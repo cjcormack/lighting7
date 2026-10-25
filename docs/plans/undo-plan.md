@@ -64,8 +64,8 @@ The findings that shape the plan, from three surveys of `main` at `59ebdb7`:
   `plugins/BroadcastSocket.kt`.
 - **The programmer is several holders.** `ProgrammerStore` (`fx/ProgrammerStore.kt:194`): private
   slot stacks and channel sideband, `blind`, `lastIncludedTarget`, `layers`,
-  `includedLayerSnapshot`, `includedKeys`, epochs, no snapshot API. Local effects are engine
-  instances matched by `isLocalEffect` (`fx/FxInstance.kt:662`). Locate is `LocateManager`'s private
+  `includedLayerSnapshot`, `includedKeys`, epochs, no snapshot API. Local FX are engine
+  instances matched by `isLocalFx` (`fx/FxInstance.kt:662`). Locate is `LocateManager`'s private
   map (`show/LocateManager.kt:25`); the programmer's scenery is an immutable `Snapshot`
   (`state/ProgrammerScenery.kt:56`). A reload hands the same objects across by reference
   (`ShowCarry.kt:63-71`).
@@ -247,25 +247,25 @@ show runs* is any live cue or loose hold. The locked rule is the client's, as th
 **Snapshot.** `ProgrammerStore.snapshot(): StoreSnapshot` and `restore(snapshot)`: the slot stacks
 and sideband (copied; slots are immutable), `layers`, `lastIncludedTarget`, `includedLayerSnapshot`,
 `includedKeys`. Not `blind`, not the epochs (`restore` bumps them). Beside it in
-`ProgrammerSnapshot`: the Local effects as specs (`LocalEffectSpec`: the add request's fields, its
+`ProgrammerSnapshot`: the Local FX as specs (`LocalFxSpec`: the add request's fields, its
 targets and its current phase), `LocateManager`'s active map, and `ProgrammerScenery`'s elements.
 
 **Checkpoints.** `ProgrammerHistory`, owned by the `Show` and adopted by `Show.resume` with the store
 on a reload, keeps a ring of 50 steps. The holders call `history.beforeMutation()` at the head of
-every mutation: the store's `put*`, `clear*` and `mutateLayers`, the engine's Local-effect add, stop
+every mutation: the store's `put*`, `clear*` and `mutateLayers`, the engine's Local-FX add, stop
 and edit, `LocateManager`'s writes and `ProgrammerScenery`'s. It takes a snapshot when the origin's
 `requestId` differs from the last step's, and none without an origin, so a reload's recook or a
 derived write never checkpoints. A continuous gesture (`programmer.set`, `setColour`, `setPosition`,
 an encoder or fader move from a surface) merges into the last step while its source, frame type,
-targets and property match and less than 1 s has passed since the last frame.
+targets and attribute match and less than 1 s has passed since the last frame.
 
-**Labels.** From the door: *Clear*, *Release Hex 1*, *Press “Warm wash” on Hex 1–6*, *Spread pan over
+**Labels.** From the door: *Clear*, *Release Hex 1*, *Press “Warm wash” on Hex 1–6*, *Fan pan over
 Spot 1–4*, *Hex 1–6 colour → Magenta*, *Claude: set_programmer*.
 
 **Restore.** Under an `UNDO` origin, at the request's `fadeMs` (the programmer fade the client
 holds): the store restored and republished at the fade, layers recooked (`ProgrammerLayerStack.reinstate`), Local
-effects diffed by instance id (those not in the snapshot shrink out at the fade, those missing respawn
-at their phase, edited ones take their spec through `applyEffectUpdate`), Locate and scenery diffed.
+FX diffed by instance id (those not in the snapshot shrink out at the fade, those missing respawn
+at their phase, edited ones take their spec through `applyFxUpdate`), Locate and scenery diffed.
 While Blind is on the restore is staged, as any programmer write is. A project switch drops the
 history with the programmer.
 
@@ -351,8 +351,8 @@ The MCP instructions gain one line: changes Claude makes can be listed and taken
 
 | Folder(s) | On undo | Moves the stage |
 |---|---|---|
-| `looks`, `templates` | `republishForLookEdit` / `…TemplateEdit` / `…Delete`; `lookListChanged` / `paletteListChanged`; `cuesRecomposed` | if a live cue or a programmer layer uses it |
-| `cues`, `cuePropertyAssignments`, `cueLayers`, `cueAdHocEffects`, `cueTriggers` | `holds.markEdited` for a held cue; `cueListChanged`; `cueStackListChanged` | no (edited since GO) |
+| `looks`, `palettes` | `republishForLookEdit` / `…PaletteEdit` / `…Delete`; `lookListChanged` / `paletteListChanged`; `cuesRecomposed` | if a live cue or a programmer layer uses it |
+| `cues`, `cueAttributeAssignments`, `cueLayers`, `cueAdHocFx`, `cueTriggers` | `holds.markEdited` for a held cue; `cueListChanged`; `cueStackListChanged` | no (edited since GO) |
 | `cueStacks`, `cueStackEntries` | `cueStackListChanged`; the run state re-announced (`announceEntriesPlaced`) | no |
 | `cueSlots`, `buskPages`, `buskRig` | `cueSlotListChanged`; `busk.layoutChanged(pageIds)`; `busk.rigChanged` | no |
 | `fixturePatches`, `fixtureGroups`, `universeConfigs`, `showHides`, `showOverrides`, `showColours` | `DbFixtureLoader.loadFixtures`; `patchListChanged`; `fixturesChanged` | yes |
@@ -364,7 +364,7 @@ The MCP instructions gain one line: changes Claude makes can be listed and taken
 | `controlSurfaceBindings` | the binding service reloads | no |
 | `project` | `projectDetailsChanged` | no |
 
-Not undoable: GO, BACK, GO TO, standby, holds, stack FX size; arm, fire, fixture commands, bulk lamp
+Not undoable: GO, BACK, GO TO, standby, holds, stack FX amount; arm, fire, fixture commands, bulk lamp
 runs; grand master, tempo taps and BPM moves, Blind, the selection, window layout; machine-local
 settings (`machine_overrides`, `project_scaler_states`, tube state, sync config); sync, venue publish,
 Update, Attach, Detach, Extract, Discard; creating, deleting and switching projects; accounts and
@@ -379,14 +379,14 @@ Each session is one PR. Sessions 1 and 2 need nothing from each other and can la
 
 ### Session 1 — programmer history (backend + programmer UI)
 
-- §3.6: `ProgrammerStore.snapshot/restore`, `LocalEffectSpec`, Locate and scenery snapshots,
+- §3.6: `ProgrammerStore.snapshot/restore`, `LocalFxSpec`, Locate and scenery snapshots,
   `ProgrammerHistory` and `beforeMutation` in every holder; a minimal `WriteOrigin` carrying source
   and `requestId` at the WS dispatch, the programmer REST routes, the press services, MCP's programmer
   tools and `SurfaceActions`, enough for steps and their coalescing (session 3 completes it).
 - `POST /history/undo|redo {programmerOnly: true, fadeMs}` and `history.state`'s programmer half.
 - Frontend: the action bar's Undo, Redo and steps menu; the Clear toast's Undo; ⌘Z and ⇧⌘Z while the
   programmer view has focus.
-- **Tests:** for each door, a gesture then undo restores the store, layers, Local effects (phase
+- **Tests:** for each door, a gesture then undo restores the store, layers, Local FX (phase
   kept), Locate and scenery to equal the snapshot; a fader drag is one step; a reload keeps the
   history, a switch drops it; under Blind the restore stages; a restore is not itself a step; redo
   dropped by a new step.
@@ -421,7 +421,7 @@ Each session is one PR. Sessions 1 and 2 need nothing from each other and can la
 ### Session 4 — putting records back: the cue side (backend)
 
 - §3.5: `RecordSource`, `ImageSource`, the importer's `UPSERT` mode and `RecordRestorer` for
-  `cueStacks`, `cueStackEntries`, `cues` and their children, `looks`, `templates`, `cueSlots`,
+  `cueStacks`, `cueStackEntries`, `cues` and their children, `looks`, `palettes`, `cueSlots`,
   `buskPages`, `buskRig`, `project`; the conflict check, back-to-here, confirms, `KindEffects` for
   those rows of §5; undo and redo routes for show entries; the post-restore checks this side needs.
 - **Tests:** on `RichProjectFixture`, for each of these folders, a write then undo leaves the export
@@ -481,8 +481,8 @@ In [`followups.md`](followups.md), when the session that creates them lands:
 
 Beyond the suites, at the desk on Sleeping Beauty:
 
-- **Session 1.** Busk a Look, spread pan, Clear at 1 s; Undo brings everything back over 1 s with the
-  Look's effect mid-phase; Undo again takes back the spread.
+- **Session 1.** Busk a Look, fan pan, Clear at 1 s; Undo brings everything back over 1 s with the
+  Look's FX mid-phase; Undo again takes back the fan.
 - **Session 2.** Export Sleeping Beauty before and after; `diff -r` is empty.
 - **Session 3.** Edit a cue, a Look and a park from two windows and ask Claude to rename a group;
   History lists four entries with the right sources and windows.

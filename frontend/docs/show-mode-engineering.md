@@ -8,7 +8,7 @@
 > pre-existing drift rather than anything 2b introduced; where they disagree with "Show Mode, in one
 > view" or "The Show view", those two are the authority.
 >
-> The plan is `lighting7/docs/plans/completed/desk-simplification-plan.md`.
+> The plan is `docs/plans/completed/desk-simplification-plan.md`.
 
 Show Mode is the production show programming and playback system. It lives in **two** routes, each
 with its own sidebar entry:
@@ -18,7 +18,7 @@ with its own sidebar entry:
   `/projects/:projectId/programmer` and two live views one letter apart was the collision that had
   kept the programmer out of the nav. `/program*` redirects, carrying the search string.
 - `/projects/:projectId/programmer` — the **Programmer**: the live value grid, its Look-layer stack
-  and its effects, all on one screen. Since session 2a its grid has a **scope** — Output / Local /
+  and its FX, all on one screen. Since session 2a its grid has a **scope** — Output / Local /
   one layer — so the same cells serve the rig, your own busk, and a Look's stored rows.
 
 There used to be a third, `/projects/:projectId/run`, and the argument for it was that splitting
@@ -146,7 +146,7 @@ The UI is structured around four distinct phases a lighting operator works throu
 
 A key insight: **tech runs live on the Run view, not the Program view**. A tech run is a running phase that occasionally requires a programming detour (switch to Program via the sidebar, edit in the CueEditor sheet, come back), not a programming phase that happens to involve running.
 
-The **Program view** is the single surface for authoring *and* assembling cues: it creates stacks, edits cues (values, layers, ad-hoc effects, triggers), reorders the show, and runs it. It has fully **absorbed the old "FX Cues" view**, which no longer exists — `/cues/*` URLs redirect to `/program`. A cue is a project record and a stack's list is **entries** naming cues, so a cue may sit in several stacks, twice in one, or in none (*loose*).
+The **Program view** is the single surface for authoring *and* assembling cues: it creates stacks, edits cues (values, layers, ad-hoc FX, triggers), reorders the show, and runs it. It has fully **absorbed the old "FX Cues" view**, which no longer exists — `/cues/*` URLs redirect to `/program`. A cue is a project record and a stack's list is **entries** naming cues, so a cue may sit in several stacks, twice in one, or in none (*loose*).
 
 ## Concepts
 
@@ -155,9 +155,9 @@ The **Program view** is the single surface for authoring *and* assembling cues: 
 **Cue Stack** -- an ordered list of entries, each placing a cue (with its own number and follow) or a marker. Has a `type` (`STACK` | `SEPARATOR`), a project-level `sortOrder`, an optional separator `label` and a `loop` flag (repeat after last cue). STACK rows are the playable unit -- the runner steps through one stack at a time; SEPARATOR rows are skipped by activate/advance/go-to.
 
 **Cue** -- a single lighting state, placed by zero or more entries. `cueStackId` / `cueStackName` describe the entry the read names (`?entryId=`), else the cue's only entry, else null; `entries` lists every place. Consists of:
-- Its own property assignments (the local layer)
+- Its own attribute assignments (the local layer)
 - Preset applications (named FX presets applied to fixture groups)
-- Ad-hoc effects (inline effects not from the library)
+- Ad-hoc FX (inline FX not from the library)
 - Triggers (scripts that run on cue activation/deactivation)
 - Timing: fade duration, fade curve, auto-advance delay
 - Metadata: cue number (Q1, Q2.5), notes
@@ -226,11 +226,11 @@ API Layer          Type definitions + WebSocket subscription factories
 | `src/components/runner/ShowOverview.tsx` | The project's ordered stack list: drag reorder, **Create Stack** (in place) + **Add Separator**, per-stack actions menu (edit settings / sort-by-cue-number / delete). Activation controls live in `ShowHeader`, not here; every edit affordance is hidden while locked. |
 | `src/components/runner/StackDetail.tsx` | Cue list within a stack — the cards or the cue sheet, which carries the bottom pane — dnd-kit reorder, **Record into `<stack>`** + Separator, "Stacks" back button. There is no "Add Cue": a cue is a captured state, so recording is the only way one is made (session 2a). |
 | `src/components/runner/CueEditorPane.tsx` | The cue sheet's **bottom pane** (show-cue-editing plan D5, §4.3): `CueEditor` for the one selected row, its height the window's (`sessionStorage cueSheet.paneHeight`, half the column until dragged), set by a magnetic grip snapping at its 160px floor and at half the column — `RigHandle`'s grip, sharing `hooks/useHeightGrip.ts` and `snapRigHeight`. A key region: the sheet's keyboard stands aside for keys pressed in it. |
-| `src/components/cues/editor/CueEditor.tsx` | **The cue editor** (show-cue-editing plan D1, §4.1): a 40px header — the entry's number and follow written to the entry, the cue's name, fade and curve to the cue (P5), the shared chip, the save state — and the tabs *Values · Looks · FX · Scenery · Events · Cue*, remembered per window (`sessionStorage cueEditor.tab`). Mounted by the card, the sheet's pane and `stage/OwnerEditor`'s sheet, each with its own `CueRowStore`. **Values** is `CueValuesGrid` (session 5): the programmer's `FixturesTable` over the cue's own rows — the draft over the `/cooked` rows, own cells edged blue and Look-won cells teal, an edit writing an own row and ⌫ removing one, saved as the whole `propertyAssignments` list at 400 ms / 2 s with one-step Undo, nothing sent to the stage (P2); its keys are the editor's key region's. **Looks** is `CueLooksTab` (session 6): `LookStack` over the cue's layers, each gesture one whole-list `layers` write restating every `sortOrder`, *+ Look* / *+ Palette* opening `ApplyPicker` on the Values selection and pressing into the cue (`PressCue`, `POST /cues/{id}/layers/press`), a layer's timing and masters in its settings popover, a row's *Targets* taking it, *Open* leaving for `/looks?edit=`. **FX** is `CueFxTab` (session 6): a row per stored effect (target, effect, property, speed, size, direction, runs, fire timing) opening `FxFields` over it with the cue's timing, and *+ Effect* — `FxPicker` in draft over the Values selection, adding to the cue and running nothing; a Look layer's deferred effects listed read-only. The Values selection is the editor's (`CueValuesView`). Locked, it reads, and a refused ⌫ or Enter asks to unlock. **A live cue edited in place is marked** (session 7, D4): the header draws *Edited since GO* while `cueHolds.state` says `edited`, with *Update stage…*, which opens `UpdateStageDialog` (in `CueActionDialogsProvider`) on a dry run of `POST /cues/{id}/update-stage` for its counts and sends the one real request on confirm; the cue sheet's Name cell and the phone card draw the chip, and the phone ⋯ menu carries *Update stage…* under *Record…*. |
+| `src/components/cues/editor/CueEditor.tsx` | **The cue editor** (show-cue-editing plan D1, §4.1): a 40px header — the entry's number and follow written to the entry, the cue's name, fade and curve to the cue (P5), the shared chip, the save state — and the tabs *Values · Looks · FX · Scenery · Events · Cue*, remembered per window (`sessionStorage cueEditor.tab`). Mounted by the card, the sheet's pane and `stage/OwnerEditor`'s sheet, each with its own `CueRowStore`. **Values** is `CueValuesGrid` (session 5): the programmer's `FixturesTable` over the cue's own rows — the draft over the `/cooked` rows, own cells edged blue and Look-won cells teal, an edit writing an own row and ⌫ removing one, saved as the whole `attributeAssignments` list at 400 ms / 2 s with one-step Undo, nothing sent to the stage (P2); its keys are the editor's key region's. **Looks** is `CueLooksTab` (session 6): `LookStack` over the cue's layers, each gesture one whole-list `layers` write restating every `sortOrder`, *+ Look* / *+ Palette* opening `ApplyPicker` on the Values selection and pressing into the cue (`PressCue`, `POST /cues/{id}/layers/press`), a layer's timing and masters in its settings popover, a row's *Targets* taking it, *Open* leaving for `/looks?edit=`. **FX** is `CueFxTab` (session 6): a row per stored FX (target, FX, attribute, cycle, amount, direction, runs, fire timing) opening `FxFields` over it with the cue's timing, and *+ FX* — `FxPicker` in draft over the Values selection, adding to the cue and running nothing; a Look layer's deferred FX listed read-only. The Values selection is the editor's (`CueValuesView`). Locked, it reads, and a refused ⌫ or Enter asks to unlock. **A live cue edited in place is marked** (session 7, D4): the header draws *Edited since GO* while `cueHolds.state` says `edited`, with *Update stage…*, which opens `UpdateStageDialog` (in `CueActionDialogsProvider`) on a dry run of `POST /cues/{id}/update-stage` for its counts and sends the one real request on confirm; the cue sheet's Name cell and the phone card draw the chip, and the phone ⋯ menu carries *Update stage…* under *Record…*. |
 | `src/components/runner/cueActionDialogs.tsx` | The cue action set's Record sheet, delete confirm and unlock question, held in `Layout` above every host, so a live card a GO collapses cannot close one. |
 | `src/components/runner/ShowMarkerRow.tsx` | Interactive marker with inline rename/delete. Locked, it renders `MarkerRow` — one separator, every surface. |
 | `src/components/runner/CueCardEditor.tsx` | The expandable cue row, rendered straight by `StackDetail` — the cards view's **host of the cue editor** (show-cue-editing plan §4.2). Opened, the collapsed row, then the cue action set's strip (`CueActions`, frontend CLAUDE.md §"The cue action set": the Edit / Blind edit split button, Load, Record…, Duplicate, Remove from stack, Delete… and the ⋯ menu), then `CueEditor` — the same editor the cue sheet's pane mounts. Two cards can be open, each with its own. Cue properties is gone (D15): `CuePropertiesSheet` and `CuePropsPane` are deleted. `CueDetailContent` is no longer the card's; it stays the phone card's and the Prompt Book's read-out. |
-| `src/components/cues/CueValueGrid.tsx` | What a cue asserts, per head and property, read-only — built from `GET /cues/{id}/cooked` so the composition is the server's, not a second implementation of it. |
+| `src/components/cues/CueValueGrid.tsx` | What a cue asserts, per head and attribute, read-only — built from `GET /cues/{id}/cooked` so the composition is the server's, not a second implementation of it. |
 | `src/components/cues/editor/CueRowStore.tsx`, `cueRowDraft.ts`, `CueValuesGrid.tsx`, `CueValuesView.tsx` | The Values tab's store, draft, grid and the editor-wide selection — frontend CLAUDE.md §"The cue editor" has the rules (the flush, the retirement, Undo, the writers, the source edges, the rows, the key region). The store also writes the Looks and FX tabs' lists (`editLayers`, `editFx`). |
 | `src/components/cues/editor/CueLooksTab.tsx`, `CueFxTab.tsx`, `cueListEdits.ts`, `editorIsolation.tsx` | The Looks and FX tables (session 6), their pure list edits, and what both clear above themselves and claim while locked. |
 | `src/components/sheet/keyRegion.ts` | Which `[data-key-region]` holds the keys — focus or the last pointer press — so two grids on one page each take keys only in their own region (§4.5). |
@@ -346,7 +346,7 @@ interface CuePresetApplicationDetail {
 }
 ```
 
-**Ad-hoc effects** are inline effects stored directly on the cue (not from the library):
+**Ad-hoc FX** are inline FX stored directly on the cue (not from the library):
 
 ```typescript
 interface CueAdHocFx {
@@ -354,7 +354,7 @@ interface CueAdHocFx {
   targetKey: string
   fxType: string
   family: string
-  propertyName: string | null
+  attribute: string | null
   cycle: number
   blendMode: string
   order: string
@@ -366,7 +366,7 @@ interface CueAdHocFx {
 }
 ```
 
-All three composition types (presets, ad-hoc effects, triggers) support optional timing fields (`delayMs`, `intervalMs`, `randomWindowMs`) for delayed or recurring execution.
+All three composition types (presets, ad-hoc FX, triggers) support optional timing fields (`delayMs`, `intervalMs`, `randomWindowMs`) for delayed or recurring execution.
 
 ### Triggers
 ```typescript
@@ -817,7 +817,7 @@ This composite id drives the green active highlight in the cue list, the ShowBar
 | Green = active, blue = standby (not amber/green) | Green reads as "on / go" and has higher contrast against the dark runner background than amber. Blue for standby (next) avoids confusion with the "show is running" green dot in the header — the standby colour is a cooler tone that implies "queued, not yet firing". |
 | Click-to-requeue in Run view (not Program) | Run is the playback surface; the operator's main action is controlling cue order. Program is for editing — a click-to-edit there (opening CueEditor) is more valuable than re-queueing. In Run, the eye icon provides the detail-view affordance so the row click is freed for re-queue. |
 | `advance` on GO, not an explicit cue id | This row used to argue the other way: `advance` couldn't see a frontend re-queue, so GO sent the standby cue id through `goToCueInStack`. Standby became server-owned (`setCueStackStandby`), so `advance` FORWARD now fires whatever the backend has on deck and the two cannot disagree. `goToCueInStack` was left with no caller and has been deleted. |
-| `CueDetailSheet` read-only view | A lighter alternative to opening the full CueEditor in Run view. Operators want to inspect cue composition (presets, effects, triggers) at a glance without the risk or overhead of the edit form. The sheet has an Edit button that deep-links to Program's CueEditor if the operator decides to make changes. |
+| `CueDetailSheet` read-only view | A lighter alternative to opening the full CueEditor in Run view. Operators want to inspect cue composition (presets, FX, triggers) at a glance without the risk or overhead of the edit form. The sheet has an Edit button that deep-links to Program's CueEditor if the operator decides to make changes. |
 
 ## Known Gaps
 

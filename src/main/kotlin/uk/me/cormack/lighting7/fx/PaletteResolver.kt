@@ -472,7 +472,7 @@ object PaletteResolver {
                 // fixture-level catalogue carries — elements keep name and category alone. A
                 // template has no element rows, so this is the whole story rather than a gap.
                 val catalogue = (fixture as? Fixture)?.fixtureAttributes
-                    ?: return Resolution(null, attribute, Note.Unsupported("no property catalogue"))
+                    ?: return Resolution(null, attribute, Note.Unsupported("no attribute catalogue"))
                 val pan = catalogue.firstOrNull { it.category == AttributeCategory.PAN }
                 val tilt = catalogue.firstOrNull { it.category == AttributeCategory.TILT }
                 if (pan == null || tilt == null) {

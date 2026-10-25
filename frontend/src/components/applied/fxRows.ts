@@ -53,7 +53,7 @@ export function saveAsPaletteOffer(
   if (entry == null) {
     return {
       enabled: false,
-      reason: `“${effect.fxType}” is not in this desk's FX library, so its category — and so the palette's family — cannot be read.`,
+      reason: `“${effect.fxType}” is not in this desk's FX library, so its family — and so the palette's — cannot be read.`,
     }
   }
   // A step effect is banked by its palettes' family or as Beam on its setting, never by its library

@@ -50,7 +50,7 @@ data class SelectionSource(
  *
  * **One desk, one selection, server-owned.** The composition model's "exactly one programmer,
  * shared by every client" argument applies verbatim (`docs/lighting-composition-model.md`
- * §"Layer 2"): DMX is one byte per channel, so two selections would force a "whose press wins?"
+ * §"Tier 2 — Programmer"): DMX is one byte per channel, so two selections would force a "whose press wins?"
  * policy nothing expresses. Every client — the busk view, the programmer page, the X-Touch's
  * select buttons — reads and writes this one fact, and the `selection.state` frame keeps them
  * honest. It is transient: cleared on project switch, never persisted, and outside the sync

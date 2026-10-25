@@ -1,12 +1,12 @@
 # Cue Timing & Script Hooks Engineering Documentation
 
-This document describes how cue effects can be timed (delayed, recurring) and how script hooks automate actions at cue lifecycle events.
+This document describes how cue FX can be timed (delayed, recurring) and how script hooks automate actions at cue lifecycle events.
 
 ## Overview
 
-### Timed Effects
+### Timed FX
 
-Preset applications and ad-hoc effects can optionally have timing fields that control *when* they are applied relative to cue activation:
+Preset applications and ad-hoc FX can optionally have timing fields that control *when* they are applied relative to cue activation:
 
 | Timing | Behaviour | Configuration |
 |--------|-----------|---------------|
@@ -14,7 +14,7 @@ Preset applications and ad-hoc effects can optionally have timing fields that co
 | **Delayed** | Applied after a delay from activation | `delayMs` |
 | **Recurring** | Applied repeatedly at an interval | `intervalMs`, `randomWindowMs` (optional) |
 
-These timing fields live directly on the `cue_preset_applications` and `cue_ad_hoc_fx` tables — no separate trigger entity needed for effect timing.
+These timing fields live directly on the `cue_preset_applications` and `cue_ad_hoc_fx` tables — no separate trigger entity needed for FX timing.
 
 ### Script Hooks (Triggers)
 
@@ -31,13 +31,13 @@ field is positive and runs the script at once otherwise. `DELAYED` and `RECURRIN
 their own once; a write still naming either is normalised to `ACTIVATION` with its timing
 (`writeCueChildren`), so an older client keeps working, but neither is ever stored or answered.
 
-Script hooks are stored in the `cue_triggers` table and always reference a script. The DEACTIVATION type only applies to script hooks (effects are inherently removed on deactivation).
+Script hooks are stored in the `cue_triggers` table and always reference a script. The DEACTIVATION type only applies to script hooks (FX are inherently removed on deactivation).
 
 **A script hook is not a cue event.** A cue's **events** (stage-view plan session 9,
 `cues-engineering.md` §"Cue events") fire a one-shot trigger — a confetti cannon's tube — at an
 offset after GO, only while the desk is armed and only on GO into the cue; a hook runs a script on
 every activation whatever the desk's arm. Reach for an event to fire a cannon: a script cannot set
-a trigger (it is not a property), and the arm exists so that nothing but a deliberate event can.
+a trigger (it is not an attribute), and the arm exists so that nothing but a deliberate event can.
 
 ## Data Model
 
@@ -84,20 +84,20 @@ Note: The trigger table no longer has `action_type`, `preset_id`, or `targets` c
 
 **File:** `fx/CueTriggerManager.kt`
 
-Manages the runtime lifecycle of both timed effects and script hooks using coroutines.
+Manages the runtime lifecycle of both timed FX and script hooks using coroutines.
 
 ### Runtime State
 
-- `activeTriggerJobs: ConcurrentHashMap<Int, MutableList<Job>>` — running coroutines per cueId (both timed effects and script hooks)
-- `triggerFxIds: ConcurrentHashMap<Int, MutableList<Long>>` — effect IDs created by timed/script actions per cueId
+- `activeTriggerJobs: ConcurrentHashMap<Int, MutableList<Job>>` — running coroutines per cueId (both timed FX and script hooks)
+- `triggerFxIds: ConcurrentHashMap<Int, MutableList<Long>>` — FX IDs created by timed/script actions per cueId
 - `cueToStack: ConcurrentHashMap<Int, Int>` — cueId → stackId mapping for stack-level cleanup
 - `deactivationTriggers: ConcurrentHashMap<Int, List<CueTriggerDto>>` — stored DEACTIVATION script hooks
 
 ### Activation Flow
 
-After the cue's immediate effects have been applied:
+After the cue's immediate FX have been applied:
 
-1. **Timed effects** (`activateTimedFxForCue`): For each preset/ad-hoc effect with `delayMs` or `intervalMs`, launch a coroutine that applies the effect at the configured timing. Timed preset fires also contribute their property assignments to the cue layer (Layer 4) at fire time (`FxEngine.appendCueAssignments`), retracting the prior fire's rows (`FxEngine.removeCueAssignmentSubset`) on each recurring tick so the cue's assignment list does not accumulate duplicates.
+1. **Timed FX** (`activateTimedFxForCue`): For each preset/ad-hoc FX with `delayMs` or `intervalMs`, launch a coroutine that applies the FX at the configured timing. Timed preset fires also contribute their attribute assignments to the cue tier (Tier 4) at fire time (`FxEngine.appendCueAssignments`), retracting the prior fire's rows (`FxEngine.removeCueAssignmentSubset`) on each recurring tick so the cue's assignment list does not accumulate duplicates.
 2. **Script hooks** (`activateTriggersForCue`): For each script trigger, execute by type:
    - **ACTIVATION** with no timing: run the script immediately
    - **ACTIVATION** with `delayMs`: launch `delay(delayMs) → runScript()`
@@ -107,16 +107,16 @@ After the cue's immediate effects have been applied:
 ### Deactivation Flow
 
 1. Fire DEACTIVATION script hooks (synchronous)
-2. Cancel all running coroutine jobs (both timed effects and script hooks)
-3. Remove all effect IDs created by timed/script actions from FxEngine
+2. Cancel all running coroutine jobs (both timed FX and script hooks)
+3. Remove all FX IDs created by timed/script actions from FxEngine
 4. Clean up all maps
 
 ### Crossfade Interaction
 
-Timed effects fire at full intensity (they don't participate in the crossfade envelope). When a stack crossfade begins:
-1. Old timed effect jobs and script hooks are cancelled
-2. Old trigger-created effects are removed during crossfade
-3. New cue's timed effects and hooks start after the new cue's immediate effects are applied
+Timed FX fire at full intensity (they don't participate in the crossfade envelope). When a stack crossfade begins:
+1. Old timed FX jobs and script hooks are cancelled
+2. Old trigger-created FX are removed during crossfade
+3. New cue's timed FX and hooks start after the new cue's immediate FX are applied
 
 ### Recurring Randomisation
 
@@ -131,7 +131,7 @@ Each iteration computes a fresh random interval for organic variation.
 
 **File:** `fx/FxEngine.kt`
 
-When running FX_APPLICATION scripts (from script hooks), `CueTriggerManager` sets `fxEngine.currentCueContext` before execution. The `FxEngine.addFx()` method auto-tags effects:
+When running FX_APPLICATION scripts (from script hooks), `CueTriggerManager` sets `fxEngine.currentCueContext` before execution. The `FxEngine.addFx()` method auto-tags FX:
 
 ```kotlin
 currentCueContext?.let { ctx ->
@@ -221,9 +221,9 @@ The second preset application has timing; triggers only contain scripts:
 
 | File | Purpose |
 |------|---------|
-| `models/cues.kt` | Timing columns on preset apps and ad-hoc effects |
+| `models/cues.kt` | Timing columns on preset apps and ad-hoc FX |
 | `models/cueTriggers.kt` | Script hook table, DAO, DTOs |
-| `fx/CueTriggerManager.kt` | Runtime lifecycle for timed effects + script hooks |
+| `fx/CueTriggerManager.kt` | Runtime lifecycle for timed FX + script hooks |
 | `fx/FxEngine.kt` | `currentCueContext` for auto-tagging |
 | `fx/CueStackManager.kt` | Immediate/timed split during cue transitions |
 | `routes/projectCues.kt` | CRUD, apply logic, immediate/timed split |

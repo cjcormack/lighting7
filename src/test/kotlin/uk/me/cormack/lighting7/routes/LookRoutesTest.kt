@@ -244,7 +244,7 @@ class LookRoutesTest : RouteIntegrationTest() {
             }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = resp.bodyAsText()
-            assertTrue("fx[1]: A look effect must name its own fixture, group or selection" in body, body)
+            assertTrue("fx[1]: A Look FX must name its own fixture, group or selection" in body, body)
             assertTrue("fx[2]: Unknown blendMode 'ADD'" in body, body)
             assertFalse("fx[0]" in body, body)
             assertTrue(client.get(base()).body<List<LookDto>>().none { it.name == "Deferred" }, "nothing is written")

@@ -325,7 +325,7 @@ private fun applyFxPaletteToProgrammer(
                 "template '{}': effect '{}' could not be created — {}",
                 paletteName, effect.fxType, e.message,
             )
-            skips += PaletteSkipDto(target.key, fxTarget.attribute, "effect could not be created")
+            skips += PaletteSkipDto(target.key, fxTarget.attribute, "FX could not be created")
             continue
         }
         if (!fxTarget.accepts(instance.effect.outputType)) {

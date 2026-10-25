@@ -46,6 +46,6 @@ hex-1's twelve channels, detaches the layer and compares them again. The Pulse r
 live clock throughout, so an FX engine tick between the reads moved channel 1 (0 → 255) whatever
 Detach did.
 
-The fix compares every channel except the one the Pulse drives, found from hex-1's dimmer property
-(`DmxSlider.channelNo`) rather than by index. The effect is asserted on its own, as before: the
-same instance runs on as a Local effect. 20 of 20 runs passed after it.
+The fix compares every channel except the one the Pulse drives, found from hex-1's dimmer attribute
+(`DmxSlider.channelNo`) rather than by index. The FX is asserted on its own, as before: the
+same instance runs on as a Local FX. 20 of 20 runs passed after it.

@@ -691,7 +691,7 @@ class ControlSurfaceBindingService(
             return read is AttributeChannelResolver.AttributeRead.Colour
         }
         fun refuse(what: String): Nothing = throw BindingRefused(
-            "$what is not a colour property, so it has no ${axis.name.lowercase().replace('_', ' ')} to drive",
+            "$what is not a colour attribute, so it has no ${axis.name.lowercase().replace('_', ' ')} to drive",
             CODE_BINDING_AXIS_NEEDS_COLOUR,
         )
         when (val inner = if (target is BindingTarget.Flash) target.target else target) {

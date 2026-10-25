@@ -10,8 +10,8 @@ import { ORDER_LABELS } from '@/lib/orderLabels'
 
 /**
  * Holds the frontend's label tables to `docs/glossary.md` (terminology plan D17): every `done` or
- * `screen` row's frontend locators must give the row's word. The `fx:`, `family:` and `masterFamily:` locators
- * are `GlossaryVocabularyTest`'s; the glossary's header says what each prefix reads.
+ * `screen` row's frontend locators must give the row's word. The `fx:`, `family:`, `masterFamily:` and `doc:`
+ * locators are `GlossaryVocabularyTest`'s; the glossary's header says what each prefix reads.
  */
 
 interface Row {
@@ -26,7 +26,7 @@ interface Row {
 const KEYED_STATUSES = new Set(['done', 'screen'])
 const STATUSES = [...KEYED_STATUSES, 'planned']
 
-const BACKEND_PREFIXES = new Set(['fx', 'family', 'masterFamily'])
+const BACKEND_PREFIXES = new Set(['fx', 'family', 'masterFamily', 'doc'])
 const FRONTEND_PREFIXES = new Set(['src', 'ORDER_LABELS', 'FX_FAMILY_INFO', 'BLEND_MODE_OPTIONS', 'ELEMENT_MODE_OPTIONS'])
 
 const SOURCES = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '!/src/**/*.test.{ts,tsx}'], {

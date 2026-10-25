@@ -1,22 +1,22 @@
-# FX (Effects) System Engineering Documentation
+# FX System Engineering Documentation
 
-This document describes the effects subsystem for tempo-synchronized lighting effects.
+This document describes the FX subsystem for tempo-synchronized lighting FX.
 
 > **See also**: [lighting-composition-model.md](lighting-composition-model.md) for the
-> layered composition model. Effects are **Layer 3**: they sit above cue property
-> assignments (Layer 4) and below the programmer (Layer 2) and parking (Layer 1). The per-tick reset-to-
-> neutral pass resets each property to the **layer below** (via `LayerResolver`), not to
-> hardcoded zero, so direct writes and cue state remain visible under running effects. Effect
+> tiered composition model. FX are **Tier 3**: they sit above cue attribute
+> assignments (Tier 4) and below the programmer (Tier 2) and parking (Tier 1). The per-tick reset-to-
+> neutral pass resets each attribute to the **tier below** (via `LayerResolver`), not to
+> hardcoded zero, so direct writes and cue state remain visible under running FX. FX
 > iteration is a sorted pass (priority ascending, then compose order, then id) rather than
-> undefined map iteration, making multi-effect composition on the same property deterministic.
+> undefined map iteration, making multi-FX composition on the same attribute deterministic.
 
 ## Overview
 
 The FX system provides:
 - Global tempo synchronization via Master Clock (BPM-based)
-- Continuous effects (sine waves, pulses, colour cycles, position sweeps)
-- Type-safe effect targeting via fixture traits
-- Multiple blend modes for effect application
+- Continuous FX (sine waves, pulses, colour cycles, position sweeps)
+- Type-safe FX targeting via fixture traits
+- Multiple blend modes for FX application
 - Real-time control via REST and WebSocket APIs
 
 ## Architecture
@@ -31,7 +31,7 @@ The FX system provides:
 │                               │ onTick → wake channel               │
 │                               ▼                                     │
 │   ┌─────────────────────────────────────────────────────────────┐   │
-│   │                  Active Effects Map                         │   │
+│   │                  Active FX Map                              │   │
 │   │   fxId → FxInstance                                     │   │
 │   └───────────────────────────┬─────────────────────────────────┘   │
 │                               │                                     │
@@ -39,10 +39,10 @@ The FX system provides:
 │   ┌─────────────────────────────────────────────────────────────┐   │
 │   │              FX Processing Loop (per tick)                  │   │
 │   │                                                             │   │
-│   │   0. Reset FX-controlled properties to neutral              │   │
-│   │   For each active effect:                                   │   │
-│   │     1. Calculate phase based on clock + effect timing       │   │
-│   │     2. Effect.calculate(phase, context) → output value      │   │
+│   │   0. Reset FX-controlled attributes to neutral              │   │
+│   │   For each active FX:                                       │   │
+│   │     1. Calculate phase based on clock + FX timing           │   │
+│   │     2. Fx.calculate(phase, context) → output value          │   │
 │   │     3. Apply blend mode (override/additive/multiply/max)    │   │
 │   │     4. Write to ControllerTransaction                       │   │
 │   └─────────────────────────────────────────────────────────────┘   │
@@ -56,10 +56,10 @@ The FX system provides:
 
 ## Speed Masters
 
-Tempo lives in a per-show **`SpeedMasterBank`** of `MasterClock` instances — named tempo
-buses that effects *subscribe to* rather than owning speeds. **Slot 0 is always master 1**,
+Tempo lives in a per-project **`SpeedMasterBank`** of `MasterClock` instances — named tempo
+buses that FX *subscribe to* rather than owning speeds. **Slot 0 is always master 1**,
 the global tempo that script `setBpm`/`tapTempo` and a bare AI `set_bpm` mean, and that
-every effect with no explicit master resolves to. (`set_bpm` also takes an optional
+every FX with no explicit master resolves to. (`set_bpm` also takes an optional
 `speedMasterUuid`, so the AI surface can retune any master, not only the global one.)
 The AI reads the bank back through `get_current_state`'s `speed_masters` section, which is
 where a master created mid-conversation gets its uuid — `describe_rig`'s listing is a snapshot
@@ -81,17 +81,17 @@ A tap or a typed tempo afterwards wins until the next cue that sets that master;
 skipped, as it refuses every tempo write. A master a cue names is a use for the delete guard
 (`cueTempoCount`).
 
-### Usage routing and follow (time signature)
+### Family routing and follow (time signature)
 
 Two nullable per-master settings, added for the busk view (see
 `docs/plans/completed/busking-view-plan.md` §2, decisions D1–D7):
 
 - **`family`** (`intensity` / `colour` / `position` / `beam` — the FX library's own family
   vocabulary, stored as `speed_masters.family`, pinned by `GlossaryVocabularyTest`) names the master an *apply-time
-  caller* should stamp into an effect created with no explicit master. This is D1: routing is
+  caller* should stamp into an FX created with no explicit master. This is D1: routing is
   visible stamping at apply time, never engine resolution — a null `speedMasterUuid` keeps
-  meaning master 1, everywhere, forever. `controls` is deliberately not routable; its effects
-  land on master 1. Nor is `palette`, the Steps family's: a Steps FX is stamped by the family it
+  meaning master 1, everywhere, forever. `controls` is deliberately not routable; its FX
+  land on master 1. Nor is `steps`: a Steps FX is stamped by the family it
   steps instead (`stepsFxFamily`) — Slot Steps by Beam's, Palette Steps by its palettes'. One master per family per project,
   enforced by `validateSpeedMasterSettings` (a friendly 409, not a DB index).
 - **`follow_num` / `follow_den` / `follow_target_uuid`** make the master a *follower* of
@@ -108,7 +108,7 @@ Two nullable per-master settings, added for the busk view (see
   beat lands on the first tick of the beat; without it a follower beats one leader tick early —
   enough to pass a rate test and obvious on two beat lamps.) The cascade runs from inside the
   leader's own tick callback, depth-first, so a follower's beat carries the leader tick's
-  timestamp exactly. Linking snaps the follower's effects once; unlinking does not
+  timestamp exactly. Linking snaps the follower's FX once; unlinking does not
   (`start(resetCounter = false)` hands the timer back where the leader left it).
 
   The snap is not incidental — `adoptDriven` **zeroes the counter on the transition**, and it
@@ -126,9 +126,9 @@ Two nullable per-master settings, added for the busk view (see
   monotonic guard freezes it until the leader's counter quadruples. That failure is silent in
   the worst way — the tempo readout keeps showing the derived bpm, because that comes from the
   *bpm*, not the clock, so the rail looks correct while the beat lamp never lights again and
-  every effect on the master stands still. Ratios above the previous one hide it (they map ahead
+  every FX on the master stands still. Ratios above the previous one hide it (they map ahead
   of the counter and drive on the first tick), which is why 2× behaved and ½, ⅓ and ¼ did not.
-  A reload that leaves the mapping alone — a rename, a usage retag, a stored-tempo edit — must
+  A reload that leaves the mapping alone — a rename, a family retag, a stored-tempo edit — must
   *not* snap: the counter would land on the same mapped value, but a zeroed counter reads as "no
   previous beat" and re-fires the beat already in progress, double-flashing every beat lamp on
   the desk for a text edit.
@@ -168,20 +168,20 @@ Two nullable per-master settings, added for the busk view (see
   follower return `TempoWriteOutcome.RefusedFollower` (naming the leader to retune instead)
   rather than silently unlinking (D5) — a 400 (`SPEED_MASTER_FOLLOWER`) on REST, a
   `speedMasters.error` frame on WS, a distinct tool error on the AI surface.
-Effects reference a master by **uuid** (`FxInstance.speedMasterUuid`, null → master 1) and
+FX reference a master by **uuid** (`FxInstance.speedMasterUuid`, null → master 1) and
 the engine binds that to a runtime slot index at add/update time, re-binding when the
-bank's membership changes; a deleted master's effects degrade to master 1, never stop.
-Because an FX instance targets specific properties, per-instance assignment already gives
-"different speeds for different properties". One FX driving several attributes is
+bank's membership changes; a deleted master's FX degrade to master 1, never stop.
+Because an FX instance targets specific attributes, per-instance assignment already gives
+"different speeds for different attributes". One FX driving several attributes is
 `FU-SPEED-PER-ATTRIBUTE`.
 
 ### One processing pass, N timebases
 
-No clock drives effect processing directly: every clock tick nudges the bank's **CONFLATED
+No clock drives FX processing directly: every clock tick nudges the bank's **CONFLATED
 wake channel**, and the engine runs one pass per wake-up over one coherent
 `SpeedMasterBank.Frame` of per-master ticks. Ticks landing mid-pass collapse into a single
 follow-up, so the pass rate is bounded by the fastest master, and one pass means one
-`ControllerTransaction` — effects on different masters can never fight over a property
+`ControllerTransaction` — FX on different masters can never fight over an attribute
 within a frame. This works because **phase is a pure function of the tick counter**
 (`MasterClock.phaseForDivision(tickNumber, division)` — a companion function; BPM never
 enters the phase math, tempo is purely tick emission rate).
@@ -199,7 +199,7 @@ enters the phase math, tempo is purely tick emission rate).
 ### Clock Resolution
 
 Like MIDI clock, each clock emits 24 ticks per beat. This provides:
-- Smooth effect interpolation
+- Smooth FX interpolation
 - Sub-beat timing resolution
 
 The tick timer keeps a **fractional deadline** rather than delaying a truncated interval:
@@ -208,9 +208,9 @@ masters it became *relative* drift (120 vs 60 BPM truncated to a 2.05:1 ratio). 
 inter-master ratios are now exact; `SpeedMasterBankTest` pins this. A tempo change never
 resets the tick counter, so phase stays continuous across it.
 
-### Beat Divisions
+### Cycle Lengths
 
-Effects reference timing via `CycleLength` constants:
+FX reference timing via `CycleLength` constants:
 
 | Constant | Value | Description |
 |----------|-------|-------------|
@@ -220,119 +220,121 @@ Effects reference timing via `CycleLength` constants:
 | `HALF_BEAT` | 0.5 | Half beat |
 | `ONE_BEAT` | 1.0 | One beat |
 | `TWO_BEATS` | 2.0 | Two beats |
-| `ONE_BAR` | 4.0 | Four beats — a new effect's default (venue-visit plan D16) |
+| `ONE_BAR` | 4.0 | Four beats — a new FX's default (venue-visit plan D16) |
 | `TWO_BARS` | 8.0 | Eight beats |
 
-Everything a person reads says the division in **beats a cycle** — `½ beat`, `1 beat`, `2 beats`,
+Everything a person reads says the cycle in **beats a cycle** — `½ beat`, `1 beat`, `2 beats`,
 `1 bar`, `2 bars`, `4 bars` — from one table (`SPEED_STEPS` in the frontend's `fxConstants.ts`), the
-editor's segment and every chip alike; an effect on Seconds reads `4 s`. The note values the chips
+editor's segment and every chip alike; an FX on Seconds reads `4 s`. The note values the chips
 once used (`1/4` for one beat) are gone (`FU-FE-FX-SPEED-SPELLING`, settled by S15).
 
-## Effect Types
+## FX types
 
 Since the terminology plan's session 3 each id is its name without the spaces (D10–D13): `Ramp`,
 `DimmerStrobe`, `ColourWave` and `ZoomWave` were `Triangle`, `Strobe`, `ColourPulse` and `ZoomBreathe`,
 and `Breathe` is gone, a stored one now Sine Wave a quarter-cycle on. `sync/LegacyNames.kt` reads the
 old names (§"Old names" in `sync-engineering.md`).
 
-### Intensity Effects (`FxOutput.Slider`)
+### Intensity FX (`FxOutput.Slider`)
 
-Effects that produce single 0-255 values for dimmer/slider properties.
+FX that produce single 0-255 values for dimmer/slider attributes.
 
-| Effect | Description | Parameters |
-|--------|-------------|------------|
+| FX | Description | Parameters |
+|----|-------------|------------|
 | `SineWave` | Smooth oscillation | `min`, `max` |
 | `RampUp` | Sawtooth up | `min`, `max`, `curve` |
 | `RampDown` | Sawtooth down | `min`, `max`, `curve` |
 | `Ramp` | Up then down | `min`, `max`, `curve` |
-| `Pulse` | Attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio` |
+| `Pulse` | Attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
 | `SquareWave` | On/off alternation | `min`, `max`, `dutyCycle` |
 | `DimmerStrobe` | Quick flash on the dimmer | `offValue`, `onValue`, `onRatio` |
 | `Flicker` | Random variation | `min`, `max` |
+| `CandleFlicker` | Organic candle or fire flicker by random walk; stateful, on the wall clock | `baseLevel`, `min`, `max`, `smoothing` |
+| `FluorescentFlicker` | A tube striking: a burst of on/off flicker, then on; stateful, on the wall clock | `onLevel`, `offLevel`, `flickerDurationMs`, `flickerSpeed` |
 | `LightningStrike` | A flash that decays | `maxBrightness`, `minBrightness` |
 
-### Colour Effects (`FxOutput.Colour`)
+### Colour FX (`FxOutput.Colour`)
 
-Effects that produce RGB color values.
+FX that produce RGB colour values.
 
-| Effect | Description | Parameters |
-|--------|-------------|------------|
+| FX | Description | Parameters |
+|----|-------------|------------|
 | `ColourCycle` | Step through a list of literal colours | `colours`, `fadeRatio` |
 | `RainbowCycle` | Hue rotation | `saturation`, `brightness` |
-| `ColourStrobe` | Flash colour | `onColor`, `offColor`, `onRatio` |
-| `ColourWave` | Sine between two | `colorA`, `colorB` |
-| `ColourFade` | Linear fade, bouncing by default | `fromColor`, `toColor` |
-| `ColourFlicker` | Random variation | `baseColor`, `variation` |
+| `ColourStrobe` | Flash colour | `onColour`, `offColour`, `onRatio` |
+| `ColourWave` | Sine between two | `colourA`, `colourB` |
+| `ColourFade` | Linear fade, bouncing by default | `fromColour`, `toColour` |
+| `ColourFlicker` | Random variation | `baseColour`, `variation` |
 
 Colour Cycle takes **literal colours only** (terminology plan D14): a `colourList` parameter — its
 `colours` — refuses a palette reference at every write boundary (`colourListPaletteProblem`: the add
-routes, `PUT /fx/{id}` and its frame, a Look's, a cue's and a palette's effects, the MCP tools), and
+routes, `PUT /fx/{id}` and its frame, a Look's, a cue's and a palette's FX, the MCP tools), and
 `TypedParams.colourList` drops one that reaches it anyway. Palette Steps is the FX that steps through
 palettes, each landing on each head for itself. The other colour FX keep a palette reference in their
 `colour` parameters, one colour for every head (D30).
 
-### Position Effects (`FxOutput.Position`)
+### Position FX (`FxOutput.Position`)
 
-Effects that produce pan/tilt values for moving heads.
+FX that produce pan/tilt values for moving heads.
 
-| Effect | Description | Parameters |
-|--------|-------------|------------|
-| `Circle` | Circular movement | `panCenter`, `tiltCenter`, `panRadius`, `tiltRadius` |
-| `Figure8` | Figure-8 pattern | `panCenter`, `tiltCenter`, `panRadius`, `tiltRadius` |
+| FX | Description | Parameters |
+|----|-------------|------------|
+| `Circle` | Circular movement | `panCentre`, `tiltCentre`, `panRadius`, `tiltRadius` |
+| `Figure8` | Figure-8 pattern | `panCentre`, `tiltCentre`, `panRadius`, `tiltRadius` |
 | `Sweep` | Linear movement, bouncing by default | `startPan`, `startTilt`, `endPan`, `endTilt`, `curve` |
-| `PanSweep` | Horizontal sweep | `startPan`, `endPan`, `tilt` |
-| `TiltSweep` | Vertical sweep | `startTilt`, `endTilt`, `pan` |
-| `RandomPosition` | Random movement | `panCenter`, `tiltCenter`, `panRange`, `tiltRange` |
+| `PanSweep` | Horizontal sweep, bouncing by default | `startPan`, `endPan`, `tilt`, `curve` |
+| `TiltSweep` | Vertical sweep, bouncing by default | `startTilt`, `endTilt`, `pan`, `curve` |
+| `RandomPosition` | Random movement | `panCentre`, `tiltCentre`, `panRange`, `tiltRange` |
 
-### Beam Effects (`FxOutput.Slider`)
+### Beam FX (`FxOutput.Slider`)
 
-Category `beam` (effects plan D6, session 6): each drives **one** beam property and declares only it
-in `compatibleProperties`, so the picker offers it only on a head that has that property, under its
-**Beam** family. Level effects are not offered on beam sliders (`FU-FX-BEAM-ANY-SLIDER`).
+Family `beam` (effects plan D6, session 6): each drives **one** beam attribute and declares only it
+in `compatibleAttributes`, so the picker offers it only on a head that has that attribute, under its
+**Beam** family. Level FX are not offered on beam sliders (`FU-FX-BEAM-ANY-SLIDER`).
 
-| Effect | Property | Description | Parameters |
-|--------|----------|-------------|------------|
+| FX | Attribute | Description | Parameters |
+|----|-----------|-------------|------------|
 | `ZoomWave` | `zoom` | Sine between two zooms | `min`, `max` |
 | `IrisPulse` | `iris` | Pulse's attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
 | `FrostPulse` | `frost` | Pulse's attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
 | `FocusPull` | `focus` | Sweep between two focus levels, bouncing by default | `start`, `end`, `curve` |
 
-The values are raw DMX, as every level effect's are. A stepped zoom (the Robe's) is a setting, so
+The values are raw DMX, as every level FX's are. A stepped zoom (the Robe's) is a setting, so
 Zoom Wave on it writes the byte and lands on whichever step that is. To step one by name, use
 Slot Steps on it (`ZOOM_18, ZOOM_26`), or Palette Steps over Beam palettes whose zoom is a percent,
 which snaps to the step nearest that share of its angles, as a palette does (below).
 
-A stored beam effect that names no property — an effect palette's, or any other stored without one — lands
-on the one property its registration declares (`FxSpawner`'s `beam` arm), on a group only where
-every member has it, as the dimmer arm asks of a group's dimmers; so a Beam palette's effect must
-name one property, its own `propertyName` or else the one its registration declares, never a
+A stored beam FX that names no attribute — an FX palette's, or any other stored without one — lands
+on the one attribute its registration declares (`FxSpawner`'s `beam` arm), on a group only where
+every member has it, as the dimmer arm asks of a group's dimmers; so a Beam palette's FX must
+name one attribute, its own `attribute` or else the one its registration declares, never a
 sentinel (`validatePaletteFx`) — Slot Steps names the setting it steps. A group or selection is resolved
-through its first head that has the property (`referenceFixtureFor(target, property)`), so a
+through its first head that has the attribute (`referenceFixtureFor(target, attribute)`), so a
 selection that starts on a head without zoom still drives the zooms after it. Record files an
-effect on `zoom`, `iris`, `frost` or `focus` as family `beam` (`categoryFromPropertyName`; a step
-effect by `recordedFxFamily`, below), so a recorded Look's families include Beam. A speed master may take `family: beam`, and a Beam effect
+FX on `zoom`, `iris`, `frost` or `focus` as family `beam` (`categoryFromAttributeName`; a step
+FX by `recordedFxFamily`, below), so a recorded Look's families include Beam. A speed master may take `family: beam`, and a Beam FX
 palette holds one of them (`PALETTE_FX_FAMILIES`).
 
-### Step Effects (`FxOutput.Steps`)
+### Step FX (`FxOutput.Steps`)
 
 Effects plan session 7 (D8, §3.6): two built-ins step through **named things**, each resolved for the
-head in hand, which no other effect output can say. Both emit `FxOutput.Steps(from, to, blend,
+head in hand, which no other FX output can say. Both emit `FxOutput.Steps(from, to, blend,
 steps)` — two step indices, how far between them, and the `StepList` that says what a step is — and
 declare `outputType: STEPS`, which every target accepts (`FxTarget.accepts`; the routes'
 `requireOutputTypeMatch`, `FxInstance`'s warn and a palette press's skip all ask it).
 
-| Effect | Category | Steps through | Parameters |
-|--------|----------|---------------|------------|
-| `PaletteSteps` | its palettes' family | generic value palettes, `pal:{uuid}` each | `palettes` (`paletteList`), `fadeRatio` |
-| `SlotSteps` | `beam` | one setting's option names | `slots` (`slotList`) |
+| FX | Family | Steps through | Parameters |
+|----|--------|---------------|------------|
+| `PaletteSteps` | its palettes' family | generic value palettes, `pal:{uuid}` each (a `paletteList`) | `palettes`, `fadeRatio` |
+| `SlotSteps` | `beam` | one setting's option names (a `slotList`) | `slots` |
 
-The two are one family in the library, *Steps* (terminology plan D23): both register under `palette`
+The two are one family in the library, *Steps* (terminology plan D23): both register under `steps`
 (`STEPS_CATEGORY`), which names no attribute family, and are offered and stored in the family of what
-they step — the Category column — through `stepsFxFamily` and, on the client, `drivenCategoryOf`.
+they step — the Family column — through `stepsFxFamily` and, on the client, `drivenCategoryOf`.
 
 `stepsAt(phase, steps, fadeRatio)` is the timing, Colour Cycle's: equal segments, each step held for
 `1 − fadeRatio` of its own and crossing to the next over the rest, the last crossing back to the
-first. Size, direction and the spread apply as to any effect, so a Backward or Bounce phase runs the
+first. Amount, direction and the spread apply as to any FX, so a Backward or Bounce phase runs the
 steps back.
 
 **The target resolves a step per head** (`StepList.valueFor`, `colourFor` on the colour target):
@@ -341,28 +343,28 @@ steps back.
 (Slot Steps' level read off the setting the target already holds, `SlotStepList.levelFor`). A head
 that cannot take a step holds what is underneath for it: nothing is written where it shows only that
 step, and part-way between a step it can take and one it cannot it crosses from what is underneath
-(`FxOutput.Steps.blendOn`, which reads what is underneath only then). The blend mode and Size apply
+(`FxOutput.Steps.blendOn`, which reads what is underneath only then). The blend mode and Amount apply
 after, as to any output.
 
 - **Palette Steps** (`PaletteStepList`): each palette's rows, as intents, resolved on the head through
   `PaletteResolver` — the cook's, *Apply as values*' and the resolves-to panel's one answer — for the
-  target's property: the colour family (the hex mixed for that head's emitters, then any explicit
+  target's attribute: the colour family (the hex mixed for that head's emitters, then any explicit
   emitter row) on the colour target, the position row on the position target, else the row naming
-  the property. So a centre-relative (`pos:`) and a degree (`deg:`) position palette each land on the
+  the attribute. So a centre-relative (`pos:`) and a degree (`deg:`) position palette each land on the
   head's own pan and tilt, a beam role on its own range (a stepped zoom snapping, `steppedZoomSlot`),
   and an RGBW head and an RGB one each get their own mix. **A colour step is a layer's colour**: a head
   missing an emitter the palette names takes none of it (`unmetColourRequirement`, the cook's rule),
   and what a palette does not name stays as it is underneath (`StepColour.over`) — a UV-only palette
   moves the UV and leaves the RGB, white and amber alone. A head is resolved once and cached by its
-  key and property, re-resolved when the model under that key changes: the engine builds fresh
+  key and attribute, re-resolved when the model under that key changes: the engine builds fresh
   fixture objects every tick, so an object is no key. Fitted media is not read, since it decides only
-  a **wheel** slot and a wheel head is no colour target's member. The palettes are read through the effect's colour source, which is a
+  a **wheel** slot and a wheel head is no colour target's member. The palettes are read through the FX's colour source, which is a
   `PaletteSource` — the one `createFxWithPalettes` passes — so `TypedParams.paletteSteps` needs
   no new factory argument, the references are pre-warmed by the same `paletteColourRefsIn` scan, and
   a palette's edit moves the running steps through the colour caches' version. An entry that is not a
   generic value palette is dropped, as a colour list drops one.
 - **Slot Steps** (`SlotStepList`): each name looked up in the head's own options of the setting the
-  effect drives, ignoring case, spaces, underscores and dashes (`normaliseSlotName`), so *Gobo 3* is
+  FX drives, ignoring case, spaces, underscores and dashes (`normaliseSlotName`), so *Gobo 3* is
   `GOBO_3` on every head, at each head's own level. A head without the slot holds what is underneath on
   that step. Its levels are cached per option set (a setting's options are its model's enum), so the
   cache holds one entry per wheel model met. It declares only the `setting` sentinel: the client turns
@@ -371,47 +373,46 @@ after, as to any output.
 **What it is filed under.** Palette Steps registers under `family: steps`, which names no
 attribute family on purpose: a stored one carries the family of its palettes (`intensity`, `colour`, `position` or
 `beam`), and `paletteStepsShape` is the one statement of that shape — every palette in one family,
-and the property it drives, the colour for colour, else the first in the palette vocabulary every
+and the attribute it drives, the colour for colour, else the first in the palette vocabulary every
 palette names (zoom, where every Beam palette names zoom and only some frost). A stored Palette Steps
-that names no property (an effect palette's, or any other stored without one) lands on that property
-(`FxSpawner.drivenPropertyOf`); Slot Steps names its setting as the row's `propertyName`. An effect
+that names no attribute (an FX palette's, or any other stored without one) lands on that attribute
+(`FxSpawner.drivenAttributeOf`); Slot Steps names its setting as the row's `attribute`. An FX
 palette's write boundary (`validatePaletteFx`) holds both: Palette Steps needs two generic value
 palettes or more, all readable, and its `family` must be theirs; Slot Steps needs a
-`propertyName` and two slots or more. Its master is stamped by that family (the picker, the
+`attribute` and two slots or more. Its master is stamped by that family (the picker, the
 palette editor and the MCP tools' `familyMasterFor`), so `steps` is no master's family
-(`GlossaryVocabularyTest`). Record files a running step effect by `recordedFxFamily`:
-Slot Steps as `beam`, Palette Steps as its palettes' family read off the property it drives (a strobe
+(`GlossaryVocabularyTest`). Record files a running step FX by `recordedFxFamily`:
+Slot Steps as `beam`, Palette Steps as its palettes' family read off the attribute it drives (a strobe
 in an Intensity palette is `intensity`, not `controls`).
 
-**Neither can be forked.** `/fx/definitions` refuses a `STEPS` output (`validateCompatibleProperties`):
+**Neither can be forked.** `/fx/definitions` refuses a `STEPS` output (`validateCompatibleAttributes`):
 a step list names this desk's palettes and settings, resolved per head by the targets, and a
 definition syncs to desks that predate the output type. The FX Library draws Fork disabled on both
 with that reason (`forkRefusal`).
 
 **On the client** (`lib/stepFx.ts`, which never resolves): the picker lists Slot Steps under
 Beam on a setting row and starts it on the setting's first two slots past its open one; it offers
-Palette Steps in each family that has two generic value palettes or more naming a property the
+Palette Steps in each family that has two generic value palettes or more naming an attribute the
 target has (`paletteStepsOffers`), started on all of them, in name order; Slot Steps from anywhere
 but a setting row starts on a gobo wheel where the head has one, else its first setting. The editor's
 two parameter types are `paletteList` (`FxPaletteListPicker`: palettes in step order, by reference —
-an effect palette's own family only, else one family once one is chosen) and `slotList`
+an FX palette's own family only, else one family once one is chosen) and `slotList`
 (`FxSlotListPicker`: the target setting's options, a stored name the head lacks drawn dashed; on an
-effect palette, which names its setting from the rig, every patched head's options of that name
+FX palette, which names its setting from the rig, every patched head's options of that name
 (`rigSettingUnion`) and typed names besides, a dashed one on no patched head). *Save as palette…* on a
-running step effect banks it as `stepFxPaletteShape` says — its palettes' family, or Beam naming
+running step FX banks it as `stepFxPaletteShape` says — its palettes' family, or Beam naming
 its setting.
 
-### Stateful Effects (`StatefulFx`)
+### Stateful FX (`StatefulFx`)
 
-Stateful effects maintain internal state that evolves over time, rather than being pure
+Stateful FX maintain internal state that evolves over time, rather than being pure
 functions of phase. They receive tick-level timing (`ClockTick` + `deltaMs`) instead of
 a 0-1 phase value.
 
-| Effect | Description | Parameters |
-|--------|-------------|------------|
-| `CandleFlicker` | Organic candle/fire flicker via random walk | `baseLevel`, `min`, `max`, `smoothing` |
+The built-in ones are Candle Flicker and Fluorescent Flicker, in the Intensity table above. Both run
+on the wall clock (`timingSource: WALL_CLOCK`), so their Cycle is seconds.
 
-Stateful effects implement the `StatefulFx` interface:
+Stateful FX implement the `StatefulFx` interface:
 - `initialize()` — called once when added to the engine, resets state
 - `calculateStateful(tick, deltaMs, context)` — called each tick instead of `calculate()`
 - `calculate(phase, context)` — fallback that returns a neutral value
@@ -428,45 +429,45 @@ is now a standard Intensity FX with the same output. One FX driving several attr
 `FU-SPEED-PER-ATTRIBUTE`.
 
 A mismatched `FxOutput` is **silently dropped** by `FxTarget` (`if (output !is FxOutput.Slider)
-return` and friends), so an FX's `compatibleProperties` must list only properties of its output type.
+return` and friends), so an FX's `compatibleAttributes` must list only attributes of its output type.
 
-## `compatibleProperties` must match the output type
+## `compatibleAttributes` must match the output type
 
-That silent drop is the general rule, and it bit every effect in
-the `position` category (sweep item A11). All seven declared `compatibleProperties: [pan, tilt]`
-against `outputType: POSITION`; `pan` and `tilt` are real `@FixtureProperty` sliders, so every
-frontend picker chose one, posted `propertyName: "pan"`, and got a `SliderTarget` that discarded
+That silent drop is the general rule, and it bit every FX in
+the `position` family (sweep item A11). All seven declared `compatibleAttributes: [pan, tilt]`
+against `outputType: POSITION`; `pan` and `tilt` are real `@FixtureAttribute` sliders, so every
+frontend picker chose one, posted `attribute: "pan"`, and got a `SliderTarget` that discarded
 the `FxOutput.Position`. No light, no error, no log, for the desk's whole life.
 
 The contract, and the three things that now hold authors to it:
 
 - **`FxTarget.acceptedOutputType`** — the one `FxOutputType` a target can apply. A **`POSITION`
-  effect must advertise `position`**, the synthetic pan/tilt compound, and never an axis by name;
-  a `COLOUR` effect must advertise `rgbColour` (or an alias); a `SLIDER` effect must advertise
+  FX must advertise `position`**, the synthetic pan/tilt compound, and never an axis by name;
+  a `COLOUR` FX must advertise `rgbColour` (or an alias); a `SLIDER` FX must advertise
   anything *but* `position` or the colour bundle.
-- **`FxTargetFactory`** (`fx/FxTargetFactory.kt`) is the single place a property *name* becomes a
+- **`FxTargetFactory`** (`fx/FxTargetFactory.kt`) is the single place an attribute *name* becomes a
   target. It replaced four near-identical copies in the route layer, all of which had A11.
-  Given the effect's output type it also coerces `pan`/`tilt` to a `PositionTarget` for a
-  `POSITION` effect — a repair for Look and cue rows *already recorded* with `propertyName: "pan"`,
-  not a licence for dishonest metadata. A `SLIDER` effect on `pan` alone still resolves to
+  Given the FX's output type it also coerces `pan`/`tilt` to a `PositionTarget` for a
+  `POSITION` FX — a repair for Look and cue rows *already recorded* with `attribute: "pan"`,
+  not a licence for dishonest metadata. A `SLIDER` FX on `pan` alone still resolves to
   `SliderTarget("pan")`, because that is a legitimate thing to ask for.
 - **Reported, not swallowed.** `POST /fx/add`, `PUT /fx/{id}` and `POST /groups/{name}/fx` reject a
   mismatch with 400 (`requireOutputTypeMatch`), and `POST`/`PUT /fx/definitions` rejects a
-  user definition whose `compatibleProperties` its `outputType` cannot drive. Everywhere a throw
+  user definition whose `compatibleAttributes` its `outputType` cannot drive. Everywhere a throw
   would be worse than a dark light — cue and Look fire, Include, scripts, MIDI — `FxInstance`'s
   `init` logs a warn instead.
 
 `FxRegistrationTargetCompatibilityTest` holds every built-in to this, resolving each declared
-property through `FxTargetFactory` *without* the output-type hint, so re-adding `[pan, tilt]` goes
+attribute through `FxTargetFactory` *without* the output-type hint, so re-adding `[pan, tilt]` goes
 red. It parses frontmatter only and compiles nothing.
 
 ### Definitions heal rather than lock
 
-`compatibleProperties` is on **no** editing surface, and the FX edit sheet sends only
+`compatibleAttributes` is on **no** editing surface, and the FX edit sheet sends only
 `{id, name, script}`. So validating the merged declaration on `PUT` — request field, else the
 stored one — would have permanently bricked every position definition already saved with
 `[pan, tilt]`: a script-only edit re-checks a stored list the operator cannot reach, 400s, and has
-no in-app remedy. `normaliseCompatibleProperties` runs first and rewrites `pan`/`tilt` → `position`
+no in-app remedy. `normaliseCompatibleAttributes` runs first and rewrites `pan`/`tilt` → `position`
 for a POSITION definition, and the `PUT` writes the normalised list back even when the request
 didn't supply the field, so the first save heals the row. That one rewrite is the only thing done
 silently, because it has no reading under which the author meant it; everything else is rejected
@@ -475,24 +476,24 @@ out loud.
 ### The frontend change A11 didn't predict
 
 A11 said neither fix needed a frontend change. True of the FX-*add* path — `AddEditFxSheet`,
-`useBuskingState` and `ConfigureFxSheet` read the property list off the library and needed
+`useBuskingState` and `ConfigureFxSheet` read the attribute list off the library and needed
 nothing. Not true of the *authoring* path: `FxLibrary.tsx`'s new-definition form derived
-`compatibleProperties` from the chosen **category** while `outputType` is an independent select
-defaulting to `SLIDER`. That let Category = Position + the default output type write a list the
-effect could never drive, and the new 400 would have fired on the desk's own create flow, naming a
+`compatibleAttributes` from the chosen **family** while `outputType` is an independent select
+defaulting to `SLIDER`. That let Family = Position + the default output type write a list the
+FX could never drive, and the new 400 would have fired on the desk's own create flow, naming a
 field the form doesn't expose. It now derives from `outputType`, which is what actually decides the
 answer.
 
-## Effect Registry
+## FX Registry
 
-All effects (built-in and user-defined) are registered in a unified `FxRegistry`.
+All FX (built-in and user-defined) are registered in a unified `FxRegistry`.
 
 ### Architecture
 
 ```
 FxRegistry
-├── register(FxRegistration)     ← Built-in effects at startup
-├── register(FxRegistration)     ← User effects from fx_definitions table
+├── register(FxRegistration)     ← Built-in FX at startup
+├── register(FxRegistration)     ← User FX from fx_definitions table
 ├── createFx(type, params, ...)  → Fx instance
 ├── getLibrary()                     → List<FxTypeInfo> (for API)
 ├── getRegistration(type)            → FxRegistration? (lookup)
@@ -501,7 +502,7 @@ FxRegistry
 
 ### FxRegistration
 
-Each registered effect provides:
+Each registered FX provides:
 - `id` — canonical name (e.g., "SineWave")
 - `aliases` — alternative names for lookup (e.g., "sine_wave", "sine")
 - `name` — human-readable display name
@@ -511,7 +512,7 @@ Each registered effect provides:
 - `defaultDirection`, `defaultCycle` — what a new instance runs at when its author names
   neither (below)
 - `parameters` — schema for the API/UI
-- `compatibleProperties` — which fixture properties this can target
+- `compatibleAttributes` — which fixture attributes this can target
 - `source` — `BUILT_IN` or `USER`
 - `script` — the calculate body (Kotlin script source)
 - `factory` — creates an `Fx` from string parameters + the colour source (see below)
@@ -522,25 +523,25 @@ Lookup is case-insensitive with spaces and underscores stripped.
 
 ### Data Model
 
-**Built-in effects** are stored as `.fx.kts` files in the repository under
+**Built-in FX** are stored as `.fx.kts` files in the repository under
 `src/main/resources/fx/`. Each file contains YAML frontmatter for metadata followed
 by the calculate body. They are loaded at startup, compiled, and registered in the
 FxRegistry with `FxSource.BUILT_IN`. They appear in the FX Library UI as
 read-only, and their scripts serve as real working examples for users writing custom
-effects.
+FX.
 
-**User effects** are stored in the `fx_definitions` database table and managed via
+**User FX** are stored in the `fx_definitions` database table and managed via
 the FX Library UI. They are compiled and registered on save and on startup. The
-table always requires a `project_id` since every user effect belongs to a project.
+table always requires a `project_id` since every user FX belongs to a project.
 
 ```
-fx_definitions table (user effects only):
-├── effect_id         — canonical ID (e.g., "MyCustomPulse")
+fx_definitions table (user FX only):
+├── fx_id             — canonical ID (e.g., "MyCustomPulse")
 ├── name              — display name (e.g., "My Custom Pulse")
-├── category          — "dimmer", "colour", "position", "controls" ("beam" and "palette" are
-│                       the built-ins' own; the New effect sheet offers neither)
-├── output_type       — SLIDER, COLOUR, or POSITION (never STEPS — refused, see Step Effects)
-├── effect_mode       — STANDARD or STATEFUL
+├── family            — "intensity", "colour", "position", "controls" ("beam" and "steps" are
+│                       the built-ins' own; the New FX sheet offers neither)
+├── output_type       — SLIDER, COLOUR, or POSITION (never STEPS — refused, see Step FX)
+├── fx_mode           — STANDARD or STATEFUL
 ├── parameters        — JSON schema [{name, type, defaultValue, description}]
 ├── compatible_attributes — JSON array of attribute names
 ├── script            — the calculate() body only
@@ -552,7 +553,7 @@ fx_definitions table (user effects only):
 ### Script Model
 
 Scripts contain **only the calculation logic** — the body of `calculate()` or
-`calculateStateful()`. All metadata (name, category,
+`calculateStateful()`. All metadata (name, family,
 parameters, etc.) is stored in the database/registration and managed via the UI.
 
 **Parameter access** uses a typed accessor object (`TypedParams`) that pre-parses
@@ -570,10 +571,10 @@ params.easingCurve("curve")  → EasingCurve
 params.string("name")        → String
 ```
 
-### Built-in Effect File Format (.fx.kts)
+### Built-in FX File Format (.fx.kts)
 
-Built-in effects are stored as `.fx.kts` files under `src/main/resources/fx/`,
-organized by category:
+Built-in FX are stored as `.fx.kts` files under `src/main/resources/fx/`,
+organized by family:
 
 ```
 src/main/resources/fx/
@@ -606,7 +607,7 @@ name: Sine Wave
 family: intensity
 outputType: SLIDER
 fxMode: STANDARD
-compatibleProperties: [dimmer, uv]
+compatibleAttributes: [dimmer, uv]
 parameters:
   - name: min
     type: ubyte
@@ -628,7 +629,7 @@ FxOutput.Slider(value)
 
 At startup, `FxFileLoader` scans the resource directory, parses each file's
 frontmatter into metadata and script body, compiles the script, and registers
-the effect in the FxRegistry with `source = BUILT_IN`.
+the FX in the FxRegistry with `source = BUILT_IN`.
 
 Two optional frontmatter keys say what a **new** instance runs at, read as `defaultTiming` is:
 `defaultDirection` (`FORWARD`, `BACKWARD` or `BOUNCE`; `FxInstance` starts its dynamics on it) and
@@ -646,7 +647,7 @@ Each `fxMode` has a dedicated base class with focused provided properties:
 
 #### FxCalcScript (STANDARD)
 
-For pure effects that are a function of phase:
+For pure FX that are a function of phase:
 
 ```kotlin
 // Provided: phase (Double), context (FxContext), params (TypedParams)
@@ -662,7 +663,7 @@ FxOutput.Slider(value)
 
 #### FxStatefulCalcScript (STATEFUL)
 
-For effects that maintain state across ticks (e.g., CandleFlicker):
+For FX that maintain state across ticks (e.g., CandleFlicker):
 
 ```kotlin
 // Provided: tick (ClockTick), deltaMs (Long), context (FxContext),
@@ -700,7 +701,7 @@ interfaces. It:
 ### FX Definitions REST API
 
 ```
-GET    /api/rest/fx/library                → List all available effects
+GET    /api/rest/fx/library                → List all available FX
 GET    /api/rest/fx/definitions/{id}       → Full definition including script
 POST   /api/rest/fx/definitions            → Create new definition
 PUT    /api/rest/fx/definitions/{id}       → Update (recompiles on save)
@@ -711,73 +712,73 @@ POST   /api/rest/fx/definitions/{id}/run   → Compile and register (live test)
 
 ## Blend Modes
 
-How effect output combines with fixture's base value:
+How FX output combines with fixture's base value:
 
 | Mode | Description | Use Case |
 |------|-------------|----------|
-| `OVERRIDE` | Effect replaces value | Primary effects |
-| `ADDITIVE` | Effect added to value | Accent layers |
-| `MULTIPLY` | Effect multiplies value | Proportional dimming |
+| `OVERRIDE` | FX replaces value | Primary FX |
+| `ADDITIVE` | FX added to value | Accent layers |
+| `MULTIPLY` | FX multiplies value | Proportional dimming |
 | `MAX` | Maximum of both | Ensure minimums |
 | `MIN` | Minimum of both | Limit maximums |
 
-### Size, direction and N-shot (effects plan session 1)
+### Amount, direction and runs (effects plan session 1)
 
-Three fields of every running effect, edited in place (they are `FxDynamics` fields, so an edit
-keeps the phase), stored on the four effect homes — a live instance, `look_fx`,
-`cue_ad_hoc_fx` and an effect palette (`palette_fx`) — and carried by `LookFxSpec`,
+Three fields of every running FX, edited in place (they are `FxDynamics` fields, so an edit
+keeps the phase), stored on the four FX homes — a live instance, `look_fx`,
+`cue_ad_hoc_fx` and an FX palette (`palette_fx`) — and carried by `LookFxSpec`,
 `StoredFx` and `LookFxSettings` between them, so Record and Include keep them. They sync
 from `formatVersion` 30 (`docs/sync-engineering.md` §"Version 30"). The desk owns every rule (the
 effects plan's P2); the editor only writes the three fields.
 
-- **Size** (D2), 0–1: how much of the effect reaches the stage over what is underneath. It is a
+- **Amount** (D2), 0–1: how much of the FX reaches the stage over what is underneath. It is a
   **weight applied after the blend**, per channel (P3): `out = before + (blended − before) × w`,
-  where `before` is what the property already holds this pass — the reset baseline and any
-  lower-priority effect already applied — and `w = amount × envelope × stackAmount`
+  where `before` is what the attribute already holds this pass — the reset baseline and any
+  lower-priority FX already applied — and `w = amount × envelope × stackAmount`
   (`FxInstance.weight`, `FxEngine.weightOf`), clamped to 0–1. A Replace dimmer at 50 % therefore sits halfway between the level underneath and the
-  effect, never at half the effect's raw value; an Around movement (`ADDITIVE` about 128) has its
+  FX, never at half the FX's raw value; an Around movement (`ADDITIVE` about 128) has its
   offset scaled, so a circle at 50 % has half its radius about the position underneath; a colour is
   weighed channel by channel, white, amber and UV included. `FxTarget.applyValueToFixture` takes the
   weight and `weigh` is the one formula. A **setting** is discrete — a slot has no halfway — so it
-  takes the effect's value from half weight up and holds what is underneath below (`weighDiscrete`).
-  At weight 0 nothing is written. A size outside 0–1 is refused at every write boundary
-  (`FxSpecCoercion.Strict.amountProblem`); a stored one is clamped with a warn. Size stops at
+  takes the FX's value from half weight up and holds what is underneath below (`weighDiscrete`).
+  At weight 0 nothing is written. An amount outside 0–1 is refused at every write boundary
+  (`FxSpecCoercion.Strict.amountProblem`); a stored one is clamped with a warn. Amount stops at
   100 % (`FU-FX-AMPLITUDE`).
 - **The envelope** is the runtime factor of the weight a fade moves (effects plan §3.5, session 4);
-  a stack's effect size (below) multiplies in beside it. It **does not scale the effect's raw output**:
-  `FxOutput.scaled()` is gone, and with it the scaling that dropped an `OVERRIDE` effect to 0. It is
+  a stack's FX amount (below) multiplies in beside it. It **does not scale the FX's raw output**:
+  `FxOutput.scaled()` is gone, and with it the scaling that dropped an `OVERRIDE` FX to 0. It is
   `FxInstance.envelope`, an immutable `FxEnvelope` (`fx/FxEnvelope.kt`) — a level, or a ramp
   from one level to another over a duration on an `EasingCurve`, read on the clock wherever the weight
   is read (`intensityMultiplier` is its level now; setting that holds a level). A fade is one value,
   so it needs no loop of its own, an edit's swap (`updateFx`) and a split's copies carry it by
   carrying the object, and every change is one compare-and-set (`FxInstance.updateEnvelope`). What
   moves it:
-  - **a cue's GO** (D1): the hold registry ramps an arriving cue's new effects `0 → 1` and a leaving
-    cue's `→ 0` over the cue's fade and curve, and an effect the two cues share runs on untouched
-    (P4; never a paused instance or an N-shot, which the incoming cue starts afresh) — a Look or
-    palette effect by its stored row, an ad-hoc effect by its run key, edited in place at the GO
+  - **a cue's GO** (D1): the hold registry ramps an arriving cue's new FX `0 → 1` and a leaving
+    cue's `→ 0` over the cue's fade and curve, and an FX the two cues share runs on untouched
+    (P4; never a paused instance or one with a run count, which the incoming cue starts afresh) — a Look or
+    palette FX by its stored row, an ad-hoc FX by its run key, edited in place at the GO
     when the incoming row's settings differ (stack-timeline plan D7, D8) —
     `docs/cue-stacks-engineering.md` §"Holds" and §"Crossfade";
   - **the programmer** (D13): a layer added or removed (a press with `fadeMs`, `programmer.removeLayer`,
-    a cue Include's layers), `programmer.clearTarget`'s local effects and Clear's band, over the
+    a cue Include's layers), `programmer.clearTarget`'s local FX and Clear's band, over the
     programmer fade — split by what is under each (`FxEngine.releaseFx`, Chris's call): an
-    effect over a programmer value the same gesture moves lands or goes at once, so that value ramps,
-    since a key an effect covers never fades and the value under a shrinking effect would snap
-    (`FU-FX-VALUE-FADE-UNDER-EFFECT`). Include's own effects land at full;
+    FX over a programmer value the same gesture moves lands or goes at once, so that value ramps,
+    since a key an FX covers never fades and the value under a shrinking FX would snap
+    (`FU-FX-VALUE-FADE-UNDER-EFFECT`). Include's own FX land at full;
   - **Blind**: leaving it grows the band from nothing over the Blind fade, by the same split (entering
     holds it at once).
 
   An instance let go on a fade is **leaving** (`FxInstance.leaving`): no cue, layer, Release, Record,
   Include or reload carry counts it any more, and the 50 Hz ticker-woken passes remove it once its ramp
   reaches 0 (`FxEngine.retireFinishedLeaving`, run before the pass's early returns, so a paused
-  effect ends on time). A fade of 0 removes it at once. A leaving instance a cue takes back mid-fade
+  FX ends on time). A fade of 0 removes it at once. A leaving instance a cue takes back mid-fade
   (`FxEngine.reclaimFx`) is held where it stood and faded on from there; one the engine has
   already retired (`FxEnvelope.RETIRED`) cannot be taken back, which is what keeps the two from
   racing. An edit's swap shares the envelope cell with the instance it replaces, as it shares the
   dynamics, so a fade or a retirement racing the swap reaches both; a retired instance an edit swapped
   in is removed by the next sweep. The envelope is never stored and never recorded: Record takes the
-  row's own size.
-- **A stack's effect size** (D10, session 5): a cue stack's runtime weight on its effects, 0–1,
+  row's own amount.
+- **A stack's FX amount** (D10, session 5): a cue stack's runtime weight on its FX, 0–1,
   100 % at load — the third factor of `w`. `StackFxAmounts` (`fx/StackFxAmounts.kt`) is owned by
   the show's `CueStackManager` and handed to the engine (`FxEngine.stackFxAmounts`), so a project
   switch starts every stack at full; a same-project reload carries it (`ShowCarry.stackFxAmounts`,
@@ -786,76 +787,76 @@ effects plan's P2); the editor only writes the three fields.
   hold, 100 % under a loose hold (§11 question 21): `weighingStackOf` reads it off the instance's
   `priority`, which `CueHolds` restamps whenever the top hold changes and retags when a cue adopts an
   instance or takes one back — never `FxInstance.cueStackId`, the first hold's tag. A **leaving**
-  instance keeps its cue and priority, so it shrinks from the size of the stack that let it go rather
-  than jumping to full as its fade starts. Programmer, manual and Include effects own no cue and are
+  instance keeps its cue and priority, so it shrinks from the FX amount of the stack that let it go rather
+  than jumping to full as its fade starts. Programmer, manual and Include FX own no cue and are
   never weighed. The weight is read per pass (one map read, none at all while every stack is at
-  full), and provenance is re-sent on every change of a size (`CueStackManager.setFxAmount`), since
+  full), and provenance is re-sent on every change of an amount (`CueStackManager.setFxAmount`), since
   a discrete output — a setting, a step — flips on stage at a weight of one half. On the wire: `GET/PUT
   /projects/{id}/cue-stacks/{sid}/fx-amount` `{amount}` (400 `STACK_FX_AMOUNT_INVALID` outside 0–1,
   404 for another project's stack, current project only, both roles — a runtime gesture on a venue),
-  the `stackFxAmount.state` / `.set` frames (`docs/websocket-engineering.md` §"Stack effect size")
+  the `stackFxAmount.state` / `.set` frames (`docs/websocket-engineering.md` §"Stack FX amount")
   and the MIDI `stackFxAmount` fader (`docs/midi-control-surface-engineering.md`). The frontend's
   *FX amount* slider sits on the stack's row in the Show view and in the phone runner.
 - **Direction** (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, applied to each member's phase after the
   spread (§3.3 step 6, `FxDirection.apply`): Backward is `1 − p`, kept inside `[0, 1)` so an
-  effect indexing a list by `floor(phase × n)` never reads one past its end; Bounce is Forward on
+  FX indexing a list by `floor(phase × n)` never reads one past its end; Bounce is Forward on
   even cycles and Backward on odd ones, counted on the member's own clock (its offset taken off). It
-  reaches every phase an effect reads; a **stateful** effect (`calculateStateful`) reads no phase,
+  reaches every phase an FX reads; a **stateful** FX (`calculateStateful`) reads no phase,
   so direction does nothing to it. The built-ins keep their shapes (P6): Ramp Down stays. The
   sweeps', Colour Fade's and Focus Pull's `pingPong` went to Bounce in the terminology plan (D24), a
   stored one rewritten at half the cycle with its phase offset, spread and runs doubled, which plays
   the same (`LegacyFxOutputTest`).
-- **N-shot** (D9): `runs`, at least 1, null for forever. The count runs on the effect's clock from
-  its first pass with a count — a master's tick (`FxInstance.runsStartTick`) for a beat effect, the
+- **Runs** (D9): `runs`, at least 1, null for forever. The count runs on the FX's clock from
+  its first pass with a count — a master's tick (`FxInstance.runsStartTick`) for a beat FX, the
   scaled accumulator (`runsStartScaledMs`) for a wall-clock one — so a count given to a running
-  effect runs from then, and its first cycle starts at the top whatever the master's bar. A member
-  runs while its own clock, the effect's less its distribution offset, is in `[0, N)`: it holds what
+  FX runs from then, and its first cycle starts at the top whatever the master's bar. A member
+  runs while its own clock, the FX's less its distribution offset, is in `[0, N)`: it holds what
   is underneath before its offset comes round and after its own N, so a one-shot chase ripples in
   and out rather than showing a tail at the start. The phase functions answer `NaN` for a holding
-  member (`FxInstance.isHolding`) and the engine applies nothing for it. The effect is **spent** once
+  member (`FxInstance.isHolding`) and the engine applies nothing for it. The FX is **spent** once
   the clock has run N cycles past the largest member offset — some member's phase was computed on
   the pass and none has runs left (`runsPending` / `runsEvaluated`, tick-loop owned) — and
   `FxEngine.finishRuns` ends it after the pass's frame is out: removed, which resets what it alone
   covered, **unless a programmer layer spawned it**, which is kept `spent`, painting nothing, because
   the layer's recook would otherwise spawn it afresh and fire it again on the next unrelated
   programmer write; the layer's release removes it. A new count (`updateFx`'s `newRuns`, or
-  `clearRuns` for forever) re-anchors from the next pass and wakes a spent instance. An effect that
+  `clearRuns` for forever) re-anchors from the next pass and wakes a spent instance. An FX that
   is **held** — Blind, a stomp, the programmer's value — still computes its phases, so its count runs
   on while it is held, as its clock does; a **paused** one is not processed and does not finish. An
   expansion with no members evaluates nothing, so a group emptied by a reload does not end an
-  effect.
+  FX.
 - **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `amount`, `direction` and `runs`;
   `PUT /fx/{id}` and `updateFx` take all three with null meaning keep, plus `runForever: true` to
   clear a count (beside a `runs`, refused). `FxDto` (and the group and indirect DTOs) reports
-  `amount`, `direction`, `runs` and `spent`; `programmer.keyStack`'s effect layers report `amount` and
-  `direction`. The MCP effect schemas take the three (`AiToolSchemas.putFxDynamics`, parsed by
+  `amount`, `direction`, `runs` and `spent`; `programmer.keyStack`'s FX layers report `amount` and
+  `direction`. The MCP FX schemas take the three (`AiToolSchemas.putFxDynamics`, parsed by
   `AiTools.parseFxDynamics`), and `describe_rig` and `get_current_state` say them where they are
   not the default.
-- **`KeyStackLayer.onStage` weighs it**: an effect weighted to nothing (a 0 % size, a spent N-shot)
+- **`KeyStackLayer.onStage` weighs it**: an FX weighted to nothing (a 0 % amount, spent runs)
   is not on stage, and only a **full-weight** `OVERRIDE` covers the layers below it — under full
-  size it is a mix with what is underneath, so both are on stage (a setting covers from half weight
+  amount it is a mix with what is underneath, so both are on stage (a setting covers from half weight
   up, as it writes).
 
 ### What the UI calls them: *Around* and *Within*
 
-The live effect editor (`FxEditor`, fixture-fx-sheets plan D12, D12a) never shows the operator
-`ADDITIVE` or `MULTIPLY` for the two effects where the choice is the whole point; it asks a question
+The live FX editor (`FxEditor`, fixture-fx-sheets plan D12, D12a) never shows the operator
+`ADDITIVE` or `MULTIPLY` for the two FX where the choice is the whole point; it asks a question
 in the desk's words and sends an existing spelling (plan P2 — no new field, no `formatVersion`):
 
-- **Movement — *Centre: Around current position | Absolute*.** A position effect with a centre pair
-  (Circle, Figure 8, Random position). **Around** is `ADDITIVE` with `panCenter` and `tiltCenter` at
-  **128**: the position blend is `base + effect − 128`, so a shape centred on 128 orbits whatever the
+- **Movement — *Centre: Around current position | Absolute*.** A position FX with a centre pair
+  (Circle, Figure 8, Random position). **Around** is `ADDITIVE` with `panCentre` and `tiltCentre` at
+  **128**: the position blend is `base + FX − 128`, so a shape centred on 128 orbits whatever the
   reset pass put underneath — the programmer's value, else the cue's, else the base. That is the only
   way a Circle orbits a set position; under `OVERRIDE` it circles its own 128/128. **Absolute** is
-  `OVERRIDE` with the centre shown. The picker starts movement effects Around.
-- **Level — *Over the level underneath: Replace it | Within it*.** The dimmer category. **Replace**
-  is `OVERRIDE` (today's default); **Within** is `MULTIPLY`, so the effect runs inside the level
+  `OVERRIDE` with the centre shown. The picker starts movement FX Around.
+- **Level — *Over the level underneath: Replace it | Within it*.** The Intensity family. **Replace**
+  is `OVERRIDE` (today's default); **Within** is `MULTIPLY`, so the FX runs inside the level
   underneath, scaled by it.
 
 Reading back is by spelling, not by flag: a stored `ADDITIVE` with both centres at 128 **is**
 Around, whoever stored it; `OVERRIDE` is Absolute or Replace; anything else (`MAX`, an `ADDITIVE`
 with a centre of its own) presses neither and the editor's Advanced section still shows the raw
-blend, which stays editable there for every effect. Effect palettes ask the same Centre question
+blend, which stays editable there for every FX. FX palettes ask the same Centre question
 in session 5 (D16); stored palettes keep `OVERRIDE` and read as Absolute (call 6).
 
 ### Reading `blendMode` and friends out of a string
@@ -878,34 +879,34 @@ policies, because there are exactly two situations:
 
 Both accept any casing and tolerate surrounding whitespace. **The strict path is stricter than it
 was before sweep item E4**: `order` and `elementFilter` used to degrade an
-unrecognised value to `NORMAL` / `ALL` and add the effect anyway, so a legacy or typo'd value from
+unrecognised value to `NORMAL` / `ALL` and add the FX anyway, so a legacy or typo'd value from
 a MIDI, AI or third-party caller now loses the whole request instead of one attribute. The shipped
 UI only ever sends canonical names, so nothing in-tree changes.
 
-### Property Reset
+### Attribute Reset
 
-Before processing effects each tick, the engine resets all FX-controlled properties to
-the value of **the layer below** (not to a hardcoded neutral). This is a core invariant of
+Before processing FX each tick, the engine resets all FX-controlled attributes to
+the value of **the tier below** (not to a hardcoded neutral). This is a core invariant of
 the composition model — see
-[lighting-composition-model.md §Layer 3 — Effects](lighting-composition-model.md#layer-3--effects).
+[lighting-composition-model.md §Tier 3 — FX](lighting-composition-model.md#tier-3--fx).
 
 The fallback is resolved by `LayerResolver.fallbackFor(target, fixture, key)`, which
 composes:
 
-1. **Layer 2 (programmer)** — sticky manual property entries and the raw-channel sideband
+1. **Tier 2 (programmer)** — sticky manual attribute entries and the raw-channel sideband
    held in `ProgrammerStore`, unless the blind gate is engaged. A programmer entry wins
-   over everything below, and additionally **suppresses** the effect's own apply on that
-   (fixture, property) — see below.
-2. **Layer 4** — `CueAssignmentResolver`'s composed cue property assignment for this target, if
+   over everything below, and additionally **suppresses** the FX's own apply on that
+   (fixture, attribute) — see below.
+2. **Tier 4** — `CueAssignmentResolver`'s composed cue attribute assignment for this target, if
    any. (The class name predates the renumber.)
-3. **Layer 5** — fixture baseline (0 for sliders, black for colour, 128 for pan/tilt).
+3. **Tier 5** — fixture baseline (0 for sliders, black for colour, 128 for pan/tilt).
 
 ### Programmer suppression and the priority band
 
-An active programmer entry (blind off) suppresses **every** effect on its (fixture,
-property) — cue-owned and manual alike: the reset pass paints the programmer value and the
-apply loop skips that pair (per fixture, so a group effect keeps painting other members, and
-per property, so an effect on another property of the same fixture keeps running). Effects in the reserved
+An active programmer entry (blind off) suppresses **every** FX on its (fixture,
+attribute) — cue-owned and manual alike: the reset pass paints the programmer value and the
+apply loop skips that pair (per fixture, so a group FX keeps painting other members, and
+per attribute, so an FX on another attribute of the same fixture keeps running). FX in the reserved
 **programmer priority band** (`FxEngine.PROGRAMMER_FX_PRIORITY_BASE`, strictly above every
 cue-derived priority) are exempt — they are programmer-owned FX and modulate on top of
 programmer values. The suppression snapshot is rebuilt only when `ProgrammerStore.epoch`
@@ -914,10 +915,10 @@ changes, keeping the 50 Hz path allocation-flat.
 Consequences:
 
 - Manual values (`updateChannel` shim, MIDI surface faders — programmer entries) persist
-  visibly under running effects, and on properties they hold, *win outright* — the effect
+  visibly under running FX, and on attributes they hold, *win outright* — the FX
   freezes until the entry clears, then resumes on the next tick.
 - `MAX` and `ADDITIVE` blend modes do not ratchet upward across ticks — the reset clears
-  the accumulator before each effect iteration.
+  the accumulator before each FX iteration.
 - Parked channels are skipped entirely by the reset + apply pass (`ParkManager.isParked`
   check), both as an optimisation and because the transmit-time parking override would
   discard the composition result anyway.
@@ -927,13 +928,13 @@ instance in the band — a busk, Include's children, a programmer layer's — is
 `blind && isProgrammerFxPriority(priority)`, asked by the compose pass beside `FxSuppression`
 (whose rule is unchanged) against **one read of blind per pass**, the same read that empties the
 suppression map, so a Blind toggle landing mid-pass cannot pair an empty map with an unheld band. A
-held instance keeps its phase and skips only its apply: a beat effect's phase is its master's tick,
-a wall-clock effect's clock — including a beat effect on *Seconds*, which runs on that loop —
-advances on every pass before anything is applied, and a stateful effect is still computed. Leaving
+held instance keeps its phase and skips only its apply: a beat FX's phase is its master's tick,
+a wall-clock FX's clock — including a beat FX on *Seconds*, which runs on that loop —
+advances on every pass before anything is applied, and a stateful FX is still computed. Leaving
 Blind lands it in step with what it started beside, growing from nothing over the Blind fade like a
 press — or at full at once over a value the programmer holds (effects plan §3.5;
 `ProgrammerWriter.setBlind` ramps the band's envelopes before the gate opens, so no pass paints one
-at full first). Provenance leaves a held effect out of its winners and the property stack lists it `heldBack`
+at full first). Provenance leaves a held FX out of its winners and the attribute stack lists it `heldBack`
 with reason `BLIND`.
 
 **Local FX sit above every layer's FX** (FX editor plan D5, §3.5). Within the band, a programmer
@@ -967,7 +968,7 @@ over a Local FX on the same key (any layer above the bottom one did) now applies
   attribute on a head both cover) in apply order, any others in the order they were made in — which
   for FX Include brought back is their stored order, so an Update that moved nothing writes nothing.
   That covers Record into a cue (`fxInstancesToCueChildren`) and into a Look (`writeLookFx`,
-  absorb-effects too), a stage snapshot, and Update's write-back into either. A write that keeps some
+  absorb-fx too), a stage snapshot, and Update's write-back into either. A write that keeps some
   of a home's FX (Record's Merge and Replace into a cue, Update) gives the FX it writes, new ones
   included, the places of the stored ones it wrote over, in that order, and puts any extra on top
   (`renumberInApplyOrder`): an FX it did not write keeps its place in the list, though a written one
@@ -990,19 +991,19 @@ over a Local FX on the same key (any layer above the bottom one did) now applies
 
 **One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
 `fx/FxSuppression.kt` — a pure function of a suppression snapshot, the stomp check, the
-(fixture, property) and the effect — and the compose pass, provenance (`ProvenanceService.compute`)
-and the property-stack read behind `programmer.keyStack` (`ProvenanceService.keyStack`) all ask it,
+(fixture, attribute) and the FX — and the compose pass, provenance (`ProvenanceService.compute`)
+and the attribute-stack read behind `programmer.keyStack` (`ProvenanceService.keyStack`) all ask it,
 against the engine's own snapshot (`FxEngine.programmerSuppression`, empty while blind). That is
-what lets the fixture sheet mark an effect *held back*: the mark is the tick's answer, not a second
+what lets the fixture sheet mark an FX *held back*: the mark is the tick's answer, not a second
 copy of it. Never write the rule again beside a reader.
 
-**The programmer outranks an effect only where the engine holds it back, on the key the effect
-paints.** The snapshot is `ProgrammerStore.activePropertiesByFixture` — property entries, each
-holding back effects on **its own key** alone. Two holds suppress nothing, and provenance credits
-an effect for both: a raw-channel sideband slot (an unpark hand-down, a Channels-tab write on a
-head with no pan property, filed under `position`), and a `pan` entry under a Circle keyed
+**The programmer outranks an FX only where the engine holds it back, on the key the FX
+paints.** The snapshot is `ProgrammerStore.activeAttributesByFixture` — attribute entries, each
+holding back FX on **its own key** alone. Two holds suppress nothing, and provenance credits
+an FX for both: a raw-channel sideband slot (an unpark hand-down, a Channels-tab write on a
+head with no pan attribute, filed under `position`), and a `pan` entry under a Circle keyed
 `position` (the Channels-tab pan on a head that declares pan, which `updateChannel` lifts to its
-own slider). An effect painting **every** channel of a programmer-held key under a sibling key takes
+own slider). An FX painting **every** channel of a programmer-held key under a sibling key takes
 the key; one painting some of them (a UV wave beside an RGBW colour entry) does not. Before W4 both
 holds read *Programmer* while the Circle was what the rig showed — the plan's issue 1.
 
@@ -1010,29 +1011,29 @@ holds read *Programmer* while the Circle was what the rig showed — the plan's 
 `parseFxUpdate` under `applyFxUpdate` (`routes/lightFx.kt`; the FX preview runs the same parse on a
 copy), and both land in `FxEngine.updateFx`, which keeps the
 instance's id, phase, layer identity and fade. A type swap takes the new type's timing source
-(`newTimingSource`), as the add path does — before, a beat effect swapped for a wall-clock one kept
+(`newTimingSource`), as the add path does — before, a beat FX swapped for a wall-clock one kept
 running on the beat loop. A refusal (`FX_UPDATE_REFUSED`: an unknown blend, type or master uuid;
-`FX_NOT_FOUND`; a split of an effect that is not Local, `FX_SPLIT_LAYER_FX` / `FX_SPLIT_NOT_LOCAL`)
+`FX_NOT_FOUND`; a split of an FX that is not Local, `FX_SPLIT_LAYER_FX` / `FX_SPLIT_NOT_LOCAL`)
 is decided before anything moves: a 400 / 404 / 409 on REST, an `fxError` on the socket. With
-`targets` naming some of its heads the edit splits them off instead (§"Local effects follow the
+`targets` naming some of its heads the edit splits them off instead (§"Local FX follow the
 selection").
 Its client is the live editor (`FxEditor`, session 3): every control writes the draft through
-`useLivePush` at a 50 ms floor (an optional field only once the operator has set it), and the frontend toasts each `fxError` keyed per effect
+`useLivePush` at a 50 ms floor (an optional field only once the operator has set it), and the frontend toasts each `fxError` keyed per FX
 (`store/fixtureFx.ts`), so a drag refused on every frame is one toast.
 
 **Reset to palette** (W5). `POST /fx/{id}/reset` re-applies a programmer palette layer's
-**current** effect to the instance it spawned, through `updateFx` — id and phase kept — with
+**current** FX to the instance it spawned, through `updateFx` — id and phase kept — with
 every setting the layer would spawn it with, its overrides included, both masters set exactly
 (`replaceMasters`, which can clear a master as the single-master arguments cannot). It also moves
-the instance's spawn key to the palette's current entry, under the stack's effects lock, so the
+the instance's spawn key to the palette's current entry, under the stack's FX lock, so the
 next recook keeps it rather than respawning it. 409 `FX_NOT_FROM_PALETTE` for anything no
 programmer palette layer started (a Look's, a manual one, a cue's palette layer, which the next GO
-respawns); 409 `FX_PALETTE_GONE` when the palette holds no effect any more.
+respawns); 409 `FX_PALETTE_GONE` when the palette holds no FX any more.
 
 **What a recook does to an edited instance.** `ProgrammerLayerStack.syncFx` matches a live
 instance by the `StoredFx` it was **spawned** from (`ProgrammerLayerFxKey`), never by its
 current parameters, and `updateFx` carries that key across its swap — so an instance edited
-through `updateFx` survives a patch, a move or an unrelated add. A palette-effect `PUT` recooks
+through `updateFx` survives a patch, a move or an unrelated add. An FX palette's `PUT` recooks
 values only and leaves the instance alone, but the next recook of the stack *for any reason* reads
 the edited palette, whose entry no longer matches the instance's key, and respawns it from the
 palette — its phase restarted, any instance edit gone. Reset is the per-instance way back. Pinned
@@ -1042,7 +1043,7 @@ by `FxLiveEditRoutesTest`; see `FU-TMPL-FX-EDIT-NO-RETIME`.
 
 The Locate toggle (`routes/lightLocate.kt`) asserts its centre-and-open-white values as
 programmer entries (owner `locate`). "Locate wins" is **non-destructive** since the
-programmer redesign: the entries suppress every effect covering the written properties for
+programmer redesign: the entries suppress every FX covering the written attributes for
 as long as the locate holds, and releasing the locate lets them resume — nothing is
 removed. (`ToggleLocateResponse.effectsRemoved` was dropped in Session 2, once the frontend
 that read it no longer existed.)
@@ -1051,9 +1052,9 @@ Park sits above all of that at transmit time, so a locate cannot move a parked c
 One filter keeps the sides honest: **`applyLocate` drops unpublishable assignments** using
 `ProgrammerWriter.publishability`. That helper applies the *same two guards the cascade
 publish applies*, in the same order and through the same helpers
-(`inferTargetForProperty`, then `allChannelsParked`), so the pre-filter cannot disagree
+(`inferTargetForAttribute`, then `allChannelsParked`), so the pre-filter cannot disagree
 with what the write then does — which matters because `ColourTarget` scopes its
-white/amber/UV channels by `bundleWithColour` while `PropertyChannelWriter.channelsFor`
+white/amber/UV channels by `bundleWithColour` while `AttributeChannelWriter.channelsFor`
 enumerates them by trait. It reports `UNRESOLVED` (no DMX-backed channels) and
 `PARK_MASKED` separately, and the latter surfaces as `parkMasked` on the toggle response so
 the UI can distinguish "parked" from "nothing to write".
@@ -1061,9 +1062,9 @@ the UI can distinguish "parked" from "nothing to write".
 Consequences:
 
 - A wholly parked fixture or group is a no-op locate: zero writes, `active: false`,
-  `parkMasked: true`, nothing registered in `LocateManager`, and no effect is disturbed.
-- Partial parking still locates: the unparked properties are asserted (suppressing the
-  effects on *those* properties), while parked channels keep emitting their parked value.
+  `parkMasked: true`, nothing registered in `LocateManager`, and no FX is disturbed.
+- Partial parking still locates: the unparked attributes are asserted (suppressing the
+  FX on *those* attributes), while parked channels keep emitting their parked value.
 - A target that becomes park-masked while located keeps its locate state. `LocateManager`'s
   re-assert path drops an entry only when the assert callback reports the target *stale*
   (returns null), not merely write-less, so releasing an overlapping group locate can't
@@ -1075,14 +1076,14 @@ Consequences:
 
 Covered by `routes/LocateParkInteractionTest.kt`.
 
-### Effect iteration order
+### FX iteration order
 
-Effects are folded in **apply order** — `priority` ascending, then `composeOrder`, then `id` —
+FX are folded in **apply order** — `priority` ascending, then `composeOrder`, then `id` —
 rather than from a `ConcurrentHashMap`, beat and wall-clock alike (§"Architecture: one compose pass"). An
-effect's `composeOrder` is its own id, except that a cue re-stamps the instances it carries over
-into its layer order (`restampComposeOrder`) and a copy split off an effect keeps its parent's, so
-same-priority effects compose in the order they were placed rather than the order they were
-created; `id` breaks only what is left. Multi-effect composition on the same property is
+FX's `composeOrder` is its own id, except that a cue re-stamps the instances it carries over
+into its layer order (`restampComposeOrder`) and a copy split off an FX keeps its parent's, so
+same-priority FX compose in the order they were placed rather than the order they were
+created; `id` breaks only what is left. Multi-FX composition on the same attribute is
 therefore **deterministic** — previously the effective "last-wins" ordering was undefined. A home
 spawns its FX in their stored `sortOrder`, which Record writes in this order, so the order an
 operator built in the programmer is the one a cue or Look plays back
@@ -1090,11 +1091,11 @@ operator built in the programmer is the one a cue or Look plays back
 
 Priority assignment:
 
-- Manual effects: `priority = 0`
-- Cue-owned effects: `priority = stackId * 1_000_000 + sortOrder * 1_000 + 1`
+- Manual FX: `priority = 0`
+- Cue-owned FX: `priority = stackId * 1_000_000 + sortOrder * 1_000 + 1`
   (leaves gaps for future fine-tuning without renumbering)
-- A programmer layer's effects: `PROGRAMMER_FX_PRIORITY_BASE + layer index`
-- Local effects: `PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET + localRank`, above every layer's
+- A programmer layer's FX: `PROGRAMMER_FX_PRIORITY_BASE + layer index`
+- Local FX: `PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET + localRank`, above every layer's
   (§"Programmer suppression and the priority band")
 
 The sorted snapshot is cached in one `@Volatile` field (`sortedFx`) and rebuilt under a
@@ -1106,7 +1107,7 @@ The per-instance parameters that request threads may change while the compose pa
 `isRunning`, `phaseOffset`, `timing`, `order`, `elementMode`,
 `elementFilter`, and since the effects plan's session 1 `amount`, `direction` and `runs` — live in one immutable `FxDynamics` value behind a single atomic reference
 (`FxInstance.dynamics`), not in individual fields. A tick pass reads the snapshot once per
-effect and works from it throughout (the member phase functions *require* it as a parameter),
+FX and works from it throughout (the member phase functions *require* it as a parameter),
 so a concurrent edit lands wholly on one pass or the next, never half-way through; writers
 replace the whole value atomically, so `updateFx`'s multi-field changes are indivisible.
 The cell is shared across `updateFx`'s instance swap, which is what makes a pause/resume
@@ -1114,8 +1115,8 @@ racing a swap unlosable. Everything else on `FxInstance` is either immutable, wr
 before the instance is published to the engine (`timingSource`), an independent `@Volatile`
 scalar with no cross-field coupling (`priority`, the master slots, `accumulatedScaledMs`, `spent`),
 one immutable value behind an `AtomicReference` changed only by compare-and-set (the envelope,
-§"Size, direction and N-shot"), tick-loop-owned plain fields
-(the N-shot anchors and per-pass flags), or tick-written diagnostics (`lastPhase`, stored once per
+§"Amount, direction and runs"), tick-loop-owned plain fields
+(the Runs anchors and per-pass flags), or tick-written diagnostics (`lastPhase`, stored once per
 pass).
 
 Anything that persists or reports several dynamics fields together (Record, programmer
@@ -1125,8 +1126,8 @@ idiom read twice across a concurrent edit records an explicit value where track-
 
 ### Phase Calculation
 
-The phase passed to each effect determines where in the cycle it evaluates. For group/multi-element
-effects, `FxInstance.calculatePhaseForMember` computes, through the pure `FxPhase.beatPhaseAt` (its
+The phase passed to each FX determines where in the cycle it evaluates. For group/multi-element
+FX, `FxInstance.calculatePhaseForMember` computes, through the pure `FxPhase.beatPhaseAt` (its
 wall-clock twin `wallClockPhaseAt`; §"Previewing an FX"):
 
 ```
@@ -1136,8 +1137,8 @@ memberPhase = (baseClock + phaseOffset - distributionOffset) % 1.0
 The distribution offset is **subtracted** so that higher-offset members are behind in the
 cycle. This makes the visual sweep flow in the natural direction (element 0 → N for NORMAL).
 
-For PING_PONG distribution, a triangle wave remap is applied to the base clock phase before
-adding offsets, causing all effects to sweep forward then backward:
+For the PING_PONG Order, a triangle wave remap is applied to the base clock phase before
+adding offsets, causing all FX to sweep forward then backward:
 
 ```
 tri = baseClock < 0.5 ? baseClock * 2 : 2 * (1 - baseClock)    // [0→1→0]
@@ -1150,20 +1151,20 @@ wrapping back to the first (since `1.0 % 1.0 == 0.0` would alias with element 0)
 Order's own count (`SpreadOrder.distinctSlots`), **not** the count after the spread's
 shape: Spread, Wings, Segments and Parts set the members' offsets, as under every other Order, and
 leave the sweep alone — so Spread 0 or Segments folding every head to one slot never scales the sweep to
-nothing, and an effect that names no shape bounces bit for bit as before (P6;
+nothing, and an FX that names no shape bounces bit for bit as before (P6;
 `SpreadShapeTest` "ping-pong sweeps the same way whatever the shape").
 
-Then, on that phase, the effect's **direction** and **N-shot** (§"Size, direction and N-shot"): a
+Then, on that phase, the FX's **direction** and **runs** (§"Amount, direction and runs"): a
 member outside its runs answers `NaN` and paints nothing, and Backward and Bounce read the phase
-backward on the member's own cycles. For an N-shot the clock is counted from the effect's start
-rather than the master's tick 0. A forever effect's phase is exactly what it was — the clock is
+backward on the member's own cycles. For an FX with a run count the clock is counted from the FX's start
+rather than the master's tick 0. A forever FX's phase is exactly what it was — the clock is
 still split into whole cycles and a fraction in integer arithmetic — and the whole-target form
 (`calculatePhase`) is the same function at offset 0 — except for a copy split off a spread
 (`FxInstance.splitMember`), which makes its member's call: that member's offset and group size.
 
 ### FxContext
 
-Effects receive an `FxContext` alongside the phase, providing distribution metadata:
+FX receive an `FxContext` alongside the phase, providing distribution metadata:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -1178,14 +1179,14 @@ Effects receive an `FxContext` alongside the phase, providing distribution metad
 
 ### Step-Chase Windowing
 
-There is no static effect: a fixed level, colour, position or setting is a value on the fixture's
-own property (the programmer, a Look, a cue), and StaticValue, StaticSetting, StaticColour and
+There is no static FX: a fixed level, colour, position or setting is a value on the fixture's
+own attribute (the programmer, a Look, a cue), and StaticValue, StaticSetting, StaticColour and
 StaticPosition were removed for that reason. The windowing they used survives as a technique for a
-user effect that should read as a **step chase** — one member lit at a time — by only being "on"
+user FX that should read as a **step chase** — one member lit at a time — by only being "on"
 for a window of each cycle. The window width is `1 / numDistinctSlots`, which accounts for
-symmetric distributions where multiple members share an offset.
+symmetric Orders where multiple members share an offset.
 
-For standard distributions (NORMAL, CENTRE_OUT, etc.), a modular distance check determines
+For standard Orders (NORMAL, CENTRE_OUT, etc.), a modular distance check determines
 which member is active:
 
 ```
@@ -1201,30 +1202,30 @@ edge cases at turnaround points:
 active = abs(base - distributionOffset) < window / 2
 ```
 
-### Step Timing
+### Timing
 
-Step timing controls whether the beat division represents the **total cycle time** or the
-**per-step time** for distributed effects.
+Timing controls whether the cycle represents the **total cycle time** or the
+**per-step time** for distributed FX.
 
-| Mode | Beat Division Meaning | Example (4 heads, 1-beat division) |
+| Mode | Cycle Meaning | Example (4 heads, 1-beat cycle) |
 |------|----------------------|-------------------------------------|
 | `timing = CYCLE` | Total cycle time | Full sweep in 1 beat (each head active for ¼ beat) |
 | `timing = HEAD` | Per-step time | Each head active for 1 beat, total sweep = 4 beats |
 
-When `timing` is `HEAD` and the effect is distributed across a group, the effective
-beat division is scaled:
+When `timing` is `HEAD` and the FX is distributed across a group, the effective
+cycle is scaled:
 
 ```
-effectiveDivision = cycle × dynamics.distinctSlots(groupSize)
+effectiveCycle = cycle × dynamics.distinctSlots(groupSize)
 ```
 
-This uses `distinctSlots` rather than `groupSize` so that symmetric distributions
+This uses `distinctSlots` rather than `groupSize` so that symmetric Orders
 (CENTRE_OUT, CENTRE_IN) scale correctly — symmetric pairs share a slot — and it is the count **after the
 spread's shape** (§"The spread's shape"), so Segments and Parts leave no empty steps either.
 
-**Default values**: Each effect type declares `defaultTiming` which is used when
-creating new `FxInstance`s. A step chase (a user effect windowed as above) declares `HEAD`;
-every built-in is a continuous effect (SineWave, Pulse, etc.) and defaults to `CYCLE` (full
+**Default values**: Each FX type declares `defaultTiming` which is used when
+creating new `FxInstance`s. A step chase (a user FX windowed as above) declares `HEAD`;
+every built-in is a continuous FX (SineWave, Pulse, etc.) and defaults to `CYCLE` (full
 cycle). The value can be overridden per-instance via the API.
 
 ## Previewing an FX
@@ -1241,7 +1242,7 @@ when they are not. The order is the engine's own `sortedFxComparator`, so Local 
 every programmer layer's FX (§"Programmer suppression and the priority band"). A step is resolved
 per head by its target (`outputByte`, `outputColour`, `outputPosition`, `outputLevel` on the targets,
 which `applyValueToFixture` calls too). What is held back is `FxSuppression.heldBackReason`,
-the rule the property-stack read asks, against one snapshot of the programmer and Blind.
+the rule the attribute-stack read asks, against one snapshot of the programmer and Blind.
 
 **What it splits out.** Two pieces were fused with state and are now pure, with the engine calling
 them:
@@ -1263,7 +1264,7 @@ holds back on that key is sampled — its own output is in the answer — but le
 reported `heldBack` with its reason. A member outside its Runs, a paused FX, or one that cannot be
 evaluated holds; its samples repeat what it would have blended over and its `holding` ranges say
 where. Where nothing running covers a key, the pass neither resets nor paints it, so the stage keeps
-the frame a paused FX left; *Result* is that frame, read off the head. *Result* is before Layer 1: a
+the frame a paused FX left; *Result* is that frame, read off the head. *Result* is before Tier 1: a
 row whose channels are all parked is marked `parked`, and the park is what is sent. Each attribute
 is folded on its own, so where two share channels (a colour FX's bundled W, A and UV beside a `uv`
 FX, `pan` beside `position`) the stage's single fold is not reproduced
@@ -1284,7 +1285,7 @@ start before its first pass.
 **Stateful FX.** Candle Flicker and Fluorescent Flicker keep state, shared on stage by every member.
 The sampler runs a fresh object per head, `initialize()`d and stepped once a sample from the window's
 start, its tick count starting at 0 so the same request answers the same, and marks the FX
-`representative`: its shape, not the stage's frames. Every other FX is evaluated on a fresh effect
+`representative`: its shape, not the stage's frames. Every other FX is evaluated on a fresh FX
 object too (`freshFx`, `createFxWithPalettes` in production), so a sample never shares one
 with the pass.
 
@@ -1371,13 +1372,13 @@ The low-level DMX fading system supports easing curves via `EasingCurve`:
 
 ## FX Targets
 
-Effects target fixture or element properties via `FxTarget` subclasses. Targets can reference a single fixture, an entire group, or an ordered selection of them using `FxTargetRef`. The `applyValueToFixture` method accepts `GroupableFixture` (not `Fixture`), allowing it to work with both standalone fixtures and fixture elements:
+FX target fixture or element attributes via `FxTarget` subclasses. Targets can reference a single fixture, an entire group, or an ordered selection of them using `FxTargetRef`. The `applyValueToFixture` method accepts `GroupableFixture` (not `Fixture`), allowing it to work with both standalone fixtures and fixture elements:
 
 ### Target Reference Types
 
 ```kotlin
 sealed class FxTargetRef {
-    data class FixtureRef(val targetKey: String)              // Single fixture (or cell)
+    data class FixtureRef(val targetKey: String)              // Single fixture (or element)
     data class GroupRef(val targetKey: String)                // Fixture group
     data class SelectionRef(val selection: FxTargetsRef.Selection)  // Fixtures and groups, in order
 }
@@ -1385,15 +1386,15 @@ sealed class FxTargetRef {
 
 ### Over a selection (effects plan session 3)
 
-One effect may run over an **ordered list of fixtures and groups** (effects plan D3), spread across
+One FX may run over an **ordered list of fixtures and groups** (effects plan D3), spread across
 them in that order as a group's members are: a marquee in grid order, a busk selection in the order
-pressed. Before this a Local effect over loose fixtures ran them in unison, one instance each.
+pressed. Before this a Local FX over loose fixtures ran them in unison, one instance each.
 
-- **The type is effect-only.** `models/TargetRef.kt` keeps `TargetRef` to fixture and group, and adds
+- **The type is FX-only.** `models/TargetRef.kt` keeps `TargetRef` to fixture and group, and adds
   `FxTargetsRef` beside it — `Single(TargetRef)` or `Selection(items)`. A value row, a layer's
   targets and a binding hold a `TargetRef`, so they cannot hold a selection, and the write boundaries
   that parse one refuse it by name (`validateCueChildren` for a cue's rows and layers,
-  `validateLookRows` for a Look's). An effect row — a cue's ad-hoc effect, a Look effect, an
+  `validateLookRows` for a Look's). An FX row — a cue's ad-hoc FX, a Look FX, an
   `FxEntry` — holds an `FxTargetsRef`.
 - **Stored as the pair it always was.** `targetType: "selection"` and a `targetKey` holding the list's
   canonical JSON, `[{"key":"par-1","type":"fixture"},{"key":"Front wash","type":"group"}]` (keys
@@ -1401,10 +1402,10 @@ pressed. Before this a Local effect over loose fixtures ran them in unison, one 
   from `formatVersion` 34. `FxTargetsRef.ofOrNull` refuses a key that is not a non-empty list of
   fixtures and groups and reads a one-item list as its one target; a cue's or a Look's write stores the
   pair in that canonical spelling (`FxTargetsRef.canonical`), so a hand-written row pairs with what
-  Record writes. `target_key` is `text` on both effect tables, since a selection outgrows 255.
-- **The expansion** (`FxEngine.buildSelectionExpansion`) flattens the list in order: a fixture or a cell
+  Record writes. `target_key` is `text` on both FX tables, since a selection outgrows 255.
+- **The expansion** (`FxEngine.buildSelectionExpansion`) flattens the list in order: a fixture or an element
   as itself, a group as its members in their own order. Each unit is a **member** where it has the
-  property, else its **heads** where its elements do, else skipped; a head reached twice counts once,
+  attribute, else its **heads** where its elements do, else skipped; a head reached twice counts once,
   at its first place, and an item the rig has lost is skipped as a missing member is. Every unit a
   member is `GROUP_MEMBERS`, spaced evenly in selection order (so `POSITION` is selection order too);
   every unit its heads is `GROUP_ELEMENTS`, exactly as a group of multi-head fixtures, `elementMode`
@@ -1413,64 +1414,64 @@ pressed. Before this a Local effect over loose fixtures ran them in unison, one 
   `DistributionPlan.of` like a group's, so the spread's shape applies unchanged. The compose pass sends a
   selection down `processGroupFx`.
 - **Coverage and reach.** `fixtureKeysCoveredBy` answers the heads in order;
-  `isPropertyCoveredByAny` also answers the units (the parents of heads it paints), as it does for a
-  group; `getIndirectFxForFixture` lists a selection effect for every fixture it names, which
+  `isAttributeCoveredByAny` also answers the units (the parents of heads it paints), as it does for a
+  group; `getIndirectFxForFixture` lists a selection FX for every fixture it names, which
   `IndirectFxDto.targetType` marks. `getFxForFixture` and `getFxForGroup` never see one:
   the canonical key names neither. Another cue's stomp takes one off only where it asserts **every**
-  item on the property, as it takes a group's effect off only where it asserts the group.
+  item on the attribute, as it takes a group's FX off only where it asserts the group.
 - **The doors.** `POST /fx/add` takes `targets` in place of `fixtureKey` — one item is that fixture or
   group alone, several a selection, every item checked against the rig at once and a trigger or a
   command refused for any item that has one. `FxDto` reports `targetType` and, for a selection,
-  `targets`. Record writes a Local effect over a selection as one ad-hoc cue effect, or one Look effect,
+  `targets`. Record writes a Local FX over a selection as one ad-hoc cue FX, or one Look FX,
   with its `selection` target (`fxInstancesToCueChildren`, `writeLookFx`); Include spawns it back as
   one (`FxSpawner.resolveTargetForCue`); a scoped Record or a masked Include reads it as in scope
-  only when every item is (`fxTargetInScope`) and by the mask group of its first item that resolves
-  (`Fixtures.referenceFixtureFor`). MCP's `create_cue` takes an ad-hoc effect's `targets` instead of
-  `targetType` and `targetKey`, and `clear_fx` naming targets clears a selection effect only when
+  only when every item is (`fxTargetInScope`) and by the family of its first item that resolves
+  (`Fixtures.referenceFixtureFor`). MCP's `create_cue` takes an ad-hoc FX's `targets` instead of
+  `targetType` and `targetKey`, and `clear_fx` naming targets clears a selection FX only when
   every item it names is among them. A rename rewrites the keys inside a stored selection (`ai/RigKeyReferences.kt`), and a
   venue Update's dead-reference report names each item (`venue/VenueUpdate.kt`).
-- **Not here**: a palette layer's effect still fans one instance per target. The programmer's bare
-  effect press and the split are built on this — §"Local effects follow the selection" below.
+- **Not here**: a palette layer's FX still fans one instance per target. The programmer's bare
+  FX press and the split are built on this — §"Local FX follow the selection" below.
 
-### Local effects follow the selection (apply-model plan session 2)
+### Local FX follow the selection (apply-model plan session 2)
 
-MagicQ's rule (apply-model plan D5, §3.4): a bare library effect is a **Local** effect on the whole
+MagicQ's rule (apply-model plan D5, §3.4): a bare library FX is a **Local** FX on the whole
 selection — the programmer's own, in its priority band and owned by no layer, Look or cue
-(`FxInstance.isLocalFx`) — and an edit follows the selection: with every head the effect runs on
+(`FxInstance.isLocalFx`) — and an edit follows the selection: with every head the FX runs on
 selected it changes in place, phase kept; with some selected, those heads split off at the phase they
 had.
 
-**The bare effect press**, `POST /api/rest/projects/{id}/programmer/fx`
-(`routes/programmerFx.kt`): `{fxType, propertyName, targets, families?, parameters?}` plus
-every effect field `POST /fx/add` takes, built by the same `buildFxInstance`, so one effect over
-the selection as the add route makes it (a group one group effect, several targets one selection
-effect). The route fixes only where it runs and whose it is:
+**The bare FX press**, `POST /api/rest/projects/{id}/programmer/fx`
+(`routes/programmerFx.kt`): `{fxType, attribute, targets, families?, parameters?}` plus
+every FX field `POST /fx/add` takes, built by the same `buildFxInstance`, so one FX over
+the selection as the add route makes it (a group one group FX, several targets one selection
+FX). The route fixes only where it runs and whose it is:
 
-- **The mask.** The effect's family must be in the selection's mask, else 400 `FX_OUTSIDE_MASK`;
+- **The mask.** The FX's family must be in the selection's mask, else 400 `FX_OUTSIDE_MASK`;
   no targets is 400 `FX_NEEDS_SELECTION`. The family is `routes/programmerFx.kt`'s
-  `fxFamily`: the attribute group of the property it drives on the first head it paints
-  (`maskGroupForProperty`, as Record and Include read an effect), so a dimmer-category Pulse on `uv`
-  is Colour. Agreed with Chris during session 2; an effect palette's family stays its library
-  category (`maskGroupForFxFamily`), since a palette names no property until it lands.
-- **The timing.** No `cycle` is one bar; a beat effect naming no master and not on *Seconds* is
+  `fxFamily`: the family of the attribute it drives on the first head it paints
+  (`familyForAttribute`, as Record and Include read an FX), so an Intensity Pulse on `uv`
+  is Colour. Agreed with Chris during session 2; an FX palette's family stays its library
+  family (`attributeFamilyForFxFamily`), since a palette names no attribute until it lands.
+- **The timing.** No `cycle` is one bar; a beat FX naming no master and not on *Seconds* is
   stamped with the master whose `family` is its library `family`, else master 1 (venue-visit plan
-  D16) — `fx/FxTimingChoice.kt`'s `familyMasterUuidFor`, the one reading MCP's effect tools stamp with
-  too. That is the category, not the property group the mask reads: a Pulse on `uv` is Colour for
-  the mask and takes the dimmer master.
-- **Local replacement**, the effect-side twin of a palette layer's family replacement
+  D16) — `fx/FxTimingChoice.kt`'s `familyMasterUuidFor`, the one reading MCP's FX tools stamp with
+  too. That is the library family, not the attribute's family the mask reads: a Pulse on `uv` is Colour for
+  the mask and takes the Intensity master.
+- **Local replacement**, the FX-side twin of a palette layer's family replacement
   (`fx/LayerPress.kt`). Before it starts, the press takes the selected heads off every other Local
-  effect of its family, read the same way (a family that resolves to nothing replaces nothing): one
+  FX of its family, read the same way (a family that resolves to nothing replaces nothing): one
   whose every painted head is selected stops; one that paints some of them
   and some others is **narrowed** — rewritten as one instance per head it keeps, each where it was
-  (the split below, with no edit). A layer's effect is never touched. The stops, the narrowing and
-  the new effect are one engine mutation (`FxEngine.replaceFx`), so no head drops to the layer
-  below between the old effect and the new; an effect another request swapped meanwhile is taken
+  (the split below, with no edit). A layer's FX is never touched. The stops, the narrowing and
+  the new FX are one engine mutation (`FxEngine.replaceFx`), so no head drops to the tier
+  below between the old FX and the new; an FX another request swapped meanwhile is taken
   off its current instance. Answers `{fxId, stopped, narrowed: [{fxId, into}]}`.
 - **Stacking** (FX editor plan D6, §3.6). `stack: true` skips the replacement: the FX is added over
   the selection and no other Local FX is stopped or narrowed, answered `{fxId, stopped: [],
   narrowed: []}`. A blend or Amount (`amount`) the request leaves out takes its family's stacking
   start from `fx/FxStacking.kt`: Intensity `MULTIPLY` (*Within it*) at 100 %, Position `ADDITIVE`
-  (*Around current position*) at 100 % with `panCenter` and `tiltCenter` at 128 where the press
+  (*Around current position*) at 100 % with `panCentre` and `tiltCentre` at 128 where the press
   names neither the blend nor that centre — only for an FX that declares both centres; any other
   Position FX (Palette Steps) outputs where to go, not an offset, and starts on `OVERRIDE` at 100 % —
   and Colour and Beam `OVERRIDE` (*Replace it*) at 50 %. A blend or Amount the press names wins over the table. Without `stack` the
@@ -1480,42 +1481,42 @@ effect). The route fixes only where it runs and whose it is:
 A new Local FX takes the top of its lane either way (§"Programmer suppression and the priority
 band"), so a stacked one applies above the Local FX it shares heads with.
 
-**The split** is `PUT /fx/{id}` or `updateFx` with `targets` (fixtures, cells and groups, as a press
-names them), decided by `planSplit` against the heads the effect **paints** (`FxEngine.paintedHeads`:
-an element filter's left-out cells paint nothing and are not counted):
+**The split** is `PUT /fx/{id}` or `updateFx` with `targets` (fixtures, elements and groups, as a press
+names them), decided by `planSplit` against the heads the FX **paints** (`FxEngine.paintedHeads`:
+an element filter's left-out elements paint nothing and are not counted):
 
 - No `targets`, or targets covering every painted head (`TargetCoverage.covers`, so a group by its
-  members and a cell by itself or its fixture), is the in-place edit, id kept. Targets covering none
+  members and an element by itself or its fixture), is the in-place edit, id kept. Targets covering none
   are 400 `FX_UPDATE_REFUSED`.
-- Covering some splits them off: `FxEngine.headCopies` rewrites the effect as **one instance per head
+- Covering some splits them off: `FxEngine.headCopies` rewrites the FX as **one instance per head
   it paints**, `replaceFx` swaps them in for it as one mutation, and the named heads' copies then
   take the edit through the same `updateFx` an in-place edit uses. The rest run on untouched. REST
   answers `FxSplitResponse {splitFxId, edited, rest}`; the frame answers `fxChanged(REMOVED)`
-  for the effect and `fxChanged(ADDED)` per copy, the edited first.
-- Only a Local effect splits: a programmer layer's is 409 `FX_SPLIT_LAYER_FX` (splitting it would
+  for the FX and `fxChanged(ADDED)` per copy, the edited first.
+- Only a Local FX splits: a programmer layer's is 409 `FX_SPLIT_LAYER_FX` (splitting it would
   need splitting its layer, apply-model plan P5; *Reset to palette* and *Update palette* stay its
   edits), and a cue's or a manual one outside the band is 409 `FX_SPLIT_NOT_LOCAL`.
 - A change to the spread's **shape** — Order, Spread, Wings, Segments, Parts, element mode or filter —
   sent with some heads is 400 `FX_UPDATE_REFUSED`, nothing moved: a split-off head runs alone, so the
   shape would do nothing on it (agreed with Chris, session 2). Only a field that differs from what
-  the effect has counts, so an editor re-sending the shape it shows still splits.
+  the FX has counts, so an editor re-sending the shape it shows still splits.
 
 **Each copy starts where its head was** (`SplitMember`, on `FxInstance.splitMember`). A copy is the
 member it was: its phase is computed by the same member call the parent's pass made for that head —
 the member's distribution offset, the size of the list it was spread over and its `FxContext` —
-so a step-timed copy keeps its set's `distinctSlots`-scaled cycle and a ping-pong copy its sweep
-(Chris chose to carry them rather than refuse those splits), an N-shot copy runs its window from its
-own offset and Bounce counts its cycles from it, and an effect reading its place in the spread still
-sees it. `FxSplitTest` runs an effect on two rigs, splits one mid-run and compares every channel
-on every tick. A copy also takes the parent's clocks (`accumulatedScaledMs`, the N-shot anchors, the
-start time), masters, timing source, *Seconds*, envelope and band, shares its effect object (as the
-members did; added `carried`, so a stateful effect is not reset), and names its fixture or cell with
+so a copy on Timing *Per head* keeps its set's `distinctSlots`-scaled cycle and a ping-pong copy its sweep
+(Chris chose to carry them rather than refuse those splits), a copy with a run count runs its window from its
+own offset and Bounce counts its cycles from it, and an FX reading its place in the spread still
+sees it. `FxSplitTest` runs an FX on two rigs, splits one mid-run and compares every channel
+on every tick. A copy also takes the parent's clocks (`accumulatedScaledMs`, the Runs anchors, the
+start time), masters, timing source, *Seconds*, envelope and band, shares its FX object (as the
+members did; added `carried`, so a stateful FX is not reset), and names its fixture or element with
 element filter `ALL`.
 
 - **The offset is beside the phase offset, not in it.** Every copy keeps the parent's
   `phaseOffset`, so an edit that follows the selection sends one value to every copy it covers; a
   phase offset per copy would collapse them into unison on the first edit. (The plan's §3.4 put the
-  offset in the phase offset and moved the N-shot anchor by it; done together those count the offset
+  offset in the phase offset and moved the Runs anchor by it; done together those count the offset
   twice, which is part of why it is carried instead.) Stored data has no field for it (P7), so what
   stores a copy folds it in — `FxInstance.storedPhaseOffset`, read by Record into a cue
   (`captureCurrentState`, `fxInstancesToCueChildren`) and into a Look (`lookFxSettings`): a
@@ -1523,34 +1524,34 @@ element filter `ALL`.
 - **Update.** A copy keeps a cue Include's origin (`programmerOrigin`). A cue Update writes each
   copy as a child of its own, one per head, so it retires the child they stand for once nothing but
   copies carries it (`splitIncludedChildren`), and each copy's origin then names its own child;
-  otherwise the cue would play the effect twice. A child already on its copy's own head is never
-  retired, so a second Update keeps the copies' children. A Look Include's (`includedLookFx`) is not kept: a Look's effect
+  otherwise the cue would play the FX twice. A child already on its copy's own head is never
+  retired, so a second Update keeps the copies' children. A Look Include's (`includedLookFx`) is not kept: a Look's FX
   is written back whole, and a copy is the operator's busk of part of it.
 - **Order.** Copies take new ids but keep the parent's `composeOrder`, which the engine sorts by
   between priority and id, so a split moves nothing in the composition order.
 - **Races.** The copies take the parent's running state again at the swap, so a pause that reached
   the parent meanwhile is kept, and `updateFx` swaps by identity, so an edit racing a split
   cannot put the parent back beside its copies.
-- **Clear and Release** take copies as they take any Local effect: they are in the band, and each
+- **Clear and Release** take copies as they take any Local FX: they are in the band, and each
   names one head.
 
 **The client's side** (apply-model plan session 6; `frontend/CLAUDE.md`'s FX paragraphs). ⌘K *Apply
-FX*, the FX table's *+ Effect*, a cell popup's Effects band and the picker's Effects section start a
-library effect through `FxPicker`'s `press` arm, the bare effect press above with the door's
-selection pair; a tap swaps the auditioned effect through `updateFx`, phase kept. The fixture sheet's
+FX*, the FX table's *+ FX*, a cell popup's FX band and the picker's FX section start a
+library FX through `FxPicker`'s `press` arm, the bare FX press above with the door's
+selection pair; a tap swaps the auditioned FX through `updateFx`, phase kept. The fixture sheet's
 FX tray is not one of them: it starts on its own pick of heads through `POST /fx/add`. A focused Look
-layer is the other exception: there the effect starts on `POST /fx/add` and is moved into the
-Look (`absorb-fx`), since the press's replacement would take heads off other Local effects. The
-live editor (`FxEditorPopover`) follows the selection: it reads which of the effect's heads the
-window's pair (or a cell's batch) covers, for its words alone, and with some of a Local effect's heads
+layer is the other exception: there the FX starts on `POST /fx/add` and is moved into the
+Look (`absorb-fx`), since the press's replacement would take heads off other Local FX. The
+live editor (`FxEditorPopover`) follows the selection: it reads which of the FX's heads the
+window's pair (or a cell's batch) covers, for its words alone, and with some of a Local FX's heads
 covered it holds the edit until *Apply to …*, which sends it once as `PUT /fx/{id}` with those heads
 as `targets` — REST, because only REST answers the copies (`FxSplitResponse`) for the editor to
 follow; the frame's `fxChanged` names none. It then sends every later move to each edited copy. A
-layer's, a cue's or a manual effect is edited in place and never offered the split.
+layer's, a cue's or a manual FX is edited in place and never offered the split.
 
 ### Target Types
 
-| Target | Properties | Fixture Trait |
+| Target | Attributes | Fixture Trait |
 |--------|------------|---------------|
 | `SliderTarget` | `dimmer`, `uv` | `WithDimmer`, `WithUv` |
 | `ColourTarget` | `rgbColour` | `WithColour` |
@@ -1558,7 +1559,7 @@ layer's, a cue's or a manual effect is edited in place and never offered the spl
 
 ### Group Targets
 
-Create group-targeting effects using factory methods:
+Create group-targeting FX using factory methods:
 
 ```kotlin
 // Target a group instead of a single fixture
@@ -1586,19 +1587,19 @@ Two script types provide focused API surfaces for different tasks:
 | Type | Base Class | Purpose |
 |------|-----------|---------|
 | `GENERAL` | `LightingScript` | Full-power: DMX, fixtures, FX, coroutines |
-| `FX_APPLICATION` | `FxApplicationScript` | Apply effects to fixtures/groups (implicit engine) |
+| `FX_APPLICATION` | `FxApplicationScript` | Apply FX to fixtures/groups (implicit engine) |
 
-FX effect definitions are **not** a script type — they are managed as `fx_definitions`
+FX definitions are **not** a script type — they are managed as `fx_definitions`
 with dedicated calculate-only script base classes (`FxCalcScript`, `FxStatefulCalcScript`). See [FX Definitions](#fx-definitions) above.
 
 ### FX_APPLICATION Scripts
 
-Apply effects with implicit `fxEngine` — no need to pass the engine to every call.
+Apply FX with implicit `fxEngine` — no need to pass the engine to every call.
 
-Effects are **named, not constructed**: `effect(id, params)` resolves the type through the
-`FxRegistry`, so a script addresses the same vocabulary as the UI, cues and Looks, user effects
+FX are **named, not constructed**: `effect(id, params)` resolves the type through the
+`FxRegistry`, so a script addresses the same vocabulary as the UI, cues and Looks, user FX
 from `fx_definitions` included. Omitted parameters take the type's declared defaults. There are no
-compiled-in effect classes to instantiate — the `fx/effects` package went with sweep item D7.
+compiled-in FX classes to instantiate — the `fx/effects` package went with sweep item D7.
 
 ```kotlin
 val wash = fixture<HexFixture>("front-wash-1")
@@ -1626,7 +1627,7 @@ Every apply site — `FxBuilder`, `GroupFxBuilder`, and all eight `applyXxxFx` e
 `speedMasterUuid` and `rateSpeedMasterUuid`. Null means master 1 and unscaled respectively, which
 are the persisted "no explicit master" values; a uuid the bank no longer knows degrades to master 1
 at bind time rather than failing the apply. Note that a rate master is inert for a STATEFUL
-wall-clock effect — see `FU-SPEED-RATEMASTER-STATEFUL`.
+wall-clock FX — see `FU-SPEED-RATEMASTER-STATEFUL`.
 
 ### GENERAL Scripts (LightingScript)
 
@@ -1645,21 +1646,21 @@ val group = fixtures.group<HexFixture>("front-wash")
 group.applyDimmerFx(fxEngine, effect("Pulse"), order = SpreadOrder.NORMAL)
 ```
 
-## Group Effect Processing
+## Group FX Processing
 
 When an `FxInstance` targets a group (or a selection, §"Over a selection"), the `FxEngine` expands it at processing time:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Group Effect Processing                       │
+│                    Group FX Processing                           │
 │                                                                  │
 │   FxInstance (group target)                                      │
 │        │                                                         │
 │        ▼                                                         │
-│   Members have target property directly?                         │
+│   Members have target attribute directly?                        │
 │     ├─ YES → Apply to each member with distribution offsets      │
 │     └─ NO  → Are members MultiElementFixture?                    │
-│               └─ YES → Do elements have the property?            │
+│               └─ YES → Do elements have the attribute?           │
 │                         └─ YES → Check elementMode:              │
 │                              ├─ PER_FIXTURE: For each parent,    │
 │                              │   distribute across its elements  │
@@ -1673,21 +1674,21 @@ When an `FxInstance` targets a group (or a selection, §"Over a selection"), the
 
 ### Element Mode for Multi-Element Groups
 
-When a group effect targets a property only available on elements (not the parent
+When a group FX targets an attribute only available on elements (not the parent
 fixtures), `ElementMode` determines the distribution dimension:
 
 | Mode | Description | Example (2×4-head fixtures) |
 |------|-------------|----------------------------|
-| `PER_FIXTURE` | Each fixture gets the effect independently. Distribution runs within each fixture's elements. | All fixtures look the same — head #0 on fixture A matches head #0 on fixture B |
+| `PER_FIXTURE` | Each fixture gets the FX independently. Distribution runs within each fixture's elements. | All fixtures look the same — head #0 on fixture A matches head #0 on fixture B |
 | `FLAT` | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (indices 0-7), chase sweeps across all heads sequentially |
 
 `ElementMode` is stored on `FxInstance` and defaults to `PER_FIXTURE`. It is only
-relevant when group members are multi-element fixtures and the target property is
-at the element level. It has no effect when members directly have the target property.
+relevant when group members are multi-element fixtures and the target attribute is
+at the element level. It has no effect when members directly have the target attribute.
 
-### Distribution Strategies
+### Orders
 
-| Strategy | Description | Distinct Slots |
+| Order | Description | Distinct Slots |
 |----------|-------------|---------------|
 | `NORMAL` | Evenly spaced phases, element 0 → N | N |
 | `UNIFIED` | All fixtures same phase (synchronized) | 1 |
@@ -1698,7 +1699,7 @@ at the element level. It has no effect when members directly have the target pro
 | `RANDOM(seed)` | Deterministic Fisher-Yates shuffle of evenly-spaced offsets | N |
 | `POSITIONAL` | Based on normalized position | N |
 
-**Symmetric strategies** (CENTRE_OUT, CENTRE_IN) have fewer distinct offset slots
+**Symmetric Orders** (CENTRE_OUT, CENTRE_IN) have fewer distinct offset slots
 than group members because symmetric pairs share the same offset. A windowed step chase uses
 `numDistinctSlots` for window width to ensure gap-free chases.
 
@@ -1709,10 +1710,10 @@ knows it, and database steps 4 and 5 and `sync/LegacyNames.kt` rewrite a stored 
 
 ### The spread's shape (effects plan session 2)
 
-The strategy is the **Order** (§3.1 of the effects plan — renamed in the UI only): which head comes
+The **Order** (§3.1 of the effects plan) says which head comes
 first. Four more fields shape what the Order gives — **Spread**, **Wings**, **Segments** and
 **Parts** (D4) — and with the Order they are the spread. All four are `FxDynamics` fields, edited
-in place as the Order is (an edit keeps the phase), stored on the four effect homes beside it
+in place as the Order is (an edit keeps the phase), stored on the four FX homes beside it
 (`look_fx`, `cue_ad_hoc_fx`, `palette_fx` as `spread` and `spread_wings` /
 `spread_segments` / `spread_parts` — the prefix because `GROUPS` was an SQLite keyword — and a live instance), carried by
 `LookFxSpec`, `StoredFx` and `LookFxSettings` so Record, Include and Update keep them, and
@@ -1726,12 +1727,12 @@ synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
    Segments, Wings and Parts count whole ranks, so whenever one of them acts
    (`SpreadShaping.countsRanks`) the plan takes `SpreadOrder.wholeRanks` instead, which
    snaps Position's to the nearest of its `N` slots, `round(position × (N − 1))` — evenly spaced
-   heads rank 0 … N − 1 as under Rig, so two wings mirror and groups repeat whole slots. Under Spread
+   heads rank 0 … N − 1 as under Normal, so two wings mirror and groups repeat whole slots. Under Spread
    alone Position stays continuous.
 2. **Segments** `B`: `r ← floor(r / B)` over `ceil(R / B)` ranks (`ceil(N / B)` under an asymmetric
    Order, whose rank count is the member count): `B` neighbours **in the Order** share one phase —
-   on the rig under Rig, Reverse and Position, and under Random heads beside each other in the
-   shuffle, so a Random in blocks of 2 is random pairs.
+   on the rig under Normal, Reverse and Position, and under Random heads beside each other in the
+   shuffle, so a Random in segments of 2 is random pairs.
 3. **Wings** `W`, only under an asymmetric Order — Centre out and Centre in are two mirrored
    wings already (`SpreadOrder.isMirrored`): the ranks split into `W` runs of
    `m = ceil(R / W)`; an odd run is mirrored **within its own length** (`r ← len − 1 − r`, `len` being
@@ -1744,17 +1745,17 @@ synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
 
 `distinctSlots` is the rank count after step 4 (`DistributionPlan.slots`, each context's
 `numDistinctSlots`, and `FxDynamics.distinctSlots` — the same count in constant time, for the
-per-pass reads), so a step chase's window and step timing stay gap-free: groups of 2 over eight heads
+per-pass reads), so a step chase's window and Timing *Per head* stay gap-free: Parts of 2 over eight heads
 are two slots, the odd heads and the even heads taking turns a step each. `PING_PONG`'s turnaround is
 **not** shaped: its sweep is the Order's own `(N − 1) / N` (§"Phase Calculation"), the shape setting only
 the offsets. At the default shape (100 %, 1, 1, 0) the
-plan does not run the shaping at all, so an effect that names no shape keeps its offsets bit for
+plan does not run the shaping at all, so an FX that names no shape keeps its offsets bit for
 bit (P6). The plan cache (`FxDistributionPlans`) is keyed on the shape as on the Order.
 
-**N-shot ends N cycles past the largest member offset — the shaped one.** A member's own clock is
-the effect's less its offset, so under Spread 50 % a 2-shot over four heads (offsets 0, ⅛, ¼, ⅜)
+**Runs end N cycles past the largest member offset — the shaped one.** A member's own clock is
+the FX's less its offset, so under Spread 50 % two runs over four heads (offsets 0, ⅛, ¼, ⅜)
 hands each head back after its own two and is spent two cycles past ⅜; under Parts of 2 (offsets 0,
-½, 0, ½) two cycles past ½. Size is untouched by the shape: it weighs the apply, after the blend.
+½, 0, ½) two cycles past ½. Amount is untouched by the shape: it weighs the apply, after the blend.
 
 **The rule is the desk's** (P2). `frontend/src/lib/spreadShape.ts` is the editor's one copy, for its
 phase-dial preview only, and `src/test/resources/fx/spreadShape.fixture.json` — generated from an
@@ -1764,7 +1765,7 @@ to the same offsets, Random's shuffle included.
 - **Refused at the write boundary** (`FxSpecCoercion.Strict.spreadProblem`, inside `problem()`
   where the Order is known): Spread outside 0–2, Wings or Segments below 1, Parts below 0, any count
   above 512, and **Wings above 1 under a mirrored Order**. `PUT /fx/{id}` checks the shape against
-  the Order the effect will run under — the request's, or the one it has — so moving a winged effect
+  the Order the FX will run under — the request's, or the one it has — so moving a winged FX
   onto Centre out is refused as surely as sending wings to one. The instance's **own** wings take
   part only when the request moves the Order: a stored row may hold wings under a mirrored Order
   (lenient on spawn, not run), and an edit of its Spread, Segments or Parts — or a frame re-sending
@@ -1773,16 +1774,16 @@ to the same offsets, Random's shuffle included.
   left as stored and not run.
 - **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `spread`, `wings`, `segments` and
   `parts`; `PUT /fx/{id}` and `updateFx` take each with null meaning keep (`parts: 0` turns them
-  off). `FxDto` and the group and indirect DTOs report them. The MCP effect schemas take the four
+  off). `FxDto` and the group and indirect DTOs report them. The MCP FX schemas take the four
   (`AiToolSchemas.putFxDynamics`), and `describe_rig` and `get_current_state` say them where they
   are not the default.
-- **The editor** (D11, §4.1): a *Spread* disclosure in `FxFields` — Order (the Distribution
+- **The editor** (D11, §4.1): a *Spread* disclosure in `FxFields` — Order (the Order
   select, moved out of Advanced), Spread %, Wings (hidden under a mirrored Order, and set back to 1
-  when one is chosen), Segments, Parts, and a row of phase dials over eight notional heads on an effect
-  palette and the effect's own heads live (up to sixteen, then *+n*). Its summary says the
-  non-defaults: *Rig · 50 % · 2 wings*.
+  when one is chosen), Segments, Parts, and a row of phase dials over eight notional heads on an FX
+  palette and the FX's own heads live (up to sixteen, then *+n*). Its summary says the
+  non-defaults: *Normal · 50 % · 2 wings*.
 
-**Strategy interface properties:**
+**Order interface properties:**
 
 | Property | Description |
 |----------|-------------|
@@ -1794,22 +1795,22 @@ to the same offsets, Random's shuffle included.
 
 ## Multi-Element Fixture Expansion
 
-When a fixture effect targets a property that the parent fixture doesn't have, but its elements do (e.g. applying a colour FX to a `QuadMoverBarFixture` whose heads have `WithColour` but the parent does not), the FX engine automatically expands the effect to all elements.
+When a fixture FX targets an attribute that the parent fixture doesn't have, but its elements do (e.g. applying a colour FX to a `QuadMoverBarFixture` whose heads have `WithColour` but the parent does not), the FX engine automatically expands the FX to all elements.
 
 This makes multi-element fixtures behave like implicit groups for FX purposes, without requiring the user to manually create a fixture group.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│              Multi-Element Effect Expansion                       │
+│              Multi-Element FX Expansion                           │
 │                                                                  │
 │   FxInstance (fixture target, e.g. "quad-mover-1")               │
 │        │                                                         │
 │        ▼                                                         │
-│   Parent has target property?                                    │
+│   Parent has target attribute?                                   │
 │     ├─ YES → Apply directly to parent (normal behaviour)         │
 │     └─ NO  → Is parent a MultiElementFixture?                    │
 │               ├─ NO  → Skip (silent no-op)                       │
-│               └─ YES → Do elements have the property?            │
+│               └─ YES → Do elements have the attribute?           │
 │                         ├─ NO  → Skip                            │
 │                         └─ YES → Expand to all elements:         │
 │                                   For each element:              │
@@ -1828,11 +1829,11 @@ Element keys follow the convention `"parent-key.suffix"` (e.g. `"quad-mover-1.he
 3. Checking if the parent implements `MultiElementFixture`
 4. Searching its elements for a matching `elementKey`
 
-### Distribution Strategy Support
+### Order Support
 
-Multi-element expansion uses the same `SpreadOrder` machinery as group effects. The `order` field on `FxInstance` (which defaults to `NORMAL`) is used to calculate per-element phase offsets based on element index and normalized position.
+Multi-element expansion uses the same `SpreadOrder` machinery as group FX. The `order` field on `FxInstance` (which defaults to `NORMAL`) is used to calculate per-element phase offsets based on element index and normalized position.
 
-The REST API `AddFxRequest` includes an optional `order` field for fixture effects targeting multi-element fixtures.
+The REST API `AddFxRequest` includes an optional `order` field for fixture FX targeting multi-element fixtures.
 
 ### Example
 
@@ -1841,12 +1842,12 @@ POST /api/rest/fx/add
 {
   "fxType": "RainbowCycle",
   "fixtureKey": "quad-mover-1",
-  "propertyName": "rgbColour",
+  "attribute": "rgbColour",
   "order": "NORMAL"
 }
 ```
 
-This applies a rainbow cycle to all 4 heads of the quad mover bar, with each head offset in phase to create a chase effect across the heads.
+This applies a rainbow cycle to all 4 heads of the quad mover bar, with each head offset in phase to create a chase FX across the heads.
 
 ## REST API
 
@@ -1868,27 +1869,27 @@ DELETE /api/rest/projects/{id}/speed-masters/{mid}  → 409 SPEED_MASTER_PROTECT
                                                      | 409 SPEED_MASTER_IN_USE (?force=true overrides)
 ```
 
-Family/follow refusal codes (see §"Usage routing and follow"): `SPEED_MASTER_INVALID` (400 —
+Family/follow refusal codes (see §"Family routing and follow"): `SPEED_MASTER_INVALID` (400 —
 malformed family or ratio, half-sent pair), `SPEED_MASTER_CANNOT_FOLLOW` (400 — ratio on master 1),
 `SPEED_MASTER_FAMILY_TAKEN` (409 — another master already holds that family), and
 `SPEED_MASTER_FOLLOWER` (400 — a `bpm` sent for a follower, on POST and PUT alike; the tempo is
 derived, so retune master 1 or unlink first).
 
-### Effect Management
+### FX Management
 
 ```
 GET    /api/rest/fx/active           → [FxDto...]
 POST   /api/rest/fx/add              ← AddFxRequest → { fxId }
 PUT    /api/rest/fx/{id}             ← UpdateFxRequest → FxDto | FxSplitResponse (with targets naming some heads)
-DELETE /api/rest/fx/{id}             (remove effect)
+DELETE /api/rest/fx/{id}             (remove FX)
 POST   /api/rest/fx/{id}/pause
 POST   /api/rest/fx/{id}/resume
 GET    /api/rest/fx/fixture/{key}    → { direct: [FxDto...], indirect: [IndirectFxDto...] }
-DELETE /api/rest/fx/fixture/{key}    (clear fixture effects)
-POST   /api/rest/fx/clear            (clear all effects)
+DELETE /api/rest/fx/fixture/{key}    (clear fixture FX)
+POST   /api/rest/fx/clear            (clear all FX)
 ```
 
-`FxDto` lives in `fx/FxDto.kt` and is the *only* effect report on any transport — the
+`FxDto` lives in `fx/FxDto.kt` and is the *only* FX report on any transport — the
 `fxState` WebSocket frame carries the same objects. Sweep item F8 collapsed the two, so these
 REST responses gained the three fields that used to be WebSocket-only: `cueStackId`,
 `speedMasterIndex` and `rateSpeedMasterIndex`. Nothing was removed, and `fxType` is
@@ -1896,7 +1897,7 @@ REST responses gained the three fields that used to be WebSocket-only: `cueStack
 Build one with `FxEngine.fxDtos` / `FxEngine.fxDto` rather than calling `toFxDto`
 directly — the engine owns the speed-master snapshot and the multi-element answer it needs.
 
-### Effect Library
+### FX Library
 
 ```
 GET  /api/rest/fx/library          → [FxTypeInfo...]
@@ -1908,7 +1909,7 @@ GET  /api/rest/fx/library          → [FxTypeInfo...]
 {
   "fxType": "SineWave",
   "fixtureKey": "front-wash-1",
-  "propertyName": "dimmer",
+  "attribute": "dimmer",
   "cycle": 1.0,
   "blendMode": "OVERRIDE",
   "startOnBeat": true,
@@ -1926,17 +1927,17 @@ GET  /api/rest/fx/library          → [FxTypeInfo...]
 
 The `speedMasterUuid` field is optional (null → master 1). It is a *uuid*, not the int id,
 so a stored reference survives project clone and import. `rateSpeedMasterUuid` is its
-wall-clock counterpart (null → unscaled); both are accepted on every effect and simply go
+wall-clock counterpart (null → unscaled); both are accepted on every FX and simply go
 unread by the timing source that does not apply.
 
-The `order` field is optional. When provided, it sets the distribution strategy for multi-element fixture expansion (see [Multi-Element Fixture Expansion](#multi-element-fixture-expansion)). For non-multi-element fixtures, it is ignored.
+The `order` field is optional. When provided, it sets the Order for multi-element fixture expansion (see [Multi-Element Fixture Expansion](#multi-element-fixture-expansion)). For non-multi-element fixtures, it is ignored.
 
-The `timing` field (`CYCLE` or `HEAD`) is optional. When provided, it overrides the effect's default step timing mode. See [Step Timing](#step-timing).
+The `timing` field (`CYCLE` or `HEAD`) is optional. When provided, it overrides the FX's default timing. See [Timing](#timing).
 
-`targets` (`[{"type": "fixture" | "group", "key": "…"}]`) replaces `fixtureKey` for one effect over a
+`targets` (`[{"type": "fixture" | "group", "key": "…"}]`) replaces `fixtureKey` for one FX over a
 selection, spread in that order ([Over a selection](#over-a-selection-effects-plan-session-3)): one
 item is that fixture or group alone, an unknown item is a 400 naming it, and a list none of whose
-heads has the property is refused. The distribution and element fields then apply as to a group.
+heads has the attribute is refused. The spread and element fields then apply as to a group.
 
 ### UpdateFxRequest Format
 
@@ -1956,8 +1957,8 @@ heads has the property is refused. The distribution and element fields then appl
 ```
 
 `targets` (`[{"type": "fixture" | "group", "key": "…"}]`) says which heads the edit is for: absent, or
-naming every head the effect paints, is the in-place edit below; naming some splits them off and
-answers `FxSplitResponse` instead — see [Local effects follow the selection](#local-effects-follow-the-selection-apply-model-plan-session-2).
+naming every head the FX paints, is the in-place edit below; naming some splits them off and
+answers `FxSplitResponse` instead — see [Local FX follow the selection](#local-fx-follow-the-selection-apply-model-plan-session-2).
 
 All fields are optional. Truly immutable fields (`fxType`, `parameters`, `cycle`,
 `blendMode`) trigger an atomic swap of the `FxInstance`, preserving id, start time, and — because
@@ -1966,12 +1967,12 @@ and any concurrently racing pause/resume. Dynamics fields (`phaseOffset`, `order
 `elementMode`, `elementFilter`, `timing`) are updated in place as **one** atomic snapshot
 replacement, so a tick pass never observes half of an update. `speedMasterUuid` /
 `rateSpeedMasterUuid` are also updated in place; both follow the same null-means-no-change
-convention, and to return an effect to the default, send master 1's uuid (master 1 always exists
-and behaves identically to the null default). `seconds` moves the effect between *Seconds* and a
-master — see [Seconds](#seconds--an-effects-own-cycle-venue-visit-plan-d7) — and is the only way to
-put a wall-clock effect back to unscaled. `amount`, `direction` and `runs` are dynamics fields, edited
+convention, and to return an FX to the default, send master 1's uuid (master 1 always exists
+and behaves identically to the null default). `seconds` moves the FX between *Seconds* and a
+master — see [Seconds](#seconds--an-fxs-own-cycle-venue-visit-plan-d7) — and is the only way to
+put a wall-clock FX back to unscaled. `amount`, `direction` and `runs` are dynamics fields, edited
 in place with the phase kept; `runForever: true` clears a count, which a null `runs` (no change)
-cannot say. See §"Size, direction and N-shot".
+cannot say. See §"Amount, direction and runs".
 
 ## WebSocket Messages
 
@@ -1979,22 +1980,22 @@ cannot say. See §"Size, direction and N-shot".
 
 | Message | Description |
 |---------|-------------|
-| `fxState` | Request the current active-effect list |
+| `fxState` | Request the current active-FX list |
 | `speedMasters.state` | Request the full masters bank |
 | `speedMasters.setBpm` | Set one master's BPM `{ masterUuid?, bpm }` (uuid omitted → master 1) |
 | `speedMasters.tap` | Tap one master's tempo `{ masterUuid? }` |
-| `removeFx` | Remove effect `{ fxId }` |
-| `pauseFx` | Pause effect `{ fxId }` |
-| `resumeFx` | Resume effect `{ fxId }` |
-| `clearFx` | Clear all effects |
+| `removeFx` | Remove FX `{ fxId }` |
+| `pauseFx` | Pause FX `{ fxId }` |
+| `resumeFx` | Resume FX `{ fxId }` |
+| `clearFx` | Clear all FX |
 | `speedMasters.requestBeat` | Ask for one immediate beat frame — `{ masterUuid? }`, omitted uuid = master 1 |
 
 ### Server → Client
 
 | Message | Description |
 |---------|-------------|
-| `fxState` | The active-effect list `{ activeFx }`, each entry the shared `FxDto` (`fx/FxDto.kt`) that `GET /fx/active` also returns — so it carries `speedMasterUuid`/`speedMasterIndex` and `rateSpeedMasterUuid`/`rateSpeedMasterIndex` alongside the full REST field set. No tempo — it used to carry `bpm`/`isClockRunning` for master 1 |
-| `fxChanged` | Effect change notification `{ changeType, fxId }` |
+| `fxState` | The active-FX list `{ activeFx }`, each entry the shared `FxDto` (`fx/FxDto.kt`) that `GET /fx/active` also returns — so it carries `speedMasterUuid`/`speedMasterIndex` and `rateSpeedMasterUuid`/`rateSpeedMasterIndex` alongside the full REST field set. No tempo — it used to carry `bpm`/`isClockRunning` for master 1 |
+| `fxChanged` | FX change notification `{ changeType, fxId }` |
 | `speedMasters.state` | Full bank `{ masters: [{ uuid, index, name, bpm, isRunning, source }] }` — sent on connect, on request, and as the reply to every `speedMasters.*` write |
 | `speedMasters.changed` | One master's tempo moved `{ masterUuid, index, bpm, source, timestampMs }` — the live-BPM stream; CRUD invalidation goes via `speedMasters.listChanged` instead |
 | `speedMasters.beat` | One master crossed a beat boundary `{ masterUuid, index, beatNumber, bpm, timestampMs }` — every master, master 1 included |
@@ -2046,40 +2047,40 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `dmx/ChannelChange.kt` | DMX change with curve support |
 | `dmx/TickerState.kt` | Curve-aware interpolation |
 | `fx/MasterClock.kt` | One speed master's tempo clock (deadline timer, tap, pure `phaseForDivision`) |
-| `fx/SpeedMasterBank.kt` | Per-show bank of master clocks, wake channel, per-pass `Frame` |
+| `fx/SpeedMasterBank.kt` | Per-project bank of master clocks, wake channel, per-pass `Frame` |
 | `models/speedMasters.kt` | Exposed DAO for speed_masters table + default-bank seeding |
 | `routes/projectSpeedMasters.kt` | Speed-master CRUD API endpoints + delete guards |
 | `routes/fxPreview.kt` | `POST /projects/{id}/fx/preview`: the FX editor's graph, answered from `fx/FxSampler.kt` (§"Previewing an FX") |
 | `plugins/SpeedMasterSocket.kt` | `speedMasters.*` WS family (live tempo control/streaming, keyed beat frames) |
 | `fx/CycleLength.kt` | Timing constants |
 | `fx/Fx.kt` | Fx, StatefulFx interfaces, FxOutput types |
-| `fx/FxRegistry.kt` | Unified effect registry, FxRegistration, ParameterInfo, FxTypeInfo |
+| `fx/FxRegistry.kt` | Unified FX registry, FxRegistration, ParameterInfo, FxTypeInfo |
 | `fx/FxFileLoader.kt` | Loads and parses .fx.kts files from resources |
 | `fx/TypedParams.kt` | Typed parameter accessor for FX scripts |
 | `fx/ScriptFxAdapter.kt` | Bridges compiled FX scripts to Fx interfaces |
 | `fx/FxScriptCompiler.kt` | Compiles and caches FX calculate scripts |
 | `fx/FxParamUtils.kt` | Parameter parsing utilities (parseExtendedColour, toUByteParam, etc.) |
-| `fx/FxInstance.kt` | Running effect state, order, ElementMode, speed-master refs |
-| `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
+| `fx/FxInstance.kt` | Running FX state, order, ElementMode, speed-master refs |
+| `fx/FxTarget.kt` | Fixture/group attribute targeting, FxTargetRef |
 | `fx/FxBlend.kt` | Blend and weight as pure functions, written through by every target and folded by the sampler |
 | `fx/FxPhase.kt` | A member's phase as a pure function of one clock reading, its dynamics and its Runs anchor |
 | `fx/FxSampler.kt` | Evaluates FX off the stage over a window, for the FX editor's graph (§"Previewing an FX") |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
-| `fx/FxEngine.kt` | The compose pass and its wake sources, active-effect set, group expansion (post-E1 split) |
-| `fx/CascadePublisher.kt` | Layer-4/cascade → controller transmit, the Layer 4 publish lock, channel-covering-key lookup |
-| `fx/CueAssignmentLayer.kt` | Per-cue Layer 4 assignment bookkeeping, within-cue stomp registry |
+| `fx/FxEngine.kt` | The compose pass and its wake sources, active-FX set, group expansion (post-E1 split) |
+| `fx/CascadePublisher.kt` | Tier-4/cascade → controller transmit, the Tier 4 publish lock, channel-covering-key lookup |
+| `fx/CueAssignmentLayer.kt` | Per-cue Tier 4 assignment bookkeeping, within-cue stomp registry |
 | `fx/ProvenanceService.kt` | "Who owns this value" computation + broadcast, `underlyingSources` |
-| `fx/ProgrammerWriter.kt` | PROGRAMMER-layer write delegation (write/clear/blind/republish) |
+| `fx/ProgrammerWriter.kt` | PROGRAMMER-tier write delegation (write/clear/blind/republish) |
 | `fx/FxLogThrottle.kt` | Per-cause throttled logging shared by the compose pass and publish paths |
 | `fx/FxExtensions.kt` | Script DSL helpers |
-| `fx/group/SpreadOrder.kt` | Phase distribution strategies |
-| `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
-| `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (30 files) |
-| `fx/PaletteColourSource.kt` | Colour-palette resolution, `PaletteSource` (also Palette Steps' palette lookup), and `createFxWithPalettes` — the one spawn helper every string-named effect goes through |
-| `fx/StepList.kt` | The step effects' lists, resolved per head (`SlotStepList`, `PaletteStepList`), `stepsAt` and `paletteStepsShape` |
-| `fx/PaletteRegistry.kt` | Palette snapshots cached by uuid — rows, or the one effect an effect palette holds; the scoped version a running effect's colour cache watches |
-| `fx/FxSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |
-| `fx/CueApply.kt` | The cue-apply domain: `CueApplyData` and its builders, cue-derived priority, Layer 4 row construction, stomp overlap |
+| `fx/group/SpreadOrder.kt` | The Orders |
+| `fx/group/GroupFxExtensions.kt` | Group FX extension functions |
+| `resources/fx/**/*.fx.kts` | Every built-in FX's metadata + calculate body (30 files) |
+| `fx/PaletteColourSource.kt` | Colour-palette resolution, `PaletteSource` (also Palette Steps' palette lookup), and `createFxWithPalettes` — the one spawn helper every string-named FX goes through |
+| `fx/StepList.kt` | The step FX's lists, resolved per head (`SlotStepList`, `PaletteStepList`), `stepsAt` and `paletteStepsShape` |
+| `fx/PaletteRegistry.kt` | Palette snapshots cached by uuid — rows, or the one FX an FX palette holds; the scoped version a running FX's colour cache watches |
+| `fx/FxSpawner.kt` | Stored FX spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |
+| `fx/CueApply.kt` | The cue-apply domain: `CueApplyData` and its builders, cue-derived priority, Tier 4 row construction, stomp overlap |
 | `fixture/trait/WithPosition.kt` | Position trait for moving heads |
 | `fixture/trait/WithDimmer.kt` | Dimmer trait |
 | `fixture/trait/WithColour.kt` | Colour trait |
@@ -2088,7 +2089,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `scripts/ScriptType.kt` | Script type enum (GENERAL, FX_APPLICATION) |
 | `scripts/scriptDef.kt` | LightingScript base class (GENERAL scripts) |
 | `scripts/fxCalcScriptDef.kt` | FxCalcScript, FxStatefulCalcScript base classes |
-| `scripts/fxApplicationScriptDef.kt` | FxApplicationScript base class (effect application) |
+| `scripts/fxApplicationScriptDef.kt` | FxApplicationScript base class (FX application) |
 | `models/fxDefinitions.kt` | Exposed DAO for fx_definitions table |
 | `routes/lightFx.kt` | FX REST API endpoints |
 | `routes/fxDefinitions.kt` | FX definitions CRUD API endpoints |
@@ -2109,13 +2110,13 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 ### Target expansion is cached, not re-derived
 
 Everything on this page about how a target expands — group members, `MultiElementFixture`
-elements, the `PER_FIXTURE`/`FLAT` split, `ElementFilter` — is resolved **once per effect per
+elements, the `PER_FIXTURE`/`FLAT` split, `ElementFilter` — is resolved **once per FX per
 register generation**, into an `FxTargetExpansion` held on the `FxInstance`. The compose pass reads
 it; it does not walk the group.
 
-They used to walk it twice per tick per effect: once in `resolveFxFixtureKeys` for the reset
+They used to walk it twice per tick per FX: once in `resolveFxFixtureKeys` for the reset
 pass, and again in the `process*` pass, with every `untypedGroup` / `untypedFixture` lookup taking
-`Fixtures.registerLock.read`. A 240-element group effect cost ~480 lock acquisitions and two
+`Fixtures.registerLock.read`. A 240-element group FX cost ~480 lock acquisitions and two
 fresh key lists per tick, at up to 120 Hz.
 
 This is safe because the topology is frozen between rebuilds: `FixtureGroup.members` is an
@@ -2130,7 +2131,7 @@ fill-time re-check, a retry loop and `putIfAbsent` — here a value built across
 simply rebuilt on the next read. `elementFilter` is part of the cache identity; `elementMode` is
 not, because both shapes it selects between are built up front.
 
-The consequence to know about: an effect whose group or fixture has been deleted now logs
+The consequence to know about: an FX whose group or fixture has been deleted now logs
 "not found" **once per register generation** rather than on every tick.
 
 `FxExpansionCacheTest` is what stands behind the invalidation. `FxEngineBenchmark`'s setup guards
@@ -2145,69 +2146,69 @@ that, a fault on a 120 Hz pass writes thousands of lines a minute and buries the
 and the fault worth reading about is usually the *first* one. Two rules for throttle keys:
 they are compared on `nanoTime`, because an NTP step backwards on a wall clock would silence a key
 until real time caught up; and they are drawn from something the **rig** bounds (a fixture key, a
-group name, an effect type — never an effect id, which is a monotonic counter), because nothing
+group name, an FX type — never an FX id, which is a monotonic counter), because nothing
 ever sweeps the map.
 
 Three levels of containment, outermost first:
 
 1. **The pass loop** (`start`) catches around each pass. Anything escaping there would cancel the
-   loop's job for the rest of the process — the desk's effects would stop for good, with one line
+   loop's job for the rest of the process — the desk's FX would stop for good, with one line
    on the uncaught-exception handler. `CancellationException` is rethrown so `stop()` still works.
-2. **Each effect's pass** is caught individually, so one bad effect doesn't cost the others their
+2. **Each FX's pass** is caught individually, so one bad FX doesn't cost the others their
    tick.
-3. **An effect that fails `MAX_CONSECUTIVE_TICK_FAILURES` (120) passes in a row is paused** —
-   `noteTickFailure`. A script effect that throws on every `calculate` is not going to come good
+3. **An FX that fails `MAX_CONSECUTIVE_TICK_FAILURES` (120) passes in a row is paused** —
+   `noteTickFailure`. A script FX that throws on every `calculate` is not going to come good
    on the next tick; pausing keeps the instance (phase, parameters, its row in the sheet) so the
    operator can fix the definition and hit resume, logs the pause at `error` with the exception,
    and shows up in the UI through the `isRunning` that `fxState` already streams. The threshold is
    a pass count, not a duration, so it trips faster the faster the desk is ticking — the safe
    direction, since a fault that clears itself (a fixture missing for the length of a patch
-   reload) gets more real time to clear on the slower paths. Only passes the effect's **own**
-   clock woke count, failing or good (a beat effect's: any master's tick; a wall-clock effect's: the
-   ticker), so a beat effect's grace period does not shrink because the ticker also wakes the
+   reload) gets more real time to clear on the slower paths. Only passes the FX's **own**
+   clock woke count, failing or good (a beat FX's: any master's tick; a wall-clock FX's: the
+   ticker), so a beat FX's grace period does not shrink because the ticker also wakes the
    pass; a failure on another pass is logged, not counted. One good pass clears the run.
 
-Levels 2 and 3 catch `Throwable`, not `Exception`: every built-in effect is a compiled script, so a
+Levels 2 and 3 catch `Throwable`, not `Exception`: every built-in FX is a compiled script, so a
 recursive helper in one (`StackOverflowError`) or a script class that fails to link
 (`NoClassDefFoundError`) raises an `Error`, and that must not be the thing that takes the pass loop
 down for the process.
 
-Pausing also **resets the effect's properties to the layer below**, into the pass's open
-transaction. An effect can die part-way through its own targets — a group effect that throws on
-member 7 has already painted 0..6 — and from the next pass on a paused effect is skipped by
-`resetActiveProperties`, so a half-applied frame would sit frozen with nothing left to move it. A
+Pausing also **resets the FX's attributes to the tier below**, into the pass's open
+transaction. An FX can die part-way through its own targets — a group FX that throws on
+member 7 has already painted 0..6 — and from the next pass on a paused FX is skipped by
+`resetActiveAttributes`, so a half-applied frame would sit frozen with nothing left to move it. A
 *manual* pause deliberately freezes instead: that frame is one the operator chose.
 
 `FxTickFailureTest` covers the pause rule, the reset, and the run-clearing.
 
 The reset pass (`resetOne`) is the one deliberate exception to "log it at warn": it logs at debug,
-because the effect's own apply is about to fail on the same missing fixture and report it properly.
+because the FX's own apply is about to fail on the same missing fixture and report it properly.
 
 ## Cue Integration
 
-A cue is an ordered stack of **Look layers** plus its own local values and ad-hoc effects. The FX system supports cues via the `cueId` field on `FxInstance`.
+A cue is an ordered stack of **Look layers** plus its own local values and ad-hoc FX. The FX system supports cues via the `cueId` field on `FxInstance`.
 
 ### FxInstance.cueId
 
 Each `FxInstance` has an optional `cueId: Int?` field (default `null`). When a cue comes on (its first
-hold, `fx/CueHolds.kt`), every effect it creates is tagged with the cue's database ID. This enables:
+hold, `fx/CueHolds.kt`), every FX it creates is tagged with the cue's database ID. This enables:
 
-- **Taking a cue off**: its last hold going removes its effects by `cueId` — never by stack — or, on
+- **Taking a cue off**: its last hold going removes its FX by `cueId` — never by stack — or, on
   a GO with a fade, sets them shrinking to nothing (leaving) for the engine to remove at 0. A cue
   brought back on before that finds its own leaving instances by `cueId` and takes them back.
-- **Identification**: Effects created by a cue can be distinguished from manually applied effects (which have `cueId = null`).
+- **Identification**: FX created by a cue can be distinguished from manually applied FX (which have `cueId = null`).
 
-A layer's effect also carries `layerFxUuid`, the stored Look or palette effect row it realises:
-what a GO matches a continuing effect on (effects plan P4), so the incoming cue adopts the outgoing
+A layer's FX also carries `layerFxUuid`, the stored Look or palette FX row it realises:
+what a GO matches a continuing FX on (effects plan P4), so the incoming cue adopts the outgoing
 cue's instance — retagged to the incoming cue, id and phase kept — instead of fading one out and
-another in. A cue's ad-hoc effect carries its own row's uuid there, which no other cue holds, and
+another in. A cue's ad-hoc FX carries its own row's uuid there, which no other cue holds, and
 its row's run key in `runUuid` (stack-timeline plan D7): a GO hands the outgoing cue's instance with
-the same key, target and property to the incoming row, restamped with that row's uuid so *Update
+the same key, target and attribute to the incoming row, restamped with that row's uuid so *Update
 stage* still reconciles by row. When the two rows' settings differ, the instance is edited in place
 at the GO (`routes.alignFx`, the same edit *Update stage* makes, injected into `CueHolds` as an
 `FxAligner` so `fx/` does not import `routes/`): phase kept, except that a move between Seconds
 and a master restarts it. The `cueId`, `layerFxUuid`, `runUuid` and envelope are preserved across
-atomic swaps in `FxEngine.updateFx()`, so updating an effect's parameters doesn't lose its cue
+atomic swaps in `FxEngine.updateFx()`, so updating an FX's parameters doesn't lose its cue
 association, its run or its fade.
 
 ### Layers
@@ -2215,40 +2216,40 @@ association, its run or its fade.
 A cue layer stores a **reference** to a Look or a palette (by id), and a palette's layer the
 targets it operates over; a Look's names none, since a Look lands whole. At apply time the Look is
 read fresh through `LookRegistry`, so editing a Look is reflected the next time the
-cue is applied — and, for a *live* cue, immediately, via `republishForLookEdit`. Each layer's effects
+cue is applied — and, for a *live* cue, immediately, via `republishForLookEdit`. Each layer's FX
 are created as `FxInstance`s tagged with the cue id.
 
-**Effects spawn in layer order, and that alone is enough to make layer order the composition
+**FX spawn in layer order, and that alone is enough to make layer order the composition
 order.** `sortedFxComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder`
-the monotonic creation counter (a split copy keeps its parent's, §"Local effects follow the
+the monotonic creation counter (a split copy keeps its parent's, §"Local FX follow the
 selection"), and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`, so
-same-priority effects already resolve last-created-wins. No priority arithmetic is needed and the
-uniform per-cue priority stays. A palette's effect fans over the layer's targets; a Look's runs on
+same-priority FX already resolve last-created-wins. No priority arithmetic is needed and the
+uniform per-cue priority stays. A palette's FX fans over the layer's targets; a Look's runs on
 its own targets, whole.
 
-The one limit worth stating: effects are Layer 3 and static values are Layer 4, so an effect sits
-above a static value regardless of layer order. See `lighting-composition-model.md`
-§"Effects, and the constraint that cannot be layered away".
+The one limit worth stating: FX are Tier 3 and static values are Tier 4, so an FX sits
+above a static value regardless of cue layer order. See `lighting-composition-model.md`
+§"FX, and the constraint that cannot be layered away".
 
-### Ad-Hoc Effects
+### Ad-Hoc FX
 
-Effects belonging to no Look are stored as full effect definitions in the `cue_ad_hoc_fx`
+FX belonging to no Look are stored as full FX definitions in the `cue_ad_hoc_fx`
 table. At apply time these are converted directly to `FxInstance`s tagged with the cue id.
 
-**A cue effect is edited in draft** (show-cue-editing plan session 6, D17): the cue editor's FX tab
+**A cue FX is edited in draft** (show-cue-editing plan session 6, D17): the cue editor's FX tab
 edits the stored row, never an instance. Its fields are the live editor's (`FxFields`) over a
-draft of the stored effect (`cueFxDraftOf` / `withCueFxDraft` in the frontend's
-`fxEditorModel.ts`, so Seconds, size, direction, runs and the spread's shape round-trip as a
-palette's effect does), and every change is the cue's whole `adHocFx` list on its `PATCH`.
-*+ Effect* runs the picker in draft: a tap stores the effect with the picker's starting spec —
-`startingSpec`, the step effects' seeded lists, D16's one bar on the usage master — on the editor's
-own selection (one row as itself, several as one `selection` effect, its key the list's canonical
+draft of the stored FX (`cueFxDraftOf` / `withCueFxDraft` in the frontend's
+`fxEditorModel.ts`, so Seconds, amount, direction, runs and the spread's shape round-trip as a
+palette's FX does), and every change is the cue's whole `adHocFx` list on its `PATCH`.
+*+ FX* runs the picker in draft: a tap stores the FX with the picker's starting spec —
+`startingSpec`, the step FX's seeded lists, D16's one bar on the family master — on the editor's
+own selection (one row as itself, several as one `selection` FX, its key the list's canonical
 JSON), and creates no instance; a second tap swaps the stored type. Nothing reaches the stage until
 the cue next comes on — its first hold spawns what the row then says — or *Update stage* sends it: a
 cue PATCH republishes nothing, and marks a held cue *edited since GO* when it changes an untimed
-effect (`docs/cue-stacks-engineering.md` §"Edited since GO and Update stage"). A reorder restates
-every `sortOrder`, and `writeCueChildren` keeps each effect's uuid by its key (target, property,
-type), which is how *Update stage* tells an edited effect from a new one.
+FX (`docs/cue-stacks-engineering.md` §"Edited since GO and Update stage"). A reorder restates
+every `sortOrder`, and `writeCueChildren` keeps each FX's uuid by its key (target, attribute,
+type), which is how *Update stage* tells an edited FX from a new one.
 
 ### Look Delete Blocking
 
@@ -2258,7 +2259,7 @@ and the referencing cue names; the delete returns 409 with code `LOOK_IN_USE`, a
 deletes the layers with it. A forced delete that took layers rebuilds the live cues that held them
 the way a Look edit does (`republishForLookDelete`, the same body as `republishForLookEdit` given the
 cue ids the delete collected before the rows went), so the Look's values leave the stage without a
-re-fire — its rows, as for an edit: effects the cue spawned from the Look at GO run until the cue
+re-fire — its rows, as for an edit: FX the cue spawned from the Look at GO run until the cue
 stops; it announces those cues, live and dark, through `cuesRecomposed`, and fires `cueListChanged`
 and `cueStackListChanged`, whose layer counts moved.
 
@@ -2266,15 +2267,15 @@ and `cueStackListChanged`, whose layer counts moved.
 
 The "create from current state" operation captures the live FX engine state:
 
-1. Effects from a Look or a palette are grouped **by that record** into cue layer rows. A palette's
+1. FX from a Look or a palette are grouped **by that record** into cue layer rows. A palette's
    row collects their targets, so one applied twice to different targets collapses into one layer
    covering both — the honest reading of a *snapshot*, since the stage cannot tell you it was two
    gestures. A Look's row names no targets: it lands whole.
-2. Effects with a null `lookId` are stored as individual `CueAdHocFx` rows with all effect fields
+2. FX with a null `lookId` are stored as individual `CueAdHocFx` rows with all FX fields
    captured.
 
 Two things a snapshot **cannot** recover, because an `FxInstance` never carried them: a layer's
-`blendMode`, `amount` and `propertyMask`, which take their DTO defaults. When the operator wants the
+`blendMode`, `amount` and `attributeMask`, which take their DTO defaults. When the operator wants the
 stack's own amounts and masks preserved they Record `TOUCHED`, which reads `ProgrammerStore.layers`
 directly rather than reconstructing from the stage.
 
@@ -2284,13 +2285,13 @@ cue naming whatever `DaoFxPreset` happened to share the number — and nothing s
 after that, so it was deleted.
 
 What an `FxInstance` *does* carry, beyond `lookId`: `registrationId`, the canonical
-`FxRegistration.id` it was built from. Any "same effect type?" test reads that. The tempting
+`FxRegistration.id` it was built from. Any "same FX type?" test reads that. The tempting
 `effect.name.replace(" ", "")` is a registration id only for built-ins, whose display name is their
 id with spaces in it; a user-defined FX definition sets `id` independently of `name`.
 
-Anything that *persists or reports* an effect type — a recorded Look or cue child, an API DTO the
+Anything that *persists or reports* an FX type — a recorded Look or cue child, an API DTO the
 client hands back on Update — goes through `FxInstance.fxTypeId`, which is `registrationId` with
-the display name kept only as the last resort for a script-constructed effect that never went
+the display name kept only as the last resort for a script-constructed FX that never went
 through the registry. Writing the display name directly stores a string the registry cannot resolve,
 and the failure surfaces much later, when the row is applied.
 
@@ -2303,7 +2304,7 @@ and the failure surfaces much later, when the row is applied.
 | `models/cues.kt` | `DaoCues`, `DaoCueLayers`, `DaoCueAdHocFx` tables |
 | `routes/projectCues.kt` | Cue CRUD, apply, from-state endpoints |
 | `models/looks.kt` | `DaoLooks`, `DaoLookRows`, `DaoLookFx` tables |
-| `fx/CueComposer.kt` | The cook step, layer blending, layer-ordered effect spawning (a Look layer's effects and an effect palette's one, through the same fan-out) |
+| `fx/CueComposer.kt` | The cook step, layer blending, layer-ordered FX spawning (a Look layer's FX and an FX palette's one, through the same fan-out) |
 | `fx/LookRegistry.kt` | Cached per-fixture Look expansion; two invalidation triggers |
 | `routes/projectLooks.kt` | Look CRUD, derived family banking, `LOOK_IN_USE` delete guard |
 
@@ -2311,20 +2312,20 @@ See `docs/cues-engineering.md` for full cue system documentation.
 
 ## Timing Source
 
-Effects can run on one of two timing sources:
+FX can run on one of two timing sources:
 
 | Source | Description | Tick Rate | Phase Calculation |
 |--------|-------------|-----------|-------------------|
-| `BEAT` | Synchronized to the effect's speed master's ticks | 24 ticks/beat (variable) | From the master's tick counter via `MasterClock.phaseForDivision()` |
-| `WALL_CLOCK` | Fixed-interval timer independent of BPM | 50Hz (20ms) | Accumulated wall-clock time since effect start, scaled per pass by an optional rate master |
+| `BEAT` | Synchronized to the FX's speed master's ticks | 24 ticks/beat (variable) | From the master's tick counter via `MasterClock.phaseForDivision()` |
+| `WALL_CLOCK` | Fixed-interval timer independent of BPM | 50Hz (20ms) | Accumulated wall-clock time since FX start, scaled per pass by an optional rate master |
 
 ### When to Use WALL_CLOCK
 
-Use wall-clock timing for effects that should feel natural and not tied to music:
+Use wall-clock timing for FX that should feel natural and not tied to music:
 - Candle/fire flicker (organic randomness)
 - Fluorescent tube flicker (intermittent failures)
 - Ambient atmospheric changes (slow drifts)
-- Any effect where beat-sync would feel unnatural
+- Any FX where beat-sync would feel unnatural
 
 ### Architecture: one compose pass
 
@@ -2336,8 +2337,8 @@ FxEngine
 ├── 20 ms ticker ────────────────────────────────────────┤ each sets its flag
 │                                                        ▼
 └── composePass(beat, ticker, frame, now)   ← at most one per 5 ms, under passLock
-    ├── reset every key a running effect covers to the layer below, once
-    └── fold every running effect, beat and wall-clock, in apply order, into one transaction
+    ├── reset every key a running FX covers to the tier below, once
+    └── fold every running FX, beat and wall-clock, in apply order, into one transaction
         ├── BEAT: phase from frame.tick(effect.speedMasterSlot)
         └── WALL_CLOCK: phase from its accumulator, scaled by its rate master
 ```
@@ -2347,24 +2348,24 @@ and every wake that lands meanwhile joins the same pass, which then knows **both
 it. The pass is mutually exclusive (`passLock`): the production driver is one coroutine, and the
 lock is what keeps a test's direct pass (`FxEngineTickShims`) off a running one.
 
-Every pass paints every running effect, whichever clock woke it:
+Every pass paints every running FX, whichever clock woke it:
 
-- **A beat effect** reads its master's tick from the pass's frame, which a beat-woken pass takes
+- **A beat FX** reads its master's tick from the pass's frame, which a beat-woken pass takes
   from the bank after any re-bind. A pass the ticker woke has no new frame and reuses the last
-  beat-woken pass's (`lastFrame`): a master's tick is a pure function of its clock, so the effect
+  beat-woken pass's (`lastFrame`): a master's tick is a pure function of its clock, so the FX
   is painted where the last tick left it. A bank membership change drops the held frame, and the
   next pass takes a fresh one.
-- **A wall-clock effect** advances its accumulator by the real time since the last pass, whatever
+- **A wall-clock FX** advances its accumulator by the real time since the last pass, whatever
   woke it. The deltas telescope, so the cycle is exactly as long however many passes there are;
   only its resolution improves.
 
-A pass with nothing running on a clock that woke it is **skipped**: with only beat effects running,
+A pass with nothing running on a clock that woke it is **skipped**: with only beat FX running,
 a ticker-woken pass would repaint them at the tick they are already on, and with only wall-clock
-effects running a beat wake adds nothing but cost. So a show running one kind of effect makes the
+FX running a beat wake adds nothing but cost. So a show running one kind of FX makes the
 passes it made before; the time a skipped pass covers is advanced by the next one, and a skipped
 pass does not hold the next wake back for the 5 ms gap.
 
-A removal does not take `passLock`: some removals run inside a pass (an N-shot's end, the leaving
+A removal does not take `passLock`: some removals run inside a pass (the end of an FX's runs, the leaving
 sweep), and the lock is not reentrant. So a removal on another thread can land while a pass that has
 already read the old list is running, and that pass commits the removed FX's output over the
 removal's reset of what it uncovered. With nothing left running every later pass is skipped and the
@@ -2374,38 +2375,38 @@ list that are no longer in the engine (removed, or swapped by an edit or a split
 resets, so a pass that finds its list still current knows any reset to come lands after its commit,
 and one that does not finds the FX gone. `FxRemovalRaceTest` forces the interleavings.
 
-What **counts** passes stays with the effect's own clock. The pass records which clocks woke it,
+What **counts** passes stays with the FX's own clock. The pass records which clocks woke it,
 and:
 
-- a **stateful** effect (`StatefulFx`: Candle Flicker, Fluorescent Flicker, a user script)
+- a **stateful** FX (`StatefulFx`: Candle Flicker, Fluorescent Flicker, a user script)
   steps only on a pass its own clock woke, handed that clock's `deltaMs` and, on the wall clock,
   the ticker's pass number (`wallClockPassNumber`). On any other pass it repaints what it last
   answered on each key (`FxInstance.statefulOutputs`), so a Candle Flicker does not flicker faster
   under a faster master. A key it has never answered for steps whatever woke the pass, so an
-  effect just added paints at once;
+  FX just added paints at once;
 - the tick-failure count (§"Tick-path failures") counts only passes its own clock woke;
-- an N-shot ends (`finishRuns`) only on a pass its own clock woke — on any other pass a member
+- an FX's runs end (`finishRuns`) only on a pass its own clock woke — on any other pass a member
   outside its runs simply holds what is underneath, as it does anyway. Its count starts on the
-  first pass that paints it, whichever clock woke it: a beat N-shot's `runsStartTick` is the
-  master tick it was painted at, so a count given to a running beat effect starts from the tick the
-  master is on rather than leaving the effect unpainted until the next one;
+  first pass that paints it, whichever clock woke it: a beat FX's `runsStartTick` is the
+  master tick it was painted at, so a count given to a running beat FX starts from the tick the
+  master is on rather than leaving the FX unpainted until the next one;
 - the leaving sweep (`retireFinishedLeaving`) runs on ticker-woken passes, at 50 Hz whether or not
   anything is running.
 
-The per-effect apply is **one code path**: `processFixtureFx` / `processGroupFx` /
-`processElementKeys`, differing per effect only in the `PhaseSource` (`Beat` reads the master's
-tick, `WallClock` the effect's own scaled accumulator). Expansion, distribution plans, programmer
+The per-FX apply is **one code path**: `processFixtureFx` / `processGroupFx` /
+`processElementKeys`, differing per FX only in the `PhaseSource` (`Beat` reads the master's
+tick, `WallClock` the FX's own scaled accumulator). Expansion, distribution plans, programmer
 suppression, Blind's hold (one read of Blind per pass) and parking are therefore one rule for both.
 
 ### Beat ↔ Wall-Clock interaction
 
-A beat effect and a wall-clock effect on the **same** key **compose**, whatever the blend: one pass
+A beat FX and a wall-clock FX on the **same** key **compose**, whatever the blend: one pass
 resets the key once and folds both, in apply order, so a Candle Flicker *Within* (MULTIPLY) a Sine
 Wave flickers inside the wave on every frame, and Add, Max and Min compose the same way.
 `FxComposePassTest` pins it against committed DMX over a schedule of beat-woken, ticker-woken and
 coalesced passes.
 
-One pass is what makes this true. With a loop per clock, each reset the keys its own effects covered
+One pass is what makes this true. With a loop per clock, each reset the keys its own FX covered
 and applied them in its own transaction, so on a shared key the loop that committed last won
 whatever the blend: the head showed the Sine Wave or the Candle Flicker, alternating, never both.
 
@@ -2415,12 +2416,12 @@ transaction for it to sample.
 
 ### Wall-Clock Phase Calculation
 
-For wall-clock effects, `cycle` is reinterpreted as cycle duration in seconds. A
+For wall-clock FX, `cycle` is reinterpreted as cycle duration in seconds. A
 **rate master** (`FxInstance.rateSpeedMasterUuid`, null → unscaled) sets how fast that cycle
 is consumed, at `master.bpm / 120`:
 
 ```kotlin
-// once per compose pass, per effect, before any phase is read
+// once per compose pass, per FX, before any phase is read
 accumulatedScaledMs += deltaMs * rateScale
 // then, wherever a phase is needed
 val cycleDurationMs = cycle * 1000.0
@@ -2434,88 +2435,88 @@ cycle length that moved under it, so retuning a rate master snapped the phase (3
 pins the continuity, and — since elapsed time is now an explicit parameter rather than a
 clock reading — pins it exactly, with no jitter tolerance.
 
-The rate master scales the effect's *internal cycle* only: cue-trigger scheduling
+The rate master scales the FX's *internal cycle* only: cue-trigger scheduling
 (`delayMs`/`intervalMs`/`randomWindowMs`) is deliberately never scaled by any master.
 
 "Null → unscaled" needs a sentinel to be true. `SpeedMasterBank.slotFor(null)` is slot 0, which
 is master 1, so binding a null `rateSpeedMasterUuid` through it made every unassigned wall-clock
-effect follow master 1's tempo — exactly 1.0 at the default 120 BPM, and a rig-wide speed change
+FX follow master 1's tempo — exactly 1.0 at the default 120 BPM, and a rig-wide speed change
 the moment anything tapped it. `FxInstance.rateMasterSlot` therefore defaults to
 `FxInstance.NO_RATE_MASTER` (-1) and the engine binds it through `rateSlotFor`, not `slotFor`
-(sweep item C6). The compose pass skips sampling `rateScales()` altogether when no wall-clock effect
+(sweep item C6). The compose pass skips sampling `rateScales()` altogether when no wall-clock FX
 holds a real slot, which is the usual case.
 
 `rateSpeedMasterUuid` is settable everywhere `speedMasterUuid` is — REST add/update, look
-effects, cue ad-hoc effects, per-application overrides, cue-edit, and sync. The two coexist
-rather than excluding each other, so an effect whose `timingSource` changes keeps both
-assignments; BEAT effects simply never read the rate scale. The MCP effect tools take both, and
+FX, cue ad-hoc FX, per-application overrides, cue-edit, and sync. The two coexist
+rather than excluding each other, so an FX whose `timingSource` changes keeps both
+assignments; BEAT FX simply never read the rate scale. The MCP FX tools take both, and
 *Seconds* beside them (below). **Scripts are the deliberate exception** — the script API has never
-addressed a per-effect master's absence, so there was nothing to mirror.
+addressed a per-FX master's absence, so there was nothing to mirror.
 
-For STATEFUL effects, `deltaMs` is computed from the wall-clock interval directly. These
-effects already use `deltaMs` rather than phase, so they work naturally — and by the same
+For STATEFUL FX, `deltaMs` is computed from the wall-clock interval directly. These
+FX already use `deltaMs` rather than phase, so they work naturally — and by the same
 token a rate master has no effect on one that never reads its phase. Both shipped wall-clock
-effects (`CandleFlicker`, `FluorescentFlicker`) are STATEFUL, so nothing in-tree currently
+FX (`CandleFlicker`, `FluorescentFlicker`) are STATEFUL, so nothing in-tree currently
 exercises rate scaling end to end; author a STANDARD + WALL_CLOCK definition to try it.
 
-### Seconds — an effect's own cycle (venue-visit plan D7)
+### Seconds — an FX's own cycle (venue-visit plan D7)
 
-An effect's **timing** is one of two things: it follows a speed master, or it runs on *Seconds* —
+An FX's **timing** is one of two things: it follows a speed master, or it runs on *Seconds* —
 its own cycle, with no master, for a slow breathe or drift that must not move when the tempo does.
-It is one question for every effect, asked by one chip (`Seconds | M1 | M2…`), and stored as one
-flag, `seconds`, on every effect home: a live `FxInstance`, an effect palette (`palette_fx`), a
-Look's effects (`look_fx`) and a cue's ad-hoc effects (`cue_ad_hoc_fx`), with
+It is one question for every FX, asked by one chip (`Seconds | M1 | M2…`), and stored as one
+flag, `seconds`, on every FX home: a live `FxInstance`, an FX palette (`palette_fx`), a
+Look's FX (`look_fx`) and a cue's ad-hoc FX (`cue_ad_hoc_fx`), with
 `LookFxSpec`, `StoredFx` and `LookFxSettings` carrying it between them. It syncs from
 `formatVersion` 29. The rules are `fx/FxTimingChoice.kt`'s:
 
-- **A beat effect on Seconds** reads its `cycle` as seconds and runs on the **wall-clock
+- **A beat FX on Seconds** reads its `cycle` as seconds and runs on the **wall-clock
   loop** with both masters null — `FxInstance.seconds` true, `timingSource` `WALL_CLOCK`,
-  `rateMasterSlot` `NO_RATE_MASTER`. That is exactly an unscaled wall-clock effect, so neither loop
+  `rateMasterSlot` `NO_RATE_MASTER`. That is exactly an unscaled wall-clock FX, so neither loop
   learned anything; `applyTimingChoice` is the one writer before an instance reaches the engine, and
   `FxEngine.updateFx`'s `newSeconds` the one after (a swap, since the loop changes).
-- **A wall-clock effect's** division is seconds already. Its Seconds is having **no rate master**,
+- **A wall-clock FX's** cycle is seconds already. Its Seconds is having **no rate master**,
   and a master is its rate master, which scales the cycle by `bpm / 120` as above. So the instance's
   flag stays false for it — `FxInstance.registrationTimingSource` can then tell the two kinds apart on
   the wall clock — and `FxInstance.onSeconds` is the reading for either kind. A stored row may
-  carry the flag for a wall-clock effect (a client's or the AI's Seconds), which spawns it with no rate
+  carry the flag for a wall-clock FX (a client's or the AI's Seconds), which spawns it with no rate
   master; a stored wall-clock row with no rate master and no flag — every row before S15 — is on
   Seconds too.
 - **Seconds is free of every master**, so nothing retimes it: a cue layer's or a programmer layer's
   master override does not reach it (`FxSpawner` applies the timing after the overrides), and a
-  busk or AI press's beat-division override leaves its cycle alone
+  busk or AI press's cycle override leaves its cycle alone
   (`LookFxSpec.withCycleOverride`). A wall-clock row that merely has no rate master keeps
   the rule it always had — a layer's rate override still scales it.
 - **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `seconds`; `PUT /fx/{id}` and
   `updateFx` (one parse, `applyFxUpdate`) take `seconds: Boolean?` — `true` onto Seconds, `false`
-  onto the master sent beside it (a beat effect's absent master is master 1; a wall-clock effect must
+  onto the master sent beside it (a beat FX's absent master is master 1; a wall-clock FX must
   name its rate master, since a null one *is* Seconds), and naming a master alone also leaves Seconds.
-  `seconds: true` beside a master is refused on the effect routes and by the MCP effect tools
-  (`secondsTimingConflict`) — two answers to one question; the stored-effect writes take Seconds and
-  drop the master instead (below). A move between Seconds and a master changes the loop the effect
-  runs on, so it is a swap and the effect's **phase restarts**; every other edit keeps it. On a wall-clock effect, `seconds: true` is the explicit *unscaled* that a null
+  `seconds: true` beside a master is refused on the FX routes and by the MCP FX tools
+  (`secondsTimingConflict`) — two answers to one question; the stored-FX writes take Seconds and
+  drop the master instead (below). A move between Seconds and a master changes the loop the FX
+  runs on, so it is a swap and the FX's **phase restarts**; every other edit keeps it. On a wall-clock FX, `seconds: true` is the explicit *unscaled* that a null
   `rateSpeedMasterUuid` (which means "no change") never could say — `FU-FX-RATE-MASTER-CLEAR`, closed
-  by S15. `FxDto.seconds` (and the group and indirect effect DTOs') reports `onSeconds`; a beat
-  effect on Seconds reports `timingSource` `WALL_CLOCK`, the loop it runs on, so every speed label
+  by S15. `FxDto.seconds` (and the group and indirect FX DTOs') reports `onSeconds`; a beat
+  FX on Seconds reports `timingSource` `WALL_CLOCK`, the loop it runs on, so every speed label
   reads its number as seconds.
 - **A stored row on Seconds keeps no master beside the flag**: the Look, palette and cue writes
-  null both masters where `seconds` is set, rather than refusing the pair as the effect routes do.
+  null both masters where `seconds` is set, rather than refusing the pair as the FX routes do.
 - **Record and Include carry it** with the masters. Both had dropped the masters of a cue's ad-hoc
-  effect until S15 — `programmerCapture` recorded none, and `CueAdHocFxDto.toFxSpec`
+  FX until S15 — `programmerCapture` recorded none, and `CueAdHocFxDto.toFxSpec`
   (Include's adapter) passed none on — so a recorded busk fell back to master 1.
-- **Blind holds it like any programmer effect** (show-cue-editing plan D7): a busk on Seconds runs on
+- **Blind holds it like any programmer FX** (show-cue-editing plan D7): a busk on Seconds runs on
   the wall clock, whose accumulators advance before the pass applies anything, so a held one keeps its
   place in real time and lands in step when Blind goes off — §"Programmer suppression and the
   priority band".
 
-**A new effect is one bar** (venue-visit plan D16): four beats, on the master whose `family` matches
-its family where one is tagged, else master 1. The master is **stamped as a uuid when the effect is
+**A new FX is one bar** (venue-visit plan D16): four beats, on the master whose `family` matches
+its family where one is tagged, else master 1. The master is **stamped as a uuid when the FX is
 written**, never resolved later, so `null` still means master 1 everywhere: by the editor's picker
-(`FxPicker`), the palette editor, the MCP effect tools (`AiTools.parseFxTiming`, which also
-makes `cycle` optional) and the programmer's bare effect press (`POST /programmer/fx`);
+(`FxPicker`), the palette editor, the MCP FX tools (`AiTools.parseFxTiming`, which also
+makes `cycle` optional) and the programmer's bare FX press (`POST /programmer/fx`);
 the desk's two read one rule, `fx/FxTimingChoice.kt`'s `familyMasterUuidFor`. REST's
-`AddFxRequest` and `AddGroupFxRequest` default an omitted division to one bar and stamp nothing. A **wall-clock** effect starts on its own Seconds — four
-seconds — since "one bar" means nothing to an effect timed in seconds. Moving a beat effect between
-Seconds and a master in the editor or the palette sheet keeps its speed: the division is converted
+`AddFxRequest` and `AddGroupFxRequest` default an omitted cycle to one bar and stamp nothing. A **wall-clock** FX starts on its own Seconds — four
+seconds — since "one bar" means nothing to an FX timed in seconds. Moving a beat FX between
+Seconds and a master in the editor or the palette sheet keeps its speed: the cycle is converted
 at the master's tempo (4 beats at 120 BPM is 2 s). The effects plan's sessions build on this timing
 and default.
 
@@ -2531,7 +2532,7 @@ timingSource: WALL_CLOCK
 ---*/
 ```
 
-The timing source is stored on `FxRegistration` in the `FxRegistry` and propagated to `FxInstance.timingSource` when effects are created via looks, cues, or the REST API.
+The timing source is stored on `FxRegistration` in the `FxRegistry` and propagated to `FxInstance.timingSource` when FX are created via looks, cues, or the REST API.
 
 ### Control-surface bindings
 
@@ -2546,7 +2547,7 @@ Two `BindingTarget` variants drive the bank from hardware
 Both address the master by **uuid** (null → master 1), so they survive clone and
 cross-install import — unlike the older int-id cue/stack variants (`FU-SYNC-BINDING-PAYLOAD-UUIDS`).
 A binding naming a deleted master reports `AssignmentHealth.MissingSpeedMaster` rather than
-falling back to master 1: an *effect* degrading to the global tempo is reasonable, a control
+falling back to master 1: an *FX* degrading to the global tempo is reasonable, a control
 silently retuning the whole show is not.
 
 `SurfaceFeedbackPublisher` indexes tempo bindings separately from DMX-backed ones (a speed
@@ -2561,5 +2562,5 @@ and a tap has no "on" state to hold.
 1. **MIDI Clock Sync**: Accept external MIDI clock as a tempo source. (Binding *surface
    controls* to speed masters has landed — see "Control-surface bindings" below.)
 2. **Beat Detection**: Auto-detect BPM from audio input
-3. **Effect Modulation**: Effects that modulate other effects' parameters
+3. **FX Modulation**: FX that modulate other FX's parameters
 4. **Custom Distribution Functions**: User-defined distribution curves via scripts

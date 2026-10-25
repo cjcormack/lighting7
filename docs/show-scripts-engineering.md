@@ -149,10 +149,10 @@ Scripts have a `ScriptType` enum stored in the database:
 | Type | Base Class | Purpose |
 |------|-----------|---------|
 | `GENERAL` | `LightingScript` | Full-power: DMX, fixtures, FX, coroutines |
-| `FX_APPLICATION` | `FxApplicationScript` | Apply effects to fixtures |
-| `FX_DEFINITION` | `FxDefinitionScript` | Register custom effect types |
-| `FX_CALC` | `FxCalcScript` | Pure phase-based effect calculation |
-| `FX_CALC_STATEFUL` | `FxStatefulCalcScript` | Tick-based effect with internal state |
+| `FX_APPLICATION` | `FxApplicationScript` | Apply FX to fixtures |
+| `FX_DEFINITION` | `FxDefinitionScript` | Register custom FX types |
+| `FX_CALC` | `FxCalcScript` | Pure phase-based FX calculation |
+| `FX_CALC_STATEFUL` | `FxStatefulCalcScript` | Tick-based FX with internal state |
 
 ### Script Wrapping
 
@@ -238,7 +238,7 @@ persistent compilation cache below.
 
 ### Persistent compilation cache (on disk)
 
-Runtime script compilation — 30 built-in FX effects, cue-trigger scripts, user effects — is
+Runtime script compilation — 30 built-in FX, cue-trigger scripts, user FX — is
 the dominant start-up cost. `buildScriptingHostConfiguration` installs a
 `CompiledScriptJarsCache` under `<appDataDir>/script-cache` (override with `scriptCache.path`;
 disable with `scriptCache.enabled=false`). The first compile of each distinct script writes a
@@ -338,11 +338,11 @@ During the warm-up window:
   subscription setup until the show exists.
 - `State.bootProgress` (a `BootStatus` `StateFlow`) advances through phases
   `SHOW_INIT → FX_COMPILE → FIXTURES → CUE_PREWARM → READY` (or `FAILED`), with a `percent`
-  for the loading bar. FX-compile progress is reported per-effect by `FxFileLoader`.
+  for the loading bar. FX-compile progress is reported per FX by `FxFileLoader`.
 
 ### Show init steps
 
-1. `Show` constructor compiles the built-in FX effects (parallel unless
+1. `Show` constructor compiles the built-in FX (parallel unless
    `fx.parallelCompile=false`), served from the disk cache after the first boot
 2. `Show.start()` called
 3. `DbFixtureLoader.loadFixtures()` registers controllers and fixtures from DB patches

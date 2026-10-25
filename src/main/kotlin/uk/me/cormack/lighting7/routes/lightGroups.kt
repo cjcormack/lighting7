@@ -69,7 +69,7 @@ internal fun Route.routeApiRestGroups(state: State) {
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply effect"))
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to apply FX"))
             }
         }
 
@@ -377,10 +377,10 @@ private fun applyGroupFx(
     val elementMode = FxSpecCoercion.Strict.elementMode(request.elementMode)
 
     // No effect may drive a member's one-shot trigger (stage-view plan session 9, D15).
-    TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.attribute, "effect")
+    TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.attribute, "FX")
         ?.let { throw TriggerNotStorableException(it) }
     // Nor a member's fixture command (fixture optics plan session 7).
-    CommandIndex.refusalLive(state.show.fixtures, "group", group.name, request.attribute, "effect")
+    CommandIndex.refusalLive(state.show.fixtures, "group", group.name, request.attribute, "FX")
         ?.let { throw CommandNotStorableException(it) }
 
     // Validate property support (direct or via elements)

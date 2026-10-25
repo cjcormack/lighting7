@@ -163,7 +163,7 @@ class FxRegistry {
         colourSourceVersion: (() -> Long)? = null,
     ): Fx {
         val registration = getRegistration(fxType)
-            ?: throw IllegalArgumentException("Unknown effect type: $fxType")
+            ?: throw IllegalArgumentException("Unknown FX type: $fxType")
         return registration.factory(params, resolveColourSource, colourSourceVersion)
     }
 

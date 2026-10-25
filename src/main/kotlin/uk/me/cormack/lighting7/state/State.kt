@@ -710,7 +710,7 @@ class State(val config: ApplicationConfig) {
      * The desk's one shared selection — what a selection-relative surface control and a busk
      * press act on. State-scoped like [activeBankState] so it outlives a `Show`, cleared on
      * project switch and pruned on fixture reload; never persisted. See
-     * [DeskSelection] and `docs/lighting-composition-model.md` §"Layer 2".
+     * [DeskSelection] and `docs/lighting-composition-model.md` §"Tier 2 — Programmer".
      */
     val deskSelection: DeskSelection by lazy {
         // Not a show being torn down: its registry empties as it goes, and a prune against that

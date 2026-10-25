@@ -159,13 +159,13 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.MissingFixture -> "missing fixture '${health.fixtureKey}'"
     is AssignmentHealth.MissingGroup -> "missing group '${health.groupName}'"
     is AssignmentHealth.MissingAttribute ->
-        "missing property '${health.attribute}' on '${health.targetKey}'"
+        "missing attribute '${health.attribute}' on '${health.targetKey}'"
     is AssignmentHealth.MissingStack -> "missing cue stack id=${health.stackId}"
     is AssignmentHealth.MissingCue -> "missing cue id=${health.cueId}"
     is AssignmentHealth.UnknownBank ->
         "unknown bank '${health.bankId}' for device '${health.deviceTypeKey}'"
     is AssignmentHealth.MissingSpeedMaster -> "missing speed master ${health.masterUuid}"
-    is AssignmentHealth.UnknownAttribute -> "no patched fixture has property '${health.attribute}'"
+    is AssignmentHealth.UnknownAttribute -> "no patched fixture has attribute '${health.attribute}'"
     is AssignmentHealth.UnknownTarget -> "unknown binding target type '${health.targetType}'"
     is AssignmentHealth.MissingLook -> "missing Look ${health.lookUuid}"
     is AssignmentHealth.MissingPalette -> "missing palette ${health.paletteUuid}"

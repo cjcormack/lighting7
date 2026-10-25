@@ -551,8 +551,8 @@ internal data class SpeedMasterUsage(
     val total: Int get() = lookFx + cueAdHocFx + cueLayers + cueTempos + followers.size
 
     fun describe(): String = buildList {
-        if (lookFx > 0) add("$lookFx look effect${if (lookFx == 1) "" else "s"}")
-        if (cueAdHocFx > 0) add("$cueAdHocFx cue effect${if (cueAdHocFx == 1) "" else "s"}")
+        if (lookFx > 0) add("$lookFx Look FX")
+        if (cueAdHocFx > 0) add("$cueAdHocFx cue FX")
         if (cueLayers > 0) add("$cueLayers cue layer${if (cueLayers == 1) "" else "s"}")
         if (cueTempos > 0) add("$cueTempos cue${if (cueTempos == 1) "" else "s"} setting its tempo")
         if (followers.isNotEmpty()) add("${followers.joinToString(", ")} following it")

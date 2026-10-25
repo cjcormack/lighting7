@@ -4,7 +4,7 @@ The theatre desk runs two touch screens and, usually, an iPad. Every console mak
 a **view on one programmer** rather than a second programmer, and so does this one: the fixture
 selection, its attribute mask, the busk page, blind, the fade and the programmer's layer stack are
 all **desk facts** — one value, server-owned, broadcast to everyone (`state/DeskSelection.kt`,
-`docs/lighting-composition-model.md` §"Layer 2"). A window is a *viewport*, and the only things it
+`docs/lighting-composition-model.md` §"Tier 2 — Programmer"). A window is a *viewport*, and the only things it
 owns are what it is looking at and how it is framed.
 
 **Two of those a window may decline to follow**, and the desk keeps holding them either way: the

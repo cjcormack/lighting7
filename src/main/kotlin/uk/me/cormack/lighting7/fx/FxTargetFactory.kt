@@ -94,13 +94,13 @@ object FxTargetFactory {
         if (fixture != null) {
             FixtureTriggers.reservedNamesOf(fixture::class).firstOrNull { it.equals(attribute, ignoreCase = true) }?.let {
                 throw TriggerNotStorableException(
-                    "'$it' on '${fixture.targetKey}' is a one-shot trigger or its arm: no effect can drive it — it fires as an event while the desk is armed",
+                    "'$it' on '${fixture.targetKey}' is a one-shot trigger or its arm: no FX can drive it — it fires as an event while the desk is armed",
                 )
             }
             // Nor a fixture command (fixture optics plan session 7).
             FixtureCommands.reservedNamesOf(fixture::class).firstOrNull { it.equals(attribute, ignoreCase = true) }?.let {
                 throw CommandNotStorableException(
-                    "'$it' on '${fixture.targetKey}' is a fixture command: no effect can drive it — it runs from the fixture panel's Commands menu",
+                    "'$it' on '${fixture.targetKey}' is a fixture command: no FX can drive it — it runs from the fixture panel's Commands menu",
                 )
             }
         }
@@ -148,8 +148,8 @@ object FxTargetFactory {
 fun requireOutputTypeMatch(effect: Fx, target: FxTarget) {
     if (target.accepts(effect.outputType)) return
     throw IllegalArgumentException(
-        "Effect '${effect.name}' outputs ${effect.outputType} but property " +
+        "FX '${effect.name}' outputs ${effect.outputType} but attribute " +
             "'${target.attribute}' takes ${target.acceptedOutputType} — the output would be " +
-            "discarded. Check the effect's compatibleAttributes."
+            "discarded. Check the FX's compatibleAttributes."
     )
 }

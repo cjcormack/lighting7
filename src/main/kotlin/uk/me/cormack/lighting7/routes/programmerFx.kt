@@ -147,7 +147,7 @@ internal fun pressBareFx(
     families: Set<AttributeFamily>?,
 ): BareFxOutcome {
     if (request.targets.isEmpty()) {
-        return BareFxOutcome.Invalid("A Local effect needs a selection", CODE_FX_NEEDS_SELECTION)
+        return BareFxOutcome.Invalid("A Local FX needs a selection", CODE_FX_NEEDS_SELECTION)
     }
     val engine = state.show.fxEngine
     val stamped = request.speedMasterUuid ?: if (request.seconds) {
@@ -186,7 +186,7 @@ internal fun pressBareFx(
     var instance = try {
         build(start = null)
     } catch (e: Exception) {
-        return BareFxOutcome.Invalid(e.message ?: "Could not start the effect")
+        return BareFxOutcome.Invalid(e.message ?: "Could not start the FX")
     }
     val family = fxFamily(state, instance)
     if (families != null && !maskAllows(families, family)) {
@@ -204,7 +204,7 @@ internal fun pressBareFx(
             instance = try {
                 build(FxStacking.startFor(family, declared))
             } catch (e: Exception) {
-                return BareFxOutcome.Invalid(e.message ?: "Could not start the effect")
+                return BareFxOutcome.Invalid(e.message ?: "Could not start the FX")
             }
         }
         engine.addFx(instance)
@@ -302,20 +302,20 @@ internal fun planSplit(state: State, effect: FxInstance, targets: List<CueTarget
     val selected = heads.filterTo(LinkedHashSet()) { coverage.covers(named, CueTargetDto(TargetRef.Fixture.TYPE, it)) }
     return when {
         selected.isEmpty() -> SplitPlan.Refusal(
-            FxUpdateOutcome.Refused("targets name none of the heads effect ${effect.id} runs on"),
+            FxUpdateOutcome.Refused("targets name none of the heads FX ${effect.id} runs on"),
         )
         selected.size == heads.size -> SplitPlan.InPlace
         effect.programmerLayerFxKey != null -> SplitPlan.Refusal(
             FxUpdateOutcome.Conflict(
                 CODE_FX_SPLIT_LAYER_FX,
-                "Effect ${effect.id} belongs to a programmer layer, and splits only with it — edit it on " +
+                "FX ${effect.id} belongs to a programmer layer, and splits only with it — edit it on " +
                     "all its heads, or Detach the layer first",
             ),
         )
         !effect.isLocalFx -> SplitPlan.Refusal(
             FxUpdateOutcome.Conflict(
                 CODE_FX_SPLIT_NOT_LOCAL,
-                "Effect ${effect.id} is not the programmer's own — only a Local effect splits",
+                "FX ${effect.id} is not the programmer's own — only a Local FX splits",
             ),
         )
         else -> SplitPlan.Heads(selected)

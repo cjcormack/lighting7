@@ -486,7 +486,7 @@ internal fun aimSkipReason(head: GroupableFixture, placement: AimPlacement?): St
     (aimableHead(head, placement) as? HeadAim.Skip)?.reason
 
 private fun aimableHead(head: GroupableFixture, placement: AimPlacement?): Aimability {
-    if (head is FixtureElement<*>) return HeadAim.Skip("a cell has no placement of its own — aim its fixture")
+    if (head is FixtureElement<*>) return HeadAim.Skip("an element has no placement of its own — aim its fixture")
     if (head !is Fixture || head !is WithPosition) return HeadAim.Skip("fixed head — no pan or tilt")
     val catalogue = head.fixtureAttributes
     val pan = catalogue.firstOrNull { it.category == AttributeCategory.PAN }

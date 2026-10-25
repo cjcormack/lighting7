@@ -50,7 +50,7 @@ internal fun FxInstance.applyTimingChoice(registrationSource: TimingSource, seco
  */
 fun secondsTimingConflict(seconds: Boolean?, speedMasterUuid: String?, rateSpeedMasterUuid: String?): String? =
     if (seconds == true && (speedMasterUuid != null || rateSpeedMasterUuid != null)) {
-        "seconds: an effect on Seconds follows no master — send seconds or a master, not both"
+        "seconds: an FX on Seconds follows no master — send seconds or a master, not both"
     } else {
         null
     }

@@ -219,7 +219,7 @@ export function NewPaletteFromFxSheet({
           {effect != null && library != null && entry == null && (
             <p className="text-[11px] text-destructive">
               &ldquo;{effect.fxType}&rdquo; is not in this desk&rsquo;s FX library, so its
-              category — and so the palette&rsquo;s family — cannot be read.
+              family — and so the palette&rsquo;s — cannot be read.
             </p>
           )}
           {Number.isFinite(projectIdNum) && (
@@ -229,8 +229,8 @@ export function NewPaletteFromFxSheet({
           {step?.reason != null && <p className="text-[11px] text-muted-foreground">{step.reason}</p>}
           {entry != null && step == null && family == null && (
             <p className="text-[11px] text-destructive">
-              A “{category}” FX cannot be a palette — an FX palette is banked by family,
-              and that category has none. It can live in a recorded look instead.
+              A “{category}” FX cannot be a palette — an FX palette is banked by attribute family,
+              and that FX family maps to none. It can live in a recorded look instead.
             </p>
           )}
         </SheetBody>

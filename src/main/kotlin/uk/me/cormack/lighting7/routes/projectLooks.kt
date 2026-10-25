@@ -883,14 +883,14 @@ internal fun validateLookFx(effects: List<LookFxDto>, registry: FxRegistry): Str
         listOfNotNull(
             when {
                 effect.targetType == DEFERRED_TARGET_TYPE ->
-                    "A look effect must name its own fixture, group or selection. An effect you point at a " +
-                        "selection is an effect palette — create one in the palette library instead."
+                    "A Look FX must name its own fixture, group or selection. An FX you point at a " +
+                        "selection is an FX palette — create one in the palette library instead."
                 FxTargetsRef.ofOrNull(effect.targetType, effect.targetKey) == null ->
-                    "Unknown effect target '${effect.targetType}' — expected 'fixture', 'group' or " +
+                    "Unknown FX target '${effect.targetType}' — expected 'fixture', 'group' or " +
                         "'${FxTargetsRef.Selection.TYPE}' (a list of fixtures and groups)"
                 else -> null
             },
-            "Effect type must not be blank".takeIf { effect.fxType.isBlank() },
+            "FX type must not be blank".takeIf { effect.fxType.isBlank() },
             FxSpecCoercion.Strict.problem(
                 blendMode = effect.blendMode,
                 order = effect.order,

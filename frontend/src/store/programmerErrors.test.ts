@@ -34,11 +34,11 @@ describe('startProgrammerErrorBridge', () => {
   it('toasts the server message verbatim', () => {
     startProgrammerErrorBridge()
 
-    errorSubscribers.forEach((fn) => fn("Property 'uv' on 'hex-1' resolves to no DMX channels"))
+    errorSubscribers.forEach((fn) => fn("Attribute 'uv' on 'hex-1' resolves to no DMX channels"))
 
     expect(toast.error).toHaveBeenCalledTimes(1)
     expect(toast.error).toHaveBeenCalledWith(
-      "Property 'uv' on 'hex-1' resolves to no DMX channels",
+      "Attribute 'uv' on 'hex-1' resolves to no DMX channels",
       { id: PROGRAMMER_ERROR_TOAST_ID },
     )
   })

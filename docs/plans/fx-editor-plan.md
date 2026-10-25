@@ -2,7 +2,7 @@
 
 > **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a, 3b, 4 and 5 of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
-> ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
+> ([`terminology-plan.md`](completed/terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
 > *Intensity*, *Runs*, *Timing: Per cycle | Per head*. The design record is
 > [`fx-editor-design/`](fx-editor-design/INDEX.md); its one page,
@@ -24,14 +24,14 @@ rename them.
 
 - **The editor edits one FX at a time.** `FxEditor` (`F/components/fx/FxEditor.tsx`) mounts
   `FxEffectFields` (`F/components/fx/FxEffectFields.tsx`, 1222 lines) inline in the fixture sheet's
-  tray, in a popover from the programmer's FX table, the Values grid's FX lens and a cell's Effects
-  band, and in the busk Effects tab. Nothing shows the FX on a selection together, or what they add
+  tray, in a popover from the programmer's FX table, the Values grid's FX lens and a cell's FX
+  band, and in the busk FX tab. Nothing shows the FX on a selection together, or what they add
   up to.
 - **The programmer's FX table lists every running FX** (`F/components/applied/AppliedFxTable.tsx`):
   one row per instance, all homes, with Edit…, pause, Save as palette and Stop. It is the FX tab of
   *Values · Stack · FX · Scenery* (`F/components/programmer/ProgrammerTableTabs.tsx`).
 - **There is no door for a second FX of a family on the same heads.** The bare FX press
-  (`POST /programmer/effects`, `K/routes/programmerEffects.kt:185-210`) first takes the selected heads
+  (`POST /programmer/fx`, `K/routes/programmerFx.kt`) first takes the selected heads
   off every other Local FX of its family. Two Intensity FX on one head are reachable only through a
   palette layer, a Look, a cue, or `/fx/add` from a script.
 - **Order within the programmer band is creation order, and Local FX sit at its bottom.** Local FX get
@@ -51,8 +51,8 @@ rename them.
   Flicker *Within* it shows one or the other, alternating with the loops. `FU-PERF-FRAME-TXN-UNIFY`
   records the transaction half and is gated on visible flicker.
 - **Nothing evaluates an FX off the stage.** `Effect.calculate` is called only from
-  `FxEngine.calculateEffectOutput` (`K/fx/FxEngine.kt:1816`). Cue previews are Layer 4 only
-  (`K/routes/cuePreview.kt:30-37`). `programmer.keyStack` lists an attribute's layers and which is on
+  `FxEngine.calculateEffectOutput` (`K/fx/FxEngine.kt:1816`). Cue previews are Tier 4 only
+  (`K/routes/cuePreview.kt:30-37`). `programmer.keyStack` lists what sits under an attribute and which is on
   stage, with no FX output values (`K/fx/ProvenanceService.kt:757-787`).
 - **The client never computes an FX's output.** The one client copy of a desk rule is the spread's
   offsets for the phase dials (`F/lib/spreadShape.ts`), pinned to `K/fx/SpreadShape.kt` by
@@ -102,7 +102,7 @@ The plan adds its own:
 - **P3. One sampler, the engine's own functions.** The preview calls the functions the tick calls
   (§3.2). No second waveform, blend or spread lives anywhere, and the parity test fails if the two
   drift.
-- **P4. Previewing changes nothing.** A preview never touches an instance's clocks, N-shot anchors,
+- **P4. Previewing changes nothing.** A preview never touches an instance's clocks, Runs anchors,
   state map, envelope, `lastPhase` or the transaction, and never sends DMX.
 - **P5. Every write is an existing write.** The inspector, the handles, Shapes and Match send
   `updateFx` as the live editor does; the list's drag sends the new move frame (§3.5); *Stack* is the
@@ -132,12 +132,12 @@ fused with state today:
 
 1. **Phase.** `FxInstance.beatPhase` and `wallClockPhase` become a pure `phaseAt(clock, dynamics,
    anchors)` returning the member phase or NaN, where `clock` is a tick count or scaled milliseconds
-   and `anchors` the N-shot start. The instance methods call it and keep their writes
-   (`nShotStartTick`, `lastPhase`) outside it. `shapeMemberPhase` is already pure in its arguments.
+   and `anchors` the Runs start. The instance methods call it and keep their writes
+   (`runsStartTick`, `lastPhase`) outside it. `shapeMemberPhase` is already pure in its arguments.
 2. **Members.** `buildExpansion` / `buildSelectionExpansion` and `DistributionPlan.of` as they are,
    read-only, for the instance's target or a draft's.
-3. **Output.** STANDARD FX through the registration's `Effect.calculate(phase, context)` on a fresh
-   effect object; Steps through `StepList.valueFor` per head. STATEFUL FX on a fresh object per
+3. **Output.** STANDARD FX through the registration's `Fx.calculate(phase, context)` on a fresh
+   FX object; Steps through `StepList.valueFor` per head. STATEFUL FX on a fresh object per
    member, `initialize()`d, driven tick by tick from the window's start with `deltaMs` at the sample
    rate and a fixed seed; the answer marks them `representative`. (The terminology plan's D27 leaves
    no COMPOSITE FX.)
@@ -146,9 +146,9 @@ fused with state today:
    them; so does the sampler.
 5. **Underneath.** `LayerResolver.fallbackFor` once per (head, attribute) at the request, held
    constant across the window. A fade underneath is not drawn.
-6. **The fold.** For each (head, attribute), the stack's FX in apply order (`sortedEffectsComparator`,
+6. **The fold.** For each (head, attribute), the stack's FX in apply order (`sortedFxComparator`,
    with D5's band), each blended over the running result and weighed by its Amount × the stack's FX
-   amount (cue FX) × 1 for the envelope; one suppressed for this key (`EffectSuppression`, Blind
+   amount (cue FX) × 1 for the envelope; one suppressed for this key (`FxSuppression`, Blind
    included) is sampled but left out of *Result* and reported `heldBack` with its reason.
 
 Sample rate: 48 samples a cycle of the picked FX, at most 1024 a row; at most 96 rows (elements)
@@ -163,13 +163,13 @@ roles, no write:
 
 ```
 { targets: [TargetRef…],            // the selection, in its order
-  fx: [ {effectId} | {draft: AddEffectRequest fields, targets?} | {effectId, draft} ],
+  fx: [ {fxId} | {draft: AddFxRequest fields, targets?} | {fxId, draft} ],
   include: "STACK" | "ONLY",       // STACK: every FX reaching the targets, plus `fx`; ONLY: `fx` alone
   window: { cycles?: n, beats?: n, seconds?: n },  // of the first `fx` entry
-  solo?: effectId }
+  solo?: fxId }
 ```
 
-`{effectId, draft}` previews a running FX with the editor's unsent move, so the graph follows a
+`{fxId, draft}` previews a running FX with the editor's unsent move, so the graph follows a
 finger before the 50 ms floor has sent it. The answer:
 
 ```
@@ -177,8 +177,8 @@ finger before the 50 ms floor has sent it. The answer:
   clock:  [{speedMasterUuid | "seconds", tickAtStart | scaledMsAtStart, msPerBeat}],  // the playhead
   rows:   [{key, fixtureKey, label, element?}],                                    // graph order
   lanes:  [{family, attributes: [{attribute, kind,
-             underneath, result, fx: [{effectId|draftIndex, output, heldBack?, heldBackReason?}]}]}],
-  fx:     [{effectId|draftIndex, family, attribute, offsets: [..], starts: [..], holding: [[from,to]..],
+             underneath, result, fx: [{fxId|draftIndex, output, heldBack?, heldBackReason?}]}]}],
+  fx:     [{fxId|draftIndex, family, attribute, offsets: [..], starts: [..], holding: [[from,to]..],
             slots, ladder: {order: [..], segments: [..], wings: [..], parts: [..], spread: [..]},
             representative?}],
   truncated? }
@@ -207,7 +207,7 @@ transaction. A beat FX reads its master's current tick, which is a pure function
 pass woken by the ticker paints it where the last tick left it; a wall-clock FX advances its
 accumulator by the real time since its last pass, as it does now. Passes are coalesced to at most
 one per 5 ms. This closes `FU-PERF-FRAME-TXN-UNIFY` and corrects `docs/fx-engineering.md` §"Beat ↔
-Wall-Clock interaction". The tick-failure counter (`MAX_CONSECUTIVE_TICK_FAILURES`) and the N-shot
+Wall-Clock interaction". The tick-failure counter (`MAX_CONSECUTIVE_TICK_FAILURES`) and the Runs
 bookkeeping keep their per-loop meaning by recording which clock woke the pass.
 
 ### 3.5 Apply order (D4, D5)
@@ -218,7 +218,7 @@ bookkeeping keep their per-loop meaning by recording which clock woke the pass.
   pressed FX palette that used to win over a Local FX on the same key now sits under it.
   `fx-engineering.md` says so where it describes the band.
 - **The rank.** A new Local FX takes the top of its key's lane (`localRank` one above the highest
-  Local FX sharing an attribute with it). `programmer.moveFx {effectId, above: effectId | null}`
+  Local FX sharing an attribute with it). `programmer.moveFx {fxId, above: fxId | null}`
   re-ranks it below `above`'s FX (null: the bottom), answered by `fxChanged(UPDATED)` for each FX whose
   priority moved; an FX not Local is refused (`fxError FX_MOVE_NOT_LOCAL`). An operator gesture, so
   `FU-AUTH-WS-PER-MESSAGE` does not fire; a row in `TraceSampling.WS_MESSAGES`.
@@ -234,8 +234,8 @@ bookkeeping keep their per-loop meaning by recording which clock woke the pass.
 The bare FX press gains `stack: true`: the FX is added over the selection, no other Local FX is
 stopped or narrowed, and an absent blend or Amount takes the family's stacking start
 (`fx/FxStacking.kt`, one table: Intensity `MULTIPLY` at 100 %, Position `ADDITIVE` with both centres
-at 128 at 100 %, Colour and Beam `OVERRIDE` at 50 %). The answer is `{effectId, stopped: 0,
-narrowed: 0}`. No MCP tool presses a bare FX (`apply_palette`, `clear_effects` and the stored FX on
+at 128 at 100 %, Colour and Beam `OVERRIDE` at 50 %). The answer is `{fxId, stopped: 0,
+narrowed: 0}`. No MCP tool presses a bare FX (`apply_palette`, `clear_fx` and the stored FX on
 `create_look` and `create_cue` are the FX tools), so none takes `stack`; agreed with Chris during
 session 3a.
 
@@ -247,7 +247,7 @@ The FX tab's row B gains *Selection · All* before its chips; *Selection* is the
 per window. *All* is today's table unchanged, except that a row's press selects that FX's heads (the
 window's selection, or the desk's while it follows) and switches to *Selection* with the FX picked.
 
-The subject is the window's pair (`useWindowEffectPair`), as `+ FX` reads it today. With nothing
+The subject is the window's pair (`useWindowFxPair`), as `+ FX` reads it today. With nothing
 selected the list says so and offers *Select the heads of a running FX…*, a menu of the running FX
 by name.
 
@@ -303,11 +303,11 @@ by name.
   that has them. Each writes through the inspector's draft and `useLivePush`, so the floor and
   Revert are the live editor's.
 - **Solo** draws the lane as the picked FX alone over *Underneath*; a solo'd card is marked, and the
-  toolbar says *Solo: Strobe*.
+  toolbar says *Solo: Dimmer Strobe*.
 
 ### 4.5 The inspector (D9, D11, D13)
 
-`FxEditor` over `FxEffectFields` as the terminology plan's §6 leaves them: *Cycle · Amount ·
+`FxEditor` over `FxFields` as the terminology plan's §6 leaves them: *Cycle · Amount ·
 Direction · Order* on top, then **Shape** (the FX's parameters), **Spread** (Shapes, Spread %,
 Wings, Segments, Parts, the offset ladder), **Over what's underneath** (the family's question; the
 raw blend for any FX), **Advanced** (Phase, Timing, Runs, element mode, element filter). The phase
@@ -331,11 +331,11 @@ all 4*), pause and × are the live editor's, unchanged.
   that fixture or group with its FX tab on *Selection*.
 - **The FX palette editor** draws the graph strip under its fields, over eight notional heads, or the
   current selection when there is one (*On the selection · On eight heads*). It replaces
-  `TemplateRunsOn`'s stripe.
+  `PaletteRunsOn`'s stripe.
 - **The cue editor's FX tab** draws the graph strip for its open FX row over that FX's own targets,
   `include: "ONLY"`; a cue FX's graph cannot say what is underneath at its GO, so it draws over
   nothing and says so.
-- **The busk Effects tab** keeps its rows and gains the strip under the open one.
+- **The busk FX tab** keeps its rows and gains the strip under the open one.
 
 ## 5. What is not changing
 
@@ -420,7 +420,7 @@ Why each gate is where it is:
 - §3.4. Full suites.
 - **Tests**: a beat Sine Wave with a wall-clock Candle Flicker *Within* it on one dimmer composes on
   every pass; a wall-clock FX's cycle length is unchanged by the extra wakes; tick-failure counting and
-  N-shot ends behave per clock as before; once 1a has landed, the parity test gains a mixed pair.
+  runs' ends behave per clock as before; once 1a has landed, the parity test gains a mixed pair.
 - **Docs**: the corrected §"Beat ↔ Wall-Clock interaction"; `FU-PERF-FRAME-TXN-UNIFY` to Completed.
 
 ### Session 3a: the band and Stack (backend) — done, `4e01c253`
@@ -433,7 +433,7 @@ Why each gate is where it is:
   undoes it; a non-Local FX's move is `FX_MOVE_NOT_LOCAL`; `stack: true` stops nothing and starts on
   the family table. No MCP schema: no tool presses a bare FX (§3.6).
 - **Docs**: `fx-engineering.md` §"Programmer suppression and the priority band", with the behaviour
-  change, and §"Effect iteration order" (which still says `id` breaks ties; it is `composeOrder`).
+  change, and §"FX iteration order" (which still says `id` breaks ties; it is `composeOrder`).
 
 ### Session 3b: apply order kept (backend) — done, `402cac92`
 
@@ -518,7 +518,7 @@ At the desk on Sleeping Beauty:
   wave, steadily, never one or the other.
 - **Session 3a.** Press a palette with an FX, then a Local Pulse on the same heads: the Pulse wins.
 - **Session 3b.** Stack two Local FX, reorder them, Record a Look; press it; the order holds.
-- **Session 4.** Select Hex 1–8 with a Sine Wave and a Strobe stacked *Within*; the list shows both,
+- **Session 4.** Select Hex 1–8 with a Sine Wave and a Dimmer Strobe stacked *Within*; the list shows both,
   top first; drag the Sine Wave above; the stage changes.
 - **Session 5.** The graph's playhead crosses Hex 1's peak as Hex 1 peaks on the rig.
 - **Session 6.** *Pairs* then *Mirror*; the graph and the rig agree.
@@ -560,7 +560,7 @@ Answered by Chris, 2026-10-23, one round of fifteen, each as recommended:
     Match, were declined.
 13. **Solo?** The graph's only (D14). A stage mute (new runtime state, a frame and a held-back
     reason) and no Solo were declined.
-14. **The editor's other hosts?** The palette editor, the cue FX tab and the busk Effects tab get the
+14. **The editor's other hosts?** The palette editor, the cue FX tab and the busk FX tab get the
     strip, and the tray links to the editor (D15). The programmer only, and the programmer plus the
     palette editor, were declined.
 15. **Names?** *FX editor*; *list*, *graph*, *inspector*; *Shapes*; *offset ladder*; *Match*, all

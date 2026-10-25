@@ -165,7 +165,7 @@ internal sealed interface HeadFocus {
  * a test can hand it a head no patch can name — a focus with no declared range.
  */
 internal fun focusHead(head: GroupableFixture, placement: AimPlacement?, point: StagePoint): HeadFocus {
-    if (head is FixtureElement<*>) return HeadFocus.Skip("a cell has no placement of its own — focus its fixture")
+    if (head is FixtureElement<*>) return HeadFocus.Skip("an element has no placement of its own — focus its fixture")
     if (head !is Fixture) return HeadFocus.Skip("no focus channel")
     val attribute = head.fixtureAttributes.firstOrNull { it.category == AttributeCategory.FOCUS && it.fineOf == null }
         ?: return HeadFocus.Skip("no focus channel")

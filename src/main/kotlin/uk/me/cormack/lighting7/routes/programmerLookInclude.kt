@@ -286,18 +286,16 @@ internal data class LookIncludeOutcome(
  */
 internal fun lookIncludeWarnings(lookName: String, outcome: LookIncludeOutcome, sceneryIncluded: Int = 0): List<String> {
     val alreadyRunning = outcome.fxAlreadyRunning.takeIf { it > 0 }?.let { n ->
-        "${fxPhrase(n)} of '$lookName' already running where it is live — release it there to edit " +
+        "$n FX of '$lookName' already running where it is live — release it there to edit " +
             "${if (n == 1) "that one" else "those"} here."
     }
     val staged = outcome.entriesWritten > 0 || sceneryIncluded > 0 || outcome.fxSpawned > 0
     return when {
         staged || alreadyRunning != null -> listOfNotNull(alreadyRunning)
         outcome.skipped.isNotEmpty() -> listOf(
-            "None of '$lookName''s rows could be staged: the fixtures or properties they " +
+            "None of '$lookName''s rows could be staged: the fixtures or attributes they " +
                 "name are not in the current patch, or the mask excluded them.",
         )
         else -> listOf("'$lookName' holds nothing to stage under this mask, or nothing at all.")
     }
 }
-
-private fun fxPhrase(n: Int) = if (n == 1) "1 effect" else "$n effects"

@@ -13,7 +13,7 @@ import {
 /**
  * Client for the backend's Layer-2 programmer (`programmer.*` WS ops plus the
  * `provenanceState` broadcast). See `lighting7/docs/lighting-composition-model.md`
- * §"Layer 2 — Programmer" for the semantics this mirrors.
+ * §"Tier 2 — Programmer" for the semantics this mirrors.
  *
  * Two things about the wire shape drive the design here:
  *

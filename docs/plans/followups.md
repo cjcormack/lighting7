@@ -19,9 +19,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-DIST-ICONS`](#fu-dist-icons) | Ready | Dist | — |
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
-| [`FU-TMPL-REWARM-BOUND`](#fu-tmpl-rewarm-bound) | Trigger | Perf | a template list change visibly stalls a template-heavy show |
+| [`FU-TMPL-REWARM-BOUND`](#fu-tmpl-rewarm-bound) | Trigger | Perf | a palette list change visibly stalls a palette-heavy show |
 | [`FU-FX-TICKFLOW-UNUSED`](#fu-fx-tickflow-unused) | Ready | Perf | — |
-| [`FU-PERF-FXSCRIPT-CACHE-BOUND`](#fu-perf-fxscript-cache-bound) | Trigger | Perf | metaspace/classloader growth that tracks FX editing, not show size |
+| [`FU-PERF-FXSCRIPT-CACHE-BOUND`](#fu-perf-fxscript-cache-bound) | Trigger | Perf | metaspace/classloader growth that tracks FX editing, not project size |
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Rejected | FE | decision record — no surface hosts it |
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 2nd surface renders `AssignmentHealth` |
 | [`FU-FE-REVISION-REFETCH-DEDUP`](#fu-fe-revision-refetch-dedup) | Trigger | FE | a 4th broadcast needs revision-gated refetch coalescing |
@@ -34,9 +34,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
 | [`FU-SPEED-SCRIPT-RAW-CLOCK`](#fu-speed-script-raw-clock) | Trigger | Speed | a script retunes a clock and surfaces show stale tempo |
 | [`FU-SPEED-LINK-PUT-STALE-BPM`](#fu-speed-link-put-stale-bpm) | Trigger | Speed | a client renders a link PUT's response without the WS state |
-| [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
+| [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock FX wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | an operator wants one FX to drive two attributes |
-| [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
+| [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across FX |
 | [`FU-FX-AMPLITUDE`](#fu-fx-amplitude) | Trigger | FX | an operator wants an FX bigger than it was written (absorbs `FU-FX-SIZE-OVER-100`) |
 | [`FU-FX-PER-STEP-TIMING`](#fu-fx-per-step-timing) | Trigger | FX | an operator expects a longer list to run slower |
 | [`FU-FX-PREVIEW-SHARED-CHANNELS`](#fu-fx-preview-shared-channels) | Trigger | FX | an FX graph disagrees with the rig where two attributes share a channel |
@@ -45,9 +45,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-STEP-WIDTH`](#fu-fx-step-width) | Trigger | FX | an operator asks for an uneven step |
 | [`FU-FX-LIBRARY-GAPS`](#fu-fx-library-gaps) | Trigger | FX | an operator reaches for a square, diamond or TiltDim |
 | [`FU-FX-FLICKER-REPEATS`](#fu-fx-flicker-repeats) | Trigger | FX | someone sees a flicker repeat on a long cycle |
-| [`FU-FX-KEYSTACK-STACK-SIZE`](#fu-fx-keystack-stack-size) | Trigger | FX | an operator misreads a property's stack under a stack below full |
+| [`FU-FX-KEYSTACK-STACK-SIZE`](#fu-fx-keystack-stack-size) | Trigger | FX | an operator misreads an attribute's stack under a stack below full |
 | [`FU-FX-PRESS-FADE-CLIENT`](#fu-fx-press-fade-client) | Ready | FX | — |
-| [`FU-FX-VALUE-FADE-UNDER-EFFECT`](#fu-fx-value-fade-under-effect) | Trigger | FX | an operator wants a value and the effect over it to fade together on a programmer gesture |
+| [`FU-FX-VALUE-FADE-UNDER-EFFECT`](#fu-fx-value-fade-under-effect) | Trigger | FX | an operator wants a value and the FX over it to fade together on a programmer gesture |
 | [`FU-FX-BEAM-ANY-SLIDER`](#fu-fx-beam-any-slider) | Trigger | FX | an operator wants to breathe prism or a fixture's own speed channel |
 | [`FU-FX-STEPS-COLOUR-WHEEL`](#fu-fx-steps-colour-wheel) | Trigger | FX | an operator steps colour palettes over a group holding a colour-wheel head |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
@@ -60,29 +60,29 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-MIDI-SHOW-GUARD`](#fu-midi-show-guard) | Trigger | MIDI | a project switch kills a surface's input and it has to be replugged |
 | [`FU-SLOT-DROP-OVERLAY-HIDDEN`](#fu-slot-drop-overlay-hidden) | Trigger | Busk | a palette row dropped at a collapsed cue-slot overlay lands on nothing |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
-| [`FU-PROG-STALE-SOURCE-NAME`](#fu-prog-stale-source-name) | Trigger | Prog | a renamed Look or template shows its old name on a live programmer layer |
+| [`FU-PROG-STALE-SOURCE-NAME`](#fu-prog-stale-source-name) | Trigger | Prog | a renamed Look or palette shows its old name on a live programmer layer |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
-| [`FU-PROG-FX-HELDBACK-COUNT`](#fu-prog-fx-heldback-count) | Trigger | Prog | an operator misses a held-back effect the grid's dot and the strike-through both show |
-| [`FU-BLIND-FX-DRAWN`](#fu-blind-fx-drawn) | Trigger | Stage | an operator previews a Blind busk or Blind edit with an effect on the Stage view and expects to see it move |
+| [`FU-PROG-FX-HELDBACK-COUNT`](#fu-prog-fx-heldback-count) | Trigger | Prog | an operator misses a held-back FX the grid's dot and the strike-through both show |
+| [`FU-BLIND-FX-DRAWN`](#fu-blind-fx-drawn) | Trigger | Stage | an operator previews a Blind busk or Blind edit with an FX on the Stage view and expects to see it move |
 | [`FU-PROG-LAYER-ROW-STACK`](#fu-prog-layer-row-stack) | Trigger | Prog | an operator asks what sits under a focused Look layer's own row |
 | [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
-| [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
+| [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one attribute of a layer to mix while the rest override |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-PRESS-REPLACE-LOOKS`](#fu-press-replace-looks) | Trigger | Look | an operator expects a Look to take another off the same heads outside a solo bank |
-| [`FU-PRESS-LAYER-MASTER`](#fu-press-layer-master) | Trigger | Look | an operator wants a programmer layer's effects on another speed or rate master |
+| [`FU-PRESS-LAYER-MASTER`](#fu-press-layer-master) | Trigger | Look | an operator wants a programmer layer's FX on another speed or rate master |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
-| [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
-| [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Tmpl | The same pair of same-family effect palettes pressed together, again and again |
-| [`FU-TMPL-USAGE-RETAG`](#fu-tmpl-usage-retag) | Trigger | Tmpl | retagging a master's usage and expecting stamped templates to follow |
-| [`FU-TMPL-FX-EDIT-NO-RETIME`](#fu-tmpl-fx-edit-no-retime) | Trigger | Tmpl | an operator retunes an effect template and the live effect keeps its old timing |
-| [`FU-TMPL-CLICK-GROUP-PARTIAL`](#fu-tmpl-click-group-partial) | Trigger | Tmpl | an effect template on a mixed group (hexes plus a hazer, or plus a 24-channel Shehds) runs on none of its heads |
-| [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
-| [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
-| [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a template is asked to address a two-wheel head's second wheel |
-| [`FU-TMPL-KELVIN`](#fu-tmpl-kelvin) | Ready | Tmpl | — |
+| [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Palette | — |
+| [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Palette | The same pair of same-family FX palettes pressed together, again and again |
+| [`FU-TMPL-USAGE-RETAG`](#fu-tmpl-usage-retag) | Trigger | Palette | retagging a master's family and expecting stamped palettes to follow |
+| [`FU-TMPL-FX-EDIT-NO-RETIME`](#fu-tmpl-fx-edit-no-retime) | Trigger | Palette | an operator retunes an FX palette and the live FX keeps its old timing |
+| [`FU-TMPL-CLICK-GROUP-PARTIAL`](#fu-tmpl-click-group-partial) | Trigger | Palette | an FX palette on a mixed group (hexes plus a hazer, or plus a 24-channel Shehds) runs on none of its heads |
+| [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Palette | two heads whose strobe rates need to match |
+| [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Palette | a colour palette snaps visibly wrong on a wheel |
+| [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Palette | a palette is asked to address a two-wheel head's second wheel |
+| [`FU-TMPL-KELVIN`](#fu-tmpl-kelvin) | Ready | Palette | — |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
-| [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined effect declares a numeric parameter outside the guessed range |
+| [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined FX declares a numeric parameter outside the guessed range |
 | [`FU-FE-FILTER-FLEX-SPLIT`](#fu-fe-filter-flex-split) | Ready | FE | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
@@ -114,7 +114,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-WINDOWS-NAME-ADDRESSED-BINDING`](#fu-windows-name-addressed-binding) | Trigger | Screens | two windows of one name and a MIDI focus button that should reach only one |
 | [`FU-SURFACE-SUBSELECT-LED`](#fu-surface-subselect-led) | Trigger | MIDI | an operator asks which sub-selection is standing |
 | [`FU-BUSK-RIG-PLOT`](#fu-busk-rig-plot) | Trigger | Busk | a rig big enough that rows stop reading as the stage |
-| [`FU-BUSK-TARGET-PAD`](#fu-busk-target-pad) | Trigger | Busk | an operator wants a selection on a pad among the templates |
+| [`FU-BUSK-TARGET-PAD`](#fu-busk-target-pad) | Trigger | Busk | an operator wants a selection on a pad among the palettes |
 | [`FU-BUSK-SPECIAL-PAD`](#fu-busk-special-pad) | Trigger | Busk | an operator asks for Clear, Locate or Blind on the page |
 | [`FU-BUSK-TILE-LEVEL-DRAG`](#fu-busk-tile-level-drag) | Trigger | Busk | an operator reaches for a tile to set a level |
 | [`FU-BUSK-SAVE-AS-GROUP`](#fu-busk-save-as-group) | Trigger | Busk | a selection is rebuilt by hand a third time |
@@ -161,8 +161,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
 | [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
-| [`FU-UPDATE-STAGE-TIMED`](#fu-update-stage-timed) | Trigger | Cues | an operator edits a live cue's timed effect or timed layer and expects *Update stage* to send it |
-| [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running effect jump on *Update stage* rather than fade |
+| [`FU-UPDATE-STAGE-TIMED`](#fu-update-stage-timed) | Trigger | Cues | an operator edits a live cue's timed FX or timed layer and expects *Update stage* to send it |
+| [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running FX jump on *Update stage* rather than fade |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 | [`FU-TIMELINE-VALUES`](#fu-timeline-values) | Trigger | Cues | the Timeline is used to find where a hand-set value changes |
 
@@ -177,24 +177,24 @@ rather than in a new doc.
 
 ### `FU-TMPL-REWARM-BOUND`
 
-**Bound `TemplateRegistry.invalidateAll`'s re-warm** · Trigger: a template list change visibly
-stalls a template-heavy show · found in sweep item C4's review, 2026-08-26
+**Bound `PaletteRegistry.invalidateAll`'s re-warm** · Trigger: a palette list change visibly
+stalls a palette-heavy show · found in sweep item C4's review, 2026-08-26
 
-C4 made `invalidateAll` re-read every requested template on the calling thread before it publishes
+C4 made `invalidateAll` re-read every requested palette on the calling thread before it publishes
 the version bump, so the 50 Hz FX pass never takes that transaction. The reads are unbounded and
 synchronous, and HikariCP runs `maximumPoolSize = 1` (SQLite has one writer), so a create / rename
-/ delete on a show with many templates serialises N round trips against the single connection —
+/ delete on a show with many palettes serialises N round trips against the single connection —
 ahead of the cook, the tick pass and any concurrent route.
 
-Deliberately left alone at the time: real shows have tens of templates, the reads are a primary-key
+Deliberately left alone at the time: real shows have tens of palettes, the reads are a primary-key
 lookup each, and the obvious alternative (hand the re-warm to a background dispatcher) puts the
 bump back ahead of the warm cache, which is the ordering bug the review caught in the first place.
 If it does bite, the shape that keeps the ordering is a cap plus a log of what was dropped — the
 dropped tail then misses on the tick, so the cap is a trade rather than a fix.
 
-Template groups (2026-09-03) widened the trigger's surface without changing its shape: every
-drop on `/templates` — a reorder, a move into or out of a group — and every group create, rename
-and ungroup fires `Fixtures.templateListChanged()`, which is this re-warm. A drag-heavy tidy-up of a large
+Palette groups (2026-09-03) widened the trigger's surface without changing its shape: every
+drop on `/palettes` — a reorder, a move into or out of a group — and every group create, rename
+and ungroup fires `Fixtures.paletteListChanged()`, which is this re-warm. A drag-heavy tidy-up of a large
 library is now the likeliest way to make it visible. The reorder itself is metadata (no recook),
 so the cost is only ever the re-warm.
 
@@ -228,11 +228,11 @@ that row changes with it.
 **`FxScriptCompiler`'s process-wide cache is never evicted** · Trigger · backend post-refactor
 sweep C10, 2026-08-24
 
-`FxScriptCompiler.cache` is a `ConcurrentHashMap<String, CompiledFxScript>` keyed on effect mode +
+`FxScriptCompiler.cache` is a `ConcurrentHashMap<String, CompiledFxScript>` keyed on FX mode +
 script body, deliberately shared for the **process** rather than per `Show`. That sharing is
 load-bearing and its KDoc explains why: a `Show` is built per project switch (and, in the test
 suite, per test), and a per-instance cache made every one of those re-evaluate all 28 built-in
-`.fx.kts` effects — 28 jar loads, 28 classloaders and ~70 ms to arrive at lambdas byte-identical to
+`.fx.kts` FX — 28 jar loads, 28 classloaders and ~70 ms to arrive at lambdas byte-identical to
 the previous `Show`'s.
 
 Nothing evicts from it. Each entry carries a compiled script and its classloader, and *failures* are
@@ -246,7 +246,7 @@ operation the key set is small and fixed, which is why this was never scheduled 
 sharing argument above — so either pin the `FxFileLoader` entries or set the bound well above the
 built-in count.
 
-**Trigger**: metaspace or classloader count that tracks FX-*editing* activity rather than show size.
+**Trigger**: metaspace or classloader count that tracks FX-*editing* activity rather than project size.
 Metaspace is the one to watch, not heap.
 
 ## Frontend polish
@@ -274,7 +274,7 @@ different thing and keeps its name.
 2026-04-22; closed 2026-08-29
 
 The item asked for a Rebind quick-action beside each dead row, opening a picker pre-populated with
-the dead assignment's property + value, in place of the Remove-and-re-author we shipped. It named
+the dead assignment's attribute + value, in place of the Remove-and-re-author we shipped. It named
 `DeadAssignmentsBanner` / `DeadPresetAssignmentsBanner` as the hosts. Neither exists: the second
 never did, and the first rendered nowhere and was deleted with `FS-DEAD-ORPHAN-FILES`
 (lighting-react `a23b16c`). Cue and Look authoring have no dead-assignment surface at all today —
@@ -402,20 +402,20 @@ and the contradiction is visible for long enough to matter.
 
 ### `FU-SPEED-RATEMASTER-STATEFUL`
 
-**Rate masters are inert for STATEFUL wall-clock effects** · Trigger · Speed-master follow-ups,
+**Rate masters are inert for STATEFUL wall-clock FX** · Trigger · Speed-master follow-ups,
 2026-08-14
 
-The rate master scales `accumulatedScaledMs`, which reaches an effect as its *phase*. STATEFUL
-effects are driven by `deltaMs` and mostly ignore phase — both shipped wall-clock effects
+The rate master scales `accumulatedScaledMs`, which reaches an FX as its *phase*. STATEFUL
+FX are driven by `deltaMs` and mostly ignore phase — both shipped wall-clock FX
 (`CandleFlicker`, `FluorescentFlicker`) do — so assigning them a rate master is legal, persisted,
 and silent.
 
-The UI deliberately does **not** gate the picker on `effectMode`: `calculateWallClockPhase` runs
-for every wall-clock effect, so a user `.fx.kts` that is STATEFUL *and* reads `phase` scales
+The UI deliberately does **not** gate the picker on `fxMode`: `calculateWallClockPhase` runs
+for every wall-clock FX, so a user `.fx.kts` that is STATEFUL *and* reads `phase` scales
 correctly, and gating would hide a working control. Making it apply to `deltaMs` too would change
-what `deltaMs` means for every stateful effect — a bigger decision than it looks.
+what `deltaMs` means for every stateful FX — a bigger decision than it looks.
 
-**Trigger**: someone writes a stateful wall-clock effect and expects a rate master to speed it up.
+**Trigger**: someone writes a stateful wall-clock FX and expects a rate master to speed it up.
 
 ### `FU-SPEED-PER-ATTRIBUTE`
 
@@ -440,25 +440,25 @@ one for the instance.
 
 ---
 
-## Effects
+## FX
 
 ### `FU-FX-WIDTH-SOFTNESS`
 
-**One Width and one Softness across effects** · Trigger · effects plan session 1 (§10), 2026-10-15
+**One Width and one Softness across FX** · Trigger · effects plan session 1 (§10), 2026-10-15
 
 Every desk surveyed (`completed/effects-design/survey.md`) has a *width* (how much of the cycle is on) and a
-*softness* (how hard the edges are) that read the same on every waveform. Ours are each effect's own
-parameter under its own name — Pulse's `attackRatio` / `holdRatio`, Square Wave's `dutyCycle`, Strobe's
+*softness* (how hard the edges are) that read the same on every waveform. Ours are each FX's own
+parameter under its own name — Pulse's `attackRatio` / `holdRatio`, Square Wave's `dutyCycle`, Dimmer Strobe's
 `onRatio`, Colour Cycle's `fadeRatio` — and the editor labels them as such (*Attack*, *Duty*, *On*,
-*Fade*). Size (D2) and direction (D5) became fields of every effect in session 1; width and softness
+*Fade*). Amount (D2) and direction (D5) became fields of every FX in session 1; width and softness
 did not, because each built-in means something slightly different by them and a common field would
-change what a stored effect plays (P6).
+change what a stored FX plays (P6).
 
 The shape if it is wanted: a declared parameter role in the `.fx.kts` frontmatter (`role: width`,
-`role: softness`) that the editor reads to put one *Width* and one *Softness* control on every effect
-that declares it, still writing the effect's own parameter — no new stored field, no `formatVersion`.
+`role: softness`) that the editor reads to put one *Width* and one *Softness* control on every FX
+that declares it, still writing the FX's own parameter — no new stored field, no `formatVersion`.
 
-**Trigger**: an operator looks for one Width or Softness control across effects and finds a
+**Trigger**: an operator looks for one Width or Softness control across FX and finds a
 differently named parameter on each.
 
 ---
@@ -469,7 +469,7 @@ differently named parameter on each.
 
 Amount (terminology plan D2, the old Size) is a mix, not an amplitude: the weight
 `out = before + (blended − before) × w` is clamped to `[0, 1]` (`FxInstance.weight`), and every write
-boundary refuses an amount above 1 (`EffectSpecCoercion.Strict.sizeProblem`). MagicQ's Size goes to
+boundary refuses an amount above 1 (`FxSpecCoercion.Strict.amountProblem`). MagicQ's Size goes to
 800 % and Eos's to 2000 % per instance, which makes an FX bigger than it was written — a wider circle,
 a deeper sine — rather than weighing it over what is underneath.
 
@@ -487,14 +487,13 @@ range) are not how they want to reach it.
 
 **Timing *Per step*: a longer list runs longer** · Trigger · terminology plan session 2 (§9), 2026-10-23
 
-Timing offers *Per cycle* (the Cycle is the FX's whole length) and *Per head* (`stepTiming`: the
-Cycle times `distinctSlots`, `docs/fx-engineering.md` §"Step Timing"). MagicQ's Timing also has
+Timing offers *Per cycle* (the Cycle is the FX's whole length) and *Per head* (`timing: HEAD`: the
+Cycle times `distinctSlots`, `docs/fx-engineering.md` §"Timing"). MagicQ's Timing also has
 *Per Step*, its default: each step of the FX takes the Cycle, so a Palette Steps or Colour Cycle with
 five entries runs five Cycles where one with two runs two. Here adding an entry squeezes the same
 cycle into more steps.
 
-The shape: a third value of the stored timing (`CYCLE` / `HEAD` / `STEP` once session 4 stores it as
-an enum), read by the step FX as a multiplier of their entry count, and a third option on the Timing
+The shape: a third value of the stored `timing` (`CYCLE` / `HEAD` / `STEP`), read by the step FX as a multiplier of their entry count, and a third option on the Timing
 segment.
 
 **Trigger**: an operator expects a longer list to run slower and finds each step shorter instead.
@@ -564,7 +563,7 @@ Palette Steps and Colour Cycle give every entry an equal share of the cycle (`st
 `fx/StepList.kt`, Colour Cycle's own `segmentSize`), with one `fadeRatio` across them. MagicQ's Width
 on its 2col, 3col and 4col FX lets one step hold longer than the rest.
 
-The shape: a per-entry weight in the step list's grammar (`tmpl:{uuid}*2`, `#ff0000*2`), read by both
+The shape: a per-entry weight in the step list's grammar (`pal:{uuid}*2`, `#ff0000*2`), read by both
 FX as the share of the cycle that entry holds.
 
 **Trigger**: an operator asks for an uneven step — one colour or palette held longer than the others.
@@ -603,18 +602,18 @@ The shape: say so in the three descriptions, or make them stateful as Candle Fli
 
 ### `FU-FX-KEYSTACK-STACK-SIZE`
 
-**The stack's effect size in `programmer.keyStack`** · Trigger · effects plan session 5 (D10), 2026-10-17
+**The stack's FX amount in `programmer.keyStack`** · Trigger · effects plan session 5 (D10), 2026-10-17
 
-A cue effect's weight is `size × envelope × stackSize` (`FxEngine.weightOf`), and the tick and
-provenance read all three. `programmer.keyStack`'s effect layers (`ProvenanceService`) still report
-the instance's own size and name `FxInstance.cueStackId`, the stack of the cue's **first** hold — so
+A cue FX's weight is `amount × envelope × stackAmount` (`FxEngine.weightOf`), and the tick and
+provenance read all three. `programmer.keyStack`'s FX layers (`ProvenanceService`) still report
+the instance's own amount and name `FxInstance.cueStackId`, the stack of the cue's **first** hold — so
 under a stack at 50 %, or a cue held by two stacks, the layer stack reads a weight and a stack that
 are not the ones on stage. What reaches the stage is right; only the reading is off.
 
-The fix is two fields on a keyStack effect layer: the weighing stack (`weighingStackOf`) and its
-size, drawn beside the effect's own size by `LayerStack`.
+The fix is two fields on a keyStack FX layer: the weighing stack (`weighingStackOf`) and its
+amount, drawn beside the FX's own amount by `LayerStack`.
 
-**Trigger**: an operator reads a property's stack while a stack is below full, or a shared cue is
+**Trigger**: an operator reads an attribute's stack while a stack is below full, or a shared cue is
 live, and is misled by it.
 
 ---
@@ -623,36 +622,36 @@ live, and is misled by it.
 
 **The press doors' programmer fade, from the client** · Ready · effects plan session 4 (D13), 2026-10-16
 
-Session 4 taught the desk to grow a press's effects from nothing and shrink a release's over the
+Session 4 taught the desk to grow a press's FX from nothing and shrink a release's over the
 programmer fade: `POST /busk/pads/{id}/press`, `/palettes/{id}/toggle` and `/looks/{id}/toggle` take an
-optional `fadeMs`, which `ProgrammerLayerStack.toggle` hands its recook (values and effects alike). The
-client does not send it yet — `pressBuskPad`, `toggleTemplate` and `toggleLook` in `frontend/src/store/`
-send no fade, so a press still lands as it always has: each row's own fade on, a snap off, effects at
-once. Release, Clear and Blind already fade effects, since the client sends their fade.
+optional `fadeMs`, which `ProgrammerLayerStack.toggle` hands its recook (values and FX alike). The
+client does not send it yet — `pressBuskPad`, `togglePalette` and `toggleLook` in `frontend/src/store/`
+send no fade, so a press still lands as it always has: each row's own fade on, a snap off, FX at
+once. Release, Clear and Blind already fade FX, since the client sends their fade.
 
 To pick up: send `getProgrammerFadeMs()` (`lib/programmerFade.ts`) on the three mutations, as
 `useRelease` does. Decide first whether a non-zero programmer fade should also override a Look row's
 own fade on the way on — the desk's rule today when `fadeMs > 0` (`recook`'s "a caller-supplied fade
-covers every key") — or whether the client should send it only for effect records.
+covers every key") — or whether the client should send it only for FX records.
 
 ---
 
 ### `FU-FX-VALUE-FADE-UNDER-EFFECT`
 
-**A programmer value fading under a fading effect** · Trigger · effects plan session 4 (D13), 2026-10-16
+**A programmer value fading under a fading FX** · Trigger · effects plan session 4 (D13), 2026-10-16
 
-A key an effect covers never fades: the tick's reset pass writes the layer below there every pass
+A key an FX covers never fades: the tick's reset pass writes the layer below there every pass
 with no fade (`FxEngine.resetOne` → `LayerResolver.fallbackFor`), and the programmer's values fade
 only as a controller ramp, which that write overrides. A cue's rows escape this because their fade is
-a weight inside `fallbackFor`. So when one programmer gesture both moves a value and fades the effect
+a weight inside `fallbackFor`. So when one programmer gesture both moves a value and fades the FX
 over it — a Release, Clear, a press or leaving Blind at a fade — one half would snap. Chris chose to
-split by what is under the effect (`FxEngine.releaseEffects`): an effect over a value the gesture
+split by what is under the FX (`FxEngine.releaseFx`): an FX over a value the gesture
 moves lands or goes at once and the value ramps; the rest fade.
 
 To do both, the programmer's own release and arrival would need a weight inside `fallbackFor`, as the
 cue layer has, so the reset pass reads a value part-way through its fade.
 
-**Trigger**: an operator wants a busked effect and the value under it to fade out (or in) together on
+**Trigger**: an operator wants a busked FX and the value under it to fade out (or in) together on
 one gesture.
 
 ---
@@ -664,9 +663,9 @@ one gesture.
 Palette Steps over colour palettes drives the colour target (`ColourTarget`), which only a head with
 a mixed colour (`WithColour`) is a member of, so a head whose colour is a wheel — the MAC 250, the
 Varytec — is skipped, where a colour palette applied as a layer snaps it to its nearest slot
-(`TemplateResolver.resolveColour`, against the head's fitted media). The step's resolution already
-answers per head (`PaletteStepList.resolveStep` asks `TemplateResolver`), and the wheel arm answers a
-`Setting` naming the wheel's own property: what is missing is a target that drives a mixed colour on
+(`PaletteResolver.resolveColour`, against the head's fitted media). The step's resolution already
+answers per head (`PaletteStepList.resolveStep` asks `PaletteResolver`), and the wheel arm answers a
+`Setting` naming the wheel's own attribute: what is missing is a target that drives a mixed colour on
 one head and a wheel on the next, and the fitted media the snap reads (`Fixtures.fittedMediaFor`),
 which `PaletteStepList` does not hold. Slot Steps on the wheel by name is today's answer.
 
@@ -676,17 +675,17 @@ which `PaletteStepList` does not hold. Slot Steps on the wheel by name is today'
 
 ### `FU-FX-BEAM-ANY-SLIDER`
 
-**A level effect on any beam slider** · Trigger · effects plan session 6 (§9, §10), 2026-10-16
+**A level FX on any beam slider** · Trigger · effects plan session 6 (§9, §10), 2026-10-16
 
-The picker offers an effect where a head has a property the effect declares (`compatibleEffectsFor`),
-every level built-in declares `[dimmer, uv]`, and each beam built-in declares one beam property
-(`fx-engineering.md` §"Beam Effects"). So zoom, iris, frost and focus each have an effect of their own,
+The picker offers an FX where a head has an attribute the FX declares (`compatibleFxFor`),
+every level built-in declares `[dimmer, uv]`, and each beam built-in declares one beam attribute
+(`fx-engineering.md` §"Beam FX"). So zoom, iris, frost and focus each have an FX of their own,
 and every other slider — prism, a fixture's own speed channel — has none on offer, though the engine
 drives any slider name (`FxTargetFactory.resolve`) and REST, a cue and the AI can already put Sine Wave
-on one. Offering the level effects on beam sliders was declined (effects plan D6) for named beam
+on one. Offering the level FX on beam sliders was declined (effects plan D6) for named beam
 built-ins.
 
-The shape, if it fires: either another built-in for the property asked for, the D6 way, or the level
+The shape, if it fires: either another built-in for the attribute asked for, the D6 way, or the level
 built-ins declaring the `slider` sentinel (`fxTargetAttributes.ts`), which offers them on every extra
 slider and puts the *On* row in the picker.
 
@@ -701,18 +700,18 @@ slider and puts the *On* row in the picker.
 **Every busk pad is a toggle; there is no flash gesture** · Trigger · Busking-view plan
 session 3 (2026-09-01), §7
 
-A press latches: a template pad applies or releases, a Look pad adds or removes a layer, a cue pad
+A press latches: a palette pad applies or releases, a Look pad adds or removes a layer, a cue pad
 applies or stops its cue, a target pad selects or deselects. Real desks also have *momentary* pads — the value holds while the button
 is held and drops on release — which is how a busking operator punches a blinder on a downbeat
 without a second press to find. Doing it means a press/release pair rather than a click.
 
-Smaller than it was written. The effect and property pads it also named were removed when the busk
+Smaller than it was written. The FX and attribute pads it also named were removed when the busk
 view was cut back to the library pads its design draws (see the busking-view plan's §4 note), so
-"what does release mean for an effect *instance* as opposed to a programmer value" is no longer part
-of the question — every pad left is a toggle of *something*, a layer for a template or Look and the
+"what does release mean for an FX *instance* as opposed to a programmer value" is no longer part
+of the question — every pad left is a toggle of *something*, a layer for a palette or Look and the
 cue itself, through `CueStackManager`, for a cue. And the three duplicated long-press
 implementations it wanted unifying first are now one shared hook,
-`lighting-react/src/hooks/useLongPress.ts`, which is where a `onPressStart`/`onPressEnd` pair would
+`frontend/src/hooks/useLongPress.ts`, which is where a `onPressStart`/`onPressEnd` pair would
 be added.
 
 **Trigger**: an operator asks to flash a pad rather than latch it, or a second surface wants the
@@ -762,7 +761,7 @@ hold** · Trigger · Multi-screen S3 (2026-09-16), review finding 17
 
 The hand's surface place runs the same append the REST route runs, which is the point — a place is
 an *existing* mutation whichever door makes it (D12). But `appendBuskPad(state, project, bank,
-templateId, lookId, cueId)` kept the route's shape, so `HandService.placeInBank` un-flattens a
+paletteId, lookId, cueId)` kept the route's shape, so `HandService.placeInBank` un-flattens a
 `Held` that already has a definite `kind` and `id` into three nullables (`held.id.takeIf { held.kind
 == ... }` ×3) purely so `buskPadKind(...)` can re-derive what it was just given. The visible
 consequence is at the other end: `AddPadOutcome.Invalid` is structurally unreachable from the
@@ -787,7 +786,7 @@ something other than "unreachable".
 S3 (2026-09-16), review finding 19
 
 `deskSelection.clear()`, `buskPageState.clear()` and `handState.drop()` are three separate lines in
-`State`'s `projectChangedFlow` collector. Forgetting one means a record id from the previous show
+`State`'s `projectChangedFlow` collector. Forgetting one means a record id from the previous project
 stays addressable — the cross-project leak the `buskPageState.clear()` comment already warns about.
 A one-method `ProjectScopedState { fun clearForProjectSwitch() }` that the collector iterates would
 make the omission impossible.
@@ -815,11 +814,11 @@ two, for the same reason.
 **`state/` imports three `routes/` DTOs, and the hand freezes their library-only fields** · Trigger ·
 Multi-screen S3 (2026-09-16), review finding 20
 
-`HandState.Held` embeds `TemplateDto` / `LookDto` / `BuskCueDto` from `routes/`, where
+`HandState.Held` embeds `PaletteDto` / `LookDto` / `BuskCueDto` from `routes/`, where
 `DeskSelection` takes its wire type from `models/` (`CueTargetDto`) precisely so both layers can
 have it. The embedding itself is settled — the plan requires the frame to carry the record's own
 summary so every window draws the ghost without a lookup — but the *package* is not, and the
-inversion has a nameable cost: those DTOs carry `usage` and `buskPageCount`, computed at pick-up and
+inversion has a nameable cost: those DTOs carry `family` and `buskPageCount`, computed at pick-up and
 then held frozen in every window's chip for up to five minutes, and anything added to them for the
 library view is silently added to what the hand retains and rebroadcasts.
 
@@ -842,7 +841,7 @@ throws while a project switch is in flight. One throw cancels that collector, an
 is dead until it is unplugged and replugged. `currentProjectId()` catches the project lookup; nothing
 catches the show.
 
-Pre-existing and house-wide: `applyLook`, `pressTemplate` and `pressPad` all have this shape. The
+Pre-existing and house-wide: `applyLook`, `pressPalette` and `pressPad` all have this shape. The
 hand added two more instances (`pickUpPad`, `handPlaceInBank`), and `handPlaceInBank` is the first
 that *writes rows* inside that unguarded call, which is why it is worth recording rather than leaving
 implicit.
@@ -883,7 +882,7 @@ stale document the *normal* case rather than the racing one.
 **No LED for `SelectionCells`** · Trigger · Busk-further plan §3.6, 2026-09-17
 
 A sub-selection is a *rewrite* of the selection's targets, not a state the desk keeps: after *Odd*
-the desk holds the odd cells and nothing that says they were arrived at by *Odd*. So a
+the desk holds the odd elements and nothing that says they were arrived at by *Odd*. So a
 `SelectionCells(ODD)` button has no fact to light from, and none of the five window and
 sub-selection targets carries an LED. Lighting one would need the desk to remember the last mode
 applied and clear it on every other write, which is a second fact about the selection for a
@@ -946,12 +945,12 @@ way the Stage view renders the same patches — never a stored position on a til
 
 **A selection on a busk pad** · Trigger · Busk-further plan §8, D17, 2026-09-17
 
-A fourth pad kind beside template, Look and cue: a saved target set, pressed to select. On the
+A fourth pad kind beside palette, Look and cue: a saved target set, pressed to select. On the
 Ideas board, out of scope by D17. It would need a fourth arm on `busk_pads`' exactly-one CHECK, a
 `selection.set` on press instead of a `toggle` on the layer stack, and a face with no swatch. Note
 the rig's group tiles already cover most of the want; this is for a set that is not a group.
 
-**Trigger**: an operator wants a selection on a pad among the templates.
+**Trigger**: an operator wants a selection on a pad among the palettes.
 
 ### `FU-BUSK-SPECIAL-PAD`
 
@@ -981,8 +980,8 @@ refusal arm goes.
 
 **The hand cannot hold a group or fixture** · Ready · Busk-further plan §5 session 3 amendment, 2026-09-17
 
-`hand.pickUp {kind, id}` takes a `BuskPadKind` and `HandState.Held` requires a template, Look or
-cue summary, so a rig row — which is made of groups, fixtures and cells — is a hand target
+`hand.pickUp {kind, id}` takes a `BuskPadKind` and `HandState.Held` requires a palette, Look or
+cue summary, so a rig row — which is made of groups, fixtures and elements — is a hand target
 (`lib/handTargets.ts`'s `rig-row`, `e7b540a8`) that nothing held can land on. The strip is
 mounted on every row in edit mode and wired to the rig PUT and `hand.drop`; it never lights. To
 land it: a `GROUP` / `FIXTURE` kind on the hand with `GroupSummaryDto` / the rig's patch DTO as
@@ -1007,7 +1006,7 @@ is a client gesture over `programmer.set` and needs the hold/drag disambiguation
 
 *Save as group…* on the rig band: the desk selection, in rig order, as a new `fixture_groups` row.
 Out of scope by D17. The route exists (`POST /patch-groups`); the work is the sheet, and a rule for
-a selection holding cells (a group holds patches, so cells would have to widen to their parents —
+a selection holding elements (a group holds patches, so elements would have to widen to their parents —
 `SubselectMode.ALL`'s rule).
 
 **Trigger**: a selection is rebuilt by hand a third time.
@@ -1075,12 +1074,12 @@ target the way the view does, and a SysEx writer.
 
 **Scripts have no server-side "used by"** · Trigger · Library-sheets plan §8, 2026-09-23
 
-`ScriptDetails.usedByProperties` is always an empty list (`toScriptDetails`, `projectScripts.kt`),
-so the Scripts sheet's *Used by* column can say only what the client can derive: the effects an
+`ScriptDetails.usedByAttributes` is always an empty list (`toScriptDetails`, `projectScripts.kt`),
+so the Scripts sheet's *Used by* column can say only what the client can derive: the FX an
 `FX_DEFINITION` script registers (from the FX library's `sourceDefinitionId`). An `FX_APPLICATION`
 script's cue hooks exist only on full cue details (`CueTriggerDetail.scriptId`), and no list query
 carries them. The fix is a server-computed list — the cues whose triggers name the script, and the
-effects it registers — on the script summary, which the column then reads for every type.
+FX it registers — on the script summary, which the column then reads for every type.
 
 **Trigger**: an operator needs to know which cues hook a script before editing or deleting it.
 
@@ -1131,7 +1130,7 @@ stakes — so the decision was taken against the *higher* stakes, not the old on
 2. **The expensive half was misidentified.** It is not the singleton *reads* — most of those are
    cold paths with an obvious caller, and `SocketScope.user` already carries the identity on every
    frame. It is `LayerResolver.fallbackFor`, the single 50 Hz read, which returns **one** value per
-   (fixture, property) because DMX is one byte per channel. The rig cannot show the union, so
+   (fixture, attribute) because DMX is one byte per channel. The rig cannot show the union, so
    somebody must win, and nothing expresses that: HTP would reverse the locked "programmer wins HTP
    categories too" decision, and `Slot.seq` bands are the only extensible axis — one whose own doc
    warns that ties resolve *inconsistently* across the four `composeProgrammerOver` overrides.
@@ -1139,7 +1138,7 @@ stakes — so the decision was taken against the *higher* stakes, not the old on
 Also unanswered, and unanswerable without inventing policy: which user owns a write from a **MIDI
 fader, a flash button, Locate, the unpark hand-down, the AI tools or the `updateChannel` shim** —
 none of which has a session. And `ProgrammerLayerStack` (625 lines) has no per-user story at all;
-`putLayerSlots` is a full-map set-difference over one shared property map.
+`putLayerSlots` is a full-map set-difference over one shared attribute map.
 
 **If this is ever re-opened**, the cheap 80% is not per-user stores. It is per-user **blind** plus
 per-user slots: at most one user is live, so the merge rule never has to exist. The per-recipient
@@ -1150,15 +1149,15 @@ chose **exclusion over merging** — one session per project, everyone else gets
 ### `FU-PROG-STALE-SOURCE-NAME`
 
 **A programmer layer caches its source's name, so a rename goes stale** · Trigger: an operator
-renames a Look or template that is live on the programmer and sees the old name · found fixing the
+renames a Look or palette that is live on the programmer and sees the old name · found fixing the
 `toggle` identity bug, 2026-09-02
 
 `ProgrammerLayer.source` and `FxInstance.source` both hold a whole `LayerSource`, captured when the
 layer was added. Two of its three fields are immutable identity (`id`, `uuid`); `name` is not. So
-renaming a record leaves every already-added layer and already-spawned effect reporting the *old*
+renaming a record leaves every already-added layer and already-spawned FX reporting the *old*
 name — visible in the layer stack (`ProgrammerLayerDto.source`) and in `FX running`
-(`EffectDto.sourceName`). Nothing refreshes it: a rename-only PUT is not a contents change, so it
-takes the `Fixtures.templateListChanged()` / `lookListChanged()` branch and never reaches the layer stack.
+(`FxDto.sourceName`). Nothing refreshes it: a rename-only PUT is not a contents change, so it
+takes the `Fixtures.paletteListChanged()` / `lookListChanged()` branch and never reaches the layer stack.
 
 This is display-only now. The *functional* half of the same root cause — `toggle` comparing whole
 `LayerSource` values, so a rename stopped a pad turning its own layer off — is fixed: it matches on
@@ -1170,9 +1169,9 @@ Two shapes, and the reason neither was done inline:
   and a hook in a path that currently and deliberately does nothing to the programmer on a rename.
   That is a real change to the store's mutation surface for a stale label.
 - **Re-derive the name at serialisation time**, the way `IncludedTargetDto` already does with
-  `DaoLook.findById(lookId)?.name`. Cheap for the layer stack; **not** cheap for `toEffectDto`,
-  which is the only producer of `EffectDto` and is called from the FX state flow — a transaction
-  per effect per publish is exactly what this codebase keeps off that path.
+  `DaoLook.findById(lookId)?.name`. Cheap for the layer stack; **not** cheap for `toFxDto`,
+  which is the only producer of `FxDto` and is called from the FX state flow — a transaction
+  per FX per publish is exactly what this codebase keeps off that path.
 
 If it fires, prefer the first shape, and note that fixing it also removes the last reason
 `LayerSource` equality is dangerous — at which point `toggle`'s uuid match becomes belt-and-braces
@@ -1197,7 +1196,7 @@ reaches for Clear repeatedly to get a partial release.
 
 **Highlight/lowlight personality values** · Trigger · Programmer redesign §6, promoted 2026-08-14
 
-`useHighlight` (`lighting-react/src/components/fixtures-list/useHighlight.ts`) takes every
+`useHighlight` (`frontend/src/components/fixtures-list/useHighlight.ts`) takes every
 selected target's dimmer to full while held and restores on release. Consoles do more: a
 per-fixture-type *highlight personality* — open the shutter, drop the gobo, open white, sometimes
 centre the head — so a highlighted moving head is findable; plus **lowlight**, which dims
@@ -1205,8 +1204,8 @@ everything *not* selected.
 
 Scope: a highlight-value set on the fixture type (natural home is the trait /
 `FixtureTypeRegistry` layer that already knows a fixture has a shutter or colour wheel), with
-`useHighlight` writing the whole set rather than one property. Its capture/restore machinery is
-already per-property and per-target, so it widens rather than changes shape. Lowlight is the
+`useHighlight` writing the whole set rather than one attribute. Its capture/restore machinery is
+already per-attribute and per-target, so it widens rather than changes shape. Lowlight is the
 cheaper half and needs no personality data — invert the target set and scale.
 
 **Trigger**: an operator can't pick their highlighted head out of a wash, or asks for lowlight.
@@ -1218,41 +1217,41 @@ cheaper half and needs no personality data — invert the target set and scale.
 **No held-back *count* on the programmer's FX tab** · Trigger · fixture-fx-sheets plan §8,
 recorded at session 6, 2026-10-08
 
-A held-back effect is marked per effect or per cell: the fixture sheet's amber dot on a row, and the
+A held-back FX is marked per FX or per cell: the fixture sheet's amber dot on a row, and the
 Values grid's FX lens chip struck through with the reason (`lib/heldBack.ts` — the desk's
-`EffectSuppression` rule copied clause for clause). Row B's FX tab counts running effects and draws
-no **count** of held-back ones — "2 effects held back" — so a held-back effect is only seen once the
+`FxSuppression` rule copied clause for clause). Row B's FX tab counts running FX and draws
+no **count** of held-back ones — "2 FX held back" — so a held-back FX is only seen once the
 operator is looking at the row or the cell that carries it. The plan judged the marks enough and
 left the count out.
 
-If it fires, the count is a sum the client can already make: `isHeldBack` over the active-effect
+If it fires, the count is a sum the client can already make: `isHeldBack` over the active-FX
 list against `programmerHolds`, which the tab's count already subscribes to, no new frame. Keep it a read-out —
 a tap on it should open the stack (`LayerStack`) for one of the keys, never clear anything.
 
-**Trigger**: an operator, on the rig, misses that an effect is held back while the dot and the
+**Trigger**: an operator, on the rig, misses that an FX is held back while the dot and the
 strike-through are both on screen.
 
 ---
 
 ### `FU-BLIND-FX-DRAWN`
 
-**The Stage view's programmer sources do not draw an effect Blind holds** · Trigger ·
+**The Stage view's programmer sources do not draw an FX Blind holds** · Trigger ·
 show-cue-editing plan §9, recorded at session 1 (venue-visit R2.1), 2026-10-15
 
-Blind holds the programmer's effects (D7, `fx/BlindHold.kt`): a busk, Include's children and a
-programmer layer's effects keep running, phase kept, and paint nothing until Blind goes off. The
+Blind holds the programmer's FX (D7, `fx/BlindHold.kt`): a busk, Include's children and a
+programmer layer's FX keep running, phase kept, and paint nothing until Blind goes off. The
 Stage view's *Output + Programmer* and *Programmer* sources preview Blind for **values** — they read
-the programmer's entries (`frontend/docs/stage-vis-engineering.md`) — but an effect exists only as
+the programmer's entries (`frontend/docs/stage-vis-engineering.md`) — but an FX exists only as
 output: nothing on the wire says what a held instance would paint, so those sources draw the key as
-the rig has it, without the effect. A Blind edit of a cue with a Pulse previews the cue's values and
+the rig has it, without the FX. A Blind edit of a cue with a Pulse previews the cue's values and
 not the Pulse.
 
 If it fires, the desk is the one that can answer: the tick already computes a held instance's output
 every pass (it skips only the apply), so a held instance's would-be values per key could ride a
 programmer-only frame the two sources read, at a capped rate. Not a client-side re-run of the
-effect — the client has no tick, no master phase and no registry.
+FX — the client has no tick, no master phase and no registry.
 
-**Trigger**: an operator previews a Blind busk or a Blind edit with an effect on the Stage view and
+**Trigger**: an operator previews a Blind busk or a Blind edit with an FX on the Stage view and
 expects to see it move.
 
 ---
@@ -1262,10 +1261,10 @@ expects to see it move.
 **A focused Look layer's own row has no stack** · Trigger · fixture-fx-sheets plan §8, recorded at
 session 6, 2026-10-08
 
-`programmer.keyStack` (W1) answers what sits under a property **on the rig**: park, the programmer
-band, each owner's slot, effects held back, the cue contributor, the base. The source chip that
+`programmer.keyStack` (W1) answers what sits under an attribute **on the rig**: park, the programmer
+band, each owner's slot, FX held back, the cue contributor, the base. The source chip that
 opens it (`LayerStack`, D5 / D19) is drawn where ownership is — Local scope on the programmer's grid.
-With a Look or template layer **focused**, the grid edits the layer's **draft**, which is not on the
+With a Look or palette layer **focused**, the grid edits the layer's **draft**, which is not on the
 desk's stack at all, so the cell's editor draws no chip (`FixturesTable`'s `sourceKeys` is undefined
 there). An operator editing a layer cannot ask "what would this row sit over".
 
@@ -1293,24 +1292,24 @@ so deleting it server-side would have 400'd every Record until the frontend caug
 `62b64eb`, and no client sends `force` on either body today. Both fields and both KDoc blocks
 explaining their survival can go whenever wanted; nothing 400s either way now.
 
-This is only the two *programmer* fields. The `force` on the template, Look and speed-master DELETE
+This is only the two *programmer* fields. The `force` on the palette, Look and speed-master DELETE
 routes is the live `?force=true` guard-override convention from
 [`../api-conventions.md`](../api-conventions.md) and must stay.
 
 ### `FU-LOOK-PERPROP-BLEND`
 
-**Per-property blend override within a layer** · Trigger · Looks-and-layers §3.4, cut as
+**Per-attribute blend override within a layer** · Trigger · Looks-and-layers §3.4, cut as
 UI-multiplying
 
-A layer's `blendMode` and `amount` apply to every property it asserts. An operator might want one
-property of a layer to mix while the rest override — "take Warm's colour at 50% but its dimmer
+A layer's `blendMode` and `amount` apply to every attribute it asserts. An operator might want one
+attribute of a layer to mix while the rest override — "take Warm's colour at 50% but its dimmer
 outright".
 
-Cheap in the composer: `CueComposer.blend` is already per-(fixture, property), so the override just
+Cheap in the composer: `CueComposer.blend` is already per-(fixture, attribute), so the override just
 needs to reach it. The cost is entirely in the UI, which would go from two controls per layer to two
-per property per layer. Recorded rather than silently cut.
+per attribute per layer. Recorded rather than silently cut.
 
-**Trigger**: an operator asks for one property of a layer to behave differently from the rest.
+**Trigger**: an operator asks for one attribute of a layer to behave differently from the rest.
 
 ### `FU-PRESS-REPLACE-LOOKS`
 
@@ -1332,7 +1331,7 @@ bank.
 
 The Stack table's *+ Look or palette* presses through the one picker (`ApplyPicker`), which puts a layer
 on through `/looks/{id}/toggle` and `/palettes/{id}/toggle`. Neither takes `speedMasterUuid` or
-`rateSpeedMasterUuid`, so a programmer layer's effects follow their own masters, and the add-layer
+`rateSpeedMasterUuid`, so a programmer layer's FX follow their own masters, and the add-layer
 sheet's two *Override … for this layer* controls, its last step on the programmer, went with it. Nothing
 else sets them on a programmer layer (`programmer.patchLayer` carries neither); a cue layer keeps them,
 set in the cue Looks tab's layer settings popover since apply-model plan session 8 (`LayerTimingFields`,
@@ -1340,7 +1339,7 @@ through `LayerHandlers.onSetTiming`). The fix is the two fields on the toggle ro
 `patchLayer`, and the Stack table's layer settings popover passing `onSetTiming` for the masters alone (a
 programmer layer has no playback to delay against).
 
-**Trigger**: an operator wants a programmer layer's effects on another speed or rate master.
+**Trigger**: an operator wants a programmer layer's FX on another speed or rate master.
 
 ### `FU-LOOK-NESTED`
 
@@ -1376,127 +1375,127 @@ show the shape it had.
 
 **Finer-grained within-cue stomp** · Trigger · Looks-and-layers §8
 
-Per-layer `stomp` suppresses lower layers' *effects* on every property the layer asserts. That is
-the coarse version: an operator might want to stomp a layer's colour effect while leaving its dimmer
-effect running.
+Per-layer `stomp` suppresses lower layers' *FX* on every attribute the layer asserts. That is
+the coarse version: an operator might want to stomp a layer's colour FX while leaving its dimmer
+FX running.
 
 The column landed with the layer model and the coarse behaviour with `FU-LOOK-STOMP-WITHIN-CUE`.
-Judge granularity only after that has been used on a rig — the Layer 3/4 boundary it exists to work
+Judge granularity only after that has been used on a rig — the Tier 3/4 boundary it exists to work
 around may turn out to bite in one specific place rather than generally.
 
 **Trigger**: per-layer stomp proves too coarse in practice.
 
 ### `FU-TMPL-VIRTUAL-DIMMER`
 
-**An intensity template on a head with no dimmer** · Ready · desk-simplification §Session 3, 2026-08-23
+**An intensity palette on a head with no dimmer** · Ready · desk-simplification §Session 3, 2026-08-23
 
 `BeamColour.dc.html` promises that "a head with no dimmer takes it as a virtual dimmer over its
 colour emitters — the existing virtual-dimmer path". **There is no such path on the backend.** The
 only virtual dimmer is a *group* gesture the client fans out to members (see
 `plugins/ProgrammerSocket`'s doc comment), and `hooks/useVirtualDimmer.ts` is a front-end scaling of
-RGB. So `TemplateResolver` reports `Unsupported("no dimmer")` and the editor's resolves-to panel shows
+RGB. So `PaletteResolver` reports `Unsupported("no dimmer")` and the editor's resolves-to panel shows
 it, which is honest but leaves a real gap: a colour-only PAR takes no part in "Half Up".
 
 The work is a `Percent` arm for a `WithColour`-but-not-`WithDimmer` head that scales the emitters the
 way `useVirtualDimmer` does, server-side so the panel and the cook agree. The awkward part is
-*composition*: a virtual dimmer writes the colour channels, so an intensity template and a colour
-template on the same head would fight over the same bytes — which is a real question about what the
+*composition*: a virtual dimmer writes the colour channels, so an intensity palette and a colour
+palette on the same head would fight over the same bytes — which is a real question about what the
 mask means, not an implementation detail.
 
 **Ready**: no gate, and the resolver is the one place it lands.
 
 ### `FU-TMPL-MULTI-EFFECT`
 
-**More than one effect per template** · Trigger: an operator keeps pressing the same pair of
-same-family effect palettes together · fx-templates session 1, 2026-09-02
+**More than one FX per palette** · Trigger: an operator keeps pressing the same pair of
+same-family FX palettes together · fx-templates session 1, 2026-09-02
 
-D2 caps an effect template at one effect. It was made when several effects together on a selection
-were a Look with deferred effects; absolute-looks plan D2 removed those (a Look effect names its own
-target), so two effects on one selection are now two effect palettes pressed together. The cap is
-enforced twice: `uniqueIndex(template)` on `template_effects`, and by name at the write boundary so
+D2 caps an FX palette at one FX. It was made when several FX together on a selection
+were a Look with deferred FX; absolute-looks plan D2 removed those (a Look FX names its own
+target), so two FX on one selection are now two FX palettes pressed together. The cap is
+enforced twice: `uniqueIndex(palette)` on `palette_fx`, and by name at the write boundary so
 it surfaces as a 400 rather than a constraint violation.
 
-The trigger to watch for is an operator who keeps pressing the same pair of same-family effect
+The trigger to watch for is an operator who keeps pressing the same pair of same-family FX
 palettes onto one selection: that is the shape the cap gets in the way of. If it fires, the storage change is small (drop the unique index, add `sort_order`) but three things
-follow it: `TemplateSnapshot.effect` becomes a list, `TemplateDto.kind` needs to stay a string
-because a third arm becomes plausible, and the *Runs on* preview has to say which effect it is
+follow it: `PaletteSnapshot.effect` becomes a list, `PaletteDto.kind` needs to stay a string
+because a third arm becomes plausible, and the *Runs on* preview has to say which FX it is
 previewing.
 
 ---
 
 ### `FU-TMPL-USAGE-RETAG`
 
-**Retagging a speed master's usage does not move stamped templates** · Trigger: someone retags a
-master's usage and expects existing effect templates to follow it · fx-templates session 1,
+**Retagging a speed master's family does not move stamped palettes** · Trigger: someone retags a
+master's family and expects existing FX palettes to follow it · fx-templates session 1,
 2026-09-02
 
-D8 stamps `speed_master_uuid` at *authoring* time from the project master whose `usage` matches the
-family. "By usage" is how the default is labelled in the sheet, not a stored mode — deliberately,
+D8 stamps `speed_master_uuid` at *authoring* time from the project master whose `family` matches the
+family. Following the family is how the default is chosen, not a stored mode — deliberately,
 because the alternative is a second meaning for `null`, and the `null → slot 0` invariant is what
 the bank and the whole `speedMasters.*` wire protocol are built on.
 
-The accepted cost is that retagging a master's usage later leaves templates already stamped
+The accepted cost is that retagging a master's family later leaves palettes already stamped
 pointing at the old master. That is defensible (the stamp is what an operator saw at the moment of
 authoring) right up until someone reorganises their masters and expects the library to follow.
 
-If it fires, resist adding a stored "by usage" mode. The cheaper shape is a *migration on retag*:
-the usage PUT already knows the old and new holders, so it can offer to re-stamp the effect
-templates of that family — visible, one-time, and leaving the invariant alone.
+If it fires, resist adding a stored "by family" mode. The cheaper shape is a *migration on retag*:
+the family PUT already knows the old and new holders, so it can offer to re-stamp the FX
+palettes of that family — visible, one-time, and leaving the invariant alone.
 
 ---
 
 ### `FU-TMPL-FX-EDIT-NO-RETIME`
 
-**An effect edit does not tour to what is already on stage** · Trigger: an operator retunes an
-effect template's beat division and the running effect keeps its old timing · fx-templates session
+**An FX edit does not tour to what is already on stage** · Trigger: an operator retunes an
+FX palette's cycle and the running FX keeps its old timing · fx-templates session
 1, 2026-09-02
 
-Editing an effect template *is* a contents change: the PUT takes the republish branch, the registry
-snapshot refreshes, and the next application runs the new effect. But
-`ProgrammerLayerStack.recookIfReferences` cooks `withEffects = false` on purpose — an edit touring
-to an already-applied layer "is not the layer arriving", and re-spawning would restart the effect
+Editing an FX palette *is* a contents change: the PUT takes the republish branch, the registry
+snapshot refreshes, and the next application runs the new FX. But
+`ProgrammerLayerStack.recookIfReferences` cooks `withFx = false` on purpose — an edit touring
+to an already-applied layer "is not the layer arriving", and re-spawning would restart the FX
 mid-show on every nudge of a parameter. So the live instance keeps its timing until the layer is
 re-applied — or, as `completed/fixture-fx-sheets-plan.md` session 1 found, until the stack next recooks for
-any reason (a patch, a move, an unrelated add), which reads the edited template, finds the
-instance's spawn key stale and respawns it from the template with its phase restarted.
+any reason (a patch, a move, an unrelated add), which reads the edited palette, finds the
+instance's spawn key stale and respawns it from the palette with its phase restarted.
 `POST /fx/{id}/reset` is the per-instance answer (it re-keys the instance); `FxLiveEditRoutesTest`
 pins both.
 
-**Since fixture-fx-sheets session 5 the busk Effects tab makes it visible both ways.** A pad's running
-instance is edited as that instance only, and reads ***edited*** while it differs from its template.
-*Update template* writes the instance's settings to the template and resets that one instance
-(re-keying it); **every other running instance of the same template then reads *edited*** — it holds
-the old settings — and *Reset to template* tours them one by hand. It stays a Trigger: the automatic
+**Since fixture-fx-sheets session 5 the busk FX tab makes it visible both ways.** A pad's running
+instance is edited as that instance only, and reads ***edited*** while it differs from its palette.
+*Update palette* writes the instance's settings to the palette and resets that one instance
+(re-keying it); **every other running instance of the same palette then reads *edited*** — it holds
+the old settings — and *Reset to palette* tours them one by hand. It stays a Trigger: the automatic
 tour is still not built.
 
-This is **inherited from Looks unchanged**, not new: a Look's effect behaves identically, and
-has since the layer stack was written. It is recorded here because an effect template makes it much
-more visible — the whole *point* of an effect template is the one thing the operator retunes, so
-"nothing happened" is a likelier reaction than it was for a Look. `TemplateRoutesTest`'s
+This is **inherited from Looks unchanged**, not new: a Look's FX behaves identically, and
+has since the layer stack was written. It is recorded here because an FX palette makes it much
+more visible — the whole *point* of an FX palette is the one thing the operator retunes, so
+"nothing happened" is a likelier reaction than it was for a Look. `PaletteRoutesTest`'s
 `an effect-only edit refreshes the snapshot without restarting what is on stage` pins both halves so
 the asymmetry stays deliberate.
 
 Note the plan's desk check 3 ("edit the template's beat division → every layer tracking it
 retimes") states the *opposite*, and is wrong as written; it should read "re-press the pad and it
-runs at the new division".
+runs at the new cycle".
 
-If it fires, the shape is not "always re-spawn": it is to distinguish a *timing* edit (division,
-speed master) from a parameter edit, and tour only the former — which needs `FxEngine.updateEffect`
+If it fires, the shape is not "always re-spawn": it is to distinguish a *timing* edit (cycle,
+speed master) from a parameter edit, and tour only the former — which needs `FxEngine.updateFx`
 to retime in place rather than retract and respawn, or the cure is the disease.
 
 ---
 
 ### `FU-TMPL-CLICK-GROUP-PARTIAL`
 
-**An effect template applied as values is all-or-nothing on a mixed group; a tapped one is not** ·
-Trigger: an operator ⌥clicks (*Apply as values*) an effect chip with a mixed group selected, gets
+**An FX palette applied as values is all-or-nothing on a mixed group; a tapped one is not** ·
+Trigger: an operator ⌥clicks (*Apply as values*) an FX chip with a mixed group selected, gets
 nothing, and taps it to find the capable heads light · fx-templates session 2 review, 2026-09-02
 
-`applyEffectTemplateToProgrammer` gates each target on `fixturesSupportProperty`, which requires
-**every** member to have the property — the same all-members rule `POST /groups/{name}/fx` has
+`applyFxPaletteToProgrammer` gates each target on `fixturesSupportAttribute`, which requires
+**every** member to have the attribute — the same all-members rule `POST /groups/{name}/fx` has
 always applied. The layer path (`ProgrammerLayerStack.build`) has no capability check at all: it
 resolves a `ColourTarget` for the group and lets `FxInstance` warn per head. So on a group of hexes
-plus a hazer, ⌥click (*Apply as values*) reports the whole group skipped and a tap runs the effect
+plus a hazer, ⌥click (*Apply as values*) reports the whole group skipped and a tap runs the FX
 on the hexes. The
 docs' parity claim is qualified for exactly this case.
 
@@ -1508,37 +1507,37 @@ Three smaller things sit behind the same gate and are worth doing together if it
   report and the granularity in one move.
 - **Overlapping targets duplicate.** The value arm collapses through `expandTargetsToFixtureKeys`;
   this arm iterates refs, so a selection naming both `front-wash` and its member `hex-1` puts two
-  band effects on `hex-1`. `effectsForLayer` behaves the same way, which is why it was left.
-- **Two capability models meet in series here.** `EffectSpawner.resolveTargetForCue` picks a
-  property from `detectCapabilities()` (a reflective element-group-descriptor scan needing ≥2
-  elements); `fixturesSupportProperty`'s multi-element fallback tests `elements.first() is
+  band FX on `hex-1`. `fxForLayer` behaves the same way, which is why it was left.
+- **Two capability models meet in series here.** `FxSpawner.resolveTargetForCue` picks a
+  attribute from `detectCapabilities()` (a reflective element-group-descriptor scan needing ≥2
+  elements); `fixturesSupportAttribute`'s multi-element fallback tests `elements.first() is
   WithColour`. They disagree on a 1-element `MultiElementFixture`, and on a head exposing an
-  `@FixtureProperty` colour without the trait. Pre-existing divergence, newly composed.
+  `@FixtureAttribute` colour without the trait. Pre-existing divergence, newly composed.
 
 Relaxing the gate to "any member supports it" is the obvious shape, but it changes the group FX
 route's contract too if the helper stays shared — which it should, since two copies disagreeing
 about one fixture is what sharing it prevented.
 
 **Read again by venue-visit plan S1 (2026-10-14), and left open on purpose.** S1 made *value*
-templates reach a multi-head fixture's cells on every arm (`fx/TemplateFanOut.kt`); it tried the
-obvious fix here too — ask `fixturesSupportProperty` of one member at a time and run the group
-effect when any member can take it — and backed it out in review, because it is not the apply
+palettes reach a multi-head fixture's elements on every arm (`fx/PaletteFanOut.kt`); it tried the
+obvious fix here too — ask `fixturesSupportAttribute` of one member at a time and run the group
+FX when any member can take it — and backed it out in review, because it is not the apply
 arm's gap alone. Two things sit underneath, and both are the FX engine's:
 
-- **A group effect with no `propertyName` is decided by `detectCapabilities()`'s all-members
-  rule** (`EffectSpawner.resolveTargetForCue`). Every effect template the UI authors names no
-  property (`TemplateEditor`, `NewTemplateFromEffectSheet`), so on a group of hexes plus a hazer
-  — or hexes plus a 24-channel Shehds, whose colour is on its cells — the tap *and* the ⌥click
+- **A group FX with no `attribute` is decided by `detectCapabilities()`'s all-members
+  rule** (`FxSpawner.resolveTargetForCue`). Every FX palette the UI authors names no
+  attribute (`PaletteEditor`, `NewPaletteFromFxSheet`), so on a group of hexes plus a hazer
+  — or hexes plus a 24-channel Shehds, whose colour is on its elements — the tap *and* the ⌥click
   resolve no target and spawn nothing. The "a tap lights the capable heads" in the paragraph above
-  holds only for a spec that names its property.
+  holds only for a spec that names its attribute.
 - **`FxEngine.buildExpansion` lets the first member stand for the whole group's shape**: a first
-  member with the property directly makes every member a direct target, one whose property is on
-  its cells (`GROUP_ELEMENTS`) contributes no keys for the plain members after it, and a first
-  member with neither is `NONE`. So even a group-targeted effect that does spawn on a mixed group
+  member with the attribute directly makes every member a direct target, one whose attribute is on
+  its elements (`GROUP_ELEMENTS`) contributes no keys for the plain members after it, and a first
+  member with neither is `NONE`. So even a group-targeted FX that does spawn on a mixed group
   does not drive every capable head, and the per-member skip report would claim it had.
 
 The fix is therefore an engine one — expand a group per member by that member's own shape, and
-resolve a property-less group spec by "any member" — and it moves the group FX route's contract
+resolve an attribute-less group spec by "any member" — and it moves the group FX route's contract
 with it, which is why it waits for its trigger rather than riding S1. The apply arm's skip still
 names the group's key (the first bullet below).
 
@@ -1551,7 +1550,7 @@ names the group's key (the first bullet below).
 `BeamColour.dc.html` calls Hz "the only unit two fixtures agree on", and it is right. When this was
 written nothing in the fixture definitions declared a Hz range for a strobe channel, so a `hz:` intent
 would have had nothing to resolve against; strobe is a percentage of each head's own channel
-(`TemplateIntent` records this).
+(`PaletteIntent` records this).
 
 The work was annotation before code — `hzMin`/`hzMax` per strobe band, which has landed (below) —
 then a `Hertz` arm in the grammar and the resolver, with heads lacking the annotation reported as
@@ -1561,7 +1560,7 @@ degraded rather than guessed at.
 no worse than what a per-fixture value gave.
 
 **Annotation half done** (fixture optics plan session 6): every STROBE channel declares its bands and
-each flashing band's `hzMin`/`hzMax` (`@FixtureProperty(strobe = […])`, `docs/fixtures-engineering.md`
+each flashing band's `hzMin`/`hzMax` (`@FixtureAttribute(strobe = […])`, `docs/fixtures-engineering.md`
 §"Beam vocabulary"), so a `hz:` intent now has something to resolve against. What stays here is the
 `Hertz` arm in the grammar and the resolver: solve each head's DMX for the rate within its strobe band
 (the inverse of `strobeRateAt` in `frontend/src/lib/strobeBands.ts`), report a head whose band cannot
@@ -1572,7 +1571,7 @@ until `FU-MANUAL-S6-STROBE` has run.
 
 **A wheel snap is only as good as its `colourPreview`** · Trigger · desk-simplification §Session 3, 2026-08-23
 
-`TemplateResolver.nearestColourSlot` picks a wheel slot by ΔE76 against
+`PaletteResolver.nearestColourSlot` picks a wheel slot by ΔE76 against
 `DmxFixtureColourSettingValue.colourPreview`, and those values are documented in the fixture
 definitions themselves as "best-effort approximations for the UI" (`RobeColorSpot575Fixture`). The
 number the editor shows is therefore "how close the desk *believes* it got", which is the right thing
@@ -1580,26 +1579,26 @@ to show — but a badly annotated wheel will snap confidently to the wrong slot.
 
 The work is a measurement pass over the wheel fixtures, not code.
 
-**Trigger**: a colour template that snaps visibly wrong on a wheel head. The ΔE in the panel is how
+**Trigger**: a colour palette that snaps visibly wrong on a wheel head. The ΔE in the panel is how
 you would notice.
 
 ### `FU-TMPL-SECOND-COLOUR-WHEEL`
 
-**A template cannot address a two-wheel head's second colour wheel** · Trigger · desk-simplification §Session 3, 2026-08-23
+**A palette cannot address a two-wheel head's second colour wheel** · Trigger · desk-simplification §Session 3, 2026-08-23
 
 `resolveCell` shows the *first* wheel only (its own doc records the cut), and
-`TemplateResolver.resolveColour` picks the first COLOUR-category setting for the same reason. The Robe
-ColorSpot 575 has two, so its second wheel takes no part in a colour template — nor in the grid.
+`PaletteResolver.resolveColour` picks the first COLOUR-category setting for the same reason. The Robe
+ColorSpot 575 has two, so its second wheel takes no part in a colour palette — nor in the grid.
 
 **The view draws it now** (fixture-optics plan session 4): the Stage view and the 2D appearance leaf
 multiply the second wheel's slot over the first's as a colour filter (`colourFilters`,
 `frontend/docs/stage-vis-engineering.md` §"Fitted media"), so what a raw DMX write or a Look row puts on
-it is seen. What is left is the template's half: a template still cannot ask for it.
+it is seen. What is left is the palette's half: a palette still cannot ask for it.
 
-Not obviously worth fixing: a colour template asks "be this colour", and answering it on two wheels at
+Not obviously worth fixing: a colour palette asks "be this colour", and answering it on two wheels at
 once is a mixing problem the fixture's own manual barely addresses.
 
-**Trigger**: an operator asks a template for the second wheel by name.
+**Trigger**: an operator asks a palette for the second wheel by name.
 
 ### `FU-TMPL-KELVIN`
 
@@ -1702,7 +1701,7 @@ Nothing records *who* made a change. `users.uuid` exists partly so it can be ref
 the auth half is already there — every gated request has an `AuthenticatedUser` in
 `call.attributes`. `created_by` / `modified_by` on cues, presets and patches is the obvious shape.
 
-Why it isn't an auth ticket: those tables are **portable show content**, so a user reference means
+Why it isn't an auth ticket: those tables are **portable project content**, so a user reference means
 deciding what an attribution means on an install where that user doesn't exist. Users are
 machine-local by requirement, so either the column carries a uuid that dangles after import (and
 the UI renders "unknown user" gracefully), or the exporter denormalises a display name at write
@@ -1728,7 +1727,7 @@ a show on a venue inherit its version's parks and adds `showParkReleases/`, keye
 channel, which records nothing about who released a park. The design for machine-local users is still
 owed; flagged again rather than folded in.
 
-**v28–v31 passed without it too** (centre-relative positions, Seconds, size/direction/N-shot and
+**v28–v31 passed without it too** (centre-relative positions, Seconds, amount/direction/runs and
 the stored locate, venue-visit plan S11, S15, R4.1 and S8, 2026-10-15): v31 adds
 `FixturePatchJson.locate`, a unit's stored pan and tilt, which records nothing about who set it. The design for machine-local users is still owed;
 flagged again rather than folded in.
@@ -1799,7 +1798,7 @@ twice.
 **Admin-only lockdown of specific controls** · Trigger · Multi-user-auth §out of scope, promoted
 2026-08-17
 
-`OPERATOR` can do everything to show content: patch fixtures, delete projects, edit scripts. The
+`OPERATOR` can do everything to project content: patch fixtures, delete projects, edit scripts. The
 role split is deliberately coarse — two roles, no per-project or per-fixture permissions — because
 the crew is familiar and physically present.
 
@@ -1810,7 +1809,7 @@ per-handler `call.requireAdmin()` instead — patch editing is read-for-everyone
 so it'd be the second instance of that pattern. Script editing is *not* a candidate: F6 settled
 that operators keep scripts, because an operator is trusted local crew who can already do
 anything the desk process can (`docs/desk-accounts.md` §Roles). Mirror any addition in
-`lighting-react/src/navigation.ts` (`adminOnly` on the `NavItem`) so Cmd+K stops offering a page
+`frontend/src/navigation.ts` (`adminOnly` on the `NavItem`) so Cmd+K stops offering a page
 that can only answer 403 — and remember that's presentation, never permission.
 
 **Trigger**: an operator changes a patch or deletes a project and the desk owner asks for it to be
@@ -2109,12 +2108,12 @@ Safari bundle name.
 
 **Child rows keep their uuid across an edit** · Ready · Cloud sync; logged 2026-10-14
 
-A Look's rows and effects (`writeLookChildren` in `routes/projectLooks.kt`) and a cue's layers,
-ad-hoc effects, property assignments and script hooks (`writeCueChildren` in
+A Look's rows and FX (`writeLookChildren` in `routes/projectLooks.kt`) and a cue's layers,
+ad-hoc FX, attribute assignments and script hooks (`writeCueChildren` in
 `routes/projectCuesHelpers.kt`, venue-visit R2.2) are reconciled by natural key on every write,
 `pairByKey`, so a one-value edit is one changed record in the sync diff. The same
-delete-every-child-then-recreate pattern still mints a fresh uuid for every row of a template (the
-template `PUT` in `routes/projectTemplates.kt`, `createTemplateRows`).
+delete-every-child-then-recreate pattern still mints a fresh uuid for every row of a palette (the
+palette `PUT` in `routes/projectPalettes.kt`, `createPaletteRows`).
 
 Not a conflict source — the three-way diff hashes whole records — but the git diff, the conflict
 view and the history read every such edit as "all rows replaced". Give it the Look's treatment
@@ -2242,7 +2241,7 @@ midpoint instead of colliding, tiebroken by UUID. **Cue stack entries have it** 
 32 (cue model plan session 3, P6): one `cueStackEntries/` file per entry, a midpoint on insert, a drag
 rewriting one file, ties ordered by uuid (`ENTRY_ORDER`, `writeEntryOrder`). **Every other ordered
 table still carries `sortOrder: Int`**: the stacks themselves (`cueStacks/`), a cue's children
-(layers, property assignments, ad-hoc effects, triggers, scenery, events), Look and palette rows, the
+(layers, attribute assignments, ad-hoc FX, triggers, scenery, events), Look and palette rows, the
 busk layout and rig, riggings, regions, scene elements, viewpoints and patches. Exports sort those by
 `(sortOrder, uuid)` for deterministic output.
 
@@ -2444,13 +2443,13 @@ for a cell more than one layer contributed to (`CellLayer.mixed`, drawn muted). 
 per row because that is where there was space at `h-8` with the name column already truncating.
 
 The fix is per-cell attribution — `buildStaticRows` already returns `layerByKey` keyed by
-`(target, property)`, so the data is there; it is the row-level `layerFor` and the single glyph in
+`(target, attribute)`, so the data is there; it is the row-level `layerFor` and the single glyph in
 the name cell that throw it away. Either move the glyph into the cell (as the programmer does) or
 give the row a "2 looks" marker.
 
 **Not the paired-slider bug it was first reported as.** A review flagged this as "a position paired
-from two axis sliders never picks up the glyph"; that is wrong. `resolutionPropertyNames` yields
-`['pan','tilt']` for such a cell and the cook names those same two properties, so they match. The
+from two axis sliders never picks up the glyph"; that is wrong. `resolutionAttributeNames` yields
+`['pan','tilt']` for such a cell and the cook names those same two attributes, so they match. The
 real loss is the multi-layer row.
 
 **Trigger**: an operator reads a cue drawn from two looks and concludes neither is involved. On a
@@ -2465,7 +2464,7 @@ frontend sweep `FS-COORD-FXLIBRARY-PARAMS`, 2026-08-29
 
 `GET /fx/library` describes each parameter with `name` / `type` / `defaultValue` / `description`
 (`FxRegistry.ParameterInfo`, filled from each `.fx.kts` file's frontmatter via `FxFileParameter`)
-and nothing else. The effect editor's fields (`FxEffectFields`' `ParamControl`, which replaced
+and nothing else. The FX editor's fields (`FxFields`' `ParamControl`, which replaced
 `EffectParameterForm.ParameterInput` in fixture-fx-sheets session 5) therefore have to invent the slider range for
 every numeric control: a `double` gets 0–1 when its default is `<= 1.0` and 0–10 otherwise, and an
 `int` gets `max(255, default * 2)`.
@@ -2474,7 +2473,7 @@ For the 28 built-ins this is exactly right and was verified parameter by paramet
 (`84885df`) started sending real defaults: all ten declared doubles are 0–1 ratios with defaults
 between 0.1 and 1.0, so the 0–10 arm is unreachable, and the two ints (`ColourFlicker.variation` 50,
 `FluorescentFlicker.flickerDurationMs` 800) land in usable ranges. The guess only breaks for an
-effect the built-ins don't constrain — a script-defined one registered through `registerEffect` /
+FX the built-ins don't constrain — a script-defined one registered through `registerFx` /
 an `FX_DEFINITION` script, which may declare a double whose real range is 0–360 (rendered 0–1
 because its default is 0) or 0–1000 (rendered 0–10).
 
@@ -2485,7 +2484,7 @@ continuation branch the two extra keys, declare them on the numeric built-ins, a
 declares none. Additive on the wire and additive in canonical JSON, so no `formatVersion` change —
 but it is a backend change, which is why the sweep item that found it did not take it.
 
-**Trigger**: a script-defined effect declares a numeric parameter whose sensible range is not the
+**Trigger**: a script-defined FX declares a numeric parameter whose sensible range is not the
 one the heuristic picks, and the operator finds the slider unusable.
 
 ---
@@ -2504,7 +2503,7 @@ job is to push `Groups` and `Columns` to the right end of the row. Two `flex: 1 
 genuine leftover is closer to ~260px.
 
 This is the same bug the file's own comment already names **for the other arm** — the note beside
-`TemplateStrip` in the selection bar explains that `ml-auto` is used there precisely because "a
+`PaletteStrip` in the selection bar explains that `ml-auto` is used there precisely because "a
 spacer here silently stole roughly half the scroller's width". The default arm of row B was never
 given the same treatment, and nothing pointed at it because the field simply looked small rather
 than broken.
@@ -2582,8 +2581,8 @@ frame — the inverse of `beamMask`'s blade line through the surface's plane.
 **Unmeasured costs in the surface-light loop: three, session 7's fourth, fixture-optics session 4's measured fifth, and stage-light sessions 3's and 4's sixth and seventh** · Trigger ·
 stage-view plan sessions 6–7, 2026-09-30
 
-Session 6's review left three notes it could not measure in a container: dark cells still raycast
-in the multi-cell loop, fixture housings run the full surface-light loop (every light, every
+Session 6's review left three notes it could not measure in a container: dark elements still raycast
+in the multi-element loop, fixture housings run the full surface-light loop (every light, every
 fragment), and `LightTable.set` marks the texture dirty on every write. Session 7 adds a little to the
 second: every light's edge and iris are unpacked from one float (`unpackEdgeIris`), and a light with
 a blade in evaluates four half-plane cuts (skipped when every blade is out). Fixture-optics session 4
@@ -2600,7 +2599,7 @@ compiled in only where a finish carries them — on the desk Mac's GPU about one
 a two-lobe finish (`FU-MANUAL-STAGE-LIGHT-BUDGET` step 7 has the bench numbers and what the iPad
 owes). **Trigger**:
 the Safari and iPad pass finds the budget short. **Then**: measure the three first — a housing could take a
-cheaper loop (it is lit, not a receiver of pools), a dark cell could skip its reach, and `set` could
+cheaper loop (it is lit, not a receiver of pools), a dark element could skip its reach, and `set` could
 compare before dirtying — before cutting steps from the march.
 
 ### `FU-STAGE-QUALITY-TIER`
@@ -2740,7 +2739,7 @@ A show sits on one venue at a pinned version (venue plan D2), and the only way o
 (D9; `docs/fixtures-engineering.md` §"Detach"), which flattens the venue's rig into the show's own
 rows — the archive, and the rare show that leaves its hall with its rig. A show that **tours** — the
 same production in a second hall with its own house patch — has no tool: its cues, Looks and
-templates name fixtures by key, and the second hall's keys are not the first's. **Trigger**: a show
+palettes name fixtures by key, and the second hall's keys are not the first's. **Trigger**: a show
 plays a second venue. **Then**: *Move to venue…*, a re-pin onto another venue's installed version with
 a **key mapping** (each fixture and group key the show's content names, mapped to one of the new
 venue's or left dark) reviewed as Update's is — the rolled-back run, `deadReferences` for what maps to
@@ -2795,7 +2794,7 @@ a venue rigging becoming one, which a patch's deliberately did not (§"Facet ove
 
 **A multi-head mover's heads tilt together** · Trigger · stage-view plan §8, 2026-10-01
 
-Session 6 gave every coloured cell its own lens, beam and light, but one tilt node per fixture: the
+Session 6 gave every coloured element its own lens, beam and light, but one tilt node per fixture: the
 Slender Beam Bar Quad's four heads are drawn at one angle whatever their elements' tilt channels say
 (`frontend/docs/stage-vis-engineering.md` §"Fixture bodies"). **Trigger**: a show runs the heads apart and the
 Stage view misleads. **Then**: a tilt node per head, driven by its element's tilt, under the
@@ -2805,7 +2804,7 @@ fixture's pan.
 
 **The lantern library is the desk's only** · Trigger · stage-view plan §8 (D8), 2026-10-01
 
-The library ships as a resource (`lanterns/library.json`), so a fix reaches every show at once, but a
+The library ships as a resource (`lanterns/library.json`), so a fix reaches every project at once, but a
 show cannot add a lantern of its own. **Trigger**: a show hangs a lantern the library lacks.
 **Then**: per-project lanterns in a portable table, resolved before the shipped library by key, with
 the same `LanternLibraryTest` checks at the write boundary.
@@ -2844,11 +2843,11 @@ channels are the same, and `ZoomAnglesTest`, `FocusRangeTest`, `ShutterBladesTes
 
 `media` is a metadata-only patch key (`docs/fixtures-engineering.md` §"Fitted media"): a write
 refreshes `Fixtures.FixturePatchMetadata` and nothing is recomposed, so a live cue or programmer layer
-whose colour template snapped a scroller frame keeps it until its next GO or recook. Chris chose this
+whose colour palette snapped a scroller frame keeps it until its next GO or recook. Chris chose this
 on 2026-10-04 over re-snapping, matching every other metadata edit. **Trigger**: an operator re-gels a
 scroller mid-show and expects the live look to move to the frame that now holds the asked colour.
 **Then**: the media write path republishes the live cues and programmer layers that compose a colour
-template onto that fixture, through `republishForSourceEdit`'s ordering (recook the programmer
+palette onto that fixture, through `republishForSourceEdit`'s ordering (recook the programmer
 unpublished, replace the cues' rows, publish), and fires `cuesRecomposed` for them.
 
 ### `FU-MEDIA-CONTROL-SWATCHES`
@@ -2858,14 +2857,14 @@ unpublished, replace the cues' rows, publish), and fires `cuesRecomposed` for th
 
 Fitted media is overlaid by the surfaces that *draw* a unit — the Stage view, the 2D appearance
 leaf, the Media box and the Focus tab (`frontend/docs/stage-vis-engineering.md` §"Fitted media") —
-and not by the ones that *set* a slot: the programmer's setting cell and its column, the property
-visualisers, the fixture card and the effect editor's setting list (`FxEffectFields`, once
+and not by the ones that *set* a slot: the programmer's setting cell and its column, the attribute
+visualisers, the fixture card and the FX editor's setting list (`FxFields`, once
 `EffectParameterForm`) list a Revolution's scroller frames with the
 type's stock swatches and names. They write a DMX slot, which is the type's, and on a fixture with
 extra placements one cell drives several units with different strings, so there is no single fitted
 colour to show. **Trigger**: an operator picks a frame by its stock swatch on a unit fitted with
 something else and lands the wrong colour. **Then**: the cell and the visualisers overlay the
-**patch's** media (`fittedProperties` with `patch.media`), naming a frame by what unit 1 holds and
+**patch's** media (`fittedAttributes` with `patch.media`), naming a frame by what unit 1 holds and
 noting where a placement differs, as `SettingCell`'s option list already takes a display name.
 
 ### `FU-STAGE-PROGRAM-MACROS`
@@ -2896,10 +2895,10 @@ The Equinox Scantastic 4's channel 1 (8- and 17-channel modes) is a binary shutt
 reads; the type has no dimmer, so a Scantastic blacked out on its shutter draws lit. Session 6 drew
 every STROBE channel's closed band dark and added the vocabulary for exactly this —
 `DmxFixtureStrobeSettingValue` (a setting-backed STROBE channel's options declaring `strobeKind`),
-which the client already decodes (`findStrobeProperties`, `lib/strobeBands.ts`) and Locate already
+which the client already decodes (`findStrobeAttributes`, `lib/strobeBands.ts`) and Locate already
 opens — but left the Scantastic's channel where it was, because recategorising it is not only the
-view's business: a STROBE property is HTP by default (it would need `composition = LTP` to keep its
-composition), sits in the INTENSITY mask group rather than BEAM (what a masked Record captures), is
+view's business: a STROBE attribute is HTP by default (it would need `composition = LTP` to keep its
+composition), sits in the Intensity family rather than Beam (what a masked Record captures), is
 scaled by the grand master and the global scalers (`GlobalScalerState.isIntensityLike` — 64 is
 blackout), and becomes the programmer's strobe column ahead of the strobe slider (`findWheel` takes the
 first). **Trigger**: a Scantastic blacked out on its shutter draws lit at a desk check. **Then**:
@@ -2920,7 +2919,7 @@ Varytec's, Fusion's, Orbit's, Shehds', IMG's and Slender bar's "fast → slow". 
 heads at the type's travel — its fastest — whatever the channel holds: early, never late.
 **Trigger**: `FU-MANUAL-S8-TRAVEL` steps 4–5 time a speed channel at several values, or a head slowed
 on its speed channel and drawn arriving early misleads at a desk check. **Then**: give
-`@FixtureProperty.timing` the *curve* form the plan's §3.1 named and session 8 did not build — a
+`@FixtureAttribute.timing` the *curve* form the plan's §3.1 named and session 8 did not build — a
 rate factor (or a duration) per DMX value, piecewise from the measured points, with the tracking and
 blackout bands as "the type's speed" — and annotate the measured channels with it; a Robe's Time mode
 needs its menu mode declared per patch first (machine-local, like an address), since the desk cannot
@@ -2933,7 +2932,7 @@ read it.
 The programmer holds scenery since session 1 of the scenery-programmer plan (`state/ProgrammerScenery.kt`,
 `programmer.setScenery`, `move_scenery`), but a control surface cannot write it: `BindingTarget` has no
 arm for an element, and the plan's D3 keeps scenery out of the desk selection, so no strip, encoder bank
-or `SelectionProperty` reaches it either. The tabs are moved from the programmer's Scenery table,
+or `SelectionAttribute` reaches it either. The tabs are moved from the programmer's Scenery table,
 the Stage view or the AI. **Trigger**: an operator wants a fader or encoder to ride a tab's `open` or a flown piece's
 `trimM` (a fly cue busked by hand), or a button to toggle a piece's `visible`. **Then**: a
 `BindingTarget.SceneryElement(elementUuid, key)` — by uuid, as `FireCue` carries one beside its id,
@@ -2949,16 +2948,16 @@ when the element is deleted. The selection stays out of it (D3).
 
 Stage-view D12 made scenery its own tracked record, not a virtual fixture, and said a *real* DMX tab
 track (a motorised curtain or fly winch on a DMX channel) is a fixture an element follows
-(`drivenBy: {fixture, property}`, `stage-view-design/INDEX.md` §"A real motorised tab track"). Nothing reads that yet: the
+(`drivenBy: {fixture, attribute}`, `stage-view-design/INDEX.md` §"A real motorised tab track"). Nothing reads that yet: the
 scene document has no `drivenBy`, so a venue whose tabs are on a DMX track patches the track as a
 fixture and the Stage view draws the tabs from the scenery records instead of from the channel —
 two truths that can disagree. The scenery-programmer plan kept it out of scope (§7). **Trigger**: a
 venue's tabs or flys run on a DMX-controlled track that the desk patches. **Then**: an optional
-`drivenBy: {fixtureUuid, property}` in a DRAW or FLY drape's (or a flown object's) params, checked at
+`drivenBy: {fixtureUuid, attribute}` in a DRAW or FLY drape's (or a flown object's) params, checked at
 the write boundary against a patched fixture with that slider; `SceneryService` resolves such an
 element's `open` / `trimM` from the live composed value (0–255 mapped onto 0–1, or onto in → out) and
 ignores scenery changes and programmer holds for that key — the channel is the truth, and the
-programmer moves it by moving the fixture's property. `travelS` does not apply; the motor has its own
+programmer moves it by moving the fixture's attribute. `travelS` does not apply; the motor has its own
 speed. An optional params key, so no `formatVersion` bump (`docs/sync-engineering.md` §"Version 18").
 
 ### `FU-SCENERY-STAGE-HANDLES`
@@ -3098,43 +3097,43 @@ cell), written through the same `CueRowStore` flush as a third kind of draft ent
 
 ### `FU-UPDATE-STAGE-TIMED`
 
-**Update stage leaves a cue's timed effects and timed layers to its next GO** · Trigger ·
+**Update stage leaves a cue's timed FX and timed layers to its next GO** · Trigger ·
 Show-cue-editing plan session 7 (venue-visit R2.7), 2026-10-17
 
-*Update stage* (`routes/cueUpdateStage.kt`) brings a live cue's rows and its untimed effects in line
+*Update stage* (`routes/cueUpdateStage.kt`) brings a live cue's rows and its untimed FX in line
 with the stored cue, and leaves what `CueTriggerManager` fires on a delay or an interval as the cue's
 last first hold armed it (Chris's call, 2026-10-17): the timers hold the cue data they were armed
-with, so an edited or removed timed effect keeps firing as it was, a new one waits for the next GO,
+with, so an edited or removed timed FX keeps firing as it was, a new one waits for the next GO,
 and a recurring timed layer's next fire re-cooks the rows from `TimedFireCook`'s armed copy — which
 undoes the Update stage's rows for that cue until its next GO. The last is not new: a Record or Update
-republish of the same cue has the same result. An effect moved from timed to untimed is started by
+republish of the same cue has the same result. An FX moved from timed to untimed is started by
 Update stage beside the copy its timer already fired, untagged with its uuid, and the two run together
 until the next GO. **Trigger**: an operator edits a live cue's timed
-effect or timed layer and expects *Update stage* (or a Record) to send it. **Then**: let the timers
+FX or timed layer and expects *Update stage* (or a Record) to send it. **Then**: let the timers
 read the cue from a per-cue holder *Update stage* and `republishCueIfLive` replace — the fired set
 kept for layers that survive, unfired delays keeping their start — rather than re-arming them, which
 would fire a delay again after the press.
 
 ### `FU-UPDATE-STAGE-EFFECT-RAMP`
 
-**Update stage's ramp skips a key a running effect covers** · Trigger · Show-cue-editing plan
+**Update stage's ramp skips a key a running FX covers** · Trigger · Show-cue-editing plan
 session 7 (venue-visit R2.7), 2026-10-17
 
 *Update stage* ramps the cue's rows at transmit (`TransmitFade` through
-`publishCueLayerToControllers`), which leaves every key in `coveredByRunningEffects()` to the effect.
-The effect's tick resets such a key to its base with no fade each pass, so the base under a running
-effect moves at once, and under an effect the same press starts the ramp is overwritten on that
-effect's first tick. A row's own fade has the same limit. **Trigger**: an operator sees the base under
-a running effect jump on *Update stage* where they expected it to fade. **Then**: a per-cue ramp in
+`publishCueLayerToControllers`), which leaves every key in `coveredByRunningFx()` to the FX.
+The FX's tick resets such a key to its base with no fade each pass, so the base under a running
+FX moves at once, and under an FX the same press starts the ramp is overwritten on that
+FX's first tick. A row's own fade has the same limit. **Trigger**: an operator sees the base under
+a running FX jump on *Update stage* where they expected it to fade. **Then**: a per-cue ramp in
 the resolver — the base value interpolated where the tick reads it — rather than a transmit-time fade.
 
 ### `FU-TIMELINE-VALUES`
 
-**The Timeline shows a cue's layers, effects and scenery, not its own values** · Trigger ·
+**The Timeline shows a cue's layers, FX and scenery, not its own values** · Trigger ·
 Stack-timeline plan session 3, 2026-10-21
 
 A stack's Timeline (`components/runner/StackTimeline.tsx`, `lib/stackTimeline/`) draws a column per
-Look, palette, effect and scenery element its cues apply; a cue's own rows — the values Record or the
+Look, palette, FX and scenery element its cues apply; a cue's own rows — the values Record or the
 Values grid set on a fixture — are not columns (plan D10, §8), so a level set by hand in Q4 and
 changed in Q9 cannot be followed down the stack the way a Look can. **Trigger**: the Timeline is used
 to find where a hand-set value changes. **Then**: a column per family of a cue's own rows (Intensity,
@@ -3286,7 +3285,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
   leader's rather than free-running inside them. Shipped together with follow *targets* — a
   master may follow any other master, chains allowed and cycles refused — which is what made
   the cascade worth building rather than a special case for master 1. See
-  `docs/fx-engineering.md` §"Usage routing and follow"
+  `docs/fx-engineering.md` §"Family routing and follow"
 - `FU-BUSK-TARGET-CAP` — retired by deletion rather than by the batched query it asked for. The
   eight-slot fan-out existed to read effect presence off the FX list for the busk view's effect
   pads; those pads went when the view was cut back to the library pads its design draws, and both

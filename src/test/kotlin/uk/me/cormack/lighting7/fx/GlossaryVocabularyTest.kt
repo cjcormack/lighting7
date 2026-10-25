@@ -9,8 +9,8 @@ import kotlin.test.fail
 
 /**
  * Holds the backend's words to `docs/glossary.md` (terminology plan D17): every `done` or `screen`
- * row's `fx:`, `family:` and `masterFamily:` locators must give the row's word, and every built-in
- * FX must have a row. The frontend's locators are `glossary.test.ts`'s.
+ * row's `fx:`, `family:`, `masterFamily:` and `doc:` locators must give the row's word, and every
+ * built-in FX must have a row. The frontend's locators are `glossary.test.ts`'s.
  *
  * It also pins the speed-master family vocabulary (busking-view plan D7): a master's `family` is one
  * of the FX library's `family` strings, so apply-time routing (`master.family == fx.family`)
@@ -80,6 +80,12 @@ class GlossaryVocabularyTest {
                         assertTrue(target in SPEED_MASTER_FAMILIES, "$row: $key is not in SPEED_MASTER_FAMILIES")
                         assertTrue(target.equals(row.word, ignoreCase = true), "$row: $key is '$target', expected '${row.word}'")
                     }
+                    "doc" -> {
+                        val doc = File(target)
+                        assertTrue(doc.isFile, "$row: $key names no file")
+                        val word = Regex("\\b${Regex.escape(row.word)}\\b", RegexOption.IGNORE_CASE)
+                        assertTrue(word.containsMatchIn(doc.readText()), "$row: $key never says '${row.word}'")
+                    }
                 }
             }
         }
@@ -138,7 +144,7 @@ class GlossaryVocabularyTest {
         val KEYED_STATUSES = setOf("done", "screen")
         val STATUSES = KEYED_STATUSES + "planned"
 
-        val BACKEND_PREFIXES = setOf("fx", "family", "masterFamily")
+        val BACKEND_PREFIXES = setOf("fx", "family", "masterFamily", "doc")
 
         /** `glossary.test.ts` reads these; both tests know every prefix so a typo fails both. */
         val FRONTEND_PREFIXES = setOf("src", "ORDER_LABELS", "FX_FAMILY_INFO", "BLEND_MODE_OPTIONS", "ELEMENT_MODE_OPTIONS")

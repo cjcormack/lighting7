@@ -897,13 +897,13 @@ class ProgrammerLayerStack(
         if (key == null || source == null || !source.isPalette || layer == null) {
             return ResetToPaletteOutcome.Refused(
                 ResetToPaletteOutcome.NOT_FROM_PALETTE,
-                "Effect $fxId was not started by a palette layer in the programmer",
+                "FX $fxId was not started by a palette layer in the programmer",
             )
         }
         val entry = paletteRegistry().snapshot(source.uuid)?.effect
             ?: return ResetToPaletteOutcome.Refused(
                 ResetToPaletteOutcome.PALETTE_GONE,
-                "Palette '${source.name}' no longer holds an effect to reset to",
+                "Palette '${source.name}' no longer holds an FX to reset to",
             )
         val st = state() ?: return ResetToPaletteOutcome.NotFound
         val spec = entry.toFxSpec().withCycleOverride(layer.cycleOverride)
@@ -918,7 +918,7 @@ class ProgrammerLayerStack(
         } catch (e: Exception) {
             return ResetToPaletteOutcome.Refused(
                 ResetToPaletteOutcome.PALETTE_GONE,
-                "Palette '${source.name}''s effect could not be created: ${e.message}",
+                "Palette '${source.name}''s FX could not be created: ${e.message}",
             )
         }
         val updated = eng.updateFx(

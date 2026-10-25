@@ -256,7 +256,7 @@ internal fun fanIntoProgrammer(
     placementsOf: (Collection<String>) -> Map<String, AimPlacement> = { aimPlacements(state, state.show.project, it) },
 ): FanOutcome {
     val attribute = PaletteAttribute.ofOrNull(request.attribute)
-        ?: return FanOutcome.Invalid("'${request.attribute}' is not a property a spread can carry")
+        ?: return FanOutcome.Invalid("'${request.attribute}' is not an attribute a fan can carry")
     val curve = FanCurve.byName(request.curve)
         ?: return FanOutcome.Invalid("Curve '${request.curve}' is not one of ${FanCurve.entries.map { it.name }}")
     val over = FanOver.byName(request.over)
@@ -445,7 +445,7 @@ internal fun fanIntoProgrammer(
 
 /** An `ABOUT` request's amounts and given bases, or the reason it is not one. */
 private fun fanShape(request: FanRequest, attribute: PaletteAttribute, over: FanOver): Result<FanShape> = runCatching {
-    require(attribute == PaletteAttribute.POSITION) { "A fan is a position spread; '${request.attribute}' has no position of its own to fan from" }
+    require(attribute == PaletteAttribute.POSITION) { "A fan about each position is Position only; '${request.attribute}' has no position of its own to fan from" }
     val fan = request.fan
     if (fan != null && (fan.x != null || fan.y != null)) return@runCatching stageFanShape(request, fan, over).getOrThrow()
     require(fan != null && (fan.pan != null || fan.tilt != null)) { "A fan needs a pan or a tilt amount, or an x or a y" }
@@ -466,7 +466,7 @@ private fun fanShape(request: FanRequest, attribute: PaletteAttribute, over: Fan
 /** A stage fan's amounts, starts and previous step, or the reason it is not one. */
 private fun stageFanShape(request: FanRequest, fan: FanAmountDto, over: FanOver): Result<FanShape.StageFan> = runCatching {
     require(fan.pan == null && fan.tilt == null) { "A fan is in pan and tilt or in stage metres, not both" }
-    require(over == FanOver.HEADS) { "A stage fan moves heads; a cell has no placement of its own" }
+    require(over == FanOver.HEADS) { "A stage fan moves heads; an element has no placement of its own" }
     for ((axis, amount) in listOf("x" to fan.x, "y" to fan.y)) {
         checkStageCoord(axis, amount)?.let { throw IllegalArgumentException(it) }
     }

@@ -166,7 +166,7 @@ internal class PatchEditTools(private val state: State) {
             if (key.isEmpty()) rowProblems += "key must be a non-blank string"
             if (newKey.isEmpty()) rowProblems += "newKey must be a non-blank string"
             if (newKey.length > 100) rowProblems += "newKey must be at most 100 characters"
-            if ('.' in newKey) rowProblems += "newKey may not contain '.': a fixture's cells are named <key>.<cell>"
+            if ('.' in newKey) rowProblems += "newKey may not contain '.': a fixture's elements are named <key>.<element>"
             if (key.isNotEmpty() && key == newKey) rowProblems += "newKey is the same as key"
             problems += rowProblems.map { "$where ('$key'): $it" }
             if (rowProblems.isEmpty()) key to newKey else null

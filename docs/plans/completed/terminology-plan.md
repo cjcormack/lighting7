@@ -1,6 +1,6 @@
 # Terminology: one vocabulary across the desk, the code and the archive, in MagicQ's words where they fit
 
-> **Document status: AGREED 2026-10-23; session 6 of 7 done.** The questions asked and their answers are in
+> **Document status: AGREED 2026-10-23; all 7 sessions done.** The questions asked and their answers are in
 > §11. The survey behind them is a one-page artifact for human readers,
 > <https://claude.ai/artifact/8Nu94UPNfSvrBmyQcdpd9V>, private to Chris and a convenience; this plan
 > is the authority.
@@ -292,7 +292,7 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
 - An FX's `panCenter` / `tiltCenter` parameters → `panCentre` / `tiltCentre`, moved from session 5
   for the same reason: they are stored in every Look, cue and palette FX's parameters.
 
-### Session 7: the docs sweep (docs)
+### Session 7: the docs sweep (docs) — done, `e85b98e`
 
 - Every engineering doc on the glossary's words: tiers in `lighting-composition-model.md`; *project*
   where docs say show; `fx-engineering.md`'s FX tables regenerated from the frontmatter, which adds
@@ -304,7 +304,7 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
 
 ## 9. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - **`FU-FX-AMPLITUDE`** (session 2): a MagicQ-style Size that scales an FX's swing about its centre,
   beside Amount. Absorbs `FU-FX-SIZE-OVER-100`. Trigger: an operator wants an FX bigger than it was
@@ -340,7 +340,9 @@ Beyond the suites, at the desk on Sleeping Beauty:
   Export Sleeping Beauty before and after; `diff -r` is empty, because the archive did not move.
 - **Session 6.** The v38 archive imports; Sleeping Beauty's export differs from its v38 one only in
   `formatVersion`, the surface bindings' names and the FX parameters' `panCentre` / `tiltCentre`.
-- **Session 7.** A search of `docs/` for each old word finds only the glossary.
+- **Session 7.** A search of the swept docs (`docs/`, `frontend/docs/`, both `CLAUDE.md` files and the
+  active plans) for each old word finds only the glossary, the uses a glossary row's *In code* cell
+  keeps (plain-English *effect*, Kotlin's *property*, a table's *cell*), old-name tables and history.
 
 ## 11. Questions
 
