@@ -117,8 +117,8 @@ describe('SelectionBar on the programmer', () => {
     const first = render(bar())
     const chip = screen.getByRole('button', { name: /^Selection:/ })
     expect(chip).toHaveTextContent('2 heads · 2 cells')
-    // Under 640 of the row the heads fold, as on a phone.
-    expect(screen.getByText(/^2 heads ·/)).toHaveClass('@max-[640px]:hidden')
+    // Under 660 of the row the heads fold, as on a phone.
+    expect(screen.getByText(/^2 heads ·/)).toHaveClass('@max-[660px]:hidden')
     first.unmount()
     const rows = render(bar({ cells: [], heads: heads({ cells: 0 }) }))
     expect(screen.getByText('2 heads')).toBeInTheDocument()

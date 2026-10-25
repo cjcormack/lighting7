@@ -1,6 +1,6 @@
 import { Fragment, useContext, useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronUp, Maximize2, Pause, Play, Plus, X } from 'lucide-react'
-import { useInRouterContext, useNavigate } from 'react-router'
+import { useInRouterContext } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -13,7 +13,7 @@ import {
 import { usePauseGroupFxMutation, useRemoveGroupFxMutation, useResumeGroupFxMutation } from '@/store/groups'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { setFxTabView } from '@/lib/fxEditorView'
+import { useOpenInFxEditor } from '@/components/fxEditor/openInFxEditor'
 import { selectWindowHeads } from '@/components/fixtures-list/programmerSelectRequest'
 import { useIsDeskConnected } from '@/store/status'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
@@ -454,7 +454,7 @@ export function FxTray({
  * (`SheetCloseContext`), since one outside the routed page would stay over the FX editor.
  */
 function OpenInFxEditor({ target, finger }: { target: FxTrayTarget; finger: boolean }) {
-  const navigate = useNavigate()
+  const openInFxEditor = useOpenInFxEditor()
   const { data: project } = useCurrentProjectQuery()
   const { fixtures } = useFixtureLookup()
   const close = useContext(SheetCloseContext)
@@ -472,9 +472,8 @@ function OpenInFxEditor({ target, finger }: { target: FxTrayTarget; finger: bool
           [target.type === 'fixture' ? { type: 'fixture', key: target.fixture.key } : { type: 'group', key: target.group.name }],
           fixtures ?? [],
         )
-        setFxTabView('selection')
         close?.()
-        navigate(`/projects/${project.id}/programmer?table=fx`)
+        openInFxEditor(project.id)
       }}
       className={cn(
         'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50',

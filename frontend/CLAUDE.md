@@ -838,13 +838,16 @@ Release folds to its glyph and the scope line drops the fade.
   ADDED, which names no copy to follow. A palette layer's FX (plan P5), a cue's and a manual one
   never offer a split. Which heads the selection covers is the client's reading, for the words alone
   (`components/fx/fxSplit.ts`, over the cell batch, the busk pair or the window's pair); the
-  split is the desk's, from the heads named. ⌘K *Apply FX*, the FX table's `+ FX` and the busk
-  FX tab's *+ FX…* open the one picker's
+  split is the desk's, from the heads named. Row C's **FX**, ⌘K *Apply FX*, the FX table's `+ FX`
+  and the busk FX tab's *+ FX…* open the one picker's
   **FX arm** (`ApplyPicker`, `library="fx"`): `FxPicker` on the **bare FX press**
   (its `press` prop — a tap is `POST /programmer/fx` with the door's pair, one Local FX over
-  it, the desk first taking those heads off every other Local FX of its family), above the
-  FX palettes that fit, the editor opening in the panel and its Done coming back to the list.
-  The two doors read one pair, `useWindowFxPair` (`components/fx/selectionFxTarget.ts`):
+  it, the desk first taking those heads off every other Local FX of its family, unless the
+  programmer's doors' *Replace · Stack* says Stack — §"Applying to a selection"), above the
+  FX palettes that fit, the editor opening in the panel and its Done coming back to the list —
+  or, from row C's FX and ⌘K's programmer door, the editor taking the panel once a tap starts the
+  FX, its Done closing it and *Open in FX editor* ⤢ beside it (the tray's ⤢, `useOpenInFxEditor`).
+  The doors read one pair, `useWindowFxPair` (`components/fx/selectionFxTarget.ts`):
   the targets `useWindowSelectionTargets` gives — the programmer's rows in grid order, a group row
   kept a group so its FX is one group FX with its Order, the desk's while following,
   else the busk view's copy — and the mask a press from this window carries. **On the programmer
@@ -2918,18 +2921,18 @@ slice: that one exists only because the cue-slot overlay is a sibling of the rou
 A press is *source × selection pair → scope*: a palette or a Look, the targets and attribute mask the
 window is acting on, and where the programmer is pointed. **`hooks/usePress.ts`** is the one place
 that turns that into a route, and every door calls it: the one picker
-(`ApplyPicker`, from a band's *All …* and the Stack table's *+ Look or palette*), the popup's
+(`ApplyPicker`, from a band's *All …*, the Stack table's *+ Look or palette* and row A's *+ Look*), the popup's
 Palettes bands (the programmer's colour, level and position editors, and the busk Colour, Level,
 Position and Beam tabs), a busk
 pad's *Apply as values*, the hand's place on the programmer's stack and a cue slot's Look. A busk
 pad's own press stays `POST /busk/pads/{id}/press`,
 which carries its bank's solo siblings. The **bare FX** is the one source `usePress` does not
-take: ⌘K *Apply FX*, the FX table's *+ FX*, a band's *+ FX …*, the busk FX tab's
+take: row C's **FX**, ⌘K *Apply FX*, the FX table's *+ FX*, a band's *+ FX …*, the busk FX tab's
 *+ FX…* and the picker's FX section
 press it through `FxPicker`'s `press` arm, `POST /programmer/fx` with the door's pair (one Local
-FX over the selection; the desk takes those heads off the family's other Local FX), or, in a
-focused Look, `/fx/add` then `absorb-fx` (§3.2 rule 6) — see §FX in the fixture sheet's
-paragraphs.
+FX over the selection; the desk takes those heads off the family's other Local FX, unless the door
+asked **Replace · Stack** and the operator chose Stack — below), or, in a focused Look, `/fx/add`
+then `absorb-fx` (§3.2 rule 6) — see §FX in the fixture sheet's paragraphs.
 
 - **The gestures**, the same on every chip and pad (D1, D8): **tap** is the press — a layer that
   *tracks* the record (`/palettes/{id}/toggle`, `/looks/{id}/toggle`), or off the pressed heads when
@@ -3010,7 +3013,7 @@ paragraphs.
 one marquees (`touch-action` cannot say that, so `useCellMarquee` arms by time for `touch`/`pen` and
 refuses `touchmove` only while a marquee is live). A chip and a cell never share a point, so a hold
 never means two things where a finger lands. The other phone rules on row C: below `@[600px]` it is
-the heads chip counting cells · the mask's glyph · Set · Fan · Release ▾ (`SelectionBar.tsx`, §The
+the heads chip counting cells · the mask's glyph · Set · Fan · FX · Release ▾ (`SelectionBar.tsx`, §The
 programmer's scoped grid), Deselect in the chip's menu, and a tap on the grid's empty background
 runs the same cells-then-rows ladder Escape does — only on the grid's own DOM, since React bubbles a
 click inside a portalled cell editor up the same tree.
@@ -3022,6 +3025,41 @@ pair and the scope.
 rode row C is gone: Set's popup already draws the family's value palettes above the editor and its FX
 palettes below (`PaletteBands`), with *All …* opening the one picker, and Set opens on whole rows too
 by asking the family first (§The programmer's scoped grid). The busk view's pads are the one-tap door.
+
+**Three doors, by what each needs** (programmer-toolbar plan D1). A **Look** needs no selection, so
+**+ Look** is in row A on every tab, between Blind and Include (`programmer/AddLook.tsx`): the one
+picker on its Looks with the pair `{targets: [], families: null}`, its ring, ⌥-click as values, open
+while pressed. Below 600px of row A it and Include are one **+**, whose picker is led by *Include a cue
+or Look…* (`ApplyPicker`'s `lead`), so the verbs keep their phone width. An **FX** starts on the
+selection, so **FX** is on row C between Fan and Release (`programmer/ProgrammerAddFxButton.tsx`, over
+`useProgrammerAddFx`'s offer: disabled with its reason in Output, absorbed in a focused Look): the
+picker's FX arm under the button, on the mask's family when it names one. Palettes go through Set.
+
+**Replace · Stack** (`components/fx/ReplaceStack.tsx`, plan D8) is the bare press's one question:
+*Replace*, the default, is the press as it always was; *Stack* sends `stack: true`, which stops and
+narrows nothing and starts the FX on its family's stacking blend (lighting7 `fx/FxStacking.kt`). It
+is asked only where it changes something — a Local FX already reaching a selected head in the family
+**the desk replaces in**, the family of the attribute the FX lands on (a Pulse on `uv` is Colour),
+other than one the session started (`localHolderIn`, over `fxLanes`) — and only of the Local press:
+a focused Look absorbs, a cue stores. An FX editor lane's *+ FX* asks it of its own lanes. The
+picker's FX arm asks it **on the programmer page** (where `useProgrammerScope` answers), through
+`useLocalFxHolder`, which reads the running list before any preview: `FxPicker` reports the
+attributes its listed FX would land on (`onLanding`), the segment is drawn in its `underFamilies`
+slot when one of them is held, and the press takes the choice per landing attribute (`press.stackOn`).
+It asks only before the session's first start: every later tap swaps that FX, which keeps how it
+started. So every FX door on the programmer page asks — row C's FX, ⌘K's *On the selection*, the FX
+table's *+ FX*, a band's *+ FX …* and the palettes' *FX…* — and no door elsewhere does: the busk
+view's family tabs, its FX tab and ⌘K's own picker off the programmer still press as they always did.
+
+**Once started, row C's FX is the live editor** (D9): ⌘K's door too (`ProgrammerAddFxSheet`'s
+`editor`, the arm's `editOnStart`). A tap starts the FX and the panel turns into `FxEditor` on it,
+with *‹ Swap* back to the list — kept mounted under the editor, so it comes back on the family the FX
+was started from and its taps swap it, phase kept — *Open in FX editor* ⤢ and the editor's Done,
+which closes the picker; a selection that leaves under row C's open picker closes it. ⤢ is `useOpenInFxEditor` (`fxEditor/openInFxEditor.ts`, the
+fixture sheet's tray's move lifted out of `FxTray`): the FX picked, the FX tab on *Selection*, the FX
+table shown — `?table=fx`, replacing the address on the programmer. Nothing is reselected: the
+selection is already the editor's subject. It is never drawn under a focused Look, whose FX goes into
+the Look when the panel closes.
 
 The offer is `paletteFits` (`lib/paletteOffer.ts`), which the picker and the popup bands both filter
 by, so they offer one set: the family, the emitters (a palette naming `white`, `amber` or `uv` is
@@ -3078,16 +3116,22 @@ desk — `ApplyLayerPicker` is mounted only while open, since its pair is a marq
 it computes nothing while shut, since its host re-renders at marquee rate; and its popover width is
 a **media** query rather than a container one — `PopoverContent` is portalled to `body`, so row C's
 `@container` is not an ancestor and a container class there would match nothing, silently.
-**The FX arm** (`library="fx"`, apply-model plan §5, session 6) is what ⌘K *Apply FX*, the
-FX table's *+ FX* and a band's *+ FX …* open, and the palettes' *FX…* switches to (with a way
+Its popover hangs on an anchor and has no Radix trigger, so it hands the focus back itself: Escape
+returns it to whatever opened it (programmer-toolbar plan §4), a press elsewhere leaves it where that
+press put it, and the FX arm, which has no search,
+opens with its family segment focused.
+**The FX arm** (`library="fx"`, apply-model plan §5, session 6) is what row C's FX, ⌘K *Apply FX*,
+the FX table's *+ FX* and a band's *+ FX …* open, and the palettes' *FX…* switches to (with a way
 back): `FxPicker` over the pair on the bare FX press, opening on the door's family and preferring
-its attribute (`attribute`, a cell's), *Edit <name>* putting the live editor in the panel, and below it
-the **FX palettes** that fit, pressed through `usePress`. It retired `FxAddSheet`. Under a focused
+its attribute (`attribute`, a cell's), *Edit <name>* putting the live editor in the panel — or, with
+`editOnStart`, the start doing so — *Replace · Stack* where the door asks, and below it the **FX
+palettes** that fit, pressed through `usePress`. It retired `FxAddSheet`. Under a focused
 Look the FX starts on `/fx/add` and the arm absorbs it when the panel closes or unmounts, once —
 unless the editor's × stopped it. It sizes to its list (up to the same 540px), where the palettes and
 Looks hold their height so a search never moves the panel under the pointer.
 `ApplyPicker.test.tsx` pins the sections, the offer, the mask arm, the Looks' one list and ring, and
-the FX arm's press and absorb.
+the FX arm's press, absorb, *Replace · Stack* and the editor on start; `ProgrammerAddFx.test.tsx` the
+doors (row C's FX, ⌘K's, the FX table's, ⤢) and `AddLook.test.tsx` row A's + Look and its **+**.
 
 **A new palette** — Record ▾'s, from the selection (programmer-toolbar plan D2) — is server-side
 (`POST /palettes/from-programmer`), for the same reason apply
@@ -4774,7 +4818,7 @@ exempt the name cell's own text, not to put the narrow arm back, because that ar
 clearing whatever the browser began selecting in the five pixels before the threshold.
 
 **The plain lists' cell verbs are Set · Clear · Fan** (`CellSelectionActions`), drawn before
-Locate and Highlight when the selection is cells; the programmer's row C is Set · Fan · Release ▾,
+Locate and Highlight when the selection is cells; the programmer's row C is Set · Fan · FX · Release ▾,
 Release's cell arm doing Clear's job (§"The programmer's scoped grid"). Set and Clear are Enter and Backspace with a
 button on them, and take the container's gate (`cellKeyboardPermission`) and words
 (`cellActionCopy`) so a button cannot promise a gesture the keyboard refuses; Output and a focused
@@ -4963,7 +5007,7 @@ right, over the one selection:
   rows**, read as targets by the bridge's `selectedRowTargets` and back by its `rowIdsForTargets` — so
   a target with no visible row has nowhere to land, as a desk frame would not. The mask is
   `SelectionMaskPill`'s `row` tone, the picker while following and a reading unlinked.
-- **What to do to them** — **Set ⏎ · Fan · Release ⌫ ▾**. **Set** (`SetButton.tsx`, D6) opens the
+- **What to do to them** — **Set ⏎ · Fan · FX · Release ⌫ ▾**. **Set** (`SetButton.tsx`, D6) opens the
   cell popup on cells; on whole rows it first asks the family, selects those rows' cells in that
   family's shown columns (a marquee, so the mask becomes it) and opens the popup once they land. It is
   refused only by the scope, never by the selection's shape. **Release** is one split button
@@ -4972,22 +5016,26 @@ right, over the one selection:
   `cellActionCopy`) and *The whole n heads* (fixture-fx-sheets plan D18: one `programmer.clearTarget`
   per Locate target at the programmer fade, a group the group and an element that head; live in
   Local and Output, refused with its reason while a Look or palette layer is focused). There is no
-  cell **Clear** on the programmer any more: *Clear* means row A's whole-programmer Clear.
+  cell **Clear** on the programmer any more: *Clear* means row A's whole-programmer Clear. **FX**
+  (`ProgrammerAddFxButton.tsx`, D8–D10) is `+ FX` on the selection — the picker under the button,
+  *Replace · Stack*, the live editor once started — §"Applying to a selection".
 - **Where they are on the rig** — **Locate ▾ · Highlight** (`fixtures-list/RigVerbs.tsx`, shared
   with the plain lists' `SelectionToolbar`), at the right edge.
 
 **Its width ladder is the row's own** (D12, `rowCFolds.ts`, container queries on `ProgrammerGrid`'s
-`@container`): from 1100 every word and ⏎ / ⌫ on Set and Release; 800–1099 Locate and Highlight
-iconic; 600–799 every control iconic and the mask abbreviated (`Col`), the chip counting a
-marquee's cells alone under 640 (the arm measured 610 with the heads, plan §9); below 600 the phone arm —
+`@container`): from 1100 every word and ⏎ / ⌫ on Set and Release; 860–1099 Locate and Highlight
+iconic, Set, Fan, FX and Release worded; 800–859 the verbs iconic too; 600–799 every control iconic and the mask abbreviated (`Col`), the chip counting a
+marquee's cells alone under 660 (the arm measured 656 with the heads and FX, plan §9); below 600 the phone arm —
 measured (`useContainerBand`) and handed down as `ToolbarPhoneContext`, since it changes components,
 not classes: the heads chip counts cells and drops its ×, Locate, *Set locate from current* and
 Highlight (latched, since a menu row cannot be held) move into its menu, and its menu, Set's family
-question and Release ▾ are bottom sheets (`sheet/ToolbarMenu.tsx`, 44px rows). On a short viewport
+question and Release ▾ are bottom sheets (`sheet/ToolbarMenu.tsx`, 44px rows), and the verbs close up
+— no divider, a 4px gap, 8px padding — which is what fits Set · Fan · FX · Release ▾ on a 360px phone
+(358 of it, measured). On a short viewport
 the row stays out of the flow until something is selected, as before (`selectionBandState`).
 
-`+ FX` follows the same rule as a value edit, from the FX table's library row or ⌘K's *Apply FX
-→ On the selection*: focused layer → into that Look (started on `/fx/add`, then
+`+ FX` follows the same rule as a value edit, from row C's FX, the FX table's library row or ⌘K's
+*Apply FX → On the selection*: focused layer → into that Look (started on `/fx/add`, then
 `POST /looks/{id}/absorb-fx`, which *moves* the running instance); Local → the bare FX
 press (`POST /programmer/fx`), one Local FX over the selection under its mask, which Record
 writes onto the cue; Output → disabled, naming the two places that can take one.
@@ -5072,7 +5120,9 @@ popover and row C's Fan — and `AppliedTables.test.tsx` pins what the tables ca
   picked (the host's `onOpenFx`). Its library
   row's create verb is **+ FX** (`useProgrammerAddFx`: the bare FX press over the
   selection in Local, into the Look a focused Look layer applies, refused with the reason in Output
-  and over a palette), in its own component so only the button hears the selection; under the
+  and over a palette; asking *Replace · Stack* as row C's **FX** does, which is the same gesture
+  from the Values tab — §"Applying to a selection"), in its own component so only the button hears
+  the selection; under the
   selection bar the rule row ***Values above beat FX below*** (`applied/FxBelowRule.tsx`).
   **Its selection is published** for the Values grid's rings (below).
 - **Stack** (`applied/StackTable.tsx`, D5): *Your values* pinned on top — its value count, its Local
@@ -5092,7 +5142,8 @@ popover and row C's Fan — and `AppliedTables.test.tsx` pins what the tables ca
   from *Your values*, and switch to Values. A layer row has its enable toggle and settings popover
   (`LayerSettingsPopover` — amount, blend, mask, stomp, *Detach*, remove), and its menu adds *Edit
   look…* (`LookDetailSheet`) / *Edit palette…*, *Pick up* and *Remove*. *+ Look or palette* is the two
-  pickers behind one menu (`programmer/ApplyLayerPicker.tsx`). The rule row is the FX table's, with
+  pickers behind one menu (`programmer/ApplyLayerPicker.tsx`); row A's *+ Look* is the Looks' half of
+  it on every tab. The rule row is the FX table's, with
   the FX count and a press to the FX tab after it.
 - **Scenery** (`applied/SceneryTable.tsx`, D6): every element, **Venue then Set** by name under
   divider rows, with the scenery filters as chips — *All* (their unfiltered state) · *Set* · *Venue*
@@ -5166,7 +5217,8 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   below the top one, then the top one below it. Layer and cue cards have no grip. Nothing is
   renumbered here: the desk's `fxChanged` refetches the list and re-asks the preview.
 - **+ FX opens `FxPicker` in the inspector on the lane's family**, the press arm. Where the lane
-  holds a Local FX on a selected head it asks ***Replace · Stack***, starting on *Replace*; *Stack*
+  holds a Local FX on a selected head it asks ***Replace · Stack*** (`fx/ReplaceStack.tsx`, the
+  segment and the rule the picker's FX arm reads too), starting on *Replace*; *Stack*
   is the picker's `press.stack`, which sends `stack: true` and **no blend**, so the desk starts it on
   the family's stacking blend (`fx/FxStacking.kt`), and a swap keeps that blend. A focused Look layer
   takes `+ FX`'s own sheet instead, which absorbs into the Look; Output and a palette layer refuse

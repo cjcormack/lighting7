@@ -398,8 +398,9 @@ export function usePaletteSave(
  *  - ***+ Effect …*** opens the picker's effects arm ([ApplyPicker], `library="fx"`) on this
  *    property: `FxPicker` on the family of the cell and the bare effect press, `POST
  *    /programmer/fx` with the same pair, so a Pulse on a uv cell is masked as Colour (the
- *    family the desk reads off the driven property). Under a focused Look it starts on `/fx/add` and
- *    is absorbed into the Look instead.
+ *    family the desk reads off the driven property) — on the programmer page asking *Replace · Stack*
+ *    where a Local effect of that family already runs on these heads. Under a focused Look it starts
+ *    on `/fx/add` and is absorbed into the Look instead.
  *
  * **In the cue editor** (apply-model plan §3.6, session 8) the band is about the cue, not the stage:
  * it lists the cue's **stored** effects on this property that reach these heads, drawn and not

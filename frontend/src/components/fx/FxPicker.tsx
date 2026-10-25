@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
 import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -124,6 +124,8 @@ export function FxPicker({
   elementFilter,
   press,
   draft,
+  onLanding,
+  underFamilies,
 }: {
   target: FxTarget
   /**
@@ -134,9 +136,15 @@ export function FxPicker({
    *
    * [stack] is the FX editor's *Stack* (FX editor plan D6): the press stops and narrows nothing,
    * and no blend is sent, so the desk starts it on its family's stacking blend and Amount — a swap
-   * then keeps the blend it started on.
+   * then keeps the blend it started on. [stackOn] is the same choice asked of the attribute a tap
+   * lands on, for a host whose answer depends on it (the picker's FX arm).
    */
-  press?: { projectId: number; families: readonly AttributeFamily[] | null; stack?: boolean }
+  press?: {
+    projectId: number
+    families: readonly AttributeFamily[] | null
+    stack?: boolean
+    stackOn?: (attribute: string) => boolean
+  }
   /**
    * Start on some of a multi-head fixture's heads — the sheet's head strip picking exactly the odd,
    * even or a half of them (`elementFilterFor`). Absent: every head.
@@ -163,6 +171,10 @@ export function FxPicker({
     current: { fxType: string; attribute: string } | null
     onPick: (pick: DraftFxPick) => void
   }
+  /** Told the attributes the listed FX would land on whenever they change — what a tap would drive. */
+  onLanding?: (attributes: readonly string[]) => void
+  /** Drawn between the family segment and the rows — the FX arm's *Replace · Stack*. */
+  underFamilies?: ReactNode
 }) {
   const { data: library } = useFxLibraryQuery()
   // In draft nothing runs, so nothing running is read.
@@ -329,6 +341,8 @@ export function FxPicker({
       return
     }
 
+    const stacked = press?.stack === true || press?.stackOn?.(attribute) === true
+
     if (running != null && running.attribute === attribute) {
       if (normalizeFxName(running.fxType) === normalizeFxName(entry.name)) return
       // A swap across units (a beat effect for a wall-clock flicker) would carry the number across
@@ -345,7 +359,7 @@ export function FxPicker({
       const speed = timing.cycle === runningFx?.cycle ? {} : { cycle: timing.cycle }
       const direction = timing.direction === (runningFx?.direction ?? 'FORWARD') ? {} : { direction: timing.direction }
       const { blendMode, ...unblended } = spec
-      const swapped = press?.stack === true ? unblended : { ...unblended, blendMode }
+      const swapped = stacked ? unblended : { ...unblended, blendMode }
       if (lightingApi.fx.updateFx(running.fxId, { fxType: entry.name, ...swapped, ...speed, ...direction })) {
         onCurrent?.({ ...running, fxType: entry.name })
       }
@@ -383,7 +397,7 @@ export function FxPicker({
         press != null
           ? pressFx({
               ...request,
-              ...(press.stack === true ? { blendMode: undefined, stack: true } : {}),
+              ...(stacked ? { blendMode: undefined, stack: true } : {}),
               speedMasterUuid: request.speedMasterUuid ?? undefined,
               projectId: press.projectId,
               targets: pressTargetsOf(target),
@@ -408,6 +422,9 @@ export function FxPicker({
     addition.kind === 'group' ? applyGroupFx({ groupName: addition.groupName, ...addition.payload }) : addFixtureFx(addition.payload)
 
   const effects = byFamily.get(family) ?? []
+  // Joined, so the report fires on a change of what the rows would drive and not on every render.
+  const landingKey = [...new Set(effects.flatMap((e) => attributeFor(e) ?? []))].join('\n')
+  useEffect(() => onLanding?.(landingKey === '' ? [] : landingKey.split('\n')), [landingKey, onLanding])
   const currentEntry =
     shown != null
       ? [...compatible, ...(paletteStepsEntry != null ? [paletteStepsEntry] : [])].find(
@@ -447,6 +464,8 @@ export function FxPicker({
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
+
+      {underFamilies}
 
       {library == null ? (
         <EditorReadout>Reading the FX library…</EditorReadout>

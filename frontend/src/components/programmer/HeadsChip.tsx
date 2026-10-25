@@ -71,8 +71,8 @@ export function HeadsChip({
   const hasSelection = selected || heads > 0 || cells > 0
   const headsLabel = `${heads} head${heads === 1 ? '' : 's'}`
   const cellsLabel = `${cells} cell${cells === 1 ? '' : 's'}`
-  // Under 640 of the row the heads go from a marquee's count, as on a phone: the 600–799 arm
-  // measured 610px wide with them (programmer-toolbar plan §9).
+  // Under 660 of the row the heads go from a marquee's count, as on a phone: the 600–799 arm
+  // measured 656px wide with them once FX joined the verbs (programmer-toolbar plan §9).
   const count = !hasSelection ? (
     'Nothing selected'
   ) : cells === 0 ? (
@@ -81,7 +81,7 @@ export function HeadsChip({
     cellsLabel
   ) : (
     <>
-      <span className="@max-[640px]:hidden">{headsLabel} · </span>
+      <span className="@max-[660px]:hidden">{headsLabel} · </span>
       {cellsLabel}
     </>
   )

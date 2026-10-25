@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { toast } from 'sonner'
 import { ApplyPicker } from '@/components/press/ApplyPicker'
 import { useWindowFxPair } from '@/components/fx/selectionFxTarget'
 import { useWindowPaletteFit, type PressPair } from '@/hooks/usePress'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
+import { useOpenInFxEditor } from '@/components/fxEditor/openInFxEditor'
 import { registerAddFxDoor } from './addFxDoor'
 
 /** What `+ Effect` can do right now, and why not when it cannot. */
@@ -32,10 +33,12 @@ export interface AddFxOffer {
  *   so there is nowhere for a new effect to go. The tooltip names the two places that can take one,
  *   because "disabled" on its own teaches nobody.
  *
- * A hook plus a picker rather than one button component: the FX table's *+ Effect* and ⌘K's
- * *Apply FX → On the selection* ([ProgrammerAddFxDoor]) are two doors onto one gesture. The
- * authoring UI is the one picker's effects arm (`ApplyPicker`, `library="fx"`): `FxPicker` and
- * the live editor, above the effect palettes.
+ * A hook plus a picker rather than one button component: row C's **FX**
+ * (`ProgrammerAddFxButton`), the FX table's *+ FX* and ⌘K's *Apply FX → On the selection*
+ * ([ProgrammerAddFxDoor]) are three doors onto one gesture. The authoring UI is the one picker's
+ * effects arm (`ApplyPicker`, `library="fx"`): `FxPicker` and the live editor, above the effect
+ * palettes, asking *Replace · Stack* where a Local FX of the family is already on a selected head
+ * (programmer-toolbar plan D8), as every FX door on the programmer page does.
  */
 export function useProgrammerAddFx(): AddFxOffer {
   const scope = useProgrammerScope()
@@ -68,26 +71,45 @@ export function useProgrammerAddFx(): AddFxOffer {
 }
 
 /**
- * The picker for `+ Effect`, mounted only while open — its pair is a marquee subscription and it
- * reads the fixture list.
+ * The picker for `+ FX`, mounted only while open — its pair is a marquee subscription and it
+ * reads the fixture list. [anchorRef] hangs it under its door as a popover on a desk; without one it
+ * is a right-hand sheet. [editor] is the FX doors' arm (D9): once a tap has started the FX the
+ * picker is its live editor, with *Open in FX editor* ⤢ and Done.
  */
 export function ProgrammerAddFxSheet({
   projectId,
   open,
   offer,
   onClose,
+  anchorRef,
+  editor = false,
 }: {
   projectId: number
   open: boolean
   offer: AddFxOffer
   onClose: () => void
+  anchorRef?: RefObject<HTMLElement | null>
+  editor?: boolean
 }) {
   if (!open || offer.disabled) return null
-  return <AddFxPicker projectId={projectId} pair={offer.pair} onClose={onClose} />
+  return <AddFxPicker projectId={projectId} pair={offer.pair} onClose={onClose} anchorRef={anchorRef} editor={editor} />
 }
 
-function AddFxPicker({ projectId, pair, onClose }: { projectId: number; pair: PressPair; onClose: () => void }) {
+function AddFxPicker({
+  projectId,
+  pair,
+  onClose,
+  anchorRef,
+  editor,
+}: {
+  projectId: number
+  pair: PressPair
+  onClose: () => void
+  anchorRef?: RefObject<HTMLElement | null>
+  editor: boolean
+}) {
   const fit = useWindowPaletteFit()
+  const openInFxEditor = useOpenInFxEditor()
   // One family masked opens the picker on it; several, or none, on the first the heads can take.
   const family = pair.families?.length === 1 ? pair.families[0] : null
   return (
@@ -95,11 +117,21 @@ function AddFxPicker({ projectId, pair, onClose }: { projectId: number; pair: Pr
       projectId={projectId}
       open
       onOpenChange={(next) => !next && onClose()}
+      anchorRef={anchorRef}
       library="fx"
       family={family}
       pair={pair}
       fit={fit}
       offerNew={false}
+      editOnStart={editor}
+      onOpenInEditor={
+        editor
+          ? (fxId) => {
+              onClose()
+              openInFxEditor(projectId, fxId)
+            }
+          : undefined
+      }
     />
   )
 }
@@ -125,5 +157,5 @@ function AskedAddFx({ projectId, onDone }: { projectId: number; onDone: () => vo
     toast.warning(asked.current.reason)
     onDone()
   }, [onDone])
-  return <ProgrammerAddFxSheet projectId={projectId} open offer={offer} onClose={onDone} />
+  return <ProgrammerAddFxSheet projectId={projectId} open offer={offer} onClose={onDone} editor />
 }

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { cn } from '@/lib/utils'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { describeCellScope, type CellRef } from '@/components/sheet/cellSelectionModel'
 import { cellFamilies, columnLabel, type ColumnKey } from '@/components/fixtures-list/columns'
@@ -24,7 +25,7 @@ export type HeadsChipParts = Omit<HeadsChipProps, 'projectId'>
  *
  * **The programmer's row is three clusters** (programmer-toolbar plan D3), left to right: *which
  * heads* — the heads chip (`HeadsChip`, which counts them and narrows them) and the mask; *what to
- * do to them* — Set ⏎ · Fan · Release ⌫ ▾ (the container's [actions]); and *where they are on the
+ * do to them* — Set ⏎ · Fan · FX · Release ⌫ ▾ (the container's [actions]); and *where they are on the
  * rig* — Locate ▾ · Highlight ([selection]), at the right edge. The kit's slots carry them:
  * `leading` for the first, `strip` for the second, the verbs for the third. Its width ladder is
  * `rowCFolds.ts`; the phone arm, which turns its menus into bottom sheets, is measured here and
@@ -125,8 +126,10 @@ export function SelectionBar({
           strip={
             actions != null ? (
               <>
-                <span className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />
-                <div className="flex shrink-0 items-center gap-1.5">{actions}</div>
+                {band !== 1 && <span className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />}
+                <div className={cn('flex shrink-0 items-center', band === 1 ? 'gap-1 [&_button]:px-2!' : 'gap-1.5')}>
+                  {actions}
+                </div>
               </>
             ) : undefined
           }

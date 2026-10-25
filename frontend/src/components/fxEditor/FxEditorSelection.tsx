@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { ProgrammerTableTabs } from '@/components/programmer/ProgrammerTableTabs'
@@ -16,6 +15,7 @@ import { OwnerEditor } from '@/components/stage/OwnerEditor'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { FxPicker, type AuditionedFx } from '@/components/fx/FxPicker'
 import { SplitFxEditor, type SplitSession } from '@/components/fx/SplitFxEditor'
+import { ReplaceStack, localHolderIn } from '@/components/fx/ReplaceStack'
 import {
   FxGraphLinkContext,
   createHoveredRowStore,
@@ -512,8 +512,7 @@ function Inspector({
   const [session, setSession] = useState<SplitSession>(null)
 
   if (adding != null) {
-    const lane = lanes.find((l) => l.family === adding)
-    const holdsLocal = (lane?.cards ?? []).some((c) => c.kind === 'local')
+    const holdsLocal = localHolderIn(lanes, adding) != null
     return (
       <AddFx
         key={adding}
@@ -562,10 +561,8 @@ function Inspector({
 }
 
 /**
- * *+ FX* on a lane (FX editor plan §4.3, D6): the picker's press arm, opening on the lane's family.
- * Where the lane already holds a Local FX on a selected head it asks ***Replace* · *Stack***,
- * starting on Replace — today's press, which takes those heads off the family's Local FX — or Stack,
- * which adds it on top on the family's stacking blend and takes nothing off.
+ * *+ FX* on a lane (FX editor plan §4.3, D6): the picker's press arm, opening on the lane's family,
+ * asking `ReplaceStack` where the lane already holds a Local FX on a selected head.
  */
 function AddFx({
   projectId,
@@ -599,23 +596,7 @@ function AddFx({
           <X className="size-3.5" />
         </button>
       </div>
-      {holdsLocal && (
-        <ToggleGroup
-          type="single"
-          size="sm"
-          value={stack ? 'stack' : 'replace'}
-          aria-label="Over the Local FX already here"
-          onValueChange={(v) => v && setStack(v === 'stack')}
-          className="flex w-full"
-        >
-          <ToggleGroupItem value="replace" className="flex-1 text-xs" title="Take the selected heads off this family’s other Local FX">
-            Replace
-          </ToggleGroupItem>
-          <ToggleGroupItem value="stack" className="flex-1 text-xs" title="Add it on top, taking nothing off">
-            Stack
-          </ToggleGroupItem>
-        </ToggleGroup>
-      )}
+      {holdsLocal && <ReplaceStack stack={stack} onChange={setStack} />}
       {target == null ? (
         <EditorReadout>Reading the rig…</EditorReadout>
       ) : (

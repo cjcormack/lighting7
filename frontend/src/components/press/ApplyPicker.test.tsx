@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { useState } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LookSummary } from '@/api/looksApi'
 import type { PaletteSummary, PaletteTarget } from '@/api/palettesApi'
@@ -69,23 +70,41 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
 /** The effects arm's `FxPicker`, by the props it is handed; a press on it starts effect 77, as a tap would. */
 const fxPicker = vi.hoisted(() => vi.fn())
 vi.mock('@/components/fx/FxPicker', () => ({
-  FxPicker: (props: { onCurrent: (c: unknown) => void }) => {
+  FxPicker: (props: { onCurrent: (c: unknown) => void; underFamilies?: React.ReactNode }) => {
     fxPicker(props)
     return (
-      <button type="button" data-fx-picker onClick={() => props.onCurrent({ fxId: 77, fxType: 'Pulse', attribute: 'dimmer' })}>
-        start
-      </button>
+      <>
+        {props.underFamilies}
+        <button type="button" data-fx-picker onClick={() => props.onCurrent({ fxId: 77, fxType: 'Pulse', attribute: 'dimmer' })}>
+          start
+        </button>
+      </>
     )
   },
 }))
 vi.mock('@/components/fx/FxEditor', () => ({
-  FxEditor: ({ onStop }: { onStop?: () => void }) =>
-    onStop == null ? null : (
-      <button type="button" onClick={onStop}>
-        stop it
+  FxEditor: ({ onStop, onDone }: { onStop?: () => void; onDone: () => void }) => (
+    <>
+      <button type="button" onClick={onDone}>
+        editor done
       </button>
-    ),
+      {onStop != null && (
+        <button type="button" onClick={onStop}>
+          stop it
+        </button>
+      )}
+    </>
+  ),
 }))
+/** What `useLocalFxHolder` answers: the attributes whose family already runs a Local FX on the selection. */
+const holders = vi.hoisted(() => ({ attributes: new Set<string>() }))
+vi.mock('@/components/fx/ReplaceStack', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/components/fx/ReplaceStack')>()),
+  useLocalFxHolder: () => (attribute: string) => (holders.attributes.has(attribute) ? `${attribute} FX on all 2 heads already` : null),
+}))
+/** The programmer page's scope, where a test says so: there the FX arm asks *Replace · Stack*. */
+const programmerScope = vi.hoisted(() => ({ value: null as object | null }))
+vi.mock('@/components/programmer/ProgrammerScope', () => ({ useProgrammerScope: () => programmerScope.value }))
 vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: applied }) }))
 vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: false, canEdit: true }) }))
 vi.mock('@/store/hand', () => ({ handPickUp: vi.fn() }))
@@ -258,6 +277,8 @@ beforeEach(() => {
   absorb.mockClear()
   stopFx.mockClear()
   fxWire.active = []
+  holders.attributes = new Set()
+  programmerScope.value = null
 })
 afterEach(cleanup)
 
@@ -364,6 +385,49 @@ describe('ApplyPicker — palettes', () => {
     expect(panel()).toHaveAttribute('data-slot', 'sheet-content')
   })
 
+  it('takes the focus on open, and Escape gives it back to the door it hangs from (plan §4)', async () => {
+    const door = document.createElement('button')
+    document.body.appendChild(door)
+    door.focus()
+    function Hosted({ library }: { library: 'palettes' | 'fx' }) {
+      const [open, setOpen] = useState(true)
+      return picker({ library, open, onOpenChange: setOpen, anchorRef: { current: door }, pair: { targets: HEX_1, families: ['COLOUR'] } })
+    }
+    render(<Hosted library="palettes" />)
+    expect(document.activeElement).toBe(within(panel()).getByRole('textbox'))
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(document.activeElement).toBe(door)
+    cleanup()
+    document.body.appendChild(door)
+    door.focus()
+    render(<Hosted library="fx" />)
+    // The FX arm has no search: it takes nothing the stub picker does not draw, and still hands back.
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(document.activeElement).toBe(door)
+    door.remove()
+  })
+
+  it('leaves the focus where the operator put it when a press elsewhere closes it', async () => {
+    const door = document.createElement('button')
+    const elsewhere = document.createElement('input')
+    document.body.append(door, elsewhere)
+    door.focus()
+    function Hosted() {
+      const [open, setOpen] = useState(true)
+      return picker({ open, onOpenChange: setOpen, anchorRef: { current: door }, pair: { targets: HEX_1, families: ['COLOUR'] } })
+    }
+    render(<Hosted />)
+    fireEvent.pointerDown(elsewhere)
+    elsewhere.focus()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(document.activeElement).toBe(elsewhere)
+    door.remove()
+    elsewhere.remove()
+  })
+
   it('computes nothing while it is shut, however often its inputs change identity', () => {
     const { rerender } = render(picker({ open: false }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -450,6 +514,16 @@ describe('ApplyPicker — Looks', () => {
     render(picker({ library: 'looks', pair: { targets: [], families: null } }))
     expect(panel().querySelector('[data-picker-look="23"]')!.className).toContain('ring-1')
     expect(panel().querySelector('[data-picker-look="21"]')!.className).not.toContain('ring-1')
+  })
+})
+
+describe('ApplyPicker — a lead', () => {
+  it('draws the door’s lead above the Looks — the phone’s *Include a cue or Look…*', () => {
+    looks = [look()]
+    render(picker({ library: 'looks', lead: <button type="button">Include a cue or Look…</button> }))
+    const lead = within(panel()).getByRole('button', { name: 'Include a cue or Look…' })
+    const search = within(panel()).getByRole('textbox', { name: 'Search Looks' })
+    expect(lead.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -551,6 +625,99 @@ describe('ApplyPicker — effects', () => {
     expect(fxPicker.mock.lastCall![0].draft.current).toBeNull()
     await act(async () => fxPicker.mock.lastCall![0].draft.onPick({ ...pick, fxType: 'SineWave' }))
     expect(pickFx).toHaveBeenLastCalledWith(expect.objectContaining({ fxType: 'SineWave' }), null)
+  })
+
+  it('asks Replace · Stack on the programmer page where a tap would land on a family already running a Local FX', () => {
+    programmerScope.value = { kind: 'local' }
+    holders.attributes = new Set(['uv'])
+    render(picker({ library: 'fx', pair: MASKED }))
+    expect(within(panel()).queryByRole('radio', { name: 'Stack' })).toBeNull()
+    act(() => fxPicker.mock.lastCall![0].onLanding(['dimmer']))
+    expect(within(panel()).queryByRole('radio', { name: 'Stack' })).toBeNull()
+    // An Intensity FX landing on uv is the Colour Local FX's business, which the desk would replace.
+    act(() => fxPicker.mock.lastCall![0].onLanding(['dimmer', 'uv']))
+    expect(within(panel()).getByText('uv FX on all 2 heads already')).toBeTruthy()
+    expect(within(panel()).getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    const stackOn = () => fxPicker.mock.lastCall![0].press.stackOn as (attribute: string) => boolean
+    expect(stackOn()('uv')).toBe(false)
+    fireEvent.click(within(panel()).getByRole('radio', { name: 'Stack' }))
+    // Stack where the landing family holds one, never where it does not.
+    expect(stackOn()('uv')).toBe(true)
+    expect(stackOn()('dimmer')).toBe(false)
+  })
+
+  it('asks only before the session’s first start, and a swap keeps how the FX started', () => {
+    programmerScope.value = { kind: 'local' }
+    holders.attributes = new Set(['uv'])
+    render(picker({ library: 'fx', pair: MASKED }))
+    act(() => fxPicker.mock.lastCall![0].onLanding(['uv']))
+    fireEvent.click(within(panel()).getByRole('radio', { name: 'Stack' }))
+    expect(fxPicker.mock.lastCall![0].press.stackOn('uv')).toBe(true)
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    expect(within(panel()).queryByRole('radio', { name: 'Stack' })).toBeNull()
+    // Every later tap swaps the started FX, so it keeps the stacking start whatever lands where.
+    expect(fxPicker.mock.lastCall![0].press.stackOn('dimmer')).toBe(true)
+  })
+
+  it('asks from Set’s *+ FX …* band too, a door that passes nothing: the page decides', async () => {
+    const { FxBand } = await import('@/components/editor/PaletteBands')
+    programmerScope.value = { kind: 'local' }
+    holders.attributes = new Set(['uv'])
+    render(<FxBand projectId={1} family="COLOUR" attribute="uv" targets={HEX_1} families={['COLOUR']} />)
+    fireEvent.click(screen.getByRole('button', { name: 'FX…' }))
+    act(() => fxPicker.mock.lastCall![0].onLanding(['uv']))
+    expect(within(panel()).getByRole('radio', { name: 'Stack' })).toBeTruthy()
+  })
+
+  it('asks nothing off the programmer page, in a focused Look, or in the cue editor', () => {
+    holders.attributes = new Set(['uv'])
+    render(picker({ library: 'fx', pair: MASKED }))
+    act(() => fxPicker.mock.lastCall![0].onLanding(['uv']))
+    expect(within(panel()).queryByRole('radio', { name: 'Stack' })).toBeNull()
+    expect(fxPicker.mock.lastCall![0].press).toEqual({ projectId: 1, families: ['COLOUR'] })
+    cleanup()
+    programmerScope.value = { kind: 'layer' }
+    focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
+    render(picker({ library: 'fx', pair: MASKED }))
+    act(() => fxPicker.mock.lastCall![0].onLanding(['uv']))
+    expect(within(panel()).queryByRole('radio', { name: 'Stack' })).toBeNull()
+  })
+
+  it('turns into the live editor once a tap starts the FX, with Swap, Open in FX editor and Done', () => {
+    fxWire.active = [{ id: 77, fxType: 'Pulse', attribute: 'dimmer' }]
+    const onOpenChange = vi.fn()
+    const onOpenInEditor = vi.fn()
+    render(picker({ library: 'fx', pair: MASKED, editOnStart: true, onOpenInEditor, onOpenChange }))
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    // The list stays mounted under the editor, so Swap comes back to the family it was on.
+    expect(panel().querySelector('[data-fx-picker]')!.closest('[hidden]')).not.toBeNull()
+    const mounts = fxPicker.mock.calls.length
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Swap' }))
+    expect(panel().querySelector('[data-fx-picker]')!.closest('[hidden]')).toBeNull()
+    expect(fxPicker.mock.calls.length).toBeGreaterThan(mounts)
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Open in FX editor' }))
+    expect(onOpenInEditor).toHaveBeenCalledWith(77)
+    fireEvent.click(within(panel()).getByRole('button', { name: 'editor done' }))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('keeps Edit and its way back to the list where the door did not ask for the editor, and no ⤢ in a Look', () => {
+    fxWire.active = [{ id: 77, fxType: 'Pulse', attribute: 'dimmer' }]
+    const onOpenChange = vi.fn()
+    const { rerender } = render(picker({ library: 'fx', pair: MASKED, onOpenChange }))
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    expect(panel().querySelector('[data-fx-picker]')!.closest('[hidden]')).toBeNull()
+    act(() => fxPicker.mock.lastCall![0].onEdit())
+    rerender(picker({ library: 'fx', pair: MASKED, onOpenChange }))
+    fireEvent.click(within(panel()).getByRole('button', { name: 'editor done' }))
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(panel().querySelector('[data-fx-picker]')!.closest('[hidden]')).toBeNull()
+    cleanup()
+    focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
+    render(picker({ library: 'fx', pair: MASKED, editOnStart: true, onOpenInEditor: vi.fn() }))
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    expect(within(panel()).queryByRole('button', { name: 'Open in FX editor' })).toBeNull()
   })
 
   it('absorbs nothing on the programmer, or when nothing was started', () => {
