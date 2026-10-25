@@ -2,7 +2,7 @@
 
 > **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a, 3b, 4 and 5 of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
-> ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
+> ([`terminology-plan.md`](completed/terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
 > *Intensity*, *Runs*, *Timing: Per cycle | Per head*. The design record is
 > [`fx-editor-design/`](fx-editor-design/INDEX.md); its one page,

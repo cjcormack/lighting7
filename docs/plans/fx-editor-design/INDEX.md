@@ -4,7 +4,7 @@ Source: a design session on 2026-10-23. The brief, from Chris: a new FX editor f
 to build stacked FX and to see how an FX's attributes interact, for example as a timeline of how
 colour and intensity change on each head and element; and anything else that would make FX
 programming simpler while keeping its power. It is built alongside the terminology plan
-([`../terminology-plan.md`](../terminology-plan.md)), each session gated on it (the plan's §6), and
+([`../completed/terminology-plan.md`](../completed/terminology-plan.md)), each session gated on it (the plan's §6), and
 every word here is that plan's.
 
 **Status: approved 2026-10-23.** Chris answered the fifteen questions in one round, every one as

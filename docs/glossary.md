@@ -2,7 +2,7 @@
 
 The desk's words, one row per idea: the word the screen, the wire, the code and the archive use for
 it once its row is `done`, what it was called before, and MagicQ's word where the plan names one.
-The words were agreed in [`plans/terminology-plan.md`](plans/terminology-plan.md); the D-numbers in
+The words were agreed in [`plans/completed/terminology-plan.md`](plans/completed/terminology-plan.md); the D-numbers in
 the Idea column are its decisions.
 
 Write a `done` row's word everywhere. Write a `screen` row's word on screen, in docs and in commit

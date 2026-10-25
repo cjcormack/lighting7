@@ -304,7 +304,7 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
 
 ## 9. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - **`FU-FX-AMPLITUDE`** (session 2): a MagicQ-style Size that scales an FX's swing about its centre,
   beside Amount. Absorbs `FU-FX-SIZE-OVER-100`. Trigger: an operator wants an FX bigger than it was
@@ -340,7 +340,9 @@ Beyond the suites, at the desk on Sleeping Beauty:
   Export Sleeping Beauty before and after; `diff -r` is empty, because the archive did not move.
 - **Session 6.** The v38 archive imports; Sleeping Beauty's export differs from its v38 one only in
   `formatVersion`, the surface bindings' names and the FX parameters' `panCentre` / `tiltCentre`.
-- **Session 7.** A search of `docs/` for each old word finds only the glossary.
+- **Session 7.** A search of the swept docs (`docs/`, `frontend/docs/`, both `CLAUDE.md` files and the
+  active plans) for each old word finds only the glossary, the uses a glossary row's *In code* cell
+  keeps (plain-English *effect*, Kotlin's *property*, a table's *cell*), old-name tables and history.
 
 ## 11. Questions
 
