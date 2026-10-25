@@ -120,7 +120,7 @@ export function PaletteBands({
  * press goes instead (*Into Warm wash*) and the rings go, since a Look holds values. In the cue
  * editor the line says *Into Q1 · as a layer* and a chip is ringed (partly) where the cue layers it.
  *
- * **The offer is the strip's** (`paletteFits`): the family, every emitter a palette names somewhere
+ * **The offer is the picker's** (`paletteFits`): the family, every emitter a palette names somewhere
  * in the heads — so a Shehds zone is offered the colour palettes its zone takes — and for a Beam cell
  * the palettes with a row for its property. Effect palettes are the Effects band's.
  *

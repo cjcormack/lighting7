@@ -54,9 +54,9 @@ export interface Press {
 const PROGRAMMER: PressInto = { kind: 'programmer' }
 
 /**
- * The window's selection pair. On the programmer, what its own list presses — the palette strip's
- * targets and the marquee's families, published through the marquee store — so a door outside the
- * list presses what the strip would, an unlinked window's own selection included; elsewhere the
+ * The window's selection pair. On the programmer, what its own list presses — the heads a press
+ * lands on and the marquee's families, published through the marquee store — so a door outside the
+ * list presses what the grid would, an unlinked window's own selection included; elsewhere the
  * desk's pair while this tab follows the desk and the tab's own copy when it does not.
  */
 export function useWindowPressPair(): PressPair {
@@ -72,7 +72,7 @@ export function useWindowPressPair(): PressPair {
 
 /**
  * What the window's heads can take, for a door that offers palettes over [useWindowPressPair] — the
- * Stack table's *+ Look or palette*: on the programmer the strip's own offer (the marquee's families, else what
+ * Stack table's *+ Look or palette*: on the programmer the grid's offer (the marquee's families, else what
  * the heads can take, and their emitters); elsewhere nothing is known, so nothing is filtered.
  */
 export function useWindowPaletteFit(): PaletteFit {
@@ -116,7 +116,7 @@ export function usePressInCue(options: PressOptions = {}): PressCue | null {
  * lands whole (absolute-looks plan D1) — the window's (`useWindowPress`), a cell
  * batch, a fixture sheet's one target, a cue slot's none; the scope is where the programmer is
  * pointed. This hook sends the one route that combination calls for and reports the answer one way,
- * and every press door — the palette strip and the picker, the popup's Palettes bands, a busk
+ * and every press door — the picker, the popup's Palettes bands, a busk
  * pad's *Apply as values*, the hand's place on the programmer's stack and a cue slot's Look — calls
  * it, so no two surfaces can answer "what does a press do"
  * differently.

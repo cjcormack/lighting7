@@ -1,13 +1,6 @@
 import type { PaletteSummary } from '@/api/palettesApi'
 
-/**
- * How many chips the programmer's row keeps, and how many the picker's Recent section shows.
- *
- * Eight because that is what the row holds at a desk width once `All · n` and `New` have their
- * place (`PalettesDesktop.dc.html`); the narrower arms simply scroll fewer of the same eight
- * rather than computing a smaller number, so the row and the sheet's first section agree about
- * what "recent" means whatever width they are drawn at.
- */
+/** How many palettes the picker's Recent section shows. */
 export const RECENT_PALETTE_LIMIT = 8
 
 /**
@@ -30,7 +23,7 @@ function pressedAt(template: PaletteSummary): number | null {
  * The offerable templates this desk has actually pressed, most recent first.
  *
  * "For the selected family" is not a parameter, and does not need to be: the caller hands in the
- * list it is already offering, which `PaletteStrip` has filtered by family, emitters and
+ * list it is already offering, which the caller has filtered by family, emitters and
  * generic-vs-per-fixture. So the per-family scoping the design asks for falls out of the filter
  * that was there anyway, and no second history has to be kept per family.
  *
@@ -49,31 +42,9 @@ export function recentPalettes(
 }
 
 /**
- * What the programmer's row of chips draws: the recents, or the first few by name where there are
- * none yet.
- *
- * The fallback is the whole reason this is a function rather than a call to [recentPalettes] at
- * the one site. A fresh project has pressed nothing, and a row that was empty until the operator
- * had already found a template some other way would be a row that teaches nothing about itself —
- * so the first press comes off the row like every one after it, and the row simply reorders from
- * then on.
- *
- * It is **all or nothing**: one recent shows one chip rather than one recent padded out with seven
- * by name. A padded row would move its own contents under the operator's hand on the second press
- * — chip five becoming chip two — where a short row only grows.
- */
-export function stripPalettes(
-  offerable: readonly PaletteSummary[],
-  limit: number = RECENT_PALETTE_LIMIT,
-): PaletteSummary[] {
-  const recents = recentPalettes(offerable, limit)
-  return recents.length > 0 ? recents : offerable.slice(0, Math.max(0, limit))
-}
-
-/**
  * Every palette given, the pressed ones most recent first and then the rest in the order given (the
- * library's, which is by name) — a popup band's order. Unlike [stripPalettes] it never falls back
- * all or nothing: the band shows its family whole, and recency only says which come first.
+ * library's, which is by name) — a popup band's order. The band shows its family whole, and recency only says
+ * which come first.
  */
 export function recentFirst(offerable: readonly PaletteSummary[]): PaletteSummary[] {
   return [...recentPalettes(offerable, offerable.length), ...offerable.filter((template) => pressedAt(template) == null)]

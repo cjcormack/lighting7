@@ -20,11 +20,11 @@ import { createValueStore, type ValueStore } from './valueStore'
  */
 export interface MarqueeSnapshot {
   /**
-   * Where a press from this window lands — the palette strip's own targets (`paletteTargetsFor`)
+   * Where a press from this window lands — the heads the grid's own presses reach (`paletteTargetsFor`)
    * — and the families the marquee names, null for rows alone. `usePress`'s pair on the
    * programmer, so a door outside the list (the hand's place on the stack, the Stack table's
-   * *+ Look or palette*) presses what the strip would. `targetFamilies` and `targetEmitters` are what
-   * those heads can take, the strip's offer, so that picker offers what the strip's `All · n` does.
+   * *+ Look or palette*) presses what the grid would. `targetFamilies` and `targetEmitters` are what
+   * those heads can take, so that picker offers what fits them.
    */
   press: {
     targets: readonly CueTarget[]

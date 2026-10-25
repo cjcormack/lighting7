@@ -88,8 +88,8 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'deletePalette', // src/components/templates/usePaletteDelete.tsx — PaletteSheet and routes/Palettes.tsx (PaletteEditor)
   'createPalette', // src/components/templates/PaletteEditor.tsx — inline alert
   'savePalette', // ...same editor (via routes/Palettes.tsx), and components/templates/PaletteSheet.tsx
-  // Silent too: its sheet stays open on failure and renders the error inline (the strip's chip is
-  // what opens it), so a toast beside that alert would say the same thing twice.
+  // Silent too: its sheet stays open on failure and renders the error inline (Record ▾'s *A new palette*
+  // is what opens it), so a toast beside that alert would say the same thing twice.
   'createPaletteFromProgrammer', // src/components/programmer/NewPaletteFromSelectionSheet.tsx
   // The 409s are ordinary steps in this flow, not failures: SPEED_MASTER_IN_USE opens the batch
   // delete's "delete anyway" dialog, and SPEED_MASTER_PROTECTED can only be reached by a stale

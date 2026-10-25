@@ -52,13 +52,11 @@ function toolbar() {
 }
 
 describe('SelectionToolbar', () => {
-  it('folds Locate and Highlight at 800 only on a bar with a strip, ahead of the phone arm', () => {
-    // The gated form, not the bare one: on the plain lists this toolbar is the only place the two
-    // verbs exist, and the 800 fold exists to give the programmer's template strip room.
+  it('keeps Locate and Highlight at every width — on the plain lists this toolbar is their only place', () => {
     toolbar()
     for (const word of ['Locate', 'Highlight']) {
       const button = screen.getByText(word).closest('button')
-      expect(button, word).toHaveClass(STRIP_MID_FOLDED_CLASS)
+      expect(button, word).not.toHaveClass(STRIP_MID_FOLDED_CLASS)
       expect(button, word).not.toHaveClass(MID_FOLDED_CLASS)
       expect(button, word).not.toHaveClass(PHONE_FOLDED_CLASS)
     }
@@ -74,13 +72,13 @@ describe('SelectionToolbar', () => {
 
   it('drops the two words earlier still, since a tooltip already carries them', () => {
     toolbar()
-    expect(screen.getByText('Locate')).toHaveClass(WORD_CLASS.split(' ').at(-1)!)
+    // The strip arm by name: the last token is the programmer row's `data-clusters` arm.
+    expect(WORD_CLASS).toContain('group-data-[strip]/bar:@max-[1100px]:hidden')
+    expect(screen.getByText('Locate')).toHaveClass('group-data-[strip]/bar:@max-[1100px]:hidden')
   })
 
-  it('offers Set locate from current and Clear locate over the selection, folding with Locate', () => {
+  it('offers Set locate from current and Clear locate over the selection', () => {
     toolbar()
-    const trigger = screen.getByRole('button', { name: 'Locate options' })
-    expect(trigger).toHaveClass(STRIP_MID_FOLDED_CLASS)
     openLocateMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Set locate from current' }))
     expect(storedLocate.storeFromCurrent).toHaveBeenCalledWith([{ type: 'fixture', key: 'hex-1' }])

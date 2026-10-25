@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { ChevronDown, ChevronLeft, ChevronRight, Grid2x2, GripVertical, MoreHorizontal, X } from 'lucide-react'
+import { ChevronDown, GripVertical, MoreHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -40,7 +40,7 @@ import { useBuskRigQuery } from '@/store/busk'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useHandPlace } from '@/store/hand'
 import { useBuskRigHeight, useDefaultBuskRigRows } from '@/lib/buskWindow'
-import { SUBSELECT_FILTER_MODES, SUBSELECT_MODE_LABELS, SUBSELECT_STEP_MODES } from '@/lib/cellsSubSelection'
+import { SubselectMenu, SubselectMenuItems, SubselectStepItems, SubselectSteps } from '@/components/selection/Subselect'
 import {
   applyDrop,
   effectiveRig,
@@ -305,8 +305,6 @@ export const EDIT_WORD_CLASS = 'hidden @[1100px]:inline @min-[400px]:@max-[615px
 const CELLS_PREFIX_CLASS = 'hidden @[790px]:inline @min-[420px]:@max-[615px]:inline'
 /** The mode word's *short* form, drawn while the prefix is folded — `1st`, not `1st half`. */
 const CELLS_SHORT_CLASS = 'inline @[790px]:hidden @min-[420px]:@max-[615px]:hidden'
-/** The mode word's full form, drawn beside the prefix. */
-const CELLS_FULL_CLASS = CELLS_PREFIX_CLASS
 
 /** The Focus control's labels, by the same measure as the Cells prefix; under the floor from 340. */
 export const FOCUS_WORD_CLASS = 'hidden @[790px]:inline @min-[340px]:@max-[615px]:inline'
@@ -336,19 +334,6 @@ export const FIRST_ROW_CLASS = '@max-[615px]:w-full @max-[615px]:flex-wrap'
  * where it was when the desk row's fold moved.
  */
 export const COMPACT_FOCUS_WORD_CLASS = 'hidden @[680px]:inline'
-
-/** The Cells control's face while its prefix is folded: the mode in one word. */
-const CELLS_SHORT_LABELS: Record<SubselectMode, string> = {
-  ALL: 'All',
-  ODD: 'Odd',
-  EVEN: 'Even',
-  NEXT: 'Next',
-  PREV: 'Prev',
-  FIRST_HALF: '1st',
-  SECOND_HALF: '2nd',
-  INVERT: 'Invert',
-  MASTERS: 'Masters',
-}
 
 export function RigBand(props: RigBandProps) {
   const { projectId, editing } = props
@@ -675,8 +660,13 @@ function RigBandBody({
             <EditorLabel className={RIG_LABEL_CLASS}>Rig</EditorLabel>
             {!editing && (
               <>
-                <CellsMenu onSubselect={onSubselect} />
-                <StepButtons onSubselect={onSubselect} />
+                <SubselectMenu
+                  onSubselect={onSubselect}
+                  className={VERB_CLASS}
+                  prefixClass={CELLS_PREFIX_CLASS}
+                  shortClass={CELLS_SHORT_CLASS}
+                />
+                <SubselectSteps onSubselect={onSubselect} />
               </>
             )}
             {editing ? (
@@ -853,92 +843,6 @@ function rigRecordOf(held: HeldRecord): RigPaletteRecord | null {
   return null
 }
 
-// ─── The Cells menu and the steps ────────────────────────────────────────
-
-/**
- * The Cells menu (D12, revised 2026-09-21): *Cells: <last>* opening the seven filters. `last` is
- * the filter pressed here most recently and nothing more — the desk keeps no sub-selection, so
- * there is nothing to read one back from. The two steps are `StepButtons`, beside it.
- */
-function CellsMenu({ onSubselect }: { onSubselect: (mode: SubselectMode) => void }) {
-  const [last, setLast] = useState<SubselectMode>('ALL')
-  const press = (mode: SubselectMode) => {
-    setLast(mode)
-    onSubselect(mode)
-  }
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          data-cells-chip
-          aria-label={`Elements: ${SUBSELECT_MODE_LABELS[last]}`}
-          title={`Sub-selection over rig order — ${SUBSELECT_FILTER_MODES.map((mode) => SUBSELECT_MODE_LABELS[mode]).join(' · ')}`}
-          className={cn(VERB_CLASS, 'gap-1')}
-        >
-          <Grid2x2 className="size-3.5" />
-          {/* Never a bare glyph: the prefix folds, the mode word stays — in its short form once
-              the prefix has gone (`1st`, `Masters`), its full form beside it (`1st half`). */}
-          <span className={CELLS_PREFIX_CLASS}>Elements: </span>
-          <span className={CELLS_FULL_CLASS}>{SUBSELECT_MODE_LABELS[last]}</span>
-          <span data-cells-mode className={CELLS_SHORT_CLASS}>{CELLS_SHORT_LABELS[last]}</span>
-          <ChevronDown className="size-3 text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Elements</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={last} onValueChange={(mode) => press(mode as SubselectMode)}>
-          {SUBSELECT_FILTER_MODES.map((mode) => (
-            <DropdownMenuRadioItem key={mode} value={mode} title={CELLS_MODE_TITLES[mode]}>
-              {SUBSELECT_MODE_LABELS[mode]}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-const STEP_LABELS: Partial<Record<SubselectMode, string>> = {
-  PREV: 'Previous along the rig',
-  NEXT: 'Next along the rig',
-}
-
-/** *Prev* / *Next*: a step along the rig order, which moves the selection rather than filtering it. */
-function StepButtons({ onSubselect }: { onSubselect: (mode: SubselectMode) => void }) {
-  return (
-    <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Step the selection along the rig">
-      {SUBSELECT_STEP_MODES.map((mode) => (
-        <Button
-          key={mode}
-          variant="outline"
-          size="sm"
-          data-cells-step={mode}
-          aria-label={STEP_LABELS[mode]}
-          title={CELLS_MODE_TITLES[mode]}
-          className="h-7 w-7 px-0"
-          onClick={() => onSubselect(mode)}
-        >
-          {mode === 'PREV' ? <ChevronLeft className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        </Button>
-      ))}
-    </div>
-  )
-}
-
-const CELLS_MODE_TITLES: Partial<Record<SubselectMode, string>> = {
-  ALL: 'Every selected element widened to its whole fixture',
-  ODD: 'Every other unit in rig order, from the first — elements where a selected head has them',
-  EVEN: 'Every other unit in rig order, from the second',
-  FIRST_HALF: 'The first half of the selection in rig order',
-  SECOND_HALF: 'The second half of the selection in rig order',
-  INVERT: 'Every unit of the selected heads that is not selected',
-  MASTERS: 'The masters only: a multi-head fixture’s own channels, no element',
-  NEXT: 'The whole selection one step along rig order; one element when only elements are selected',
-  PREV: 'The whole selection one step back along rig order',
-}
-
 /**
  * Below `md` the compact row has no room for a second control: the filters, the steps and the
  * verbs sit in one menu. **Module-level, not a closure inside the band**: a component declared during a
@@ -970,17 +874,9 @@ function CompactVerbs({
               {/* Below `md` the menu's filters and the two steps sit here: the compact row has no
                   room for a second control. */}
               <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Elements</DropdownMenuLabel>
-              {SUBSELECT_FILTER_MODES.map((mode) => (
-                <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)}>
-                  {SUBSELECT_MODE_LABELS[mode]}
-                </DropdownMenuItem>
-              ))}
+              <SubselectMenuItems onSubselect={onSubselect} layout="list" />
               <DropdownMenuSeparator />
-              {SUBSELECT_STEP_MODES.map((mode) => (
-                <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)} title={CELLS_MODE_TITLES[mode]}>
-                  {STEP_LABELS[mode] ?? SUBSELECT_MODE_LABELS[mode]}
-                </DropdownMenuItem>
-              ))}
+              <SubselectStepItems onSubselect={onSubselect} />
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={verbs.spread} title="Fan a value across the selection">
                 Fan…

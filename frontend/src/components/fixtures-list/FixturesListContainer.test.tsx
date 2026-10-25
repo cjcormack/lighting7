@@ -9,6 +9,8 @@ import type { Row, RowId } from './rowModel'
 import type { ProgrammerScope } from '../programmer/ProgrammerScope'
 import { chan, colourProp, makeFixture, makePixelBar, sliderProp } from '../../test/fixtureFactories'
 import type { CellOpenRequest } from '../sheet/useCellEditorRequests'
+import { createMarqueeStore, MarqueeStoreContext, type MarqueeStore } from './marqueeContext'
+import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 
 /**
  * What the three lists now share, asserted at the seam where they used to differ.
@@ -74,13 +76,17 @@ const FIXTURES = [
   // Infrastructure: the raw list carries it and the visible one does not, so the list must read
   // the visible one to leave it out.
   makeFixture('hazer-power', [sliderProp('dimmer', 'dimmer', chan(40))], { name: 'Hazer power', infrastructure: true }),
+  // Two Intensity columns, Dimmer and Strobe: what Set on rows must not put under one editor.
+  makeFixture('d', [sliderProp('dimmer', 'dimmer', chan(50)), sliderProp('strobe', 'strobe', chan(51))], { name: 'Strobe wash', groups: ['Front'] }),
 ]
 vi.mock('../../store/fixtures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../store/fixtures')>()),
   useFixtureListQuery: () => ({ data: FIXTURES, isLoading: false }),
   useVisibleFixtureListQuery: () => ({ data: FIXTURES.filter((f) => !f.infrastructure), isLoading: false }),
 }))
-vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: [], isLoading: false }) }))
+/** The groups a test patches in; none by default. */
+const groupList = vi.hoisted(() => ({ value: [] as unknown[] }))
+vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: groupList.value, isLoading: false }) }))
 // Release stops a selection effect it released whole through the REST delete; nothing here runs one.
 vi.mock('@/store/fixtureFx', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/fixtureFx')>()),
@@ -111,7 +117,11 @@ vi.mock('./useDeskSelectionBridge', () => ({ useDeskSelectionBridge: () => {} })
 vi.mock('@/store/selection', () => ({
   usePressFamilies: (local: unknown) => local,
   useDeskSelectionSnapshot: () => ({ targets: [], families: null, source: null }),
+  setDeskSelection: vi.fn(),
+  subselectDeskSelection: vi.fn(),
 }))
+// The heads chip's subsets read the busk rig; its own suite covers them.
+vi.mock('../../store/busk', () => ({ useBuskRigQuery: () => ({ data: undefined, isError: true }) }))
 // The plain lists draw the kit's selection bar as their row C (CLAUDE.md §List shell), and it asks
 // the viewport's height; jsdom has no `matchMedia`, and a desk is tall.
 vi.mock('../../hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
@@ -138,6 +148,8 @@ vi.mock('./SelectionToolbar', () => ({
   SelectionToolbar: ({ actions }: { actions: ReactNode }) => (
     <div data-testid="toolbar">{actions}</div>
   ),
+  LocateHighlightButtons: () => null,
+  useLocateSelection: () => ({ allLocated: false, locateSelection: () => {} }),
 }))
 vi.mock('../sheet/CellSelectionActions', () => ({
   CellSelectionActions: () => <span data-testid="cell-verbs" />,
@@ -233,6 +245,7 @@ beforeEach(() => {
   table.keyboardOpens = []
   table.revealCell = null
   include.request = { nonce: 0, fixtureKeys: [], groupKeys: [] }
+  groupList.value = []
 })
 afterEach(cleanup)
 
@@ -306,7 +319,7 @@ describe('FixturesListContainer on the plain list routes', () => {
     expect(screen.queryByRole('button', { name: /^Release/ })).toBeNull()
     rerender(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     expect(screen.getByTestId('row-spread')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Release 2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Release 2 heads' })).toBeInTheDocument()
   })
 
   it('clears a rows-only selection when a blank cell is clicked — the programmer\'s answer, now theirs', () => {
@@ -705,8 +718,8 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
   it('sends one programmer.clearTarget per selected row, at the programmer fade', async () => {
     rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
     render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
-    // A rows-only selection on the programmer: Release is row C's verb there, counting the rows.
-    fireEvent.click(screen.getByRole('button', { name: 'Release 2' }))
+    // A rows-only selection on the programmer: Release's face is the whole heads.
+    fireEvent.click(screen.getByRole('button', { name: 'Release 2 heads' }))
     await vi.waitFor(() => expect(releaseFrames.calls).toHaveLength(2))
     expect(releaseFrames.calls.map(([type, key]) => `${type}:${key}`)).toEqual(['fixture:a', 'fixture:b'])
   })
@@ -715,13 +728,13 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
     rowSelection.ids = new Set(['fixture:a'])
     programmerScope.value = { kind: 'layer', layerId: 3 } as ProgrammerScope
     const { unmount } = render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
-    const release = screen.getByRole('button', { name: 'Release 1' })
+    const release = screen.getByRole('button', { name: 'Release 1 head' })
     expect(release).toBeDisabled()
     expect(release.getAttribute('title')).toMatch(/Release clears Local/)
     unmount()
     programmerScope.value = { kind: 'output' } as ProgrammerScope
     render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
-    expect(screen.getByRole('button', { name: 'Release 1' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Release 1 head' })).toBeEnabled()
   })
 
   it('is not on the plain lists — the programmer is what it releases', () => {
@@ -731,31 +744,137 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
   })
 })
 
+describe('Set on whole rows (programmer-toolbar plan D6)', () => {
+  it('asks which attribute, then selects the rows’ cells in that family and opens their editor at Set', () => {
+    programmerScope.value = { kind: 'local' }
+    // The row the request names must be on screen, or the container scrolls rather than opens.
+    table.editorOpen = true
+    rowSelection.ids = new Set(['fixture:a'])
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+    const set = screen.getByRole('button', { name: 'Set an attribute on the 1 head' })
+    expect(set).toBeEnabled()
+    fireEvent.click(set)
+    // `a` has a Dimmer and a Colour cell, so those two are offered, in the palette order.
+    const offered = [...document.querySelectorAll('[data-set-family]')].map((b) => b.getAttribute('data-set-family'))
+    expect(offered).toEqual(['INTENSITY', 'COLOUR'])
+    fireEvent.click(document.querySelector('[data-set-family="COLOUR"]')!)
+    expect(table.cellSelection?.cells).toEqual([{ rowId: 'fixture:a', col: 'colour' }])
+    expect(table.keyboardOpens.at(-1)).toMatchObject({ rowId: 'fixture:a', col: 'colour', atButton: true })
+  })
+
+  it('is refused with Output’s reason, not drawn as nothing to set', () => {
+    programmerScope.value = { kind: 'output' } as ProgrammerScope
+    rowSelection.ids = new Set(['fixture:a'])
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+    const set = screen.getByRole('button', { name: 'Set an attribute on the 1 head' })
+    expect(set).toBeDisabled()
+    expect(set.getAttribute('title')).toMatch(/Output is a read/)
+  })
+})
+
+describe('Set on rows takes one column of the family', () => {
+  it('marquees Dimmer alone for Intensity, never Strobe beside it', () => {
+    programmerScope.value = { kind: 'local' }
+    table.editorOpen = true
+    rowSelection.ids = new Set(['fixture:d'])
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+    fireEvent.click(screen.getByRole('button', { name: 'Set an attribute on the 1 head' }))
+    fireEvent.click(document.querySelector('[data-set-family="INTENSITY"]')!)
+    expect(table.cellSelection?.cells).toEqual([{ rowId: 'fixture:d', col: 'dimmer' }])
+  })
+})
+
+describe('the heads chip’s writes on an unlinked list', () => {
+  type Parts = { heads: { onSelectTargets: (targets: { type: 'fixture' | 'group'; key: string }[], families: null) => void } }
+  afterEach(() => resetDeskFollowStores())
+
+  it('opens the collapsed group a selected fixture is listed under, then selects its row', () => {
+    unlinkFromDesk({ targets: [], families: null })
+    groupList.value = [{ name: 'Front', memberCount: 1, memberKeys: ['d'], capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' }]
+    let parts: Parts | null = null
+    const renderToolbar = (p: Parts) => {
+      parts = p
+      return null
+    }
+    render(<FixturesListContainer projectId={1} grouped selectionScope="programmer" showOwnership renderToolbar={renderToolbar as never} />)
+    expect(table.rows.some((row) => row.id.includes(':d'))).toBe(false)
+    act(() => parts!.heads.onSelectTargets([{ type: 'fixture', key: 'd' }], null))
+    expect(table.rows.some((row) => row.kind === 'fixture' && row.fixture.key === 'd')).toBe(true)
+    expect(rowSelection.setSelection).toHaveBeenLastCalledWith([expect.stringContaining('d')])
+  })
+
+  it('leaves the selection be when none of the targets has a row', () => {
+    unlinkFromDesk({ targets: [], families: null })
+    rowSelection.ids = new Set(['fixture:a'])
+    let parts: Parts | null = null
+    const renderToolbar = (p: Parts) => {
+      parts = p
+      return null
+    }
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={renderToolbar as never} />)
+    rowSelection.setSelection.mockClear()
+    act(() => parts!.heads.onSelectTargets([{ type: 'fixture', key: 'nowhere' }], null))
+    expect(rowSelection.setSelection).not.toHaveBeenCalled()
+  })
+})
+
+describe('Release counts what it releases', () => {
+  it('counts a group row’s every member, shown or not', () => {
+    groupList.value = [{ name: 'Front', memberCount: 8, memberKeys: ['d'], capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' }]
+    rowSelection.ids = new Set(['group:Front'])
+    render(<FixturesListContainer projectId={1} grouped selectionScope="programmer" showOwnership />)
+    expect(screen.getByRole('button', { name: 'Release 8 heads' })).toBeInTheDocument()
+  })
+})
+
+describe('Release over cells on the programmer (programmer-toolbar plan D7)', () => {
+  it('releases the cells on the face, and leaves no separate cell Clear', () => {
+    programmerScope.value = { kind: 'local' }
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+    fireEvent.click(screen.getByTestId('cell'))
+    expect(screen.queryByTestId('cell-verbs')).toBeNull()
+    const face = screen.getByRole('button', { name: 'Release 1 cell' })
+    expect(face).toBeEnabled()
+    expect(face.getAttribute('data-release-face')).toBe('cells')
+  })
+
+  it('refuses the cells face in a focused layer, in the cells’ own words', () => {
+    programmerScope.value = { kind: 'layer', layerId: 3 } as ProgrammerScope
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+    fireEvent.click(screen.getByTestId('cell'))
+    const face = screen.getByRole('button', { name: 'Release 1 cell' })
+    expect(face).toBeDisabled()
+    expect(face.getAttribute('title')).toMatch(/cannot be cleared from here/)
+  })
+})
+
 describe('FixturesListContainer — what a palette press lands on (venue-visit plan S1)', () => {
   const press = (key: string) => fireEvent.keyDown(window, { key })
-  type ToolbarParts = { paletteTargets: readonly { type: string; key: string }[]; targetFamilies: readonly string[] }
+  type ToolbarParts = { paletteTargets: readonly { type: string; key: string }[] }
 
-  function renderWithToolbar(): { parts: () => ToolbarParts } {
+  function renderWithToolbar(): { parts: () => ToolbarParts; store: MarqueeStore } {
     let last: ToolbarParts | null = null
     const renderToolbar = (parts: ToolbarParts) => {
       last = parts
       return null
     }
+    const store = createMarqueeStore()
     const props = { projectId: 1, grouped: false, selectionScope: 'programmer' as const, showOwnership: true, renderToolbar }
-    const { rerender } = render(<FixturesListContainer {...props} />)
+    const wrap = (node: ReactNode) => <MarqueeStoreContext.Provider value={store}>{node}</MarqueeStoreContext.Provider>
+    const { rerender } = render(wrap(<FixturesListContainer {...props} />))
     // Open the pixel bar so its cells have rows, then select one cell alone.
     rowSelection.ids = new Set(['fixture:c'])
-    rerender(<FixturesListContainer {...props} />)
+    rerender(wrap(<FixturesListContainer {...props} />))
     press('ArrowRight')
     rowSelection.ids = new Set(['element:fixture:c:c.pixel-0'])
-    rerender(<FixturesListContainer {...props} />)
-    return { parts: () => last! }
+    rerender(wrap(<FixturesListContainer {...props} />))
+    return { parts: () => last!, store }
   }
 
   it('sends a cell by its element key and offers the families the cell can take', () => {
-    const { parts } = renderWithToolbar()
+    const { parts, store } = renderWithToolbar()
     expect(parts().paletteTargets).toEqual([{ type: 'fixture', key: 'c.pixel-0' }])
     // The cell's own colour: keyed by fixture alone, the map dropped the cell and offered nothing.
-    expect(parts().targetFamilies).toEqual(['COLOUR'])
+    expect(store.get()?.press.targetFamilies).toEqual(['COLOUR'])
   })
 })

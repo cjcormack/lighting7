@@ -1,3 +1,4 @@
+import { Filter } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
@@ -20,6 +21,25 @@ export interface SelectionMaskPillProps {
   className?: string
   /** A test handle the host's pill has always carried — `data-rig-family`, `data-pad-family`. */
   marker?: string
+  /**
+   * The face's words: whole (`Colour`), abbreviated (`Col`) or the glyph alone — the programmer's
+   * row C at its narrower rungs. Default whole.
+   */
+  display?: 'full' | 'short' | 'icon'
+}
+
+const SHORT_FAMILY: Record<AttributeFamily, string> = {
+  INTENSITY: 'Int',
+  COLOUR: 'Col',
+  POSITION: 'Pos',
+  BEAM: 'Beam',
+}
+
+/** A mask's words at a rung: `Colour · Beam`, `Col · Beam`. */
+export function maskWords(families: readonly AttributeFamily[], display: 'full' | 'short'): string {
+  return display === 'full'
+    ? formatFamilyList(families, ' · ')
+    : families.map((family) => SHORT_FAMILY[family]).join(' · ')
 }
 
 /**
@@ -40,9 +60,9 @@ export interface SelectionMaskPillProps {
  * rows-only click still move the mask from the grid, and the draft follows them as a write from
  * elsewhere.
  */
-export function SelectionMaskPill({ families, onChange, tone, className, marker }: SelectionMaskPillProps) {
+export function SelectionMaskPill({ families, onChange, tone, className, marker, display = 'full' }: SelectionMaskPillProps) {
   const masked = families != null && families.length > 0
-  const label = masked ? formatFamilyList(families, ' · ') : 'All'
+  const label = masked ? maskWords(families, display === 'short' ? 'short' : 'full') : 'All'
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -66,7 +86,7 @@ export function SelectionMaskPill({ families, onChange, tone, className, marker 
                 : 'All attributes — click to mask the selection to some of them.'
             }
           >
-            {label}
+            {display === 'icon' ? <Filter className="size-3" aria-label={`Mask: ${label}`} /> : label}
           </button>
         </Badge>
       </PopoverTrigger>

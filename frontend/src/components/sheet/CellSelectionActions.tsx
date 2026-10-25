@@ -5,8 +5,8 @@ import { WORD_CLASS } from './toolbarFolds'
 import type { CellActionCopy, CellKeyboardPermission } from './cellEntry'
 
 /**
- * The selection bar's verbs for a **cell** selection: Set, Clear, Spread — and on the programmer,
- * *Release n* after Spread (the [release] slot).
+ * The selection bar's verbs for a **cell** selection: Set, Clear, Spread. The programmer's row C
+ * draws its own (`ProgrammerSelectionVerbs`), where Clear and Release are one split button.
  *
  * Set and Clear are the marquee's two keys with a button on them — Enter and Backspace — and they
  * exist because a phone has neither, and because a released drag no longer opens an editor by
@@ -36,7 +36,6 @@ export function CellSelectionActions({
   onClear,
   onRefused,
   spread,
-  release,
 }: {
   copy: CellActionCopy
   /** Whether Set and Clear are offered — the keyboard's own gate, read here so the two agree. */
@@ -60,11 +59,6 @@ export function CellSelectionActions({
   onRefused?: () => void
   /** The surface's Spread panel, or nothing where the surface has no column that spreads. */
   spread?: ReactNode
-  /**
-   * After Spread: the programmer's *Release n* over the selection's rows (fixture-fx-sheets plan
-   * D18) — a surface verb like Spread, so a slot rather than a component drawn here.
-   */
-  release?: ReactNode
 }) {
   return (
     <>
@@ -92,7 +86,6 @@ export function CellSelectionActions({
         <span className={WORD_CLASS}>Clear</span>
       </Button>
       {spread}
-      {release}
     </>
   )
 }

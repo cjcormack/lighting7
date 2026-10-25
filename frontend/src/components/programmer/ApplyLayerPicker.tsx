@@ -4,7 +4,7 @@ import { useMarquee } from '@/components/fixtures-list/marqueeContext'
 
 /**
  * The Stack table's *+ Look or palette*: the one picker on the window's selection (apply-model plan
- * §4.6) — the strip's targets and the marquee's families, an unlinked window's own included — so a
+ * §4.6) — the heads a press lands on and the marquee's families, an unlinked window's own included — so a
  * press from the table lands where a press from row C would, with the same gestures. Mounted only
  * while open: its pair is a marquee subscription, which a shut picker must not hold.
  */

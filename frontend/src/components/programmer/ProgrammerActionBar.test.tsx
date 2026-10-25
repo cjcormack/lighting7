@@ -46,6 +46,21 @@ const sheets = {
 }
 vi.mock('./ProgrammerSheets', () => ({ useProgrammerSheets: () => sheets }))
 
+/** What the grid's marquee publishes — the pair *A new palette* records over. */
+const marquee = vi.hoisted(() => ({
+  press: null as null | { targets: { type: string; key: string }[]; askedFamilies: string[] | null },
+}))
+vi.mock('@/components/fixtures-list/marqueeContext', () => ({
+  useMarquee: () =>
+    marquee.press == null ? null : { press: { ...marquee.press, targetFamilies: [], targetEmitters: [] } },
+}))
+vi.mock('./NewPaletteFromSelectionSheet', () => ({
+  NewPaletteFromSelectionSheet: (props: { open: boolean; targets: unknown[]; families: string[] | null }) =>
+    props.open ? (
+      <div data-testid="new-palette" data-targets={JSON.stringify(props.targets)} data-families={JSON.stringify(props.families)} />
+    ) : null,
+}))
+
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
 import { ProgrammerActionBar, clearSentence, recordMenuLabel } from './ProgrammerActionBar'
 
@@ -70,6 +85,7 @@ afterEach(() => {
   heldScenery = 0
   layers = []
   venue.isVenue = false
+  marquee.press = null
   resetProgrammerFadeStore()
 })
 
@@ -182,6 +198,36 @@ describe('ProgrammerActionBar', () => {
     expect(screen.getByText('An existing cue…')).toBeTruthy()
     // NOT a predicted "becomes Q4.5" — the server assigns the number.
     expect(screen.queryByText(/Q4\.5/)).toBeNull()
+  })
+
+  it('offers A new palette from the selection, opening the sheet with its heads and asked families', () => {
+    summary = { ...summary, entryCount: 2 }
+    marquee.press = { targets: [{ type: 'fixture', key: 'a' }, { type: 'fixture', key: 'b' }], askedFamilies: ['COLOUR'] }
+    render(<ProgrammerActionBar projectId={1} />)
+    openRecordMenu()
+    expect(screen.getByText('From the selection’s 2 heads')).toBeTruthy()
+    fireEvent.click(screen.getByText('A new palette'))
+    const sheet = screen.getByTestId('new-palette')
+    expect(JSON.parse(sheet.dataset.targets!)).toEqual(marquee.press.targets)
+    expect(JSON.parse(sheet.dataset.families!)).toEqual(['COLOUR'])
+  })
+
+  it('disables A new palette, saying why, with nothing selected', () => {
+    summary = { ...summary, entryCount: 2 }
+    render(<ProgrammerActionBar projectId={1} />)
+    openRecordMenu()
+    expect(screen.getByText('Select heads first')).toBeTruthy()
+    expect(screen.getByText('A new palette').closest('[role="menuitem"]')).toHaveAttribute('data-disabled')
+  })
+
+  it('opens Record ▾ for A new palette on an empty programmer, the record destinations off', () => {
+    marquee.press = { targets: [{ type: 'fixture', key: 'a' }], askedFamilies: null }
+    render(<ProgrammerActionBar projectId={1} />)
+    expect(screen.getByRole('button', { name: 'Record' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Record destination' })).toBeEnabled()
+    openRecordMenu()
+    expect(screen.getByText('A new Look').closest('[role="menuitem"]')).toHaveAttribute('data-disabled')
+    expect(screen.getByText('A new palette').closest('[role="menuitem"]')).not.toHaveAttribute('data-disabled')
   })
 
   it('omits the update-this-cue destination when nothing is included', () => {

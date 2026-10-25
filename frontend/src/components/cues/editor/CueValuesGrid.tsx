@@ -62,7 +62,7 @@ const ALL_COLUMNS: readonly ColumnKey[] = COLUMN_DEFS.map((d) => d.key)
  *   holds an own row on — drawn and edited there, as one group row. *+ Fixtures…* adds a fixture
  *   or a group, *Whole rig* lists every fixture, *Own only* narrows to the rows the cue holds itself.
  * - **It sends nothing** (P2). The grid mounts none of the surfaces that reach the rig or the desk —
- *   no desk-selection bridge, no Release, Locate or Highlight, no palette strip, no effect sweep on
+ *   no desk-selection bridge, no heads chip, no Release, Locate or Highlight, no effect sweep on
  *   ⌫, no live writer: its `EditorContext` is the `cue` arm, whose writers land in the store and
  *   have no live fallback, and its rows and selection are the editor's (`CueValuesView`), never the
  *   desk's. It draws nothing outside a `CueRowStoreProvider` and a `CueValuesViewProvider`.

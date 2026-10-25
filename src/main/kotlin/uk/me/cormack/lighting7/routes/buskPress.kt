@@ -48,7 +48,7 @@ internal const val CODE_PALETTE_NEEDS_SELECTION = "PALETTE_NEEDS_SELECTION"
  * (solo off) has no siblings at all.
  *
  * The engine's rules do not move here: `/palettes/{id}/toggle` and `/looks/{id}/toggle` remain
- * for the programmer's palette strip and the AI, with no solo siblings. A palette's family
+ * for the programmer's doors (Set's Palettes band, the picker) and the AI, with no solo siblings. A palette's family
  * replacement (apply-model D2) is `toggle`'s own, so it runs through every door alike.
  */
 internal fun Route.routeApiRestBuskPress(state: State) {

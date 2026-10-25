@@ -61,7 +61,7 @@ import type { CueTarget } from "@/api/cuesApi"
  * **busk page** under *Desk*, which already holds the encoder bank.
  *
  * **Chips are grouped by family inside a row**, with a hairline between groups — intensity,
- * position, colour, beam, then the actions — `PaletteStrip`'s split, sideways. It is what keeps a
+ * position, colour, beam, then the actions. It is what keeps a
  * fixture row legible now that a colour is **four chips** (hue, hue fine, sat, bright: one per
  * `ColourAxis`, each carrying its axis on the target and its own swatch) and the bundled emitters
  * (white, amber, UV) sit beside them as faders of their own. `groupChipsByFamily` is the pure half.
@@ -254,7 +254,7 @@ function ChipButton({
   )
 }
 
-/** `PaletteStrip`'s hairline, verbatim: drawn between two chip groups, never at an end. */
+/** A hairline between two chip groups, never at an end. */
 function Hairline() {
   return <span aria-hidden data-testid="chip-hairline" className="mx-0.5 h-5 w-px shrink-0 bg-border" />
 }

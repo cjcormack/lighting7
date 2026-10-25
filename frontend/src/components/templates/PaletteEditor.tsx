@@ -90,7 +90,7 @@ import {
  * Three things this editor deliberately does not do:
  *
  *  - **It does not create a per-fixture template.** Eight heads aimed at one spot is a *recording* —
- *    the values come from where the heads actually are — so it comes from the programmer's strip.
+ *    the values come from where the heads actually are — so it comes from the programmer's Record ▾ → *A new palette*.
  *    Opening one here edits its name, notes and fade, and lists its values read-only, which is the
  *    same stance `LookDetailSheet` takes and for the same reason: there is no authoring gesture that
  *    would improve on re-recording from the rig.

@@ -17,6 +17,7 @@ import { useCreateProjectMutation, useProjectListQuery } from "./store/projects"
 import { useSeatingPresetsQuery } from "./store/venues"
 import { publishedDate } from "./lib/venue"
 import type { ProjectDetail, ProjectSummary } from "./api/projectApi"
+import { plural } from "@/lib/plural"
 
 /** The Venue select's "none": a standalone show, which holds its whole rig as every project did. */
 const NO_VENUE = "none"
@@ -204,10 +205,6 @@ function versionLine(venue: ProjectSummary, note: string | null | undefined): st
   return [`v${s.version} latest`, s.publishedAt ? publishedDate(s.publishedAt) : null, note ? `“${note}”` : null]
     .filter(Boolean)
     .join(" · ")
-}
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`
 }
 
 /** *What the show starts with*: the venue's rig, referenced; what the show adds, its own. */

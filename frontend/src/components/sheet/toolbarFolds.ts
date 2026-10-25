@@ -20,50 +20,30 @@
  * the cue sheet — a 1100px fold folded every word at once on an ordinary 1160px window, with
  * nothing to give the room to; those keep their words down to `sm`.
  *
+ * The programmer's row C is the one bar with a third arm: it carries no strip, and lays its verbs out
+ * in clusters (`SelectionBar`'s `clusters`, `data-clusters`), so its words keep their place to 800
+ * rather than 1100 and fold there with the rest of that row.
+ *
  * Every list has the bar's `@container` above row C since the list shell (CLAUDE.md §List shell);
  * the container is the bar's wrapper on every list, never the page.
  */
-export const WORD_CLASS = 'hidden sm:inline group-data-[strip]/bar:@max-[1100px]:hidden'
+export const WORD_CLASS =
+  'hidden sm:inline group-data-[strip]/bar:@max-[1100px]:hidden group-data-[clusters]/bar:@max-[800px]:hidden'
 
 /**
- * Where Locate, Highlight and Spread go on a phone-width programmer bar, and Deselect does not.
- * Set and Clear stay too — see `CellSelectionActions`.
- *
- * `PD-SELECTION-BAR-DENSITY` and `PD-CLEAR-SELECTION-TOUCH`, decided together because they pull
- * against each other: the chips are the only thing on that row an operator presses, so the width
- * goes to them, and the one control the row keeps at every width is the one a phone has no other
- * way to do — Escape is a key, and "click off" needs empty grid space a full list has none of.
- * This is what the `Phone` artboard draws: glyph · count · chips · New · X. The three folded here
- * are not lost — Locate and Highlight are on the busk target band, and Spread comes back with the
- * width.
- *
- * Same container rule as `WORD_CLASS`: the bar's wrapper is the container on every list, the two
- * plain routes included. `@[600px]` is the bar's phone arm — the threshold row B's key button
- * already uses for "this grid column is a phone's".
- *
- * Exported because the programmer's `SelectionBar` folds its own counts and badge at the same
- * width: one constant, so the two halves of one row cannot fold at different thresholds. The
- * import runs this way round — the bar already depends on this toolbar, never the reverse.
+ * A selection bar's **phone arm**: what folds below `@[600px]` of the bar — the counts' family badge,
+ * a cell selection's Spread — while Set, Clear and Deselect stay, because Enter, Backspace and
+ * Escape are keys a phone has not got (`PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH`).
+ * `@[600px]` is the threshold row B's key button already uses for "this grid column is a phone's".
+ * The programmer's row C measures its rungs instead (`programmer/rowCBand.ts`).
  */
 export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
 
 /**
- * Where **Locate and Highlight** go on a bar with a strip, which is earlier than everything else
- * on the row — the same `data-strip` gate as [WORD_CLASS], and for the same reason.
- *
- * The template row needs the width. `All · n` and `New` are fixed, the chips are what an operator
- * presses, and an iPad portrait's row C is ~800px — enough for two recent chips once these two
- * buttons and the fixture count have gone, and enough for none while they are there.
- *
- * They are the right two to lose first because neither is lost: both are on the busk view's target
- * band, and both are momentary aids rather than gestures the grid depends on — unlike Set, Clear
- * and Deselect, which stay at every width because Enter, Backspace and Escape are keys a phone has
- * not got. Spread keeps the 600 fold: it is a cell verb like the two beside it, and folding it earlier
- * would break up a group of three.
- *
- * Same container rule as [PHONE_FOLDED_CLASS] — the bar's wrapper, on every list. The bare form
- * folds the bar's own counts; Locate and Highlight take [STRIP_MID_FOLDED_CLASS] instead, because
- * on a bar with nothing riding it that toolbar is the only place those two verbs exist.
+ * Where a bar's own **row count** folds beside a cell count, whose hover carries it — and, gated on
+ * a strip ([STRIP_MID_FOLDED_CLASS]), where a sheet's Locate and Highlight give the strip their
+ * width. Both are momentary aids rather than gestures the grid depends on, so they are the right
+ * two to lose first. Same container rule as [PHONE_FOLDED_CLASS].
  */
 export const MID_FOLDED_CLASS = '@max-[800px]:hidden'
 
@@ -83,3 +63,6 @@ export const STRIP_MID_FOLDED_CLASS = 'group-data-[strip]/bar:@max-[800px]:hidde
  * gestures a phone has no key for (`CellSelectionActions`), and they are what a marquee is for.
  */
 export const ROW_VERB_WORD_CLASS = 'hidden sm:inline @max-[1100px]:hidden'
+
+/** The ShowBar's key-cap styling, so every key hint on a selection bar reads as one vocabulary. */
+export const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'

@@ -1,21 +1,20 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 
 /**
- * Row C's phone arm (`PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH`).
+ * Row C, the programmer's arm (programmer-toolbar plan D3–D5, D12) and the plain lists' arm.
  *
- * jsdom evaluates no container query, so what is pinned is *which* element carries the fold
- * class — the head count and the family badge do, the cell count does not. The Deselect is the
- * toolbar's (`selection`) whichever shape the selection is in, since rows and cells became one
- * selection; this bar drew a second X for the cells-only case until then.
+ * jsdom measures nothing, so the row's rung (`rowCBand.ts`) is set through the measuring hook; the
+ * container-query word folds are pinned by the class they carry.
  */
-vi.mock('./PaletteStrip', () => ({ PaletteStrip: () => <div data-testid="strip" /> }))
 const shortViewport = vi.hoisted(() => ({ current: false }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => shortViewport.current }))
-// The desk chip's readers: the desk's fact and this tab's name; follow/local is the real store.
+const measured = vi.hoisted(() => ({ band: 0 }))
+vi.mock('@/hooks/useContainerBand', () => ({ useContainerBand: () => [() => {}, measured.band] }))
 const desk = vi.hoisted(() => ({
   snapshot: { targets: [], families: null, source: null } as DeskSelectionSnapshot,
   /** Every mask the pill wrote, in order — the bridge's `remask` argument. */
@@ -25,47 +24,87 @@ vi.mock('@/store/selection', async () => {
   const { unlinkFromDesk, useDeskFollow } = await import('@/lib/deskFollow')
   return {
     useDeskSelectionSnapshot: () => desk.snapshot,
-    // The badge's press (desk-follow D11): the desk's fact as this window's own.
     unlinkFromDeskNow: () => unlinkFromDesk({ targets: desk.snapshot.targets, families: desk.snapshot.families }),
-    // The press mask: the desk's while following, the marquee's own when not — the real rule, over
-    // the mocked snapshot and the real (subscribed) follow store.
-    usePressFamilies: (local: AttributeFamily[] | null) =>
-      useDeskFollow() ? desk.snapshot.families : local,
+    usePressFamilies: (local: AttributeFamily[] | null) => (useDeskFollow() ? desk.snapshot.families : local),
   }
 })
-vi.mock('@/lib/windowIdentity', () => ({ useWindowName: () => 'Screen 1' }))
-// The chip resolves "this window" through the windows registry now; an empty registry means it
-// falls back to comparing names, which is what these tests were written against.
-vi.mock('@/store/windows', () => ({ useDeskWindows: () => [], thisWindowRow: () => null }))
+// The chip's store-connected pieces have suites of their own.
+vi.mock('@/components/fixtureColours/SelectByColour', () => ({ SelectByColourSub: () => null }))
+const rig = vi.hoisted(() => ({ wordClass: null as string | null }))
+vi.mock('@/components/fixtures-list/SelectionToolbar', () => ({
+  LocateHighlightButtons: ({ wordClass }: { wordClass: string }) => {
+    rig.wordClass = wordClass
+    return <span data-testid="locate-highlight" />
+  },
+  useLocateSelection: () => ({ allLocated: false, locateSelection: () => {} }),
+}))
+vi.mock('@/hooks/useStoredLocateActions', () => ({
+  useStoredLocateActions: () => ({ busy: false, projectId: 1, storeFromCurrent: () => {}, clearLocate: () => {} }),
+}))
+vi.mock('@/components/fixtureSheet/useRelease', () => ({ useReleaseTargets: () => async () => {} }))
 
 const { SelectionBar } = await import('./SelectionBar')
+const { ProgrammerSelectionVerbs } = await import('./ProgrammerSelectionVerbs')
 import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from '@/components/sheet/toolbarFolds'
 import type { DeskSelectionSnapshot } from '@/api/selectionApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import { isFollowingDesk, resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
+import { resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
 
 const CELLS: CellRef<ColumnKey>[] = [
   { rowId: 'fixture:a', col: 'colour' },
   { rowId: 'fixture:b', col: 'colour' },
 ]
+const TWO = [
+  { type: 'fixture' as const, key: 'a' },
+  { type: 'fixture' as const, key: 'b' },
+]
+const BANDS = { desk: 0, lap: 1, tab: 2, phone: 3 }
+
+const NONE = { targets: [], onSubselect: vi.fn(), onSelectTargets: vi.fn(), onDeselect: vi.fn(), locateTargets: [], writeTargets: [] }
+
+const heads = {
+  targets: TWO,
+  onSubselect: vi.fn(),
+  onSelectTargets: vi.fn(),
+  onDeselect: vi.fn(),
+  locateTargets: TWO,
+  writeTargets: [],
+}
+
+function verbs(cells: number): ReactNode {
+  return (
+    <ProgrammerSelectionVerbs
+      heads={2}
+      cells={cells}
+      set={{
+        title: 'Set',
+        enabled: true,
+        setRef: () => {},
+        onSet: () => {},
+        families: ['INTENSITY', 'COLOUR'],
+        onSetFamily: () => {},
+      }}
+      fan={<button type="button">Fan</button>}
+      release={{ targets: [], heads: 2, onReleaseCells: () => {}, cellsTitle: 'Clear' }}
+      locateTargets={TWO}
+      writeTargets={[]}
+    />
+  )
+}
 
 function bar(over: Partial<React.ComponentProps<typeof SelectionBar>> = {}) {
+  const cells = over.cells ?? CELLS
   return (
     <SelectionBar
       projectId={1}
-      selection={null}
-      cells={CELLS}
+      selection={verbs(cells.length)}
+      cells={cells}
       cellEntryKey={false}
       cellClearKey={false}
-      paletteTargets={[
-        { type: 'fixture', key: 'a' },
-        { type: 'fixture', key: 'b' },
-      ]}
-      targetFamilies={['COLOUR']}
-      targetEmitters={[]}
+      paletteTargets={TWO}
       marqueeDragging={false}
-      // The list's desk bridge: what it publishes is `useDeskSelectionBridge.test.tsx`'s to pin.
       onRemask={(families) => desk.masks.push(families == null ? null : [...families])}
+      heads={heads}
       {...over}
     />
   )
@@ -73,6 +112,8 @@ function bar(over: Partial<React.ComponentProps<typeof SelectionBar>> = {}) {
 
 beforeEach(() => {
   shortViewport.current = false
+  measured.band = BANDS.desk
+  rig.wordClass = null
   desk.snapshot = { targets: [], families: null, source: null }
   desk.masks = []
 })
@@ -82,226 +123,155 @@ afterEach(() => {
   resetDeskFollowStores()
 })
 
-describe('SelectionBar', () => {
-  it('folds the head count at 800 and the family badge at 600, and keeps the cell count', () => {
+function follows(a: Element, b: Element): boolean {
+  return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+}
+
+describe('the programmer’s row C', () => {
+  it('reads which heads, what to do to them, and where they are on the rig — left to right', () => {
     desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
+    const { container } = render(bar())
+    const chip = container.querySelector('[data-heads-chip]')!
+    const mask = screen.getByRole('button', { name: 'Colour' })
+    const set = screen.getByRole('button', { name: 'Set' })
+    const fan = screen.getByRole('button', { name: 'Fan' })
+    const release = container.querySelector('[data-release-selection]')!
+    const rigVerbs = screen.getByTestId('locate-highlight')
+    expect(follows(chip, mask) && follows(mask, set) && follows(set, fan) && follows(fan, release)).toBe(true)
+    expect(follows(release, rigVerbs)).toBe(true)
+    // The last cluster is pushed to the right edge: the verbs take the row's slack.
+    expect(container.querySelector('[data-clusters]')).not.toBeNull()
+  })
+
+  it('counts heads and cells on the chip, and has no separate desk chip, hints or strip', () => {
     render(bar())
-    // The count goes early, with Locate and Highlight, because that is what buys the template row
-    // its chips on an iPad portrait; the badge is a phone-arm fold like the rest of the bar.
-    expect(screen.getByText('2 heads')).toHaveClass(MID_FOLDED_CLASS)
-    expect(screen.getByText('2 heads')).not.toHaveClass(PHONE_FOLDED_CLASS)
-    // The pill is the picker's button while following; the fold is on the slot it sits in.
-    expect(screen.getByText('Colour').parentElement).toHaveClass(PHONE_FOLDED_CLASS)
-    expect(screen.getByText('2 cells')).not.toHaveClass(MID_FOLDED_CLASS)
-    expect(screen.getByText('2 cells')).not.toHaveClass(PHONE_FOLDED_CLASS)
+    expect(screen.getByText('2 heads · 2 cells')).toBeInTheDocument()
+    expect(screen.queryByText('edit')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Following the desk selection/ })).not.toBeInTheDocument()
   })
 
-  it('keeps the head count at every width when it is the only count', () => {
-    // Rows selected and no cells: the row toolbar is there, and the count is the only one.
-    render(bar({ cells: [], selection: <button type="button">Deselect all</button> }))
-    expect(screen.getByText('2 heads')).not.toHaveClass(MID_FOLDED_CLASS)
-    expect(screen.getByText('2 heads')).not.toHaveClass(PHONE_FOLDED_CLASS)
+  it('counts the heads alone over rows', () => {
+    render(bar({ cells: [] }))
+    expect(screen.getByText('2 heads')).toBeInTheDocument()
   })
 
-  it('says the head count on the cell count’s hover, since the phone shows it nowhere else', () => {
-    render(bar())
-    expect(screen.getByText('2 cells')).toHaveAttribute(
-      'title',
-      expect.stringMatching(/^2 heads · /),
-    )
-  })
-
-  it('draws no Deselect of its own — the toolbar carries it for cells and rows alike', () => {
-    render(bar({ selection: <button type="button">Deselect all</button> }))
-    expect(screen.queryByRole('button', { name: 'Deselect cells' })).not.toBeInTheDocument()
-    expect(screen.getByText('Deselect all')).toBeInTheDocument()
-  })
-
-  it('draws no Deselect of its own with nothing selected', () => {
-    render(bar({ cells: [], paletteTargets: [] }))
-    expect(screen.queryByRole('button', { name: /Deselect/ })).not.toBeInTheDocument()
+  it('says Nothing selected on the chip, with the way to select, when there is no selection', () => {
+    render(bar({ cells: [], paletteTargets: [], selection: null, heads: NONE }))
     expect(screen.getByText('Nothing selected')).toBeInTheDocument()
+    expect(screen.getByText(/Drag across cells, or narrow from the heads menu/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Deselect' })).not.toBeInTheDocument()
   })
 
-  /**
-   * The family pill is the mask the next press carries (multi-screen plan D4): the desk's while
-   * following — even over a row-only selection, which is how the bridge lands another window's
-   * mask — and the marquee's own when unlinked. The plain lists keep the marquee's reading.
-   */
-  describe('the family pill', () => {
+  describe('across widths (D12)', () => {
+    it('puts ⏎ on Set and ⌫ on Release, and words on Locate and Highlight, from 1100', () => {
+      render(bar())
+      expect(screen.getByRole('button', { name: 'Set' })).toHaveTextContent('⏎')
+      expect(screen.getByRole('button', { name: 'Release 2 cells' })).toHaveTextContent('⌫')
+      expect(rig.wordClass).toBe('inline')
+    })
+
+    it('drops the keys and Locate’s and Highlight’s words from 800 to 1099', () => {
+      measured.band = BANDS.lap
+      render(bar())
+      expect(screen.getByRole('button', { name: 'Set' })).not.toHaveTextContent('⏎')
+      expect(screen.getByRole('button', { name: 'Release 2 cells' })).not.toHaveTextContent('⌫')
+      expect(rig.wordClass).toBe('hidden')
+      expect(screen.getByText('2 heads · 2 cells')).toBeInTheDocument()
+    })
+
+    it('abbreviates the mask from 600 to 799', () => {
+      measured.band = BANDS.tab
+      desk.snapshot = { targets: [], families: ['COLOUR', 'BEAM'], source: null }
+      render(bar())
+      expect(screen.getByRole('button', { name: 'Col · Beam' })).toBeInTheDocument()
+    })
+
+    it('on a phone: cells alone on the chip, no ×, the mask a glyph, and Locate and Highlight off the row', () => {
+      measured.band = BANDS.phone
+      desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
+      render(bar())
+      expect(screen.getByText('2 cells')).toBeInTheDocument()
+      expect(screen.queryByText('2 heads · 2 cells')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Deselect' })).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Mask: Colour')).toBeInTheDocument()
+      expect(screen.queryByTestId('locate-highlight')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('the mask', () => {
     it('reads the desk’s mask while following, over rows with no cells', () => {
       desk.snapshot = { targets: [], families: ['POSITION'], source: { kind: 'window', name: 'Screen 2' } }
-      render(bar({ cells: [], selection: <button type="button">Deselect all</button> }))
-      expect(screen.getByText('Position')).toBeInTheDocument()
+      render(bar({ cells: [] }))
+      expect(screen.getByRole('button', { name: 'Position' })).toBeInTheDocument()
     })
 
     it('reads All while following an unmasked desk, whatever the marquee names', () => {
-      desk.snapshot = { targets: [], families: null, source: null }
       render(bar())
-      expect(screen.queryByText('Colour')).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument()
     })
 
-    it('reads the marquee’s own families once unlinked', () => {
+    it('is a reading of the marquee’s own families once unlinked', () => {
       desk.snapshot = { targets: [], families: ['POSITION'], source: null }
-      unlinkFromDesk({ targets: [], families: null })
-      render(bar())
-      expect(screen.getByText('Colour')).toBeInTheDocument()
-      expect(screen.queryByText('Position')).not.toBeInTheDocument()
-    })
-
-    it('reads the marquee’s families on the plain lists, which never bridge', () => {
-      desk.snapshot = { targets: [], families: ['POSITION'], source: null }
-      render(bar({ projectId: undefined }))
-      expect(screen.getByText('Colour')).toBeInTheDocument()
-    })
-  })
-
-  /**
-   * The pill is the mask's picker while this window follows the desk (apply-model plan D3, §4.4):
-   * S10's `MaskToggles` through `useMaskDraft`, each real change handed to the list's desk bridge
-   * (`remask`), which writes `selection.setFamilies`, the heads kept. The draft holds what the
-   * selection cannot — all four ticked with the switch off, and nothing ticked — and writes only a
-   * real change.
-   */
-  describe('the family pill as a picker', () => {
-    function openPill(name: string) {
-      fireEvent.click(screen.getByRole('button', { name }))
-      return screen.getByRole('switch', { name: 'All attributes' })
-    }
-
-    it('writes the new families on a change, and nothing for switching All attributes off', () => {
-      desk.snapshot = { targets: [{ type: 'fixture', key: 'a' }], families: null, source: null }
-      render(bar({ cells: [], selection: <button type="button">Deselect all</button> }))
-      fireEvent.click(openPill('All'))
-      // Off ticks all four: the same mask as none, so nothing is written yet.
-      expect(desk.masks).toEqual([])
-      fireEvent.click(screen.getByLabelText('Beam'))
-      expect(desk.masks).toEqual([['INTENSITY', 'POSITION', 'COLOUR']])
-    })
-
-    it('clears the mask with All attributes', () => {
-      desk.snapshot = { targets: [{ type: 'fixture', key: 'a' }], families: ['COLOUR'], source: null }
-      render(bar())
-      fireEvent.click(openPill('Colour'))
-      expect(desk.masks).toEqual([null])
-    })
-
-    it('writes nothing for nothing ticked, and says the selection keeps its mask', () => {
-      desk.snapshot = { targets: [{ type: 'fixture', key: 'a' }], families: ['COLOUR'], source: null }
-      render(bar())
-      openPill('Colour')
-      fireEvent.click(screen.getByLabelText('Colour'))
-      expect(desk.masks).toEqual([])
-      expect(screen.getByText(/Pick at least one attribute\. The selection stays Colour\./)).toBeInTheDocument()
-    })
-
-    it('writes all four ticked back as no mask, leaving the switch off', () => {
-      desk.snapshot = { targets: [{ type: 'fixture', key: 'a' }], families: ['INTENSITY', 'POSITION', 'COLOUR'], source: null }
-      render(bar())
-      const allSwitch = openPill('Intensity · Position · Colour')
-      fireEvent.click(screen.getByLabelText('Beam'))
-      expect(desk.masks).toEqual([null])
-      expect(allSwitch).toHaveAttribute('aria-checked', 'false')
-    })
-
-    it('stays a reading once unlinked — the marquee’s columns are the only mask there is', () => {
-      // An unlinked list does not bridge, so it hands the bar no write.
       unlinkFromDesk({ targets: [], families: null })
       render(bar({ onRemask: null }))
       expect(screen.queryByRole('button', { name: 'Colour' })).not.toBeInTheDocument()
       expect(screen.getByText('Colour')).toBeInTheDocument()
+      expect(screen.queryByText('Position')).not.toBeInTheDocument()
     })
 
-    it('stays a reading on the plain lists', () => {
-      render(bar({ projectId: undefined, onRemask: null }))
-      expect(screen.queryByRole('button', { name: 'Colour' })).not.toBeInTheDocument()
-      expect(screen.getByText('Colour')).toBeInTheDocument()
+    it('is the picker while following, writing a real change through the bridge', () => {
+      desk.snapshot = { targets: [{ type: 'fixture', key: 'a' }], families: null, source: null }
+      render(bar({ cells: [] }))
+      fireEvent.click(screen.getByRole('button', { name: 'All' }))
+      fireEvent.click(screen.getByRole('switch', { name: 'All attributes' }))
+      expect(desk.masks).toEqual([])
+      fireEvent.click(screen.getByLabelText('Beam'))
+      expect(desk.masks).toEqual([['INTENSITY', 'POSITION', 'COLOUR']])
     })
   })
 
-  /**
-   * The desk chip (multi-screen plan §4, D7; desk-follow plan D8, revisiting busk-chrome D18):
-   * between the family pill and the strip, on the programmer only — the plain lists never bridge
-   * to the desk (D1), so a chip there would name a link that does not exist. While following it is
-   * the link badge, whose press unlinks (D11); once unlinked, the dashed *This window*, whose press
-   * is the way back. ⌘K and the Screens row can do either too, for another window.
-   */
-  describe('the desk chip', () => {
-    it('is the link badge while following — whoever moved the selection last — not the pill', () => {
-      desk.snapshot = { targets: [], families: null, source: { kind: 'window', name: 'Screen 2' } }
-      const first = render(bar())
-      expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
-      first.unmount()
-      desk.snapshot = { targets: [], families: null, source: { kind: 'surface', name: 'Control surface' } }
-      render(bar())
-      expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
-    })
-
-    it('draws the badge between the family pill and the strip, and with nothing selected', () => {
-      desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
-      const live = render(bar())
-      const badge = screen.getByRole('button', { name: 'Following the desk selection' })
-      expect(screen.getByText('Colour').compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(badge.compareDocumentPosition(screen.getByTestId('strip')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      live.unmount()
-      render(bar({ cells: [], paletteTargets: [] }))
-      expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
-    })
-
-    it('sits between the family pill and the strip, dashed, once unlinked', () => {
-      desk.snapshot = { targets: [], families: ['COLOUR'], source: null }
-      unlinkFromDesk({ targets: [], families: ['COLOUR'] })
-      render(bar())
-      const chip = screen.getByRole('button', { name: 'This window' })
-      expect(chip.className).toContain('border-dashed')
-      const pill = screen.getByText('Colour')
-      const strip = screen.getByTestId('strip')
-      expect(pill.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(chip.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    })
-
-    it('is drawn with nothing selected too', () => {
-      unlinkFromDesk({ targets: [], families: null })
-      render(bar({ cells: [], paletteTargets: [] }))
-      expect(screen.getByRole('button', { name: 'This window' })).toBeInTheDocument()
-    })
-
-    it('is not drawn on the plain lists, linked or not', () => {
-      const linked = render(bar({ projectId: undefined }))
-      expect(screen.queryByRole('button', { name: 'Following the desk selection' })).not.toBeInTheDocument()
-      linked.unmount()
-      unlinkFromDesk({ targets: [], families: null })
-      render(bar({ projectId: undefined }))
-      expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
-    })
-
-    it('unlinks on a press of the badge, taking the desk’s selection as its own (desk-follow D11)', () => {
-      desk.snapshot = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
-      render(bar())
-      fireEvent.click(screen.getByRole('button', { name: 'Following the desk selection' }))
-      expect(isFollowingDesk()).toBe(false)
-      expect(screen.getByRole('button', { name: 'This window' })).toBeInTheDocument()
-    })
-
-    it('follows the desk again on a click, and is then gone', () => {
-      unlinkFromDesk({ targets: [], families: null })
-      render(bar())
-      fireEvent.click(screen.getByRole('button', { name: 'This window' }))
-      expect(screen.queryByRole('button', { name: /Desk|This window/ })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
-    })
+  it('holds row C out of the flow on a short viewport until something is selected', () => {
+    shortViewport.current = true
+    const { container } = render(bar({ cells: [], paletteTargets: [], selection: null, heads: NONE }))
+    expect(container.querySelector('[data-heads-chip]')).toBeNull()
   })
 
   it('is a 40px line in both arms — the chrome system', () => {
-    // Rows A, B and C are all 40 with 32px controls, so the verbs on this bar sit at the same
-    // inset as the tools above them. It was 34, a 1px inset over 32px verbs and 26px chips.
     const live = render(bar())
-    expect(live.container.firstElementChild!.className).toContain('h-10')
-    expect(live.container.firstElementChild!.className).not.toContain('h-[34px]')
+    expect(live.container.querySelector('[data-clusters]')!.className).toContain('h-10')
     live.unmount()
-    const reserved = render(bar({ cells: [], paletteTargets: [] }))
-    expect(reserved.container.firstElementChild!.className).toContain('h-10')
+    const reserved = render(bar({ cells: [], paletteTargets: [], selection: null, heads: NONE }))
+    expect(reserved.container.querySelector('[data-heads-chip]')!.parentElement!.className).toContain('h-10')
+  })
+})
+
+describe('the plain lists’ row C', () => {
+  function plain(over: Partial<React.ComponentProps<typeof SelectionBar>> = {}) {
+    return bar({ projectId: undefined, heads: undefined, selection: <button type="button">Deselect all</button>, ...over })
+  }
+
+  it('folds the head count at 800 and the family badge at 600, and keeps the cell count', () => {
+    render(plain())
+    expect(screen.getByText('2 heads')).toHaveClass(MID_FOLDED_CLASS)
+    expect(screen.getByText('Colour')).toHaveClass(PHONE_FOLDED_CLASS)
+    expect(screen.getByText('2 cells')).not.toHaveClass(MID_FOLDED_CLASS)
+  })
+
+  it('keeps the head count at every width when it is the only count', () => {
+    render(plain({ cells: [] }))
+    expect(screen.getByText('2 heads')).not.toHaveClass(MID_FOLDED_CLASS)
+  })
+
+  it('says the head count on the cell count’s hover', () => {
+    render(plain())
+    expect(screen.getByText('2 cells')).toHaveAttribute('title', expect.stringMatching(/^2 heads · /))
+  })
+
+  it('reads the marquee’s families, which never bridge, and draws no heads chip or desk chip', () => {
+    desk.snapshot = { targets: [], families: ['POSITION'], source: null }
+    const { container } = render(plain())
+    expect(screen.getByText('Colour')).toBeInTheDocument()
+    expect(container.querySelector('[data-heads-chip]')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Following the desk|This window/ })).not.toBeInTheDocument()
   })
 })

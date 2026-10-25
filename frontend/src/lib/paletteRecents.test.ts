@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recentPalettes, stripPalettes } from './paletteRecents'
+import { recentPalettes } from './paletteRecents'
 import type { PaletteSummary } from '@/api/palettesApi'
 
 /**
@@ -79,7 +79,6 @@ describe('recentPalettes', () => {
       template({ id: 3, name: 'Rubbish', lastPressedAt: 'not a date' }),
     ]
     expect(recentPalettes(rows)).toEqual([])
-    expect(names(stripPalettes(rows))).toEqual(['Null', 'Absent', 'Rubbish'])
   })
 
   it('caps at the limit', () => {
@@ -102,25 +101,5 @@ describe('recentPalettes', () => {
     ]
     recentPalettes(rows)
     expect(names(rows)).toEqual(['Older', 'Newer'])
-  })
-})
-
-describe('stripPalettes', () => {
-  it('draws the first few by name when nothing has been pressed', () => {
-    const rows = Array.from({ length: 9 }, (_, i) => template({ id: i + 1, name: `T${i + 1}` }))
-    expect(names(stripPalettes(rows))).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8'])
-  })
-
-  it('is all or nothing: one recent draws one chip, not one plus seven by name', () => {
-    const rows = [
-      template({ id: 1, name: 'Never pressed' }),
-      template({ id: 2, name: 'Pressed', lastPressedAt: '2026-09-14T10:00:00.000Z' }),
-      template({ id: 3, name: 'Also never' }),
-    ]
-    expect(names(stripPalettes(rows))).toEqual(['Pressed'])
-  })
-
-  it('is empty for an empty library', () => {
-    expect(stripPalettes([])).toEqual([])
   })
 })
