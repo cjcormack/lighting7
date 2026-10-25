@@ -18,28 +18,46 @@ A plan this skill can run has a `## Sessions` table with the columns
 `Session | Title | Status | Branch | PR | Head SHA`, and one `### Session N — <title>` section per
 row. *Status* is `planned`, `in progress`, `in review` or `merged`.
 
-1. With `$ARGUMENTS`, use that file. Otherwise list `docs/plans/*-plan.md` (not `completed/`) whose
-   Sessions table has a row that is not `merged`. Exactly one: use it. None: say so and stop.
-   Several: ask which.
-2. Read the whole plan, its design record (the `*-design/INDEX.md` it links) and the root and
+1. `git fetch origin main`. With `$ARGUMENTS`, use that file. Otherwise list `docs/plans/*-plan.md`
+   (not `completed/`) on `origin/main` whose Sessions table has a row that is not `merged`. Exactly
+   one: use it. None: say so and stop. Several: ask which.
+2. **Find the sessions already in flight.** Main's table is not enough: a session's own row moves to
+   `in progress` and `in review` on its branch, so main reads `planned` until its PR merges, and a
+   second run would redo it. List the repo's **open** PRs (`gh pr list --state open --json
+   number,url,headRefName,baseRefName` where `gh` is installed, else the GitHub MCP's
+   `list_pull_requests` with `state: open`, loading its tools with ToolSearch; owner and repo from
+   `git remote get-url origin`). For each, `git fetch origin <headRefName>` and read the plan at
+   `origin/<headRefName>`. The PR is session *N*'s when that copy's row *N* is `in progress` or
+   `in review` with *Branch* equal to `<headRefName>`. Do the same for remote `claude/*` branches
+   ahead of main that touch the plan (`git log origin/main..origin/<b> -- <plan path>`) and have no
+   open PR: that is a run that pushed but never opened its PR.
+   - Two PRs or branches claim one session: stop, name them and ask which stands.
+   - A run in another container that has not pushed yet cannot be seen. If the operator says one
+     is going, wait for its PR.
+3. **The effective table** is main's, with each session found in step 2 overlaid from its own
+   branch: *Status* `in review` (`in progress` for a branch with no PR), *Branch*, *PR*, and
+   *Head SHA* that branch's head. The session to run is the **first effective row whose Status is
+   `planned` or `in progress`**. Every row before it must be `merged` or have an open PR: an
+   earlier row with a pushed branch but no PR, or a PR closed without merging, stops the run, since
+   sessions run in order. If the chosen row is `in progress`, an earlier run stopped part way: look
+   for its branch and any `REVIEW_STATE.md`, and if one exists, resume `/verified-ship` from it
+   (empty arguments) instead of starting again.
+4. Read the whole plan **at the base §2 picks** (the previous session's branch when stacking: it may
+   have corrected the plan), its design record (the `*-design/INDEX.md` it links) and the root and
    `frontend/` `CLAUDE.md`s.
-3. The session to run is the **first row whose Status is `planned` or `in progress`**. If an
-   earlier row has no PR, stop: sessions run in order. If that row is `in progress`, an earlier run
-   stopped part way: look for its branch and any `REVIEW_STATE.md`, and if one exists, resume
-   `/verified-ship` from it (empty arguments) instead of starting again.
 
 ## 2. Work out the base
 
-`git fetch origin main`, plus the previous session's branch when there is one.
-
 - **Session 1, or the previous session's PR is merged**: the base is `main`.
-- **The previous session's PR is open**: the base is its branch, at `origin/<branch>`'s head.
+- **The previous session's PR is open**: the base is its branch, at `origin/<branch>`'s head. The
+  PRs before it in the stack must be ancestors of that head (`git merge-base --is-ancestor`); if one
+  is not, the stack has forked, so stop and say which.
 - **The previous session's PR was closed without merging**, or its CI is red on its head: stop and
   say so. Stacking on a broken or abandoned base is the previous session's problem to settle first.
+  CI still running is not red; stack on it, and say so in §6.
 
-Read a PR's state with `gh pr view` where `gh` is installed. Otherwise use the GitHub MCP
-(`pull_request_read`, `list_pull_requests` with `head`), loading its tools with ToolSearch first.
-Take owner and repo from `git remote get-url origin`.
+Read a PR's state and checks with `gh pr view` / `gh pr checks` where `gh` is installed, else the
+GitHub MCP's `pull_request_read` (`get`, `get_check_runs`).
 
 ## 3. Cut the branch
 
@@ -47,15 +65,16 @@ Take owner and repo from `git remote get-url origin`.
   Otherwise use `claude/<plan slug>-s<N>`, the slug being the plan's file name without `-plan.md`.
 - If that branch already exists with commits the base lacks, and they are not this session's own
   earlier work (§1.3), stop and ask.
-- `git checkout -B <branch> origin/<base>`, or `git checkout -B <branch> main` after a fetch when the
-  base is `main`.
+- `git checkout -B <branch> origin/<base>` (`origin/main` when the base is `main`).
 
 ## 4. Book-keeping on the branch, before implementing
 
 Edit the plan's Sessions table in the working tree; these edits go into this session's commit:
 
-- The previous row: fill *PR* (a markdown link to the full URL) and *Head SHA* (its branch's head
-  as fetched, short form) if they are empty; set *Status* to `merged` if its PR has merged.
+- Every earlier row: bring it to the effective table (§1.3): fill *PR* (a markdown link to the full
+  URL) and *Head SHA* (its branch's head as fetched, short form) where they are empty, and set
+  *Status* to `merged` where its PR has merged. A stacked base's copy has the previous row at
+  `in review` with no PR, because that session opened its PR after committing.
 - This row: *Status* `in progress`, *Branch* the branch from §3.
 
 ## 5. Hand the session to `/verified-ship`
@@ -89,7 +108,7 @@ and the PR.
 
 Report the PR link, its base, whether the gate passed or what blocked it, and whether the full suite
 ran locally or is CI's to run. Nothing is merged. If the base is a previous session's branch, say
-that its PR has to merge first, and that GitHub moves this PR's base to `main` when that branch is
+whether that PR's CI was still running when this one stacked on it, that its PR has to merge first, and that GitHub moves this PR's base to `main` when that branch is
 deleted on merge; otherwise its base needs changing by hand.
 
 If a later commit lands on the previous session's branch (a review fix) before this PR merges,
