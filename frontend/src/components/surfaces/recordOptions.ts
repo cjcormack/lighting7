@@ -25,14 +25,6 @@ export interface RecordOption {
   label: string
   /** A second line for a list item — a Look's family summary, a pad's page and bank. */
   detail: string | null
-  /**
-   * Offered for context but not selectable — a Look with a deferred effect, whose `applyLook`
-   * press has no targets of its own. `SurfaceLibrary`'s drag chip already excludes one of these
-   * outright, by the same rule, to avoid the write boundary's `BINDING_LOOK_NEEDS_SELECTION`; the
-   * picker shows it (so "why isn't my Look here?" has an answer) but must not let it be chosen and
-   * saved, which would hit the same refusal through the other door.
-   */
-  disabled?: boolean
 }
 
 export interface RecordBindingOptions {
@@ -71,10 +63,7 @@ export function useRecordBindingOptions(projectId: number): RecordBindingOptions
       looks: (looks ?? []).map((look) => ({
         uuid: look.uuid,
         label: look.name,
-        // What an `applyLook` binding will actually do on a button, said where the choice is made:
-        // a deferred effect has no own targets, so the write boundary refuses it by name.
-        detail: look.hasDeferredFx ? "needs a selection — cannot go on a button" : null,
-        disabled: look.hasDeferredFx,
+        detail: null,
       })),
       palettes: (templates ?? []).map((template) => ({
         uuid: template.uuid,

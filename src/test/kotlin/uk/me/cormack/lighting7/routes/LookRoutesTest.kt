@@ -78,7 +78,6 @@ class LookRoutesTest : RouteIntegrationTest() {
         val summary = list.single { it.id == lookId }
         assertEquals(1, summary.rowCount)
         assertEquals(1, summary.fxCount)
-        assertFalse(summary.hasDeferredFx, "a Look effect names its own target")
 
         val fetched = client.get("${base()}/$lookId").body<LookDetails>()
         assertEquals("dimmer", fetched.rows.single().attribute)
@@ -569,7 +568,6 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
         val applied = on.body<ToggleLookResponse>()
         assertEquals("applied", applied.action, "nothing of it is Position, and it goes on all the same")
-        assertTrue(applied.skippedFamilies.isEmpty())
         assertNull(state.show.programmerStore.layers.single().attributeMask, "the press gives the layer no mask (D3)")
         assertEquals(1, applied.fxCount)
 

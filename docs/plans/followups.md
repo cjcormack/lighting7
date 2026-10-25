@@ -3193,8 +3193,8 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
   none of whose fixtures is patched goes on, lands nothing and lights its tile, as a cue does;
   `CUE_SLOT_LOOK_NEEDS_SELECTION` and `LOOK_NO_TARGETS` are gone (absolute-looks plan session 2).
 - `FU-LOOK-COMPAT-ROW-COVERAGE` — retired with its question: a Look cannot be put on one fixture
-  (absolute-looks plan P7), so `compatibleIdsFor` is gone and `compatibleLookIds` answers empty until
-  the client's picker goes in session 3.
+  (absolute-looks plan P7), so `compatibleIdsFor`, `compatibleLookIds` and the fixture sheet's Look
+  picker are gone (sessions 2 and 3).
 - `FU-BUSK-PAD-STALE-NUMBER` — a reorder, a sort-by-number, `POST /cues` and Record CREATE into a
   stack announce the stack's cue pads, through the one announce every placing handler ends in
   (`announceEntriesPlaced`), and a cue delete those of the cues left in its stacks (venue-visit plan

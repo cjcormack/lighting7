@@ -21,7 +21,7 @@ const calls = vi.hoisted(() => ({
 }))
 const answers = vi.hoisted(() => ({
   apply: { written: 1, skipped: [] } as Record<string, unknown>,
-  look: { action: 'applied', fxCount: 0, skippedFamilies: [] } as Record<string, unknown>,
+  look: { action: 'applied', fxCount: 0 } as Record<string, unknown>,
   absorbOk: true,
 }))
 function mutation(spy: (args: unknown) => void, answer: () => unknown) {
@@ -37,7 +37,7 @@ vi.mock('@/store/palettes', () => ({
   useTogglePaletteMutation: mutation(calls.togglePalette, () => ({ action: 'applied', fxCount: 0 })),
 }))
 vi.mock('@/store/looks', () => ({
-  useApplyLookMutation: mutation(calls.applyLook, () => ({ written: 2, fxIds: [], skippedFamilies: [] })),
+  useApplyLookMutation: mutation(calls.applyLook, () => ({ written: 2, fxIds: [] })),
   useToggleLookMutation: mutation(calls.toggleLook, () => answers.look),
   useAbsorbLookFxMutation: () => [
     (args: unknown) => {
@@ -135,20 +135,15 @@ describe('usePress — the programmer', () => {
     expect(calls.togglePalette).not.toHaveBeenCalled()
   })
 
-  it('a Look presses its toggle, and Apply as values its apply', async () => {
+  it('a Look presses its toggle, and Apply as values its apply, naming neither the targets nor the mask', async () => {
+    // A Look lands whole (absolute-looks plan D1, D3), whatever the pair holds.
+    desk.pair = { targets: HEX, families: ['COLOUR'] }
     await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')
-    expect(calls.toggleLook).toHaveBeenCalledWith({ projectId: 1, lookId: 7, targets: HEX, families: undefined })
+    expect(calls.toggleLook).toHaveBeenCalledWith({ projectId: 1, lookId: 7 })
     await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'asValues')
-    expect(calls.applyLook).toHaveBeenCalledWith({ projectId: 1, lookId: 7, targets: HEX, families: undefined })
+    expect(calls.applyLook).toHaveBeenCalledWith({ projectId: 1, lookId: 7 })
   })
 
-  it('toasts a Look’s skipped families in the rows vocabulary', async () => {
-    desk.pair = { targets: HEX, families: ['COLOUR'] }
-    answers.look = { action: 'applied', fxCount: 0, skippedFamilies: ['POSITION'] }
-    await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')
-    expect(calls.toggleLook).toHaveBeenCalledWith(expect.objectContaining({ families: ['COLOUR'] }))
-    expect(toast.warning).toHaveBeenCalledWith('Position rows skipped — the selection is Colour')
-  })
 
   it('refuses a generic palette with no targets, which the palette routes would land nowhere', async () => {
     desk.pair = { targets: [], families: null }
@@ -165,17 +160,15 @@ describe('usePress — the programmer', () => {
     expect(calls.applyPalette).not.toHaveBeenCalled()
   })
 
-  it('sends a per-fixture palette or a Look with no targets — they name their own heads', async () => {
+  it('sends a per-fixture palette with no targets — it names its own heads', async () => {
     desk.pair = { targets: [], families: null }
     await send({ kind: 'palette', palette: { ...AMBER, isGeneric: false } }, 'press')
     expect(calls.togglePalette).toHaveBeenCalledWith(expect.objectContaining({ targets: [] }))
-    await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')
-    expect(calls.toggleLook).toHaveBeenCalledWith(expect.objectContaining({ targets: [] }))
   })
 
   it('says whether the press put the record on or took it off', async () => {
     expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBe('on')
-    answers.look = { action: 'removed', fxCount: 0, skippedFamilies: [] }
+    answers.look = { action: 'removed', fxCount: 0 }
     expect(await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')).toBe('off')
   })
 })
@@ -205,11 +198,12 @@ describe('usePress — the pair', () => {
   })
 
   it('takes a door’s own pair where it has one', async () => {
-    const { result } = renderHook(() => usePress(1, { targets: [], families: null }))
+    const own = [{ type: 'fixture' as const, key: 'hex-9' }]
+    const { result } = renderHook(() => usePress(1, { targets: own, families: null }))
     await act(async () => {
-      await result.current.press({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')
+      await result.current.press({ kind: 'palette', palette: AMBER }, 'press')
     })
-    expect(calls.toggleLook).toHaveBeenCalledWith(expect.objectContaining({ targets: [] }))
+    expect(calls.togglePalette).toHaveBeenCalledWith(expect.objectContaining({ targets: own }))
   })
 })
 
@@ -221,7 +215,6 @@ describe('usePress — a focused Look layer', () => {
       layerId: 4,
       lookId: 9,
       lookName: 'Night',
-      targetedKeys: null,
       setValue: calls.setValue,
     }
     answers.apply = {
@@ -249,13 +242,6 @@ describe('usePress — a focused Look layer', () => {
     expect(calls.programmerFrame).not.toHaveBeenCalled()
   })
 
-  it('lands nothing on a head the layer does not target, and says so', async () => {
-    lookStore.current = { ...(lookStore.current as object), targetedKeys: new Set(['hex-2']) }
-    const landed = await send({ kind: 'palette', palette: AMBER }, 'press')
-    expect(landed).toBeNull()
-    expect(calls.setValue).not.toHaveBeenCalled()
-    expect(toast.warning).toHaveBeenCalledWith('0 values into Night · 1 could not take it')
-  })
 
   it('absorbs an effect palette’s effect into the Look', async () => {
     answers.apply = { written: 0, skipped: [], fxIds: [31] }
@@ -273,12 +259,12 @@ describe('usePress — a focused Look layer', () => {
     expect(calls.removeFx).toHaveBeenCalledWith(expect.objectContaining({ id: 32 }))
   })
 
-  it('starts an effect palette only on the heads the layer targets', async () => {
-    desk.pair = { targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'fixture', key: 'hex-9' }], families: null }
-    lookStore.current = { ...(lookStore.current as object), targetedKeys: new Set(['hex-1']), targets: [] }
+  it('starts an effect palette on every selected head, since a Look names no targets of its own', async () => {
+    const both = [{ type: 'fixture' as const, key: 'hex-1' }, { type: 'fixture' as const, key: 'hex-9' }]
+    desk.pair = { targets: both, families: null }
     answers.apply = { written: 0, skipped: [], fxIds: [31] }
     await send({ kind: 'palette', palette: BREATHE }, 'press')
-    expect(calls.applyPalette).toHaveBeenCalledWith(expect.objectContaining({ targets: [{ type: 'fixture', key: 'hex-1' }] }))
+    expect(calls.applyPalette).toHaveBeenCalledWith(expect.objectContaining({ targets: both }))
   })
 
   it('refuses a Look, since Looks don’t nest', async () => {
@@ -328,7 +314,7 @@ describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
       readOnly,
       layered: new Set<string>(),
       effects: [],
-      pressLayer: vi.fn(() => Promise.resolve({ action, skippedFamilies: [], cue: {} })),
+      pressLayer: vi.fn(() => Promise.resolve({ action, cue: {} })),
       landValues: vi.fn((values: readonly unknown[]) => values.length),
       pickFx: vi.fn(() => Promise.resolve(true)),
     }
@@ -340,9 +326,9 @@ describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
     const cue = arm()
     desk.pair = { targets: HEX, families: ['COLOUR'] }
     expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBe('on')
-    expect(cue.pressLayer).toHaveBeenCalledWith({ paletteId: 1 }, HEX, ['COLOUR'])
+    expect(cue.pressLayer).toHaveBeenCalledWith({ paletteId: 1, targets: HEX, families: ['COLOUR'] })
     expect(await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')).toBe('on')
-    expect(cue.pressLayer).toHaveBeenLastCalledWith({ lookId: 7 }, HEX, ['COLOUR'])
+    expect(cue.pressLayer).toHaveBeenLastCalledWith({ lookId: 7 })
     for (const spy of [calls.togglePalette, calls.toggleLook, calls.applyLook, calls.absorb, calls.programmerFrame]) {
       expect(spy).not.toHaveBeenCalled()
     }

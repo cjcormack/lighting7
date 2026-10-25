@@ -14,10 +14,9 @@ import type { BuskPadKind } from '@/api/buskApi'
  *
  * - **A bank takes all three.** A busk pad *is* a reference to exactly one template, Look or cue
  *   (`BuskPadKind` is the same three), so there is nothing a bank can refuse.
- * - **A cue slot takes a cue, or a Look with no deferred effect.** A slot has no selection, so it
- *   can hold only what needs none (busk-layout plan D7): a template always lands on the selection,
- *   and a Look with a deferred effect has no own fixtures. This is `dnd/slotDrop.ts`'s rule and
- *   must stay identical to it.
+ * - **A cue slot takes a cue or a Look.** A slot has no selection, so it can hold only what needs
+ *   none (busk-layout plan D7): a palette always lands on the selection, and a Look lands whole
+ *   (absolute-looks plan D1). This is `dnd/slotDrop.ts`'s rule and must stay identical to it.
  * - **The programmer's layer stack takes a Look or a template.** A layer applies one of those two;
  *   a cue is not a thing a layer can be.
  * - **A cue's own stack takes a Look or a template**, for the same reason — a cue layer is a cue
@@ -53,12 +52,6 @@ export type HandTargetKind = 'bank' | 'slot' | 'layer-stack' | 'cue-stack' | 'ri
  */
 export interface HandCandidate {
   kind: BuskPadKind
-  /**
-   * For a `LOOK`: does it have an effect with no targets of its own? A slot cannot supply one.
-   * Ignored for the other two kinds, and `undefined` is read as "no" — the honest default, since
-   * every other kind has no deferred effects by construction.
-   */
-  hasDeferredFx?: boolean
 }
 
 /** Can this record be placed here? */
@@ -67,8 +60,7 @@ export function canHandLand(candidate: HandCandidate, target: HandTargetKind): b
     case 'bank':
       return true
     case 'slot':
-      if (candidate.kind === 'CUE') return true
-      return candidate.kind === 'LOOK' && candidate.hasDeferredFx !== true
+      return candidate.kind === 'CUE' || candidate.kind === 'LOOK'
     case 'layer-stack':
     case 'cue-stack':
       return candidate.kind === 'LOOK' || candidate.kind === 'PALETTE'
@@ -90,10 +82,7 @@ export function handRefusalReason(
   target: HandTargetKind,
 ): string | null {
   if (canHandLand(candidate, target)) return null
-  if (target === 'slot') {
-    if (candidate.kind === 'PALETTE') return 'A slot has no selection, and a palette needs one'
-    return 'This Look has a deferred FX, so it needs a selection — a slot has none to give'
-  }
+  if (target === 'slot') return 'A slot has no selection, and a palette needs one'
   if (target === 'rig-row') return 'A rig row takes a group, a fixture or an element, and the hand cannot hold one yet'
   return 'A layer applies a Look or a palette, never a cue'
 }

@@ -219,15 +219,15 @@ export interface AddBuskPadRequest {
 }
 
 /**
- * A press. `targets` is the busk view's selection; it is ignored for a cue pad, and may be empty
- * for a per-fixture template or a Look with no deferred effect — both of which name their own heads.
+ * A press. `targets` is the busk view's selection; it may be empty for a per-fixture palette, which
+ * names its own heads, and a cue or a Look pad ignores it — a Look lands whole (absolute-looks plan D1).
  *
  * `families` is the selection's attribute mask, riding the press beside the targets it is a mask
  * *of* (multi-screen plan D4): the desk's pair while this tab follows the desk, the tab's own when
  * unlinked. Absent is every attribute. It is tested on the **on** arm only — a press that turns a
  * lit record off answers `removed` under any mask — so a client never pre-refuses a press from
- * the mask it holds: send it, and render the desk's answer. A template outside it is 400
- * `PALETTE_OUTSIDE_MASK`, a Look with nothing inside it 400 `LOOK_OUTSIDE_MASK`; a cue ignores it.
+ * the mask it holds: send it, and render the desk's answer. A palette outside it is 400
+ * `PALETTE_OUTSIDE_MASK`; a cue and a Look ignore it.
  */
 export interface BuskPressRequest {
   targets: { type: 'group' | 'fixture'; key: string }[]
@@ -245,13 +245,6 @@ export interface BuskPressResponse {
    * besides — layer siblings narrowed or dropped, cue siblings stopped. Always 0 for an off press.
    */
   released: number
-  /**
-   * A Look's families the mask left out, in declaration order — what the pressing window toasts
-   * as `Position rows skipped` (D6). Empty for a template or cue, an unmasked press, and the off
-   * arm. *Rows*: the layer's mask filters its rows, not its effects, so a Look's effect in a
-   * skipped family still runs while being named here.
-   */
-  skippedFamilies: string[]
 }
 
 // ─── Error codes the UI branches on ─────────────────────────────────────

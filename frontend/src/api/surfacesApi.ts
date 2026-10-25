@@ -234,12 +234,11 @@ export interface EncoderBankSetTarget {
 // clone or a cross-install import, which is what `FU-SYNC-BINDING-PAYLOAD-UUIDS` records.
 
 /**
- * Press a Look onto **its own fixtures** — never the selection.
+ * Put a Look on **whole** — never onto the selection.
  *
  * The opposite choice from {@link PressPaletteTarget}, and for the reason that makes each of them
- * "one behaviour every press": a Look names its fixtures and a template names none. A Look with a
- * deferred effect has no own targets, so it is refused at bind time
- * (`BINDING_LOOK_NEEDS_SELECTION`) and reads as health `lookNeedsSelection` if it gains one later.
+ * "one behaviour every press": a Look lands whole (absolute-looks plan D1) and a palette names no
+ * targets of its own.
  */
 export interface ApplyLookTarget {
   type: "applyLook"
@@ -452,10 +451,6 @@ export type BindingHealth =
   // window of that name announces, which is why the desk re-evaluates health on every registry
   // change (busk-further plan D14).
   | { type: "missingWindow"; windowName: string }
-  // Not "missing": the Look is still there, but it has gained a deferred effect, so it has no own
-  // targets and a button has no selection to give it. A different state because it has a different
-  // fix — bind the effect's targets, rather than rebind the button.
-  | { type: "lookNeedsSelection"; lookUuid: string }
   // The row the tolerant decode kept (see `UnknownTarget`). Dead, drawn, rebindable.
   | { type: "unknownTarget"; targetType: string }
 

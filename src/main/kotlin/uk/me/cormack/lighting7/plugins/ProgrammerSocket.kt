@@ -20,6 +20,9 @@ import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.models.LayerSourceDto
+import uk.me.cormack.lighting7.models.LayerSourceKind
+import uk.me.cormack.lighting7.models.LookLayerTargetedException
+import uk.me.cormack.lighting7.models.lookLayerTargetedMessage
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProvenanceEntry
@@ -302,7 +305,7 @@ data class ProgrammerAddLayerInMessage(
     /** Exactly one of [lookId] / [paletteId]. */
     val lookId: Int? = null,
     val paletteId: Int? = null,
-    /** A palette layer's targets; a Look's layer names none, so any given for one are dropped. */
+    /** A palette layer's targets; a Look's layer names none, so any given for one are refused (`LOOK_LAYER_TARGETED`). */
     val targets: List<CueTargetDto> = emptyList(),
     val attributeMask: String? = null,
     val blendMode: String? = null,
@@ -347,7 +350,7 @@ data class ProgrammerPatchLayerInMessage(
     val amount: Double? = null,
     val attributeMask: String? = null,
     val blendMode: String? = null,
-    /** A palette layer's targets; a Look's layer keeps naming none. */
+    /** A palette layer's targets; a Look's layer names none, so any given for one are refused (`LOOK_LAYER_TARGETED`). */
     val targets: List<CueTargetDto>? = null,
     val stomp: Boolean? = null,
     val fadeMs: Long? = null,
@@ -630,6 +633,8 @@ data class ProgrammerTargetClearedOutMessage(
 @SerialName("programmer.error")
 data class ProgrammerErrorOutMessage(
     val message: String,
+    /** A refusal a client may branch on, by name — `LOOK_LAYER_TARGETED`; null for the rest. */
+    val code: String? = null,
 ) : ProgrammerOutMessage()
 
 /**
@@ -967,8 +972,12 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             // Same rejection as `programmer.addLayer`: a patched blend reaches `cue_layers` through
             // Record just as an added one does, so it is checked where it enters.
             val problem = FxSpecCoercion.Strict.problem(blendMode = message.blendMode)
+            val look = message.targets.orEmpty().isNotEmpty() &&
+                state.show.programmerStore.layers.any { it.layerId == message.layerId && it.source.kind == LayerSourceKind.LOOK }
             if (problem != null) {
                 ProgrammerErrorOutMessage(problem)
+            } else if (look) {
+                ProgrammerHandler.lookLayerTargeted("programmer.patchLayer")
             } else {
                 state.show.programmerLayerStack.patch(
                     layerId = message.layerId,
@@ -1306,6 +1315,7 @@ object ProgrammerHandler {
         FxSpecCoercion.Strict.problem(blendMode = message.blendMode)?.let {
             return ProgrammerErrorOutMessage(it)
         }
+        if (source.kind == LayerSourceKind.LOOK && message.targets.isNotEmpty()) return lookLayerTargeted("programmer.addLayer")
 
         state.show.programmerLayerStack.add(
             source = source,
@@ -1319,6 +1329,10 @@ object ProgrammerHandler {
         )
         return layerState(state)
     }
+
+    /** A Look's layer given targets, refused by name (absolute-looks plan P2). */
+    fun lookLayerTargeted(where: String) =
+        ProgrammerErrorOutMessage(lookLayerTargetedMessage(where), LookLayerTargetedException.CODE)
 
     fun stateSnapshot(state: State): ProgrammerStateOutMessage {
         val store = state.show.programmerStore

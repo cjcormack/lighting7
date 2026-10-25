@@ -1,6 +1,6 @@
 # Looks as absolute states
 
-> **Document status: agreed 2026-10-21; session 2 of 3 done.** D1–D3 are Chris's calls, made after the
+> **Document status: agreed 2026-10-21; all three sessions done.** D1–D3 are Chris's calls, made after the
 > Timeline drew one scenery-only Look as three columns. The P rows are the plan's own.
 
 ## 1. Context

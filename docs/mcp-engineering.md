@@ -338,7 +338,8 @@ it is there. **A Look's FX name their own targets** (absolute-looks plan D2), ta
 `create_cue`'s ad-hoc FX take one (`parseAdHocFxTarget`): `targetType` and `targetKey`, or
 `targets` for one FX over a selection; `update_look` takes them the same way, and one naming no
 target is refused before anything is written. `apply_look` puts a Look on whole, wherever its own
-values and FX land, and a cue layer of a Look names no targets — any given are dropped; its
+values and FX land, and a cue layer of a Look names no targets — `create_cue` and `build_cue_stack`
+refuse one naming any, by name (`LOOK_LAYER_TARGETED`); its
 `asValues: true` is `POST /looks/{id}/apply` instead, the Look's values and FX as the programmer's
 own. `list_fixture_types` with `attributes: true` is where the model learns the names. A layer with no
 targets on a generic palette is refused by `create_cue` and `build_cue_stack`, as the busk pad refuses

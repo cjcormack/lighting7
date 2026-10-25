@@ -444,19 +444,20 @@ export function CueRowStoreProvider({
    * The desk's answer is the cue as stored, and its layers land in the cache at once.
    */
   const pressLayer = useCallback<PressCue['pressLayer']>(
-    async (source, targets, families) => {
+    async (source) => {
       if (readOnlyRef.current) return null
       flushRef.current()
       const args = { ...argsRef.current, cueId: entry.cueId }
+      const pressed =
+        'lookId' in source
+          ? { lookId: source.lookId }
+          : {
+              paletteId: source.paletteId,
+              targets: source.targets.map((t) => ({ type: t.type, key: t.key })),
+              ...(source.families != null && source.families.length > 0 ? { families: [...source.families] } : {}),
+            }
       const result = await enqueue<UndoStep, CueLayerPressResponse>((latest) => ({
-        send: () =>
-          pressCueLayer({
-            projectId: args.projectId,
-            cueId: args.cueId,
-            ...source,
-            targets: targets.map((t) => ({ type: t.type, key: t.key })),
-            ...(families != null && families.length > 0 ? { families: [...families] } : {}),
-          }).unwrap(),
+        send: () => pressCueLayer({ projectId: args.projectId, cueId: args.cueId, ...pressed }).unwrap(),
         undo: { layers: latest.layers.map(cueLayerInput) },
       }))
       if (result == null || !result.ok || result.answer == null) return null

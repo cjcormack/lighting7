@@ -522,7 +522,8 @@ internal fun checkCueSpeedMasters(
  *
  * Message-returning rather than throwing, because [writeCueChildren] serves surfaces with three
  * different ways of saying "no" — a 400, a `ToolExecutionResult`, Record's outcome type — and only
- * the first can afford a stack trace.
+ * the first can afford a stack trace. The one throw is a Look layer naming targets, refused by name
+ * ([LookLayerTargetedException]).
  */
 internal fun validateCueChildren(
     adHocFx: List<CueAdHocFxDto>,
@@ -534,9 +535,9 @@ internal fun validateCueChildren(
     // fixture or a group.
     attributeAssignments.withIndex().firstOrNull { (_, row) -> TargetRef.ofOrNull(row.targetType, row.targetKey) == null }
         ?.let { (i, row) -> return "attributeAssignments[$i]: unknown target type '${row.targetType}' — expected 'fixture' or 'group'" }
+    checkLookLayersUntargeted(layers)
     for (layer in layers) {
-        // A Look layer's targets are dropped, not judged (absolute-looks plan P2).
-        layer.withStoredTargets().targets.firstOrNull { TargetRef.ofOrNull(it.type, it.key) == null }
+        layer.targets.firstOrNull { TargetRef.ofOrNull(it.type, it.key) == null }
             ?.let { return "A layer's target must be a fixture or a group, not '${it.type}'" }
         FxSpecCoercion.Strict.problem(blendMode = layer.blendMode)?.let { return it }
     }
@@ -738,8 +739,7 @@ internal fun writeCueChildren(
     }
 
     if (layers != null) {
-        // A Look layer names no targets (absolute-looks plan P2): a write naming some stores none.
-        val resolved = layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer.withStoredTargets() to it } }
+        val resolved = layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer to it } }
         val existing = if (created) emptyList() else cue.layersInOrder()
         val pairing = if (restore) {
             pairByKey(existing, resolved, { it.uuid to it.layerKey }, { (layer, source) -> restoredUuid(layer.uuid) to source.layerKey })
@@ -827,11 +827,11 @@ internal fun writeCueChildren(
 /** A restored child's uuid, or a fresh one — which no stored row holds — for a child that names none. */
 private fun restoredUuid(uuid: String?): UUID = uuid?.let(UUID::fromString) ?: UUID.randomUUID()
 
-/** [layer] onto this layer, but for the record [writeCueChildren] matched it on; a Look layer's targets are none. */
+/** [layer] onto this layer, but for the record [writeCueChildren] matched it on. */
 internal fun DaoCueLayer.take(layer: CueLayerDto) {
     sortOrder = layer.sortOrder
     enabled = layer.enabled
-    targets = layer.withStoredTargets().targets
+    targets = layer.targets
     attributeMask = layer.attributeMask
     blendMode = layer.blendMode
     amount = layer.amount

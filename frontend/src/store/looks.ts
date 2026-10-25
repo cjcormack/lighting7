@@ -26,16 +26,10 @@ import type {
  */
 export function startLooksBridge() {
   lightingApi.looks.subscribe(function () {
-    // `Fixture` and `GroupList` for the same reason the CRUD mutations carry them:
-    // `compatibleLookIds` rides on the fixture and group summaries, so a Look created, copied or
-    // deleted on **another** client would otherwise exist here and be offered nowhere —
-    // `LookTogglePicker` omits it. Affordable
-    // precisely because `lookListChanged` is CRUD-only: a contents edit does not fire it (see
-    // `looksWsApi`), so this is not on the per-resolution path.
-    //
-    // `Cue` for a related reason: creating, copying or deleting a Look changes what every cue
+    // `Cue` because creating, copying or deleting a Look changes what every cue
     // layering it composes to, and `projectCueCooked` — the read behind the read-only cue grid —
-    // is tagged `Cue`. Affordable on the same CRUD-cadence grounds, and load-bearing on the delete
+    // is tagged `Cue`. Affordable because `lookListChanged` is CRUD-only — a contents edit does not
+    // fire it (see `looksWsApi`) — and load-bearing on the delete
     // path, which fires only this signal unless it took cue layers (then `cuesRecomposed` too).
     // A Look *retune* is the other half and does not come through here: it rides the keyed
     // `cuesRecomposed` frame instead.
@@ -44,7 +38,7 @@ export function startLooksBridge() {
     // entry in that list carries `layers[].source.name`, so a Look renamed elsewhere leaves the
     // old name in the cached list otherwise.
     store.dispatch(
-      restApi.util.invalidateTags(['Look', 'LookList', 'Fixture', 'GroupList', 'Cue', 'CueList']),
+      restApi.util.invalidateTags(['Look', 'LookList', 'Cue', 'CueList']),
     )
   })
 }
@@ -106,19 +100,9 @@ export const looksApi = restApi.injectEndpoints({
       }),
       // A rename can collide (409) and a bad row can 400; nothing moved when either happens.
       // Cues are invalidated because a contents edit republishes every cue layering this Look.
-      //
-      // `Fixture`/`GroupList` ride on **`fx` alone**, and that conditional is the point.
-      // `compatibleLookIds` is derived server-side by `compatibleIdsFor`, which filters on a Look's
-      // effect categories and nothing else — the `editorFixtureType` type gate that used to sit
-      // beside it went with the column in session 3, so the comment that once justified these two
-      // tags for *any* edit was describing a filter that no longer exists. Rows and metadata
-      // provably cannot move compatibility; only adding (or clearing) an effect of a family can.
-      //
-      // Unconditional was expensive in the one place it fires most: `LookRowStore` saves rows-only
-      // bodies every 400 ms through a layer-scope drag, and `Fixture` is the fixture list — 48
-      // consumers here, `loadLookCompatibilityInfos` + `detectCapabilities` per fixture server-side
-      // — so every drag tick refetched it and handed every consumer a new array identity mid-drag.
-      invalidatesTags: (result, _error, { lookId, fx }) =>
+      // Never the fixture list: `LookRowStore` saves every 400 ms through a layer-scope drag, and
+      // nothing on a fixture or group summary depends on a Look.
+      invalidatesTags: (result, _error, { lookId }) =>
         result == null
           ? []
           : [
@@ -126,9 +110,6 @@ export const looksApi = restApi.injectEndpoints({
               'LookList' as const,
               'Cue' as const,
               'CueList' as const,
-              ...(fx === undefined
-                ? []
-                : (['Fixture', 'GroupList'] as const)),
             ],
     }),
 
@@ -149,9 +130,6 @@ export const looksApi = restApi.injectEndpoints({
               { type: 'Look', id: lookId },
               'CueList',
               'Cue',
-              // Same reason as create: the deleted Look has to leave every `compatibleLookIds`.
-              'Fixture',
-              'GroupList',
             ],
     }),
 
@@ -165,17 +143,8 @@ export const looksApi = restApi.injectEndpoints({
         body,
       }),
       // The copy lands in the *target* project's library, which may not be the one on screen — so
-      // the list tag is scoped to that project. `Fixture`/`GroupList` are **not** conditional on
-      // the target, though, and comparing it against the *source* project would be the wrong test:
-      // those two lists belong to the **active** project (`fixtures` and `groups` take no
-      // project), which this mutation cannot see. Copying from another project's library *into* the
-      // active one — the main "Copy to Project" flow — is exactly the case a source==target check
-      // skips, and it is the case that most needs the refresh: the new Look would exist and be
-      // offered nowhere. Always invalidating costs one refetch of two lists, as a create does.
-      invalidatesTags: (result) =>
-        result == null
-          ? []
-          : [{ type: 'LookList', id: result.targetProjectId }, 'Fixture', 'GroupList'],
+      // the list tag is scoped to that project.
+      invalidatesTags: (result) => (result == null ? [] : [{ type: 'LookList', id: result.targetProjectId }]),
     }),
 
     /**
@@ -194,22 +163,16 @@ export const looksApi = restApi.injectEndpoints({
         method: 'POST',
         body: { fxIds },
       }),
-      // Absorbing is an effect write, so it moves `compatibleLookIds` the same way
-      // `saveLook`'s `fx` arm does — hence `Fixture`/`GroupList` here too.
       invalidatesTags: (_result, _error, { lookId }) => [
         { type: 'Look' as const, id: lookId },
         'LookList' as const,
         'FixtureFx' as const,
-        'Fixture' as const,
-        'GroupList' as const,
       ],
     }),
 
     /**
-     * Put a Look on these targets, or take it off again — the busking pad's path.
-     *
-     * Only the Look's **deferred** rows and effects are applied: the pad supplies the targets, so a
-     * bound row would land on fixtures the operator never selected.
+     * Put a Look on, or take it off again — `usePress`'s path. It names no targets: a Look
+     * lands whole, and its effects reach the FX lists through `fxChanged`.
      */
     toggleLook: build.mutation<
       ToggleLookResponse,
@@ -220,25 +183,11 @@ export const looksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: (_result, _error, { targets }) => {
-        const tags: Array<
-          | { type: 'FixtureFx'; id: string }
-          | { type: 'GroupActiveFxList'; id: string }
-        > = []
-        for (const t of targets) {
-          if (t.type === 'fixture') {
-            tags.push({ type: 'FixtureFx', id: t.key })
-          } else {
-            tags.push({ type: 'GroupActiveFxList', id: t.key })
-          }
-        }
-        return tags
-      },
     }),
 
     /**
      * *Apply as values* for a Look — ⌥click and the hold menu's second item (apply-model plan
-     * D8). Lands Local values and Local effects, so it invalidates what the toggle does.
+     * D8). Lands Local values and Local effects; like the toggle it names no targets to invalidate.
      */
     applyLook: build.mutation<ApplyLookResponse, { projectId: number; lookId: number } & ApplyLookRequest>({
       query: ({ projectId, lookId, ...body }) => ({
@@ -246,12 +195,6 @@ export const looksApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: (_result, _error, { targets }) =>
-        targets.map((t) =>
-          t.type === 'fixture'
-            ? ({ type: 'FixtureFx', id: t.key } as const)
-            : ({ type: 'GroupActiveFxList', id: t.key } as const),
-        ),
     }),
   }),
   overrideExisting: false,

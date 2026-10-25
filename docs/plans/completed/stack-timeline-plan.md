@@ -54,7 +54,7 @@ From the design record, agreed with Chris on 2026-10-20:
 |---|---|
 | D1 | **Cues as rows.** Cue, name, fade and follow at the left; the grid to the right. |
 | D2 | **A third mode of the stack view**, *Cards · Table · Timeline*, keeping the Table's rows, row drag, edit lock and bottom pane. |
-| D3 | **A column per record and target**: a Look (its own fixtures, or one target it is filtered to), a palette on one target, an FX by type, attribute and targets, a scenery element. One layer over two targets is two cells. |
+| D3 | **A column per record and target**: a Look, one column, sub *Look* (it lands whole: absolute-looks plan D1), a palette on one target, an FX by type, attribute and targets, a scenery element. One palette layer over two targets is two cells. |
 | D4 | **Cells stay per cue.** A filled cell is that cue's own layer; neighbouring cells draw as one bar; drag, fill and range on/off edit them. Layers do not start tracking. |
 | D5 | **A palette cell follows the press rule**: other palettes of its family come off the same heads in that cue. |
 | D6 | **A new cell copies its settings** from the nearest filled cell above in its column, else below, else the press defaults. A new layer goes on top; every cell shows its layer's rank. |

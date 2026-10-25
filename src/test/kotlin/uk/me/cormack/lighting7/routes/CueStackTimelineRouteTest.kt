@@ -223,7 +223,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
         client.cue(
             act, "Q1",
             layers = listOf(
-                CueLayerDto(lookId = warm, sortOrder = 0, targets = wash),
+                CueLayerDto(lookId = warm, sortOrder = 0),
                 CueLayerDto(paletteId = throne, sortOrder = 1, targets = wash),
                 CueLayerDto(paletteId = throne, sortOrder = 2),
                 CueLayerDto(paletteId = lavender, sortOrder = 3, targets = wash),
@@ -231,7 +231,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
         )
 
         val layers = client.get("$base/cue-stacks/$act/timeline").body<CueStackTimelineDto>().entries.single().layers
-        // Warm binds hex-1 only and lands whole: the wash its write named is not its to reach.
+        // Warm binds hex-1 only and lands whole.
         assertEquals(listOf("hex-1"), layers[0].heads)
         assertEquals(listOf("hex-2"), layers[1].heads)
         assertEquals(listOf("hex-2"), layers[2].heads)

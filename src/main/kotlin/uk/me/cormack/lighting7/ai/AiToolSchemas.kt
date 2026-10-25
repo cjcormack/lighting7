@@ -645,7 +645,7 @@ internal val cueLayerSchema = buildJsonObject {
         put("targets", buildJsonObject {
             put("type", "array")
             put("items", targetSchema)
-            put("description", "What the layer applies a palette to: a generic palette's FX or values land on these, so it needs them. A look's layer names none — a look always lands whole — so targets given for one are dropped.")
+            put("description", "What the layer applies a palette to: a generic palette's FX or values land on these, so it needs them. A look's layer names none — a look always lands whole — so targets given for one are refused (LOOK_LAYER_TARGETED).")
         })
         put("sortOrder", buildJsonObject {
             put("type", "integer")

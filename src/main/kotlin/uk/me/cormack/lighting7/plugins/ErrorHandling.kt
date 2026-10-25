@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.mcp.RemoteEffectsDisabledException
 import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 import uk.me.cormack.lighting7.fixture.CommandNotStorableException
+import uk.me.cormack.lighting7.models.LookLayerTargetedException
 import uk.me.cormack.lighting7.routes.ErrorResponse
 import uk.me.cormack.lighting7.venue.VenueException
 
@@ -119,6 +120,11 @@ fun Application.configureErrorHandling() {
             logger.warn("Refused a command row on {}: {}", call.request.local.uri, cause.message)
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "A fixture command cannot be stored", CommandNotStorableException.CODE))
         }
+        // A stored write giving a Look's layer targets (absolute-looks plan P2): a Look lands whole.
+        exception<LookLayerTargetedException> { call, cause ->
+            logger.warn("Refused a targeted Look layer on {}: {}", call.request.local.uri, cause.message)
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "A Look's layer names no targets", LookLayerTargetedException.CODE))
+        }
         // An arm, fire or reload through the tunnel while "allow arming and firing" is off.
         exception<RemoteEffectsDisabledException> { call, cause ->
             logger.warn("Refused remote effects request on {}", call.request.local.uri)
@@ -174,6 +180,7 @@ internal fun isClientErrorException(cause: Throwable): Boolean = when (cause) {
     is RemoteCommandsDisabledException,
     is TriggerNotStorableException,
     is CommandNotStorableException,
+    is LookLayerTargetedException,
     is PasswordPolicyException -> true
     else -> false
 }

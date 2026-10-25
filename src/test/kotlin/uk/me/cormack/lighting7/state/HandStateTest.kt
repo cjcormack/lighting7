@@ -51,7 +51,7 @@ class HandStateTest {
     private val lookDto = LookDto(
         id = 9, uuid = "look-uuid", name = "Act 1 opener",
         families = emptyList(), rowCount = 0, fxCount = 0, targetCount = 0,
-        hasDeferredFx = false, preview = emptyList(), layerCount = 0, buskPageCount = 0,
+        preview = emptyList(), layerCount = 0, buskPageCount = 0,
     )
     private val cueDto = BuskCueDto(
         id = 11, uuid = "cue-uuid", name = "Cue 3", entries = listOf(CueUseEntryDto(1, "Main", 5, "3")),

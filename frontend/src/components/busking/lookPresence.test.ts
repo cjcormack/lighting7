@@ -1,18 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { lookIsApplied, lookLayerPresence, paletteLayerPresence } from './lookPresence'
+import { lookIsApplied, lookPresence, paletteLayerPresence } from './lookPresence'
 import type { AppliedTarget, ProgrammerAppliedSource } from '@/store/programmer'
 import type { CueTarget } from '@/api/cuesApi'
 
-/** The desk's answer for one record: "Warm Wash" applied to whatever [targets] say. */
-function applied(
+/** The desk's answer for one palette: "Amber Breathe" applied to whatever [targets] say. */
+function paletteApplied(
   targets: AppliedTarget[],
   overrides: Partial<ProgrammerAppliedSource> = {},
 ): ProgrammerAppliedSource {
   return {
-    source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
+    source: { kind: 'PALETTE', id: 4, uuid: 'ut4', name: 'Amber Breathe' },
     targets,
     ...overrides,
   }
+}
+
+/** The desk's answer for a Look with a layer on: it names no targets (absolute-looks plan P4). */
+function lookApplied(id = 7): ProgrammerAppliedSource {
+  return { source: { kind: 'LOOK', id, uuid: `u${id}`, name: 'Warm Wash' }, targets: [] }
 }
 
 const FRONT: CueTarget = { type: 'group', key: 'front-wash' }
@@ -25,109 +30,61 @@ const FRONT_ALL: AppliedTarget[] = [
   { type: 'fixture', key: 'hex-2', state: 'all' },
 ]
 
-describe('lookLayerPresence', () => {
-  it('lights the ring for a Look made only of static rows', () => {
-    // The regression this replaces: the old match read the effect list, so a rows-only Look could
-    // never light its ring however plainly it was on stage. A layer exists either way, and the
-    // desk resolves the layer.
-    expect(lookLayerPresence([applied(FRONT_ALL)], [FRONT], 7)).toBe('all')
+describe('lookPresence', () => {
+  it('lights while a layer of the Look is on, whatever is selected', () => {
+    // A Look lands whole, so its ring reads the layer, never coverage of the selection.
+    expect(lookPresence([lookApplied()], 7)).toBe('all')
+    expect(lookIsApplied([lookApplied()], 7)).toBe(true)
   })
 
   it('reads none when the desk reports no layer for this Look', () => {
-    const other = applied(FRONT_ALL, { source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Cool' } })
-    expect(lookLayerPresence([other], [FRONT], 7)).toBe('none')
-    expect(lookLayerPresence([], [FRONT], 7)).toBe('none')
+    expect(lookPresence([lookApplied(8)], 7)).toBe('none')
+    expect(lookPresence([], 7)).toBe('none')
+    expect(lookIsApplied([], 7)).toBe(false)
   })
 
-  it('reads some when only part of the selection is covered', () => {
-    expect(lookLayerPresence([applied(FRONT_ALL)], [FRONT, BACK], 7)).toBe('some')
-  })
-
-  it('passes a partly-covered group straight through as some', () => {
-    // Half the wash's heads: `some` is the desk's word, and the whole of the client's job is not
-    // to lose it. Working out which half is covered was the rule that used to live here.
-    const half: AppliedTarget[] = [
-      { type: 'group', key: 'front-wash', state: 'some' },
-      { type: 'fixture', key: 'hex-1', state: 'all' },
-    ]
-    expect(lookLayerPresence([applied(half)], [FRONT], 7)).toBe('some')
-    expect(lookLayerPresence([applied(half)], [{ type: 'fixture', key: 'hex-1' }], 7)).toBe('all')
-  })
-
-  it('lights for a member of a group the layer names', () => {
-    // A group is its fixtures — expanded server-side, so a head of a lit wash arrives lit. Before
-    // the desk answered this, the ring went dark the moment the operator picked one head out of
-    // the group they had just lit.
-    expect(lookLayerPresence([applied(FRONT_ALL)], [{ type: 'fixture', key: 'hex-2' }], 7)).toBe('all')
-  })
-
-  it('distinguishes a fixture from a group of the same name', () => {
-    // A pad must never answer for the other kind of target: the two share a namespace on the wire.
-    expect(lookLayerPresence([applied(FRONT_ALL)], [{ type: 'fixture', key: 'front-wash' }], 7)).toBe('none')
-  })
-
-  it('reads none with nothing selected', () => {
-    expect(lookLayerPresence([applied(FRONT_ALL)], [], 7)).toBe('none')
-  })
-
-  it('reads none for a record the desk lists with no targets', () => {
-    // What a layer with empty targets resolves to: its source's own bound rows decide where it
-    // lands, which is the cook's answer to give, so the desk reports it as covering nothing.
-    expect(lookLayerPresence([applied([])], [FRONT], 7)).toBe('none')
-  })
-})
-
-const paletteApplied = (targets: AppliedTarget[]) =>
-  applied(targets, { source: { kind: 'PALETTE', id: 4, uuid: 'ut4', name: 'Amber Breathe' } })
-
-describe('cells (busk-further plan D11)', () => {
-  // A cell is `{type: 'fixture', key: <elementKey>}` and the desk's `TargetCoverage` owns the
-  // parent↔cell rule: a layer on the whole bar covers a press on its cells, a layer on four cells
-  // does not cover the bar. Nothing here computes that — the ring reads the extents the desk
-  // resolved, so a cell selection is lit by what `applied` names and by nothing else.
-  const bar = { type: 'fixture', key: 'bar-1' } as const
-  const cells = [0, 1, 2].map((i) => ({ type: 'fixture', key: `bar-1.pixel-${i}` }) as const)
-
-  it('lights a cell selection only from the desk’s resolved extents, never from its parent here', () => {
-    // The desk names the parent and not the cells: this side does not widen it to them.
-    const parentOnly = [{ source: { kind: 'LOOK', id: 5, name: 'Wash' }, targets: [{ ...bar, state: 'all' }] }]
-    expect(lookLayerPresence(parentOnly as never, cells, 5)).toBe('none')
-    // The desk resolved the cells (`appliedState`'s extents fold the parent onto them): lit.
-    const resolved = [{ source: { kind: 'LOOK', id: 5, name: 'Wash' }, targets: cells.map((c) => ({ ...c, state: 'all' })) }]
-    expect(lookLayerPresence(resolved as never, cells, 5)).toBe('all')
-    expect(lookLayerPresence(resolved as never, [cells[0]!, { type: 'fixture', key: 'bar-1.pixel-9' }], 5)).toBe('some')
-  })
-
-  it('does not read a parent as covered by its cells — that direction is the desk’s to refuse too', () => {
-    const cellsOnly = [{ source: { kind: 'PALETTE', id: 2, name: 'Amber' }, targets: cells.map((c) => ({ ...c, state: 'all' })) }]
-    expect(paletteLayerPresence(cellsOnly as never, [bar], 2)).toBe('none')
+  it('does not answer for a palette carrying the same int PK', () => {
+    // Two tables, two id spaces.
+    expect(lookPresence([paletteApplied(FRONT_ALL, { source: { kind: 'PALETTE', id: 7, uuid: 't7', name: 'Amber Key' } })], 7)).toBe('none')
   })
 })
 
 describe('paletteLayerPresence', () => {
   it('lights the ring from the applied state, whatever the palette holds', () => {
-    // The rule that matters since a template can hold an **effect**: presence is read from the
-    // layer, never from the running instance. Matching on the instance would light for an effect
-    // template and leave every value template's pad dark — the worst of both answers.
+    // The rule that matters since a palette can hold an **FX**: presence is read from the layer,
+    // never from the running instance. Matching on the instance would light for an FX palette and
+    // leave every value palette's pad dark — the worst of both answers.
     expect(paletteLayerPresence([paletteApplied(FRONT_ALL)], [FRONT], 4)).toBe('all')
   })
 
   it('does not confuse a Look and a palette sharing an int PK', () => {
-    // Two tables, two id spaces — so the Look here carries the *template's* id, or the assertion
-    // would pass on `7 !== 4` and never reach the kind check it exists to pin.
-    const lookWithPaletteId = applied(FRONT_ALL, {
-      source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Warm Wash' },
-    })
-    expect(paletteLayerPresence([lookWithPaletteId], [FRONT], 4)).toBe('none')
-    expect(lookLayerPresence([paletteApplied(FRONT_ALL)], [FRONT], 4)).toBe('none')
+    // The Look carries the *palette's* id, or the assertion would pass on `7 !== 4` and never reach
+    // the kind check it exists to pin.
+    expect(paletteLayerPresence([lookApplied(4)], [FRONT], 4)).toBe('none')
   })
 
   it('reads some when only part of the selection is covered', () => {
     expect(paletteLayerPresence([paletteApplied(FRONT_ALL)], [FRONT, BACK], 4)).toBe('some')
   })
 
-  it('reads a covered head of a named group like a Look pad does', () => {
+  it('passes a partly-covered group straight through as some', () => {
+    // Half the wash's heads: `some` is the desk's word, and the whole of the client's job is not
+    // to lose it.
+    const half: AppliedTarget[] = [
+      { type: 'group', key: 'front-wash', state: 'some' },
+      { type: 'fixture', key: 'hex-1', state: 'all' },
+    ]
+    expect(paletteLayerPresence([paletteApplied(half)], [FRONT], 4)).toBe('some')
+    expect(paletteLayerPresence([paletteApplied(half)], [{ type: 'fixture', key: 'hex-1' }], 4)).toBe('all')
+  })
+
+  it('reads a covered head of a named group as lit', () => {
+    // A group is its fixtures — expanded server-side, so a head of a lit wash arrives lit.
     expect(paletteLayerPresence([paletteApplied(FRONT_ALL)], [{ type: 'fixture', key: 'hex-2' }], 4)).toBe('all')
+  })
+
+  it('distinguishes a fixture from a group of the same name', () => {
+    expect(paletteLayerPresence([paletteApplied(FRONT_ALL)], [{ type: 'fixture', key: 'front-wash' }], 4)).toBe('none')
   })
 
   it('reads none with nothing selected, or with no record applying it', () => {
@@ -137,27 +94,22 @@ describe('paletteLayerPresence', () => {
   })
 })
 
-describe('lookIsApplied', () => {
-  it('answers for a surface with no selection, where the target-scoped fold cannot', () => {
-    // The whole reason the helper exists. An FX cue slot has no selection, so reading its tile
-    // through `lookLayerPresence` would leave every Look dark however plainly it is on stage.
-    const on = [applied(FRONT_ALL)]
-    expect(lookLayerPresence(on, [], 7)).toBe('none')
-    expect(lookIsApplied(on, 7)).toBe(true)
+describe('cells (busk-further plan D11)', () => {
+  // A cell is `{type: 'fixture', key: <elementKey>}` and the desk's `TargetCoverage` owns the
+  // parent↔cell rule. Nothing here computes that — the ring reads the extents the desk resolved.
+  const bar = { type: 'fixture', key: 'bar-1' } as const
+  const cells = [0, 1, 2].map((i) => ({ type: 'fixture', key: `bar-1.pixel-${i}` }) as const)
+
+  it('lights a cell selection only from the desk’s resolved extents, never from its parent here', () => {
+    const parentOnly = [paletteApplied([{ ...bar, state: 'all' }])]
+    expect(paletteLayerPresence(parentOnly, cells, 4)).toBe('none')
+    const resolved = [paletteApplied(cells.map((c) => ({ ...c, state: 'all' as const })))]
+    expect(paletteLayerPresence(resolved, cells, 4)).toBe('all')
+    expect(paletteLayerPresence(resolved, [cells[0]!, { type: 'fixture', key: 'bar-1.pixel-9' }], 4)).toBe('some')
   })
 
-  it('does not answer for a palette carrying the same int PK', () => {
-    // Two tables, two id spaces — the collision `lookLayerPresence` guards, asked of a surface
-    // that has no targets to disambiguate with.
-    const template = applied(FRONT_ALL, {
-      source: { kind: 'PALETTE', id: 7, uuid: 't7', name: 'Amber Key' },
-    })
-    expect(lookIsApplied([template], 7)).toBe(false)
-  })
-
-  it('reads false for an empty feed, another Look, or a layer covering nothing', () => {
-    expect(lookIsApplied([], 7)).toBe(false)
-    expect(lookIsApplied([applied(FRONT_ALL, { source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Cool' } })], 7)).toBe(false)
-    expect(lookIsApplied([applied([])], 7)).toBe(false)
+  it('does not read a parent as covered by its cells — that direction is the desk’s to refuse too', () => {
+    const cellsOnly = [paletteApplied(cells.map((c) => ({ ...c, state: 'all' as const })))]
+    expect(paletteLayerPresence(cellsOnly, [bar], 4)).toBe('none')
   })
 })

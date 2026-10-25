@@ -217,7 +217,6 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             val layers = listOf(
                 CueLayerDto(
                     lookId = pulsing.id, sortOrder = 0,
-                    targets = listOf(CueTargetDto("fixture", "hex-1")),
                 ),
             )
             val cueId = createCue(client, "layered", layers = layers)
@@ -323,7 +322,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val cueId = createCue(
             client, "layered",
             layers = listOf(
-                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                CueLayerDto(lookId = warm.id, sortOrder = 0),
             ),
         )
 
@@ -347,7 +346,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             val cueId = createCue(
                 client, "layered",
                 layers = listOf(
-                    CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                    CueLayerDto(lookId = warm.id, sortOrder = 0),
                 ),
             )
             // A row the write boundary now refuses, as an older build or a hand edit left it. The
@@ -393,7 +392,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             val cueId = createCue(
                 client, "layered",
                 layers = listOf(
-                    CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                    CueLayerDto(lookId = warm.id, sortOrder = 0),
                 ),
             )
 
@@ -416,12 +415,11 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val dim = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Dim", mapOf("dimmer" to "40"),
         )
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
         val cueId = createCue(
             client, "layered",
             layers = listOf(
-                CueLayerDto(lookId = bright.id, sortOrder = 0, targets = targets),
-                CueLayerDto(lookId = dim.id, sortOrder = 1, targets = targets),
+                CueLayerDto(lookId = bright.id, sortOrder = 0),
+                CueLayerDto(lookId = dim.id, sortOrder = 1),
             ),
         )
 
@@ -453,7 +451,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             client, "layered",
             rows = listOf(assignment("fixture", "hex-1", "dimmer", "90")),
             layers = listOf(
-                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                CueLayerDto(lookId = warm.id, sortOrder = 0),
             ),
         )
 
@@ -482,7 +480,6 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             layers = listOf(
                 CueLayerDto(
                     lookId = warm.id, sortOrder = 0,
-                    targets = listOf(CueTargetDto("fixture", "hex-1")),
                     delayMs = 2_000L,
                 ),
             ),

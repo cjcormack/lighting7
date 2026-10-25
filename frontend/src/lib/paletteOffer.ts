@@ -89,15 +89,3 @@ export function outsideMaskReason(
   if (family == null || mask == null || mask.length === 0 || mask.includes(family)) return null
   return `${FAMILY_LABELS[family].singular} — the selection is ${formatFamilyList(mask, ' · ')}`
 }
-
-/**
- * A Look's reason: it lands masked, so only a Look with no family inside the mask is out. A Look with
- * no family at all (scenery alone) lights nothing for a mask to cut, and lands whatever the mask.
- */
-export function lookOutsideMaskReason(
-  families: readonly AttributeFamily[],
-  mask: readonly AttributeFamily[] | null,
-): string | null {
-  if (mask == null || mask.length === 0 || families.length === 0 || families.some((f) => mask.includes(f))) return null
-  return `${formatFamilyList(families, ' · ')} — the selection is ${formatFamilyList(mask, ' · ')}`
-}

@@ -744,8 +744,7 @@ function TargetBody({
           options={records.looks}
         />
         <p className="text-xs text-muted-foreground">
-          Presses the Look onto <em>its own fixtures</em>, the same every press — never onto the
-          selection. A Look with a deferred FX has none of its own, and is refused.
+          Puts the Look on whole, the same every press — never onto the selection.
         </p>
       </div>
     )
@@ -951,7 +950,7 @@ function RecordField({
         <SelectTrigger><SelectValue placeholder="Choose…" /></SelectTrigger>
         <SelectContent>
           {options.map((o) => (
-            <SelectItem key={o.uuid} value={o.uuid} disabled={o.disabled}>
+            <SelectItem key={o.uuid} value={o.uuid}>
               {o.label}
               {o.detail && <span className="text-muted-foreground"> · {o.detail}</span>}
             </SelectItem>

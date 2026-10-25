@@ -29,7 +29,6 @@ function look(overrides: Partial<LookSummary> = {}): LookSummary {
     rowCount: 3,
     fxCount: 0,
     targetCount: 3,
-    hasDeferredFx: false,
     preview: [],
     layerCount: 1,
     buskPageCount: 0,
@@ -73,13 +72,22 @@ function layer(overrides: Partial<LookStackLayer> = {}): LookStackLayer {
   return {
     source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
     enabled: true,
-    targets: [{ type: 'group', key: 'front-wash' }],
+    targets: [],
     attributeMask: null,
     blendMode: 'OVERRIDE',
     amount: 1,
     stomp: false,
     ...overrides,
   }
+}
+
+/** A palette's layer, which names targets where a Look's names none. */
+function paletteLayer(overrides: Partial<LookStackLayer> = {}): LookStackLayer {
+  return layer({
+    source: { kind: 'PALETTE', id: 4, uuid: 'p4', name: 'Amber' },
+    targets: [{ type: 'group', key: 'front-wash' }],
+    ...overrides,
+  })
 }
 
 function handlers() {
@@ -310,9 +318,11 @@ describe('LookStack', () => {
     expect(screen.getAllByTitle(/How this layer combines/)).toHaveLength(2)
   })
 
-  it('says a layer with no targets uses the look’s own', () => {
-    renderStack([layer({ targets: [] })])
-    expect(screen.getByText(/look’s own targets/)).toBeInTheDocument()
+  it('draws targets on a palette’s layer only — a Look’s names none, since it lands whole', () => {
+    renderStack([layer(), paletteLayer(), paletteLayer({ targets: [] })])
+    expect(screen.getAllByText('front-wash')).toHaveLength(1)
+    expect(screen.getAllByText('its own heads')).toHaveLength(1)
+    expect(screen.queryByText(/look’s own targets/)).toBeNull()
   })
 
   it('gives every layer a drag handle', () => {
@@ -381,8 +391,10 @@ describe('LookStack — a host with a selection of its own (the cue editor’s L
     const onSetTargets = vi.fn()
     const onOpenSource = vi.fn()
     const h = { ...handlers(), onSetTargets, onOpenSource }
-    render(<LookStack layers={[layer(), layer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" precedenceNote="" />)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Targets' })[1])
+    render(<LookStack layers={[layer(), paletteLayer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" precedenceNote="" />)
+    // Targets on the palette's layer alone: a Look's names none.
+    expect(screen.getAllByRole('button', { name: 'Targets' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Targets' }))
     expect(onSetTargets).toHaveBeenCalledWith(1)
     fireEvent.click(screen.getAllByRole('button', { name: 'Open Warm Wash' })[0])
     expect(onOpenSource).toHaveBeenCalledWith(0)
@@ -395,7 +407,7 @@ describe('LookStack — a host with a selection of its own (the cue editor’s L
 
   it('draws Targets refused with the host’s reason', () => {
     const h = { ...handlers(), onSetTargets: vi.fn() }
-    render(<LookStack layers={[layer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" targetsRefusal="Select fixtures first" />)
+    render(<LookStack layers={[paletteLayer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" targetsRefusal="Select fixtures first" />)
     const targets = screen.getByRole('button', { name: 'Targets' })
     expect(targets).toBeDisabled()
     expect(targets).toHaveAttribute('title', 'Select fixtures first')

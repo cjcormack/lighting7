@@ -10,19 +10,6 @@ export interface GroupSummary {
   symmetricMode: string
   defaultOrder: string
   /**
-   * Ids of the Looks the backend reports as compatible with this group.
-   *
-   * **Capability-only**: "does this group have colour/position at all", never "was this Look
-   * authored against that model", and no Look is excluded on any other ground — the "deferred
-   * Looks only" this used to claim describes nothing now that every Look row is bound. It
-   * answers for a Look's *deferred effects*, which are what the layer's targets supply.
-   *
-   * Known hole, and it is the backend's to close: a rows-only Look has an empty capability set,
-   * so it is reported compatible with everything. Do not filter here — compatibility is one
-   * answer, given server-side, or it drifts.
-   */
-  compatibleLookIds: number[]
-  /**
    * Every member's key in the group's order (`sort_order`, venue-visit plan S7): the order its
    * effects and a spread over it run in, which the Groups list draws member rows in. Absent from
    * an older desk.

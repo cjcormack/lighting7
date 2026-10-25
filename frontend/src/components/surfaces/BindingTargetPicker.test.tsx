@@ -54,8 +54,8 @@ vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({
     data: [
-      { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredFx: false },
-      { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredFx: true },
+      { id: 1, uuid: 'look-warm', name: 'Warm wash' },
+      { id: 2, uuid: 'look-pulse', name: 'Pulse' },
     ],
   }),
 }))
@@ -238,16 +238,13 @@ describe('BindingTargetPicker record targets', () => {
     expect(screen.getByText('Warm wash')).toBeInTheDocument()
   })
 
-  it('offers a Look that needs a selection, but not as a choosable option', () => {
-    // `SurfaceLibrary`'s drag chip already excludes one of these outright, to avoid the write
-    // boundary's `BINDING_LOOK_NEEDS_SELECTION`. The picker's manual "Change target" door has to
-    // enforce the same rule itself rather than let the operator pick it and hit the 400 on save.
+  it('offers every Look as a choosable option, since a Look lands whole', () => {
     renderPicker(false, { type: 'applyLook', lookUuid: 'look-warm' })
     // Two comboboxes are on screen: "Target type" and this body's own "Look" field — the second
     // is the one that lists the library.
     fireEvent.click(screen.getAllByRole('combobox')[1]!)
     const pulse = screen.getByRole('option', { name: /Pulse/ })
-    expect(pulse.getAttribute('aria-disabled')).toBe('true')
+    expect(pulse.getAttribute('aria-disabled')).not.toBe('true')
   })
 })
 

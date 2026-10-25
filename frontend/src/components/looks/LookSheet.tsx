@@ -383,7 +383,7 @@ function cellsInert(): boolean {
 /**
  * What a Look covers, in one line — `12 fixtures · 24 rows · 1 fx`. The row's subtitle before the
  * sheet (`LookListRow`'s `describeContents`), with the effect count folded in now that it has no
- * badge of its own. A Look with deferred effects says so: that is what makes it pad-eligible.
+ * badge of its own.
  */
 export function describeLookContents(look: LookSummary): string {
   if (look.targetCount === 0 && look.fxCount === 0) {
@@ -395,7 +395,6 @@ export function describeLookContents(look: LookSummary): string {
   if (look.targetCount > 0) parts.push(`${look.targetCount} fixture${look.targetCount === 1 ? '' : 's'}`)
   if (look.rowCount > 0) parts.push(`${look.rowCount} row${look.rowCount === 1 ? '' : 's'}`)
   if (look.fxCount > 0) parts.push(`${look.fxCount} FX`)
-  if (look.hasDeferredFx) parts.push('FX follow the layer')
   return parts.join(' · ')
 }
 

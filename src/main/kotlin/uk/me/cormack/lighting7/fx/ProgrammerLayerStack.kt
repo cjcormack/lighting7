@@ -451,9 +451,7 @@ class ProgrammerLayerStack(
      * the stack*, and a pad's next press still takes it off, so its ring stays lit.
      *
      * **A Look is on or off** (absolute-looks plan P4): coverage is a palette's question. A Look with
-     * a layer on the stack answers every target of the rig as [AppliedExtent.ALL] ([wholeRig]), so a
-     * ring folded over any selection reads it lit — "a layer of it is on", in the vocabulary a
-     * palette's ring already reads.
+     * a layer on the stack answers an entry naming no targets — its presence is the whole answer.
      *
      * Takes the layer list so the `layerState` broadcast can describe the frame it is sending
      * rather than whatever the store holds by the time it renders.
@@ -473,7 +471,6 @@ class ProgrammerLayerStack(
             heads.getOrPut(layer.source.uuid) { LinkedHashSet() } += coverage(named)
         }
         if (sources.isEmpty()) return emptyList()
-        val rig = if (sources.size == heads.size) emptyList() else wholeRig()
 
         // Group membership in the same terms `coverage` produces, so the two can be compared
         // directly. Empty groups are dropped: "every one of no heads" is a claim nothing means.
@@ -482,7 +479,7 @@ class ProgrammerLayerStack(
         }.filter { (_, members) -> members.isNotEmpty() }
 
         return sources.values.map { source ->
-            val covered = heads[source.uuid] ?: return@map AppliedSource(source, rig)
+            val covered = heads[source.uuid] ?: return@map AppliedSource(source, emptyList())
             val groupTargets = groups.mapNotNull { (name, members) ->
                 val hits = members.count { it in covered }
                 // A member held only through some of its cells is partly covered: the group reads
@@ -516,23 +513,6 @@ class ProgrammerLayerStack(
                 covered.map { AppliedTarget(it, AppliedExtent.ALL) } + cellTargets + parentTargets + groupTargets,
             )
         }
-    }
-
-    /**
-     * Every target of the rig as [AppliedExtent.ALL] — each fixture, each of its cells and each group
-     * with members — which is what a Look's [appliedState] entry answers: lit whatever is selected.
-     */
-    private fun wholeRig(): List<AppliedTarget> {
-        val rig = fixtures()
-        val out = ArrayList<AppliedTarget>()
-        for (fixture in rig.fixtures) {
-            val head = CueTargetDto(TargetRef.Fixture.TYPE, fixture.key)
-            out += AppliedTarget(head, AppliedExtent.ALL)
-            targetCoverage.cells(head).mapTo(out) { AppliedTarget(it, AppliedExtent.ALL) }
-        }
-        rig.groups.filter { it.fixtures.isNotEmpty() }
-            .mapTo(out) { AppliedTarget(CueTargetDto(TargetRef.Group.TYPE, it.name), AppliedExtent.ALL) }
-        return out
     }
 
     /**

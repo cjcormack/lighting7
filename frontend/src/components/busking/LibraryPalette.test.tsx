@@ -24,8 +24,8 @@ const templates = [
 ]
 
 const looks = [
-  { id: 5, uuid: 'l5', name: 'Ballyhoo', notes: null, sortOrder: 0, families: ['POSITION'], rowCount: 0, fxCount: 2, targetCount: 8, hasDeferredFx: true, preview: [], layerCount: 0 },
-  { id: 6, uuid: 'l6', name: 'Storm Wash', notes: null, sortOrder: 1, families: ['COLOUR'], rowCount: 3, fxCount: 0, targetCount: 10, hasDeferredFx: false, preview: [], layerCount: 0 },
+  { id: 5, uuid: 'l5', name: 'Ballyhoo', notes: null, sortOrder: 0, families: ['POSITION'], rowCount: 0, fxCount: 2, targetCount: 8, preview: [], layerCount: 0 },
+  { id: 6, uuid: 'l6', name: 'Storm Wash', notes: null, sortOrder: 1, families: ['COLOUR'], rowCount: 3, fxCount: 0, targetCount: 10, preview: [], layerCount: 0 },
 ]
 
 const stacks = [
@@ -102,10 +102,10 @@ describe('the library palette', () => {
     expect(screen.queryByText('Act 2')).toBeNull()
   })
 
-  it('says which Looks are bound, because those are the ones a slot could take', async () => {
+  it('describes a Look by what it holds', async () => {
     draw()
     await screen.findByText('Storm Wash')
-    expect(screen.getByText('10 fixtures · 3 values · bound')).toBeTruthy()
+    expect(screen.getByText('10 fixtures · 3 values')).toBeTruthy()
     expect(screen.getByText('8 fixtures · 2 FX')).toBeTruthy()
   })
 
@@ -152,8 +152,8 @@ describe('the library palette', () => {
 /**
  * While a drag is over an FX cue slot, the rows a slot cannot take say why.
  *
- * A slot has no selection, so it holds only what needs none: a cue, or a Look bound to its own
- * fixtures (D7). `useCueSlotHover` is the signal — it crosses from the header, where the slots
+ * A slot has no selection, so it holds only what needs none: a cue, or a Look, which lands whole
+ * (D7; absolute-looks plan D1). `useCueSlotHover` is the signal — it crosses from the header, where the slots
  * live, into the palette, which is in the routed page — and is mocked here because jsdom cannot
  * drive a real drag.
  */
@@ -182,10 +182,10 @@ describe('the palette while a slot is the drop target', () => {
     const refusedIn = (name: string) =>
       screen.getByText(name).closest('.min-h-10')!.textContent!.includes('needs a selection')
 
-    // A template needs a selection to land on; so does a Look with deferred effects.
+    // A palette needs a selection to land on.
     expect(refusedIn('Amber Key')).toBe(true)
-    expect(refusedIn('Ballyhoo')).toBe(true)
-    // A bound Look presses onto its own fixtures, and a cue has no targets at all.
+    // A Look lands whole, and a cue has no targets at all.
+    expect(refusedIn('Ballyhoo')).toBe(false)
     expect(refusedIn('Storm Wash')).toBe(false)
     expect(refusedIn('Blackout')).toBe(false)
   })

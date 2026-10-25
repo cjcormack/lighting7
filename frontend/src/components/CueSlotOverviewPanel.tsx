@@ -100,8 +100,8 @@ function CueSlotOverviewPanelBody() {
 
   const [applyCue] = useApplyCueMutation()
   const [stopCue] = useStopCueMutation()
-  // A slot has no selection: no targets — the desk lands the Look on its own patched fixtures — and
-  // no mask, whatever the window holds, and never a focused Look's draft.
+  // A slot has no selection, and a Look's press names none: it lands whole, whatever the window
+  // holds, and never in a focused Look's draft.
   const { press } = usePress(projectId ?? 0, SLOT_PAIR, { scope: 'programmer' })
   const [clearSlot] = useClearCueSlotMutation()
   const [assignSlot] = useAssignCueSlotMutation()
@@ -311,9 +311,7 @@ function CueSlotOverviewPanelBody() {
         return
       }
       // One route for both directions: the desk decides add-or-remove against the same layer stack
-      // the tile lights from. **Empty targets is the contract** — the route derives them from the
-      // Look's own patched fixtures, which is exactly why only a Look with no deferred effect may
-      // sit in a slot (D7). No optimistic ring: the applied feed lands on the same frame, and
+      // the tile lights from. No optimistic ring: the applied feed lands on the same frame, and
       // faking one would fight it.
       void press({ kind: 'look', look: { id: slot.itemId, name: slot.itemName } }, 'press')
     },

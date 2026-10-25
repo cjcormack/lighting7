@@ -125,6 +125,4 @@ internal data class BuskPressResponse(
      * D2). Always 0 for an off press.
      */
     val released: Int = 0,
-    /** Always empty: no press is masked by family any more (a Look's lands whole). Kept on the wire until the client stops reading it. */
-    val skippedFamilies: List<String> = emptyList(),
 )

@@ -11,6 +11,7 @@ import {
   markerMarkAt,
   moveColumn,
   recordColumnId,
+  extraColumnId,
   runMarkAt,
   runs,
   withExtraColumns,
@@ -107,7 +108,7 @@ function act(): StackTimeline {
 }
 
 describe('columns', () => {
-  it('groups by kind in first use down the stack, a column per record and target', () => {
+  it('groups by kind in first use down the stack, a column per Look and per palette and target', () => {
     const cols = columns(act(), names)
     expect(cols.map((c) => c.id)).toEqual([
       'look:1:*',
@@ -119,7 +120,7 @@ describe('columns', () => {
       'scenery:tabs',
     ])
     const [look, lavender1, lavender2] = cols
-    expect(look).toMatchObject({ kind: 'look', name: 'Warm', sub: 'own fixtures', families: ['INTENSITY', 'COLOUR'], heads: ['hex-1'] })
+    expect(look).toMatchObject({ kind: 'look', name: 'Warm', sub: 'Look', families: ['INTENSITY', 'COLOUR'], heads: ['hex-1'] })
     // One layer over two targets is two columns, each reaching its own head.
     expect(lavender1).toMatchObject({ name: 'Lavender', sub: 'Hex 1', heads: ['hex-1'] })
     expect(lavender2).toMatchObject({ sub: 'Hex 2', heads: ['hex-2'] })
@@ -237,7 +238,7 @@ describe('a column of one target of several', () => {
       entries: [
         cue(1, {
           layers: [
-            layer(WARM, {
+            layer(LAVENDER, {
               targets: [{ type: 'fixture', key: 'bar' }, { type: 'group', key: 'wash' }, { type: 'fixture', key: 'hex-3' }],
               heads: ['bar.1', 'bar.2', 'hex-2'],
             }),
@@ -246,10 +247,21 @@ describe('a column of one target of several', () => {
       ],
     }
     const byId = new Map(columns(t, rig).map((c) => [c.id, c.heads]))
-    expect(byId.get('look:1:fixture:bar')).toEqual(['bar.1', 'bar.2'])
-    expect(byId.get('look:1:group:wash')).toEqual(['hex-2'])
-    // A target the Look's rows never reach is a column that reaches nothing.
-    expect(byId.get('look:1:fixture:hex-3')).toEqual([])
+    expect(byId.get('palette:7:fixture:bar')).toEqual(['bar.1', 'bar.2'])
+    expect(byId.get('palette:7:group:wash')).toEqual(['hex-2'])
+    // A target the layer never reaches is a column that reaches nothing.
+    expect(byId.get('palette:7:fixture:hex-3')).toEqual([])
+  })
+
+  it('draws a Look once, whatever targets an older layer of it still names', () => {
+    // A Look lands whole (absolute-looks plan D1): one column, sub *Look*, its heads the layer's.
+    const t: StackTimeline = {
+      stackId: 1,
+      entries: [cue(1, { layers: [layer(WARM, { targets: [{ type: 'group', key: 'wash' }, { type: 'fixture', key: 'hex-3' }], heads: ['hex-1', 'hex-2'] })] })],
+    }
+    const cols = columns(t, names)
+    expect(cols.map((c) => c.id)).toEqual(['look:1:*'])
+    expect(cols[0]).toMatchObject({ sub: 'Look', target: null, heads: ['hex-1', 'hex-2'] })
   })
 })
 
@@ -275,6 +287,14 @@ describe('an added column', () => {
     const id = recordColumnId('palette', 9, amber.target)
     const added = withExtraColumns(columns(act(), names), [amber], names, [id])
     expect(added.filter((c) => c.kind === 'palette')[0].id).toBe(id)
+  })
+
+  it('is a Look’s one column, whatever targets older windows stored for it', () => {
+    const stale = { kind: 'look' as const, sourceId: 5, name: 'Dusk', target: { type: 'group' as const, key: 'wash' }, families: [] }
+    const other = { ...stale, target: { type: 'fixture' as const, key: 'hex-1' } }
+    const added = withExtraColumns(columns(act(), names), [stale, other], names).filter((c) => c.sourceId === 5)
+    expect(added).toEqual([expect.objectContaining({ id: 'look:5:*', sub: 'Look', target: null, heads: [] })])
+    expect(extraColumnId(stale)).toBe('look:5:*')
   })
 })
 

@@ -34,17 +34,12 @@ function paletteDrag(activeData: unknown): BuskPaletteDragData | null {
 /**
  * The assignment a palette row would make, or null if it cannot land here.
  *
- * Null for a **template** and for a Look with a deferred effect: a slot has no selection, so it can
- * hold only what needs none (busk-layout plan D7). The rule itself is `lib/handTargets.ts`'s
- * `canHandLand(…, 'slot')`, which the palette calls to set `slotEligible` and the hand's target
- * affordance calls directly — one statement of it, where there were three.
- *
- * **What the kind switch below re-checks, and what it does not.** A wrongly-true `slotEligible` on a
- * *template* row still cannot put one in a slot: the trailing `return null` catches it. The
- * deferred-effect *Look* refusal has no such second line — a Look reaching here with the flag set
- * is assigned — so that half rests on `canHandLand` alone. That asymmetry is why it matters that
- * the flag is computed from the shared rule rather than restated per row, and it is stated here
- * because the sentence that used to stand in its place implied both cases were covered.
+ * Null for a **palette**: a slot has no selection, so it can hold only what needs none (busk-layout
+ * plan D7) — a cue, or a Look, which lands whole. The rule itself is `lib/handTargets.ts`'s
+ * `canHandLand(…, 'slot')`, which the library calls to set `slotEligible` and the hand's target
+ * affordance calls directly — one statement of it, where there were three. A wrongly-true
+ * `slotEligible` on a palette row still cannot put one in a slot: the trailing `return null`
+ * catches it.
  */
 export function slotAssignmentFor(activeData: unknown): SlotAssignment | null {
   const drag = paletteDrag(activeData)
@@ -56,8 +51,7 @@ export function slotAssignmentFor(activeData: unknown): SlotAssignment | null {
 }
 
 /**
- * A palette row that is over a slot but cannot land in it — a template, or a Look that needs a
- * selection. Purely an affordance: the drop is a no-op either way, and this only lets the tile say
+ * A library row that is over a slot but cannot land in it — a palette. Purely an affordance: the drop is a no-op either way, and this only lets the tile say
  * why rather than swallowing the gesture silently.
  */
 export function isSlotRefusedDrag(activeData: unknown): boolean {

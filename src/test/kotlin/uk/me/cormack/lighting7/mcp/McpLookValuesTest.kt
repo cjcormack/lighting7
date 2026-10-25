@@ -407,6 +407,21 @@ class McpLookValuesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `create_cue refuses a Look layer naming targets, by name`() {
+        patchRig()
+        val look = call(
+            "create_look",
+            """{"name":"Warm","values":[{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"dmx:150"}]}""",
+        )
+        assertTrue(look.success, look.result)
+        val lookId = look.json()["lookId"]!!.jsonPrimitive.int
+
+        val refused = call("create_cue", """{"name":"Q","layers":[{"lookId":$lookId,"targets":[{"type":"fixture","key":"foh-1"}]}]}""")
+        assertFalse(refused.success)
+        assertTrue("layers[0]" in refused.description && "LOOK_LAYER_TARGETED" in refused.description, refused.description)
+    }
+
+    @Test
     fun `a cue whose Look names an effect no longer registered still goes, without that effect`() {
         patchRig()
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
@@ -432,7 +447,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
         }
         state.show.fixtures.lookListChanged()
 
-        val cue = call("create_cue", """{"name":"Q","layers":[{"lookId":$lookId,"targets":[{"type":"fixture","key":"foh-1"}]}]}""")
+        val cue = call("create_cue", """{"name":"Q","layers":[{"lookId":$lookId}]}""")
         assertTrue(cue.success, cue.result)
         val applied = call("apply_cue", """{"cueId":${cue.json()["cueId"]!!.jsonPrimitive.int}}""")
         assertTrue(applied.success, applied.result)

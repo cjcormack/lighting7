@@ -17,6 +17,7 @@ import type { PressPair } from '@/hooks/usePress'
  */
 let library: PaletteSummary[] = []
 let looks: LookSummary[] = []
+let applied: unknown[] = []
 
 const press = vi.fn(async () => 'on' as const)
 const pairs: PressPair[] = []
@@ -85,7 +86,7 @@ vi.mock('@/components/fx/FxEditor', () => ({
       </button>
     ),
 }))
-vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: [] }) }))
+vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: applied }) }))
 vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: false, canEdit: true }) }))
 vi.mock('@/store/hand', () => ({ handPickUp: vi.fn() }))
 
@@ -159,7 +160,6 @@ function look(over: Partial<LookSummary> = {}): LookSummary {
     rowCount: 4,
     fxCount: 0,
     targetCount: 4,
-    hasDeferredFx: false,
     preview: [],
     layerCount: 0,
     buskPageCount: 0,
@@ -251,6 +251,7 @@ beforeEach(() => {
   recentPalettesSpy.mockClear()
   library = [PRESSED, GENERIC, PER_FIXTURE, EFFECT, WHITE_KEY, FULL, WIDE, SOFT]
   looks = []
+  applied = []
   focus.look = null
   focus.cue = null
   fxPicker.mockClear()
@@ -418,14 +419,14 @@ describe('ApplyPicker — palettes', () => {
 
 describe('ApplyPicker — Looks', () => {
   const OWN = look({ id: 21, name: 'Warm wash' })
-  const DEFERRED = look({ id: 22, uuid: 'l22', name: 'Chase', families: ['INTENSITY'], fxCount: 1, hasDeferredFx: true })
+  const CHASE = look({ id: 22, uuid: 'l22', name: 'Chase', families: ['INTENSITY'], fxCount: 1 })
   const MOVES = look({ id: 23, uuid: 'l23', name: 'Sweep', families: ['POSITION'] })
 
   beforeEach(() => {
-    looks = [OWN, DEFERRED, MOVES]
+    looks = [OWN, CHASE, MOVES]
   })
 
-  it('presses a Look onto the selection, with its gestures', async () => {
+  it('presses a Look with its gestures, whatever is selected', async () => {
     const pair = { targets: HEX_1, families: null }
     render(picker({ library: 'looks', pair }))
     expect(sectionPads('all')).toEqual(['Warm wash', 'Chase', 'Sweep'])
@@ -433,30 +434,22 @@ describe('ApplyPicker — Looks', () => {
       fireEvent.click(panel().querySelector('[data-picker-look="21"]')!)
     })
     expect(press).toHaveBeenCalledWith({ kind: 'look', look: OWN }, 'press')
-    expect(pairs.at(-1)).toBe(pair)
   })
 
-  it('puts a Look outside the mask only when none of its families is inside it', () => {
+  it('draws every Look in one list, whatever the mask, with no Own fixtures switch', () => {
+    // A Look lands whole (absolute-looks plan D1, D3): the selection's mask says nothing about it.
     render(picker({ library: 'looks', pair: { targets: HEX_1, families: ['COLOUR'] } }))
-    // Warm wash lands masked to its colour rows; Chase and Sweep have nothing in Colour.
-    expect(sectionPads('all')).toEqual(['Warm wash'])
-    expect(sectionPads('outside')).toEqual(['Chase', 'Sweep'])
+    expect(sectionPads('all')).toEqual(['Warm wash', 'Chase', 'Sweep'])
+    expect(panel().querySelector('[data-picker-section="outside"]')).toBeNull()
+    expect(within(panel()).queryByText('On its own fixtures')).not.toBeInTheDocument()
   })
 
-  it('lands on its own fixtures with nothing selected, and a Look whose effects need targets is out', async () => {
+  it('rings a Look while a layer of it is on, whatever is selected', () => {
+    // The desk's entry for a Look names no targets (P4): its presence is the ring.
+    applied = [{ source: { kind: 'LOOK', id: 23, uuid: 'l23', name: 'Sweep' }, targets: [] }]
     render(picker({ library: 'looks', pair: { targets: [], families: null } }))
-    expect(sectionPads('all')).toEqual(['Warm wash', 'Sweep'])
-    expect(sectionPads('outside')).toEqual(['Chase'])
-    await act(async () => {
-      fireEvent.click(panel().querySelector('[data-picker-look="23"]')!)
-    })
-    expect(pairs.at(-1)).toEqual({ targets: [], families: null })
-  })
-
-  it('offers its own fixtures beside the selection, which presses with no targets', () => {
-    render(picker({ library: 'looks', pair: { targets: HEX_1, families: null } }))
-    fireEvent.click(within(panel()).getByText('On its own fixtures'))
-    expect(pairs.at(-1)).toEqual({ targets: [], families: null })
+    expect(panel().querySelector('[data-picker-look="23"]')!.className).toContain('ring-1')
+    expect(panel().querySelector('[data-picker-look="21"]')!.className).not.toContain('ring-1')
   })
 })
 

@@ -255,6 +255,7 @@ export function BuskPadButton({
     presence,
     hasSelection,
     !(pad.kind === 'PALETTE' && (pad.palette?.isGeneric ?? true)),
+    pad.kind === 'LOOK',
   )
 
   // No menu while editing: there the pad is a drag handle, `useLongPress` is disabled and the only

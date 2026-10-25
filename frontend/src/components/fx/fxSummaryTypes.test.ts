@@ -21,8 +21,8 @@ const MASTER = 'aaaaaaaa-0000-0000-0000-000000000002'
 describe('fxSummaryTypes speed-master threading', () => {
   it('fromLookFx carries it', () => {
     const e: LookFx = {
-      targetType: 'deferred',
-      targetKey: '',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
       fxType: 'Pulse', family: 'intensity', attribute: 'dimmer',
       cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,
@@ -74,8 +74,8 @@ describe('fxSummaryTypes speed-master threading', () => {
 
   it('an absent reference normalises to null, the master-1 default', () => {
     const e: LookFx = {
-      targetType: 'deferred',
-      targetKey: '',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
       fxType: 'Pulse', family: 'intensity', attribute: 'dimmer',
       cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,
@@ -95,8 +95,8 @@ describe('fxSummaryTypes rate-master threading', () => {
 
   it('fromLookFx carries it independently of the speed master', () => {
     const e: LookFx = {
-      targetType: 'deferred',
-      targetKey: '',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
       fxType: 'CandleFlicker', family: 'intensity', attribute: 'dimmer',
       cycle: 4, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,
@@ -120,8 +120,8 @@ describe('fxSummaryTypes rate-master threading', () => {
 
   it('an absent rate reference normalises to null, meaning unscaled', () => {
     const e: LookFx = {
-      targetType: 'deferred',
-      targetKey: '',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
       fxType: 'Pulse', family: 'intensity', attribute: 'dimmer',
       cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,

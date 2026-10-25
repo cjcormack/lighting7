@@ -68,7 +68,6 @@ vi.mock('../fixtures/FixtureParkButton', () => ({
   FixtureParkButton: () => <button type="button">Park</button>,
   ParkButton: () => <button type="button">Park</button>,
 }))
-vi.mock('../fx/LookTogglePicker', () => ({ LookTogglePicker: () => null }))
 const picker = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }))
 vi.mock('../fx/FxPicker', () => ({
   FxPicker: (props: Record<string, unknown>) => {

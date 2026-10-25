@@ -18,7 +18,7 @@ export interface TimelineColumn {
   kind: TimelineKind
   /** The record's name — the Look's, the palette's, the effect's, the element's. */
   name: string
-  /** What it is on — the target, *own fixtures*, a scenery element's kind. */
+  /** What it is — *Look*, a palette's target or *own heads*, a scenery element's kind. */
   sub: string
   /** Attribute families (`AttributeFamily` names) it touches; empty for scenery. */
   families: string[]
@@ -26,7 +26,7 @@ export interface TimelineColumn {
   heads: string[]
   /** A Look's or a palette's source id; an effect's type; a scenery element's uuid. */
   sourceId: number | null
-  /** The one target a Look or palette column is on, or null for its own fixtures. */
+  /** The one target a palette column is on, or null for its own heads — and for a Look's, always. */
   target: CueTarget | null
   effect?: { fxType: string; attribute: string | null; targetType: string; targetKey: string }
   elementUuid?: string
