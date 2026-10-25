@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { PROGRAMMER_TABLES, PROGRAMMER_TABLE_LABELS, parseProgrammerTable, type ProgrammerTable } from '@/lib/programmerTables'
 import { useHeldSceneryCount } from './ProgrammerSceneryList'
@@ -28,7 +28,7 @@ export interface ProgrammerTablesChoice {
 /** Layers, running effects and held scenery: the counts on Stack, FX and Scenery. */
 export function useProgrammerTableCounts(projectId: number): ProgrammerTablesChoice['counts'] {
   const { data: layers } = useProgrammerLayersQuery()
-  const { data: effects } = useActiveEffectsQuery()
+  const { data: effects } = useActiveFxQuery()
   const scenery = useHeldSceneryCount(projectId)
   const stack = layers?.length ?? 0
   const fx = effects?.length ?? 0
@@ -218,7 +218,7 @@ function countSentence(table: ProgrammerTable, count: number): string {
     case 'stack':
       return `${count} layer${count === 1 ? '' : 's'}`
     case 'fx':
-      return `${count} effect${count === 1 ? '' : 's'} running`
+      return `${count} FX running`
     case 'scenery':
       return `${count} piece${count === 1 ? '' : 's'} of scenery held`
     default:

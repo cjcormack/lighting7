@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
-import type { CellPropertyKey, RowCell } from './useRowValues'
+import type { CellAttributeKey, RowCell } from './useRowValues'
 
 /**
  * The per-row programmer subscription mechanism, shared by `useRowOwnership` and the Local
@@ -35,7 +35,7 @@ export function useProgrammerRowSnapshot<T>(
 ): T {
   const keysSignature = useMemo(() => signatureOf(cells), [cells])
 
-  const subscribedKeys = useMemo<CellPropertyKey[]>(
+  const subscribedKeys = useMemo<CellAttributeKey[]>(
     () => dedupeKeys(cells),
     // Keyed on the signature, not `cells`: buildRows mints fresh Row objects on every filter
     // keystroke, and re-registering every subscription for every mounted row would make
@@ -46,7 +46,7 @@ export function useProgrammerRowSnapshot<T>(
 
   const cachedRef = useRef<{
     cells: readonly RowCell[]
-    keys: readonly CellPropertyKey[]
+    keys: readonly CellAttributeKey[]
     version: number
     snapshot: T
   } | null>(null)
@@ -68,7 +68,7 @@ export function useProgrammerRowSnapshot<T>(
         callback()
       }
       const subscriptions = subscribedKeys.map((key) =>
-        lightingApi.programmer.subscribeToKey(key.targetKey, key.propertyName, bump),
+        lightingApi.programmer.subscribeToKey(key.targetKey, key.attribute, bump),
       )
       // Blind is global rather than per-key, and flipping it changes what every cell displays.
       // Filter to *just* that transition — the whole-state channel also fires on every
@@ -120,17 +120,17 @@ function signatureOf(cells: readonly RowCell[]): string {
   return cells
     .map(
       (cell) =>
-        `${cell.col}=${cell.keys.map((k) => `${k.targetKey}|${k.propertyName}`).join(',')}`,
+        `${cell.col}=${cell.keys.map((k) => `${k.targetKey}|${k.attribute}`).join(',')}`,
     )
     .join(';')
 }
 
-function dedupeKeys(cells: readonly RowCell[]): CellPropertyKey[] {
+function dedupeKeys(cells: readonly RowCell[]): CellAttributeKey[] {
   const seen = new Set<string>()
-  const out: CellPropertyKey[] = []
+  const out: CellAttributeKey[] = []
   for (const cell of cells) {
     for (const key of cell.keys) {
-      const id = `${key.targetKey}|${key.propertyName}`
+      const id = `${key.targetKey}|${key.attribute}`
       if (seen.has(id)) continue
       seen.add(id)
       out.push(key)

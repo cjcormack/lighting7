@@ -25,18 +25,18 @@ import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.routes.AddPadOutcome
 import uk.me.cormack.lighting7.routes.BuskPressService
 import uk.me.cormack.lighting7.routes.HandService
 import uk.me.cormack.lighting7.routes.familyOf
-import uk.me.cormack.lighting7.routes.isGenericTemplate
+import uk.me.cormack.lighting7.routes.isGenericPalette
 import uk.me.cormack.lighting7.routes.pressWouldRelease
-import uk.me.cormack.lighting7.routes.TemplatePressLog
-import uk.me.cormack.lighting7.routes.templateOutsideMaskMessage
+import uk.me.cormack.lighting7.routes.PalettePressLog
+import uk.me.cormack.lighting7.routes.paletteOutsideMaskMessage
 import uk.me.cormack.lighting7.routes.layerSource
 import uk.me.cormack.lighting7.routes.toggleLocate
 import uk.me.cormack.lighting7.state.SelectionSource
@@ -62,28 +62,28 @@ interface SurfaceActions {
      * edited by Include / Update like every other authoring path. [colourAxis] is which axis of
      * a colour property the value moves — null is hue — and means nothing on a slider.
      */
-    fun writeFixtureProperty(
+    fun writeFixtureAttribute(
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         midiValue7Bit: UByte,
         colourAxis: ColourAxis? = null,
     )
 
-    /** Group variant of [writeFixtureProperty], fanned out per member. */
-    fun writeGroupProperty(
+    /** Group variant of [writeFixtureAttribute], fanned out per member. */
+    fun writeGroupAttribute(
         groupName: String,
-        propertyName: String,
+        attribute: String,
         midiValue7Bit: UByte,
         colourAxis: ColourAxis? = null,
     )
 
     /** Flash press: store at 0..255 [max] on the property's channels. */
-    fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte)
-    fun flashGroupPropertyPress(groupName: String, propertyName: String, max: UByte)
+    fun flashFixtureAttributePress(fixtureKey: String, attribute: String, max: UByte)
+    fun flashGroupAttributePress(groupName: String, attribute: String, max: UByte)
 
     /** Flash release: clear direct-write entries for the property's channels. */
-    fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String)
-    fun flashGroupPropertyRelease(groupName: String, propertyName: String)
+    fun flashFixtureAttributeRelease(fixtureKey: String, attribute: String)
+    fun flashGroupAttributeRelease(groupName: String, attribute: String)
 
     /**
      * Cue and stack actions take the binding's uuid beside its int. A uuid, when present, is the
@@ -110,11 +110,11 @@ interface SurfaceActions {
     fun writeGrandMaster(midiValue7Bit: UByte)
 
     /**
-     * Set a cue stack's effect size from a continuous control, 0..127 across 0–100 %, the stack
+     * Set a cue stack's FX amount from a continuous control, 0..127 across 0–100 %, the stack
      * resolved as the stack buttons resolve theirs. A default so a test double that does not care
      * about stack sizes need not say so.
      */
-    fun writeStackEffectSize(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {}
+    fun writeStackFxAmount(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {}
 
     /**
      * Set a speed master's tempo from a continuous control, scaling 0..127 across
@@ -126,12 +126,12 @@ interface SurfaceActions {
     fun tapSpeedMaster(masterUuid: String?)
 
     /**
-     * Write a continuous value to [propertyName] on every target in the desk selection
+     * Write a continuous value to [attribute] on every target in the desk selection
      * ([uk.me.cormack.lighting7.state.DeskSelection]) — a group fanned to its members. An empty
      * selection drops the write with a debug log; it is never widened to "everything".
-     * [colourAxis] as on [writeFixtureProperty].
+     * [colourAxis] as on [writeFixtureAttribute].
      */
-    fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis? = null)
+    fun writeSelectionAttribute(attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis? = null)
 
     /** One turn of a fan encoder on [axis] over the desk selection — see [SelectionFan]. */
     fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte)
@@ -155,7 +155,7 @@ interface SurfaceActions {
      * dropped, exactly as its busk pad refuses; a per-fixture one presses on its own heads. The
      * family mask is derived from the template's rows, never sent.
      */
-    fun pressTemplate(templateUuid: String)
+    fun pressPalette(paletteUuid: String)
 
     /** Press a busk pad — its own bank's plan, solo siblings included, on the desk selection. */
     fun pressPad(padUuid: String)
@@ -226,9 +226,9 @@ class DefaultSurfaceActions(
     private val globalScalerState: GlobalScalerState get() = state.show.globalScalerState
     private val speedMasters: SpeedMasterBank get() = state.show.speedMasterBank
 
-    override fun writeFixtureProperty(
+    override fun writeFixtureAttribute(
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         midiValue7Bit: UByte,
         colourAxis: ColourAxis?,
     ) {
@@ -238,18 +238,18 @@ class DefaultSurfaceActions(
             logger.debug("Surface write: fixture '{}' not found", fixtureKey)
             return
         }
-        val value = PropertyChannelResolver.toPropertyValue(
-            fixture, propertyName, midiValue7Bit, PropertyChannelResolver.channelReader(fixtures), colourAxis,
+        val value = AttributeChannelResolver.toAttributeValue(
+            fixture, attribute, midiValue7Bit, AttributeChannelResolver.channelReader(fixtures), colourAxis,
         ) ?: run {
-            logger.debug("Surface write: property '{}' on '{}' not fader-writable", propertyName, fixtureKey)
+            logger.debug("Surface write: property '{}' on '{}' not fader-writable", attribute, fixtureKey)
             return
         }
-        fxEngine.programmer.writeProperty(ProgrammerOwner.SURFACE, fixture, propertyName, value)
+        fxEngine.programmer.writeAttribute(ProgrammerOwner.SURFACE, fixture, attribute, value)
     }
 
-    override fun writeGroupProperty(
+    override fun writeGroupAttribute(
         groupName: String,
-        propertyName: String,
+        attribute: String,
         midiValue7Bit: UByte,
         colourAxis: ColourAxis?,
     ) {
@@ -261,48 +261,48 @@ class DefaultSurfaceActions(
         }
         // Convert per member — sliders scale through each member's own min..max sub-range, and
         // a colour axis lands on each member's own current colour.
-        val read = PropertyChannelResolver.channelReader(fixtures)
+        val read = AttributeChannelResolver.channelReader(fixtures)
         val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
-            PropertyChannelResolver.toPropertyValue(member, propertyName, midiValue7Bit, read, colourAxis)?.let {
-                ProgrammerWriter.PropertyWrite(member, propertyName, it, sourceGroup = groupName)
+            AttributeChannelResolver.toAttributeValue(member, attribute, midiValue7Bit, read, colourAxis)?.let {
+                ProgrammerWriter.AttributeWrite(member, attribute, it, sourceGroup = groupName)
             }
         }
         if (writes.isEmpty()) return
-        fxEngine.programmer.writeProperties(ProgrammerOwner.SURFACE, writes)
+        fxEngine.programmer.writeAttributes(ProgrammerOwner.SURFACE, writes)
     }
 
-    override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {
+    override fun flashFixtureAttributePress(fixtureKey: String, attribute: String, max: UByte) {
         val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
-        val value = PropertyChannelResolver.flashPropertyValue(fixture, propertyName, max) ?: return
+        val value = AttributeChannelResolver.flashAttributeValue(fixture, attribute, max) ?: return
         // Momentary owner: don't absorb the sideband — release must reveal what was under it.
-        fxEngine.programmer.writeProperty(
-            ProgrammerOwner.FLASH, fixture, propertyName, value, absorbSideband = false,
+        fxEngine.programmer.writeAttribute(
+            ProgrammerOwner.FLASH, fixture, attribute, value, absorbSideband = false,
         )
     }
 
-    override fun flashGroupPropertyPress(groupName: String, propertyName: String, max: UByte) {
+    override fun flashGroupAttributePress(groupName: String, attribute: String, max: UByte) {
         val group = fixtures.tryUntypedGroup(groupName) ?: return
         // Clamp per member — slider max can differ across heterogeneous group members.
         val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
-            PropertyChannelResolver.flashPropertyValue(member, propertyName, max)?.let {
-                ProgrammerWriter.PropertyWrite(member, propertyName, it, sourceGroup = groupName)
+            AttributeChannelResolver.flashAttributeValue(member, attribute, max)?.let {
+                ProgrammerWriter.AttributeWrite(member, attribute, it, sourceGroup = groupName)
             }
         }
         if (writes.isEmpty()) return
-        fxEngine.programmer.writeProperties(ProgrammerOwner.FLASH, writes, absorbSideband = false)
+        fxEngine.programmer.writeAttributes(ProgrammerOwner.FLASH, writes, absorbSideband = false)
     }
 
-    override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {
+    override fun flashFixtureAttributeRelease(fixtureKey: String, attribute: String) {
         val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
         // Release pops only the FLASH slot: the property cascades to the surviving owner
         // underneath (fader/busk level), then the cue layer, then baseline — in one
         // transaction, skipping keys a running effect covers.
-        fxEngine.programmer.clearProperty(ProgrammerOwner.FLASH, fixture, propertyName)
+        fxEngine.programmer.clearAttribute(ProgrammerOwner.FLASH, fixture, attribute)
     }
 
-    override fun flashGroupPropertyRelease(groupName: String, propertyName: String) {
+    override fun flashGroupAttributeRelease(groupName: String, attribute: String) {
         val group = fixtures.tryUntypedGroup(groupName) ?: return
-        fxEngine.programmer.clearGroupProperty(ProgrammerOwner.FLASH, group, propertyName)
+        fxEngine.programmer.clearGroupAttribute(ProgrammerOwner.FLASH, group, attribute)
     }
 
     @OptIn(DelicateCoroutinesApi::class)
@@ -363,9 +363,9 @@ class DefaultSurfaceActions(
     override fun writeGrandMaster(midiValue7Bit: UByte) =
         globalScalerState.setGrandMasterLevel(grandMasterLevelOf7Bit(midiValue7Bit))
 
-    override fun writeStackEffectSize(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
+    override fun writeStackFxAmount(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
         val resolved = resolveFaderStackId(stackId, stackUuid) ?: return
-        cueStackManager.setEffectSize(resolved, stackEffectSizeOf7Bit(midiValue7Bit))
+        cueStackManager.setFxAmount(resolved, stackFxAmountOf7Bit(midiValue7Bit))
     }
 
     /** A stack button's rule — the uuid wins, the int only without one — through the show's kept lookup. */
@@ -419,17 +419,17 @@ class DefaultSurfaceActions(
         null
     }
 
-    override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
+    override fun writeSelectionAttribute(attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
         // The selection's attribute mask is ignored here on purpose: the control names its own
         // attribute, as a cell edit is not masked by a marquee elsewhere (multi-screen plan §3.3).
         val targets = state.deskSelection.state.value.targets
         if (targets.isEmpty()) {
-            logger.debug("Surface selection write of '{}' dropped: nothing selected", propertyName)
+            logger.debug("Surface selection write of '{}' dropped: nothing selected", attribute)
             return
         }
-        val writes = SelectionWrites.forTargets(fixtures, targets, propertyName, midiValue7Bit, colourAxis)
+        val writes = SelectionWrites.forTargets(fixtures, targets, attribute, midiValue7Bit, colourAxis)
         if (writes.isEmpty()) return
-        fxEngine.programmer.writeProperties(ProgrammerOwner.SURFACE, writes)
+        fxEngine.programmer.writeAttributes(ProgrammerOwner.SURFACE, writes)
     }
 
     override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) = state.selectionFan.turn(axis, midiValue7Bit)
@@ -491,52 +491,52 @@ class DefaultSurfaceActions(
      * rule as every other door: a template whose family is outside it is refused by name, and the
      * refusal is a log line because a button has no reply channel (multi-screen plan D5).
      */
-    override fun pressTemplate(templateUuid: String) {
-        val uuid = uuidOrNull(templateUuid) ?: run {
-            logger.warn("Surface pressTemplate dropped: '{}' is not a uuid", templateUuid)
+    override fun pressPalette(paletteUuid: String) {
+        val uuid = uuidOrNull(paletteUuid) ?: run {
+            logger.warn("Surface pressPalette dropped: '{}' is not a uuid", paletteUuid)
             return
         }
         val projectId = currentProjectId() ?: return
         val press = transaction(state.database) {
-            DaoTemplate.find { (DaoTemplates.uuid eq uuid) and (DaoTemplates.project eq projectId) }
+            DaoPalette.find { (DaoPalettes.uuid eq uuid) and (DaoPalettes.project eq projectId) }
                 .firstOrNull()
                 ?.let { t ->
                     Triple(
-                        LayerSource.template(t.id.value, t.uuid, t.name),
+                        LayerSource.palette(t.id.value, t.uuid, t.name),
                         t.familyOf(),
-                        t.isGenericTemplate(),
+                        t.isGenericPalette(),
                     )
                 }
         }
         if (press == null) {
-            logger.warn("Surface pressTemplate dropped: no template {} in project {}", templateUuid, projectId)
+            logger.warn("Surface pressPalette dropped: no template {} in project {}", paletteUuid, projectId)
             return
         }
         val (source, family, isGeneric) = press
         val selection = state.deskSelection.state.value
         val targets = selection.targets
         if (isGeneric && targets.isEmpty()) {
-            logger.debug("Surface pressTemplate of '{}' dropped: nothing selected", source.name)
+            logger.debug("Surface pressPalette of '{}' dropped: nothing selected", source.name)
             return
         }
         val mask = selection.families
         // The on arm only: an off press comes off under any mask (`pressWouldRelease`).
         if (mask != null && !maskAllows(mask, family) && !pressWouldRelease(state, source.uuid, targets)) {
-            logger.warn("Surface pressTemplate dropped: {}", templateOutsideMaskMessage(source.name, family, mask))
+            logger.warn("Surface pressPalette dropped: {}", paletteOutsideMaskMessage(source.name, family, mask))
             return
         }
         runCatching {
-            state.show.programmerLayerStack.toggle(source = source, targets = targets, propertyMask = family?.name)
+            state.show.programmerLayerStack.toggle(source = source, targets = targets, attributeMask = family?.name)
         }.onSuccess { outcome ->
             // The hardware door of the press log — pressing from the desk's own buttons counts, or
             // the programmer's recents row would disagree with the surface the operator is using.
-            // The **on** arm only: a release is not a press (`TemplatePressLog`). The two refusals
+            // The **on** arm only: a release is not a press (`PalettePressLog`). The two refusals
             // above (no uuid / no such template, and a generic template with nothing selected) have
             // already returned, and a `toggle` that threw lands in `onFailure`.
             if (outcome.action == "applied") {
-                TemplatePressLog.record(state, projectId, source.id)
+                PalettePressLog.record(state, projectId, source.id)
             }
-        }.onFailure { logger.warn("Surface pressTemplate failed: {}", it.message) }
+        }.onFailure { logger.warn("Surface pressPalette failed: {}", it.message) }
     }
 
     /**

@@ -1,0 +1,19 @@
+{
+  "depthM": 0.12,
+  "heightM": 3.1,
+  "kind": "DRAPE",
+  "layer": "VENUE",
+  "name": "House tabs",
+  "params": {
+    "drawFrom": "STAGE_LEFT",
+    "operation": "DRAW",
+    "role": "TABS",
+    "states": {
+      "open": 1.0
+    },
+    "travelS": 4.5
+  },
+  "positionY": 0.6,
+  "uuid": "c314887e-693b-4ba6-81b8-a18843b93e52",
+  "widthM": 5.6
+}

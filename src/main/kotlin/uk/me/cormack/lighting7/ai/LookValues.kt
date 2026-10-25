@@ -5,27 +5,27 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
-import uk.me.cormack.lighting7.fx.TemplateIntent
-import uk.me.cormack.lighting7.fx.TemplateProperty
-import uk.me.cormack.lighting7.fx.TemplateResolver
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
+import uk.me.cormack.lighting7.fx.PaletteIntent
+import uk.me.cormack.lighting7.fx.PaletteAttribute
+import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.WhitePolicy
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.parseTemplateIntent
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
+import uk.me.cormack.lighting7.fx.parsePaletteIntent
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
- * `create_look`'s values: intents resolved per head through [TemplateResolver] into the literal
+ * `create_look`'s values: intents resolved per head through [PaletteResolver] into the literal
  * rows a Look stores. A group keeps one row while its members agree, else one row per head.
  */
 internal class ResolvedLookValues(
@@ -40,12 +40,12 @@ internal class ResolvedLookValues(
  * The same rows as a cue's own values (`create_cue` / `build_cue_stack`), which address a cell by
  * its own key, as Record writes one.
  */
-internal fun ResolvedLookValues.asCueAssignments(): List<CuePropertyAssignmentDto> =
+internal fun ResolvedLookValues.asCueAssignments(): List<CueAttributeAssignmentDto> =
     rows.mapIndexed { index, row ->
-        CuePropertyAssignmentDto(row.targetType, row.elementKey ?: row.targetKey, row.propertyName, row.value, sortOrder = index)
+        CueAttributeAssignmentDto(row.targetType, row.elementKey ?: row.targetKey, row.attribute, row.value, sortOrder = index)
     }
 
-internal data class LookValueSkip(val target: String, val propertyName: String, val reason: String)
+internal data class LookValueSkip(val target: String, val attribute: String, val reason: String)
 
 /** What `values[].value` may say, for the schema and the refusals. */
 internal const val LOOK_VALUE_GRAMMAR =
@@ -57,11 +57,11 @@ internal const val LOOK_VALUE_GRAMMAR =
         "'pos:<pan>,<tilt>' for position (centre-relative DMX, -128 to 127 each, 0 the centre of travel; 'deg:' travel " +
         "degrees is still read), or pan and tilt each on its own with 'pct:' or 'dmx:', " +
         "'dmx:0-255' for a raw channel level (white, amber and uv, or any single channel), 'on' / 'off' for prism, " +
-        "or a setting's option name (a gobo, a colour-wheel slot, a macro) as list_fixture_types' properties name it"
+        "or a setting's option name (a gobo, a colour-wheel slot, a macro) as list_fixture_types' attributes name it"
 
-private class Entry(val at: String, val ref: TargetRef, val propertyName: String, val raw: String, val value: LookValue)
+private class Entry(val at: String, val ref: TargetRef, val attribute: String, val raw: String, val value: LookValue)
 
-private class ParsedValue(val propertyName: String, val raw: String, val value: LookValue)
+private class ParsedValue(val attribute: String, val raw: String, val value: LookValue)
 
 internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLookValues {
     val problems = ArrayList<String>()
@@ -69,15 +69,15 @@ internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLo
 
     val seen = HashMap<Pair<TargetRef, String>, String>()
     for (entry in entries) {
-        seen.putIfAbsent(entry.ref to entry.propertyName, entry.at)?.let { first ->
-            problems += "${entry.at}: ${entry.ref.key} ${entry.propertyName} is already set by $first"
+        seen.putIfAbsent(entry.ref to entry.attribute, entry.at)?.let { first ->
+            problems += "${entry.at}: ${entry.ref.key} ${entry.attribute} is already set by $first"
         }
     }
     if (problems.isNotEmpty()) return ResolvedLookValues(emptyList(), emptyList(), problems)
 
     // A fixture's own value beats its group's in the cook; a group split per head must not
     // shadow it with a fixture row of its own.
-    val namedOnFixture = entries.filter { it.ref is TargetRef.Fixture }.mapTo(HashSet()) { it.ref.key to it.propertyName }
+    val namedOnFixture = entries.filter { it.ref is TargetRef.Fixture }.mapTo(HashSet()) { it.ref.key to it.attribute }
 
     val rows = ArrayList<LookRowDto>()
     val skipped = ArrayList<LookValueSkip>()
@@ -94,15 +94,15 @@ internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLo
         val landed = LinkedHashMap<GroupableFixture, Pair<String, String>>()
         val missed = ArrayList<LookValueSkip>()
         for (head in heads) {
-            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.propertyName, entry.raw, entry.value)) {
+            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.attribute, entry.raw, entry.value)) {
                 when (result) {
-                    is HeadValue.Landed -> landed[cell] = result.propertyName to result.value.serialize()
-                    is HeadValue.Missed -> missed += LookValueSkip(cell.targetKey, entry.propertyName, result.reason)
+                    is HeadValue.Landed -> landed[cell] = result.attribute to result.value.serialize()
+                    is HeadValue.Missed -> missed += LookValueSkip(cell.targetKey, entry.attribute, result.reason)
                 }
             }
         }
         if (landed.isEmpty()) {
-            problems += "${entry.at}: no head of ${entry.ref.key} can take ${entry.propertyName} '${entry.raw}' — " +
+            problems += "${entry.at}: no head of ${entry.ref.key} can take ${entry.attribute} '${entry.raw}' — " +
                 missed.distinctBy { it.reason }.joinToString("; ") { "${it.target}: ${it.reason}" }
             continue
         }
@@ -132,10 +132,10 @@ internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLo
  * must not be written beside it.
  */
 private fun shadowedByOwnValue(entry: Entry, head: GroupableFixture, namedOnFixture: Set<Pair<String, String>>): Boolean {
-    val property = entry.propertyName
-    if (head.targetKey != entry.ref.key && (head.targetKey to property) in namedOnFixture) return true
+    val attribute = entry.attribute
+    if (head.targetKey != entry.ref.key && (head.targetKey to attribute) in namedOnFixture) return true
     val parent = (head as? FixtureElement<*>)?.parentFixture?.key
-    return entry.ref is TargetRef.Group && parent != null && (parent to property) in namedOnFixture
+    return entry.ref is TargetRef.Group && parent != null && (parent to attribute) in namedOnFixture
 }
 
 private fun parseEntry(at: String, element: Any, problems: MutableList<String>): Entry? {
@@ -149,32 +149,32 @@ private fun parseEntry(at: String, element: Any, problems: MutableList<String>):
         return null
     }
     val parsed = parseValue(at, obj, problems) ?: return null
-    return Entry(at, ref, parsed.propertyName, parsed.raw, parsed.value)
+    return Entry(at, ref, parsed.attribute, parsed.raw, parsed.value)
 }
 
-/** An entry's `propertyName` and `value`, checked against the grammar. */
+/** An entry's `attribute` and `value`, checked against the grammar. */
 private fun parseValue(at: String, obj: JsonObject, problems: MutableList<String>): ParsedValue? {
-    val propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-        ?.let(::canonicalPropertyName)
-        ?: run { problems += "$at: propertyName is required"; return null }
+    val attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        ?.let(::canonicalAttributeName)
+        ?: run { problems += "$at: attribute is required"; return null }
     val raw = obj["value"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         ?: run { problems += "$at: value is required"; return null }
-    val value = parseLookValue(propertyName, raw)
-        ?: run { problems += "$at: '$raw' is not a value $propertyName takes — use $LOOK_VALUE_GRAMMAR"; return null }
-    return ParsedValue(propertyName, raw, value)
+    val value = parseLookValue(attribute, raw)
+        ?: run { problems += "$at: '$raw' is not a value $attribute takes — use $LOOK_VALUE_GRAMMAR"; return null }
+    return ParsedValue(attribute, raw, value)
 }
 
 /** A cell is stored as Record stores one: the parent as the target, the cell as `elementKey`. */
-private fun row(ref: TargetRef, head: GroupableFixture?, propertyName: String, literal: String, sortOrder: Int): LookRowDto =
+private fun row(ref: TargetRef, head: GroupableFixture?, attribute: String, literal: String, sortOrder: Int): LookRowDto =
     if (head is FixtureElement<*>) {
-        LookRowDto(TargetRef.Fixture.TYPE, head.parentFixture.key, propertyName, literal, elementKey = head.elementKey, sortOrder = sortOrder)
+        LookRowDto(TargetRef.Fixture.TYPE, head.parentFixture.key, attribute, literal, elementKey = head.elementKey, sortOrder = sortOrder)
     } else {
-        LookRowDto(ref.discriminator, ref.key, propertyName, literal, sortOrder = sortOrder)
+        LookRowDto(ref.discriminator, ref.key, attribute, literal, sortOrder = sortOrder)
     }
 
 private sealed interface LookValue {
     /** [emitters] is a colour's own white, amber and UV, laid over the mix where the head has them. */
-    data class Intent(val intent: TemplateIntent, val emitters: Emitters? = null) : LookValue
+    data class Intent(val intent: PaletteIntent, val emitters: Emitters? = null) : LookValue
     data class Option(val name: String) : LookValue
 }
 
@@ -182,16 +182,16 @@ private sealed interface LookValue {
 private data class Emitters(val white: UByte?, val amber: UByte?, val uv: UByte?)
 
 /**
- * A hex only for a colour and `pos:` / `deg:` only for `position`, so [TemplateResolver]'s colour fallback
+ * A hex only for a colour and `pos:` / `deg:` only for `position`, so [PaletteResolver]'s colour fallback
  * cannot land a hex on some other property. Anything that is not an intent is an option name.
  */
-private fun parseLookValue(propertyName: String, raw: String): LookValue? {
-    val vocabulary = TemplateProperty.ofOrNull(propertyName)
-    if (vocabulary == TemplateProperty.COLOUR) return parseColourValue(raw)
-    val intent = parseTemplateIntent(raw)
+private fun parseLookValue(attribute: String, raw: String): LookValue? {
+    val vocabulary = PaletteAttribute.ofOrNull(attribute)
+    if (vocabulary == PaletteAttribute.COLOUR) return parseColourValue(raw)
+    val intent = parsePaletteIntent(raw)
     return when {
-        vocabulary == TemplateProperty.POSITION -> (intent as? TemplateIntent.Position)?.let { LookValue.Intent(it) }
-        intent is TemplateIntent.Colour || intent is TemplateIntent.Position -> null
+        vocabulary == PaletteAttribute.POSITION -> (intent as? PaletteIntent.Position)?.let { LookValue.Intent(it) }
+        intent is PaletteIntent.Colour || intent is PaletteIntent.Position -> null
         intent != null -> LookValue.Intent(intent)
         else -> LookValue.Option(raw)
     }
@@ -223,7 +223,7 @@ private fun parseColourValue(raw: String): LookValue? {
         }
     }
     val hex = parts.first() + (policy?.let { ";policy=$it" } ?: "")
-    val intent = parseTemplateIntent(hex) as? TemplateIntent.Colour ?: return null
+    val intent = parsePaletteIntent(hex) as? PaletteIntent.Colour ?: return null
     val emitters = if (white == null && amber == null && uv == null) null else Emitters(white, amber, uv)
     return LookValue.Intent(intent, emitters)
 }
@@ -233,15 +233,15 @@ private fun parseColourValue(raw: String): LookValue? {
  * (`bundleWithColour`, the class catalogue's answer, as the colour write itself asks) — elsewhere a
  * colour's W/A/UV reaches no channel, so it is left out rather than stored.
  */
-private fun withEmitters(head: GroupableFixture, value: PropertyValue, emitters: Emitters?): PropertyValue {
-    if (emitters == null || value !is PropertyValue.Colour) return value
-    val bundled = FixturePropertyCatalogue.of(head::class).bundledByCategory
+private fun withEmitters(head: GroupableFixture, value: AttributeValue, emitters: Emitters?): AttributeValue {
+    if (emitters == null || value !is AttributeValue.Colour) return value
+    val bundled = FixtureAttributeCatalogue.of(head::class).bundledByCategory
     val mix = value.value
-    return PropertyValue.Colour(
+    return AttributeValue.Colour(
         mix.copy(
-            white = emitters.white?.takeIf { PropertyCategory.WHITE in bundled } ?: mix.white,
-            amber = emitters.amber?.takeIf { PropertyCategory.AMBER in bundled } ?: mix.amber,
-            uv = emitters.uv?.takeIf { PropertyCategory.UV in bundled } ?: mix.uv,
+            white = emitters.white?.takeIf { AttributeCategory.WHITE in bundled } ?: mix.white,
+            amber = emitters.amber?.takeIf { AttributeCategory.AMBER in bundled } ?: mix.amber,
+            uv = emitters.uv?.takeIf { AttributeCategory.UV in bundled } ?: mix.uv,
         ),
     )
 }
@@ -256,46 +256,46 @@ private fun withEmitters(head: GroupableFixture, value: PropertyValue, emitters:
 private fun resolveOnHeadOrCells(
     fixtures: Fixtures,
     head: GroupableFixture,
-    propertyName: String,
+    attribute: String,
     raw: String,
     value: LookValue,
 ): List<Pair<GroupableFixture, HeadValue>> {
-    val own = resolveOnHead(fixtures, head, propertyName, raw, value)
+    val own = resolveOnHead(fixtures, head, attribute, raw, value)
     if (own is HeadValue.Landed || head !is MultiElementFixture<*> || head.elements.isEmpty()) return listOf(head to own)
-    val cells = head.elements.map { cell -> cell to resolveOnHead(fixtures, cell, propertyName, raw, value) }
+    val cells = head.elements.map { cell -> cell to resolveOnHead(fixtures, cell, attribute, raw, value) }
     return if (cells.any { it.second is HeadValue.Landed }) cells else listOf(head to own)
 }
 
 private sealed interface HeadValue {
-    data class Landed(val propertyName: String, val value: PropertyValue) : HeadValue
+    data class Landed(val attribute: String, val value: AttributeValue) : HeadValue
     data class Missed(val reason: String) : HeadValue
 }
 
-private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, propertyName: String, raw: String, value: LookValue): HeadValue {
-    val backing = PropertyChannelWriter.resolveProperty(head, propertyName)?.value
+private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, attribute: String, raw: String, value: LookValue): HeadValue {
+    val backing = AttributeChannelWriter.resolveAttribute(head, attribute)?.value
     val setting = backing as? DmxFixtureSetting<*>
     // An option literally named On or Off is that option, not the first or last slot.
     val named = setting?.sortedValues?.firstOrNull { it.name.equals(raw, ignoreCase = true) }
-    if (named != null) return HeadValue.Landed(propertyName, PropertyValue.Setting(named.level))
+    if (named != null) return HeadValue.Landed(attribute, AttributeValue.Setting(named.level))
 
     return when (value) {
         is LookValue.Option -> HeadValue.Missed(
             when {
-                backing == null -> "no $propertyName"
-                setting == null -> "$propertyName has no named options"
-                else -> "$propertyName has no option '${value.name}' (it has ${setting.sortedValues.joinToString { it.name }})"
+                backing == null -> "no $attribute"
+                setting == null -> "$attribute has no named options"
+                else -> "$attribute has no option '${value.name}' (it has ${setting.sortedValues.joinToString { it.name }})"
             },
         )
         is LookValue.Intent -> {
             val intent = value.intent
-            if (intent is TemplateIntent.Level && setting != null) {
-                return HeadValue.Landed(propertyName, PropertyValue.Setting(intent.value.toUByte()))
+            if (intent is PaletteIntent.Level && setting != null) {
+                return HeadValue.Landed(attribute, AttributeValue.Setting(intent.value.toUByte()))
             }
             val owner = (head as? FixtureElement<*>)?.parentFixture ?: head as? Fixture
-            val resolution = TemplateResolver.resolve(head, propertyName, intent, owner?.let { fixtures.fittedMediaFor(it.key) })
+            val resolution = PaletteResolver.resolve(head, attribute, intent, owner?.let { fixtures.fittedMediaFor(it.key) })
             val resolved = resolution.value
-                ?: return HeadValue.Missed((resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")
-            HeadValue.Landed(resolution.propertyName, withEmitters(head, resolved, value.emitters))
+                ?: return HeadValue.Missed((resolution.note as? PaletteResolver.Note.Unsupported)?.reason ?: "unsupported")
+            HeadValue.Landed(resolution.attribute, withEmitters(head, resolved, value.emitters))
         }
     }
 }
@@ -313,18 +313,18 @@ internal class ResolvedProgrammerValues(
     val problems: List<String>,
 )
 
-/** One head's value; [requestedName] is the name the caller used, [propertyName] the one it landed on. */
+/** One head's value; [requestedName] is the name the caller used, [attribute] the one it landed on. */
 internal class ProgrammerValueWrite(
     val head: GroupableFixture,
     val requestedName: String,
-    val propertyName: String,
-    val value: PropertyValue,
+    val attribute: String,
+    val value: AttributeValue,
 )
 
 internal fun resolveProgrammerValues(fixtures: Fixtures, targets: List<TargetRef>, items: JsonArray): ResolvedProgrammerValues {
     val problems = ArrayList<String>()
     if (targets.isEmpty()) problems += "targets must name at least one fixture or group"
-    if (items.isEmpty()) problems += "values must hold at least one {propertyName, value}"
+    if (items.isEmpty()) problems += "values must hold at least one {attribute, value}"
 
     val heads = LinkedHashMap<String, GroupableFixture>()
     for (ref in targets) {
@@ -346,8 +346,8 @@ internal fun resolveProgrammerValues(fixtures: Fixtures, targets: List<TargetRef
     }
     val seen = HashMap<String, String>()
     for ((at, parsed) in entries) {
-        seen.putIfAbsent(parsed.propertyName, at)?.let { first ->
-            problems += "$at: ${parsed.propertyName} is already set by $first"
+        seen.putIfAbsent(parsed.attribute, at)?.let { first ->
+            problems += "$at: ${parsed.attribute} is already set by $first"
         }
     }
     if (problems.isNotEmpty()) return ResolvedProgrammerValues(emptyList(), emptyList(), problems)
@@ -358,18 +358,18 @@ internal fun resolveProgrammerValues(fixtures: Fixtures, targets: List<TargetRef
         val missed = ArrayList<LookValueSkip>()
         var landed = 0
         for (head in heads.values) {
-            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.propertyName, entry.raw, entry.value)) {
+            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.attribute, entry.raw, entry.value)) {
                 when (result) {
                     is HeadValue.Landed -> {
-                        writes += ProgrammerValueWrite(cell, entry.propertyName, result.propertyName, result.value)
+                        writes += ProgrammerValueWrite(cell, entry.attribute, result.attribute, result.value)
                         landed++
                     }
-                    is HeadValue.Missed -> missed += LookValueSkip(cell.targetKey, entry.propertyName, result.reason)
+                    is HeadValue.Missed -> missed += LookValueSkip(cell.targetKey, entry.attribute, result.reason)
                 }
             }
         }
         if (landed == 0) {
-            problems += "$at: no selected head can take ${entry.propertyName} '${entry.raw}' — " +
+            problems += "$at: no selected head can take ${entry.attribute} '${entry.raw}' — " +
                 missed.distinctBy { it.reason }.joinToString("; ") { "${it.target}: ${it.reason}" }
         }
         skipped += missed

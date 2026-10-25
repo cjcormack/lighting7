@@ -8,7 +8,6 @@ import { LookRowDraft } from './lookRowDraft'
 import { lookRowKey } from './lookRowKey'
 import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 import type { ReactNode } from 'react'
-import type { CueTarget } from '@/api/cuesApi'
 import type { LookDetails, LookRow } from '@/api/looksApi'
 import type { StagedValue } from '@/components/fixtures-list/useRowOwnership'
 
@@ -39,13 +38,9 @@ export interface LookRowStoreValue {
   /** Uncommitted edits, overlaid on `serverRows` by the read path. */
   draft: LookRowDraft
   /** Set one cell's value and schedule the save. Canonical assignment string. */
-  setValue: (targetKey: string, propertyName: string, value: string) => void
-  /** Fixture keys the layer asserts on. `null` means "the Look's own targets", i.e. all of them. */
-  targetedKeys: ReadonlySet<string> | null
-  /** The layer's target list verbatim, so a row can append to it without re-reading the stack. */
-  targets: readonly CueTarget[]
-  /** The layer's `propertyMask`, verbatim — callers parse it with `parsePropertyMask`. */
-  propertyMask: string | null | undefined
+  setValue: (targetKey: string, attribute: string, value: string) => void
+  /** The layer's `attributeMask`, verbatim — callers parse it with `parseAttributeMask`. */
+  attributeMask: string | null | undefined
   /**
    * Rows that name no target of their own. They compose against whatever the applying layer
    * targets, so they cannot be drawn as a value on any one fixture's row — the grid lists them
@@ -177,25 +172,9 @@ export function LookRowStoreProvider({
       .catch(() => setSaveState('error'))
   }, [entry, projectId, saveLook])
 
-  const targetedKeys = useMemo(
-    () => (layer == null ? null : expandTargets(layer.targets, fixtures)),
-    [layer, fixtures],
-  )
-  // Read through a ref so `setValue` stays identity-stable across layer-stack broadcasts — the
-  // store value is held by every mounted row.
-  const targetedKeysRef = useRef(targetedKeys)
-  targetedKeysRef.current = targetedKeys
-
   const setValue = useCallback(
-    (targetKey: string, propertyName: string, value: string) => {
-      // **The write guard, not just the paint guard.** Untargeted cells are drawn
-      // `pointer-events-none`, which stops a *click* — but the marquee selects by rectangle, off the
-      // rows wrapper, so a drag across the grid can still put untargeted cells in the batch and one
-      // commit from an editable cell would fan out to all of them. Widening a layer must stay an
-      // explicit press (`AddToTargetsButton`), never a side effect of a drag.
-      const targeted = targetedKeysRef.current
-      if (targeted && !targeted.has(targetKey)) return
-      draft.set(targetKey, propertyName, value)
+    (targetKey: string, attribute: string, value: string) => {
+      draft.set(targetKey, attribute, value)
       writesRef.current += 1
       setSaveState('dirty')
       // Debounce with a ceiling. The cadence is not only a network question: each save republishes
@@ -221,7 +200,7 @@ export function LookRowStoreProvider({
     const committed = new Map<string, string>()
     for (const row of look.rows) {
       if (row.targetType === 'fixture' && !row.elementKey) {
-        committed.set(lookRowKey(row.targetKey, row.propertyName), row.value)
+        committed.set(lookRowKey(row.targetKey, row.attribute), row.value)
       }
     }
     draft.reconcile(committed)
@@ -247,16 +226,14 @@ export function LookRowStoreProvider({
       serverRows: buildServerRows(look?.rows, fixtures),
       draft,
       setValue,
-      targetedKeys,
-      targets: layer.targets,
-      propertyMask: layer.propertyMask,
+      attributeMask: layer.attributeMask,
       deferredRows: (look?.rows ?? []).filter((r) => r.targetType === DEFERRED_TARGET_TYPE),
       elementRows: (look?.rows ?? []).filter(
         (r) => r.targetType !== DEFERRED_TARGET_TYPE && !!r.elementKey,
       ),
       loaded: isSuccess,
     }
-  }, [projectId, layer, lookId, look, fixtures, draft, setValue, targetedKeys, isSuccess])
+  }, [projectId, layer, lookId, look, fixtures, draft, setValue, isSuccess])
 
   return (
     <LookRowStoreContext.Provider value={value}>
@@ -283,58 +260,15 @@ function buildServerRows(
       const staged = parseProgrammerValue(row.value)
       if (!staged) continue
       if (pass === 'fixture') {
-        out.set(lookRowKey(row.targetKey, row.propertyName), staged)
+        out.set(lookRowKey(row.targetKey, row.attribute), staged)
         continue
       }
       for (const fixture of fixtures ?? []) {
         if (fixture.groups.includes(row.targetKey)) {
-          out.set(lookRowKey(fixture.key, row.propertyName), staged)
+          out.set(lookRowKey(fixture.key, row.attribute), staged)
         }
       }
     }
   }
   return out
-}
-
-/**
- * The fixture keys a layer asserts on, or `null` for "whatever the Look itself names".
- *
- * An **empty** `targets` array is not "nothing" — it means the layer adds no targets of its own and
- * the Look's bound rows land where they name (`CueLayer.targets`' own doc says so). Reading it as
- * an empty set would dim every row in the grid on a perfectly ordinary bound layer.
- *
- * **A targeted fixture's element keys are in the set too.** `resolveTargetCells` applies
- * parent-first precedence, so a multi-element fixture whose parent carries no colour property
- * resolves that column *per element* and `RowCell.targetKeys` then holds element keys. Comparing
- * those against fixture keys alone marked every pixel bar the layer explicitly targets as "outside
- * the targets" — dashed, non-editable, with a spurious Add-to-targets button beside it.
- */
-export function expandTargets(
-  targets: readonly CueTarget[],
-  fixtures: readonly TargetableFixture[] | undefined,
-): ReadonlySet<string> | null {
-  if (targets.length === 0) return null
-  const byKey = new Map((fixtures ?? []).map((f) => [f.key, f]))
-  const keys = new Set<string>()
-  const add = (fixture: TargetableFixture | undefined, key: string) => {
-    keys.add(key)
-    for (const element of fixture?.elements ?? []) keys.add(element.key)
-  }
-  for (const target of targets) {
-    if (target.type === 'fixture') {
-      add(byKey.get(target.key), target.key)
-      continue
-    }
-    for (const fixture of fixtures ?? []) {
-      if (fixture.groups.includes(target.key)) add(fixture, fixture.key)
-    }
-  }
-  return keys
-}
-
-/** Only the fields these two helpers read — `Fixture` itself is far wider. */
-interface TargetableFixture {
-  key: string
-  groups: string[]
-  elements?: { key: string }[]
 }

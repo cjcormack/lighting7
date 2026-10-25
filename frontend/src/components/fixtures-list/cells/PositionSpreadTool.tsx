@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import { Waves } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useFocusedTemplateLayer } from '@/components/programmer/FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from '@/components/programmer/FocusedPaletteLayer'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 
 /**
@@ -24,13 +24,13 @@ export const PositionFanContext = createContext<(() => void) | null>(null)
 export function PositionSpreadTool({ heads, onOpened }: { heads: number; onOpened?: () => void }) {
   const openFan = useContext(PositionFanContext)
   const scope = useProgrammerScope()
-  const focusedTemplate = useFocusedTemplateLayer()
+  const focusedPalette = useFocusedPaletteLayer()
   if (openFan == null) return null
 
   const refusal =
     scope?.kind === 'output'
       ? 'Output is a read of the cook — switch to Local to fan these heads'
-      : focusedTemplate != null
+      : focusedPalette != null
         ? 'This layer applies a palette — switch to Local to fan these heads'
         : heads < 2
           ? 'A fan needs two or more heads — select more cells in this column'
@@ -50,7 +50,7 @@ export function PositionSpreadTool({ heads, onOpened }: { heads: number; onOpene
       }}
     >
       <Waves className="size-3.5" />
-      <span className="sr-only">Spread…</span>
+      <span className="sr-only">Fan…</span>
     </Button>
   )
 }

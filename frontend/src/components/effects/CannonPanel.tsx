@@ -19,7 +19,7 @@ import { useCurrentProjectQuery } from '@/store/projects'
 import { useVisiblePatchListQuery } from '@/store/patches'
 import { useArmEffectsMutation, useEffectsArm, useFireTriggerMutation, useReloadTriggerMutation } from '@/store/effects'
 import { useVisSource } from '@/hooks/useVisSource'
-import type { TriggerPropertyDescriptor } from '@/store/fixtures'
+import type { TriggerAttributeDescriptor } from '@/store/fixtures'
 import { useArmCountdown } from './useArmCountdown'
 
 /** How long a fire button must be held before it fires. Long enough that a brush is not a fire. */
@@ -53,7 +53,7 @@ export function CannonPanel({
   canFire,
 }: {
   fixtureKey: string
-  triggers: readonly TriggerPropertyDescriptor[]
+  triggers: readonly TriggerAttributeDescriptor[]
   /** False on a read-only surface or with the desk unreachable. */
   canFire: boolean
 }) {
@@ -80,7 +80,7 @@ export function CannonPanel({
   }
 
   const fireTube = useCallback(
-    (trigger: TriggerPropertyDescriptor) => {
+    (trigger: TriggerAttributeDescriptor) => {
       if (project == null || patch == null) return
       fire({ projectId: project.id, patchId: patch.id, trigger: trigger.name, rehearse: source === 'programmer' })
         .unwrap()
@@ -156,7 +156,7 @@ export function CannonPanel({
       </Button>
 
       <p className="text-[11px] leading-snug text-muted-foreground">
-        The fire channels are triggers: no Look, palette, effect or Record can hold them. Arming is
+        The fire channels are triggers: no Look, palette, FX or Record can hold them. Arming is
         desk-wide, for every signed-in role at the desk; in Blind, or with this window&apos;s vis
         source on the programmer, a fire is rehearsed — confetti on every window, nothing on the wire.
       </p>

@@ -1,19 +1,19 @@
 /*---
 id: RandomPosition
 name: Random Position
-category: position
+family: position
 outputType: POSITION
-effectMode: STANDARD
-compatibleProperties: [position]
+fxMode: STANDARD
+compatibleAttributes: [position]
 parameters:
-  - name: panCenter
+  - name: panCentre
     type: ubyte
     default: "128"
-    description: Center pan position
-  - name: tiltCenter
+    description: Centre pan position
+  - name: tiltCentre
     type: ubyte
     default: "128"
-    description: Center tilt position
+    description: Centre tilt position
   - name: panRange
     type: ubyte
     default: "64"
@@ -24,12 +24,12 @@ parameters:
     description: Range of tilt movement
 ---*/
 
-val panCenter = params.ubyte("panCenter")
-val tiltCenter = params.ubyte("tiltCenter")
+val panCentre = params.ubyte("panCentre")
+val tiltCentre = params.ubyte("tiltCentre")
 val panRange = params.ubyte("panRange")
 val tiltRange = params.ubyte("tiltRange")
 val panOffset = (sin(phase * 127.0) * panRange.toInt()).toInt()
 val tiltOffset = (sin(phase * 211.0) * tiltRange.toInt()).toInt()
-val pan = (panCenter.toInt() + panOffset).coerceIn(0, 255).toUByte()
-val tilt = (tiltCenter.toInt() + tiltOffset).coerceIn(0, 255).toUByte()
+val pan = (panCentre.toInt() + panOffset).coerceIn(0, 255).toUByte()
+val tilt = (tiltCentre.toInt() + tiltOffset).coerceIn(0, 255).toUByte()
 FxOutput.Position(pan, tilt)

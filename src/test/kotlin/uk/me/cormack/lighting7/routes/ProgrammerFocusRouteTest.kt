@@ -105,9 +105,9 @@ class ProgrammerFocusRouteTest : RouteIntegrationTest() {
         return resp.body()
     }
 
-    private fun entry(key: String, property: String): CueAssignmentResolver.PropertyValue? =
+    private fun entry(key: String, attribute: String): CueAssignmentResolver.AttributeValue? =
         state.show.programmerStore.entries()
-            .firstOrNull { it.fixtureKey == key && it.propertyName == property }
+            .firstOrNull { it.fixtureKey == key && it.attribute == attribute }
             ?.slots?.firstOrNull()?.value?.resolved
 
     private fun at(p: StagePoint) = FocusPointDto(p.x, p.y, p.z)
@@ -126,7 +126,7 @@ class ProgrammerFocusRouteTest : RouteIntegrationTest() {
         assertEquals(246, wallDmx)
         assertEquals("246", written.value)
         assertTrue(out.skipped.isEmpty(), out.skipped.toString())
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(246u), entry("rev-1", "focus"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(246u), entry("rev-1", "focus"))
     }
 
     @Test
@@ -144,7 +144,7 @@ class ProgrammerFocusRouteTest : RouteIntegrationTest() {
         assertEquals(5.61, mac.distanceM)
         val expected = FocusRange(2.0, 40.0, true, 0, 255).dmxFor(macM)!!
         assertEquals(expected.toString(), mac.value)
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(expected.toUByte()), entry("mac", "focus"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(expected.toUByte()), entry("mac", "focus"))
     }
 
     @Test
@@ -235,8 +235,8 @@ class ProgrammerFocusRouteTest : RouteIntegrationTest() {
         val wet = call("{$args}")
         assertTrue(wet.success, wet.result)
         assertFalse(wet.json()["dryRun"]!!.jsonPrimitive.boolean)
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(246u), entry("rev-1", "focus"))
-        assertIs<CueAssignmentResolver.PropertyValue.Position>(entry("rev-1", "position"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(246u), entry("rev-1", "focus"))
+        assertIs<CueAssignmentResolver.AttributeValue.Position>(entry("rev-1", "position"))
     }
 
     @Test

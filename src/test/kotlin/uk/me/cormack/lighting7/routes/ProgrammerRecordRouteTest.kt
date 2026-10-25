@@ -10,7 +10,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.BeatDivision
+import uk.me.cormack.lighting7.fx.CycleLength
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
@@ -21,7 +21,7 @@ import uk.me.cormack.lighting7.fx.SliderTarget
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
 import uk.me.cormack.lighting7.plugins.handleUpdateChannel
@@ -65,7 +65,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         ).body()
 
         assertTrue(response.created)
-        val row = response.cue.propertyAssignments.single { it.propertyName == "dimmer" }
+        val row = response.cue.attributeAssignments.single { it.attribute == "dimmer" }
         assertEquals("fixture", row.targetType)
         assertEquals("hex-1", row.targetKey)
         assertEquals("200", row.value)
@@ -85,9 +85,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             listOf(
                 CueAssignmentResolver.Assignment(
                     cueId = 991, priority = 10, fadeWeight = 1.0,
-                    targetKey = "hex-1", targetIsGroup = false, propertyName = "dimmer",
-                    category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
-                    value = CueAssignmentResolver.PropertyValue.Slider(90u),
+                    targetKey = "hex-1", targetIsGroup = false, attribute = "dimmer",
+                    category = uk.me.cormack.lighting7.fixture.AttributeCategory.DIMMER,
+                    value = CueAssignmentResolver.AttributeValue.Slider(90u),
                 )
             ),
         )
@@ -99,8 +99,8 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         ).body()
 
         assertTrue(
-            response.cue.propertyAssignments.isEmpty(),
-            "TOUCHED records the programmer, not composed stage state; got ${response.cue.propertyAssignments}",
+            response.cue.attributeAssignments.isEmpty(),
+            "TOUCHED records the programmer, not composed stage state; got ${response.cue.attributeAssignments}",
         )
     }
 
@@ -117,9 +117,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             listOf(
                 CueAssignmentResolver.Assignment(
                     cueId = 992, priority = 10, fadeWeight = 1.0,
-                    targetKey = "hex-2", targetIsGroup = false, propertyName = "dimmer",
-                    category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
-                    value = CueAssignmentResolver.PropertyValue.Slider(90u),
+                    targetKey = "hex-2", targetIsGroup = false, attribute = "dimmer",
+                    category = uk.me.cormack.lighting7.fixture.AttributeCategory.DIMMER,
+                    value = CueAssignmentResolver.AttributeValue.Slider(90u),
                 )
             ),
         )
@@ -132,7 +132,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             )
         ).body()
 
-        val rows = response.cue.propertyAssignments.associate { it.targetKey to it.value }
+        val rows = response.cue.attributeAssignments.associate { it.targetKey to it.value }
         assertEquals("90", rows["hex-2"], "the cue layer is in the snapshot")
         // The old snapshot-from-live read Layer 4 only, so this row was silently dropped.
         assertEquals("200", rows["hex-1"], "the programmer overlays the snapshot")
@@ -154,7 +154,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
                 projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
             )
         ).body()
-        val row = grouped.cue.propertyAssignments.single { it.propertyName == "dimmer" }
+        val row = grouped.cue.attributeAssignments.single { it.attribute == "dimmer" }
         assertEquals("group", row.targetType)
         assertEquals("front-wash", row.targetKey)
         assertEquals(1, grouped.groupRowsEmitted)
@@ -166,7 +166,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
                 projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
             )
         ).body()
-        val dimmerRows = split.cue.propertyAssignments.filter { it.propertyName == "dimmer" }
+        val dimmerRows = split.cue.attributeAssignments.filter { it.attribute == "dimmer" }
         assertEquals(0, split.groupRowsEmitted)
         assertEquals(setOf("hex-1", "hex-2"), dimmerRows.map { it.targetKey }.toSet())
         assertTrue(dimmerRows.all { it.targetType == "fixture" })
@@ -191,9 +191,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         assertEquals(
             listOf("rgbColour"),
-            response.cue.propertyAssignments.map { it.propertyName },
+            response.cue.attributeAssignments.map { it.attribute },
         )
-        assertTrue(response.skipped.any { it.propertyName == "dimmer" && it.reason == "MASKED_OUT" })
+        assertTrue(response.skipped.any { it.attribute == "dimmer" && it.reason == "MASKED_OUT" })
     }
 
     @Test
@@ -222,7 +222,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             )
         ).body()
 
-        val rows = updated.cue.propertyAssignments.associate { it.propertyName to it.value }
+        val rows = updated.cue.attributeAssignments.associate { it.attribute to it.value }
         assertEquals("200", rows["dimmer"], "an out-of-mask row must not be deleted")
         assertTrue(rows.getValue("rgbColour").startsWith("#00ff00"))
     }
@@ -250,7 +250,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             )
         ).body()
 
-        val rows = merged.cue.propertyAssignments.associate { it.targetKey to it.value }
+        val rows = merged.cue.attributeAssignments.associate { it.targetKey to it.value }
         assertEquals("200", rows["hex-1"])
         assertEquals("50", rows["hex-2"])
     }
@@ -270,7 +270,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
                 projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
             )
         ).body()
-        assertEquals("group", created.cue.propertyAssignments.single().targetType)
+        assertEquals("group", created.cue.attributeAssignments.single().targetType)
 
         // Now try to remove just one member. The group row covers both, so deleting it would
         // silently drop hex-1 too — say so rather than guessing.
@@ -282,7 +282,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             )
         ).body()
 
-        assertEquals(1, removed.cue.propertyAssignments.size, "the group row survives")
+        assertEquals(1, removed.cue.attributeAssignments.size, "the group row survives")
         assertTrue(
             removed.warnings.any { it.contains("front-wash") && it.contains("hex-2") },
             "expected a covering-group warning; got ${removed.warnings}",
@@ -290,7 +290,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a newer sideband write beats an older property entry on the same property`() =
+    fun `a newer sideband write beats an older attribute entry on the same attribute`() =
         testApplication {
             mountTestApp(state)
             val client = jsonClient()
@@ -311,13 +311,13 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
             assertEquals(
                 "40",
-                response.cue.propertyAssignments.single { it.propertyName == "dimmer" }.value,
+                response.cue.attributeAssignments.single { it.attribute == "dimmer" }.value,
                 "the newer write is what's on stage, so it is what records",
             )
         }
 
     @Test
-    fun `an older sideband write does not displace a newer property entry`() = testApplication {
+    fun `an older sideband write does not displace a newer attribute entry`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
@@ -334,12 +334,12 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         assertEquals(
             "200",
-            response.cue.propertyAssignments.single { it.propertyName == "dimmer" }.value,
+            response.cue.attributeAssignments.single { it.attribute == "dimmer" }.value,
         )
     }
 
     @Test
-    fun `STAGE_SNAPSHOT captures a raw sideband write that a property covers`() = testApplication {
+    fun `STAGE_SNAPSHOT captures a raw sideband write that an attribute covers`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
@@ -359,7 +359,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         assertEquals(
             "175",
-            response.cue.propertyAssignments.single { it.propertyName == "dimmer" }.value,
+            response.cue.attributeAssignments.single { it.attribute == "dimmer" }.value,
         )
     }
 
@@ -380,7 +380,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             )
         ).body()
         assertTrue(
-            touched.cue.propertyAssignments.none { it.propertyName == "dimmer" },
+            touched.cue.attributeAssignments.none { it.attribute == "dimmer" },
             "an unpark hand-down is not an operator edit",
         )
 
@@ -392,7 +392,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         ).body()
         assertEquals(
             "77",
-            all.cue.propertyAssignments.single { it.propertyName == "dimmer" }.value,
+            all.cue.attributeAssignments.single { it.attribute == "dimmer" }.value,
             "ALL records the rig as the programmer holds it, hand-downs included",
         )
     }
@@ -414,9 +414,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             )
         ).body()
 
-        assertTrue(response.cue.propertyAssignments.isEmpty())
+        assertTrue(response.cue.attributeAssignments.isEmpty())
         val skip = response.skipped.single()
-        assertEquals("NO_BACKING_PROPERTY", skip.reason)
+        assertEquals("NO_BACKING_ATTRIBUTE", skip.reason)
         assertEquals(100, skip.channel)
     }
 
@@ -442,8 +442,8 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         // the drag lifts straight to a `pan` entry. (The synthetic `position` pairing is the
         // fallback for heads whose axes aren't annotated separately — that path goes through
         // the sideband, exercised by the unpark case above.)
-        val row = response.cue.propertyAssignments.singleOrNull { it.propertyName == "pan" }
-        assertNotNull(row, "raw axis drags used to vanish from a capture; got ${response.cue.propertyAssignments}")
+        val row = response.cue.attributeAssignments.singleOrNull { it.attribute == "pan" }
+        assertNotNull(row, "raw axis drags used to vanish from a capture; got ${response.cue.attributeAssignments}")
         assertEquals("128", row.value)
     }
 
@@ -468,7 +468,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         assertEquals(
             listOf("hex-1"),
-            response.cue.propertyAssignments.map { it.targetKey },
+            response.cue.attributeAssignments.map { it.targetKey },
         )
         assertTrue(
             response.skipped.any { it.targetKey == "hex-2" && it.reason == "OUT_OF_SCOPE" },
@@ -499,7 +499,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         // Both members are in scope, so the group collapse still applies — scoping narrows what
         // is captured, it doesn't force the rows to be per-fixture.
-        val targets = response.cue.propertyAssignments.map { it.targetKey }.toSet()
+        val targets = response.cue.attributeAssignments.map { it.targetKey }.toSet()
         assertTrue("hex-3" !in targets, "hex-3 is outside the group; got $targets")
         assertTrue(response.skipped.any { it.targetKey == "hex-3" && it.reason == "OUT_OF_SCOPE" })
     }
@@ -532,7 +532,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             )
         ).body()
 
-        val rows = updated.cue.propertyAssignments.associate { it.targetKey to it.value }
+        val rows = updated.cue.attributeAssignments.associate { it.targetKey to it.value }
         assertEquals("255", rows["hex-1"])
         assertEquals("50", rows["hex-2"], "an out-of-scope row must not be deleted")
         assertEquals(1, updated.preserved.outOfScopeAssignments)
@@ -553,7 +553,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
                 projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
             )
         ).body()
-        assertEquals("group", created.cue.propertyAssignments.single().targetType)
+        assertEquals("group", created.cue.attributeAssignments.single().targetType)
 
         // Only hex-1 is selected. Replacing the group row would rewrite hex-2's value too, so
         // the row is preserved and the new fixture row lands beside it.
@@ -567,7 +567,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         ).body()
 
         assertEquals(1, updated.preserved.outOfScopeAssignments)
-        val byTarget = updated.cue.propertyAssignments.associate { it.targetKey to it.value }
+        val byTarget = updated.cue.attributeAssignments.associate { it.targetKey to it.value }
         assertEquals("150", byTarget["front-wash"], "the partly-covered group row survives")
         assertEquals("255", byTarget["hex-1"])
     }
@@ -587,9 +587,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             listOf(
                 CueAssignmentResolver.Assignment(
                     cueId = 993, priority = 10, fadeWeight = 1.0,
-                    targetKey = "hex-2", targetIsGroup = false, propertyName = "dimmer",
-                    category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
-                    value = CueAssignmentResolver.PropertyValue.Slider(90u),
+                    targetKey = "hex-2", targetIsGroup = false, attribute = "dimmer",
+                    category = uk.me.cormack.lighting7.fixture.AttributeCategory.DIMMER,
+                    value = CueAssignmentResolver.AttributeValue.Slider(90u),
                 )
             ),
         )
@@ -605,7 +605,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         assertEquals(
             listOf("hex-1"),
-            response.cue.propertyAssignments.map { it.targetKey }.distinct(),
+            response.cue.attributeAssignments.map { it.targetKey }.distinct(),
         )
         assertTrue(response.skipped.any { it.targetKey == "hex-2" && it.reason == "OUT_OF_SCOPE" })
     }
@@ -622,7 +622,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
             // A cue whose effect is asserted on the whole group.
             ProgrammerHandler.set(state, TargetRef.Group("front-wash"), "dimmer", "150", 0)
-            state.show.fxEngine.addEffect(programmerBandSine(FxTargetRef.group("front-wash")))
+            state.show.fxEngine.addFx(programmerBandSine(FxTargetRef.group("front-wash")))
             val created: ProgrammerRecordResponse = client.record(
                 ProgrammerRecordRequest(
                     projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
@@ -632,9 +632,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
             // Re-record only hex-1, with the same effect now running on hex-1 alone.
             clearProgrammer()
-            state.show.fxEngine.getActiveEffects().forEach { state.show.fxEngine.removeEffect(it.id) }
+            state.show.fxEngine.getActiveFx().forEach { state.show.fxEngine.removeFx(it.id) }
             setProgrammer("hex-1", "dimmer", "255")
-            state.show.fxEngine.addEffect(programmerBandSine(FxTargetRef.fixture("hex-1")))
+            state.show.fxEngine.addFx(programmerBandSine(FxTargetRef.fixture("hex-1")))
             val updated: ProgrammerRecordResponse = client.record(
                 ProgrammerRecordRequest(
                     projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = cueId,
@@ -645,7 +645,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             // The group row survives (hex-2 is outside the selection), so a second row naming
             // hex-1 would run the same effect twice on it — cue activation instantiates per row
             // per target with no de-duplication.
-            val dimmerEffects = updated.cue.adHocEffects.filter { it.propertyName == "dimmer" }
+            val dimmerEffects = updated.cue.adHocFx.filter { it.attribute == "dimmer" }
             val coverage = dimmerEffects.flatMap { effect ->
                 if (effect.targetType == TargetRef.Group.TYPE) listOf("hex-1", "hex-2")
                 else listOf(effect.targetKey)
@@ -732,7 +732,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         assertEquals(1, response.cue.layers.size, "the layer was saved as a layer")
         assertEquals(warm.id, response.cue.layers.single().lookId)
         assertTrue(
-            response.cue.propertyAssignments.isEmpty(),
+            response.cue.attributeAssignments.isEmpty(),
             "and not also as rows — two representations of one thing would detach the cue",
         )
     }
@@ -760,7 +760,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         ).body()
 
         assertTrue(response.cue.layers.isEmpty(), "no layers")
-        assertEquals("200", response.cue.propertyAssignments.single().value, "flattened to a row")
+        assertEquals("200", response.cue.attributeAssignments.single().value, "flattened to a row")
     }
 
     @Test
@@ -786,7 +786,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         ).body()
 
         assertEquals(1, response.cue.layers.size)
-        val rows = response.cue.propertyAssignments
+        val rows = response.cue.attributeAssignments
         assertEquals(1, rows.size, "only the operator's own edit is a row")
         assertEquals("hex-1", rows.single().targetKey)
         assertEquals("30", rows.single().value)
@@ -978,7 +978,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         val kept = updated.cue.layers.single()
         assertEquals(storedUuid, kept.uuid, "the cue's own layer of Warm, untouched")
         assertEquals(1.0, kept.amount)
-        assertEquals("90", updated.cue.propertyAssignments.single { it.propertyName == "uv" }.value, "the scoped row is still written")
+        assertEquals("90", updated.cue.attributeAssignments.single { it.attribute == "uv" }.value, "the scoped row is still written")
         assertEquals(0, updated.fxWritten, "the left-out Look is not counted as written")
         assertTrue(updated.warnings.any { "'Warm'" in it }, "${updated.warnings}")
     }
@@ -1058,13 +1058,13 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         // A busked effect on a named master, and one on Seconds (venue-visit plan S15, D7). Record
         // dropped the master before S15, so a recorded busk fell back to master 1.
         for ((key, request) in listOf(
-            "hex-1" to AddEffectRequest(
-                effectType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer",
+            "hex-1" to AddFxRequest(
+                fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer",
                 speedMasterUuid = master, programmerOwned = true,
             ),
-            "hex-2" to AddEffectRequest(
-                effectType = "Pulse", fixtureKey = "hex-2", propertyName = "dimmer",
-                beatDivision = 8.0, seconds = true, programmerOwned = true,
+            "hex-2" to AddFxRequest(
+                fxType = "Pulse", fixtureKey = "hex-2", attribute = "dimmer",
+                cycle = 8.0, seconds = true, programmerOwned = true,
             ),
         )) {
             val added = client.post("/api/rest/fx/add") {
@@ -1078,12 +1078,12 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId, name = "timed"),
         ).body()
 
-        val onMaster = response.cue.adHocEffects.single { it.targetKey == "hex-1" }
+        val onMaster = response.cue.adHocFx.single { it.targetKey == "hex-1" }
         assertEquals(master, onMaster.speedMasterUuid)
         assertEquals(false, onMaster.seconds)
-        val onSeconds = response.cue.adHocEffects.single { it.targetKey == "hex-2" }
+        val onSeconds = response.cue.adHocFx.single { it.targetKey == "hex-2" }
         assertTrue(onSeconds.seconds)
-        assertEquals(8.0, onSeconds.beatDivision)
+        assertEquals(8.0, onSeconds.cycle)
         assertNull(onSeconds.speedMasterUuid)
     }
 
@@ -1098,11 +1098,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
     /** A generic UV palette, as a layer source. */
     private suspend fun createPalette(client: HttpClient, name: String): LayerSource {
-        val created: TemplateDto = client.post("/api/rest/projects/$projectId/palettes") {
+        val created: PaletteDto = client.post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "uv", "dmx:200"))))
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", "uv", "dmx:200"))))
         }.body()
-        return LayerSource.template(created.id, java.util.UUID.fromString(created.uuid), created.name)
+        return LayerSource.palette(created.id, java.util.UUID.fromString(created.uuid), created.name)
     }
 
     private suspend fun HttpClient.record(request: ProgrammerRecordRequest) =
@@ -1114,8 +1114,8 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     private suspend fun createStack(client: HttpClient, name: String): Int =
         ProgrammerRouteTestSupport.createStack(client, projectId, name)
 
-    private fun setProgrammer(fixtureKey: String, property: String, value: String) {
-        ProgrammerHandler.set(state, TargetRef.Fixture(fixtureKey), property, value, 0)
+    private fun setProgrammer(fixtureKey: String, attribute: String, value: String) {
+        ProgrammerHandler.set(state, TargetRef.Fixture(fixtureKey), attribute, value, 0)
     }
 
     private fun clearProgrammer() = clearProgrammerCompletely(state)
@@ -1124,7 +1124,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     private fun programmerBandSine(target: FxTargetRef) = FxInstance(
         effect = SineSlider(),
         target = SliderTarget(target, "dimmer"),
-        timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        timing = FxTiming(cycle = CycleLength.ONE_BEAT),
     ).apply { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
 
     private fun seedHex(key: String, startChannel: Int) =

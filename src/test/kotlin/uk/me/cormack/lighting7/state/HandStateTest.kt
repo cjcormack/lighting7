@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.models.BuskPadKind
 import uk.me.cormack.lighting7.routes.BuskCueDto
 import uk.me.cormack.lighting7.routes.CueUseEntryDto
 import uk.me.cormack.lighting7.routes.LookDto
-import uk.me.cormack.lighting7.routes.TemplateDto
+import uk.me.cormack.lighting7.routes.PaletteDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -44,20 +44,20 @@ class HandStateTest {
     // Real summary DTOs, because `Held` asserts that exactly one is set and matches the kind — the
     // rule `DaoBuskPads` has a database CHECK constraint for. Their contents don't matter here;
     // their presence does.
-    private val templateDto = TemplateDto(
+    private val paletteDto = PaletteDto(
         id = 7, uuid = "tmpl-uuid", name = "Warm wash",
         isGeneric = true, kind = "value", layerCount = 0, buskPageCount = 0,
     )
     private val lookDto = LookDto(
         id = 9, uuid = "look-uuid", name = "Act 1 opener",
-        families = emptyList(), rowCount = 0, effectCount = 0, targetCount = 0,
-        hasDeferredEffects = false, preview = emptyList(), layerCount = 0, buskPageCount = 0,
+        families = emptyList(), rowCount = 0, fxCount = 0, targetCount = 0,
+        preview = emptyList(), layerCount = 0, buskPageCount = 0,
     )
     private val cueDto = BuskCueDto(
         id = 11, uuid = "cue-uuid", name = "Cue 3", entries = listOf(CueUseEntryDto(1, "Main", 5, "3")),
     )
 
-    private val template = HandState.Held(BuskPadKind.TEMPLATE, id = 7, uuid = "tmpl-uuid", template = templateDto)
+    private val palette = HandState.Held(BuskPadKind.PALETTE, id = 7, uuid = "tmpl-uuid", palette = paletteDto)
     private val look = HandState.Held(BuskPadKind.LOOK, id = 9, uuid = "look-uuid", look = lookDto)
     private val cue = HandState.Held(BuskPadKind.CUE, id = 11, uuid = "cue-uuid", cue = cueDto)
 
@@ -71,7 +71,7 @@ class HandStateTest {
 
         assertNull(hand.held.value, "a fresh desk holds nothing")
 
-        val first = assertNotNull(hand.pickUp(template))
+        val first = assertNotNull(hand.pickUp(palette))
         assertEquals(1_000L, first.pickedUpAtMs)
         assertEquals(1_000L + 5.minutes.inWholeMilliseconds, first.expiresAtMs)
         assertEquals(first, hand.held.value)
@@ -103,7 +103,7 @@ class HandStateTest {
     @Test
     fun `the timeout drops what nobody placed`() = runTest {
         val hand = HandState(backgroundScope, everything, timeout = 5.minutes)
-        hand.pickUp(template)
+        hand.pickUp(palette)
 
         advanceTimeBy(4.minutes + 59.seconds)
         yield()
@@ -119,7 +119,7 @@ class HandStateTest {
         // The one race in this class. Five minutes after the first pick-up, its job wakes; by then
         // the operator has picked up something else, and an unguarded drop would take that instead.
         val hand = HandState(backgroundScope, everything, timeout = 5.minutes)
-        hand.pickUp(template)
+        hand.pickUp(palette)
 
         advanceTimeBy(4.minutes)
         yield()
@@ -137,7 +137,7 @@ class HandStateTest {
     @Test
     fun `a drop cancels the timer, so a later pick-up keeps its own full five minutes`() = runTest {
         val hand = HandState(backgroundScope, everything, timeout = 5.minutes)
-        hand.pickUp(template)
+        hand.pickUp(palette)
         advanceTimeBy(1.minutes)
         yield()
         hand.drop()
@@ -150,7 +150,7 @@ class HandStateTest {
 
     @Test
     fun `reconcile drops a record that has gone, on each of the three kinds`() = runTest {
-        for (record in listOf(template, look, cue)) {
+        for (record in listOf(palette, look, cue)) {
             var gone = false
             val hand = HandState(backgroundScope, resolves = { _, _ -> !gone })
             hand.pickUp(record)
@@ -173,8 +173,8 @@ class HandStateTest {
         assertTrue(asked.isEmpty(), "nothing held, nothing to ask about")
 
         hand.pickUp(look)
-        hand.reconcile(BuskPadKind.TEMPLATE)
-        assertTrue(asked.isEmpty(), "a template list moving cannot affect a held Look — no read at all")
+        hand.reconcile(BuskPadKind.PALETTE)
+        assertTrue(asked.isEmpty(), "a palette list moving cannot affect a held Look — no read at all")
 
         hand.reconcile(BuskPadKind.LOOK)
         assertEquals(listOf(BuskPadKind.LOOK to 9), asked, "the kind and id it holds, not some other pair")
@@ -185,8 +185,8 @@ class HandStateTest {
         // The hand's face is frozen, exactly as a busk pad's is between reads: `reconcile` asks
         // whether the record *exists*, never whether it still looks the way it did.
         val hand = HandState(backgroundScope, everything)
-        val held = hand.pickUp(template)
-        hand.reconcile(BuskPadKind.TEMPLATE)
+        val held = hand.pickUp(palette)
+        hand.reconcile(BuskPadKind.PALETTE)
         assertSame(held, hand.held.value)
     }
 
@@ -210,8 +210,8 @@ class HandStateTest {
     fun `two identical pick-ups in one clock tick still expire`() = runTest {
         val hand = HandState(backgroundScope, everything, timeout = 5.minutes, nowMs = { 1_000L })
 
-        val first = hand.pickUp(template)
-        val second = hand.pickUp(template)
+        val first = hand.pickUp(palette)
+        val second = hand.pickUp(palette)
 
         assertNotNull(first)
         assertNotNull(second)
@@ -229,7 +229,7 @@ class HandStateTest {
     @Test
     fun `dropIfHolding lets go of that hold and nothing else`() = runTest {
         val hand = HandState(backgroundScope, everything)
-        val first = assertNotNull(hand.pickUp(template))
+        val first = assertNotNull(hand.pickUp(palette))
 
         assertTrue(hand.dropIfHolding(first.holdId))
         assertNull(hand.held.value)
@@ -244,12 +244,12 @@ class HandStateTest {
     @Test
     fun `dropIfRecord lets go only of the record it names`() = runTest {
         val hand = HandState(backgroundScope, everything)
-        hand.pickUp(template)
+        hand.pickUp(palette)
 
         assertTrue(!hand.dropIfRecord(look.uuid), "another window's record must not clear this one")
         assertNotNull(hand.held.value)
 
-        assertTrue(hand.dropIfRecord(template.uuid))
+        assertTrue(hand.dropIfRecord(palette.uuid))
         assertNull(hand.held.value)
     }
 
@@ -258,7 +258,7 @@ class HandStateTest {
         // Without this a frame still in flight through teardown would arm a fresh five-minute job
         // capturing the whole State graph — the retention FU-TEST-COREMIDI-INIT-DEADLOCK names.
         val hand = HandState(backgroundScope, everything)
-        hand.pickUp(template)
+        hand.pickUp(palette)
 
         hand.close()
         assertNull(hand.held.value)
@@ -272,13 +272,13 @@ class HandStateTest {
         // `buskPadKind` that decides it there — a Held naming two records would serialize happily
         // into a ghost every window draws blank.
         assertFailsWith<IllegalArgumentException> {
-            HandState.Held(BuskPadKind.TEMPLATE, 1, "u", template = templateDto, look = lookDto)
+            HandState.Held(BuskPadKind.PALETTE, 1, "u", palette = paletteDto, look = lookDto)
         }
         assertFailsWith<IllegalArgumentException> {
-            HandState.Held(BuskPadKind.TEMPLATE, 1, "u", look = lookDto)
+            HandState.Held(BuskPadKind.PALETTE, 1, "u", look = lookDto)
         }
         assertFailsWith<IllegalArgumentException> {
-            HandState.Held(BuskPadKind.TEMPLATE, 1, "u")
+            HandState.Held(BuskPadKind.PALETTE, 1, "u")
         }
     }
 }

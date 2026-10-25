@@ -34,7 +34,7 @@ import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookRow
@@ -114,7 +114,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         cannon(client)
 
         val fixture = state.show.fixtures.untypedFixture("cannon")
-        assertTrue(fixture.fixtureProperties.isEmpty(), "no trigger or arm is a @FixtureProperty")
+        assertTrue(fixture.fixtureAttributes.isEmpty(), "no trigger or arm is a @FixtureAttribute")
         assertEquals(listOf("output1", "output2"), FixtureTriggers.of(fixture).map { it.name })
         assertEquals(listOf(0, 0, 0), (1..3).map { out(it) })
 
@@ -186,8 +186,8 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         val s = stack(client, "Act 1")
 
         val look = json(client, "looks", """{"name":"Bang","rows":[
-            {"targetType":"fixture","targetKey":"cannon","propertyName":"output1","value":"255"},
-            {"targetType":"fixture","targetKey":"cannon","propertyName":"master","value":"255"}]}""")
+            {"targetType":"fixture","targetKey":"cannon","attribute":"output1","value":"255"},
+            {"targetType":"fixture","targetKey":"cannon","attribute":"master","value":"255"}]}""")
         assertEquals(HttpStatusCode.BadRequest, look.status, look.bodyAsText())
         assertEquals(TriggerNotStorableException.CODE, look.code())
         val text = look.bodyAsText()
@@ -196,15 +196,15 @@ class EffectsRoutesTest : RouteIntegrationTest() {
 
         val cueRefused = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
-            setBody(NewCue(name = "Q9", cueStackId = s, propertyAssignments = listOf(
-                uk.me.cormack.lighting7.models.CuePropertyAssignmentDto(targetType = "fixture", targetKey = "cannon", propertyName = "output2", value = "255"),
+            setBody(NewCue(name = "Q9", cueStackId = s, attributeAssignments = listOf(
+                uk.me.cormack.lighting7.models.CueAttributeAssignmentDto(targetType = "fixture", targetKey = "cannon", attribute = "output2", value = "255"),
             )))
         }
         assertEquals(HttpStatusCode.BadRequest, cueRefused.status, cueRefused.bodyAsText())
-        assertTrue("propertyAssignments[0]: 'output2'" in cueRefused.bodyAsText())
+        assertTrue("attributeAssignments[0]: 'output2'" in cueRefused.bodyAsText())
         assertEquals(0L, transaction(state.database) { DaoCue.count() })
 
-        val template = json(client, "palettes", """{"name":"T","rows":[{"targetType":"deferred","targetKey":"","propertyName":"output1","value":"255"}]}""")
+        val template = json(client, "palettes", """{"name":"T","rows":[{"targetType":"deferred","targetKey":"","attribute":"output1","value":"255"}]}""")
         assertEquals(HttpStatusCode.BadRequest, template.status, template.bodyAsText())
         // Named as a trigger, not as a slotted property a recorded Look could hold.
         assertTrue("one-shot trigger" in template.bodyAsText(), template.bodyAsText())
@@ -212,7 +212,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
 
         val effect = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
-            setBody("""{"effectType":"Pulse","fixtureKey":"cannon","propertyName":"output1","beatDivision":1.0}""")
+            setBody("""{"fxType":"Pulse","fixtureKey":"cannon","attribute":"output1","cycle":1.0}""")
         }
         assertEquals(HttpStatusCode.BadRequest, effect.status, effect.bodyAsText())
         assertTrue("one-shot trigger" in effect.bodyAsText(), effect.bodyAsText())
@@ -221,8 +221,8 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         assertTrue(programmer is ProgrammerErrorOutMessage && "one-shot trigger" in programmer.message, "$programmer")
 
         for (target in listOf(
-            uk.me.cormack.lighting7.midi.BindingTarget.FixtureProperty("cannon", "output1"),
-            uk.me.cormack.lighting7.midi.BindingTarget.SelectionProperty("output2"),
+            uk.me.cormack.lighting7.midi.BindingTarget.FixtureAttribute("cannon", "output1"),
+            uk.me.cormack.lighting7.midi.BindingTarget.SelectionAttribute("output2"),
         )) {
             val refused = assertFailsWith<uk.me.cormack.lighting7.midi.BindingRefused> {
                 state.controlSurfaceBindingService.create(
@@ -464,8 +464,8 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         val looksBefore = transaction(state.database) { DaoLook.all().count() }
         val look = ai.executeTool("create_look", buildJsonObject {
             put("name", "Bang")
-            put("effects", Json.parseToJsonElement(
-                """[{"targetType":"fixture","targetKey":"cannon","effectType":"Pulse","category":"dimmer","propertyName":"master","beatDivision":1.0,"blendMode":"OVERRIDE"}]""",
+            put("fx", Json.parseToJsonElement(
+                """[{"targetType":"fixture","targetKey":"cannon","fxType":"Pulse","family":"intensity","attribute":"master","cycle":1.0,"blendMode":"OVERRIDE"}]""",
             ))
         })
         assertFalse(look.success, look.description)
@@ -483,10 +483,10 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         val stripped = transaction(state.database) {
             val project = DaoProject[projectId]
             val look = DaoLook.new { this.project = project; name = "Old" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "cannon"; propertyName = "output1"; value = "255" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "cannon"; propertyName = "master"; value = "255" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "dimmer-x"; propertyName = "dimmer"; value = "255" }
-            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "cannon"; propertyName = "output2"; value = "255" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "cannon"; attribute = "output1"; value = "255" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "cannon"; attribute = "master"; value = "255" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "dimmer-x"; attribute = "dimmer"; value = "255" }
+            DaoCueAttributeAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "cannon"; attribute = "output2"; value = "255" }
             stripTriggerRows(project)
         }
         assertEquals(3, stripped)

@@ -144,7 +144,7 @@ in-process Sentry whose transport sends nothing (`withTestSentry`).
 |---|---|---|---|
 | A call under `/api/`, `/mcp`, `/oauth/`, `/.well-known/` | `http.server` | `plugins/SentryTracing.kt` | DB, outbound HTTP, the operations below |
 | A gesture WS frame | `websocket.message` | `traceMessage` in the socket loop | the same |
-| Boot | `app.boot` | `module()` | `boot.phase` `starting` (with `db.init`, recorded before Sentry started), `show_init` (with `fx.compile`, a child per effect whose `cache` is `memory`, `disk` or `compiled`: the
+| Boot | `app.boot` | `module()` | `boot.phase` `starting` (with `db.init`, recorded before Sentry started), `show_init` (with `fx.compile`, a child per FX whose `cache` is `memory`, `disk` or `compiled`: the
 parallel workers' threads hold no scope, so the cache lookup is this attribute rather than a
 `cache.get` span), `fixtures` (`show.fixtures`, `show.prewarm`), `mdns` |
 | Cue GO | `cue.go` | `CueStackManager.activateEntry` | `cue.compose`, `cue.spawn`, `scenery.resolve`, `cue.events` |
@@ -283,8 +283,8 @@ Every flush reads and resets what it reports, and sends nothing for a window tha
 |---|---|---|---|
 | `artnet.frame.lateness` | histogram | `ArtNetController`'s loop, at the top of each frame: how far past its deadline it started | `universe` (`subnet:universe`) |
 | `artnet.frame.overrun` | count | the same loop, each time it fell more than a whole interval behind and re-based its deadline | `universe` |
-| `fx.tick.duration` | histogram | `FxEngine`'s two loops, around each pass (an idle pass included) | `loop` (`beat`, `wall_clock`) |
-| `fx.active_effects` | gauge | the live show's `FxEngine.activeEffectCount` | — |
+| `fx.tick.duration` | histogram | `FxEngine`'s compose pass, around each pass (an idle pass included) | `loop`: `beat` when a master's tick woke it (alone or with the ticker), else `wall_clock` |
+| `fx.active_effects` | gauge | the live show's `FxEngine.activeFxCount` | — |
 | `ws.clients` | gauge | sockets past the warm-up gate | — |
 | `ws.outbound.dropped` | count | frames a socket never sent, see below | `type` (the frame's `@SerialName`), `reason` (`conflated`, `closed`) |
 | `midi.latency` | histogram | `MidiLatencyTracker`, read and never reset | `stage` (`ingressButton`, …) |
@@ -312,7 +312,7 @@ beans emit nothing, and the metric would be silent on every packaged install.
 
 The org is on the free plan, so what each window sends is worth knowing. On an idle desk the steady
 state per window is 3 gauges, plus 3 samples for each histogram that recorded anything:
-`3 × universes` for ArtNet, 6 for the two FX loops (both tick idle), usually 3 for the database and
+`3 × universes` for ArtNet, 6 for `fx.tick.duration`'s two `loop` labels (both record idle passes), usually 3 for the database and
 3 for GC. With two universes that is about 21 samples a window, or about 60,000 a day.
 An auto-sync run is one more count in the window it lands in: about 1,440 a day at one a minute.
 Counts and events cost nothing in a window without them.
@@ -376,7 +376,7 @@ those do nothing until a client exists.
 | What | From |
 |---|---|
 | Issues | uncaught errors and rejections; `FeatureErrorBoundary`, through `captureReactException` with the tag `feature` (`This page`, `The script editor`) and the component stack; the root `ErrorBoundary` in `App` for what no feature boundary contains |
-| Transactions | a page load and each navigation, named by route pattern (`/projects/:projectId/busk`); fetch spans under them; a `websocket.request` span per `programmer.keyStack` or `programmer.clearTarget` round trip, only under an open page transaction (`onlyIfParent`), since the key-stack view asks once per property |
+| Transactions | a page load and each navigation, named by route pattern (`/projects/:projectId/busk`); fetch spans under them; a `websocket.request` span per `programmer.keyStack` or `programmer.clearTarget` round trip, only under an open page transaction (`onlyIfParent`), since the key-stack view asks once per attribute |
 | Sessions | one per page load (the SDK's `page` lifecycle), so browser release health counts page loads |
 | Breadcrumbs | the SDK's (clicks, console, fetch, history); the socket's open, close with its code, and reconnects; and one per Redux action, carrying its type and RTK Query endpoint but never a payload — a query's is its whole response — and not RTK Query's per-frame bookkeeping (`queryResultPatched`, subscriptions, config) |
 | Replays | a page load that errors, from up to a minute before the error; a tenth of page loads whole outside `release` (§"Replay") |
@@ -434,6 +434,13 @@ own form (`createForm`, `autoInject: false`) in the app's theme, with no name or
 browser sets no user (D11) — and a screenshot button. The screenshot is the SDK's: the browser asks
 to share the tab (`getDisplayMedia`), and an iPad has none. Opening the form flushes the replay
 buffer and the feedback names that replay, so a report carries the minute before it.
+
+The form is in a shadow root on `<body>` (`#sentry-feedback`), so a key typed in it reaches the
+desk's window and document listeners retargeted to that host, which no shortcut's field or dialog
+guard recognises. `lib/sentryFeedbackKeys.ts` stops its keydown and keypress at a window capture
+listener that `startSentry` installs before the first render, ahead of every shortcut; a window
+key listener that must hear the form's keys (`pointerFocus.ts`'s tracker) is installed before it.
+Keyups go through, so a modifier released in the form reads as released.
 
 The screenshot is a PNG at the device's pixel ratio and travels in the feedback's envelope, so one
 over the tunnel's cap would lose the feedback with it. `lib/sentryScreenshot.ts` fits it in
@@ -515,7 +522,7 @@ Replay, feedback and metrics, measured on a test desk with 11.7.0 (2026-10-13):
   room, but a much larger rig drawing more DOM than the busk view's tiles scales that segment with it.
 - **Replay, recording** (the rest of a session that has errored, or a sampled whole session): a
   segment every ~5.5 s while anything changes. Idle, 0.3–1.7 kB; on the busk view with six heads
-  under two effects, ~7 kB a segment (~205 rrweb events, ~120 kB raw), about 1.3 kB/s or 4.6 MB an
+  under two FX, ~7 kB a segment (~205 rrweb events, ~120 kB raw), about 1.3 kB/s or 4.6 MB an
   hour, almost all of it live tiles. A replay session lasts at most an hour and lapses after
   15 minutes idle; each new one is sampled again, and it is kept per tab across reloads.
 - **How many replays.** In `release`, one per replay session that errors. In `development`, a tenth

@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { useLookListQuery } from "@/store/looks"
-import { useTemplateListQuery } from "@/store/templates"
+import { usePaletteListQuery } from "@/store/palettes"
 import { useBuskPagesQuery } from "@/store/busk"
 import { allBanks, forEachPad } from "@/lib/buskLayout"
 import { padFaceOf } from "@/components/busking/padFace"
@@ -25,19 +25,11 @@ export interface RecordOption {
   label: string
   /** A second line for a list item — a Look's family summary, a pad's page and bank. */
   detail: string | null
-  /**
-   * Offered for context but not selectable — a Look with a deferred effect, whose `applyLook`
-   * press has no targets of its own. `SurfaceLibrary`'s drag chip already excludes one of these
-   * outright, by the same rule, to avoid the write boundary's `BINDING_LOOK_NEEDS_SELECTION`; the
-   * picker shows it (so "why isn't my Look here?" has an answer) but must not let it be chosen and
-   * saved, which would hit the same refusal through the other door.
-   */
-  disabled?: boolean
 }
 
 export interface RecordBindingOptions {
   looks: RecordOption[]
-  templates: RecordOption[]
+  palettes: RecordOption[]
   /** Every pad on every page, flat: a pad is addressed by uuid and its page is only context. */
   pads: RecordOption[]
   /**
@@ -53,7 +45,7 @@ export interface RecordBindingOptions {
 /** No library loaded yet, or nothing to resolve — a stable empty answer callers can default to. */
 export const EMPTY_RECORD_OPTIONS: RecordBindingOptions = {
   looks: [],
-  templates: [],
+  palettes: [],
   pads: [],
   banks: [],
   pages: [],
@@ -62,7 +54,7 @@ const EMPTY = EMPTY_RECORD_OPTIONS
 
 export function useRecordBindingOptions(projectId: number): RecordBindingOptions {
   const { data: looks } = useLookListQuery({ projectId })
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const { data: pages } = useBuskPagesQuery(projectId)
 
   return useMemo(() => {
@@ -71,12 +63,9 @@ export function useRecordBindingOptions(projectId: number): RecordBindingOptions
       looks: (looks ?? []).map((look) => ({
         uuid: look.uuid,
         label: look.name,
-        // What an `applyLook` binding will actually do on a button, said where the choice is made:
-        // a deferred effect has no own targets, so the write boundary refuses it by name.
-        detail: look.hasDeferredEffects ? "needs a selection — cannot go on a button" : null,
-        disabled: look.hasDeferredEffects,
+        detail: null,
       })),
-      templates: (templates ?? []).map((template) => ({
+      palettes: (templates ?? []).map((template) => ({
         uuid: template.uuid,
         label: template.name,
         detail: template.family?.toLowerCase() ?? null,
@@ -125,8 +114,8 @@ export function recordTargetName(
   switch (target.type) {
     case "applyLook":
       return find(options.looks, target.lookUuid)
-    case "pressTemplate":
-      return find(options.templates, target.templateUuid)
+    case "pressPalette":
+      return find(options.palettes, target.paletteUuid)
     case "pressPad":
       return find(options.pads, target.padUuid)
     // The hand's two uuid-bearing targets. `handDrop` names no record and falls to `null` below,
@@ -160,7 +149,7 @@ export function describeBindingTarget(target: BindingTarget, records: RecordBind
   switch (target.type) {
     case "applyLook":
       return `Apply ${name}`
-    case "pressTemplate":
+    case "pressPalette":
       return `Press ${name}`
     case "pressPad":
       return `Press pad ${name}`

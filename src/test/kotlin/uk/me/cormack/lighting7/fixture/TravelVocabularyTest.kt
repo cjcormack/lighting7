@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.RobeColorSpot575Fixture
 import uk.me.cormack.lighting7.fixture.dmx.Source4RevolutionFixture
-import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 
 /**
  * The fixture optics plan's session 8, "travel time" (D14): a type's base speeds (`@FixtureType.travel`)
- * and a fixture's own timing channels (`@FixtureProperty.timing`). Both are drawn by the Stage view and
+ * and a fixture's own timing channels (`@FixtureAttribute.timing`). Both are drawn by the Stage view and
  * never output — the last test holds the desk to sending a timing channel and the move it times exactly
  * as written.
  */
@@ -26,7 +26,7 @@ class TravelVocabularyTest {
     fun `every head whose pan and tilt the view draws in degrees declares how fast they move`() {
         var movers = 0
         for (type in FixtureTypeRegistry.allTypes) {
-            val sliders = type.properties.filterIsInstance<SliderPropertyDescriptor>()
+            val sliders = type.attributes.filterIsInstance<SliderAttributeDescriptor>()
             val drawsPosition = sliders.any { it.axis == "PAN" && it.degMax != null } &&
                 sliders.any { it.axis == "TILT" && it.degMax != null }
             if (!drawsPosition) continue
@@ -53,14 +53,14 @@ class TravelVocabularyTest {
         assertEquals(157.27, robe.panDegPerS)
         assertEquals(108.95, robe.tiltDegPerS)
         // Its pan/tilt speed channel is not a timing channel: its curve depends on a menu mode.
-        val speed = RobeColorSpot575Fixture.Mode2Ch(universe, "s", "S", 1).generatePropertyDescriptors()
-            .filterIsInstance<SliderPropertyDescriptor>().single { it.name == "panTiltSpeed" }
+        val speed = RobeColorSpot575Fixture.Mode2Ch(universe, "s", "S", 1).generateAttributeDescriptors()
+            .filterIsInstance<SliderAttributeDescriptor>().single { it.name == "panTiltSpeed" }
         assertNull(speed.timing)
     }
 
     @Test
     fun `the Revolution's three timing channels stretch position, colour and beam at one second a step`() {
-        val sliders = revolution().generatePropertyDescriptors().filterIsInstance<SliderPropertyDescriptor>().associateBy { it.name }
+        val sliders = revolution().generateAttributeDescriptors().filterIsInstance<SliderAttributeDescriptor>().associateBy { it.name }
         val focus = sliders.getValue("focusTime")
         assertEquals("POSITION", focus.timing, "ETC's Focus Timing times pan and tilt (p14 [10]), not the lens")
         assertEquals(1.0, focus.timingSecondsPerStep)
@@ -79,7 +79,7 @@ class TravelVocabularyTest {
     fun `every timing channel is a SPEED slider that declares its seconds per step and a fast band inside its range`() {
         var timing = 0
         for (type in FixtureTypeRegistry.allTypes) {
-            for (slider in type.properties.filterIsInstance<SliderPropertyDescriptor>()) {
+            for (slider in type.attributes.filterIsInstance<SliderAttributeDescriptor>()) {
                 if (slider.timing == null) {
                     assertNull(slider.timingSecondsPerStep, "${type.typeKey}'s ${slider.name} is no timing channel")
                     assertNull(slider.timingFastFrom, "${type.typeKey}'s ${slider.name} is no timing channel")

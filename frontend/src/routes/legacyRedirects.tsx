@@ -1,6 +1,6 @@
 import { useLocation, useParams, Navigate } from 'react-router'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
-import { TemplatesRedirect } from './Templates'
+import { PalettesRedirect } from './Palettes'
 
 /**
  * Redirects for paths that no longer name a view.
@@ -16,7 +16,7 @@ import { TemplatesRedirect } from './Templates'
  * exact `/program` vs `/programmer` confusion in the file layout.
  *
  * Every target collected here is byte-identical to what it was before the collection;
- * `LegacyTemplatesRedirect` was added after it. `?cue=` deep links are an external contract, minted
+ * `LegacyPalettesRedirect` was added after it. `?cue=` deep links are an external contract, minted
  * by the Prompt Book's "Edit cue" rail card, so the search string is carried across wherever the
  * original did.
  *
@@ -119,13 +119,13 @@ export function LegacyProgramRedirect() {
  * The palette library used to live at `/templates`. The search string is carried because the
  * old `?family=` deep links — Cmd+K's four family entries — named that path.
  */
-export function LegacyTemplatesRedirect() {
+export function LegacyPalettesRedirect() {
   const { projectId } = useParams()
   const { search } = useLocation()
   if (projectId) {
     return <Navigate to={`/projects/${projectId}/palettes${search}`} replace />
   }
-  return <TemplatesRedirect />
+  return <PalettesRedirect />
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { BuskPad } from '@/api/buskApi'
 import type { HeldRecord } from '@/api/handApi'
 import type { CueRing } from '@/api/cueHoldsApi'
-import type { EffectPresence } from './buskingTypes'
+import type { FxPresence } from './buskingTypes'
 
 /**
  * What a pad does and how it lights, handed down from the view that owns the selection and the
@@ -12,7 +12,7 @@ import type { EffectPresence } from './buskingTypes'
  */
 export interface PadBehaviour {
   /** A template or Look pad's ring, from the desk's resolved applied state. */
-  presenceOf: (pad: BuskPad) => EffectPresence
+  presenceOf: (pad: BuskPad) => FxPresence
   /**
    * A cue pad's ring (cue model plan D11): solid while a press holds the cue loose — what the next
    * press lets go of — and outline while only a stack holds it.

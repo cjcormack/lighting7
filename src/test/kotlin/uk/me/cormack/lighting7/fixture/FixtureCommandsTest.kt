@@ -2,8 +2,8 @@ package uk.me.cormack.lighting7.fixture
 
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.routes.CommandPropertyDescriptor
-import uk.me.cormack.lighting7.routes.TriggerPropertyDescriptor
+import uk.me.cormack.lighting7.routes.CommandAttributeDescriptor
+import uk.me.cormack.lighting7.routes.TriggerAttributeDescriptor
 import kotlin.reflect.KProperty1
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,14 +65,14 @@ class FixtureCommandsTest {
     fun `every declaration is sound`() {
         assertTrue(library.size >= 10, "the plan's eight families, ten types: ${library.map { it.first }}")
         for ((typeKey, fixture, commands) in library) {
-            val propertyChannels = FixtureCommands.propertyChannelsOf(fixture)
+            val attributeChannels = FixtureCommands.attributeChannelsOf(fixture)
             for (c in commands) {
                 assertTrue(c.spec.label.isNotBlank() && c.spec.description.isNotBlank(), "$typeKey ${c.name} needs a label and a description")
                 assertTrue(c.spec.holdMs in 500..FixtureCommands.MAX_HOLD_MS, "$typeKey ${c.name} holds ${c.spec.holdMs} ms")
                 assertTrue(c.spec.confirm, "$typeKey ${c.name}: every command in the library asks first")
                 assertTrue(c.channelNo in fixture.firstChannel until fixture.firstChannel + fixture.channelCount, "$typeKey ${c.name} is off the fixture's footprint")
                 for (pre in c.alongside) {
-                    assertTrue(pre.channelNo in propertyChannels, "$typeKey ${c.name}: a precondition sets a property's channel, not ${pre.channelNo}")
+                    assertTrue(pre.channelNo in attributeChannels, "$typeKey ${c.name}: a precondition sets a property's channel, not ${pre.channelNo}")
                     assertTrue(pre.channelNo != c.channelNo, "$typeKey ${c.name}: a precondition on its own channel")
                 }
             }
@@ -125,12 +125,12 @@ class FixtureCommandsTest {
     }
 
     @Test
-    fun `a shared channel's property offers no option inside a command's band`() {
+    fun `a shared channel's attribute offers no option inside a command's band`() {
         // The five RESET options this session removed must stay removed: a setting option in a band would
         // put the command back in every Look picker.
         for ((typeKey, fixture, commands) in library) {
             for (c in commands.filterNot { it.dedicated }) {
-                for (prop in fixture.fixtureProperties) {
+                for (prop in fixture.fixtureAttributes) {
                     val setting = runCatching { prop.classProperty.call(fixture) }.getOrNull() as? DmxFixtureSetting<*> ?: continue
                     if (setting.channelNo != c.channelNo) continue
                     val inBand = setting.sortedValues.filter { it.level in c.bandMin..c.bandMax }
@@ -146,7 +146,7 @@ class FixtureCommandsTest {
         for ((typeKey, fixture, commands) in library) {
             if (fixture !is MultiElementFixture<*>) continue
             for (element in fixture.elements) {
-                for (prop in FixturePropertyCatalogue.of(element::class).all) {
+                for (prop in FixtureAttributeCatalogue.of(element::class).all) {
                     @Suppress("UNCHECKED_CAST")
                     val channel = when (val v = (prop.classProperty as KProperty1<Any, *>).call(element)) {
                         is uk.me.cormack.lighting7.fixture.dmx.DmxSlider -> v.channelNo
@@ -160,13 +160,13 @@ class FixtureCommandsTest {
     }
 
     @Test
-    fun `no command name is any type's property or trigger name`() {
+    fun `no command name is any type's attribute or trigger name`() {
         // A generic row is refused by every command name there is, so a property of the same name
         // anywhere in the library would become unstorable on every generic row.
-        val propertyNames = FixtureTypeRegistry.allTypes.flatMap { t -> t.properties.filterNot { it is CommandPropertyDescriptor || it is TriggerPropertyDescriptor }.map { it.name } }.toSet()
-        val elementNames = FixtureTypeRegistry.allTypes.flatMap { t -> t.elementGroupProperties.orEmpty().map { it.name } }.toSet()
+        val attributes = FixtureTypeRegistry.allTypes.flatMap { t -> t.attributes.filterNot { it is CommandAttributeDescriptor || it is TriggerAttributeDescriptor }.map { it.name } }.toSet()
+        val elementNames = FixtureTypeRegistry.allTypes.flatMap { t -> t.elementGroupAttributes.orEmpty().map { it.name } }.toSet()
         for (name in FixtureCommands.allReservedNames) {
-            assertFalse(propertyNames.any { it.equals(name, ignoreCase = true) }, "'$name' is a command and a property")
+            assertFalse(attributes.any { it.equals(name, ignoreCase = true) }, "'$name' is a command and a property")
             assertFalse(elementNames.any { it.equals(name, ignoreCase = true) }, "'$name' is a command and a head property")
             assertFalse(FixtureTriggers.allReservedNames.any { it.equals(name, ignoreCase = true) }, "'$name' is a command and a trigger")
         }
@@ -175,10 +175,10 @@ class FixtureCommandsTest {
     @Test
     fun `commands reach the descriptor list last, after the controls`() {
         for ((typeKey, fixture, commands) in library) {
-            val descriptors = fixture.generatePropertyDescriptors()
-            val listed = descriptors.filterIsInstance<CommandPropertyDescriptor>()
+            val descriptors = fixture.generateAttributeDescriptors()
+            val listed = descriptors.filterIsInstance<CommandAttributeDescriptor>()
             assertEquals(commands.map { it.name }, listed.map { it.name }, typeKey)
-            assertTrue(descriptors.takeLast(listed.size).all { it is CommandPropertyDescriptor || it is TriggerPropertyDescriptor }, "$typeKey: commands come last")
+            assertTrue(descriptors.takeLast(listed.size).all { it is CommandAttributeDescriptor || it is TriggerAttributeDescriptor }, "$typeKey: commands come last")
             val first = listed.first()
             val command = commands.first()
             assertEquals(command.spec.holdMs, first.holdMs)
@@ -192,7 +192,7 @@ class FixtureCommandsTest {
     }
 
     @Test
-    fun `a dedicated command channel is named in the DMX sheet, a shared one keeps its property's name`() {
+    fun `a dedicated command channel is named in the DMX sheet, a shared one keeps its attribute's name`() {
         val rev = library.single { it.first == "etc-source4-revolution-base-frame" }.second
         assertEquals("5 commands", rev.channelDescriptions().getValue(12))
         val vary = FixtureTypeRegistry.introspectionInstanceForTypeKey("varytec-easymove-xl-60-spot-11ch")!!
@@ -202,7 +202,7 @@ class FixtureCommandsTest {
     }
 
     @Test
-    fun `shared bands are listed per property for the stored-row strip`() {
+    fun `shared bands are listed per attribute for the stored-row strip`() {
         assertEquals(
             mapOf("strobe" to listOf(208..217, 228..237, 248..255)),
             FixtureCommands.sharedBandsForTypeKey("martin-mac-250-mode-4").mapValues { e -> e.value.map { it.range }.sortedBy { it.first } },

@@ -1,16 +1,15 @@
-import type { ApplyFxRequest, BlendMode, DistributionStrategy, ElementMode } from '@/api/groupsApi'
+import type { ApplyFxRequest, BlendMode, SpreadOrder, ElementMode } from '@/api/groupsApi'
 import type { AddFixtureFxRequest } from '@/store/fixtureFx'
-import type { EffectDirection } from '@/api/fxApi'
+import type { FxDirection, Timing } from '@/api/fxApi'
 import type { CueTarget } from '@/api/cuesApi'
 
 /**
  * The one place that knows how "start this effect" is spelled for a fixture and for a group.
  *
- * The two create routes differ in more than a key name — a group carries a `distribution` and an
- * `elementMode`, a fixture carries `startOnBeat` and spells its distribution `distributionStrategy`
- * — so every surface that starts an effect used to write the branch out for itself. There were four
+ * The two create routes differ — a group carries an `elementMode` and requires an `order`, a
+ * fixture carries `startOnBeat` and leaves its `order` optional — so every surface that starts an effect used to write the branch out for itself. There were four
  * copies between the old add/edit sheet and the busking pad, and they had already drifted: only some of
- * them sent `stepTiming`, and the sheet suppressed a fixture's distribution while the pad sent it
+ * them sent the Timing, and the sheet suppressed a fixture's Order while the pad sent it
  * unconditionally.
  *
  * This does **not** cover updates. A running effect is edited over the `updateFx` frame
@@ -28,9 +27,9 @@ export type FxCreateTarget =
   | { type: 'selection'; targets: CueTarget[] }
 
 export interface FxCreateRequest {
-  effectType: string
-  propertyName: string
-  beatDivision: number
+  fxType: string
+  attribute: string
+  cycle: number
   blendMode: BlendMode
   phaseOffset: number
   parameters: Record<string, string>
@@ -39,30 +38,30 @@ export interface FxCreateRequest {
    * with — a single-head fixture, or the pad's one-tap.
    *
    * The two routes treat absence differently, and deliberately: the group route requires a
-   * distribution, so it falls back to `LINEAR`, while the fixture route's is optional and is left
+   * distribution, so it falls back to `NORMAL`, while the fixture route's is optional and is left
    * off entirely rather than pinning a choice nobody made onto the instance.
    */
-  distribution?: DistributionStrategy
+  order?: SpreadOrder
   /** Group only — how a multi-element member's heads are addressed. */
   elementMode?: ElementMode
   /** Restrict the effect to some of a multi-head fixture's elements. Absent means all of them. */
   elementFilter?: string
-  stepTiming?: boolean
+  timing?: Timing
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
   /** On *Seconds* (D7): the division is seconds, no master. */
   seconds?: boolean
-  /** Size (effects plan D2), 0–1; omitted → 1. */
-  size?: number
+  /** Amount (effects plan D2), 0–1; omitted → 1. */
+  amount?: number
   /** Direction (D5); omitted → forward. */
-  direction?: EffectDirection
+  direction?: FxDirection
   /** Runs (D9), at least 1; omitted → forever. */
-  nShot?: number
+  runs?: number
   /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
   spread?: number
   wings?: number
-  blocks?: number
-  groups?: number
+  segments?: number
+  parts?: number
   /**
    * Create in the programmer's reserved priority band. Always set by the busking pad; the sheet
    * sets it only for the programmer's own `+ Effect`.
@@ -82,28 +81,28 @@ export function fxCreateAddition(
   request: FxCreateRequest,
 ): FxCreateAddition {
   const shared = {
-    effectType: request.effectType,
-    propertyName: request.propertyName,
-    beatDivision: request.beatDivision,
+    fxType: request.fxType,
+    attribute: request.attribute,
+    cycle: request.cycle,
     blendMode: request.blendMode,
     phaseOffset: request.phaseOffset,
     parameters: { ...request.parameters },
     ...(request.programmerOwned ? { programmerOwned: true } : {}),
     ...(request.elementFilter !== undefined ? { elementFilter: request.elementFilter } : {}),
-    ...(request.stepTiming !== undefined ? { stepTiming: request.stepTiming } : {}),
+    ...(request.timing !== undefined ? { timing: request.timing } : {}),
     ...(request.speedMasterUuid != null ? { speedMasterUuid: request.speedMasterUuid } : {}),
     ...(request.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: request.rateSpeedMasterUuid }
       : {}),
     ...(request.seconds ? { seconds: true } : {}),
-    ...(request.size != null && request.size !== 1 ? { size: request.size } : {}),
+    ...(request.amount != null && request.amount !== 1 ? { amount: request.amount } : {}),
     ...(request.direction != null && request.direction !== 'FORWARD' ? { direction: request.direction } : {}),
-    ...(request.nShot != null ? { nShot: request.nShot } : {}),
+    ...(request.runs != null ? { runs: request.runs } : {}),
     // The spread's shape (effects plan D4), said only where it is not the default.
     ...(request.spread != null && request.spread !== 1 ? { spread: request.spread } : {}),
     ...(request.wings != null && request.wings !== 1 ? { wings: request.wings } : {}),
-    ...(request.blocks != null && request.blocks !== 1 ? { blocks: request.blocks } : {}),
-    ...(request.groups != null && request.groups !== 0 ? { groups: request.groups } : {}),
+    ...(request.segments != null && request.segments !== 1 ? { segments: request.segments } : {}),
+    ...(request.parts != null && request.parts !== 0 ? { parts: request.parts } : {}),
   }
 
   if (target.type === 'group') {
@@ -112,7 +111,7 @@ export function fxCreateAddition(
       groupName: target.groupName,
       payload: {
         ...shared,
-        distribution: request.distribution ?? 'LINEAR',
+        order: request.order ?? 'NORMAL',
         ...(request.elementMode ? { elementMode: request.elementMode } : {}),
       },
     }
@@ -124,8 +123,8 @@ export function fxCreateAddition(
       ...shared,
       ...(target.type === 'selection' ? { targets: target.targets } : { fixtureKey: target.fixtureKey }),
       startOnBeat: request.startOnBeat ?? true,
-      ...(request.distribution !== undefined
-        ? { distributionStrategy: request.distribution }
+      ...(request.order !== undefined
+        ? { order: request.order }
         : {}),
     },
   }

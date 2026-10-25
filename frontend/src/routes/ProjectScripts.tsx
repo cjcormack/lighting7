@@ -10,7 +10,7 @@ import {
   useProjectScriptsQuery,
   useRunProjectScriptMutation,
 } from '../store/projects'
-import { useEffectLibraryQuery } from '../store/fixtureFx'
+import { useFxLibraryQuery } from '../store/fixtureFx'
 import { useFxDefinitionListQuery } from '../store/fxDefinitions'
 import type { ProjectScriptDetail } from '../api/projectApi'
 import type { ScriptType } from '../store/scripts'
@@ -20,7 +20,7 @@ import { ScriptSheet, scriptRowId, type ScriptSheetRow } from '../components/scr
 import { useScriptDelete } from '../components/scripts/useScriptDelete'
 import { checkFromResult, type ScriptCheck } from '../components/scripts/scriptCheck'
 import { ALL_SCRIPT_TYPES, SCRIPT_TYPE_LABELS } from '../components/scripts/scriptUtils'
-import { definitionsByEffectId, displayName, effectsRegisteredBy } from '../components/fxLibrary/fxLibraryModel'
+import { definitionsByFxId, displayName, fxRegisteredBy } from '../components/fxLibrary/fxLibraryModel'
 import { LibraryRow, PartitionChips } from '../components/sheet/LibraryRow'
 import { SheetPage } from '../components/sheet/SheetPage'
 import { groupRows } from '../components/sheet/groupRows'
@@ -41,7 +41,6 @@ const SCRIPT_TYPE_SHORT_LABELS: Record<ScriptType, string> = {
   FX_APPLICATION: 'FX app',
   FX_CALC: 'FX calc',
   FX_CALC_STATEFUL: 'Stateful',
-  FX_CALC_COMPOSITE: 'Composite',
 }
 
 /** `?type=fx-definition` ↔ `FX_DEFINITION`. */
@@ -79,7 +78,7 @@ export default function ProjectScripts() {
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   const { data: scriptList, isLoading: scriptsLoading } = useProjectScriptsQuery(projectIdNum)
   // Used by: the running show's library, read against its definitions (the FX Library's rule).
-  const { data: fxLibrary } = useEffectLibraryQuery()
+  const { data: fxLibrary } = useFxLibraryQuery()
   const { data: fxDefinitions } = useFxDefinitionListQuery()
   const [compileScript] = useCompileProjectScriptMutation()
   const [runScript, { data: runResult, isUninitialized: hasNotRun, isLoading: isRunning, reset: resetRun }] =
@@ -179,12 +178,12 @@ export default function ProjectScripts() {
 
   // ── Used by ──
   const registeredBy = useMemo(() => {
-    const byEffectId = definitionsByEffectId(fxDefinitions ?? [])
+    const byFxId = definitionsByFxId(fxDefinitions ?? [])
     const entries = fxLibrary ?? []
     // Another project's script ids name nothing in the running show's library.
     return (script: ProjectScriptDetail): readonly string[] =>
       isCurrentProject && script.scriptType === 'FX_DEFINITION'
-        ? effectsRegisteredBy(script.id, entries, byEffectId).map((e) => displayName(e.name))
+        ? fxRegisteredBy(script.id, entries, byFxId).map((e) => displayName(e.name))
         : []
   }, [fxDefinitions, fxLibrary, isCurrentProject])
 

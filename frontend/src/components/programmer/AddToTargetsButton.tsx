@@ -2,12 +2,11 @@ import { Crosshair } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { programmerPatchLayer } from '@/store/programmer'
-import { useLookRowStore } from './LookRowStore'
-import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from './FocusedPaletteLayer'
 import type { CueTarget } from '@/api/cuesApi'
 
 /**
- * Bring a row inside the focused layer's targets.
+ * Bring a row inside the focused palette layer's targets.
  *
  * This is the *only* way a layer widens, and that is deliberate. In layer scope an untargeted row's
  * cells are shown but not editable, so a marquee dragged across the grid cannot quietly extend a
@@ -15,11 +14,8 @@ import type { CueTarget } from '@/api/cuesApi'
  * just made. Widening is a press, on the row, next to Locate and Details.
  *
  * Reads only context, so it costs a mounted row nothing: the layer's target list rides on values the
- * grid is already holding rather than a per-row query subscription. **Both** layer contexts — a
- * focused Look layer's `LookRowStore` and a focused template layer's `FocusedTemplateLayer`, which
- * are mutually exclusive by construction. The template half is not optional: since a template
- * layer's grid became a read, an untargeted row there is painted dashed and non-editable, and
- * without this button that tone would name a state with no way out of it.
+ * grid is already holding rather than a per-row query subscription. A palette layer only: a Look's
+ * names no targets (absolute-looks plan D1), so it has nothing to widen.
  *
  * No optimistic update, matching the Stack table — the programmer's layer state is a
  * broadcast, and the row un-dims when it lands. Restating it here would be a second opinion on a
@@ -36,12 +32,9 @@ export function AddToTargetsButton({
   fixtureKeys: readonly string[]
   name: string
 }) {
-  const store = useLookRowStore()
-  const focusedTemplate = useFocusedTemplateLayer()
-  const layer = store ?? focusedTemplate
-  // `targetedKeys === null` is "the source's own targets" — for a Look, every bound row lands where
-  // it names, so there is nothing to widen. Reading it as "no targets" would put this button on
-  // every row.
+  const layer = useFocusedPaletteLayer()
+  // `targetedKeys === null` is a per-fixture palette naming no targets: its rows land where they
+  // name, so there is nothing to widen.
   if (!layer || layer.targetedKeys === null) return null
   const targeted = layer.targetedKeys
   if (fixtureKeys.length === 0 || fixtureKeys.every((key) => targeted.has(key))) return null

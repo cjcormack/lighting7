@@ -1,14 +1,14 @@
-import type { TemplateTarget } from '../../api/templatesApi'
+import type { PaletteTarget } from '../../api/palettesApi'
 import { resolveCell } from './columns'
 import { filterTerms, fixtureMatchesTerms } from '../../lib/fixtureSearch'
 import type { CellResolution, ColumnKey } from './columns'
-import type { ElementDescriptor, Fixture, PropertyDescriptor } from '../../store/fixtures'
+import type { ElementDescriptor, Fixture, AttributeDescriptor } from '../../store/fixtures'
 import type { GroupSummary } from '../../api/groupsApi'
 import type { LocateTarget } from '../../store/locate'
 import { targetKey } from '../../lib/targetKey'
 import { ATTRIBUTE_FAMILIES, familyForCategory, type AttributeFamily } from '../../lib/attributeFamily'
-import { EMITTER_PROPERTIES, templatePropertyFor, type TemplateProperty } from '../../lib/templateIntent'
-import { spreadPropertiesFor } from '../../lib/spreadIntent'
+import { EMITTER_ATTRIBUTES, paletteAttributeFor, type PaletteAttribute } from '../../lib/paletteIntent'
+import { spreadAttributesFor } from '../../lib/spreadIntent'
 import { centreToDmx } from '../../lib/positionScale'
 import { readColour, splitColourTerms, type FixtureColour } from '../../lib/fixtureColours'
 
@@ -266,9 +266,9 @@ export type CellCommit =
  */
 export interface WriteTarget {
   key: string
-  properties: PropertyDescriptor[]
+  attributes: AttributeDescriptor[]
   /** Present on fixture targets. When a column resolves to nothing against
-   *  `properties`, planBatchWrites falls through to one write per element. */
+   *  `attributes`, planBatchWrites falls through to one write per element. */
   elements?: ElementDescriptor[]
   /**
    * Present on **element** targets: the owning fixture's key. Element keys are never parsed
@@ -419,7 +419,7 @@ export function selectedRowTargets(
  * them by the desk, so a fixture row still reaches every cell. Two names for one walk because the
  * two presses are different questions that happen to share an answer.
  */
-export function templateTargetsFor(
+export function paletteTargetsFor(
   rows: readonly Row[],
   selectedIds: ReadonlySet<RowId>,
 ): LocateTarget[] {
@@ -435,7 +435,7 @@ export function templateTargetsFor(
  *
  * It is [expandSelectionToTargets]'s walk — the same dedupe, the same drop of an element row under
  * a covered parent — read as cue targets, through [spreadTargetsOf], so the container's per-column
- * targets and this answer cannot name different heads for one marquee. [templateTargetsFor] is this
+ * targets and this answer cannot name different heads for one marquee. [paletteTargetsFor] is this
  * walk too since venue-visit plan S1, when it stopped folding a cell onto its fixture.
  */
 export function spreadTargetsFor(
@@ -472,26 +472,26 @@ export function spreadTargetsOf(targets: readonly WriteTarget[]): LocateTarget[]
 }
 
 /**
- * The template property a grid column spreads as — the column → `TemplateProperty` map of
+ * The template property a grid column spreads as — the column → `PaletteAttribute` map of
  * editor-kit plan D4. Null for a column outside the vocabulary: Speed spreads as **raw** bytes
  * (D15), and Gobo and Prism do not spread at all (a wheel slot is per-model; a prism is a switch).
  */
-export function spreadPropertyForColumn(col: ColumnKey): TemplateProperty | null {
+export function spreadAttributeForColumn(col: ColumnKey): PaletteAttribute | null {
   switch (col) {
     case 'dimmer':
-      return templatePropertyFor('dimmer')
+      return paletteAttributeFor('dimmer')
     case 'strobe':
-      return templatePropertyFor('strobe')
+      return paletteAttributeFor('strobe')
     case 'colour':
-      return templatePropertyFor('rgbColour')
+      return paletteAttributeFor('rgbColour')
     case 'position':
-      return templatePropertyFor('position')
+      return paletteAttributeFor('position')
     case 'zoom':
-      return templatePropertyFor('zoom')
+      return paletteAttributeFor('zoom')
     case 'focus':
-      return templatePropertyFor('focus')
+      return paletteAttributeFor('focus')
     case 'iris':
-      return templatePropertyFor('iris')
+      return paletteAttributeFor('iris')
     case 'gobo':
     case 'prism':
     case 'speed':
@@ -500,25 +500,25 @@ export function spreadPropertyForColumn(col: ColumnKey): TemplateProperty | null
 }
 
 /** Whether one head — a fixture or an element — has something this template property resolves against. */
-function headTakesProperty(properties: readonly PropertyDescriptor[], property: TemplateProperty): boolean {
-  switch (property.propertyName) {
+function headTakesAttribute(attributes: readonly AttributeDescriptor[], attribute: PaletteAttribute): boolean {
+  switch (attribute.attribute) {
     case 'rgbColour':
-      return properties.some((p) => p.type === 'colour' || p.type === 'whiteMix')
+      return attributes.some((p) => p.type === 'colour' || p.type === 'whiteMix')
     // The bundled emitters are omitted from the flat descriptor list, so read the colour
     // descriptor's channels (`targetEmitters`'s rule).
     case 'white':
-      return properties.some((p) => (p.type === 'colour' && p.whiteChannel != null) || p.category === 'white')
+      return attributes.some((p) => (p.type === 'colour' && p.whiteChannel != null) || p.category === 'white')
     case 'amber':
-      return properties.some((p) => (p.type === 'colour' && p.amberChannel != null) || p.category === 'amber')
+      return attributes.some((p) => (p.type === 'colour' && p.amberChannel != null) || p.category === 'amber')
     case 'uv':
-      return properties.some((p) => (p.type === 'colour' && p.uvChannel != null) || p.category === 'uv')
+      return attributes.some((p) => (p.type === 'colour' && p.uvChannel != null) || p.category === 'uv')
     case 'position':
-      return resolveCell([...properties], 'position') != null
+      return resolveCell([...attributes], 'position') != null
     case 'prism':
-      return properties.some((p) => p.category === 'prism')
+      return attributes.some((p) => p.category === 'prism')
     default:
       // dimmer, strobe, zoom, focus, iris, frost: a property in that category.
-      return properties.some((p) => p.category === property.propertyName)
+      return attributes.some((p) => p.category === attribute.attribute)
   }
 }
 
@@ -529,12 +529,12 @@ function headTakesProperty(properties: readonly PropertyDescriptor[], property: 
  * alone; a Dimmer marquee over heads with a strobe offers Level · Strobe. An element's properties
  * count for its fixture, as [targetFamilies] counts them.
  */
-export function spreadPropertiesOffered(targets: readonly WriteTarget[], family: AttributeFamily): TemplateProperty[] {
-  return spreadPropertiesFor(family).filter((property) =>
+export function spreadAttributesOffered(targets: readonly WriteTarget[], family: AttributeFamily): PaletteAttribute[] {
+  return spreadAttributesFor(family).filter((attribute) =>
     targets.some(
       (target) =>
-        headTakesProperty(target.properties, property) ||
-        (target.elements ?? []).some((element) => headTakesProperty(element.properties, property)),
+        headTakesAttribute(target.attributes, attribute) ||
+        (target.elements ?? []).some((element) => headTakesAttribute(element.attributes, attribute)),
     ),
   )
 }
@@ -566,17 +566,19 @@ export function spreadCellCount(targets: readonly WriteTarget[]): number {
  * string — `fixturesSupportingFamily` counts every head for it, where a descriptor set can say
  * whether a head has a wheel, a zoom, an iris.
  */
-export function targetFamilies(targets: readonly WriteTarget[]): AttributeFamily[] {
+export function targetFamilies(
+  targets: readonly { attributes: readonly AttributeDescriptor[]; elements?: readonly { attributes: readonly AttributeDescriptor[] }[] }[],
+): AttributeFamily[] {
   const out = new Set<AttributeFamily>()
   // A trigger or a command is no attribute a head can take: neither can be held by a template or a
   // layer, so a head whose only beam-ish descriptor is a reset must not offer Beam.
-  const add = (property: PropertyDescriptor) => {
-    if (property.type !== 'trigger' && property.type !== 'command') out.add(familyForCategory(property.category))
+  const add = (attribute: AttributeDescriptor) => {
+    if (attribute.type !== 'trigger' && attribute.type !== 'command') out.add(familyForCategory(attribute.category))
   }
   for (const target of targets) {
-    for (const property of target.properties) add(property)
+    for (const attribute of target.attributes) add(attribute)
     for (const element of target.elements ?? []) {
-      for (const property of element.properties) add(property)
+      for (const attribute of element.attributes) add(attribute)
     }
   }
   return ATTRIBUTE_FAMILIES.filter((family) => out.has(family))
@@ -591,7 +593,7 @@ export function targetFamilies(targets: readonly WriteTarget[]): AttributeFamily
  *
  * Answered from descriptors, and it has to be: `bundleWithColour` sliders are **omitted** from the
  * flat descriptor list and folded into the colour descriptor's `whiteChannel` / `amberChannel` /
- * `uvChannel` (see `hooks/useTargetProperties`), so scanning categories the way [targetFamilies]
+ * `uvChannel` (see `hooks/useTargetAttributes`), so scanning categories the way [targetFamilies]
  * does would find no emitter on any head. The `slider`-with-that-category arm is the belt to that
  * braces — it costs one comparison and catches a head that publishes an emitter as a plain slider
  * rather than folding it in. Same probe as `detectExtendedChannels` in `components/fx/colourUtils`,
@@ -599,28 +601,28 @@ export function targetFamilies(targets: readonly WriteTarget[]): AttributeFamily
  */
 export function targetEmitters(targets: readonly WriteTarget[]): string[] {
   const out = new Set<string>()
-  // Narrowed on `type`, never cast. `PropertyDescriptor`'s colour arm declares the three channel
+  // Narrowed on `type`, never cast. `AttributeDescriptor`'s colour arm declares the three channel
   // fields, so this type-checks for free — and an earlier version that reached them through an
   // `as Record<string, unknown>` also read a `memberColourChannels` that is not on this union at
-  // all (it belongs to `GroupColourPropertyDescriptor`, which never reaches a `WriteTarget`: group
+  // all (it belongs to `GroupColourAttributeDescriptor`, which never reaches a `WriteTarget`: group
   // rows are expanded to member fixtures before they get here). The cast is what let that dead
   // branch compile.
-  const scan = (properties: readonly PropertyDescriptor[]) => {
-    for (const property of properties) {
-      if (property.type === 'colour') {
-        if (property.whiteChannel != null) out.add('white')
-        if (property.amberChannel != null) out.add('amber')
-        if (property.uvChannel != null) out.add('uv')
-      } else if (property.type === 'slider' && EMITTER_PROPERTIES.includes(property.category)) {
-        out.add(property.category)
+  const scan = (attributes: readonly AttributeDescriptor[]) => {
+    for (const attribute of attributes) {
+      if (attribute.type === 'colour') {
+        if (attribute.whiteChannel != null) out.add('white')
+        if (attribute.amberChannel != null) out.add('amber')
+        if (attribute.uvChannel != null) out.add('uv')
+      } else if (attribute.type === 'slider' && EMITTER_ATTRIBUTES.includes(attribute.category)) {
+        out.add(attribute.category)
       }
     }
   }
   for (const target of targets) {
-    scan(target.properties)
-    for (const element of target.elements ?? []) scan(element.properties)
+    scan(target.attributes)
+    for (const element of target.elements ?? []) scan(element.attributes)
   }
-  return EMITTER_PROPERTIES.filter((emitter) => out.has(emitter))
+  return EMITTER_ATTRIBUTES.filter((emitter) => out.has(emitter))
 }
 
 /**
@@ -732,7 +734,7 @@ export function clampCommitToResolution(
   resolution: NonNullable<CellResolution>,
 ): CellCommit {
   if (commit.kind === 'slider' && resolution.kind === 'slider') {
-    const { min, max } = resolution.property
+    const { min, max } = resolution.attribute
     return { kind: 'slider', value: clamp(commit.value, min, max) }
   }
   if (commit.kind === 'position' && resolution.kind === 'position') {
@@ -838,11 +840,11 @@ export interface TargetResolution {
  * against it is later skipped.
  */
 export function resolveTargetCells(target: WriteTarget, col: ColumnKey): TargetResolution[] {
-  const own = resolveCell(target.properties, col)
+  const own = resolveCell(target.attributes, col)
   if (own) return [{ target, resolution: own }]
   const out: TargetResolution[] = []
   for (const element of target.elements ?? []) {
-    const resolution = resolveCell(element.properties, col)
+    const resolution = resolveCell(element.attributes, col)
     if (resolution) out.push({ target: element, resolution })
   }
   return out
@@ -944,7 +946,7 @@ export function parseSelectParam(raw: string): SelectParam | null {
  * Where a template press or record lands for these targets: each target by its own key — a whole
  * fixture as itself, a **cell as its element key** (`{type: 'fixture', key: element.key}`, the
  * cells contract the desk resolves) — deduped, and a cell dropped where its parent is in the batch
- * too, since the parent covers it (`templateTargetsFor`'s rule, over the batch's targets rather than
+ * too, since the parent covers it (`paletteTargetsFor`'s rule, over the batch's targets rather than
  * the rows, which a cell never sees).
  *
  * A cell used to be folded onto its parent, on the belief that the template route would drop an
@@ -953,10 +955,10 @@ export function parseSelectParam(raw: string): SelectParam | null {
  * whose colour lives on its cells out to those cells itself, so a whole-fixture target still means
  * every cell.
  */
-export function templateTargetsOf(targets: readonly WriteTarget[]): TemplateTarget[] {
+export function paletteTargetsOf(targets: readonly WriteTarget[]): PaletteTarget[] {
   const parents = new Set(targets.filter((target) => target.fixtureKey == null).map((target) => target.key))
   const seen = new Set<string>()
-  const out: TemplateTarget[] = []
+  const out: PaletteTarget[] = []
   for (const target of targets) {
     if (target.fixtureKey != null && parents.has(target.fixtureKey)) continue
     if (seen.has(target.key)) continue

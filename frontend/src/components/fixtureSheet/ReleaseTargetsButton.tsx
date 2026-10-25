@@ -37,7 +37,7 @@ export function ReleaseTargetsButton({
           ? disabledReason
           : n === 0
           ? 'Nothing selected to release'
-          : `Release ${n} — every value and local effect the selection holds in the programmer; pads stay lit`
+          : `Release ${n} — every value and local FX the selection holds in the programmer; pads stay lit`
       }
       onClick={() => void release()}
     >

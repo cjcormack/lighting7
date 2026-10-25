@@ -10,7 +10,7 @@ import { LayerStack } from './LayerStack'
  */
 export const SOURCE_EDGE_CLASS: Record<RowSourceKind, string> = {
   programmer: 'before:bg-primary',
-  effect: 'before:bg-violet-500',
+  fx: 'before:bg-violet-500',
   cue: 'before:bg-sky-500',
   parked: 'before:bg-amber-500',
   base: 'before:bg-transparent',
@@ -23,7 +23,7 @@ function chipClass(source: RowSource): string {
       return source.touched
         ? 'border-primary/55 bg-primary/15 text-primary'
         : 'border-primary/55 text-primary'
-    case 'effect':
+    case 'fx':
       return 'border-violet-500/60 bg-violet-500/15 text-violet-600 dark:text-violet-300'
     case 'cue':
       return 'border-sky-500/50 bg-sky-500/10 text-sky-700 dark:text-sky-300'
@@ -40,7 +40,7 @@ function chipClass(source: RowSource): string {
  */
 export const MIXED_EDGE_CLASS: Record<RowSourceKind, string> = {
   programmer: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-primary)_0_4px,transparent_4px_7px)]',
-  effect: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-violet-500)_0_4px,transparent_4px_7px)]',
+  fx: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-violet-500)_0_4px,transparent_4px_7px)]',
   cue: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-sky-500)_0_4px,transparent_4px_7px)]',
   parked: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-amber-500)_0_4px,transparent_4px_7px)]',
   base: 'before:bg-[repeating-linear-gradient(to_bottom,var(--color-border)_0_4px,transparent_4px_7px)]',
@@ -56,7 +56,7 @@ export function SourceChip({
   source,
   heads,
   group,
-  propertyName,
+  attribute,
   label,
   cueLabel,
   connected,
@@ -68,7 +68,7 @@ export function SourceChip({
   /** A group's *All*: the stack is asked of the group. */
   group?: string
   /** The row's first key: the property the stack is asked about. */
-  propertyName: string
+  attribute: string
   /** The row's name, for the stack's title. */
   label: string
   /** Outside a fixture sheet (the grid's cell editor), what its context would carry — see `LayerStack`. */
@@ -86,7 +86,7 @@ export function SourceChip({
         onOpenChange={setOpen}
         heads={heads}
         group={group}
-        propertyName={propertyName}
+        attribute={attribute}
         label={label}
         cueLabel={cueLabel}
         connected={connected}
@@ -103,7 +103,7 @@ export function SourceChip({
               count != null && 'border-dashed',
             )}
           >
-            {source.kind === 'effect' && <AudioWaveform className="size-3 shrink-0" aria-hidden />}
+            {source.kind === 'fx' && <AudioWaveform className="size-3 shrink-0" aria-hidden />}
             {source.kind === 'parked' && <Lock className="size-3 shrink-0" aria-hidden />}
             <span className="truncate">{words}</span>
             {source.heldBack && (

@@ -10,16 +10,16 @@ import { SheetTable } from '@/components/sheet/SheetTable'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
 import { useSheet } from '@/components/sheet/useSheet'
 import { useUpdateFxDefinitionMutation, type FxDefinition } from '@/store/fxDefinitions'
-import type { EffectLibraryEntry } from '@/store/fixtureFx'
+import type { FxLibraryEntry } from '@/store/fixtureFx'
 import { cn } from '@/lib/utils'
-import { EFFECT_MODE_LABELS, FX_SOURCE_LABELS, OUTPUT_TYPE_LABELS, forkRefusal, type FxSource } from './fxLibraryModel'
+import { FX_MODE_LABELS, FX_SOURCE_LABELS, OUTPUT_TYPE_LABELS, forkRefusal, type FxSource } from './fxLibraryModel'
 import { useFxDefinitionDelete, type FxDeleteItem } from './useFxDefinitionDelete'
 
 export type FxColumnKey = 'output' | 'mode' | 'timing' | 'params' | 'drives' | 'source'
 
 export interface FxSheetRow extends SheetRow {
   /** Absent on a category divider. */
-  entry?: EffectLibraryEntry
+  entry?: FxLibraryEntry
   source?: FxSource
   /** A custom row's definition — the discriminator, and what the rename and the delete write. */
   definition?: FxDefinition
@@ -28,10 +28,10 @@ export interface FxSheetRow extends SheetRow {
 }
 
 /** A member row — every row but a divider carries its entry, source and name. */
-export type FxMemberRow = FxSheetRow & { entry: EffectLibraryEntry; source: FxSource; name: string }
+export type FxMemberRow = FxSheetRow & { entry: FxLibraryEntry; source: FxSource; name: string }
 
-export function fxRowId(effectId: string): string {
-  return `fx:${effectId}`
+export function fxRowId(fxId: string): string {
+  return `fx:${fxId}`
 }
 
 function isMember(row: FxSheetRow): row is FxMemberRow {
@@ -47,7 +47,7 @@ export interface FxLibrarySheetProps {
   /** Open a row's record: a custom row its definition, a script's effect its script, a built-in its detail. */
   onOpen: (row: FxMemberRow) => void
   /** Fork a built-in (D9) — the route mints the id, creates it and opens the editor. */
-  onFork: (entry: EffectLibraryEntry) => void
+  onFork: (entry: FxLibraryEntry) => void
   forking: boolean
 }
 
@@ -62,7 +62,7 @@ export interface FxLibrarySheetProps {
  * script's effect's names are the desk's and the script's.
  *
  * **Source is the definition list read against the library** (`fxSourceOf`): custom where a
- * definition's `effectId` is the entry's id, *Script* for any other `USER` entry. That is also what
+ * definition's `fxId` is the entry's id, *Script* for any other `USER` entry. That is also what
  * a row opens (§1's first bug): a custom row its definition, a script-registered row its **script**,
  * a built-in its read-only detail.
  *
@@ -94,7 +94,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
         label: 'Mode',
         width: '96px',
         value: () => undefined,
-        display: (row) => row.entry && <ReadText>{EFFECT_MODE_LABELS[row.entry.effectMode] ?? row.entry.effectMode}</ReadText>,
+        display: (row) => row.entry && <ReadText>{FX_MODE_LABELS[row.entry.fxMode] ?? row.entry.fxMode}</ReadText>,
       },
       {
         key: 'timing',
@@ -135,8 +135,8 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
         value: () => undefined,
         display: (row) =>
           row.entry && (
-            <span className="mx-1.5 flex min-w-0 gap-1 overflow-hidden" title={row.entry.compatibleProperties.join(', ')}>
-              {row.entry.compatibleProperties.map((prop) => (
+            <span className="mx-1.5 flex min-w-0 gap-1 overflow-hidden" title={row.entry.compatibleAttributes.join(', ')}>
+              {row.entry.compatibleAttributes.map((prop) => (
                 <span
                   key={prop}
                   className="inline-flex h-[18px] shrink-0 items-center rounded-full bg-muted px-1.5 font-mono text-[10px]"
@@ -167,7 +167,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
     columns,
     permission: scope.permission,
     copy: scope.copy,
-    noun: 'effect',
+    noun: 'FX',
     rowName: (row) => row.name ?? row.id,
     onOpenRow: openRow,
   })
@@ -190,15 +190,15 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
   )
 
   const count = selected.length
-  const noun = count === 1 ? 'effect' : 'effects'
+  const noun = 'FX'
   const one = selected[0]
   const forkReason =
     scope.reason ??
     (forking
       ? 'Forking…'
-      : (oneRecordReason('Fork', 'effect', count) ??
+      : (oneRecordReason('Fork', 'FX', count) ??
         (one.source !== 'builtIn'
-          ? `Only a built-in forks — ${one.source === 'custom' ? 'edit this custom effect directly' : 'edit the script that registers this effect'}`
+          ? `Only a built-in forks — ${one.source === 'custom' ? 'edit this custom FX directly' : 'edit the script that registers this FX'}`
           : (forkRefusal(one.entry) ??
             (one.entry.script ? null : `${one.name} publishes no script to fork`)))))
   const deletable = selected.some((row) => row.source === 'custom')
@@ -208,7 +208,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
       ? 'Deleting…'
       : deletable
         ? null
-        : 'Only a custom effect deletes here — built-ins are the desk’s, and a script’s effects are its script’s')
+        : 'Only a custom FX deletes here — built-ins are the desk’s, and a script’s FX are its script’s')
 
   const verbs =
     count > 0 ? (
@@ -216,7 +216,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
         <LibraryVerb
           icon={GitFork}
           label="Fork"
-          title={`Make a custom copy of ${one?.name ?? 'this effect'} you can edit`}
+          title={`Make a custom copy of ${one?.name ?? 'this FX'} you can edit`}
           disabledReason={forkReason}
           onClick={() => onFork(one.entry)}
         />
@@ -224,7 +224,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
           icon={Trash2}
           label="Delete"
           destructive
-          title={`Delete ${count} ${noun} — only custom effects are sent`}
+          title={`Delete ${count} ${noun} — only custom FX are sent`}
           disabledReason={deleteReason}
           onClick={() => void runDelete(selected.map(toDeleteItem))}
         />
@@ -238,9 +238,9 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
   const firstColumn = useMemo(
     () =>
       libraryNameColumn<FxSheetRow>({
-        label: 'Effect',
+        label: 'FX',
         width: `${NAME_WIDTH}px`,
-        noun: 'effect',
+        noun: 'FX',
         name: (row) => row.name ?? '',
         rename,
         renameDisabled: (row) => scope.readOnly || row.source !== 'custom',
@@ -278,7 +278,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
 }
 
 /** Why nothing is live off the running project — the library and its writes are the running show's. */
-export const FX_READ_ONLY_REASON = 'Effects shows and edits the running show’s effects'
+export const FX_READ_ONLY_REASON = 'FX shows and edits the running show’s FX'
 
 /**
  * The name column's track. With the other tracks' floors (100 + 96 + 86 + 70 + 150 + 110 = 612)

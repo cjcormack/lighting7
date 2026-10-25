@@ -4,7 +4,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.*
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.*
-import uk.me.cormack.lighting7.routes.PropertyDescriptor
+import uk.me.cormack.lighting7.routes.AttributeDescriptor
 import kotlin.reflect.KClass
 import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.full.primaryConstructor
@@ -62,8 +62,8 @@ object FixtureTypeRegistry {
         val modeName: String?,
         val channelCount: Int?,
         val capabilities: List<String>,
-        val properties: List<PropertyDescriptor>,
-        val elementGroupProperties: List<GroupPropertyDescriptor>?,
+        val attributes: List<AttributeDescriptor>,
+        val elementGroupAttributes: List<GroupAttributeDescriptor>?,
         val acceptsBeamAngle: Boolean,
         val acceptsGel: Boolean,
         val gelCompactDisplay: CompactDisplayRole,
@@ -257,11 +257,11 @@ object FixtureTypeRegistry {
         if (fixture is WithStrobe) caps.add("strobe")
         if (fixture is MultiElementFixture<*>) {
             caps.add("multi-element")
-            val egp = fixture.generateElementGroupPropertyDescriptors()
+            val egp = fixture.generateElementGroupAttributeDescriptors()
             if (egp != null) {
-                if ("dimmer" !in caps && egp.any { it is GroupSliderPropertyDescriptor && it.category == "dimmer" }) caps.add("dimmer")
-                if ("colour" !in caps && egp.any { it is GroupColourPropertyDescriptor || it is GroupWhiteMixPropertyDescriptor }) caps.add("colour")
-                if ("position" !in caps && egp.any { it is GroupPositionPropertyDescriptor }) caps.add("position")
+                if ("dimmer" !in caps && egp.any { it is GroupSliderAttributeDescriptor && it.category == "dimmer" }) caps.add("dimmer")
+                if ("colour" !in caps && egp.any { it is GroupColourAttributeDescriptor || it is GroupWhiteMixAttributeDescriptor }) caps.add("colour")
+                if ("position" !in caps && egp.any { it is GroupPositionAttributeDescriptor }) caps.add("position")
             }
         }
         return caps
@@ -286,8 +286,8 @@ object FixtureTypeRegistry {
         // Instantiate for introspection to get capabilities and properties
         val instance = instantiateForIntrospection(klass)
         val capabilities = instance?.let { detectCapabilities(it) } ?: emptyList()
-        val properties = instance?.generatePropertyDescriptors() ?: emptyList()
-        val elementGroupProperties = instance?.generateElementGroupPropertyDescriptors()
+        val attributes = instance?.generateAttributeDescriptors() ?: emptyList()
+        val elementGroupAttributes = instance?.generateElementGroupAttributeDescriptors()
 
         // Channel count: prefer mode info (multi-mode fixtures), fall back to instance
         val channelCount = modeInfo?.channelCount ?: instance?.channelCount
@@ -308,8 +308,8 @@ object FixtureTypeRegistry {
                 modeName = modeInfo?.modeName,
                 channelCount = channelCount,
                 capabilities = capabilities,
-                properties = properties,
-                elementGroupProperties = elementGroupProperties,
+                attributes = attributes,
+                elementGroupAttributes = elementGroupAttributes,
                 // A fixture accepts a beam angle if explicitly flagged OR its
                 // (resolved) shape draws a beam.
                 acceptsBeamAngle = annotation.acceptsBeamAngle || beamShape != BeamShape.NONE,

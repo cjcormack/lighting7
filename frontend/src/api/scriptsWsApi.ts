@@ -15,7 +15,7 @@ export interface ScriptsWsApi {
  *
  * Fired for a script's *contents* as well as its name, unlike the Look and template frames. A
  * script has no live consumers to republish and no open editor to storm — the list carries
- * `usedByProperties` and `canDelete`, both of which move when the source does.
+ * `usedByAttributes` and `canDelete`, both of which move when the source does.
  */
 export function createScriptsWsApi(conn: InternalApiConnection): ScriptsWsApi {
   return createChangeSignalApi(conn, 'scriptListChanged')

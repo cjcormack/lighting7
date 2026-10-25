@@ -18,7 +18,7 @@ import uk.me.cormack.lighting7.fx.AppliedSource
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
-import uk.me.cormack.lighting7.fx.StackEffectSizes
+import uk.me.cormack.lighting7.fx.StackFxAmounts
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -94,7 +94,7 @@ interface SurfaceFeedbackHooks {
  * off state, takeover is disarmed, and the stream reports `value: null`. A turn or move then
  * writes every head and the next tick reads uniform
  * (`docs/plans/completed/midi-surface-plan.md` D10). What a head's value *is* — and so what a
- * turn writes — is [PropertyChannelResolver]'s rule, not this class's.
+ * turn writes — is [AttributeChannelResolver]'s rule, not this class's.
  *
  * ## The control-state stream
  *
@@ -125,7 +125,7 @@ class SurfaceFeedbackPublisher(
      */
     private val speedMasterBankProvider: (() -> SpeedMasterBank)? = null,
     /**
-     * The desk selection a `SelectionProperty` control writes and a `SelectTarget` LED shows.
+     * The desk selection a `SelectionAttribute` control writes and a `SelectTarget` LED shows.
      * A value, not a provider: it is State-scoped and survives a project switch (cleared, not
      * rebuilt). Null disables the selection-relative arms — a harness without a desk.
      */
@@ -133,7 +133,7 @@ class SurfaceFeedbackPublisher(
     /** Locate state for `LocateSelection` LEDs; a provider because the manager is per show. */
     private val locateManagerProvider: (() -> LocateManager)? = null,
     /**
-     * The programmer's layer stack, for the record LEDs — `ApplyLook` and `PressTemplate` read its
+     * The programmer's layer stack, for the record LEDs — `ApplyLook` and `PressPalette` read its
      * `appliedState`, which is the same answer a busk pad's ring reads, resolved server-side so the
      * two cannot drift. A provider because the stack is per show.
      */
@@ -165,12 +165,12 @@ class SurfaceFeedbackPublisher(
      */
     private val buskRefsProvider: ((projectId: Int) -> BuskRefs)? = null,
     /**
-     * The live show's stack effect sizes, for `StackEffectSize` faders (effects plan D10). A
-     * provider because the sizes are per show, like [globalScalerStateProvider].
+     * The live show's stack FX amounts, for `StackFxAmount` faders (effects plan D10). A
+     * provider because the FX amounts are per show, like [globalScalerStateProvider].
      */
-    private val stackEffectSizesProvider: (() -> StackEffectSizes)? = null,
+    private val stackFxAmountsProvider: (() -> StackFxAmounts)? = null,
     /**
-     * A stack uuid's id in the live show, for a `StackEffectSize` fader — the input path's own lookup
+     * A stack uuid's id in the live show, for a `StackFxAmount` fader — the input path's own lookup
      * (`CueStackManager.stackIdForUuid`), kept for the show's life, so a rebuild reads no row twice.
      */
     private val stackIdResolver: ((stackUuid: String) -> Int?)? = null,
@@ -209,7 +209,7 @@ class SurfaceFeedbackPublisher(
      * [heads] are what the 7-bit feedback position is read from — one per head the target names:
      * the fixture itself, each member of a group, each selected head of a selection binding. A
      * head is a slider's one channel or a colour's three read together on the binding's [axis]
-     * ([PropertyChannelResolver.readHead] owns that rule, so the ring reads what a turn writes).
+     * ([AttributeChannelResolver.readHead] owns that rule, so the ring reads what a turn writes).
      * Empty for a selection binding with nothing selected: the entry exists so the control reads
      * "no selection" rather than "unbound". [channels] is the flat list the index is keyed on.
      * [axis] is baked here at rebuild, like [policy], so the read path never re-derives it.
@@ -219,11 +219,11 @@ class SurfaceFeedbackPublisher(
         val deviceTypeKey: String,
         val control: ControlDescriptor,
         val binding: ControlSurfaceBindingService.ResolvedBinding,
-        val heads: List<PropertyChannelResolver.PropertyRead>,
+        val heads: List<AttributeChannelResolver.AttributeRead>,
         val policy: BindingTakeoverPolicy,
         val axis: ColourAxis?,
     ) {
-        val channels: List<PropertyChannelResolver.PropertyChannel> = heads.flatMap { it.channels }
+        val channels: List<AttributeChannelResolver.AttributeChannel> = heads.flatMap { it.channels }
     }
 
     /** Discrete-binding entry for LED feedback (Flash / Blackout / GrandMasterToggle / Select / Locate). */
@@ -265,7 +265,7 @@ class SurfaceFeedbackPublisher(
 
     /**
      * Continuous entry for a tempo-bound control. Deliberately *not* a [ContinuousEntry]:
-     * that type is built around a DMX [PropertyChannelResolver.PropertyChannel], and a speed
+     * that type is built around a DMX [AttributeChannelResolver.AttributeChannel], and a speed
      * master has no channel behind it — its value lives in the bank.
      *
      * This exists mainly so soft takeover works. PICKUP only engages once something calls
@@ -294,11 +294,11 @@ class SurfaceFeedbackPublisher(
     )
 
     /**
-     * A control bound to a cue stack's effect size — [GrandMasterEntry]'s shape, its value in the
-     * show's [StackEffectSizes]. [stackId] is resolved at rebuild; null when the binding's stack is
+     * A control bound to a cue stack's FX amount — [GrandMasterEntry]'s shape, its value in the
+     * show's [StackFxAmounts]. [stackId] is resolved at rebuild; null when the binding's stack is
      * not in this project, which health already marks dead.
      */
-    private data class StackSizeEntry(
+    private data class StackFxAmountEntry(
         val displayKey: String,
         val control: ControlDescriptor,
         val stackId: Int?,
@@ -328,7 +328,7 @@ class SurfaceFeedbackPublisher(
         /** `EncoderBankSet` buttons: lit while that property is the device's encoder bank. */
         val encoderBankLeds: List<LedEntry>,
         /**
-         * `ApplyLook` / `PressTemplate` / `PressPad` buttons, with their records resolved — as a
+         * `ApplyLook` / `PressPalette` / `PressPad` buttons, with their records resolved — as a
          * list for the layer-change sweep and **by binding id** for [ledOn], which is handed one
          * entry at a time by the full resync and has only the binding to go on.
          */
@@ -346,8 +346,8 @@ class SurfaceFeedbackPublisher(
         val speedMasterEntries: List<SpeedMasterEntry>,
         /** Grand-master faders: a flat list, scanned per level change, for [speedMasterEntries]' reason. */
         val grandMasterEntries: List<GrandMasterEntry>,
-        /** Stack effect-size faders: likewise. */
-        val stackSizeEntries: List<StackSizeEntry>,
+        /** Stack FX amount faders: likewise. */
+        val stackFxAmountEntries: List<StackFxAmountEntry>,
         /** Fan encoders: likewise. */
         val fanEntries: List<FanEntry> = emptyList(),
     ) {
@@ -377,7 +377,7 @@ class SurfaceFeedbackPublisher(
         // merely health ones. A layout write is included: it is what moves a pad between banks and
         // what takes one off a page.
         override fun lookListChanged() { rebuildAndResync() }
-        override fun templateListChanged() { rebuildAndResync() }
+        override fun paletteListChanged() { rebuildAndResync() }
         override fun buskLayoutChanged(pageIds: List<Int>) { rebuildAndResync() }
         // A cue pad's ring is its stack's live cue, so a GO or a release moves it. Discrete — this
         // fires on transitions, not per fade frame.
@@ -389,7 +389,7 @@ class SurfaceFeedbackPublisher(
     private var scalerJob: Job? = null
     private var grandMasterJob: Job? = null
     private var speedMasterJob: Job? = null
-    private var stackSizeJob: Job? = null
+    private var stackFxAmountJob: Job? = null
     private var fanJob: Job? = null
     private var locateJob: Job? = null
     private var layersJob: Job? = null
@@ -444,7 +444,7 @@ class SurfaceFeedbackPublisher(
         }
         subscribeScaler(scope)
         subscribeSpeedMasters(scope)
-        subscribeStackSizes(scope)
+        subscribeStackFxAmounts(scope)
         subscribeLocate(scope)
         subscribeProgrammerLayers(scope)
         selectionFan?.let { fan ->
@@ -539,22 +539,22 @@ class SurfaceFeedbackPublisher(
             .launchIn(scope)
     }
 
-    /** (Re)subscribe to the current show's stack effect sizes, per show like [subscribeScaler]. */
-    private fun subscribeStackSizes(scope: CoroutineScope) {
-        stackSizeJob?.cancel()
-        val sizes = try {
-            stackEffectSizesProvider?.invoke()
+    /** (Re)subscribe to the current show's stack FX amounts, per show like [subscribeScaler]. */
+    private fun subscribeStackFxAmounts(scope: CoroutineScope) {
+        stackFxAmountJob?.cancel()
+        val amounts = try {
+            stackFxAmountsProvider?.invoke()
         } catch (_: Exception) {
             null
         } ?: return
         // Only the controls on a stack that moved: a fader dragged at frame rate must not re-send
         // every other stack's control its unchanged value.
-        var last = sizes.state.value
-        stackSizeJob = sizes.state
+        var last = amounts.state.value
+        stackFxAmountJob = amounts.state
             .onEach { now ->
                 val moved = (last.keys + now.keys).filterTo(HashSet()) { last[it] != now[it] }
                 last = now
-                if (moved.isNotEmpty()) resyncStackSizeEntries(index.get().stackSizeEntries.filter { it.stackId in moved })
+                if (moved.isNotEmpty()) resyncStackFxAmountEntries(index.get().stackFxAmountEntries.filter { it.stackId in moved })
             }
             .launchIn(scope)
     }
@@ -582,8 +582,8 @@ class SurfaceFeedbackPublisher(
         grandMasterJob = null
         speedMasterJob?.cancel()
         speedMasterJob = null
-        stackSizeJob?.cancel()
-        stackSizeJob = null
+        stackFxAmountJob?.cancel()
+        stackFxAmountJob = null
         fanJob?.cancel()
         fanJob = null
         locateJob?.cancel()
@@ -607,7 +607,7 @@ class SurfaceFeedbackPublisher(
         publisherScope?.let {
             subscribeScaler(it)
             subscribeSpeedMasters(it)
-            subscribeStackSizes(it)
+            subscribeStackFxAmounts(it)
             subscribeLocate(it)
             subscribeProgrammerLayers(it)
         }
@@ -829,7 +829,7 @@ class SurfaceFeedbackPublisher(
         }
 
         fun lookUuid(raw: String): UUID? = uuidOrNull(raw)
-        fun templateUuid(raw: String): UUID? = uuidOrNull(raw)
+        fun paletteUuid(raw: String): UUID? = uuidOrNull(raw)
         fun pageId(raw: String): Int? = uuidOrNull(raw)?.let { refs.pageIds[it] }
 
         fun padLed(entry: LedEntry, raw: String): RecordLedEntry =
@@ -876,7 +876,7 @@ class SurfaceFeedbackPublisher(
         val buskPageLeds = mutableListOf<Pair<LedEntry, Int?>>()
         val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
         val grandMasterEntries = mutableListOf<GrandMasterEntry>()
-        val stackSizeEntries = mutableListOf<StackSizeEntry>()
+        val stackFxAmountEntries = mutableListOf<StackFxAmountEntry>()
         val fanEntries = mutableListOf<FanEntry>()
         // Every record and page uuid a bound button on an attached device names, resolved in one
         // batch below rather than one lookup per button.
@@ -918,8 +918,8 @@ class SurfaceFeedbackPublisher(
                     (binding.target as? BindingTarget.SelectionFan)?.let { fan ->
                         fanEntries += FanEntry(displayKey, control, fan.axis, binding.takeoverPolicy ?: classDefault)
                     }
-                    (binding.target as? BindingTarget.StackEffectSize)?.let { stack ->
-                        stackSizeEntries += StackSizeEntry(
+                    (binding.target as? BindingTarget.StackFxAmount)?.let { stack ->
+                        stackFxAmountEntries += StackFxAmountEntry(
                             displayKey = displayKey,
                             control = control,
                             // The input path's rule: a uuid that resolves to nothing here is no stack,
@@ -967,9 +967,9 @@ class SurfaceFeedbackPublisher(
                             )
                             true
                         }
-                        is BindingTarget.PressTemplate -> {
+                        is BindingTarget.PressPalette -> {
                             recordLeds += RecordLedEntry(
-                                entry, RecordLedKind.COVERS_SELECTION, recordRefs.templateUuid(target.templateUuid),
+                                entry, RecordLedKind.COVERS_SELECTION, recordRefs.paletteUuid(target.paletteUuid),
                             )
                             true
                         }
@@ -1005,7 +1005,7 @@ class SurfaceFeedbackPublisher(
                 buskPageIdByBindingId = buskPageLeds.associate { (entry, pageId) -> entry.binding.id to pageId },
                 speedMasterEntries = speedMasterEntries,
                 grandMasterEntries = grandMasterEntries,
-                stackSizeEntries = stackSizeEntries,
+                stackFxAmountEntries = stackFxAmountEntries,
                 fanEntries = fanEntries,
             )
         )
@@ -1013,7 +1013,7 @@ class SurfaceFeedbackPublisher(
         // the operator's first touch, rather than only after the first tempo change.
         resyncSpeedMasterEntries(speedMasterEntries)
         resyncGrandMasterEntries(grandMasterEntries)
-        resyncStackSizeEntries(stackSizeEntries)
+        resyncStackFxAmountEntries(stackFxAmountEntries)
         resyncFanEntries(fanEntries)
     }
 
@@ -1030,7 +1030,7 @@ class SurfaceFeedbackPublisher(
      * (to nothing when nothing is selected), because "no selection" is a state the control
      * shows rather than the absence of a binding.
      *
-     * Every arm takes the **whole** [PropertyChannelResolver.PropertyRead]. Each used to take the
+     * Every arm takes the **whole** [AttributeChannelResolver.AttributeRead]. Each used to take the
      * first channel of the flat description, so a colour binding stood on red alone and a
      * red-and-yellow selection read as uniform (`FU-MIDI-SELECTION-COLOUR-RED-ONLY`).
      *
@@ -1038,40 +1038,40 @@ class SurfaceFeedbackPublisher(
      * for the whole entry when any head reads null, and a slider head reads null on an axis — so
      * a selection mixing a colour head and a slider head under one property name would otherwise
      * darken the ring for the heads the move does reach. The write skips those heads
-     * ([PropertyChannelResolver.toPropertyValue]); the read has to skip the same ones.
+     * ([AttributeChannelResolver.toAttributeValue]); the read has to skip the same ones.
      */
     private fun findHeads(
         fixtures: Fixtures,
         target: BindingTarget,
         selectedHeads: List<CueTargetDto>,
         axis: ColourAxis?,
-    ): List<PropertyChannelResolver.PropertyRead>? {
-        fun describe(fixture: Fixture, propertyName: String): PropertyChannelResolver.PropertyRead? {
-            val read = PropertyChannelResolver.describePropertyRead(fixture, propertyName) ?: return null
-            if (axis != null && read !is PropertyChannelResolver.PropertyRead.Colour) return null
+    ): List<AttributeChannelResolver.AttributeRead>? {
+        fun describe(fixture: Fixture, attribute: String): AttributeChannelResolver.AttributeRead? {
+            val read = AttributeChannelResolver.describeAttributeRead(fixture, attribute) ?: return null
+            if (axis != null && read !is AttributeChannelResolver.AttributeRead.Colour) return null
             return read
         }
         return when (target) {
-            is BindingTarget.FixtureProperty -> {
+            is BindingTarget.FixtureAttribute -> {
                 val fixture = try {
                     fixtures.untypedFixture(target.fixtureKey)
                 } catch (_: Exception) { null }
-                fixture?.let { describe(it, target.propertyName) }?.let { listOf(it) }
+                fixture?.let { describe(it, target.attribute) }?.let { listOf(it) }
             }
-            is BindingTarget.GroupProperty -> {
+            is BindingTarget.GroupAttribute -> {
                 val group = try {
                     fixtures.untypedGroup(target.groupName)
                 } catch (_: Exception) { null }
                 group?.fixtures?.filterIsInstance<Fixture>()
-                    ?.mapNotNull { describe(it, target.propertyName) }
+                    ?.mapNotNull { describe(it, target.attribute) }
                     ?.takeIf { it.isNotEmpty() }
             }
-            is BindingTarget.SelectionProperty -> selectedHeads.mapNotNull { head ->
+            is BindingTarget.SelectionAttribute -> selectedHeads.mapNotNull { head ->
                 if (head.type != TargetRef.Fixture.TYPE) return@mapNotNull null
                 val fixture = try {
                     fixtures.untypedFixture(head.key)
                 } catch (_: Exception) { null }
-                fixture?.let { describe(it, target.propertyName) }
+                fixture?.let { describe(it, target.attribute) }
             }
             // Never seen here: resolve() derives a strip to one of the property targets above.
             is BindingTarget.Strip -> null
@@ -1085,8 +1085,8 @@ class SurfaceFeedbackPublisher(
         resyncGrandMasterEntries(
             idx.grandMasterEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
         )
-        resyncStackSizeEntries(
-            idx.stackSizeEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
+        resyncStackFxAmountEntries(
+            idx.stackFxAmountEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
         )
         resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId })
         val entries = idx.continuousByDisplay[displayKey] ?: return
@@ -1130,7 +1130,7 @@ class SurfaceFeedbackPublisher(
         // above wiped their rows: re-feed them here or the stream reports a lit ring as unbound.
         resyncSpeedMasterEntries(idx.speedMasterEntries.filter { it.displayKey == displayKey })
         resyncGrandMasterEntries(idx.grandMasterEntries.filter { it.displayKey == displayKey })
-        resyncStackSizeEntries(idx.stackSizeEntries.filter { it.displayKey == displayKey })
+        resyncStackFxAmountEntries(idx.stackFxAmountEntries.filter { it.displayKey == displayKey })
         resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey })
         // Folded once for the whole device resync rather than once per record-button LED in it.
         val applied = appliedSources()
@@ -1157,7 +1157,7 @@ class SurfaceFeedbackPublisher(
         // Both halves, through the effective axis: a hue button and a saturation button on one
         // colour property are two banks, and (rgbColour, null) is the same bank as (rgbColour, HUE).
         is BindingTarget.EncoderBankSet -> encoderBankState.selectionFor(entry.binding.deviceTypeKey).let {
-            it.propertyName == target.propertyName && it.colourAxis.effective == target.colourAxis.effective
+            it.attribute == target.attribute && it.colourAxis.effective == target.colourAxis.effective
         }
         // Never indexed: resolve() derives a strip to the target of the control it stands on.
         is BindingTarget.Strip -> null
@@ -1165,7 +1165,7 @@ class SurfaceFeedbackPublisher(
         // function has only the binding, and a uuid → record lookup here would be a database read
         // per LED per resync.
         is BindingTarget.ApplyLook,
-        is BindingTarget.PressTemplate,
+        is BindingTarget.PressPalette,
         is BindingTarget.PressPad,
             -> index.get().recordLedByBindingId[entry.binding.id]
                 ?.let { recordLedOn(it, applied ?: appliedSources()) }
@@ -1197,7 +1197,7 @@ class SurfaceFeedbackPublisher(
             val selected = deskSelection?.state?.value?.targets.orEmpty()
             if (uuid == null || selected.isEmpty()) false else {
                 val entry = applied.firstOrNull { it.source.uuid == uuid }
-                // "Covers every selected target" — the same fold `lookLayerPresence` makes in the
+                // "Covers every selected target" — the same fold `paletteLayerPresence` makes in the
                 // client, and the same `all`/`some` vocabulary, so a pad and its button agree.
                 entry != null && selected.all { target ->
                     entry.targets.any {
@@ -1231,17 +1231,17 @@ class SurfaceFeedbackPublisher(
      * no position to report (a colour with no hue, a black with no saturation), or when there
      * are none (nothing selected): the control has no one value to show. What "agree" means —
      * exact for a slider, within a head's own quantisation on a colour axis, and every pair
-     * rather than each against the first — is [PropertyChannelResolver.commonValue]'s.
+     * rather than each against the first — is [AttributeChannelResolver.commonValue]'s.
      */
     private fun computeValue7Bit(entry: ContinuousEntry): UByte? {
         val fixtures = currentFixtures ?: return null
         if (entry.heads.isEmpty()) return null
-        val read = PropertyChannelResolver.channelReader(fixtures)
-        val reads = ArrayList<PropertyChannelResolver.HeadValue>(entry.heads.size)
+        val read = AttributeChannelResolver.channelReader(fixtures)
+        val reads = ArrayList<AttributeChannelResolver.HeadValue>(entry.heads.size)
         for (head in entry.heads) {
-            reads += PropertyChannelResolver.readHead(head, read, entry.axis) ?: return null
+            reads += AttributeChannelResolver.readHead(head, read, entry.axis) ?: return null
         }
-        return PropertyChannelResolver.commonValue(reads)
+        return AttributeChannelResolver.commonValue(reads)
     }
 
     /**
@@ -1361,13 +1361,13 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    /** Push each entry's stack's effect size onto its control, and record it for PICKUP. */
-    private fun resyncStackSizeEntries(entries: List<StackSizeEntry>) {
+    /** Push each entry's stack's FX amount onto its control, and record it for PICKUP. */
+    private fun resyncStackFxAmountEntries(entries: List<StackFxAmountEntry>) {
         if (entries.isEmpty()) return
-        val sizes = runCatching { stackEffectSizesProvider?.invoke() }.getOrNull() ?: return
+        val amounts = runCatching { stackFxAmountsProvider?.invoke() }.getOrNull() ?: return
         for (entry in entries) {
             val stackId = entry.stackId ?: continue
-            val value7Bit = stackEffectSizeTo7Bit(sizes.of(stackId))
+            val value7Bit = stackFxAmountTo7Bit(amounts.of(stackId))
             sendControlFeedback(entry.displayKey, entry.control, value7Bit)
             takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
         }

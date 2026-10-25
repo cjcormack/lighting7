@@ -268,7 +268,7 @@ class ControlSurfaceBindingService(
         // than rebuilding the whole snapshot (stacks/cues/masters/looks/templates/pages) twice.
         val healthContext = resolveHealthContext(projectId)
         refuseAxisOnNonColour(healthContext, target)
-        refuseTriggerProperty(healthContext, target)
+        refuseTriggerAttribute(healthContext, target)
         val resolved = synchronized(lockFor(projectId)) {
             val existing = cache[projectId]?.byControl
                 ?.get(ControlKey(deviceTypeKey, controlId))
@@ -321,7 +321,7 @@ class ControlSurfaceBindingService(
         val healthContext = resolveHealthContext(projectId)
         target?.let {
             refuseAxisOnNonColour(healthContext, it)
-            refuseTriggerProperty(healthContext, it)
+            refuseTriggerAttribute(healthContext, it)
         }
         val resolved = synchronized(lockFor(projectId)) {
             val pc = cache[projectId] ?: return null
@@ -419,7 +419,7 @@ class ControlSurfaceBindingService(
         val healthContext = resolveHealthContext(projectId)
         creates.forEach {
             refuseAxisOnNonColour(healthContext, it.target)
-            refuseTriggerProperty(healthContext, it.target)
+            refuseTriggerAttribute(healthContext, it.target)
         }
         val created = synchronized(lockFor(projectId)) {
             val pc = cache.getOrPut(projectId) { ProjectCache() }
@@ -557,28 +557,28 @@ class ControlSurfaceBindingService(
      * which needs the desk's arm. Without a register to judge by (no show), a name no trigger reserves
      * passes and one that does is left to health, as an unknown property would be.
      */
-    private fun refuseTriggerProperty(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
-        val (type, key, property) = when (target) {
-            is BindingTarget.FixtureProperty -> Triple("fixture", target.fixtureKey, target.propertyName)
-            is BindingTarget.GroupProperty -> Triple("group", target.groupName, target.propertyName)
-            is BindingTarget.Flash -> return refuseTriggerProperty(context, target.target)
-            is BindingTarget.SelectionProperty -> Triple(null, null, target.propertyName)
-            is BindingTarget.EncoderBankSet -> Triple(null, null, target.propertyName)
+    private fun refuseTriggerAttribute(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
+        val (type, key, attribute) = when (target) {
+            is BindingTarget.FixtureAttribute -> Triple("fixture", target.fixtureKey, target.attribute)
+            is BindingTarget.GroupAttribute -> Triple("group", target.groupName, target.attribute)
+            is BindingTarget.Flash -> return refuseTriggerAttribute(context, target.target)
+            is BindingTarget.SelectionAttribute -> Triple(null, null, target.attribute)
+            is BindingTarget.EncoderBankSet -> Triple(null, null, target.attribute)
             else -> return
         }
         val refusal = if (context != null) {
-            TriggerIndex.refusalLive(context.fixtures, type, key, property, "binding")
+            TriggerIndex.refusalLive(context.fixtures, type, key, attribute, "binding")
         } else if (type == null) {
-            TriggerIndex.EMPTY.refusal(null, null, property, "binding")
+            TriggerIndex.EMPTY.refusal(null, null, attribute, "binding")
         } else {
             null
         }
         refusal?.let { throw BindingRefused(it, TriggerNotStorableException.CODE) }
         // Nor a fixture command (fixture optics plan session 7): a fader on a reset is a reset.
         val commandRefusal = if (context != null) {
-            CommandIndex.refusalLive(context.fixtures, type, key, property, "binding")
+            CommandIndex.refusalLive(context.fixtures, type, key, attribute, "binding")
         } else if (type == null) {
-            CommandIndex.EMPTY.refusal(null, null, property, "binding")
+            CommandIndex.EMPTY.refusal(null, null, attribute, "binding")
         } else {
             null
         }
@@ -630,7 +630,7 @@ class ControlSurfaceBindingService(
      * (`FU-MIDI-BIND-CONTROL-KIND`).
      *
      * Nothing else refused this, and the failure was total silence: a `FireCue` on a fader saved,
-     * read health `Ok`, and did nothing — `dispatchContinuous` has no arm for it. A `GroupProperty`
+     * read health `Ok`, and did nothing — `dispatchContinuous` has no arm for it. A `GroupAttribute`
      * on a plain button, likewise. And a binding of any kind on a **bank button** can never fire at
      * all, because `SurfaceInputRouter.route` answers `ResolvedInput.BankButton` and switches the
      * bank *before* it resolves a binding.
@@ -666,15 +666,15 @@ class ControlSurfaceBindingService(
     /**
      * A [ColourAxis] on a property that is not a colour has nothing to drive.
      *
-     * Judged with the **dispatch** lookup — [PropertyChannelResolver.describePropertyRead] answering
-     * [PropertyChannelResolver.PropertyRead.Colour] — so the refusal can never disagree with what a
+     * Judged with the **dispatch** lookup — [AttributeChannelResolver.describeAttributeRead] answering
+     * [AttributeChannelResolver.AttributeRead.Colour] — so the refusal can never disagree with what a
      * move will do. What it does *not* judge is left to health: a fixture or group that does not
      * exist, or a property name no head declares, is not this rule's — an unknown name has an
-     * unknown type, and health already says `UnknownProperty` for it. A group is refused only when
+     * unknown type, and health already says `UnknownAttribute` for it. A group is refused only when
      * **no** member declares the property as a colour, since the write skips the members that do
      * not and reaches the rest, exactly as [SelectionWrites] does; a selection or encoder-bank
      * target, which names no head, is judged against the rig's colour vocabulary
-     * ([BindingHealthEvaluator.Context.colourProperties]) but only for a name the rig *has*
+     * ([BindingHealthEvaluator.Context.colourAttributes]) but only for a name the rig *has*
      * ([isKnownNonColour]) — absent from both vocabularies is the unknown-name case, not a
      * refusal. A [BindingTarget.Flash] is judged for the
      * property it wraps, so a flash cannot smuggle in an axis a direct binding would be refused.
@@ -685,32 +685,32 @@ class ControlSurfaceBindingService(
     private fun refuseAxisOnNonColour(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
         if (context == null) return
         val axis = target.colourAxisOrNull() ?: return
-        fun isColour(fixture: Fixture, propertyName: String): Boolean? {
-            fixture.fixtureProperty(propertyName) ?: return null
-            val read = PropertyChannelResolver.describePropertyRead(fixture, propertyName)
-            return read is PropertyChannelResolver.PropertyRead.Colour
+        fun isColour(fixture: Fixture, attribute: String): Boolean? {
+            fixture.fixtureAttribute(attribute) ?: return null
+            val read = AttributeChannelResolver.describeAttributeRead(fixture, attribute)
+            return read is AttributeChannelResolver.AttributeRead.Colour
         }
         fun refuse(what: String): Nothing = throw BindingRefused(
-            "$what is not a colour property, so it has no ${axis.name.lowercase().replace('_', ' ')} to drive",
+            "$what is not a colour attribute, so it has no ${axis.name.lowercase().replace('_', ' ')} to drive",
             CODE_BINDING_AXIS_NEEDS_COLOUR,
         )
         when (val inner = if (target is BindingTarget.Flash) target.target else target) {
-            is BindingTarget.FixtureProperty -> {
+            is BindingTarget.FixtureAttribute -> {
                 val fixture = runCatching { context.fixtures.untypedFixture(inner.fixtureKey) }.getOrNull() ?: return
-                if (isColour(fixture, inner.propertyName) == false) refuse("'${inner.propertyName}' on '${inner.fixtureKey}'")
+                if (isColour(fixture, inner.attribute) == false) refuse("'${inner.attribute}' on '${inner.fixtureKey}'")
             }
-            is BindingTarget.GroupProperty -> {
+            is BindingTarget.GroupAttribute -> {
                 val group = runCatching { context.fixtures.untypedGroup(inner.groupName) }.getOrNull() ?: return
-                val verdicts = group.fixtures.filterIsInstance<Fixture>().mapNotNull { isColour(it, inner.propertyName) }
-                if (verdicts.isNotEmpty() && verdicts.none { it }) refuse("'${inner.propertyName}' on '${inner.groupName}'")
+                val verdicts = group.fixtures.filterIsInstance<Fixture>().mapNotNull { isColour(it, inner.attribute) }
+                if (verdicts.isNotEmpty() && verdicts.none { it }) refuse("'${inner.attribute}' on '${inner.groupName}'")
             }
             // Both need the property to be **known and not a colour**, never merely absent — see
-            // the "left to health" rule above. `selectionProperties` is what "known" means, and
+            // the "left to health" rule above. `selectionAttributes` is what "known" means, and
             // is the same vocabulary health judges these two targets against.
-            is BindingTarget.SelectionProperty ->
-                if (isKnownNonColour(context, inner.propertyName)) refuse("'${inner.propertyName}' on the selection")
+            is BindingTarget.SelectionAttribute ->
+                if (isKnownNonColour(context, inner.attribute)) refuse("'${inner.attribute}' on the selection")
             is BindingTarget.EncoderBankSet ->
-                if (isKnownNonColour(context, inner.propertyName)) refuse("'${inner.propertyName}' as an encoder bank")
+                if (isKnownNonColour(context, inner.attribute)) refuse("'${inner.attribute}' as an encoder bank")
             else -> Unit
         }
     }
@@ -725,8 +725,8 @@ class ControlSurfaceBindingService(
      * so refusing on absence would reject a perfectly good colour-axis binding authored for another
      * project's rig and leave the operator no way to make it at all.
      */
-    private fun isKnownNonColour(context: BindingHealthEvaluator.Context, propertyName: String): Boolean =
-        propertyName in context.selectionProperties && propertyName !in context.colourProperties
+    private fun isKnownNonColour(context: BindingHealthEvaluator.Context, attribute: String): Boolean =
+        attribute in context.selectionAttributes && attribute !in context.colourAttributes
 
     /**
      * Fill the uuid beside the int on a cue / stack target when the client sent only the int —
@@ -743,7 +743,7 @@ class ControlSurfaceBindingService(
         is BindingTarget.CueStackGo -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
         is BindingTarget.CueStackBack -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
         is BindingTarget.CueStackPause -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
-        is BindingTarget.StackEffectSize -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
+        is BindingTarget.StackFxAmount -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
         else -> this
     }
 

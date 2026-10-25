@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { formatError } from '@/lib/formatError'
+import { nounPlural } from './sheetModel'
 
 /** What one plain (or forced) delete answered. */
 export type DeleteOutcome<S> =
@@ -85,7 +86,7 @@ export function useBatchDelete<Item, S>({
       const message =
         refusals.length === 1
           ? `${name(refusals[0].item)} was not deleted: ${refusals[0].reason}`
-          : `${refusals.length} ${noun}s were not deleted — ${refusals.map((r) => `${name(r.item)}: ${r.reason}`).join('; ')}`
+          : `${refusals.length} ${nounPlural(noun)} were not deleted — ${refusals.map((r) => `${name(r.item)}: ${r.reason}`).join('; ')}`
       toast.error(message, { id: `batch-delete:${toastKey}` })
     },
     [name, noun, toastKey],
@@ -105,7 +106,7 @@ export function useBatchDelete<Item, S>({
         toast.info(
           skipped.length === 1
             ? `${name(skipped[0].item)} skipped — ${skipped[0].reason}`
-            : `${skipped.length} ${noun}s skipped — ${skipped.map((s) => `${name(s.item)}: ${s.reason}`).join('; ')}`,
+            : `${skipped.length} ${nounPlural(noun)} skipped — ${skipped.map((s) => `${name(s.item)}: ${s.reason}`).join('; ')}`,
           { id: `batch-delete-skip:${toastKey}` },
         )
       }

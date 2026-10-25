@@ -1,8 +1,8 @@
 package uk.me.cormack.lighting7.show
 
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 
 /**
@@ -19,18 +19,18 @@ fun Fixtures.referenceFixtureFor(target: TargetRef): GroupableFixture? = try {
 }
 
 /** A selection's reference fixture is its first item's that resolves. */
-fun Fixtures.referenceFixtureFor(target: EffectTargetRef): GroupableFixture? =
+fun Fixtures.referenceFixtureFor(target: FxTargetsRef): GroupableFixture? =
     target.items.firstNotNullOfOrNull { referenceFixtureFor(it) }
 
 /**
- * The first head [target] reaches that declares [propertyName], else [referenceFixtureFor]'s. What an
+ * The first head [target] reaches that declares [attribute], else [referenceFixtureFor]'s. What an
  * effect's target factory reflects on to tell a slider from a setting: a selection or group whose
  * first head lacks the property must still resolve the kind the heads that have it carry.
  */
-fun Fixtures.referenceFixtureFor(target: EffectTargetRef, propertyName: String): GroupableFixture? =
+fun Fixtures.referenceFixtureFor(target: FxTargetsRef, attribute: String): GroupableFixture? =
     target.items.asSequence()
         .flatMap { headsOf(it) }
-        .firstOrNull { it.declaresProperty(propertyName) }
+        .firstOrNull { it.declaresAttribute(attribute) }
         ?: referenceFixtureFor(target)
 
 private fun Fixtures.headsOf(target: TargetRef): Sequence<GroupableFixture> = try {
@@ -42,5 +42,5 @@ private fun Fixtures.headsOf(target: TargetRef): Sequence<GroupableFixture> = tr
     emptySequence()
 }
 
-private fun GroupableFixture.declaresProperty(propertyName: String): Boolean =
-    FixturePropertyCatalogue.of(this::class).byName[propertyName] != null
+private fun GroupableFixture.declaresAttribute(attribute: String): Boolean =
+    FixtureAttributeCatalogue.of(this::class).byName[attribute] != null

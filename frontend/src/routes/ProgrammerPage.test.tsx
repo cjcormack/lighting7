@@ -57,8 +57,8 @@ vi.mock('@/components/programmer/ProgrammerGrid', async () => {
 // Provider, like every other child mocked here.
 vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => null }))
 // ⌘K's `+ Effect` door reads the Redux selection once asked; here it only has to be mounted.
-vi.mock('@/components/programmer/ProgrammerAddEffect', () => ({
-  ProgrammerAddEffectDoor: () => null,
+vi.mock('@/components/programmer/ProgrammerAddFx', () => ({
+  ProgrammerAddFxDoor: () => null,
 }))
 // The dock's two editors have their own tests (`RailColourTab.test.tsx`); here they only have to
 // mount and unmount around one grid. The dock itself is real — its header, strip and handle are
@@ -76,9 +76,9 @@ vi.mock('@/components/applied/StackTable', async () => {
   const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
   return { StackTable: () => <div data-testid="stack-table"><ProgrammerTableTabs /></div> }
 })
-vi.mock('@/components/applied/AppliedFxTable', async () => {
+vi.mock('@/components/fxEditor/ProgrammerFxTab', async () => {
   const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
-  return { AppliedFxTable: () => <div data-testid="fx-table"><ProgrammerTableTabs /></div> }
+  return { ProgrammerFxTab: () => <div data-testid="fx-table"><ProgrammerTableTabs /></div> }
 })
 vi.mock('@/components/applied/SceneryTable', async () => {
   const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
@@ -91,7 +91,7 @@ vi.mock('@/hooks/usePress', async (importOriginal) => ({
   useWindowPressPair: () => ({ targets: [], families: null }),
   useWindowPaletteFit: () => ({ families: null, emitters: null }),
 }))
-vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: [] }) }))
 vi.mock('@/components/programmer/ProgrammerSourceStrip', () => ({
   ProgrammerSourceStrip: () => <div data-testid="source-strip" />,
 }))
@@ -151,9 +151,9 @@ vi.mock('@/store/looks', () => ({
   useLookQuery: () => ({ data: undefined, isSuccess: false }),
   useSaveLookMutation: () => [vi.fn()],
 }))
-// Same reason as `@/store/looks` above, for `FocusedTemplateLayerProvider`: `skip` stops the
+// Same reason as `@/store/looks` above, for `FocusedPaletteLayerProvider`: `skip` stops the
 // *request*, not the hook, so the query still reaches for the store.
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtures', () => ({
   useFixtureListQuery: () => ({ data: [] }),
   useVisibleFixtureListQuery: () => ({ data: [] }),
@@ -233,11 +233,11 @@ function tableTab(name: RegExp) {
 
 describe('ProgrammerPage', () => {
   it('draws the grid beside the dock, the dock resting on Colour', () => {
-    // Tables-colours plan D4: the right side is a dock — Colour · Spread — and lists nothing. The
+    // Tables-colours plan D4: the right side is a dock — Colour · Fan — and lists nothing. The
     // layers, effects and scenery are the Stack, FX and Scenery tables on row B.
     draw()
     expect(screen.getByTestId('grid')).toBeTruthy()
-    expect(screen.getByRole('complementary', { name: 'Colour and spread' })).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Colour and fan' })).toBeTruthy()
     expect(screen.getByTestId('rail-colour')).toBeTruthy()
     expect(screen.queryByTestId('rail-spread')).toBeNull()
   })
@@ -263,12 +263,12 @@ describe('ProgrammerPage', () => {
     expect(screen.getByTestId('header')).toBeTruthy()
   })
 
-  it('rests on Values, with the dock’s Colour · Spread beside it and nothing that lists', () => {
+  it('rests on Values, with the dock’s Colour · Fan beside it and nothing that lists', () => {
     draw()
     expect(screen.getAllByRole('tablist').map((list) => list.getAttribute('aria-label'))).toEqual(['Programmer tables', 'Dock'])
     expect(tableTab(/^Values/).getAttribute('aria-selected')).toBe('true')
     const dock = screen.getByRole('tablist', { name: 'Dock' })
-    expect(within(dock).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Colour', 'Spread'])
+    expect(within(dock).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Colour', 'Fan'])
     expect(within(dock).getByRole('tab', { name: 'Colour' }).getAttribute('aria-selected')).toBe('true')
     // The rail's lists, doors and counts are gone with its Stack body.
     expect(screen.queryByLabelText('Add a look layer')).toBeNull()
@@ -339,8 +339,8 @@ describe('ProgrammerPage', () => {
     draw()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Spread' }))
-    expect(screen.getByRole('tab', { name: 'Spread' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Fan' }))
+    expect(screen.getByRole('tab', { name: 'Fan' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByTestId('rail-spread')).toBeTruthy()
     expect(screen.queryByTestId('rail-colour')).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Colour' }))
@@ -396,7 +396,7 @@ describe('ProgrammerPage', () => {
 
     // The strip's doors expand it onto their tab.
     fireEvent.click(screen.getByLabelText('Collapse the dock'))
-    fireEvent.click(screen.getByLabelText('Expand the dock on Spread'))
+    fireEvent.click(screen.getByLabelText('Expand the dock on Fan'))
     expect(screen.getByTestId('rail-spread')).toBeTruthy()
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
@@ -435,7 +435,7 @@ describe('ProgrammerPage', () => {
     expect(screen.queryByTestId('rail-colour')).toBeNull()
 
     // A door opens the overlay on its own tab.
-    fireEvent.click(screen.getByRole('button', { name: 'Open the dock on Spread' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the dock on Fan' }))
     expect(screen.getByTestId('rail-spread')).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Close the dock'))
     expect(screen.queryByTestId('rail-spread')).toBeNull()
@@ -449,18 +449,18 @@ describe('ProgrammerPage', () => {
     draw()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
-    const opener = screen.getByRole('button', { name: 'Open Colour and Spread' })
+    const opener = screen.getByRole('button', { name: 'Open Colour and Fan' })
     expect(opener).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(screen.getByRole('button', { name: 'Show Spread' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show Fan' }))
     expect(screen.getByTestId('rail-spread')).toBeTruthy()
     // One panel, not two: the docked frame is not rendered while the sheet holds it.
     expect(screen.getAllByTestId('rail-spread')).toHaveLength(1)
-    expect(screen.queryByRole('complementary', { name: 'Colour and spread' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Colour and fan' })).toBeNull()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(screen.getAllByTestId('rail-spread')).toHaveLength(1)
-    expect(screen.getByRole('complementary', { name: 'Colour and spread' })).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Colour and fan' })).toBeTruthy()
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 

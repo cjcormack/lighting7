@@ -15,7 +15,7 @@ import java.util.UUID
  * carried in a Look (sweep item **B2** — before it, every script effect pinned to master 1).
  * Both default to null, which is the persisted "no explicit master" value: null
  * `speedMasterUuid` means master 1, null `rateSpeedMasterUuid` means unscaled. The uuids are
- * bound to runtime bank slots by [FxEngine.addEffect], so an unknown uuid degrades to master 1
+ * bound to runtime bank slots by [FxEngine.addFx], so an unknown uuid degrades to master 1
  * rather than failing the apply.
  */
 
@@ -32,7 +32,7 @@ import java.util.UUID
  */
 fun <T> T.applyDimmerFx(
     engine: FxEngine,
-    effect: Effect,
+    effect: Fx,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     speedMasterUuid: UUID? = null,
@@ -43,7 +43,7 @@ fun <T> T.applyDimmerFx(
         this.speedMasterUuid = speedMasterUuid
         this.rateSpeedMasterUuid = rateSpeedMasterUuid
     }
-    return engine.addEffect(instance)
+    return engine.addFx(instance)
 }
 
 /**
@@ -59,7 +59,7 @@ fun <T> T.applyDimmerFx(
  */
 fun <T> T.applyUvFx(
     engine: FxEngine,
-    effect: Effect,
+    effect: Fx,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     speedMasterUuid: UUID? = null,
@@ -70,7 +70,7 @@ fun <T> T.applyUvFx(
         this.speedMasterUuid = speedMasterUuid
         this.rateSpeedMasterUuid = rateSpeedMasterUuid
     }
-    return engine.addEffect(instance)
+    return engine.addFx(instance)
 }
 
 /**
@@ -86,7 +86,7 @@ fun <T> T.applyUvFx(
  */
 fun <T> T.applyColourFx(
     engine: FxEngine,
-    effect: Effect,
+    effect: Fx,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     speedMasterUuid: UUID? = null,
@@ -97,7 +97,7 @@ fun <T> T.applyColourFx(
         this.speedMasterUuid = speedMasterUuid
         this.rateSpeedMasterUuid = rateSpeedMasterUuid
     }
-    return engine.addEffect(instance)
+    return engine.addFx(instance)
 }
 
 /**
@@ -113,7 +113,7 @@ fun <T> T.applyColourFx(
  */
 fun <T> T.applyPositionFx(
     engine: FxEngine,
-    effect: Effect,
+    effect: Fx,
     timing: FxTiming = FxTiming(),
     blendMode: BlendMode = BlendMode.OVERRIDE,
     speedMasterUuid: UUID? = null,
@@ -124,7 +124,7 @@ fun <T> T.applyPositionFx(
         this.speedMasterUuid = speedMasterUuid
         this.rateSpeedMasterUuid = rateSpeedMasterUuid
     }
-    return engine.addEffect(instance)
+    return engine.addFx(instance)
 }
 
 /**
@@ -135,8 +135,8 @@ fun <T> T.applyPositionFx(
  * Example:
  * ```
  * fixture.fx(fxEngine) {
- *     dimmer(effect("SineWave"), BeatDivision.HALF)
- *     colour(effect("RainbowCycle"), BeatDivision.ONE_BAR)
+ *     dimmer(effect("SineWave"), CycleLength.TWO_BEATS)
+ *     colour(effect("RainbowCycle"), CycleLength.ONE_BAR)
  * }
  * ```
  *
@@ -151,7 +151,7 @@ class FxBuilder(
      * Add a dimmer effect.
      *
      * @param effect The effect to apply
-     * @param beatDivision Duration of one effect cycle in beats
+     * @param cycle Duration of one effect cycle in beats
      * @param blendMode How to blend with existing value
      * @param phaseOffset Phase offset for chase effects (0.0-1.0)
      * @param speedMasterUuid Speed master driving the effect's phase (null → master 1)
@@ -159,8 +159,8 @@ class FxBuilder(
      * @return The effect ID
      */
     fun dimmer(
-        effect: Effect,
-        beatDivision: Double = BeatDivision.QUARTER,
+        effect: Fx,
+        cycle: Double = CycleLength.ONE_BEAT,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         phaseOffset: Double = 0.0,
         speedMasterUuid: UUID? = null,
@@ -169,20 +169,20 @@ class FxBuilder(
         val instance = FxInstance(
             effect = effect,
             target = SliderTarget(targetKey, "dimmer"),
-            timing = FxTiming(beatDivision),
+            timing = FxTiming(cycle),
             blendMode = blendMode
         )
         instance.phaseOffset = phaseOffset
         instance.speedMasterUuid = speedMasterUuid
         instance.rateSpeedMasterUuid = rateSpeedMasterUuid
-        return engine.addEffect(instance)
+        return engine.addFx(instance)
     }
 
     /**
      * Add a colour effect.
      *
      * @param effect The effect to apply
-     * @param beatDivision Duration of one effect cycle in beats
+     * @param cycle Duration of one effect cycle in beats
      * @param blendMode How to blend with existing value
      * @param phaseOffset Phase offset for chase effects (0.0-1.0)
      * @param speedMasterUuid Speed master driving the effect's phase (null → master 1)
@@ -190,8 +190,8 @@ class FxBuilder(
      * @return The effect ID
      */
     fun colour(
-        effect: Effect,
-        beatDivision: Double = BeatDivision.QUARTER,
+        effect: Fx,
+        cycle: Double = CycleLength.ONE_BEAT,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         phaseOffset: Double = 0.0,
         speedMasterUuid: UUID? = null,
@@ -200,20 +200,20 @@ class FxBuilder(
         val instance = FxInstance(
             effect = effect,
             target = ColourTarget(targetKey),
-            timing = FxTiming(beatDivision),
+            timing = FxTiming(cycle),
             blendMode = blendMode
         )
         instance.phaseOffset = phaseOffset
         instance.speedMasterUuid = speedMasterUuid
         instance.rateSpeedMasterUuid = rateSpeedMasterUuid
-        return engine.addEffect(instance)
+        return engine.addFx(instance)
     }
 
     /**
      * Add a UV effect.
      *
      * @param effect The effect to apply
-     * @param beatDivision Duration of one effect cycle in beats
+     * @param cycle Duration of one effect cycle in beats
      * @param blendMode How to blend with existing value
      * @param phaseOffset Phase offset for chase effects (0.0-1.0)
      * @param speedMasterUuid Speed master driving the effect's phase (null → master 1)
@@ -221,8 +221,8 @@ class FxBuilder(
      * @return The effect ID
      */
     fun uv(
-        effect: Effect,
-        beatDivision: Double = BeatDivision.QUARTER,
+        effect: Fx,
+        cycle: Double = CycleLength.ONE_BEAT,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         phaseOffset: Double = 0.0,
         speedMasterUuid: UUID? = null,
@@ -231,20 +231,20 @@ class FxBuilder(
         val instance = FxInstance(
             effect = effect,
             target = SliderTarget(targetKey, "uv"),
-            timing = FxTiming(beatDivision),
+            timing = FxTiming(cycle),
             blendMode = blendMode
         )
         instance.phaseOffset = phaseOffset
         instance.speedMasterUuid = speedMasterUuid
         instance.rateSpeedMasterUuid = rateSpeedMasterUuid
-        return engine.addEffect(instance)
+        return engine.addFx(instance)
     }
 
     /**
      * Add a position effect.
      *
      * @param effect The effect to apply
-     * @param beatDivision Duration of one effect cycle in beats
+     * @param cycle Duration of one effect cycle in beats
      * @param blendMode How to blend with existing value
      * @param phaseOffset Phase offset for chase effects (0.0-1.0)
      * @param speedMasterUuid Speed master driving the effect's phase (null → master 1)
@@ -252,8 +252,8 @@ class FxBuilder(
      * @return The effect ID
      */
     fun position(
-        effect: Effect,
-        beatDivision: Double = BeatDivision.QUARTER,
+        effect: Fx,
+        cycle: Double = CycleLength.ONE_BEAT,
         blendMode: BlendMode = BlendMode.OVERRIDE,
         phaseOffset: Double = 0.0,
         speedMasterUuid: UUID? = null,
@@ -262,13 +262,13 @@ class FxBuilder(
         val instance = FxInstance(
             effect = effect,
             target = PositionTarget(targetKey),
-            timing = FxTiming(beatDivision),
+            timing = FxTiming(cycle),
             blendMode = blendMode
         )
         instance.phaseOffset = phaseOffset
         instance.speedMasterUuid = speedMasterUuid
         instance.rateSpeedMasterUuid = rateSpeedMasterUuid
-        return engine.addEffect(instance)
+        return engine.addFx(instance)
     }
 }
 
@@ -289,5 +289,5 @@ fun FixtureTarget.fx(engine: FxEngine, block: FxBuilder.() -> Unit) {
  * @return Number of effects removed
  */
 fun FixtureTarget.clearFx(engine: FxEngine): Int {
-    return engine.removeEffectsForFixture(this.targetKey)
+    return engine.removeFxForFixture(this.targetKey)
 }

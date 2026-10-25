@@ -85,7 +85,7 @@ function openMenu(trigger: HTMLElement) {
 beforeEach(() => {
   running = false
   edited = false
-  updateStage.mockReturnValue(landed({ rows: 3, effects: { edited: 1, stopped: 1, started: 0 }, fadeMs: 2000, curve: 'LINEAR' }))
+  updateStage.mockReturnValue(landed({ rows: 3, fx: { edited: 1, stopped: 1, started: 0 }, fadeMs: 2000, curve: 'LINEAR' }))
   preview = undefined
   duplicateCue.mockImplementation(({ cueId, stackId }) =>
     landed({ cueId: cueId + 50, name: 'copy', stackId, entryId: cueId + 150 }),
@@ -326,7 +326,7 @@ describe('CueActions', () => {
       const dialog = await screen.findByRole('dialog')
       expect(within(dialog).getByText('Update stage to Q1 Opener?')).toBeTruthy()
       await waitFor(() => expect(dialog.querySelector('[data-update-stage-counts]')?.textContent).toContain('3 values change, over its 2.0s fade'))
-      expect(dialog.querySelector('[data-update-stage-counts]')?.textContent).toContain('1 effect edited in place · 1 stopped')
+      expect(dialog.querySelector('[data-update-stage-counts]')?.textContent).toContain('1 FX edited in place · 1 stopped')
       expect(updateStage.mock.calls.map(([arg]) => arg)).toEqual([{ projectId: 1, cueId: 1, dryRun: true }])
 
       fireEvent.click(within(dialog).getByRole('button', { name: 'Update stage' }))

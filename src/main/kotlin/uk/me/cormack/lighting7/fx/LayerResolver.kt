@@ -42,12 +42,12 @@ class LayerResolver(
      */
     class CueLayerSnapshot internal constructor(
         /**
-         * Layer 4 composition output, keyed fixtureKey → propertyName → value — the shape
+         * Layer 4 composition output, keyed fixtureKey → attribute → value — the shape
          * [CueAssignmentResolver.resolveIndexed] builds. The hot-path index: it lets the
          * per-tick reset path look up a Layer 4 contribution without allocating a compound
          * `CueAssignmentResolver.Key` per call, and is the map the publish-time diff walks.
          */
-        val index: Map<String, Map<String, CueAssignmentResolver.PropertyValue>>,
+        val index: Map<String, Map<String, CueAssignmentResolver.AttributeValue>>,
         /**
          * Winning contributor per composed key — provenance only, never on the hot path.
          * Approximation: the highest-(priority, fadeWeight) contributor, which matches the
@@ -78,13 +78,13 @@ class LayerResolver(
         val fadeDurations: Map<CueAssignmentResolver.Key, Long>,
     ) {
         /**
-         * [index] flattened to (targetKey, propertyName) keys, derived on first read.
+         * [index] flattened to (targetKey, attribute) keys, derived on first read.
          * Deliberately lazy: crossfade frames rebuild this snapshot at ~62 fps and nothing on
          * that path reads the flat form — only provenance (coalesced), the Update checklist
          * and preview/diagnostic sites do — so building it eagerly per publish duplicated the
          * whole map for nobody (sweep item C3).
          */
-        val state: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue> by lazy {
+        val state: Map<CueAssignmentResolver.Key, CueAssignmentResolver.AttributeValue> by lazy {
             CueAssignmentResolver.flattenIndexed(index)
         }
 
@@ -185,7 +185,7 @@ class LayerResolver(
         if (assignments.isEmpty()) return emptyMap()
         val winners = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.Assignment>()
         for (a in assignments) {
-            val key = CueAssignmentResolver.Key.fixture(a.targetKey, a.propertyName)
+            val key = CueAssignmentResolver.Key.fixture(a.targetKey, a.attribute)
             val current = winners[key]
             // Final tiebreak on cueId keeps the attribution deterministic on an exact
             // (priority, fadeWeight) tie — the flat assignment list comes from HashMap
@@ -227,7 +227,7 @@ class LayerResolver(
         get() = cueLayer
 
     /** Current composition output; exposed for tests and diagnostics. */
-    val currentCueLayerState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>
+    val currentCueLayerState: Map<CueAssignmentResolver.Key, CueAssignmentResolver.AttributeValue>
         get() = cueLayer.state
 
     /** Winning contributor cueId per composed key — provenance / diagnostics. */
@@ -260,7 +260,7 @@ class LayerResolver(
         // needs the below value for the components it doesn't own.
         val below = run {
             val idx = cueLayer.index
-            val cue = if (idx.isNotEmpty()) idx[fixtureKey]?.get(target.propertyName) else null
+            val cue = if (idx.isNotEmpty()) idx[fixtureKey]?.get(target.attribute) else null
             cue?.asFxOutputFor(target) ?: baselineFor(target, fixture)
         }
         if (programmer.blind) return below
@@ -281,14 +281,14 @@ class LayerResolver(
      */
     fun baselineFor(target: FxTarget, fixture: GroupableFixture): FxOutput = target.baselineFallback(fixture)
 
-    private fun CueAssignmentResolver.PropertyValue.asFxOutputFor(target: FxTarget): FxOutput? = when (this) {
-        is CueAssignmentResolver.PropertyValue.Slider ->
+    private fun CueAssignmentResolver.AttributeValue.asFxOutputFor(target: FxTarget): FxOutput? = when (this) {
+        is CueAssignmentResolver.AttributeValue.Slider ->
             if (target is SliderTarget) FxOutput.Slider(value) else null
-        is CueAssignmentResolver.PropertyValue.Colour ->
+        is CueAssignmentResolver.AttributeValue.Colour ->
             if (target is ColourTarget) FxOutput.Colour(value) else null
-        is CueAssignmentResolver.PropertyValue.Position ->
+        is CueAssignmentResolver.AttributeValue.Position ->
             if (target is PositionTarget) FxOutput.Position(pan, tilt) else null
-        is CueAssignmentResolver.PropertyValue.Setting ->
+        is CueAssignmentResolver.AttributeValue.Setting ->
             if (target is SettingTarget) FxOutput.Slider(channelValue) else null
     }
 }

@@ -24,20 +24,20 @@ import uk.me.cormack.lighting7.models.DaoBuskPages
 import uk.me.cormack.lighting7.models.DaoBuskRigRows
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
 import uk.me.cormack.lighting7.models.DaoCueSlots
 import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.DaoCueStacks
 import uk.me.cormack.lighting7.models.DaoCueTriggers
 import uk.me.cormack.lighting7.models.DaoCues
-import uk.me.cormack.lighting7.models.DaoLookEffects
+import uk.me.cormack.lighting7.models.DaoLookFx
 import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.DaoTemplateEffects
-import uk.me.cormack.lighting7.models.DaoTemplateRows
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPaletteFx
+import uk.me.cormack.lighting7.models.DaoPaletteRows
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatches
@@ -132,10 +132,10 @@ class SyncCoverageTest {
         DaoFxDefinitions to Disposition.Portable("fxDefinitions"),
         DaoLooks to Disposition.Portable("looks"),
         DaoLookRows to Disposition.Portable("looks", "rows"),
-        DaoTemplates to Disposition.Portable("templates"),
-        DaoTemplateRows to Disposition.Portable("templates", "rows"),
-        DaoTemplateEffects to Disposition.Portable("templates", "effect"),
-        DaoLookEffects to Disposition.Portable("looks", "effects"),
+        DaoPalettes to Disposition.Portable("palettes"),
+        DaoPaletteRows to Disposition.Portable("palettes", "rows"),
+        DaoPaletteFx to Disposition.Portable("palettes", "fx"),
+        DaoLookFx to Disposition.Portable("looks", "fx"),
         // Five `Excluded` dispositions stood here and just below — `DaoFxPresets`,
         // `DaoFxPresetPropertyAssignments`, `DaoPalettes`, `DaoPaletteEntries` and
         // `DaoCuePresetApplications`. They were excluded rather than portable at formatVersion 5,
@@ -173,9 +173,9 @@ class SyncCoverageTest {
         // entry — markers included — so a drag rewrites one file and two desks adding to one stack add
         // two. Until then each cue's one entry rode inside its cue file.
         DaoCueStackEntries to Disposition.Portable("cueStackEntries"),
-        DaoCuePropertyAssignments to Disposition.Portable("cuePropertyAssignments"),
+        DaoCueAttributeAssignments to Disposition.Portable("cueAttributeAssignments"),
         DaoCueLayers to Disposition.Portable("cueLayers"),
-        DaoCueAdHocEffects to Disposition.Portable("cueAdHocEffects"),
+        DaoCueAdHocFx to Disposition.Portable("cueAdHocFx"),
         DaoCueTriggers to Disposition.Portable("cueTriggers"),
         DaoCueSlots to Disposition.Portable("cueSlots"),
         DaoBuskPages to Disposition.Portable("buskPages"),

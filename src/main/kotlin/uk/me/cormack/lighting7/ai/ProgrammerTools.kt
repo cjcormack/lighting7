@@ -21,32 +21,32 @@ import uk.me.cormack.lighting7.fixture.CommandIndex
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.groupHintsForTargets
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerClearTargetInMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
-import uk.me.cormack.lighting7.routes.ApplyTemplateOutcome
-import uk.me.cormack.lighting7.routes.CODE_TEMPLATE_NEEDS_SELECTION
-import uk.me.cormack.lighting7.routes.CODE_TEMPLATE_OUTSIDE_MASK
+import uk.me.cormack.lighting7.routes.ApplyPaletteOutcome
+import uk.me.cormack.lighting7.routes.CODE_PALETTE_NEEDS_SELECTION
+import uk.me.cormack.lighting7.routes.CODE_PALETTE_OUTSIDE_MASK
 import uk.me.cormack.lighting7.routes.RecordLookCoreResult
 import uk.me.cormack.lighting7.routes.RecordMode
 import uk.me.cormack.lighting7.routes.RecordSource
-import uk.me.cormack.lighting7.routes.TemplatePressLog
-import uk.me.cormack.lighting7.routes.applyTemplateToProgrammer
+import uk.me.cormack.lighting7.routes.PalettePressLog
+import uk.me.cormack.lighting7.routes.applyPaletteToProgrammer
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
 import uk.me.cormack.lighting7.routes.familyOf
-import uk.me.cormack.lighting7.routes.isGenericTemplate
+import uk.me.cormack.lighting7.routes.isGenericPalette
 import uk.me.cormack.lighting7.routes.parseEnumOrNull
 import uk.me.cormack.lighting7.routes.performProgrammerRecordLook
 import uk.me.cormack.lighting7.routes.pressWouldRelease
-import uk.me.cormack.lighting7.routes.templateOutsideMaskMessage
+import uk.me.cormack.lighting7.routes.paletteOutsideMaskMessage
 import uk.me.cormack.lighting7.state.State
 
 /** The longest fade a programmer tool takes, in seconds. */
@@ -65,14 +65,14 @@ internal class ProgrammerTools(private val state: State) {
 
     private fun setProgrammerUnguarded(input: JsonObject): ToolExecutionResult {
         val targets = parseTargets(input, required = true).getOrElse { return errorResult(it.message ?: "Bad arguments") }!!
-        val values = input.present("values") as? JsonArray ?: return errorResult("Missing 'values': [{propertyName, value}]")
+        val values = input.present("values") as? JsonArray ?: return errorResult("Missing 'values': [{attribute, value}]")
         val fadeMs = fadeMs(input).getOrElse { return errorResult(it.message ?: "Bad arguments") }
         val fixtures = state.show.fixtures
 
         val refusals = targets.flatMap { target ->
-            values.mapNotNull { (it as? JsonObject)?.text("propertyName") }.mapNotNull { propertyName ->
-                TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, propertyName, "programmer")
-                    ?: CommandIndex.refusalLive(fixtures, target.discriminator, target.key, propertyName, "programmer")
+            values.mapNotNull { (it as? JsonObject)?.text("attribute") }.mapNotNull { attribute ->
+                TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "programmer")
+                    ?: CommandIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "programmer")
             }
         }
         if (refusals.isNotEmpty()) return errorResult(refusals.distinct().joinToString("; "))
@@ -83,15 +83,15 @@ internal class ProgrammerTools(private val state: State) {
         // The group each head arrived through, so Record collapses it back to a group row.
         val groupHints = groupHintsForTargets(fixtures, targets)
         val writes = resolved.writes.map {
-            ProgrammerWriter.PropertyWrite(it.head, it.propertyName, it.value, sourceGroup = groupHints[it.head.targetKey])
+            ProgrammerWriter.AttributeWrite(it.head, it.attribute, it.value, sourceGroup = groupHints[it.head.targetKey])
         }
-        val landed = state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
+        val landed = state.show.fxEngine.programmer.writeAttributes(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
 
         val written = ArrayList<ProgrammerValueWrite>()
         val skipped = resolved.skipped.toMutableList()
         resolved.writes.forEachIndexed { index, write ->
             if (landed[index].isEmpty()) {
-                skipped += LookValueSkip(write.head.targetKey, write.requestedName, "${write.propertyName} resolves to no DMX channels")
+                skipped += LookValueSkip(write.head.targetKey, write.requestedName, "${write.attribute} resolves to no DMX channels")
             } else {
                 written += write
             }
@@ -105,7 +105,7 @@ internal class ProgrammerTools(private val state: State) {
                     for (write in written) {
                         addJsonObject {
                             put("targetKey", write.head.targetKey)
-                            put("propertyName", write.propertyName)
+                            put("attribute", write.attribute)
                             put("value", write.value.serialize())
                             groupHints[write.head.targetKey]?.let { put("group", it) }
                         }
@@ -127,10 +127,10 @@ internal class ProgrammerTools(private val state: State) {
             val cleared = clearProgrammerCompletely(state, fadeMs)
             return ToolExecutionResult(
                 success = true,
-                description = "Cleared the programmer — ${cleared.entryCount} value(s), ${cleared.effectsCleared} effect(s)",
+                description = "Cleared the programmer — ${cleared.entryCount} value(s), ${cleared.fxCleared} FX",
                 result = buildJsonObject {
                     put("valuesCleared", cleared.entryCount)
-                    put("effectsCleared", cleared.effectsCleared)
+                    put("fxCleared", cleared.fxCleared)
                 }.toString(),
             )
         }
@@ -155,7 +155,7 @@ internal class ProgrammerTools(private val state: State) {
         return ToolExecutionResult(
             success = failed.isEmpty(),
             description = if (failed.isEmpty()) {
-                "Cleared ${answers.sumOf { it.values }} value(s) and ${answers.sumOf { it.effects }} effect(s) " +
+                "Cleared ${answers.sumOf { it.values }} value(s) and ${answers.sumOf { it.fx }} FX " +
                     "on ${targets.joinToString { it.key }}"
             } else {
                 failed.joinToString("; ")
@@ -167,16 +167,16 @@ internal class ProgrammerTools(private val state: State) {
                             put("type", answer.targetType)
                             put("key", answer.targetKey)
                             put("values", answer.values)
-                            put("effects", answer.effects)
+                            put("fx", answer.fx)
                             answer.error?.let { put("error", it) }
                             if (answer.partial.isNotEmpty()) {
                                 put("partial", buildJsonArray {
                                     for (p in answer.partial) {
                                         addJsonObject {
-                                            put("effectId", p.effectId)
-                                            put("effectType", p.effectType)
+                                            put("fxId", p.fxId)
+                                            put("fxType", p.fxType)
                                             put("targetKey", p.targetKey)
-                                            put("propertyName", p.propertyName)
+                                            put("attribute", p.attribute)
                                         }
                                     }
                                 })
@@ -205,89 +205,85 @@ internal class ProgrammerTools(private val state: State) {
         )
     }
 
-    fun applyTemplate(input: JsonObject): ToolExecutionResult = guarded { applyTemplateUnguarded(input) }
+    fun applyPalette(input: JsonObject): ToolExecutionResult = guarded { applyPaletteUnguarded(input) }
 
-    private fun applyTemplateUnguarded(input: JsonObject): ToolExecutionResult {
+    private fun applyPaletteUnguarded(input: JsonObject): ToolExecutionResult {
         val project = state.projectManager.currentProject
-        // A layer that tracks the palette by default, as the desk's press is (apply-model D9). The
-        // `mode` this replaced is refused rather than ignored: ignored, LITERALS would toggle a layer.
-        if (input.present("mode") != null) {
-            return errorResult("'mode' is gone: apply_palette puts on a layer by default; pass asValues: true for literals")
-        }
+        // A layer that tracks the palette by default, as the desk's press is (apply-model D9).
         val layer = input.flag("asValues") != true
         val requested = parseTargets(input, required = false).getOrElse { return errorResult(it.message ?: "Bad arguments") }.orEmpty()
         val families = maskOf(input)
         val fadeMs = if (input.present("fadeSeconds") == null) null else fadeMs(input).getOrElse { return errorResult(it.message ?: "Bad arguments") }
 
-        val templateId = input.integer("paletteId")
-        val templateName = input.text("paletteName")?.trim()?.takeIf { it.isNotEmpty() }
-        if ((templateId == null) == (templateName == null)) return errorResult("Give exactly one of paletteId or paletteName")
+        val paletteId = input.integer("paletteId")
+        val paletteName = input.text("paletteName")?.trim()?.takeIf { it.isNotEmpty() }
+        if ((paletteId == null) == (paletteName == null)) return errorResult("Give exactly one of paletteId or paletteName")
 
         val found = transaction(state.database) {
-            val template = if (templateId != null) {
-                DaoTemplate.findById(templateId)?.takeIf { it.project.id == project.id }
+            val template = if (paletteId != null) {
+                DaoPalette.findById(paletteId)?.takeIf { it.project.id == project.id }
             } else {
-                DaoTemplate.find { (DaoTemplates.project eq project.id) and (DaoTemplates.name eq templateName!!) }.firstOrNull()
+                DaoPalette.find { (DaoPalettes.project eq project.id) and (DaoPalettes.name eq paletteName!!) }.firstOrNull()
             }
             template?.let {
                 Found(
-                    source = LayerSource.template(it.id.value, it.uuid, it.name),
+                    source = LayerSource.palette(it.id.value, it.uuid, it.name),
                     family = it.familyOf(),
-                    isGeneric = it.isGenericTemplate(),
+                    isGeneric = it.isGenericPalette(),
                 )
             }
         } ?: return errorResult(
-            if (templateId != null) "Palette not found: $templateId" else "No palette named '$templateName' in this project",
+            if (paletteId != null) "Palette not found: $paletteId" else "No palette named '$paletteName' in this project",
         )
 
         if (found.isGeneric && requested.isEmpty()) {
-            return errorResult("'${found.source.name}' is generic, so it needs targets to land on", CODE_TEMPLATE_NEEDS_SELECTION)
+            return errorResult("'${found.source.name}' is generic, so it needs targets to land on", CODE_PALETTE_NEEDS_SELECTION)
         }
         val targets = requested.map { CueTargetDto(it.discriminator, it.key) }
-        return if (layer) toggleTemplate(project.id.value, found, targets, families)
-        else applyTemplateLiterals(project.id.value, found, targets, families, fadeMs)
+        return if (layer) togglePalette(project.id.value, found, targets, families)
+        else applyPaletteLiterals(project.id.value, found, targets, families, fadeMs)
     }
 
-    private class Found(val source: LayerSource, val family: PropertyMaskGroup?, val isGeneric: Boolean)
+    private class Found(val source: LayerSource, val family: AttributeFamily?, val isGeneric: Boolean)
 
     /** The press: the toggle route's path, with no solo siblings. */
-    private fun toggleTemplate(
+    private fun togglePalette(
         projectId: Int,
         found: Found,
         targets: List<CueTargetDto>,
-        families: Set<PropertyMaskGroup>?,
+        families: Set<AttributeFamily>?,
     ): ToolExecutionResult {
         if (families != null && !maskAllows(families, found.family) && !pressWouldRelease(state, found.source.uuid, targets)) {
-            return errorResult(templateOutsideMaskMessage(found.source.name, found.family, families), CODE_TEMPLATE_OUTSIDE_MASK)
+            return errorResult(paletteOutsideMaskMessage(found.source.name, found.family, families), CODE_PALETTE_OUTSIDE_MASK)
         }
         val outcome = try {
-            state.show.programmerLayerStack.toggle(source = found.source, targets = targets, propertyMask = found.family?.name)
+            state.show.programmerLayerStack.toggle(source = found.source, targets = targets, attributeMask = found.family?.name)
         } catch (e: IllegalStateException) {
             return errorResult(e.message ?: "Target not found")
         }
-        if (outcome.action == "applied") TemplatePressLog.record(state, projectId, found.source.id)
+        if (outcome.action == "applied") PalettePressLog.record(state, projectId, found.source.id)
         return ToolExecutionResult(
             success = true,
             description = "${outcome.action} palette '${found.source.name}' as a layer",
             result = buildJsonObject {
                 put("asValues", false)
                 put("action", outcome.action)
-                put("effectCount", outcome.effectCount)
+                put("fxCount", outcome.fxCount)
                 if (outcome.released > 0) put("released", outcome.released)
-                found.family?.let { put("propertyMask", it.name) }
+                found.family?.let { put("attributeMask", it.name) }
             }.toString(),
         )
     }
 
-    /** `asValues`: literals (or a detached effect copy) through [applyTemplateToProgrammer]. */
-    private fun applyTemplateLiterals(
+    /** `asValues`: literals (or a detached effect copy) through [applyPaletteToProgrammer]. */
+    private fun applyPaletteLiterals(
         projectId: Int,
         found: Found,
         requested: List<CueTargetDto>,
-        families: Set<PropertyMaskGroup>?,
+        families: Set<AttributeFamily>?,
         fadeMs: Long?,
     ): ToolExecutionResult {
-        val snapshot = state.show.templateRegistry.snapshot(found.source.uuid)
+        val snapshot = state.show.paletteRegistry.snapshot(found.source.uuid)
             ?: return errorResult("Palette '${found.source.name}' is not loaded yet; try again")
         // A per-fixture template with no targets lands on its own heads, as its pad press does.
         val targets = requested.ifEmpty {
@@ -295,20 +291,20 @@ internal class ProgrammerTools(private val state: State) {
                 .map { CueTargetDto(TargetRef.Fixture.TYPE, it.key) }
         }
         if (targets.isEmpty() || (requested.isEmpty() && snapshot.rows.any { it.isDeferred })) {
-            return errorResult("'${found.source.name}' has generic rows, so it needs targets to land on", CODE_TEMPLATE_NEEDS_SELECTION)
+            return errorResult("'${found.source.name}' has generic rows, so it needs targets to land on", CODE_PALETTE_NEEDS_SELECTION)
         }
         return when (
-            val outcome = applyTemplateToProgrammer(
+            val outcome = applyPaletteToProgrammer(
                 state, projectId, snapshot, targets, fadeMs ?: snapshot.fadeDurationMs ?: 0, families,
             )
         ) {
-            is ApplyTemplateOutcome.Refused -> errorResult(outcome.message, outcome.code)
-            is ApplyTemplateOutcome.Applied -> {
+            is ApplyPaletteOutcome.Refused -> errorResult(outcome.message, outcome.code)
+            is ApplyPaletteOutcome.Applied -> {
                 val response = outcome.response
                 ToolExecutionResult(
                     success = true,
-                    description = if (response.effectIds.isNotEmpty()) {
-                        "Started ${response.effectIds.size} copy(ies) of '${found.source.name}''s effect"
+                    description = if (response.fxIds.isNotEmpty()) {
+                        "Started ${response.fxIds.size} copy(ies) of '${found.source.name}''s FX"
                     } else {
                         "Applied '${found.source.name}': ${response.written} value(s)" +
                             (if (response.skipped.isNotEmpty()) ", ${response.skipped.size} skipped" else "")
@@ -316,10 +312,10 @@ internal class ProgrammerTools(private val state: State) {
                     result = buildJsonObject {
                         put("asValues", true)
                         put("written", response.written)
-                        if (response.effectIds.isNotEmpty()) {
-                            put("effectIds", buildJsonArray { response.effectIds.forEach { add(JsonPrimitive(it)) } })
+                        if (response.fxIds.isNotEmpty()) {
+                            put("fxIds", buildJsonArray { response.fxIds.forEach { add(JsonPrimitive(it)) } })
                         }
-                        putValueSkips(response.skipped.map { LookValueSkip(it.fixtureKey, it.propertyName, it.reason) })
+                        putValueSkips(response.skipped.map { LookValueSkip(it.fixtureKey, it.attribute, it.reason) })
                     }.toString(),
                 )
             }
@@ -335,9 +331,9 @@ internal class ProgrammerTools(private val state: State) {
         val source = parseEnumOrNull<RecordSource>(sourceName) ?: return errorResult("Unknown record source '$sourceName'")
         val mask = maskOf(input)
         val targets = parseTargets(input, required = false).getOrElse { return errorResult(it.message ?: "Bad arguments") }
-        val effectIds = input.present("effectIds")?.let { ids ->
-            (ids as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.longOrNull ?: return errorResult("effectIds must be integers") }
-                ?: return errorResult("effectIds must be an array of integers")
+        val fxIds = input.present("fxIds")?.let { ids ->
+            (ids as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.longOrNull ?: return errorResult("fxIds must be integers") }
+                ?: return errorResult("fxIds must be an array of integers")
         }.orEmpty()
 
         val result = performProgrammerRecordLook(
@@ -350,7 +346,7 @@ internal class ProgrammerTools(private val state: State) {
             notes = input.text("notes"),
             mask = mask,
             targets = targets?.map { CueTargetDto(it.discriminator, it.key) },
-            effectIds = effectIds,
+            fxIds = fxIds,
             scenery = input.flag("scenery") ?: true,
         )
         return when (result) {
@@ -367,7 +363,7 @@ internal class ProgrammerTools(private val state: State) {
                         put("created", r.created)
                         put("rowsWritten", r.rowsWritten)
                         put("rowsRemoved", r.rowsRemoved)
-                        put("effectsWritten", r.effectsWritten)
+                        put("fxWritten", r.fxWritten)
                         put("sceneryWritten", r.sceneryWritten)
                         put("sceneryRemoved", r.sceneryRemoved)
                         put("rows", buildJsonArray {
@@ -376,7 +372,7 @@ internal class ProgrammerTools(private val state: State) {
                                     put("targetType", row.targetType)
                                     put("targetKey", row.targetKey)
                                     row.elementKey?.let { put("elementKey", it) }
-                                    put("propertyName", row.propertyName)
+                                    put("attribute", row.attribute)
                                     put("value", row.value)
                                 }
                             }
@@ -386,7 +382,7 @@ internal class ProgrammerTools(private val state: State) {
                                 for (skip in r.skipped) {
                                     addJsonObject {
                                         skip.targetKey?.let { put("targetKey", it) }
-                                        skip.propertyName?.let { put("propertyName", it) }
+                                        skip.attribute?.let { put("attribute", it) }
                                         put("reason", skip.reason)
                                     }
                                 }
@@ -431,7 +427,7 @@ internal class ProgrammerTools(private val state: State) {
             for (skip in skips) {
                 addJsonObject {
                     put("targetKey", skip.target)
-                    put("propertyName", skip.propertyName)
+                    put("attribute", skip.attribute)
                     put("reason", skip.reason)
                 }
             }
@@ -460,13 +456,13 @@ internal class ProgrammerTools(private val state: State) {
         (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.booleanOrNull ?: throw IllegalArgumentException("'$key' must be true or false")
     }
 
-    private fun maskOf(input: JsonObject): Set<PropertyMaskGroup>? {
+    private fun maskOf(input: JsonObject): Set<AttributeFamily>? {
         val names = input.present("mask")?.let { mask ->
             (mask as? JsonArray)?.map {
                 (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: throw IllegalArgumentException("'mask' entries must be family names")
             } ?: throw IllegalArgumentException("'mask' must be an array of family names")
         }
-        return parseMaskGroups(names)
+        return parseFamilies(names)
     }
 
     private fun errorResult(message: String, code: String? = null) = ToolExecutionResult(

@@ -1,0 +1,24 @@
+{
+  "baseRollDeg": -12.5,
+  "displayName": "Ring 1",
+  "extraPlacements": [
+    {
+      "baseRollDeg": 90.0,
+      "baseYawDeg": 180.0,
+      "label": "US",
+      "lengthM": 12.25,
+      "stageX": 0.0,
+      "stageY": 6.0,
+      "uuid": "93c9320c-3fb1-49a7-902c-70f4af057aca"
+    }
+  ],
+  "fixtureTypeKey": "lightstrip",
+  "key": "ring-1",
+  "lengthM": 8.5,
+  "sortOrder": 6,
+  "stageX": 0.0,
+  "stageY": 0.0,
+  "startChannel": 200,
+  "universeConfigUuid": "12191f6e-b7cd-46c3-b886-651c9fe935ce",
+  "uuid": "70d0f6db-8cfb-4b65-9afe-60311967805a"
+}

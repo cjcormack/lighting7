@@ -14,14 +14,14 @@ import org.jetbrains.exposed.v1.core.Table
  */
 val ALL_TABLES: List<Table> = listOf(
     DaoProjects, DaoScripts,
-    DaoLooks, DaoLookRows, DaoLookEffects,
-    DaoTemplates, DaoTemplateRows, DaoTemplateEffects,
+    DaoLooks, DaoLookRows, DaoLookFx,
+    DaoPalettes, DaoPaletteRows, DaoPaletteFx,
     DaoSpeedMasters,
     DaoCueStacks, DaoCues,
     // After the stacks and cues it places (cue model plan session 1).
     DaoCueStackEntries,
     DaoCueLayers,
-    DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
+    DaoCueAdHocFx, DaoCueAttributeAssignments, DaoCueTriggers,
     DaoCueSlots,
     DaoBuskPages, DaoBuskColumns, DaoBuskBanks, DaoBuskPads,
     DaoUniverseConfigs, DaoRiggings, DaoStageRegions,

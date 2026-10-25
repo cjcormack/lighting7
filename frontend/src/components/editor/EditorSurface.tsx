@@ -103,7 +103,7 @@ export function editorIsOpen(): boolean {
  *
  * One type rather than four copies of two props, because the four cell editors have to answer this
  * identically: a grid where the dimmer selects and the colour opens would be two gestures wearing
- * one shape. `PropertyCell` spreads it into whichever of them a cell's value kind picks.
+ * one shape. `AttributeCell` spreads it into whichever of them a cell's value kind picks.
  *
  * Absent means the old behaviour — a click opens the editor, anchored at the cell — which is what
  * `CueValueGrid` wants and gets by passing nothing. It was the fixtures and groups lists' answer

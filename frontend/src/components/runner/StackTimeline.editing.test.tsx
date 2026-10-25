@@ -8,6 +8,7 @@ import type {
   TimelineEditOp,
   TimelineEditResponse,
   TimelineEntry,
+  TimelineFx,
   TimelineLayer,
 } from '@/api/stackTimelineApi'
 
@@ -29,8 +30,8 @@ vi.mock('@/store/cueStacks', () => ({
 }))
 vi.mock('@/store/fixtures', () => ({ useVisibleFixtureListQuery: () => ({ data: [{ key: 'hex-1', name: 'Hex 1' }] }) }))
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({
     data: [
       { id: 7, name: 'Lavender', isGeneric: true, family: 'COLOUR', rows: [] },
       { id: 8, name: 'Amber', isGeneric: true, family: 'COLOUR', rows: [] },
@@ -95,14 +96,14 @@ const STACK: CueStack = {
 function lavender(id: number, over: Partial<TimelineLayer> = {}): TimelineLayer {
   return {
     id,
-    source: { kind: 'TEMPLATE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
+    source: { kind: 'PALETTE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
     targets: [{ type: 'fixture', key: 'hex-1' }],
     heads: ['hex-1'],
     sortOrder: 0,
     enabled: true,
     amount: 1,
     blendMode: 'OVERRIDE',
-    propertyMask: null,
+    attributeMask: null,
     stomp: false,
     timed: false,
     speedMasterUuid: null,
@@ -112,7 +113,7 @@ function lavender(id: number, over: Partial<TimelineLayer> = {}): TimelineLayer 
 }
 
 function entry(entryId: number, over: Partial<TimelineEntry> = {}): TimelineEntry {
-  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], effects: [], scenery: [], trackedScenery: [], ...over }
+  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], fx: [], scenery: [], trackedScenery: [], ...over }
 }
 
 const PALETTE = 'palette:7:fixture:hex-1'
@@ -120,6 +121,15 @@ const SCENERY = 'scenery:tabs'
 
 function cell(entryId: number, col: string): HTMLElement {
   return document.querySelector(`[data-row-id="entry:${entryId}"] [data-cell="${col}"]`)!.firstElementChild as HTMLElement
+}
+
+/**
+ * One press sent and its answer settled. ⌘Z reaches only an Undo step the answer has recorded, and
+ * the press's toast is called once it has, so waiting on `edit` alone lets ⌘Z land too early.
+ */
+async function pressAnswered() {
+  await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(toast).toHaveBeenCalledTimes(1))
 }
 
 beforeEach(() => {
@@ -131,13 +141,13 @@ beforeEach(() => {
   timelineFiltersStore.reset()
   sessionStorage.clear()
   EDITED = false
-  ANSWER = { changed: [2], released: [], before: [{ cueId: 2, layers: [], adHocEffects: [], scenery: [] }], edited: [] }
+  ANSWER = { changed: [2], released: [], before: [{ cueId: 2, layers: [], adHocFx: [], scenery: [] }], edited: [] }
   TIMELINE = {
     stackId: 10,
     entries: [
       entry(101, { layers: [lavender(11, { amount: 0.6 })], scenery: [{ elementUuid: 'tabs', state: { open: 0 }, transitionMs: 4000 }] }),
       entry(102),
-      { entryId: 150, kind: 'MARKER', label: 'Scene 2', layers: [], effects: [], scenery: [], trackedScenery: [] },
+      { entryId: 150, kind: 'MARKER', label: 'Scene 2', layers: [], fx: [], scenery: [], trackedScenery: [] },
       entry(103, { layers: [lavender(13)] }),
       entry(104),
     ],
@@ -161,7 +171,7 @@ describe('one cell', () => {
     fireEvent.click(cell(102, PALETTE))
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
     expect(requests[0].ops).toEqual([
-      { op: 'layerOn', cueId: 2, source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 11 },
+      { op: 'layerOn', cueId: 2, source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 11 },
     ])
   })
 
@@ -179,11 +189,11 @@ describe('one cell', () => {
   it('names what a press released, and its toast’s Undo sends the before back as one restore', async () => {
     ANSWER = {
       changed: [3],
-      released: [{ cueId: 3, source: { kind: 'TEMPLATE', id: 7, uuid: 'p7', name: 'Lavender' }, targets: [{ type: 'fixture', key: 'hex-1' }] }],
-      before: [{ cueId: 3, layers: [{ templateId: 7 }], adHocEffects: [], scenery: [] }],
+      released: [{ cueId: 3, source: { kind: 'PALETTE', id: 7, uuid: 'p7', name: 'Lavender' }, targets: [{ type: 'fixture', key: 'hex-1' }] }],
+      before: [{ cueId: 3, layers: [{ paletteId: 7 }], adHocFx: [], scenery: [] }],
       edited: [],
     }
-    TIMELINE!.entries.push(entry(105, { layers: [lavender(15, { source: { kind: 'TEMPLATE', id: 8, uuid: 'p8', name: 'Amber', families: ['COLOUR'] } })] }))
+    TIMELINE!.entries.push(entry(105, { layers: [lavender(15, { source: { kind: 'PALETTE', id: 8, uuid: 'p8', name: 'Amber', families: ['COLOUR'] } })] }))
     mount({ stack: { ...STACK, cues: [...STACK.cues, cueRow(5, { name: 'Five' })] } })
     const amber = 'palette:8:fixture:hex-1'
     fireEvent.click(cell(103, amber))
@@ -193,14 +203,14 @@ describe('one cell', () => {
     expect(message).toBe('Amber on Hex 1 in Q3. Lavender released there.')
     act(() => options.action.onClick())
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(2))
-    expect(requests[1].ops).toEqual([{ op: 'restore', cueId: 3, layers: [{ templateId: 7 }], adHocEffects: [], scenery: [] }])
+    expect(requests[1].ops).toEqual([{ op: 'restore', cueId: 3, layers: [{ paletteId: 7 }], adHocFx: [], scenery: [] }])
   })
 
   it('⌘Z undoes the last gesture as one request', async () => {
     mount()
     fireEvent.click(cell(102, PALETTE))
     fireEvent.click(cell(102, PALETTE))
-    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    await pressAnswered()
     fireEvent.keyDown(window, { key: 'z', metaKey: true })
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(2))
     expect(requests[1].ops.map((op) => op.op)).toEqual(['restore'])
@@ -210,7 +220,7 @@ describe('one cell', () => {
     mount()
     fireEvent.click(cell(102, PALETTE))
     fireEvent.click(cell(102, PALETTE))
-    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    await pressAnswered()
     edit.mockImplementationOnce((arg: { ops: TimelineEditOp[] }) => {
       requests.push(arg)
       return { unwrap: () => Promise.reject({ status: 400 }) }
@@ -226,7 +236,7 @@ describe('one cell', () => {
     mount()
     fireEvent.click(cell(102, PALETTE))
     fireEvent.click(cell(102, PALETTE))
-    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    await pressAnswered()
     fireEvent.keyDown(window, { key: 'z', metaKey: true })
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Put back', expect.objectContaining({ action: undefined })))
     const [, options] = toast.mock.calls.at(-1) as [string, object]
@@ -295,7 +305,7 @@ describe('a range', () => {
     mount()
     selectColumn()
     fireEvent.click(document.querySelector('[data-timeline-verb="Replace"]')!)
-    fireEvent.change(screen.getByLabelText('Replacement'), { target: { value: 'TEMPLATE:8' } })
+    fireEvent.change(screen.getByLabelText('Replacement'), { target: { value: 'PALETTE:8' } })
     expect(document.querySelector('[data-replace-readout]')?.textContent).toContain('Q1 and Q3 swap Lavender for Amber')
     fireEvent.click(screen.getByRole('button', { name: /^Replace 2/ }))
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
@@ -303,8 +313,8 @@ describe('a range', () => {
       {
         op: 'replace',
         cueIds: [1, 3],
-        from: { source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' } },
-        to: { source: { kind: 'TEMPLATE', id: 8 }, target: { type: 'fixture', key: 'hex-1' } },
+        from: { source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' } },
+        to: { source: { kind: 'PALETTE', id: 8 }, target: { type: 'fixture', key: 'hex-1' } },
         keepSettings: true,
       },
     ])
@@ -326,7 +336,7 @@ describe('a range', () => {
   })
 
   it('Settings… over differing masks says so, and the first mask chosen is written to every layer', async () => {
-    TIMELINE!.entries[3] = entry(103, { layers: [lavender(13, { propertyMask: 'COLOUR' })] })
+    TIMELINE!.entries[3] = entry(103, { layers: [lavender(13, { attributeMask: 'COLOUR' })] })
     mount()
     selectColumn()
     fireEvent.click(document.querySelector('[data-timeline-verb="Settings"]')!)
@@ -336,8 +346,8 @@ describe('a range', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Beam' }))
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
     expect(requests[0].ops).toEqual([
-      { op: 'layerSettings', cueId: 1, layerId: 11, fields: { propertyMask: 'INTENSITY,POSITION,COLOUR' } },
-      { op: 'layerSettings', cueId: 3, layerId: 13, fields: { propertyMask: 'INTENSITY,POSITION,COLOUR' } },
+      { op: 'layerSettings', cueId: 1, layerId: 11, fields: { attributeMask: 'INTENSITY,POSITION,COLOUR' } },
+      { op: 'layerSettings', cueId: 3, layerId: 13, fields: { attributeMask: 'INTENSITY,POSITION,COLOUR' } },
     ])
   })
 })
@@ -358,8 +368,110 @@ it('dragging a run’s end down fills the cells it crosses in one request', asyn
   })
   await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
   expect(requests[0].ops).toEqual([
-    { op: 'layerOn', cueId: 4, source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 13 },
+    { op: 'layerOn', cueId: 4, source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 13 },
   ])
+})
+
+describe('FX cells', () => {
+  const FX = 'fx:Pulse:dimmer:fixture:hex-1'
+  function pulse(uuid: string, runUuid: string | null, settings: Record<string, unknown> = { cycle: 1, speedMasterUuid: 'm1' }): TimelineFx {
+    return {
+      id: Number(uuid.slice(1)),
+      uuid,
+      runUuid,
+      fxType: 'Pulse',
+      attribute: 'dimmer',
+      targetType: 'fixture',
+      targetKey: 'hex-1',
+      family: 'INTENSITY',
+      heads: ['hex-1'],
+      settings,
+    }
+  }
+  beforeEach(() => {
+    TIMELINE!.entries[0].fx = [pulse('u1', 'run-a')]
+    TIMELINE!.entries[1].fx = [pulse('u2', 'run-a', { cycle: 2, speedMasterUuid: 'm1' })]
+    TIMELINE!.entries[3].fx = [pulse('u3', null)]
+  })
+
+  it('an empty cell’s second click copies the nearest filled row into it: one request', async () => {
+    mount()
+    fireEvent.click(cell(104, FX))
+    fireEvent.click(cell(104, FX))
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    expect(requests[0].ops).toEqual([{ op: 'fxOn', cueId: 4, fromFxUuid: 'u3' }])
+  })
+
+  it('⌫ deletes a filled cell’s row: one request', async () => {
+    mount()
+    fireEvent.click(cell(103, FX))
+    fireEvent.keyDown(window, { key: 'Backspace' })
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    expect(requests[0].ops).toEqual([{ op: 'fxOff', cueId: 3, fxUuid: 'u3' }])
+  })
+
+  it('a filled cell’s second click opens its run, cue by cue, and Break run is one request', async () => {
+    mount()
+    fireEvent.click(cell(102, FX))
+    fireEvent.click(cell(102, FX))
+    expect(edit).not.toHaveBeenCalled()
+    const list = document.querySelector('[data-timeline-run-list]')!
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['Q11 beatstarts', 'Q2◆ 2 beatsedited in place'])
+    expect(edit).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Join run above' })).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Break run at Q2' }))
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    expect(requests[0].ops).toEqual([{ op: 'breakRun', cueId: 2, fxUuid: 'u2', entryId: 102 }])
+    expect(document.querySelector('[data-timeline-fx-run]')).toBeNull()
+  })
+
+  it('Join run above on a cell in no run is one request', async () => {
+    mount()
+    fireEvent.click(cell(103, FX))
+    fireEvent.click(cell(103, FX))
+    expect(screen.getByRole('button', { name: 'Break run at Q3' })).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Join run above' }))
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    expect(requests[0].ops).toEqual([{ op: 'joinRun', cueId: 3, fxUuid: 'u3', entryId: 103 }])
+  })
+
+  it('dragging a run’s end down copies its row into the cells it crosses: one request', async () => {
+    mount()
+    const handle = cell(103, FX).querySelector('[data-timeline-handle]')!
+    document.elementFromPoint = vi.fn(() => document.querySelector('[data-row-id="entry:104"]')!)
+    fireEvent.pointerDown(handle, { clientX: 400, clientY: 120 })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400, clientY: 150 }))
+    })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('pointerup', { clientX: 400, clientY: 150 }))
+    })
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    expect(requests[0].ops).toEqual([{ op: 'fxOn', cueId: 4, fromFxUuid: 'u3' }])
+  })
+
+  it('closes the run popover when its cell empties, so a later fill does not reopen it', () => {
+    const { rerender } = mount()
+    fireEvent.click(cell(103, FX))
+    fireEvent.click(cell(103, FX))
+    expect(document.querySelector('[data-timeline-fx-run]')).toBeTruthy()
+    const filled = TIMELINE!.entries[3].fx
+    TIMELINE = { ...TIMELINE!, entries: TIMELINE!.entries.map((e) => (e.entryId === 103 ? { ...e, fx: [] } : e)) }
+    rerender(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    expect(document.querySelector('[data-timeline-fx-run]')).toBeNull()
+    TIMELINE = { ...TIMELINE!, entries: TIMELINE!.entries.map((e) => (e.entryId === 103 ? { ...e, fx: filled } : e)) }
+    rerender(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    expect(document.querySelector('[data-timeline-fx-run]')).toBeNull()
+  })
+
+  it('locked, a filled cell’s second click asks to unlock', () => {
+    mount({ locked: true, onRequestUnlock: vi.fn() })
+    fireEvent.click(cell(102, FX))
+    fireEvent.click(cell(102, FX))
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+    expect(document.querySelector('[data-timeline-fx-run]')).toBeNull()
+    expect(edit).not.toHaveBeenCalled()
+  })
 })
 
 it('a scenery cell’s second click opens its popover, whose Clear change is one request', async () => {

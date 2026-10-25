@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { chan, element, groupSummary, makeFixture, positionProp, sliderProp } from '@/test/fixtureFactories'
 import type { BuskingTarget } from './buskingTypes'
@@ -11,25 +11,25 @@ import type { BuskingTarget } from './buskingTypes'
  * over the busk selection pair. What is pinned is that each tab's band presses the busk pair — its
  * targets as the busk view addresses them (a group as one, a cell by its key) and its mask — into
  * Local whatever the grid is pointed at, that the editors write Local (the Position tab's XY pad
- * one `setPosition` per head), and that the Beam tab acts on the Beam property the operator picks.
+ * one `setPosition` per head), and that the Beam tab acts on the Beam attribute the operator picks.
  */
 
-let templates: TemplateSummary[] = []
+let templates: PaletteSummary[] = []
 const toggle = vi.hoisted(() => vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve({ action: 'added' }) })))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: templates }),
-  useApplyTemplateMutation: () => [vi.fn()],
-  useToggleTemplateMutation: () => [toggle],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: templates }),
+  useApplyPaletteMutation: () => [vi.fn()],
+  useTogglePaletteMutation: () => [toggle],
 }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
-  useAbsorbLookEffectsMutation: () => [vi.fn()],
+  useAbsorbLookFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/fixtureFx', () => ({
   useRemoveFxMutation: () => [vi.fn()],
-  useEffectLibraryQuery: () => ({ data: [] }),
-  useActiveEffectsQuery: () => ({ data: [] }),
+  useFxLibraryQuery: () => ({ data: [] }),
+  useActiveFxQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [vi.fn()] }))
 const picker = vi.hoisted(() => vi.fn())
@@ -51,10 +51,10 @@ vi.mock('react-router', async (importOriginal) => ({
 // The programmer grid is pointed at a focused Look layer: the busk tabs must write Local anyway.
 vi.mock('@/components/programmer/ProgrammerScope', () => ({ useProgrammerScope: () => ({ kind: 'layer', layerId: 'l1' }) }))
 vi.mock('@/components/programmer/LookRowStore', () => ({
-  useLookRowStore: () => ({ lookName: 'Warm wash', projectId: 1, lookId: 9, targets: [], targetedKeys: null, setValue: vi.fn() }),
+  useLookRowStore: () => ({ lookName: 'Warm wash', projectId: 1, lookId: 9, setValue: vi.fn() }),
 }))
-vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
-  NewTemplateFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
+vi.mock('@/components/programmer/NewPaletteFromSelectionSheet', () => ({
+  NewPaletteFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
     open ? <div data-testid="new-template" data-targets={JSON.stringify(targets)} data-families={families.join()} /> : null,
 }))
 vi.mock('@/components/fixtureSheet/useChannelValues', () => ({
@@ -95,7 +95,7 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
 
 const { LevelSheet, PositionSheet, BeamSheet } = await import('./FamilySheets')
 
-function template(over: Partial<TemplateSummary>): TemplateSummary {
+function template(over: Partial<PaletteSummary>): PaletteSummary {
   return {
     id: 1,
     uuid: 'u1',
@@ -107,8 +107,8 @@ function template(over: Partial<TemplateSummary>): TemplateSummary {
     kind: 'value',
     requiredEmitters: [],
     lastPressedAt: null,
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:100' }],
-    effect: null,
+    rows: [{ targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:100' }],
+    fx: null,
     layerCount: 0,
     buskPageCount: 0,
     ...over,
@@ -137,9 +137,9 @@ beforeEach(() => {
   )
   templates = [
     template({ id: 1, name: 'Full' }),
-    template({ id: 2, name: 'Centre', family: 'POSITION', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value: 'pos:0,0' }] }),
-    template({ id: 3, name: 'Wide', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] }),
-    template({ id: 4, name: 'Open iris', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'iris', value: 'pct:100' }] }),
+    template({ id: 2, name: 'Centre', family: 'POSITION', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'position', value: 'pos:0,0' }] }),
+    template({ id: 3, name: 'Wide', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'zoom', value: 'pct:100' }] }),
+    template({ id: 4, name: 'Open iris', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'iris', value: 'pct:100' }] }),
   ]
 })
 
@@ -154,12 +154,12 @@ const chips = () => [...document.querySelectorAll('[data-band-palette]')].map((c
 
 describe('each family tab presses over the busk pair, into Local', () => {
   const CASES = [
-    { name: 'Level', Tab: LevelSheet, family: 'INTENSITY', chip: 'Full', templateId: 1 },
-    { name: 'Position', Tab: PositionSheet, family: 'POSITION', chip: 'Centre', templateId: 2 },
-    { name: 'Beam', Tab: BeamSheet, family: 'BEAM', chip: 'Wide', templateId: 3 },
+    { name: 'Level', Tab: LevelSheet, family: 'INTENSITY', chip: 'Full', paletteId: 1 },
+    { name: 'Position', Tab: PositionSheet, family: 'POSITION', chip: 'Centre', paletteId: 2 },
+    { name: 'Beam', Tab: BeamSheet, family: 'BEAM', chip: 'Wide', paletteId: 3 },
   ] as const
 
-  for (const { name, Tab, family, chip, templateId } of CASES) {
+  for (const { name, Tab, family, chip, paletteId } of CASES) {
     it(`${name}: the family’s Palettes band lands on the busk targets under the busk mask, a focused Look notwithstanding`, async () => {
       const families: AttributeFamily[] = [family, 'COLOUR']
       render(<Tab projectId={1} selectedTargets={selection} families={families} />)
@@ -171,15 +171,15 @@ describe('each family tab presses over the busk pair, into Local', () => {
         fireEvent.click(screen.getByText(chip))
       })
       expect(toggle).toHaveBeenCalledWith(
-        expect.objectContaining({ projectId: 1, templateId, targets: BUSK_PAIR_TARGETS, families }),
+        expect.objectContaining({ projectId: 1, paletteId, targets: BUSK_PAIR_TARGETS, families }),
       )
     })
 
-    it(`${name}: + Effect… opens the effects arm on the busk pair, writing Local`, () => {
+    it(`${name}: + FX… opens the effects arm on the busk pair, writing Local`, () => {
       render(<Tab projectId={1} selectedTargets={selection} families={null} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Effect…' }))
+      fireEvent.click(screen.getByRole('button', { name: 'FX…' }))
       expect(picker).toHaveBeenLastCalledWith(
-        expect.objectContaining({ library: 'effects', family, scope: 'programmer', pair: { targets: BUSK_PAIR_TARGETS, families: null } }),
+        expect.objectContaining({ library: 'fx', family, scope: 'programmer', pair: { targets: BUSK_PAIR_TARGETS, families: null } }),
       )
     })
 
@@ -262,14 +262,14 @@ describe('the editors write Local', () => {
   })
 })
 
-describe('the Beam tab acts on one Beam property', () => {
+describe('the Beam tab acts on one Beam attribute', () => {
   it('offers the Beam properties the selection carries, and its band and level follow the one picked', () => {
     const both = new Map<string, BuskingTarget>([
       ['group:Spots', spots],
       ['fixture:spot-1', { type: 'fixture', key: 'spot-1', fixture: SPOT_1 }],
     ])
     render(<BeamSheet projectId={1} selectedTargets={both} families={null} />)
-    const row = screen.getByRole('radiogroup', { name: 'Beam property' })
+    const row = screen.getByRole('radiogroup', { name: 'Beam attribute' })
     expect(within(row).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Zoom', 'Iris'])
     expect(within(row).getByRole('radio', { name: 'Zoom' })).toHaveAttribute('aria-checked', 'true')
     expect(chips()).toEqual(['Wide'])
@@ -286,7 +286,7 @@ describe('the Beam tab acts on one Beam property', () => {
 
   it('draws no property row over a selection with one Beam level', () => {
     render(<BeamSheet projectId={1} selectedTargets={new Map([['fixture:spot-2', { type: 'fixture', key: 'spot-2', fixture: SPOT_2 }]])} families={null} />)
-    expect(screen.queryByRole('radiogroup', { name: 'Beam property' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Beam attribute' })).toBeNull()
     expect(screen.getByLabelText('Zoom percent')).toBeInTheDocument()
   })
 })

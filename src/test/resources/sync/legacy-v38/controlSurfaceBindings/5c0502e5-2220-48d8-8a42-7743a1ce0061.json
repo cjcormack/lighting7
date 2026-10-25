@@ -1,0 +1,8 @@
+{
+  "controlId": "button-6",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 8,
+  "targetPayload": "{\"type\":\"encoderBankSet\",\"propertyName\":\"pan\"}",
+  "targetType": "encoderBankSet",
+  "uuid": "5c0502e5-2220-48d8-8a42-7743a1ce0061"
+}

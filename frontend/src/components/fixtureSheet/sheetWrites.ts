@@ -1,7 +1,7 @@
 import { lightingApi } from '@/api/lightingApi'
 import { parseProgrammerEntryValue, serializeLevel } from '@/lib/programmerValue'
 import { clampCommitToResolution, type CellCommit } from '../fixtures-list/rowModel'
-import type { ChannelRef, ColourPropertyDescriptor, WhiteMixPropertyDescriptor } from '@/store/fixtures'
+import type { ChannelRef, ColourAttributeDescriptor, WhiteMixAttributeDescriptor } from '@/store/fixtures'
 import type { Rgb } from '@/lib/whiteMix'
 import type { PickWrite } from './sheetPick'
 import type { PositionResolution } from './sheetRows'
@@ -54,8 +54,8 @@ function resolvePosition(
 }
 
 /** A level or a setting's option level, as one property entry. */
-export function writeSheetLevel(headKey: string, propertyName: string, level: number, fadeMs?: number, sourceGroup?: string): void {
-  lightingApi.programmer.set('fixture', headKey, propertyName, serializeLevel(level), fadeMs, sourceGroup)
+export function writeSheetLevel(headKey: string, attribute: string, level: number, fadeMs?: number, sourceGroup?: string): void {
+  lightingApi.programmer.set('fixture', headKey, attribute, serializeLevel(level), fadeMs, sourceGroup)
 }
 
 /**
@@ -77,13 +77,13 @@ export function clearSheetRow(headKey: string, keys: readonly string[], fadeMs: 
  * A level over a pick: a group's *All* is **one** group entry; anything else is each head's own
  * entry, a group member's carrying the group as `sourceGroup`.
  */
-export function writePickLevel(write: PickWrite, propertyName: string, level: number, fadeMs?: number): void {
+export function writePickLevel(write: PickWrite, attribute: string, level: number, fadeMs?: number): void {
   if (write.kind === 'group') {
-    lightingApi.programmer.set('group', write.group, propertyName, serializeLevel(level), fadeMs)
+    lightingApi.programmer.set('group', write.group, attribute, serializeLevel(level), fadeMs)
     return
   }
   for (const key of write.keys) {
-    lightingApi.programmer.set('fixture', key, propertyName, serializeLevel(level), fadeMs, write.sourceGroup)
+    lightingApi.programmer.set('fixture', key, attribute, serializeLevel(level), fadeMs, write.sourceGroup)
   }
 }
 
@@ -106,32 +106,32 @@ export interface PickColour {
  */
 export function writePickColour(
   write: PickWrite,
-  heads: readonly { key: string; property: ColourPropertyDescriptor }[],
+  heads: readonly { key: string; attribute: ColourAttributeDescriptor }[],
   colour: PickColour,
   fadeMs?: number,
 ): void {
-  const first = heads[0]?.property
+  const first = heads[0]?.attribute
   if (first == null) return
-  const emitters = (p: ColourPropertyDescriptor) => `${!!p.whiteChannel}${!!p.amberChannel}${!!p.uvChannel}`
-  const own = (property: ColourPropertyDescriptor) => {
+  const emitters = (p: ColourAttributeDescriptor) => `${!!p.whiteChannel}${!!p.amberChannel}${!!p.uvChannel}`
+  const own = (attribute: ColourAttributeDescriptor) => {
     const fill = (given: number | undefined, ref: ChannelRef | undefined) =>
       ref == null ? undefined : (given ?? lightingApi.channels.get(ref.universe, ref.channelNo))
     return {
       r: colour.r,
       g: colour.g,
       b: colour.b,
-      w: fill(colour.w, property.whiteChannel),
-      a: fill(colour.a, property.amberChannel),
-      uv: fill(colour.uv, property.uvChannel),
+      w: fill(colour.w, attribute.whiteChannel),
+      a: fill(colour.a, attribute.amberChannel),
+      uv: fill(colour.uv, attribute.uvChannel),
     }
   }
-  if (write.kind === 'group' && heads.every((h) => emitters(h.property) === emitters(first))) {
+  if (write.kind === 'group' && heads.every((h) => emitters(h.attribute) === emitters(first))) {
     lightingApi.programmer.setColour('group', write.group, first.name, own(first), fadeMs)
     return
   }
   const sourceGroup = write.kind === 'group' ? write.group : write.sourceGroup
-  for (const { key, property } of heads) {
-    lightingApi.programmer.setColour('fixture', key, property.name, own(property), fadeMs, sourceGroup)
+  for (const { key, attribute } of heads) {
+    lightingApi.programmer.setColour('fixture', key, attribute.name, own(attribute), fadeMs, sourceGroup)
   }
 }
 
@@ -142,20 +142,20 @@ export function writePickColour(
  */
 export function writePickWhiteMix(
   write: PickWrite,
-  heads: readonly { key: string; property: WhiteMixPropertyDescriptor }[],
+  heads: readonly { key: string; attribute: WhiteMixAttributeDescriptor }[],
   [r, g, b]: Rgb,
   fadeMs?: number,
 ): void {
-  const first = heads[0]?.property
+  const first = heads[0]?.attribute
   if (first == null) return
-  const sameWhites = heads.every((h) => h.property.warmKelvin === first.warmKelvin && h.property.coldKelvin === first.coldKelvin)
+  const sameWhites = heads.every((h) => h.attribute.warmKelvin === first.warmKelvin && h.attribute.coldKelvin === first.coldKelvin)
   if (write.kind === 'group' && sameWhites) {
     lightingApi.programmer.setColour('group', write.group, first.name, { r, g, b }, fadeMs)
     return
   }
   const sourceGroup = write.kind === 'group' ? write.group : write.sourceGroup
-  for (const { key, property } of heads) {
-    lightingApi.programmer.setColour('fixture', key, property.name, { r, g, b }, fadeMs, sourceGroup)
+  for (const { key, attribute } of heads) {
+    lightingApi.programmer.setColour('fixture', key, attribute.name, { r, g, b }, fadeMs, sourceGroup)
   }
 }
 
@@ -198,7 +198,7 @@ export function writePickPosition(
  */
 export function writePickVirtualDimmer(
   write: PickWrite,
-  heads: readonly { key: string; property: ColourPropertyDescriptor }[],
+  heads: readonly { key: string; attribute: ColourAttributeDescriptor }[],
   level: number,
   fadeMs?: number,
 ): void {
@@ -206,10 +206,10 @@ export function writePickVirtualDimmer(
   const sourceGroup = write.kind === 'group' ? write.group : write.sourceGroup
   const read = (ref: { universe: number; channelNo: number } | undefined) =>
     ref == null ? undefined : lightingApi.channels.get(ref.universe, ref.channelNo)
-  for (const { key, property } of heads) {
-    const r = read(property.redChannel) ?? 0
-    const g = read(property.greenChannel) ?? 0
-    const b = read(property.blueChannel) ?? 0
+  for (const { key, attribute } of heads) {
+    const r = read(attribute.redChannel) ?? 0
+    const g = read(attribute.greenChannel) ?? 0
+    const b = read(attribute.blueChannel) ?? 0
     const max = Math.max(r, g, b)
     // A dark head has no hue to scale: it comes up white at the level set, so the row reads back
     // what was typed.
@@ -217,8 +217,8 @@ export function writePickVirtualDimmer(
     lightingApi.programmer.setColour(
       'fixture',
       key,
-      property.name,
-      { r: scale(r), g: scale(g), b: scale(b), w: read(property.whiteChannel), a: read(property.amberChannel), uv: read(property.uvChannel) },
+      attribute.name,
+      { r: scale(r), g: scale(g), b: scale(b), w: read(attribute.whiteChannel), a: read(attribute.amberChannel), uv: read(attribute.uvChannel) },
       fadeMs,
       sourceGroup,
     )

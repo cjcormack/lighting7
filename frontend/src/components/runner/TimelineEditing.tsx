@@ -21,12 +21,15 @@ import type {
 } from '@/api/stackTimelineApi'
 import { useEditCueStackTimelineMutation } from '@/store/cueStacks'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useSpeedMasterListQuery } from '@/store/speedMasters'
-import { parsePropertyMask, serializePropertyMask } from '@/lib/attributeFamily'
+import { parseAttributeMask, serializeAttributeMask } from '@/lib/attributeFamily'
 import { MaskToggles, maskIsEmpty, maskToWire, useMaskDraft, type MaskValue } from '@/components/programmer/maskPicker'
 import { shownSceneryState } from '@/lib/scenery'
-import { replacePlan, sharedValue, type TimelineColumn } from '@/lib/stackTimeline'
+import { cellTargetOf, fxCycleWords, replacePlan, settingsChangeLabel, sharedValue, type FxRunCell, type FxRunVerb, type TimelineColumn } from '@/lib/stackTimeline'
+import { fxDynamicsParts } from '@/lib/fxDynamics'
+import { runsWord } from '@/components/fx/fxEditorModel'
+import type { FxDirection } from '@/api/fxApi'
 import type { StoredExtraColumn } from '@/lib/stackTimeline/columnOrder'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { SceneryControl } from '@/components/scenery/SceneryControl'
@@ -115,13 +118,17 @@ export function describeEdit(
   for (const op of ops) {
     if (op.op === 'restore' || op.op === 'replace' || op.op === 'layerSettings') continue
     const column = columnOf(op)
-    const verb = op.op === 'layerOn' ? 'on' : op.op === 'layerOff' ? 'off' : op.op === 'scenerySet' ? 'set' : 'cleared'
+    const verb = VERB[op.op]
     const key = `${column?.id ?? '?'}|${verb}`
     const group = groups.get(key) ?? { column, verb, cueIds: [] }
     group.cueIds.push(op.cueId)
     groups.set(key, group)
   }
   const sentences = [...groups.values()].map(({ column, verb, cueIds }) => {
+    if (verb === 'break' || verb === 'join') {
+      const name = column == null ? 'The FX' : `${column.name} · ${column.sub}`
+      return verb === 'break' ? `${name}'s run broken at ${cues(cueIds)}.` : `${name} joined to the run above at ${cues(cueIds)}.`
+    }
     const name = column == null ? 'Cell' : column.kind === 'scenery' ? column.name : `${column.name} ${verb === 'on' ? 'on' : 'off'} ${column.sub}`
     const action = column?.kind === 'scenery' ? ` ${verb}` : ''
     return `${name}${action} in ${cues(cueIds)}.`
@@ -134,6 +141,18 @@ export function describeEdit(
   }
   if (answer.changed.length === 0) return 'Nothing changed'
   return sentences.join(' ')
+}
+
+/** Each op's verb as the toast groups it. */
+const VERB: Record<Exclude<TimelineEditOp['op'], 'restore' | 'replace' | 'layerSettings'>, string> = {
+  layerOn: 'on',
+  layerOff: 'off',
+  fxOn: 'on',
+  fxOff: 'off',
+  breakRun: 'break',
+  joinRun: 'join',
+  scenerySet: 'set',
+  sceneryClear: 'cleared',
 }
 
 // ── The selection bar's verbs ─────────────────────────────────────────────────────────────────────
@@ -223,7 +242,7 @@ export function TimelineVerbs({
 
 // ── Replace with… ─────────────────────────────────────────────────────────────────────────────────
 
-type RecordChoice = { kind: 'LOOK' | 'TEMPLATE'; id: number; name: string; generic: boolean }
+type RecordChoice = { kind: 'LOOK' | 'PALETTE'; id: number; name: string; generic: boolean }
 
 /** *Replace with…* (D11): the selected column's record swapped for another over the selected cues. */
 export function TimelineReplacePopover({
@@ -249,10 +268,10 @@ export function TimelineReplacePopover({
 }) {
   const [open, setOpen] = useState(false)
   const { data: looks } = useLookListQuery({ projectId }, { skip: !open })
-  const { data: palettes } = useTemplateListQuery({ projectId }, { skip: !open })
+  const { data: palettes } = usePaletteListQuery({ projectId }, { skip: !open })
   const records = useMemo<RecordChoice[]>(
     () => [
-      ...(palettes ?? []).map((p) => ({ kind: 'TEMPLATE' as const, id: p.id, name: p.name, generic: p.isGeneric })),
+      ...(palettes ?? []).map((p) => ({ kind: 'PALETTE' as const, id: p.id, name: p.name, generic: p.isGeneric })),
       ...(looks ?? []).map((l) => ({ kind: 'LOOK' as const, id: l.id, name: l.name, generic: false })),
     ],
     [looks, palettes],
@@ -272,8 +291,12 @@ export function TimelineReplacePopover({
   const defaultTarget = deskTargets[0] ?? column.target
   const keyed = targetKey ?? (defaultTarget ? `${defaultTarget.type}:${defaultTarget.key}` : '*')
   const chosenTargetKey = needsTarget && keyed === '*' ? ([...targets.keys()].find((k) => k !== '*') ?? '*') : keyed
-  const from: TimelineCellRef = { source: { kind: column.kind === 'look' ? 'LOOK' : 'TEMPLATE', id: column.sourceId! }, target: column.target }
-  const to: TimelineCellRef | null = chosen ? { source: { kind: chosen.kind, id: chosen.id }, target: targets.get(chosenTargetKey) ?? null } : null
+  const from: TimelineCellRef = { source: { kind: column.kind === 'look' ? 'LOOK' : 'PALETTE', id: column.sourceId! }, target: cellTargetOf(column) }
+  // A Look names no target: it lands whole (absolute-looks plan D1).
+  const toLook = chosen?.kind === 'LOOK'
+  const to: TimelineCellRef | null = chosen
+    ? { source: { kind: chosen.kind, id: chosen.id }, target: toLook ? null : (targets.get(chosenTargetKey) ?? null) }
+    : null
   const plan = to ? replacePlan(timeline.entries, cueIds, from, to) : null
   const same = to != null && to.source.kind === from.source.kind && to.source.id === from.source.id && (to.target?.key ?? null) === (from.target?.key ?? null)
   const count = plan == null ? 0 : plan.swaps.length + plan.holds.length
@@ -297,8 +320,8 @@ export function TimelineReplacePopover({
           >
             <option value="">Choose…</option>
             <optgroup label="Palettes">
-              {records.filter((r) => r.kind === 'TEMPLATE').map((r) => (
-                <option key={`TEMPLATE:${r.id}`} value={`TEMPLATE:${r.id}`}>{r.name}</option>
+              {records.filter((r) => r.kind === 'PALETTE').map((r) => (
+                <option key={`PALETTE:${r.id}`} value={`PALETTE:${r.id}`}>{r.name}</option>
               ))}
             </optgroup>
             <optgroup label="Looks">
@@ -307,16 +330,18 @@ export function TimelineReplacePopover({
               ))}
             </optgroup>
           </select>
-          <select
-            aria-label="Target"
-            className="h-8 w-28 rounded-md border bg-background px-2 text-sm"
-            value={chosenTargetKey}
-            onChange={(e) => setTargetKey(e.target.value)}
-          >
-            {[...targets].filter(([key]) => !(needsTarget && key === '*')).map(([key, t]) => (
-              <option key={key} value={key}>{t == null ? 'Own heads' : targetName(t)}</option>
-            ))}
-          </select>
+          {!toLook && (
+            <select
+              aria-label="Target"
+              className="h-8 w-28 rounded-md border bg-background px-2 text-sm"
+              value={chosenTargetKey}
+              onChange={(e) => setTargetKey(e.target.value)}
+            >
+              {[...targets].filter(([key]) => !(needsTarget && key === '*')).map(([key, t]) => (
+                <option key={key} value={key}>{t == null ? 'Own heads' : targetName(t)}</option>
+              ))}
+            </select>
+          )}
         </div>
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" checked={keepSettings} onChange={(e) => setKeepSettings(e.target.checked)} />
@@ -384,7 +409,7 @@ export function TimelineSettingsPopover({
   const value = <T,>(read: (l: TimelineLayer) => T) => sharedValue(layers.map(({ layer }) => read(layer)))
   const amount = value((l) => l.amount)
   const blend = value((l) => l.blendMode.toUpperCase())
-  const mask = value((l) => l.propertyMask ?? null)
+  const mask = value((l) => l.attributeMask ?? null)
   const stomp = value((l) => l.stomp)
   const enabled = value((l) => l.enabled)
   const delay = value((l) => l.delayMs ?? null)
@@ -431,7 +456,7 @@ export function TimelineSettingsPopover({
           />
         </SettingRow>
         <SettingRow label="Mask">
-          <TimelineMaskField key={mask === 'mixed' ? 'mixed' : 'shared'} mask={mask ?? null} onWrite={(propertyMask) => write({ propertyMask }, 'Mask')} />
+          <TimelineMaskField key={mask === 'mixed' ? 'mixed' : 'shared'} mask={mask ?? null} onWrite={(attributeMask) => write({ attributeMask }, 'Mask')} />
         </SettingRow>
         <SettingRow label="Stomp">
           <SegmentButtons
@@ -489,17 +514,17 @@ export function TimelineSettingsPopover({
  * attributes*: the first choice that is a mask — every attribute, or a narrowing — is written to
  * every layer, and the picker then reads as one mask.
  */
-function TimelineMaskField({ mask, onWrite }: { mask: string | null | 'mixed'; onWrite: (propertyMask: string | null) => void }) {
+function TimelineMaskField({ mask, onWrite }: { mask: string | null | 'mixed'; onWrite: (attributeMask: string | null) => void }) {
   return mask === 'mixed' ? <MixedMask onWrite={onWrite} /> : <SharedMask mask={mask} onWrite={onWrite} />
 }
 
-function SharedMask({ mask, onWrite }: { mask: string | null; onWrite: (propertyMask: string | null) => void }) {
-  const stored = parsePropertyMask(mask)
-  const [draft, setDraft] = useMaskDraft(stored.length > 0 ? stored : null, (families) => onWrite(serializePropertyMask(families ?? [])))
+function SharedMask({ mask, onWrite }: { mask: string | null; onWrite: (attributeMask: string | null) => void }) {
+  const stored = parseAttributeMask(mask)
+  const [draft, setDraft] = useMaskDraft(stored.length > 0 ? stored : null, (families) => onWrite(serializeAttributeMask(families ?? [])))
   return <MaskToggles value={draft} onChange={setDraft} />
 }
 
-function MixedMask({ onWrite }: { onWrite: (propertyMask: string | null) => void }) {
+function MixedMask({ onWrite }: { onWrite: (attributeMask: string | null) => void }) {
   const [draft, setDraft] = useState<MaskValue>(null)
   return (
     <div className="space-y-1">
@@ -509,7 +534,7 @@ function MixedMask({ onWrite }: { onWrite: (propertyMask: string | null) => void
         onChange={(next) => {
           setDraft(next)
           if (maskIsEmpty(next) || (next != null && maskToWire(next) == null)) return
-          onWrite(serializePropertyMask(next ?? []))
+          onWrite(serializeAttributeMask(next ?? []))
         }}
       />
     </div>
@@ -697,12 +722,152 @@ export function TimelineSceneryPopover({
   )
 }
 
+// ── An FX cell ────────────────────────────────────────────────────────────────────────────────────
+
+/** One cue's FX settings as the run popover lists them, in the pad face's words: `½ beat · ↔ · 60 % · ADDITIVE`. */
+export function fxSettingsWords(settings: Record<string, unknown>): string {
+  const parts: string[] = []
+  const cycle = fxCycleWords(settings)
+  if (cycle != null) parts.push(cycle)
+  parts.push(
+    ...fxDynamicsParts({
+      amount: typeof settings.amount === 'number' ? settings.amount : undefined,
+      direction: typeof settings.direction === 'string' ? (settings.direction as FxDirection) : undefined,
+    }),
+  )
+  if (typeof settings.blendMode === 'string' && settings.blendMode !== 'OVERRIDE') parts.push(settings.blendMode)
+  if (typeof settings.runs === 'number') parts.push(runsWord(settings.runs))
+  return parts.join(' · ')
+}
+
+/**
+ * An FX cell's popover (§4.4, D7, D8): its run cue by cue with each cue's settings, ◆ where they
+ * change, and *Break run at Qn*, *Join run above* and *Edit Qn's FX…* — each verb one request, and
+ * one disabled with its reason where it would do nothing.
+ */
+export function TimelineFxRunPopover({
+  anchor,
+  column,
+  run,
+  entryId,
+  cueLabel,
+  cues,
+  breakRun,
+  joinRun,
+  locked,
+  onRefused,
+  onClose,
+  onSend,
+  onEdit,
+}: {
+  anchor: () => Element | null
+  column: TimelineColumn
+  run: readonly FxRunCell[]
+  entryId: number
+  cueLabel: (cueId: number) => string
+  cues: (cueIds: readonly number[]) => string
+  breakRun: FxRunVerb
+  joinRun: FxRunVerb
+  locked: boolean
+  onRefused?: () => void
+  onClose: () => void
+  onSend: (op: TimelineEditOp, label: string) => void
+  onEdit: () => void
+}) {
+  const anchorRef = useRef<{ getBoundingClientRect(): DOMRect } | null>(null)
+  anchorRef.current = { getBoundingClientRect: () => anchor()?.getBoundingClientRect() ?? new DOMRect() }
+  const here = run.find((cell) => cell.entryId === entryId)
+  const at = here == null ? '' : cueLabel(here.cueId)
+  const keyed = here?.effect.runUuid != null
+  const verb = (label: string, state: FxRunVerb, words: string) => (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={state.op == null || (locked && onRefused == null)}
+      title={state.reason ?? (locked ? 'The show is locked — unlock to edit' : undefined)}
+      data-timeline-run-verb={words}
+      onClick={() => {
+        if (state.op == null) return
+        if (locked) return onRefused?.()
+        onSend(state.op, words)
+        onClose()
+      }}
+    >
+      {label}
+    </Button>
+  )
+  return (
+    <EditorSurface
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={`${column.name} in ${at}`}
+      align="center"
+      anchorRef={anchorRef}
+      contentClassName="w-80 space-y-3 p-3"
+    >
+      <div className="space-y-3" data-timeline-fx-run>
+        <div className="flex items-baseline gap-2">
+          <span aria-hidden className="text-violet-300">∿</span>
+          <b className="min-w-0 truncate text-sm">
+            {column.name} · {column.sub}
+          </b>
+          <span className="ml-auto shrink-0 rounded border px-1.5 text-[10.5px] text-muted-foreground">
+            {run.length > 1 ? `run ${cues(run.map((c) => c.cueId))}` : keyed ? 'a run of one' : 'in no run'}
+          </span>
+        </div>
+        <ol className="space-y-0.5 text-xs" data-timeline-run-list>
+          {run.map((cell, i) => (
+            <li
+              key={cell.entryId}
+              className={cn('grid grid-cols-[44px_1fr_auto] items-baseline gap-2 rounded px-1 py-0.5', cell.entryId === entryId && 'bg-muted')}
+            >
+              <span className="font-mono">{cueLabel(cell.cueId)}</span>
+              <span className="min-w-0 truncate">
+                {i === 0 ? (
+                  fxSettingsWords(cell.effect.settings)
+                ) : cell.changed ? (
+                  <b className="font-semibold text-violet-300">◆ {settingsChangeLabel(run[i - 1].effect.settings, cell.effect.settings) ?? fxSettingsWords(cell.effect.settings)}</b>
+                ) : (
+                  <span className="text-muted-foreground">same</span>
+                )}
+              </span>
+              <span className="text-[10.5px] text-muted-foreground">{i === 0 ? 'starts' : cell.changed ? 'edited in place' : 'continues'}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          {run.length > 1
+            ? 'Each GO inside the run hands the running FX to the next cue with its phase kept; a ◆ is an edit in place at that GO.'
+            : keyed
+              ? 'A GO into the cue below hands it on only where that cue shares its run.'
+              : 'In no run: its GO starts it afresh. Join run above to continue it from the cue above.'}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {verb(`Break run at ${at}`, breakRun, 'Run broken')}
+          {verb('Join run above', joinRun, 'Run joined')}
+          <span className="flex-1" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onEdit()
+              onClose()
+            }}
+          >
+            Edit {at}&apos;s FX…
+          </Button>
+        </div>
+      </div>
+    </EditorSurface>
+  )
+}
+
 // ── + Column ──────────────────────────────────────────────────────────────────────────────────────
 
 /**
  * *+ Column* (D11): searches the Looks and palettes; a palette takes the desk selection's first
- * target unless another is picked, a Look its own fixtures. The column is this window's until one
- * of its cells is filled, after which it is derived like any other.
+ * target unless another is picked, and a Look none — it lands whole (absolute-looks plan D1). The
+ * column is this window's until one of its cells is filled, after which it is derived like any other.
  */
 export function TimelineAddColumn({
   projectId,
@@ -719,7 +884,7 @@ export function TimelineAddColumn({
   const [query, setQuery] = useState('')
   const [targetKey, setTargetKey] = useState<string | null>(null)
   const { data: looks } = useLookListQuery({ projectId }, { skip: !open })
-  const { data: palettes } = useTemplateListQuery({ projectId }, { skip: !open })
+  const { data: palettes } = usePaletteListQuery({ projectId }, { skip: !open })
   const targets = useMemo(() => new Map<string, CueTarget>(deskTargets.map((t) => [`${t.type}:${t.key}`, t])), [deskTargets])
   const q = query.trim().toLowerCase()
   const matches = (name: string) => q === '' || name.toLowerCase().includes(q)
@@ -746,7 +911,7 @@ export function TimelineAddColumn({
           value={targetKey ?? (deskTargets[0] ? `${deskTargets[0].type}:${deskTargets[0].key}` : '*')}
           onChange={(e) => setTargetKey(e.target.value)}
         >
-          <option value="*">Own fixtures / heads</option>
+          <option value="*">Own heads</option>
           {deskTargets.map((t) => (
             <option key={`${t.type}:${t.key}`} value={`${t.type}:${t.key}`}>{targetName(t)}, the selection</option>
           ))}
@@ -757,8 +922,8 @@ export function TimelineAddColumn({
               <ListItem
                 key={`look-${l.id}`}
                 label={l.name}
-                sub={picked == null ? 'own fixtures' : targetName(picked)}
-                onPick={() => add({ kind: 'look', sourceId: l.id, name: l.name, target: picked ?? null, families: l.families })}
+                sub="Look"
+                onPick={() => add({ kind: 'look', sourceId: l.id, name: l.name, target: null, families: l.families })}
               />
             ))}
           </ListGroup>

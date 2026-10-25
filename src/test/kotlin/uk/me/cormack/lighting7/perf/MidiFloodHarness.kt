@@ -18,14 +18,14 @@ import kotlin.test.Test
  * MIDI flood harness — drives the backend's surface fader hot path under realistic
  * sustained load.
  *
- * Phase B item 4 of the follow-up drain plan; companion to `EffectStormHarness`.
+ * Phase B item 4 of the follow-up drain plan; companion to `FxStormHarness`.
  * Referenced by `FU-MANUAL-SUSPEND-PATH`.
  *
  * The original target was `cueEdit`: 100 Hz of fader CC ran through
  * `CueEditSessionHandler.setPropertyForSession`, a Hikari borrow + Exposed transaction +
  * Layer 4 republish per event, which is what `FU-PERF-COALESCE-WRITES` was raised against
  * (and cancelled on — p99 2.1 ms). Sweep item D1 retired that family, so a bound fader now
- * lands in `ProgrammerWriter.writeProperty` instead. The harness is unchanged and still
+ * lands in `ProgrammerWriter.writeAttribute` instead. The harness is unchanged and still
  * useful: it is the only load generator for the surface write path, and that path is still
  * per-event work on the operator's hot loop.
  *
@@ -41,7 +41,7 @@ import kotlin.test.Test
  *
  * 1. Boot the backend (`./gradlew run`) in a separate process.
  * 2. In the React frontend, bind a fader on a learned control surface to a fixture's `dimmer`
- *    (or `uv` — anything `PropertyChannelResolver.toPropertyValue` accepts).
+ *    (or `uv` — anything `AttributeChannelResolver.toAttributeValue` accepts).
  * 3. Launch the harness — it registers a virtual port named `lighting7-flood` (override with
  *    `--port-name`). The backend's poll loop (~1 s interval) discovers it; you'll need to
  *    re-bind the fader to the harness device or re-route the binding through the virtual

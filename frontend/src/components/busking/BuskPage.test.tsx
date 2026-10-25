@@ -20,7 +20,7 @@ import type { BuskDragData } from './buskDnd'
 /** Rows of columns of banks, from a document — and the width shares reaching the grid. */
 
 let seq = 0
-function pad(name: string, kind: BuskPad['kind'] = 'TEMPLATE'): BuskPad {
+function pad(name: string, kind: BuskPad['kind'] = 'PALETTE'): BuskPad {
   const id = ++seq
   if (kind === 'CUE') {
     return {
@@ -36,9 +36,9 @@ function pad(name: string, kind: BuskPad['kind'] = 'TEMPLATE'): BuskPad {
     }
   }
   if (kind === 'LOOK') {
-    return { id, uuid: `p${id}`, kind, look: { id, name, rowCount: 2, effectCount: 1 } as never }
+    return { id, uuid: `p${id}`, kind, look: { id, name, rowCount: 2, fxCount: 1 } as never }
   }
-  return { id, uuid: `p${id}`, kind, template: { id, name, rows: [], isGeneric: true } as never }
+  return { id, uuid: `p${id}`, kind, palette: { id, name, rows: [], isGeneric: true } as never }
 }
 
 const page: BuskPage = {
@@ -204,7 +204,7 @@ describe('the drop slot', () => {
     const { container } = drawWith({
       type: 'busk-pad',
       at: { row: 1, column: 0, bank: 0, pad: 0 },
-      face: { kind: 'TEMPLATE', name: 'Disco' } as never,
+      face: { kind: 'PALETTE', name: 'Disco' } as never,
     })
     expect(container.querySelector('.border-dashed.border-primary')).toBeTruthy()
   })

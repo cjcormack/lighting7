@@ -299,7 +299,7 @@ function ChecklistView({
             {checklist.unattributed.length === 1 ? '' : 's'} sitting over the baseline (
             {checklist.unattributed
               .slice(0, 4)
-              .map((key) => `${key.targetKey}.${key.propertyName}`)
+              .map((key) => `${key.targetKey}.${key.attribute}`)
               .join(', ')}
             {checklist.unattributed.length > 4 ? '…' : ''}). Record these into a new cue instead.
           </p>
@@ -337,14 +337,14 @@ function ChecklistRow({
           {cue.keyCount} value{cue.keyCount === 1 ? '' : 's'} overridden ·{' '}
           {cue.sample
             .slice(0, 3)
-            .map((key) => `${key.targetKey}.${key.propertyName}`)
+            .map((key) => `${key.targetKey}.${key.attribute}`)
             .join(', ')}
           {cue.keyCount > 3 ? '…' : ''}
         </span>
-        {cue.viaEffectKeyCount > 0 && (
+        {cue.viaFxKeyCount > 0 && (
           <span className="block text-xs text-amber-600 dark:text-amber-500">
-            {cue.viaEffectKeyCount} of these are driven by an effect in this cue — a stored value
-            will be masked by that effect on the next GO.
+            {cue.viaFxKeyCount} of these are driven by an FX in this cue — a stored value
+            will be masked by that FX on the next GO.
           </span>
         )}
       </span>

@@ -3,7 +3,7 @@ import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
 import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
 import type { ProgrammerKeyState, ProvenanceSource } from '../../api/programmerWsApi'
-import type { CellPropertyKey, RowCell } from './useRowValues'
+import type { CellAttributeKey, RowCell } from './useRowValues'
 import type { ColumnKey } from './columns'
 
 /**
@@ -13,7 +13,7 @@ import type { ColumnKey } from './columns'
  * (all members of a group row, all heads of a collapsed multi-head fixture). A cell with
  * nothing above baseline reads `baseline`.
  */
-export type CellOwnershipSource = 'parked' | 'programmer' | 'effect' | 'cue' | 'baseline'
+export type CellOwnershipSource = 'parked' | 'programmer' | 'fx' | 'cue' | 'baseline'
 
 export interface CellOwnership {
   source: CellOwnershipSource
@@ -81,7 +81,7 @@ export type RowOwnership = Partial<Record<ColumnKey, CellOwnership>>
 const SOURCE_RANK: Record<CellOwnershipSource, number> = {
   parked: 4,
   programmer: 3,
-  effect: 2,
+  fx: 2,
   cue: 1,
   baseline: 0,
 }
@@ -89,7 +89,7 @@ const SOURCE_RANK: Record<CellOwnershipSource, number> = {
 const PROVENANCE_TO_SOURCE: Record<ProvenanceSource, CellOwnershipSource> = {
   PARKED: 'parked',
   PROGRAMMER: 'programmer',
-  EFFECT: 'effect',
+  FX: 'fx',
   CUE: 'cue',
 }
 
@@ -106,9 +106,9 @@ function sourceFor(state: ProgrammerKeyState): CellOwnershipSource {
 
 /** Aggregate one cell's covered properties into a single ownership verdict. */
 export function aggregateCellOwnership(
-  keys: readonly CellPropertyKey[],
+  keys: readonly CellAttributeKey[],
   blind: boolean,
-  lookup: (targetKey: string, propertyName: string) => ProgrammerKeyState,
+  lookup: (targetKey: string, attribute: string) => ProgrammerKeyState,
 ): CellOwnership | undefined {
   if (keys.length === 0) return undefined
 
@@ -143,7 +143,7 @@ export function aggregateCellOwnership(
   }
 
   keys.forEach((key, index) => {
-    const state = lookup(key.targetKey, key.propertyName)
+    const state = lookup(key.targetKey, key.attribute)
     const keySource = sourceFor(state)
     if (index === 0) source = keySource
     else if (keySource !== source) {
@@ -213,8 +213,8 @@ export function useRowOwnership(cells: readonly RowCell[]): RowOwnership {
 
 function computeRowOwnership(cells: readonly RowCell[]): RowOwnership {
   const blind = lightingApi.programmer.isBlind()
-  const lookup = (targetKey: string, propertyName: string) =>
-    lightingApi.programmer.getKeyState(targetKey, propertyName)
+  const lookup = (targetKey: string, attribute: string) =>
+    lightingApi.programmer.getKeyState(targetKey, attribute)
 
   const ownership: RowOwnership = {}
   for (const cell of cells) {

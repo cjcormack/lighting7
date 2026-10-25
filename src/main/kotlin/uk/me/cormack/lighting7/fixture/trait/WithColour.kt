@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.trait
 
-import uk.me.cormack.lighting7.fixture.property.Colour
+import uk.me.cormack.lighting7.fixture.attribute.Colour
 
 /**
  * Trait for targets that have RGB colour control.

@@ -91,7 +91,7 @@ export function StageConfetti({
       if (at == null) return
       // A cannon's tubes are its triggers, in the order the desk lists them — the Twin Shot's A
       // left, B right. A fixture this window has not loaded yet throws from the head's axis.
-      const triggers = triggersOf(fx.get(fired.fixture)?.properties)
+      const triggers = triggersOf(fx.get(fired.fixture)?.attributes)
       const tube = Math.max(0, triggers.findIndex((t) => t.name === fired.trigger))
       const dir = muzzleDirection(patch.baseYawDeg ?? 0, patch.basePitchDeg ?? 0, tube, Math.max(1, triggers.length))
       // A little out from the body along the tube, so the flakes leave the muzzle, not the base.

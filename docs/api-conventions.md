@@ -29,7 +29,7 @@ one, so this does not shadow `/projects/{id}` — but it does mean an entity who
 
 **Actions on a resource are a trailing verb segment on that resource**, POSTed:
 `/projects/{id}/clone`, `/cues/{cueId}/apply`, `/cue-stacks/{stackId}/standby`,
-`/palettes/{templateId}/toggle`. Not a top-level `/doThing` endpoint carrying the id in a body.
+`/palettes/{paletteId}/toggle`. Not a top-level `/doThing` endpoint carrying the id in a body.
 
 ## Vocabulary enumerations
 
@@ -38,18 +38,18 @@ authored, are kebab-case plural nouns naming the thing enumerated. One spelling 
 
 * `GET /api/rest/fixture-types` — every fixture type compiled into this build.
 * `GET /api/rest/control-surface-types` — every control-surface device profile.
-* `GET /api/rest/groups/distribution-strategies` — the phase-distribution strategies.
+* `GET /api/rest/spread-orders` — the spread Orders.
 * `GET /api/rest/lanterns` — the lantern library a generic dimmer is hung with (stage-view plan
   session 7; `docs/fixtures-engineering.md` §"Lanterns and focus").
 * `GET /api/rest/gels` — the gel library a unit's fitted media names its gels from (fixture optics
   plan session 3; `docs/fixtures-engineering.md` §"Fitted media").
-* `GET /api/rest/fx/library` — the effect vocabulary. The odd one out, and deliberately: it is not
+* `GET /api/rest/fx/library` — the FX vocabulary. The odd one out, and deliberately: it is not
   a list of *types* but of registrations, script-defined ones included, so it changes at runtime.
 
 They sit at the top level when they are independent of any project (`/fixture-types` describes the
-build, not the rig — most of what it returns is not patched anywhere), and nested under a parent
-when they only mean something inside it (`distribution-strategies` is a group concept). What they
-must **not** do is hide under the resource they merely resemble: `/fixture-types` is a sibling of
+build, not the rig — most of what it returns is not patched anywhere). `/spread-orders` sits there
+too, though an Order is a group concept: under `/groups` a literal segment would shadow a group of
+that name. What they must **not** do is hide under the resource they merely resemble: `/fixture-types` is a sibling of
 `/fixtures`, not `/fixtures/types`, because it does not describe the patched rig.
 
 ## Project scoping
@@ -109,7 +109,7 @@ still points at — answers 409 with a machine-readable `code` and a usage summa
 `?force=true` as the operator's "yes, I meant it". The forced path is allowed to leave dangling
 references on purpose; the resolver treats a dangling reference as absent.
 
-Current users: three deletes, `/projects/{id}/palettes/{templateId}`,
+Current users: three deletes, `/projects/{id}/palettes/{paletteId}`,
 `/projects/{id}/looks/{lookId}`, `/projects/{id}/speed-masters/{masterId}`, and
 `/projects/{id}/stage-elements/{elementId}` for both its `DELETE` and its `PUT` — a seating that seat
 views still sit in answers `STAGE_ELEMENT_IN_USE` naming them, whether the write would delete it or
@@ -161,6 +161,12 @@ collision handler renamed it further, or whether a derived field moved. The one 
 is an update whose "resource" is a secret rather than something with a representable shape — a
 password change, a stored PAT — those answer `204` because there is nothing safe to echo back.
 
+**A partial write refuses a field it does not take.** A write read as a raw object, so that absent
+and `null` differ (the cue `PATCH`, the Look `PUT`), reads only the keys it knows; it answers 400
+`Unknown field(s): …` for any other (`unknownFieldsProblem`), and decodes its FX list strictly. A
+field renamed on the wire is then refused by name rather than ignored with a 200 that changed
+nothing (terminology plan P5).
+
 The two-stack-verb family (`/show/activate`, `/show/advance`, `/show/go-to`, `/show/deactivate`)
 answers with the same DTO shape across all four, `activeStackId`/`activatedStackName` both `null`
 after a deactivate — a client watching "what's live now" reads one response shape regardless of
@@ -176,7 +182,7 @@ takes it as a query parameter (absent means "the stack's effective next").
 The exception is a route whose input is a body too shaped to live in a query string — a source
 script, or an unsaved draft with its own list of rows — because there is no clean way to spell
 that as `?rows=...` and no cache key worth building around it anyway. `fx/definitions/compile`,
-`fx/definitions/{id}/compile` and `templates/resolve` all stay `POST` for this reason:
+`fx/definitions/{id}/compile` and `palettes/resolve` all stay `POST` for this reason:
 `palettes/resolve` in particular answers "resolve *this* body", not "resolve the palette", so
 even though it has no side effect, there is no stable resource behind it for a `GET` to name.
 

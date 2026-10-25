@@ -3,10 +3,10 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Cue, CueLayerDetail } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 vi.mock('@/store/fixtureFx', () => ({
-  useEffectLibraryQuery: () => ({ data: [] }),
+  useFxLibraryQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({ data: LOOKS }),
@@ -14,8 +14,8 @@ vi.mock('@/store/looks', () => ({
 // Both libraries, because a layer row names either — and `describeStackSource` only paints a layer
 // as missing once *both* have landed, so a suite mocking one and not the other would show every
 // Look layer as broken.
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: TEMPLATES }),
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: TEMPLATES }),
 }))
 
 // The Values section fetches the cue's cook. Stubbed out: what this suite is about is the read
@@ -32,16 +32,15 @@ const LOOKS: LookSummary[] = [
     notes: null,
     families: ['COLOUR'],
     rowCount: 3,
-    effectCount: 0,
+    fxCount: 0,
     targetCount: 3,
-    hasDeferredEffects: false,
     preview: [],
     layerCount: 1,
     buskPageCount: 0,
   },
 ]
 
-const TEMPLATES: TemplateSummary[] = [
+const TEMPLATES: PaletteSummary[] = [
   {
     id: 4,
     uuid: 'ut4',
@@ -50,15 +49,15 @@ const TEMPLATES: TemplateSummary[] = [
     fadeDurationMs: null,
     family: 'COLOUR',
     isGeneric: true,
-    kind: 'effect',
+    kind: 'fx',
     requiredEmitters: [],
     rows: [],
-    effect: {
-      effectType: 'ColourPulse',
-      category: 'colour',
-      beatDivision: 0.5,
+    fx: {
+      fxType: 'ColourWave',
+      family: 'colour',
+      cycle: 0.5,
       blendMode: 'OVERRIDE',
-      distribution: 'LINEAR',
+      order: 'NORMAL',
       parameters: {},
       timingSource: 'BEAT',
     },
@@ -75,7 +74,7 @@ function layer(over: Partial<CueLayerDetail> = {}): CueLayerDetail {
     sortOrder: 0,
     enabled: true,
     targets: [{ type: 'fixture', key: 'hex-1' }],
-    propertyMask: null,
+    attributeMask: null,
     blendMode: 'OVERRIDE',
     amount: 1,
     stomp: false,
@@ -91,8 +90,8 @@ function cue(over: Partial<Cue> = {}): Cue {
     cueNumberAuto: false,
     sortOrder: 0,
     layers: [],
-    adHocEffects: [],
-    propertyAssignments: [],
+    adHocFx: [],
+    attributeAssignments: [],
     triggers: [],
     ...over,
   } as Cue
@@ -112,23 +111,28 @@ afterEach(() => {
  * "four independent read renderers" collapsed to one file.
  */
 describe('CueDetailContent', () => {
-  it('renders each layer in order, named and with its targets', () => {
+  it('renders each layer in order, named, with a palette’s targets and none on a Look’s', () => {
     render(
       <CueDetailContent
-        cue={cue({ layers: [layer(), layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Second' }, sortOrder: 1 })] })}
+        cue={cue({
+          layers: [
+            layer(),
+            layer({ source: { kind: 'PALETTE', id: 8, uuid: 'p8', name: 'Second' }, lookId: undefined, paletteId: 8, sortOrder: 1 }),
+          ],
+        })}
         projectId={1}
       />,
     )
     expect(screen.getByText('Warm Wash')).toBeInTheDocument()
     expect(screen.getByText('Second')).toBeInTheDocument()
-    // Both layers name the same fixture, so this is deliberately getAll — one target chip per row.
-    expect(screen.getAllByText('hex-1')).toHaveLength(2)
+    // A Look lands whole, so only the palette's row draws a target chip.
+    expect(screen.getAllByText('hex-1')).toHaveLength(1)
   })
 
   it('shows a masked layer’s families, so a colour-only layer explains itself', () => {
     // The migration sets a mask on every layer folded from a value-level reference, so this is the
     // common case. It reads the same here as in the editor because both draw `LayerRow`.
-    render(<CueDetailContent cue={cue({ layers: [layer({ propertyMask: 'COLOUR' })] })} projectId={1} />)
+    render(<CueDetailContent cue={cue({ layers: [layer({ attributeMask: 'COLOUR' })] })} projectId={1} />)
     expect(screen.getByText('[Colour]')).toBeInTheDocument()
   })
 
@@ -138,7 +142,7 @@ describe('CueDetailContent', () => {
     // the Run card and the Prompt Book rail, where there is no mutation behind them.
     render(
       <CueDetailContent
-        cue={cue({ layers: [layer({ propertyMask: 'COLOUR', blendMode: 'MAX', amount: 0.5 })] })}
+        cue={cue({ layers: [layer({ attributeMask: 'COLOUR', blendMode: 'MAX', amount: 0.5 })] })}
         projectId={1}
       />,
     )
@@ -153,9 +157,14 @@ describe('CueDetailContent', () => {
     expect(screen.getByText('MAX')).toBeInTheDocument()
   })
 
-  it('says a layer with no targets takes them from the look', () => {
-    render(<CueDetailContent cue={cue({ layers: [layer({ targets: [] })] })} projectId={1} />)
-    expect(screen.getByText(/look’s own targets/)).toBeInTheDocument()
+  it('says a palette layer with no targets lands on its own heads', () => {
+    render(
+      <CueDetailContent
+        cue={cue({ layers: [layer({ source: { kind: 'PALETTE', id: 8, uuid: 'p8', name: 'Throne' }, lookId: undefined, paletteId: 8, targets: [] })] })}
+        projectId={1}
+      />,
+    )
+    expect(screen.getByText('its own heads')).toBeInTheDocument()
   })
 
   it('draws no stage map, however many heads the cue touches (venue-visit S3)', () => {

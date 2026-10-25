@@ -13,17 +13,17 @@ import {
 } from 'lucide-react'
 import { formatFadeText } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
-import { useEffectLibraryQuery } from '@/store/fixtureFx'
+import { useFxLibraryQuery } from '@/store/fixtureFx'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery } from '@/store/templates'
-import { EffectSummary } from '@/components/fx/EffectSummary'
+import { usePaletteListQuery } from '@/store/palettes'
+import { FxSummary } from '@/components/fx/FxSummary'
 import { LayerRow, describeStackSource } from '@/components/looks/LookStack'
 import { CueValueGrid } from './CueValueGrid'
 import { TriggerSummary } from './TriggerSummary'
 import { TimingBadge } from './TimingBadge'
 import { CueSceneryReadout } from '@/components/scenery/SceneryReadout'
 import { CueEventsReadout } from '@/components/effects/CueEventsEditor'
-import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
+import { fromCueAdHocFx } from '@/components/fx/fxSummaryTypes'
 import type { Cue } from '@/api/cuesApi'
 
 // ── Section header (shared across all detail sections) ────────────────
@@ -73,7 +73,7 @@ export const CueDetailContent = memo(function CueDetailContent({
   enabled = true,
 }: CueDetailContentProps) {
   const layers = cue?.layers ?? []
-  const adHocEffects = cue?.adHocEffects ?? []
+  const adHocFx = cue?.adHocFx ?? []
   const triggers = cue?.triggers ?? []
   const scenery = cue?.scenery ?? []
   const trackedScenery = cue?.trackedScenery ?? []
@@ -166,8 +166,8 @@ export const CueDetailContent = memo(function CueDetailContent({
 
       {/* ── Ad-hoc Effects ── */}
       <div className="space-y-1.5">
-        <SectionHeader icon={AudioWaveform} label="Effects" count={adHocEffects.length} />
-        <CueEffectsReadout cue={cue} enabled={enabled} />
+        <SectionHeader icon={AudioWaveform} label="FX" count={adHocFx.length} />
+        <CueFxReadout cue={cue} enabled={enabled} />
       </div>
 
       {/* ── Script Hooks ── */}
@@ -193,11 +193,11 @@ function CueLayersReadout({ cue, projectId, enabled = true }: { cue: Cue; projec
   // The template library, for the same reason the Look library is here: a layer row says what it
   // applies, and since fx-templates a template's badge also says *which kind* it holds. One cached
   // list, already warm — the programmer and the busk view mount the same entry.
-  const { data: templates } = useTemplateListQuery({ projectId }, { skip: !enabled })
+  const { data: templates } = usePaletteListQuery({ projectId }, { skip: !enabled })
   // Built once rather than a `.find` per layer: a cue with a dozen layers over a library of a
   // hundred Looks was doing twelve hundred comparisons per render.
   const looksById = useMemo(() => new Map((looks ?? []).map((look) => [look.id, look])), [looks])
-  const templatesById = useMemo(
+  const palettesById = useMemo(
     () => new Map((templates ?? []).map((template) => [template.id, template])),
     [templates],
   )
@@ -212,7 +212,7 @@ function CueLayersReadout({ cue, projectId, enabled = true }: { cue: Cue; projec
           index={index}
           // `librariesLoaded` waits for *both*, as the Stack table does: with only one list
           // back, every layer applying the other would paint as missing for the length of a fetch.
-          info={describeStackSource(layer.source, looksById, templatesById, looks != null && templates != null)}
+          info={describeStackSource(layer.source, looksById, palettesById, looks != null && templates != null)}
           sortable={false}
           showTargets
           readOnly
@@ -223,16 +223,16 @@ function CueLayersReadout({ cue, projectId, enabled = true }: { cue: Cue; projec
 }
 
 /** A cue's own effects, read-only, each with its fire timing. */
-function CueEffectsReadout({ cue, enabled = true }: { cue: Cue; enabled?: boolean }) {
-  const { data: library } = useEffectLibraryQuery(undefined, { skip: !enabled })
-  const adHocEffects = cue.adHocEffects
-  if (adHocEffects.length === 0) return <p className="text-[11px] text-muted-foreground">None.</p>
+function CueFxReadout({ cue, enabled = true }: { cue: Cue; enabled?: boolean }) {
+  const { data: library } = useFxLibraryQuery(undefined, { skip: !enabled })
+  const adHocFx = cue.adHocFx
+  if (adHocFx.length === 0) return <p className="text-[11px] text-muted-foreground">None.</p>
   return (
     <>
-      {adHocEffects.map((effect, index) => (
-        <EffectSummary
+      {adHocFx.map((effect, index) => (
+        <FxSummary
           key={`effect-${index}`}
-          effect={fromCueAdHocEffect(effect, library)}
+          effect={fromCueAdHocFx(effect, library)}
           target={{ type: effect.targetType, key: effect.targetKey }}
           actions={
             <TimingBadge delayMs={effect.delayMs} intervalMs={effect.intervalMs} randomWindowMs={effect.randomWindowMs} />

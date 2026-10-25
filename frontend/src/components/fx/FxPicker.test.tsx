@@ -2,9 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
-import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
-import type { TemplateSummary } from '@/api/templatesApi'
-import { chan, makeActiveEffect, makeFixture, settingProp, sliderProp } from '@/test/fixtureFactories'
+import type { ActiveFx, FxLibraryEntry } from '@/store/fixtureFx'
+import type { PaletteSummary } from '@/api/palettesApi'
+import { chan, makeActiveFx, makeFixture, settingProp, sliderProp } from '@/test/fixtureFactories'
 
 const updateFx = vi.hoisted(() => vi.fn((_id: number, _req: unknown) => true))
 vi.mock('@/api/lightingApi', async () => {
@@ -15,24 +15,24 @@ vi.mock('@/api/lightingApi', async () => {
 })
 
 const wire = vi.hoisted(() => ({
-  library: [] as EffectLibraryEntry[],
-  active: [] as ActiveEffect[],
-  templates: [] as TemplateSummary[],
+  library: [] as FxLibraryEntry[],
+  active: [] as ActiveFx[],
+  templates: [] as PaletteSummary[],
 }))
 const addFixtureFx = vi.hoisted(() =>
-  vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ effectId: 77 }) })),
+  vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ fxId: 77 }) })),
 )
 const removeFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve() })))
-const applyGroupFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ effectId: 88 }) })))
+const applyGroupFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ fxId: 88 }) })))
 /** The bare effect press: one Local effect over the targets, which took them off effect 5 (stopped). */
-const pressEffect = vi.hoisted(() =>
-  vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ effectId: 99, stopped: [5], narrowed: [] }) })),
+const pressFx = vi.hoisted(() =>
+  vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ fxId: 99, stopped: [5], narrowed: [] }) })),
 )
 vi.mock('@/store/fixtureFx', () => ({
-  useEffectLibraryQuery: () => ({ data: wire.library }),
-  useActiveEffectsQuery: () => ({ data: wire.active }),
+  useFxLibraryQuery: () => ({ data: wire.library }),
+  useActiveFxQuery: () => ({ data: wire.active }),
   useAddFixtureFxMutation: () => [addFixtureFx],
-  usePressProgrammerEffectMutation: () => [pressEffect],
+  usePressProgrammerFxMutation: () => [pressFx],
   useRemoveFxMutation: () => [removeFx],
 }))
 vi.mock('@/store/groups', () => ({
@@ -41,36 +41,36 @@ vi.mock('@/store/groups', () => ({
 }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
 // The palette library Palette Steps is offered from (effects plan §4.4).
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: wire.templates }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: wire.templates }) }))
 // Venue-visit plan D16: a master is tagged for position, none for dimmer.
 vi.mock('@/store/speedMasters', () => ({
-  useSpeedMasterForCategory: () => (category: string | null | undefined) =>
+  useSpeedMasterForFamily: () => (category: string | null | undefined) =>
     category === 'position' ? 'm-position' : category === 'beam' ? 'm-beam' : null,
 }))
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: [], fixtureByKey: new Map() }) }))
 
-import { FxPicker, pressTargetsOf, type AuditionedEffect, type DraftEffectPick, type FxTarget } from './FxPicker'
+import { FxPicker, pressTargetsOf, type AuditionedFx, type DraftFxPick, type FxTarget } from './FxPicker'
 
-const position = (name: string): EffectLibraryEntry => ({
+const position = (name: string): FxLibraryEntry => ({
   name,
-  category: 'position',
+  family: 'position',
   outputType: 'POSITION',
-  effectMode: 'STANDARD',
+  fxMode: 'STANDARD',
   timingSource: 'BEAT',
-  compatibleProperties: ['position'],
+  compatibleAttributes: ['position'],
   parameters: [
-    { name: 'panCenter', type: 'ubyte', defaultValue: '128', description: '' },
-    { name: 'tiltCenter', type: 'ubyte', defaultValue: '128', description: '' },
+    { name: 'panCentre', type: 'ubyte', defaultValue: '128', description: '' },
+    { name: 'tiltCentre', type: 'ubyte', defaultValue: '128', description: '' },
     { name: 'panRadius', type: 'ubyte', defaultValue: '64', description: '' },
     { name: 'tiltRadius', type: 'ubyte', defaultValue: name === 'Figure 8' ? '32' : '64', description: '' },
   ],
 })
-const PULSE: EffectLibraryEntry = {
+const PULSE: FxLibraryEntry = {
   name: 'Pulse',
-  category: 'dimmer',
+  family: 'intensity',
   outputType: 'SLIDER',
-  effectMode: 'STANDARD',
-  compatibleProperties: ['dimmer', 'uv'],
+  fxMode: 'STANDARD',
+  compatibleAttributes: ['dimmer', 'uv'],
   parameters: [
     { name: 'min', type: 'ubyte', defaultValue: '0', description: '' },
     { name: 'max', type: 'ubyte', defaultValue: '255', description: '' },
@@ -85,7 +85,7 @@ const TARGET: FxTarget = { type: 'fixture', fixture: SPOT }
 
 /** The tray's own session state, so a second tap sees the first's effect. */
 function Harness({ initialFamily = 'POSITION' as const }: { initialFamily?: 'POSITION' | 'INTENSITY' }) {
-  const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+  const [current, setCurrent] = useState<AuditionedFx | null>(null)
   return <FxPicker target={TARGET} initialFamily={initialFamily} current={current} onCurrent={setCurrent} onEdit={() => {}} />
 }
 
@@ -95,16 +95,16 @@ beforeEach(() => {
   wire.templates = []
   updateFx.mockClear()
   addFixtureFx.mockClear()
-  pressEffect.mockClear()
+  pressFx.mockClear()
   removeFx.mockClear()
 })
 afterEach(cleanup)
 
 describe('FxPicker', () => {
   it('in draft, a tap hands the host the effect with its starting spec and starts nothing; a second tap picks again', () => {
-    const picks: DraftEffectPick[] = []
+    const picks: DraftFxPick[] = []
     function Draft() {
-      const [current, setCurrent] = useState<{ effectType: string; propertyName: string } | null>(null)
+      const [current, setCurrent] = useState<{ fxType: string; attribute: string } | null>(null)
       return (
         <FxPicker
           target={TARGET}
@@ -114,7 +114,7 @@ describe('FxPicker', () => {
             current,
             onPick: (pick) => {
               picks.push(pick)
-              setCurrent({ effectType: pick.effectType, propertyName: pick.propertyName })
+              setCurrent({ fxType: pick.fxType, attribute: pick.attribute })
             },
           }}
         />
@@ -123,16 +123,16 @@ describe('FxPicker', () => {
     render(<Draft />)
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
     expect(picks[0]).toMatchObject({
-      effectType: 'Circle',
-      propertyName: 'position',
+      fxType: 'Circle',
+      attribute: 'position',
       blendMode: 'ADDITIVE',
-      beatDivision: 4,
+      cycle: 4,
       speedMasterUuid: 'm-position',
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
     })
     expect(screen.getByRole('button', { name: 'Circle' })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Figure 8' }))
-    expect(picks.map((p) => p.effectType)).toEqual(['Circle', 'Figure 8'])
+    expect(picks.map((p) => p.fxType)).toEqual(['Circle', 'Figure 8'])
     expect(addFixtureFx).not.toHaveBeenCalled()
     expect(updateFx).not.toHaveBeenCalled()
   })
@@ -142,14 +142,14 @@ describe('FxPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
-      effectType: 'Circle',
+      fxType: 'Circle',
       fixtureKey: 'spot-3',
-      propertyName: 'position',
+      attribute: 'position',
       programmerOwned: true,
       blendMode: 'ADDITIVE',
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
-      // D16: one bar, on the master tagged for its family's usage.
-      beatDivision: 4,
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
+      // D16: one bar, on the master tagged with its family.
+      cycle: 4,
       speedMasterUuid: 'm-position',
     })
     expect(updateFx).not.toHaveBeenCalled()
@@ -159,7 +159,7 @@ describe('FxPicker', () => {
     render(<Harness initialFamily="INTENSITY" />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
-    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ effectType: 'Pulse', beatDivision: 4 })
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Pulse', cycle: 4 })
     expect(addFixtureFx.mock.calls[0][0]).not.toHaveProperty('speedMasterUuid')
   })
 
@@ -168,7 +168,7 @@ describe('FxPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     // The desk now runs it.
-    wire.active = [makeActiveEffect({ id: 77, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Circle', targetKey: 'spot-3', attribute: 'position' })]
     rerender(<Harness />)
     expect(screen.getByRole('button', { name: 'Circle' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: 'Edit Circle' })).toBeTruthy()
@@ -179,9 +179,9 @@ describe('FxPicker', () => {
     expect(updateFx).toHaveBeenCalledTimes(1)
     expect(updateFx.mock.calls[0][0]).toBe(77)
     expect(updateFx.mock.calls[0][1]).toEqual({
-      effectType: 'Figure 8',
+      fxType: 'Figure 8',
       blendMode: 'ADDITIVE',
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '32' },
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '32' },
     })
   })
 
@@ -189,31 +189,45 @@ describe('FxPicker', () => {
     const { rerender } = render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
-    wire.active = [makeActiveEffect({ id: 77, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Circle', targetKey: 'spot-3', attribute: 'position' })]
     rerender(<Harness />)
 
     fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(2))
     expect(removeFx).toHaveBeenCalledWith({ id: 77, fixtureKey: 'spot-3' })
-    expect(addFixtureFx.mock.calls[1][0]).toMatchObject({ effectType: 'Pulse', propertyName: 'dimmer', programmerOwned: true, blendMode: 'OVERRIDE' })
+    expect(addFixtureFx.mock.calls[1][0]).toMatchObject({ fxType: 'Pulse', attribute: 'dimmer', programmerOwned: true, blendMode: 'OVERRIDE' })
     expect(updateFx).not.toHaveBeenCalled()
   })
 
   it('lands a swap across timing sources on one cycle, and keeps the speed within one', async () => {
-    const flicker: EffectLibraryEntry = { ...PULSE, name: 'CandleFlicker', timingSource: 'WALL_CLOCK' }
-    const sine: EffectLibraryEntry = { ...PULSE, name: 'SineWave' }
+    const flicker: FxLibraryEntry = { ...PULSE, name: 'CandleFlicker', timingSource: 'WALL_CLOCK' }
+    const sine: FxLibraryEntry = { ...PULSE, name: 'SineWave' }
     wire.library = [PULSE, flicker, sine]
     const { rerender } = render(<Harness initialFamily="INTENSITY" />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
-    wire.active = [makeActiveEffect({ id: 77, effectType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', beatDivision: 16, timingSource: 'BEAT' })]
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Pulse', targetKey: 'spot-3', attribute: 'dimmer', cycle: 16, timingSource: 'BEAT' })]
     rerender(<Harness initialFamily="INTENSITY" />)
 
     fireEvent.click(screen.getByRole('button', { name: 'SineWave' }))
-    expect(updateFx.mock.calls[0][1]).not.toHaveProperty('beatDivision')
+    expect(updateFx.mock.calls[0][1]).not.toHaveProperty('cycle')
     fireEvent.click(screen.getByRole('button', { name: 'CandleFlicker' }))
-    expect(updateFx.mock.calls[1][1]).toMatchObject({ effectType: 'CandleFlicker', beatDivision: 4 })
+    expect(updateFx.mock.calls[1][1]).toMatchObject({ fxType: 'CandleFlicker', cycle: 4 })
+  })
+
+  it('starts an FX that bounces at its own half bar, Bounce, and a swap at the old default takes the new one', async () => {
+    const fade: FxLibraryEntry = { ...PULSE, name: 'Fade', defaultCycle: 2, defaultDirection: 'BOUNCE' }
+    wire.library = [PULSE, fade]
+    const { rerender } = render(<Harness initialFamily="INTENSITY" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Fade' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Fade', cycle: 2, direction: 'BOUNCE' })
+
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Fade', targetKey: 'spot-3', attribute: 'dimmer', cycle: 2, direction: 'BOUNCE' })]
+    rerender(<Harness initialFamily="INTENSITY" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    expect(updateFx.mock.calls[0][1]).toMatchObject({ fxType: 'Pulse', cycle: 4, direction: 'FORWARD' })
   })
 
   it('swaps a second tap made before the effect list has caught up, rather than starting a second effect', async () => {
@@ -236,13 +250,13 @@ describe('FxPicker', () => {
 })
 
 describe('the Beam family (effects plan §4.4)', () => {
-  const beam = (name: string, property: string): EffectLibraryEntry => ({
+  const beam = (name: string, attribute: string): FxLibraryEntry => ({
     name,
-    category: 'beam',
+    family: 'beam',
     outputType: 'SLIDER',
-    effectMode: 'STANDARD',
+    fxMode: 'STANDARD',
     timingSource: 'BEAT',
-    compatibleProperties: [property],
+    compatibleAttributes: [attribute],
     parameters: [{ name: 'min', type: 'ubyte', defaultValue: '64', description: '' }],
   })
   const PROFILE = makeFixture('profile-1', [
@@ -252,7 +266,7 @@ describe('the Beam family (effects plan §4.4)', () => {
   ])
 
   function BeamHarness() {
-    const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
     return (
       <FxPicker
         target={{ type: 'fixture', fixture: PROFILE }}
@@ -267,7 +281,7 @@ describe('the Beam family (effects plan §4.4)', () => {
   beforeEach(() => {
     wire.library = [
       PULSE,
-      beam('Zoom Breathe', 'zoom'),
+      beam('Zoom Wave', 'zoom'),
       beam('Iris Pulse', 'iris'),
       beam('Frost Pulse', 'frost'),
       beam('Focus Pull', 'focus'),
@@ -276,22 +290,22 @@ describe('the Beam family (effects plan §4.4)', () => {
 
   it('offers each beam effect only on a head with its property', () => {
     render(<BeamHarness />)
-    const list = screen.getByRole('list', { name: 'Beam effects' })
+    const list = screen.getByRole('list', { name: 'Beam FX' })
     expect(Array.from(list.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual([
-      'Zoom Breathe',
+      'Zoom Wave',
       'Iris Pulse',
     ])
   })
 
   it('opens a Beam row on Beam only where a beam effect drives its property', () => {
-    const withPrism = makeFixture('profile-2', [...PROFILE.properties!, sliderProp('prism', 'prism', chan(4))])
+    const withPrism = makeFixture('profile-2', [...PROFILE.attributes!, sliderProp('prism', 'prism', chan(4))])
     const props = { current: null, onCurrent: () => {}, onEdit: () => {}, initialFamily: 'BEAM' as const }
     const target = { type: 'fixture' as const, fixture: withPrism }
-    const { unmount } = render(<FxPicker target={target} preferredProperty="iris" {...props} />)
+    const { unmount } = render(<FxPicker target={target} preferredAttribute="iris" {...props} />)
     expect(screen.getByRole('radio', { name: 'Beam' }).getAttribute('aria-checked')).toBe('true')
     unmount()
-    wire.library = [...wire.library, { ...PULSE, name: 'Prism Sweep', category: 'controls', compatibleProperties: ['slider'] }]
-    render(<FxPicker target={target} preferredProperty="prism" {...props} />)
+    wire.library = [...wire.library, { ...PULSE, name: 'Prism Sweep', family: 'controls', compatibleAttributes: ['slider'] }]
+    render(<FxPicker target={target} preferredAttribute="prism" {...props} />)
     expect(screen.getByRole('radio', { name: 'Controls' }).getAttribute('aria-checked')).toBe('true')
   })
 
@@ -300,38 +314,39 @@ describe('the Beam family (effects plan §4.4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Iris Pulse' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
-      effectType: 'Iris Pulse',
+      fxType: 'Iris Pulse',
       fixtureKey: 'profile-1',
-      propertyName: 'iris',
-      beatDivision: 4,
+      attribute: 'iris',
+      cycle: 4,
       speedMasterUuid: 'm-beam',
     })
   })
 })
 
 describe('the step effects (effects plan session 7, §4.4)', () => {
-  const PALETTE_STEPS: EffectLibraryEntry = {
+  const PALETTE_STEPS: FxLibraryEntry = {
     name: 'PaletteSteps',
-    category: 'palette',
+    family: 'steps',
     outputType: 'STEPS',
-    effectMode: 'STANDARD',
+    fxMode: 'STANDARD',
     timingSource: 'BEAT',
-    compatibleProperties: ['dimmer', 'rgbColour', 'position', 'zoom', 'focus', 'iris', 'frost'],
+    compatibleAttributes: ['dimmer', 'rgbColour', 'position', 'zoom', 'focus', 'iris', 'frost'],
     parameters: [
       { name: 'palettes', type: 'paletteList', defaultValue: '', description: '' },
       { name: 'fadeRatio', type: 'double', defaultValue: '0.5', description: '' },
     ],
   }
-  const SLOT_STEPS: EffectLibraryEntry = {
+  const SLOT_STEPS: FxLibraryEntry = {
     name: 'SlotSteps',
-    category: 'beam',
+    // The Steps family's, as the desk files it (terminology plan D23); it is still offered in Beam.
+    family: 'steps',
     outputType: 'STEPS',
-    effectMode: 'STANDARD',
+    fxMode: 'STANDARD',
     timingSource: 'BEAT',
-    compatibleProperties: ['setting'],
+    compatibleAttributes: ['setting'],
     parameters: [{ name: 'slots', type: 'slotList', defaultValue: '', description: '' }],
   }
-  const palette = (name: string, family: TemplateSummary['family'], propertyName: string, value: string, over: Partial<TemplateSummary> = {}) =>
+  const palette = (name: string, family: PaletteSummary['family'], attribute: string, value: string, over: Partial<PaletteSummary> = {}) =>
     ({
       id: name.length,
       uuid: `uuid-${name}`,
@@ -342,10 +357,10 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
       isGeneric: true,
       kind: 'value',
       requiredEmitters: [],
-      rows: [{ targetType: 'deferred', targetKey: '', propertyName, value }],
-      effect: null,
+      rows: [{ targetType: 'deferred', targetKey: '', attribute, value }],
+      fx: null,
       ...over,
-    }) as unknown as TemplateSummary
+    }) as unknown as PaletteSummary
   const MOVER = makeFixture('mover-1', [
     sliderProp('dimmer', 'dimmer', chan(1)),
     { type: 'position', name: 'position', displayName: 'Position', category: 'pan', panChannel: chan(2), tiltChannel: chan(3), panMin: 0, panMax: 255, tiltMin: 0, tiltMax: 255 } as never,
@@ -374,19 +389,19 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
 
   function StepHarness({
     initialFamily,
-    preferredProperty,
+    preferredAttribute,
     fixture = MOVER,
   }: {
     initialFamily: 'POSITION' | 'BEAM' | 'INTENSITY'
-    preferredProperty?: string
+    preferredAttribute?: string
     fixture?: typeof MOVER
   }) {
-    const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
     return (
       <FxPicker
         target={{ type: 'fixture', fixture }}
         initialFamily={initialFamily}
-        preferredProperty={preferredProperty}
+        preferredAttribute={preferredAttribute}
         current={current}
         onCurrent={setCurrent}
         onEdit={() => {}}
@@ -402,19 +417,19 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
       palette('Half', 'INTENSITY', 'dimmer', 'pct:50'),
       // Neither offered: a per-fixture position and an effect palette are no steps.
       palette('Aimed', 'POSITION', 'position', 'pos:10,10', { isGeneric: false }),
-      palette('Orbit', 'POSITION', 'position', 'pos:0,0', { kind: 'effect' }),
+      palette('Orbit', 'POSITION', 'position', 'pos:0,0', { kind: 'fx' }),
     ]
   })
 
   it('offers Palette Steps in a family with two generic value palettes, and not in one with fewer', () => {
     render(<StepHarness initialFamily="POSITION" />)
-    const list = screen.getByRole('list', { name: 'Position effects' })
+    const list = screen.getByRole('list', { name: 'Position FX' })
     expect(Array.from(list.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual([
       'Circle',
       'PaletteSteps',
     ])
     fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
-    const intensity = screen.getByRole('list', { name: 'Intensity effects' })
+    const intensity = screen.getByRole('list', { name: 'Intensity FX' })
     expect(intensity.querySelector('[data-effect-pick="PaletteSteps"]')).toBeNull()
   })
 
@@ -423,22 +438,22 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'PaletteSteps' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
-      effectType: 'PaletteSteps',
-      propertyName: 'position',
+      fxType: 'PaletteSteps',
+      attribute: 'position',
       blendMode: 'OVERRIDE',
       speedMasterUuid: 'm-position',
-      parameters: { palettes: 'tmpl:uuid-Centre,tmpl:uuid-Downstage', fadeRatio: '0.5' },
+      parameters: { palettes: 'pal:uuid-Centre,pal:uuid-Downstage', fadeRatio: '0.5' },
     })
   })
 
   it('offers Slot Steps in Beam on a gobo row, and starts it on that setting’s first slots past open', async () => {
-    render(<StepHarness initialFamily="BEAM" preferredProperty="gobo" />)
+    render(<StepHarness initialFamily="BEAM" preferredAttribute="gobo" />)
     expect(screen.getByRole('radio', { name: 'Beam' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'SlotSteps' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
-      effectType: 'SlotSteps',
-      propertyName: 'gobo',
+      fxType: 'SlotSteps',
+      attribute: 'gobo',
       speedMasterUuid: 'm-beam',
       parameters: { slots: 'GOBO_1,GOBO_2' },
     })
@@ -448,13 +463,13 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
     render(<StepHarness initialFamily="BEAM" fixture={WHEEL_FIRST} />)
     fireEvent.click(screen.getByRole('button', { name: 'SlotSteps' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
-    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ effectType: 'SlotSteps', propertyName: 'gobo', parameters: { slots: 'GOBO_1,GOBO_2' } })
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'SlotSteps', attribute: 'gobo', parameters: { slots: 'GOBO_1,GOBO_2' } })
   })
 })
 
 /**
  * The bare effect press (apply-model plan §3.4, session 6): *+ Effect*, ⌘K *Apply FX* and a band's
- * *+ Effect …* start one Local effect over the selection through `POST /programmer/effects`, with the
+ * *+ Effect …* start one Local effect over the selection through `POST /programmer/fx`, with the
  * door's mask — the desk then takes those heads off the family's other Local effects, which is why
  * the answer names effect 5 stopped and the client does nothing about it.
  */
@@ -468,7 +483,7 @@ describe('FxPicker on the bare effect press', () => {
   }
 
   function Pressing({ target = FOUR }: { target?: FxTarget }) {
-    const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
     return (
       <FxPicker
         target={target}
@@ -484,31 +499,31 @@ describe('FxPicker on the bare effect press', () => {
   it('starts one effect over a four-head selection through the press, with the mask, and never /fx/add', async () => {
     render(<Pressing />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
-    await waitFor(() => expect(pressEffect).toHaveBeenCalledTimes(1))
-    expect(pressEffect.mock.calls[0][0]).toMatchObject({
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    expect(pressFx.mock.calls[0][0]).toMatchObject({
       projectId: 3,
-      effectType: 'Pulse',
-      propertyName: 'dimmer',
+      fxType: 'Pulse',
+      attribute: 'dimmer',
       targets: HEX.map((f) => ({ type: 'fixture', key: f.key })),
       families: ['INTENSITY'],
-      beatDivision: 4,
+      cycle: 4,
     })
-    expect(pressEffect.mock.calls[0][0]).not.toHaveProperty('programmerOwned')
+    expect(pressFx.mock.calls[0][0]).not.toHaveProperty('programmerOwned')
     expect(addFixtureFx).not.toHaveBeenCalled()
     expect(applyGroupFx).not.toHaveBeenCalled()
   })
 
   it('auditions the pressed effect: a second tap swaps it in place rather than pressing again', async () => {
     const { rerender } = render(<Pressing />)
-    wire.library = [PULSE, { ...PULSE, name: 'Breathe' }]
+    wire.library = [PULSE, { ...PULSE, name: 'Ramp' }]
     rerender(<Pressing />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
-    await waitFor(() => expect(pressEffect).toHaveBeenCalledTimes(1))
-    wire.active = [makeActiveEffect({ id: 99, effectType: 'Pulse', targetKey: '[]', propertyName: 'dimmer' })]
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    wire.active = [makeActiveFx({ id: 99, fxType: 'Pulse', targetKey: '[]', attribute: 'dimmer' })]
     rerender(<Pressing />)
-    fireEvent.click(screen.getByRole('button', { name: 'Breathe' }))
-    expect(pressEffect).toHaveBeenCalledTimes(1)
-    expect(updateFx).toHaveBeenCalledWith(99, expect.objectContaining({ effectType: 'Breathe' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ramp' }))
+    expect(pressFx).toHaveBeenCalledTimes(1)
+    expect(updateFx).toHaveBeenCalledWith(99, expect.objectContaining({ fxType: 'Ramp' }))
   })
 
   it('names a group as itself, so its effect is one group effect with its distribution', () => {
@@ -518,7 +533,7 @@ describe('FxPicker on the bare effect press', () => {
 
   it('sends no mask where the door carries none', async () => {
     function Unmasked() {
-      const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+      const [current, setCurrent] = useState<AuditionedFx | null>(null)
       return (
         <FxPicker
           target={FOUR}
@@ -532,7 +547,51 @@ describe('FxPicker on the bare effect press', () => {
     }
     render(<Unmasked />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
-    await waitFor(() => expect(pressEffect).toHaveBeenCalledTimes(1))
-    expect(pressEffect.mock.calls[0][0]).not.toHaveProperty('families')
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    expect(pressFx.mock.calls[0][0]).not.toHaveProperty('families')
+  })
+
+  /** The FX editor's *Stack* (FX editor plan D6): nothing replaced, the family's stacking blend the desk's. */
+  function Stacking({ stack }: { stack: boolean }) {
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
+    return (
+      <FxPicker
+        target={FOUR}
+        initialFamily="INTENSITY"
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+        press={{ projectId: 3, families: null, stack }}
+      />
+    )
+  }
+
+  it('sends stack: true and no blend under Stack, so the desk starts it on the family’s stacking blend', async () => {
+    render(<Stacking stack />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    const sent = JSON.parse(JSON.stringify(pressFx.mock.calls[0][0]))
+    expect(sent).toMatchObject({ stack: true, fxType: 'Pulse' })
+    expect(sent).not.toHaveProperty('blendMode')
+  })
+
+  it('sends no stack under Replace, with the FX’s own blend', async () => {
+    render(<Stacking stack={false} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    expect(pressFx.mock.calls[0][0]).not.toHaveProperty('stack')
+    expect(pressFx.mock.calls[0][0]).toHaveProperty('blendMode')
+  })
+
+  it('keeps a stacked FX’s blend through a swap', async () => {
+    const { rerender } = render(<Stacking stack />)
+    wire.library = [PULSE, { ...PULSE, name: 'Ramp' }]
+    rerender(<Stacking stack />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    wire.active = [makeActiveFx({ id: 99, fxType: 'Pulse', targetKey: '[]', attribute: 'dimmer', blendMode: 'MULTIPLY' })]
+    rerender(<Stacking stack />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ramp' }))
+    expect(updateFx).toHaveBeenCalledWith(99, expect.not.objectContaining({ blendMode: expect.anything() }))
   })
 })

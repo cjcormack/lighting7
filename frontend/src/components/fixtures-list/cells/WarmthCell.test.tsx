@@ -14,10 +14,10 @@ import { resetEditorSurfaceMedia } from '../../editor/EditorSurface'
  */
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() } }))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: [] }),
-  useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
-  useToggleTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: [] }),
+  useApplyPaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+  useTogglePaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
 }))
 vi.mock('@/store/selection', () => ({ usePressFamilies: (local: unknown) => local }))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: [] }) }))
@@ -32,16 +32,16 @@ const MIX = { warmKelvin: 3000, coldKelvin: 6500 }
 const cell1 = whiteMixProp(chan(5), chan(6))
 const cell2 = whiteMixProp(chan(7), chan(8))
 const WARM_COLD: NonNullable<CellResolution>[] = [
-  { kind: 'white-mix', property: cell1 },
-  { kind: 'white-mix', property: cell2 },
+  { kind: 'white-mix', attribute: cell1 },
+  { kind: 'white-mix', attribute: cell2 },
 ]
 const blinderBatch: CellBatch = {
   count: 2,
   skipped: 0,
   resolutions: WARM_COLD,
   targets: [
-    { key: 'blinder.cell-1', properties: [cell1], fixtureKey: 'blinder', cellIndex: 0 },
-    { key: 'blinder.cell-2', properties: [cell2], fixtureKey: 'blinder', cellIndex: 1 },
+    { key: 'blinder.cell-1', attributes: [cell1], fixtureKey: 'blinder', cellIndex: 0 },
+    { key: 'blinder.cell-2', attributes: [cell2], fixtureKey: 'blinder', cellIndex: 1 },
   ],
 }
 
@@ -132,7 +132,7 @@ describe('the Colour column over warm/cold white pairs', () => {
       />,
     )
     expect(await screen.findByRole('button', { name: /save as palette/i })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: /spread/i }))
+    fireEvent.click(screen.getByRole('button', { name: /fan/i }))
     expect(onSpread).toHaveBeenCalledWith({ r: colour[0], g: colour[1], b: colour[2] })
   })
 
@@ -143,7 +143,7 @@ describe('the Colour column over warm/cold white pairs', () => {
       <ColourCell
         value={{ kind: 'colour', isUniform: true, r: colour[0], g: colour[1], b: colour[2], combinedCss: 'x' }}
         resolutions={[WARM_COLD[0]]}
-        batch={{ ...blinderBatch, resolutions: [WARM_COLD[0], { kind: 'colour', property: rgb }] }}
+        batch={{ ...blinderBatch, resolutions: [WARM_COLD[0], { kind: 'colour', attribute: rgb }] }}
         onCommit={() => {}}
         onBeginEdit={() => {}}
       />,
@@ -156,7 +156,7 @@ describe('the Colour column over warm/cold white pairs', () => {
     const mixed: CellBatch = {
       ...blinderBatch,
       count: 3,
-      resolutions: [...WARM_COLD, { kind: 'colour', property: rgb }],
+      resolutions: [...WARM_COLD, { kind: 'colour', attribute: rgb }],
     }
     draw([200, 100, 50], mixed)
     await screen.findByRole('spinbutton', { name: 'R' })

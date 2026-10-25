@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { TemplateSummary } from '@/api/templatesApi'
-import { lookOutsideMaskReason, outsideMaskReason, paletteFits } from './paletteOffer'
-import { recentFirst } from './templateRecents'
+import type { PaletteSummary } from '@/api/palettesApi'
+import { outsideMaskReason, paletteFits } from './paletteOffer'
+import { recentFirst } from './paletteRecents'
 
 /**
  * The offer the strip, the popup bands and the picker share — so the three offer one set — and the
  * band's order.
  */
-function palette(over: Partial<TemplateSummary>): TemplateSummary {
+function palette(over: Partial<PaletteSummary>): PaletteSummary {
   return {
     id: 1,
     uuid: 'u1',
@@ -18,8 +18,8 @@ function palette(over: Partial<TemplateSummary>): TemplateSummary {
     isGeneric: true,
     kind: 'value',
     requiredEmitters: [],
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff0000' }],
-    effect: null,
+    rows: [{ targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#ff0000' }],
+    fx: null,
     layerCount: 0,
     buskPageCount: 0,
     ...over,
@@ -37,34 +37,34 @@ describe('paletteFits', () => {
   })
 
   it('narrows a Beam offer to the palettes with a row for the property', () => {
-    const wide = palette({ family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] })
-    expect(paletteFits(wide, { families: ['BEAM'], emitters: [], property: 'zoom' })).toBe(true)
-    expect(paletteFits(wide, { families: ['BEAM'], emitters: [], property: 'iris' })).toBe(false)
+    const wide = palette({ family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'zoom', value: 'pct:100' }] })
+    expect(paletteFits(wide, { families: ['BEAM'], emitters: [], attribute: 'zoom' })).toBe(true)
+    expect(paletteFits(wide, { families: ['BEAM'], emitters: [], attribute: 'iris' })).toBe(false)
     // A colour cell's property says nothing about which colour palettes fit: only Beam is narrowed.
-    expect(paletteFits(palette({}), { families: ['COLOUR'], emitters: [], property: 'white' })).toBe(true)
+    expect(paletteFits(palette({}), { families: ['COLOUR'], emitters: [], attribute: 'white' })).toBe(true)
   })
 
   it('narrows a Beam cell’s effect palettes to the property the effect drives', () => {
-    const effect = (effectType: string, extra: Partial<NonNullable<TemplateSummary['effect']>> = {}) =>
+    const effect = (fxType: string, extra: Partial<NonNullable<PaletteSummary['fx']>> = {}) =>
       palette({
         family: 'BEAM',
-        kind: 'effect',
+        kind: 'fx',
         rows: [],
-        effect: { effectType, category: 'beam', beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'LINEAR', parameters: {}, ...extra },
+        fx: { fxType, family: 'beam', cycle: 4, blendMode: 'OVERRIDE', order: 'NORMAL', parameters: {}, ...extra },
       })
-    const zoomFit = { families: ['BEAM' as const], emitters: null, property: 'zoom' }
-    const library = [{ name: 'ZoomBreathe', compatibleProperties: ['zoom'] }, { name: 'IrisPulse', compatibleProperties: ['iris'] }]
+    const zoomFit = { families: ['BEAM' as const], emitters: null, attribute: 'zoom' }
+    const library = [{ name: 'ZoomWave', compatibleAttributes: ['zoom'] }, { name: 'IrisPulse', compatibleAttributes: ['iris'] }]
     // A beam built-in by the library's property.
-    expect(paletteFits(effect('ZoomBreathe'), zoomFit, { library })).toBe(true)
+    expect(paletteFits(effect('ZoomWave'), zoomFit, { library })).toBe(true)
     expect(paletteFits(effect('IrisPulse'), zoomFit, { library })).toBe(false)
     // Slot Steps by the setting it names.
-    expect(paletteFits(effect('SlotSteps', { propertyName: 'gobo' }), { ...zoomFit, property: 'gobo' })).toBe(true)
-    expect(paletteFits(effect('SlotSteps', { propertyName: 'prism' }), { ...zoomFit, property: 'gobo' })).toBe(false)
+    expect(paletteFits(effect('SlotSteps', { attribute: 'gobo' }), { ...zoomFit, attribute: 'gobo' })).toBe(true)
+    expect(paletteFits(effect('SlotSteps', { attribute: 'prism' }), { ...zoomFit, attribute: 'gobo' })).toBe(false)
     // Palette Steps by its palettes' rows.
-    const wide = palette({ uuid: 'w', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] })
-    const steps = effect('PaletteSteps', { parameters: { palettes: 'tmpl:w' } })
-    expect(paletteFits(steps, zoomFit, { templates: [wide] })).toBe(true)
-    expect(paletteFits(steps, { ...zoomFit, property: 'iris' }, { templates: [wide] })).toBe(false)
+    const wide = palette({ uuid: 'w', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'zoom', value: 'pct:100' }] })
+    const steps = effect('PaletteSteps', { parameters: { palettes: 'pal:w' } })
+    expect(paletteFits(steps, zoomFit, { palettes: [wide] })).toBe(true)
+    expect(paletteFits(steps, { ...zoomFit, attribute: 'iris' }, { palettes: [wide] })).toBe(false)
     // Without what it needs to read, it is not narrowed.
     expect(paletteFits(effect('IrisPulse'), zoomFit)).toBe(true)
   })
@@ -75,13 +75,6 @@ describe('the mask', () => {
     expect(outsideMaskReason('COLOUR', ['POSITION'])).toBe('Colour — the selection is Position')
     expect(outsideMaskReason('COLOUR', ['COLOUR'])).toBeNull()
     expect(outsideMaskReason('COLOUR', null)).toBeNull()
-  })
-
-  it('puts a Look outside only when none of its families is inside', () => {
-    expect(lookOutsideMaskReason(['COLOUR', 'INTENSITY'], ['COLOUR'])).toBeNull()
-    expect(lookOutsideMaskReason(['POSITION'], ['COLOUR'])).toBe('Position — the selection is Colour')
-    // Scenery alone lights nothing for a mask to cut, so the desk lands it whatever the mask.
-    expect(lookOutsideMaskReason([], ['COLOUR'])).toBeNull()
   })
 })
 

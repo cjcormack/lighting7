@@ -1,0 +1,1757 @@
+package uk.me.cormack.lighting7.routes
+
+import uk.me.cormack.lighting7.models.timingOf
+import uk.me.cormack.lighting7.models.storedTiming
+import uk.me.cormack.lighting7.fixture.FixtureTriggers
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+import uk.me.cormack.lighting7.fixture.CommandIndex
+import uk.me.cormack.lighting7.fixture.CommandNotStorableException
+import uk.me.cormack.lighting7.fixture.FixtureCommands
+
+import io.ktor.http.HttpStatusCode
+import io.ktor.resources.Resource
+import io.ktor.server.request.receive
+import io.ktor.server.resources.delete
+import io.ktor.server.resources.get
+import io.ktor.server.resources.post
+import io.ktor.server.resources.put
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.group.FixtureElement
+import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
+import uk.me.cormack.lighting7.fx.FxRegistry
+import uk.me.cormack.lighting7.fx.FX_ATTRIBUTE_SENTINELS
+import uk.me.cormack.lighting7.fx.PALETTE_STEPS_ID
+import uk.me.cormack.lighting7.fx.PaletteStepsShape
+import uk.me.cormack.lighting7.fx.SLOT_STEPS_ID
+import uk.me.cormack.lighting7.fx.PaletteRegistry
+import uk.me.cormack.lighting7.fx.PaletteSource
+import uk.me.cormack.lighting7.fx.paletteStepsShape
+import uk.me.cormack.lighting7.fx.AttributeFamily
+import uk.me.cormack.lighting7.fx.parseFamilies
+import uk.me.cormack.lighting7.fx.maskAllows
+import uk.me.cormack.lighting7.fx.PaletteSnapshot
+import uk.me.cormack.lighting7.fx.PaletteFanOut
+import uk.me.cormack.lighting7.fx.PaletteIntent
+import uk.me.cormack.lighting7.fx.PaletteAttribute
+import uk.me.cormack.lighting7.fx.PaletteResolver
+import uk.me.cormack.lighting7.fx.WhitePolicy
+import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
+import uk.me.cormack.lighting7.fx.parsePaletteIntent
+import uk.me.cormack.lighting7.fx.serializePaletteColourRef
+import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
+import uk.me.cormack.lighting7.fx.stepsFxFamily
+import uk.me.cormack.lighting7.fx.paletteFamily
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
+import uk.me.cormack.lighting7.models.BuskPadKind
+import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoCueLayers
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
+import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteFxEntity
+import uk.me.cormack.lighting7.models.DaoPaletteRow
+import uk.me.cormack.lighting7.models.DaoPaletteRows
+import uk.me.cormack.lighting7.models.DaoPalettes
+import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.PaletteFxDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
+import java.time.Instant
+import java.util.UUID
+import uk.me.cormack.lighting7.state.State
+import java.time.Duration
+import uk.me.cormack.lighting7.models.toIsoUtc
+import uk.me.cormack.lighting7.models.asDuration
+
+/** Error code the client keys the "this template is still applied somewhere" flow off. */
+internal const val CODE_PALETTE_IN_USE = "PALETTE_IN_USE"
+
+/**
+ * 400 code: the selection is masked to families the template's own is not in (multi-screen plan
+ * D5). Every door — tap, ⌥click, pad, button — refuses by this name rather than landing a layer
+ * the cook would skip whole, which is the same dead-pad reading `PALETTE_NEEDS_SELECTION` refuses.
+ */
+internal const val CODE_PALETTE_OUTSIDE_MASK = "PALETTE_OUTSIDE_MASK"
+
+/** The refusal's text, shared by every door so a button's log line and a pad's toast agree. */
+internal fun paletteOutsideMaskMessage(name: String, family: AttributeFamily?, mask: Set<AttributeFamily>): String {
+    val masked = describeFamilies(mask)
+    return if (family == null) {
+        "'$name' names no known attribute, so it cannot land on a selection masked to $masked"
+    } else {
+        "'$name' is a ${describeFamilies(setOf(family))} palette, and the selection is masked to $masked"
+    }
+}
+
+private const val PALETTE_NOT_FOUND = "Palette not found"
+
+/**
+ * The template library: CRUD, the press and *Apply as values*, and the editor's resolves-to panel.
+ *
+ * Modelled on [routeApiRestProjectLooks] and deliberately *not* merged with it. The two entities
+ * differ in what they are for (a template composes values, a Look composes cues), in what they hold
+ * (one family of intents, versus any families of literals plus effects plus a positional colour
+ * list) and in how they are applied (to a selection, versus as a layer only). Sharing a route file
+ * would mean a `when` on kind in every handler.
+ *
+ * Three of these routes have no Look counterpart, and each exists for a stated reason:
+ *
+ *  - **`/resolve`** takes a *draft* rather than a saved id, because the editor's panel has to answer
+ *    "what will this do to my rig?" before anything is written. It is the only reason the resolver
+ *    is reachable without a template row.
+ *  - **`/apply`** writes **literals** into the programmer. That is *Apply as values* (a chip's ⌥click), and the
+ *    literals are the point: retuning the template later must not move what you busked.
+ *  - **`/from-programmer`** records a selection as a new template, collapsing to one generic row per
+ *    property where every target agrees and keeping per-fixture rows where they do not.
+ */
+internal fun Route.routeApiRestProjectPalettes(state: State) {
+    // GET /projects/{id}/palettes?family=COLOUR
+    get<ProjectPalettesResource> { resource ->
+        withProject(state, resource.projectId) { project ->
+            val familyFilter = resource.family?.trim()?.takeIf { it.isNotEmpty() }
+            val parsedFamily = familyFilter?.let { raw ->
+                AttributeFamily.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }
+            }
+            if (familyFilter != null && parsedFamily == null) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse(
+                        "Unknown family '$familyFilter' — expected one of " +
+                            AttributeFamily.entries.joinToString { it.name },
+                    ),
+                )
+                return@withProject
+            }
+            val templates = transaction(state.database) {
+                val all = DaoPalette.find { DaoPalettes.project eq project.id }
+                    .orderBy(DaoPalettes.name to SortOrder.ASC)
+                    .toList()
+                val usage = paletteUsageFor(all.map { it.id.value })
+                all.map { it.toDto(state.show.fxRegistry, usage[it.id.value]) }
+            }
+            // Filtered after the DTOs are built, because the family is derived from the rows and
+            // there is no column to query on — the same reason `/looks` filters in memory.
+            call.respond(
+                if (parsedFamily == null) templates
+                else templates.filter { it.family == parsedFamily.name },
+            )
+        }
+    }
+
+    // GET /projects/{id}/palettes/{paletteId}
+    get<ProjectPaletteResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val dto = transaction(state.database) {
+                val template = DaoPalette.findById(resource.paletteId) ?: return@transaction null
+                if (template.project.id != project.id) return@transaction null
+                template.toDto(state.show.fxRegistry, paletteUsage(template.id.value))
+            }
+            if (dto == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(PALETTE_NOT_FOUND))
+            } else {
+                call.respond(dto)
+            }
+        }
+    }
+
+    // POST /projects/{id}/palettes
+    post<ProjectPalettesResource> { resource ->
+        withCurrentProject(state, resource.projectId) { project ->
+            when (val result = performPaletteCreate(state, project, call.receive())) {
+                is PaletteCreateResult.Invalid ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.message))
+                is PaletteCreateResult.Duplicate ->
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse(result.message))
+                is PaletteCreateResult.Ok ->
+                    call.respond(HttpStatusCode.Created, result.palette)
+            }
+        }
+    }
+
+    // PUT /projects/{id}/palettes/{paletteId}
+    //
+    // Unlike the Look PUT this takes a typed body rather than a raw `JsonObject`. The
+    // absent-versus-empty distinction that forced the raw decode there does not arise for either
+    // child: neither a rows-less value template nor an effect-less effect template is a thing you
+    // can save, so "omitted" and "empty" both mean "leave that half alone" — which a nullable
+    // field says exactly. That is also why `effect` needs no `fxPresent` twin the way `notes`
+    // does: an effect can be replaced but never cleared, because clearing it would flip Holds,
+    // which the write boundary refuses outright.
+    //
+    // The validation therefore has to run *inside* the transaction, against the template's stored
+    // Holds — a rows body arriving for an effect template is only detectable with the record in
+    // hand.
+    put<ProjectPaletteResource> { resource ->
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<PaletteInput>()
+            val outcome = transaction(state.database) {
+                val template = DaoPalette.findById(resource.paletteId)
+                    ?: return@transaction PaletteWriteOutcome.NotFound
+                if (template.project.id != project.id) return@transaction PaletteWriteOutcome.NotFound
+
+                // Holds is the template's identity, like its family: a value template stays a
+                // value template (D1). Refused here rather than trusted to the sheet's locked
+                // segment, because the AI surface and a hand-rolled PUT reach the same route.
+                val holdsFx = template.effect != null
+                if (request.rows?.isNotEmpty() == true && holdsFx) {
+                    return@transaction PaletteWriteOutcome.Invalid(
+                        "'${template.name}' holds an FX — a palette cannot hold values as " +
+                            "well, and what it holds is fixed when it is created",
+                    )
+                }
+                if (request.fx != null && !holdsFx && !template.rows.empty()) {
+                    return@transaction PaletteWriteOutcome.Invalid(
+                        "'${template.name}' holds values — a palette cannot hold an FX as " +
+                            "well, and what it holds is fixed when it is created",
+                    )
+                }
+                // Only what this request actually *sends* goes through the content rules — the
+                // same carve-out `validateSpeedMasterSettings` documents. Contents already stored
+                // are upstream of this write (an import writes them verbatim, deliberately, so a
+                // category from a newer build can land here), and re-checking them would 400
+                // every later PUT on the row, rename and notes edits included. The Holds check
+                // above is the one rule that genuinely needs the stored state, which is why it is
+                // separate.
+                if (request.rows != null || request.fx != null) {
+                    validatePaletteContents(
+                        request.rows ?: emptyList(),
+                        request.fx,
+                        state.show.fxRegistry,
+                        template.uuid,
+                        state.show.paletteRegistry,
+                    )?.let { return@transaction PaletteWriteOutcome.Invalid(it) }
+                }
+
+                // The group's one-family rule, judged on the family this write *leaves* the
+                // template with — the new contents when it sends any, the stored ones otherwise.
+                // Two ways to break it: joining a group of another family, and re-contenting a
+                // grouped template into another family. `validatePaletteContents` cannot see the
+                // second, because it checks only that the new rows are one family, not which.
+                val contentsSent = request.rows != null || request.fx != null
+                val resultingFamily =
+                    if (contentsSent) contentsFamily(request.rows ?: emptyList(), request.fx)
+                    else template.familyOf()
+
+                request.name?.trim()?.takeIf { it.isNotEmpty() }?.let { newName ->
+                    if (newName != template.name) {
+                        val clash = DaoPalette.find {
+                            (DaoPalettes.project eq project.id) and (DaoPalettes.name eq newName)
+                        }.firstOrNull()
+                        if (clash != null) return@transaction PaletteWriteOutcome.NameTaken(newName)
+                        template.name = newName
+                    }
+                }
+                if (request.notesPresent) template.notes = request.notes
+                if (request.fadeDurationMsPresent) template.fadeDuration = request.fadeDurationMs.asDuration()
+
+                val rows = request.rows
+                if (rows != null) {
+                    template.rows.forEach { it.delete() }
+                    createPaletteRows(template, rows)
+                }
+                val effect = request.fx
+                if (effect != null) {
+                    // The row keeps its uuid across a save: a GO matches a continuing effect on it
+                    // (effects plan P4).
+                    val keptUuid = template.effects.firstOrNull()?.uuid
+                    template.effects.forEach { it.delete() }
+                    createPaletteFx(template, effect, keptUuid)
+                }
+                PaletteWriteOutcome.Written(
+                    template.toDto(state.show.fxRegistry, paletteUsage(template.id.value)),
+                    template.uuid,
+                    // An effect-only edit is a contents change like a rows edit: without it
+                    // `republishForPaletteEdit` never runs, and retuning an effect template would
+                    // reach nothing already live — which is the feature.
+                    contentsChanged = rows != null || effect != null,
+                )
+            }
+            when (outcome) {
+                is PaletteWriteOutcome.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse(PALETTE_NOT_FOUND))
+                is PaletteWriteOutcome.NameTaken -> call.respond(
+                    HttpStatusCode.Conflict,
+                    ErrorResponse("A palette named '${outcome.name}' already exists in this project"),
+                )
+                is PaletteWriteOutcome.Invalid ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message))
+                is PaletteWriteOutcome.Written -> {
+                    if (outcome.contentsChanged) {
+                        // A contents change republishes the live consumers directly — one retune
+                        // moving every cue that layers this template, with no cue re-fired. That is
+                        // the feature. `paletteListChanged` would only drop every cached snapshot.
+                        republishForPaletteEdit(state, outcome.uuid)
+                    } else {
+                        state.show.fixtures.paletteListChanged()
+                    }
+                    call.respond(outcome.dto)
+                }
+            }
+        }
+    }
+
+    // DELETE /projects/{id}/palettes/{paletteId}?force=true
+    delete<ProjectPaletteResource> { resource ->
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val outcome = transaction(state.database) {
+                val template = DaoPalette.findById(resource.paletteId)
+                    ?: return@transaction PaletteDeleteOutcome.NotFound
+                if (template.project.id != project.id) return@transaction PaletteDeleteOutcome.NotFound
+                val usage = paletteUsage(template.id.value)
+                // Three kinds of usage, and all must block. A cue layer *applies* the template; a
+                // programmer layer is *running* it right now; an effect parameter *references* it
+                // by uuid (`pal:{uuid}`) — and deleting out from under that last one is worse than
+                // out from under a layer, because the effect keeps running and its colour silently
+                // falls back to white.
+                val fxRefs = paletteFxReferenceCount(template.uuid)
+                // Read off the in-memory stack, not the DB: a programmer layer is live state with
+                // no row of its own, which is exactly why this cannot live in `PaletteUsage`.
+                val running = state.show.programmerStore.layers.count {
+                    it.source.isPalette && it.source.uuid == template.uuid
+                }
+                if ((usage.layerCount > 0 || fxRefs > 0 || running > 0) && !resource.force) {
+                    return@transaction PaletteDeleteOutcome.InUse(usage, fxRefs, running)
+                }
+                // No DB-level ON DELETE CASCADE — SQLite does not enforce cascades without a
+                // per-connection pragma, so children go first, explicitly.
+                if (resource.force) {
+                    DaoCueLayer.find { DaoCueLayers.palette eq template.id }.forEach { it.delete() }
+                }
+                template.rows.forEach { it.delete() }
+                template.effects.forEach { it.delete() }
+                // Its busk pads go with it, unconditionally — a pad is an enrichment, not a use
+                // the guard above counts (busk-layout plan D3).
+                val pageIds = deleteBuskPadsReferencing(paletteId = template.id.value)
+                val uuid = template.uuid
+                template.delete()
+                PaletteDeleteOutcome.Deleted(uuid, pageIds)
+            }
+            when (outcome) {
+                is PaletteDeleteOutcome.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse(PALETTE_NOT_FOUND))
+                is PaletteDeleteOutcome.InUse -> call.respond(
+                    HttpStatusCode.Conflict,
+                    PaletteInUseResponse(
+                        error = "This palette is still in use by " +
+                            describePaletteUse(
+                                outcome.usage, outcome.fxReferenceCount, outcome.runningCount,
+                            ),
+                        code = CODE_PALETTE_IN_USE,
+                        layerCount = outcome.usage.layerCount,
+                        cueIds = outcome.usage.cueIds,
+                        cueNames = outcome.usage.cueNames,
+                        fxReferenceCount = outcome.fxReferenceCount,
+                        runningCount = outcome.runningCount,
+                    ),
+                )
+                is PaletteDeleteOutcome.Deleted -> {
+                    // *Delete anyway* releases the programmer layers the guard counted, the same
+                    // way it deleted the cue-layer rows. Nothing else can: a layer naming a uuid
+                    // with no row behind it resolves to null on every recook, so it sits in the
+                    // stack asserting nothing while the effect it spawned keeps running, and the
+                    // operator has no template left to press to take it off.
+                    state.show.programmerStore.layers
+                        .filter { it.source.isPalette && it.source.uuid == outcome.uuid }
+                        .forEach { state.show.programmerLayerStack.remove(it.layerId) }
+                    state.show.fixtures.paletteListChanged()
+                    if (outcome.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(outcome.pageIds.toList())
+                    call.respond(HttpStatusCode.NoContent)
+                }
+            }
+        }
+    }
+
+    // POST /projects/{id}/palettes/resolve — the editor's "resolves to" panel.
+    post<PaletteResolveResource> { resource ->
+        withProject(state, resource.parent.projectId) { _ ->
+            val request = call.receive<PaletteResolveRequest>()
+            // Rows only: the panel answers "what will each head receive", which an effect template
+            // has no answer to — its *Runs on* panel is a head count and a client-side preview.
+            validatePaletteContents(
+                request.rows, effect = null, registry = state.show.fxRegistry,
+            )?.let { problem ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
+                return@withProject
+            }
+            call.respond(resolvePaletteAgainstPatch(state, request))
+        }
+    }
+
+    // POST /projects/{id}/palettes/{paletteId}/apply — *Apply as values* (⌥click): literals into the programmer.
+    post<ApplyPaletteResource> { resource ->
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<ApplyPaletteRequest>()
+            val families = try {
+                parseFamilies(request.families)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
+                return@withCurrentProject
+            }
+            val snapshot = transaction(state.database) {
+                DaoPalette.findById(resource.paletteId)
+                    ?.takeIf { it.project.id == project.id }
+                    ?.uuid
+            }?.let { state.show.paletteRegistry.snapshot(it) }
+            if (snapshot == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(PALETTE_NOT_FOUND))
+                return@withCurrentProject
+            }
+            when (
+                val outcome = applyPaletteToProgrammer(
+                    state,
+                    project.id.value,
+                    snapshot,
+                    request.targets.map { CueTargetDto(it.type, it.key) },
+                    request.fadeMs ?: snapshot.fadeDurationMs ?: 0,
+                    families,
+                    write = request.write,
+                )
+            ) {
+                is ApplyPaletteOutcome.Applied -> call.respond(outcome.response)
+                is ApplyPaletteOutcome.Refused ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
+            }
+        }
+    }
+
+    // POST /projects/{id}/palettes/{paletteId}/toggle — the press: a chip's tap and the busking pads.
+    post<TogglePaletteResource> { resource ->
+        withCurrentProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<TogglePaletteRequest>()
+            val families = try {
+                parseFamilies(request.families)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
+                return@withCurrentProject
+            }
+            // Source *and* mask in one transaction: the mask is derived by the same [familyOf]
+            // `toDto` uses for `family`, so the layer cannot be masked to something the template
+            // list never showed. Deriving it here rather than trusting `request.attributeMask` is
+            // also what gives the response an independent answer to report: an echo could never
+            // disagree with the caller.
+            //
+            // One shared derivation rather than the row expression this inlined before: an effect
+            // template has no rows, so the inline copy would have answered null and added an
+            // *unmasked* layer — which asserts across every family instead of the effect's own.
+            //
+            // No solo siblings: those are a busk bank's (`routes/buskPress.kt`). The family
+            // replacement still runs — `toggle` resolves it for every palette door.
+            val found = transaction(state.database) {
+                DaoPalette.findById(resource.paletteId)
+                    ?.takeIf { it.project.id == project.id }
+                    ?.let { template ->
+                        LayerSource.palette(template.id.value, template.uuid, template.name) to
+                            template.familyOf()
+                    }
+            }
+            if (found == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(PALETTE_NOT_FOUND))
+                return@withCurrentProject
+            }
+            val (source, family) = found
+            val targets = request.targets.map { CueTargetDto(it.type, it.key) }
+            // A template is one family, so under a mask it either lands whole or not at all: the
+            // selection's mask refuses it by name rather than adding a layer the cook skips. On
+            // the *on* arm only — an off press comes off under any mask (`pressWouldRelease`).
+            if (families != null && !maskAllows(families, family) && !pressWouldRelease(state, source.uuid, targets)) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse(paletteOutsideMaskMessage(source.name, family, families), code = CODE_PALETTE_OUTSIDE_MASK),
+                )
+                return@withCurrentProject
+            }
+            val derivedMask = family?.name
+            try {
+                val outcome = state.show.programmerLayerStack.toggle(
+                    source = source,
+                    targets = targets,
+                    attributeMask = derivedMask,
+                    fadeMs = request.fadeMs ?: 0,
+                )
+                // The tap door of the press log — the **on** arm only. A second press
+                // takes the layer off, and a release is not a press (`PalettePressLog`).
+                if (outcome.action == "applied") {
+                    PalettePressLog.record(state, project.id.value, source.id)
+                }
+                call.respond(
+                    TogglePaletteResponse(outcome.action, outcome.fxCount, derivedMask, outcome.released),
+                )
+            } catch (e: IllegalStateException) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
+            }
+        }
+    }
+
+    // POST /projects/{id}/palettes/{paletteId}/copy
+    //
+    // Duplicate (the same project, a new name) and Copy to… (another project) in one route —
+    // `copyLook`'s shape, renamed (library-sheets plan D10). `withProject`, not
+    // `withCurrentProject`, on the source: copying *out of* another project's library is the point.
+    //
+    // The copy is a new entity: a fresh template uuid and fresh child uuids, because reusing the
+    // source's would make sync treat the two as one record. `lastPressedAt` starts null — a press
+    // history belongs to the template that was pressed, and a copy has not been.
+    //
+    // Per-fixture row keys, the effect's speed master uuids and any `pal:{uuid}` colour parameter
+    // are copied **as they are**, the same trade `copyLook` makes. Into another project that can
+    // leave a key that is not patched there (the row reads as unhealthy, exactly as after a
+    // repatch), a master that does not exist there (it resolves to master 1, the documented
+    // meaning of an unknown master) or a colour reference to the source project's template.
+    // Rewriting any of them would be guessing at which of the target's records was meant.
+    //
+    // No `validatePaletteContents`: the source's contents already crossed the write boundary (or
+    // arrived through an import, which writes verbatim by design), and the copy is the same
+    // contents under a new uuid. Re-validating would refuse to copy a template the source project
+    // can still press — an import-landed category this build's registry lacks, say — which helps
+    // nobody. The one rule that turns on identity, a `pal:` parameter naming the template's own
+    // uuid, cannot newly fire: the copy's uuid is fresh.
+    post<CopyPaletteResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<CopyPaletteRequest>()
+            if (refusedCopyTarget(state, request.targetProjectId)) return@withProject
+            val result = transaction(state.database) {
+                val source = DaoPalette.findById(resource.paletteId)
+                    ?: return@transaction CopyPaletteOutcome.NotFound(PALETTE_NOT_FOUND)
+                if (source.project.id != project.id) {
+                    return@transaction CopyPaletteOutcome.NotFound(PALETTE_NOT_FOUND)
+                }
+                val target = state.resolveProject(request.targetProjectId.toString())
+                    ?: return@transaction CopyPaletteOutcome.NotFound("Target project not found")
+                val newName = request.newName?.trim()?.takeIf { it.isNotEmpty() } ?: source.name
+                val clash = DaoPalette.find {
+                    (DaoPalettes.project eq target.id) and (DaoPalettes.name eq newName)
+                }.firstOrNull()
+                if (clash != null) return@transaction CopyPaletteOutcome.NameTaken(newName)
+                val copy = DaoPalette.new {
+                    this.project = target
+                    this.name = newName
+                    this.notes = source.notes
+                    this.fadeDuration = source.fadeDuration
+                }
+                for (row in source.rows.orderBy(DaoPaletteRows.sortOrder to SortOrder.ASC)) {
+                    DaoPaletteRow.new {
+                        palette = copy
+                        targetType = row.targetType
+                        targetKey = row.targetKey
+                        attribute = row.attribute
+                        value = row.value
+                        sortOrder = row.sortOrder
+                    }
+                }
+                // At most one (`DaoPaletteFx`' unique index), iterated like the delete path
+                // iterates it.
+                for (effect in source.effects) {
+                    DaoPaletteFxEntity.new {
+                        palette = copy
+                        fxType = effect.fxType
+                        family = effect.family
+                        attribute = effect.attribute
+                        cycle = effect.cycle
+                        blendMode = effect.blendMode
+                        order = effect.order
+                        phaseOffset = effect.phaseOffset
+                        elementMode = effect.elementMode
+                        elementFilter = effect.elementFilter
+                        timing = effect.timing
+                        parameters = effect.parameters
+                        speedMasterUuid = effect.speedMasterUuid
+                        rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+                        seconds = effect.seconds
+                        amount = effect.amount
+                        direction = effect.direction
+                        runs = effect.runs
+                        this.spread = effect.spread
+                        this.wings = effect.wings
+                        this.segments = effect.segments
+                        this.parts = effect.parts
+                    }
+                }
+                CopyPaletteOutcome.Copied(
+                    CopyPaletteResponse(
+                        paletteId = copy.id.value,
+                        paletteName = copy.name,
+                        targetProjectId = target.id.value,
+                        targetProjectName = target.name,
+                        message = "Copied '${source.name}' to '${target.name}' as '${copy.name}'",
+                    )
+                )
+            }
+            when (result) {
+                is CopyPaletteOutcome.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse(result.message))
+                is CopyPaletteOutcome.NameTaken -> call.respond(
+                    HttpStatusCode.Conflict,
+                    ErrorResponse("A palette named '${result.name}' already exists in the target project"),
+                )
+                is CopyPaletteOutcome.Copied -> {
+                    // After the commit, unconditionally, as `copyLook` does: the frame carries no
+                    // project, so a window showing the *target's* library refreshes too, and the
+                    // current show's template cache only loses snapshots it can re-read.
+                    state.show.fixtures.paletteListChanged()
+                    call.respond(result.response)
+                }
+            }
+        }
+    }
+
+}
+
+// ─── Resources ──────────────────────────────────────────────────────────
+
+@Resource("/{projectId}/palettes")
+internal data class ProjectPalettesResource(val projectId: String, val family: String? = null)
+
+@Resource("/{paletteId}")
+internal data class ProjectPaletteResource(
+    val parent: ProjectPalettesResource,
+    val paletteId: Int,
+    val force: Boolean = false,
+)
+
+/**
+ * Unambiguous against [ProjectPaletteResource] despite sitting at the same depth: nothing serves
+ * `POST /{paletteId}`, and `paletteId` is an `Int` that `"resolve"` cannot parse as.
+ */
+@Resource("/resolve")
+internal data class PaletteResolveResource(val parent: ProjectPalettesResource)
+
+@Resource("/{paletteId}/apply")
+internal data class ApplyPaletteResource(val parent: ProjectPalettesResource, val paletteId: Int)
+
+@Resource("/{paletteId}/toggle")
+internal data class TogglePaletteResource(val parent: ProjectPalettesResource, val paletteId: Int)
+
+@Resource("/{paletteId}/copy")
+internal data class CopyPaletteResource(val parent: ProjectPalettesResource, val paletteId: Int)
+
+// ─── DTOs ───────────────────────────────────────────────────────────────
+
+/**
+ * A template as the library lists it — **contents included**, unlike `LookDto`.
+ *
+ * A Look needs a summary/detail split because its derived counts would go stale beside its contents.
+ * A template holds no palette and either one effect or few rows (one for a generic template, one per
+ * head for a focus position), so one shape still serves the list and the editor — and the library
+ * row can preview the actual value without a second fetch, which is what `LookLibrary`'s row does
+ * with `preview`.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+internal data class PaletteDto(
+    val id: Int,
+    val uuid: String,
+    val name: String,
+    val notes: String? = null,
+    val fadeDurationMs: Long? = null,
+    /**
+     * The one family this template is in, **derived** — from its rows, or from its effect's library
+     * category (D4) — never stored. Null only for a template whose contents have all been deleted,
+     * which the write boundary does not allow but a hand-edited database could produce.
+     */
+    val family: String? = null,
+    /**
+     * True when every row takes its targets from whatever applies the template (the *Generic* case);
+     * false when the rows name their own heads (the *Per fixture* case, a focus position).
+     *
+     * Always true for an **effect** template: an effect fans over whatever the layer names, so
+     * there is no per-fixture case for it to be (D3).
+     */
+    val isGeneric: Boolean,
+    /**
+     * What this palette holds — `"value"` or `"fx"` (D1). Derived, and the field the library
+     * row branches its swatch on.
+     *
+     * A string rather than a boolean because it is a two-arm vocabulary the UI renders by name, and
+     * because `FU-TMPL-MULTI-EFFECT` would give it a third arm before it gave it a second flag.
+     */
+    val kind: String,
+    /**
+     * The bundled colour emitters this template names outright — a subset of `white`, `amber`, `uv`,
+     * **derived** from its rows the way [family] is.
+     *
+     * The client's offer filter. A template that names an emitter cannot be served by a head without
+     * it — the whole template refuses, not just the row (`PaletteResolver.unmetColourRequirement`)
+     * — so `PaletteStrip` and the busk palette need to know before offering it, and the family
+     * alone cannot say: white, amber, UV and the hex are all `COLOUR`.
+     *
+     * Not on the fixture: the requirement belongs to the template and is three tokens long, and the
+     * *capability* half is already on the wire as a colour descriptor's `whiteChannel` /
+     * `amberChannel` / `uvChannel`, so pairing them client-side costs one memo and no round trip per
+     * patch change.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val requiredEmitters: List<String> = emptyList(),
+    /**
+     * When this template was last **pressed** on this desk, as an ISO-8601 instant; null until it
+     * has been.
+     *
+     * The programmer's recent-chip row is "the offerable templates that have one, newest first",
+     * which is why this rides the list rather than having a route of its own: the family filter and
+     * the emitter filter the strip already applies *are* the per-family scoping, and a deleted
+     * template takes its history with it.
+     *
+     * A string rather than a number so it reads in a log and in a diff, and — since it comes from
+     * `Instant.toIsoUtc()` — a **sortable** one: the fraction is always three digits, so a client
+     * may order these by comparing the text. That was not true while this was hand-formatted with
+     * `Instant.toString()`, which drops the fraction entirely on an exact second and so sorted
+     * `…:34Z` after `…:34.500Z`. See `models/timeColumns.kt`.
+     */
+    val lastPressedAt: String? = null,
+    /**
+     * The template's value rows — **empty for an effect template**, which holds one effect instead.
+     *
+     * `@EncodeDefault(ALWAYS)`, and it is load-bearing rather than tidiness. The **WebSocket**
+     * converter this DTO also rides has `encodeDefaults = false` (the REST `json()` of
+     * `routes/router.kt` is Ktor's `DefaultJson`, which encodes defaults — `BuskRigRoutesTest` pins
+     * that; an earlier version of this comment had it backwards), so on a frame an **empty** list is
+     * not serialised as `[]` but vanishes entirely. The client declares `rows` required and reads it
+     * without a guard, so an effect template arrived with `rows: undefined` and
+     * `paletteRowsSwatch` threw on `rows.find`.
+     *
+     * That was not a cosmetic failure: this DTO rides `hand.state`, and lighting-react's `HandChip`
+     * is mounted in `Layout.tsx` and draws the held record through `padFaceOf` — so for as long as
+     * the desk held an effect template, **every route** in the client sat behind its error boundary.
+     * [requiredEmitters] above carries the annotation for the same reason; the client had already
+     * grown a defensive `?? []` for that one, which is the same bug caught one layer later.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val rows: List<PaletteRowDto> = emptyList(),
+    /** The one effect an effect template holds; null for a value template. */
+    val fx: PaletteFxDto? = null,
+    /**
+     * How many **cue** layers apply this template. Gates delete.
+     *
+     * Cue layers only, deliberately — programmer layers tracking it live are counted by the delete
+     * guard instead ([PaletteInUseResponse.runningCount]), because that count needs the in-memory
+     * store and this mapping has only the row.
+     */
+    val layerCount: Int,
+    /**
+     * How many busk pages hold a pad for this template — the library row's "on *n* pages" hint,
+     * and the line the delete confirm shows before taking those pads with it.
+     *
+     * A hint, not a use: it does **not** gate delete, and [layerCount] alone still does
+     * (busk-layout plan D3, "a pad is an enrichment, never content and never a guard").
+     *
+     * **No default**, like [layerCount] beside it: a converter that omits defaults (the WS one) would
+     * keep a defaulted zero off the wire, where the client declares a number — and with no default a
+     * copier that forgets the field fails to compile rather than silently sending nothing. (The REST
+     * `json()` itself encodes defaults; an earlier version of this comment said otherwise.)
+     */
+    val buskPageCount: Int,
+)
+
+/**
+ * Create / update payload.
+ *
+ * `notes` and `fadeDurationMs` carry an explicit presence flag rather than relying on null, because
+ * for both of them null is a *value* an operator can set (clear the notes, use the caller's default
+ * fade) and PUT has to be able to tell that from "leave it alone".
+ *
+ * `rows` and `effect` need no such flag: null cannot mean "clear" for either, because clearing
+ * would leave a template holding nothing — or flip its Holds, which the write boundary refuses
+ * (D1). Exactly one of them is set on create.
+ */
+@Serializable
+internal data class PaletteInput(
+    val name: String? = null,
+    val notes: String? = null,
+    val notesPresent: Boolean = false,
+    val fadeDurationMs: Long? = null,
+    val fadeDurationMsPresent: Boolean = false,
+    val rows: List<PaletteRowDto>? = null,
+    /** The effect an effect template holds (D1/D2). Never set beside a non-empty [rows]. */
+    val fx: PaletteFxDto? = null,
+)
+
+@Serializable
+internal data class PaletteInUseResponse(
+    val error: String,
+    val code: String,
+    val layerCount: Int,
+    val cueIds: List<Int>,
+    val cueNames: List<String>,
+    /** Effect parameters holding a `pal:{uuid}` reference to this template. */
+    val fxReferenceCount: Int = 0,
+    /**
+     * Programmer layers tracking this template *right now*.
+     *
+     * Live state with no row of its own, so it is absent from [layerCount] (which counts stored
+     * cue layers) and from `PaletteUsage` — the dialog reports the two separately because
+     * *Delete anyway* undoes them differently: a cue layer row is deleted, a programmer layer is
+     * simply released.
+     */
+    val runningCount: Int = 0,
+)
+
+/** `copyLook`'s request, renamed. A blank or absent [newName] keeps the source's name. */
+@Serializable
+internal data class CopyPaletteRequest(val targetProjectId: Int, val newName: String? = null)
+
+@Serializable
+internal data class CopyPaletteResponse(
+    val paletteId: Int,
+    val paletteName: String,
+    val targetProjectId: Int,
+    val targetProjectName: String,
+    val message: String,
+)
+
+@Serializable
+internal data class PaletteTargetDto(val type: String, val key: String)
+
+@Serializable
+internal data class ApplyPaletteRequest(
+    val targets: List<PaletteTargetDto> = emptyList(),
+    val fadeMs: Long? = null,
+    /**
+     * The selection's attribute mask (`AttributeFamily` names); absent is every attribute, an
+     * unknown name is 400. A template whose family is outside it is refused
+     * (`PALETTE_OUTSIDE_MASK`) rather than applied — multi-screen plan D5.
+     */
+    val families: List<String>? = null,
+    /**
+     * False resolves without writing anything, answering [ApplyPaletteResponse.values] — the
+     * focused-Look-layer arm, as on the Spread route (apply-model plan D7). Not logged as a press.
+     */
+    val write: Boolean = true,
+)
+
+@Serializable
+internal data class ApplyPaletteResponse(
+    /**
+     * Programmer entries written. Always 0 for an **effect** template, which writes no values —
+     * its count is [fxIds]`.size`.
+     */
+    val written: Int,
+    /** Heads the template could not reach, with the reason — the same notes the panel shows. */
+    val skipped: List<PaletteSkipDto> = emptyList(),
+    /**
+     * The programmer-band effects an apply of an **effect** template minted, one per target it
+     * named; empty for a value template.
+     *
+     * Ids rather than a count, because the caller has to be able to take *these* copies off again
+     * without sweeping the whole band — the copies carry no template identity to find them by, by
+     * design (see `applyFxPaletteToProgrammer`).
+     */
+    val fxIds: List<Long> = emptyList(),
+    /**
+     * Each head's literal for a **value** palette, in the Look row grammar (`AttributeValue.serialize()`)
+     * and on the property it landed on — Spread's answer shape. With `write` false this is all the
+     * route did, and [written] counts what it would have written.
+     */
+    val values: List<FanWriteDto> = emptyList(),
+)
+
+@Serializable
+internal data class PaletteSkipDto(
+    val fixtureKey: String,
+    val attribute: String,
+    val reason: String,
+)
+
+@Serializable
+internal data class TogglePaletteRequest(
+    val targets: List<PaletteTargetDto> = emptyList(),
+    /**
+     * What the caller *believed* it was masking to. Advisory: the mask actually applied is derived
+     * from the template's rows server-side, because the mask a template layer wants is a fact about
+     * the template rather than about the press. Stating it anyway is what lets a client and server
+     * that disagree show up in [TogglePaletteResponse.attributeMask] instead of silently on the rig.
+     */
+    val attributeMask: String? = null,
+    /** The selection's attribute mask, as on [ApplyPaletteRequest.families]; same refusal. */
+    val families: List<String>? = null,
+    /**
+     * The programmer fade, over which a press grows its effects and a release shrinks them (effects
+     * plan D13), and which then covers every value too. Absent or 0: values at each row's own fade
+     * on the way on and a snap on the way off, effects at once — the press as it was.
+     */
+    val fadeMs: Long? = null,
+)
+
+@Serializable
+internal data class TogglePaletteResponse(
+    val action: String,
+    val fxCount: Int,
+    /**
+     * The mask the layer actually carries — the template's own family, derived from its rows. Null
+     * only for a template whose rows name no known property. Compare against what was sent: this is
+     * the *server's* answer, not an echo, so the two genuinely can differ.
+     */
+    val attributeMask: String? = null,
+    /**
+     * How many other palettes' layers this press took the pressed heads off — the palettes of its
+     * family and kind it replaces (apply-model D2, D6). Always 0 on a `removed`.
+     */
+    val released: Int = 0,
+)
+
+/** The editor's live panel: a draft, and optionally which heads to answer for. */
+@Serializable
+internal data class PaletteResolveRequest(
+    val rows: List<PaletteRowDto> = emptyList(),
+    /** Empty means "every patched fixture but infrastructure" — what the editor wants while nothing is selected. */
+    val targets: List<PaletteTargetDto> = emptyList(),
+)
+
+@Serializable
+internal data class PaletteResolveResponse(
+    val entries: List<PaletteResolutionDto> = emptyList(),
+)
+
+/** One head's answer, in the shape the panel renders a row from. */
+@Serializable
+internal data class PaletteResolutionDto(
+    val fixtureKey: String,
+    val fixtureName: String,
+    val typeKey: String,
+    val attribute: String,
+    /** The property the value actually landed on — differs from [attribute] on a colour wheel. */
+    val resolvedAttributeName: String,
+    /** `EXACT` | `CLAMPED` | `SNAPPED` | `DEGRADED` | `UNSUPPORTED`. */
+    val outcome: String,
+    /** Operator-facing detail: the clamp, the slot name, or the reason. Null for an exact resolve. */
+    val detail: String? = null,
+    /** ΔE against the requested colour, on a wheel snap only. */
+    val deltaE: Double? = null,
+    /** The resolved value in the canonical assignment grammar, for a swatch or a number. */
+    val value: String? = null,
+)
+
+// ─── Outcomes ───────────────────────────────────────────────────────────
+
+private sealed interface PaletteWriteOutcome {
+    data object NotFound : PaletteWriteOutcome
+    data class NameTaken(val name: String) : PaletteWriteOutcome
+
+    /**
+     * The body would have written contents the write boundary refuses — a 400.
+     *
+     * Separate from [NameTaken]'s 409 because these are two different client mistakes: a clash is
+     * about the project's *other* templates, this is about this template's own contents.
+     */
+    data class Invalid(val message: String) : PaletteWriteOutcome
+
+    data class Written(val dto: PaletteDto, val uuid: java.util.UUID, val contentsChanged: Boolean) :
+        PaletteWriteOutcome
+}
+
+private sealed interface PaletteDeleteOutcome {
+    data object NotFound : PaletteDeleteOutcome
+    data class InUse(
+        val usage: PaletteUsage,
+        val fxReferenceCount: Int,
+        val runningCount: Int,
+    ) : PaletteDeleteOutcome
+
+    /**
+     * Carries the uuid so the handler can release the programmer layers naming it, and the busk
+     * pages that lost a pad so it can say so.
+     */
+    data class Deleted(val uuid: java.util.UUID, val pageIds: Set<Int>) : PaletteDeleteOutcome
+}
+
+/**
+ * `CopyLookOutcome` plus a [NotFound] that says *which* thing was missing — the source template or
+ * the target project — where the Look route answers "Look not found" for both.
+ */
+private sealed interface CopyPaletteOutcome {
+    data class NotFound(val message: String) : CopyPaletteOutcome
+    data class NameTaken(val name: String) : CopyPaletteOutcome
+    data class Copied(val response: CopyPaletteResponse) : CopyPaletteOutcome
+}
+
+// ─── Validation ─────────────────────────────────────────────────────────
+
+/*
+ * The template write boundary lives in [validatePaletteContents] below, and every rule there is
+ * load-bearing rather than defensive.
+ *
+ * A **value** template's rows:
+ *  1. **Exactly one family.** This is what makes a template a template — `TwoThings` calls it the
+ *     single real backend ask — and it is enforced here because there is no column to constrain.
+ *  2. **A closed property vocabulary** ([PaletteAttribute]), which is where "a template cannot carry
+ *     a gobo" actually lives. A slotted role is refused by name.
+ *  3. **The intent must parse, and match the property's shape.** A `deg:` value on a dimmer is a
+ *     client bug, and storing it would produce a row that resolves to nothing on every head.
+ *  4. **No group rows.** A template names no targets of its own; the only reason a row names a
+ *     fixture is that its value is specific to that head, which a group cannot be.
+ *
+ * An **effect** template's one effect (fx-templates D1–D4, D12): exactly one of rows/effect, a
+ * category that maps to a bankable family, a type the [FxRegistry] resolves whose own category
+ * agrees with the stored one, enum-valued fields the desk recognises, and no `pal:` parameter
+ * naming the template itself.
+ */
+
+internal sealed interface PaletteCreateResult {
+    data class Ok(val palette: PaletteDto) : PaletteCreateResult
+    data class Invalid(val message: String) : PaletteCreateResult
+    data class Duplicate(val message: String) : PaletteCreateResult
+}
+
+/**
+ * Create a template — the shared body behind `POST /palettes` and the AI surface's
+ * `create_palette`.
+ *
+ * Shared rather than copied because the validation *is* the feature: [validatePaletteContents]
+ * enforces one attribute family per template, rejects slotted properties, and refuses an effect
+ * whose category no family banks — and a second caller that skipped it could write a template no
+ * consumer can resolve.
+ */
+internal fun performPaletteCreate(
+    state: State,
+    project: DaoProject,
+    input: PaletteInput,
+): PaletteCreateResult {
+    val name = input.name?.trim().orEmpty()
+    if (name.isEmpty()) return PaletteCreateResult.Invalid("Palette name must not be blank")
+
+    val rows = input.rows ?: emptyList()
+    val effect = input.fx
+    // No `ownUuid`: the template does not exist yet, so it cannot name itself. The self-reference
+    // rule is the update route's to enforce.
+    validatePaletteContents(rows, effect, state.show.fxRegistry, templates = state.show.paletteRegistry)
+        ?.let { return PaletteCreateResult.Invalid(it) }
+
+    val result = transaction(state.database) {
+        val duplicate = DaoPalette.find {
+            (DaoPalettes.project eq project.id) and (DaoPalettes.name eq name)
+        }.firstOrNull()
+        if (duplicate != null) {
+            return@transaction PaletteCreateResult.Duplicate(
+                "A palette named '$name' already exists in this project",
+            )
+        }
+        val template = DaoPalette.new {
+            this.project = project
+            this.name = name
+            this.notes = input.notes
+            this.fadeDuration = input.fadeDurationMs.asDuration()
+        }
+        createPaletteRows(template, rows)
+        effect?.let { createPaletteFx(template, it) }
+        PaletteCreateResult.Ok(template.toDto(state.show.fxRegistry, paletteUsage(template.id.value)))
+    }
+    if (result is PaletteCreateResult.Ok) state.show.fixtures.paletteListChanged()
+    return result
+}
+
+/**
+ * The family a set of contents is in — [DaoPalette.familyOf] for contents that are not yet a
+ * row. Null when nothing in them names a family, which the write boundary refuses anyway.
+ */
+internal fun contentsFamily(rows: List<PaletteRowDto>, effect: PaletteFxDto?): AttributeFamily? =
+    rows.firstNotNullOfOrNull { PaletteAttribute.ofOrNull(it.attribute)?.family }
+        ?: effect?.let { attributeFamilyForFxFamily(it.family) }
+
+/**
+ * A trigger's name is refused as a trigger (stage-view plan session 9), not with the slotted-property
+ * sentence below, which would send the operator to a recorded Look — and no Look can hold one either.
+ * Thrown as [TriggerNotStorableException] by [validatePaletteContents], so a template answers
+ * `TRIGGER_NOT_STORABLE` as a Look and a cue do.
+ */
+private fun triggerPaletteRefusal(attribute: String): String? =
+    FixtureTriggers.allReservedNames.firstOrNull { it.equals(attribute.trim(), ignoreCase = true) }?.let {
+        "A palette cannot hold '$it' — it is a one-shot trigger or its arm, which fires as an event " +
+            "(a cue's Events, the cannon's panel, a MIDI FireTrigger) while the desk is armed, and is never a stored value"
+    }
+
+/** A fixture command's name, refused as a command (fixture optics plan session 7) — [triggerPaletteRefusal]'s twin. */
+private fun commandPaletteRefusal(attribute: String): String? =
+    FixtureCommands.allReservedNames.firstOrNull { it.equals(attribute.trim(), ignoreCase = true) }?.let {
+        "A palette cannot hold '$it' — it is a fixture command, which runs from the fixture panel's " +
+            "Commands menu behind a confirm, and is never a stored value"
+    }
+
+/**
+ * The template write boundary: a value template's rows *or* an effect template's one effect.
+ *
+ * Called with the **resulting** (post-write) contents, so create and update share the
+ * implementation — the [uk.me.cormack.lighting7.models.validateSpeedMasterSettings] pattern.
+ * [ownUuid] is the template being edited (null on create), needed for the self-reference rule.
+ *
+ * Returns the problem, or null when the contents are acceptable — except a row naming a one-shot
+ * trigger, which throws [TriggerNotStorableException] so every route answers it with its code.
+ */
+internal fun validatePaletteContents(
+    rows: List<PaletteRowDto>,
+    effect: PaletteFxDto?,
+    registry: FxRegistry,
+    ownUuid: java.util.UUID? = null,
+    /** What a Palette Steps effect's palettes are read through; null refuses one, with the reason. */
+    templates: PaletteRegistry? = null,
+): String? {
+    // Rule 1 (D1): a template holds a value *or* an effect. A colour *and* a chase is a Look,
+    // which already holds rows plus effects and has its own busk pool.
+    if (rows.isNotEmpty() && effect != null) {
+        return "A palette holds a value or an FX, never both — for both together, record a look"
+    }
+    if (rows.isEmpty() && effect == null) return "A palette must hold at least one value"
+    if (effect != null) return validatePaletteFx(effect, registry, ownUuid, templates)
+
+    val families = LinkedHashSet<AttributeFamily>()
+    for (row in rows) {
+        if (row.targetType != DEFERRED_TARGET_TYPE) {
+            val target = TargetRef.ofOrNull(row.targetType, row.targetKey)
+            if (target !is TargetRef.Fixture) {
+                return "A palette row targets a fixture or nothing at all, not '${row.targetType}'"
+            }
+        }
+        val attribute = PaletteAttribute.ofOrNull(row.attribute)
+            ?: triggerPaletteRefusal(row.attribute)?.let { throw TriggerNotStorableException(it) }
+            ?: commandPaletteRefusal(row.attribute)?.let { throw CommandNotStorableException(it) }
+            ?: return "A palette cannot hold '${row.attribute}' — " +
+                "slotted attributes (gobo, colour wheel, macros) are per-model, so they live in a " +
+                "recorded look. Palettes hold: " +
+                PaletteAttribute.entries.joinToString { it.attribute }
+        val intent = parsePaletteIntent(row.value)
+            ?: return "'${row.value}' is not a palette value for ${attribute.attribute}"
+        if (!attribute.accepts(intent)) {
+            return "'${row.value}' is the wrong kind of value for ${attribute.attribute}"
+        }
+        families.add(attribute.family)
+    }
+    if (families.size > 1) {
+        return "A palette holds exactly one attribute family, but these rows span " +
+            families.joinToString { it.name }
+    }
+    duplicateRow(rows)?.let { return it }
+    return conflictingWhitePolicy(rows)
+}
+
+/**
+ * Rule 5: one row per property per target.
+ *
+ * Two `rgbColour` rows are not a template holding two colours — they are one colour and one that
+ * silently loses, since every reader downstream takes the first it finds (`paletteRowsSwatch` in
+ * the client, `resolveColourGeneric`'s fold here) and nothing says which. Refused rather than
+ * ordered, because "the first one wins" is a rule about *storage order* and a template is a named
+ * thing whose meaning should not depend on which half of it was typed first.
+ *
+ * This was reachable before emitters existed and merely invisible: `isOfferable`'s old
+ * `rows.length === 1` clause hid such a template from the one surface that would have folded both.
+ * Relaxing that clause is what made the gap worth closing.
+ */
+private fun duplicateRow(rows: List<PaletteRowDto>): String? {
+    val seen = HashSet<Pair<String, String>>()
+    for (row in rows) {
+        val attribute = PaletteAttribute.ofOrNull(row.attribute) ?: continue
+        val target = if (row.isDeferred) "" else row.targetKey
+        if (!seen.add(attribute.attribute to target)) {
+            return "This palette sets ${attribute.attribute} twice" +
+                (if (target.isEmpty()) "" else " on '$target'") +
+                " — a palette holds one value per attribute, and the second would silently lose."
+        }
+    }
+    return null
+}
+
+/**
+ * Rule 6: an explicit white or amber row and a colour row that *derives* one are refused together.
+ *
+ * [WhitePolicy.EXTRACT] and [WhitePolicy.ADDITIVE] both drive the same emitter byte the explicit row
+ * names, so a template holding both asks two things of one channel and the answer would come down to
+ * composition order — which is exactly the kind of "it depends" a named, portable thing must not
+ * have. Refused rather than silently letting the explicit row win, because the operator who set a
+ * policy and then dialled an amber should be told the policy is now doing nothing.
+ *
+ * **UV is exempt**, and that is not an oversight: `mixColour` has never driven UV under any policy,
+ * so a `uv` row conflicts with nothing.
+ *
+ * Checked **per target** rather than across the whole template: a per-fixture template holds a row
+ * set per head, and one head's explicit amber says nothing about another head's policy.
+ */
+private fun conflictingWhitePolicy(rows: List<PaletteRowDto>): String? {
+    val emitters = rows.filter {
+        PaletteAttribute.ofOrNull(it.attribute)
+            .let { p -> p == PaletteAttribute.WHITE || p == PaletteAttribute.AMBER }
+    }
+    if (emitters.isEmpty()) return null
+    val deriving = rows.filter { row ->
+        PaletteAttribute.ofOrNull(row.attribute) == PaletteAttribute.COLOUR &&
+            (parsePaletteIntent(row.value) as? PaletteIntent.Colour)
+                ?.policy.let { it != null && it != WhitePolicy.RGB_ONLY }
+    }
+
+    // **Co-applicability, not a shared target key.** Two rows meet on a head when either is deferred
+    // — a deferred row applies to *every* head the template lands on — or when they name the same
+    // one. Grouping by target key instead put deferred rows in a bucket of their own, so a deferred
+    // `extract` colour beside a per-fixture `white` row passed validation and then drove that head's
+    // white channel from two unarbitrated sources at cook time: exactly the ambiguity this rule
+    // exists to forbid, and a shape `POST /palettes/from-programmer` can genuinely record (the
+    // generic/per-fixture collapse is decided *per property*, so one row can be deferred while
+    // another is not).
+    for (emitter in emitters) {
+        for (colour in deriving) {
+            if (!emitter.isDeferred && !colour.isDeferred && emitter.targetKey != colour.targetKey) continue
+            val policy = (parsePaletteIntent(colour.value) as? PaletteIntent.Colour)?.policy ?: continue
+            val name = PaletteAttribute.ofOrNull(emitter.attribute)?.attribute ?: emitter.attribute
+            return "This palette sets $name directly, so the colour's '${policy.token}' policy has " +
+                "nothing left to do — it drives the same emitter. Set the colour to 'rgbonly', or " +
+                "drop the $name row."
+        }
+    }
+    return null
+}
+
+/**
+ * Rules 2–5 for the effect arm of [validatePaletteContents].
+ *
+ * Split out rather than inlined because the row arm's four rules and these four answer different
+ * questions — the rows arm asks "is this a resolvable value", this asks "is this a runnable
+ * effect of a family a template can be banked under".
+ */
+private fun validatePaletteFx(
+    effect: PaletteFxDto,
+    registry: FxRegistry,
+    ownUuid: java.util.UUID?,
+    templates: PaletteRegistry?,
+): String? {
+    // Rule 2 (D4): the family is the effect library's own category, through the same map a Look's
+    // derived families use. `controls` has no tempo, so names none; a beam effect (effects plan
+    // D6) is a Beam palette.
+    val family = attributeFamilyForFxFamily(effect.family)
+        ?: return "A palette cannot hold a '${effect.family}' FX — an FX palette is " +
+            "banked by attribute family, and that FX family maps to none. FX palettes are: " +
+            PALETTE_FX_FAMILIES.joinToString { it.name }
+
+    // Rule 3: the library is the authority on what an effect *is*; the stored `category` is a
+    // denormalisation for the family derivation and the list DTO, so it must agree or the two
+    // disagree silently — the template banks under one family and runs as another.
+    val registration = registry.getRegistration(effect.fxType)
+        ?: return "'${effect.fxType}' is not an FX this desk knows"
+    // Palette Steps sits in the family of the palettes it is given (effects plan §3.6, §4.4), so
+    // what its category must agree with is that family's, read off the palettes themselves.
+    val category = if (registration.id == PALETTE_STEPS_ID) {
+        validatePaletteSteps(effect.parameters["palettes"], templates).getOrElse { return it.message }.fxFamily
+    } else {
+        stepsFxFamily(registration.id, null) ?: registration.family
+    }
+    if (!category.equals(effect.family, ignoreCase = true)) {
+        return "'${effect.fxType}' is in the $category family, not ${effect.family}"
+    }
+    // A palette's beam effect lands, on a press, on the property the effect names or else the one
+    // its registration declares, so a script-registered one must declare exactly one, by name.
+    // Slot Steps declares only the `setting` sentinel — its slots are one setting's options, and
+    // which setting is the palette's to name (`attribute`, the setting it steps).
+    if (family == AttributeFamily.BEAM && registration.id != PALETTE_STEPS_ID) {
+        val named = effect.attribute?.takeIf { it.isNotBlank() }
+            ?: registration.compatibleAttributes.singleOrNull()?.takeUnless { it in FX_ATTRIBUTE_SENTINELS }
+        if (named == null) {
+            return if (registration.id == SLOT_STEPS_ID) {
+                "Slot Steps in a palette must name the setting it steps — a gobo or colour wheel"
+            } else {
+                "A Beam palette's FX must drive one named attribute — '${effect.fxType}' " +
+                    "declares ${registration.compatibleAttributes.joinToString().ifEmpty { "none" }}"
+            }
+        }
+    }
+    if (registration.id == SLOT_STEPS_ID &&
+        effect.parameters["slots"].orEmpty().split(",").count { it.isNotBlank() } < 2
+    ) {
+        return "Slot Steps steps between two slots or more"
+    }
+
+    // Rule 4: the enum-valued fields, exactly as `validateLookFx` checks them and for the
+    // reason its KDoc gives — an unrecognised `blendMode` reaches `varchar(50)` intact, reads back
+    // as itself and renders in the UI as the template's blend, while every spawn warns and plays
+    // `OVERRIDE`. `FxSpecCoercion.Lenient` exists to *survive* that, not to be the only thing
+    // standing between an authoring route and a template that permanently misreports itself.
+    FxSpecCoercion.Strict.problem(
+        blendMode = effect.blendMode,
+        order = effect.order,
+        elementMode = effect.elementMode,
+        elementFilter = effect.elementFilter,
+        direction = effect.direction,
+        amount = effect.amount,
+        runs = effect.runs,
+        spread = effect.spread,
+        wings = effect.wings,
+        segments = effect.segments,
+        parts = effect.parts,
+    )?.let { return it }
+
+    registry.fxWriteProblem(effect.fxType, effect.parameters, effect.family)?.let { return it }
+
+    // Rule 5 (D12): a template naming itself would recurse in `createFxWithPalettes`. The
+    // other direction — an effect template's colour parameter naming a *value* colour template —
+    // is allowed and is the useful case.
+    if (ownUuid != null) {
+        val selfRef = serializePaletteColourRef(ownUuid)
+        val namesSelf = effect.parameters.values.any { value ->
+            value.split(",").any { it.trim().equals(selfRef, ignoreCase = true) }
+        }
+        if (namesSelf) return "A palette's FX cannot reference the palette itself"
+    }
+    return null
+}
+
+/**
+ * A Palette Steps `palettes` parameter as the write boundary sees it (effects plan §3.6): two
+ * generic value palettes or more, every one this desk can read, all of one family — the shape the
+ * effect is stored and offered under.
+ */
+private fun validatePaletteSteps(parameter: String?, templates: PaletteRegistry?): Result<PaletteStepsShape> {
+    val source = templates?.let(::PaletteSource)
+        ?: return Result.failure(IllegalStateException("Palette Steps cannot be checked here"))
+    val named = parameter.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    if (named.size < 2) return Result.failure(IllegalArgumentException("Palette Steps steps between two palettes or more"))
+    val steps = named.map { raw ->
+        source.paletteStep(raw) ?: return Result.failure(
+            IllegalArgumentException("Palette Steps names '$raw', which is not a generic value palette"),
+        )
+    }
+    return paletteStepsShape(steps)
+}
+
+/** The families an effect template can be banked under (D4): every family an effect category names. */
+private val PALETTE_FX_FAMILIES = setOf(
+    AttributeFamily.INTENSITY,
+    AttributeFamily.COLOUR,
+    AttributeFamily.POSITION,
+    AttributeFamily.BEAM,
+)
+
+/** Must be called inside a transaction. */
+private fun createPaletteRows(template: DaoPalette, rows: List<PaletteRowDto>) {
+    // No row may name a one-shot trigger (stage-view plan session 9, D15); a generic row lands on the
+    // selection, so it is checked against every trigger name there is.
+    // The index is queries; build it only when some name could be refused at all.
+    if (rows.any { TriggerIndex.mayRefuse(it.attribute) }) {
+        TriggerIndex.of(template.project).check(
+            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.attribute, "rows[$i]") },
+        )
+    }
+    // Nor a fixture command (fixture optics plan session 7).
+    if (rows.any { CommandIndex.mayRefuse(it.attribute) }) {
+        CommandIndex.of(template.project).check(
+            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.attribute, "rows[$i]") },
+        )
+    }
+    for ((index, row) in rows.withIndex()) {
+        DaoPaletteRow.new {
+            this.palette = template
+            targetType = row.targetType
+            targetKey = if (row.targetType == DEFERRED_TARGET_TYPE) "" else row.targetKey
+            attribute = row.attribute
+            value = row.value
+            sortOrder = if (row.sortOrder != 0) row.sortOrder else index
+        }
+    }
+}
+
+/**
+ * Write a template's one effect (D2). Must be called inside a transaction, on a template with none.
+ *
+ * The enum-valued fields go in as given rather than being coerced here: the write boundary has
+ * already rejected an unrecognised blend / distribution / element mode through
+ * `FxSpecCoercion.Strict`, exactly as `validateLookFx` does, and spawn time coerces
+ * leniently — the same treatment a Look effect gets, so the two cannot disagree about what a
+ * stored effect means.
+ */
+private fun createPaletteFx(template: DaoPalette, effect: PaletteFxDto, uuid: java.util.UUID? = null) {
+    // A template's effect has no target of its own: it lands on the selection.
+    TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "FX")))
+    CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "FX")))
+    DaoPaletteFxEntity.new {
+        if (uuid != null) this.uuid = uuid
+        this.palette = template
+        fxType = effect.fxType
+        family = effect.family
+        attribute = effect.attribute
+        cycle = effect.cycle
+        blendMode = effect.blendMode
+        order = effect.order
+        phaseOffset = effect.phaseOffset
+        elementMode = effect.elementMode
+        elementFilter = effect.elementFilter
+        timing = storedTiming(effect.timing)
+        parameters = effect.parameters
+        // `speedMasterUuidOrNull`, not `UUID.fromString`: this is a client-supplied string, and
+        // the bare parse throws `IllegalArgumentException` out of the transaction and out of the
+        // handler — a 500 on a malformed body. The Look path (`writeLookChildren`) already goes
+        // through the tolerant helper, and null here means master 1, which is the documented
+        // meaning of an absent master everywhere else.
+        speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
+        rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+        // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
+        seconds = effect.seconds
+        amount = effect.amount
+        direction = FxSpecCoercion.Names.canonicalDirection(effect.direction)
+        runs = effect.runs
+        this.spread = effect.spread
+        this.wings = effect.wings
+        this.segments = effect.segments
+        this.parts = effect.parts
+    }
+}
+
+// ─── Usage ──────────────────────────────────────────────────────────────
+
+internal data class PaletteUsage(
+    val layerCount: Int,
+    val cueIds: List<Int>,
+    val cueNames: List<String>,
+    /**
+     * How many busk pages hold a pad for this template — a **hint**, not a use.
+     *
+     * It rides here because it is wanted by exactly the callers [paletteUsageFor] already serves,
+     * and batching it beside them keeps the library read at a fixed number of queries. It is
+     * deliberately absent from [describe]: that string is the *delete guard's* message, and a pad
+     * does not block a delete (busk-layout plan D3) — the record's delete sweeps its pads.
+     */
+    val buskPageCount: Int = 0,
+) {
+    fun describe(): String = when {
+        layerCount == 0 -> "nothing"
+        cueNames.size == 1 -> "1 layer in ${cueNames.first()}"
+        else -> "$layerCount layers across ${cueNames.size} cues"
+    }
+}
+
+/**
+ * How many **effect parameters** reference this template by uuid.
+ *
+ * Deliberately not folded into [PaletteUsage]: that is computed on every library read, and this is
+ * a scan of three JSON columns rather than an indexed FK lookup. Delete is rare; listing is not.
+ *
+ * The scan is over the whole show's ad-hoc, Look and template effects rather than a `LIKE` on the JSON text,
+ * because the stored form is a serialised `Map<String, String>` and a substring match on it would
+ * also hit a parameter whose *name* happened to contain the uuid. Effect counts are in the hundreds.
+ *
+ * `fx_definitions.parameters` is **not** scanned: it holds a definition's schema *defaults*, which
+ * seed new effects rather than driving running ones. A default naming a deleted template produces
+ * one white effect the next time someone adds it, not a change to anything on stage.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun paletteFxReferenceCount(paletteUuid: java.util.UUID): Int {
+    val ref = serializePaletteColourRef(paletteUuid)
+    fun Map<String, String>.holdsRef() = values.any { value ->
+        value.split(",").any { it.trim().equals(ref, ignoreCase = true) }
+    }
+    val adHoc = DaoCueAdHocFxEntity.all().count { it.parameters.holdsRef() }
+    val look = DaoLookFxEntity.all().count { it.parameters.holdsRef() }
+    // The third carrier of effect parameters, since a template can hold an effect (D12): an effect
+    // template's colour parameter naming a *value* colour template is the allowed and useful
+    // direction, and without this arm that value template stays deletable out from under a running
+    // effect — the exact failure this guard exists to prevent.
+    val paletteFx = DaoPaletteFxEntity.all().count { it.parameters.holdsRef() }
+    return adHoc + look + paletteFx
+}
+
+/** Phrase all three kinds of usage for the 409 body. */
+private fun describePaletteUse(
+    usage: PaletteUsage,
+    fxReferenceCount: Int,
+    runningCount: Int,
+): String {
+    val parts = buildList {
+        if (usage.layerCount > 0) add(usage.describe())
+        if (fxReferenceCount > 0) {
+            add(if (fxReferenceCount == 1) "1 FX parameter" else "$fxReferenceCount FX parameters")
+        }
+        // Phrased as a state rather than a count: an operator does not think of the programmer as
+        // holding "2 layers", they think of the template as being up right now.
+        if (runningCount > 0) add("the programmer now")
+    }
+    return if (parts.isEmpty()) "nothing" else parts.joinToString(" and ")
+}
+
+/** Must be called inside a transaction. */
+internal fun paletteUsage(paletteId: Int): PaletteUsage =
+    paletteUsageFor(listOf(paletteId))[paletteId]
+        ?: PaletteUsage(0, emptyList(), emptyList(), 0)
+
+/**
+ * Batched form for a list response — one query instead of one per template, the same shape
+ * `lookUsageFor` uses and for the same reason: a layer's children are a table, so touching them per
+ * record would be a lazy query each on every library read.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun paletteUsageFor(paletteIds: Collection<Int>): Map<Int, PaletteUsage> {
+    if (paletteIds.isEmpty()) return emptyMap()
+    val ids = paletteIds.toList()
+    val layers = DaoCueLayer.find { DaoCueLayers.palette inList ids }.toList()
+    // `template` is nullable (a layer may name a Look instead) but this query filtered on it, so
+    // every row here has one.
+    val byPalette = layers.groupBy { it.palette!!.id.value }
+    val buskPages = buskPageCountsFor(BuskPadKind.PALETTE, ids)
+    return ids.associateWith { paletteId ->
+        val mine = byPalette[paletteId].orEmpty()
+        val cues = mine.map { it.cue }.distinctBy { it.id.value }
+        PaletteUsage(
+            layerCount = mine.size,
+            cueIds = cues.map { it.id.value },
+            cueNames = cues.map { it.name },
+            buskPageCount = buskPages[paletteId] ?: 0,
+        )
+    }
+}
+
+// ─── Mapping ────────────────────────────────────────────────────────────
+
+/** One stored template row on the wire. Must be called inside a transaction. */
+internal fun DaoPaletteRow.toDto() = PaletteRowDto(
+    targetType = targetType,
+    targetKey = targetKey,
+    attribute = attribute,
+    value = value,
+    sortOrder = sortOrder,
+)
+
+/**
+ * One stored template effect on the wire. Must be called inside a transaction.
+ *
+ * Takes the registry rather than defaulting it away, so [PaletteFxDto.timingSource] cannot be
+ * silently omitted by a new call site: a DTO without it makes `cycle` unreadable, and the
+ * failure is a client rendering "2 Bars" for a two-second cycle rather than anything that throws.
+ */
+internal fun DaoPaletteFxEntity.toDto(registry: FxRegistry) = PaletteFxDto(
+    fxType = fxType,
+    family = family,
+    attribute = attribute,
+    cycle = cycle,
+    blendMode = blendMode,
+    order = order,
+    phaseOffset = phaseOffset,
+    elementMode = elementMode,
+    elementFilter = elementFilter,
+    timing = timingOf(timing),
+    parameters = parameters,
+    speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    seconds = seconds,
+    amount = amount,
+    direction = direction,
+    runs = runs,
+    spread = spread,
+    wings = wings,
+    segments = segments,
+    parts = parts,
+    // The registry is the authority, exactly as it is for `category` — which the write boundary
+    // checks rather than trusts. Unlike `category` this one is not stored at all: an effect's
+    // timing source is a property of the *effect type*, so a column would be a second copy that a
+    // re-registered script could contradict.
+    timingSource = registry.getRegistration(fxType)?.timingSource?.name,
+)
+
+/**
+ * The one family this template is in — the **single** derivation, from rows or from the effect's
+ * library category (D4).
+ *
+ * One function because there are two readers that must never disagree: [toDto], which is what the
+ * library banks the template under, and the toggle route, which masks the programmer layer it adds
+ * to that same family. They were two copies of the row expression before an effect template
+ * existed, at which point the toggle route's copy would have derived null and added an unmasked
+ * layer.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun DaoPalette.familyOf(): AttributeFamily? =
+    // `sortedBy` rather than Exposed's `orderBy`: this is called from `toDto` *after* the rows have
+    // been loaded, and re-ordering a loaded `SizedIterable` throws "Can't order already loaded
+    // data". A template has a handful of rows, so sorting them in memory costs nothing and leaves
+    // this function safe to call whatever the caller has already read.
+    paletteFamily(rows.sortedBy { it.sortOrder }.map { it.attribute }, effect?.family)
+
+/**
+ * The bundled emitters this template's rows name outright — `PaletteDto.requiredEmitters`.
+ *
+ * In [PaletteAttribute.EMITTERS] order rather than row order, so the wire form has one spelling and
+ * a client can compare two templates' requirements without sorting. Must be called inside a
+ * transaction.
+ */
+internal fun DaoPalette.requiredEmittersOf(): List<String> {
+    val named = rows.mapNotNull { PaletteAttribute.ofOrNull(it.attribute) }.toSet()
+    return PaletteAttribute.EMITTERS.filter { it in named }.map { it.attribute }
+}
+
+/**
+ * Does this template take its targets from the press?
+ *
+ * An effect template is generic by construction (D3) — it names no target at all, so the "every row
+ * is deferred" test has nothing to run over and would answer false. Extracted because three callers
+ * need it and each is a place a press could refuse differently: [toDto], which is what the library
+ * shows, `BuskPressService`, which refuses a generic press with nothing selected, and
+ * `DefaultSurfaceActions.pressPalette`, which is the same refusal from a button. Must be called
+ * inside a transaction.
+ */
+internal fun DaoPalette.isGenericPalette(): Boolean {
+    if (effect != null) return true
+    val rowList = rows.toList()
+    return rowList.isNotEmpty() && rowList.all { it.isDeferred }
+}
+
+/** Must be called inside a transaction. */
+internal fun DaoPalette.toDto(registry: FxRegistry, usage: PaletteUsage? = null): PaletteDto {
+    // `sortedBy`, not Exposed's `orderBy`, for the reason [familyOf] gives: the PUT route reads
+    // the rows before it validates, so by the time this runs the collection is loaded and
+    // re-ordering it throws.
+    val rowList = rows.sortedBy { it.sortOrder }
+    val storedFx = effect
+    val resolvedUsage = usage ?: paletteUsage(id.value)
+    return PaletteDto(
+        id = id.value,
+        uuid = uuid.toString(),
+        name = name,
+        notes = notes,
+        fadeDurationMs = fadeDuration?.toMillis(),
+        family = familyOf()?.name,
+        isGeneric = isGenericPalette(),
+        kind = if (storedFx != null) PALETTE_KIND_FX else PALETTE_KIND_VALUE,
+        requiredEmitters = requiredEmittersOf(),
+        lastPressedAt = lastPressedAt?.toIsoUtc(),
+        rows = rowList.map { it.toDto() },
+        fx = storedFx?.toDto(registry),
+        layerCount = resolvedUsage.layerCount,
+        buskPageCount = resolvedUsage.buskPageCount,
+    )
+}
+
+/** [PaletteDto.kind] for a template holding rows. */
+internal const val PALETTE_KIND_VALUE = "value"
+
+/** [PaletteDto.kind] for a template holding one effect. */
+internal const val PALETTE_KIND_FX = "fx"
+
+// ─── Resolve ────────────────────────────────────────────────────────────
+
+/**
+ * Answer the editor's panel: what will each head actually receive?
+ *
+ * Runs the **same** [PaletteResolver] the cook does, which is the entire point — see §6 of the
+ * plan: "the ΔE shown in the editor and the value actually written at cook must come from one
+ * implementation". A head the template cannot reach at all is reported rather than dropped, because
+ * "why is that bar missing?" is exactly the question the panel exists to answer; a head with nothing
+ * in the family is absent, because it was never a candidate.
+ */
+private fun resolvePaletteAgainstPatch(
+    state: State,
+    request: PaletteResolveRequest,
+): PaletteResolveResponse {
+    val fixtures = state.show.fixtures
+    val candidates: List<Fixture> = if (request.targets.isEmpty()) {
+        // "The whole patch" is the patch an operator is offered: never an infrastructure fixture.
+        fixtures.operatorFixtures
+    } else {
+        val keys = expandTargetsToFixtureKeys(
+            state,
+            request.targets.map { CueTargetDto(it.type, it.key) },
+        )
+        fixtures.fixtures.filter { it.key in keys }
+    }
+
+    // Every row paired with the heads it lands on, before anything is resolved — the apply's and the
+    // cook's pairing, so the panel promises what the desk does. A per-fixture row answers only for
+    // the head it names; a generic row answers for all. A multi-head fixture whose property lives
+    // only on its cells (the Shehds' colour, on its three zones) answers once per cell
+    // ([PaletteFanOut]), where the parent alone was "never a candidate" and quietly omitted.
+    // Parsed **once**, not once per candidate: this backs the editor's live panel, so on a rig-wide
+    // resolve the old shape re-parsed every row for every patched head on every debounced keystroke.
+    val fittedMediaFor: (String) -> uk.me.cormack.lighting7.fixture.media.FittedMedia? = fixtures::fittedMediaFor
+    val parsedRows = request.rows.mapNotNull { row -> parsePaletteIntent(row.value)?.let { row to it } }
+    val landings: List<Pair<Pair<PaletteRowDto, PaletteIntent>, List<GroupableFixture>>> =
+        parsedRows.map { (row, intent) ->
+            val forThisRow = when (val target = row.target) {
+                is TargetRef.Fixture -> candidates.filter { it.key == target.key }
+                else -> candidates
+            }
+            (row to intent) to forThisRow.flatMap { PaletteFanOut.headsFor(it, row.attribute, fittedMediaFor) }
+        }
+
+    // The whole-template colour rule, per landing head, before any row is reported. A head that
+    // cannot serve every colour row serves none of them, so each of its colour rows has to say
+    // *that* rather than its own answer — otherwise the panel shows the hex landing fine beside an
+    // unsupported amber and the operator reads it as "mostly works", which is the opposite of what
+    // the desk will do.
+    val colourRequirement: Map<String, PaletteResolver.ColourRequirement> = buildMap {
+        val applicableByHead = LinkedHashMap<String, Pair<GroupableFixture, MutableList<Pair<String, PaletteIntent>>>>()
+        for ((rowIntent, heads) in landings) {
+            for (head in heads) {
+                applicableByHead.getOrPut(head.targetKey) { head to ArrayList() }
+                    .second.add(rowIntent.first.attribute to rowIntent.second)
+            }
+        }
+        for ((key, headRows) in applicableByHead) {
+            put(key, PaletteResolver.unmetColourRequirement(headRows.first, headRows.second, PaletteFanOut.mediaOf(headRows.first, fittedMediaFor)))
+        }
+    }
+
+    val entries = ArrayList<PaletteResolutionDto>()
+    for ((rowIntent, heads) in landings) {
+        val (row, intent) = rowIntent
+        val isColourRow = PaletteAttribute.ofOrNull(row.attribute)?.family == AttributeFamily.COLOUR
+        for (head in heads.distinctBy { it.targetKey }) {
+            val resolution = PaletteResolver.resolve(head, row.attribute, intent, PaletteFanOut.mediaOf(head, fittedMediaFor))
+            val requirement = if (isColourRow) colourRequirement[head.targetKey] else null
+            // A head with nothing in this family was never a candidate — omitted rather than listed
+            // as a failure, which is what the resolver's own `NotACandidate` arm says. It used to be
+            // decided by matching the reason against a `"no colour"` constant, and a UV-only template
+            // answers `"no uv"` for every head in the rig — so a rig-wide resolve listed every
+            // dimmer and PAR as a failure instead of omitting them.
+            if (requirement is PaletteResolver.ColourRequirement.NotACandidate) continue
+            val unmet = (requirement as? PaletteResolver.ColourRequirement.Unmet)?.reason
+            val (outcome, detail, deltaE) = if (unmet != null) {
+                // Reported under the *template's* reason, not this row's.
+                Triple("UNSUPPORTED", unmet, null)
+            } else {
+                describeNote(resolution.note)
+            }
+            // A cell names itself by its parent and position (`Shehds 1 · Element 2`) and carries its
+            // parent's type, so the panel's two lines read as they do for a whole head.
+            val element = head as? FixtureElement<*>
+            val fixture = element?.parentFixture ?: head as? Fixture
+            // A head with nothing in this family was never a candidate — omitted rather than listed
+            // as a failure. `Unsupported` still appears when the head *could* have taken it but
+            // cannot (no degree range, no dimmer), which is the distinction worth drawing.
+            entries.add(
+                PaletteResolutionDto(
+                    fixtureKey = head.targetKey,
+                    fixtureName = if (element != null) {
+                        "${element.parentFixture.fixtureName} · Element ${element.elementIndex + 1}"
+                    } else {
+                        fixture?.fixtureName ?: head.displayName
+                    },
+                    typeKey = fixture?.typeKey ?: "",
+                    attribute = row.attribute,
+                    resolvedAttributeName = resolution.attribute,
+                    outcome = outcome,
+                    detail = detail,
+                    deltaE = deltaE,
+                    // Null when the template refuses as a whole, even though this row on its own
+                    // resolved — the head receives nothing, and printing the value it *would* have
+                    // taken would say the opposite.
+                    value = if (unmet == null) resolution.value?.serialize() else null,
+                )
+            )
+        }
+    }
+    return PaletteResolveResponse(entries)
+}
+
+
+private fun describeNote(note: PaletteResolver.Note): Triple<String, String?, Double?> = when (note) {
+    is PaletteResolver.Note.Exact -> Triple("EXACT", null, null)
+    is PaletteResolver.Note.Clamped -> Triple("CLAMPED", note.to, null)
+    is PaletteResolver.Note.Snapped -> Triple("SNAPPED", note.slot, note.deltaE)
+    is PaletteResolver.Note.Degraded -> Triple("DEGRADED", note.how, null)
+    is PaletteResolver.Note.Unsupported -> Triple("UNSUPPORTED", note.reason, null)
+}

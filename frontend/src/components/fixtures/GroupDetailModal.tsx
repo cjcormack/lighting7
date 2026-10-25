@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useGroupListQuery } from '../../store/groups'
 import { FixtureSheet } from '../fixtureSheet/FixtureSheet'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
+import { SheetCloseContext } from '../fixtureSheet/sheetContext'
 
 interface GroupDetailModalProps {
   groupName: string | null
@@ -28,19 +29,21 @@ export function GroupDetailModal({ groupName, onClose }: GroupDetailModalProps) 
   }, [groupName])
 
   return (
-    <Sheet open={groupName !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
-        <SheetDescription className="sr-only">The group&apos;s values, its members and its effects</SheetDescription>
-        {group ? (
-          // Keyed by group so the view and the open row reset when the sheet moves to another.
-          <FixtureSheet key={group.name} group={group} host="popup" titleComponent={SheetTitle} onOpenMember={setSelectedFixture} />
-        ) : (
-          <SheetTitle className="p-4">{groupName ?? 'Group'}</SheetTitle>
-        )}
-      </SheetContent>
+    <SheetCloseContext.Provider value={onClose}>
+      <Sheet open={groupName !== null} onOpenChange={(open) => !open && onClose()}>
+        <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
+          <SheetDescription className="sr-only">The group&apos;s values, its members and its FX</SheetDescription>
+          {group ? (
+            // Keyed by group so the view and the open row reset when the sheet moves to another.
+            <FixtureSheet key={group.name} group={group} host="popup" titleComponent={SheetTitle} onOpenMember={setSelectedFixture} />
+          ) : (
+            <SheetTitle className="p-4">{groupName ?? 'Group'}</SheetTitle>
+          )}
+        </SheetContent>
 
-      {/* A member's own sheet, over the group's. */}
-      <FixtureDetailModal fixtureKey={selectedFixture} onClose={() => setSelectedFixture(null)} />
-    </Sheet>
+        {/* A member's own sheet, over the group's. */}
+        <FixtureDetailModal fixtureKey={selectedFixture} onClose={() => setSelectedFixture(null)} />
+      </Sheet>
+    </SheetCloseContext.Provider>
   )
 }

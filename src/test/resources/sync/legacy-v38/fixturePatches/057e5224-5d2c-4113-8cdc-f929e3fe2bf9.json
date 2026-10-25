@@ -1,0 +1,55 @@
+{
+  "displayName": "Rev 1",
+  "extraPlacements": [
+    {
+      "label": "SL",
+      "media": {
+        "slots": {
+          "gelScroller": {
+            "L201_FULL_CT_BLUE": {
+              "gel": "R80"
+            }
+          },
+          "mediaFrame": {
+            "IN": {
+              "gel": "L202"
+            }
+          }
+        }
+      },
+      "stageX": -4.0,
+      "stageY": -16.0,
+      "stageZ": 2.8,
+      "uuid": "a2cc842f-31e9-4e40-9824-2c50982f9218"
+    }
+  ],
+  "fixtureTypeKey": "etc-source4-revolution-base-frame",
+  "key": "rev-1",
+  "locate": [
+    {
+      "pan": 140,
+      "panFine": 12,
+      "tilt": 96,
+      "tiltFine": 200
+    }
+  ],
+  "media": {
+    "slots": {
+      "fbWheelPos": {
+        "SLOT_1": {
+          "gobo": "breakup"
+        }
+      },
+      "gelScroller": {
+        "L201_FULL_CT_BLUE": {
+          "gel": "R26"
+        },
+        "R02_BASTARD_AMBER": {}
+      }
+    }
+  },
+  "sortOrder": 9,
+  "startChannel": 440,
+  "universeConfigUuid": "08615f24-edb5-4c0b-b322-e38e4d81cee4",
+  "uuid": "057e5224-5d2c-4113-8cdc-f929e3fe2bf9"
+}

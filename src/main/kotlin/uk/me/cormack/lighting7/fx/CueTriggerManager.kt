@@ -35,7 +35,7 @@ class CueTriggerManager(
     private val activeTriggerJobs = ConcurrentHashMap<Int, MutableList<Job>>()
 
     /** Effect IDs created by timed effects/triggers per cue ID (for targeted cleanup) */
-    private val triggerEffectIds = ConcurrentHashMap<Int, MutableList<Long>>()
+    private val triggerFxIds = ConcurrentHashMap<Int, MutableList<Long>>()
 
     /** cueId → the stack whose hold brought it on, for its DEACTIVATION scripts' `CueContext`. */
     private val cueToStack = ConcurrentHashMap<Int, Int>()
@@ -83,12 +83,12 @@ class CueTriggerManager(
      * which a hold taken or let go after this activation moves. Timed fires produce Layer 4 rows and
      * effects at it, so they compose consistently with the cue's apply-time rows.
      */
-    internal fun activateTimedEffectsForCue(
+    internal fun activateTimedFxForCue(
         cueId: Int,
         cueStackId: Int?,
         priority: () -> Int,
         cueData: CueApplyData,
-        timedAdHocEffects: List<CueAdHocEffectDto>,
+        timedAdHocFx: List<CueAdHocFxDto>,
         scope: CoroutineScope,
     ) {
         // The `enabled && amount > 0.0` half of [CueComposer.contributingLayers]: an amount-0 layer
@@ -96,12 +96,12 @@ class CueTriggerManager(
         // no-op re-cook. Not the helper itself, because this wants the layers the helper *drops* —
         // the unfired timed ones are precisely what needs a timer.
         val timedLayers = cueData.layers.filter { it.enabled && it.amount > 0.0 && it.isTimed }
-        if (timedLayers.isEmpty() && timedAdHocEffects.isEmpty()) return
+        if (timedLayers.isEmpty() && timedAdHocFx.isEmpty()) return
 
         cueStackId?.let { cueToStack[cueId] = it }
 
         val jobs = mutableListOf<Job>()
-        val effectIds = triggerEffectIds.getOrPut(cueId) { mutableListOf() }
+        val fxIds = triggerFxIds.getOrPut(cueId) { mutableListOf() }
         // A fresh activation has fired nothing: start from empty rather than inheriting a previous
         // run's set, which would make a re-applied cue skip its delays.
         val fired: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -126,15 +126,15 @@ class CueTriggerManager(
                 fired.add(layer.layerId)
 
                 // Effects first, so a fire that spawns nothing still publishes its values.
-                for ((firedLayer, layerEffect, target) in CueComposer.cookEffects(
+                for ((firedLayer, layerFx, target) in CueComposer.cookFx(
                     state.show.fixtures, cueId, listOf(layer),
                     state.show.lookRegistry::snapshot,
                     // A timed *template* layer spawns its effect too (D5), so this path resolves
-                    // both kinds. Passing it is not optional — see `cookEffects`.
-                    state.show.templateRegistry::snapshot,
+                    // both kinds. Passing it is not optional — see `cookFx`.
+                    state.show.paletteRegistry::snapshot,
                     includeTimed = setOf(layer.layerId),
                 )) {
-                    applyLayerEffectToTarget(firedLayer, layerEffect, target, cueId, cueStackId, priority(), effectIds)
+                    applyLayerFxToTarget(firedLayer, layerFx, target, cueId, cueStackId, priority(), fxIds)
                 }
 
                 val cooked = fireCook.cook(fired.toSet())
@@ -154,9 +154,9 @@ class CueTriggerManager(
         }
 
         // Launch timed ad-hoc effects
-        for (effect in timedAdHocEffects) {
+        for (effect in timedAdHocFx) {
             val job = launchTimedAction(effect.delayMs, effect.intervalMs, effect.randomWindowMs, scope) {
-                applyAdHocEffect(effect, cueId, cueStackId, priority(), effectIds)
+                applyAdHocFx(effect, cueId, cueStackId, priority(), fxIds)
             }
             if (job != null) jobs.add(job)
         }
@@ -185,7 +185,7 @@ class CueTriggerManager(
         cueStackId?.let { cueToStack[cueId] = it }
 
         val jobs = mutableListOf<Job>()
-        val effectIds = triggerEffectIds.getOrPut(cueId) { mutableListOf() }
+        val fxIds = triggerFxIds.getOrPut(cueId) { mutableListOf() }
 
         // Store deactivation triggers for later
         val deactivation = triggers.filter { it.triggerType == "DEACTIVATION" }
@@ -202,7 +202,7 @@ class CueTriggerManager(
                     if (hasTiming) {
                         val job = launchTimedAction(trigger.delayMs, trigger.intervalMs, trigger.randomWindowMs, scope) {
                             try {
-                                executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
+                                executeScriptTrigger(trigger.scriptId, cueId, cueStackId, fxIds)
                             } catch (e: Exception) {
                                 logger.error(USER_SCRIPT, "Error executing timed ACTIVATION script trigger for cue $cueId", e)
                             }
@@ -211,7 +211,7 @@ class CueTriggerManager(
                     } else {
                         // Immediate activation
                         try {
-                            executeScriptTrigger(trigger.scriptId, cueId, cueStackId, effectIds)
+                            executeScriptTrigger(trigger.scriptId, cueId, cueStackId, fxIds)
                         } catch (e: Exception) {
                             logger.error(USER_SCRIPT, "Error executing ACTIVATION script trigger for cue $cueId", e)
                         }
@@ -250,8 +250,8 @@ class CueTriggerManager(
         activeTriggerJobs.remove(cueId)?.forEach { it.cancel() }
 
         // Remove timed/trigger-created effects
-        triggerEffectIds.remove(cueId)?.forEach { effectId ->
-            fxEngine.removeEffect(effectId)
+        triggerFxIds.remove(cueId)?.forEach { fxId ->
+            fxEngine.removeFx(fxId)
         }
 
         firedTimedLayers.remove(cueId)
@@ -311,18 +311,18 @@ class CueTriggerManager(
      * cooked effect triple from the caller so the fire path can share one DB transaction with the
      * Layer 4 property-assignment lookup.
      */
-    private fun applyLayerEffectToTarget(
+    private fun applyLayerFxToTarget(
         layer: CookLayer,
-        layerEffect: StoredEffect,
-        target: uk.me.cormack.lighting7.models.EffectTargetRef,
+        layerFx: StoredFx,
+        target: uk.me.cormack.lighting7.models.FxTargetsRef,
         cueId: Int,
         cueStackId: Int?,
         priority: Int,
-        effectIds: MutableList<Long>,
+        fxIds: MutableList<Long>,
     ) {
-        val effectSpec = layerEffect.toEffectSpec()
+        val fxSpec = layerFx.toFxSpec()
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, target, effectSpec)
+            FxSpawner.resolveTargetForCue(state, target, fxSpec)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: timed layer on '{}' — target '{}' unresolvable — skipping effect: {}",
@@ -331,8 +331,8 @@ class CueTriggerManager(
             null
         } ?: return
 
-        val instance = EffectSpawner.createEffectInstanceOrNull(
-            effectSpec, fxTarget, state = state,
+        val instance = FxSpawner.createFxInstanceOrNull(
+            fxSpec, fxTarget, state = state,
             context = "cue $cueId: timed layer on '${layer.source.name}'",
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
@@ -343,25 +343,25 @@ class CueTriggerManager(
         instance.cueStackId = cueStackId
         instance.priority = priority
 
-        val id = fxEngine.addEffect(instance)
-        synchronized(effectIds) { effectIds.add(id) }
+        val id = fxEngine.addFx(instance)
+        synchronized(fxIds) { fxIds.add(id) }
     }
 
     /**
      * Apply an ad-hoc effect, creating an FxInstance and adding to the engine.
      */
-    private fun applyAdHocEffect(
-        effect: CueAdHocEffectDto,
+    private fun applyAdHocFx(
+        effect: CueAdHocFxDto,
         cueId: Int,
         cueStackId: Int?,
         priority: Int,
-        effectIds: MutableList<Long>,
+        fxIds: MutableList<Long>,
     ) {
         val toggleTarget = CueTargetDto(effect.target)
-        val adHocEffectSpec = effect.toLookEffectSpec()
+        val adHocFxSpec = effect.toLookFxSpec()
 
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, toggleTarget, adHocEffectSpec)
+            FxSpawner.resolveTargetForCue(state, toggleTarget, adHocFxSpec)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: timed ad-hoc effect on '{}' — target unresolvable — skipping: {}",
@@ -370,15 +370,15 @@ class CueTriggerManager(
             null
         } ?: return
 
-        val instance = EffectSpawner.createEffectInstanceOrNull(
-            adHocEffectSpec, fxTarget, state, "cue $cueId: timed ad-hoc effect on '${effect.targetKey}'",
+        val instance = FxSpawner.createFxInstanceOrNull(
+            adHocFxSpec, fxTarget, state, "cue $cueId: timed ad-hoc effect on '${effect.targetKey}'",
         ) ?: return
         instance.cueId = cueId
         instance.cueStackId = cueStackId
         instance.priority = priority
 
-        val id = fxEngine.addEffect(instance)
-        synchronized(effectIds) { effectIds.add(id) }
+        val id = fxEngine.addFx(instance)
+        synchronized(fxIds) { fxIds.add(id) }
     }
 
     /**
@@ -388,7 +388,7 @@ class CueTriggerManager(
         scriptId: Int,
         cueId: Int,
         cueStackId: Int?,
-        effectIds: MutableList<Long>,
+        fxIds: MutableList<Long>,
     ) {
         // Load script from database
         val scriptBody = transaction(state.database) {
@@ -399,7 +399,7 @@ class CueTriggerManager(
         // Set CueContext so effects created by the script are auto-tagged
         fxEngine.currentCueContext = CueContext(cueId, cueStackId)
         // Outside the `try` so the `finally` can see it.
-        val beforeEffects = fxEngine.getActiveEffects().map { it.id }.toSet()
+        val beforeFx = fxEngine.getActiveFx().map { it.id }.toSet()
         try {
             // Run as FX_APPLICATION script (lightweight, implicit engine access)
             state.show.runLiteralScript(
@@ -414,15 +414,15 @@ class CueTriggerManager(
             // Track new effects in the `finally`, not after the script returns: a script that
             // throws part-way has still applied everything up to the throw, and this list is the
             // only thing `deactivateTriggersForCue` cleans up by — there is no per-cue sweep, only
-            // `removeEffectsForCueStack` when the whole stack is torn down. So a mid-script failure
+            // `removeFxForCueStack` when the whole stack is torn down. So a mid-script failure
             // used to leave its already-applied effects running until the stack stopped.
             //
             // The window opened when effects stopped being compiled-in classes (sweep item D7): a
             // typo'd effect name was a *compile* error, which threw before the script had applied
             // anything, whereas `effect("SineWav")` throws at GO time with effects already live.
-            val afterEffects = fxEngine.getActiveEffects().map { it.id }.toSet()
-            val newEffectIds = afterEffects - beforeEffects
-            synchronized(effectIds) { effectIds.addAll(newEffectIds) }
+            val afterFx = fxEngine.getActiveFx().map { it.id }.toSet()
+            val newFxIds = afterFx - beforeFx
+            synchronized(fxIds) { fxIds.addAll(newFxIds) }
         }
     }
 
@@ -459,7 +459,7 @@ class CueTriggerManager(
  * **Invalidation is a stamp, not a listener.** Anything a cook reads besides the fixed
  * [CueApplyData] carries a version: the patch register ([Fixtures.structureVersion]), the Look
  * cache ([LookRegistry.version]) and, scoped to the templates this cue actually names,
- * [TemplateRegistry.versionFor] — and the cue's own priority, which a hold taken or let go moves
+ * [PaletteRegistry.versionFor] — and the cue's own priority, which a hold taken or let go moves
  * ([CueHolds]). A mid-cue Look edit republishes the cue through
  * `republishForLookEdit` *and* bumps that version, so the next fire re-cooks rather than serving a
  * pre-edit result and quietly reverting the operator's save.
@@ -476,12 +476,12 @@ private class TimedFireCook(
     private val cueData: CueApplyData,
 ) {
     /** Scoped so an edit to some *other* template doesn't drop this cue's memo. */
-    private val templateUuids: List<java.util.UUID> = cueData.layers
-        .filter { it.source.isTemplate }
+    private val paletteUuids: List<java.util.UUID> = cueData.layers
+        .filter { it.source.isPalette }
         .map { it.source.uuid }
         .distinct()
 
-    private data class Stamp(val structure: Long, val looks: Long, val templates: Long, val priority: Int)
+    private data class Stamp(val structure: Long, val looks: Long, val palettes: Long, val priority: Int)
 
     private var stamp: Stamp? = null
     private var localRows: List<CueAssignmentResolver.Assignment>? = null
@@ -501,7 +501,7 @@ private class TimedFireCook(
         val now = Stamp(
             structure = state.show.fixtures.structureVersion,
             looks = state.show.lookRegistry.version,
-            templates = state.show.templateRegistry.versionFor(templateUuids),
+            palettes = state.show.paletteRegistry.versionFor(paletteUuids),
             priority = priority(),
         )
         if (now != stamp) {
@@ -522,7 +522,7 @@ private class TimedFireCook(
             layers = cueData.layers,
             localRows = rows,
             resolveLook = state.show.lookRegistry::snapshot,
-            resolveTemplate = state.show.templateRegistry::snapshot,
+            resolvePalette = state.show.paletteRegistry::snapshot,
             includeTimed = fired,
         )
         firedKey = fired

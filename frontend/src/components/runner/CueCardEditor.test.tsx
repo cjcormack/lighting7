@@ -46,7 +46,7 @@ vi.mock('@/components/cues/CueRowParts', () => ({
   CueStatePip: () => <div data-testid="pip" />,
   CueTargetChip: () => <div />,
   useExpandedCue: () => ({
-    cueData: { id: 1, name: 'Q1', adHocEffects: [], triggers: [], layers: [] },
+    cueData: { id: 1, name: 'Q1', adHocFx: [], triggers: [], layers: [] },
     targets: [],
     isFetching: false,
   }),
@@ -71,7 +71,7 @@ const cue: CueStackCueRow = {
   name: 'Q1',
   sortOrder: 1,
   layerCount: 0,
-  adHocEffectCount: 0,
+  adHocFxCount: 0,
   autoAdvance: false,
   autoAdvanceDelayMs: null,
   fadeDurationMs: 2000,

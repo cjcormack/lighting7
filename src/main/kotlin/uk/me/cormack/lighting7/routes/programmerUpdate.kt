@@ -3,21 +3,22 @@ package uk.me.cormack.lighting7.routes
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.CueLayerFields
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerStore
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.familyForAttribute
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.layerTargets
@@ -37,7 +38,7 @@ data class ProgrammerChecklistCueDto(
     val isActive: Boolean,
     val keyCount: Int,
     /** Keys the cue drives through an effect rather than a property assignment. */
-    val viaEffectKeyCount: Int,
+    val viaFxKeyCount: Int,
     val sample: List<ProgrammerChecklistKeyDto>,
 )
 
@@ -45,12 +46,12 @@ data class ProgrammerChecklistCueDto(
 @Serializable
 data class ProgrammerChecklistKeyDto(
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     /** The programmer's winning value, serialised. */
     val currentValue: String,
     /** The value underneath, serialised — null when nothing but baseline is below. */
     val cueValue: String? = null,
-    val viaEffect: Boolean = false,
+    val viaFx: Boolean = false,
 )
 
 /** Overridden cues, grouped by the stack they belong to. */
@@ -96,7 +97,7 @@ private const val CHECKLIST_SAMPLE_SIZE = 8
  */
 internal fun changedSinceInclude(
     state: State,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
 ): Pair<List<RecordEntry>, List<RecordSkip>> {
     val store = state.show.programmerStore
     // `allowElements`: both destinations can hold a cell — a cue as a cell-target row, a Look as
@@ -106,10 +107,10 @@ internal fun changedSinceInclude(
     val changed = entries.filterTo(LinkedHashSet()) { entry ->
         // Since a Record, what was recorded is the baseline; a key it did not see is new.
         if (recorded != null) {
-            return@filterTo recorded[ProgrammerStore.IncludedKey(entry.fixtureKey, entry.propertyName)] !=
+            return@filterTo recorded[ProgrammerStore.IncludedKey(entry.fixtureKey, entry.attribute)] !=
                 (entry.reconciledFrom ?: entry.value)
         }
-        val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.propertyName)
+        val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.attribute)
             // New since Include — the operator adding a fixture to the cue.
             ?: return@filterTo true
         // A plain value comparison since the `ref:` grammar retired. It used to also compare
@@ -125,16 +126,16 @@ internal fun changedSinceInclude(
     }
     // An emitter an operator's newer colour overrode must go back too, carrying the colour's
     // component — playback lets the emitter's own row win, so leaving it would play back the old W.
-    // "Its colour" is the bundle's own ([FixturePropertyCatalogue.Entry.colour]), not a colour macro.
+    // "Its colour" is the bundle's own ([FixtureAttributeCatalogue.Entry.colour]), not a colour macro.
     val fixtures = state.show.fixtures
     val colourChanged = changed.mapNotNullTo(HashSet()) { entry ->
         val fixture = runCatching { fixtures.untypedGroupableFixture(entry.fixtureKey) }.getOrNull()
             ?: return@mapNotNullTo null
-        entry.fixtureKey.takeIf { entry.propertyName == FixturePropertyCatalogue.of(fixture::class).colour?.name }
+        entry.fixtureKey.takeIf { entry.attribute == FixtureAttributeCatalogue.of(fixture::class).colour?.name }
     }
     val overridden = entries.filter { entry ->
         entry !in changed &&
-            entry.reconciledFrom is CueAssignmentResolver.PropertyValue.Slider &&
+            entry.reconciledFrom is CueAssignmentResolver.AttributeValue.Slider &&
             entry.fixtureKey in colourChanged
     }
     return (changed + overridden).let { set -> entries.filter { it in set } } to skips
@@ -152,14 +153,14 @@ internal fun foldUpdateIntoRecorded(
     val store = state.show.programmerStore
     val recorded = store.recordedValues ?: return
     store.recordedValues = recorded - cleared.toSet() +
-        written.associate { ProgrammerStore.IncludedKey(it.fixtureKey, it.propertyName) to (it.reconciledFrom ?: it.value) }
+        written.associate { ProgrammerStore.IncludedKey(it.fixtureKey, it.attribute) to (it.reconciledFrom ?: it.value) }
 }
 
 /** A Record made the include target agree with the programmer: its touched values become Update's baseline. */
 internal fun stampRecordedValues(state: State) {
     val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask = null, allowElements = true)
     state.show.programmerStore.recordedValues = entries.associate {
-        ProgrammerStore.IncludedKey(it.fixtureKey, it.propertyName) to (it.reconciledFrom ?: it.value)
+        ProgrammerStore.IncludedKey(it.fixtureKey, it.attribute) to (it.reconciledFrom ?: it.value)
     }
 }
 
@@ -173,16 +174,16 @@ internal fun stampRecordedValues(state: State) {
 internal fun clearedSinceInclude(
     state: State,
     target: IncludedTarget,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
 ): List<ProgrammerStore.IncludedKey> {
     val store = state.show.programmerStore
     return store.includedKeysFor(target).filter { included ->
-        if (store.slotsFor(included.fixtureKey, included.propertyName).any { it.owner != ProgrammerOwner.LAYERS }) {
+        if (store.slotsFor(included.fixtureKey, included.attribute).any { it.owner != ProgrammerOwner.LAYERS }) {
             return@filter false
         }
         val fixture = runCatching { state.show.fixtures.untypedGroupableFixture(included.fixtureKey) }.getOrNull()
             ?: return@filter false
-        maskAllows(mask, maskGroupForProperty(fixture, included.propertyName))
+        maskAllows(mask, familyForAttribute(fixture, included.attribute))
     }
 }
 
@@ -192,7 +193,7 @@ internal class StoredValueRow<R>(
     val targetType: String,
     /** The fixture, cell or group the row names. */
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
 )
 
 /** What deleting cleared keys does to one cue's or Look's rows. */
@@ -221,37 +222,37 @@ internal fun <R> planClearedRemoval(
     cleared: Collection<ProgrammerStore.IncludedKey>,
     membersOf: (groupKey: String) -> List<String>?,
 ): ClearedRemoval<R> {
-    val clearedKeys = cleared.mapTo(HashSet()) { it.fixtureKey to canonicalPropertyName(it.propertyName) }
+    val clearedKeys = cleared.mapTo(HashSet()) { it.fixtureKey to canonicalAttributeName(it.attribute) }
     val direct = rows
         .filter { it.targetType == TargetRef.Fixture.TYPE }
-        .mapTo(HashSet()) { it.targetKey to canonicalPropertyName(it.propertyName) }
+        .mapTo(HashSet()) { it.targetKey to canonicalAttributeName(it.attribute) }
     val delete = ArrayList<R>()
     val split = ArrayList<Pair<R, String>>()
     val handled = HashSet<Pair<String, String>>()
     val splitKeys = HashSet<Pair<String, String>>()
 
     for (stored in rows) {
-        val property = canonicalPropertyName(stored.propertyName)
+        val attribute = canonicalAttributeName(stored.attribute)
         when (stored.targetType) {
-            TargetRef.Fixture.TYPE -> if ((stored.targetKey to property) in clearedKeys) {
+            TargetRef.Fixture.TYPE -> if ((stored.targetKey to attribute) in clearedKeys) {
                 delete += stored.row
-                handled += stored.targetKey to property
+                handled += stored.targetKey to attribute
             }
             TargetRef.Group.TYPE -> {
                 val members = membersOf(stored.targetKey) ?: continue
-                val hit = members.filter { (it to property) in clearedKeys }
+                val hit = members.filter { (it to attribute) in clearedKeys }
                 if (hit.isEmpty()) continue
                 delete += stored.row
-                hit.forEach { handled += it to property }
+                hit.forEach { handled += it to attribute }
                 for (member in members) {
-                    val key = member to property
+                    val key = member to attribute
                     if (key in clearedKeys || key in direct || !splitKeys.add(key)) continue
                     split += stored.row to member
                 }
             }
         }
     }
-    val unmatched = cleared.filter { (it.fixtureKey to canonicalPropertyName(it.propertyName)) !in handled }
+    val unmatched = cleared.filter { (it.fixtureKey to canonicalAttributeName(it.attribute)) !in handled }
     return ClearedRemoval(delete, split, unmatched)
 }
 
@@ -262,7 +263,7 @@ internal fun groupMembersIn(fixtures: Fixtures): (String) -> List<String>? = { g
 
 /** The warning for a cleared key Update could not delete: something other than a row of its own sets it. */
 internal fun unmatchedClearWarning(key: ProgrammerStore.IncludedKey): String =
-    "'${key.fixtureKey}'.${key.propertyName} was cleared, but no row of its own sets it — use Record → Remove on what does"
+    "'${key.fixtureKey}'.${key.attribute} was cleared, but no row of its own sets it — use Record → Remove on what does"
 
 /**
  * Delete [cleared] from [cue]'s own rows, splitting a group row as [planClearedRemoval] says.
@@ -274,19 +275,19 @@ internal fun removeClearedFromCue(
     fixtures: Fixtures,
 ): ClearedOutcome {
     if (cleared.isEmpty()) return ClearedOutcome()
-    val assignments = cue.propertyAssignmentsInOrder()
+    val assignments = cue.attributeAssignmentsInOrder()
     val plan = planClearedRemoval(
-        assignments.map { StoredValueRow(it, it.targetType, it.targetKey, it.propertyName) },
+        assignments.map { StoredValueRow(it, it.targetType, it.targetKey, it.attribute) },
         cleared,
         groupMembersIn(fixtures),
     )
     var nextSort = (assignments.maxOfOrNull { it.sortOrder } ?: -1) + 1
     for ((group, member) in plan.split) {
-        DaoCuePropertyAssignment.new {
+        DaoCueAttributeAssignment.new {
             this.cue = cue
             targetType = TargetRef.Fixture.TYPE
             targetKey = member
-            propertyName = group.propertyName
+            attribute = group.attribute
             value = group.value
             fadeDuration = group.fadeDuration
             sortOrder = nextSort++
@@ -322,7 +323,7 @@ internal data class ClearedOutcome(
  */
 internal fun buildUpdateChecklist(
     state: State,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
 ): ProgrammerUpdateChecklistDto {
     val engine = state.show.fxEngine
     val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
@@ -330,7 +331,7 @@ internal fun buildUpdateChecklist(
         return ProgrammerUpdateChecklistDto(emptyList(), emptyList(), 0)
     }
 
-    val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.propertyName) }
+    val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.attribute) }
     // One snapshot for both the cueValue reads and the attribution, so a cue apply landing
     // mid-request cannot pair one cue's value with another cue's name in the checklist.
     val cueLayer = engine.layerResolver.current
@@ -345,10 +346,10 @@ internal fun buildUpdateChecklist(
         val entry = byKey[source.key] ?: continue
         val dto = ProgrammerChecklistKeyDto(
             targetKey = entry.fixtureKey,
-            propertyName = entry.propertyName,
+            attribute = entry.attribute,
             currentValue = entry.value.serialize(),
             cueValue = cueLayerState[source.key]?.serialize(),
-            viaEffect = source.viaEffectId != null,
+            viaFx = source.viaFxId != null,
         )
         val cueId = source.cueId
         if (cueId == null) {
@@ -402,7 +403,7 @@ internal fun buildUpdateChecklist(
                 // Live is held — by a stack or a loose press (cue model plan §3.4).
                 isActive = state.show.cueStackManager.holds.isHeld(cueId),
                 keyCount = keys.size,
-                viaEffectKeyCount = keys.count { it.viaEffect },
+                viaFxKeyCount = keys.count { it.viaFx },
                 sample = sorted.take(CHECKLIST_SAMPLE_SIZE),
             ),
         )
@@ -427,7 +428,7 @@ internal fun buildUpdateChecklist(
 
 private val keyOrder = compareBy(
     ProgrammerChecklistKeyDto::targetKey,
-    ProgrammerChecklistKeyDto::propertyName,
+    ProgrammerChecklistKeyDto::attribute,
 )
 
 /**
@@ -440,12 +441,12 @@ private val keyOrder = compareBy(
 internal fun entriesUnderlyingCue(
     state: State,
     cueId: Int,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
 ): List<RecordEntry> {
     val engine = state.show.fxEngine
     val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
     if (entries.isEmpty()) return emptyList()
-    val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.propertyName) }
+    val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.attribute) }
     return engine.provenance.underlyingSources(byKey.keys)
         .filter { it.cueId == cueId }
         .mapNotNull { byKey[it.key] }
@@ -465,37 +466,49 @@ internal fun recordingForUpdate(
     includeFx: Boolean,
 ): ProgrammerRecording {
     val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
-    val bandEffects = if (includeFx) {
-        state.show.fxEngine.getActiveEffects()
+    val bandFx = if (includeFx) {
+        state.show.fxEngine.getActiveFx()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
-    val adHoc = fxInstancesToCueChildren(bandEffects, mask = null, state.show.fixtures)
+    val captured = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandFx), mask = null, state.show.fixtures)
     return ProgrammerRecording(
         rows = collapsed.rows,
         // Update never writes the layer stack through this path: the *structural* half of Mode A is
         // a diff against the layers Include staged, applied directly to the cue's rows. Handing a
         // layer list to the MERGE writer as well would append the whole stack on every Update.
         layers = emptyList(),
-        adHocEffects = adHoc,
+        adHocFx = captured.map { it.second },
         groupRowsEmitted = collapsed.groupRows,
         skipped = collapsed.skipped,
+        adHocSourceIds = captured.map { it.first.id },
     )
 }
 
 /**
- * The sort orders of [cueId]'s ad-hoc effects whose Included instance now runs only as split
+ * The uuids of [cueId]'s ad-hoc effects whose Included instance now runs only as split
  * copies (apply-model plan §3.4). Update writes the copies as children of their own, one per head,
- * so the child they stand for is retired, or the cue would play the effect twice.
+ * so the child they stand for is retired, or the cue would play the effect twice. A child a copy
+ * was already written as is on that copy's own head, and is kept.
  */
-internal fun splitIncludedChildren(state: State, cueId: Int): Set<Int> =
-    state.show.fxEngine.getActiveEffects()
+internal fun splitIncludedChildren(state: State, cueId: Int): Set<String> {
+    val copies = state.show.fxEngine.getActiveFx()
         .filter { FxEngine.isProgrammerFxPriority(it.priority) && it.programmerOrigin?.cueId == cueId && !it.leaving }
-        .groupBy { it.programmerOrigin!!.childSortOrder }
+        .groupBy { it.programmerOrigin!!.childUuid }
         .filterValues { instances -> instances.all { it.splitMember != null } }
-        .keys
+        .filterKeys { it != null }
+    if (copies.isEmpty()) return emptySet()
+    val targets = transaction(state.database) {
+        DaoCue.findById(cueId)?.adHocFx?.associate {
+            it.uuid.toString() to FxTargetsRef.canonical(it.targetType, it.targetKey)
+        }.orEmpty()
+    }
+    return copies.filter { (uuid, instances) ->
+        instances.none { FxTargetsRef.canonical(it.target.targetRef.discriminator, it.target.targetKey) == targets[uuid] }
+    }.keys.filterNotNullTo(HashSet())
+}
 
 private fun DaoCueLayer.cueFields() =
-    CueLayerFields(enabled, targets, propertyMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
+    CueLayerFields(enabled, targets, attributeMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
 
 /** What a layer-stack diff changed in the cue, for the response and the log line. */
 internal data class LayerDiffOutcome(
@@ -569,11 +582,11 @@ internal fun writeLayerStackIntoCue(
             addedRows[layer.layerId] = DaoCueLayer.new {
                 this.cue = cue
                 this.look = resolved.look
-                this.template = resolved.template
+                this.palette = resolved.palette
                 this.sortOrder = index
                 this.enabled = layer.enabled
                 this.targets = layerTargets(layer.source, layer.targets)
-                this.propertyMask = layer.propertyMask
+                this.attributeMask = layer.attributeMask
                 this.blendMode = layer.blendMode
                 this.amount = layer.amount
                 this.stomp = layer.stomp
@@ -590,7 +603,7 @@ internal fun writeLayerStackIntoCue(
         if (stored.cueFields() != layer.cueFields()) {
             stored.enabled = layer.enabled
             stored.targets = layerTargets(layer.source, layer.targets)
-            stored.propertyMask = layer.propertyMask
+            stored.attributeMask = layer.attributeMask
             stored.blendMode = layer.blendMode
             stored.amount = layer.amount
             stored.stomp = layer.stomp

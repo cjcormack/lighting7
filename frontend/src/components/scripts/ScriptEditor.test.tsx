@@ -61,7 +61,6 @@ describe('what the widget is handed', () => {
       'FX_APPLICATION',
       'FX_CALC',
       'FX_CALC_STATEFUL',
-      'FX_CALC_COMPOSITE',
     ]
 
     for (const scriptType of types) {

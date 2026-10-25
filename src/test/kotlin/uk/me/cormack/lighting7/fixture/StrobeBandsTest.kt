@@ -9,9 +9,9 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.dmx.MartinMac250Fixture
 import uk.me.cormack.lighting7.fixture.dmx.WhexFixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fixture.property.Strobe
-import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
-import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.fixture.attribute.Strobe
+import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
+import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import uk.me.cormack.lighting7.routes.StrobeBandInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -44,9 +44,9 @@ class StrobeBandsTest {
     fun `every STROBE slider in the library declares its bands, and they cover what composition can write`() {
         var sliders = 0
         for ((where, owner) in owners()) {
-            for (p in FixturePropertyCatalogue.of(owner::class).all) {
+            for (p in FixtureAttributeCatalogue.of(owner::class).all) {
                 val value = p.classProperty.getter.call(owner)
-                if (p.category != PropertyCategory.STROBE) {
+                if (p.category != AttributeCategory.STROBE) {
                     assertTrue(p.strobeBands.isEmpty(), "$where's ${p.name} is no STROBE property but declares strobe bands")
                     continue
                 }
@@ -66,8 +66,8 @@ class StrobeBandsTest {
     @Test
     fun `what each strobe writer writes lands where its bands say it should`() {
         for ((where, owner) in owners()) {
-            for (p in FixturePropertyCatalogue.of(owner::class).all) {
-                if (p.category != PropertyCategory.STROBE) continue
+            for (p in FixtureAttributeCatalogue.of(owner::class).all) {
+                if (p.category != AttributeCategory.STROBE) continue
                 val value = p.classProperty.getter.call(owner) as? DmxSlider ?: continue
                 val bands = p.strobeBands
                 fun kindAt(level: UByte): StrobeKind? = bands.firstOrNull { level.toInt() in it }?.kind
@@ -104,8 +104,8 @@ class StrobeBandsTest {
     @Test
     fun `every STROBE setting's options declare what their band does`() {
         for ((where, owner) in owners()) {
-            for (p in FixturePropertyCatalogue.of(owner::class).all) {
-                if (p.category != PropertyCategory.STROBE) continue
+            for (p in FixtureAttributeCatalogue.of(owner::class).all) {
+                if (p.category != AttributeCategory.STROBE) continue
                 val setting = p.classProperty.getter.call(owner) as? DmxFixtureSetting<*> ?: continue
                 for (option in setting.sortedValues) {
                     val strobe = option as? DmxFixtureStrobeSettingValue
@@ -123,7 +123,7 @@ class StrobeBandsTest {
     @Test
     fun `the bands reach the descriptor, the MAC 250's past its clamp`() {
         val mac = MartinMac250Fixture.Mode4Ch(universe, "mac-1", "MAC 1", 1)
-        val strobe = mac.generatePropertyDescriptors().filterIsInstance<SliderPropertyDescriptor>().single { it.name == "strobe" }
+        val strobe = mac.generateAttributeDescriptors().filterIsInstance<SliderAttributeDescriptor>().single { it.name == "strobe" }
         assertEquals(72, strobe.max, "the slider stays clamped below reset and the lamp")
         val bands = checkNotNull(strobe.strobeBands)
         assertEquals(StrobeBandInfo(0, 19, "CLOSED"), bands.first())
@@ -131,14 +131,14 @@ class StrobeBandsTest {
         assertTrue(bands.any { it.kind == "RANDOM" && it.from == 128 }, "a raw write past the clamp is described too")
         assertTrue(bands.none { 208 in it.from..it.to || 228 in it.from..it.to }, "reset and the lamp stay undeclared: they are fixture commands, and the view draws their bands open")
 
-        val dimmer = mac.generatePropertyDescriptors().filterIsInstance<SliderPropertyDescriptor>().single { it.name == "dimmer" }
+        val dimmer = mac.generateAttributeDescriptors().filterIsInstance<SliderAttributeDescriptor>().single { it.name == "dimmer" }
         assertNull(dimmer.strobeBands, "only a STROBE slider carries bands")
     }
 
     @Test
     fun `a STROBE setting's options carry their kind and rate on the wire`() {
         val head = TestStrobeShutterHead(universe, "shutter-1", 1)
-        val shutter = head.generatePropertyDescriptors().filterIsInstance<SettingPropertyDescriptor>().single()
+        val shutter = head.generateAttributeDescriptors().filterIsInstance<SettingAttributeDescriptor>().single()
         val byName = shutter.options.associateBy { it.name }
         assertEquals("CLOSED", byName.getValue("SHUT").strobeKind)
         assertNull(byName.getValue("SHUT").hzMin)
@@ -201,6 +201,6 @@ internal class TestStrobeShutterHead(
     override fun withTransaction(transaction: ControllerTransaction): TestStrobeShutterHead =
         TestStrobeShutterHead(universe, key, firstChannel, transaction)
 
-    @FixtureProperty("Shutter", category = PropertyCategory.STROBE)
+    @FixtureAttribute("Shutter", category = AttributeCategory.STROBE)
     val shutter = DmxFixtureSetting(transaction, universe, firstChannel, Shutter.entries.toTypedArray())
 }

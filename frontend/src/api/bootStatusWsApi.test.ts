@@ -5,7 +5,7 @@ import { BootStatus, createBootStatusWsApi } from "./bootStatusWsApi"
 
 const SAMPLE_STATUS: BootStatus = {
   phase: "FX_COMPILE",
-  message: "Compiling effects (12/28)…",
+  message: "Compiling FX (12/28)…",
   percent: 45,
   ready: false,
   error: null,

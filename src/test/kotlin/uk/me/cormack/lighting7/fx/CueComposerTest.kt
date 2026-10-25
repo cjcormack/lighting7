@@ -3,10 +3,10 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
@@ -53,11 +53,11 @@ class CueComposerTest {
     private fun lookRow(
         targetType: String = "fixture",
         targetKey: String = "hex-1",
-        propertyName: String,
+        attribute: String,
         value: String,
     ) = LookRowEntry(
         target = uk.me.cormack.lighting7.models.TargetRef.of(targetType, targetKey),
-        propertyName = propertyName,
+        attribute = attribute,
         value = value,
     )
 
@@ -82,7 +82,7 @@ class CueComposerTest {
         look: LookSnapshot,
         sortOrder: Int,
         targets: List<CueTargetDto> = emptyList(),
-        propertyMask: String? = null,
+        attributeMask: String? = null,
         blendMode: String = "OVERRIDE",
         amount: Double = 1.0,
         enabled: Boolean = true,
@@ -93,7 +93,7 @@ class CueComposerTest {
         sortOrder = sortOrder,
         enabled = enabled,
         targets = targets,
-        propertyMask = propertyMask,
+        attributeMask = attributeMask,
         blendMode = blendMode,
         amount = amount,
         layerId = layerId,
@@ -102,7 +102,7 @@ class CueComposerTest {
 
     private fun localSlider(
         targetKey: String,
-        propertyName: String = "dimmer",
+        attribute: String = "dimmer",
         value: UByte,
         targetIsGroup: Boolean = false,
         moveInDark: Boolean = false,
@@ -112,10 +112,10 @@ class CueComposerTest {
         fadeWeight = 1.0,
         targetKey = targetKey,
         targetIsGroup = targetIsGroup,
-        propertyName = propertyName,
-        category = PropertyCategory.DIMMER,
+        attribute = attribute,
+        category = AttributeCategory.DIMMER,
         compositionOverride = CompositionRule.UNSET,
-        value = CueAssignmentResolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.AttributeValue.Slider(value),
         moveInDark = moveInDark,
     )
 
@@ -139,50 +139,50 @@ class CueComposerTest {
         layers = layers,
         localRows = localRows,
         resolveLook = registry::snapshot,
-        // No template layer in this file — `CueComposerTemplateLayerTest` owns that arm.
-        resolveTemplate = { null },
+        // No template layer in this file — `CueComposerPaletteLayerTest` owns that arm.
+        resolvePalette = { null },
     )
 
     /** The cooked winner for one key, as `sourceName@index`, or null when a local row won. */
     private fun List<CueAssignmentResolver.Assignment>.winnerAt(
         targetKey: String,
-        propertyName: String = "dimmer",
+        attribute: String = "dimmer",
     ): String? {
-        val row = single { it.targetKey == targetKey && it.propertyName == propertyName }
+        val row = single { it.targetKey == targetKey && it.attribute == attribute }
         return row.layerWinner?.let { "${it.source.name}@${it.index}" }
     }
 
     private fun sliderAt(
         rows: List<CueAssignmentResolver.Assignment>,
         targetKey: String,
-        propertyName: String = "dimmer",
+        attribute: String = "dimmer",
     ): UByte {
-        val row = rows.single { it.targetKey == targetKey && it.propertyName == propertyName }
-        return assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value
+        val row = rows.single { it.targetKey == targetKey && it.attribute == attribute }
+        return assertIs<CueAssignmentResolver.AttributeValue.Slider>(row.value).value
     }
 
     private fun colourAt(
         rows: List<CueAssignmentResolver.Assignment>,
         targetKey: String,
     ): ExtendedColour {
-        val row = rows.single { it.targetKey == targetKey && it.propertyName == "rgbColour" }
-        return assertIs<CueAssignmentResolver.PropertyValue.Colour>(row.value).value
+        val row = rows.single { it.targetKey == targetKey && it.attribute == "rgbColour" }
+        return assertIs<CueAssignmentResolver.AttributeValue.Colour>(row.value).value
     }
 
     // ─── The invariant ──────────────────────────────────────────────────
 
     @Test
-    fun `cook never emits two rows for the same fixture and property`() {
+    fun `cook never emits two rows for the same fixture and attribute`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         // Every way of hitting one key at once: two layers, a group row and a fixture row inside
         // one Look, and a local row on top.
         // A's row is a *group* row so that hex-2 has three contributors fighting over it — A, B's
         // group row and the local row — rather than only two. That is the collision the test is for.
-        val a = look("A", lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "100"))
+        val a = look("A", lookRow(targetType = "group", targetKey = "front-wash", attribute = "dimmer", value = "100"))
         val b = look(
             "B",
-            lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "150"),
-            lookRow(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "200"),
+            lookRow(targetType = "group", targetKey = "front-wash", attribute = "dimmer", value = "150"),
+            lookRow(targetType = "fixture", targetKey = "hex-1", attribute = "dimmer", value = "200"),
         )
         val rows = cook(
             fixtures,
@@ -193,7 +193,7 @@ class CueComposerTest {
             ),
             localRows = listOf(localSlider("hex-2", value = 250u)),
         )
-        val keys = rows.map { it.targetKey to it.propertyName }
+        val keys = rows.map { it.targetKey to it.attribute }
         assertEquals(keys.size, keys.toSet().size, "one contributor per (fixture, property): $keys")
     }
 
@@ -204,8 +204,8 @@ class CueComposerTest {
         // The named behaviour change: layered intensity becomes later-wins. Under the old
         // concatenate-at-equal-priority scheme this pair composed as max() = 200.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val bright = look("Bright", lookRow(propertyName = "dimmer", value = "200"))
-        val dim = look("Dim", lookRow(propertyName = "dimmer", value = "40"))
+        val bright = look("Bright", lookRow(attribute = "dimmer", value = "200"))
+        val dim = look("Dim", lookRow(attribute = "dimmer", value = "40"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, bright, dim),
@@ -222,8 +222,8 @@ class CueComposerTest {
         // Under the old scheme the *earlier* contributor won an exact priority tie, so this is the
         // ordering flip the migration bakes in.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val red = look("Red", lookRow(propertyName = "rgbColour", value = "#ff0000"))
-        val blue = look("Blue", lookRow(propertyName = "rgbColour", value = "#0000ff"))
+        val red = look("Red", lookRow(attribute = "rgbColour", value = "#ff0000"))
+        val blue = look("Blue", lookRow(attribute = "rgbColour", value = "#0000ff"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, red, blue),
@@ -238,8 +238,8 @@ class CueComposerTest {
     @Test
     fun `local rows beat every layer`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
-        val b = look("B", lookRow(propertyName = "dimmer", value = "200"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "100"))
+        val b = look("B", lookRow(attribute = "dimmer", value = "200"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a, b),
@@ -255,8 +255,8 @@ class CueComposerTest {
     @Test
     fun `sortOrder decides, not list order`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
-        val b = look("B", lookRow(propertyName = "dimmer", value = "200"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "100"))
+        val b = look("B", lookRow(attribute = "dimmer", value = "200"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a, b),
@@ -272,8 +272,8 @@ class CueComposerTest {
     @Test
     fun `a disabled layer contributes nothing`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
-        val b = look("B", lookRow(propertyName = "dimmer", value = "200"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "100"))
+        val b = look("B", lookRow(attribute = "dimmer", value = "200"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a, b),
@@ -292,8 +292,8 @@ class CueComposerTest {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val mixed = look(
             "Mixed",
-            lookRow(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "20"),
-            lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "180"),
+            lookRow(targetType = "fixture", targetKey = "hex-1", attribute = "dimmer", value = "20"),
+            lookRow(targetType = "group", targetKey = "front-wash", attribute = "dimmer", value = "180"),
         )
         val rows = cook(fixtures, registryOf(fixtures, mixed), listOf(layer(mixed, 0)))
         assertEquals(20u.toUByte(), sliderAt(rows, "hex-1"), "fixture row wins on hex-1")
@@ -307,8 +307,8 @@ class CueComposerTest {
     @Test
     fun `OVERRIDE at amount 0 point 5 mixes halfway over the layer beneath`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
-        val b = look("B", lookRow(propertyName = "dimmer", value = "200"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "100"))
+        val b = look("B", lookRow(attribute = "dimmer", value = "200"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a, b),
@@ -325,7 +325,7 @@ class CueComposerTest {
         // Nothing beneath, so OVERRIDE's identity (zero) stands in — which is what makes a single
         // dimmer layer at half amount read as half intensity, as an operator expects.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "200"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "200"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a),
@@ -337,7 +337,7 @@ class CueComposerTest {
     @Test
     fun `an amount 0 layer contributes nothing at all`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "200"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "200"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a),
@@ -349,8 +349,8 @@ class CueComposerTest {
     @Test
     fun `MAX keeps the brighter of the two layers`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "180"))
-        val b = look("B", lookRow(propertyName = "dimmer", value = "60"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "180"))
+        val b = look("B", lookRow(attribute = "dimmer", value = "60"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a, b),
@@ -365,8 +365,8 @@ class CueComposerTest {
     @Test
     fun `MIN keeps the darker of the two layers`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "180"))
-        val b = look("B", lookRow(propertyName = "dimmer", value = "60"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "180"))
+        val b = look("B", lookRow(attribute = "dimmer", value = "60"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a, b),
@@ -381,8 +381,8 @@ class CueComposerTest {
     @Test
     fun `MULTIPLY scales the layer beneath`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "200"))
-        val b = look("B", lookRow(propertyName = "dimmer", value = "128"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "200"))
+        val b = look("B", lookRow(attribute = "dimmer", value = "128"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a, b),
@@ -399,7 +399,7 @@ class CueComposerTest {
         // MULTIPLY's identity is full scale, not zero — otherwise a lone multiply layer would
         // blackout rather than assert itself.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "128"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "128"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a),
@@ -411,7 +411,7 @@ class CueComposerTest {
     @Test
     fun `an unknown blend mode falls back to OVERRIDE rather than dropping the layer`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "77"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "77"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a),
@@ -423,21 +423,21 @@ class CueComposerTest {
     // ─── Mask and target restriction ────────────────────────────────────
 
     @Test
-    fun `a masked layer asserts only in-mask properties`() {
+    fun `a masked layer asserts only in-mask attributes`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val both = look(
             "Both",
-            lookRow(propertyName = "dimmer", value = "180"),
-            lookRow(propertyName = "rgbColour", value = "#00ff00"),
+            lookRow(attribute = "dimmer", value = "180"),
+            lookRow(attribute = "rgbColour", value = "#00ff00"),
         )
         val rows = cook(
             fixtures,
             registryOf(fixtures, both),
-            listOf(layer(both, 0, targets = listOf(CueTargetDto("fixture", "hex-1")), propertyMask = "COLOUR")),
+            listOf(layer(both, 0, targets = listOf(CueTargetDto("fixture", "hex-1")), attributeMask = "COLOUR")),
         )
         assertEquals(Color(0, 255, 0), colourAt(rows, "hex-1").color)
         assertNull(
-            rows.firstOrNull { it.propertyName == "dimmer" },
+            rows.firstOrNull { it.attribute == "dimmer" },
             "dimmer is INTENSITY, outside a COLOUR mask",
         )
     }
@@ -449,8 +449,8 @@ class CueComposerTest {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val wide = look(
             "Wide",
-            lookRow(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "111"),
-            lookRow(targetType = "fixture", targetKey = "hex-2", propertyName = "dimmer", value = "222"),
+            lookRow(targetType = "fixture", targetKey = "hex-1", attribute = "dimmer", value = "111"),
+            lookRow(targetType = "fixture", targetKey = "hex-2", attribute = "dimmer", value = "222"),
         )
         val rows = cook(
             fixtures,
@@ -467,8 +467,8 @@ class CueComposerTest {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val wide = look(
             "Wide",
-            lookRow(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "111"),
-            lookRow(targetType = "fixture", targetKey = "hex-2", propertyName = "dimmer", value = "222"),
+            lookRow(targetType = "fixture", targetKey = "hex-1", attribute = "dimmer", value = "111"),
+            lookRow(targetType = "fixture", targetKey = "hex-2", attribute = "dimmer", value = "222"),
         )
         val rows = cook(fixtures, registryOf(fixtures, wide), listOf(layer(wide, 0)))
         assertEquals(111u.toUByte(), sliderAt(rows, "hex-1"))
@@ -480,7 +480,7 @@ class CueComposerTest {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val grouped = look(
             "Grouped",
-            lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "140"),
+            lookRow(targetType = "group", targetKey = "front-wash", attribute = "dimmer", value = "140"),
         )
         val rows = cook(
             fixtures,
@@ -491,7 +491,7 @@ class CueComposerTest {
         assertEquals(140u.toUByte(), sliderAt(rows, "hex-1"))
         assertEquals(140u.toUByte(), sliderAt(rows, "hex-2"))
 
-        val masked = cook(fixtures, registryOf(fixtures, grouped), listOf(layer(grouped, 0, propertyMask = "COLOUR")))
+        val masked = cook(fixtures, registryOf(fixtures, grouped), listOf(layer(grouped, 0, attributeMask = "COLOUR")))
         assertTrue(masked.isEmpty(), "a layer's mask is its own setting, and the cook applies it to the rows")
     }
 
@@ -512,13 +512,13 @@ class CueComposerTest {
         )
         val row = rows.single()
         assertEquals(true, row.moveInDark)
-        assertEquals(0u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value)
+        assertEquals(0u.toUByte(), assertIs<CueAssignmentResolver.AttributeValue.Slider>(row.value).value)
     }
 
     @Test
     fun `cook preserves the cue id, priority and a fade weight of 1`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val a = look("A", lookRow(propertyName = "dimmer", value = "100"))
+        val a = look("A", lookRow(attribute = "dimmer", value = "100"))
         val rows = cook(
             fixtures,
             registryOf(fixtures, a),
@@ -555,8 +555,8 @@ class CueComposerTest {
         // fired layer included rather than appending its rows, because appending would put two
         // contributors on one key.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val base = look("Base", lookRow(propertyName = "dimmer", value = "100"))
-        val timed = look("Timed", lookRow(propertyName = "dimmer", value = "255"))
+        val base = look("Base", lookRow(attribute = "dimmer", value = "100"))
+        val timed = look("Timed", lookRow(attribute = "dimmer", value = "255"))
         val layers = listOf(
             layer(base, 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
             layer(timed, 1, targets = listOf(CueTargetDto("fixture", "hex-1"))).copy(delayMs = 500L),
@@ -573,7 +573,7 @@ class CueComposerTest {
             includeTimed = setOf(timed.lookId),
         ).rows
         assertEquals(255u.toUByte(), sliderAt(afterFire, "hex-1"))
-        val keys = afterFire.map { it.targetKey to it.propertyName }
+        val keys = afterFire.map { it.targetKey to it.attribute }
         assertEquals(keys.size, keys.toSet().size, "firing a timed layer must not double up a key")
     }
 
@@ -583,7 +583,7 @@ class CueComposerTest {
         // contribution would land at the first layer's delay. ADDITIVE makes the difference
         // observable: two layers of one look are otherwise idempotent under OVERRIDE.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val same = look("Same", lookRow(propertyName = "dimmer", value = "100"))
+        val same = look("Same", lookRow(attribute = "dimmer", value = "100"))
         val target = listOf(CueTargetDto("fixture", "hex-1"))
         val first = layer(same, 0, targets = target, blendMode = "ADDITIVE", layerId = 101)
             .copy(delayMs = 100L)
@@ -611,7 +611,7 @@ class CueComposerTest {
 
     @Test
     fun `an amount-0 layer spawns no effects`() {
-        // `cook` drops an amount-0 layer outright, so `cookEffects` must agree — otherwise pulling
+        // `cook` drops an amount-0 layer outright, so `cookFx` must agree — otherwise pulling
         // Amount to zero mutes a layer's values while leaving its effects running.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val withEffect = LookSnapshot(
@@ -620,19 +620,19 @@ class CueComposerTest {
             name = "Muted",
             rows = emptyList(),
             effects = listOf(
-                EffectEntry(
-                    target = EffectTargetRef.Single(TargetRef.Fixture("hex-1")),
-                    effect = StoredEffect(
-                        effectType = "SineWave",
-                        category = "dimmer",
-                        propertyName = "dimmer",
-                        beatDivision = 1.0,
+                FxEntry(
+                    target = FxTargetsRef.Single(TargetRef.Fixture("hex-1")),
+                    effect = StoredFx(
+                        fxType = "SineWave",
+                        family = "intensity",
+                        attribute = "dimmer",
+                        cycle = 1.0,
                         blendMode = "OVERRIDE",
-                        distribution = "LINEAR",
+                        order = "NORMAL",
                         phaseOffset = 0.0,
                         elementMode = null,
                         elementFilter = null,
-                        stepTiming = null,
+                        timing = null,
                         parameters = emptyMap(),
                         speedMasterUuid = null,
                         rateSpeedMasterUuid = null,
@@ -645,15 +645,15 @@ class CueComposerTest {
 
         assertEquals(
             1,
-            CueComposer.cookEffects(
+            CueComposer.cookFx(
                 fixtures, cueId, listOf(layer(withEffect, 0, targets = target)),
-                registry::snapshot, resolveTemplate = { null },
+                registry::snapshot, resolvePalette = { null },
             ).size,
         )
         assertTrue(
-            CueComposer.cookEffects(
+            CueComposer.cookFx(
                 fixtures, cueId, listOf(layer(withEffect, 0, targets = target, amount = 0.0)),
-                registry::snapshot, resolveTemplate = { null },
+                registry::snapshot, resolvePalette = { null },
             ).isEmpty(),
         )
     }
@@ -663,8 +663,8 @@ class CueComposerTest {
     @Test
     fun `cook names the layer that produced each row`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val warm = look("Warm", lookRow(propertyName = "dimmer", value = "200"))
-        val cool = look("Cool", lookRow(targetKey = "hex-2", propertyName = "dimmer", value = "40"))
+        val warm = look("Warm", lookRow(attribute = "dimmer", value = "200"))
+        val cool = look("Cool", lookRow(targetKey = "hex-2", attribute = "dimmer", value = "40"))
         val registry = registryOf(fixtures, warm, cool)
 
         val rows = cook(
@@ -770,7 +770,7 @@ class CueComposerTest {
         // parallel map is what makes those two facts independent — there is no second structure to
         // fall out of step with the assignments it describes.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val warm = look("Warm", lookRow(propertyName = "dimmer", value = "200"))
+        val warm = look("Warm", lookRow(attribute = "dimmer", value = "200"))
         val registry = registryOf(fixtures, warm)
 
         val rows = cook(fixtures, registry, listOf(layer(warm, sortOrder = 0)))
@@ -781,7 +781,7 @@ class CueComposerTest {
     // ─── Within-cue stomp (FU-LOOK-STOMP-WITHIN-CUE) ────────────────────
 
     @Test
-    fun `a stomping layer suppresses the layers below it on every property it asserts`() {
+    fun `a stomping layer suppresses the layers below it on every attribute it asserts`() {
         // The escape hatch for the one thing layer order cannot express: effects are Layer 3 and
         // values Layer 4, so a lower layer's colour effect beats a higher layer's static colour
         // whatever the order says. `stomp` on the higher layer is how the operator says otherwise.
@@ -869,7 +869,7 @@ class CueComposerTest {
             fixtures, registry,
             listOf(
                 layer(below, sortOrder = 0, layerId = 41),
-                layer(stomper, sortOrder = 1, layerId = 42, stomp = true, propertyMask = "COLOUR"),
+                layer(stomper, sortOrder = 1, layerId = 42, stomp = true, attributeMask = "COLOUR"),
             ),
         )
 
@@ -918,7 +918,7 @@ class CueComposerTest {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val wash = look(
             "Wash",
-            lookRow(targetType = "group", targetKey = "front-wash", propertyName = "dimmer", value = "200"),
+            lookRow(targetType = "group", targetKey = "front-wash", attribute = "dimmer", value = "200"),
         )
         val registry = registryOf(fixtures, wash)
 
@@ -929,9 +929,9 @@ class CueComposerTest {
 
         assertEquals(
             setOf(
-                FxEngine.PropertyKey("hex-1", "dimmer"),
-                FxEngine.PropertyKey("hex-2", "dimmer"),
-                FxEngine.PropertyKey("front-wash", "dimmer"),
+                FxEngine.TargetAttribute("hex-1", "dimmer"),
+                FxEngine.TargetAttribute("hex-2", "dimmer"),
+                FxEngine.TargetAttribute("front-wash", "dimmer"),
             ),
             cooked.assertedKeys,
         )
@@ -943,8 +943,8 @@ class CueComposerTest {
         // rows keep only the winner per key, and a layer that asserted and then lost still
         // asserted.
         val fixtures = fixturesWithTwoHexesInAGroup()
-        val one = look("One", lookRow(propertyName = "dimmer", value = "10"))
-        val two = look("Two", lookRow(propertyName = "dimmer", value = "200"))
+        val one = look("One", lookRow(attribute = "dimmer", value = "10"))
+        val two = look("Two", lookRow(attribute = "dimmer", value = "200"))
         val registry = registryOf(fixtures, one, two)
 
         val cooked = cookFull(
@@ -956,7 +956,7 @@ class CueComposerTest {
         )
 
         assertEquals(1, cooked.rows.size, "one contributor per key, as always")
-        assertEquals(setOf(FxEngine.PropertyKey("hex-1", "dimmer")), cooked.assertedKeys)
+        assertEquals(setOf(FxEngine.TargetAttribute("hex-1", "dimmer")), cooked.assertedKeys)
     }
     // ─── the contributing-layer predicate ───────────────────────────────
 
@@ -965,7 +965,7 @@ class CueComposerTest {
         // Sweep item E5: this predicate used to be written out at three call sites, one of which
         // had drifted. The point of the helper is that a rank means the same thing everywhere, so
         // this pins both halves of it — who is dropped, and what order the survivors come back in.
-        val look = look("Any", lookRow(propertyName = "dimmer", value = "100"))
+        val look = look("Any", lookRow(attribute = "dimmer", value = "100"))
         val live = layer(look, sortOrder = 30, layerId = 1)
         val disabled = layer(look, sortOrder = 10, layerId = 2, enabled = false)
         val muted = layer(look, sortOrder = 20, layerId = 3, amount = 0.0)
@@ -990,15 +990,15 @@ class CueComposerTest {
         // Numbering is `contributingLayers`' job and belongs to no kind: a template layer takes a
         // rank whether it contributes rows or one effect, and if it did not, every layer above it
         // would renumber and their programmer-band priorities would shift.
-        val look = look("Any", lookRow(propertyName = "dimmer", value = "100"))
-        val templateLayer = CookLayer(
-            source = LayerSource.template(99, UUID.nameUUIDFromBytes("t".toByteArray()), "Amber"),
+        val look = look("Any", lookRow(attribute = "dimmer", value = "100"))
+        val paletteLayer = CookLayer(
+            source = LayerSource.palette(99, UUID.nameUUIDFromBytes("t".toByteArray()), "Amber"),
             sortOrder = 0,
             layerId = 99,
         )
         assertEquals(
             listOf(99, 1),
-            CueComposer.contributingLayers(listOf(templateLayer, layer(look, sortOrder = 1, layerId = 1)))
+            CueComposer.contributingLayers(listOf(paletteLayer, layer(look, sortOrder = 1, layerId = 1)))
                 .map { it.layerId },
         )
     }

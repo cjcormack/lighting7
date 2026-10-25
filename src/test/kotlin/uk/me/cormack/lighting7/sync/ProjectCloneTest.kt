@@ -5,6 +5,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import uk.me.cormack.lighting7.routes.fxInOrder
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.BindingTargetJson
 import uk.me.cormack.lighting7.models.AssignmentHealth
@@ -149,7 +150,7 @@ class ProjectCloneTest {
 
         transaction(state.database) {
             fun runs(projectId: Int) = DaoCue.find { DaoCues.project eq projectId }
-                .flatMap { cue -> cue.adHocEffects.map { cue.name to it.runUuid } }
+                .flatMap { cue -> cue.adHocFx.map { cue.name to it.runUuid } }
                 .filter { it.second != null }.sortedBy { it.first }
             val expected = listOf("build" to RICH_PROJECT_PULSE_RUN, "open" to RICH_PROJECT_PULSE_RUN)
             assertEquals(expected, runs(sourceId))
@@ -176,6 +177,19 @@ class ProjectCloneTest {
             assertEquals(FittedSlot(gel = "R80"), sl.fittedMedia?.slot("gelScroller", "L201_FULL_CT_BLUE"))
             assertEquals(FittedSlot(gel = "L202"), sl.fittedMedia?.slot("mediaFrame", "IN"))
         }
+    }
+
+    /** A clone's Look keeps its FX in their stored order, which is not the order they were made in. */
+    @Test
+    fun `clone keeps a Look's FX order`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-order", description = null)
+
+        fun stacked(projectId: Int) = transaction(state.database) {
+            DaoProject.findById(projectId)!!.looks.single { it.name == "stacked" }.fxInOrder().map { it.fxType to it.sortOrder }
+        }
+        assertEquals(listOf("SquareWave" to 0, "SineWave" to 1), stacked(sourceId))
+        assertEquals(stacked(sourceId), stacked(result.projectId))
     }
 
     /**
@@ -253,12 +267,12 @@ class ProjectCloneTest {
 
             // The routing/follow columns (busking-view session 1) travel with the master —
             // "export/import carries the three columns" is exactly this assertion.
-            assertEquals("position", cloneMaster.usageCategory)
+            assertEquals("position", cloneMaster.family)
             assertEquals(1, cloneMaster.followNum)
             assertEquals(2, cloneMaster.followDen)
             assertEquals(
-                "dimmer",
-                clone.speedMasters.single { it.masterIndex == 1 }.usageCategory,
+                "intensity",
+                clone.speedMasters.single { it.masterIndex == 1 }.family,
             )
             assertNull(
                 cloneMaster.followTargetUuid,
@@ -278,17 +292,17 @@ class ProjectCloneTest {
                 "…and must not still name the source project's master",
             )
 
-            val lookEffect = clone.looks.flatMap { it.effects.toList() }.single { it.speedMasterUuid != null }
+            val lookFx = clone.looks.flatMap { it.effects.toList() }.single { it.speedMasterUuid != null }
             assertEquals(
-                cloneMaster.uuid, lookEffect.speedMasterUuid,
+                cloneMaster.uuid, lookFx.speedMasterUuid,
                 "the look effect's reference must point at the clone's master",
             )
             assertEquals(
-                cloneMaster.uuid, lookEffect.rateSpeedMasterUuid,
+                cloneMaster.uuid, lookFx.rateSpeedMasterUuid,
                 "and so must the rate role — parity matters, they are set independently",
             )
 
-            val adHoc = clone.cues.flatMap { it.adHocEffects }.single { it.speedMasterUuid != null }
+            val adHoc = clone.cues.flatMap { it.adHocFx }.single { it.speedMasterUuid != null }
             assertEquals(
                 cloneMaster.uuid, adHoc.speedMasterUuid,
                 "the ad-hoc effect's column must point at the clone's master",
@@ -316,12 +330,12 @@ class ProjectCloneTest {
             // `ExportUuidRemapper` knows nothing about — which is the point: the remap is a blind
             // uuid substitution across the export text, so a new inline child is covered with no
             // code of its own.
-            val templateEffect = clone.templates.mapNotNull { it.effect }.single()
+            val paletteFx = clone.palettes.mapNotNull { it.effect }.single()
             assertEquals(
-                cloneMaster.uuid, templateEffect.speedMasterUuid,
+                cloneMaster.uuid, paletteFx.speedMasterUuid,
                 "the template effect's reference must point at the clone's master",
             )
-            assertEquals(cloneMaster.uuid, templateEffect.rateSpeedMasterUuid)
+            assertEquals(cloneMaster.uuid, paletteFx.rateSpeedMasterUuid)
         }
     }
 
@@ -330,7 +344,7 @@ class ProjectCloneTest {
      * colour parameter naming a value colour template.
      *
      * Worth its own test rather than folding into the master one above: the master columns are
-     * real uuid columns, whereas this is a uuid embedded in a `tmpl:` string inside a JSON value,
+     * real uuid columns, whereas this is a uuid embedded in a `pal:` string inside a JSON value,
      * and only the remapper being deliberately *not* field-aware makes it work. A cloned effect
      * still naming the source project's template would resolve to nothing and silently run white.
      */
@@ -343,13 +357,13 @@ class ProjectCloneTest {
             val clone = DaoProject.findById(result.projectId)!!
             val source = DaoProject.findById(sourceId)!!
 
-            val cloneColour = clone.templates.single { it.name == "amber-key" }
-            val sourceColour = source.templates.single { it.name == "amber-key" }
+            val cloneColour = clone.palettes.single { it.name == "amber-key" }
+            val sourceColour = source.palettes.single { it.name == "amber-key" }
             assertNotEquals(sourceColour.uuid, cloneColour.uuid, "clone must mint a fresh identity")
 
-            val effect = clone.templates.single { it.name == "amber-breathe" }.effect!!
+            val effect = clone.palettes.single { it.name == "amber-breathe" }.effect!!
             assertEquals(
-                "tmpl:${cloneColour.uuid}", effect.parameters["colours"],
+                "pal:${cloneColour.uuid}", effect.parameters["colours"],
                 "the parameter must name the clone's own colour template",
             )
         }
@@ -373,11 +387,11 @@ class ProjectCloneTest {
             assertEquals(8, pads.size)
             assertTrue(
                 pads.all { pad ->
-                    (pad.template?.project?.id ?: pad.look?.project?.id ?: pad.cue?.project?.id) == clone.id
+                    (pad.palette?.project?.id ?: pad.look?.project?.id ?: pad.cue?.project?.id) == clone.id
                 },
                 "every pad points at a record of the clone, never of the source",
             )
-            assertEquals(2, pads.count { it.template?.name == "amber-key" }, "the record on two pads is on two pads of the clone")
+            assertEquals(2, pads.count { it.palette?.name == "amber-key" }, "the record on two pads is on two pads of the clone")
             assertEquals(clone.id, clone.cueSlots.single { it.look != null }.look!!.project.id, "the Look slot points at the clone's Look")
         }
     }

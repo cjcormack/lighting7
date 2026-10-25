@@ -24,8 +24,8 @@ function asMap(channels: { key: string; value: number }[]): Record<string, numbe
   return Object.fromEntries(channels.map((c) => [c.key, c.value]))
 }
 
-function entry(propertyName: string, value: string, over: Partial<ResolvableEntry> = {}) {
-  return { targetKey: 'fx-1', propertyName, value, ...over }
+function entry(attribute: string, value: string, over: Partial<ResolvableEntry> = {}) {
+  return { targetKey: 'fx-1', attribute, value, ...over }
 }
 
 describe('resolveEntryChannels', () => {
@@ -131,7 +131,7 @@ describe('descriptorsByTarget', () => {
 
     const resolved = resolveEntryChannels(index.get('mover-1.head-0'), {
       targetKey: 'mover-1.head-0',
-      propertyName: 'rgbColour',
+      attribute: 'rgbColour',
       value: serializeColour(5, 6, 7),
     })
     expect(asMap(resolved)).toEqual({ '0:20': 5, '0:21': 6, '0:22': 7 })
@@ -144,8 +144,8 @@ describe('buildProgrammerChannelMap', () => {
     const two = makeFixture('fx-2', [colourProp('rgbColour', chan(2), chan(3), chan(4))])
     const map = buildProgrammerChannelMap(
       [
-        { targetKey: 'fx-1', propertyName: 'dimmer', value: '255' },
-        { targetKey: 'fx-2', propertyName: 'rgbColour', value: serializeColour(11, 12, 13) },
+        { targetKey: 'fx-1', attribute: 'dimmer', value: '255' },
+        { targetKey: 'fx-2', attribute: 'rgbColour', value: serializeColour(11, 12, 13) },
       ],
       [],
       descriptorsByTarget([one, two]),
@@ -158,7 +158,7 @@ describe('buildProgrammerChannelMap', () => {
     // client never sees, so the sideband is applied last.
     const fixture = makeFixture('fx-1', [sliderProp('dimmer', 'dimmer', chan(1))])
     const map = buildProgrammerChannelMap(
-      [{ targetKey: 'fx-1', propertyName: 'dimmer', value: '255' }],
+      [{ targetKey: 'fx-1', attribute: 'dimmer', value: '255' }],
       [{ universe: 0, channel: 1, value: 64 }],
       descriptorsByTarget([fixture]),
     )

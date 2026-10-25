@@ -1,34 +1,37 @@
-import { Fragment, useMemo, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronUp, Pause, Play, Plus, X } from 'lucide-react'
+import { Fragment, useContext, useMemo, useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronUp, Maximize2, Pause, Play, Plus, X } from 'lucide-react'
+import { useInRouterContext, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
-  useActiveEffectsQuery,
+  useActiveFxQuery,
   usePauseFxMutation,
   useRemoveFxMutation,
   useResumeFxMutation,
-  type ActiveEffect,
+  type ActiveFx,
 } from '@/store/fixtureFx'
 import { usePauseGroupFxMutation, useRemoveGroupFxMutation, useResumeGroupFxMutation } from '@/store/groups'
 import { useCurrentProjectQuery } from '@/store/projects'
+import { useFixtureLookup } from '@/hooks/useFixtureLookup'
+import { setFxTabView } from '@/lib/fxEditorView'
+import { selectWindowHeads } from '@/components/fixtures-list/programmerSelectRequest'
 import { useIsDeskConnected } from '@/store/status'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { isHeldByBlind } from '@/lib/heldBack'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import { FxEditor } from '../fx/FxEditor'
-import { FxPicker, type AuditionedEffect, type FxTarget } from '../fx/FxPicker'
-import { LookTogglePicker } from '../fx/LookTogglePicker'
+import { FxPicker, type AuditionedFx, type FxTarget } from '../fx/FxPicker'
 import { HELD_BLIND_WORDS, HeldBlindMark } from '../fx/HeldBlindMark'
-import { isCueEffect, type PickerFamily } from '../fx/fxEditorModel'
+import { isCueFx, type PickerFamily } from '../fx/fxEditorModel'
 import { getElementFilterLabel, getElementModeLabel } from '../fx/fxConstants'
 import { EditorLabel } from '../editor/EditorLabel'
 import { OwnerEditor } from '../stage/OwnerEditor'
 import { fixtureHeadKeys } from './useRelease'
-import { useCueLabel, useEffectDetail } from './effectLabels'
-import { effectsReaching } from './rowSource'
-import { FINGER_CHIP_CLASS, useFingerSized } from './sheetContext'
-import { effectNames, effectTargetLabel, selectionItems, spreadsOverMembers } from '@/lib/effectTargets'
+import { useCueLabel, useFxDetail } from './fxLabels'
+import { fxReaching } from './rowSource'
+import { FINGER_CHIP_CLASS, SheetCloseContext, useFingerSized } from './sheetContext'
+import { fxNames, fxTargetLabel, selectionItems, spreadsOverMembers } from '@/lib/fxTargets'
 
 export type FxTrayTarget = { type: 'fixture'; fixture: Fixture } | { type: 'group'; group: GroupSummary }
 
@@ -37,7 +40,7 @@ export type FxTrayTarget = { type: 'fixture'; fixture: Fixture } | { type: 'grou
  * reaches the picked heads or members, and **+ Effect** starts there.
  */
 export interface TrayPick {
-  /** `effectsReaching`'s arguments for the pick — its keys (heads, and their fixture) and their groups. */
+  /** `fxReaching`'s arguments for the pick — its keys (heads, and their fixture) and their groups. */
   reach: { keys: readonly string[]; groups: readonly string[] }
   /** Where **+ Effect** starts — the picker's target and any element filter — or why it cannot. */
   start: { target: FxTarget; elementFilter?: string } | { reason: string }
@@ -51,7 +54,7 @@ export interface TrayPick {
 /** How many chips the folded tray draws before *+n*. */
 const FOLDED_CHIPS = 3
 
-const EMPTY: readonly ActiveEffect[] = []
+const EMPTY: readonly ActiveFx[] = []
 
 /** What a start is keyed on: a fixture's key, a group's name or a selection's words. */
 function fxTargetKey(target: FxTarget): string {
@@ -65,10 +68,10 @@ const NO_KEYS: ReadonlySet<string> = new Set()
  * selection effects reach a fixture as *via <group>*: they are the group's or the selection's, not
  * this sheet's.
  */
-export function effectsOnTarget(effects: readonly ActiveEffect[] | undefined, target: FxTrayTarget): ActiveEffect[] {
+export function fxOnTarget(effects: readonly ActiveFx[] | undefined, target: FxTrayTarget): ActiveFx[] {
   if (!effects) return []
-  if (target.type === 'group') return effects.filter((e) => effectNames(e, NO_KEYS, new Set([target.group.name])))
-  return effectsReaching(effects, [...fixtureHeadKeys(target.fixture)], target.fixture.groups)
+  if (target.type === 'group') return effects.filter((e) => fxNames(e, NO_KEYS, new Set([target.group.name])))
+  return fxReaching(effects, [...fixtureHeadKeys(target.fixture)], target.fixture.groups)
 }
 
 /**
@@ -91,12 +94,15 @@ export function effectsOnTarget(effects: readonly ActiveEffect[] | undefined, ta
  * of being held back by them; the picker opens on the family of the row the sheet came from.
  *
  * On the phone host its row is 48px and its chips and **+ Effect** 32px, a finger's size (§4).
+ *
+ * **Open in FX editor** (⤢, FX editor plan §4.6) takes the sheet's fixture or group to the
+ * programmer's FX tab on *Selection*, selected there as *All*'s row press selects.
  */
 export function FxTray({
   target,
   pick,
   initialFamily,
-  preferredProperty,
+  preferredAttribute,
 }: {
   target: FxTrayTarget
   /** The strip's pick; absent, the tray is the whole target's. */
@@ -104,11 +110,11 @@ export function FxTray({
   /** The family of the row open on the sheet, which the picker opens on. */
   initialFamily?: PickerFamily | null
   /** That row's property, preferred over an effect's first compatible one. */
-  preferredProperty?: string | null
+  preferredAttribute?: string | null
 }) {
-  const { data: all } = useActiveEffectsQuery()
+  const { data: all } = useActiveFxQuery()
   const effects = useMemo(
-    () => (pick != null ? effectsReaching(all ?? EMPTY, pick.reach.keys, pick.reach.groups) : effectsOnTarget(all ?? EMPTY, target)),
+    () => (pick != null ? fxReaching(all ?? EMPTY, pick.reach.keys, pick.reach.groups) : fxOnTarget(all ?? EMPTY, target)),
     [all, target, pick],
   )
   const connected = useIsDeskConnected()
@@ -116,7 +122,7 @@ export function FxTray({
   // chip and row say *held · Blind* — running, phase kept, painting nothing until Blind goes off.
   const blind = useProgrammerBlind()
   const finger = useFingerSized()
-  const effectDetail = useEffectDetail()
+  const fxDetail = useFxDetail()
   const cueLabel = useCueLabel()
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -125,9 +131,9 @@ export function FxTray({
   const start = pick?.start
   const startKey =
     start == null ? 'whole' : 'reason' in start ? null : `${fxTargetKey(start.target)}\u0000${start.elementFilter ?? ''}`
-  const [audition, setAudition] = useState<{ startKey: string | null; effect: AuditionedEffect } | null>(null)
+  const [audition, setAudition] = useState<{ startKey: string | null; effect: AuditionedFx } | null>(null)
   const auditioned = audition != null && audition.startKey === startKey ? audition.effect : null
-  const setAuditioned = (effect: AuditionedEffect | null) => setAudition(effect == null ? null : { startKey, effect })
+  const setAuditioned = (effect: AuditionedFx | null) => setAudition(effect == null ? null : { startKey, effect })
   const [editingId, setEditingId] = useState<number | null>(null)
   // The cue whose editor is open over the sheet. Held here, not on its row, so the sheet stays
   // open if the cue's effect stops under it.
@@ -139,7 +145,7 @@ export function FxTray({
   }
   const editingLive = editingId != null ? effects.find((e) => e.id === editingId) ?? null : null
 
-  const edit = (e: ActiveEffect) => {
+  const edit = (e: ActiveFx) => {
     setOpen(true)
     setAdding(false)
     setEditingId(e.id)
@@ -159,10 +165,10 @@ export function FxTray({
   const [removeGroupFx] = useRemoveGroupFxMutation()
 
   const ownGroup = target.type === 'group' ? target.group.name : null
-  const via = (e: ActiveEffect) =>
-    selectionItems(e) != null ? effectTargetLabel(e) : e.isGroupTarget && e.targetKey !== ownGroup ? e.targetKey : null
+  const via = (e: ActiveFx) =>
+    selectionItems(e) != null ? fxTargetLabel(e) : e.isGroupTarget && e.targetKey !== ownGroup ? e.targetKey : null
 
-  const togglePause = (e: ActiveEffect) => {
+  const togglePause = (e: ActiveFx) => {
     const request = e.isGroupTarget
       ? (e.isRunning ? pauseGroupFx : resumeGroupFx)({ id: e.id, groupName: e.targetKey })
       : (e.isRunning ? pauseFx : resumeFx)({ id: e.id, fixtureKey: e.targetKey })
@@ -170,11 +176,11 @@ export function FxTray({
       // Reported by errorToastMiddleware.
     })
   }
-  const stop = (e: ActiveEffect) => {
+  const stop = (e: ActiveFx) => {
     // A group's or a selection's effect reaching this fixture is theirs: stopping it here stops it on every
     // member, so it asks first (Chris's call, session 2 review). The fixture's own stop does not.
     const group = via(e)
-    if (group && !confirm(`Stop ${e.effectType} on every fixture in ${group}?`)) return
+    if (group && !confirm(`Stop ${e.fxType} on every fixture in ${group}?`)) return
     const request = e.isGroupTarget
       ? removeGroupFx({ id: e.id, groupName: e.targetKey })
       : removeFx({ id: e.id, fixtureKey: e.targetKey })
@@ -184,24 +190,6 @@ export function FxTray({
     if (editingId === e.id) setEditingId(null)
   }
 
-  // The Look picker follows the pick by + Effect's rule (Chris's call, session 4): the whole target
-  // on *All*, the one head or member when one is picked — a Look press takes a head's key as a target
-  // — and absent for any other pick, where a press would land on more than the rows below edit. A
-  // filtered start (*first half*) has no one target for a Look either.
-  const lookFrom: FxTarget | null =
-    start == null
-      ? target.type === 'fixture'
-        ? { type: 'fixture', fixture: target.fixture }
-        : { type: 'group', group: target.group }
-      : 'reason' in start || start.elementFilter != null
-        ? null
-        : start.target
-  const lookTarget =
-    lookFrom == null || lookFrom.type === 'selection'
-      ? null
-      : lookFrom.type === 'fixture'
-        ? { targetType: 'fixture' as const, targetKey: lookFrom.fixture.key, compatibleLookIds: lookFrom.fixture.compatibleLookIds }
-        : { targetType: 'group' as const, targetKey: lookFrom.group.name, compatibleLookIds: lookFrom.group.compatibleLookIds }
   const addTarget: FxTarget | null =
     start == null
       ? target.type === 'fixture'
@@ -213,11 +201,12 @@ export function FxTray({
   const cannotStart = start != null && 'reason' in start ? start.reason : null
   const ownKey = target.type === 'fixture' ? target.fixture.key : null
   // An effect on one head or one member, rather than on the sheet's own target, says which.
-  const onWhom = (e: ActiveEffect) =>
+  const onWhom = (e: ActiveFx) =>
     spreadsOverMembers(e) || e.targetKey === ownKey ? null : (pick?.nameOf(e.targetKey) ?? null)
 
   const shown = effects.slice(0, FOLDED_CHIPS)
   const more = effects.length - shown.length
+  const inRouter = useInRouterContext()
 
   return (
     <div
@@ -230,18 +219,18 @@ export function FxTray({
           <>
             <button
               type="button"
-              aria-label="Back to the effects"
+              aria-label="Back to the FX"
               onClick={() => setAdding(false)}
               className="-ml-1.5 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <ChevronLeft className="size-4" />
             </button>
-            <EditorLabel>Add an effect</EditorLabel>
+            <EditorLabel>Add an FX</EditorLabel>
             <span className="flex-1" />
           </>
         ) : (
           <>
-            <EditorLabel>Effects</EditorLabel>
+            <EditorLabel>FX</EditorLabel>
             <span className="font-mono text-[11px] text-muted-foreground">{effects.length > 0 ? effects.length : 'none'}</span>
           </>
         )}
@@ -251,9 +240,9 @@ export function FxTray({
               <button
                 key={e.id}
                 type="button"
-                title={`${e.effectType} on ${e.propertyName}${via(e) ? ` via ${via(e)}` : ''}${isHeldByBlind(e, blind) ? ` — ${HELD_BLIND_WORDS}` : ''}${isCueEffect(e) ? ' — the cue’s' : ' — edit'}`}
+                title={`${e.fxType} on ${e.attribute}${via(e) ? ` via ${via(e)}` : ''}${isHeldByBlind(e, blind) ? ` — ${HELD_BLIND_WORDS}` : ''}${isCueFx(e) ? ' — the cue’s' : ' — edit'}`}
                 data-held-blind={isHeldByBlind(e, blind) || undefined}
-                onClick={() => (isCueEffect(e) ? setOpen(true) : edit(e))}
+                onClick={() => (isCueFx(e) ? setOpen(true) : edit(e))}
                 className={cn(
                   'inline-flex h-6 min-w-0 shrink items-center gap-1.5 rounded-full border px-2 text-[11px] whitespace-nowrap',
                   finger && cn(FINGER_CHIP_CLASS, 'px-2.5 text-xs'),
@@ -269,8 +258,8 @@ export function FxTray({
                     !e.isRunning ? 'bg-muted-foreground' : isHeldByBlind(e, blind) ? 'bg-amber-500' : 'bg-violet-500',
                   )}
                 />
-                <span className="truncate">{e.effectType}</span>
-                <span className="truncate text-muted-foreground">· {e.propertyName}</span>
+                <span className="truncate">{e.fxType}</span>
+                <span className="truncate text-muted-foreground">· {e.attribute}</span>
               </button>
             ))}
             {more > 0 && (
@@ -287,7 +276,6 @@ export function FxTray({
         {open && !adding && <span className="flex-1" />}
         {!(open && adding) && (
           <>
-            {lookTarget != null && <LookTogglePicker key={lookTarget.targetKey} {...lookTarget} />}
             <Button
               variant="outline"
               size="sm"
@@ -297,14 +285,15 @@ export function FxTray({
               onClick={startAdding}
             >
               <Plus className="size-3" />
-              Effect
+              FX
             </Button>
           </>
         )}
+        {inRouter && <OpenInFxEditor target={target} finger={finger} />}
         <button
           type="button"
           aria-expanded={open}
-          aria-label={open ? 'Fold the effects' : 'Open the effects'}
+          aria-label={open ? 'Fold the FX' : 'Open the FX'}
           onClick={() => setOpen((o) => !o)}
           className={cn(
             'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground',
@@ -327,13 +316,13 @@ export function FxTray({
             target={addTarget}
             elementFilter={start != null && !('reason' in start) ? start.elementFilter : undefined}
             initialFamily={initialFamily}
-            preferredProperty={preferredProperty}
+            preferredAttribute={preferredAttribute}
             current={auditioned}
             onCurrent={setAuditioned}
             onEdit={() => {
               if (auditioned == null) return
               setAdding(false)
-              setEditingId(auditioned.effectId)
+              setEditingId(auditioned.fxId)
             }}
           />
         </div>
@@ -342,12 +331,12 @@ export function FxTray({
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-fx-tray-list>
           {effects.length === 0 && (
             <p className="px-2 py-3 text-xs text-muted-foreground">
-              {pick != null ? `No effects reach ${pick.noun}.` : `No effects on this ${target.type === 'group' ? 'group' : 'fixture'}.`}
+              {pick != null ? `No FX reach ${pick.noun}.` : `No FX on this ${target.type === 'group' ? 'group' : 'fixture'}.`}
             </p>
           )}
           {effects.map((e) => {
             const group = via(e)
-            const cue = isCueEffect(e)
+            const cue = isCueFx(e)
             // A button only once the cue is named: its name comes from the current project's stack
             // list, so a named cue means the project the cue sheet opens in has loaded too.
             const cueId = cue ? e.cueId : null
@@ -370,8 +359,8 @@ export function FxTray({
                   <div className="flex items-center gap-1.5 text-[12.5px] font-medium">
                     <span className={cn('size-[7px] shrink-0 rounded-full', e.isRunning ? 'bg-violet-500' : 'bg-muted-foreground')} />
                     {cue ? (
-                      <span className="min-w-0 truncate" data-read-only title="The cue’s effect — edit it in the cue">
-                        {e.effectType}
+                      <span className="min-w-0 truncate" data-read-only title="The cue’s FX — edit it in the cue">
+                        {e.fxType}
                       </span>
                     ) : (
                       <button
@@ -380,18 +369,18 @@ export function FxTray({
                         aria-expanded={isEditing}
                         onClick={() => setEditingId(isEditing ? null : e.id)}
                       >
-                        {e.effectType}
+                        {e.fxType}
                       </button>
                     )}
                     <span className="inline-flex h-4 items-center rounded border px-1 text-[9.5px] text-muted-foreground">
-                      {effectDetail(e)}
+                      {fxDetail(e)}
                     </span>
                     {isHeldByBlind(e, blind) && <HeldBlindMark />}
                     <span className="flex-1" />
                     {!cue && (
                       <button
                         type="button"
-                        aria-label={e.isRunning ? `Pause ${e.effectType}` : `Resume ${e.effectType}`}
+                        aria-label={e.isRunning ? `Pause ${e.fxType}` : `Resume ${e.fxType}`}
                         disabled={!connected}
                         onClick={() => togglePause(e)}
                         className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
@@ -402,7 +391,7 @@ export function FxTray({
                     {!isEditing && !cue && (
                       <button
                         type="button"
-                        aria-label={`Stop ${e.effectType}`}
+                        aria-label={`Stop ${e.fxType}`}
                         disabled={!connected}
                         onClick={() => stop(e)}
                         className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-destructive disabled:opacity-50"
@@ -412,7 +401,7 @@ export function FxTray({
                     )}
                   </div>
                   <div className="pl-[13px] text-[11px] text-muted-foreground">
-                    → {e.propertyName}
+                    → {e.attribute}
                     {onWhom(e) && ` · on ${onWhom(e)}`}
                     {e.elementFilter && e.elementFilter !== 'ALL' && ` · ${getElementFilterLabel(e.elementFilter).toLowerCase()} heads`}
                     {group && ` · via ${group}`}
@@ -427,7 +416,7 @@ export function FxTray({
                           // phone host a finger's height of hit area, as inline padding so the line
                           // itself does not grow.
                           className={cn('underline decoration-dotted underline-offset-2 hover:text-foreground hover:decoration-solid', finger && 'py-2.5')}
-                          title={`The cue’s effect — open ${cueName} to change it`}
+                          title={`The cue’s FX — open ${cueName} to change it`}
                           onClick={() => openCue(cueId)}
                         >
                           {home}
@@ -441,7 +430,7 @@ export function FxTray({
                 {isEditing && (
                   <div data-fx-tray-editor className="mx-1 mt-1 mb-2 rounded-lg border bg-background p-2.5">
                     <FxEditor
-                      key={`${e.id}:${e.effectType}`}
+                      key={`${e.id}:${e.fxType}`}
                       effect={e}
                       onDone={() => setEditingId(null)}
                       onStop={() => stop(e)}
@@ -455,6 +444,45 @@ export function FxTray({
       )}
       {cueSheetMounted && <CueSheet cueId={openCueId} onClose={() => setOpenCueId(null)} />}
     </div>
+  )
+}
+
+/**
+ * ⤢: the programmer on [target], its FX tab on *Selection*. The selection goes through what *All*'s
+ * row press uses (`selectWindowHeads`): the desk's while the window follows it, else Include's
+ * request, which the programmer list takes up as it mounts. A modal host is closed first
+ * (`SheetCloseContext`), since one outside the routed page would stay over the FX editor.
+ */
+function OpenInFxEditor({ target, finger }: { target: FxTrayTarget; finger: boolean }) {
+  const navigate = useNavigate()
+  const { data: project } = useCurrentProjectQuery()
+  const { fixtures } = useFixtureLookup()
+  const close = useContext(SheetCloseContext)
+  const name = target.type === 'fixture' ? target.fixture.name : target.group.name
+  return (
+    <button
+      type="button"
+      aria-label={`Open ${name} in the FX editor`}
+      title="Open in FX editor"
+      disabled={project == null}
+      data-open-fx-editor
+      onClick={() => {
+        if (project == null) return
+        selectWindowHeads(
+          [target.type === 'fixture' ? { type: 'fixture', key: target.fixture.key } : { type: 'group', key: target.group.name }],
+          fixtures ?? [],
+        )
+        setFxTabView('selection')
+        close?.()
+        navigate(`/projects/${project.id}/programmer?table=fx`)
+      }}
+      className={cn(
+        'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50',
+        finger && 'size-9',
+      )}
+    >
+      <Maximize2 className="size-3.5" />
+    </button>
   )
 }
 

@@ -1,10 +1,12 @@
 /*---
 id: ColourFade
 name: Colour Fade
-category: colour
+family: colour
 outputType: COLOUR
-effectMode: STANDARD
-compatibleProperties: [rgbColour]
+fxMode: STANDARD
+defaultDirection: BOUNCE
+defaultCycle: 2.0
+compatibleAttributes: [rgbColour]
 parameters:
   - name: fromColour
     type: colour
@@ -14,22 +16,9 @@ parameters:
     type: colour
     default: "#0000ff"
     description: Ending colour
-  - name: pingPong
-    type: boolean
-    default: "true"
-    description: Fade back to start colour
 ---*/
 
 val fromColour = params.colour("fromColour")
 val toColour = params.colour("toColour")
-val pingPong = params.boolean("pingPong")
 
-val ratio = if (pingPong && phase > 0.5) {
-    1.0 - (phase - 0.5) * 2
-} else if (pingPong) {
-    phase * 2
-} else {
-    phase
-}
-
-FxOutput.Colour(blendExtendedColours(fromColour, toColour, ratio))
+FxOutput.Colour(blendExtendedColours(fromColour, toColour, phase))

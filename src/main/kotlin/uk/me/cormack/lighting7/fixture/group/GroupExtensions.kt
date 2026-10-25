@@ -1,14 +1,14 @@
 package uk.me.cormack.lighting7.fixture.group
 
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.group.property.GroupColour
-import uk.me.cormack.lighting7.fixture.group.property.GroupPosition
-import uk.me.cormack.lighting7.fixture.group.property.GroupSlider
-import uk.me.cormack.lighting7.fixture.group.property.GroupStrobe
-import uk.me.cormack.lighting7.fixture.property.AggregateColour
-import uk.me.cormack.lighting7.fixture.property.AggregatePosition
-import uk.me.cormack.lighting7.fixture.property.AggregateSlider
-import uk.me.cormack.lighting7.fixture.property.AggregateStrobe
+import uk.me.cormack.lighting7.fixture.group.attribute.GroupColour
+import uk.me.cormack.lighting7.fixture.group.attribute.GroupPosition
+import uk.me.cormack.lighting7.fixture.group.attribute.GroupSlider
+import uk.me.cormack.lighting7.fixture.group.attribute.GroupStrobe
+import uk.me.cormack.lighting7.fixture.attribute.AggregateColour
+import uk.me.cormack.lighting7.fixture.attribute.AggregatePosition
+import uk.me.cormack.lighting7.fixture.attribute.AggregateSlider
+import uk.me.cormack.lighting7.fixture.attribute.AggregateStrobe
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer

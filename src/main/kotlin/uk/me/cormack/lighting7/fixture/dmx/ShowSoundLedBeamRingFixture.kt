@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
@@ -174,24 +174,24 @@ sealed class ShowSoundLedBeamRingFixture(
 
         // The head file locates pan at 86 of 255 (182°), not mid-travel: its front, as the Shehds'.
         // Estimate: checked on the rig by FU-MANUAL-SHOWSOUND-BEAMRING.
-        @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse, 0–540°)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0, forwardDeg = 180.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt (coarse, 0–180°)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse, 0–180°)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 180.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Pan/tilt speed", category = AttributeCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
         /**
@@ -201,8 +201,8 @@ sealed class ShowSoundLedBeamRingFixture(
          * Estimate: the strobe and random rates are the head file's 1–13 Hz; a pulse at 0.5–2 Hz.
          * Checked on the rig by FU-MANUAL-SHOWSOUND-BEAMRING.
          */
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 3, StrobeKind.OPEN),
                 StrobeBand(4, 99, StrobeKind.PULSE, hzMin = 0.5, hzMax = 2.0),
@@ -216,22 +216,22 @@ sealed class ShowSoundLedBeamRingFixture(
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
         )
 
-        @FixtureProperty("Colour wheel", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Colour wheel", category = AttributeCategory.COLOUR)
         val colourWheel = DmxFixtureSetting(
             transaction, universe, firstChannel + 7, Colour.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Gobo wheel", category = PropertyCategory.GOBO)
+        @FixtureAttribute("Gobo wheel", category = AttributeCategory.GOBO)
         val gobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 8, Gobo.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Prism", category = PropertyCategory.PRISM)
+        @FixtureAttribute("Prism", category = AttributeCategory.PRISM)
         val prism = DmxFixtureSetting(
             transaction, universe, firstChannel + 9, Prism.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Macro", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Macro", category = AttributeCategory.SETTING)
         val macro = DmxFixtureSetting(
             transaction, universe, firstChannel + 10, Macro.entries.toTypedArray(),
         )
@@ -245,12 +245,12 @@ sealed class ShowSoundLedBeamRingFixture(
         )
         val reset = DmxCommand(universe, firstChannel + 11, 255u, bandMin = 250u, bandMax = 255u)
 
-        @FixtureProperty("LED ring", category = PropertyCategory.RING)
+        @FixtureAttribute("LED ring", category = AttributeCategory.RING)
         val ringFx = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, RingFx.entries.toTypedArray(),
         )
 
-        @FixtureProperty("LED ring speed", category = PropertyCategory.RING_SPEED)
+        @FixtureAttribute("LED ring speed", category = AttributeCategory.RING_SPEED)
         val ringSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 13)
 
         companion object {

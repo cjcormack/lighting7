@@ -25,7 +25,7 @@ const POLL_MS = 400
 
 const FX_COMPILE: BootStatus = {
   phase: "FX_COMPILE",
-  message: "Compiling effects (12/28)…",
+  message: "Compiling FX (12/28)…",
   percent: 45,
   ready: false,
   error: null,
@@ -108,7 +108,7 @@ describe("BootGate", () => {
     // "FX_COMPILE" is humanised to "FX COMPILE" (underscores -> spaces).
     await screen.findByText("FX COMPILE")
     expect(progressBar(container)).toHaveStyle({ width: "45%" })
-    expect(screen.getByText("Compiling effects (12/28)…")).toBeInTheDocument()
+    expect(screen.getByText("Compiling FX (12/28)…")).toBeInTheDocument()
     expect(screen.queryByText(CHILD_TEXT)).not.toBeInTheDocument()
   })
 

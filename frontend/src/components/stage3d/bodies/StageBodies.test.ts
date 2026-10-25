@@ -17,7 +17,7 @@ import { applyHousingWorkLights, buildBodies, buildBodyLayout, flushBodies, make
 import { HOUSING_COLOR, HOUSING_FILL, TAG_HOUSING_ALBEDO, TAG_HOUSING_COLORS } from './palette'
 import { litByFill } from '../scene/surfaceShader'
 import { WORK_LIGHT_LEVELS } from '../scene/workLights'
-import { RING_SEGMENTS } from '../../../lib/ringEffect'
+import { RING_SEGMENTS } from '../../../lib/ringFx'
 import { FIXTURE_COLOURS } from '../../../lib/fixtureColours'
 
 function spec(kind: 'PROFILE' | 'FRESNEL', lengthM: number | null = null): BodySpec {

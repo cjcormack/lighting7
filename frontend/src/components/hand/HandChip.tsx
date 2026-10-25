@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { AudioWaveform, Hand, ListMusic, Palette, SwatchBook, X } from 'lucide-react'
-import { EFFECT_GLYPH_CLASS, padFaceOf, type PadFace } from '@/components/busking/padFace'
+import { FX_GLYPH_CLASS, padFaceOf, type PadFace } from '@/components/busking/padFace'
 import { useEscapeEditorSnapshot } from '@/components/sheet/useEscapeEditorSnapshot'
 import { handDrop, useHand } from '@/store/hand'
 import { cn } from '@/lib/utils'
@@ -106,7 +106,7 @@ function HeldGlyph({ face }: { face: PadFace }) {
       />
     )
   }
-  if (face.isEffect) return <AudioWaveform className={EFFECT_GLYPH_CLASS} aria-hidden />
+  if (face.isFx) return <AudioWaveform className={FX_GLYPH_CLASS} aria-hidden />
   if (face.kind === 'CUE') {
     return <ListMusic className="size-3 shrink-0 text-muted-foreground" aria-hidden />
   }

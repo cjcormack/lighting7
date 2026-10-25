@@ -8,15 +8,16 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import uk.me.cormack.lighting7.fx.EffectMode
+import uk.me.cormack.lighting7.fx.FxMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.ProjectKind
-import uk.me.cormack.lighting7.models.LookEffectSpec
+import uk.me.cormack.lighting7.models.LookFxSpec
 import uk.me.cormack.lighting7.models.PromptBookRectDto
+import uk.me.cormack.lighting7.models.TIMING_CYCLE
 import uk.me.cormack.lighting7.models.TriggerType
 import uk.me.cormack.lighting7.scripts.ScriptType
 
@@ -33,13 +34,30 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
-    // v30: Size, direction and N-shot (effects plan session 1, venue-visit R4.1). `LookEffectJson`,
-    // `TemplateEffectJson` and `CueAdHocEffectJson` gain `size` (default 1.0), `direction` (default
+    // v39: a surface binding's attribute targets are `fixtureAttribute`, `groupAttribute` and
+    // `selectionAttribute`, and theirs and `encoderBankSet`'s `propertyName` is `attribute`, a
+    // flash's nested target too; Circle's, Figure 8's and Random Position's `panCenter` and
+    // `tiltCenter` are `panCentre` and `tiltCentre` (terminology plan session 6). Read through
+    // `sync/LegacyNames.kt`. `minReader` moves to **39**: a v38 reader would hold every such binding
+    // as one it does not know and run each centre at its default. See `docs/sync-engineering.md`
+    // §"Version 39 — attributes and centres".
+    // v38: the archive in the glossary's words (terminology plan session 4). `templates/` is
+    // `palettes/`, `cueAdHocEffects/` `cueAdHocFx/` and `cuePropertyAssignments/`
+    // `cueAttributeAssignments/`; a stored FX's fields are `fxType`, `family`, `attribute`, `cycle`,
+    // `order`, `timing` (`CYCLE` / `HEAD`, once the boolean `stepTiming`), `amount`, `runs`,
+    // `segments` and `parts`, a Look's and a palette's FX are `fx`, a palette is a cue layer's and a
+    // pad's `paletteUuid`, and the Order, family, `pal:` and binding values moved with them. Every old
+    // name is read through `sync/LegacyNames.kt`, so the reader takes any archive from v5. `minReader`
+    // moves to **38**: a v37 reader would find every renamed required field missing, and v38 also
+    // implies `ProjectJson.fxLibrary`, which it no longer writes. See `docs/sync-engineering.md`
+    // §"Version 38 — the glossary's words".
+    // v30: Size, direction and N-shot (effects plan session 1, venue-visit R4.1). `LookFxJson`,
+    // `PaletteFxJson` and `CueAdHocFxJson` gain `size` (default 1.0), `direction` (default
     // `FORWARD`) and `nShot` (default null), each omitted at its default. The writer's number moves by
     // the sharp-edge rule: a v29 reader would run a 40 % breathe at full size, a backward cycle
     // forward and a one-shot forever, and its next wipe-then-export push would write all three away.
     // `minReader` stays at **5** — every field defaults to what an older row meant. See
-    // `docs/sync-engineering.md` §"Version 30 — Size, direction and N-shot".
+    // `docs/sync-engineering.md` §"Version 30 — Amount, direction and runs".
     // v31: stored locate. `FixturePatchJson` gains `locate` (default empty, omitted): the pan and tilt
     // bytes Locate points each of a patch's units at (venue-visit plan D6, D17). A patch with none
     // exports byte-for-byte as at v30. The writer's number moves by the sharp-edge rule: a v30 reader
@@ -57,18 +75,18 @@ data class FormatVersionJson(
     // `minReader` stays at **5** — the reader still takes a v5–v31 archive's lists from its cue
     // files ([LegacyCuePlacementJson]). See `docs/sync-engineering.md` §"Version 32 — cue stack
     // entries".
-    // v33: the spread's shape (effects plan session 2, venue-visit R4.2). `LookEffectJson`,
-    // `TemplateEffectJson` and `CueAdHocEffectJson` gain `spread` (default 1.0), `wings` and `blocks`
+    // v33: the spread's shape (effects plan session 2, venue-visit R4.2). `LookFxJson`,
+    // `PaletteFxJson` and `CueAdHocFxJson` gain `spread` (default 1.0), `wings` and `blocks`
     // (default 1) and `groups` (default 0, off), each omitted at its default. The writer's number moves
     // by the sharp-edge rule: a v32 reader would run a 50 % ripple over the whole cycle and two wings
     // as one, and its next wipe-then-export push would write all four away. `minReader` stays at
     // **5** — every field defaults to what an older row meant. See `docs/sync-engineering.md`
     // §"Version 33 — the spread's shape".
-    // v34: one effect over a selection (effects plan session 3, venue-visit R4.3). A `LookEffectJson`
-    // or `CueAdHocEffectJson` may say `targetType: "selection"` with `targetKey` the list's canonical
+    // v34: one effect over a selection (effects plan session 3, venue-visit R4.3). A `LookFxJson`
+    // or `CueAdHocFxJson` may say `targetType: "selection"` with `targetKey` the list's canonical
     // JSON. The writer's number moves by the sharp-edge rule: a v33 reader would store a target it
     // cannot spawn, so every cue and Look holding one would skip that effect. `minReader`
-    // stays at **5** — no field changed. See `docs/sync-engineering.md` §"Version 34 — one effect over a
+    // stays at **5** — no field changed. See `docs/sync-engineering.md` §"Version 34 — one FX over a
     // selection".
     // v35: speed masters on a cue (venue-visit plan S16). `CueJson` gains `speedMasters` (default
     // empty, omitted): the masters the cue sets on GO, each a master's uuid and a BPM
@@ -83,14 +101,14 @@ data class FormatVersionJson(
     // group without its colour and its next wipe-then-export push would write them away for every peer.
     // `minReader` stays at **5** — a missing colour is none. See `docs/sync-engineering.md`
     // §"Version 36 — fixture colours".
-    // v37: effect runs (stack-timeline plan D7, §3.4). `CueAdHocEffectJson` gains `runUuid` (default
+    // v37: effect runs (stack-timeline plan D7, §3.4). `CueAdHocFxJson` gains `runUuid` (default
     // null, omitted): the run key ad-hoc effects of neighbouring cues share, for a GO to hand the running
     // effect on (stack-timeline plan session 2). A show with no runs exports byte-for-byte as at v36. The writer's number moves by the
     // sharp-edge rule: a v36 reader would import every effect out of its run and its next
     // wipe-then-export push would write the keys away for every peer. `minReader` stays at **5** — a
-    // missing key is no run. See `docs/sync-engineering.md` §"Version 37 — effect runs".
+    // missing key is no run. See `docs/sync-engineering.md` §"Version 37 — FX runs".
     //
-    // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
+    // v29: Seconds. `LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
     // then seconds. The writer's number moves by the sharp-edge rule: a v28 reader would import a
     // ten-second breathe as ten beats of master 1 and its next wipe-then-export push would write the
@@ -99,7 +117,7 @@ data class FormatVersionJson(
     //
     // v28: centre-relative positions. A palette's position row may say `pos:<pan>,<tilt>` —
     // centre-relative coarse DMX, -128..127 about DMX 128 (venue-visit plan D3) — beside the `deg:`
-    // travel degrees every earlier row holds. No field moved (`TemplateRowJson.value` is a string),
+    // travel degrees every earlier row holds. No field moved (`PaletteRowJson.value` is a string),
     // but its meaning did: a v27 reader parses a `pos:` row as no intent and runs every new position
     // palette as nothing. `minReader` stays at **5** — a `deg:` row still resolves as angles. See
     // `docs/sync-engineering.md` §"Version 28 — centre-relative positions".
@@ -305,9 +323,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 37,
+    val formatVersion: Int = 39,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 5,
+    val minReader: Int = 39,
 )
 
 /**
@@ -347,6 +365,14 @@ data class ProjectJson(
      */
     val detachedFromVenueUuid: String? = null,
     val detachedFromVersion: Int? = null,
+    /**
+     * Which FX library a v37 archive's FX were written against ([LegacyNames.FX_LIBRARY]); absent is
+     * 1, every archive written before the terminology plan's session 3. It tells the importer an FX
+     * that names no `pingPong` from before the parameter went, which ran with it on, from one written
+     * since. Read, never written: from v38 the `formatVersion` says it
+     * ([LegacyNames.absentPingPongIsOn]).
+     */
+    val fxLibrary: Int? = null,
 )
 
 /**
@@ -421,21 +447,24 @@ data class VenueVersionJson(
 data class ScriptMetaJson(
     val uuid: String,
     val name: String,
-    val scriptType: ScriptType = ScriptType.GENERAL,
+    /** A [ScriptType] by name, read through [uk.me.cormack.lighting7.sync.LegacyNames.scriptType]. */
+    val scriptType: String = ScriptType.GENERAL.name,
 )
 
 @Serializable
 data class FxDefinitionJson(
     val uuid: String,
-    val effectId: String,
+    val fxId: String,
     val name: String,
-    val category: String,
+    val family: String,
     val outputType: FxOutputType,
-    val effectMode: EffectMode = EffectMode.STANDARD,
+    /** An [FxMode] by name, read through [uk.me.cormack.lighting7.sync.LegacyNames.fxMode]. */
+    val fxMode: String = FxMode.STANDARD.name,
     val parameters: JsonElement? = null,
-    val compatibleProperties: List<String> = emptyList(),
+    val compatibleAttributes: List<String> = emptyList(),
     val script: String,
-    val defaultStepTiming: Boolean = false,
+    /** `CYCLE` or `HEAD` (terminology plan D22). */
+    val defaultTiming: String = TIMING_CYCLE,
     val timingSource: TimingSource = TimingSource.BEAT,
 )
 
@@ -445,15 +474,31 @@ data class LookRowJson(
     /** A `TargetRef` discriminator — `fixture` or `group`. A Look row is always bound. */
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val value: String,
     val fadeDurationMs: Long? = null,
     val elementKey: String? = null,
     val sortOrder: Int = 0,
 )
 
+/**
+ * The fields every archive home of a stored FX shares — a Look's, a palette's and a cue's — which
+ * `sync/LegacyNames.kt`'s rewrites read.
+ */
+interface StoredFxFields {
+    val fxType: String
+    val family: String
+    val cycle: Double
+    val order: String
+    val phaseOffset: Double
+    val parameters: Map<String, String>
+    val direction: String
+    val runs: Int?
+    val spread: Double
+}
+
 @Serializable
-data class LookEffectJson(
+data class LookFxJson(
     val uuid: String,
     /**
      * `fixture`, `group`, or since v34 `selection` (its key the ordered list's canonical JSON). An older
@@ -461,38 +506,39 @@ data class LookEffectJson(
      */
     val targetType: String,
     val targetKey: String,
-    val effectType: String,
-    val category: String,
-    val propertyName: String? = null,
-    val beatDivision: Double,
+    override val fxType: String,
+    override val family: String,
+    val attribute: String? = null,
+    override val cycle: Double,
     val blendMode: String,
-    val distribution: String,
-    val phaseOffset: Double = 0.0,
+    override val order: String,
+    override val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean? = null,
-    val parameters: Map<String, String> = emptyMap(),
+    /** Timing (D22), `CYCLE` or `HEAD`; absent is the FX type's own. */
+    val timing: String? = null,
+    override val parameters: Map<String, String> = emptyMap(),
     /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
-    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
-    val size: Double = 1.0,
+    /** Amount (effects plan D2, terminology plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val amount: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
-    val direction: String = "FORWARD",
+    override val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
-    val nShot: Int? = null,
+    override val runs: Int? = null,
     /**
-     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Segments, Parts (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
-    val spread: Double = 1.0,
+    override val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
     val sortOrder: Int = 0,
-)
+) : StoredFxFields
 
 /**
  * A Look — portable show content, rows and effects embedded inline.
@@ -512,7 +558,7 @@ data class LookJson(
     val name: String,
     val notes: String? = null,
     val rows: List<LookRowJson> = emptyList(),
-    val effects: List<LookEffectJson> = emptyList(),
+    val fx: List<LookFxJson> = emptyList(),
     /** v20: what the Look shows while it is live. */
     val scenery: List<SceneryChangeJson> = emptyList(),
 )
@@ -525,14 +571,14 @@ data class LookJson(
  * diff.
  */
 @Serializable
-data class TemplateRowJson(
+data class PaletteRowJson(
     val uuid: String,
     /** `deferred` for a generic row, `fixture` for a per-fixture one. Never `group`. */
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     /**
-     * A `TemplateIntent` in serialised form — `#FF9D4A;policy=extract`, `pct:75`, `pos:-12,30` (v28; a
+     * A `PaletteIntent` in serialised form — `#FF9D4A;policy=extract`, `pct:75`, `pos:-12,30` (v28; a
      * centre-relative position), or the `deg:45,12.5` travel degrees a row written before v28 holds.
      */
     val value: String,
@@ -540,48 +586,49 @@ data class TemplateRowJson(
 )
 
 /**
- * A template's one effect — [LookEffectJson] minus `targetType` / `targetKey` (an effect template
+ * A template's one effect — [LookFxJson] minus `targetType` / `targetKey` (an effect template
  * is always generic, fx-templates D3) and `sortOrder` (at most one, D2).
  *
- * `parameters` may hold a `tmpl:{uuid}` colour reference. It needs no special handling here for
- * the same reason `LookEffectJson`'s does not: `ExportUuidRemapper` rewrites every uuid *string*
+ * `parameters` may hold a `pal:{uuid}` colour reference. It needs no special handling here for
+ * the same reason `LookFxJson`'s does not: `ExportUuidRemapper` rewrites every uuid *string*
  * in the export text, so the reference and the two master uuids are re-pointed on clone with no
  * field-aware code.
  */
 @Serializable
-data class TemplateEffectJson(
+data class PaletteFxJson(
     val uuid: String,
-    val effectType: String,
-    val category: String,
-    val propertyName: String? = null,
-    val beatDivision: Double,
+    override val fxType: String,
+    override val family: String,
+    val attribute: String? = null,
+    override val cycle: Double,
     val blendMode: String,
-    val distribution: String,
-    val phaseOffset: Double = 0.0,
+    override val order: String,
+    override val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean? = null,
-    val parameters: Map<String, String> = emptyMap(),
+    /** Timing (D22), `CYCLE` or `HEAD`; absent is the FX type's own. */
+    val timing: String? = null,
+    override val parameters: Map<String, String> = emptyMap(),
     /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
-    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
-    val size: Double = 1.0,
+    /** Amount (effects plan D2, terminology plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val amount: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
-    val direction: String = "FORWARD",
+    override val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
-    val nShot: Int? = null,
+    override val runs: Int? = null,
     /**
-     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Segments, Parts (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
-    val spread: Double = 1.0,
+    override val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
-)
+    val segments: Int = 1,
+    val parts: Int = 0,
+) : StoredFxFields
 
 /**
  * A template — portable show content, rows *or* one effect embedded inline.
@@ -603,13 +650,13 @@ data class TemplateEffectJson(
  * solo bank's. `GET /palettes` lists by name.
  */
 @Serializable
-data class TemplateJson(
+data class PaletteJson(
     val uuid: String,
     val name: String,
     val notes: String? = null,
     val fadeDurationMs: Long? = null,
-    val rows: List<TemplateRowJson> = emptyList(),
-    val effect: TemplateEffectJson? = null,
+    val rows: List<PaletteRowJson> = emptyList(),
+    val fx: PaletteFxJson? = null,
 )
 
 /**
@@ -637,7 +684,7 @@ data class SpeedMasterJson(
      * dangle or silently re-point. Null with a ratio set means master 1, which is what every
      * export written before follow targets existed says.
      */
-    val usage: String? = null,
+    val family: String? = null,
     val followNum: Int? = null,
     val followDen: Int? = null,
     val followTargetUuid: String? = null,
@@ -888,12 +935,12 @@ data class SceneryChangeJson(
 )
 
 @Serializable
-data class CuePropertyAssignmentJson(
+data class CueAttributeAssignmentJson(
     val uuid: String,
     val cueUuid: String,
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val value: String,
     val fadeDurationMs: Long? = null,
     val sortOrder: Int = 0,
@@ -905,7 +952,7 @@ data class CuePropertyAssignmentJson(
  * `CuePresetApplicationJson` was — a cue child that points at a second entity, so it cannot be
  * embedded in either one.
  *
- * **Exactly one of [lookUuid] / [templateUuid]** is set: a layer applies a Look or a template. Both
+ * **Exactly one of [lookUuid] / [paletteUuid]** is set: a layer applies a Look or a template. Both
  * are uuids rather than ids for the usual reason — int PKs are re-minted on import, and
  * [uk.me.cormack.lighting7.sync.ExportUuidRemapper] rewrites uuid occurrences across the export.
  */
@@ -914,12 +961,12 @@ data class CueLayerJson(
     val uuid: String,
     val cueUuid: String,
     val lookUuid: String? = null,
-    val templateUuid: String? = null,
+    val paletteUuid: String? = null,
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
-    /** Comma-separated `PropertyMaskGroup` names; null = every property. */
-    val propertyMask: String? = null,
+    /** Comma-separated `AttributeFamily` names; null = every property. */
+    val attributeMask: String? = null,
     val blendMode: String = "OVERRIDE",
     val amount: Double = 1.0,
     val stomp: Boolean = false,
@@ -932,23 +979,24 @@ data class CueLayerJson(
 )
 
 @Serializable
-data class CueAdHocEffectJson(
+data class CueAdHocFxJson(
     val uuid: String,
     val cueUuid: String,
     /** `fixture`, `group`, or since v34 `selection` (its key the ordered list's canonical JSON). */
     val targetType: String,
     val targetKey: String,
-    val effectType: String,
-    val category: String,
-    val propertyName: String? = null,
-    val beatDivision: Double,
+    override val fxType: String,
+    override val family: String,
+    val attribute: String? = null,
+    override val cycle: Double,
     val blendMode: String,
-    val distribution: String,
-    val phaseOffset: Double = 0.0,
+    override val order: String,
+    override val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean? = null,
-    val parameters: Map<String, String> = emptyMap(),
+    /** Timing (D22), `CYCLE` or `HEAD`; absent is the FX type's own. */
+    val timing: String? = null,
+    override val parameters: Map<String, String> = emptyMap(),
     val delayMs: Long? = null,
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
@@ -959,26 +1007,26 @@ data class CueAdHocEffectJson(
     val rateSpeedMasterUuid: String? = null,
     /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
     val seconds: Boolean = false,
-    /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
-    val size: Double = 1.0,
+    /** Amount (effects plan D2, terminology plan D2), 0–1 (formatVersion 30). Omitted at 1. */
+    val amount: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
-    val direction: String = "FORWARD",
+    override val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
-    val nShot: Int? = null,
+    override val runs: Int? = null,
     /**
-     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
+     * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Segments, Parts (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
-    val spread: Double = 1.0,
+    override val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
     /**
      * The run key (stack-timeline plan D7, formatVersion 37): rows of neighbouring cues sharing one
      * are one run. Omitted when null. Not an identity, so a clone's remap leaves it as it is.
      */
     val runUuid: String? = null,
-)
+) : StoredFxFields
 
 @Serializable
 data class CueTriggerJson(
@@ -1168,7 +1216,7 @@ data class BuskBankJson(
 data class BuskPadJson(
     val uuid: String,
     val sortOrder: Int,
-    val templateUuid: String? = null,
+    val paletteUuid: String? = null,
     val lookUuid: String? = null,
     val cueUuid: String? = null,
 )

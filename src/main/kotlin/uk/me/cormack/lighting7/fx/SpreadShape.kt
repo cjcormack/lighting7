@@ -15,17 +15,17 @@ import kotlin.math.min
  *
  * @property spread How much of the cycle the members cover, 0.0–2.0 (0–200 %); 1.0 is today's.
  * @property wings The members split into this many wings, alternate wings mirrored; 1 is none. Only
- *   under an asymmetric Order: Centre out, Edges in and Split are two wings already, so wings under
- *   them are refused at the write boundary ([EffectSpecCoercion.Strict.spreadProblem]) and ignored if
+ *   under an asymmetric Order: Centre out and Centre in are two wings already, so wings under
+ *   them are refused at the write boundary ([FxSpecCoercion.Strict.spreadProblem]) and ignored if
  *   a stored row holds one anyway.
- * @property blocks This many neighbouring members share one phase; 1 is none.
- * @property groups The spread repeats every this many members; 0 is off.
+ * @property segments This many neighbouring members share one phase; 1 is none.
+ * @property parts The spread repeats every this many members; 0 is off.
  */
 data class SpreadShape(
     val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
 ) {
     val isDefault: Boolean get() = this == DEFAULT
 
@@ -35,14 +35,14 @@ data class SpreadShape(
         /** Spread's ceiling, 200 % (§3.1). */
         const val MAX_SPREAD = 2.0
 
-        /** The ceiling on Wings, Blocks and Groups: a universe of single-channel heads. */
+        /** The ceiling on Wings, Segments and Parts: a universe of single-channel heads. */
         const val MAX_COUNT = 512
     }
 }
 
 /**
  * Steps 2–5 of §3.3, over ranks the Order (step 1) has already given — the one place the desk says
- * what Spread, Wings, Blocks and Groups do (P2). `frontend/src/lib/spreadShape.ts` is the editor's
+ * what Spread, Wings, Segments and Parts do (P2). `frontend/src/lib/spreadShape.ts` is the editor's
  * copy, for its dial preview only, and `src/test/resources/fx/spreadShape.fixture.json` pins the two
  * together.
  */
@@ -51,32 +51,54 @@ object SpreadShaping {
     class Result(val offsets: DoubleArray, val slots: Int)
 
     /**
+     * The offset ladder (FX editor plan D9): each member's rank, and the rank count, after each of
+     * steps 1–4 — [shape] fills it as it goes, so the ladder is the shaping itself, not a copy of it.
+     */
+    class Ladder(members: Int) {
+        /** Indexed by [Step]: each member's rank after that step. */
+        val ranks: Array<DoubleArray> = Array(Step.entries.size) { DoubleArray(members) }
+
+        /** Indexed by [Step]: the rank count after that step. */
+        val counts: IntArray = IntArray(Step.entries.size)
+
+        internal fun record(step: Step, r: DoubleArray, count: Int) {
+            r.copyInto(ranks[step.ordinal])
+            counts[step.ordinal] = count
+        }
+    }
+
+    /** A rung of the [Ladder]: steps 1–4 of §3.3. Step 5, Spread, is the offsets themselves. */
+    enum class Step { ORDER, SEGMENTS, WINGS, PARTS }
+
+    /**
      * Shape [ranks] (step 1's, one per member) over [rankCount] ranks. They are whole numbers whenever
-     * Blocks, Wings or Groups act ([countsRanks]) — `POSITIONAL`'s position is snapped to a slot
+     * Segments, Wings or Parts act ([countsRanks]) — `POSITIONAL`'s position is snapped to a slot
      * first — and continuous only under Spread alone, which scales them as they are.
      *
-     * 2. **Blocks** `B`: `r ← floor(r / B)`, over `ceil(R / B)` ranks — `ceil(n / B)` under an
+     * 2. **Segments** `S`: `r ← floor(r / S)`, over `ceil(R / S)` ranks — `ceil(n / S)` under an
      *    asymmetric Order, whose rank count is the member count.
      * 3. **Wings** `W`, only when [wingsApply]: the ranks split into `W` runs of `m = ceil(R / W)`;
      *    an odd run is mirrored within its own length (`r ← len − 1 − r`, `len` being `m` for every
      *    run but a short last one), so the outermost member of each wing pair shares a rank; over `m`.
-     * 4. **Groups** `G`: `r ← r mod G`, over `G` ranks — when `G` is below the rank count; otherwise
+     * 4. **Parts** `P`: `r ← r mod P`, over `P` ranks — when `P` is below the rank count; otherwise
      *    the ranks stand, so the slot count never exceeds what the members can fill.
      * 5. **Spread** `s`: `offset = s × r / R`.
      *
      * [Result.slots] is `R` after step 4: a step chase's window is `1 / slots` and its step timing
      * scales by it, so neither leaves a gap.
      */
-    fun shape(ranks: DoubleArray, rankCount: Int, shape: SpreadShape, wingsApply: Boolean): Result {
+    fun shape(ranks: DoubleArray, rankCount: Int, shape: SpreadShape, wingsApply: Boolean, ladder: Ladder? = null): Result {
         val n = ranks.size
         var count = max(rankCount, 1)
         val r = ranks.copyOf()
+        ladder?.record(Step.ORDER, r, count)
 
-        if (shape.blocks > 1) {
-            val b = shape.blocks
-            count = ceilDiv(count, b)
-            for (i in 0 until n) r[i] = min(floor(r[i] / b), (count - 1).toDouble())
+        if (shape.segments > 1) {
+            val s = shape.segments
+            count = ceilDiv(count, s)
+            for (i in 0 until n) r[i] = min(floor(r[i] / s), (count - 1).toDouble())
         }
+        ladder?.record(Step.SEGMENTS, r, count)
 
         if (wingsApply && shape.wings > 1) {
             val m = ceilDiv(count, shape.wings)
@@ -92,12 +114,14 @@ object SpreadShaping {
             }
             count = m
         }
+        ladder?.record(Step.WINGS, r, count)
 
-        if (shape.groups in 1 until count) {
-            val g = shape.groups.toDouble()
-            for (i in 0 until n) r[i] = r[i] - g * floor(r[i] / g)
-            count = shape.groups
+        if (shape.parts in 1 until count) {
+            val p = shape.parts.toDouble()
+            for (i in 0 until n) r[i] = r[i] - p * floor(r[i] / p)
+            count = shape.parts
         }
+        ladder?.record(Step.PARTS, r, count)
 
         val offsets = DoubleArray(n) { shape.spread * r[it] / count }
         return Result(offsets, count)
@@ -108,23 +132,23 @@ object SpreadShaping {
      * from [rankCount] (the Order's own slot count), in constant time, over the four fields as
      * [FxDynamics] holds them so a tick allocates no [SpreadShape].
      */
-    fun slots(rankCount: Int, wings: Int, blocks: Int, groups: Int, wingsApply: Boolean): Int {
+    fun slots(rankCount: Int, wings: Int, segments: Int, parts: Int, wingsApply: Boolean): Int {
         var count = max(rankCount, 1)
-        if (blocks > 1) count = ceilDiv(count, blocks)
+        if (segments > 1) count = ceilDiv(count, segments)
         if (wingsApply && wings > 1) count = ceilDiv(count, wings)
-        if (groups in 1 until count) count = groups
+        if (parts in 1 until count) count = parts
         return count
     }
 
     /**
-     * Whether Blocks, Wings or Groups act on [rankCount] ranks — the steps that count in whole ranks,
+     * Whether Segments, Wings or Parts act on [rankCount] ranks — the steps that count in whole ranks,
      * so a continuous Order's ranks (Position's) are snapped to whole slots before them
-     * ([uk.me.cormack.lighting7.fx.group.DistributionStrategy.wholeRanks]). Spread alone does not.
+     * ([uk.me.cormack.lighting7.fx.group.SpreadOrder.wholeRanks]). Spread alone does not.
      */
     fun countsRanks(rankCount: Int, shape: SpreadShape, wingsApply: Boolean): Boolean {
-        if (shape.blocks > 1) return true
+        if (shape.segments > 1) return true
         if (wingsApply && shape.wings > 1) return true
-        return shape.groups in 1 until max(rankCount, 1)
+        return shape.parts in 1 until max(rankCount, 1)
     }
 
     private fun ceilDiv(a: Int, b: Int): Int = ceil(a.toDouble() / b).toInt()

@@ -18,7 +18,7 @@ import kotlinx.serialization.Serializable
  * - [colourMs] — the same for a colour wheel, a gel scroller and the colour filters (a second
  *   wheel, a media frame's wing). A wheel or a string passes through the slots between.
  *
- * The fixture's own **timing channels** ([FixtureProperty.timing]) stretch these: a non-zero value
+ * The fixture's own **timing channels** ([FixtureAttribute.timing]) stretch these: a non-zero value
  * on one replaces the rate with a duration for the families it names. Few manuals publish speeds,
  * so most of these are estimates (D15), marked at their source and listed in
  * `FU-MANUAL-S8-TRAVEL`. See `docs/fixtures-engineering.md` §"Travel and timing channels".
@@ -53,7 +53,7 @@ fun Travel.resolve(): TravelInfo? {
 }
 
 /**
- * Which families a fixture **timing channel** stretches (`@FixtureProperty(timing = …)`, fixture
+ * Which families a fixture **timing channel** stretches (`@FixtureAttribute(timing = …)`, fixture
  * optics plan D14) — the Source Four Revolution's Focus, Colour and Beam Timing (manual p14–16 [10–12]).
  * [NONE] is the annotation's sentinel for "not a timing channel", as [Blade.NONE] is for "no blade".
  *

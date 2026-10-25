@@ -1,10 +1,10 @@
 /*---
 id: FrostPulse
 name: Frost Pulse
-category: beam
+family: beam
 outputType: SLIDER
-effectMode: STANDARD
-compatibleProperties: [frost]
+fxMode: STANDARD
+compatibleAttributes: [frost]
 parameters:
   - name: min
     type: ubyte

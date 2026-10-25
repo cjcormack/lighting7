@@ -20,8 +20,8 @@ import kotlin.test.assertTrue
  * The programmer's layer stack, at the value level.
  *
  * Effects need a real `State` (the FX registry and target resolution both take one) and are covered
- * in `ProgrammerLayerStackEffectsTest`; everything here runs against map-backed [LookRegistry] and
- * [TemplateRegistry]s and no database, which is what keeps the composition rules cheap to assert.
+ * in `ProgrammerLayerStackFxTest`; everything here runs against map-backed [LookRegistry] and
+ * [PaletteRegistry]s and no database, which is what keeps the composition rules cheap to assert.
  * A Look lands whole, so the per-target press rules are a palette's and are asserted on palettes.
  */
 class ProgrammerLayerStackTest {
@@ -35,7 +35,7 @@ class ProgrammerLayerStackTest {
         val stack: ProgrammerLayerStack,
         val looks: MutableMap<UUID, LookSnapshot>,
         val registry: LookRegistry,
-        val palettes: MutableMap<UUID, TemplateSnapshot>,
+        val palettes: MutableMap<UUID, PaletteSnapshot>,
     )
 
     private fun newRig(): Rig {
@@ -52,8 +52,8 @@ class ProgrammerLayerStackTest {
         val store = ProgrammerStore()
         val looks = HashMap<UUID, LookSnapshot>()
         val registry = LookRegistry(fixtures = { fixtures }, loader = { looks[it] })
-        val palettes = HashMap<UUID, TemplateSnapshot>()
-        val templateRegistry = TemplateRegistry(loader = { palettes[it] })
+        val palettes = HashMap<UUID, PaletteSnapshot>()
+        val paletteRegistry = PaletteRegistry(loader = { palettes[it] })
         val engine = FxEngine(
             fixtures = fixtures,
             speedMasters = SpeedMasterBank(),
@@ -63,7 +63,7 @@ class ProgrammerLayerStackTest {
         val stack = ProgrammerLayerStack(
             fixtures = { fixtures },
             lookRegistry = { registry },
-            templateRegistry = { templateRegistry },
+            paletteRegistry = { paletteRegistry },
             engine = { engine },
             store = store,
             // No effects in these Looks or palettes, so nothing ever reaches the spawn path.
@@ -87,7 +87,7 @@ class ProgrammerLayerStackTest {
 
     private fun Rig.rowsFor(dimmer: Int, vararg fixtureKeys: String) =
         fixtureKeys.ifEmpty { fixtures.fixtures.map { it.key }.toTypedArray() }.map {
-            LookRowEntry(target = TargetRef.Fixture(it), propertyName = "dimmer", value = dimmer.toString())
+            LookRowEntry(target = TargetRef.Fixture(it), attribute = "dimmer", value = dimmer.toString())
         }
 
     private fun Rig.lookSource(name: String, dimmer: Int, vararg fixtureKeys: String) =
@@ -97,17 +97,17 @@ class ProgrammerLayerStackTest {
     private fun Rig.add(name: String, dimmer: Int, vararg fixtureKeys: String) =
         stack.add(source = lookSource(name, dimmer, *fixtureKeys), targets = emptyList()).first
 
-    /** A generic palette of one row, `property` at `value` (a [TemplateIntent] string), and its source. */
-    private fun Rig.palette(name: String, property: String, value: String): LayerSource {
+    /** A generic palette of one row, `attribute` at `value` (a [PaletteIntent] string), and its source. */
+    private fun Rig.palette(name: String, attribute: String, value: String): LayerSource {
         val uuid = UUID.nameUUIDFromBytes("palette:$name".toByteArray())
-        palettes[uuid] = TemplateSnapshot(
-            templateId = name.hashCode(),
-            templateUuid = uuid,
+        palettes[uuid] = PaletteSnapshot(
+            paletteId = name.hashCode(),
+            paletteUuid = uuid,
             name = name,
             fadeDurationMs = null,
-            rows = listOf(TemplateRowEntry(target = null, propertyName = property, value = value)),
+            rows = listOf(PaletteRowEntry(target = null, attribute = attribute, value = value)),
         )
-        return LayerSource.template(name.hashCode(), uuid, name)
+        return LayerSource.palette(name.hashCode(), uuid, name)
     }
 
     /** A UV palette: `dmx:` is a literal level, so [valueOf] reads [level] back exactly. */
@@ -117,9 +117,9 @@ class ProgrammerLayerStackTest {
     private fun Rig.dimmer(name: String, percent: Int) = palette(name, "dimmer", "pct:$percent")
 
     /** The programmer's winning value for a key, as an Int, or null when it holds nothing. */
-    private fun Rig.valueOf(fixtureKey: String, propertyName: String = "dimmer"): Int? {
-        val slot = store.get(fixtureKey, propertyName) ?: return null
-        return (slot.value.resolved as CueAssignmentResolver.PropertyValue.Slider).value.toInt()
+    private fun Rig.valueOf(fixtureKey: String, attribute: String = "dimmer"): Int? {
+        val slot = store.get(fixtureKey, attribute) ?: return null
+        return (slot.value.resolved as CueAssignmentResolver.AttributeValue.Slider).value.toInt()
     }
 
     private fun on(vararg keys: String) = keys.map { CueTargetDto("fixture", it) }
@@ -218,7 +218,7 @@ class ProgrammerLayerStackTest {
         val rig = newRig()
         rig.store.putValue(
             ProgrammerOwner.WEB, "hex-1", "dimmer",
-            ProgrammerValue.Hard(CueAssignmentResolver.PropertyValue.Slider(90u)),
+            ProgrammerValue.Hard(CueAssignmentResolver.AttributeValue.Slider(90u)),
         )
 
         rig.add("Warm", 200, "hex-1")
@@ -302,11 +302,11 @@ class ProgrammerLayerStackTest {
         val rig = newRig()
         val warm = rig.lookSource("Warm", 200)
 
-        val applied = rig.stack.toggle(warm, on("hex-1"), propertyMask = "COLOUR")
+        val applied = rig.stack.toggle(warm, on("hex-1"), attributeMask = "COLOUR")
         assertEquals("applied", applied.action)
         val layer = rig.store.layers.single()
         assertTrue(layer.targets.isEmpty(), "the selection is not the Look's")
-        assertNull(layer.propertyMask, "and nor is the selection's mask")
+        assertNull(layer.attributeMask, "and nor is the selection's mask")
         assertEquals(200, rig.valueOf("hex-1"))
         assertEquals(200, rig.valueOf("hex-2"))
 
@@ -334,9 +334,9 @@ class ProgrammerLayerStackTest {
         rig.stack.toggle(warm, on("hex-1"))
         val layer = rig.store.layers.single()
 
-        rig.stack.patch(layer.layerId, propertyMask = "COLOUR")
+        rig.stack.patch(layer.layerId, attributeMask = "COLOUR")
 
-        assertEquals("COLOUR", rig.store.layers.single().propertyMask)
+        assertEquals("COLOUR", rig.store.layers.single().attributeMask)
         assertNull(rig.valueOf("hex-1"), "a dimmer row is outside a colour mask")
     }
 
@@ -385,7 +385,7 @@ class ProgrammerLayerStackTest {
         rig.stack.toggle(LayerSource.look(7, uuid, "Warm"), on("hex-1"))
         // Same id, different record. The palette resolves to null here (the map does not hold it),
         // so it contributes no values — but it must still take a layer of its own.
-        rig.stack.toggle(LayerSource.template(7, UUID.nameUUIDFromBytes("t7".toByteArray()), "Amber Key"), on("hex-1"))
+        rig.stack.toggle(LayerSource.palette(7, UUID.nameUUIDFromBytes("t7".toByteArray()), "Amber Key"), on("hex-1"))
 
         assertEquals(2, rig.store.layers.size, "sharing an int PK must not collapse two pads into one")
         assertEquals(200, rig.valueOf("hex-1"), "the Look's pad is still on")
@@ -825,14 +825,15 @@ class ProgrammerLayerStackTest {
     }
 
     @Test
-    fun `a Look reads applied on the whole rig, whatever its rows reach`() {
-        // A Look's ring is on or off: lit whatever is selected while a layer of it is on.
+    fun `a Look's applied entry names no targets, its presence being the ring`() {
+        // A Look's ring is on or off (absolute-looks plan P4): lit whatever is selected while a
+        // layer of it is on, so coverage is not its question.
         val rig = newRig()
         rig.add("Warm", 200, "hex-1")
 
         val applied = rig.stack.appliedState().single()
         assertEquals("Warm", applied.source.name)
-        assertEquals(wholeRig, applied.described())
+        assertEquals(emptyList(), applied.described())
     }
 
     @Test
@@ -842,7 +843,7 @@ class ProgrammerLayerStackTest {
         rig.stack.add(source = rig.uv("Amber", 150), targets = on("hex-2"))
 
         val bySource = rig.stack.appliedState().associate { it.source.name to it.described() }
-        assertEquals(wholeRig, bySource["Warm"])
+        assertEquals(emptyList(), bySource["Warm"])
         assertEquals(listOf("fixture:hex-2=all", "group:wash=some"), bySource["Amber"])
     }
 
@@ -855,7 +856,7 @@ class ProgrammerLayerStackTest {
         rig.stack.patch(layer.layerId, enabled = false)
 
         assertNull(rig.valueOf("hex-1"), "a disabled layer asserts no value")
-        assertEquals(wholeRig, rig.stack.appliedState().single().described())
+        assertEquals("Warm", rig.stack.appliedState().single().source.name)
     }
 
     @Test

@@ -12,17 +12,9 @@ import type { BuskPadKind } from '@/api/buskApi'
  * no longer a question a test *can* fail: they are the same function, which is the point. What is
  * worth pinning instead is the part that is still two independent pieces of code:
  *
- *  - `slotAssignmentFor`'s own **kind re-check**, which is a second line of defence for a template
- *    and — deliberately, see its docblock — is *not* one for a deferred-effect Look. The test below
- *    asserts both halves of that asymmetry directly, by handing it a drag whose `slotEligible` is
- *    wrongly true.
+ *  - `slotAssignmentFor`'s own **kind re-check**, a second line of defence for a palette. The test
+ *    below asserts it directly, by handing it a drag whose `slotEligible` is wrongly true.
  *  - The table's other three rows, which nothing else states.
- *
- * The earlier version built its fixture's `slotEligible` from a hand-written copy of the formula
- * and then asserted `canHandLand` agreed with `slotAssignmentFor` — which reads that flag. For the
- * deferred-Look row that compared two hardcoded copies of one rule, so real drift in
- * `LibraryPalette` would have kept it green. That is the failure this comment exists to prevent a
- * second time.
  */
 
 /**
@@ -33,52 +25,40 @@ import type { BuskPadKind } from '@/api/buskApi'
  * `eligible` overrides it, for the two tests that need a *wrongly* eligible drag to probe
  * `slotAssignmentFor`'s own re-check.
  */
-function paletteDrag(kind: BuskPadKind, hasDeferredEffects = false, eligible?: boolean) {
+function paletteDrag(kind: BuskPadKind, eligible?: boolean) {
   const record =
     kind === 'CUE'
       ? { kind: 'CUE' as const, cue: { id: 7, name: 'Cue 1', entries: [{ stackId: 1, stackName: 'Act I', entryId: 107, cueNumber: '1' }] } }
       : kind === 'LOOK'
-        ? { kind: 'LOOK' as const, look: { id: 7, name: 'Warm', hasDeferredEffects } }
-        : { kind: 'TEMPLATE' as const, template: { id: 7, name: 'Amber' } }
+        ? { kind: 'LOOK' as const, look: { id: 7, name: 'Warm' } }
+        : { kind: 'PALETTE' as const, palette: { id: 7, name: 'Amber' } }
   return {
     type: 'busk-palette',
     record,
     face: {},
-    slotEligible: eligible ?? canHandLand({ kind, hasDeferredEffects }, 'slot'),
+    slotEligible: eligible ?? canHandLand({ kind }, 'slot'),
   }
 }
 
-const KINDS: BuskPadKind[] = ['TEMPLATE', 'LOOK', 'CUE']
+const KINDS: BuskPadKind[] = ['PALETTE', 'LOOK', 'CUE']
 
 describe('canHandLand', () => {
   it('lets a bank take all three kinds — a pad is a reference to exactly one of them', () => {
     for (const kind of KINDS) {
       expect(canHandLand({ kind }, 'bank')).toBe(true)
     }
-    expect(canHandLand({ kind: 'LOOK', hasDeferredEffects: true }, 'bank')).toBe(true)
   })
 
   it('routes every kind to the same answer slotAssignmentFor gives for a palette row', () => {
-    const cases: { kind: BuskPadKind; deferred?: boolean }[] = [
-      { kind: 'TEMPLATE' },
-      { kind: 'LOOK' },
-      { kind: 'LOOK', deferred: true },
-      { kind: 'CUE' },
-    ]
-    for (const { kind, deferred } of cases) {
-      const slotWouldTakeIt = slotAssignmentFor(paletteDrag(kind, deferred === true)) != null
-      expect(
-        canHandLand({ kind, hasDeferredEffects: deferred }, 'slot'),
-        `${kind}${deferred === true ? ' (deferred)' : ''}`,
-      ).toBe(slotWouldTakeIt)
+    for (const kind of KINDS) {
+      expect(canHandLand({ kind }, 'slot'), kind).toBe(slotAssignmentFor(paletteDrag(kind)) != null)
     }
   })
 
   it('lets both layer stacks take a Look or a palette, and neither take a cue', () => {
     for (const target of ['layer-stack', 'cue-stack'] as const) {
       expect(canHandLand({ kind: 'LOOK' }, target)).toBe(true)
-      expect(canHandLand({ kind: 'LOOK', hasDeferredEffects: true }, target)).toBe(true)
-      expect(canHandLand({ kind: 'TEMPLATE' }, target)).toBe(true)
+      expect(canHandLand({ kind: 'PALETTE' }, target)).toBe(true)
       expect(canHandLand({ kind: 'CUE' }, target)).toBe(false)
     }
   })
@@ -88,27 +68,19 @@ describe('canHandLand', () => {
     expect(takers).toEqual(['bank', 'slot'])
   })
 
-  it('reads an absent hasDeferredEffects as "no", so a bare kind is enough for a slot', () => {
+  it('lets a slot take any Look, which lands whole, and no palette', () => {
     expect(canHandLand({ kind: 'LOOK' }, 'slot')).toBe(true)
+    expect(canHandLand({ kind: 'PALETTE' }, 'slot')).toBe(false)
   })
 })
 
 /**
- * `slotAssignmentFor`'s second line of defence, and the exact shape of the hole in it.
- *
- * These are the assertions that can still fail independently of `canHandLand`, because they feed it
- * a drag whose `slotEligible` is wrong on purpose — which no amount of sharing the rule can produce.
+ * `slotAssignmentFor`'s second line of defence: it can still fail independently of `canHandLand`,
+ * because it is fed a drag whose `slotEligible` is wrong on purpose.
  */
 describe('slotAssignmentFor against a wrongly-eligible drag', () => {
   it('still refuses a palette, because it re-checks the kind itself', () => {
-    expect(slotAssignmentFor(paletteDrag('TEMPLATE', false, true))).toBeNull()
-  })
-
-  it('does NOT catch a deferred-effect Look — that half rests on canHandLand alone', () => {
-    // Not a defect to fix here: it is the documented asymmetry in `slotDrop.ts`, pinned so that a
-    // future reader who assumes the re-check covers both cases is contradicted by a test rather
-    // than by a rig. If this ever starts returning null, the docblock there needs updating too.
-    expect(slotAssignmentFor(paletteDrag('LOOK', true, true))).toEqual({ lookId: 7 })
+    expect(slotAssignmentFor(paletteDrag('PALETTE', true))).toBeNull()
   })
 })
 
@@ -119,10 +91,7 @@ describe('handRefusalReason', () => {
   })
 
   it('names the actual reason for each refusal, not one generic line', () => {
-    expect(handRefusalReason({ kind: 'TEMPLATE' }, 'slot')).toMatch(/selection/)
-    expect(handRefusalReason({ kind: 'LOOK', hasDeferredEffects: true }, 'slot')).toMatch(
-      /deferred effect/,
-    )
+    expect(handRefusalReason({ kind: 'PALETTE' }, 'slot')).toMatch(/selection/)
     expect(handRefusalReason({ kind: 'CUE' }, 'layer-stack')).toMatch(/never a cue/)
   })
 })
@@ -131,7 +100,6 @@ describe('the rig row', () => {
   it('is a target kind that takes nothing the hand can hold today', () => {
     expect(HAND_TARGET_KINDS).toContain('rig-row')
     for (const kind of KINDS) expect(canHandLand({ kind }, 'rig-row')).toBe(false)
-    expect(canHandLand({ kind: 'LOOK', hasDeferredEffects: true }, 'rig-row')).toBe(false)
   })
 
   it('says why', () => {

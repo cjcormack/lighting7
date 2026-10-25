@@ -3,10 +3,10 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import type { ActiveEffect } from '@/store/fixtureFx'
+import type { ActiveFx } from '@/store/fixtureFx'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { StageElementDto } from '@/api/stageElementApi'
 import type { LiveScenery, ProgrammerScenery } from '@/api/sceneryApi'
 
@@ -20,10 +20,10 @@ import type { LiveScenery, ProgrammerScenery } from '@/api/sceneryApi'
  * *+ Effect* door. Sort, filter and chip ride the query string beside `?table=`.
  */
 const mocks = vi.hoisted(() => ({
-  effects: [] as ActiveEffect[],
+  effects: [] as ActiveFx[],
   layers: [] as ProgrammerLayer[],
   looks: [] as LookSummary[],
-  templates: [] as TemplateSummary[],
+  templates: [] as PaletteSummary[],
   blind: false,
   removeLayer: vi.fn(),
   moveLayer: vi.fn(),
@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   setScenery: vi.fn(),
   clearScenery: vi.fn(),
   notes: new Map<string, string>(),
+  selectHeads: vi.fn(),
 }))
 
 const mutation = (spy: (arg: unknown) => void) => () => [
@@ -84,15 +85,15 @@ vi.mock('@/components/programmer/useLocalFamilyCounts', () => ({ useLocalValueCo
 vi.mock('@/components/programmer/ApplyLayerPicker', () => ({
   ApplyLayerPicker: ({ library }: { library: string }) => <div data-testid="apply-picker">{library}</div>,
 }))
-vi.mock('@/components/programmer/ProgrammerAddEffect', async () => {
+vi.mock('@/components/programmer/ProgrammerAddFx', async () => {
   const { useEffect, useState } = await import('react')
-  const { registerAddEffectDoor } = await import('@/components/programmer/addEffectDoor')
+  const { registerAddFxDoor } = await import('@/components/programmer/addFxDoor')
   return {
-    useProgrammerAddEffect: () => ({ disabled: false, reason: 'Add an effect to the programmer.', pair: { targets: [], families: null } }),
-    ProgrammerAddEffectSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-effect" /> : null),
-    ProgrammerAddEffectDoor: () => {
+    useProgrammerAddFx: () => ({ disabled: false, reason: 'Add an FX to the programmer.', pair: { targets: [], families: null } }),
+    ProgrammerAddFxSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-effect" /> : null),
+    ProgrammerAddFxDoor: () => {
       const [asked, setAsked] = useState(false)
-      useEffect(() => registerAddEffectDoor(() => setAsked(true)), [])
+      useEffect(() => registerAddFxDoor(() => setAsked(true)), [])
       return asked ? <div data-testid="add-effect-door" /> : null
     },
   }
@@ -103,8 +104,8 @@ vi.mock('@/components/programmer/useReplacementNotes', () => ({
   useReplacementNotes: () => mocks.notes,
 }))
 vi.mock('@/store/fixtureFx', () => ({
-  useActiveEffectsQuery: () => ({ data: mocks.effects }),
-  useEffectLibraryQuery: () => ({ data: [] }),
+  useActiveFxQuery: () => ({ data: mocks.effects }),
+  useFxLibraryQuery: () => ({ data: [] }),
   usePauseFxMutation: mutation(mocks.pauseFx),
   useResumeFxMutation: mutation(mocks.resumeFx),
   useRemoveFxMutation: mutation(mocks.removeFx),
@@ -115,7 +116,7 @@ vi.mock('@/store/groups', () => ({
   useRemoveGroupFxMutation: mutation(mocks.removeGroupFx),
 }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: mocks.looks }), useLookQuery: () => ({ currentData: undefined }) }))
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: mocks.templates }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: mocks.templates }) }))
 vi.mock('@/store/speedMasters', () => ({
   useSpeedMasterLiveQuery: (_: unknown, opts: { selectFromResult: (r: { data: unknown }) => unknown }) =>
     opts.selectFromResult({
@@ -131,11 +132,15 @@ vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => mocks.b
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: [] }) }))
 vi.mock('@/components/Breadcrumbs', () => ({ Breadcrumbs: ({ currentPage }: { currentPage: string }) => <span>{currentPage}</span> }))
 vi.mock('@/components/fx/SpeedMasterChip', () => ({ SpeedMasterChip: () => null }))
-vi.mock('@/components/fx/FxEditorPopover', () => ({
-  FxEditorPopover: ({ effect }: { effect: ActiveEffect }) => <div data-testid="fx-editor">{effect.id}</div>,
+// The FX editor has its own suite; here *All*'s row press only has to land on it.
+vi.mock('@/components/fxEditor/FxEditorSelection', () => ({
+  FxEditorSelection: ({ viewSwitch }: { viewSwitch: ReactNode }) => <div data-testid="fx-editor-selection">{viewSwitch}</div>,
 }))
-vi.mock('@/components/programmer/NewTemplateFromEffectSheet', () => ({
-  NewTemplateFromEffectSheet: ({ open, effect }: { open: boolean; effect: ActiveEffect | null }) =>
+vi.mock('@/components/fixtures-list/programmerSelectRequest', () => ({
+  selectWindowHeads: (...a: unknown[]) => mocks.selectHeads(...a),
+}))
+vi.mock('@/components/programmer/NewPaletteFromFxSheet', () => ({
+  NewPaletteFromFxSheet: ({ open, effect }: { open: boolean; effect: ActiveFx | null }) =>
     open ? <div data-testid="save-sheet">{effect?.id}</div> : null,
 }))
 vi.mock('@/components/looks/LookDetailSheet', () => ({
@@ -150,27 +155,28 @@ const { DEFAULT_SCENERY_FILTERS, SCENERY_FILTERS_KEY, resetSceneryFiltersStore }
   '@/components/programmer/ProgrammerSceneryList'
 )
 const { FxSelectionStoreContext, createFxSelectionStore } = await import('@/components/fixtures-list/fxSelection')
-const { openAddEffectDoor } = await import('@/components/programmer/addEffectDoor')
+const { openAddFxDoor } = await import('@/components/programmer/addFxDoor')
+const { getPickedFx, resetFxEditorViewStores, setFxTabView, useFxTabView } = await import('@/lib/fxEditorView')
 
-function effect(id: number, over: Partial<ActiveEffect> = {}): ActiveEffect {
+function effect(id: number, over: Partial<ActiveFx> = {}): ActiveFx {
   return {
     id,
-    effectType: `Effect ${id}`,
+    fxType: `Effect ${id}`,
     targetKey: `par-${id}`,
-    propertyName: 'dimmer',
-    beatDivision: 1,
+    attribute: 'dimmer',
+    cycle: 1,
     blendMode: 'OVERRIDE',
     isRunning: true,
     phaseOffset: 0,
     currentPhase: 0,
     parameters: {},
     isGroupTarget: false,
-    distributionStrategy: null,
+    order: null,
     elementMode: null,
     elementFilter: null,
-    stepTiming: false,
+    timing: 'CYCLE',
     lookId: null,
-    templateId: null,
+    paletteId: null,
     sourceName: null,
     programmerLayerId: null,
     cueId: null,
@@ -183,14 +189,14 @@ function effect(id: number, over: Partial<ActiveEffect> = {}): ActiveEffect {
   }
 }
 
-function layer(layerId: number, kind: 'LOOK' | 'TEMPLATE', id: number, name: string, over: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
+function layer(layerId: number, kind: 'LOOK' | 'PALETTE', id: number, name: string, over: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
   return {
     layerId,
     source: { kind, id, uuid: `u-${kind}-${id}`, name },
     sortOrder: layerId,
     enabled: true,
     targets: [{ type: 'group', key: 'front' }],
-    propertyMask: null,
+    attributeMask: null,
     blendMode: 'OVERRIDE',
     amount: 1,
     stomp: false,
@@ -206,16 +212,15 @@ function look(id: number, name: string): LookSummary {
     notes: null,
     families: ['COLOUR'],
     rowCount: 1,
-    effectCount: 0,
+    fxCount: 0,
     targetCount: 1,
-    hasDeferredEffects: false,
     preview: [],
     layerCount: 0,
     buskPageCount: 0,
   }
 }
 
-function template(id: number, name: string, over: Partial<TemplateSummary> = {}): TemplateSummary {
+function template(id: number, name: string, over: Partial<PaletteSummary> = {}): PaletteSummary {
   return {
     id,
     uuid: `u-TEMPLATE-${id}`,
@@ -223,9 +228,9 @@ function template(id: number, name: string, over: Partial<TemplateSummary> = {})
     family: 'COLOUR',
     kind: 'value',
     isGeneric: true,
-    rows: [{ targetType: null, targetKey: null, propertyName: 'colour', value: '#ff9d4a;policy=extract' }],
+    rows: [{ targetType: null, targetKey: null, attribute: 'colour', value: '#ff9d4a;policy=extract' }],
     ...over,
-  } as TemplateSummary
+  } as PaletteSummary
 }
 
 function element(uuid: string, name: string, layer: 'VENUE' | 'SET', kind: 'DRAPE' | 'OBJECT', params: Record<string, unknown>): StageElementDto {
@@ -303,6 +308,9 @@ beforeEach(() => {
   sessionStorage.clear()
   resetProgrammerTableStore()
   resetSceneryFiltersStore()
+  // This suite is *All*'s: the FX tab's table of every running FX.
+  resetFxEditorViewStores()
+  setFxTabView('all')
   mocks.blind = false
   mocks.localValues = 0
   mocks.notes = new Map()
@@ -314,20 +322,20 @@ beforeEach(() => {
     element('e-sofa', 'Sofa', 'SET', 'OBJECT', {}),
   ]
   mocks.effects = [
-    effect(1, { effectType: 'Pulse', targetKey: 'front', isGroupTarget: true, speedMasterUuid: 'm2' }),
-    effect(2, { effectType: 'Circle', propertyName: 'position', size: 0.6, direction: 'BOUNCE' }),
-    effect(3, { effectType: 'Lightning', programmerOwned: false, programmerLayerId: 12, nShot: 3, spent: true, seconds: true, timingSource: 'WALL_CLOCK', beatDivision: 4 }),
-    effect(4, { effectType: 'Breathe', programmerOwned: false, cueId: 9, isRunning: false }),
+    effect(1, { fxType: 'Pulse', targetKey: 'front', isGroupTarget: true, speedMasterUuid: 'm2' }),
+    effect(2, { fxType: 'Circle', attribute: 'position', amount: 0.6, direction: 'BOUNCE' }),
+    effect(3, { fxType: 'Lightning', programmerOwned: false, programmerLayerId: 12, runs: 3, spent: true, seconds: true, timingSource: 'WALL_CLOCK', cycle: 4 }),
+    effect(4, { fxType: 'CandleFlicker', programmerOwned: false, cueId: 9, isRunning: false }),
   ]
   mocks.layers = [
     layer(10, 'LOOK', 1, 'Storm'),
-    layer(11, 'TEMPLATE', 5, 'Amber'),
-    layer(12, 'TEMPLATE', 6, 'Flash 3x'),
+    layer(11, 'PALETTE', 5, 'Amber'),
+    layer(12, 'PALETTE', 6, 'Flash 3x'),
     layer(13, 'LOOK', 2, 'Thunder', { enabled: false }),
   ]
   mocks.looks = [look(1, 'Storm'), look(2, 'Thunder')]
-  mocks.templates = [template(5, 'Amber'), template(6, 'Flash 3x', { kind: 'effect', rows: [] })]
-  for (const spy of [mocks.removeLayer, mocks.moveLayer, mocks.patchLayer, mocks.detachLayer, mocks.pickUp, mocks.pauseFx, mocks.resumeFx, mocks.removeFx, mocks.removeGroupFx, mocks.openMakeLayer, mocks.setScenery, mocks.clearScenery]) spy.mockClear()
+  mocks.templates = [template(5, 'Amber'), template(6, 'Flash 3x', { kind: 'fx', rows: [] })]
+  for (const spy of [mocks.selectHeads, mocks.removeLayer, mocks.moveLayer, mocks.patchLayer, mocks.detachLayer, mocks.pickUp, mocks.pauseFx, mocks.resumeFx, mocks.removeFx, mocks.removeGroupFx, mocks.openMakeLayer, mocks.setScenery, mocks.clearScenery]) spy.mockClear()
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -335,7 +343,7 @@ describe('the FX table', () => {
   it('lists every running effect, one row per instance in the desk’s order', () => {
     drawRoute('?table=fx')
     const table = tableRows().map((r) => within(r).getByRole('button', { name: /^Actions for / }).getAttribute('aria-label'))
-    expect(table).toEqual(['Actions for Pulse', 'Actions for Circle', 'Actions for Lightning', 'Actions for Breathe'])
+    expect(table).toEqual(['Actions for Pulse', 'Actions for Circle', 'Actions for Lightning', 'Actions for CandleFlicker'])
   })
 
   it('reads the desk’s timing, size, direction, runs and spent, and marks held · Blind', () => {
@@ -364,11 +372,14 @@ describe('the FX table', () => {
     expect(mocks.removeFx.mock.calls).toEqual([[{ id: 2, fixtureKey: 'par-2' }]])
   })
 
-  it('opens the live editor from Edit… in the row’s menu', () => {
+  it('opens Edit… in Selection with the FX picked, its heads selected', () => {
     drawRoute('?table=fx')
     openMenu(within(rowOf('fx:3')).getByRole('button', { name: 'Actions for Lightning' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit…' }))
-    expect(screen.getByTestId('fx-editor')).toHaveTextContent('3')
+    expect(mocks.selectHeads.mock.calls).toEqual([[[{ type: 'fixture', key: 'par-3' }], []]])
+    expect(getPickedFx()).toBe(3)
+    expect(screen.getByTestId('fx-editor-selection')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Selection' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('publishes its selection for the Values grid’s rings, and takes it back when it mounts again', () => {
@@ -393,16 +404,30 @@ describe('the FX table', () => {
     openMenu(within(rowOf('fx:2')).getByRole('button', { name: 'Actions for Circle' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Pause' }))
     expect(mocks.pauseFx).toHaveBeenCalledWith({ id: 2, fixtureKey: 'par-2' })
-    openMenu(within(rowOf('fx:4')).getByRole('button', { name: 'Actions for Breathe' }))
+    openMenu(within(rowOf('fx:4')).getByRole('button', { name: 'Actions for CandleFlicker' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Resume' }))
     expect(mocks.resumeFx).toHaveBeenCalledWith({ id: 4, fixtureKey: 'par-4' })
   })
 
-  it('opens the live editor from the row, ⏎ and Edit… alike', () => {
+  it('presses a row with ⏎ as Edit… does, a group FX selecting its group', () => {
     drawRoute('?table=fx')
-    fireEvent.click(rowOf('fx:2').querySelector('[data-first-column]')!)
+    fireEvent.click(rowOf('fx:1').querySelector('[data-first-column]')!)
     fireEvent.keyDown(window, { key: 'Enter' })
-    expect(screen.getByTestId('fx-editor')).toHaveTextContent('2')
+    expect(mocks.selectHeads.mock.calls).toEqual([[[{ type: 'group', key: 'front' }], []]])
+    expect(getPickedFx()).toBe(1)
+    expect(screen.getByTestId('fx-editor-selection')).toBeTruthy()
+  })
+
+  it('switches between Selection and All, the window keeping the choice', () => {
+    function View() {
+      return <span data-testid="fx-view">{useFxTabView()}</span>
+    }
+    drawRoute('?table=fx')
+    render(<View />)
+    fireEvent.click(screen.getByRole('button', { name: 'Selection' }))
+    expect(screen.getByTestId('fx-view')).toHaveTextContent('selection')
+    expect(sessionStorage.getItem('programmer.fx.view')).toBe('"selection"')
+    expect(screen.getByTestId('fx-editor-selection')).toBeTruthy()
   })
 
   it('stops every selected effect from the bar', () => {
@@ -418,11 +443,11 @@ describe('the FX table', () => {
 describe('the Stack table', () => {
   // Each row's name badge, by its title — `Look “Storm”`, `Palette “Amber”`.
   const badges = (root: ParentNode) =>
-    [...root.querySelectorAll('[title^="Look “"], [title^="Palette “"], [title^="Effect palette “"]')].map((el) => el.getAttribute('title'))
+    [...root.querySelectorAll('[title^="Look “"], [title^="Palette “"], [title^="FX palette “"]')].map((el) => el.getAttribute('title'))
 
   it('lists every layer top wins, Looks and palettes in one order, under your values pinned on top', () => {
     drawRoute('?table=stack')
-    expect(tableRows().flatMap((r) => badges(r))).toEqual(['Look “Thunder”', 'Effect palette “Flash 3x”', 'Palette “Amber”', 'Look “Storm”'])
+    expect(tableRows().flatMap((r) => badges(r))).toEqual(['Look “Thunder”', 'FX palette “Flash 3x”', 'Palette “Amber”', 'Look “Storm”'])
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['local', 'layer:13', 'layer:12', 'layer:11', 'layer:10'])
     expect(rowOf('local')).toHaveTextContent('Your values')
   })
@@ -444,8 +469,8 @@ describe('the Stack table', () => {
   it('draws the values-beat-effects rule with the effects under the stack, a press from the FX tab', () => {
     drawRoute('?table=stack')
     const rule = document.querySelector('[data-effects-rule]')!
-    expect(rule).toHaveTextContent('Values above beat effects below')
-    expect(rule).toHaveTextContent('4 effects run under this stack')
+    expect(rule).toHaveTextContent('Values above beat FX below')
+    expect(rule).toHaveTextContent('4 FX run under this stack')
     fireEvent.click(within(rule as HTMLElement).getByRole('button', { name: 'on the FX tab' }))
     expect(where()).toBe('/projects/1/programmer?table=fx')
   })
@@ -677,9 +702,9 @@ describe('the Scenery table', () => {
 describe('the FX table’s create verb and rule', () => {
   it('draws + Effect on the library row and the values-beat-effects rule over the sheet', () => {
     drawRoute('?table=fx')
-    fireEvent.click(screen.getByRole('button', { name: 'Add an effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add an FX' }))
     expect(screen.getByTestId('add-effect')).toBeInTheDocument()
-    expect(document.querySelector('[data-effects-rule]')).toHaveTextContent('Values above beat effects below')
+    expect(document.querySelector('[data-effects-rule]')).toHaveTextContent('Values above beat FX below')
   })
 })
 
@@ -696,11 +721,11 @@ describe('what the tables’ frame carries for every table', () => {
     const view = drawRoute('')
     expect(screen.queryByTestId('add-effect-door')).toBeNull()
     act(() => {
-      expect(openAddEffectDoor()).toBe(true)
+      expect(openAddFxDoor()).toBe(true)
     })
     expect(screen.getByTestId('add-effect-door')).toBeInTheDocument()
     view.unmount()
-    expect(openAddEffectDoor()).toBe(false)
+    expect(openAddFxDoor()).toBe(false)
   })
 })
 
@@ -714,12 +739,12 @@ describe('the query string', () => {
   it('narrows by the chip, and writes a header press and a chip back with replace', () => {
     drawRoute('?table=fx&home=yours')
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['fx:1', 'fx:2'])
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     expect(where()).toBe('/projects/1/programmer?table=fx&sort=name&home=yours')
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['fx:2', 'fx:1'])
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     expect(where()).toBe('/projects/1/programmer?table=fx&sort=name&dir=desc&home=yours')
-    fireEvent.click(screen.getByRole('button', { name: /^All/ }))
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Where it lives' })).getByRole('button', { name: /^All/ }))
     expect(where()).toBe('/projects/1/programmer?table=fx&sort=name&dir=desc')
   })
 

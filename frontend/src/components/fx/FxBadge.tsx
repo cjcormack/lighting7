@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { AudioWaveform } from 'lucide-react'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
-import { effectNames } from '@/lib/effectTargets'
+import { useActiveFxQuery } from '@/store/fixtureFx'
+import { fxNames } from '@/lib/fxTargets'
 
 const NONE: ReadonlySet<string> = new Set()
 
@@ -14,12 +14,12 @@ type FxBadgeProps =
  *
  * Reads the rig-wide `fx/active` list rather than `fx/fixture/{key}` or
  * `groups/{name}/fx/active`, because every mounted badge shares that one cache entry: a single
- * `fxChanged` broadcast invalidates `FixtureEffects` wholesale, so per-target queries turned one
+ * `fxChanged` broadcast invalidates `FixtureFx` wholesale, so per-target queries turned one
  * effect change into one GET per card on screen.
  */
 export function FxBadge(props: FxBadgeProps) {
   const { fixtureKey, fixtureGroups, groupName } = props
-  const { data: activeEffects } = useActiveEffectsQuery()
+  const { data: activeFx } = useActiveFxQuery()
 
   // The two sets `GET /fx/fixture/{key}` reports: `direct` effects on the fixture itself, and the
   // `indirect` ones — group effects that reach it through membership, and selection effects that
@@ -27,7 +27,7 @@ export function FxBadge(props: FxBadgeProps) {
   // fills from the same `groupsForFixture` the indirect derivation uses, so the counts agree.
   const keys = groupName ? NONE : new Set(fixtureKey ? [fixtureKey] : [])
   const groups = new Set(groupName ? [groupName] : (fixtureGroups ?? []))
-  const matching = (activeEffects ?? []).filter((effect) => (groupName || fixtureKey) && effectNames(effect, keys, groups))
+  const matching = (activeFx ?? []).filter((effect) => (groupName || fixtureKey) && fxNames(effect, keys, groups))
 
   if (matching.length === 0) return null
 

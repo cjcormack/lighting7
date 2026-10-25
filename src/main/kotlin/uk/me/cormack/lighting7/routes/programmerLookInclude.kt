@@ -2,20 +2,20 @@ package uk.me.cormack.lighting7.routes
 
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fx.EffectSpawner
+import uk.me.cormack.lighting7.fx.FxSpawner
 import uk.me.cormack.lighting7.fx.FxInstance
-import uk.me.cormack.lighting7.fx.IncludedLookEffect
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.lookEffectSettings
+import uk.me.cormack.lighting7.fx.IncludedLookFx
+import uk.me.cormack.lighting7.fx.AttributeFamily
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
+import uk.me.cormack.lighting7.fx.lookFxSettings
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
-import uk.me.cormack.lighting7.fx.toEffectEntry
-import uk.me.cormack.lighting7.fx.toEffectSpec
+import uk.me.cormack.lighting7.fx.familyForAttribute
+import uk.me.cormack.lighting7.fx.toFxEntry
+import uk.me.cormack.lighting7.fx.toFxSpec
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.LayerSourceKind
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.show.referenceFixtureFor
@@ -47,8 +47,8 @@ internal fun expandTargetsToFixtureKeys(state: State, targets: List<CueTargetDto
     val out = LinkedHashSet<String>()
     for (target in targets) {
         // An effect's selection (effects plan D3) expands to what each of its items does.
-        if (target.type == EffectTargetRef.Selection.TYPE) {
-            EffectTargetRef.Selection.parseKey(target.key)?.let { items -> out += expandTargetsToFixtureKeys(state, items.map(::CueTargetDto)) }
+        if (target.type == FxTargetsRef.Selection.TYPE) {
+            FxTargetsRef.Selection.parseKey(target.key)?.let { items -> out += expandTargetsToFixtureKeys(state, items.map(::CueTargetDto)) }
             continue
         }
         when (val ref = TargetRef.ofOrNull(target.type, target.key)) {
@@ -74,13 +74,13 @@ internal fun expandTargetsToFixtureKeys(state: State, targets: List<CueTargetDto
  *
  * Every row and every effect arrives with a target of its own: a Look row is always bound (sweep
  * item B6), and so is a Look effect (absolute-looks plan D2). One an older database left deferred
- * never survives `loadLookSnapshot` or [toEffectEntry].
+ * never survives `loadLookSnapshot` or [toFxEntry].
  */
 internal fun includeLookIntoProgrammer(
     state: State,
     lookId: Int,
     lookUuid: java.util.UUID,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     fadeMs: Long,
     includeFx: Boolean = true,
 ): LookIncludeOutcome {
@@ -89,7 +89,7 @@ internal fun includeLookIntoProgrammer(
         uk.me.cormack.lighting7.fx.IncludedTarget.look(lookId, lookUuid),
     )
     if (!includeFx) return values
-    val fx = spawnIncludedLookEffects(state, lookId, mask)
+    val fx = spawnIncludedLookFx(state, lookId, mask)
     return values.copy(
         fixtureKeys = (values.fixtureKeys + fx.coveredFixtureKeys).distinct(),
         fxSpawned = fx.spawned,
@@ -97,7 +97,7 @@ internal fun includeLookIntoProgrammer(
     )
 }
 
-private data class IncludedLookFx(
+private data class IncludedLookFxResult(
     val spawned: Int,
     val alreadyRunning: Int,
     val coveredFixtureKeys: Set<String>,
@@ -105,7 +105,7 @@ private data class IncludedLookFx(
 
 /**
  * Run a Look's effects in the programmer band, each stamped with the stored effect it realises
- * ([uk.me.cormack.lighting7.fx.IncludedLookEffect]) — `spawnIncludedFx`'s rules for a cue's
+ * ([uk.me.cormack.lighting7.fx.IncludedLookFx]) — `spawnIncludedFx`'s rules for a cue's
  * children, applied to a Look's:
  *
  * - **Already running is skipped.** Where the Look is live — a programmer layer, a cue's layer —
@@ -114,67 +114,66 @@ private data class IncludedLookFx(
  *   skips them for the same reason.
  * - **Masked like a value**: by the family of the property the effect drives on its target.
  */
-private fun spawnIncludedLookEffects(
+private fun spawnIncludedLookFx(
     state: State,
     lookId: Int,
-    mask: Set<PropertyMaskGroup>?,
-): IncludedLookFx {
+    mask: Set<AttributeFamily>?,
+): IncludedLookFxResult {
     val stored = transaction(state.database) {
-        DaoLook.findById(lookId)?.effects
-            ?.sortedBy { it.sortOrder }
-            ?.mapNotNull { effect -> effect.toEffectEntry()?.let { effect.id.value to it } }
+        DaoLook.findById(lookId)?.fxInOrder()
+            ?.mapNotNull { effect -> effect.toFxEntry()?.let { effect.id.value to it } }
     }.orEmpty()
-    if (stored.isEmpty()) return IncludedLookFx(0, 0, emptySet())
+    if (stored.isEmpty()) return IncludedLookFxResult(0, 0, emptySet())
 
     val engine = state.show.fxEngine
-    val running = engine.getActiveEffects().filterNot { it.leaving }
+    val running = engine.getActiveFx().filterNot { it.leaving }
     val spawning = ArrayList<FxInstance>()
     val covered = LinkedHashSet<String>()
     var alreadyRunning = 0
 
-    for ((lookEffectId, entry) in stored) {
+    for ((lookFxId, entry) in stored) {
         val target = CueTargetDto(entry.target)
-        val spec = entry.effect.toEffectSpec()
-        val registrationId = state.show.fxRegistry.getRegistration(spec.effectType)?.id
+        val spec = entry.effect.toFxSpec()
+        val registrationId = state.show.fxRegistry.getRegistration(spec.fxType)?.id
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, target, spec)
+            FxSpawner.resolveTargetForCue(state, target, spec)
         } catch (e: Exception) {
             logger.warn("look {}: included fx on '{}' — target unresolvable — skipping: {}", lookId, target.key, e.message)
             null
         } ?: continue
 
         if (mask != null) {
-            val reference = state.show.fixtures.referenceFixtureFor(target.effectTarget)
-            val group = reference?.let { maskGroupForProperty(it, fxTarget.propertyName) }
+            val reference = state.show.fixtures.referenceFixtureFor(target.fxTarget)
+            val group = reference?.let { familyForAttribute(it, fxTarget.attribute) }
             if (!maskAllows(mask, group)) continue
         }
 
         val duplicate = running.any {
             it.registrationId == registrationId &&
                 it.target.targetKey == fxTarget.targetKey &&
-                it.target.propertyName == fxTarget.propertyName &&
+                it.target.attribute == fxTarget.attribute &&
                 (it.source?.let { s -> s.kind == LayerSourceKind.LOOK && s.id == lookId } == true ||
-                    it.includedLookEffect?.lookEffectId == lookEffectId)
+                    it.includedLookFx?.lookFxId == lookFxId)
         }
         if (duplicate) {
             alreadyRunning++
             continue
         }
 
-        val instance = EffectSpawner.createEffectInstanceOrNull(
+        val instance = FxSpawner.createFxInstanceOrNull(
             spec, fxTarget, state, "look $lookId: included fx on '${target.key}'",
         ) ?: continue
         markProgrammerOwned(instance, true)
-        instance.includedLookEffect = IncludedLookEffect(lookId, lookEffectId, baseline = instance.lookEffectSettings())
+        instance.includedLookFx = IncludedLookFx(lookId, lookFxId, baseline = instance.lookFxSettings())
         spawning += instance
     }
 
-    engine.addEffects(spawning)
+    engine.addFxBatch(spawning)
     for (instance in spawning) covered += engine.fixtureKeysCoveredBy(instance)
     if (spawning.isNotEmpty()) {
         logger.debug("include: spawned {} programmer-band effect(s) from look {}", spawning.size, lookId)
     }
-    return IncludedLookFx(spawning.size, alreadyRunning, covered)
+    return IncludedLookFxResult(spawning.size, alreadyRunning, covered)
 }
 
 /**
@@ -191,14 +190,14 @@ private fun spawnIncludedLookEffects(
 internal fun includeExpandedIntoProgrammer(
     state: State,
     sourceUuid: java.util.UUID,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     fadeMs: Long,
     includedTarget: uk.me.cormack.lighting7.fx.IncludedTarget,
 ): LookIncludeOutcome {
     val expanded = state.show.lookRegistry.expanded(sourceUuid)
         ?: return LookIncludeOutcome(0, emptyList(), emptyList())
 
-    val writes = ArrayList<uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite>()
+    val writes = ArrayList<uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite>()
     val skips = ArrayList<RecordSkip>()
     val fixtureKeys = LinkedHashSet<String>()
 
@@ -212,41 +211,41 @@ internal fun includeExpandedIntoProgrammer(
                 .filterIsInstance<uk.me.cormack.lighting7.fixture.Fixture>()
         }.getOrNull() ?: continue
         for (member in members) {
-            groupHints[member.key to canonicalPropertyName(entry.propertyName)] = group.key
+            groupHints[member.key to canonicalAttributeName(entry.attribute)] = group.key
         }
     }
 
-    for ((fixtureKey, byProperty) in expanded.byFixture) {
+    for ((fixtureKey, byAttribute) in expanded.byFixture) {
         val fixture = runCatching { state.show.fixtures.untypedGroupableFixture(fixtureKey) }.getOrNull()
         if (fixture == null) {
             skips += RecordSkip(fixtureKey, reason = RecordSkipReason.MISSING_FIXTURE)
             continue
         }
-        for ((propertyName, literal) in byProperty) {
-            val group = uk.me.cormack.lighting7.fx.maskGroupForProperty(fixture, propertyName)
+        for ((attribute, literal) in byAttribute) {
+            val group = uk.me.cormack.lighting7.fx.familyForAttribute(fixture, attribute)
             if (group == null) {
-                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)
+                skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MISSING_ATTRIBUTE)
                 continue
             }
             if (!uk.me.cormack.lighting7.fx.maskAllows(mask, group)) {
-                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MASKED_OUT)
+                skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MASKED_OUT)
                 continue
             }
-            val resolvedProperty = uk.me.cormack.lighting7.fx.PropertyChannelWriter
-                .resolveProperty(fixture, propertyName)
-            val category = resolvedProperty?.category
-                ?: uk.me.cormack.lighting7.fixture.PropertyCategory.OTHER
+            val resolvedAttribute = uk.me.cormack.lighting7.fx.AttributeChannelWriter
+                .resolveAttribute(fixture, attribute)
+            val category = resolvedAttribute?.category
+                ?: uk.me.cormack.lighting7.fixture.AttributeCategory.OTHER
             val value = uk.me.cormack.lighting7.fx.CueAssignmentResolver.parseAssignmentValue(
-                category, propertyName, literal,
-                settingBacked = resolvedProperty?.value is uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting<*>,
+                category, attribute, literal,
+                settingBacked = resolvedAttribute?.value is uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting<*>,
             )
             if (value == null) {
-                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)
+                skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MISSING_ATTRIBUTE)
                 continue
             }
-            writes += uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
-                fixture, propertyName, value,
-                sourceGroup = groupHints[fixtureKey to propertyName],
+            writes += uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite(
+                fixture, attribute, value,
+                sourceGroup = groupHints[fixtureKey to attribute],
             )
             fixtureKeys += fixtureKey
         }
@@ -255,7 +254,7 @@ internal fun includeExpandedIntoProgrammer(
     if (writes.isNotEmpty()) {
         // One batched write, as Include-a-cue does: a large palette is hundreds of properties and
         // per-property publishing would visibly stutter the rig.
-        state.show.fxEngine.programmer.writeProperties(
+        state.show.fxEngine.programmer.writeAttributes(
             uk.me.cormack.lighting7.fx.ProgrammerOwner.INCLUDE, writes, fadeMs = fadeMs,
         )
     }
@@ -287,18 +286,16 @@ internal data class LookIncludeOutcome(
  */
 internal fun lookIncludeWarnings(lookName: String, outcome: LookIncludeOutcome, sceneryIncluded: Int = 0): List<String> {
     val alreadyRunning = outcome.fxAlreadyRunning.takeIf { it > 0 }?.let { n ->
-        "${effectsPhrase(n)} of '$lookName' already running where it is live — release it there to edit " +
+        "$n FX of '$lookName' already running where it is live — release it there to edit " +
             "${if (n == 1) "that one" else "those"} here."
     }
     val staged = outcome.entriesWritten > 0 || sceneryIncluded > 0 || outcome.fxSpawned > 0
     return when {
         staged || alreadyRunning != null -> listOfNotNull(alreadyRunning)
         outcome.skipped.isNotEmpty() -> listOf(
-            "None of '$lookName''s rows could be staged: the fixtures or properties they " +
+            "None of '$lookName''s rows could be staged: the fixtures or attributes they " +
                 "name are not in the current patch, or the mask excluded them.",
         )
         else -> listOf("'$lookName' holds nothing to stage under this mask, or nothing at all.")
     }
 }
-
-private fun effectsPhrase(n: Int) = if (n == 1) "1 effect" else "$n effects"

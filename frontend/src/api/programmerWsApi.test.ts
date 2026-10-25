@@ -13,7 +13,7 @@ import {
 
 const ENTRY: ProgrammerEntry = {
   targetKey: 'hex-1',
-  propertyName: 'dimmer',
+  attribute: 'dimmer',
   value: '200',
   owner: 'web',
   touched: true,
@@ -22,7 +22,7 @@ const ENTRY: ProgrammerEntry = {
 
 const PROV: ProvenanceEntry = {
   targetKey: 'hex-1',
-  propertyName: 'dimmer',
+  attribute: 'dimmer',
   source: 'PROGRAMMER',
 }
 
@@ -76,7 +76,7 @@ describe('createProgrammerApi', () => {
     expect(sent).toEqual([])
   })
 
-  it('indexes a state snapshot by (targetKey, propertyName)', () => {
+  it('indexes a state snapshot by (targetKey, attribute)', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
@@ -300,7 +300,7 @@ describe('createProgrammerApi', () => {
       type: 'programmer.entryChanged',
       targetType: 'fixture',
       targetKey: 'hex-1',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       value: '180',
     })
 
@@ -318,7 +318,7 @@ describe('createProgrammerApi', () => {
       type: 'programmer.entryChanged',
       targetType: 'fixture',
       targetKey: 'hex-1',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       value: '120',
     })
 
@@ -348,7 +348,7 @@ describe('createProgrammerApi', () => {
       type: 'programmer.entryChanged',
       targetType: 'fixture',
       targetKey: 'hex-1',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       value: '120',
     })
     dimmer.mockClear()
@@ -369,7 +369,7 @@ describe('createProgrammerApi', () => {
       type: 'programmer.entryChanged',
       targetType: 'fixture',
       targetKey: 'hex-1',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       value: '200',
     })
     dimmer.mockClear()
@@ -391,7 +391,7 @@ describe('createProgrammerApi', () => {
       type: 'programmer.entryCleared',
       targetType: 'fixture',
       targetKey: 'hex-1',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
     })
     dimmer.mockClear()
     frame(stateFrame())
@@ -407,7 +407,7 @@ describe('createProgrammerApi', () => {
 
     const dimmer = vi.fn()
     api.subscribeToKey('hex-1', 'dimmer', dimmer)
-    frame({ type: 'programmer.cleared', cleared: 1, effectsCleared: 0 })
+    frame({ type: 'programmer.cleared', cleared: 1, fxCleared: 0 })
     dimmer.mockClear()
     frame(stateFrame())
 
@@ -424,7 +424,7 @@ describe('createProgrammerApi', () => {
       type: 'programmer.entryCleared',
       targetType: 'fixture',
       targetKey: 'hex-1',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
     })
 
     expect(api.entryCount()).toBe(0)
@@ -435,7 +435,7 @@ describe('createProgrammerApi', () => {
     const api = createProgrammerApi(conn)
     frame(stateFrame())
 
-    frame({ type: 'programmer.cleared', cleared: 1, effectsCleared: 2 })
+    frame({ type: 'programmer.cleared', cleared: 1, fxCleared: 2 })
 
     expect(api.entryCount()).toBe(0)
   })
@@ -481,7 +481,7 @@ describe('createProgrammerApi', () => {
         type: 'programmer.set',
         targetType: 'fixture',
         targetKey: 'hex-1',
-        propertyName: 'dimmer',
+        attribute: 'dimmer',
         value: '200',
         fadeMs: 500,
       },
@@ -489,7 +489,7 @@ describe('createProgrammerApi', () => {
         type: 'programmer.setColour',
         targetType: 'fixture',
         targetKey: 'hex-1',
-        propertyName: 'rgbColour',
+        attribute: 'rgbColour',
         r: 255,
         g: 0,
         b: 128,
@@ -505,7 +505,7 @@ describe('createProgrammerApi', () => {
         type: 'programmer.clearEntry',
         targetType: 'group',
         targetKey: 'Wash',
-        propertyName: 'dimmer',
+        attribute: 'dimmer',
         fadeMs: 1000,
       },
       { type: 'programmer.clearAll', fadeMs: 2000 },
@@ -517,7 +517,7 @@ describe('createProgrammerApi', () => {
     const { conn, sent } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
-    api.addLayer({ lookId: 7, targets: [{ type: 'group', key: 'front-wash' }], amount: 0.5 })
+    api.addLayer({ paletteId: 7, targets: [{ type: 'group', key: 'front-wash' }], amount: 0.5 })
     api.addLayer({ lookId: 8 })
     api.removeLayer(3, 500)
     api.moveLayer(3, 0)
@@ -526,12 +526,11 @@ describe('createProgrammerApi', () => {
     expect(sent).toEqual([
       {
         type: 'programmer.addLayer',
-        lookId: 7,
+        paletteId: 7,
         targets: [{ type: 'group', key: 'front-wash' }],
         amount: 0.5,
       },
-      // Targets default to `[]` rather than being omitted: an absent list and an empty one mean
-      // the same thing to the server, and always sending the field keeps the shape one shape.
+      // Targets default to `[]` rather than being omitted — a Look's layer names none.
       { type: 'programmer.addLayer', lookId: 8, targets: [] },
       { type: 'programmer.removeLayer', layerId: 3, fadeMs: 500 },
       { type: 'programmer.moveLayer', layerId: 3, toIndex: 0 },
@@ -710,12 +709,12 @@ describe('createProgrammerApi', () => {
 
     frame(
       provenanceFrame([
-        { ...PROV, source: 'CUE', layerId: 1, layerSource: { kind: 'TEMPLATE', id: 3, uuid: 't3', name: 'Sweep' } },
+        { ...PROV, source: 'CUE', layerId: 1, layerSource: { kind: 'PALETTE', id: 3, uuid: 't3', name: 'Sweep' } },
       ]),
     )
 
     expect(spy).toHaveBeenCalledTimes(2)
-    expect(spy.mock.calls[1][0].provenance?.layerSource?.kind).toBe('TEMPLATE')
+    expect(spy.mock.calls[1][0].provenance?.layerSource?.kind).toBe('PALETTE')
   })
 
   it('stops delivering to a key subscriber after it unsubscribes', () => {
@@ -828,7 +827,7 @@ describe('createProgrammerApi', () => {
       const answer = api.keyStack('fixture', 'hex-1', 'dimmer')
       expect(sent).toHaveLength(1)
       const { requestId, ...rest } = sent[0]
-      expect(rest).toEqual({ type: 'programmer.keyStack', targetType: 'fixture', targetKey: 'hex-1', propertyName: 'dimmer' })
+      expect(rest).toEqual({ type: 'programmer.keyStack', targetType: 'fixture', targetKey: 'hex-1', attribute: 'dimmer' })
       expect(typeof requestId).toBe('string')
 
       frame({
@@ -836,14 +835,14 @@ describe('createProgrammerApi', () => {
         requestId,
         targetType: 'fixture',
         targetKey: 'hex-1',
-        propertyName: 'dimmer',
+        attribute: 'dimmer',
         blind: false,
         stacks: [{ targetKey: 'hex-1', layers: [{ kind: 'PROGRAMMER', onStage: true, value: '200', owner: 'web' }] }],
       })
       await expect(answer).resolves.toEqual({
         targetType: 'fixture',
         targetKey: 'hex-1',
-        propertyName: 'dimmer',
+        attribute: 'dimmer',
         blind: false,
         stacks: [{ targetKey: 'hex-1', layers: [{ kind: 'PROGRAMMER', onStage: true, value: '200', owner: 'web' }] }],
       })
@@ -857,7 +856,7 @@ describe('createProgrammerApi', () => {
       const reply = (index: number, key: string) =>
         frame({
           type: 'programmer.keyStack', requestId: sent[index].requestId, targetType: 'fixture',
-          targetKey: key, propertyName: 'dimmer', blind: false, stacks: [],
+          targetKey: key, attribute: 'dimmer', blind: false, stacks: [],
         })
       reply(1, 'hex-2')
       reply(0, 'hex-1')
@@ -871,14 +870,14 @@ describe('createProgrammerApi', () => {
       const refused = api.keyStack('fixture', 'nope', 'dimmer')
       frame({
         type: 'programmer.keyStack', requestId: sent[0].requestId, targetType: 'fixture',
-        targetKey: 'nope', propertyName: 'dimmer', blind: false, error: "Unknown fixture 'nope'",
+        targetKey: 'nope', attribute: 'dimmer', blind: false, error: "Unknown fixture 'nope'",
       })
       await expect(refused).rejects.toThrow("Unknown fixture 'nope'")
 
       const empty = api.keyStack('fixture', 'hex-1', 'dimmer')
       frame({
         type: 'programmer.keyStack', requestId: sent[1].requestId, targetType: 'fixture',
-        targetKey: 'hex-1', propertyName: 'dimmer', blind: true,
+        targetKey: 'hex-1', attribute: 'dimmer', blind: true,
       })
       await expect(empty).resolves.toMatchObject({ blind: true, stacks: [] })
     })
@@ -902,7 +901,7 @@ describe('createProgrammerApi', () => {
       void api.keyStack('fixture', 'hex-1', 'dimmer')
       frame({
         type: 'programmer.keyStack', requestId: sent[0].requestId, targetType: 'fixture',
-        targetKey: 'hex-1', propertyName: 'dimmer', blind: false, stacks: [],
+        targetKey: 'hex-1', attribute: 'dimmer', blind: false, stacks: [],
       })
       expect(listener).not.toHaveBeenCalled()
     })
@@ -916,15 +915,15 @@ describe('createProgrammerApi', () => {
 
       frame({
         type: 'programmer.targetCleared', requestId, targetType: 'group', targetKey: 'front',
-        values: 4, effects: 1,
-        partial: [{ effectId: 9, effectType: 'Pulse', targetKey: 'all', isGroupTarget: true, propertyName: 'dimmer' }],
+        values: 4, fx: 1,
+        partial: [{ fxId: 9, fxType: 'Pulse', targetKey: 'all', isGroupTarget: true, attribute: 'dimmer' }],
       })
       await expect(cleared).resolves.toEqual({
         targetType: 'group',
         targetKey: 'front',
         values: 4,
-        effects: 1,
-        partial: [{ effectId: 9, effectType: 'Pulse', targetKey: 'all', isGroupTarget: true, propertyName: 'dimmer' }],
+        fx: 1,
+        partial: [{ fxId: 9, fxType: 'Pulse', targetKey: 'all', isGroupTarget: true, attribute: 'dimmer' }],
       })
     })
 

@@ -20,14 +20,14 @@ export interface TimelineEntry {
   cueId?: number | null
   /** In layer order, bottom first; each layer carries its rank, which counts a layer whose source is gone. */
   layers: TimelineLayer[]
-  effects: TimelineEffect[]
+  fx: TimelineFx[]
   scenery: TimelineScenery[]
   trackedScenery: TimelineTrackedScenery[]
 }
 
 export interface TimelineLayer {
   id: number
-  source: { kind: 'LOOK' | 'TEMPLATE'; id: number; uuid: string; name: string; families: string[] }
+  source: { kind: 'LOOK' | 'PALETTE'; id: number; uuid: string; name: string; families: string[] }
   targets: CueTarget[]
   /** The fixture keys the layer reaches: its targets with groups expanded, else its source's own. */
   heads: string[]
@@ -37,7 +37,7 @@ export interface TimelineLayer {
   enabled: boolean
   amount: number
   blendMode: string
-  propertyMask: string | null
+  attributeMask: string | null
   stomp: boolean
   /** Fires on a delay, an interval or a random window rather than at the GO. */
   timed: boolean
@@ -48,13 +48,13 @@ export interface TimelineLayer {
   rateSpeedMasterUuid: string | null
 }
 
-export interface TimelineEffect {
+export interface TimelineFx {
   id: number
   uuid: string
   /** The run key: rows of neighbouring cues that share one draw as one run (D7). */
   runUuid: string | null
-  effectType: string
-  propertyName: string | null
+  fxType: string
+  attribute: string | null
   targetType: string
   targetKey: string
   family: string | null
@@ -78,7 +78,7 @@ export interface TimelineTrackedScenery {
 
 /** A Look or a palette, as a timeline edit names one. */
 export interface TimelineSourceRef {
-  kind: 'LOOK' | 'TEMPLATE'
+  kind: 'LOOK' | 'PALETTE'
   id: number
 }
 
@@ -93,8 +93,8 @@ export interface TimelineLayerFields {
   enabled?: boolean
   amount?: number
   blendMode?: string
-  /** `PropertyMaskGroup` names joined by commas, or null for every attribute. */
-  propertyMask?: string | null
+  /** `AttributeFamily` names joined by commas, or null for every attribute. */
+  attributeMask?: string | null
   stomp?: boolean
   delayMs?: number | null
   intervalMs?: number | null
@@ -107,7 +107,7 @@ export interface TimelineLayerFields {
 export interface TimelineCueSnapshot {
   cueId: number
   layers: Record<string, unknown>[]
-  adHocEffects: Record<string, unknown>[]
+  adHocFx: Record<string, unknown>[]
   scenery: Record<string, unknown>[]
 }
 
@@ -120,6 +120,10 @@ export type TimelineEditOp =
   | { op: 'layerOff'; cueId: number; source: TimelineSourceRef; target?: CueTarget | null }
   | { op: 'layerSettings'; cueId: number; layerId: number; fields: TimelineLayerFields }
   | { op: 'replace'; cueIds: number[]; from: TimelineCellRef; to: TimelineCellRef; keepSettings: boolean }
+  | { op: 'fxOn'; cueId: number; fromFxUuid: string }
+  | { op: 'fxOff'; cueId: number; fxUuid: string }
+  | { op: 'breakRun'; cueId: number; fxUuid: string; entryId?: number | null }
+  | { op: 'joinRun'; cueId: number; fxUuid: string; entryId?: number | null }
   | { op: 'scenerySet'; cueId: number; elementUuid: string; state: SceneryState; transitionMs?: number | null }
   | { op: 'sceneryClear'; cueId: number; elementUuid: string }
   | ({ op: 'restore' } & TimelineCueSnapshot)

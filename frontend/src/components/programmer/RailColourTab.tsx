@@ -7,13 +7,13 @@ import { EditorLabelLine } from '@/components/editor/EditorLabelLine'
 import { headsLine } from '@/components/editor/editorCopy'
 import { useEditorKeyboard } from '@/components/editor/useEditorKeyboard'
 import { colourTargetsOf } from '@/components/fixtures-list/cells/ColourCell'
-import { templateTargetsOf } from '@/components/fixtures-list/rowModel'
+import { paletteTargetsOf } from '@/components/fixtures-list/rowModel'
 import { cellActionCopy } from '@/components/fixtures-list/cellEntry'
 import { useMarquee, type MarqueeSnapshot } from '@/components/fixtures-list/marqueeContext'
 import { batchForTargets, type CellBatch, type WriteTarget } from '@/components/fixtures-list/rowModel'
 import { computeCombinedCss } from '@/lib/colourMath'
-import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
-import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
+import { useFocusedPaletteLayer } from './FocusedPaletteLayer'
+import { NewPaletteFromSelectionSheet } from './NewPaletteFromSelectionSheet'
 import { useProgrammerScope } from './ProgrammerScope'
 import { useRailArm } from './ProgrammerWorkspace'
 import { useClaimedFocus } from './useClaimedFocus'
@@ -64,17 +64,17 @@ export const RailColourTab = memo(function RailColourTab({ projectId }: { projec
   const marquee = useMarquee()
   const arm = useRailArm()
   const scope = useProgrammerScope()
-  const focusedTemplate = useFocusedTemplateLayer() != null
+  const focusedPalette = useFocusedPaletteLayer() != null
 
   const batch = useMarqueeColourBatch(marquee)
   const targets = useMemo(() => colourTargetsOf(batch?.targets ?? NO_TARGETS), [batch])
   const resolutions = batch?.resolutions ?? NO_RESOLUTIONS
-  const hasWhite = resolutions.some((r) => r.kind === 'colour' && r.property.whiteChannel != null)
-  const hasAmber = resolutions.some((r) => r.kind === 'colour' && r.property.amberChannel != null)
-  const hasUv = resolutions.some((r) => r.kind === 'colour' && r.property.uvChannel != null)
+  const hasWhite = resolutions.some((r) => r.kind === 'colour' && r.attribute.whiteChannel != null)
+  const hasAmber = resolutions.some((r) => r.kind === 'colour' && r.attribute.amberChannel != null)
+  const hasUv = resolutions.some((r) => r.kind === 'colour' && r.attribute.uvChannel != null)
 
   const readOnly = marquee != null && !marquee.permission.entry
-  const refusal = readOnly ? cellActionCopy(scope, focusedTemplate, targets.length).setTitle : null
+  const refusal = readOnly ? cellActionCopy(scope, focusedPalette, targets.length).setTitle : null
   const commit = marquee?.commit
 
   const [channels, setChannels] = useState<ColourBuffer>(NEUTRAL)
@@ -121,7 +121,7 @@ export const RailColourTab = memo(function RailColourTab({ projectId }: { projec
   // The claimed open: R focused and selected, the character seeded (`useClaimedFocus`).
   const seed = useClaimedFocus('colour', contentRef, 'input[type="number"]:not([disabled])', readOnly)
 
-  const templateTargets = useMemo(() => templateTargetsOf(targets), [targets])
+  const paletteTargets = useMemo(() => paletteTargetsOf(targets), [targets])
   // Mounted once Save has been pressed and kept from then on — the cell's rule: a dialog's hooks
   // are not worth holding before anyone asks, and unmounting on close would cut its slide-out.
   const [saveMounted, setSaveMounted] = useState(false)
@@ -199,7 +199,7 @@ export const RailColourTab = memo(function RailColourTab({ projectId }: { projec
         </>
       )}
       {saveMounted && (
-        <NewTemplateFromSelectionSheet open={saving} onOpenChange={setSaving} projectId={projectId} families={COLOUR_FAMILY} targets={templateTargets} />
+        <NewPaletteFromSelectionSheet open={saving} onOpenChange={setSaving} projectId={projectId} families={COLOUR_FAMILY} targets={paletteTargets} />
       )}
     </div>
   )

@@ -28,7 +28,7 @@ import {
   followTargetOf,
   leaderLabelOf,
   leaderNameOf,
-  usageLabel,
+  masterFamilyLabel,
 } from '@/lib/speedMasterModel'
 import { useIsDeskConnected } from '@/store/status'
 import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
@@ -40,22 +40,22 @@ import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
  *
  * The rail is what makes the routing sessions 1-2 built *visible*: every master says what it is
  * for, in a badge, on a performance surface. The rule that badge names — an effect with no explicit
- * master is stamped with the usage-matching one — has a caller again since fx-templates session 3:
- * `TemplateEditor` stamps an effect template when its effect is chosen. **Nothing on this page does
+ * master is stamped with the family-matching one — has a caller again since fx-templates session 3:
+ * `PaletteEditor` stamps an effect template when its effect is chosen. **Nothing on this page does
  * that**, though, so the caption still states what a badge *means* rather than promising what a
  * press here does; don't restore its old wording, which claimed the pads stamped.
  *
  * **Two queries, and each is load-bearing.** The live query supplies everything drawn — since the
- * busking-view plan's session 2 the WS state carries `usage` and the follow pair alongside the
+ * busking-view plan's session 2 the WS state carries `family` and the follow pair alongside the
  * running tempo, so nothing here needs the REST row to render. The list query supplies the REST row
  * itself, which live state is not: a ratio-chip PUT needs its numeric `id`, and the detail sheet
  * needs the whole thing. They are joined by uuid, the same join the Speed Masters page's
  * `SpeedMasterSheet` makes for the same reason.
  *
  * **A card is also the way into `SpeedMasterDetailSheet`**, through the sliders glyph in its title
- * row. Renaming a master, retagging its usage, setting the tempo it boots at and linking or
+ * row. Renaming a master, retagging its family, setting the tempo it boots at and linking or
  * unlinking follow all live in that sheet, and until now `/speed-masters` was the only place to
- * reach it; a performance surface that shows a master's usage badge should be able to change it.
+ * reach it; a performance surface that shows a master's family badge should be able to change it.
  * One sheet for the whole rail rather than one per card: only one can be open.
  *
  * **This is the fourth surface offering TAP and click-to-type**, after `MasterTile`, `MasterRow`
@@ -71,7 +71,7 @@ import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
  * **It fills whatever width the sheet gives it** (2026-09-21), where it was a fixed 288px column
  * inside a sheet the operator drags to width — so the cards stopped at 288 in a 480px sheet. And
  * it draws **no heading and no caption**: the tab strip names the tab, and the sentence about
- * what a usage badge means is on each badge's own title instead. The caption's one rule — the
+ * what a family badge means is on each badge's own title instead. The caption's one rule — the
  * badge names the family whose effect templates default to this master, and nothing here stamps
  * one — still holds; it just is not printed at the top of every visit.
  */
@@ -86,7 +86,7 @@ export function BuskSpeedRail() {
 
   // The REST row is carried for the two writes — a ratio chip's PUT needs its `id`, the detail
   // sheet needs all of it. Nothing *displayed* comes from it: every value drawn is from the live
-  // frame, so a stale list cannot make the rail state a tempo, a usage or a ratio the desk is not
+  // frame, so a stale list cannot make the rail state a tempo, a family or a ratio the desk is not
   // running.
   const rowByUuid = useMemo(
     () => new Map((rows ?? []).map((row) => [row.uuid, row] as const)),
@@ -156,11 +156,11 @@ function useLiveTempoPush(uuid: string | null) {
 /**
  * One master, in one of three arms.
  *
- * - **Master 1** is the global tempo: the big number, a full-width TAP, and no usage badge — it is
+ * - **Master 1** is the global tempo: the big number, a full-width TAP, and no family badge — it is
  *   where every unmatched category lands by definition, so a badge saying so would be noise.
  * - **A follower** shows what it derives and the ratio it derives at, and trades TAP for the five
  *   ratio chips. Its tempo is not typeable either: the same refusal covers both writes.
- * - **A manual master** keeps its own TAP inline, and carries its usage badge.
+ * - **A manual master** keeps its own TAP inline, and carries its family badge.
  *
  * **Hold the card and it becomes a tempo fader** — the busk view's own hold-to-slide gesture, the
  * one the property pads used to carry, and the third way to set a tempo beside typing it and
@@ -219,7 +219,7 @@ function MasterCard({
         leaderNameOf(bank, leaderTarget),
       )
     : null
-  const usage = usageLabel(master.usage)
+  const family = masterFamilyLabel(master.family)
 
   const cardRef = useRef<HTMLDivElement>(null)
   /** The tempo under the finger while a drag runs; null when one is not. */
@@ -344,14 +344,14 @@ function MasterCard({
           <span className="flex-1" />
           {/* Master 1 never carries one: it is the fallback for every category no other master
             claims, so "routes dimmer" would understate it and any single label would be wrong. */}
-          {!isMaster1 && usage && (
+          {!isMaster1 && family && (
             <span
               className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[9px] font-bold tracking-[0.06em]"
-              // The rail's old caption, on the badge it was about: what a usage *means*, not what a
-              // press here does — nothing on this page stamps a master; `TemplateEditor` does.
-              title="Usage: effect palettes of this family default to this master"
+              // The rail's old caption, on the badge it was about: what a family *means*, not what a
+              // press here does — nothing on this page stamps a master; `PaletteEditor` does.
+              title="Family: FX palettes of this family default to this master"
             >
-              {usage}
+              {family}
             </span>
           )}
           {onOpenSettings && (
@@ -359,7 +359,7 @@ function MasterCard({
               type="button"
               onClick={onOpenSettings}
               aria-label={`Master ${master.index} settings`}
-              title="Name, usage, starting tempo and follow"
+              title="Name, family, starting tempo and follow"
               className="shrink-0 transition-colors hover:text-foreground"
             >
               <SlidersHorizontal className="size-3" />

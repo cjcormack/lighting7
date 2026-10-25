@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.state
 
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fx.SpreadOver
+import uk.me.cormack.lighting7.fx.FanOver
 import uk.me.cormack.lighting7.models.BuskRigCellMode
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -29,15 +29,15 @@ data class BuskRigTileSpec(
 
 /**
  * The **effective rig order** — the one sequence the desk walks for `selection.subselect`'s *Next* /
- * *Prev* and for a spread's `LINEAR` order (busk-further plan §3.3, D9, D12).
+ * *Prev* and for a spread's `NORMAL` order (busk-further plan §3.3, D9, D12).
  *
  * Rows in order, tiles in order, and each tile as the operator would press it:
  *
  * - a **group** tile is one step, the group itself, and places its members in member order — over
- *   [SpreadOver.CELLS] it is its members' units instead, so a cell reached through a group tile
+ *   [FanOver.CELLS] it is its members' units instead, so a cell reached through a group tile
  *   steps like one reached through a fixture tile;
  * - a **fixture** tile is one step (`PIPS` / `WHOLE`), or one step per cell (`PER_CELL`), or
- *   `cellSplit` steps each a contiguous run of cells (`HALVES`); over [SpreadOver.CELLS] every
+ *   `cellSplit` steps each a contiguous run of cells (`HALVES`); over [FanOver.CELLS] every
  *   multi-head fixture is its cells whatever its mode, because a *Next* pressed with a cell selected
  *   should step one cell (the plan's §9);
  * - a tile carrying an **element key** is that one cell;
@@ -64,7 +64,7 @@ class BuskRigOrder(private val fixtures: Fixtures, private val rig: BuskRigSpec)
     /**
      * The steps of the band, each the targets one press on it selects, at [over]'s granularity.
      */
-    fun steps(over: SpreadOver): List<List<CueTargetDto>> {
+    fun steps(over: FanOver): List<List<CueTargetDto>> {
         val out = LinkedHashSet<List<CueTargetDto>>()
         if (rig.isEmpty) {
             fixtures.groups.forEach { out += groupSteps(it.name, over) }
@@ -97,9 +97,9 @@ class BuskRigOrder(private val fixtures: Fixtures, private val rig: BuskRigSpec)
      * cell selected must step one cell whether the rig reaches that cell through a group tile or a
      * fixture tile. Nothing for a group the patch does not have.
      */
-    private fun groupSteps(name: String, over: SpreadOver): List<List<CueTargetDto>> {
+    private fun groupSteps(name: String, over: FanOver): List<List<CueTargetDto>> {
         val group = resolveGroup(name) ?: return emptyList()
-        if (over == SpreadOver.HEADS) return listOf(listOf(groupTarget(name)))
+        if (over == FanOver.HEADS) return listOf(listOf(groupTarget(name)))
         return group.fixtures.filterIsInstance<Fixture>().flatMap { fixtureSteps(it, over, BuskRigCellMode.PIPS, null) }
     }
 
@@ -158,13 +158,13 @@ class BuskRigOrder(private val fixtures: Fixtures, private val rig: BuskRigSpec)
 
     private fun fixtureSteps(
         fixture: Fixture,
-        over: SpreadOver,
+        over: FanOver,
         mode: BuskRigCellMode,
         split: Int?,
     ): List<List<CueTargetDto>> {
         val cells = cellsOf(fixture)
         if (cells.isEmpty()) return listOf(listOf(fixtureTarget(fixture.key)))
-        if (over == SpreadOver.CELLS) return cells.map { listOf(it) }
+        if (over == FanOver.CELLS) return cells.map { listOf(it) }
         return when (mode) {
             BuskRigCellMode.PIPS, BuskRigCellMode.WHOLE -> listOf(listOf(fixtureTarget(fixture.key)))
             BuskRigCellMode.PER_CELL -> cells.map { listOf(it) }

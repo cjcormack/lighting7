@@ -5,7 +5,7 @@ import { ColourEditor } from '../editor/ColourEditor'
 import { EditorLabelLine } from '../editor/EditorLabelLine'
 import { headsLine } from '../editor/editorCopy'
 import { SpreadPanel, type IntentSpreadPlan, type RawSpreadPlan, type SpreadPlan, type SpreadSeed } from '../editor/SpreadPanel'
-import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from '../programmer/FocusedPaletteLayer'
 import { useLookRowStore } from '../programmer/LookRowStore'
 import { landValuesInLook } from '../programmer/landValuesInLook'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
@@ -15,15 +15,15 @@ import { getProgrammerFadeMs } from '../../lib/programmerFade'
 import { parseProgrammerValue } from '../../lib/programmerValue'
 import { usePressFamilies } from '../../store/selection'
 import { useSpreadMutation } from '../../store/programmerOps'
-import { useTemplateListQuery } from '../../store/templates'
-import { isSpreadColourTemplate } from '../fx/FxColourTemplates'
+import { usePaletteListQuery } from '../../store/palettes'
+import { isSpreadColourPalette } from '../fx/FxColourPalettes'
 import { COLUMN_DEFS, cellFamilies, columnFamily, resolveCell } from './columns'
 import {
   clampCommitToResolution,
   commitMatchesResolution,
   spreadCellCount,
-  spreadPropertiesOffered,
-  spreadPropertyForColumn,
+  spreadAttributesOffered,
+  spreadAttributeForColumn,
   spreadTargetsOf,
   targetFamilies,
   type WriteTarget,
@@ -54,11 +54,11 @@ const INTENT_TOAST = 'spread-popover-intent-answer'
  * Whether a desk answered the interpolated **intent** rather than a literal — an older desk, plan
  * §6. Asked by shape, not by the literal parser alone: `parseProgrammerValue` splits on `;` and
  * tests only the head, so `#FF0000;policy=extract` would parse as a colour and land the intent in
- * a Look row. `pct:` / `pos:` / `deg:` / `dmx:` / `tmpl:` are the other five spellings the intent
+ * a Look row. `pct:` / `pos:` / `deg:` / `dmx:` / `pal:` are the other five spellings the intent
  * grammar has.
  */
 export function isIntentString(value: string): boolean {
-  return /^(pct|pos|deg|dmx|tmpl):/i.test(value.trim()) || /;\s*policy=/i.test(value)
+  return /^(pct|pos|deg|dmx|pal):/i.test(value.trim()) || /;\s*policy=/i.test(value)
 }
 
 /**
@@ -93,7 +93,7 @@ interface SpreadPopoverProps {
    * button is offered disabled for a reason other than the scope's.
    */
   columns: readonly SpreadColumn[]
-  /** The project the heads belong to — what `POST /programmer/spread` is addressed to. Absent, no desk-resolved plan is built. */
+  /** The project the heads belong to — what `POST /programmer/fan` is addressed to. Absent, no desk-resolved plan is built. */
   projectId?: number
   /**
    * This surface follows the desk selection — the programmer, whose bridge publishes the marquee
@@ -149,11 +149,11 @@ export interface MarqueeSpreadPlans {
 export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeLabel = 'Local', docked = false }: MarqueeSpreadInput): MarqueeSpreadPlans {
   const writers = useCellWriters()
   const scope = useProgrammerScope()
-  const focusedTemplate = useFocusedTemplateLayer()
+  const focusedPalette = useFocusedPaletteLayer()
   const lookStore = useLookRowStore()
   const [spread] = useSpreadMutation()
-  const { data: templates } = useTemplateListQuery({ projectId: projectId ?? 0 }, { skip: projectId == null })
-  const colourTemplates = useMemo(() => (templates ?? []).filter(isSpreadColourTemplate), [templates])
+  const { data: templates } = usePaletteListQuery({ projectId: projectId ?? 0 }, { skip: projectId == null })
+  const colourPalettes = useMemo(() => (templates ?? []).filter(isSpreadColourPalette), [templates])
   // The cue editor's Values grid (show-cue-editing plan §3.3): the desk resolves with `write: false`
   // and each head's literal lands in the cue's own rows, as a focused Look layer's land in its draft.
   const editorContext = useEditorContext()
@@ -163,13 +163,13 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
     editorContext.kind === 'cue' && cueStoreRaw?.readOnly
       ? 'This cue is read-only here — unlock the show to edit its values'
       : scope?.kind === 'output'
-      ? 'Output is a read of the cook — switch to Local to spread values onto these heads'
-      : focusedTemplate != null
-        ? 'This layer applies a palette — switch to Local to spread values onto these heads'
+      ? 'Output is a read of the cook — switch to Local to fan values onto these heads'
+      : focusedPalette != null
+        ? 'This layer applies a palette — switch to Local to fan values onto these heads'
         : null
 
   const intentColumns = useMemo(
-    () => columns.filter(({ col }) => spreadPropertyForColumn(col) != null),
+    () => columns.filter(({ col }) => spreadAttributeForColumn(col) != null),
     [columns],
   )
   const marqueeFamilies = useMemo(() => cellFamilies(intentColumns), [intentColumns])
@@ -180,26 +180,26 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
   const lookName = layerStore?.lookName
 
   const landInCue = useCallback(
-    (answer: { written?: { target: { key: string }; propertyName: string; value: string }[] }) => {
+    (answer: { written?: { target: { key: string }; attribute: string; value: string }[] }) => {
       if (cueStore == null) return
       const written = answer.written ?? []
       const intent = written.find((write) => isIntentString(write.value) || parseProgrammerValue(write.value) == null)
       if (intent != null) {
-        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to spread into a cue`, { id: INTENT_TOAST })
+        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to fan into a cue`, { id: INTENT_TOAST })
         return
       }
-      for (const write of written) cueStore.setValue('fixture', write.target.key, write.propertyName, write.value)
+      for (const write of written) cueStore.setValue('fixture', write.target.key, write.attribute, write.value)
     },
     [cueStore],
   )
 
   const landInLayer = useCallback(
-    (answer: { written?: { target: { key: string }; propertyName: string; value: string }[] }) => {
+    (answer: { written?: { target: { key: string }; attribute: string; value: string }[] }) => {
       if (layerStore == null) return
       const written = answer.written ?? []
       const intent = written.find((write) => isIntentString(write.value) || parseProgrammerValue(write.value) == null)
       if (intent != null) {
-        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to spread into a Look layer`, { id: INTENT_TOAST })
+        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to fan into a Look layer`, { id: INTENT_TOAST })
         return
       }
       landValuesInLook(layerStore, written)
@@ -239,11 +239,11 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         cellCount: spreadCellCount(heads),
         families: targetFamilies(heads),
         offered: marqueeFamilies,
-        familyRefusal: 'Not in the selection — select cells in that column to spread it',
-        propertiesFor: (family: AttributeFamily) => spreadPropertiesOffered(heads, family),
-        initial: { family: columnFamily(first.col), property: spreadPropertyForColumn(first.col) ?? undefined },
+        familyRefusal: 'Not in the selection — select cells in that column to fan it',
+        attributesFor: (family: AttributeFamily) => spreadAttributesOffered(heads, family),
+        initial: { family: columnFamily(first.col), attribute: spreadAttributeForColumn(first.col) ?? undefined },
         mask,
-        colourTemplates,
+        colourPalettes,
         send: (body) => spread({ ...body, projectId, fadeMs: getProgrammerFadeMs() }).unwrap(),
       }
       // A fan there starts from the row being edited, not the stage (venue-visit plan S12).
@@ -269,10 +269,10 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       const probe = { kind: 'slider' as const, value: 0 }
       const headsOfWrites = speed.targets
         .map((outer) => {
-          const own = resolveCell(outer.properties, 'speed')
+          const own = resolveCell(outer.attributes, 'speed')
           if (own && commitMatchesResolution(probe, own)) return [{ target: outer, resolution: own }]
           return (outer.elements ?? []).flatMap((element) => {
-            const resolution = resolveCell(element.properties, 'speed')
+            const resolution = resolveCell(element.attributes, 'speed')
             return resolution && commitMatchesResolution(probe, resolution) ? [{ target: element, resolution }] : []
           })
         })
@@ -299,7 +299,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       }
     }
     return out
-  }, [columns, intentColumns, marqueeFamilies, mask, projectId, colourTemplates, spread, setLookValue, landInLayer, layerStore, cueStore, landInCue, writers])
+  }, [columns, intentColumns, marqueeFamilies, mask, projectId, colourPalettes, spread, setLookValue, landInLayer, layerStore, cueStore, landInCue, writers])
 
   const intent = plans.find((plan): plan is IntentSpreadPlan => plan.kind === 'intent')
   const labelLine: ReactNode =
@@ -348,7 +348,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
  * the layer's draft through `LookRowStore.setValue`, which coalesces and PUTs as every layer-scope
  * edit does (400 ms, 2 s ceiling; flush cadence is stage cadence). A desk that still answers the
  * intent (mid-upgrade, plan §6) is told apart by shape (`isIntentString`: a `pct:` / `pos:` /
- * `deg:` / `dmx:` / `tmpl:` prefix or a `;policy=` tag — the literal parser alone would take a colour
+ * `deg:` / `dmx:` / `pal:` prefix or a `;policy=` tag — the literal parser alone would take a colour
  * intent as a colour) and refused with a toast naming the desk rather than landing an intent in
  * a Look row. In practice such a desk 400s the `write: false` request first, since its Json
  * refuses the unknown key; the guard is for the answer, should one ever arrive.

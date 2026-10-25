@@ -31,12 +31,12 @@ export function useFxSelectionStore(): FxSelectionStore | null {
 
 const NO_STORE: FxSelectionStore = { get: () => NONE, set: () => {}, subscribe: () => () => {} }
 
-/** Whether any of [effectIds] is selected on the FX table — a boolean, so a cell re-renders only as its ring moves. */
-export function useFxRinged(effectIds: readonly number[]): boolean {
+/** Whether any of [fxIds] is selected on the FX table — a boolean, so a cell re-renders only as its ring moves. */
+export function useFxRinged(fxIds: readonly number[]): boolean {
   const store = useFxSelectionStore() ?? NO_STORE
   const read = () => {
     const selected = store.get()
-    return selected.size > 0 && effectIds.some((id) => selected.has(id))
+    return selected.size > 0 && fxIds.some((id) => selected.has(id))
   }
   return useSyncExternalStore(store.subscribe, read, read)
 }

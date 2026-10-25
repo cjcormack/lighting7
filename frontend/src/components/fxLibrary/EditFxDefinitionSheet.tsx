@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import type { Timing } from '@/api/fxApi'
 import {
   SheetBody,
   SheetClose,
@@ -16,13 +18,13 @@ import { LazyScriptEditor } from '@/components/scripts/LazyScriptEditor'
 import { ScriptCompileDialog, ScriptRunDialog } from '@/components/scripts/ScriptResultDialogs'
 import { useCompileProjectScriptMutation, useCurrentProjectQuery, useRunProjectScriptMutation } from '@/store/projects'
 import { useFxDefinitionQuery, useUpdateFxDefinitionMutation, type FxDefinition } from '@/store/fxDefinitions'
-import { EFFECT_MODE_LABELS, effectModeToEditorType } from './fxLibraryModel'
+import { FX_MODE_LABELS, fxModeToEditorType } from './fxLibraryModel'
 
 /**
  * A **custom** definition's editor — its name, its script, and whether its instances start with
  * step timing on — what a custom row's pencil (or ⏎ over one) opens, and where Fork lands (D9).
  *
- * **Step timing is shown, not hidden.** A fork starts with `defaultStepTiming` false: the library
+ * **Step timing is shown, not hidden.** A fork starts with `defaultTiming` `CYCLE`: the library
  * entry does not publish a built-in's own default, so the fork cannot copy it. [forkedFrom] names
  * the built-in when the sheet was opened by Fork, and the note under the toggle says so.
  *
@@ -52,7 +54,7 @@ export function EditFxDefinitionSheet({
     useRunProjectScriptMutation()
   const [runUpdateMutation, { isLoading: isSaving }] = useUpdateFxDefinitionMutation()
 
-  const [edits, setEdits] = useState<{ name?: string; script?: string; defaultStepTiming?: boolean }>({})
+  const [edits, setEdits] = useState<{ name?: string; script?: string; defaultTiming?: Timing }>({})
 
   useEffect(() => {
     setEdits({})
@@ -64,7 +66,7 @@ export function EditFxDefinitionSheet({
   // that text counts as a *change* is asked here instead of at the point it is stored.
   const hasChanged =
     edits.name !== undefined ||
-    (edits.defaultStepTiming !== undefined && edits.defaultStepTiming !== definition?.defaultStepTiming) ||
+    (edits.defaultTiming !== undefined && edits.defaultTiming !== definition?.defaultTiming) ||
     (edits.script !== undefined && edits.script.trim() !== definition?.script.trim())
 
   // Before the early returns: hooks cannot be skipped, and the sheet must know about the edit
@@ -95,10 +97,10 @@ export function EditFxDefinitionSheet({
     )
   }
 
-  const editorType = effectModeToEditorType(definition.effectMode)
+  const editorType = fxModeToEditorType(definition.fxMode)
   const currentName = edits.name ?? definition.name
   const currentScript = edits.script ?? definition.script
-  const currentStepTiming = edits.defaultStepTiming ?? definition.defaultStepTiming
+  const currentTiming = edits.defaultTiming ?? definition.defaultTiming
 
   // Trimmed, as the sheet's rename is: a name of spaces alone is no name.
   const canSave = hasChanged && currentName.trim() !== '' && currentScript !== ''
@@ -119,7 +121,7 @@ export function EditFxDefinitionSheet({
         id: definitionId,
         name: currentName.trim(),
         script: currentScript,
-        defaultStepTiming: currentStepTiming,
+        defaultTiming: currentTiming,
       }).unwrap()
       setEdits({})
     } catch {
@@ -133,9 +135,9 @@ export function EditFxDefinitionSheet({
         <SheetTitle className="flex items-center gap-2">
           Edit FX
           <Badge variant="default">Custom</Badge>
-          {definition.effectMode !== 'STANDARD' && (
+          {definition.fxMode !== 'STANDARD' && (
             <Badge variant="outline" className="text-xs">
-              {EFFECT_MODE_LABELS[definition.effectMode] ?? definition.effectMode}
+              {FX_MODE_LABELS[definition.fxMode] ?? definition.fxMode}
             </Badge>
           )}
         </SheetTitle>
@@ -163,18 +165,26 @@ export function EditFxDefinitionSheet({
 
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <input
-              id="edit-fx-step-timing"
-              type="checkbox"
-              checked={currentStepTiming}
-              onChange={(e) => setEdits({ ...edits, defaultStepTiming: e.target.checked })}
-            />
-            <Label htmlFor="edit-fx-step-timing">Step timing by default</Label>
+            <Label id="edit-fx-timing">Timing by default</Label>
+            <ToggleGroup
+              type="single"
+              size="sm"
+              aria-labelledby="edit-fx-timing"
+              value={currentTiming === 'HEAD' ? 'head' : 'cycle'}
+              onValueChange={(v) => v && setEdits({ ...edits, defaultTiming: v === 'head' ? 'HEAD' : 'CYCLE' })}
+            >
+              <ToggleGroupItem value="cycle" className="px-2 text-xs">
+                Per cycle
+              </ToggleGroupItem>
+              <ToggleGroupItem value="head" className="px-2 text-xs">
+                Per head
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
           <p className="text-xs text-muted-foreground" data-testid="fork-step-timing-note">
             {forkedFrom
-              ? `Forked from ${forkedFrom}. A fork starts with step timing off — the library does not publish the built-in’s own default, so check it matches before you use this.`
-              : 'New instances of this effect start with step timing on or off as set here.'}
+              ? `Forked from ${forkedFrom}. A fork starts per cycle — the library does not publish the built-in’s own default, so check it matches before you use this.`
+              : 'New instances of this FX start per cycle or per head as set here.'}
           </p>
         </div>
 

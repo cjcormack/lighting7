@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.routes
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,15 +36,15 @@ class ProgrammerRecordShapeTest {
 
     private fun entry(
         key: String,
-        property: String = "dimmer",
+        attribute: String = "dimmer",
         value: Int = 100,
         group: String? = null,
     ) = RecordEntry(
         fixtureKey = key,
-        propertyName = property,
-        value = CueAssignmentResolver.PropertyValue.Slider(value.toUByte()),
+        attribute = attribute,
+        value = CueAssignmentResolver.AttributeValue.Slider(value.toUByte()),
         sourceGroup = group,
-        maskGroup = PropertyMaskGroup.INTENSITY,
+        family = AttributeFamily.INTENSITY,
     )
 
     @Test
@@ -137,13 +137,13 @@ class ProgrammerRecordShapeTest {
         // A store walk has no inherent order. Two identical Records producing differently
         // ordered rows would make cue diffs unreadable.
         val base = listOf(
-            entry("hex-3", property = "dimmer", value = 10),
-            entry("hex-1", property = "strobe", value = 20),
-            entry("hex-1", property = "dimmer", value = 30),
+            entry("hex-3", attribute = "dimmer", value = 10),
+            entry("hex-1", attribute = "strobe", value = 20),
+            entry("hex-1", attribute = "dimmer", value = 30),
         )
         val a = collapseRecordingToAssignments(base, fixtures()).rows
         val b = collapseRecordingToAssignments(base.reversed(), fixtures()).rows
-        assertEquals(a.map { it.targetKey to it.propertyName }, b.map { it.targetKey to it.propertyName })
+        assertEquals(a.map { it.targetKey to it.attribute }, b.map { it.targetKey to it.attribute })
         assertEquals(listOf(0, 1, 2), a.map { it.sortOrder })
     }
 

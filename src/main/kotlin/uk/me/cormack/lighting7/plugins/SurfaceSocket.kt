@@ -62,7 +62,7 @@ data object SurfaceBankStateInMessage : SurfaceInMessage()
 @SerialName("surfaceEncoderBank.set")
 data class SurfaceEncoderBankSetInMessage(
     val deviceTypeKey: String,
-    val propertyName: String,
+    val attribute: String,
     /** Which axis of a colour property; null (and absent) is hue. See [ColourAxis]. */
     val colourAxis: ColourAxis? = null,
 ) : SurfaceInMessage()
@@ -172,7 +172,7 @@ data class SurfaceEncoderBankStateOutMessage(
      * `deviceTypeKey` → what its strip encoders drive: a property name and, for a colour, which
      * axis (absent is hue). A device absent from the map is on the default, `dimmer`.
      */
-    val properties: Map<String, EncoderBankSelection>,
+    val attributes: Map<String, EncoderBankSelection>,
 ) : SurfaceOutMessage()
 
 @Serializable
@@ -286,7 +286,7 @@ suspend fun handleSurface(scope: SocketScope, message: SurfaceInMessage) {
             scope.send(SurfaceBankStateOutMessage(state.activeBankState.active.value))
         is SurfaceEncoderBankSetInMessage ->
             state.encoderBankState.set(
-                message.deviceTypeKey, EncoderBankSelection(message.propertyName, message.colourAxis),
+                message.deviceTypeKey, EncoderBankSelection(message.attribute, message.colourAxis),
             )
         is SurfaceEncoderBankStateInMessage ->
             scope.send(SurfaceEncoderBankStateOutMessage(state.encoderBankState.selections.value))

@@ -10,7 +10,7 @@ import {
   useMaskDraft,
   type MaskValue,
 } from './maskPicker'
-import type { PropertyMaskGroup } from '@/store/programmerOps'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 
 /**
  * *All attributes* (venue-visit plan S10): a switch, on for every attribute, that shows the four
@@ -21,7 +21,7 @@ const allSwitch = () => screen.getByRole('switch', { name: 'All attributes' })
 const box = (name: string) => screen.getByRole('checkbox', { name }) as HTMLInputElement
 const families = () => screen.queryAllByRole('checkbox').map((b) => (b as HTMLInputElement).checked)
 
-function Harness({ initial = null as MaskValue, onChange = (_: MaskValue) => {}, counts = undefined as Partial<Record<PropertyMaskGroup, number>> | undefined }) {
+function Harness({ initial = null as MaskValue, onChange = (_: MaskValue) => {}, counts = undefined as Partial<Record<AttributeFamily, number>> | undefined }) {
   const [value, setValue] = useState<MaskValue>(initial)
   return (
     <MaskPicker
@@ -114,7 +114,7 @@ describe('the wire fold', () => {
 })
 
 describe('useMaskDraft', () => {
-  function setup(initial: PropertyMaskGroup[] | null) {
+  function setup(initial: AttributeFamily[] | null) {
     const write = vi.fn()
     const hook = renderHook(({ stored }) => useMaskDraft(stored, write), { initialProps: { stored: initial } })
     return { write, hook }

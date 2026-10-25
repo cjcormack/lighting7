@@ -52,7 +52,7 @@ export type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
  * rely on there being no cells to type at. And `useCellWriters` has no arm for Output or for a focused
  * *template* layer — `ProgrammerGrid` supplies a `live` context for both — so a commit taken in
  * either would put literals into Local under a grid drawing itself as a read. That is the hole
- * `PropertyCell`'s `disabled` and `SpreadPopover`'s template gate each close for their own path, and
+ * `AttributeCell`'s `disabled` and `SpreadPopover`'s template gate each close for their own path, and
  * this closes it for the keyboard and the bar.
  *
  *  - **Local**, or no scope at all — the two plain list routes, whose cells write straight to the
@@ -67,11 +67,11 @@ export type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
  */
 export function cellKeyboardPermission(
   scope: ProgrammerScope | null,
-  focusedTemplate: boolean,
+  focusedPalette: boolean,
 ): CellKeyboardPermission {
   if (scope == null || scope.kind === 'local') return { entry: true, clear: true }
   if (scope.kind === 'output') return { entry: false, clear: false }
-  return focusedTemplate ? { entry: false, clear: false } : { entry: true, clear: false }
+  return focusedPalette ? { entry: false, clear: false } : { entry: true, clear: false }
 }
 
 /**
@@ -87,7 +87,7 @@ export function cellKeyboardPermission(
  */
 export function cellActionCopy(
   scope: ProgrammerScope | null,
-  focusedTemplate: boolean,
+  focusedPalette: boolean,
   cellCount: number,
 ): CellActionCopy {
   const cells = `${cellCount} selected cell${cellCount === 1 ? '' : 's'}`
@@ -96,7 +96,7 @@ export function cellActionCopy(
     return { setTitle: reason, clearTitle: reason }
   }
   if (scope?.kind === 'layer') {
-    if (focusedTemplate) {
+    if (focusedPalette) {
       const reason = 'This layer applies a palette — switch to Local to set these cells'
       return { setTitle: reason, clearTitle: reason }
     }
@@ -107,6 +107,6 @@ export function cellActionCopy(
   }
   return {
     setTitle: `Set the ${cells} in Local — this is what Record will take (Enter)`,
-    clearTitle: `Take the ${cells} out of Local, including any effect busked on them (Backspace)`,
+    clearTitle: `Take the ${cells} out of Local, including any FX busked on them (Backspace)`,
   }
 }

@@ -1,10 +1,10 @@
 /*---
 id: ColourStrobe
 name: Colour Strobe
-category: colour
+family: colour
 outputType: COLOUR
-effectMode: STANDARD
-compatibleProperties: [rgbColour]
+fxMode: STANDARD
+compatibleAttributes: [rgbColour]
 parameters:
   - name: onColour
     type: colour

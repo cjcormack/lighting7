@@ -44,15 +44,15 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
-import uk.me.cormack.lighting7.fixture.group.GroupPropertyDescriptor
-import uk.me.cormack.lighting7.fixture.group.GroupSettingPropertyDescriptor
-import uk.me.cormack.lighting7.fixture.group.GroupWhiteMixPropertyDescriptor
-import uk.me.cormack.lighting7.routes.ColourPropertyDescriptor
-import uk.me.cormack.lighting7.routes.PositionPropertyDescriptor
-import uk.me.cormack.lighting7.routes.PropertyDescriptor
-import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
-import uk.me.cormack.lighting7.routes.WhiteMixPropertyDescriptor
-import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupAttributeDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupSettingAttributeDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupWhiteMixAttributeDescriptor
+import uk.me.cormack.lighting7.routes.ColourAttributeDescriptor
+import uk.me.cormack.lighting7.routes.PositionAttributeDescriptor
+import uk.me.cormack.lighting7.routes.AttributeDescriptor
+import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
+import uk.me.cormack.lighting7.routes.WhiteMixAttributeDescriptor
+import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
 import uk.me.cormack.lighting7.routes.listedProjects
@@ -122,7 +122,8 @@ class SetupTools(
 
     /** Run [name]; [caller] is the signed-in user's display name, which signs what a tool publishes. */
     suspend fun executeTool(name: String, input: JsonObject, caller: String? = null): ToolExecutionResult = try {
-        when (name) {
+        val refusal = toolDefs.firstOrNull { it.name == name }?.let { undeclaredArgumentRefusal(it, input) }
+        if (refusal != null) failure(refusal) else when (name) {
             listProjectsTool.name -> listProjects()
             createProjectTool.name -> createProject(input)
             switchProjectTool.name -> switchProject(input)
@@ -315,7 +316,7 @@ class SetupTools(
 
     private fun listFixtureTypes(input: JsonObject): ToolExecutionResult {
         val query = input.string("query")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-        val withProperties = input["properties"]?.jsonPrimitive?.booleanOrNull == true
+        val withAttributes = input["attributes"]?.jsonPrimitive?.booleanOrNull == true
         val types = FixtureTypeRegistry.allTypes
             .filter { it.channelCount != null }
             .filter { t ->
@@ -359,10 +360,10 @@ class SetupTools(
                             }
                         }
                         putJsonArray("capabilities") { t.capabilities.forEach { add(it) } }
-                        if (withProperties) {
-                            putJsonArray("properties") { t.properties.forEach { addTypeProperty(it) } }
-                            t.elementGroupProperties?.takeIf { it.isNotEmpty() }?.let { cells ->
-                                putJsonArray("cellProperties") { cells.forEach { addCellProperty(it) } }
+                        if (withAttributes) {
+                            putJsonArray("attributes") { t.attributes.forEach { addTypeAttribute(it) } }
+                            t.elementGroupAttributes?.takeIf { it.isNotEmpty() }?.let { cells ->
+                                putJsonArray("cellAttributes") { cells.forEach { addCellAttribute(it) } }
                             }
                         }
                     }
@@ -375,31 +376,31 @@ class SetupTools(
      * One settable property of a type, as a Look value names it. One-shot triggers and fixture
      * commands are left out: no stored value may hold either.
      */
-    private fun JsonArrayBuilder.addTypeProperty(property: PropertyDescriptor) {
-        val kind = when (property) {
-            is SliderPropertyDescriptor -> "slider"
-            is ColourPropertyDescriptor -> "colour"
-            is WhiteMixPropertyDescriptor -> "whiteMix"
-            is PositionPropertyDescriptor -> "position"
-            is SettingPropertyDescriptor -> "setting"
+    private fun JsonArrayBuilder.addTypeAttribute(attribute: AttributeDescriptor) {
+        val kind = when (attribute) {
+            is SliderAttributeDescriptor -> "slider"
+            is ColourAttributeDescriptor -> "colour"
+            is WhiteMixAttributeDescriptor -> "whiteMix"
+            is PositionAttributeDescriptor -> "position"
+            is SettingAttributeDescriptor -> "setting"
             else -> return
         }
         addJsonObject {
-            put("name", property.name)
+            put("name", attribute.name)
             put("kind", kind)
-            put("category", property.category)
-            if (property is SettingPropertyDescriptor) putJsonArray("options") { property.options.forEach { add(it.name) } }
-            if (property is WhiteMixPropertyDescriptor) whiteMix(property.warmKelvin, property.coldKelvin)
+            put("category", attribute.category)
+            if (attribute is SettingAttributeDescriptor) putJsonArray("options") { attribute.options.forEach { add(it.name) } }
+            if (attribute is WhiteMixAttributeDescriptor) whiteMix(attribute.warmKelvin, attribute.coldKelvin)
         }
     }
 
     /** One property every cell (head) of a multi-head type has, for a value on a cell's own key. */
-    private fun JsonArrayBuilder.addCellProperty(property: GroupPropertyDescriptor) {
+    private fun JsonArrayBuilder.addCellAttribute(attribute: GroupAttributeDescriptor) {
         addJsonObject {
-            put("name", property.name)
-            put("category", property.category)
-            if (property is GroupSettingPropertyDescriptor) putJsonArray("options") { property.options.forEach { add(it.name) } }
-            if (property is GroupWhiteMixPropertyDescriptor) whiteMix(property.warmKelvin, property.coldKelvin)
+            put("name", attribute.name)
+            put("category", attribute.category)
+            if (attribute is GroupSettingAttributeDescriptor) putJsonArray("options") { attribute.options.forEach { add(it.name) } }
+            if (attribute is GroupWhiteMixAttributeDescriptor) whiteMix(attribute.warmKelvin, attribute.coldKelvin)
         }
     }
 
@@ -1331,7 +1332,9 @@ class SetupTools(
 
     private fun setStage(input: JsonObject, target: ToolProject): ToolExecutionResult {
         val project = target.project
-        val problems = mutableListOf<String>()
+        val problems = unknownFields(
+            input, listOf("stage", "regions", "riggings", "removeRegions", "removeRiggings", "projectId"), "set_stage",
+        ).toMutableList()
 
         for ((name, shape) in listOf("stage" to "an object", "regions" to "an array", "riggings" to "an array")) {
             val element = input[name] ?: continue
@@ -1680,9 +1683,13 @@ class SetupTools(
             }
             val layers = try {
                 aiTools.parseCueLayers(row["layers"] as? JsonArray).also { parsed ->
-                    validateCueChildren(emptyList(), parsed)?.let { rowProblems += it }
+                    // Named here and validated without the Look targets, which the validator would throw on,
+                    // so the row's other problems are named in the same answer.
+                    rowProblems += lookLayerTargetedProblems(parsed)
+                    val untargeted = parsed.map { if (it.lookId != null) it.copy(targets = emptyList()) else it }
+                    validateCueChildren(emptyList(), untargeted, registry = state.show.fxRegistry)?.let { rowProblems += it }
                     rowProblems += aiTools.layerSourceProblems(project, parsed)
-                    rowProblems += aiTools.untargetedEffectLayerProblems(parsed)
+                    rowProblems += aiTools.untargetedFxLayerProblems(parsed)
                 }
             } catch (e: Exception) {
                 rowProblems += "layers: ${e.message ?: "malformed"}"
@@ -1756,7 +1763,7 @@ class SetupTools(
                     fadeCurve = spec.fadeCurve
                     speedMasters = spec.speedMasters
                 }.also { cue ->
-                    writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true)
+                    writeCueChildren(cue, attributeAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true, registry = state.show.fxRegistry)
                     replaceCueScenery(cue, spec.scenery)
                     replaceCueEvents(cue, spec.events)
                 }
@@ -1992,14 +1999,9 @@ class SetupTools(
 
     /**
      * The entry an anchor row names — `entryId`, or `stackId` and `number` — in [project], or null after
-     * [problem]. A `cueId` alone is refused: a shared cue has several places, a loose one none. Inside a
-     * transaction.
+     * [problem]. Inside a transaction.
      */
     private fun anchorEntry(row: JsonObject, project: DaoProject, where: String, problem: (String) -> Unit): Int? {
-        if (row["cueId"] != null && listOf("entryId", "number").none { row[it] != null && row[it] !is JsonNull }) {
-            problem("$where: name the entry the cue is called from — entryId, or stackId and number (a cue may sit in several stacks, so cueId alone names no place)")
-            return null
-        }
         return findProjectEntry(project, row, where, problem)?.id?.value
     }
 

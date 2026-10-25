@@ -6,9 +6,9 @@ import uk.me.cormack.lighting7.fixture.dmx.UVFixture
 import uk.me.cormack.lighting7.fixture.dmx.WhexFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.LocateValueResolver
-import uk.me.cormack.lighting7.fx.TemplateIntent
-import uk.me.cormack.lighting7.fx.TemplateResolver
-import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.fx.PaletteIntent
+import uk.me.cormack.lighting7.fx.PaletteResolver
+import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -42,7 +42,7 @@ class LibraryOpticsTest {
     fun `no type declares both a fixed field and a zoom channel`() {
         for (type in FixtureTypeRegistry.allTypes) {
             if (type.fieldDeg == null) continue
-            assertTrue(type.properties.none { it.category == "zoom" }, "${type.typeKey} has a zoom and a fixed field")
+            assertTrue(type.attributes.none { it.category == "zoom" }, "${type.typeKey} has a zoom and a fixed field")
         }
     }
 
@@ -50,7 +50,7 @@ class LibraryOpticsTest {
 
     @Test
     fun `the Robe's iris and frost declare their proportional band, which reaches the descriptor`() {
-        val sliders = robe().generatePropertyDescriptors().filterIsInstance<SliderPropertyDescriptor>().associateBy { it.name }
+        val sliders = robe().generateAttributeDescriptors().filterIsInstance<SliderAttributeDescriptor>().associateBy { it.name }
         for (name in listOf("iris", "frost")) {
             val slider = assertNotNull(sliders[name], name)
             assertEquals(1, slider.activeMin, name)
@@ -63,7 +63,7 @@ class LibraryOpticsTest {
     @Test
     fun `every declared band lies inside its slider and runs upwards`() {
         for (type in FixtureTypeRegistry.allTypes) {
-            for (slider in type.properties.filterIsInstance<SliderPropertyDescriptor>()) {
+            for (slider in type.attributes.filterIsInstance<SliderAttributeDescriptor>()) {
                 val lo = slider.activeMin ?: slider.min
                 val hi = slider.activeMax ?: slider.max
                 assertTrue(lo in slider.min..slider.max && hi in slider.min..slider.max && lo < hi, "${type.typeKey}'s ${slider.name} band $lo..$hi")
@@ -75,14 +75,14 @@ class LibraryOpticsTest {
 
     @Test
     fun `Locate puts a stepped zoom at its middle angle, not its focus-corrected twin`() {
-        val zoom = LocateValueResolver.resolve(robe()).single { it.propertyName == "zoom" }
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(RobeColorSpot575Fixture.Zoom.ZOOM_18.level), zoom.value)
+        val zoom = LocateValueResolver.resolve(robe()).single { it.attribute == "zoom" }
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(RobeColorSpot575Fixture.Zoom.ZOOM_18.level), zoom.value)
     }
 
     @Test
     fun `a percent on a stepped zoom runs across its angles from DMX min's`() {
-        fun at(pct: Double) = assertIs<CueAssignmentResolver.PropertyValue.Setting>(
-            TemplateResolver.resolve(robe(), "zoom", TemplateIntent.Percent(pct), media = null).value,
+        fun at(pct: Double) = assertIs<CueAssignmentResolver.AttributeValue.Setting>(
+            PaletteResolver.resolve(robe(), "zoom", PaletteIntent.Percent(pct), media = null).value,
         ).channelValue
         assertEquals(RobeColorSpot575Fixture.Zoom.ZOOM_15.level, at(0.0))
         assertEquals(RobeColorSpot575Fixture.Zoom.ZOOM_18.level, at(50.0))
@@ -94,10 +94,10 @@ class LibraryOpticsTest {
     @Test
     fun `the Robe pans 530 degrees and tilts 280, as its manual says`() {
         val robe = robe()
-        assertEquals(530.0, robe.fixtureProperty("pan")?.degMax)
-        assertEquals(280.0, robe.fixtureProperty("tilt")?.degMax)
-        assertEquals(0.0, robe.fixtureProperty("pan")?.degMin)
-        assertEquals(0.0, robe.fixtureProperty("tilt")?.degMin)
+        assertEquals(530.0, robe.fixtureAttribute("pan")?.degMax)
+        assertEquals(280.0, robe.fixtureAttribute("tilt")?.degMax)
+        assertEquals(0.0, robe.fixtureAttribute("pan")?.degMin)
+        assertEquals(0.0, robe.fixtureAttribute("tilt")?.degMin)
     }
 
     @Test
@@ -129,9 +129,9 @@ class LibraryOpticsTest {
     @Test
     fun `a UV fixture's one channel is found as its dimmer`() {
         val uv = UVFixture(universe, "uv-1", "UV 1", 1)
-        val property = assertNotNull(uv.fixtureProperty("dimmer"))
-        assertEquals(PropertyCategory.DIMMER, property.category)
-        val slider = uv.generatePropertyDescriptors().filterIsInstance<SliderPropertyDescriptor>().single()
+        val attribute = assertNotNull(uv.fixtureAttribute("dimmer"))
+        assertEquals(AttributeCategory.DIMMER, attribute.category)
+        val slider = uv.generateAttributeDescriptors().filterIsInstance<SliderAttributeDescriptor>().single()
         assertEquals("dimmer", slider.category)
         assertTrue("dimmer" in FixtureTypeRegistry.typeInfoForKey("uv")!!.capabilities)
     }

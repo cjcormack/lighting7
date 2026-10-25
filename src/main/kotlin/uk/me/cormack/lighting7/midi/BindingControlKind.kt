@@ -41,13 +41,13 @@ fun dispatchableKinds(descriptor: ControlDescriptor): Set<ControlKind> = when (d
  * here keeps one rule per refusal instead of two saying overlapping things.
  */
 fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
-    is BindingTarget.FixtureProperty,
-    is BindingTarget.GroupProperty,
-    is BindingTarget.SelectionProperty,
+    is BindingTarget.FixtureAttribute,
+    is BindingTarget.GroupAttribute,
+    is BindingTarget.SelectionAttribute,
     is BindingTarget.SelectionFan,
     is BindingTarget.SpeedMasterBpm,
     BindingTarget.GrandMasterFader,
-    is BindingTarget.StackEffectSize,
+    is BindingTarget.StackFxAmount,
         -> ControlKind.CONTINUOUS
 
     is BindingTarget.Flash,
@@ -65,7 +65,7 @@ fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
     is BindingTarget.SetBank,
     is BindingTarget.SpeedMasterTap,
     is BindingTarget.ApplyLook,
-    is BindingTarget.PressTemplate,
+    is BindingTarget.PressPalette,
     is BindingTarget.PressPad,
     is BindingTarget.PickUpPad,
     is BindingTarget.HandPlaceInBank,

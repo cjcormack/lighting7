@@ -126,7 +126,7 @@ export interface ProjectScriptDetail {
   script: string;
   scriptType: ScriptType;
   // Usage tracking fields
-  usedByProperties?: string[];
+  usedByAttributes?: string[];
   canDelete?: boolean;
   cannotDeleteReason?: string | null;
   canEdit?: boolean;

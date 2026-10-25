@@ -5,25 +5,25 @@ import {
   findColourSource,
   findCompactPrimary,
   findCompactSecondary,
-  findDimmerProperty,
+  findDimmerAttribute,
   type Fixture,
-  type PropertyDescriptor,
-  type ColourPropertyDescriptor,
-  type SliderPropertyDescriptor,
-  type SettingPropertyDescriptor,
+  type AttributeDescriptor,
+  type ColourAttributeDescriptor,
+  type SliderAttributeDescriptor,
+  type SettingAttributeDescriptor,
   type ElementDescriptor,
 } from '../../store/fixtures'
-import type { GroupSliderPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
-import { useFixtureEffectsQuery } from '@/store/fixtureFx'
+import type { GroupSliderAttributeDescriptor, GroupColourAttributeDescriptor } from '../../api/groupsApi'
+import { useFixtureFxQuery } from '@/store/fixtureFx'
 import { AudioWaveform } from 'lucide-react'
 import {
   useSliderValue,
   useSettingValue,
   useSettingColourPreview,
-} from '../../hooks/usePropertyValues'
+} from '../../hooks/useAttributeValues'
 import { useColourAppearance } from '../../hooks/useColourAppearance'
 import { SWATCH_FLOOR } from '@/lib/colourMath'
-import { useGroupSliderValues } from '../../hooks/useGroupPropertyValues'
+import { useGroupSliderValues } from '../../hooks/useGroupAttributeValues'
 import { useVirtualDimmer, useGroupVirtualDimmer } from '../../hooks/useVirtualDimmer'
 import { findGel } from '../../lib/gels'
 import { useGelIndex } from '../../hooks/useGelIndex'
@@ -63,32 +63,32 @@ interface CompactFixtureCardProps {
 /**
  * Get the aggregated dimmer property from element group properties
  */
-function findGroupDimmerProperty(
+function findGroupDimmerAttribute(
   fixture: Fixture
-): GroupSliderPropertyDescriptor | undefined {
-  return fixture.elementGroupProperties?.find(
+): GroupSliderAttributeDescriptor | undefined {
+  return fixture.elementGroupAttributes?.find(
     (p) => p.type === 'slider' && p.category === 'dimmer'
-  ) as GroupSliderPropertyDescriptor | undefined
+  ) as GroupSliderAttributeDescriptor | undefined
 }
 
 /**
  * Get the fixture-level colour property (for virtual dimmer)
  */
-function findColourProperty(
-  properties: Fixture['properties']
-): ColourPropertyDescriptor | undefined {
-  return properties?.find((p) => p.type === 'colour') as ColourPropertyDescriptor | undefined
+function findColourAttribute(
+  attributes: Fixture['attributes']
+): ColourAttributeDescriptor | undefined {
+  return attributes?.find((p) => p.type === 'colour') as ColourAttributeDescriptor | undefined
 }
 
 /**
  * Get the element-group colour property (for virtual dimmer)
  */
-function findGroupColourProperty(
+function findGroupColourAttribute(
   fixture: Fixture
-): GroupColourPropertyDescriptor | undefined {
-  return fixture.elementGroupProperties?.find(
+): GroupColourAttributeDescriptor | undefined {
+  return fixture.elementGroupAttributes?.find(
     (p) => p.type === 'colour'
-  ) as GroupColourPropertyDescriptor | undefined
+  ) as GroupColourAttributeDescriptor | undefined
 }
 
 /**
@@ -96,12 +96,12 @@ function findGroupColourProperty(
  */
 function hasAnyColourSource(fixture: Fixture): boolean {
   // Check fixture-level properties
-  if (fixture.properties && findColourSource(fixture.properties)) {
+  if (fixture.attributes && findColourSource(fixture.attributes)) {
     return true
   }
   // Check element-level properties
   if (fixture.elements) {
-    return fixture.elements.some((el) => findColourSource(el.properties))
+    return fixture.elements.some((el) => findColourSource(el.attributes))
   }
   return false
 }
@@ -119,10 +119,10 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
     () => (fixture && fixtureTypes ? fixtureTypes.find((t) => t.typeKey === fixture.typeKey) : undefined),
     [fixture, fixtureTypes]
   )
-  const { data: effects } = useFixtureEffectsQuery(fixtureKey)
-  const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
-  const hasActiveFx = allEffects.length > 0
-  const anyRunning = allEffects.some((e) => e.isRunning)
+  const { data: effects } = useFixtureFxQuery(fixtureKey)
+  const allFx = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
+  const hasActiveFx = allFx.length > 0
+  const anyRunning = allFx.some((e) => e.isRunning)
   const gels = useGelIndex()
 
   if (!fixture) {
@@ -140,17 +140,17 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
     )
   }
 
-  const dimmerProp = findDimmerProperty(fixture.properties)
-  const groupDimmerProp = !dimmerProp ? findGroupDimmerProperty(fixture) : undefined
+  const dimmerProp = findDimmerAttribute(fixture.attributes)
+  const groupDimmerProp = !dimmerProp ? findGroupDimmerAttribute(fixture) : undefined
   const hasRealDimmer = !!dimmerProp || !!groupDimmerProp
   const hasElements = fixture.elements && fixture.elements.length > 0
   const hasColour = hasAnyColourSource(fixture)
   const headBasis = hasElements ? basisForHeads(fixture.elements!.length) : undefined
 
   // Virtual dimmer: colour but no real dimmer
-  const virtualDimmerColourProp = !hasRealDimmer ? findColourProperty(fixture.properties) : undefined
+  const virtualDimmerColourProp = !hasRealDimmer ? findColourAttribute(fixture.attributes) : undefined
   const virtualDimmerGroupColourProp = !hasRealDimmer && !virtualDimmerColourProp
-    ? findGroupColourProperty(fixture) : undefined
+    ? findGroupColourAttribute(fixture) : undefined
 
   const hasDimmerRow = !!dimmerProp || !!groupDimmerProp || !!virtualDimmerColourProp || !!virtualDimmerGroupColourProp
 
@@ -161,8 +161,8 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
     : null
 
   // Compact display fallbacks for fixtures without colour/dimmer
-  const compactPrimary = !hasColour && !gel ? findCompactPrimary(fixture.properties) : undefined
-  const compactSecondary = !hasDimmerRow ? findCompactSecondary(fixture.properties) : undefined
+  const compactPrimary = !hasColour && !gel ? findCompactPrimary(fixture.attributes) : undefined
+  const compactSecondary = !hasDimmerRow ? findCompactSecondary(fixture.attributes) : undefined
 
   return (
     <div
@@ -192,7 +192,7 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
         ) : gel ? (
           <GelSwatch gelHex={gel.color} dimmerProp={dimmerProp} className="h-full w-full" />
         ) : compactPrimary ? (
-          <CompactPropertyDisplay property={compactPrimary} />
+          <CompactAttributeDisplay attribute={compactPrimary} />
         ) : null}
       </div>
 
@@ -201,13 +201,13 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
         {dimmerProp ? (
           <DimmerBar dimmerProp={dimmerProp} />
         ) : groupDimmerProp ? (
-          <GroupDimmerBar property={groupDimmerProp} />
+          <GroupDimmerBar attribute={groupDimmerProp} />
         ) : virtualDimmerColourProp ? (
           <VirtualDimmerBar colourProp={virtualDimmerColourProp} />
         ) : virtualDimmerGroupColourProp ? (
           <GroupVirtualDimmerBar colourProp={virtualDimmerGroupColourProp} />
         ) : compactSecondary ? (
-          <CompactPropertyDisplay property={compactSecondary} />
+          <CompactAttributeDisplay attribute={compactSecondary} />
         ) : null}
       </div>
     </div>
@@ -218,15 +218,15 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
  * Single fixture colour indicator with dimmer brightness - full width
  */
 function SingleHeadIndicator({ fixture }: { fixture: Fixture }) {
-  const colourSource = fixture.properties ? findColourSource(fixture.properties) : undefined
-  const dimmerProp = findDimmerProperty(fixture.properties)
+  const colourSource = fixture.attributes ? findColourSource(fixture.attributes) : undefined
+  const dimmerProp = findDimmerAttribute(fixture.attributes)
 
   if (colourSource?.type === 'colour') {
-    return <ColourSquare colourProp={colourSource.property} dimmerProp={dimmerProp} fullWidth />
+    return <ColourSquare colourProp={colourSource.attribute} dimmerProp={dimmerProp} fullWidth />
   }
 
   if (colourSource?.type === 'setting') {
-    return <SettingColourSquare settingProp={colourSource.property} dimmerProp={dimmerProp} fullWidth />
+    return <SettingColourSquare settingProp={colourSource.attribute} dimmerProp={dimmerProp} fullWidth />
   }
 
   return null
@@ -240,7 +240,7 @@ function MultiHeadIndicator({
   fixtureDimmer,
 }: {
   elements: ElementDescriptor[]
-  fixtureDimmer?: SliderPropertyDescriptor
+  fixtureDimmer?: SliderAttributeDescriptor
 }) {
   return (
     <div className="flex gap-1 h-full">
@@ -263,11 +263,11 @@ function HeadSquare({
   fixtureDimmer,
 }: {
   element: ElementDescriptor
-  fixtureDimmer?: SliderPropertyDescriptor
+  fixtureDimmer?: SliderAttributeDescriptor
 }) {
-  const colourSource = findColourSource(element.properties)
+  const colourSource = findColourSource(element.attributes)
   // Use element's own dimmer if it has one, otherwise use fixture dimmer
-  const elementDimmer = findDimmerProperty(element.properties)
+  const elementDimmer = findDimmerAttribute(element.attributes)
   const dimmerProp = elementDimmer ?? fixtureDimmer
 
   if (!colourSource) {
@@ -276,10 +276,10 @@ function HeadSquare({
   }
 
   if (colourSource.type === 'colour') {
-    return <ColourSquare colourProp={colourSource.property} dimmerProp={dimmerProp} grow />
+    return <ColourSquare colourProp={colourSource.attribute} dimmerProp={dimmerProp} grow />
   }
 
-  return <SettingColourSquare settingProp={colourSource.property} dimmerProp={dimmerProp} grow />
+  return <SettingColourSquare settingProp={colourSource.attribute} dimmerProp={dimmerProp} grow />
 }
 
 /**
@@ -293,8 +293,8 @@ function ColourSquare({
   fullWidth,
   grow,
 }: {
-  colourProp: ColourPropertyDescriptor
-  dimmerProp?: SliderPropertyDescriptor
+  colourProp: ColourAttributeDescriptor
+  dimmerProp?: SliderAttributeDescriptor
   fullWidth?: boolean
   grow?: boolean
 }) {
@@ -327,8 +327,8 @@ function SettingColourSquare({
   fullWidth,
   grow,
 }: {
-  settingProp: SettingPropertyDescriptor
-  dimmerProp?: SliderPropertyDescriptor
+  settingProp: SettingAttributeDescriptor
+  dimmerProp?: SliderAttributeDescriptor
   fullWidth?: boolean
   grow?: boolean
 }) {
@@ -357,12 +357,12 @@ function SettingColourSquare({
  * Renders a promoted property on the compact card.
  * Dispatches to the appropriate display based on property type.
  */
-function CompactPropertyDisplay({ property }: { property: PropertyDescriptor }) {
-  switch (property.type) {
+function CompactAttributeDisplay({ attribute }: { attribute: AttributeDescriptor }) {
+  switch (attribute.type) {
     case 'setting':
-      return <CompactSettingLabel settingProp={property} />
+      return <CompactSettingLabel settingProp={attribute} />
     case 'slider':
-      return <CompactSliderBar sliderProp={property} />
+      return <CompactSliderBar sliderProp={attribute} />
     default:
       return null
   }
@@ -371,7 +371,7 @@ function CompactPropertyDisplay({ property }: { property: PropertyDescriptor }) 
 /**
  * Compact display for a setting property — shows the current mode name as a label
  */
-function CompactSettingLabel({ settingProp }: { settingProp: SettingPropertyDescriptor }) {
+function CompactSettingLabel({ settingProp }: { settingProp: SettingAttributeDescriptor }) {
   const { option } = useSettingValue(settingProp)
 
   return (
@@ -386,7 +386,7 @@ function CompactSettingLabel({ settingProp }: { settingProp: SettingPropertyDesc
 /**
  * Compact display for a slider property — shows a bar with the property's display name
  */
-function CompactSliderBar({ sliderProp }: { sliderProp: SliderPropertyDescriptor }) {
+function CompactSliderBar({ sliderProp }: { sliderProp: SliderAttributeDescriptor }) {
   const value = useSliderValue(sliderProp)
   const range = sliderProp.max - sliderProp.min
   const pct = range > 0 ? Math.round(((value - sliderProp.min) / range) * 100) : 0
@@ -412,7 +412,7 @@ function CompactSliderBar({ sliderProp }: { sliderProp: SliderPropertyDescriptor
 /**
  * Visual dimmer bar indicator
  */
-function DimmerBar({ dimmerProp }: { dimmerProp: SliderPropertyDescriptor }) {
+function DimmerBar({ dimmerProp }: { dimmerProp: SliderAttributeDescriptor }) {
   const value = useSliderValue(dimmerProp)
   const pct = Math.round((value / 255) * 100)
 
@@ -437,8 +437,8 @@ function DimmerBar({ dimmerProp }: { dimmerProp: SliderPropertyDescriptor }) {
 /**
  * Visual dimmer bar for aggregated element group dimmer (shows range for mixed values)
  */
-function GroupDimmerBar({ property }: { property: GroupSliderPropertyDescriptor }) {
-  const { min, max, isUniform, displayText } = useGroupSliderValues(property)
+function GroupDimmerBar({ attribute }: { attribute: GroupSliderAttributeDescriptor }) {
+  const { min, max, isUniform, displayText } = useGroupSliderValues(attribute)
   const minPct = Math.round((min / 255) * 100)
   const maxPct = Math.round((max / 255) * 100)
 
@@ -470,7 +470,7 @@ function GroupDimmerBar({ property }: { property: GroupSliderPropertyDescriptor 
 /**
  * Virtual dimmer bar for a single colour property — derives brightness from max(R,G,B)
  */
-function VirtualDimmerBar({ colourProp }: { colourProp: ColourPropertyDescriptor }) {
+function VirtualDimmerBar({ colourProp }: { colourProp: ColourAttributeDescriptor }) {
   const { percentage } = useVirtualDimmer(colourProp)
 
   return (
@@ -494,7 +494,7 @@ function VirtualDimmerBar({ colourProp }: { colourProp: ColourPropertyDescriptor
 /**
  * Virtual dimmer bar for a group colour property — aggregates max(R,G,B) per member
  */
-function GroupVirtualDimmerBar({ colourProp }: { colourProp: GroupColourPropertyDescriptor }) {
+function GroupVirtualDimmerBar({ colourProp }: { colourProp: GroupColourAttributeDescriptor }) {
   const { min, max, isUniform, displayText } = useGroupVirtualDimmer(colourProp)
   const minPct = Math.round((min / 255) * 100)
   const maxPct = Math.round((max / 255) * 100)
@@ -545,15 +545,15 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
 }: MultiElementCompactCardProps) {
   const { data: fixtureList } = useFixtureListQuery(undefined, { skip: !!fixtureProp })
   const fixture = fixtureProp ?? fixtureList?.find((f) => f.key === parentKey)
-  const { data: effects } = useFixtureEffectsQuery(parentKey)
-  const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
-  const hasActiveFx = allEffects.length > 0
-  const anyRunning = allEffects.some((e) => e.isRunning)
+  const { data: effects } = useFixtureFxQuery(parentKey)
+  const allFx = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
+  const hasActiveFx = allFx.length > 0
+  const anyRunning = allFx.some((e) => e.isRunning)
 
   // Check if any elements have colour
   const hasColour = useMemo(() => {
     if (!fixture?.elements) return false
-    return fixture.elements.some((el) => findColourSource(el.properties))
+    return fixture.elements.some((el) => findColourSource(el.attributes))
   }, [fixture?.elements])
 
   const actualHeadCount = fixture?.elements?.length ?? elementCount
@@ -575,19 +575,19 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
     )
   }
 
-  const dimmerProp = findDimmerProperty(fixture.properties)
-  const groupDimmerProp = !dimmerProp ? findGroupDimmerProperty(fixture) : undefined
+  const dimmerProp = findDimmerAttribute(fixture.attributes)
+  const groupDimmerProp = !dimmerProp ? findGroupDimmerAttribute(fixture) : undefined
   const hasRealDimmer = !!dimmerProp || !!groupDimmerProp
 
   // Virtual dimmer: colour but no real dimmer
   const virtualDimmerGroupColourProp = !hasRealDimmer
-    ? findGroupColourProperty(fixture) : undefined
+    ? findGroupColourAttribute(fixture) : undefined
 
   const hasDimmerRow = !!dimmerProp || !!groupDimmerProp || !!virtualDimmerGroupColourProp
 
   // Compact display fallbacks for fixtures without colour/dimmer
-  const compactPrimary = !hasColour ? findCompactPrimary(fixture.properties) : undefined
-  const compactSecondary = !hasDimmerRow ? findCompactSecondary(fixture.properties) : undefined
+  const compactPrimary = !hasColour ? findCompactPrimary(fixture.attributes) : undefined
+  const compactSecondary = !hasDimmerRow ? findCompactSecondary(fixture.attributes) : undefined
 
   return (
     <div
@@ -611,7 +611,7 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
             fixtureDimmer={dimmerProp}
           />
         ) : compactPrimary ? (
-          <CompactPropertyDisplay property={compactPrimary} />
+          <CompactAttributeDisplay attribute={compactPrimary} />
         ) : null}
       </div>
 
@@ -620,11 +620,11 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
         {dimmerProp ? (
           <DimmerBar dimmerProp={dimmerProp} />
         ) : groupDimmerProp ? (
-          <GroupDimmerBar property={groupDimmerProp} />
+          <GroupDimmerBar attribute={groupDimmerProp} />
         ) : virtualDimmerGroupColourProp ? (
           <GroupVirtualDimmerBar colourProp={virtualDimmerGroupColourProp} />
         ) : compactSecondary ? (
-          <CompactPropertyDisplay property={compactSecondary} />
+          <CompactAttributeDisplay attribute={compactSecondary} />
         ) : null}
       </div>
     </div>

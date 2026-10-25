@@ -15,8 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 import { CompactFixtureCard, MultiElementCompactCard } from './CompactFixtureCard'
 import { useFixtureListQuery, type Fixture } from '../../store/fixtures'
-import type { DistributionStrategy, GroupDetail, GroupMember } from '../../api/groupsApi'
-import { DISTRIBUTION_STRATEGY_OPTIONS } from '../fx/fxConstants'
+import type { SpreadOrder, GroupDetail, GroupMember } from '../../api/groupsApi'
+import { ORDER_OPTION_ENTRIES } from '../fx/fxConstants'
 import { useVisibleGroupMembers } from './useVisibleGroupMembers'
 import { useGroupMemberReorder } from './useGroupMemberReorder'
 
@@ -32,9 +32,9 @@ interface GroupMembersSectionProps {
    */
   layout?: 'wrap' | 'list'
   groupName?: string
-  /** The group's `distributionSteps` and `defaultDistribution`, for the list's steps. */
-  distributionSteps?: GroupDetail['distributionSteps']
-  defaultDistribution?: string
+  /** The group's `orderSteps` and `defaultOrder`, for the list's steps. */
+  orderSteps?: GroupDetail['orderSteps']
+  defaultOrder?: string
 }
 
 export function GroupMembersSection({
@@ -43,8 +43,8 @@ export function GroupMembersSection({
   onFixtureClick,
   layout = 'wrap',
   groupName,
-  distributionSteps,
-  defaultDistribution,
+  orderSteps,
+  defaultOrder,
 }: GroupMembersSectionProps) {
   const { data: fixtureList } = useFixtureListQuery()
   // An infrastructure head stays in the group (the group still drives it) but is not shown.
@@ -92,8 +92,8 @@ export function GroupMembersSection({
         groupName={groupName}
         members={members}
         fixtureMap={fixtureMap}
-        distributionSteps={distributionSteps}
-        defaultDistribution={defaultDistribution}
+        orderSteps={orderSteps}
+        defaultOrder={defaultOrder}
         onFixtureClick={onFixtureClick}
       />
     )
@@ -150,13 +150,13 @@ export function GroupMembersSection({
   )
 }
 
-const STRATEGY_VALUES = new Set<string>(DISTRIBUTION_STRATEGY_OPTIONS.map((o) => o.value))
+const ORDER_VALUES = new Set<string>(ORDER_OPTION_ENTRIES.map((o) => o.value))
 
 /**
  * The group sheet's member list (venue-visit plan S7): every shown member in the group's order,
  * numbered by its place in the whole group (an infrastructure head is still counted, so a number
  * can skip), with its **step** under the strategy *Runs as* names — the desk's
- * `distributionSteps`, so shared steps (a `CENTER_OUT` pair) read alike. A drag writes the new
+ * `orderSteps`, so shared steps (a `CENTRE_OUT` pair) read alike. A drag writes the new
  * order at once, optimistically, rolled back if the desk refuses it; a venue's group in a show,
  * and a venue's rig for an operator, are read-only and say why.
  *
@@ -167,23 +167,23 @@ function OrderedMembers({
   groupName,
   members,
   fixtureMap,
-  distributionSteps,
-  defaultDistribution,
+  orderSteps,
+  defaultOrder,
   onFixtureClick,
 }: {
   groupName: string
   members: GroupMember[]
   fixtureMap: Map<string, Fixture>
-  distributionSteps?: GroupDetail['distributionSteps']
-  defaultDistribution?: string
+  orderSteps?: GroupDetail['orderSteps']
+  defaultOrder?: string
   onFixtureClick: (fixtureKey: string) => void
 }) {
   const reorder = useGroupMemberReorder(groupName)
-  const [strategy, setStrategy] = useState<DistributionStrategy>(() =>
-    defaultDistribution != null && STRATEGY_VALUES.has(defaultDistribution) ? (defaultDistribution as DistributionStrategy) : 'LINEAR',
+  const [order, setOrder] = useState<SpreadOrder>(() =>
+    defaultOrder != null && ORDER_VALUES.has(defaultOrder) ? (defaultOrder as SpreadOrder) : 'NORMAL',
   )
-  const steps = distributionSteps?.[strategy]
-  const strategyLabel = DISTRIBUTION_STRATEGY_OPTIONS.find((o) => o.value === strategy)?.label ?? strategy
+  const steps = orderSteps?.[order]
+  const orderName = ORDER_OPTION_ENTRIES.find((o) => o.value === order)?.label ?? order
   const editable = reorder.kind === 'editable'
 
   const sensors = useSensors(
@@ -203,15 +203,15 @@ function OrderedMembers({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <h4 className="text-sm font-medium text-muted-foreground">Order</h4>
-        {distributionSteps != null && (
+        {orderSteps != null && (
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             Runs as
-            <Select value={strategy} onValueChange={(v) => setStrategy(v as DistributionStrategy)}>
+            <Select value={order} onValueChange={(v) => setOrder(v as SpreadOrder)}>
               <SelectTrigger className="h-7 w-32 text-xs" aria-label="Runs as">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {DISTRIBUTION_STRATEGY_OPTIONS.map((o) => (
+                {ORDER_OPTION_ENTRIES.map((o) => (
                   <SelectItem key={o.value} value={o.value} className="text-xs">
                     {o.label}
                   </SelectItem>
@@ -224,8 +224,8 @@ function OrderedMembers({
       <p className="text-xs text-muted-foreground">
         {reorder.kind === 'readOnly'
           ? reorder.reason
-          : `Effects and a spread over ${groupName} run in this order${editable ? '. Drag to reorder.' : '.'}`}
-        {steps != null && ` Step is when each member comes round under ${strategyLabel}.`}
+          : `FX and a fan over ${groupName} run in this order${editable ? '. Drag to reorder.' : '.'}`}
+        {steps != null && ` Step is when each member comes round under ${orderName}.`}
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={keys} strategy={verticalListSortingStrategy} disabled={!editable}>

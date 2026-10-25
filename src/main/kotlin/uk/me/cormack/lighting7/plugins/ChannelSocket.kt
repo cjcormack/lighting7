@@ -10,14 +10,14 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
@@ -85,11 +85,11 @@ data class UniversesStateOutMessage(
     val universes: List<Int>,
 ) : ChannelOutMessage()
 
-/** One `(target, property)` key that drives a DMX address — see [ChannelMappingEntry.properties]. */
+/** One `(target, property)` key that drives a DMX address — see [ChannelMappingEntry.attributes]. */
 @Serializable
-data class ChannelPropertyKeyDto(
+data class ChannelAttributeKeyDto(
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
 )
 
 @Serializable
@@ -99,7 +99,7 @@ data class ChannelMappingEntry(
     val description: String,
     /**
      * Every property key whose channels include this address, from
-     * [PropertyChannelWriter.propertyKeysByChannel] — usually one, two where a bundled emitter
+     * [AttributeChannelWriter.attributeKeysByChannel] — usually one, two where a bundled emitter
      * or a pan/tilt axis is also part of `rgbColour` / `position`, and element keys on a
      * multi-head fixture. The DMX sheet reads ownership through these, so it asks the desk's
      * own property→channel lookup instead of re-deriving it from descriptors.
@@ -108,7 +108,7 @@ data class ChannelMappingEntry(
      * covers must arrive as `[]`, not as the absent field an older desk sends.
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val properties: List<ChannelPropertyKeyDto> = emptyList(),
+    val attributes: List<ChannelAttributeKeyDto> = emptyList(),
 )
 
 @Serializable
@@ -185,7 +185,7 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
         )
         return
     }
-    if (key.propertyName.equals("position", ignoreCase = true)) {
+    if (key.attribute.equals("position", ignoreCase = true)) {
         // Pan/tilt axes stay channel-shaped: lifting one axis to a position entry would
         // freeze the other axis into the programmer too.
         engine.programmer.writeChannel(
@@ -205,9 +205,9 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
         return
     }
 
-    when (val raw = PropertyChannelWriter.resolveProperty(fixture, key.propertyName)?.value) {
+    when (val raw = AttributeChannelWriter.resolveAttribute(fixture, key.attribute)?.value) {
         is DmxColour -> {
-            val current = currentExtendedColour(state, fixture, key.propertyName, raw, universe)
+            val current = currentExtendedColour(state, fixture, key.attribute, raw, universe)
             val replaced = replaceColourComponent(fixture, raw, current, channel, level)
             if (replaced == null) {
                 // A channel of the colour that is none of its components — nothing to lift into.
@@ -216,18 +216,18 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
                 )
                 return
             }
-            engine.programmer.writeProperty(
-                ProgrammerOwner.WEB, fixture, key.propertyName,
-                CueAssignmentResolver.PropertyValue.Colour(replaced), fadeMs = fade,
+            engine.programmer.writeAttribute(
+                ProgrammerOwner.WEB, fixture, key.attribute,
+                CueAssignmentResolver.AttributeValue.Colour(replaced), fadeMs = fade,
             )
         }
-        is DmxFixtureSetting<*> -> engine.programmer.writeProperty(
-            ProgrammerOwner.WEB, fixture, key.propertyName,
-            CueAssignmentResolver.PropertyValue.Setting(level), fadeMs = fade,
+        is DmxFixtureSetting<*> -> engine.programmer.writeAttribute(
+            ProgrammerOwner.WEB, fixture, key.attribute,
+            CueAssignmentResolver.AttributeValue.Setting(level), fadeMs = fade,
         )
-        is DmxSlider -> engine.programmer.writeProperty(
-            ProgrammerOwner.WEB, fixture, key.propertyName,
-            CueAssignmentResolver.PropertyValue.Slider(level), fadeMs = fade,
+        is DmxSlider -> engine.programmer.writeAttribute(
+            ProgrammerOwner.WEB, fixture, key.attribute,
+            CueAssignmentResolver.AttributeValue.Slider(level), fadeMs = fade,
         )
         else -> engine.programmer.writeChannel(
             ProgrammerOwner.WEB, universe, channel, level, coveringKey = key, fadeMs = fade,
@@ -275,7 +275,7 @@ private fun replaceColourComponent(
 private fun currentExtendedColour(
     state: State,
     fixture: GroupableFixture,
-    propertyName: String,
+    attribute: String,
     dmxColour: DmxColour,
     universe: Int,
 ): ExtendedColour {
@@ -284,8 +284,8 @@ private fun currentExtendedColour(
     // sideband lifting ([readOutputColour]) so the two can't disagree about which channels
     // count as part of the colour; the entry preference is this path's own rule, because
     // Record has already applied its own precedence before it gets there.
-    (state.show.programmerStore.get(fixture.targetKey, propertyName)?.value?.resolved
-        as? CueAssignmentResolver.PropertyValue.Colour)
+    (state.show.programmerStore.get(fixture.targetKey, attribute)?.value?.resolved
+        as? CueAssignmentResolver.AttributeValue.Colour)
         ?.let { return it.value }
 
     return readOutputColour(state, fixture, dmxColour, universe)
@@ -335,7 +335,7 @@ private val channelMappingCache = AtomicReference<CachedChannelMappings?>(null)
  * The channel-mapping frame, **built once per register version** and shared.
  *
  * Every connected socket asks for this on connect and again on each `fixturesChanged`. The
- * per-address keys come from [PropertyChannelWriter.channelKeyIndex], itself cached per version and
+ * per-address keys come from [AttributeChannelWriter.channelKeyIndex], itself cached per version and
  * shared with the desk's covering lookup, so the reflective walk behind them runs once per patch
  * edit; this cache saves re-assembling the frame per socket. The frame depends only on the
  * register, so it is cached against
@@ -343,7 +343,7 @@ private val channelMappingCache = AtomicReference<CachedChannelMappings?>(null)
  * A version bumped with nothing structural changed (`patchListChanged`) just rebuilds once.
  *
  * The fixtures and the mappings come from one [Fixtures.channelMappingSnapshot], so an address's
- * `properties` and its fixture name cannot come from two different registers.
+ * `attributes` and its fixture name cannot come from two different registers.
  */
 internal fun buildChannelMappingMessage(fixtures: Fixtures): ChannelMappingStateOutMessage {
     channelMappingCache.get()?.let { cached ->
@@ -352,7 +352,7 @@ internal fun buildChannelMappingMessage(fixtures: Fixtures): ChannelMappingState
     val snapshot = fixtures.channelMappingSnapshot()
     // The index for *this* snapshot's version, so every address's keys come from the same register
     // as its mapping — and the walk behind it is shared with the desk's covering lookup.
-    val keysByChannel = PropertyChannelWriter.channelKeyIndex(fixtures, snapshot).propertyKeys
+    val keysByChannel = AttributeChannelWriter.channelKeyIndex(fixtures, snapshot).attributeKeys
     val mappings = snapshot.mappings
         .mapValues { (universe, channels) ->
             channels.mapValues { (channel, mapping) ->
@@ -360,8 +360,8 @@ internal fun buildChannelMappingMessage(fixtures: Fixtures): ChannelMappingState
                     fixtureKey = mapping.fixtureKey,
                     fixtureName = mapping.fixtureName,
                     description = mapping.description,
-                    properties = keysByChannel[universe to channel].orEmpty()
-                        .map { ChannelPropertyKeyDto(it.targetKey, it.propertyName) },
+                    attributes = keysByChannel[universe to channel].orEmpty()
+                        .map { ChannelAttributeKeyDto(it.targetKey, it.attribute) },
                 )
             }
         }

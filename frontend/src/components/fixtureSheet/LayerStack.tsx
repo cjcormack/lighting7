@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
-import { getBeatDivisionLabel, secondsLabel } from '../fx/fxConstants'
+import { getCycleLabel, secondsLabel } from '../fx/fxConstants'
 import { EditorSurface } from '../editor/EditorSurface'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
@@ -52,23 +52,23 @@ interface LayerLine {
 
 /** One stack entry in the Layers board's words. Pure, so the six kinds read as a table. */
 export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: number) => string | undefined): LayerLine {
-  const effectName = layer.effectName ?? layer.effectType ?? 'Effect'
+  const fxName = layer.fxName ?? layer.fxType ?? 'FX'
   // On Seconds, or a wall-clock effect, the division is seconds (venue-visit plan D7).
   const inSeconds = layer.seconds === true || layer.timingSource === 'WALL_CLOCK'
   const division =
-    layer.beatDivision == null ? null : inSeconds ? secondsLabel(layer.beatDivision) : getBeatDivisionLabel(layer.beatDivision)
+    layer.cycle == null ? null : inSeconds ? secondsLabel(layer.cycle) : getCycleLabel(layer.cycle)
   const paused = layer.running === false ? 'paused' : null
   switch (layer.kind) {
     case 'PARK':
       return {
         title: 'Parked',
-        detail: 'the rig ignores every layer here',
+        detail: 'the rig ignores everything below it',
         value: layer.parkedChannels?.map((c) => String(c.value)).join(', ') ?? null,
       }
-    case 'PROGRAMMER_EFFECT':
+    case 'PROGRAMMER_FX':
       return {
-        title: effectName,
-        detail: ['programmer effect', division, paused, heldBackDetail(layer)].filter(Boolean).join(' · '),
+        title: fxName,
+        detail: ['programmer FX', division, paused, heldBackDetail(layer)].filter(Boolean).join(' · '),
         value: null,
       }
     case 'PROGRAMMER': {
@@ -89,11 +89,11 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
         value: layer.value ?? null,
       }
     }
-    case 'EFFECT': {
+    case 'FX': {
       const cue = layer.cueId != null ? cueLabel(layer.cueId) : undefined
-      const home = cue ? `${cue}'s effect` : layer.layerSource?.name ? `${layer.layerSource.name}'s effect` : 'effect'
+      const home = cue ? `${cue}'s FX` : layer.layerSource?.name ? `${layer.layerSource.name}'s FX` : 'FX'
       return {
-        title: effectName,
+        title: fxName,
         detail: [
           home,
           division,
@@ -118,9 +118,9 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
 
 const EDGE: Record<KeyStackLayer['kind'], string> = {
   PARK: 'before:bg-amber-500',
-  PROGRAMMER_EFFECT: 'before:bg-violet-500',
+  PROGRAMMER_FX: 'before:bg-violet-500',
   PROGRAMMER: 'before:bg-primary',
-  EFFECT: 'before:bg-violet-500',
+  FX: 'before:bg-violet-500',
   CUE: 'before:bg-sky-500',
   BASE: 'before:bg-transparent',
 }
@@ -171,7 +171,7 @@ export function LayerStack({
   onOpenChange,
   heads,
   group,
-  propertyName,
+  attribute,
   label,
   trigger,
   cueLabel: cueLabelProp,
@@ -183,7 +183,7 @@ export function LayerStack({
   heads: readonly { key: string; name: string }[]
   /** A group's *All*: ask the group, and clear the group entry. */
   group?: string
-  propertyName: string
+  attribute: string
   label: string
   trigger: ReactNode
   /**
@@ -208,9 +208,9 @@ export function LayerStack({
     const keys = headsKey.split('\u0000')
     const request: Promise<{ blind: boolean; stacks: KeyStack[] }> =
       group != null
-        ? lightingApi.programmer.keyStack('group', group, propertyName)
+        ? lightingApi.programmer.keyStack('group', group, attribute)
         : // Settled, not all: one head the desk could not answer for leaves the others' stacks drawn.
-          Promise.allSettled(keys.map((key) => lightingApi.programmer.keyStack('fixture', key, propertyName))).then((results) => {
+          Promise.allSettled(keys.map((key) => lightingApi.programmer.keyStack('fixture', key, attribute))).then((results) => {
             const answers = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
             if (answers.length === 0) throw (results[0] as PromiseRejectedResult).reason
             return { blind: answers.some((a) => a.blind), stacks: answers.flatMap((a) => a.stacks) }
@@ -226,7 +226,7 @@ export function LayerStack({
         setError(e instanceof Error ? e.message : 'The desk did not answer')
       },
     )
-  }, [headsKey, group, propertyName])
+  }, [headsKey, group, attribute])
 
   useEffect(() => {
     if (!open) {
@@ -251,12 +251,12 @@ export function LayerStack({
         if (live) ask()
       })
     }
-    const subs = headsKey.split('\u0000').map((key) => lightingApi.programmer.subscribeToKey(key, propertyName, askSoon))
+    const subs = headsKey.split('\u0000').map((key) => lightingApi.programmer.subscribeToKey(key, attribute, askSoon))
     return () => {
       live = false
       subs.forEach((s) => s.unsubscribe())
     }
-  }, [open, ask, headsKey, propertyName])
+  }, [open, ask, headsKey, attribute])
 
   const stacks = answer?.stacks ?? []
   const nameOf = (key: string) => headsRef.current.find((h) => h.key === key)?.name ?? key
@@ -272,11 +272,11 @@ export function LayerStack({
   const clearYours = () => {
     const fade = getProgrammerFadeMs()
     if (group != null) {
-      lightingApi.programmer.clearEntry('group', group, propertyName, fade)
+      lightingApi.programmer.clearEntry('group', group, attribute, fade)
       return
     }
     for (const stack of stacks) {
-      if (holding(stack)) lightingApi.programmer.clearEntry('fixture', stack.targetKey, propertyName, fade)
+      if (holding(stack)) lightingApi.programmer.clearEntry('fixture', stack.targetKey, attribute, fade)
     }
   }
 

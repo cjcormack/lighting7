@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * resolved lazily with colour-source version caching — they only re-resolve
  * when a referenced template is edited.
  *
- * Where `EffectParamUtils.kt` already owns a parser, this class caches it rather than restating
+ * Where `FxParamUtils.kt` already owns a parser, this class caches it rather than restating
  * it: [ubyte] and [easingCurve] call [toUByteParam] / [toEasingCurveParam], which an FX calc
  * script can equally apply to `params.string(…)` itself. They used to reimplement those bodies
  * inline — identically, but with nothing keeping them so.
@@ -25,15 +25,15 @@ import java.util.concurrent.ConcurrentHashMap
  * ```kotlin
  * val min = params.ubyte("min")
  * val max = params.ubyte("max")
- * val colour = params.colour("baseColor")   // literal, or a "tmpl:{uuid}" reference
+ * val colour = params.colour("baseColor")   // literal, or a "pal:{uuid}" reference
  * ```
  */
 class TypedParams(
     private val raw: Map<String, String>,
     private val schema: List<ParameterInfo>,
     /**
-     * Resolves a colour string that names something rather than stating it — today a `tmpl:`
-     * template reference; see [templateColourSource]. Answers null for a literal, and for a
+     * Resolves a colour string that names something rather than stating it — today a `pal:`
+     * template reference; see [paletteColourSource]. Answers null for a literal, and for a
      * reference it cannot honour, so a caller always has its own parser to fall back to.
      */
     private val resolveColourSource: ((String) -> ExtendedColour?)? = null,
@@ -76,7 +76,7 @@ class TypedParams(
      * `GET /fx/library` served `defaultValue: ""`, the Add FX sheet seeded its form from that, and
      * the resulting `{"min":"","max":""}` was persisted into `cue_effects` / `look_effects` /
      * `cue_ad_hoc_effects` verbatim. Those rows exist on the desk today. Preferring a present-but-
-     * empty value over the schema default would leave every one of them dead — a `Breathe` parked
+     * empty value over the schema default would leave every one of them dead — a `SineWave` parked
      * at 0, a `Circle` with no radius — while an identical newly-added effect worked, with nothing
      * in the UI to tell them apart. No effect parameter has a meaningful empty value, so treating
      * blank as "not set" heals the stored rows and costs nothing.
@@ -113,7 +113,7 @@ class TypedParams(
     fun string(name: String): String = raw(name)
 
     /**
-     * Parse a colour parameter, resolving a template reference (`tmpl:{uuid}`) through the colour
+     * Parse a colour parameter, resolving a template reference (`pal:{uuid}`) through the colour
      * source. Results are cached and only re-resolved when the source's version changes.
      *
      * A reference the source refuses falls through to [parseExtendedColour], which reads an
@@ -135,12 +135,10 @@ class TypedParams(
     }
 
     /**
-     * Parse a comma-separated list of colour strings, resolving template references.
-     * Results are cached and only re-resolved when the colour source's version changes.
-     *
-     * A reference the source refuses is **dropped** rather than replaced, which is the one place
-     * this differs from [colour]: a list is allowed to be shorter, and a white entry in the middle
-     * of a colour cycle reads as a deliberate flash.
+     * Parse a comma-separated list of literal colours (terminology plan D14). A palette reference
+     * names no colour here — Palette Steps is the FX that steps through palettes — so one is
+     * **dropped** like any other entry that is no colour, as [colourListPaletteProblem] refuses it at
+     * every write boundary. Cached as [colour] is.
      */
     fun colourList(name: String): List<ExtendedColour> {
         return currentColourCaches().colourLists.getOrPut(name) {
@@ -152,8 +150,7 @@ class TypedParams(
                 value.split(",").mapNotNull { str ->
                     val trimmed = str.trim()
                     when {
-                        trimmed.isEmpty() -> null
-                        isTemplateColourRef(trimmed) -> resolveColourSource?.invoke(trimmed)
+                        trimmed.isEmpty() || isPaletteColourRef(trimmed) -> null
                         else -> parseExtendedColour(trimmed)
                     }
                 }
@@ -162,19 +159,19 @@ class TypedParams(
     }
 
     /**
-     * Palette Steps' list (effects plan §3.6): a comma-separated list of `tmpl:{uuid}` references to
+     * Palette Steps' list (effects plan §3.6): a comma-separated list of `pal:{uuid}` references to
      * generic value palettes, each read off the palette as its rows' intents and resolved per head by
      * the target. Cached against the colour source's version, as a colour list is, so retuning a
      * palette moves the running steps without rebuilding the effect.
      *
-     * The palettes are read through the colour source when it is a [TemplateSource] — the one every
-     * spawn site passes (`createEffectWithTemplates`). Without one (a bare `createEffect`, a test)
+     * The palettes are read through the colour source when it is a [PaletteSource] — the one every
+     * spawn site passes (`createFxWithPalettes`). Without one (a bare `createFx`, a test)
      * there is nothing to read them from, and the list is empty. An entry that cannot be a step is
      * **dropped**, as a colour list drops a reference it cannot honour.
      */
     fun paletteSteps(name: String): StepList {
         return currentColourCaches().paletteSteps.getOrPut(name) {
-            val source = resolveColourSource as? TemplateSource
+            val source = resolveColourSource as? PaletteSource
             val value = raw(name)
             if (source == null || value.isBlank()) {
                 StepList.EMPTY

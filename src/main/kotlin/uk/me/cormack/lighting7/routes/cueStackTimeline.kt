@@ -11,12 +11,12 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.FxRegistry
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.TimingSource
-import uk.me.cormack.lighting7.fx.familyForEffectCategory
+import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
 import uk.me.cormack.lighting7.fx.perFixtureRowTargetsOf
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.toMaskNames
 import uk.me.cormack.lighting7.models.*
@@ -65,8 +65,8 @@ internal fun cueStackTimeline(
     val layersByCue = if (cueIds.isEmpty()) emptyMap() else {
         DaoCueLayer.find { DaoCueLayers.cue inList cueRefs }.groupBy { it.readValues[DaoCueLayers.cue].value }
     }
-    val effectsByCue = if (cueIds.isEmpty()) emptyMap() else {
-        DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList cueRefs }.groupBy { it.readValues[DaoCueAdHocEffects.cue].value }
+    val fxByCue = if (cueIds.isEmpty()) emptyMap() else {
+        DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList cueRefs }.groupBy { it.readValues[DaoCueAdHocFx.cue].value }
     }
     val sceneryByCue = cueSceneryByCue(cueRefs)
     val tracked = trackedSceneryOfStack(stack)
@@ -74,7 +74,7 @@ internal fun cueStackTimeline(
 
     // Each cue's children once, however many places the cue has in the stack.
     val layerDtos = HashMap<Int, List<TimelineLayerDto>>()
-    val effectDtos = HashMap<Int, List<TimelineEffectDto>>()
+    val fxDtos = HashMap<Int, List<TimelineFxDto>>()
     return CueStackTimelineDto(
         stackId = stack.id.value,
         entries = entries.map { entry ->
@@ -93,8 +93,8 @@ internal fun cueStackTimeline(
                         .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
                         .mapIndexedNotNull { index, layer -> reads.layer(layer, rank = index + 1) }
                 },
-                effects = effectDtos.getOrPut(cueId) {
-                    effectsByCue[cueId].orEmpty()
+                fx = fxDtos.getOrPut(cueId) {
+                    fxByCue[cueId].orEmpty()
                         .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
                         .map { reads.effect(it) }
                 },
@@ -124,7 +124,7 @@ private class TimelineReads(
     fun layer(layer: DaoCueLayer, rank: Int): TimelineLayerDto? {
         val source = layer.source ?: return null
         val look = layer.look
-        val template = layer.template
+        val template = layer.palette
         val families = when {
             look != null -> lookFamilies.getOrPut(look.id.value) { lookFamiliesOf(look) }
             template != null -> paletteFamilies.getOrPut(template.id.value) { listOfNotNull(template.familyOf()?.name) }
@@ -145,7 +145,7 @@ private class TimelineReads(
             enabled = layer.enabled,
             amount = layer.amount,
             blendMode = layer.blendMode,
-            propertyMask = layer.propertyMask,
+            attributeMask = layer.attributeMask,
             stomp = layer.stomp,
             timed = layer.delay != null || layer.interval != null || layer.randomWindow != null,
             delayMs = layer.delay?.toMillis(),
@@ -156,20 +156,20 @@ private class TimelineReads(
         )
     }
 
-    fun effect(row: DaoCueAdHocEffect): TimelineEffectDto {
+    fun effect(row: DaoCueAdHocFxEntity): TimelineFxDto {
         val dto = row.toDto().canonicalTarget()
-        val target = EffectTargetRef.ofOrNull(dto.targetType, dto.targetKey)
+        val target = FxTargetsRef.ofOrNull(dto.targetType, dto.targetKey)
         val heads = headsOf(target?.items.orEmpty().map(::CueTargetDto))
-        val registration = registry.getRegistration(dto.effectType)
-        return TimelineEffectDto(
+        val registration = registry.getRegistration(dto.fxType)
+        return TimelineFxDto(
             id = row.id.value,
             uuid = row.uuid.toString(),
             runUuid = row.runUuid?.toString(),
-            effectType = dto.effectType,
-            propertyName = dto.propertyName,
+            fxType = dto.fxType,
+            attribute = dto.attribute,
             targetType = dto.targetType,
             targetKey = dto.targetKey,
-            family = effectFamilyOf(dto, heads)?.name,
+            family = fxFamilyOf(dto, heads)?.name,
             heads = heads,
             settings = comparableSettingsOf(dto, target, registration),
         )
@@ -187,7 +187,7 @@ private class TimelineReads(
      * ([uk.me.cormack.lighting7.fx.LayerPressRules.paletteHeads]'s rule — a row head a target
      * covers, or the row's cells within a pressed parent).
      */
-    private fun paletteHeads(template: DaoTemplate, targets: List<CueTargetDto>): List<String> {
+    private fun paletteHeads(template: DaoPalette, targets: List<CueTargetDto>): List<String> {
         val rows = paletteRows.getOrPut(template.id.value) {
             perFixtureRowTargetsOf(template.effect != null, template.rows.map { it.target })?.let { coverage.expand(it).toSet() }
         } ?: return headsOf(targets)
@@ -202,56 +202,56 @@ private class TimelineReads(
         if (fixtures != null) {
             look.derivedFamilyGroups(fixtures).toMaskNames()
         } else {
-            look.effects.mapNotNullTo(LinkedHashSet()) { familyForEffectCategory(it.category) }.toMaskNames()
+            look.effects.mapNotNullTo(LinkedHashSet()) { attributeFamilyForFxFamily(it.family) }.toMaskNames()
         }
 
     /**
-     * The family of the property an effect drives, as Record reads it (`effectFamily`): its first
+     * The family of the property an effect drives, as Record reads it (`fxFamily`): its first
      * head's property's group, else its library category's.
      */
-    private fun effectFamilyOf(effect: CueAdHocEffectDto, heads: List<String>): PropertyMaskGroup? {
-        val byCategory = familyForEffectCategory(effect.category)
-        val property = effect.propertyName ?: return byCategory
+    private fun fxFamilyOf(effect: CueAdHocFxDto, heads: List<String>): AttributeFamily? {
+        val byCategory = attributeFamilyForFxFamily(effect.family)
+        val attribute = effect.attribute ?: return byCategory
         val fixture = heads.firstOrNull()?.let { key -> runCatching { fixtures?.untypedGroupableFixture(key) }.getOrNull() }
             ?: return byCategory
-        return maskGroupForProperty(fixture, property) ?: byCategory
+        return familyForAttribute(fixture, attribute) ?: byCategory
     }
 
     /**
-     * What [uk.me.cormack.lighting7.fx.comparableEffectSettings] compares, read off the stored row
+     * What [uk.me.cormack.lighting7.fx.comparableFxSettings] compares, read off the stored row
      * rather than a running instance: the canonical effect type, the parameters over the library's
      * defaults, an element mode only over members, the filter and step timing only where they differ
      * from the default, and only the master the effect's timing reads, master 1 spelled by its uuid.
      */
     private fun comparableSettingsOf(
-        effect: CueAdHocEffectDto,
-        target: EffectTargetRef?,
-        registration: uk.me.cormack.lighting7.fx.EffectRegistration?,
-    ): TimelineEffectSettingsDto {
+        effect: CueAdHocFxDto,
+        target: FxTargetsRef?,
+        registration: uk.me.cormack.lighting7.fx.FxRegistration?,
+    ): TimelineFxSettingsDto {
         val beat = (registration?.timingSource ?: TimingSource.BEAT) == TimingSource.BEAT
-        val overMembers = target is EffectTargetRef.Selection ||
-            (target is EffectTargetRef.Single && target.target is TargetRef.Group)
+        val overMembers = target is FxTargetsRef.Selection ||
+            (target is FxTargetsRef.Single && target.target is TargetRef.Group)
         val defaults = registration?.parameters.orEmpty().associate { it.name to it.defaultValue }
-        return TimelineEffectSettingsDto(
-            effectType = registration?.id ?: effect.effectType,
-            beatDivision = effect.beatDivision,
+        return TimelineFxSettingsDto(
+            fxType = registration?.id ?: effect.fxType,
+            cycle = effect.cycle,
             blendMode = effect.blendMode.uppercase(),
-            distribution = effect.distribution.uppercase(),
+            order = effect.order.uppercase(),
             phaseOffset = effect.phaseOffset,
             elementMode = effect.elementMode?.uppercase()?.takeIf { overMembers },
             elementFilter = effect.elementFilter?.takeUnless { it.equals("ALL", ignoreCase = true) },
-            stepTiming = effect.stepTiming?.takeUnless { it == (registration?.defaultStepTiming ?: false) },
+            timing = effect.timing?.takeUnless { it == (registration?.defaultTiming ?: Timing.CYCLE) },
             parameters = (defaults + effect.parameters).toSortedMap(),
             speedMasterUuid = if (beat) (speedMasterUuidOrNull(effect.speedMasterUuid) ?: master1Uuid)?.toString() else null,
             rateSpeedMasterUuid = if (beat) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)?.toString(),
             seconds = effect.seconds,
-            size = effect.size,
+            amount = effect.amount,
             direction = effect.direction.uppercase(),
-            nShot = effect.nShot,
+            runs = effect.runs,
             spread = effect.spread,
             wings = effect.wings,
-            blocks = effect.blocks,
-            groups = effect.groups,
+            segments = effect.segments,
+            parts = effect.parts,
         )
     }
 }
@@ -274,19 +274,19 @@ internal data class TimelineEntryDto(
     val cueId: Int? = null,
     /** In layer order, bottom first; each layer carries its rank, which counts a layer whose source is gone. */
     val layers: List<TimelineLayerDto> = emptyList(),
-    val effects: List<TimelineEffectDto> = emptyList(),
+    val fx: List<TimelineFxDto> = emptyList(),
     val scenery: List<TimelineSceneryDto> = emptyList(),
     val trackedScenery: List<TimelineTrackedSceneryDto> = emptyList(),
 )
 
 @Serializable
 internal data class TimelineSourceDto(
-    /** `LOOK` or `TEMPLATE`. */
+    /** `LOOK` or `PALETTE`. */
     val kind: String,
     val id: Int,
     val uuid: String,
     val name: String,
-    /** `PropertyMaskGroup` names: a Look's from its rows and effects, a palette's its one family. */
+    /** `AttributeFamily` names: a Look's from its rows and effects, a palette's its one family. */
     val families: List<String>,
 )
 
@@ -304,7 +304,7 @@ internal data class TimelineLayerDto(
     val enabled: Boolean,
     val amount: Double,
     val blendMode: String,
-    val propertyMask: String?,
+    val attributeMask: String?,
     val stomp: Boolean,
     /** A delay, interval or random window: the layer fires on a timer rather than at the GO. */
     val timed: Boolean,
@@ -316,43 +316,43 @@ internal data class TimelineLayerDto(
 )
 
 @Serializable
-internal data class TimelineEffectDto(
+internal data class TimelineFxDto(
     val id: Int,
     val uuid: String,
     val runUuid: String?,
-    val effectType: String,
-    val propertyName: String?,
-    /** The target as the desk stores it (`CueAdHocEffectDto.canonicalTarget`), so a column keys on one spelling. */
+    val fxType: String,
+    val attribute: String?,
+    /** The target as the desk stores it (`CueAdHocFxDto.canonicalTarget`), so a column keys on one spelling. */
     val targetType: String,
     val targetKey: String,
-    /** The `PropertyMaskGroup` of the property it drives, or null for none. */
+    /** The `AttributeFamily` of the property it drives, or null for none. */
     val family: String?,
     val heads: List<String>,
-    val settings: TimelineEffectSettingsDto,
+    val settings: TimelineFxSettingsDto,
 )
 
-/** `LookEffectSettings` on the wire, uuids as strings: equal for two rows a GO would run alike. */
+/** `LookFxSettings` on the wire, uuids as strings: equal for two rows a GO would run alike. */
 @Serializable
-internal data class TimelineEffectSettingsDto(
-    val effectType: String,
-    val beatDivision: Double,
+internal data class TimelineFxSettingsDto(
+    val fxType: String,
+    val cycle: Double,
     val blendMode: String,
-    val distribution: String,
+    val order: String,
     val phaseOffset: Double,
     val elementMode: String?,
     val elementFilter: String?,
-    val stepTiming: Boolean?,
+    val timing: Timing?,
     val parameters: Map<String, String>,
     val speedMasterUuid: String?,
     val rateSpeedMasterUuid: String?,
     val seconds: Boolean,
-    val size: Double,
+    val amount: Double,
     val direction: String,
-    val nShot: Int?,
+    val runs: Int?,
     val spread: Double,
     val wings: Int,
-    val blocks: Int,
-    val groups: Int,
+    val segments: Int,
+    val parts: Int,
 )
 
 @Serializable

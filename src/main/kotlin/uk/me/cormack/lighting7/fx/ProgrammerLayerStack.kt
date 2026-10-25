@@ -4,10 +4,10 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.sameTargets
-import uk.me.cormack.lighting7.models.withBeatDivisionOverride
+import uk.me.cormack.lighting7.models.withCycleOverride
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
@@ -34,7 +34,7 @@ data class ProgrammerLayer(
     val sortOrder: Int,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     val blendMode: String = "OVERRIDE",
     val amount: Double = 1.0,
     val stomp: Boolean = false,
@@ -53,17 +53,17 @@ data class ProgrammerLayer(
      * shipping client sends it today; it is honoured rather than quietly dropped because the route
      * documents it.
      */
-    val beatDivisionOverride: Double? = null,
+    val cycleOverride: Double? = null,
 ) {
     /** What a cue row holds for this layer beside its source and place: the fields Update retunes. */
-    fun cueFields() = CueLayerFields(enabled, targets, propertyMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
+    fun cueFields() = CueLayerFields(enabled, targets, attributeMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
 
     internal fun toCookLayer() = CookLayer(
         source = source,
         sortOrder = sortOrder,
         enabled = enabled,
         targets = targets,
-        propertyMask = propertyMask,
+        attributeMask = attributeMask,
         blendMode = blendMode,
         amount = amount,
         stomp = stomp,
@@ -81,7 +81,7 @@ data class ProgrammerLayer(
 data class CueLayerFields(
     val enabled: Boolean,
     val targets: List<CueTargetDto>,
-    val propertyMask: String?,
+    val attributeMask: String?,
     val blendMode: String,
     val amount: Double,
     val stomp: Boolean,
@@ -92,15 +92,15 @@ data class CueLayerFields(
 /** What a recook moved, for the caller to report. */
 data class ProgrammerLayerOutcome(
     val keysRepublished: Int,
-    val effectsSpawned: Int,
-    val effectsRetracted: Int,
-    val effectsRepriorised: Int,
+    val fxSpawned: Int,
+    val fxRetracted: Int,
+    val fxRepriorised: Int,
 )
 
 /**
  * What a pad press did — see [ProgrammerLayerStack.toggle].
  *
- * [action] is `"applied"` or `"removed"`, the two words the pads have always read. [effectCount] is
+ * [action] is `"applied"` or `"removed"`, the two words the pads have always read. [fxCount] is
  * the effects that moved *for this layer* (spawned on apply, retracted on remove). [released] is
  * how many **other** records' layers an apply took the pressed targets off — a solo bank's
  * siblings, and the palettes of a pressed palette's family and kind — counting a layer narrowed to
@@ -110,7 +110,7 @@ data class ProgrammerLayerOutcome(
  */
 data class ToggleOutcome(
     val action: String,
-    val effectCount: Int,
+    val fxCount: Int,
     val released: Int = 0,
 )
 
@@ -118,25 +118,25 @@ data class ToggleOutcome(
 data class DetachOutcome(val written: Int, val effects: Int)
 
 /** What [ProgrammerLayerStack.applyAsValues] did: values written into Local, and the Local effects it started. */
-data class ApplyValuesOutcome(val written: Int, val effectIds: List<Long>)
+data class ApplyValuesOutcome(val written: Int, val fxIds: List<Long>)
 
-/** What [ProgrammerLayerStack.resetEffectToTemplate] did. */
-sealed interface ResetToTemplateOutcome {
+/** What [ProgrammerLayerStack.resetFxToPalette] did. */
+sealed interface ResetToPaletteOutcome {
     /** The instance now runs the template's current effect; [instance] is the one now live. */
-    data class Reset(val instance: FxInstance) : ResetToTemplateOutcome
+    data class Reset(val instance: FxInstance) : ResetToPaletteOutcome
 
     /** No effect with that id is running. */
-    data object NotFound : ResetToTemplateOutcome
+    data object NotFound : ResetToPaletteOutcome
 
     /** It is running but cannot be reset: [code] says why. */
-    data class Refused(val code: String, val message: String) : ResetToTemplateOutcome
+    data class Refused(val code: String, val message: String) : ResetToPaletteOutcome
 
     companion object {
         /** No template layer in the programmer spawned this instance. */
-        const val NOT_FROM_TEMPLATE = "FX_NOT_FROM_PALETTE"
+        const val NOT_FROM_PALETTE = "FX_NOT_FROM_PALETTE"
 
         /** Its template no longer resolves — deleted, or emptied of its effect. */
-        const val TEMPLATE_GONE = "FX_PALETTE_GONE"
+        const val PALETTE_GONE = "FX_PALETTE_GONE"
     }
 }
 
@@ -165,7 +165,7 @@ data class AppliedSource(val source: LayerSource, val targets: List<AppliedTarge
  *
  * The reason is not the per-tick cost. `FxTarget.composeProgrammerOver` is only reached for keys a
  * running effect covers; everything *else* about the programmer is answered by cold-path coverage
- * oracles — `coversFixture` (the gate in `LayerResolver.fallbackFor`), `activePropertiesByFixture`
+ * oracles — `coversFixture` (the gate in `LayerResolver.fallbackFor`), `activeAttributesByFixture`
  * (effect suppression), `activeKeys` (provenance, blind republish, Clear), `entries` (Record and
  * the wire snapshot). Composing at read would make **every one of those** layer-aware, and each
  * needs the cooked key set — so it would mean cooking anyway, plus cooking per fixture per tick.
@@ -201,29 +201,29 @@ data class AppliedSource(val source: LayerSource, val targets: List<AppliedTarge
 class ProgrammerLayerStack(
     private val fixtures: () -> Fixtures,
     private val lookRegistry: () -> LookRegistry,
-    private val templateRegistry: () -> TemplateRegistry,
+    private val paletteRegistry: () -> PaletteRegistry,
     private val engine: () -> FxEngine,
     private val store: ProgrammerStore,
     /**
      * Supplied lazily because `Show` builds this before `State` finishes wiring itself, and only
-     * effect *spawning* needs it — `resolveTargetForCue` and `createEffectInstance` both take
+     * effect *spawning* needs it — `resolveTargetForCue` and `createFxInstance` both take
      * it. Values cook with no `State` at all, which is what lets the value half be tested without
      * a database.
      */
     private val state: () -> State?,
 ) {
     private val targetCoverage = TargetCoverage { fixtures() }
-    private val pressRules = LayerPressRules(templateRegistry, targetCoverage)
+    private val pressRules = LayerPressRules(paletteRegistry, targetCoverage)
 
     /**
-     * Guards the classify-spawn-retract sequence in [syncEffects].
+     * Guards the classify-spawn-retract sequence in [syncFx].
      *
      * The live band state itself lives on the engine — each instance carries its
-     * [ProgrammerLayerEffectKey], and [FxEngine.programmerLayerEffects] is the only record of
+     * [ProgrammerLayerFxKey], and [FxEngine.programmerLayerFx] is the only record of
      * which layer effects exist (sweep item E6) — so there is no map to corrupt here. The lock
      * remains because the sequence is read-then-write: two recooks racing between the snapshot
      * and the spawns would each decide to spawn the same missing effect. Same-key twins are worse
-     * than a glitch — [FxEngine.programmerLayerEffects] keeps one instance per key, so the losing
+     * than a glitch — [FxEngine.programmerLayerFx] keeps one instance per key, so the losing
      * twin could never be retracted by a recook and would sit on stage until a band sweep.
      *
      * Separate from `ProgrammerStore`'s layer lock, and taken after it everywhere but [detach],
@@ -232,7 +232,7 @@ class ProgrammerLayerStack(
      * (`loadLookSnapshot` opens a transaction), so two mutations can legitimately reach here
      * concurrently.
      */
-    private val effectsLock = Any()
+    private val fxLock = Any()
 
     /**
      * The pseudo cue id a programmer cook runs under.
@@ -249,13 +249,13 @@ class ProgrammerLayerStack(
     fun add(
         source: LayerSource,
         targets: List<CueTargetDto> = emptyList(),
-        propertyMask: String? = null,
+        attributeMask: String? = null,
         blendMode: String = "OVERRIDE",
         amount: Double = 1.0,
         speedMasterUuid: UUID? = null,
         rateSpeedMasterUuid: UUID? = null,
         sourceCueLayerId: Int? = null,
-        beatDivisionOverride: Double? = null,
+        cycleOverride: Double? = null,
         fadeMs: Long = 0,
     ): Pair<ProgrammerLayer, ProgrammerLayerOutcome> {
         val layer = ProgrammerLayer(
@@ -263,13 +263,13 @@ class ProgrammerLayerStack(
             source = source,
             sortOrder = 0, // renumbered below
             targets = layerTargets(source, targets),
-            propertyMask = propertyMask,
+            attributeMask = attributeMask,
             blendMode = blendMode,
             amount = amount,
             speedMasterUuid = speedMasterUuid,
             rateSpeedMasterUuid = rateSpeedMasterUuid,
             sourceCueLayerId = sourceCueLayerId,
-            beatDivisionOverride = beatDivisionOverride,
+            cycleOverride = cycleOverride,
         )
         val (next, _) = store.mutateLayers { current -> renumber(current + layer) to Unit }
         return layer to recook(next, fadeMs, arrival = true)
@@ -281,7 +281,7 @@ class ProgrammerLayerStack(
      * list in one store mutation and recooks it once.
      *
      * **A Look is pressed whole** (absolute-looks plan D1, D3, P1): its layer names no targets and
-     * no mask, whatever the door passes in [targets] and [propertyMask]; on puts one layer of it on
+     * no mask, whatever the door passes in [targets] and [attributeMask]; on puts one layer of it on
      * top, off takes every layer of it off. Everything below about targets and coverage is a
      * palette's.
      *
@@ -305,7 +305,7 @@ class ProgrammerLayerStack(
      * way, and so does a **value** template; an *effect* template reports one per target, which is
      * why the pads' ring cannot be driven from the effect list alone.
      *
-     * [propertyMask] applies to the *arriving* palette layer only. It is deliberately **not** part of
+     * [attributeMask] applies to the *arriving* palette layer only. It is deliberately **not** part of
      * the "already on" comparison: a pad that re-pressed with a different mask should still take its
      * layer off rather than stack a second one.
      *
@@ -324,7 +324,7 @@ class ProgrammerLayerStack(
      * - **The family replacement** (apply-model plan D2, D6), resolved here so every palette door gets
      *   it: a palette press takes its heads off every other palette on the stack of the **same family
      *   and kind** — a value palette off value palettes, an effect palette off effect palettes, so
-     *   Amber Breathe runs over Red. A Look replaces nothing and is replaced by nothing (D6).
+     *   Amber Wave runs over Red. A Look replaces nothing and is replaced by nothing (D6).
      * - Neither drops a layer that also holds other heads: it is narrowed to them, so Amber on the
      *   front wash and Blue on the back wash are two layers on two rigs.
      *
@@ -344,8 +344,8 @@ class ProgrammerLayerStack(
     fun toggle(
         source: LayerSource,
         targets: List<CueTargetDto>,
-        propertyMask: String? = null,
-        beatDivisionOverride: Double? = null,
+        attributeMask: String? = null,
+        cycleOverride: Double? = null,
         releaseSiblings: Set<UUID> = emptySet(),
         fadeMs: Long = 0,
     ): ToggleOutcome {
@@ -357,12 +357,12 @@ class ProgrammerLayerStack(
             source = source,
             sortOrder = 0, // renumbered below
             targets = pressTargets,
-            propertyMask = propertyMask.takeUnless { isLook },
-            beatDivisionOverride = beatDivisionOverride,
+            attributeMask = attributeMask.takeUnless { isLook },
+            cycleOverride = cycleOverride,
         )
         // Resolved before the mutation: a palette snapshot can open a transaction, which must never
         // run under the layer lock. A stale answer is harmless — it names records and their rows.
-        val replaces = pressRules.familyReplacements(source.isTemplate, source.uuid, paletteUuids(store.layers))
+        val replaces = pressRules.familyReplacements(source.isPalette, source.uuid, paletteUuids(store.layers))
         val replacesOn = if (replaces.isEmpty()) null else pressRules.paletteHeads(source.uuid, pressTargets)
         val ops = layerOps(store.layers)
         val (next, result) = store.mutateLayers { current ->
@@ -370,9 +370,9 @@ class ProgrammerLayerStack(
             renumber(result.layers) to result
         }
         return when (result) {
-            is LayerPress.Result.Removed -> ToggleOutcome("removed", recook(next, fade).effectsRetracted)
+            is LayerPress.Result.Removed -> ToggleOutcome("removed", recook(next, fade).fxRetracted)
             is LayerPress.Result.Applied ->
-                ToggleOutcome("applied", recook(next, fade, arrival = true).effectsSpawned, result.released)
+                ToggleOutcome("applied", recook(next, fade, arrival = true).fxSpawned, result.released)
         }
     }
 
@@ -387,10 +387,10 @@ class ProgrammerLayerStack(
     }
 
     private fun paletteUuids(layers: List<ProgrammerLayer>): Set<UUID> =
-        layers.filter { it.source.isTemplate }.mapTo(HashSet()) { it.source.uuid }
+        layers.filter { it.source.isPalette }.mapTo(HashSet()) { it.source.uuid }
 
     private fun layerOps(layers: List<ProgrammerLayer>) = LayerOps(
-        pressRules.boundHeads(layers.filter { it.source.isTemplate && it.targets.isEmpty() }.map { it.source.uuid }),
+        pressRules.boundHeads(layers.filter { it.source.isPalette && it.targets.isEmpty() }.map { it.source.uuid }),
     )
 
     /**
@@ -409,13 +409,13 @@ class ProgrammerLayerStack(
         // for the old ones.
         override fun sameSettings(layer: ProgrammerLayer, arriving: ProgrammerLayer) =
             layer.enabled == arriving.enabled &&
-                layer.propertyMask == arriving.propertyMask &&
+                layer.attributeMask == arriving.attributeMask &&
                 layer.blendMode == arriving.blendMode &&
                 layer.amount == arriving.amount &&
                 layer.stomp == arriving.stomp &&
                 layer.speedMasterUuid == arriving.speedMasterUuid &&
                 layer.rateSpeedMasterUuid == arriving.rateSpeedMasterUuid &&
-                layer.beatDivisionOverride == arriving.beatDivisionOverride
+                layer.cycleOverride == arriving.cycleOverride
     }
 
     /**
@@ -451,9 +451,7 @@ class ProgrammerLayerStack(
      * the stack*, and a pad's next press still takes it off, so its ring stays lit.
      *
      * **A Look is on or off** (absolute-looks plan P4): coverage is a palette's question. A Look with
-     * a layer on the stack answers every target of the rig as [AppliedExtent.ALL] ([wholeRig]), so a
-     * ring folded over any selection reads it lit — "a layer of it is on", in the vocabulary a
-     * palette's ring already reads.
+     * a layer on the stack answers an entry naming no targets — its presence is the whole answer.
      *
      * Takes the layer list so the `layerState` broadcast can describe the frame it is sending
      * rather than whatever the store holds by the time it renders.
@@ -473,7 +471,6 @@ class ProgrammerLayerStack(
             heads.getOrPut(layer.source.uuid) { LinkedHashSet() } += coverage(named)
         }
         if (sources.isEmpty()) return emptyList()
-        val rig = if (sources.size == heads.size) emptyList() else wholeRig()
 
         // Group membership in the same terms `coverage` produces, so the two can be compared
         // directly. Empty groups are dropped: "every one of no heads" is a claim nothing means.
@@ -482,7 +479,7 @@ class ProgrammerLayerStack(
         }.filter { (_, members) -> members.isNotEmpty() }
 
         return sources.values.map { source ->
-            val covered = heads[source.uuid] ?: return@map AppliedSource(source, rig)
+            val covered = heads[source.uuid] ?: return@map AppliedSource(source, emptyList())
             val groupTargets = groups.mapNotNull { (name, members) ->
                 val hits = members.count { it in covered }
                 // A member held only through some of its cells is partly covered: the group reads
@@ -516,23 +513,6 @@ class ProgrammerLayerStack(
                 covered.map { AppliedTarget(it, AppliedExtent.ALL) } + cellTargets + parentTargets + groupTargets,
             )
         }
-    }
-
-    /**
-     * Every target of the rig as [AppliedExtent.ALL] — each fixture, each of its cells and each group
-     * with members — which is what a Look's [appliedState] entry answers: lit whatever is selected.
-     */
-    private fun wholeRig(): List<AppliedTarget> {
-        val rig = fixtures()
-        val out = ArrayList<AppliedTarget>()
-        for (fixture in rig.fixtures) {
-            val head = CueTargetDto(TargetRef.Fixture.TYPE, fixture.key)
-            out += AppliedTarget(head, AppliedExtent.ALL)
-            targetCoverage.cells(head).mapTo(out) { AppliedTarget(it, AppliedExtent.ALL) }
-        }
-        rig.groups.filter { it.fixtures.isNotEmpty() }
-            .mapTo(out) { AppliedTarget(CueTargetDto(TargetRef.Group.TYPE, it.name), AppliedExtent.ALL) }
-        return out
     }
 
     /**
@@ -587,31 +567,32 @@ class ProgrammerLayerStack(
      * that owner, for when it lets go; a key the operator's own `WEB` value already holds, or a raw
      * channel slot overrides, is left as it is. A Look's scenery passes to the programmer's own
      * scenery ([ProgrammerScenery.holdUnder]) where no higher Look layer holds it. Its effects lose
-     * their layer and keep running, phase kept, as Local effects (a spent N-shot is removed), and
-     * the layer comes off; the recook moves nothing the `WEB` slots now hold.
+     * their layer and keep running, phase kept, as Local effects at the bottom of the Local FX (a
+     * spent N-shot is removed), and the layer comes off; the recook moves nothing the `WEB` slots now hold.
      *
-     * One thing still moves: a stomping layer's suppression of the effects under it ends with it.
-     * Returns null when no such layer is on the stack.
+     * Two things still move: a stomping layer's suppression of the effects under it ends with it, and
+     * a detached effect now applies above every layer's (FX editor plan D5), so one a higher layer's
+     * effect beat on a key now wins there. Returns null when no such layer is on the stack.
      */
     fun detach(layerId: Int): DetachOutcome? {
         val layers = store.layers
         val layer = layers.firstOrNull { it.layerId == layerId } ?: return null
         val rest = layers.filterNot { it.layerId == layerId }
-        val without = cookStack(rest, withEffects = false).values.rows
-            .associate { (it.targetKey to it.propertyName) to it.value }
+        val without = cookStack(rest, withFx = false).values.rows
+            .associate { (it.targetKey to it.attribute) to it.value }
         val fixtures = fixtures()
         val hints = groupHintsForTargets(fixtures, layer.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
-        val onTop = ArrayList<ProgrammerWriter.PropertyWrite>()
-        val beneath = ArrayList<ProgrammerWriter.PropertyWrite>()
-        for (row in cookStack(layers, withEffects = false).values.rows) {
-            if (without[row.targetKey to row.propertyName] == row.value) continue
-            val slots = store.slotsFor(row.targetKey, row.propertyName)
+        val onTop = ArrayList<ProgrammerWriter.AttributeWrite>()
+        val beneath = ArrayList<ProgrammerWriter.AttributeWrite>()
+        for (row in cookStack(layers, withFx = false).values.rows) {
+            if (without[row.targetKey to row.attribute] == row.value) continue
+            val slots = store.slotsFor(row.targetKey, row.attribute)
             if (slots.any { it.owner == ProgrammerOwner.WEB }) continue
             val head = runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull() ?: continue
-            if (PropertyChannelWriter.channelsFor(head, row.propertyName).any { store.getChannelSlot(it.universe.universe, it.channel) != null }) continue
+            if (AttributeChannelWriter.channelsFor(head, row.attribute).any { store.getChannelSlot(it.universe.universe, it.channel) != null }) continue
             val parentKey = targetCoverage.parentOf(CueTargetDto(TargetRef.Fixture.TYPE, row.targetKey))?.key
-            val write = ProgrammerWriter.PropertyWrite(
-                head, row.propertyName, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
+            val write = ProgrammerWriter.AttributeWrite(
+                head, row.attribute, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
             )
             if (slots.firstOrNull()?.owner == ProgrammerOwner.LAYERS) onTop += write else beneath += write
         }
@@ -623,12 +604,12 @@ class ProgrammerLayerStack(
         // One block, so no recook from another press can see the layer gone while its effects are
         // still keyed to it, and retract them. `mutateLayers` takes the layer lock inside this one;
         // nothing takes them the other way round.
-        val (next, effects) = synchronized(effectsLock) {
+        val (next, effects) = synchronized(fxLock) {
             val (next, _) = store.mutateLayers { current ->
                 val kept = current.filterNot { it.layerId == layerId }
                 if (kept.size == current.size) current to Unit else renumber(kept) to Unit
             }
-            next to eng.detachProgrammerLayerEffects(layerId)
+            next to eng.detachProgrammerLayerFx(layerId)
         }
         recook(next)
         return DetachOutcome(onTop.size + beneath.size, effects)
@@ -664,14 +645,14 @@ class ProgrammerLayerStack(
      * with no layer ever on the stack. The Look is cooked on top of the stack as the layer a press
      * would add; the keys it wins are written as `WEB` values (at [fadeMs] when given, else each
      * row's own fade, as a press's arrival is) under the group each row names, its effects start as
-     * Local effects at the rank that layer would have had, and its scenery passes to the
+     * Local effects on top of their lanes (FX editor plan §3.5), and its scenery passes to the
      * programmer's own. A Look's [targets] are none (D1).
      */
     fun applyAsValues(
         source: LayerSource,
         targets: List<CueTargetDto>,
-        propertyMask: String? = null,
-        beatDivisionOverride: Double? = null,
+        attributeMask: String? = null,
+        cycleOverride: Double? = null,
         fadeMs: Long? = null,
     ): ApplyValuesOutcome {
         val layer = ProgrammerLayer(
@@ -679,29 +660,30 @@ class ProgrammerLayerStack(
             source = source,
             sortOrder = Int.MAX_VALUE,
             targets = layerTargets(source, targets),
-            propertyMask = propertyMask,
-            beatDivisionOverride = beatDivisionOverride,
+            attributeMask = attributeMask,
+            cycleOverride = cycleOverride,
         )
-        val cooked = cookStack(store.layers + layer, withEffects = true)
+        val cooked = cookStack(store.layers + layer, withFx = true)
         val fixtures = fixtures()
         val hints = groupHintsForTargets(fixtures, targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
-        val byFade = LinkedHashMap<Long, MutableList<ProgrammerWriter.PropertyWrite>>()
+        val byFade = LinkedHashMap<Long, MutableList<ProgrammerWriter.AttributeWrite>>()
         for (row in cooked.values.rows) {
             if (row.layerWinner?.layerId != layer.layerId) continue
             val head = runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull() ?: continue
             val parentKey = targetCoverage.parentOf(CueTargetDto(TargetRef.Fixture.TYPE, row.targetKey))?.key
-            byFade.getOrPut(fadeMs ?: row.fadeDurationMs ?: 0) { ArrayList() } += ProgrammerWriter.PropertyWrite(
-                head, row.propertyName, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
+            byFade.getOrPut(fadeMs ?: row.fadeDurationMs ?: 0) { ArrayList() } += ProgrammerWriter.AttributeWrite(
+                head, row.attribute, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
             )
         }
         val eng = engine()
-        for ((fade, writes) in byFade) eng.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fade)
-        val priority = priorityFor(cooked.ranks[layer.layerId] ?: 0)
+        for ((fade, writes) in byFade) eng.programmer.writeAttributes(ProgrammerOwner.WEB, writes, fadeMs = fade)
         val instances = cooked.effects.mapNotNull { (cookLayer, effect, target) ->
             if (cookLayer.layerId != layer.layerId) return@mapNotNull null
-            spawn(cookLayer, effect, target, beatDivisionOverride)?.also { it.priority = priority }
+            spawn(cookLayer, effect, target, cycleOverride)?.also {
+                it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE
+            }
         }
-        val effectIds = eng.addEffects(instances)
+        val fxIds = eng.addFxBatch(instances)
         if (source.kind == LayerSourceKind.LOOK) {
             state()?.let { st ->
                 val rows = lookSceneryOf(st.database, listOf(source.id))[source.id].orEmpty()
@@ -709,7 +691,7 @@ class ProgrammerLayerStack(
                 if (rows.isNotEmpty() && projectId != null) st.programmerScenery.holdUnder(projectId, rows)
             }
         }
-        return ApplyValuesOutcome(byFade.values.sumOf { it.size }, effectIds)
+        return ApplyValuesOutcome(byFade.values.sumOf { it.size }, fxIds)
     }
 
     /** Move a layer to [toIndex], renumbering the whole list. */
@@ -733,7 +715,7 @@ class ProgrammerLayerStack(
         layerId: Int,
         enabled: Boolean? = null,
         amount: Double? = null,
-        propertyMask: String? = null,
+        attributeMask: String? = null,
         blendMode: String? = null,
         targets: List<CueTargetDto>? = null,
         stomp: Boolean? = null,
@@ -745,7 +727,7 @@ class ProgrammerLayerStack(
                 else it.copy(
                     enabled = enabled ?: it.enabled,
                     amount = amount?.coerceIn(0.0, 1.0) ?: it.amount,
-                    propertyMask = propertyMask ?: it.propertyMask,
+                    attributeMask = attributeMask ?: it.attributeMask,
                     blendMode = blendMode ?: it.blendMode,
                     targets = layerTargets(it.source, targets ?: it.targets),
                     stomp = stomp ?: it.stomp,
@@ -783,7 +765,7 @@ class ProgrammerLayerStack(
                     sortOrder = 0, // renumbered below
                     enabled = layer.enabled,
                     targets = layerTargets(layer.source, layer.targets),
-                    propertyMask = layer.propertyMask,
+                    attributeMask = layer.attributeMask,
                     // The one point a *stored* blend becomes programmer state, and so the one
                     // place the lenient policy belongs on this path: a row written by another
                     // build may name a blend this one does not know, and Record writes these
@@ -791,7 +773,7 @@ class ProgrammerLayerStack(
                     // UI and every subsequent write agree on the blend the desk is actually
                     // playing — and that `writeCueChildren`'s strict check, which Record CREATE
                     // does not catch, can never see an unrecognised value from this direction.
-                    blendMode = EffectSpecCoercion.Lenient.blendMode(layer.blendMode) {
+                    blendMode = FxSpecCoercion.Lenient.blendMode(layer.blendMode) {
                         "included cue layer ${layer.layerId} on '${layer.source.name}'"
                     }.name,
                     amount = layer.amount,
@@ -861,13 +843,13 @@ class ProgrammerLayerStack(
         // into one publish across the programmer *and* every live cue, and a Look edit touring to
         // an already-applied layer is not the layer arriving — re-timing it would make every nudge
         // of a colour crossfade on stage.
-        return materialise(cookStack(layers, withEffects = false).values).moved
+        return materialise(cookStack(layers, withFx = false).values).moved
     }
 
     /**
      * Put a template layer's **current** effect back on the instance it spawned — the busk Effects
      * tab's *Reset to template* (fixture-fx-sheets plan W5, D20). The instance is edited in place
-     * through [FxEngine.updateEffect], so its id and its phase are kept: a running chase snaps back
+     * through [FxEngine.updateFx], so its id and its phase are kept: a running chase snaps back
      * to the template's settings without restarting.
      *
      * Everything the layer would spawn the effect with is restored — the effect and its
@@ -875,77 +857,77 @@ class ProgrammerLayerStack(
      * timing, timing source and both masters — with the layer's own overrides (its speed masters,
      * its beat-division override) applied exactly as [build] applies them.
      *
-     * **The spawn key moves to the template's current effect.** [syncEffects] matches an instance
-     * by the [StoredEffect] it was spawned from, so an instance spawned before a template edit
+     * **The spawn key moves to the template's current effect.** [syncFx] matches an instance
+     * by the [StoredFx] it was spawned from, so an instance spawned before a template edit
      * carries the old entry and the next recook would retract it and spawn afresh. Reset is the
      * moment the instance becomes the template's current effect, so it takes that entry as its key
-     * and the next recook keeps it. Done under [effectsLock], so no recook can classify the instance
+     * and the next recook keeps it. Done under [fxLock], so no recook can classify the instance
      * between the update and the re-key.
      *
-     * Refused with [ResetToTemplateOutcome.NOT_FROM_TEMPLATE] for an instance no programmer
+     * Refused with [ResetToPaletteOutcome.NOT_FROM_PALETTE] for an instance no programmer
      * template layer spawned — a Look layer's, a manual one, a cue's (whose template layer is
      * re-spawned by the next GO, not edited in place), Include's.
      */
-    fun resetEffectToTemplate(effectId: Long): ResetToTemplateOutcome = synchronized(effectsLock) {
+    fun resetFxToPalette(fxId: Long): ResetToPaletteOutcome = synchronized(fxLock) {
         val eng = engine()
-        val instance = eng.getEffect(effectId) ?: return ResetToTemplateOutcome.NotFound
-        val key = instance.programmerLayerEffectKey
+        val instance = eng.getFx(fxId) ?: return ResetToPaletteOutcome.NotFound
+        val key = instance.programmerLayerFxKey
         val source = instance.source
         val layer = key?.let { k -> store.layers.firstOrNull { it.layerId == k.layerId } }
-        if (key == null || source == null || !source.isTemplate || layer == null) {
-            return ResetToTemplateOutcome.Refused(
-                ResetToTemplateOutcome.NOT_FROM_TEMPLATE,
-                "Effect $effectId was not started by a palette layer in the programmer",
+        if (key == null || source == null || !source.isPalette || layer == null) {
+            return ResetToPaletteOutcome.Refused(
+                ResetToPaletteOutcome.NOT_FROM_PALETTE,
+                "FX $fxId was not started by a palette layer in the programmer",
             )
         }
-        val entry = templateRegistry().snapshot(source.uuid)?.effect
-            ?: return ResetToTemplateOutcome.Refused(
-                ResetToTemplateOutcome.TEMPLATE_GONE,
-                "Palette '${source.name}' no longer holds an effect to reset to",
+        val entry = paletteRegistry().snapshot(source.uuid)?.effect
+            ?: return ResetToPaletteOutcome.Refused(
+                ResetToPaletteOutcome.PALETTE_GONE,
+                "Palette '${source.name}' no longer holds an FX to reset to",
             )
-        val st = state() ?: return ResetToTemplateOutcome.NotFound
-        val spec = entry.toEffectSpec().withBeatDivisionOverride(layer.beatDivisionOverride)
+        val st = state() ?: return ResetToPaletteOutcome.NotFound
+        val spec = entry.toFxSpec().withCycleOverride(layer.cycleOverride)
         // Built the way [build] builds a fresh spawn, on the instance's own target, and read for its
         // settings only — this instance is never added to the engine.
         val fresh = try {
-            EffectSpawner.createEffectInstance(
+            FxSpawner.createFxInstance(
                 spec, instance.target, state = st,
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
             )
         } catch (e: Exception) {
-            return ResetToTemplateOutcome.Refused(
-                ResetToTemplateOutcome.TEMPLATE_GONE,
-                "Palette '${source.name}''s effect could not be created: ${e.message}",
+            return ResetToPaletteOutcome.Refused(
+                ResetToPaletteOutcome.PALETTE_GONE,
+                "Palette '${source.name}''s FX could not be created: ${e.message}",
             )
         }
-        val updated = eng.updateEffect(
-            effectId = effectId,
-            newEffect = fresh.effect,
+        val updated = eng.updateFx(
+            fxId = fxId,
+            newFx = fresh.effect,
             newTiming = fresh.timing,
             newBlendMode = fresh.blendMode,
             newPhaseOffset = fresh.phaseOffset,
-            newDistributionStrategy = fresh.distributionStrategy,
+            newOrder = fresh.order,
             newElementMode = fresh.elementMode,
             newElementFilter = fresh.elementFilter,
-            newStepTiming = fresh.stepTiming,
+            newTimingMode = fresh.dynamics.timing,
             newRegistrationId = fresh.registrationId,
             newTimingSource = fresh.registrationTimingSource,
             replaceMasters = FxEngine.MasterAssignment(fresh.speedMasterUuid, fresh.rateSpeedMasterUuid),
             newSeconds = fresh.onSeconds,
             // Size, direction and runs are the palette's too (effects plan D2, D5, D9).
-            newSize = fresh.dynamics.size,
+            newAmount = fresh.dynamics.amount,
             newDirection = fresh.dynamics.direction,
-            newNShot = fresh.dynamics.nShot,
-            clearNShot = fresh.dynamics.nShot == null,
+            newRuns = fresh.dynamics.runs,
+            clearRuns = fresh.dynamics.runs == null,
             // And the spread's shape (D4).
             newSpread = fresh.dynamics.spread,
             newWings = fresh.dynamics.wings,
-            newBlocks = fresh.dynamics.blocks,
-            newGroups = fresh.dynamics.groups,
-        ) ?: return ResetToTemplateOutcome.NotFound
-        updated.programmerLayerEffectKey = ProgrammerLayerEffectKey.of(key.layerId, entry, key.target)
-        ResetToTemplateOutcome.Reset(updated)
+            newSegments = fresh.dynamics.segments,
+            newParts = fresh.dynamics.parts,
+        ) ?: return ResetToPaletteOutcome.NotFound
+        updated.programmerLayerFxKey = ProgrammerLayerFxKey.of(key.layerId, entry, key.target)
+        ResetToPaletteOutcome.Reset(updated)
     }
 
     // ── The cook ────────────────────────────────────────────────────────────
@@ -966,9 +948,9 @@ class ProgrammerLayerStack(
         // One cook for the whole recook (sweep item C8): the rows and the effect triples come out
         // of a single pass over the stack, so the layers resolve once and both halves see the same
         // Look snapshots.
-        val cooked = cookStack(layers, withEffects = true)
+        val cooked = cookStack(layers, withFx = true)
         val (moved, rowFades) = materialise(cooked.values)
-        val fx = syncEffects(layers, cooked, fadeMs, moved)
+        val fx = syncFx(layers, cooked, fadeMs, moved)
         if (moved.isNotEmpty()) {
             val eng = engine()
             if (!arrival || rowFades.isEmpty() || fadeMs > 0) {
@@ -996,16 +978,16 @@ class ProgrammerLayerStack(
     /**
      * Cook the stack.
      *
-     * [withEffects] asks for the effect triples alongside the rows, out of the same pass over the
+     * [withFx] asks for the effect triples alongside the rows, out of the same pass over the
      * layers — which is what [recook] wants. [recookIfReferences] passes false: it republishes
      * values and deliberately leaves the running effects alone, so collecting them would be work
      * thrown away.
      *
-     * Called **outside** [effectsLock], always. `loadLookSnapshot` opens a transaction, and the
+     * Called **outside** [fxLock], always. `loadLookSnapshot` opens a transaction, and the
      * class doc's rule that the cook stays outside every lock is why — the effect half used to be
      * cooked from inside that lock, which is the violation this consolidation removes.
      */
-    private fun cookStack(layers: List<ProgrammerLayer>, withEffects: Boolean): CueComposer.FullCook =
+    private fun cookStack(layers: List<ProgrammerLayer>, withFx: Boolean): CueComposer.FullCook =
         CueComposer.cookAll(
             fixtures = fixtures(),
             cueId = programmerCookCueId,
@@ -1017,16 +999,16 @@ class ProgrammerLayerStack(
             // tell the operator's own edits from the stack's output.
             localRows = emptyList(),
             resolveLook = lookRegistry()::snapshot,
-            resolveTemplate = templateRegistry()::snapshot,
-            withEffects = withEffects,
+            resolvePalette = paletteRegistry()::snapshot,
+            withFx = withFx,
         )
 
     /**
      * Swap a cook's values into the store. No publish.
      *
      * Also republishes the stack's within-cue stomp suppression, which has to happen here rather
-     * than in [syncEffects] beside the instances it affects: only the cook knows which properties
-     * each layer asserted, and `syncEffects` deliberately does not rebuild on a mask, amount or
+     * than in [syncFx] beside the instances it affects: only the cook knows which properties
+     * each layer asserted, and `syncFx` deliberately does not rebuild on a mask, amount or
      * order change — all three of which move the suppression set.
      */
     private fun materialise(cooked: CookResult): Materialised {
@@ -1035,7 +1017,7 @@ class ProgrammerLayerStack(
             cooked.rows.map { row ->
                 ProgrammerStore.LayerSlotWrite(
                     fixtureKey = row.targetKey,
-                    propertyName = row.propertyName,
+                    attribute = row.attribute,
                     value = row.value,
                     // Absent only when a local row won, which cannot happen here — nothing is
                     // passed as a local row. Index 0 is a safe floor either way.
@@ -1050,7 +1032,7 @@ class ProgrammerLayerStack(
         } else {
             cooked.rows.mapNotNull { row ->
                 val fade = row.fadeDurationMs?.takeIf { it > 0 } ?: return@mapNotNull null
-                CueAssignmentResolver.Key.fixture(row.targetKey, row.propertyName)
+                CueAssignmentResolver.Key.fixture(row.targetKey, row.attribute)
                     .takeIf { it in moved }
                     ?.let { it to fade }
             }.toMap()
@@ -1058,7 +1040,7 @@ class ProgrammerLayerStack(
         return Materialised(moved, rowFades)
     }
 
-    private data class EffectSync(val spawned: Int, val retracted: Int, val repriorised: Int)
+    private data class FxSync(val spawned: Int, val retracted: Int, val repriorised: Int)
 
     /**
      * Bring the live programmer-band effects into line with the stack.
@@ -1070,19 +1052,19 @@ class ProgrammerLayerStack(
      *
      * At [fadeMs] above 0 an arriving instance grows from nothing and a retracted one shrinks to
      * nothing, removed at 0 (effects plan D13) — except one over a key whose value this recook moves
-     * ([moved]), which lands or goes at once so that value can ramp ([FxEngine.releaseEffects]). At
+     * ([moved]), which lands or goes at once so that value can ramp ([FxEngine.releaseFx]). At
      * 0 both snap.
      */
-    private fun syncEffects(
+    private fun syncFx(
         layers: List<ProgrammerLayer>,
         cooked: CueComposer.FullCook,
         fadeMs: Long,
         moved: Set<CueAssignmentResolver.Key>,
-    ): EffectSync = synchronized(effectsLock) {
+    ): FxSync = synchronized(fxLock) {
         val eng = engine()
         // The engine's record *is* the band: anything removed by another surface (the FX sheet's
         // own remove, a band sweep) is simply absent here, with no bookkeeping to reconcile.
-        val live = eng.programmerLayerEffects()
+        val live = eng.programmerLayerFx()
 
         val desired = cooked.effects
 
@@ -1091,16 +1073,16 @@ class ProgrammerLayerStack(
         val rankOf = cooked.ranks
 
         val byLayerId = layers.associateBy { it.layerId }
-        val wanted = HashSet<ProgrammerLayerEffectKey>(desired.size)
+        val wanted = HashSet<ProgrammerLayerFxKey>(desired.size)
         val repriorities = HashMap<Long, Int>()
-        // Built here, added in one `addEffects` below: a per-instance add rebuilt the engine's
+        // Built here, added in one `addFxBatch` below: a per-instance add rebuilt the engine's
         // sorted snapshots and re-broadcast the whole active-effect list once per effect, which
         // is O(N²) over a stack of any size (sweep item C7). Build order is add order, so the
         // layer-rank priorities still decide composition exactly as before.
         val spawning = mutableListOf<FxInstance>()
 
         for ((layer, effect, target) in desired) {
-            val key = ProgrammerLayerEffectKey.of(layer.layerId, effect, target)
+            val key = ProgrammerLayerFxKey.of(layer.layerId, effect, target)
             // A Look holding the same effect twice on one target would collide here; the second is
             // dropped rather than spawning a second instance under the same identity — the retract
             // pass matches on the key, so only one of the twins could ever be seen.
@@ -1111,25 +1093,25 @@ class ProgrammerLayerStack(
                 repriorities[existing.id] = priority
                 continue
             }
-            val override = byLayerId[layer.layerId]?.beatDivisionOverride
+            val override = byLayerId[layer.layerId]?.cycleOverride
             spawning += build(layer, effect, target, key, priority, override) ?: continue
         }
 
-        val valueMoves = { key: String, property: String -> CueAssignmentResolver.Key.fixture(key, property) in moved }
+        val valueMoves = { key: String, attribute: String -> CueAssignmentResolver.Key.fixture(key, attribute) in moved }
         // Set before the add, so no pass paints an arriving instance at full first.
         if (fadeMs > 0) {
             val nowMs = System.currentTimeMillis()
             for (instance in spawning) {
                 if (eng.paintsMovingValue(instance, valueMoves)) continue
-                instance.carryEnvelope(EffectEnvelope.ramp(0.0, 1.0, fadeMs, EasingCurve.LINEAR, nowMs))
+                instance.carryEnvelope(FxEnvelope.ramp(0.0, 1.0, fadeMs, EasingCurve.LINEAR, nowMs))
             }
         }
-        val spawned = eng.addEffects(spawning).size
+        val spawned = eng.addFxBatch(spawning).size
 
-        val retracted = eng.releaseEffects(live.filterKeys { it !in wanted }.values, fadeMs, valueMoves)
+        val retracted = eng.releaseFx(live.filterKeys { it !in wanted }.values, fadeMs, valueMoves)
 
-        val repriorised = eng.repriorityProgrammerLayerEffects(repriorities)
-        EffectSync(spawned, retracted, repriorised)
+        val repriorised = eng.repriorityProgrammerLayerFx(repriorities)
+        FxSync(spawned, retracted, repriorised)
     }
 
     /**
@@ -1139,7 +1121,7 @@ class ProgrammerLayerStack(
      * in `CookWinner.index` — so an effect's position in the band and its layer's cooked rank are
      * one value, not two that have to be kept equal.
      *
-     * `sortedEffectsComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder` the
+     * `sortedFxComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder` the
      * creation counter, so without the offset relative order would be *spawn* order and a reorder would need
      * a respawn to express itself. Every consumer of the band tests
      * `isProgrammerFxPriority` (`>= BASE`) rather than exact equality, so an offset is invisible to
@@ -1151,25 +1133,25 @@ class ProgrammerLayerStack(
 
     /**
      * Build the instance a programmer layer's effect wants, or null if it can't be built.
-     * The caller adds it — see the batched `addEffects` in [syncEffects].
+     * The caller adds it — see the batched `addFxBatch` in [syncFx].
      */
     private fun build(
         layer: CookLayer,
-        effect: StoredEffect,
-        target: EffectTargetRef,
-        key: ProgrammerLayerEffectKey,
+        effect: StoredFx,
+        target: FxTargetsRef,
+        key: ProgrammerLayerFxKey,
         priority: Int,
-        beatDivisionOverride: Double?,
+        cycleOverride: Double?,
     ): FxInstance? {
-        val instance = spawn(layer, effect, target, beatDivisionOverride) ?: return null
+        val instance = spawn(layer, effect, target, cycleOverride) ?: return null
         // `source` and the band key are the honest fields for where this came from — a template
         // layer reaches here too now (D5), which is why this is the whole source rather than an
         // id that could only ever mean a Look.
         instance.source = layer.source
-        // The key is the instance's identity in the band: [syncEffects] classifies the engine's
+        // The key is the instance's identity in the band: [syncFx] classifies the engine's
         // live instances by it on the next recook, so an unstamped instance would be retracted
         // as unrecognised and respawned every mutation.
-        instance.programmerLayerEffectKey = key
+        instance.programmerLayerFxKey = key
         instance.priority = priority
         return instance
     }
@@ -1177,14 +1159,14 @@ class ProgrammerLayerStack(
     /** A layer's effect on one target as a bare instance — no source, no band key, no priority. */
     private fun spawn(
         layer: CookLayer,
-        effect: StoredEffect,
-        target: EffectTargetRef,
-        beatDivisionOverride: Double?,
+        effect: StoredFx,
+        target: FxTargetsRef,
+        cycleOverride: Double?,
     ): FxInstance? {
         val st = state() ?: return null
-        val spec = effect.toEffectSpec().withBeatDivisionOverride(beatDivisionOverride)
+        val spec = effect.toFxSpec().withCycleOverride(cycleOverride)
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(st, target, spec)
+            FxSpawner.resolveTargetForCue(st, target, spec)
         } catch (e: Exception) {
             logger.warn(
                 "programmer layer on '{}' — target '{}' unresolvable — skipping effect: {}",
@@ -1193,10 +1175,10 @@ class ProgrammerLayerStack(
             null
         } ?: return null
 
-        // [createEffectInstance] gives this a **live** colour source: a `tmpl:` reference is a live
+        // [createFxInstance] gives this a **live** colour source: a `pal:` reference is a live
         // dependency by design, and a programmer layer is no more exempt from that than a cue's.
         return try {
-            EffectSpawner.createEffectInstance(
+            FxSpawner.createFxInstance(
                 spec, fxTarget, state = st,
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
@@ -1204,7 +1186,7 @@ class ProgrammerLayerStack(
         } catch (e: Exception) {
             logger.warn(
                 "programmer layer '{}': effect '{}' could not be created — {}",
-                layer.source.name, effect.effectType, e.message,
+                layer.source.name, effect.fxType, e.message,
             )
             null
         }

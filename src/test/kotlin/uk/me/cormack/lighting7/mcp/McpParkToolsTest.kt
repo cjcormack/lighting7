@@ -74,6 +74,14 @@ class McpParkToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `get_current_state refuses an include it does not know, the old active_effects among them`() {
+        val refused = call("get_current_state", """{"include":["active_effects"]}""")
+        assertFalse(refused.success)
+        assertTrue("active_effects" in refused.description, refused.description)
+        assertTrue(call("get_current_state", """{"include":["active_fx"]}""").success)
+    }
+
+    @Test
     fun `park_channel parks, names what it drives, and holds the output`() {
         patchDimmerAt7()
         assertEquals(emptyList(), parkedList(), "nothing is parked to begin with, and the key is still there")

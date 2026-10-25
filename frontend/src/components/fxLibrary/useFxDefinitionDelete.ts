@@ -17,7 +17,7 @@ export interface FxDeleteItem {
  * editing or deleting that script, which is the Scripts page's.
  */
 export function fxDeleteSkipReason(item: FxDeleteItem): string | null {
-  if (item.source === 'builtIn') return 'built-in effects cannot be deleted'
+  if (item.source === 'builtIn') return 'built-in FX cannot be deleted'
   if (item.source === 'script') return 'a script registers it — edit or delete the script'
   if (item.definition == null) return 'its definition is not loaded yet'
   return null
@@ -29,7 +29,7 @@ export function fxDeleteSkipReason(item: FxDeleteItem): string | null {
  * are skipped by name before anything is sent ([fxDeleteSkipReason]).
  *
  * **No dialog.** The desk keeps no record of what uses a definition — a template's effect, a cue
- * effect, a running instance all name it by `effectId` — so `DELETE fx/definitions/{id}` has no
+ * effect, a running instance all name it by `fxId` — so `DELETE fx/definitions/{id}` has no
  * in-use refusal to gather, and every other refusal is toasted by the hook. `deleteFxDefinition` is
  * in `SILENT_ENDPOINTS` for that reason (D14): the middleware would say it a second time.
  */
@@ -56,7 +56,7 @@ export function useFxDefinitionDelete({
     remove,
     name: fxItemName,
     skip: fxDeleteSkipReason,
-    noun: 'effect',
+    noun: 'FX',
     onDeleted,
     toastKey: 'fx-library',
   })

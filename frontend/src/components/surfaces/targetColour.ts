@@ -9,10 +9,10 @@ import type { FixtureColour } from '@/lib/fixtureColours'
  */
 export function bindingTargetColour(target: BindingTarget, colours: TargetColours): FixtureColour | null {
   switch (target.type) {
-    case 'fixtureProperty':
+    case 'fixtureAttribute':
     case 'fireTrigger':
       return targetColour({ type: 'fixture', key: target.fixtureKey }, colours)
-    case 'groupProperty':
+    case 'groupAttribute':
       return targetColour({ type: 'group', key: target.groupName }, colours)
     case 'flash':
       return bindingTargetColour(target.target, colours)

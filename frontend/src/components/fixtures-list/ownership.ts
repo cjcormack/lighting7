@@ -1,5 +1,5 @@
 import { computeCombinedCss } from '../../lib/colourMath'
-import { resolveSettingOption } from '../../hooks/usePropertyValues'
+import { resolveSettingOption } from '../../hooks/useAttributeValues'
 import type { CellResolution } from './columns'
 import type { CellState, CueCellStateSource } from './scopedCellValue'
 import type { CellValue } from './useRowValues'
@@ -38,7 +38,7 @@ export function ownershipCellClass(ownership?: CellOwnership): string {
       return ownership.touched
         ? 'rounded-sm ring-1 ring-inset ring-primary bg-primary/10' + mixed
         : 'rounded-sm ring-1 ring-inset ring-primary/40' + mixed
-    case 'effect':
+    case 'fx':
       return 'rounded-sm ring-1 ring-inset ring-violet-500/50' + mixed
     case 'cue':
       return 'rounded-sm ring-1 ring-inset ring-sky-500/40' + mixed
@@ -55,7 +55,7 @@ export function ownershipCellClass(ownership?: CellOwnership): string {
  * one place the fork belongs. The subscription machinery stays single-implementation.
  *
  * Three states, and none of them is about the rig — they are about this layer:
- * - **inert**: the column's family sits outside the layer's `propertyMask`, so the layer would
+ * - **inert**: the column's family sits outside the layer's `attributeMask`, so the layer would
  *   never write it whatever the Look holds;
  * - **untargeted**: the fixture sits outside the layer's `targets`. The value still shows when the
  *   Look has one, because "this Look has a value for it, this layer filters it out" is the useful
@@ -117,9 +117,9 @@ export function cueSourceTitle(source: CueCellStateSource | undefined): string |
  * the legend glosses them for an operator meeting the colours for the first time.
  */
 export const OWNERSHIP_LABELS: Record<CellOwnershipSource, string> = {
-  parked: 'Parked — the rig ignores every layer here',
+  parked: 'Parked — the rig ignores everything below it',
   programmer: 'Programmer',
-  effect: 'Effect',
+  fx: 'FX',
   cue: 'Cue',
   baseline: 'Baseline — nothing asserts this',
 }
@@ -192,7 +192,7 @@ export function applyStagedValue(
       if (staged.kind !== 'level') return value
       const options =
         first && (first.kind === 'setting' || first.kind === 'colour-setting')
-          ? first.property.options
+          ? first.attribute.options
           : []
       return {
         kind: 'setting',

@@ -19,8 +19,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.DaoProject
@@ -85,10 +85,10 @@ class CueHoldsTest : RouteIntegrationTest() {
                 this.name = name
                 fadeDuration = fadeMs?.let { Duration.ofMillis(it) }
             }.also { cue ->
-                DaoCuePropertyAssignment.new {
+                DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = fixture
-                    propertyName = "rgbColour"; value = "#%02x0000".format(level); sortOrder = 0
+                    attribute = "rgbColour"; value = "#%02x0000".format(level); sortOrder = 0
                 }
             }
             fun entry(stack: DaoCueStack, cue: DaoCue, ordinal: Double, number: String, follows: Boolean = false) =
@@ -104,10 +104,10 @@ class CueHoldsTest : RouteIntegrationTest() {
             val b = stack("B", 1)
             val c = cue("C", "hex-1", 100, cFadeMs).also { cue ->
                 // And hex-1's dimmer, which only C sets: HTP, so a fade's weight shows in its level.
-                DaoCuePropertyAssignment.new {
+                DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = "hex-1"
-                    propertyName = "dimmer"; value = "100"; sortOrder = 1
+                    attribute = "dimmer"; value = "100"; sortOrder = 1
                 }
             }
             val d = cue("D", "hex-1", 200, null)
@@ -124,12 +124,12 @@ class CueHoldsTest : RouteIntegrationTest() {
     /** The red of [fixture]'s composed Layer 4 colour, or null when no cue holds it. */
     private fun red(fixture: String): Int? =
         (state.show.fxEngine.layerResolver.currentCueLayerState[CueAssignmentResolver.Key.fixture(fixture, "rgbColour")]
-            as? CueAssignmentResolver.PropertyValue.Colour)?.value?.toSerializedString()?.substring(1, 3)?.toInt(16)
+            as? CueAssignmentResolver.AttributeValue.Colour)?.value?.toSerializedString()?.substring(1, 3)?.toInt(16)
 
     /** hex-1's composed Layer 4 dimmer — C's alone, scaled by C's fade weight. */
     private fun dimmer(): Int? =
         (state.show.fxEngine.layerResolver.currentCueLayerState[CueAssignmentResolver.Key.fixture("hex-1", "dimmer")]
-            as? CueAssignmentResolver.PropertyValue.Slider)?.value?.toInt()
+            as? CueAssignmentResolver.AttributeValue.Slider)?.value?.toInt()
 
     private fun onStage(cueId: Int) = cueId in state.show.fxEngine.cueLayer.activeCueIds()
 
@@ -234,23 +234,23 @@ class CueHoldsTest : RouteIntegrationTest() {
         mountTestApp(state)
         val rig = seed(cFadeMs = 2_000, a3Follows = true)
         transaction(state.database) {
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = DaoCue[rig.c]
                 targetType = "fixture"; targetKey = "hex-2"
-                effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
             }
         }
         manager.activateEntry(state, rig.stackA, rig.a1)
-        val effects = state.show.fxEngine.getActiveEffects().filter { it.cueId == rig.c }.map { it.id }.toSet()
+        val effects = state.show.fxEngine.getActiveFx().filter { it.cueId == rig.c }.map { it.id }.toSet()
         assertEquals(1, effects.size, "C's effect is running")
 
         // a1 to a3: both name C. C has a 2 s fade, and there is an outgoing entry — yet nothing fades.
         manager.goToEntry(state, rig.stackA, rig.a3)
 
         assertEquals(listOf(CueHold.Stack(rig.stackA, rig.a3)), holds.holdsOf(rig.c))
-        assertEquals(effects, state.show.fxEngine.getActiveEffects().filter { it.cueId == rig.c }.map { it.id }.toSet(), "no respawn")
+        assertEquals(effects, state.show.fxEngine.getActiveFx().filter { it.cueId == rig.c }.map { it.id }.toSet(), "no respawn")
         val run = manager.runState.runStateFor(state, rig.stackA)
         assertNull(run.fadeElapsedMs, "no crossfade ran")
         assertEquals(rig.a3, run.activeEntryId)

@@ -7,13 +7,17 @@ import { store } from "./store"
 import { applyThemeClass, getInitialTheme } from "./lib/theme"
 import { startOAuthIdentityBridge } from "./store/oauthGithub"
 import { startLooksBridge } from "./store/looks"
-import { startTemplatesBridge } from "./store/templates"
+import { startPalettesBridge } from "./store/palettes"
 import { startProgrammerErrorBridge } from "./store/programmerErrors"
 import { windowName } from "./lib/windowIdentity"
 import { applyImmersiveLaunch } from "./lib/immersive"
 import { refreshTelemetry, startSentry } from "./lib/sentry"
 import { lightingApi } from "./api/lightingApi"
 import { installPointerFocusTracking } from "./components/sheet/pointerFocus"
+
+// Before the first render, so the click that navigates to a grid is seen; and before Sentry's
+// feedback key guard, which would otherwise hide a Tab out of the form from it. See pointerFocus.ts.
+installPointerFocusTracking()
 
 // Asks the desk whether to report, before the bridges start; it never holds up the first paint.
 startSentry()
@@ -36,15 +40,12 @@ startOAuthIdentityBridge()
 // Same reason, one slice along: store/looks is imported from the sidebar's nav registry and from
 // pickers that mount everywhere, so its WS bridge cannot run at module-eval time either.
 startLooksBridge()
-startTemplatesBridge()
+startPalettesBridge()
 
 // The programmer's WS write path reports its refusals on `programmer.error` and nothing else —
 // there is no REST action for `errorToastMiddleware` to catch — so an unheard frame means a
 // slider that moved while the rig did not. See startProgrammerErrorBridge.
 startProgrammerErrorBridge()
-
-// Before the first render, so the click that navigates to a grid is seen. See pointerFocus.ts.
-installPointerFocusTracking()
 
 // This tab's name (multi-screen plan D10): `?window=` is read once and stripped here, before the
 // router is created, so the router never sees the parameter and a bookmark of the stripped URL

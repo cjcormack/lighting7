@@ -76,7 +76,7 @@ data class SpeedMasterStateJson(
     /** `MANUAL` / `TAP` — how the tempo was last set. */
     val source: String,
     /** Effect-library category this master is the apply-time default for; null routes nothing. */
-    val usage: String? = null,
+    val family: String? = null,
     /** Follow ratio over [followTargetUuid] (`bpm = leader × num/den`); both null = manual. */
     val followNum: Int? = null,
     val followDen: Int? = null,
@@ -298,7 +298,7 @@ private fun buildSpeedMastersState(bank: SpeedMasterBank): SpeedMastersStateOutM
                 bpm = it.bpm,
                 isRunning = it.isRunning,
                 source = it.source.name,
-                usage = it.usage,
+                family = it.family,
                 followNum = it.followNum,
                 followDen = it.followDen,
                 followTargetUuid = it.followTargetUuid?.toString(),

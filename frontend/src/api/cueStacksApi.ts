@@ -30,7 +30,7 @@ interface CueStackEntryBase {
    * built entirely from layers otherwise reads as empty in the Run list.
    */
   layerCount: number
-  adHocEffectCount: number
+  adHocFxCount: number
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null
   fadeDurationMs: number | null
@@ -184,7 +184,7 @@ export interface CueStackActivateResponse {
   entryId: number
   cueId: number
   cueName: string
-  effectCount: number
+  fxCount: number
 }
 
 export interface CueStackDeactivateResponse {
@@ -293,7 +293,7 @@ export interface PreviewChannel {
 export interface PreviewCueResponse {
   cueId: number
   channels: PreviewChannel[]
-  /** `fixtureKey.property` rows that couldn't be resolved to channels. Advisory. */
+  /** `fixtureKey.attribute` rows that couldn't be resolved to channels. Advisory. */
   skipped: string[]
   /**
    * The scenery the GO would land, whole (an element absent shows its base), each with the move from

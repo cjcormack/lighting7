@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.show.Fixtures
@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /** Which layer produced the current winning value for one (target, property). */
-enum class ProvenanceSource { PARKED, PROGRAMMER, EFFECT, CUE }
+enum class ProvenanceSource { PARKED, PROGRAMMER, FX, CUE }
 
 /**
  * The winning contributor for one (target, property) — the "who owns this value"
@@ -23,11 +23,11 @@ enum class ProvenanceSource { PARKED, PROGRAMMER, EFFECT, CUE }
  */
 data class ProvenanceEntry(
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val source: ProvenanceSource,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
-    val effectId: Long? = null,
+    val fxId: Long? = null,
     /**
      * The Look layer that won, when one did.
      *
@@ -62,7 +62,7 @@ data class ProvenanceEntry(
 /** One bundled emitter's contribution to a reconciled colour — see [ProvenanceEntry.bundled]. */
 data class BundledProvenance(
     /** The emitter property (`white`, `amber`, `uv`) whose own row supplied the component. */
-    val propertyName: String,
+    val attribute: String,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     val layerId: Int? = null,
@@ -97,7 +97,7 @@ data class UnderlyingSource(
     val key: CueAssignmentResolver.Key,
     val cueId: Int?,
     val cueStackId: Int?,
-    val viaEffectId: Long?,
+    val viaFxId: Long?,
 )
 
 /**
@@ -106,7 +106,7 @@ data class UnderlyingSource(
  */
 data class KeyStack(
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     /**
      * The programmer is blind: its slots are listed but none is on stage, nothing is held back by its
      * values, and its own effects are held ([BlindHold]).
@@ -126,7 +126,7 @@ data class KeyStackLayer(
     val kind: Kind,
     val onStage: Boolean,
     /** The literal this layer holds, where it holds one (a programmer slot, the cue's value, the base). */
-    val value: CueAssignmentResolver.PropertyValue? = null,
+    val value: CueAssignmentResolver.AttributeValue? = null,
     /** [Kind.PARK]: the property's parked channels. */
     val parkedChannels: List<ParkedChannelValue> = emptyList(),
     /** [Kind.PROGRAMMER]: the slot's owner, and its age at the read. */
@@ -138,7 +138,7 @@ data class KeyStackLayer(
     val effect: FxInstance? = null,
     /**
      * The two effect kinds: running but not painting here — the tick's own answer, [BlindHold] and
-     * [EffectSuppression.isSuppressed] against the engine's snapshot. [heldBackReason] says which.
+     * [FxSuppression.isSuppressed] against the engine's snapshot. [heldBackReason] says which.
      */
     val heldBack: Boolean = false,
     /** Set exactly when [heldBack] is: why the effect is not painting this key. */
@@ -164,13 +164,13 @@ data class KeyStackLayer(
          * An effect in the programmer priority band — it modulates on top of the programmer, and is
          * held while the programmer is blind ([BlindHold]).
          */
-        PROGRAMMER_EFFECT,
+        PROGRAMMER_FX,
 
         /** One owner's programmer slot (or a sideband slot on one of the property's channels). */
         PROGRAMMER,
 
         /** Any other effect — a cue's, a manual one. Held back while the programmer holds the key. */
-        EFFECT,
+        FX,
 
         /** What the cues compose to on this key. */
         CUE,
@@ -193,7 +193,7 @@ class ProvenanceService internal constructor(
     private val layerResolver: LayerResolver,
     private val publisher: CascadePublisher,
     /** Snapshot of the engine's active effect instances. */
-    private val activeEffects: () -> Collection<FxInstance>,
+    private val activeFx: () -> Collection<FxInstance>,
     /** The fixture/element keys an effect currently writes to — [FxEngine.fixtureKeysCoveredBy]'s private twin. */
     private val coverageKeys: (FxInstance) -> List<String>,
     /** The tick loops' stomp check — [CueAssignmentLayer.isLayerStomped]. */
@@ -204,16 +204,16 @@ class ProvenanceService internal constructor(
      * Priority order for effects — the engine's tick-composition comparator, shared so the
      * winner reported here is the effect actually painting on top.
      */
-    private val effectOrder: Comparator<FxInstance>,
+    private val fxOrder: Comparator<FxInstance>,
     /**
      * The engine's programmer-suppression snapshot ([FxEngine.programmerSuppression]) — the very
      * map its tick reads, empty while blind. Provenance and [keyStack] ask
-     * [EffectSuppression] against it rather than rebuilding a coverage map of their own, so "the
+     * [FxSuppression] against it rather than rebuilding a coverage map of their own, so "the
      * programmer holds this effect back" has one answer on the rig and on the wire (W1, W4).
      */
     private val programmerSuppression: () -> Map<String, Set<String>>,
     /** An effect's weight now, its stack's size included — [FxEngine.weightOf]. */
-    private val effectWeight: (FxInstance) -> Double = { it.weight(it.dynamics) },
+    private val fxWeight: (FxInstance) -> Double = { it.weight(it.dynamics) },
 ) {
     // Conflated: recomputed on layer events only (programmer mutation, cue republish,
     // effect lifecycle, park change) — never per frame. Full-state snapshots rather than
@@ -311,7 +311,7 @@ class ProvenanceService internal constructor(
      * running effect → cue layer. Keys nothing covers are omitted (baseline).
      *
      * **The programmer outranks an effect only where the engine holds that effect back**
-     * (fixture-fx-sheets plan W4), and both ask [EffectSuppression.heldBackByProgrammer] over one
+     * (fixture-fx-sheets plan W4), and both ask [FxSuppression.heldBackByProgrammer] over one
      * snapshot to find out — of the key the effect *paints*, since that is the key the tick asks
      * about. The effect is the key's own, or, for a key the programmer holds with none of its own,
      * one painting **every** channel of the key under a sibling key ([siblingPaintings]).
@@ -329,9 +329,9 @@ class ProvenanceService internal constructor(
         // the winners below: it is running, but it is not what the rig shows.
         val blind = programmerStore.blind
         val suppressing = if (blind) emptyMap() else programmerSuppression()
-        val propertyKeys: Set<CueAssignmentResolver.Key> = buildSet {
-            for ((fixtureKey, properties) in suppressing) {
-                for (propertyName in properties) add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
+        val attributeKeys: Set<CueAssignmentResolver.Key> = buildSet {
+            for ((fixtureKey, attributes) in suppressing) {
+                for (attribute in attributes) add(CueAssignmentResolver.Key.fixture(fixtureKey, attribute))
             }
         }
         // Sideband slots drive the wire too (raw pan/tilt drags, unpark hand-downs): attribute
@@ -349,7 +349,7 @@ class ProvenanceService internal constructor(
                 }
                 out
             }
-        val programmerKeys = HashSet<CueAssignmentResolver.Key>(propertyKeys).apply { addAll(sidebandChannels.keys) }
+        val programmerKeys = HashSet<CueAssignmentResolver.Key>(attributeKeys).apply { addAll(sidebandChannels.keys) }
 
         // Which programmer layer won each key it covers, so a programmer-won cell can name
         // *Warm Wash* rather than just "the programmer" — the same answer the cue branch below
@@ -367,7 +367,7 @@ class ProvenanceService internal constructor(
                 }
             }
 
-        val effectByKey = highestPriorityEffectByKey { !BlindHold.holds(blind, it) }
+        val fxByKey = highestPriorityFxByKey { !BlindHold.holds(blind, it) }
 
         // One snapshot for all three maps — this runs outside the publish lock, so
         // reading them as separate fields could straddle a concurrent cue apply. Reads the
@@ -381,16 +381,16 @@ class ProvenanceService internal constructor(
         val cueLayerLayerWinners = cueLayer.layerWinners
 
         val keys = HashSet<CueAssignmentResolver.Key>(programmerKeys)
-        for ((targetKey, properties) in cueLayerIndex) {
-            for (propertyName in properties.keys) {
-                keys.add(CueAssignmentResolver.Key.fixture(targetKey, propertyName))
+        for ((targetKey, attributes) in cueLayerIndex) {
+            for (attribute in attributes.keys) {
+                keys.add(CueAssignmentResolver.Key.fixture(targetKey, attribute))
             }
         }
-        for ((pair, _) in effectByKey) {
+        for ((pair, _) in fxByKey) {
             keys.add(CueAssignmentResolver.Key.fixture(pair.first, pair.second))
         }
 
-        val siblings = siblingPaintings(programmerKeys, propertyKeys, sidebandChannels, effectByKey)
+        val siblings = siblingPaintings(programmerKeys, attributeKeys, sidebandChannels, fxByKey)
 
         val entries = ArrayList<ProvenanceEntry>(keys.size)
         for (key in keys) {
@@ -399,39 +399,39 @@ class ProvenanceService internal constructor(
             } catch (_: Exception) {
                 continue
             }
-            val target = publisher.inferTargetForProperty(fixture, key)
+            val target = publisher.inferTargetForAttribute(fixture, key)
 
             val parked = target != null && publisher.allChannelsParked(target, fixture)
             // The effect painting this key: its own, or one painting all of it under a sibling key.
-            val painting: Painting? = effectByKey[key.targetKey to key.propertyName]
-                ?.let { Painting(key.targetKey, key.propertyName, it) }
+            val painting: Painting? = fxByKey[key.targetKey to key.attribute]
+                ?.let { Painting(key.targetKey, key.attribute, it) }
                 ?: siblings[key]
             val effect = painting?.effect
             val programmerWins = key in programmerKeys && (
-                painting == null || EffectSuppression.heldBackByProgrammer(
-                    suppressing, painting.fixtureKey, painting.propertyName, painting.effect.priority,
+                painting == null || FxSuppression.heldBackByProgrammer(
+                    suppressing, painting.fixtureKey, painting.attribute, painting.effect.priority,
                 )
             )
 
             val entry = when {
-                parked -> ProvenanceEntry(key.targetKey, key.propertyName, ProvenanceSource.PARKED)
+                parked -> ProvenanceEntry(key.targetKey, key.attribute, ProvenanceSource.PARKED)
                 programmerWins -> {
                     val layer = programmerLayerWinners[key]
                     ProvenanceEntry(
-                        key.targetKey, key.propertyName, ProvenanceSource.PROGRAMMER,
+                        key.targetKey, key.attribute, ProvenanceSource.PROGRAMMER,
                         layerId = layer?.layerId,
                         layerSource = layer?.source,
                     )
                 }
                 effect != null -> ProvenanceEntry(
-                    key.targetKey, key.propertyName, ProvenanceSource.EFFECT,
-                    cueId = effect.cueId, cueStackId = effect.cueStackId, effectId = effect.id,
+                    key.targetKey, key.attribute, ProvenanceSource.FX,
+                    cueId = effect.cueId, cueStackId = effect.cueStackId, fxId = effect.id,
                 )
-                cueLayerIndex[key.targetKey]?.containsKey(key.propertyName) == true -> {
+                cueLayerIndex[key.targetKey]?.containsKey(key.attribute) == true -> {
                     val winningCueId = cueLayerWinners[key]
                     val layer = cueLayerLayerWinners[key]
                     ProvenanceEntry(
-                        key.targetKey, key.propertyName, ProvenanceSource.CUE,
+                        key.targetKey, key.attribute, ProvenanceSource.CUE,
                         cueId = winningCueId,
                         cueStackId = winningCueId?.let { cueStackIdFor(it) },
                         layerId = layer?.layerId,
@@ -443,12 +443,12 @@ class ProvenanceService internal constructor(
             }
             entries.add(entry)
         }
-        entries.sortWith(compareBy({ it.targetKey }, { it.propertyName }))
+        entries.sortWith(compareBy({ it.targetKey }, { it.attribute }))
         return entries
     }
 
     /** An effect and the key it paints, which need not be the key being asked about — see [compute]. */
-    private data class Painting(val fixtureKey: String, val propertyName: String, val effect: FxInstance)
+    private data class Painting(val fixtureKey: String, val attribute: String, val effect: FxInstance)
 
     /**
      * For each programmer-held key with no running effect of its own, the top effect that paints
@@ -463,38 +463,38 @@ class ProvenanceService internal constructor(
      */
     private fun siblingPaintings(
         programmerKeys: Set<CueAssignmentResolver.Key>,
-        propertyKeys: Set<CueAssignmentResolver.Key>,
+        attributeKeys: Set<CueAssignmentResolver.Key>,
         sidebandChannels: Map<CueAssignmentResolver.Key, List<Pair<Int, Int>>>,
-        effectByKey: Map<Pair<String, String>, FxInstance>,
+        fxByKey: Map<Pair<String, String>, FxInstance>,
     ): Map<CueAssignmentResolver.Key, Painting> {
-        if (programmerKeys.isEmpty() || effectByKey.isEmpty()) return emptyMap()
+        if (programmerKeys.isEmpty() || fxByKey.isEmpty()) return emptyMap()
         val painted = HashMap<Pair<Int, Int>, MutableSet<Painting>>()
-        for ((paintKey, effect) in effectByKey) {
+        for ((paintKey, effect) in fxByKey) {
             val fixture = try {
                 fixtures.untypedGroupableFixture(paintKey.first)
             } catch (_: Exception) {
                 continue
             }
             val painting = Painting(paintKey.first, paintKey.second, effect)
-            for (write in PropertyChannelWriter.channelsFor(fixture, paintKey.second)) {
+            for (write in AttributeChannelWriter.channelsFor(fixture, paintKey.second)) {
                 painted.getOrPut(write.universe.universe to write.channel) { HashSet(1) }.add(painting)
             }
         }
         val candidates = HashSet<CueAssignmentResolver.Key>()
         for ((universe, channel) in painted.keys) {
-            for (key in publisher.resolveChannelPropertyKeys(universe, channel)) {
-                if (key in programmerKeys && (key.targetKey to key.propertyName) !in effectByKey) candidates += key
+            for (key in publisher.resolveChannelAttributeKeys(universe, channel)) {
+                if (key in programmerKeys && (key.targetKey to key.attribute) !in fxByKey) candidates += key
             }
         }
         val out = HashMap<CueAssignmentResolver.Key, Painting>()
         for (key in candidates) {
-            val held: List<Pair<Int, Int>> = if (key in propertyKeys) {
+            val held: List<Pair<Int, Int>> = if (key in attributeKeys) {
                 val fixture = try {
                     fixtures.untypedGroupableFixture(key.targetKey)
                 } catch (_: Exception) {
                     continue
                 }
-                PropertyChannelWriter.channelsFor(fixture, key.propertyName).map { it.universe.universe to it.channel }
+                AttributeChannelWriter.channelsFor(fixture, key.attribute).map { it.universe.universe to it.channel }
             } else {
                 sidebandChannels[key] ?: continue
             }
@@ -505,7 +505,7 @@ class ProvenanceService internal constructor(
                 common = common?.intersect(here) ?: here
                 if (common.isEmpty()) break
             }
-            common?.maxWithOrNull { a, b -> effectOrder.compare(a.effect, b.effect) }?.let { out[key] = it }
+            common?.maxWithOrNull { a, b -> fxOrder.compare(a.effect, b.effect) }?.let { out[key] = it }
         }
         return out
     }
@@ -520,16 +520,16 @@ class ProvenanceService internal constructor(
         key: CueAssignmentResolver.Key,
         cueLayer: LayerResolver.CueLayerSnapshot,
     ): List<BundledProvenance> {
-        if (bundleRoleOf(fixture, key.propertyName) != CueAssignmentResolver.BundleRole.COLOUR) return emptyList()
+        if (bundleRoleOf(fixture, key.attribute) != CueAssignmentResolver.BundleRole.COLOUR) return emptyList()
         val composed = cueLayer.index[key.targetKey] ?: return emptyList()
-        val bundled = FixturePropertyCatalogue.of(fixture::class).bundledByCategory.values
+        val bundled = FixtureAttributeCatalogue.of(fixture::class).bundledByCategory.values
         return bundled.mapNotNull { emitter ->
-            if (composed[emitter.name] !is CueAssignmentResolver.PropertyValue.Slider) return@mapNotNull null
+            if (composed[emitter.name] !is CueAssignmentResolver.AttributeValue.Slider) return@mapNotNull null
             val emitterKey = CueAssignmentResolver.Key.fixture(key.targetKey, emitter.name)
             val cueId = cueLayer.winners[emitterKey]
             val layer = cueLayer.layerWinners[emitterKey]
             BundledProvenance(
-                propertyName = emitter.name,
+                attribute = emitter.name,
                 cueId = cueId,
                 cueStackId = cueId?.let { cueStackIdFor(it) },
                 layerId = layer?.layerId,
@@ -539,7 +539,7 @@ class ProvenanceService internal constructor(
     }
 
     /**
-     * Highest-priority running effect per `(fixtureKey, propertyName)`. Shared by
+     * Highest-priority running effect per `(fixtureKey, attribute)`. Shared by
      * [compute] and [underlyingSources] so the two can't disagree about which effect is
      * driving a property.
      *
@@ -554,25 +554,25 @@ class ProvenanceService internal constructor(
      * An effect weighted to nothing — a 0 % size, or a programmer layer's spent N-shot (effects plan
      * D2, D9) — is skipped for the same reason, as [keyStack] reports it not on stage.
      */
-    private fun highestPriorityEffectByKey(
+    private fun highestPriorityFxByKey(
         include: (FxInstance) -> Boolean = { true },
     ): Map<Pair<String, String>, FxInstance> {
-        val effectByKey = HashMap<Pair<String, String>, FxInstance>()
-        for (effect in activeEffects()) {
+        val fxByKey = HashMap<Pair<String, String>, FxInstance>()
+        for (effect in activeFx()) {
             if (!effect.isRunning) continue
-            if (effect.spent || effectWeight(effect) <= 0.0) continue
+            if (effect.spent || fxWeight(effect) <= 0.0) continue
             if (!include(effect)) continue
-            val propertyName = effect.target.propertyName
+            val attribute = effect.target.attribute
             for (fixtureKey in coverageKeys(effect)) {
-                if (isLayerStomped(effect, fixtureKey, propertyName)) continue
-                val k = fixtureKey to propertyName
-                val current = effectByKey[k]
-                if (current == null || effectOrder.compare(effect, current) > 0) {
-                    effectByKey[k] = effect
+                if (isLayerStomped(effect, fixtureKey, attribute)) continue
+                val k = fixtureKey to attribute
+                val current = fxByKey[k]
+                if (current == null || fxOrder.compare(effect, current) > 0) {
+                    fxByKey[k] = effect
                 }
             }
         }
-        return effectByKey
+        return fxByKey
     }
 
     /**
@@ -606,13 +606,13 @@ class ProvenanceService internal constructor(
         // afterwards would lose the cue underneath: band effects always outrank cue-derived
         // priorities, so a single top-priority-per-key map would only ever hold the band one,
         // and a cue driving that property through its own FX would report as unattributed.
-        val effectByKey = highestPriorityEffectByKey { !FxEngine.isProgrammerFxPriority(it.priority) }
+        val fxByKey = highestPriorityFxByKey { !FxEngine.isProgrammerFxPriority(it.priority) }
         return keys.map { key ->
             val cueId = cueLayerWinners[key]
             if (cueId != null) {
-                UnderlyingSource(key, cueId, cueStackIdFor(cueId), viaEffectId = null)
+                UnderlyingSource(key, cueId, cueStackIdFor(cueId), viaFxId = null)
             } else {
-                val effect = effectByKey[key.targetKey to key.propertyName]
+                val effect = fxByKey[key.targetKey to key.attribute]
                     ?.takeIf { it.cueId != null }
                 UnderlyingSource(key, effect?.cueId, effect?.cueStackId, effect?.id)
             }
@@ -625,7 +625,7 @@ class ProvenanceService internal constructor(
      * fixture sheet's stack (fixture-fx-sheets plan W1, D5). Null for a key that names no fixture.
      *
      * Each part is asked of the code that decides it, against **one** snapshot of each input:
-     * - held back is [EffectSuppression.isSuppressed] over the engine's suppression snapshot and
+     * - held back is [FxSuppression.isSuppressed] over the engine's suppression snapshot and
      *   its stomp check, and [BlindHold] over the request's one read of blind — the tick's own
      *   questions, so the sheet cannot mark an effect held back that is painting, or the reverse —
      *   with the reason ([heldBackReason]);
@@ -644,8 +644,8 @@ class ProvenanceService internal constructor(
      * Cold path: on a socket that asked. A group's members go through [keyStacks], which takes
      * every snapshot once for all of them.
      */
-    fun keyStack(fixtureKey: String, propertyName: String): KeyStack? =
-        keyStacks(listOf(fixtureKey), propertyName).singleOrNull()
+    fun keyStack(fixtureKey: String, attribute: String): KeyStack? =
+        keyStacks(listOf(fixtureKey), attribute).singleOrNull()
 
     /**
      * [keyStack] for several keys at once — a group target's members — against **one** snapshot of
@@ -655,18 +655,18 @@ class ProvenanceService internal constructor(
      * sibling rule needs is memoised across members, so a group of N heads under E effects resolves
      * each painted (key, property) once, not N times. A key naming no fixture is left out.
      */
-    fun keyStacks(fixtureKeys: List<String>, propertyName: String): List<KeyStack> {
+    fun keyStacks(fixtureKeys: List<String>, attribute: String): List<KeyStack> {
         val blind = programmerStore.blind
         val read = KeyStackRead(
             blind = blind,
             held = if (blind) emptyMap() else programmerSuppression(),
             cueLayer = layerResolver.current,
             now = System.currentTimeMillis(),
-            effects = activeEffects().map { it to coverageKeys(it) },
+            effects = activeFx().map { it to coverageKeys(it) },
             channelEntries = programmerStore.channelEntries(),
             programmerLayers = programmerStore.layers,
         )
-        val keys = fixtureKeys.map { CueAssignmentResolver.Key.fixture(it, propertyName) }
+        val keys = fixtureKeys.map { CueAssignmentResolver.Key.fixture(it, attribute) }
         val underlying = underlyingSources(keys, read.cueLayer).associateBy { it.key }
         return keys.mapNotNull { key -> keyStackOf(key, read, underlying.getValue(key)) }
     }
@@ -684,20 +684,20 @@ class ProvenanceService internal constructor(
         private val painted = HashMap<Pair<String, String>, Set<Pair<Int, Int>>>()
 
         /** The channels (fixture/element key, property) drives — memoised for the request. */
-        fun channelsOf(fixtureKey: String, propertyName: String): Set<Pair<Int, Int>> =
-            painted.getOrPut(fixtureKey to propertyName) {
+        fun channelsOf(fixtureKey: String, attribute: String): Set<Pair<Int, Int>> =
+            painted.getOrPut(fixtureKey to attribute) {
                 val fixture = try {
                     fixtures.untypedGroupableFixture(fixtureKey)
                 } catch (_: Exception) {
                     return@getOrPut emptySet()
                 }
-                PropertyChannelWriter.channelsFor(fixture, propertyName).mapTo(HashSet()) { it.universe.universe to it.channel }
+                AttributeChannelWriter.channelsFor(fixture, attribute).mapTo(HashSet()) { it.universe.universe to it.channel }
             }
     }
 
     private fun keyStackOf(key: CueAssignmentResolver.Key, read: KeyStackRead, underlying: UnderlyingSource): KeyStack? {
         val fixtureKey = key.targetKey
-        val propertyName = key.propertyName
+        val attribute = key.attribute
         val fixture = try {
             fixtures.untypedGroupableFixture(fixtureKey)
         } catch (_: Exception) {
@@ -705,8 +705,8 @@ class ProvenanceService internal constructor(
         }
         val blind = read.blind
         val cueLayer = read.cueLayer
-        val target = publisher.inferTargetForProperty(fixture, key)
-        val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
+        val target = publisher.inferTargetForAttribute(fixture, key)
+        val channels = AttributeChannelWriter.channelsFor(fixture, attribute)
 
         // ── Park ──
         val parkedChannels = channels.mapNotNull { write ->
@@ -721,26 +721,26 @@ class ProvenanceService internal constructor(
         val channelSet = channels.mapTo(HashSet()) { it.universe.universe to it.channel }
         val paintings = ArrayList<Painting>()
         for ((effect, covered) in read.effects) {
-            if (effect.target.propertyName == propertyName && fixtureKey in covered) {
-                paintings += Painting(fixtureKey, propertyName, effect)
+            if (effect.target.attribute == attribute && fixtureKey in covered) {
+                paintings += Painting(fixtureKey, attribute, effect)
                 continue
             }
             if (channelSet.isEmpty()) continue
             for (paintKey in covered) {
-                if (read.channelsOf(paintKey, effect.target.propertyName).containsAll(channelSet)) {
-                    paintings += Painting(paintKey, effect.target.propertyName, effect)
+                if (read.channelsOf(paintKey, effect.target.attribute).containsAll(channelSet)) {
+                    paintings += Painting(paintKey, effect.target.attribute, effect)
                     break
                 }
             }
         }
-        paintings.sortWith { a, b -> effectOrder.compare(b.effect, a.effect) }
+        paintings.sortWith { a, b -> fxOrder.compare(b.effect, a.effect) }
         val onKey = paintings.map { it.effect }
         val heldBack: Map<FxInstance, KeyStackLayer.HeldBackReason?> = paintings.associate {
             it.effect to heldBackReason(read, it)
         }
 
         // ── Programmer: property slots (most recent first) and sideband slots on its channels ──
-        val slots = programmerStore.slotsFor(fixtureKey, propertyName)
+        val slots = programmerStore.slotsFor(fixtureKey, attribute)
         val sideband = read.channelEntries
             .filter { (it.universe to it.channel) in channelSet }
             .map { it to it.slots.first() }
@@ -748,25 +748,25 @@ class ProvenanceService internal constructor(
         val now = read.now
 
         // ── The cue contributor, from the request's one Layer 4 snapshot ──
-        val cueValue = cueLayer.index[fixtureKey]?.get(propertyName)
+        val cueValue = cueLayer.index[fixtureKey]?.get(attribute)
         val cueLayerWinner = cueLayer.layerWinners[key]
 
         // ── Base ──
-        val base = target?.let { layerResolver.baselineFor(it, fixture).asPropertyValueFor(it) }
+        val base = target?.let { layerResolver.baselineFor(it, fixture).asAttributeValueFor(it) }
 
         // ── On stage: the output order, top first ──
         var covered = fullyParked
-        val effectOnStage = HashMap<FxInstance, Boolean>()
+        val fxOnStage = HashMap<FxInstance, Boolean>()
         for (effect in onKey) {
             // Size (effects plan P3): an effect weighted to nothing — a 0 % Size, a spent N-shot —
             // puts nothing on stage, and one under full weight is a mix with what is underneath, so
             // only a full-weight OVERRIDE covers the layers below it. A setting has no mix: it is on
             // stage, and covers, from half weight up, as its target writes it ([weighDiscrete]).
-            val weight = if (effect.spent) 0.0 else effectWeight(effect)
+            val weight = if (effect.spent) 0.0 else fxWeight(effect)
             val discrete = effect.target is SettingTarget
             val paints = if (discrete) weighDiscrete(weight) else weight > 0.0
             val on = !covered && effect.isRunning && heldBack[effect] == null && paints
-            effectOnStage[effect] = on
+            fxOnStage[effect] = on
             if (on && effect.blendMode == BlendMode.OVERRIDE && (discrete || weight >= 1.0)) covered = true
         }
         // Within the programmer, recency arbitrates across granularities (`ProgrammerStore.Slot.seq`):
@@ -791,9 +791,9 @@ class ProvenanceService internal constructor(
         if (parkedChannels.isNotEmpty()) {
             layers += KeyStackLayer(KeyStackLayer.Kind.PARK, onStage = true, parkedChannels = parkedChannels)
         }
-        fun effectLayer(kind: KeyStackLayer.Kind, effect: FxInstance) = KeyStackLayer(
+        fun fxLayer(kind: KeyStackLayer.Kind, effect: FxInstance) = KeyStackLayer(
             kind = kind,
-            onStage = effectOnStage[effect] == true,
+            onStage = fxOnStage[effect] == true,
             effect = effect,
             heldBack = heldBack[effect] != null,
             heldBackReason = heldBack[effect],
@@ -804,7 +804,7 @@ class ProvenanceService internal constructor(
         )
         for (effect in onKey) {
             if (FxEngine.isProgrammerFxPriority(effect.priority)) {
-                layers += effectLayer(KeyStackLayer.Kind.PROGRAMMER_EFFECT, effect)
+                layers += fxLayer(KeyStackLayer.Kind.PROGRAMMER_FX, effect)
             }
         }
         for ((index, slot) in slots.withIndex()) {
@@ -831,7 +831,7 @@ class ProvenanceService internal constructor(
         }
         for (effect in onKey) {
             if (!FxEngine.isProgrammerFxPriority(effect.priority)) {
-                layers += effectLayer(KeyStackLayer.Kind.EFFECT, effect)
+                layers += fxLayer(KeyStackLayer.Kind.FX, effect)
             }
         }
         if (cueValue != null) {
@@ -848,33 +848,22 @@ class ProvenanceService internal constructor(
         if (base != null) {
             layers += KeyStackLayer(KeyStackLayer.Kind.BASE, onStage = baseOnStage, value = base)
         }
-        return KeyStack(fixtureKey, propertyName, blind, layers)
+        return KeyStack(fixtureKey, attribute, blind, layers)
     }
 
-    /**
-     * Why [painting]'s effect is not painting its key, or null when it is: the tick's own two
-     * questions — [EffectSuppression.isSuppressed] and [BlindHold] — against the request's snapshot,
-     * asked in [KeyStackLayer.HeldBackReason]'s order. The stomp and the programmer halves are
-     * [EffectSuppression]'s own two, so the reason never disagrees with its answer.
-     */
-    private fun heldBackReason(read: KeyStackRead, painting: Painting): KeyStackLayer.HeldBackReason? {
-        val effect = painting.effect
-        return when {
-            isLayerStomped(effect, painting.fixtureKey, painting.propertyName) -> KeyStackLayer.HeldBackReason.STOMP
-            EffectSuppression.heldBackByProgrammer(read.held, painting.fixtureKey, painting.propertyName, effect.priority) ->
-                KeyStackLayer.HeldBackReason.PROGRAMMER
-            BlindHold.holds(read.blind, effect) -> KeyStackLayer.HeldBackReason.BLIND
-            else -> null
-        }
-    }
+    /** Why [painting]'s effect is not painting its key, or null when it is, against the request's snapshot. */
+    private fun heldBackReason(read: KeyStackRead, painting: Painting): KeyStackLayer.HeldBackReason? =
+        FxSuppression.heldBackReason(
+            read.held, read.blind, painting.fixtureKey, painting.attribute, painting.effect, isLayerStomped,
+        )
 
     /** An [FxOutput] in the literal grammar of [target]'s property. */
-    private fun FxOutput.asPropertyValueFor(target: FxTarget): CueAssignmentResolver.PropertyValue = when (this) {
+    private fun FxOutput.asAttributeValueFor(target: FxTarget): CueAssignmentResolver.AttributeValue = when (this) {
         is FxOutput.Slider ->
-            if (target is SettingTarget) CueAssignmentResolver.PropertyValue.Setting(value)
-            else CueAssignmentResolver.PropertyValue.Slider(value)
-        is FxOutput.Colour -> CueAssignmentResolver.PropertyValue.Colour(color)
-        is FxOutput.Position -> CueAssignmentResolver.PropertyValue.Position(pan, tilt)
+            if (target is SettingTarget) CueAssignmentResolver.AttributeValue.Setting(value)
+            else CueAssignmentResolver.AttributeValue.Slider(value)
+        is FxOutput.Colour -> CueAssignmentResolver.AttributeValue.Colour(color)
+        is FxOutput.Position -> CueAssignmentResolver.AttributeValue.Position(pan, tilt)
         // Read for a target's baseline alone, which is always a value of its own type.
         is FxOutput.Steps -> error("A baseline is a value, never steps")
     }

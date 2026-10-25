@@ -6,18 +6,18 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fx.CookLayer
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.CueEffectKey
+import uk.me.cormack.lighting7.fx.CueFxKey
 import uk.me.cormack.lighting7.fx.CueHold
-import uk.me.cormack.lighting7.fx.EffectEnvelope
-import uk.me.cormack.lighting7.fx.EffectSettingsSnapshot
+import uk.me.cormack.lighting7.fx.FxEnvelope
+import uk.me.cormack.lighting7.fx.FxSettingsSnapshot
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.fx.TransmitFade
 import uk.me.cormack.lighting7.fx.buildCombinedCueLayerCook
 import uk.me.cormack.lighting7.fx.buildCueApplyData
-import uk.me.cormack.lighting7.fx.comparableEffectSettings
-import uk.me.cormack.lighting7.fx.cueEffectKey
+import uk.me.cormack.lighting7.fx.comparableFxSettings
+import uk.me.cormack.lighting7.fx.cueFxKey
 import uk.me.cormack.lighting7.fx.settingsSnapshot
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.state.State
@@ -38,10 +38,10 @@ data class UpdateStageRequest(val dryRun: Boolean = false)
  * they move over.
  */
 @Serializable
-data class UpdateStageResponse(val rows: Int, val effects: UpdateStageEffects, val fadeMs: Long, val curve: String)
+data class UpdateStageResponse(val rows: Int, val fx: UpdateStageFx, val fadeMs: Long, val curve: String)
 
 @Serializable
-data class UpdateStageEffects(val edited: Int, val stopped: Int, val started: Int)
+data class UpdateStageFx(val edited: Int, val stopped: Int, val started: Int)
 
 /** One *Update stage* at a time, so two presses cannot each start what the cue newly gained. */
 private val updateStageLock = Any()
@@ -58,7 +58,7 @@ private val updateStageLock = Any()
  *   stack for. A key a running effect covers is the effect's, so its base moves with no ramp.
  * - **Effects**: the running instances its untimed effects spawned, reconciled by stored uuid, layer,
  *   target and property against what the cue spawns now. A changed one is edited in place through
- *   [applyEffectUpdate] — id and phase kept, but for a move between Seconds and a master, which
+ *   [applyFxUpdate] — id and phase kept, but for a move between Seconds and a master, which
  *   restarts its loop — a removed one shrinks to nothing over the fade, and one the stored cue has
  *   gained grows from nothing over it, at the cue's priority. One the cue spawned that is no longer
  *   running — an N-shot run out, one a stomp took off — stays off.
@@ -83,23 +83,23 @@ private fun updateStageLocked(state: State, cueId: Int, dryRun: Boolean): Update
     val cooked = buildCombinedCueLayerCook(state, cueId, data, priority = priority)
     val rows = changedKeyCount(engine.cueLayer.assignmentsOf(cueId), cooked.values.rows)
 
-    val layerEffects = cooked.effects.filter { (layer, _, _) -> !layer.isTimed }
-    val fresh = holds.cueEffectInstances(
+    val layerFx = cooked.effects.filter { (layer, _, _) -> !layer.isTimed }
+    val fresh = holds.cueFxInstances(
         state, cueId,
-        layerEffects,
-        data.adHocEffects.filter { it.delayMs == null && it.intervalMs == null },
+        layerFx,
+        data.adHocFx.filter { it.delayMs == null && it.intervalMs == null },
     )
     val master1 = engine.speedMasters.master1Uuid()
     val plan = reconcile(
         // Timed and script-spawned instances carry no stored uuid, so they are left alone.
-        live = engine.cueEffects(cueId).filter { it.layerEffectUuid != null },
+        live = engine.cueFx(cueId).filter { it.layerFxUuid != null },
         fresh = fresh,
-        spawned = holds.spawnedEffectsOf(cueId),
+        spawned = holds.spawnedFxOf(cueId),
         master1 = master1,
     )
     val fadeMs = data.fadeDurationMs ?: 0L
     val curve = runCatching { EasingCurve.valueOf(data.fadeCurve) }.getOrDefault(EasingCurve.LINEAR)
-    val counts = UpdateStageEffects(edited = plan.edited.size, stopped = plan.stopped.size, started = plan.started.size)
+    val counts = UpdateStageFx(edited = plan.edited.size, stopped = plan.stopped.size, started = plan.started.size)
     if (dryRun) return UpdateStageResponse(rows, counts, fadeMs, curve.name)
 
     // A GO may have taken it off while it was cooked: rows published now would be no one's.
@@ -108,17 +108,17 @@ private fun updateStageLocked(state: State, cueId: Int, dryRun: Boolean): Update
     val replaced = mutableListOf<FxInstance>()
     var edited = 0
     for ((instance, freshInstance) in plan.edited) {
-        if (alignEffect(state, instance.id, instance.settingsSnapshot(master1), freshInstance.settingsSnapshot(master1)) != null) {
+        if (alignFx(state, instance.id, instance.settingsSnapshot(master1), freshInstance.settingsSnapshot(master1)) != null) {
             edited++
         } else {
             // An edit the in-place path refuses (or an instance gone meanwhile) is the stored
             // effect started afresh, so the stage still ends up as the cue says.
             logger.info("cue {}: effect {} not edited in place; restarting it", cueId, instance.id)
-            engine.fadeOutEffects(listOf(instance), 0)
+            engine.fadeOutFx(listOf(instance), 0)
             replaced += freshInstance
         }
     }
-    engine.fadeOutEffects(plan.stopped, fadeMs, curve)
+    engine.fadeOutFx(plan.stopped, fadeMs, curve)
     val starting = plan.started + replaced
     if (starting.isNotEmpty()) {
         val stackTag = plan.matchedStack ?: (holds.holdsOf(cueId).firstOrNull() as? CueHold.Stack)?.stackId
@@ -126,17 +126,17 @@ private fun updateStageLocked(state: State, cueId: Int, dryRun: Boolean): Update
         val livePriority = holds.priorityOf(cueId) ?: priority
         for (instance in starting) {
             with(holds) { instance.tagged(cueId, stackTag, livePriority) }
-            if (fadeMs > 0 && instance in plan.started) instance.carryEnvelope(EffectEnvelope.ramp(0.0, 1.0, fadeMs, curve, nowMs))
+            if (fadeMs > 0 && instance in plan.started) instance.carryEnvelope(FxEnvelope.ramp(0.0, 1.0, fadeMs, curve, nowMs))
         }
-        engine.addEffects(starting)
+        engine.addFxBatch(starting)
         // A release since the rows went up took the cue's effects off without these.
         if (!holds.isHeld(cueId)) {
-            engine.removeEffects(starting.map { it.id })
+            engine.removeFxBatch(starting.map { it.id })
             return null
         }
     }
-    restampIfMoved(engine, cueId, plan.order.mapNotNull { (liveId, instance) -> liveId?.let(engine::getEffect) ?: instance.takeIf { it in starting } })
-    holds.setSpawnedEffects(cueId, fresh.mapTo(HashSet()) { (instance, _) -> instance.cueEffectKey() }, layerEffects)
+    restampIfMoved(engine, cueId, plan.order.mapNotNull { (liveId, instance) -> liveId?.let(engine::getFx) ?: instance.takeIf { it in starting } })
+    holds.setSpawnedFx(cueId, fresh.mapTo(HashSet()) { (instance, _) -> instance.cueFxKey() }, layerFx)
     holds.clearEdited(cueId)
     return UpdateStageResponse(rows, counts.copy(edited = edited, started = plan.started.size + replaced.size), fadeMs, curve.name)
 }
@@ -147,7 +147,7 @@ private fun updateStageLocked(state: State, cueId: Int, dryRun: Boolean): Update
  */
 private fun restampIfMoved(engine: FxEngine, cueId: Int, ordered: List<FxInstance>) {
     if (ordered.zipWithNext().all { (a, b) -> a.composeOrder < b.composeOrder }) return
-    val others = engine.cueEffects(cueId).filter { it !in ordered }.sortedBy { it.composeOrder }
+    val others = engine.cueFx(cueId).filter { it !in ordered }.sortedBy { it.composeOrder }
     engine.restampComposeOrder(ordered + others)
 }
 
@@ -173,7 +173,7 @@ private class ReconcilePlan(
 private fun reconcile(
     live: List<FxInstance>,
     fresh: List<Pair<FxInstance, CookLayer?>>,
-    spawned: Set<CueEffectKey>,
+    spawned: Set<CueFxKey>,
     master1: UUID?,
 ): ReconcilePlan {
     val pool = live.toMutableList()
@@ -181,8 +181,8 @@ private fun reconcile(
     val started = mutableListOf<FxInstance>()
     val order = mutableListOf<Pair<Long?, FxInstance>>()
     for ((instance, _) in fresh) {
-        val key = instance.cueEffectKey()
-        val match = pool.firstOrNull { it.cueEffectKey() == key }
+        val key = instance.cueFxKey()
+        val match = pool.firstOrNull { it.cueFxKey() == key }
         if (match == null) {
             if (key !in spawned) {
                 started += instance
@@ -191,40 +191,40 @@ private fun reconcile(
             continue
         }
         pool.remove(match)
-        if (match.comparableEffectSettings(master1) != instance.comparableEffectSettings(master1)) edited += match to instance
+        if (match.comparableFxSettings(master1) != instance.comparableFxSettings(master1)) edited += match to instance
         order += match.id to instance
     }
     return ReconcilePlan(edited, stopped = pool, started, order, matchedStack = live.firstNotNullOfOrNull { it.cueStackId })
 }
 
 /**
- * Edit running effect [effectId] in place from [from]'s settings to [to]'s, through
- * [applyEffectUpdate] on [alignmentRequest] — a GO handing an effect run on with new settings, and
+ * Edit running effect [fxId] in place from [from]'s settings to [to]'s, through
+ * [applyFxUpdate] on [alignmentRequest] — a GO handing an effect run on with new settings, and
  * undoing that when the GO gives it back ([uk.me.cormack.lighting7.fx.CueHolds]). Answers the
  * instance running now, which a swapping edit replaces, or null when the edit was refused or the
  * effect is gone.
  */
-internal fun alignEffect(state: State, effectId: Long, from: EffectSettingsSnapshot, to: EffectSettingsSnapshot): FxInstance? =
-    when (val outcome = applyEffectUpdate(state, effectId, alignmentRequest(from, to))) {
-        is EffectUpdateOutcome.Updated -> outcome.instance
+internal fun alignFx(state: State, fxId: Long, from: FxSettingsSnapshot, to: FxSettingsSnapshot): FxInstance? =
+    when (val outcome = applyFxUpdate(state, fxId, alignmentRequest(from, to))) {
+        is FxUpdateOutcome.Updated -> outcome.instance
         else -> {
-            logger.info("effect {} not edited in place ({})", effectId, outcome)
+            logger.info("effect {} not edited in place ({})", fxId, outcome)
             null
         }
     }
 
 /**
  * The in-place edit that takes [live] to [fresh]'s settings: every field that differs, each in the
- * form [UpdateEffectRequest] reads as a change — master 1 by its uuid, forever as [UpdateEffectRequest.runForever],
- * Seconds as [UpdateEffectRequest.seconds] — and nothing else, so no field is re-sent that a refusal
+ * form [UpdateFxRequest] reads as a change — master 1 by its uuid, forever as [UpdateFxRequest.runForever],
+ * Seconds as [UpdateFxRequest.seconds] — and nothing else, so no field is re-sent that a refusal
  * could catch on. No `targets`: a cue's effect never splits (`FX_SPLIT_NOT_LOCAL`).
  */
-internal fun alignmentRequest(live: EffectSettingsSnapshot, fresh: EffectSettingsSnapshot): UpdateEffectRequest {
+internal fun alignmentRequest(live: FxSettingsSnapshot, fresh: FxSettingsSnapshot): UpdateFxRequest {
     val was = live.settings
     val now = fresh.settings
     val wasDyn = live.dynamics
     val nowDyn = fresh.dynamics
-    val typeMoved = now.effectType != was.effectType
+    val typeMoved = now.fxType != was.fxType
     val beat = fresh.timingSource == TimingSource.BEAT
     val toSeconds = fresh.onSeconds && !live.onSeconds
     val fromSeconds = !fresh.onSeconds && live.onSeconds
@@ -238,16 +238,16 @@ internal fun alignmentRequest(live: EffectSettingsSnapshot, fresh: EffectSetting
     val rateMaster = if (!beat && !toSeconds && (fromSeconds || now.rateSpeedMasterUuid != was.rateSpeedMasterUuid)) {
         now.rateSpeedMasterUuid?.toString()
     } else null
-    return UpdateEffectRequest(
-        effectType = now.effectType.takeIf { typeMoved },
+    return UpdateFxRequest(
+        fxType = now.fxType.takeIf { typeMoved },
         parameters = now.parameters.takeIf { typeMoved || it != was.parameters },
-        beatDivision = now.beatDivision.takeIf { it != was.beatDivision },
+        cycle = now.cycle.takeIf { it != was.cycle },
         blendMode = now.blendMode.takeIf { it != was.blendMode },
         phaseOffset = nowDyn.phaseOffset.takeIf { it != wasDyn.phaseOffset },
-        distributionStrategy = now.distribution.takeIf { nowDyn.distributionStrategy != wasDyn.distributionStrategy },
+        order = now.order.takeIf { nowDyn.order != wasDyn.order },
         elementMode = nowDyn.elementMode.name.takeIf { nowDyn.elementMode != wasDyn.elementMode },
         elementFilter = nowDyn.elementFilter.name.takeIf { nowDyn.elementFilter != wasDyn.elementFilter },
-        stepTiming = nowDyn.stepTiming.takeIf { it != wasDyn.stepTiming },
+        timing = nowDyn.timing.takeIf { it != wasDyn.timing },
         speedMasterUuid = speedMaster,
         rateSpeedMasterUuid = rateMaster,
         seconds = when {
@@ -255,14 +255,14 @@ internal fun alignmentRequest(live: EffectSettingsSnapshot, fresh: EffectSetting
             fromSeconds -> false
             else -> null
         },
-        size = now.size.takeIf { it != was.size },
+        amount = now.amount.takeIf { it != was.amount },
         direction = now.direction.takeIf { it != was.direction },
-        nShot = now.nShot.takeIf { it != was.nShot },
-        runForever = now.nShot == null && was.nShot != null,
+        runs = now.runs.takeIf { it != was.runs },
+        runForever = now.runs == null && was.runs != null,
         spread = now.spread.takeIf { it != was.spread },
         wings = now.wings.takeIf { it != was.wings },
-        blocks = now.blocks.takeIf { it != was.blocks },
-        groups = now.groups.takeIf { it != was.groups },
+        segments = now.segments.takeIf { it != was.segments },
+        parts = now.parts.takeIf { it != was.parts },
     )
 }
 
@@ -271,7 +271,7 @@ private fun changedKeyCount(
     before: List<CueAssignmentResolver.Assignment>,
     after: List<CueAssignmentResolver.Assignment>,
 ): Int {
-    val was = before.associate { (it.targetKey to it.propertyName) to it.value }
-    val now = after.associate { (it.targetKey to it.propertyName) to it.value }
+    val was = before.associate { (it.targetKey to it.attribute) to it.value }
+    val now = after.associate { (it.targetKey to it.attribute) to it.value }
     return (was.keys + now.keys).count { was[it] != now[it] }
 }

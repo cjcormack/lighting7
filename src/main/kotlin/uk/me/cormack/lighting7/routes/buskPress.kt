@@ -7,14 +7,14 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.State
 
 private const val PAD_NOT_FOUND = "Busk pad not found"
 
 /** 400 code: a generic template's rows take their targets from the press, so with none it asserts nothing. */
-internal const val CODE_TEMPLATE_NEEDS_SELECTION = "PALETTE_NEEDS_SELECTION"
+internal const val CODE_PALETTE_NEEDS_SELECTION = "PALETTE_NEEDS_SELECTION"
 
 /**
  * `POST /projects/{id}/busk/pads/{padId}/press` — the busk view's one gesture.
@@ -65,18 +65,18 @@ internal fun Route.routeApiRestBuskPress(state: State) {
                 return@withCurrentProject
             }
             val families = try {
-                if (plan.record is PressRecord.Template) parseMaskGroups(request.families) else null
+                if (plan.record is PressRecord.Palette) parseFamilies(request.families) else null
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
             }
             val outcome = BuskPressService.apply(
-                state, plan, request.targets, families = families, beatDivision = request.beatDivision,
+                state, plan, request.targets, families = families, cycle = request.cycle,
                 fadeMs = request.fadeMs ?: 0,
             )
             when (outcome) {
                 is BuskPressService.Outcome.Pressed -> call.respond(
-                    BuskPressResponse(outcome.kind, outcome.action, outcome.effectCount, outcome.released),
+                    BuskPressResponse(outcome.kind, outcome.action, outcome.fxCount, outcome.released),
                 )
                 is BuskPressService.Outcome.Refused ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
@@ -96,13 +96,13 @@ internal data class BuskPadPressResource(val projectId: String, val padId: Int)
 
 /**
  * The selection and its attribute mask, a palette pad's: both ignored, unread, for a cue or a Look
- * pad. [families] (`PropertyMaskGroup` names) absent is every attribute and an unknown name is 400;
+ * pad. [families] (`AttributeFamily` names) absent is every attribute and an unknown name is 400;
  * a palette outside it is `PALETTE_OUTSIDE_MASK` — multi-screen plan D5.
  */
 @Serializable
 internal data class BuskPressRequest(
     val targets: List<CueTargetDto> = emptyList(),
-    val beatDivision: Double? = null,
+    val cycle: Double? = null,
     val families: List<String>? = null,
     /**
      * The programmer fade, over which a press grows its effects and a release shrinks them (effects
@@ -114,17 +114,15 @@ internal data class BuskPressRequest(
 
 @Serializable
 internal data class BuskPressResponse(
-    /** `TEMPLATE`, `LOOK` or `CUE`. */
+    /** `PALETTE`, `LOOK` or `CUE`. */
     val kind: String,
     /** `"applied"` or `"removed"`. */
     val action: String,
-    val effectCount: Int,
+    val fxCount: Int,
     /**
      * What an *on* press turned off: layer siblings narrowed or dropped and cue siblings stopped in a
      * solo bank, plus the palettes of a pressed palette's family and kind it replaced (apply-model
      * D2). Always 0 for an off press.
      */
     val released: Int = 0,
-    /** Always empty: no press is masked by family any more (a Look's lands whole). Kept on the wire until the client stops reading it. */
-    val skippedFamilies: List<String> = emptyList(),
 )

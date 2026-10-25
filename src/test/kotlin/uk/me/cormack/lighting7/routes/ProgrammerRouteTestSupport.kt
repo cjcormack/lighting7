@@ -6,23 +6,23 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
-import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 
 /**
- * A minimal ad-hoc effect for a test cue. Wraps [CueAdHocEffectDto]'s wide constructor so the
+ * A minimal ad-hoc effect for a test cue. Wraps [CueAdHocFxDto]'s wide constructor so the
  * Include/Update tests can say what they mean in one line.
  */
-data class CueAdHocEffectSpec(
+data class CueAdHocFxSpec(
     val targetType: String,
     val targetKey: String,
-    val effectType: String,
-    val propertyName: String,
-    val category: String = "DIMMER",
-    val beatDivision: Double = 1.0,
+    val fxType: String,
+    val attribute: String,
+    val category: String = "intensity",
+    val cycle: Double = 1.0,
 )
 
 /** Cue and stack construction shared by the Record / Include / Update route tests. */
@@ -43,8 +43,8 @@ object ProgrammerRouteTestSupport {
         client: HttpClient,
         projectId: Int,
         name: String,
-        rows: List<CuePropertyAssignmentDto> = emptyList(),
-        adHoc: List<CueAdHocEffectSpec> = emptyList(),
+        rows: List<CueAttributeAssignmentDto> = emptyList(),
+        adHoc: List<CueAdHocFxSpec> = emptyList(),
         stackId: Int? = null,
         layers: List<CueLayerDto> = emptyList(),
     ): Int {
@@ -55,8 +55,8 @@ object ProgrammerRouteTestSupport {
                 NewCue(
                     name = name,
                     cueStackId = stack,
-                    propertyAssignments = rows,
-                    adHocEffects = adHoc.map { it.toDto() },
+                    attributeAssignments = rows,
+                    adHocFx = adHoc.map { it.toDto() },
                     layers = layers,
                 )
             )
@@ -76,7 +76,7 @@ object ProgrammerRouteTestSupport {
         projectId: Int,
         name: String,
         rows: Map<String, String>,
-        effects: List<LookEffectDto> = emptyList(),
+        effects: List<LookFxDto> = emptyList(),
         targetKey: String = "hex-1",
         /** `fixture` or `group` — a *Look* row may name either; only a template may not. */
         targetType: String = "fixture",
@@ -85,22 +85,22 @@ object ProgrammerRouteTestSupport {
         setBody(
             CreateLookRequest(
                 name = name,
-                rows = rows.entries.mapIndexed { index, (property, value) ->
-                    LookRowDto(targetType, targetKey, property, value, sortOrder = index)
+                rows = rows.entries.mapIndexed { index, (attribute, value) ->
+                    LookRowDto(targetType, targetKey, attribute, value, sortOrder = index)
                 },
-                effects = effects,
+                fx = effects,
             )
         )
     }.body()
 
-    private fun CueAdHocEffectSpec.toDto() = CueAdHocEffectDto(
+    private fun CueAdHocFxSpec.toDto() = CueAdHocFxDto(
         targetType = targetType,
         targetKey = targetKey,
-        effectType = effectType,
-        category = category,
-        propertyName = propertyName,
-        beatDivision = beatDivision,
+        fxType = fxType,
+        family = category,
+        attribute = attribute,
+        cycle = cycle,
         blendMode = "OVERRIDE",
-        distribution = "LINEAR",
+        order = "NORMAL",
     )
 }

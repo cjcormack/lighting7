@@ -277,8 +277,8 @@ internal object VenueRigChecks {
         }
     }
 
-    /** A [RigKeyReferences] user as a review names one: a palette is `TEMPLATE`, as stored. */
-    fun usedBy(user: RigKeyReferences.User) = UsedByDto(if (user.kind == "PALETTE") "TEMPLATE" else user.kind, user.id, user.name)
+    /** A [RigKeyReferences] user as a review names one. */
+    fun usedBy(user: RigKeyReferences.User) = UsedByDto(user.kind, user.id, user.name)
 
     // A cue's numbers are its entries': every one it has (a shared cue's places), else its name.
     fun cueLabel(cue: DaoCue): String =

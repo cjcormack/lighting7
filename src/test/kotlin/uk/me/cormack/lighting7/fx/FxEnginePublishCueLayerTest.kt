@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
@@ -57,9 +57,9 @@ class FxEnginePublishCueLayerTest {
         cueId: Int,
         priority: Int = 1,
         targetKey: String = "hex-a",
-        propertyName: String = "dimmer",
+        attribute: String = "dimmer",
         value: UByte,
-        category: PropertyCategory = PropertyCategory.DIMMER,
+        category: AttributeCategory = AttributeCategory.DIMMER,
         fadeDurationMs: Long? = null,
     ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
@@ -67,9 +67,9 @@ class FxEnginePublishCueLayerTest {
         fadeWeight = 1.0,
         targetKey = targetKey,
         targetIsGroup = false,
-        propertyName = propertyName,
+        attribute = attribute,
         category = category,
-        value = CueAssignmentResolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.AttributeValue.Slider(value),
         fadeDurationMs = fadeDurationMs,
     )
 
@@ -96,7 +96,7 @@ class FxEnginePublishCueLayerTest {
         val rig = newRig(firstChannel = 1)
         rig.engine.cueLayer.setAssignments(
             10,
-            listOf(slider(cueId = 10, value = 180u, category = PropertyCategory.DIMMER, fadeDurationMs = 900)),
+            listOf(slider(cueId = 10, value = 180u, category = AttributeCategory.DIMMER, fadeDurationMs = 900)),
             honourRowFades = true,
         )
         assertEquals(900L, rig.controller.changesTo(1).last().fadeMs)
@@ -200,7 +200,7 @@ class FxEnginePublishCueLayerTest {
     fun `a programmer value wins over a cue and survives its release`() {
         val rig = newRig(firstChannel = 1)
         // Sticky programmer write — sits ABOVE the cue layer.
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(55u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.AttributeValue.Slider(55u))
 
         rig.engine.cueLayer.setAssignments(10, listOf(slider(cueId = 10, value = 180u)))
         assertEquals(
@@ -215,7 +215,7 @@ class FxEnginePublishCueLayerTest {
         )
 
         // Clearing the programmer entry with no cue below cascades to baseline.
-        rig.engine.programmer.clearProperty(
+        rig.engine.programmer.clearAttribute(
             ProgrammerOwner.WEB, rig.fixtures.fixture<uk.me.cormack.lighting7.fixture.dmx.HexFixture>("hex-a"), "dimmer",
         )
         assertEquals(0u.toUByte(), rig.controller.currentValues[1])
@@ -242,7 +242,7 @@ class FxEnginePublishCueLayerTest {
     @Test
     fun `clearAllCueAssignments releases every previously-asserted channel`() {
         val rig = newRig(firstChannel = 1)
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(30u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.AttributeValue.Slider(30u))
 
         rig.engine.cueLayer.setAssignments(10, listOf(slider(cueId = 10, value = 180u)))
         assertEquals(
@@ -266,10 +266,10 @@ class FxEnginePublishCueLayerTest {
             fadeWeight = 1.0,
             targetKey = "hex-a",
             targetIsGroup = false,
-            propertyName = "rgbColour",
-            category = PropertyCategory.COLOUR,
+            attribute = "rgbColour",
+            category = AttributeCategory.COLOUR,
             compositionOverride = CompositionRule.UNSET,
-            value = CueAssignmentResolver.PropertyValue.Colour(
+            value = CueAssignmentResolver.AttributeValue.Colour(
                 ExtendedColour(java.awt.Color(128, 64, 200), 0u, 0u, 0u)
             ),
         )
@@ -320,7 +320,7 @@ class FxEnginePublishCueLayerTest {
         cueId: Int,
         priority: Int = 1,
         targetKey: String = "hex-a",
-        propertyName: String = "dimmer",
+        attribute: String = "dimmer",
         value: UByte,
     ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
@@ -328,10 +328,10 @@ class FxEnginePublishCueLayerTest {
         fadeWeight = 1.0,
         targetKey = targetKey,
         targetIsGroup = false,
-        propertyName = propertyName,
-        category = PropertyCategory.DIMMER,
+        attribute = attribute,
+        category = AttributeCategory.DIMMER,
         compositionOverride = CompositionRule.LTP,
-        value = CueAssignmentResolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.AttributeValue.Slider(value),
     )
 
     @Test
@@ -490,12 +490,12 @@ class FxEnginePublishCueLayerTest {
         val red = CueAssignmentResolver.Assignment(
             cueId = 10, priority = 1, fadeWeight = 1.0,
             targetKey = "hex-a", targetIsGroup = false,
-            propertyName = "rgbColour", category = PropertyCategory.COLOUR,
-            value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(255, 0, 0), 0u, 0u, 0u)),
+            attribute = "rgbColour", category = AttributeCategory.COLOUR,
+            value = CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(java.awt.Color(255, 0, 0), 0u, 0u, 0u)),
         )
         val blue = red.copy(
             cueId = 20, priority = 2,
-            value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(0, 0, 255), 0u, 0u, 0u)),
+            value = CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(java.awt.Color(0, 0, 255), 0u, 0u, 0u)),
         )
         rig.engine.cueLayer.setAssignments(10, listOf(red))
         rig.engine.cueLayer.setAssignments(20, listOf(blue))
@@ -520,14 +520,14 @@ class FxEnginePublishCueLayerTest {
         // The programmer holds a dim red on the colour property.
         rig.programmerStore.put(
             ProgrammerOwner.WEB, "hex-a", "rgbColour",
-            CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(40, 10, 10))),
+            CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(java.awt.Color(40, 10, 10))),
         )
 
         val assignment = CueAssignmentResolver.Assignment(
             cueId = 10, priority = 1, fadeWeight = 1.0,
             targetKey = "hex-a", targetIsGroup = false,
-            propertyName = "rgbColour", category = PropertyCategory.COLOUR,
-            value = CueAssignmentResolver.PropertyValue.Colour(
+            attribute = "rgbColour", category = AttributeCategory.COLOUR,
+            value = CueAssignmentResolver.AttributeValue.Colour(
                 ExtendedColour(java.awt.Color(255, 255, 255), 0u, 0u, 0u)
             ),
         )
@@ -601,11 +601,11 @@ class FxEnginePublishCueLayerTest {
         // A running effect now covers the key; the effect-coverage cache built by the earlier
         // publishes must be invalidated, or the next weight tick would keep painting Layer 4
         // under the effect (visible flicker between the effect's ticks).
-        rig.engine.addEffect(
+        rig.engine.addFx(
             FxInstance(
                 effect = uk.me.cormack.lighting7.testsupport.SineSlider(),
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             ),
         )
 

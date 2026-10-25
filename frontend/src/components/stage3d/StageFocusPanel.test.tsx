@@ -235,7 +235,7 @@ describe('StageFocusPanel', () => {
   it('names a DMX fixture’s optics channels rather than offering a spanner', () => {
     const fixture = {
       name: 'Spot 1',
-      properties: [
+      attributes: [
         { name: 'zoom', type: 'slider', category: 'zoom' },
         { name: 'iris', type: 'slider', category: 'iris' },
       ],
@@ -256,7 +256,7 @@ describe('StageFocusPanel', () => {
   it('names framing shutters among the optics a DMX fixture drives from its channels', () => {
     const fixture = {
       name: 'Rev 1',
-      properties: [{ name: 'zoom', type: 'slider', category: 'zoom' }, ...revolutionShutterProps()],
+      attributes: [{ name: 'zoom', type: 'slider', category: 'zoom' }, ...revolutionShutterProps()],
     } as unknown as Fixture
     render(
       <StageFocusPanel
@@ -281,7 +281,7 @@ describe('StageFocusPanel', () => {
         { name: 'L201_FULL_CT_BLUE', level: 165, displayName: 'L201', colourPreview: '#9bbede', loadable: true },
       ],
     }
-    const fixture = { name: 'Rev 1', properties: [scroller] } as unknown as Fixture
+    const fixture = { name: 'Rev 1', attributes: [scroller] } as unknown as Fixture
     const revType = { typeKey: 'etc-source4-revolution-base-frame', kind: 'MOVING_HEAD', acceptsLantern: false } as unknown as FixtureTypeInfo
     render(
       <StageFocusPanel
@@ -325,7 +325,7 @@ describe('StageFocusPanel', () => {
   })
 
   it('tells a DMX fixture with no optics channels that its optics are fixed — not that its channels set them', () => {
-    const fixture = { name: 'Par 1', properties: [{ name: 'dimmer', type: 'slider', category: 'dimmer' }] } as unknown as Fixture
+    const fixture = { name: 'Par 1', attributes: [{ name: 'dimmer', type: 'slider', category: 'dimmer' }] } as unknown as Fixture
     render(
       <StageFocusPanel
         projectId={1}
@@ -346,7 +346,7 @@ describe('StageFocusPanel', () => {
       name: 'focus', type: 'slider', category: 'focus', channel: { universe: 1, channelNo: 7 }, min: 0, max: 255,
       focusNearM: 2, focusFarM: 40,
     }
-    const revolution = { name: 'Rev 1', properties: [REV_FOCUS] } as unknown as Fixture
+    const revolution = { name: 'Rev 1', attributes: [REV_FOCUS] } as unknown as Fixture
     const REV_TYPE = { typeKey: 'etc-source4-revolution-base-frame', kind: 'PROFILE', acceptsLantern: false } as unknown as FixtureTypeInfo
     const panel = (over: { fixture?: Fixture; canFocus?: boolean } = {}) =>
       render(
@@ -389,7 +389,7 @@ describe('StageFocusPanel', () => {
       panel({ canFocus: false })
       expect(screen.queryByRole('button', { name: /Focus here/ })).toBeNull()
       cleanup()
-      const unranged = { name: 'Rev 1', properties: [{ ...REV_FOCUS, focusNearM: undefined, focusFarM: undefined }] } as unknown as Fixture
+      const unranged = { name: 'Rev 1', attributes: [{ ...REV_FOCUS, focusNearM: undefined, focusFarM: undefined }] } as unknown as Fixture
       panel({ fixture: unranged })
       expect(screen.queryByRole('button', { name: /Focus here/ })).toBeNull()
     })

@@ -56,7 +56,7 @@ function rowsOf(name: string): BuskRigRow[] {
           id: j,
           uuid: `t${i}.${j}`,
           kind: 'GROUP',
-          group: { name: t.group, memberCount: 0, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] },
+          group: { name: t.group, memberCount: 0, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' },
           cellMode: 'PIPS',
         }
       }

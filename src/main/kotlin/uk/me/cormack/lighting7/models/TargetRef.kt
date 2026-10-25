@@ -53,21 +53,21 @@ sealed class TargetRef {
  * same `(targetType, targetKey)` pair — `selection`, with [Selection.key] its canonical JSON — so an
  * effect row needs no new column.
  */
-sealed class EffectTargetRef {
+sealed class FxTargetsRef {
     abstract val discriminator: String
     abstract val key: String
 
     /** What it names, in order: the one target, or the selection's items. */
     abstract val items: List<TargetRef>
 
-    data class Single(val target: TargetRef) : EffectTargetRef() {
+    data class Single(val target: TargetRef) : FxTargetsRef() {
         override val discriminator: String get() = target.discriminator
         override val key: String get() = target.key
         override val items: List<TargetRef> get() = listOf(target)
     }
 
     /** Never empty. Items keep the order given; a head named twice counts once, at its first place. */
-    data class Selection(override val items: List<TargetRef>) : EffectTargetRef() {
+    data class Selection(override val items: List<TargetRef>) : FxTargetsRef() {
         init {
             require(items.isNotEmpty()) { "A selection names at least one fixture or group" }
         }
@@ -102,14 +102,14 @@ sealed class EffectTargetRef {
 
     companion object {
         /** One target as [Single], more as a [Selection]. */
-        fun of(targets: List<TargetRef>): EffectTargetRef =
+        fun of(targets: List<TargetRef>): FxTargetsRef =
             targets.singleOrNull()?.let { Single(it) } ?: Selection(targets)
 
-        fun of(type: String, key: String): EffectTargetRef =
-            ofOrNull(type, key) ?: throw IllegalArgumentException("Unknown effect target '$type' (key='$key')")
+        fun of(type: String, key: String): FxTargetsRef =
+            ofOrNull(type, key) ?: throw IllegalArgumentException("Unknown FX target '$type' (key='$key')")
 
         /** A one-item selection is read as its one target, so the two never differ in what they mean. */
-        fun ofOrNull(type: String, key: String): EffectTargetRef? =
+        fun ofOrNull(type: String, key: String): FxTargetsRef? =
             if (type == Selection.TYPE) Selection.parseKey(key)?.let { of(it) }
             else TargetRef.ofOrNull(type, key)?.let { Single(it) }
 

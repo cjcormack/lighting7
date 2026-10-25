@@ -326,7 +326,7 @@ class State(val config: ApplicationConfig) {
         uk.me.cormack.lighting7.update.LiveHintDto(
             showReady = true,
             activeStackName = activeCueStackName(),
-            activeEffectCount = show.fxEngine.getActiveEffects().size,
+            activeFxCount = show.fxEngine.getActiveFx().size,
         )
     }.getOrElse { uk.me.cormack.lighting7.update.LiveHintDto(showReady = false) }
 
@@ -620,7 +620,7 @@ class State(val config: ApplicationConfig) {
             val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq projectId }
                 .map { it.uuid }.toSet()
             val looks = DaoLook.find { DaoLooks.project eq projectId }.mapTo(HashSet()) { it.uuid }
-            val templates = DaoTemplate.find { DaoTemplates.project eq projectId }.mapTo(HashSet()) { it.uuid }
+            val templates = DaoPalette.find { DaoPalettes.project eq projectId }.mapTo(HashSet()) { it.uuid }
             val pages = DaoBuskPage.find { DaoBuskPages.project eq projectId }.map { it.id.value to it.uuid }
             // A pad has no project column of its own — it is reached through its bank's column's
             // page, which is the one level that has one. `buskPageContents` owns that descent.
@@ -642,7 +642,7 @@ class State(val config: ApplicationConfig) {
                 cues = cues,
                 speedMasterUuids = masters,
                 lookUuids = looks,
-                templateUuids = templates,
+                paletteUuids = templates,
                 padUuids = pads,
                 bankUuids = banks,
                 pageUuids = pages.mapTo(HashSet()) { it.second },
@@ -656,10 +656,10 @@ class State(val config: ApplicationConfig) {
             validSpeedMasterUuids = snapshot.speedMasterUuids,
             validStackUuids = snapshot.stacks.mapTo(HashSet()) { it.second },
             validCueUuids = snapshot.cues.mapTo(HashSet()) { it.second },
-            selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
-            colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
+            selectionAttributes = BindingHealthEvaluator.selectionAttributesOf(fixtures),
+            colourAttributes = BindingHealthEvaluator.colourAttributesOf(fixtures),
             validLookUuids = snapshot.lookUuids,
-            validTemplateUuids = snapshot.templateUuids,
+            validPaletteUuids = snapshot.paletteUuids,
             validPadUuids = snapshot.padUuids,
             validBankUuids = snapshot.bankUuids,
             validPageUuids = snapshot.pageUuids,
@@ -675,7 +675,7 @@ class State(val config: ApplicationConfig) {
         val cues: List<Pair<Int, java.util.UUID>>,
         val speedMasterUuids: Set<java.util.UUID>,
         val lookUuids: Set<java.util.UUID>,
-        val templateUuids: Set<java.util.UUID>,
+        val paletteUuids: Set<java.util.UUID>,
         val padUuids: Set<java.util.UUID>,
         val bankUuids: Set<java.util.UUID>,
         val pageUuids: Set<java.util.UUID>,
@@ -710,7 +710,7 @@ class State(val config: ApplicationConfig) {
      * The desk's one shared selection — what a selection-relative surface control and a busk
      * press act on. State-scoped like [activeBankState] so it outlives a `Show`, cleared on
      * project switch and pruned on fixture reload; never persisted. See
-     * [DeskSelection] and `docs/lighting-composition-model.md` §"Layer 2".
+     * [DeskSelection] and `docs/lighting-composition-model.md` §"Tier 2 — Programmer".
      */
     val deskSelection: DeskSelection by lazy {
         // Not a show being torn down: its registry empties as it goes, and a prune against that
@@ -722,7 +722,7 @@ class State(val config: ApplicationConfig) {
     val selectionFan: SelectionFan by lazy { SelectionFan(this) }
 
     /**
-     * The effective rig order for `selection.subselect` and a spread's `LINEAR` order
+     * The effective rig order for `selection.subselect` and a spread's `NORMAL` order
      * (`state/BuskRigOrder.kt`), read fresh from the current project's rig tables at gesture time —
      * a rig write is rare next to a press, and holding a cached copy would be one more thing to
      * invalidate on `buskRigChanged`. Null before the show is up.
@@ -779,7 +779,7 @@ class State(val config: ApplicationConfig) {
         val projectId = projectManager.currentProject.id.value
         transaction(database) {
             when (kind) {
-                BuskPadKind.TEMPLATE -> DaoTemplate.findById(id)?.project?.id?.value
+                BuskPadKind.PALETTE -> DaoPalette.findById(id)?.project?.id?.value
                 BuskPadKind.LOOK -> DaoLook.findById(id)?.project?.id?.value
                 BuskPadKind.CUE -> DaoCue.findById(id)?.project?.id?.value
             } == projectId
@@ -946,7 +946,7 @@ class State(val config: ApplicationConfig) {
                 runCatching { show.cueStackManager.holds.looseHeld(cueId) }.getOrDefault(false)
             },
             buskRefsProvider = ::buildBuskRefs,
-            stackEffectSizesProvider = { show.cueStackManager.effectSizes },
+            stackFxAmountsProvider = { show.cueStackManager.fxAmounts },
             stackIdResolver = { stackUuid -> show.cueStackManager.stackIdForUuid(database, stackUuid) },
             selectionFan = selectionFan,
             latencyTracker = midiLatencyTracker,
@@ -966,7 +966,7 @@ class State(val config: ApplicationConfig) {
             val pads = buskPageContents(pages.map { it.first }).pads.values
                 .mapNotNull { pad ->
                     when (pad.kind) {
-                        BuskPadKind.TEMPLATE -> pad.uuid to PadRef.Layer(pad.template!!.uuid, isLook = false)
+                        BuskPadKind.PALETTE -> pad.uuid to PadRef.Layer(pad.palette!!.uuid, isLook = false)
                         BuskPadKind.LOOK -> pad.uuid to PadRef.Layer(pad.look!!.uuid, isLook = true)
                         // The pad names the cue and nothing else: a press holds it loose (cue model plan D6).
                         BuskPadKind.CUE -> pad.uuid to PadRef.Cue(pad.cue!!.id.value)
@@ -1170,8 +1170,8 @@ class State(val config: ApplicationConfig) {
             handState.reconcile(BuskPadKind.LOOK)
             refreshActiveProjectBindingHealth()
         }
-        override fun templateListChanged() {
-            handState.reconcile(BuskPadKind.TEMPLATE)
+        override fun paletteListChanged() {
+            handState.reconcile(BuskPadKind.PALETTE)
             refreshActiveProjectBindingHealth()
         }
         override fun buskLayoutChanged(pageIds: List<Int>) {
@@ -1306,6 +1306,11 @@ class State(val config: ApplicationConfig) {
         // the exception its KDoc explains. A no-op on a fresh or already-converted database.
         CueModelMigration.runIfNeeded(ds, database, dbPath)
 
+        // Terminology plan step 5: tables, columns and stored values in the glossary's words —
+        // before the reconciliation too, which would otherwise create every renamed column empty
+        // beside the old one. A no-op on a fresh or already-renamed database.
+        TerminologyMigration.runIfNeeded(ds, database, dbPath)
+
         transaction(database) {
             // Create tables - order matters for FK constraints
             // DaoProjects now includes all columns (FK columns as plain integers)
@@ -1364,8 +1369,22 @@ class State(val config: ApplicationConfig) {
             // (absolute-looks plan D1). `LookLayerTargetsMigration.kt`.
             clearLookLayerTargets()
 
+            // Once per database: every stored FX onto today's library — renamed ids, Breathe as Sine
+            // Wave, `pingPong` as Bounce, Colour Cycle on literal colours (terminology plan §5 step 4).
+            // `FxLibraryMigration.kt`.
+            rewriteFxLibrary()
+
+            // Step 5's version, recorded once the steps above have run over its renamed shape
+            // (`TerminologyMigration.kt`).
+            markTerminologyRenamed()
+
             ensureInstallRow()
         }
+
+        // Terminology plan step 6: the surface bindings' attribute targets and the position FX's
+        // centres in the glossary's words, backed up first when anything moves. After step 5 is
+        // recorded, so it meets the renamed schema. `AttributeNamesMigration.kt`.
+        AttributeNamesMigration.runIfNeeded(ds, database, dbPath)
 
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database

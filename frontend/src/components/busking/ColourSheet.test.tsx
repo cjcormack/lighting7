@@ -22,28 +22,28 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() }))
 const groupList = vi.hoisted(() => () => ({
-  data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] })),
+  data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' })),
 }))
 vi.mock('sonner', () => ({ toast }))
 
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: [] }),
-  useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
-  useToggleTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: [] }),
+  useApplyPaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+  useTogglePaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
 }))
 // A Palettes band chip is a press (`usePress`): its other routes and the ring's applied state, none of
 // which these tests are about.
 // A refused absorb into a focused Look takes the effects it started off again.
 vi.mock('@/store/fixtureFx', () => ({
   useRemoveFxMutation: () => [vi.fn()],
-  useEffectLibraryQuery: () => ({ data: [] }),
-  useActiveEffectsQuery: () => ({ data: [] }),
+  useFxLibraryQuery: () => ({ data: [] }),
+  useActiveFxQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [vi.fn()], useGroupListQuery: groupList }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
-  useAbsorbLookEffectsMutation: () => [vi.fn()],
+  useAbsorbLookFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/programmer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/programmer')>()),
@@ -53,8 +53,8 @@ vi.mock('@/store/selection', () => ({
   usePressFamilies: (local: unknown) => local,
   useSelectionPair: () => ({ targets: [], families: null }),
 }))
-vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
-  NewTemplateFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
+vi.mock('@/components/programmer/NewPaletteFromSelectionSheet', () => ({
+  NewPaletteFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
     open ? <div data-testid="new-template" data-targets={JSON.stringify(targets)} data-families={families.join()} /> : null,
 }))
 /** A built rig naming the bar first, so rig order and selection order differ. */
@@ -72,33 +72,33 @@ const colour = (extra: Record<string, unknown> = {}) => ({
   blueChannel: { universe: 1, channelNo: 3 },
   ...extra,
 })
-const par1 = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: ['Front wash', 'Reds'], properties: [colour()] } as unknown as Fixture
+const par1 = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: ['Front wash', 'Reds'], attributes: [colour()] } as unknown as Fixture
 /** RGB only, like par-1: with it, 'Reds' is a group whose members agree on emitters. */
-const par3 = { key: 'par-3', name: 'PAR 3', typeKey: 'par', groups: ['Reds'], properties: [colour()] } as unknown as Fixture
+const par3 = { key: 'par-3', name: 'PAR 3', typeKey: 'par', groups: ['Reds'], attributes: [colour()] } as unknown as Fixture
 /** A dimmer-only head: nothing to write, nothing to read. */
 const dim = {
   key: 'dim',
   name: 'Dimmer',
   typeKey: 'dimmer',
   groups: ['Front wash'],
-  properties: [{ type: 'slider', name: 'dimmer', displayName: 'Dimmer', category: 'dimmer', channel: { universe: 1, channelNo: 20 }, min: 0, max: 255 }],
+  attributes: [{ type: 'slider', name: 'dimmer', displayName: 'Dimmer', category: 'dimmer', channel: { universe: 1, channelNo: 20 }, min: 0, max: 255 }],
 } as unknown as Fixture
 const par2 = {
   key: 'par-2',
   name: 'PAR 2',
   typeKey: 'par',
   groups: ['Front wash'],
-  properties: [colour({ whiteChannel: { universe: 1, channelNo: 4 } })],
+  attributes: [colour({ whiteChannel: { universe: 1, channelNo: 4 } })],
 } as unknown as Fixture
 const bar = {
   key: 'bar',
   name: 'Bar L',
   typeKey: 'bar',
   groups: [],
-  properties: [],
+  attributes: [],
   elements: [
-    { index: 0, key: 'bar.c1', displayName: 'Cell 1', properties: [colour({ amberChannel: { universe: 1, channelNo: 9 } })] },
-    { index: 1, key: 'bar.c2', displayName: 'Cell 2', properties: [colour({ amberChannel: { universe: 1, channelNo: 10 } })] },
+    { index: 0, key: 'bar.c1', displayName: 'Cell 1', attributes: [colour({ amberChannel: { universe: 1, channelNo: 9 } })] },
+    { index: 1, key: 'bar.c2', displayName: 'Cell 2', attributes: [colour({ amberChannel: { universe: 1, channelNo: 10 } })] },
   ],
 } as unknown as Fixture
 const fixtures = [par1, par2, bar, par3, dim]
@@ -129,7 +129,7 @@ import { ColourSheet, planColourWrites, writeTargetsOf } from './ColourSheet'
 const groupOf = (name: string, memberCount: number): BuskingTarget => ({
   type: 'group',
   name,
-  group: { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] },
+  group: { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' },
 })
 /** Mixed: par-1 (RGB), par-2 (RGBW) and a dimmer-only head. */
 const group = groupOf('Front wash', 3)
@@ -231,7 +231,7 @@ describe('writes', () => {
   it('plans a whole fixture as one write, sending only the emitters it has, and folds an undeliverable white into RGB — per member for a mixed group', () => {
     const white = { r: 0, g: 0, b: 0, w: 255, a: 0, uv: 0 }
     expect(planColourWrites([whole], white, fixtures)).toEqual([
-      { targetType: 'fixture', targetKey: 'par-2', propertyName: 'rgbColour', colour: { r: 0, g: 0, b: 0, w: 255, a: undefined, uv: undefined }, sourceGroup: undefined },
+      { targetType: 'fixture', targetKey: 'par-2', attribute: 'rgbColour', colour: { r: 0, g: 0, b: 0, w: 255, a: undefined, uv: undefined }, sourceGroup: undefined },
     ])
     const par1Only: BuskingTarget = { type: 'fixture', key: 'par-1', fixture: par1 }
     expect(planColourWrites([par1Only], white, fixtures)[0].colour).toEqual({ r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined })
@@ -247,7 +247,7 @@ describe('writes', () => {
     ])
     // Agreeing members: one group write, folded for what they share.
     expect(planColourWrites([reds], white, fixtures)).toEqual([
-      { targetType: 'group', targetKey: 'Reds', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined } },
+      { targetType: 'group', targetKey: 'Reds', attribute: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined } },
     ])
   })
 
@@ -262,8 +262,8 @@ describe('writes', () => {
     const blinder = makeFixture('blinder', [sliderProp('dimmer', 'dimmer', chan(199))], { elements: cells })
     const whole: BuskingTarget = { type: 'fixture', key: 'blinder', fixture: blinder }
     expect(planColourWrites([whole], { r: 0, g: 0, b: 0, w: 255, a: 0, uv: 0 }, [blinder])).toEqual([
-      { targetType: 'fixture', targetKey: 'blinder.cell-1', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
-      { targetType: 'fixture', targetKey: 'blinder.cell-2', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
+      { targetType: 'fixture', targetKey: 'blinder.cell-1', attribute: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
+      { targetType: 'fixture', targetKey: 'blinder.cell-2', attribute: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
     ])
   })
 
@@ -318,7 +318,7 @@ describe('the footer’s verbs reach the editor', () => {
     expect(scroller.contains(footer)).toBe(false)
     const names = [...footer.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(names[0]).toMatch(/Save as palette/)
-    expect(names).toContain('Spread to a second colour…')
+    expect(names).toContain('Fan to a second colour…')
     // The two bands sit at the foot of the scroller, under the picker: Palettes, then Effects.
     const palettes = scroller.querySelector('[data-palette-band="COLOUR"]')!
     const effects = scroller.querySelector('[data-effects-band="COLOUR"]')!
@@ -339,13 +339,13 @@ describe('the footer’s verbs reach the editor', () => {
   it('hands Spread to a second colour… the current colour once wired, and draws it inert on a host with no Spread tab', () => {
     const { unmount } = draw([reds])
     expect(screen.queryByRole('switch')).toBeNull()
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeDisabled()
     unmount()
     const onSpread = vi.fn()
     draw([reds], { onSpread })
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeEnabled()
     fireEvent.change(field('B'), { target: { value: '7' } })
-    fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Fan to a second colour/ }))
     expect(onSpread).toHaveBeenCalledWith({ r: 255, g: 0, b: 7, w: 0, a: 0, uv: 0 })
   })
 })

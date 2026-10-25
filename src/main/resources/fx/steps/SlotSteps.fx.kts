@@ -1,10 +1,10 @@
 /*---
 id: SlotSteps
 name: Slot Steps
-category: beam
+family: steps
 outputType: STEPS
-effectMode: STANDARD
-compatibleProperties: [setting]
+fxMode: STANDARD
+compatibleAttributes: [setting]
 parameters:
   - name: slots
     type: slotList

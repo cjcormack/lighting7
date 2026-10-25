@@ -1,6 +1,6 @@
 # Cue Stacks Engineering Documentation
 
-This document describes the Cue Stack system — ordered containers for sequential cue playback with looping and per-cue auto-advance and crossfades of values and effects.
+This document describes the Cue Stack system — ordered containers for sequential cue playback with looping and per-cue auto-advance and crossfades of values and FX.
 
 ## Overview
 
@@ -17,9 +17,9 @@ Key behaviours:
   leaves the cue (`cues-engineering.md` §"Delete"). The Cues table (`/projects/:id/cues`, cue model
   plan §3.7) lists every cue once from `GET /cues`, each with its entries and its `usedBy` — the busk
   pads, cue slots and `FireCue` bindings naming it — which is where a loose cue is found
-- Activating a stack applies the first (or specified) cue's effects
+- Activating a stack applies the first (or specified) cue's FX
 - Advancing steps through the list's cue entries in order, markers skipped
-- Deactivating removes all effects tagged with the stack's ID
+- Deactivating removes all FX tagged with the stack's ID
 
 ## Data Model
 
@@ -221,8 +221,8 @@ Three halves of running a stack live beside it rather than in it:
 
 | Class | Owns |
 |-------|------|
-| `fx/CueHolds.kt` | What holds each live cue, its priority, and bringing a cue on (first hold) and taking it off (last release) — effects, Layer 4 rows, stomp, timed effects, triggers and events |
-| `fx/CueCrossfadeDriver.kt` | The Layer 4 fade weights: one in-flight fade per stack, its tick loop, and the outgoing cue it must drop (rows and leaving effects) if cancelled — unless a hold has that cue again. The effects' envelopes ramp on their own (`fx/EffectEnvelope.kt`) |
+| `fx/CueHolds.kt` | What holds each live cue, its priority, and bringing a cue on (first hold) and taking it off (last release) — FX, Tier 4 rows, stomp, timed FX, triggers and events |
+| `fx/CueCrossfadeDriver.kt` | The Tier 4 fade weights: one in-flight fade per stack, its tick loop, and the outgoing cue it must drop (rows and leaving FX) if cancelled — unless a hold has that cue again. FX envelopes ramp on their own (`fx/FxEnvelope.kt`) |
 | `fx/CueRunStateTracker.kt` | Standby arming, the definition of "next", `CueRunState` and its broadcast. Reached as `cueStackManager.runState` |
 
 The tracker reads the manager's bookkeeping through a `LiveStacks` snapshot rather than the mutable
@@ -242,50 +242,50 @@ places is one contribution, never two). A hold is one of:
 
 The registry decides three things:
 
-- **`acquire` on a cue's first hold brings it on** — its ad-hoc and Look effects (growing from
-  nothing over the GO's fade, effects plan D1), its Layer 4 rows (at weight 0 when a crossfade will
-  bring them in), its stomp, its timed effects and triggers, and its **events** (D15). Any other
+- **`acquire` on a cue's first hold brings it on** — its ad-hoc and Look FX (growing from
+  nothing over the GO's fade, effects plan D1), its Tier 4 rows (at weight 0 when a crossfade will
+  bring them in), its stomp, its timed FX and triggers, and its **events** (D15). Any other
   acquire only restamps its priority: nothing on stage moves.
-- **`release` of its last hold takes it off** — triggers and timed effects stopped, effects removed
+- **`release` of its last hold takes it off** — triggers and timed FX stopped, FX removed
   or shrinking to nothing over the GO's fade, its rows dropped or left at full weight for the
   caller's crossfade to take down. Any other release only restamps.
 - **A cue's priority is its highest hold's.** A stack hold composes at the entry's
   `cueDerivedPriority` (the stack band plus the entry's position, markers counted); a loose hold at
   `LOOSE_BAND + seq` (`2_000_000_000 +`), above every stack, the newest press on top (D10). So a pad
-  pressed over a running stack wins on every LTP property until it is let go, and the stack takes
+  pressed over a running stack wins on every LTP attribute until it is let go, and the stack takes
   over again on release with nothing re-fired. A write that shifts entry positions (reorder, add-cue,
   sort, a cue created, recorded or deleted mid-list, an entry or a marker added or removed) calls
   `holds.restampEntries(stackEntryPriorities(stack))`, which re-ranks only the stack holds it names.
 
-So the effects' envelopes follow the holds, as the rows' weights do (effects plan §3.5): a GO between
+So FX envelopes follow the holds, as the rows' weights do (effects plan §3.5): a GO between
 two entries of a cue that stays held moves no envelope, a GO onto a cue another stack or a press
-already holds moves none, and a stack moving off a cue a press still holds leaves its effects at
-full. A loose hold has no fade: its effects snap on and off with its rows. Each effect a cue coming
-on cooks to is matched by one rule (`continues`: the same stored effect row —
-`FxInstance.layerEffectUuid`, a Look's, a palette's or the cue's own ad-hoc row's uuid — on the same
-target and property, with the same `lookEffectSettings()`), an ad-hoc one across a GO by its run key
+already holds moves none, and a stack moving off a cue a press still holds leaves its FX at
+full. A loose hold has no fade: its FX snap on and off with its rows. Each FX a cue coming
+on cooks to is matched by one rule (`continues`: the same stored FX row —
+`FxInstance.layerFxUuid`, a Look's, a palette's or the cue's own ad-hoc row's uuid — on the same
+target and attribute, with the same `lookFxSettings()`), an ad-hoc one across a GO by its run key
 (`handsRunTo`, below), and arrives one of four ways:
 
 - **Taken back.** A cue brought on again while its fade-out is still running (Chris's answer,
   session 4) keeps its own instances: they grow from where they stand over the new hold's fade, or
   return to full at once on a snap — no respawn, no phase jump. That covers a press, another
   stack's GO and a GO BACK or GO TO on the same stack, whose cancel leaves the returning cue's
-  effects for its acquire. One the cue no longer cooks to (it was edited meanwhile) finishes
+  FX for its acquire. One the cue no longer cooks to (it was edited meanwhile) finishes
   going, and one the engine retired in that instant is spawned afresh.
 - **Adopted** (P4). A GO that takes one cue off and brings another on hands the incoming acquire
   the outgoing cue (`adoptFrom`: the outgoing cue's only hold is this stack's live entry). An
-  incoming effect matching one of its live instances takes that instance over, id and phase kept,
-  and is not faded — unless it is paused or an N-shot, which the incoming cue starts afresh. A
-  Look layered at two speed masters is two effects, so one leaves and one arrives. Should a press
+  incoming FX matching one of its live instances takes that instance over, id and phase kept,
+  and is not faded — unless it is paused or has Runs set, which the incoming cue starts afresh. A
+  Look layered at two speed masters is two FX, so one leaves and one arrives. Should a press
   take the outgoing cue between the two holds, or the acquire fail, the adoptions go back
   (`giveBack`) and the incoming cue runs its own.
-- **Handed on** (stack-timeline plan D7, D8). An ad-hoc effect's row is its cue's alone, so it is
-  never adopted by `continues`; its **run key** (`cue_ad_hoc_effects.run_uuid`) is what carries it
-  across a GO. Under the same `adoptFrom` and the same paused and N-shot rule — an incoming N-shot
-  row starts afresh too, an accent its GO fires — an incoming ad-hoc effect with a key takes over
-  the outgoing cue's instance with that key, target and property,
+- **Handed on** (stack-timeline plan D7, D8). An ad-hoc FX's row is its cue's alone, so it is
+  never adopted by `continues`; its **run key** (`cue_ad_hoc_fx.run_uuid`) is what carries it
+  across a GO. Under the same `adoptFrom` and the same paused and Runs rule — an incoming row with Runs
+  starts afresh too, an accent its GO fires — an incoming ad-hoc FX with a key takes over
+  the outgoing cue's instance with that key, target and attribute,
   restamped with the incoming row's uuid. Same settings, it runs on untouched; different ones, it is
-  edited in place at the GO, not over the fade (`EffectAligner`, `routes.alignEffect`: phase kept, but
+  edited in place at the GO, not over the fade (`FxAligner`, `routes.alignFx`: phase kept, but
   a move between Seconds and a master restarts it), and an edit refused leaves the instance to its
   cue, which fades it out while the incoming row spawns. `giveBack` restores a handed-on instance's
   cue, row uuid and settings; should the edit back be refused, the cue it returns to is marked edited
@@ -297,11 +297,11 @@ target and property, with the same `lookEffectSettings()`), an ad-hoc one across
 Instances carried over get fresh compose orders in the cue's layer order (`restampComposeOrder`),
 so a cue composes the same however it was reached.
 
-The engine layers below stay keyed by cue — `CueAssignmentLayer`'s rows and fade weights,
-`CueTriggerManager`'s jobs, `FxInstance.cueId` — which is what D3 makes correct. An effect a cue
-brings on is tagged with the stack that brought it (`cueStackId`), for the effect list's readout;
-nothing removes effects by that tag any more (`removeEffectsForCueStack` removes only
-stack-scoped effects with no cue).
+The engine parts below stay keyed by cue — `CueAssignmentLayer`'s rows and fade weights,
+`CueTriggerManager`'s jobs, `FxInstance.cueId` — which is what D3 makes correct. An FX a cue
+brings on is tagged with the stack that brought it (`cueStackId`), for the FX list's readout;
+nothing removes FX by that tag any more (`removeFxForCueStack` removes only
+stack-scoped FX with no cue).
 
 The registry's lock covers the bookkeeping only; the engine work runs outside it, and reads
 (`isHeld`, `priorityOf`, `stackOf`) take a volatile view. A stack delete stops its stack inside its
@@ -317,31 +317,31 @@ project switch starts empty.
 ### Edited since GO and Update stage
 
 A stored cue edit sends nothing to the stage (show-cue-editing plan P2), so a held cue whose rows,
-layers or effects are written is **edited since GO**: the stage still shows it as it came on. The
+layers or FX are written is **edited since GO**: the stage still shows it as it came on. The
 registry keeps the mark (`CueHolds.markEdited`, a set beside the holds) and `cueHolds.state` carries
 it as `edited: true`.
 
 - **What sets it**: the cue's `PUT` and `PATCH` when the write changes what *Update stage* would
-  send — `DaoCue.stageContent()`, its own rows' values and its untimed layers and ad-hoc effects,
+  send — `DaoCue.stageContent()`, its own rows' values and its untimed layers and ad-hoc FX,
   compared across the write — and only while something holds the cue. A name, fade, notes, scenery
-  or events write does not, nor a row's own fade or move-in-dark, nor a timed layer or effect: Update
+  or events write does not, nor a row's own fade or move-in-dark, nor a timed layer or FX: Update
   stage sends none of them (Chris's call, 2026-10-17, narrowing plan §3.5). **A Look or palette edit
-  that moves its effects** marks every live cue layering it (Chris's call, 2026-10-17, amending §3.5):
-  `republishForSourceEdit` republishes those cues' rows, never their effects, and
-  `CueHolds.markIfLayerEffectsMoved` compares what the cue's untimed layer effects cook to now with
+  that moves its FX** marks every live cue layering it (Chris's call, 2026-10-17, amending §3.5):
+  `republishForSourceEdit` republishes those cues' rows, never their FX, and
+  `CueHolds.markIfLayerFxMoved` compares what the cue's untimed layer FX cook to now with
   what they cooked to as it came on or was last brought in line — a held cue with no rows of its
   own included, which the row republish never visits. A values-only edit republishes and marks
   nothing.
 - **What clears it**: the cue's first hold (it comes on as stored), its last release and *Update
   stage*. A Record, an Update or the patch-edit tool's republish (`republishCueIfLive`) leaves it:
-  it moves the rows and not the effects (Chris's call, 2026-10-17, amending §3.5). Nor does a
-  Record or Update into a held cue set it: the effects it recorded are the programmer's instances,
+  it moves the rows and not the FX (Chris's call, 2026-10-17, amending §3.5). Nor does a
+  Record or Update into a held cue set it: the FX it recorded are the programmer's instances,
   still running, which an *Update stage* would start a second copy of.
 - **`POST /cues/{id}/update-stage {dryRun?}`** (`routes/cueUpdateStage.kt`) sends a live cue's stored
-  rows and effects to the stage and answers `{rows, effects: {edited, stopped, started}, fadeMs,
+  rows and FX to the stage and answers `{rows, fx: {edited, stopped, started}, fadeMs,
   curve}`; `dryRun` answers the same and sends nothing, which is what the confirm words its fade
   from. 409 `CUE_NOT_LIVE` when nothing holds the cue. One runs at a time.
-  - **Rows and effects come from one cook** (`buildCombinedCueLayerCook`, fired timed layers
+  - **Rows and FX come from one cook** (`buildCombinedCueLayerCook`, fired timed layers
     included), so both read one version of every Look. The rows go through `CueHolds.restage` →
     `CueAssignmentLayer.restageAssignments`, which asks under the publish lock whether a hold still
     has the cue — a release's row drop takes that lock too — so no rows are left behind a cue a GO
@@ -351,34 +351,34 @@ it as `edited: true`.
     its crossfade weight, and one with none that a GO is still bringing in takes the weight that
     crossfade has reached (`CueCrossfadeDriver.incomingWeight`). A GO's fade is not borrowed: a GO
     between two entries of one cue moves nothing, the driver holds one fade per stack, and a loose cue
-    has no stack. `rows` counts the (head, property) keys whose value changes.
-  - **A key a running effect covers does not ramp**: the publish leaves it to the effect, whose tick
-    re-reads the base with no fade, so the base under an effect moves at once, and under an effect
-    the update starts the ramp is overwritten on the effect's first tick. A row's own fade has the
+    has no stack. `rows` counts the (head, attribute) keys whose value changes.
+  - **A key a running FX covers does not ramp**: the publish leaves it to the FX, whose tick
+    re-reads the base with no fade, so the base under an FX moves at once, and under an FX
+    the update starts the ramp is overwritten on the FX's first tick. A row's own fade has the
     same limit; a ramp there needs a per-cue fade in the resolver rather than at transmit
     (`FU-UPDATE-STAGE-EFFECT-RAMP`).
-  - **Effects** are reconciled against the running instances the cue's holds spawned, by stored
-    uuid, cue layer, target and property (`CueEffectKey`; `cueEffectInstances` builds what a first
+  - **FX** are reconciled against the running instances the cue's holds spawned, by stored
+    uuid, cue layer, target and attribute (`CueFxKey`; `cueFxInstances` builds what a first
     hold would spawn, as `bringOn` does). A matched instance whose settings differ is edited in place
-    through `applyEffectUpdate`, no `targets`: id and phase kept, but a move between Seconds and a
+    through `applyFxUpdate`, no `targets`: id and phase kept, but a move between Seconds and a
     master restarts its loop. One the in-place edit refuses is started afresh. An unmatched running
-    instance shrinks to nothing over the cue's fade. An unmatched stored effect grows from nothing
+    instance shrinks to nothing over the cue's fade. An unmatched stored FX grows from nothing
     over it, at the cue's priority — **but only one the cue newly gained**: the registry keeps what
-    the cue's first hold spawned (`spawnedEffects`, updated by each Update stage), and an effect in it
-    with no running instance — an N-shot run out, one another cue's stomp removed — stays off. A
-    changed layer brings its effects in line the same way, a palette layer's head by head.
-  - **Settings compare with master 1 spelled once** (`comparableEffectSettings`): a stored null and
-    master 1's uuid are one master, and only the master an effect's timing reads is compared — so an
-    effect moved onto master 1 by uuid still matches its stored effect, here and in a later GO's P4
+    the cue's first hold spawned (`spawnedFx`, updated by each Update stage), and an FX in it
+    with no running instance — one whose Runs ran out, one another cue's stomp removed — stays off. A
+    changed layer brings its FX in line the same way, a palette layer's head by head.
+  - **Settings compare with master 1 spelled once** (`comparableFxSettings`): a stored null and
+    master 1's uuid are one master, and only the master an FX's timing reads is compared — so an
+    FX moved onto master 1 by uuid still matches its stored FX, here and in a later GO's P4
     adoption (`CueHolds.continues`).
   - **Compose order** is restamped only when the cue's untimed instances are out of its layer order,
     and its timed and script-spawned instances then keep their order after them.
   - **Not re-run**: events, scenery, stomp and the cue's speed-master tempos (a GO's, as events
-    are), and the cue's **timed** effects and layers — fired
+    are), and the cue's **timed** FX and layers — fired
     things, whose timers keep what the last first hold armed; their next GO lands them (Chris's call,
     2026-10-17). Their instances carry no stored uuid, which is how the reconcile leaves them. A
     recurring timed layer's next fire re-cooks the rows as they were armed, as it did after a Record;
-    and an effect moved from timed to untimed starts beside the copy its timer already fired, which
+    and an FX moved from timed to untimed starts beside the copy its timer already fired, which
     runs on until the next GO (`FU-UPDATE-STAGE-TIMED`).
   - Current project only and both roles, as a GO is: it stores nothing.
 
@@ -481,12 +481,12 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
    was the last. A cue already held elsewhere stays at full on both sides, so a GO from A1 to A2 of
    the same cue — or onto a cue another stack already holds — moves nothing, and the run state
    reports no fade (`fadeStartedAtMs` null).
-4. Effects fade by size with the values (effects plan D1): on a crossfading GO the incoming cue's
-   new effects grow from nothing and the outgoing cue's shrink to nothing, each instance's envelope
-   ramping on the clock over the cue's fade and curve; the effects the two cues share run on
-   (§"Holds", P4). A side with effects and no rows fades all the same — the gate is rows *or*
-   effects, so an effect-only cue fades. A 0 s fade, a first GO from a stopped stack and a re-fire
-   snap, values and effects alike.
+4. FX fade by weight with the values (effects plan D1): on a crossfading GO the incoming cue's
+   new FX grow from nothing and the outgoing cue's shrink to nothing, each instance's envelope
+   ramping on the clock over the cue's fade and curve; the FX the two cues share run on
+   (§"Holds", P4). A side with FX and no rows fades all the same — the gate is rows *or*
+   FX, so an FX-only cue fades. A 0 s fade, a first GO from a stopped stack and a re-fire
+   snap, values and FX alike.
 5. The **incoming** entry's follow schedules the auto-advance, even when it names the cue that was
    already live (D7).
 6. Publish the run state, then the scenery (`SceneryService.onEntryLive`) — §"Scenery" below.
@@ -495,44 +495,44 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
    never on the BACKWARD arm of `advanceStack`. A GO onto a cue another stack or a press already
    holds fires none. `deactivateStack` drops the desk's arm (`onStackStopped`)
 
-A loose press runs the same acquire with a `Loose` hold and no crossfade: the cue's effects, rows,
-stomp, timed effects, triggers and events come on exactly as a GO's would (the old separate apply
+A loose press runs the same acquire with a `Loose` hold and no crossfade: the cue's FX, rows,
+stomp, timed FX, triggers and events come on exactly as a GO's would (the old separate apply
 path is gone), and its scenery is tracked as a loose track (`SceneryService.onLooseHeld`).
 
 A step "merge cue palette into stack palette" used to sit in this flow, and the stack carried a
-positional colour list its cues inherited. That whole grammar is gone — an effect parameter names a
-colour palette (`tmpl:{uuid}`) whose answer does not depend on which stack is running — so a stack
+positional colour list its cues inherited. That whole grammar is gone — an FX parameter names a
+colour palette (`pal:{uuid}`) whose answer does not depend on which stack is running — so a stack
 carries no colour state at all.
 
 ## Crossfade (Option B — Intensity Envelope)
 
-A GO's fade moves two things over the same time and curve: each live cue's Layer 4 fade weight,
-which `CueCrossfadeDriver` ticks, and each of its effects' **envelope**, which ticks itself.
+A GO's fade moves two things over the same time and curve: each live cue's Tier 4 fade weight,
+which `CueCrossfadeDriver` ticks, and each of its FX's **envelope**, which ticks itself.
 
-### The effect envelope
+### The FX envelope
 
-`FxInstance.envelope` is an immutable `EffectEnvelope` (`fx/EffectEnvelope.kt`): a level, or a ramp
+`FxInstance.envelope` is an immutable `FxEnvelope` (`fx/FxEnvelope.kt`): a level, or a ramp
 from one level to another over a duration on an `EasingCurve`, read on the clock wherever the weight
-is read (`intensityMultiplier` is its level now). So the effects need no loop of their own: `CueHolds`
-sets the ramps as the holds move — `bringOn` spawns an arriving cue's effects on `0 → 1` before they
+is read (`intensityMultiplier` is its level now). So the FX need no loop of their own: `CueHolds`
+sets the ramps as the holds move — `bringOn` spawns an arriving cue's FX on `0 → 1` before they
 are added, `takeOff` sets a leaving cue's on `now → 0` — and every change of fade is one
 compare-and-set on the instance. An instance on its way out is **leaving**: it belongs to no cue,
-layer or Release any more, and the engine's 50 Hz wall-clock pass removes it once it reaches 0
-(`FxEngine.retireFinishedLeaving`, which runs whatever is running, so a paused or beat-loop effect
-ends on time too).
+layer or Release any more, and the engine's 50 Hz ticker-woken passes remove it once it reaches 0
+(`FxEngine.retireFinishedLeaving`, which runs whatever is running, so a paused or beat FX ends
+on time too).
 
 ### The envelope is a weight, not a scale
 
 `FxOutput.scaled()` is gone (effects plan session 1). `intensityMultiplier` is the **envelope**, one
 factor of the weight applied after the blend — `out = before + (blended − before)
-× size × envelope × stackSize`, the last the cue stack's runtime effect size (effects plan D10) — so an envelope going to 0 hands the property back to what is underneath rather
-than driving an `OVERRIDE` to 0. See `docs/fx-engineering.md` §"Size, direction and N-shot".
+× amount × envelope × stackAmount`, the last the cue stack's runtime FX amount (effects plan D10) — so an envelope going to 0 hands the attribute back to what is underneath rather
+than driving an `OVERRIDE` to 0. See `docs/fx-engineering.md` §"Amount, direction and runs".
 
-Applied in the target, after the blend: `calculateEffectOutput` returns the raw output, and each of
-the three effect output sites hands `FxTarget.applyValue` the pass's weight (`FxEngine.weightOf`, which is `FxInstance.weight` with the stack's size). Both the beat and wall-clock passes share those three, differing only in
-the `PhaseSource` they hand them:
-1. `processFixtureEffect` — direct fixture
-2. `processGroupEffect` — group member direct
+Applied in the target, after the blend: `calculateFxOutput` returns the raw output, and each of
+the three FX output sites hands `FxTarget.applyValue` the pass's weight (`FxEngine.weightOf`, which is `FxInstance.weight` with the stack's amount). Beat and wall-clock FX share those three, differing only in
+the `PhaseSource` the compose pass hands them:
+1. `processFixtureFx` — direct fixture
+2. `processGroupFx` — group member direct
 3. `processElementKeys` — per-element distribution, serving both the multi-element fixture
    expansion and a group's `FLAT`/`PER_FIXTURE` element lists (they became the same walk once
    the expansion started arriving pre-resolved — see `FxTargetExpansion`)
@@ -555,7 +555,7 @@ private suspend fun runFade(outgoingCueId, incomingCueId, durationMs, easingCurv
         if (progress >= 1.0) break
         delay(CROSSFADE_TICK_MS) // 16 ms, ~60fps
     }
-    // Remove outgoing's Layer 4, pin incoming at 1.0
+    // Remove outgoing's Tier 4, pin incoming at 1.0
 }
 ```
 
@@ -566,11 +566,11 @@ isHeld)`): then its rows are pinned at full instead, since another stack or a pr
 on stage. The incoming cue is pinned at full. A fade's two sides are read every tick, so a cue
 that gains a hold mid-fade is taken out of it (`forgetOutgoing`) rather than faded off under it.
 
-`cancel` treats the effects as it treats the rows: the abandoned outgoing cue's leaving effects are
+`cancel` treats the FX as it treats the rows: the abandoned outgoing cue's leaving FX are
 removed at once (`FxEngine.retireLeaving`) unless a hold has it again — that hold took them back — or
 the cancelling GO is bringing it back (`returning`), whose acquire takes them back; the incoming
-cue's effects are pinned at full (`settleEffects`). The driver is started for a
-side with effects and no rows too, so that a cancel can find them; its tick moves only rows.
+cue's FX are pinned at full (`settleFx`). The driver is started for a
+side with FX and no rows too, so that a cancel can find them; its tick moves only rows.
 
 ### Easing Curves
 
@@ -599,7 +599,7 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | POST | `/{stackId}/markers` | Add a marker entry: body `{ label, sortOrder? }` (a position; appended if omitted). 201 with its row |
 | PUT / DELETE | `/{stackId}/markers/{entryId}` | Rename (`{ label }`) or remove a marker; 404 for a cue's entry |
 | GET | `/{stackId}/preview?entryId=` | Compose an entry's cue without firing it (absent → the effective next). See below |
-| GET | `/{stackId}/timeline` | The stack's Timeline read: every entry with its cue's stored layers, ad-hoc effects, scenery and tracked scenery. See below |
+| GET | `/{stackId}/timeline` | The stack's Timeline read: every entry with its cue's stored layers, ad-hoc FX, scenery and tracked scenery. See below |
 | POST | `/{stackId}/timeline/edit` | One Timeline gesture: `{ ops, dryRun? }`, a batch over the stack's stored cues in one transaction, nothing sent to the stage. See §"Timeline" |
 | POST | `/{stackId}/sort-by-cue-number` | Group-aware sort of cue_number |
 
@@ -607,39 +607,39 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 
 `GET /{stackId}/timeline` (stack-timeline plan §3.5, `routes/cueStackTimeline.kt`) is what the
 Show view's Timeline derives its grid from (P6): `{stackId, entries: [{entryId, kind: CUE | MARKER,
-label?, cueId?, layers, effects, scenery, trackedScenery}]}`, one entry per row in `ENTRY_ORDER`. Under
+label?, cueId?, layers, fx, scenery, trackedScenery}]}`, one entry per row in `ENTRY_ORDER`. Under
 `withProject` like the stack GET, so it reads any project's stack. Names, fade, follow, numbers and
 live state are not repeated: the client has them from the stack list, `cueRunStateChanged` and
 `cueHolds.state`, and the read rides those lists' invalidations rather than a frame of its own.
 
 - **`layers`**, in layer order (`sortOrder`, then id): `{id, source: {kind, id, uuid, name,
-  families}, targets, heads, sortOrder, rank, enabled, amount, blendMode, propertyMask, stomp, timed,
+  families}, targets, heads, sortOrder, rank, enabled, amount, blendMode, attributeMask, stomp, timed,
   delayMs, intervalMs, randomWindowMs, speedMasterUuid, rateSpeedMasterUuid}`. `rank` is the layer's
   place among **every** stored layer of the cue, from 1 at the bottom, so a layer whose source is gone
   — left out of the list — still holds its place and the ranks above it do not shift. `families` is a
-  Look's `derivedFamilyGroups` (its rows' properties and its effects' categories) or a palette's
+  Look's `derivedFamilyGroups` (its rows' attributes and its FX's families) or a palette's
   `familyOf`. `targets` are a palette layer's; a Look layer's are none, since a Look lands whole
   (absolute-looks plan D1). `heads` are the fixture keys the layer lands on, groups expanded
   (`TargetCoverage.expand`): a Look's own heads (`ownTargets`); a per-fixture palette's row heads,
   narrowed as `LayerPressRules.paletteHeads` narrows a press; a generic palette's targets. `timed` is
   a delay, interval or random window.
-- **`effects`**: `{id, uuid, runUuid, effectType, propertyName, targetType, targetKey, family, heads,
-  settings}`, the target canonical (`canonicalTarget`). `family` is the group of the property it
-  drives as Record reads it — the first head's property, else the library category's. `settings` is
-  what `comparableEffectSettings` compares, built from the **row** rather than a live instance: the
+- **`fx`**: `{id, uuid, runUuid, fxType, attribute, targetType, targetKey, family, heads,
+  settings}`, the target canonical (`canonicalTarget`). `family` is the group of the attribute it
+  drives as Record reads it — the first head's attribute, else the library `family`'s. `settings` is
+  what `comparableFxSettings` compares, built from the **row** rather than a live instance: the
   canonical type, the parameters over the library's defaults, an element mode only over members, a
-  filter or step timing only where not the default, and only the master the timing reads, master 1
-  by its uuid. Two rows of one run with equal settings are one effect to a GO; unequal, an edit in
-  place (◆, D8) — unless either is an N-shot, which a GO never hands on.
+  filter or Timing only where not the default, and only the master the timing reads, master 1
+  by its uuid. Two rows of one run with equal settings are one FX to a GO; unequal, an edit in
+  place (◆, D8) — unless either has Runs set, which a GO never hands on.
 - **`scenery`** `{elementUuid, state, transitionMs}` and **`trackedScenery`** `{elementUuid, state,
   fromCueId}` (null from the stack's set) — the latter from `trackedSceneryOfStack`, one read of the
   stack's scenery for every entry, at each **place** of a cue placed twice (`trackedSceneryAt` reads
   the same function for its one entry, resolving that place alone).
 
 A cue placed twice carries the same children at both entries; each child is read once per cue. The
-rig-derived fields — `heads`, a Look's row families, an effect's family by head — read the live
+rig-derived fields — `heads`, a Look's row families, an FX's family by head — read the live
 patch, so for a project that is not current the heads are the targets unexpanded and a Look's
-families its effects' alone.
+families its FX's alone.
 
 ### `add-cue` with `insertByNumber`
 
@@ -669,8 +669,8 @@ from the entry's position — see [cues-engineering.md](cues-engineering.md) §P
 
 - `NewCueStack` — name, loop
 - `CueStackDetails` — full stack with ordered cues, `activeEntryId` / `activeCueId`, `standbyEntryId` / `standbyCueId`, `nextEntryId` / `nextCueId` (what GO fires), canEdit, canDelete
-- `CueStackCueEntry` — one **row** of the list: `entryId` (what reorder, standby and go-to name), `id` (the cue's; null on a marker), name (a marker's label), sortOrder (its position), layerCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType, scenery (the cue's own scenery changes, always encoded — §"Scenery")
-- `CueStackActivateResponse` — stackId, entryId, cueId, cueName, effectCount
+- `CueStackCueEntry` — one **row** of the list: `entryId` (what reorder, standby and go-to name), `id` (the cue's; null on a marker), name (a marker's label), sortOrder (its position), layerCount, adHocFxCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType, scenery (the cue's own scenery changes, always encoded — §"Scenery")
+- `CueStackActivateResponse` — stackId, entryId, cueId, cueName, fxCount
 - `CueStackDeactivateResponse` — stackId, removedCount
 - `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount
 
@@ -684,28 +684,50 @@ and every cue an op names must have an entry in this stack. **Nothing is sent to
 
 | Op | Does |
 |---|---|
-| `layerOn {cueId, source: {kind, id}, target?, settingsFrom?}` | The cue editor's press (`decideCueLayerPress`, shared with `POST /cues/{id}/layers/press`, not copied) of a palette on one target — or none, its own heads — or of a Look, whole: a Look's `target` is ignored. It takes `settingsFrom`'s settings (D6): a layer of the same record in this stack as the batch found it, so one an earlier op took off still lends them. Else a fresh press's. A new layer goes on top; the top layer of the record is widened where it carries the same settings, keeping its own identity. A cell already on is left alone |
+| `layerOn {cueId, source: {kind, id}, target?, settingsFrom?}` | The cue editor's press (`decideCueLayerPress`, shared with `POST /cues/{id}/layers/press`, not copied) of a palette on one target — or none, its own heads — or of a Look, whole: an op naming a target for a Look is refused, `LOOK_LAYER_TARGETED`. It takes `settingsFrom`'s settings (D6): a layer of the same record in this stack as the batch found it, so one an earlier op took off still lends them. Else a fresh press's. A new layer goes on top; the top layer of the record is widened where it carries the same settings, keeping its own identity. A cell already on is left alone |
 | `layerOff {cueId, source, target?}` | The off press; a Look's takes every layer of it off. A cell already off is left alone |
-| `layerSettings {cueId, layerId, fields}` | The Looks tab's fields: `enabled`, `amount` (0–1), `blendMode`, `propertyMask` (a comma list, or null), `stomp`, `delayMs`, `intervalMs`, `randomWindowMs`, `speedMasterUuid`, `rateSpeedMasterUuid` (a project's master, or null). An unknown field is a problem |
-| `replace {cueIds, from, to, keepSettings}` | In each cue holding `from` (a palette's layer naming its target, or none for its own heads; any layer of a Look, whose target is ignored): where the cue lacks `to`, `from` comes off and `to` goes on with `from`'s settings **where `from` was** (`keepSettings`; a palette's mask is its family), else on top with a press's defaults; where the cue already has `to`, `from` comes off. Still the press, so a palette arriving takes its family's others off its heads |
+| `layerSettings {cueId, layerId, fields}` | The Looks tab's fields: `enabled`, `amount` (0–1), `blendMode`, `attributeMask` (a comma list, or null), `stomp`, `delayMs`, `intervalMs`, `randomWindowMs`, `speedMasterUuid`, `rateSpeedMasterUuid` (a project's master, or null). An unknown field is a problem |
+| `replace {cueIds, from, to, keepSettings}` | In each cue holding `from` (a palette's layer naming its target, or none for its own heads; any layer of a Look, which names no target — one naming any is refused, `LOOK_LAYER_TARGETED`): where the cue lacks `to`, `from` comes off and `to` goes on with `from`'s settings **where `from` was** (`keepSettings`; a palette's mask is its family), else on top with a press's defaults; where the cue already has `to`, `from` comes off. Still the press, so a palette arriving takes its family's others off its heads |
+| `fxOn {cueId, fromFxUuid}` | Copies an ad-hoc FX row of one of this stack's cues into the cue, on top of its FX, with a uuid of its own (D6). The copy takes the source's run key; a source with none is given a fresh one and the copy shares it, so the two are one run (D7). A source an earlier op deleted is copied as the batch found it. Only the copy is checked and written, so a stale FX the cue already holds cannot refuse it. A cue already filling the column — an FX of the same `CueFxKey` — is left alone |
+| `fxOff {cueId, fxUuid}` | Deletes that FX row of the cue |
+| `breakRun {cueId, fxUuid, entryId?}` | A fresh run key for the cell and the cells of its run below it: down the stack's cue entries from the place `entryId` names (else the cue's first), markers passed over, while the column's cell (the cue's first FX of that `CueFxKey`) still carries the old key. A cell in no run has nothing to break |
+| `joinRun {cueId, fxUuid, entryId?}` | The key of the cell directly above in the column — the cue entry above that place, markers passed over — for the cell and the rest of its run below; where that cell has no key it is given a fresh one, which is how an FX stored before run keys joins (C5). Refused when that cell is empty: a run joins neighbours only, so a key taken across a gap would join nothing |
 | `scenerySet {cueId, elementUuid, state, transitionMs?}` / `sceneryClear {cueId, elementUuid}` | One element's change, checked by `parseSceneryList` with the rest of the cue's list and written by `replaceCueScenery`; a clear hands the cue back to tracking |
-| `restore {cueId, layers, adHocEffects, scenery}` | Undo (P5): the cue put back exactly as an answer's `before` holds it — `writeCueChildren(restore = true)` pairs layers and effects by uuid rather than key, so a row an edit deleted comes back with its uuid, and an effect with its run key; scenery by `replaceCueScenery`'s uuids. Stored orders are kept where they order the rows on their own, else renumbered by place |
+| `restore {cueId, layers, adHocFx, scenery}` | Undo (P5): the cue put back exactly as an answer's `before` holds it — `writeCueChildren(restore = true)` pairs layers and FX by uuid rather than key, so a row an edit deleted comes back with its uuid, and an FX with its run key; scenery by `replaceCueScenery`'s uuids. Stored orders are kept where they order the rows on their own, else renumbered by place |
 
-The answer is `{changed, released: [{cueId, source, targets}], before: [{cueId, layers, adHocEffects,
-scenery}], edited}`: the cues whose layers, effects or scenery changed (compared whole, uuids
+The answer is `{changed, released: [{cueId, source, targets}], before: [{cueId, layers, adHocFx,
+scenery}], edited}`: the cues whose layers, FX or scenery changed (compared whole, uuids
 included), each press's knock-on — another record's layers it narrowed or dropped, named on the
 pressed targets — each changed cue as the batch found it (what Undo sends back as `restore` ops), and
 the held cues whose `stageContent` changed, which are marked edited since GO (`CueHolds.markEdited`).
 `cueListChanged` and `cueStackListChanged` fire once per batch. `dryRun` runs the batch and rolls it
 back, marking and announcing nothing. Every problem is named at once: 400 `TIMELINE_EDIT_INVALID`
 `{error, code, problems: [{op, message}]}`, `op` the op's index — an unknown record or op, a cue
-with no entry in the stack, a refused press (a generic palette with no target), a bad field, a
-scenery state its element refuses — and the batch rolls back.
+with no entry in the stack, a refused press (a generic palette with no target), a bad field, an FX
+row not in the cue, a scenery state its element refuses, a run key two of one cue's FX would share —
+and the batch rolls back.
 
-The press's palette snapshots are read inside the batch's transaction, so `loadTemplateSnapshot`
+**A run key names one FX in a cue** (P3): after each op, every cue it wrote is checked, and an op
+that would leave two of a cue's FX sharing a key is a problem, `restore` included. That is what lets
+a GO hand a run's instance to exactly one row. **A run key is not stage content** (P4):
+`stageContent` leaves it out, so `breakRun` and `joinRun` on a held cue change it (`changed`,
+`before`) without marking it edited since GO — neither moves anything on stage now. `fxOn` and
+`fxOff` on a held cue do mark it. A key two of a cue's FX already shared as the batch found it (an
+older archive's; the importer does not check) is not refused: P3 refuses a write that *makes* one.
+
+**A held cue's running FX take the keys written** once the batch commits (`restampRunKeys`): a GO
+hands a run on by the instance's `runUuid` (§3.3 of the plan, `CueHolds.handsRunTo`), which is stamped
+at spawn, so without this a run made, broken or joined on the live cue would play at its next GO as
+it was drawn before. Each live ad-hoc instance of a changed held cue takes the key of the row its
+`layerFxUuid` names; nothing on stage moves.
+
+The press's palette snapshots are read inside the batch's transaction, so `loadPaletteSnapshot`
 queries a palette's rows rather than ordering `template.rows`, which throws on a referrer collection
-the transaction has already loaded. Effect ops (`effectOn`, `effectOff`, `breakRun`, `joinRun`) are
-the plan's session 5.
+the transaction has already loaded.
+
+The layer and FX ops name a cue, not an entry. `breakRun` and `joinRun` take an optional `entryId`,
+since a cue placed twice has a cell at each place and the cells above and below them differ; the
+Timeline always sends it. An entry that is not a place of the cue is a problem.
 
 ## Preview compose
 
@@ -730,13 +752,13 @@ arming client-side.
    which is what makes the preview and the GO agree by construction rather than by inspection.
 3. **Compose** — a *fresh* `CueAssignmentResolver`. `resolve` is a pure function of its rows, so
    this cannot disturb `layerResolver`'s live state (`CuePreviewRouteTest` asserts that).
-4. **To channels** — `PropertyChannelWriter.resolve` per composed property, subnet 0 only,
-   keyed so two properties backing one channel resolve last-write-wins as a transaction would.
+4. **To channels** — `AttributeChannelWriter.resolve` per composed attribute, subnet 0 only,
+   keyed so two attributes backing one channel resolve last-write-wins as a transaction would.
 
 Three deliberate limits, all worth knowing before building UI on it:
 
-- **Layer 4 only.** Effects in the cue band have no static value to report, and timed preset
-  applications don't contribute (matching a GO's first publish). A cue whose look is carried by an effect
+- **Tier 4 only.** FX in the cue band have no static value to report, and timed preset
+  applications don't contribute (matching a GO's first publish). A cue whose look is carried by an FX
   previews as whatever its assignments say — possibly nothing.
 - **Assertions only.** Channels no cue asserts are *absent* rather than reported as 0; the caller
   falls back to the live output the way the "Output + Programmer" vis source already overlays.
@@ -771,7 +793,7 @@ D11–D13). Scenery sits **beside** the composition model, not in it: nothing he
 Record captures only what the programmer **holds** (the scenery-programmer plan's D7, its session 3;
 below), and a palette never carries it. Above the three owners sits the **programmer's own scenery** — what the operator's
 hands hold now (scenery-programmer plan D1). See `docs/lighting-composition-model.md`
-§"Scenery — beside the layers".
+§"Scenery — beside the tiers".
 
 **Scenery tracks; lighting does not.** A cue is a complete lighting state, but a tab closed at Q14
 stays closed at Q15. `show/SceneryResolver.kt` resolves each element, per state, highest last:
@@ -793,13 +815,13 @@ stays closed at Q15. `show/SceneryResolver.kt` resolves each element, per state,
 
 A state the element's kind no longer takes (a drape switched from DRAW) is ignored.
 
-**Blind** takes tiers 4 and 5 off stage: the live resolve leaves them out, and a second resolve that
+**Blind** takes the two programmer ranks off stage: the live resolve leaves them out, and a second resolve that
 includes them is published as `staged` — only the elements whose state differs from live, and only
 while there is one (D12). Each staged entry moves from where live (or an earlier staged move) has the
 piece, on the clock leaving Blind will give it, so the Stage view's Output + Programmer and
 Programmer sources can draw the move the operator is rehearsing. Leaving Blind lands it.
 
-**Each entry names what holds it** (`source`, D4): the source of its highest-tier state —
+**Each entry names what holds it** (`source`, D4): the source of its highest-ranked state —
 `base`, `set` (with the stack and its name), `cue` (stack, cue, label), `cueLook` (stack, Look and its
 name), `programmerLook` (Look and name) or `programmer` (`SceneryResolver.holderOf`).
 
@@ -897,7 +919,7 @@ resolves there (`docs/cues-engineering.md` §"Copying").
 with their clocks, the stacks whose set holds it, the Looks that show it — each owner's own row and
 never what a cue only tracks (`elementSceneryOf`, `routes/projectScenery.kt`). It is the Stage
 view's *Moves with*: the popover a click on a piece opens, and the element form, whose entries open
-each owner's editor. The popover itself writes the programmer's overlay (tier 5), as the programmer's
+each owner's editor. The popover itself writes the programmer's overlay (the top rank), as the programmer's
 Scenery table does; in Blind the Stage view's programmer sources draw `staged` (D12).
 
 ## Events
@@ -998,13 +1020,13 @@ change to who owns that timer has to move both halves together.
 
 ### FxState Integration
 
-The `fxState` WebSocket message includes `cueStackId` on each effect in `activeEffects`:
+The `fxState` WebSocket message includes `cueStackId` on each FX in `activeFx`:
 
 ```json
 {
   "type": "fxState",
-  "activeEffects": [
-    { "id": 1, "effectType": "SineWave", "targetKey": "front-wash", "cueId": 10, "cueStackId": 1, ... }
+  "activeFx": [
+    { "id": 1, "fxType": "SineWave", "targetKey": "front-wash", "cueId": 10, "cueStackId": 1, ... }
   ]
 }
 ```
@@ -1015,7 +1037,7 @@ The `fxState` WebSocket message includes `cueStackId` on each effect in `activeE
 - `src/api/cueStacksApi.ts` — Type definitions for CueStack, CueStackInput, CueStackCueEntry, etc. A `CueStackCueEntry` is a union keyed by `cueType`: a `CueStackCueRow` (`id` the cue's) or a `CueStackMarkerRow` (`id: null`), both carrying `entryId`; rows are keyed, sorted, reordered, armed and gone to by `entryId`, and `isCueRow` / `cueRowById` narrow to cue rows
 - `src/api/cueStacksWsApi.ts` — WebSocket subscription for `cueStackListChanged`
 - `src/api/lightingApi.ts` — Registers `cueStacks` WS API
-- `src/api/fxApi.ts` — `FxEffectState` includes `cueStackId`
+- `src/api/fxApi.ts` — `ActiveFxState` includes `cueStackId`
 - `src/api/cuesApi.ts` — `Cue` interface includes `cueStackId`, `cueStackName`, `entryId`, `sortOrder` (the context entry's), `entries` (every place) and, on the project list only, `usedBy`
 
 ### State Management
@@ -1062,6 +1084,6 @@ text or `false` beside them is ignored). `create_cue`, `add_cue_to_stack`, `remo
 end in `announceEntriesPlaced` when they write the current project, so a busk pad's numbers and a
 live stack's next follow.
 
-The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and the live cue and entry, `cue_run` alongside it for the run state of every stack that has one — `activeEntryId`, the armed-or-positional `nextEntryId` / `nextCueId`, `standbyEntryId`, `nextIsArmed`, and the live fade — and `cue_holds`, what holds each live cue (a stack's entry or a loose hold), from `cueHolds.state`'s frame. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Its `cues` list each cue's `entries`. Active effects include `cueStackId`. Auto-advance is an entry's and the crossfade a cue's, set on the entry and the cue editor's Cue tab or by `build_cue_stack`.
+The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and the live cue and entry, `cue_run` alongside it for the run state of every stack that has one — `activeEntryId`, the armed-or-positional `nextEntryId` / `nextCueId`, `standbyEntryId`, `nextIsArmed`, and the live fade — and `cue_holds`, what holds each live cue (a stack's entry or a loose hold), from `cueHolds.state`'s frame. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Its `cues` list each cue's `entries`. Active FX include `cueStackId`. Auto-advance is an entry's and the crossfade a cue's, set on the entry and the cue editor's Cue tab or by `build_cue_stack`.
 
 The MCP `instructions` (`RigBriefing.keyConcepts`) describe cue stack concepts and workflow.

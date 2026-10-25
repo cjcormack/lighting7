@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.WindowedColour
 import java.awt.Color
@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  * cache being *invalidated*.
  *
  * They exist because nothing else in the suite covers it. `FxEngineBenchmark`'s setup guards
- * call `fixtureKeysCoveredBy` once, immediately after `addEffect`, on a rig that never
+ * call `fixtureKeysCoveredBy` once, immediately after `addFx`, on a rig that never
  * re-registers — so a cache with no invalidation at all passes every one of them.
  * `ParkSurvivesFixtureReloadTest` does re-register, but runs no effects. The shape here follows
  * `LookRegistryTest`'s "a group membership change is picked up after invalidateAll", which is
@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
  * `Mode48Ch` is the fixture throughout because it is a [uk.me.cormack.lighting7.fixture.group.MultiElementFixture]
  * that deliberately does *not* implement `WithColour` itself — which is what pushes a group
  * colour effect down the element-expansion branch rather than the direct-member one.
- * [DistributionStrategy.UNIFIED] keeps [WindowedColour] phase-independent, so "was this element
+ * [SpreadOrder.UNIFIED] keeps [WindowedColour] phase-independent, so "was this element
  * painted?" is a clean yes/no read off the mock controller.
  */
 class FxExpansionCacheTest {
@@ -94,19 +94,19 @@ class FxExpansionCacheTest {
         return Rig(controller, fixtures, engine)
     }
 
-    private fun groupColourEffect(
+    private fun groupColourFx(
         elementMode: ElementMode = ElementMode.FLAT,
         elementFilter: ElementFilter = ElementFilter.ALL,
-        distribution: DistributionStrategy = DistributionStrategy.UNIFIED,
+        order: SpreadOrder = SpreadOrder.UNIFIED,
     ) = FxInstance(
         effect = WindowedColour(ExtendedColour(PAINT)),
         target = ColourTarget.forGroup("bars"),
-        timing = FxTiming(beatDivision = BeatDivision.WHOLE),
+        timing = FxTiming(cycle = CycleLength.ONE_BAR),
         blendMode = BlendMode.OVERRIDE,
     ).apply {
         this.elementMode = elementMode
         this.elementFilter = elementFilter
-        distributionStrategy = distribution
+        this.order = order
     }
 
     private fun tick(n: Long): MasterClock.ClockTick {
@@ -137,8 +137,8 @@ class FxExpansionCacheTest {
     @Test
     fun `a group gaining a member is covered after the repatch`() {
         val rig = newRig(barCount = 2)
-        val effect = groupColourEffect()
-        rig.engine.addEffect(effect)
+        val effect = groupColourFx()
+        rig.engine.addFx(effect)
 
         assertEquals(
             2 * PIXELS_PER_BAR,
@@ -160,7 +160,7 @@ class FxExpansionCacheTest {
     @Test
     fun `a bar added by a repatch is painted on the next tick`() {
         val rig = newRig(barCount = 2)
-        rig.engine.addEffect(groupColourEffect())
+        rig.engine.addFx(groupColourFx())
 
         rig.engine.processBeatTick(tick(0))
         assertEquals((0 until PIXELS_PER_BAR).toList(), rig.paintedPixels(bar = 0))
@@ -180,8 +180,8 @@ class FxExpansionCacheTest {
     @Test
     fun `a group losing a member drops those keys and keeps ticking`() {
         val rig = newRig(barCount = 3)
-        val effect = groupColourEffect()
-        rig.engine.addEffect(effect)
+        val effect = groupColourFx()
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
 
         rig.fixtures.patchBars(rig.controller, barCount = 2)
@@ -201,8 +201,8 @@ class FxExpansionCacheTest {
     @Test
     fun `patchListChanged alone invalidates a cached expansion`() {
         val rig = newRig(barCount = 2)
-        val effect = groupColourEffect()
-        rig.engine.addEffect(effect)
+        val effect = groupColourFx()
+        rig.engine.addFx(effect)
 
         // Poison the cache with a same-version "nothing to do". Only a version bump can
         // dislodge it, so this isolates the second trigger from the register rebuild.
@@ -223,8 +223,8 @@ class FxExpansionCacheTest {
     @Test
     fun `an element filter narrows what is painted but not what is covered`() {
         val rig = newRig(barCount = 1)
-        val effect = groupColourEffect(elementFilter = ElementFilter.ODD)
-        rig.engine.addEffect(effect)
+        val effect = groupColourFx(elementFilter = ElementFilter.ODD)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
 
         // Coverage is deliberately unfiltered: the reset pass returns every element the effect
@@ -236,12 +236,12 @@ class FxExpansionCacheTest {
     @Test
     fun `changing the element filter re-expands without a repatch`() {
         val rig = newRig(barCount = 1)
-        val effect = groupColourEffect(elementFilter = ElementFilter.ODD)
-        rig.engine.addEffect(effect)
+        val effect = groupColourFx(elementFilter = ElementFilter.ODD)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(listOf(0, 2, 4, 6, 8, 10), rig.paintedPixels(bar = 0))
 
-        rig.engine.updateEffect(effect.id, newElementFilter = ElementFilter.EVEN)
+        rig.engine.updateFx(effect.id, newElementFilter = ElementFilter.EVEN)
         rig.clearChannels(bars = 1)
         rig.engine.processBeatTick(tick(1))
 
@@ -256,18 +256,18 @@ class FxExpansionCacheTest {
     @Test
     fun `element mode selects between the two filtered shapes of one expansion`() {
         val rig = newRig(barCount = 2)
-        val effect = groupColourEffect(
+        val effect = groupColourFx(
             elementMode = ElementMode.FLAT,
             elementFilter = ElementFilter.FIRST_HALF,
         )
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
 
         // FLAT filters on the global index across all 24 elements: the first bar, entire.
         assertEquals((0 until PIXELS_PER_BAR).toList(), rig.paintedPixels(bar = 0))
         assertEquals(emptyList(), rig.paintedPixels(bar = 1))
 
-        rig.engine.updateEffect(effect.id, newElementMode = ElementMode.PER_FIXTURE)
+        rig.engine.updateFx(effect.id, newElementMode = ElementMode.PER_FIXTURE)
         rig.clearChannels(bars = 2)
         rig.engine.processBeatTick(tick(1))
 
@@ -282,9 +282,9 @@ class FxExpansionCacheTest {
         val effect = FxInstance(
             effect = WindowedColour(ExtendedColour(PAINT)),
             target = ColourTarget.forGroup("no-such-group"),
-            timing = FxTiming(beatDivision = BeatDivision.WHOLE),
+            timing = FxTiming(cycle = CycleLength.ONE_BAR),
         )
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
 
         repeat(50) { rig.engine.processBeatTick(tick(it.toLong())) }
 
@@ -294,17 +294,17 @@ class FxExpansionCacheTest {
     // ---------------------------------------------------------------- distribution plans
 
     /**
-     * The per-member offsets and [EffectContext]s ([FxDistributionPlans]) are cached on the
+     * The per-member offsets and [FxContext]s ([FxDistributionPlans]) are cached on the
      * instance beside the expansion and validated against it *by identity*, plus equality on
-     * the distribution strategy. Those are the two ways they can go stale, and neither is
-     * covered by anything above: the expansion tests all run [DistributionStrategy.UNIFIED],
+     * the Order. Those are the two ways they can go stale, and neither is
+     * covered by anything above: the expansion tests all run [SpreadOrder.UNIFIED],
      * whose offsets are zero whatever the member count.
      */
     @Test
-    fun `changing the distribution strategy moves the offsets on the next tick`() {
+    fun `changing the Order moves the offsets on the next tick`() {
         val rig = newRig(barCount = 2)
-        val effect = groupColourEffect(distribution = DistributionStrategy.LINEAR)
-        rig.engine.addEffect(effect)
+        val effect = groupColourFx(order = SpreadOrder.NORMAL)
+        rig.engine.addFx(effect)
 
         // 24 flat elements, step-timed, WHOLE (4 beats) each: one cycle is 24 × 4 × 24 = 2304
         // ticks, so each element owns a 96-tick window and tick 12 sits inside the first one.
@@ -314,11 +314,11 @@ class FxExpansionCacheTest {
         assertEquals(listOf(0), rig.paintedPixels(bar = 0))
         assertEquals(emptyList(), rig.paintedPixels(bar = 1))
 
-        effect.distributionStrategy = DistributionStrategy.REVERSE
+        effect.order = SpreadOrder.REVERSE
         rig.clearChannels(bars = 2)
         rig.engine.processBeatTick(tick(12))
 
-        // REVERSE puts offset 0 on the *last* element. A plan cached under LINEAR would keep
+        // REVERSE puts offset 0 on the *last* element. A plan cached under NORMAL would keep
         // painting bar 0 pixel 0 — the strategy edit would appear to do nothing.
         assertEquals(emptyList(), rig.paintedPixels(bar = 0))
         assertEquals(listOf(PIXELS_PER_BAR - 1), rig.paintedPixels(bar = 1))
@@ -327,8 +327,8 @@ class FxExpansionCacheTest {
     @Test
     fun `a repatch that grows the group rebuilds the offsets, not just the key list`() {
         val rig = newRig(barCount = 2)
-        val effect = groupColourEffect(distribution = DistributionStrategy.LINEAR)
-        rig.engine.addEffect(effect)
+        val effect = groupColourFx(order = SpreadOrder.NORMAL)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(12))
 
         rig.fixtures.patchBars(rig.controller, barCount = 3)
@@ -364,7 +364,7 @@ class FxExpansionCacheTest {
         val afterPatchList = rig.fixtures.structureVersion
         rig.fixtures.setPatchMetadata("bar-0", Fixtures.FixturePatchMetadata(gelCode = "L201"))
         rig.fixtures.lookListChanged()
-        rig.fixtures.templateListChanged()
+        rig.fixtures.paletteListChanged()
         rig.fixtures.riggingListChanged()
         assertEquals(afterPatchList, rig.fixtures.structureVersion)
     }

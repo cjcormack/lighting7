@@ -14,8 +14,8 @@ const wire = vi.hoisted(() => ({
   members: [] as { fixtureKey: string; fixtureName: string }[],
 }))
 
-vi.mock('@/hooks/usePropertyValues', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/hooks/usePropertyValues')>()
+vi.mock('@/hooks/useAttributeValues', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/hooks/useAttributeValues')>()
   const at = (ref: { universe: number; channelNo: number } | null) => (ref ? (wire.values.get(`${ref.universe}:${ref.channelNo}`) ?? 0) : 0)
   return {
     ...real,
@@ -53,9 +53,9 @@ vi.mock('@/components/ui/slider', () => ({
     />
   ),
 }))
-vi.mock('@/hooks/usePropertyParkStatus', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/hooks/usePropertyParkStatus')>()),
-  usePropertyParkStatus: () => ({ isAnyParked: false }),
+vi.mock('@/hooks/useAttributeParkStatus', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useAttributeParkStatus')>()),
+  useAttributeParkStatus: () => ({ isAnyParked: false }),
 }))
 vi.mock('@/hooks/useColourAppearance', () => ({
   useColourAppearance: () => ({ r: 0, g: 0, b: 0, combinedCss: '#000000', appearanceCss: '#000000' }),
@@ -65,7 +65,7 @@ vi.mock('@/store/status', () => ({ useIsDeskConnected: () => wire.connected }))
 vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => false }))
 vi.mock('@/store/programmer', () => ({ useProgrammerRevision: () => 0 }))
 vi.mock('@/store/fixtureFx', () => ({
-  useActiveEffectsQuery: () => ({ data: wire.effects }),
+  useActiveFxQuery: () => ({ data: wire.effects }),
   usePauseFxMutation: () => [vi.fn()],
   useResumeFxMutation: () => [vi.fn()],
   useRemoveFxMutation: () => [vi.fn()],
@@ -90,8 +90,8 @@ vi.mock('@/store/fixtures', async (importOriginal) => ({
 vi.mock('@/hooks/useGelIndex', () => ({ useGelIndex: () => new Map() }))
 const sheetColours = vi.hoisted(() => ({ current: new Map<string, string>() }))
 vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => sheetColours.current }))
-vi.mock('./effectLabels', () => ({
-  useEffectDetail: () => () => '¼ · M1',
+vi.mock('./fxLabels', () => ({
+  useFxDetail: () => () => '¼ · M1',
   useCueLabel: () => (id: number) => `Q${id}`,
 }))
 vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow: () => null, GroupBoundControlsRow: () => null }))
@@ -99,9 +99,6 @@ vi.mock('../fixtures/LocateButton', () => ({ LocateTargetsButton: () => <button 
 vi.mock('../fixtures/FixtureParkButton', () => ({
   FixtureParkButton: () => <button type="button">Park</button>,
   ParkButton: () => <button type="button">Park</button>,
-}))
-vi.mock('../fx/LookTogglePicker', () => ({
-  LookTogglePicker: (props: { targetType: string; targetKey: string }) => <span data-testid="look-picker" data-target={`${props.targetType}:${props.targetKey}`} />,
 }))
 const picker = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }))
 vi.mock('../fx/FxPicker', () => ({
@@ -152,7 +149,7 @@ const mouse = { button: 0, pointerId: 1, pointerType: 'mouse' }
 const addPip = (name: string) => fireEvent.click(pip(name), { metaKey: true })
 const checked = () => pips().filter((p) => p.getAttribute('aria-pressed') === 'true').map((p) => p.getAttribute('aria-label'))
 
-/** Rows over a pick of heads or members are a `PickPropertyRow`; one picked head is its own `PropertyRow`. */
+/** Rows over a pick of heads or members are a `PickAttributeRow`; one picked head is its own `AttributeRow`. */
 function typeInto(field: HTMLElement, value: string) {
   fireEvent.change(field, { target: { value } })
   fireEvent.keyDown(field, { key: 'Enter' })
@@ -160,8 +157,8 @@ function typeInto(field: HTMLElement, value: string) {
 
 function hold(entries: ProgrammerEntry[], provenance: ProvenanceEntry[]) {
   programmerWs.push({
-    entries: new Map(entries.map((e) => [`${e.targetKey}|${e.propertyName}`, e])),
-    provenance: new Map(provenance.map((p) => [`${p.targetKey}|${p.propertyName}`, p])),
+    entries: new Map(entries.map((e) => [`${e.targetKey}|${e.attribute}`, e])),
+    provenance: new Map(provenance.map((p) => [`${p.targetKey}|${p.attribute}`, p])),
   })
 }
 
@@ -252,25 +249,25 @@ describe('the head strip', () => {
     expect(checked()).toEqual(['Head 1', 'Head 3'])
   })
 
-  it('picks by pattern from the Cells menu, steps with Prev and Next, and a tap clears the pattern', () => {
+  it('picks by pattern from the Elements menu, steps with Prev and Next, and a tap clears the pattern', () => {
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
-    const cells = () => screen.getByRole('button', { name: /^Cells:/ })
+    const cells = () => screen.getByRole('button', { name: /^Elements:/ })
     // Radix opens on Enter at the trigger, with no pointer needed.
     const choose = (name: string) => {
       fireEvent.keyDown(cells(), { key: 'Enter' })
       fireEvent.click(screen.getByRole('menuitem', { name }))
     }
-    expect(cells().getAttribute('aria-label')).toBe('Cells: All')
+    expect(cells().getAttribute('aria-label')).toBe('Elements: All')
     choose('Odd')
     expect(checked()).toEqual(['Head 1', 'Head 3', 'Head 5', 'Head 7', 'Head 9', 'Head 11'])
-    expect(cells().getAttribute('aria-label')).toBe('Cells: Odd')
+    expect(cells().getAttribute('aria-label')).toBe('Elements: Odd')
     choose('Invert')
     expect(checked()).toEqual(['Head 2', 'Head 4', 'Head 6', 'Head 8', 'Head 10', 'Head 12'])
     choose('2nd half')
     expect(checked()).toEqual(['Head 7', 'Head 8', 'Head 9', 'Head 10', 'Head 11', 'Head 12'])
     fireEvent.click(screen.getByRole('button', { name: 'Next head' }))
     expect(checked()).toEqual(['Head 1', 'Head 8', 'Head 9', 'Head 10', 'Head 11', 'Head 12'])
-    expect(cells().getAttribute('aria-label')).toBe('Cells: a pick of your own')
+    expect(cells().getAttribute('aria-label')).toBe('Elements: a pick of your own')
     fireEvent.click(pip('Head 4'))
     expect(checked()).toEqual(['Head 4'])
     fireEvent.click(screen.getByRole('button', { name: 'Previous head' }))
@@ -324,7 +321,7 @@ describe('rows over a pick of heads', () => {
     // Head 1 at red, head 2 at half red.
     const [h1, h2] = BAR_A.elements!
     const red = (e: typeof h1, v: number) => {
-      const c = e.properties[0] as { redChannel: { universe: number; channelNo: number } }
+      const c = e.attributes[0] as { redChannel: { universe: number; channelNo: number } }
       wire.values.set(`${c.redChannel.universe}:${c.redChannel.channelNo}`, v)
     }
     red(h1, 255)
@@ -342,10 +339,10 @@ describe('rows over a pick of heads', () => {
   it('counts the heads a source holds on the chip and dashes the edge where they differ', () => {
     const [h1, h2] = BAR_A.elements!
     hold(
-      [{ targetKey: h1.key, propertyName: 'rgbColour', value: '#ff0000', owner: 'web', touched: true, owners: ['web'] }],
+      [{ targetKey: h1.key, attribute: 'rgbColour', value: '#ff0000', owner: 'web', touched: true, owners: ['web'] }],
       [
-        { targetKey: h1.key, propertyName: 'rgbColour', source: 'PROGRAMMER' },
-        { targetKey: h2.key, propertyName: 'rgbColour', source: 'CUE', cueId: 8 },
+        { targetKey: h1.key, attribute: 'rgbColour', source: 'PROGRAMMER' },
+        { targetKey: h2.key, attribute: 'rgbColour', source: 'CUE', cueId: 8 },
       ],
     )
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
@@ -358,8 +355,8 @@ describe('rows over a pick of heads', () => {
 
   it('lists what reaches the pick in the tray and starts + Effect on the picked head', () => {
     wire.effects = [
-      { id: 7, effectType: 'Pulse', targetKey: 'bar-a.pixel-2', propertyName: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
-      { id: 8, effectType: 'Rainbow', targetKey: 'bar-a', propertyName: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
+      { id: 7, fxType: 'Pulse', targetKey: 'bar-a.pixel-2', attribute: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
+      { id: 8, fxType: 'Rainbow', targetKey: 'bar-a', attribute: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
     ]
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
     fireEvent.click(pip('Head 1'))
@@ -367,7 +364,7 @@ describe('rows over a pick of heads', () => {
     // Head 1 sees the fixture's Rainbow (painted onto every head) and not head 3's Pulse.
     expect(within(tray).getByText('Rainbow')).toBeTruthy()
     expect(within(tray).queryByText('Pulse')).toBeNull()
-    fireEvent.click(within(tray).getByRole('button', { name: 'Effect' }))
+    fireEvent.click(within(tray).getByRole('button', { name: 'FX' }))
     expect((picker.props?.target as { fixture: Fixture }).fixture.key).toBe('bar-a.pixel-0')
   })
 
@@ -376,35 +373,22 @@ describe('rows over a pick of heads', () => {
     fireEvent.click(pip('Head 1'))
     for (const n of [2, 3, 4, 5, 6]) addPip(`Head ${n}`)
     const tray = document.querySelector('[data-fx-tray]') as HTMLElement
-    fireEvent.click(within(tray).getByRole('button', { name: 'Effect' }))
+    fireEvent.click(within(tray).getByRole('button', { name: 'FX' }))
     expect((picker.props?.target as { fixture: Fixture }).fixture.key).toBe('bar-a')
     expect(picker.props?.elementFilter).toBe('FIRST_HALF')
     // Five heads: no filter names them, so the picker says why rather than starting on the wrong ones.
     addPip('Head 6')
     expect(within(tray).queryByTestId('fx-picker')).toBeNull()
     expect(within(tray).getByText(/pick one of those/)).toBeTruthy()
-    fireEvent.click(within(tray).getByRole('button', { name: 'Back to the effects' }))
-    expect((within(tray).getByRole('button', { name: 'Effect' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(within(tray).getByRole('button', { name: 'Back to the FX' }))
+    expect((within(tray).getByRole('button', { name: 'FX' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
-describe('the tray’s Look picker follows the pick', () => {
-  const look = () => document.querySelector('[data-testid="look-picker"]')?.getAttribute('data-target') ?? null
-
-  it('presses onto the fixture on All, one head when one is picked, and is absent for any other pick', () => {
+describe('the tray', () => {
+  it('offers no Look picker: a Look lands whole, so none is put on one fixture (absolute-looks plan P7)', () => {
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
-    expect(look()).toBe('fixture:bar-a')
-    fireEvent.click(pip('Head 1'))
-    expect(look()).toBe('fixture:bar-a.pixel-0')
-    addPip('Head 2')
-    expect(look()).toBeNull()
-  })
-
-  it('presses onto the group on All and one member when one is picked', () => {
-    render(<FixtureSheet group={FRONT} host="popup" />)
-    expect(look()).toBe('group:front')
-    fireEvent.click(pip('Wash 3'))
-    expect(look()).toBe('fixture:wash-3')
+    expect(screen.queryByTitle('Apply look')).toBeNull()
   })
 })
 
@@ -445,7 +429,7 @@ describe('the group sheet', () => {
     const parB = par('par-b', 211)
     wire.fixtures = [parA, parB]
     wire.members = [parA, parB].map((f) => ({ fixtureKey: f.key, fixtureName: f.name }))
-    const red = (f: Fixture) => (f.properties[0] as { redChannel: { universe: number; channelNo: number } }).redChannel
+    const red = (f: Fixture) => (f.attributes[0] as { redChannel: { universe: number; channelNo: number } }).redChannel
     for (const f of [parA, parB]) wire.values.set(`${red(f).universe}:${red(f).channelNo}`, 200)
     setProgrammerFade('0')
     const setColour = vi.spyOn(lightingApi.programmer, 'setColour')
@@ -481,8 +465,8 @@ describe('the group sheet', () => {
   it('clears the group entry with one frame from All', () => {
     const clear = vi.spyOn(lightingApi.programmer, 'clearEntry')
     hold(
-      [{ targetKey: 'wash-2', propertyName: 'dimmer', value: '128', owner: 'web', touched: true, owners: ['web'], sourceGroup: 'front' }],
-      [{ targetKey: 'wash-2', propertyName: 'dimmer', source: 'PROGRAMMER' }],
+      [{ targetKey: 'wash-2', attribute: 'dimmer', value: '128', owner: 'web', touched: true, owners: ['web'], sourceGroup: 'front' }],
+      [{ targetKey: 'wash-2', attribute: 'dimmer', source: 'PROGRAMMER' }],
     )
     render(<FixtureSheet group={FRONT} host="popup" />)
     fireEvent.click(within(row('dimmer')).getByRole('button', { name: 'Clear your dimmer' }))
@@ -494,7 +478,7 @@ describe('the group sheet', () => {
     render(<FixtureSheet group={FRONT} host="popup" onOpenMember={() => {}} />)
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Values', 'Members'])
     const tray = () => document.querySelector('[data-fx-tray]') as HTMLElement
-    fireEvent.click(within(tray()).getByRole('button', { name: 'Effect' }))
+    fireEvent.click(within(tray()).getByRole('button', { name: 'FX' }))
     expect(picker.props?.target).toMatchObject({ type: 'group', group: { name: 'front' } })
     // The picker follows the pick while it is open.
     fireEvent.click(pip('Wash 2'))

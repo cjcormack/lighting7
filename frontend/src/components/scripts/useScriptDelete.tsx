@@ -65,7 +65,7 @@ export function useScriptDelete({
       noun="script"
       name={scriptName}
       describe={(_script, summary) => `registers ${summary.registers.join(', ')}`}
-      consequence="deleting them anyway leaves the effects they registered in the library only until the desk restarts, and then anything naming one stops resolving:"
+      consequence="deleting them anyway leaves the FX they registered in the library only until the desk restarts, and then anything naming one stops resolving:"
       busy={batch.busy}
       onForce={batch.force}
       onKeep={batch.keep}

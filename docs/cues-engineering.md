@@ -1,36 +1,36 @@
 # Cues Engineering Documentation
 
-This document describes the Cue system — named states built as an ordered stack of **Look layers** plus the cue's own local values and ad-hoc effects. See `lighting-composition-model.md` §"Looks and layers" for how the stack is composed.
+This document describes the Cue system — named states built as an ordered stack of **Look layers** plus the cue's own local values and ad-hoc FX. See `lighting-composition-model.md` §"Looks and layers" for how the stack is composed.
 
 > **See also**: [lighting-composition-model.md](lighting-composition-model.md). Cues contribute
-> at **Layer 4** (property assignments) and own the ad-hoc effects they
-> spawn at **Layer 3**. Cue-owned effects receive a derived priority so composition across
+> at **Tier 4** (attribute assignments) and own the ad-hoc FX they
+> spawn at **Tier 3**. Cue-owned FX receive a derived priority so composition across
 > restarts and reapplies is deterministic. The `stomp` flag (see below) removes other cues'
-> ad-hoc effects when a stomping cue applies and overlaps their targets.
+> ad-hoc FX when a stomping cue applies and overlaps their targets.
 
 ## Overview
 
 A **Cue** is a named, project-scoped entity that captures a complete lighting look:
-- **Layers** — an ordered list of Looks to apply, each with its own targets, property mask, blend
+- **Layers** — an ordered list of Looks to apply, each with its own targets, attribute mask, blend
   mode and amount. Looks are read fresh at apply time, so editing a Look moves every cue layering
-  it. Later layers override earlier ones for the same fixture and property, whatever the attribute;
+  it. Later layers override earlier ones for the same fixture and attribute, whatever its kind;
   the cue's own local values win over every layer.
-- **Ad-hoc effects** — manually applied effects belonging to no Look, stored as full inline effect definitions.
+- **Ad-hoc FX** — manually applied FX belonging to no Look, stored as full inline FX definitions.
 - **Scenery** — scene elements the cue moves on GO, each on its own clock (stage-view plan session 8;
   `cue-stacks-engineering.md` §"Scenery").
 - **Events** — one-shot triggers (a confetti cannon's tubes) the cue fires a set time after GO into it,
   while the desk is armed (stage-view plan session 9; §"Cue events" below).
 
 A cue used to carry a **positional colour list** too (`palette` + `updateGlobalPalette`), which its
-effects indexed as `P1` / `P2` / `P*` and which cascaded global → stack → cue. That whole grammar is
-gone: an effect parameter names a **colour palette** instead (`tmpl:{uuid}`, see
-`fx/TemplateColourSource.kt`), which has one meaning wherever it is read and needs no per-cue scope.
+FX indexed as `P1` / `P2` / `P*` and which cascaded global → stack → cue. That whole grammar is
+gone: an FX parameter names a **colour palette** instead (`pal:{uuid}`, see
+`fx/PaletteColourSource.kt`), which has one meaning wherever it is read and needs no per-cue scope.
 
 Key behaviours:
 - **Multiple concurrent cues**: Applying a cue adds it alongside other running cues (not replace).
-- **Re-apply**: Applying a cue that is already running refreshes it (stops and re-starts its effects only).
+- **Re-apply**: Applying a cue that is already running refreshes it (stops and re-starts its FX only).
 - **Replace all**: Apply with `?replaceAll=true` to stop all other running cues first.
-- **Stop**: Use the stop endpoint to remove a specific cue's effects without affecting others.
+- **Stop**: Use the stop endpoint to remove a specific cue's FX without affecting others.
 - Create from the current live FX state
 - Duplicate within active project, copy to another project
 - Deleting a Look is blocked if any cue layer references it (`LOOK_IN_USE`), unless forced
@@ -61,36 +61,36 @@ cue_stack_entries — one row of a stack's list (cue-stacks-engineering.md §"Da
 cue_layers
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
-├── look_id (FK → looks, nullable)        ┐ exactly one of the two: a layer applies a Look
-├── template_id (FK → templates, nullable) ┘ or a template
+├── look_id (FK → looks, nullable)       ┐ exactly one of the two: a layer applies a Look
+├── palette_id (FK → palettes, nullable) ┘ or a palette
 ├── sort_order (int, default 0)
 ├── enabled (bool, default true)
 ├── targets (JSON: List<CueTargetDto>)
-├── property_mask (varchar, nullable — I/P/C/B mask, e.g. "INTENSITY,COLOUR")
+├── attribute_mask (varchar, nullable — I/P/C/B mask, e.g. "INTENSITY,COLOUR")
 ├── blend_mode (varchar, default OVERRIDE)
 ├── amount (double, default 1.0)
 ├── stomp (bool, default false — per-layer stomp, see lighting-composition-model.md §Stomp)
-├── speed_master_uuid, rate_speed_master_uuid (nullable — override the layer's effects' masters)
+├── speed_master_uuid, rate_speed_master_uuid (nullable — override the masters of the layer's FX)
 ├── delay (Duration, nullable — delayed application; nanoseconds on disk)
 ├── interval (Duration, nullable — recurring application)
 ├── random_window (Duration, nullable — randomisation for recurring)
 └── uuid
 
-cue_ad_hoc_effects
+cue_ad_hoc_fx
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
 ├── target_type (varchar 50)
 ├── target_key (varchar 255)
-├── effect_type (varchar 255)
-├── category (varchar 50)
-├── property_name (varchar 255, nullable)
-├── beat_division (double)
+├── fx_type (varchar 255)
+├── family (varchar 50)
+├── attribute (varchar 255, nullable)
+├── cycle (double)
 ├── blend_mode (varchar 50)
-├── distribution (varchar 50)
+├── spread_order (varchar 50)
 ├── phase_offset (double, default 0.0)
 ├── element_mode (varchar 50, nullable)
 ├── element_filter (varchar 50, nullable)
-├── step_timing (boolean, nullable)
+├── timing (varchar 8, nullable — CYCLE or HEAD)
 ├── parameters (JSON: Map<String, String>)
 ├── delay (Duration, nullable — delayed application; nanoseconds on disk)
 ├── interval (Duration, nullable — recurring application)
@@ -98,7 +98,7 @@ cue_ad_hoc_effects
 ├── sort_order (int, default 0)
 ├── speed_master_uuid, rate_speed_master_uuid (nullable)
 ├── uuid
-└── run_uuid (nullable — the run key, see §"Effect runs")
+└── run_uuid (nullable — the run key, see §"FX runs")
 
 cue_triggers (script hooks only)
 ├── id (auto-increment PK)
@@ -132,36 +132,36 @@ the list onto entries (`state/CueModelMigration.kt`).
 
 ### Key Design Decisions
 
-- **Separate child tables with FKs** rather than JSON columns for layers and ad-hoc effects. This provides referential integrity (FK from a layer to its Look), simpler queries for usage counts — the delete guard is a plain indexed FK query where the named-palette era could only scan opaque value text — and proper normalization.
+- **Separate child tables with FKs** rather than JSON columns for layers and ad-hoc FX. This provides referential integrity (FK from a layer to its Look), simpler queries for usage counts — the delete guard is a plain indexed FK query where the named-palette era could only scan opaque value text — and proper normalization.
 - **Targets stored as JSON** within `cue_layers` because each application has a small, variable-length list of targets that doesn't benefit from its own table.
-- **Parameters stored as JSON**, matching `cue_ad_hoc_effects` and `look_effects`.
+- **Parameters stored as JSON**, matching `cue_ad_hoc_fx` and `look_fx`.
 - **A write keeps its children's uuids** (show-cue-editing plan P3, §3.4). Every cue write — the
   REST `POST`, `PUT` and `PATCH`, Record's `CREATE` and `UPDATE_EXISTING`, and the AI tools'
   `create_cue` and `build_cue_stack` — goes through `writeCueChildren` (`routes/projectCuesHelpers.kt`),
   which reconciles each child list against what is stored rather than deleting it and creating it
-  again: a row is matched by `(targetType, targetKey, canonical property)`, a layer by the record it
-  applies (`lookId | templateId`), an effect by `(targetType, targetKey, canonical property,
-  effectType)` and a hook by `(triggerType, scriptId)`. `pairByKey` pairs the n-th incoming item of
+  again: a row is matched by `(targetType, targetKey, canonical attribute)`, a layer by the record it
+  applies (`lookId | paletteId`), an FX by `(targetType, targetKey, canonical attribute,
+  fxType)` and a hook by `(triggerType, scriptId)`. `pairByKey` pairs the n-th incoming item of
   a key with the n-th stored one in `sortOrder` order, so a key held twice — a Look layered twice at
   two delays — pairs deterministically. A survivor is updated in place and keeps its `uuid`;
   everything else about it is the incoming item's, and the rest are inserted or deleted. So a
-  one-value edit is one changed record in the sync diff, and `CueAdHocEffectDto.uuid` (read only,
-  ignored on write) names one effect across writes. An effect swapped for another type on the same
-  property is a removal and an addition, as on a Look (`writeLookChildren`, its twin). A `PATCH`
+  one-value edit is one changed record in the sync diff, and `CueAdHocFxDto.uuid` (read only,
+  ignored on write) names one FX across writes. An FX swapped for another type on the same
+  attribute is a removal and an addition, as on a Look (`writeLookChildren`, its twin). A `PATCH`
   replaces only the lists it carries. Record's `UPDATE_EXISTING` pairs the recording against the
-  rows, effects and layers it replaces (in scope and mask), so a re-recorded value keeps its row;
+  rows, FX and layers it replaces (in scope and mask), so a re-recorded value keeps its row;
   `MERGE`, and with it Update, already upserted in place, and Update's layer diff keeps a layer by
   its id. `deleteCueChildren` is only for a cue being deleted. A copy into another project, a clone
   and the importer still mint or carry uuids as they always did.
-- **Effect runs** (stack-timeline plan D7, P2–P4). `cue_ad_hoc_effects.run_uuid` is an ad-hoc
-  effect's **run key**: rows of neighbouring cues that share one are one run, for the stack's Timeline
-  to draw as one bar and a GO to hand the effect on (stack-timeline plan sessions 2 and 3). It is the
-  timeline's to write. `CueAdHocEffectDto.runUuid` is read only, like `uuid`, and `take()` leaves it
+- **FX runs** (stack-timeline plan D7, P2–P4). `cue_ad_hoc_fx.run_uuid` is an ad-hoc
+  FX's **run key**: rows of neighbouring cues that share one are one run, for the stack's Timeline
+  to draw as one bar and a GO to hand the FX on (stack-timeline plan sessions 2 and 3). It is the
+  timeline's to write. `CueAdHocFxDto.runUuid` is read only, like `uuid`, and `take()` leaves it
   alone, so every other write — a `PUT` or `PATCH`, Record, Update, `create_cue` — keeps a matched
-  row's key and gives a new row none. A write that changes an effect's target, property or type
+  row's key and gives a new row none. A write that changes an FX's target, attribute or type
   replaces its row, so the new one is in no run. A key is not stage content (`stageContent` leaves it out), so breaking or joining a
-  run does not mark a live cue edited since GO. It syncs as `CueAdHocEffectJson.runUuid`
-  (`formatVersion` 37), and a clone keeps it as it is; a copy gets fresh keys (§"Copying"). Effects
+  run does not mark a live cue edited since GO. It syncs as `CueAdHocFxJson.runUuid`
+  (`formatVersion` 37), and a clone keeps it as it is; a copy gets fresh keys (§"Copying"). FX
   stored before the key have none, and no migration gives them one (C5).
 
 ## REST API
@@ -176,12 +176,12 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 | PUT | `/{projectId}/cues/{cueId}` | Update a cue's content (current project only); its number and follow are the entry's |
 | DELETE | `/{projectId}/cues/{cueId}` | Delete a cue (current project only): 409 `CUE_IN_USE` while anything names it, `?force=true` to take those with it (§"Delete") |
 | POST | `/{projectId}/cues/delete` | `{cueIds, force?, dryRun?}` — several at once, all or none (§"Delete") |
-| POST | `/{projectId}/cues/{cueId}/duplicate` | `{stackId?}` — a copy of the cue in this project (current project only): its rows, layers, effects, hooks, notes, scenery and events, named `<name> (copy)`, appended unnumbered to the **end** of `stackId`'s list, or loose without one (show-cue-editing plan D12). Answers 201 `{cueId, name, stackId?, entryId?}`; 400 for a stack of another project or a separator |
+| POST | `/{projectId}/cues/{cueId}/duplicate` | `{stackId?}` — a copy of the cue in this project (current project only): its rows, layers, FX, hooks, notes, scenery and events, named `<name> (copy)`, appended unnumbered to the **end** of `stackId`'s list, or loose without one (show-cue-editing plan D12). Answers 201 `{cueId, name, stackId?, entryId?}`; 400 for a stack of another project or a separator |
 | POST | `/{projectId}/cues/copy-from` | `{fromProjectId, cueIds, stackId?, after?, dryRun?}` — cues of any other project copied into this one (current project only), loose or each a new unnumbered entry in `stackId` (after `after`, else at the end). Answers `{copied: [{fromCueId, cueId, entryId?}], unresolved: [{problem, in}], stackId?, looksCopied, looksLinked, palettesCopied, palettesLinked}`, 201, or 200 for a `dryRun`, the same run rolled back. 400 for no cues, this project as the source, a separator, or an `after` not in the stack; 404 for an unknown project, cue or stack (§"Copying") |
 | POST | `/{projectId}/cues/{cueId}/apply` | Take a **loose hold** on the cue (current project only) — live above every stack, newest press on top. Query param: `replaceAll=true` lets every other loose hold go first. |
 | POST | `/{projectId}/cues/{cueId}/stop` | Let the cue's loose hold go; it comes off stage unless a stack still holds it |
-| POST | `/{projectId}/cues/{cueId}/update-stage` | `{dryRun?}` — *Update stage*: a live cue's stored rows and untimed effects to the stage over the cue's own fade (current project only, both roles). Answers `{rows, effects: {edited, stopped, started}, fadeMs, curve}`; 409 `CUE_NOT_LIVE` for a cue nothing holds. See [cue stacks](cue-stacks-engineering.md#edited-since-go-and-update-stage) |
-| POST | `/{projectId}/cues/{cueId}/layers/press` | `{templateId \| lookId, targets, families?}` — a palette or a Look **pressed into the stored cue** (apply-model plan §3.6, current project only, both roles): the programmer's press rule (`fx/LayerPress.kt`, its replacement set and per-fixture heads from `fx/LayerPressRules.kt`) applied to the cue's layers and written, sending nothing to the stage. A palette goes on as a layer on `targets`, taking those heads off the cue's other palettes of its family and kind; the record's newest layer widens when it is the top; a press covering heads it already holds takes them off. The mask (`families`) is tested on the on arm only: a palette outside it is 400 `PALETTE_OUTSIDE_MASK`. A generic palette with no targets is 400 `PALETTE_NEEDS_SELECTION`. A **Look** is pressed whole (absolute-looks plan P1): `targets` and `families` are ignored, on is one layer naming no targets and no mask, off takes every layer of it off, and a Look none of whose fixtures is patched still goes on. A palette's target that is neither a fixture nor a group is 400; an unknown cue, palette or Look 404. A live cue is marked edited since GO. Answers `{action, released, propertyMask, skippedFamilies, cue}` (`skippedFamilies` always empty, kept while the client reads it); 409 `CUE_LAYERS_MOVED` if other writes kept moving the layers under it. The cue editor's bands and picker send it (apply-model plan §3.6; the rule is §"A press is per target" in [the composition model](lighting-composition-model.md#a-press-is-per-target)) |
+| POST | `/{projectId}/cues/{cueId}/update-stage` | `{dryRun?}` — *Update stage*: a live cue's stored rows and untimed FX to the stage over the cue's own fade (current project only, both roles). Answers `{rows, fx: {edited, stopped, started}, fadeMs, curve}`; 409 `CUE_NOT_LIVE` for a cue nothing holds. See [cue stacks](cue-stacks-engineering.md#edited-since-go-and-update-stage) |
+| POST | `/{projectId}/cues/{cueId}/layers/press` | `{paletteId \| lookId, targets, families?}` — a palette or a Look **pressed into the stored cue** (apply-model plan §3.6, current project only, both roles): the programmer's press rule (`fx/LayerPress.kt`, its replacement set and per-fixture heads from `fx/LayerPressRules.kt`) applied to the cue's layers and written, sending nothing to the stage. A palette goes on as a layer on `targets`, taking those heads off the cue's other palettes of its family and kind; the record's newest layer widens when it is the top; a press covering heads it already holds takes them off. The mask (`families`) is tested on the on arm only: a palette outside it is 400 `PALETTE_OUTSIDE_MASK`. A generic palette with no targets is 400 `PALETTE_NEEDS_SELECTION`. A **Look** is pressed whole (absolute-looks plan P1): `targets` and `families` are ignored, on is one layer naming no targets and no mask, off takes every layer of it off, and a Look none of whose fixtures is patched still goes on. A palette's target that is neither a fixture nor a group is 400; an unknown cue, palette or Look 404. A live cue is marked edited since GO. Answers `{action, released, attributeMask, cue}`; 409 `CUE_LAYERS_MOVED` if other writes kept moving the layers under it. The cue editor's bands and picker send it (apply-model plan §3.6; the rule is §"A press is per target" in [the composition model](lighting-composition-model.md#a-press-is-per-target)) |
 | POST | `/{projectId}/cues/from-state` | Create cue from the current FX state |
 
 Writing the *programmer* into a cue lives outside this namespace, under
@@ -190,7 +190,7 @@ Writing the *programmer* into a cue lives outside this namespace, under
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/programmer/record` | Write the programmer into a cue (`CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, optional I/P/C/B mask) |
-| POST | `/programmer/include` | Load a cue's layers + rows + FX, or a Look's rows and effects (each effect on its own target), into the programmer for editing |
+| POST | `/programmer/include` | Load a cue's layers + rows + FX, or a Look's rows and FX (each FX on its own target), into the programmer for editing |
 | POST | `/programmer/record-look` | Record the programmer into a Look — `CREATE`/`MERGE`/`REMOVE`/`UPDATE_EXISTING`, with an explicit I/P/C/B mask |
 | POST | `/project/{id}/looks` … `/looks/{lookId}` | Look CRUD, banked by derived attribute family; delete guarded by `LOOK_IN_USE` |
 | POST | `/programmer/update` | Write programmer edits back — to the include target, or to cues named from the Mode B checklist |
@@ -198,8 +198,8 @@ Writing the *programmer* into a cue lives outside this namespace, under
 `POST /{projectId}/cues/{cueId}/snapshot-from-live` was removed in the programmer redesign's
 Session 3. Capturing the stage is now `POST /programmer/record { source: "STAGE_SNAPSHOT",
 mode: "UPDATE_EXISTING", cueId }` — the same capture, plus the programmer overlay the old route
-could not see (it read Layer 4 only, so anything busked was silently dropped), and preserving
-triggers and timed effects the old route left to chance.
+could not see (it read Tier 4 only, so anything busked was silently dropped), and preserving
+triggers and timed FX the old route left to chance.
 
 ### Apply Semantics
 
@@ -208,9 +208,9 @@ same as a busk cue pad, a cue slot, MIDI `FireCue`, the hand and the AI's `apply
 hold registry:
 
 1. If the cue is not live, its **first hold brings it on**, exactly as a GO would: the layer stack
-   is cooked to one contributor per (fixture, property) and published as Layer 4 rows, each layer's
-   effects are spawned **in layer order**, each ad-hoc effect from its stored definition, its stomp
-   applied, its timed effects and triggers started, and its events fired (D15). Every new
+   is cooked to one contributor per (fixture, attribute) and published as Tier 4 rows, each layer's
+   FX are spawned **in layer order**, each ad-hoc FX from its stored definition, its stomp
+   applied, its timed FX and triggers started, and its events fired (D15). Every new
    `FxInstance` is tagged with the cue's ID.
 2. If something already holds it — a stack, or an earlier press — nothing on stage moves: the press
    only restamps it to the top of the loose band.
@@ -220,7 +220,7 @@ hold registry:
 
 When a cue is stopped via `POST /{cueId}/stop` (or `stop_cue`, or a second pad or slot press):
 1. Its **loose hold** is let go. If that was its last hold, the cue comes off — triggers stopped,
-   effects removed, its rows dropped (a snap).
+   FX removed, its rows dropped (a snap).
 2. If a stack still holds it, it stays on stage at that stack's priority. A stop never moves a
    stack's playhead; stopping the stack is the stack's own gesture.
 3. Other running cues are unaffected.
@@ -254,36 +254,36 @@ effect of removing an entry or deleting a stack.
 
 ### Colour resolution
 
-Every effect, wherever it is spawned from, gets the **same** colour source:
+Every FX, wherever it is spawned from, gets the **same** colour source:
 
 ```kotlin
-resolveColourSource = templateColourSource(state.show.templateRegistry)
-colourSourceVersion = { state.show.templateRegistry.versionFor(refs) }
+resolveColourSource = paletteColourSource(state.show.paletteRegistry)
+colourSourceVersion = { state.show.paletteRegistry.versionFor(refs) }
 ```
 
-`refs` is the set of palette uuids *this* effect's parameters name (including its registration's
-declared defaults) — `createEffectWithTemplates` computes it once and uses it for both the pre-warm
+`refs` is the set of palette uuids *this* FX's parameters name (including its registration's
+declared defaults) — `createFxWithPalettes` computes it once and uses it for both the pre-warm
 and the version. Scoping it is what keeps an edit to one palette from re-resolving every colour
-parameter on the desk, and an effect naming no palette from re-resolving at all. A palette *list*
-change (create / rename / delete) still moves every scoped version by one, because an effect is
+parameter on the desk, and an FX naming no palette from re-resolving at all. A palette *list*
+change (create / rename / delete) still moves every scoped version by one, because an FX is
 allowed to name a uuid that has no palette yet.
 
-There were two `createEffectInstance` variants until the positional list went — a cue-scoped one
+There were two `createFxInstance` variants until the positional list went — a cue-scoped one
 resolving `P1` against `getCuePalette(cueId) ?: getPalette()`, and a second one Include needed
-because that fallback silently reached the *global* list when the cue was not live. A `tmpl:`
+because that fallback silently reached the *global* list when the cue was not live. A `pal:`
 reference has one answer wherever it is read, so the fork had nothing left to be about and the two
 collapsed into one.
 
-**One invariant when adding a spawn site**: call `prewarmTemplateColours` on the request thread
-first. `TemplateRegistry.snapshot` falls back to a DB read, and the tick loop must never take one.
+**One invariant when adding a spawn site**: call `prewarmPaletteColours` on the request thread
+first. `PaletteRegistry.snapshot` falls back to a DB read, and the tick loop must never take one.
 
 ### From-State Capture
 
 The `from-state` endpoint and `programmer/record { source: "STAGE_SNAPSHOT" }` share
 `captureCurrentState`, which captures the current FxEngine state:
-- Effects from a Look or a palette are grouped by that record into layer entries — a palette's
+- FX from a Look or a palette are grouped by that record into layer entries — a palette's
   deduplicating its targets, a Look's naming none, since it lands whole
-- Effects belonging to no Look (ad-hoc) are captured as full `CueAdHocEffectDto` entries with all fields
+- FX belonging to no Look (ad-hoc) are captured as full `CueAdHocFxDto` entries with all fields
 
 ### Look Delete Blocking
 
@@ -360,14 +360,14 @@ Two kinds of **hold** put a cue on stage, and both go through the hold registry 
 | Path | Hold |
 |------|------|
 | A stack GO, GO TO, BACK, activate, auto-advance | `Stack(stackId, entryId)` through `CueStackManager.activateEntry` — the entry becomes its stack's live one, with the crossfade and auto-advance it carries |
-| `POST /cues/{id}/apply`, the AI's `apply_cue`, a busk cue pad, a cue slot, MIDI `FireCue`, the hand | `Loose(seq)` — the cue live above every stack, the newest press on top, with no stack moved; its effects, rows, timed effects, triggers, scenery and events exactly as a GO's |
+| `POST /cues/{id}/apply`, the AI's `apply_cue`, a busk cue pad, a cue slot, MIDI `FireCue`, the hand | `Loose(seq)` — the cue live above every stack, the newest press on top, with no stack moved; its FX, rows, timed FX, triggers, scenery and events exactly as a GO's |
 
 ## FxInstance Integration
 
 The `FxInstance` class has a `cueId: Int?` field (alongside `lookId`, `cueLayerId` and
 `programmerLayerId`, which name what spawned it). When a cue is applied, all created FxInstances are tagged with the cue's ID. This allows:
-- The hold registry to remove a cue's own effects when its last hold goes (not all cues)
-- The effect list (`EffectDto`, `get_current_state`) to name the cue an effect belongs to
+- The hold registry to remove a cue's own FX when its last hold goes (not all cues)
+- The FX list (`FxDto`, `get_current_state`) to name the cue an FX belongs to
 
 ### Priority
 
@@ -382,14 +382,14 @@ A live cue composes at its **highest hold's** priority (cue model plan P3, D10; 
   re-stamps it as the newest.
 
 A cue held twice — by two stacks, by a stack and a press — is one contribution at the higher of the
-two (D3). Manual (uncued) effects keep priority `0`; the programmer band sits above all of it.
+two (D3). Manual (uncued) FX keep priority `0`; the programmer band sits above all of it.
 
-The engine iterates effects in priority-ascending order, then by compose order (creation order,
+The engine iterates FX in priority-ascending order, then by compose order (creation order,
 which a split copy takes from its parent), then id. Higher priority composes later, so under non-OVERRIDE blend modes a later-positioned cue dominates
-earlier cues on the same property, and on Layer 4 the higher priority wins every LTP property (HTP
+earlier cues on the same attribute, and on Tier 4 the higher priority wins every LTP attribute (HTP
 dimmers still take the highest level). See
-[lighting-composition-model.md](lighting-composition-model.md) §"Layer 3 — Effects" and §"Holds and
-the loose band". Note that a property held by the programmer (Layer 2) suppresses cue-owned effects on it entirely.
+[lighting-composition-model.md](lighting-composition-model.md) §"Tier 3 — FX" and §"Holds and
+the loose band". Note that an attribute held by the programmer (Tier 2) suppresses cue-owned FX on it entirely.
 
 Because a stack hold's priority is derived from the entry's position, **reordering a stack changes
 precedence**. Every write that moves an entry's position — reorder, `add-cue` (and the AI's
@@ -397,22 +397,22 @@ precedence**. Every write that moves an entry's position — reorder, `add-cue` 
 marker added or removed (a marker counts in the positions) — calls
 `holds.restampEntries(stackEntryPriorities(stack))` after writing the entries' order. That re-ranks
 the stack holds whose entries it names and restamps each affected cue to its new highest hold
-through `FxEngine.repriorityCues`, which moves both layers a cue owns — `FxInstance.priority` and
-the Layer 4 `Assignment.priority` rows — so cues already on stage compose in the new order without
+through `FxEngine.repriorityCues`, which moves both tiers a cue owns — `FxInstance.priority` and
+the Tier 4 `Assignment.priority` rows — so cues already on stage compose in the new order without
 being re-applied. A cue a press holds keeps its loose priority. Crossfade weights are left
 untouched, and cues whose priority didn't change are skipped, which makes the ordinary
 single-live-cue reorder a no-op.
 
-Timed effects and timed layers stamp the cue's priority **when they fire**, from the registry, so
+Timed FX and timed layers stamp the cue's priority **when they fire**, from the registry, so
 a timer that fires after a press has raised the cue composes at the raised priority.
 
 ### Stomp
 
 `DaoCues.stomp: Boolean` (default false) — when a stomping cue applies, the engine calls
-`FxEngine.stompForCue(stompingCueId, overlap)` to remove ad-hoc effects owned by *other*
+`FxEngine.stompForCue(stompingCueId, overlap)` to remove ad-hoc FX owned by *other*
 cues that target the overlap set. Phase 0 derives the overlap from the stomping cue's own
-ad-hoc effect targets; Phase 1 will switch to Layer 4 property assignments once they land.
-Manual effects and effects owned by the stomping cue itself are never stomped. See
+ad-hoc FX targets; Phase 1 will switch to Tier 4 attribute assignments once they land.
+Manual FX and FX owned by the stomping cue itself are never stomped. See
 [lighting-composition-model.md](lighting-composition-model.md) §"Stomp".
 
 ## Active Cue Tracking
@@ -429,7 +429,7 @@ answer:
 
 It used to be read from each stack's `activeCueId`, which could never see a cue held loose, and
 before that derived from `FxInstance.cueId` over the `fxState` stream, which could never see a cue
-made only of values (no effect carries its id). A stack's own run state — `cueRunStateChanged`,
+made only of values (no FX carries its id). A stack's own run state — `cueRunStateChanged`,
 keyed by entry — still says which **entry** each stack is on; holds say which **cues** are on stage.
 
 ## Cue events
@@ -522,22 +522,22 @@ on a cue"). The cue editor's **Cue** tab edits it (`frontend/CLAUDE.md` §"The c
 share `copyCuesFrom` (`routes/cueCopyFrom.kt`), and MCP's `copy_to_project`, which copies whole
 stacks through it. A copy is a new cue with fresh uuids and the
 source's name, holding everything the source holds — fade, curve, notes, stomp, its speed masters,
-layers, own rows, effects, script hooks, scenery and events. Within one project every reference is
+layers, own rows, FX, script hooks, scenery and events. Within one project every reference is
 kept as it is. Across projects each is resolved **in the target**:
 
 - **A Look or palette** a layer applies is the target's of that name, else copied with the cue, and
-  so is one a `tmpl:{uuid}` effect parameter names — a colour reference, or an item of a list
+  so is one a `pal:{uuid}` FX parameter names — a colour reference, or an item of a list
   (a colour list, Palette Steps' `palettes`). A copied Look or palette has its own references
   mapped the same way. The answer names each under `looksCopied` / `looksLinked` /
   `palettesCopied` / `palettesLinked`.
-- **A speed master** maps by its index — a layer's and an effect's (one the target lacks drives off
+- **A speed master** maps by its index — a layer's and an FX's (one the target lacks drives off
   master 1) and the cue's own tempo list (one the target lacks is left out). **A script** maps by
   name; a hook whose script the target lacks is left out.
 - **A cue event's patch and a scenery row's element** match by **uuid** first when the two projects
   are on one venue — a show pins it, a venue is it — whatever version each pins, since a published
   version keeps every record's uuid; otherwise, and failing that, a patch by key and fixture type and
   an element by name. One that does not resolve is left out.
-- **A fixture or group target** — a layer's, a row's, an effect's, each item of a selection — is kept
+- **A fixture or group target** — a layer's, a row's, an FX's, each item of a selection — is kept
   whatever the target's effective rig (`RigScope.of(target)`) holds; one the rig lacks reads as
   missing through `AssignmentHealth`, as a venue Update's dead references do.
 
@@ -553,7 +553,7 @@ table"). The REST `POST /cues/{id}/copy`, which copied as-is into a stack it cal
 gone. When a portable column is added to a cue, Look, palette or their children, add it to the
 copier too.
 
-**A copy's effect runs are its own** (stack-timeline plan C4): the copier maps each source run key to
+**A copy's FX runs are its own** (stack-timeline plan C4): the copier maps each source run key to
 a fresh one, once per copier, and one copier spans one operation. A *Duplicate* gets keys used nowhere
 else, so it joins no run of its source's; cues copied together — `copy-from`'s list, every stack of one
 `copy_to_project` — keep their runs joined to each other and to nothing in the source.
@@ -568,7 +568,7 @@ When cues are created, updated, or deleted, a `cueListChanged` message is broadc
 
 The frontend subscribes to this message and invalidates the `CueList` RTK Query tag, triggering a re-fetch of the cue list.
 
-The `fxState` WebSocket message now includes `cueId` on each effect in `activeEffects`, enabling the frontend to track which cues are running.
+The `fxState` WebSocket message now includes `cueId` on each FX in `activeFx`, enabling the frontend to track which cues are running.
 
 ## Frontend Integration
 
@@ -576,7 +576,7 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 - `src/api/cuesApi.ts` — Type definitions for Cue, CueInput, StopCueResponse, etc.
 - `src/api/cuesWsApi.ts` — WebSocket subscription for `cueListChanged`
 - `src/api/lightingApi.ts` — Registers `cues` WS API
-- `src/api/fxApi.ts` — `FxEffectState` includes `cueId`
+- `src/api/fxApi.ts` — `ActiveFxState` includes `cueId`
 
 ### State Management
 - `src/store/cues.ts` — RTK Query endpoints with `CueList` tag, `stopCue` mutation; liveness is `store/cueHolds.ts`'s `useCueRings()`, which replaced `useActiveCueIds()`
@@ -615,7 +615,7 @@ The cue tools (`ai/AiTools.kt` and the setup tools, offered over MCP — `docs/m
 name a cue by its id and a **place** by entry: `entryId`, or the stack's `number` (cue model plan
 §3.10). A cue may be shared, so the tools that run or edit a place never take a cue id for it:
 - `create_cue` — Create a named cue with layers (a Look, or a palette by `paletteId`), its own
-  `values` (resolved per head in `create_look`'s grammar; they beat every layer) and ad-hoc effects.
+  `values` (resolved per head in `create_look`'s grammar; they beat every layer) and ad-hoc FX.
   Loose unless `stackId` (with `number` and `after`) also places it; the answer's `entry` is the place
 - `apply_cue` — Take a **loose hold** on a saved cue by ID (§"Apply Semantics"): live above every
   stack, newest on top, no stack moved. Optional `replaceAll` lets every other loose hold go first;
@@ -641,23 +641,23 @@ the checklist without writing). They call the
 same `performProgrammerRecord` / `performProgrammerInclude` / `performProgrammerUpdate` cores in
 `routes/programmerSurface.kt` that the REST routes render — the mode/mask/scope rules and the
 include-target bookkeeping decide which rows get overwritten, so there is exactly one copy of them.
-`create_palette` completes the set: the named, referenceable value an effect parameter points at
-with `tmpl:{uuid}`.
+`create_palette` completes the set: the named, referenceable value an FX parameter points at
+with `pal:{uuid}`.
 
-The `get_current_state` tool includes `cueId` on active effects and `cues` in its default include set, returning each cue's name, counts and `entries` (its places, empty for a loose cue), and `cue_holds`, what holds each live cue.
+The `get_current_state` tool includes `cueId` on active FX and `cues` in its default include set, returning each cue's name, counts and `entries` (its places, empty for a loose cue), and `cue_holds`, what holds each live cue.
 
 The MCP `instructions` and `describe_rig` (`ai/RigBriefing.kt`) describe:
 - Multiple concurrent cues, applied alongside one another
 - Each cue's places, `in: Act 1 Q14, Act 2 Q3` or `loose`; that a cue may be shared; and that only
   `delete_cues` deletes one
-- Colour palettes, listed with their uuids under `palettes`, and the `tmpl:{uuid}` grammar an
-  effect parameter uses to name one
-- Active effects display includes `cueId` for each effect
+- Colour palettes, listed with their uuids under `palettes`, and the `pal:{uuid}` grammar an
+  FX parameter uses to name one
+- Active FX display includes `cueId` for each FX
 
 ## Assignment values: one form
 
-A `cue_property_assignments.value` (and its `look_rows` twin) holds a **literal**, in the canonical
-`CueAssignmentResolver.PropertyValue.serialize()` grammar — `"200"`, `"#rrggbb[;wN;aN;uvN]"`,
+A `cue_attribute_assignments.value` (and its `look_rows` twin) holds a **literal**, in the canonical
+`CueAssignmentResolver.AttributeValue.serialize()` grammar — `"200"`, `"#rrggbb[;wN;aN;uvN]"`,
 `"pan,tilt"`. Nothing else.
 
 Two other forms have been through here, and both retired for the same reason. `"ref:{paletteUuid}"`
@@ -668,14 +668,14 @@ list scoped global → stack → cue — went with the whole positional palette.
 Neither capability was lost; each moved up a level. A dependency on a *named look* is a
 **`DaoCueLayer`**, which names its Look through a real FK — an FK cannot be half-rewritten by an
 import, the delete guard is an indexed query rather than a scan over opaque text, and a
-`propertyMask` expresses "only this cue's colour comes from Warm" without a reference per row. A
-dependency on a *named colour* inside an **effect parameter** is `tmpl:{uuid}`, which is the one
+`attributeMask` expresses "only this cue's colour comes from Warm" without a reference per row. A
+dependency on a *named colour* inside an **FX parameter** is `pal:{uuid}`, which is the one
 consumer with no layer to hang off.
 
 Three things outlived those grammars, all deliberately. `validateLookRows` rejects both a `ref:`- and
-a `tmpl:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so
+a `pal:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so
 it survives as an inlined shape check with its own local constant.
-`CueAssignmentResolver.parseAssignmentValue` returns **null** for a `tmpl:`-shaped value rather than
+`CueAssignmentResolver.parseAssignmentValue` returns **null** for a `pal:`-shaped value rather than
 letting `parseExtendedColour` answer white. The third was the migration that folded `ref:` rows from
 a v4 database into layers; it was removed on 2026-08-24 with the rest of them (see
 [InstallBootstrap.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt)), so a

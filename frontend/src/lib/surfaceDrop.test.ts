@@ -118,7 +118,7 @@ const chip = (target: BindingTarget): SurfaceChipDrag => ({
   label: 'x',
   swatch: null,
 })
-const dimmer: BindingTarget = { type: 'groupProperty', groupName: 'Movers', propertyName: 'dimmer' }
+const dimmer: BindingTarget = { type: 'groupAttribute', groupName: 'Movers', attribute: 'dimmer' }
 const fire: BindingTarget = { type: 'fireCue', cueId: 4 }
 
 describe('controlKinds', () => {
@@ -150,7 +150,7 @@ describe('targetControlKind', () => {
     // `case` labels, where a slip lands a target on the wrong half with no compiler complaint —
     // and the backend's `refuseWrongKind` would then refuse a drop the palette had just allowed.
     expect(targetControlKind({ type: 'applyLook', lookUuid: 'l' })).toBe('button')
-    expect(targetControlKind({ type: 'pressTemplate', templateUuid: 't' })).toBe('button')
+    expect(targetControlKind({ type: 'pressPalette', paletteUuid: 't' })).toBe('button')
     expect(targetControlKind({ type: 'pressPad', padUuid: 'p' })).toBe('button')
     expect(targetControlKind({ type: 'buskPageNext' })).toBe('button')
     expect(targetControlKind({ type: 'buskPagePrev' })).toBe('button')
@@ -273,14 +273,14 @@ describe('colour axes', () => {
     // `targetControlKind` switches on the kind alone; an axis changes what the fader *means*, not
     // which half of the dispatch reaches it — the mirror of `BindingControlKind.kt`.
     const fine: BindingTarget = {
-      type: 'fixtureProperty',
+      type: 'fixtureAttribute',
       fixtureKey: 'hex-1',
-      propertyName: 'rgbColour',
+      attribute: 'rgbColour',
       colourAxis: 'hueFine',
     }
     expect(targetControlKind(fine)).toBe('continuous')
-    expect(targetControlKind({ type: 'selectionProperty', propertyName: 'rgbColour', colourAxis: 'saturation' })).toBe('continuous')
-    expect(targetControlKind({ type: 'encoderBankSet', propertyName: 'rgbColour', colourAxis: 'brightness' })).toBe('button')
+    expect(targetControlKind({ type: 'selectionAttribute', attribute: 'rgbColour', colourAxis: 'saturation' })).toBe('continuous')
+    expect(targetControlKind({ type: 'encoderBankSet', attribute: 'rgbColour', colourAxis: 'brightness' })).toBe('button')
     const chip: SurfaceChipDrag = { type: 'surface-chip', target: fine, label: 'hue fine', swatch: null }
     const onFader: SurfaceControlDrop = { type: 'surface-control', controlId: 'fader-1', kinds: controlKinds(fader) }
     const onButton: SurfaceControlDrop = { type: 'surface-control', controlId: 'btn-25', kinds: controlKinds(button) }
@@ -301,7 +301,7 @@ describe('a fan control (venue-visit plan S12)', () => {
 
 describe('a stack effect-size fader', () => {
   it('is continuous, so its chip lands on a fader and not a button (BindingControlKind.kt)', () => {
-    const target: BindingTarget = { type: 'stackEffectSize', stackId: 3 }
+    const target: BindingTarget = { type: 'stackFxAmount', stackId: 3 }
     expect(targetControlKind(target)).toBe('continuous')
     const chip: SurfaceChipDrag = { type: 'surface-chip', target, label: 'FX size', swatch: null }
     expect(canLand(chip, { type: 'surface-control', controlId: 'fader-1', kinds: controlKinds(fader) })).toBe(true)

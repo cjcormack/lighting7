@@ -104,7 +104,7 @@ export function ProgrammerIndicator({ className }: { className?: string }) {
       : null,
     // Values *and* effects: Blind holds the programmer's effects as it holds its values
     // (show-cue-editing plan D7), so a blind busk is not a working one either.
-    summary?.blind ? 'Blind — values and effects held: the programmer is gated out of the stage output' : null,
+    summary?.blind ? 'Blind — values and FX held: the programmer is gated out of the stage output' : null,
     // Only offer the trip if we aren't already there.
     programmerPath && !onProgrammer ? 'Go to the programmer to clear or edit' : null,
   ]

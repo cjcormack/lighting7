@@ -1,6 +1,6 @@
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 /**
  * The **busk layout**: pages of rows of columns of banks of pads, built by the operator.
@@ -43,7 +43,7 @@ export const BUSK_FLOW_LABELS: Readonly<Record<BuskFlow, string>> = {
 }
 
 /** The three things a pad can press. */
-export type BuskPadKind = 'TEMPLATE' | 'LOOK' | 'CUE'
+export type BuskPadKind = 'PALETTE' | 'LOOK' | 'CUE'
 
 /**
  * The width shares a column may take, **in twelfths**: ¼, ⅓, ½, ⅔, ¾ and full.
@@ -105,7 +105,7 @@ export interface BuskPad {
   /** Client-minted React/drag key for an unsaved node. Never sent; see `toLayoutRequest`. */
   localKey?: string
   kind: BuskPadKind
-  template?: TemplateSummary | null
+  palette?: PaletteSummary | null
   look?: LookSummary | null
   cue?: BuskCue | null
 }
@@ -165,7 +165,7 @@ export interface ReorderBuskPagesRequest {
 /** Exactly one of the three is set. */
 export interface BuskLayoutPadInput {
   padId?: number
-  templateId?: number
+  paletteId?: number
   lookId?: number
   cueId?: number
 }
@@ -213,45 +213,38 @@ export interface BuskLayoutRequest {
  * same contract `BuskLayoutRequest` has and for the same reason: the ids it minted.
  */
 export interface AddBuskPadRequest {
-  templateId?: number
+  paletteId?: number
   lookId?: number
   cueId?: number
 }
 
 /**
- * A press. `targets` is the busk view's selection; it is ignored for a cue pad, and may be empty
- * for a per-fixture template or a Look with no deferred effect — both of which name their own heads.
+ * A press. `targets` is the busk view's selection; it may be empty for a per-fixture palette, which
+ * names its own heads, and a cue or a Look pad ignores it — a Look lands whole (absolute-looks plan D1).
  *
  * `families` is the selection's attribute mask, riding the press beside the targets it is a mask
  * *of* (multi-screen plan D4): the desk's pair while this tab follows the desk, the tab's own when
  * unlinked. Absent is every attribute. It is tested on the **on** arm only — a press that turns a
  * lit record off answers `removed` under any mask — so a client never pre-refuses a press from
- * the mask it holds: send it, and render the desk's answer. A template outside it is 400
- * `PALETTE_OUTSIDE_MASK`, a Look with nothing inside it 400 `LOOK_OUTSIDE_MASK`; a cue ignores it.
+ * the mask it holds: send it, and render the desk's answer. A palette outside it is 400
+ * `PALETTE_OUTSIDE_MASK`; a cue and a Look ignore it.
  */
 export interface BuskPressRequest {
   targets: { type: 'group' | 'fixture'; key: string }[]
   families?: AttributeFamily[]
-  beatDivision?: number
+  cycle?: number
 }
 
 export interface BuskPressResponse {
   kind: BuskPadKind
   action: 'applied' | 'removed'
-  effectCount: number
+  fxCount: number
   /**
    * What an *on* press turned off: the palettes of the pressed palette's family and kind it
    * replaced on the pressed heads (apply-model plan D2, D6), and in a **solo** bank its siblings
    * besides — layer siblings narrowed or dropped, cue siblings stopped. Always 0 for an off press.
    */
   released: number
-  /**
-   * A Look's families the mask left out, in declaration order — what the pressing window toasts
-   * as `Position rows skipped` (D6). Empty for a template or cue, an unmasked press, and the off
-   * arm. *Rows*: the layer's mask filters its rows, not its effects, so a Look's effect in a
-   * skipped family still runs while being named here.
-   */
-  skippedFamilies: string[]
 }
 
 // ─── Error codes the UI branches on ─────────────────────────────────────

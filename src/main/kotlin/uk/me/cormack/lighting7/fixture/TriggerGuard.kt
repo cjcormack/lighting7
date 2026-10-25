@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.show.Fixtures
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 
 /**
  * A write that names a one-shot trigger, or its arm, refused by name (stage-view plan session 9,
@@ -20,7 +20,7 @@ class TriggerNotStorableException(message: String) : IllegalArgumentException(me
  * Which fixtures and groups carry a one-shot trigger, and the names they reserve — what every write
  * boundary checks a `(target, property)` against before it stores or applies it.
  *
- * A trigger is not a `@FixtureProperty`, so nothing resolves one by name; a row naming one would be
+ * A trigger is not a `@FixtureAttribute`, so nothing resolves one by name; a row naming one would be
  * stored as an unhealthy row today and fire nothing. That is not good enough for a value that spends
  * a cartridge: the row would come back to life the day the type grew a property of that name, and it
  * says nothing to the operator who wrote it. So each boundary refuses it, by name, here:
@@ -44,12 +44,12 @@ class TriggerIndex private constructor(
     val isEmpty: Boolean get() = fixtures.isEmpty()
 
     /**
-     * Why [propertyName] on this target may not be stored or set, or null when it may. [targetType]
+     * Why [attribute] on this target may not be stored or set, or null when it may. [targetType]
      * is the stored discriminator (`fixture`, `group`, or the deferred marker / null for a row with no
-     * target of its own). [where] prefixes the message (`rows[2]`, `propertyAssignments[0]`).
+     * target of its own). [where] prefixes the message (`rows[2]`, `attributeAssignments[0]`).
      */
-    fun refusal(targetType: String?, targetKey: String?, propertyName: String?, where: String): String? {
-        val name = propertyName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    fun refusal(targetType: String?, targetKey: String?, attribute: String?, where: String): String? {
+        val name = attribute?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         return when (targetType?.lowercase()) {
             "fixture" -> {
                 val key = targetKey ?: return null
@@ -61,8 +61,8 @@ class TriggerIndex private constructor(
                 reserved.matching(name)?.let { message(where, it, "a member of group '$targetKey'") }
             }
             // An effect over a selection (effects plan D3): refused for the first item that would be.
-            EffectTargetRef.Selection.TYPE ->
-                EffectTargetRef.Selection.parseKey(targetKey.orEmpty())
+            FxTargetsRef.Selection.TYPE ->
+                FxTargetsRef.Selection.parseKey(targetKey.orEmpty())
                     ?.firstNotNullOfOrNull { refusal(it.discriminator, it.key, name, where) }
             else -> FixtureTriggers.allReservedNames.matching(name)?.let {
                 "$where: '$it' is a one-shot trigger's name, and a row with no target of its own lands on " +
@@ -75,7 +75,7 @@ class TriggerIndex private constructor(
     /** Throws [TriggerNotStorableException] naming every refused row at once, or returns. */
     fun check(rows: Iterable<RowRef>) {
         if (FixtureTriggers.allReservedNames.isEmpty()) return
-        val problems = rows.mapNotNull { refusal(it.targetType, it.targetKey, it.propertyName, it.where) }
+        val problems = rows.mapNotNull { refusal(it.targetType, it.targetKey, it.attribute, it.where) }
         if (problems.isNotEmpty()) throw TriggerNotStorableException(problems.joinToString("; "))
     }
 
@@ -83,7 +83,7 @@ class TriggerIndex private constructor(
     data class RowRef(
         val targetType: String?,
         val targetKey: String?,
-        val propertyName: String?,
+        val attribute: String?,
         val where: String,
         /** A stored row's level, for [CommandIndex.levelRefusal]; null for an effect or a template row. */
         val value: String? = null,
@@ -94,15 +94,15 @@ class TriggerIndex private constructor(
         val EMPTY = TriggerIndex(emptyMap(), emptyMap())
 
         /**
-         * Whether [propertyName] is a name any trigger-carrying type reserves — the cheap gate a hot
+         * Whether [attribute] is a name any trigger-carrying type reserves — the cheap gate a hot
          * path (a fader's programmer write) takes before it builds an index.
          */
-        fun mayRefuse(propertyName: String?): Boolean =
-            propertyName != null && FixtureTriggers.allReservedNames.any { it.equals(propertyName.trim(), ignoreCase = true) }
+        fun mayRefuse(attribute: String?): Boolean =
+            attribute != null && FixtureTriggers.allReservedNames.any { it.equals(attribute.trim(), ignoreCase = true) }
 
         /** [refusal] against the live register, or null at once for a name no trigger reserves. */
-        fun refusalLive(register: Fixtures, targetType: String?, targetKey: String?, propertyName: String?, where: String): String? =
-            if (!mayRefuse(propertyName)) null else of(register).refusal(targetType, targetKey, propertyName, where)
+        fun refusalLive(register: Fixtures, targetType: String?, targetKey: String?, attribute: String?, where: String): String? =
+            if (!mayRefuse(attribute)) null else of(register).refusal(targetType, targetKey, attribute, where)
 
         /** From the live register: the current project as it is loaded. */
         fun of(register: Fixtures): TriggerIndex {
@@ -138,6 +138,6 @@ class TriggerIndex private constructor(
         private fun message(where: String, name: String, on: String) =
             "$where: '$name' on $on is a one-shot trigger or its arm — it fires as an event (a cue's Events, " +
                 "the cannon's panel, a MIDI FireTrigger) while the desk is armed, and no Look, palette, cue, " +
-                "effect or programmer value can hold it"
+                "FX or programmer value can hold it"
     }
 }

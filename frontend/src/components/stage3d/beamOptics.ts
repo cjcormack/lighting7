@@ -1,8 +1,8 @@
 import type {
   SettingOption,
-  SettingPropertyDescriptor,
-  ShutterProperties,
-  SliderPropertyDescriptor,
+  SettingAttributeDescriptor,
+  ShutterAttributes,
+  SliderAttributeDescriptor,
 } from '../../store/fixtures'
 import { dmxToDegrees } from '../../lib/axisDegrees'
 import { MAX_PRISM_LOBES } from './emitterLayout'
@@ -23,7 +23,7 @@ export { GOBO_SLOT_COUNT }
 const TAU = Math.PI * 2
 
 /** Raw DMX value of a slider- or setting-backed single-byte channel. */
-export type ByteDescriptor = SliderPropertyDescriptor | SettingPropertyDescriptor
+export type ByteDescriptor = SliderAttributeDescriptor | SettingAttributeDescriptor
 
 /**
  * The band containing `level`, as [start, end] inclusive.
@@ -192,7 +192,7 @@ export function resolveGoboSpin(prop: ByteDescriptor | undefined, level: number)
  * consumer that reads a fraction of the coarse span reads `value / 65535` exactly, and a lone coarse
  * channel reads as it always did. (`coarse + fine / 256` would run to 255.996 and read every value
  * ~0.4% high.) `fineLevel` is null where the type declares no fine channel (`fineOf`,
- * `findFineProperty`).
+ * `findFineAttribute`).
  */
 export function combineFinePair(coarseLevel: number, fineLevel: number | null): number {
   return fineLevel == null ? coarseLevel : (coarseLevel * 256 + fineLevel) / 257
@@ -286,7 +286,7 @@ export function resolveGoboRotation(
 export interface GoboLayers {
   /**
    * Both layers packed (`packGobos`): layer A, the first wheel in channel order
-   * (`findGoboProperties`), layer B the second (open on a type with one wheel), and the turned one's
+   * (`findGoboAttributes`), layer B the second (open on a type with one wheel), and the turned one's
    * angle. 0 while both are open.
    */
   packed: number
@@ -365,7 +365,7 @@ export function resolveZoomDeg(prop: ByteDescriptor | undefined, level: number):
  * ramps, random — which a still picture cannot draw, so it stays at the band's last value rather
  * than reading the effect's DMX as more of the same. Null for a slider with no span.
  */
-export function proportionalBand(prop: SliderPropertyDescriptor, level: number): number | null {
+export function proportionalBand(prop: SliderAttributeDescriptor, level: number): number | null {
   const lo = prop.activeMin ?? prop.min
   const hi = prop.activeMax ?? prop.max
   if (!(hi > lo)) return null
@@ -377,7 +377,7 @@ export function proportionalBand(prop: SliderPropertyDescriptor, level: number):
  * diameter, 0 out and 0.5 reaching the centre. Linear from DMX min (out) to `depthMax` at DMX max,
  * reversed when `inverted`. 0 where the slider declares no `depthMax`.
  */
-export function resolveBladeDepth(prop: SliderPropertyDescriptor | undefined, level: number): number {
+export function resolveBladeDepth(prop: SliderAttributeDescriptor | undefined, level: number): number {
   if (!prop || prop.depthMax == null) return 0
   const span = prop.max - prop.min
   if (span <= 0) return 0
@@ -390,7 +390,7 @@ export function resolveBladeDepth(prop: SliderPropertyDescriptor | undefined, le
  * honouring `inverted` — the same mapping a zoom's or a pan's angle takes. 0 (square) where it
  * declares none.
  */
-export function resolveBladeAngleDeg(prop: SliderPropertyDescriptor | undefined, level: number): number {
+export function resolveBladeAngleDeg(prop: SliderAttributeDescriptor | undefined, level: number): number {
   return prop ? dmxToDegrees(level, prop) ?? 0 : 0
 }
 
@@ -411,7 +411,7 @@ export function makeBladeStates(): BladeState[] {
  * channel is out, and one with no rotation channel square.
  */
 export function resolveDmxBlades(
-  shutters: ShutterProperties,
+  shutters: ShutterAttributes,
   depthLevels: ArrayLike<number>,
   rotationLevels: ArrayLike<number>,
   out: BladeState[],
@@ -516,7 +516,7 @@ export function resolvePrismSpin(
  * (the caller then keeps the fixture type's static beam edge).
  */
 export function resolveFocusParam(
-  prop: SliderPropertyDescriptor | undefined,
+  prop: SliderAttributeDescriptor | undefined,
   level: number,
 ): number | null {
   if (!prop) return null
@@ -537,7 +537,7 @@ export const IRIS_MIN_OPEN = 0.12
  * in its name, and the Robe ColorSpot's is the same way round — so the channel's minimum is open.
  * The fraction runs over the slider's proportional band ([proportionalBand]).
  */
-export function resolveIris(prop: SliderPropertyDescriptor | undefined, level: number): number {
+export function resolveIris(prop: SliderAttributeDescriptor | undefined, level: number): number {
   if (!prop) return 1
   // Over its proportional band (`proportionalBand`): the Robe's 1–179, held closed-down above it.
   const closed = proportionalBand(prop, level)
@@ -552,7 +552,7 @@ export function resolveIris(prop: SliderPropertyDescriptor | undefined, level: n
  */
 export function resolveSoftness(
   familySoftness: number,
-  frostProp: SliderPropertyDescriptor | undefined,
+  frostProp: SliderAttributeDescriptor | undefined,
   frostLevel: number,
 ): number {
   const base = Math.max(0, Math.min(1, familySoftness))
@@ -574,7 +574,7 @@ export function resolveSoftness(
  */
 export function resolveEdgeHardness(
   familySoftness: number,
-  frostProp: SliderPropertyDescriptor | undefined,
+  frostProp: SliderAttributeDescriptor | undefined,
   frostLevel: number,
   focused: boolean,
 ): number {
@@ -614,7 +614,7 @@ export function resolveFocusDistance(focusParam: number | null, beamLength: numb
  * is under 4 m at half travel.
  */
 export function resolveDeclaredFocusDistance(
-  prop: SliderPropertyDescriptor | undefined,
+  prop: SliderAttributeDescriptor | undefined,
   focusParam: number | null,
 ): number | null {
   if (!prop || focusParam == null) return null

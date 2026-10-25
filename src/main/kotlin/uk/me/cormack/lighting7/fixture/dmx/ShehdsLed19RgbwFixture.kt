@@ -5,7 +5,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
@@ -87,7 +87,7 @@ sealed class ShehdsLed19RgbwFixture(
         override val elementKey: String
             get() = "${this@ShehdsLed19RgbwFixture.key}.zone-${elementIndex + 1}"
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             zoneTransaction, universe,
             zoneFirstChannel,
@@ -95,7 +95,7 @@ sealed class ShehdsLed19RgbwFixture(
             zoneFirstChannel + 2,
         )
 
-        @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
+        @FixtureAttribute(category = AttributeCategory.WHITE, bundleWithColour = true)
         override val white: Slider = DmxSlider(zoneTransaction, universe, zoneFirstChannel + 3)
 
         override fun withTransaction(transaction: ControllerTransaction): Zone =
@@ -113,7 +113,7 @@ sealed class ShehdsLed19RgbwFixture(
      * - Ch 3: Tilt (coarse, 0–270°).
      * - Ch 4: Tilt (fine).
      * - Ch 5: Pan/tilt speed.
-     * - Ch 6: Zoom (15° narrow → 60° wide).
+     * - Ch 6: Zoom (60° wide → 10° narrow).
      * - Ch 7: Master dimmer (0–100% linear).
      * - Ch 8: Strobe.
      * - Ch 9–12: Zone 1 RGBW.
@@ -150,36 +150,36 @@ sealed class ShehdsLed19RgbwFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode24Ch =
             Mode24Ch(this, transaction)
 
-        @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse, 0–540°)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0, forwardDeg = 180.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse, 0–270°)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Pan/tilt speed", category = AttributeCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty(
-            "Zoom (narrow → wide)", category = PropertyCategory.ZOOM,
-            degMin = 15.0, degMax = 60.0,
+        @FixtureAttribute(
+            "Zoom (wide → narrow)", category = AttributeCategory.ZOOM,
+            degMin = 60.0, degMax = 10.0,
         )
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 6)
 
         // Estimate: the manual names the channel only ("0-255 Strobe") — 0 open, as the class writes, and
         // the strobe's 1–20 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 0, StrobeKind.OPEN),
                 StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -201,17 +201,17 @@ sealed class ShehdsLed19RgbwFixture(
             return elements[index]
         }
 
-        @FixtureProperty("Built-in program", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Built-in program", category = AttributeCategory.SETTING)
         val program = DmxFixtureSetting(
             transaction, universe, firstChannel + 20, Program.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Program speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Program speed", category = AttributeCategory.SPEED)
         val programSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 21)
 
-        @FixtureProperty(
+        @FixtureAttribute(
             "Control mode (50–99 activates programs, 100–199 self-propelled, 200–255 voice)",
-            category = PropertyCategory.SETTING,
+            category = AttributeCategory.SETTING,
         )
         val controlMode: Slider = DmxSlider(transaction, universe, firstChannel + 22)
 
@@ -247,7 +247,7 @@ sealed class ShehdsLed19RgbwFixture(
      * - Ch 9: Green.
      * - Ch 10: Blue.
      * - Ch 11: White.
-     * - Ch 12: Zoom.
+     * - Ch 12: Zoom (60° wide → 10° narrow).
      * - Ch 13: Built-in program.
      * - Ch 14: Program speed.
      * - Ch 15: Control mode (10–99 activates programs, 100–179 self-propelled,
@@ -278,30 +278,30 @@ sealed class ShehdsLed19RgbwFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode16Ch =
             Mode16Ch(this, transaction)
 
-        @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse, 0–540°)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0, forwardDeg = 180.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse, 0–270°)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Pan/tilt speed", category = AttributeCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
         // Estimate: the manual names the channel only ("0-255 Strobe") — 0 open, as the class writes, and
         // the strobe's 1–20 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 0, StrobeKind.OPEN),
                 StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -312,7 +312,7 @@ sealed class ShehdsLed19RgbwFixture(
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
         )
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             transaction, universe,
             firstChannel + 7,
@@ -320,26 +320,26 @@ sealed class ShehdsLed19RgbwFixture(
             firstChannel + 9,
         )
 
-        @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
+        @FixtureAttribute(category = AttributeCategory.WHITE, bundleWithColour = true)
         override val white: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
-        @FixtureProperty(
-            "Zoom (narrow → wide)", category = PropertyCategory.ZOOM,
-            degMin = 15.0, degMax = 60.0,
+        @FixtureAttribute(
+            "Zoom (wide → narrow)", category = AttributeCategory.ZOOM,
+            degMin = 60.0, degMax = 10.0,
         )
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 11)
 
-        @FixtureProperty("Built-in program", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Built-in program", category = AttributeCategory.SETTING)
         val program = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, Program.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Program speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Program speed", category = AttributeCategory.SPEED)
         val programSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 13)
 
-        @FixtureProperty(
+        @FixtureAttribute(
             "Control mode (10–99 activates programs, 100–179 self-propelled, 180–255 voice)",
-            category = PropertyCategory.SETTING,
+            category = AttributeCategory.SETTING,
         )
         val controlMode: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 

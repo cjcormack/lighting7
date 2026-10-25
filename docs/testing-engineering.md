@@ -50,12 +50,12 @@ the full ~1.4 s. That is correct, and it is why it is among the slowest classes.
 
 `FxScriptCompiler`'s cache is on the **companion object**, not the instance. A compiler is
 built per `Show`, and a `Show` per project switch — per *test* in the suite. With a per-instance
-cache every new `Show` re-evaluated every built-in `.fx.kts` effect: even with the on-disk jar
+cache every new `Show` re-evaluated every built-in `.fx.kts` FX: even with the on-disk jar
 cache warm, that is a jar load, a classloader and an evaluation each to arrive at lambdas
 identical to the previous `Show`'s.
 
 Safe because `CompiledFxScript` is immutable and its lambdas are stateless — a STATEFUL
-effect's mutable state is passed in per call, never captured. `FxScriptCompilerCacheTest` pins
+FX's mutable state is passed in per call, never captured. `FxScriptCompilerCacheTest` pins
 this with an `assertSame` across two compilers.
 
 ### 3. The build fingerprint is memoised (~55 ms per test)
@@ -153,8 +153,8 @@ Precedent: commit `51965fc` removed a tick-delivery assertion from `SpeedMasterB
 held only on an idle machine — it failed 3 of 4 full runs and 0 of 5 runs of the class alone.
 `Dispatchers.Default` is shared with the integration tests, and it saturates.
 
-Effects run on the live clock too, so a test that compares channels must not compare one an
-effect is running on: an engine tick between the two reads moves it (`ProgrammerDetachTest`
+FX run on the live clock too, so a test that compares channels must not compare one an
+FX is running on: an engine tick between the two reads moves it (`ProgrammerDetachTest`
 leaves out the channel its Pulse drives; see [`plans/flaky-tests.md`](plans/flaky-tests.md)).
 
 `RouteIntegrationTest` puts a 60 s `Timeout` rule on every test so a hung one fails loudly
@@ -225,21 +225,21 @@ Note `:test` rather than `test`: the latter also runs `:launcher:test`, which fa
 
 ### `FxEngineBenchmark` scenarios
 
-Six independent rigs, one per `@Test`, because engine state, cue assignments and the effect
+Six independent rigs, one per `@Test`, because engine state, cue assignments and the FX
 registry all persist per rig — sharing one would make the numbers order-dependent.
 
 | Scenario | Rig | Exists for |
 |---|---|---|
-| `[beat]` / `[wall]` | 4 universes × `HexFixture`, one beat + one wall-clock `SliderTarget` each (168 fixtures, 336 effects) | the original Phase 5 harness — **frozen**, it is what the 2026-04-22 baseline was measured on |
-| `[chase-beat]` / `[chase-wall]` | 40 × `LedLightbar12PixelFixture.Mode48Ch` in two groups (480 `RgbwPixel` elements), 4 group colour effects across two speed masters — FLAT and PER_FIXTURE on both tick loops | sweep C1 (per-tick target re-expansion), C2 (reflective property access on the colour write path), C6 (allocation bundle) |
-| `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `cueLayer.updateFadeWeights` at 62 fps | sweep C3 |
-| `[colour-beat]` | 168 `HexFixture`s with colour effects and a half-covered programmer band | sweep C2 — scenario 2 was claimed to cover it and does not |
-| `[spawn-each]` / `[spawn-batch]` | scenario 1's fixtures, a **fresh** engine per sample, 168 dimmer effects put up as one cue GO would | sweep C7 — the only scenario that measures *adding* effects rather than ticking them |
-| `[cook-split]` / `[cook-once]` | a three-layer stack over a 168-head group: a 40-row Look bound to the group, a two-row palette layer, a Look holding 24 head-bound effects | sweep C8 — the only scenario that measures `CueComposer` rather than `FxEngine` |
+| `[beat]` / `[wall]` | 4 universes × `HexFixture`, one beat + one wall-clock `SliderTarget` each (168 fixtures, 336 FX) | the original Phase 5 harness — **frozen**, it is what the 2026-04-22 baseline was measured on |
+| `[chase-beat]` / `[chase-wall]` | 40 × `LedLightbar12PixelFixture.Mode48Ch` in two groups (480 `RgbwPixel` elements), 4 group colour FX across two speed masters — FLAT and PER_FIXTURE on both clocks | sweep C1 (per-tick target re-expansion), C2 (reflective property access on the colour write path), C6 (allocation bundle) |
+| `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 FX; drives `cueLayer.updateFadeWeights` at 62 fps | sweep C3 |
+| `[colour-beat]` | 168 `HexFixture`s with colour FX and a half-covered programmer band | sweep C2 — scenario 2 was claimed to cover it and does not |
+| `[spawn-each]` / `[spawn-batch]` | scenario 1's fixtures, a **fresh** engine per sample, 168 dimmer FX put up as one cue GO would | sweep C7 — the only scenario that measures *adding* FX rather than ticking them |
+| `[cook-split]` / `[cook-once]` | a three-layer stack over a 168-head group: a 40-row Look bound to the group, a two-row palette layer, a Look holding 24 head-bound FX | sweep C8 — the only scenario that measures `CueComposer` rather than `FxEngine` |
 
 `[spawn-each]`/`[spawn-batch]` and `[cook-split]`/`[cook-once]` are shaped differently from the
 other four on purpose: each reports both shapes in the same run, so it carries its own
-before/after and does not depend on a historical block. Every other scenario spawns its effects in
+before/after and does not depend on a historical block. Every other scenario spawns its FX in
 rig setup, outside the measured window, which is why none of them could see C7 at all — and none
 of the five reaches the cook, which is why C8 needed a sixth.
 
@@ -247,40 +247,45 @@ The cook rig needs no engine, no `State` and no database: `CueComposer` resolves
 palettes through the two lambdas it is handed, so the scenario is a straight function call over
 plain snapshots. What it *does* need is the group. A bound row naming a group is what makes the
 cook expand per row; the layer naming that same group is what makes the allowed-set rebuild per
-row; and effects bound to individual heads inside it are what push `coversTarget` past its
+row; and FX bound to individual heads inside it are what push `coversTarget` past its
 name-match fast path. Point the layers at fixtures instead and every one of those paths goes
 quiet while the numbers stay plausible.
 
-The **effects** the harness applies are load-bearing for the same reason the rigs are, and they
-live in `testsupport/TestEffects.kt` rather than coming from the `FxRegistry`. Effect maths runs
+The **FX** the harness applies are load-bearing for the same reason the rigs are, and they
+live in `testsupport/TestFx.kt` rather than coming from the `FxRegistry`. FX maths runs
 inside the measured loop, so a baseline is only comparable while that maths stays put — and the
 registry's 30 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
 `WindowedSlider`, `HueSweepColour` and `SteppedColour` are frozen copies of the retired
 `fx.effects` classes the 2026-04-22 baseline was taken against (backend-sweep item D7). Don't
 "improve" their maths, and don't repoint the harness at the registry: either silently moves every
 number. Behaviour of the real built-ins is covered separately, against the real registry, in
-`fx/BuiltInEffectBehaviourTest`.
+`fx/BuiltInFxBehaviourTest`.
 
 The chase rig's fixture choice is load-bearing, not incidental. `Mode48Ch` implements
 `MultiElementFixture` and deliberately does *not* implement `WithColour` itself, which is what
-pushes `processGroupEffect` down the element-expansion branch; its `RgbwPixel` elements are
+pushes `processGroupFx` down the element-expansion branch; its `RgbwPixel` elements are
 `WithColour, WithWhite` with `bundleWithColour = true`, which is what makes each element's write
-pay `ColourTarget.extendedComponent`'s `fixtureProperties.find {}` + `KProperty1.call`. Swap in a
+pay `ColourTarget.extendedComponent`'s `fixtureAttributes.find {}` + `KProperty1.call`. Swap in a
 cheaper fixture and the harness still runs, still passes, and measures none of that — so each
-scenario asserts its own shape before the warmup (`fixtureKeysCoveredBy(...).size`, effect counts,
+scenario asserts its own shape before the warmup (`fixtureKeysCoveredBy(...).size`, FX counts,
 `cueLayer.activeCueIds()`). Those guards are the only thing standing between a wrong rig and
 plausible-looking microsecond numbers.
 
-Since C1 the engine caches each effect's expansion, so those guards no longer prove it is *live* —
+Since C1 the engine caches each FX's expansion, so those guards no longer prove it is *live* —
 a cache that never invalidated would satisfy every one of them, because a benchmark rig registers
 once and never repatches. The chase rig re-checks past a `patchListChanged()` to catch a cache
 serving garbage, but the invalidation itself is covered by `FxExpansionCacheTest`, not here.
 
 The crossfade scenario measures the **single-threaded** per-frame republish cost. C3 also flags
-lock contention on the Layer 4 publish lock (now `CascadePublisher`'s) with concurrent programmer writes; that is a different
+lock contention on the Tier 4 publish lock (now `CascadePublisher`'s) with concurrent programmer writes; that is a different
 shape of measurement and is deliberately not in this harness.
 
 ### Recorded baselines
+
+Since the FX editor plan's session 2 a pass folds every running FX whichever clock woke it
+(`docs/fx-engineering.md` §"Architecture: one compose pass"), so `[beat]` and `[wall]` each time
+all 336 FX and `[chase-beat]` / `[chase-wall]` all four. Numbers recorded before it are not
+comparable with numbers after it.
 
 Track-only — nothing asserts against these. `FU-TEST-FX-BENCH-CI-GATE` holds the ±20 %
 fail-on-regression gate, deferred pending a variance study on real CI hardware.
@@ -300,12 +305,12 @@ fail-on-regression gate, deferred pending a variance study on real CI hardware.
 [crossfade] frames=312 p50=816µs p99=2108µs mean=867µs allocBytes/frame=1338020
 ```
 
-The chase rig's four effects are deliberately one per branch C1 rewrites: beat FLAT, beat FLAT
+The chase rig's four FX are deliberately one per branch C1 rewrites: beat FLAT, beat FLAT
 on the second master, wall-clock PER_FIXTURE, wall-clock FLAT. Dropping the last one (an earlier
 draft did) halves `[chase-wall]` to ~165 µs and hides the wall-clock loop's FLAT arm entirely —
 the reason each mode/loop pairing gets its own `fixtureKeysCoveredBy` guard.
 
-Two things to read off it. `[chase-beat]` costs ~3× a `[beat]` tick while running **3** effects
+Two things to read off it. `[chase-beat]` costs ~3× a `[beat]` tick while running **3** FX
 against 336 — that ratio is the C1/C2 signal, and it is what the C-wave should move.
 `[crossfade]` at ~773 µs/frame × 62 fps is ~5 % of a core spent continuously republishing, which
 is C3's case in one number.
@@ -342,16 +347,16 @@ move. If C3 wants an allocation signal out of this scenario it needs a quieter m
 
 `[chase-beat]` moving ~6 % is the honest size of C1 on its own, not a disappointment. That
 scenario's cost is dominated by two things C1 deliberately did not touch:
-`DistributionStrategy.RANDOM` allocating a `java.util.Random` plus a boxed permutation **per
+`SpreadOrder.RANDOM` allocating a `java.util.Random` plus a boxed permutation **per
 member per call, twice per member** (~2.4 MB of the 3.35 MB/tick, C6), and the reflective
 property resolution on the colour write path (C2). C1 removed the register lookups and the
-per-tick list rebuilds around those, which is what `[chase-wall]` — no RANDOM effect — shows at
+per-tick list rebuilds around those, which is what `[chase-wall]` — no RANDOM FX — shows at
 −20 %.
 
-Two knock-ons for later items. C1 also cut `fixtureHasProperty` from twice per effect per tick to
+Two knock-ons for later items. C1 also cut `fixtureHasAttribute` from twice per FX per tick to
 twice per rebuild, so **C2's measured win will read smaller than its sweep entry predicts** — part
 of it has already been taken here. And C3's entry cites the per-crossfade-frame
-`resolveEffectFixtureKeys` walk as part of the cost; that walk is now cached, so C3 should be
+`resolveFxFixtureKeys` walk as part of the cost; that walk is now cached, so C3 should be
 re-measured rather than implemented against the old premise.
 
 *(The first of those two predictions was wrong, and instructively so — see the C2 block below.)*
@@ -376,15 +381,15 @@ its "before" is the same session, not a historical figure.
 ```
 
 **The win is the wrap, not the scan the item was named after.** `Fixture` computed
-`fixtureProperties` and its `@FixtureType` in *instance* initializers, and `FixturesWithTransaction`
+`fixtureAttributes` and its `@FixtureType` in *instance* initializers, and `FixturesWithTransaction`
 binds a fixture to a tick's transaction by constructing a new instance — so every touched fixture
 re-ran a full `memberProperties` scan 50×/s. `wrappedFixtureCache` deduped within a tick and
 therefore hid this completely from anyone reading that code. Hoisting the scan to a per-class
-`FixturePropertyCatalogue` took two thirds of `[beat]`'s entire per-tick allocation.
+`FixtureAttributeCatalogue` took two thirds of `[beat]`'s entire per-tick allocation.
 
-**C2b — replacing the five `fixtureProperties.find {}` scans with indexed lookups — did not
+**C2b — replacing the five `fixtureAttributes.find {}` scans with indexed lookups — did not
 move anything measurable**, and is recorded here as a null result rather than dropped. A linear
-scan over nine properties is simply not where the time was; `[colour-beat]`'s p50 varied 171–270 µs
+scan over nine attributes is simply not where the time was; `[colour-beat]`'s p50 varied 171–270 µs
 across the four runs, which swamps it entirely. The change was kept for the O(1) lookup and because
 it removes the last linear scans from the tick, not on the strength of a number. The gated
 follow-on (`KProperty1.call` → `.get`) was **not** done: C2b's null result is good evidence the
@@ -404,7 +409,7 @@ re-measured against this block, not the C1 one.
 **2026-08-26, selwyn.local, JDK 25** — sweep item C3 (crossfade republish). Median of four runs
 each side, captured back to back in one sitting. The re-measured "before" (left column) confirmed
 the item's premise was only partly spent by C1/C2: `[crossfade]` still ran the winner-set resolve,
-the effect-coverage walk and a duplicate flat `state` map per frame.
+the FX-coverage walk and a duplicate flat `state` map per frame.
 
 ```
                   before          after C3
@@ -417,7 +422,7 @@ the effect-coverage walk and a duplicate flat `state` map per frame.
 ```
 
 The −12.8 % on `[crossfade]`'s per-frame allocation is the honest size of C3's cuts (winner maps
-carried forward on weight ticks, effect coverage cached on a mutation-bumped epoch, the flat
+carried forward on weight ticks, FX coverage cached on a mutation-bumped epoch, the flat
 `Key`-keyed composition map made lazy, plus the review round's `applySpecificity` fast path and
 compound-`Key` removals) — and the figure is *readable*: the before runs varied by 93 bytes, the
 after runs by 14 kB, nothing like the 100 kB band C1 saw. Every other scenario is flat, as it
@@ -430,7 +435,7 @@ An earlier same-sitting capture with quieter timings read `[crossfade]` p50 as f
 the frame's remaining time is what a weight tick genuinely must redo — recomposing 336 keys and
 writing ~168 moved colour fallbacks — which is C6's target, not C3's. The half of C3 no
 single-threaded benchmark can see is the lock: everything the item removed ran inside
-the Layer 4 publish lock (now `CascadePublisher`'s), which programmer writes contend for.
+the Tier 4 publish lock (now `CascadePublisher`'s), which programmer writes contend for.
 
 Two capture notes. Absolute numbers this session are ~40 % below the 2026-08-24 session across
 every scenario, unchanged code included — the same environment effect the C0 block warns about.
@@ -439,14 +444,14 @@ provenance *synchronously inside every measured frame* rather than coalescing as
 `[crossfade]` numbers include a per-frame provenance recompute a real desk pays ~20×/s at most.
 
 **2026-08-26 — sweep item C4 (palette colour-cache versioning): no comparison taken, and why.**
-C4's cost lives on the *invalidation* path — a palette edit re-resolving `tmpl:` colour parameters,
-and the DB read that resolve opens — and none of the five scenarios has a `tmpl:` parameter in it.
-The harness's effects are the frozen `testsupport/TestEffects.kt` copies, which do not go through
+C4's cost lives on the *invalidation* path — a palette edit re-resolving `pal:` colour parameters,
+and the DB read that resolve opens — and none of the five scenarios has a `pal:` parameter in it.
+The harness's FX are the frozen `testsupport/TestFx.kt` copies, which do not go through
 `TypedParams` at all, so nothing here calls `colourSourceVersion` once, let alone 50×/s. A
 before/after pair would have measured run-to-run noise and then sat in this section looking like
-evidence. What C4 would need is a sixth scenario — effects with palette-referencing colour
+evidence. What C4 would need is a sixth scenario — FX with palette-referencing colour
 parameters, ticking across a palette edit — which nobody has needed enough to build; its unit
-coverage is the load-count assertions in `TemplateColourSourceTest`, and its rig behaviour is
+coverage is the load-count assertions in `PaletteColourSourceTest`, and its rig behaviour is
 `FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.
 
 **2026-08-26 — sweep item C5 (timed-layer fires, `CueApplyData` builders, Look-edit republish): no
@@ -476,25 +481,25 @@ same commit rather than a stash, so the working tree was never disturbed.
 
 `[chase-beat]` is the headline: its per-tick allocation drops by well over half, because that
 scenario is the one with 240 elements per group and it was building a synthetic
-`DistributionMemberInfo` *and* an `EffectContext` for every one of them on every tick. Caching
-both per (expansion, strategy) removes essentially all of it. `[crossfade]`'s 160 kB is the row
+`DistributionMemberInfo` *and* an `FxContext` for every one of them on every tick. Caching
+both per (expansion, Order) removes essentially all of it. `[crossfade]`'s 160 kB is the row
 copies and the re-cook a weight tick no longer pays.
 
 **`[chase-wall]`'s p50 went the wrong way and is not explained.** Eight runs a side puts the
 medians at 274 → 329 µs while its allocation falls 11%, and the two sides' ranges (264–327 before,
 255–459 after) overlap heavily. It is the least trustworthy window in the suite — 500 ticks rather
 than 1200, so the least JIT-warmed, and its p99 swings 20× run to run. The obvious hypothesis, that
-the now-long-lived `EffectContext` array is read from old-gen memory instead of a hot TLAB, does
+the now-long-lived `FxContext` array is read from old-gen memory instead of a hot TLAB, does
 not survive `[chase-beat]` improving 44% on the same structure over twice as many elements. Left
 recorded rather than explained; if it matters it needs the quieter measurement `FU-TEST-FX-BENCH-CI-GATE`
 is waiting on anyway.
 
 Both `[beat]` and `[wall]` move about 9% on allocation despite being single-fixture `SliderTarget`
-rigs with no group expansion at all — that is the `resetActiveProperties` scratch reuse, which is
+rigs with no group expansion at all — that is the `resetActiveAttributes` scratch reuse, which is
 the only part of C6 those two scenarios can see.
 
 **2026-08-26, selwyn.local, JDK 25** — sweep item C7 (`emitStateUpdate` makes cue apply O(N²)).
-Both sides in one run of the new `cue spawn cost` scenario: 168 effects put up on a fresh engine,
+Both sides in one run of the new `cue spawn cost` scenario: 168 FX put up on a fresh engine,
 8 samples a side after 3 warmups, engine and instances built outside the timed window.
 
 ```
@@ -503,20 +508,20 @@ Both sides in one run of the new `cue spawn cost` scenario: 168 effects put up o
 [spawn-batch]   106 µs      163 µs    112 µs     162,843
 ```
 
-~80× on p50 and ~45× on allocation, for the 168-effect case. The shape is the point rather than
-the multiplier: `[spawn-each]` is quadratic, so the factor grows with the cue — every `addEffect`
-re-sorted the snapshots *and* rebuilt an `FxInstanceState` for every effect already up, each with
+~80× on p50 and ~45× on allocation, for the 168-FX case. The shape is the point rather than
+the multiplier: `[spawn-each]` is quadratic, so the factor grows with the cue — every `addFx`
+re-sorted the snapshots *and* rebuilt an `FxInstanceState` for every FX already up, each with
 a group / multi-element lookup. A batched add pays that once.
 
 The five tick scenarios are structurally blind to this and were confirmed flat; their numbers from
 this session are not recorded, because `--rerun-tasks` compile load was running alongside them and
 their p99s (`[chase-wall]` 19.8 ms) measured the machine. C7 does not touch a tick path — `insert`
-does exactly what `addEffect`'s body did, and the one rebuild still lands before anything the
+does exactly what `addFx`'s body did, and the one rebuild still lands before anything the
 calling flow publishes.
 
 **2026-08-27, selwyn.local, JDK 25** — sweep item C8 (cook-internal repeated work), on the new
 `layer stack cook cost` scenario: a three-layer stack (a 40-row Look bound to a 168-head group, a
-two-row palette layer, a Look holding 24 head-bound effects) cooked 200 times after 40 warmups.
+two-row palette layer, a Look holding 24 head-bound FX) cooked 200 times after 40 warmups.
 No tick scenario reaches [`CueComposer`] at all, which is why C8 needed a sixth rig rather than a
 before/after on the existing five.
 
@@ -530,7 +535,7 @@ before/after on the existing five.
 Two separate wins, and the table separates them deliberately. **`[cook-split]` before → after** is
 the per-row and per-head hoisting *inside* `applyLayer`, which both arms share — the allowed-set
 and target expansion off the row loop and onto a per-layer `LayerTargets`, the palette intent
-parsed per row rather than per head, and `TemplateResolver` walking the head's property catalogue
+parsed per row rather than per head, and `PaletteResolver` walking the head's attribute catalogue
 once instead of twice. That is ~32 % of the cook and ~35 % of its allocation. **`[cook-split]` →
 `[cook-once]`** is the consolidation: one pass over the stack, one `contributingLayers` sort
 instead of three, each Look snapshot read once, and the layer's targets expanded once for both
@@ -541,9 +546,9 @@ the programmer recook and the hold registry's bring-on (`CueHolds`, every GO and
 `cookAll`. `[cook-split]` is kept as the arm that carries the historical shape, so the scenario
 stays a self-contained before/after instead of depending on this block.
 
-The part the benchmark cannot show is the one worth having: rows and effects now come out of the
+The part the benchmark cannot show is the one worth having: rows and FX now come out of the
 *same* resolved snapshots, so a Look edited between the two reads can no longer land its rows and
-its effects on stage from different versions of itself.
+its FX on stage from different versions of itself.
 
 The first `[cook-split]` "before" run of the session read p50 = 2,754 µs / p99 = 29 ms; the figure
 above is the second, quieter run. Treat the p99 column on this scenario as unusable — the cook
@@ -551,4 +556,4 @@ allocates ~2-3 MB a time, so GC lands inside the timed window at this repeat cou
 
 The five tick scenarios were run either side and are flat, as they must be: C8 touches no tick
 path. `TypedParams`' cache fix is the one part of C8 that *is* per-tick, and it is invisible here —
-it only bites an effect whose colour parameter is blank, which no benchmark rig has.
+it only bites an FX whose colour parameter is blank, which no benchmark rig has.

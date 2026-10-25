@@ -1,12 +1,12 @@
-import type { PropertyCategory, SliderPropertyDescriptor } from '../store/fixtures'
-import { useSliderValue } from './usePropertyValues'
+import type { AttributeCategory, SliderAttributeDescriptor } from '../store/fixtures'
+import { useSliderValue } from './useAttributeValues'
 import { colourMagnitude } from '../lib/colourMath'
 
 /**
  * Stable hook-call-order placeholder for `useSliderValue` when the optional
  * descriptor is absent. Channel u0c0 + name `__none__` is ignored downstream.
  */
-function makeFallbackSlider(category: PropertyCategory): SliderPropertyDescriptor {
+function makeFallbackSlider(category: AttributeCategory): SliderAttributeDescriptor {
   return {
     type: 'slider',
     name: '__none__',
@@ -26,7 +26,7 @@ const FALLBACK_DIMMER = makeFallbackSlider('dimmer')
  * hook-call order stable when `dimmerProp` is undefined.
  */
 export function useNormalizedIntensity(
-  dimmerProp: SliderPropertyDescriptor | undefined,
+  dimmerProp: SliderAttributeDescriptor | undefined,
 ): number {
   const value = useSliderValue(dimmerProp ?? FALLBACK_DIMMER)
   if (!dimmerProp) return 1

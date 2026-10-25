@@ -22,57 +22,57 @@ class WallClockTimingTest {
     // Note: FxInstance phase calculation tests require a real FxTarget (sealed class),
     // which requires the fixture system. Those are tested via integration tests.
 
-    // ─── EffectRegistration timingSource ────────────────────────────────
+    // ─── FxRegistration timingSource ────────────────────────────────
 
     @Test
-    fun `EffectRegistration defaults to BEAT timing source`() {
-        val reg = EffectRegistration(
+    fun `FxRegistration defaults to BEAT timing source`() {
+        val reg = FxRegistration(
             id = "TestEffect",
             name = "Test Effect",
-            category = "dimmer",
+            family = "intensity",
             outputType = FxOutputType.SLIDER,
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
             factory = { _, _, _ -> SineSlider() },
         )
         assertEquals(TimingSource.BEAT, reg.timingSource)
     }
 
     @Test
-    fun `EffectRegistration can specify WALL_CLOCK timing source`() {
-        val reg = EffectRegistration(
+    fun `FxRegistration can specify WALL_CLOCK timing source`() {
+        val reg = FxRegistration(
             id = "CandleFlicker",
             name = "Candle Flicker",
-            category = "dimmer",
+            family = "intensity",
             outputType = FxOutputType.SLIDER,
             timingSource = TimingSource.WALL_CLOCK,
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
             factory = { _, _, _ -> SineSlider() },
         )
         assertEquals(TimingSource.WALL_CLOCK, reg.timingSource)
     }
 
-    // ─── EffectTypeInfo timingSource ────────────────────────────────────
+    // ─── FxTypeInfo timingSource ────────────────────────────────────
 
     @Test
-    fun `EffectTypeInfo defaults to BEAT`() {
-        val info = EffectTypeInfo(
+    fun `FxTypeInfo defaults to BEAT`() {
+        val info = FxTypeInfo(
             name = "TestEffect",
-            category = "dimmer",
+            family = "intensity",
             outputType = "SLIDER",
             parameters = emptyList(),
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
         )
         assertEquals("BEAT", info.timingSource)
     }
 
     @Test
-    fun `EffectTypeInfo can be WALL_CLOCK`() {
-        val info = EffectTypeInfo(
+    fun `FxTypeInfo can be WALL_CLOCK`() {
+        val info = FxTypeInfo(
             name = "CandleFlicker",
-            category = "dimmer",
+            family = "intensity",
             outputType = "SLIDER",
             parameters = emptyList(),
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
             timingSource = "WALL_CLOCK",
         )
         assertEquals("WALL_CLOCK", info.timingSource)
@@ -82,13 +82,13 @@ class WallClockTimingTest {
 
     @Test
     fun `FxFileMetadata defaults to BEAT`() {
-        val meta = FxFileMetadata(id = "test", name = "Test", category = "dimmer")
+        val meta = FxFileMetadata(id = "test", name = "Test", family = "intensity")
         assertEquals("BEAT", meta.timingSource)
     }
 
     @Test
     fun `FxFileMetadata can be WALL_CLOCK`() {
-        val meta = FxFileMetadata(id = "test", name = "Test", category = "dimmer", timingSource = "WALL_CLOCK")
+        val meta = FxFileMetadata(id = "test", name = "Test", family = "intensity", timingSource = "WALL_CLOCK")
         assertEquals("WALL_CLOCK", meta.timingSource)
     }
 
@@ -102,9 +102,9 @@ class WallClockTimingTest {
             |name: Test Flicker
             |category: dimmer
             |outputType: SLIDER
-            |effectMode: STATEFUL
+            |fxMode: STATEFUL
             |timingSource: WALL_CLOCK
-            |compatibleProperties: [dimmer]
+            |compatibleAttributes: [dimmer]
             |parameters: []
             |---*/
             |
@@ -114,7 +114,7 @@ class WallClockTimingTest {
         val (metadata, _) = FxFileLoader.parseFxFile(content)
         assertEquals("WALL_CLOCK", metadata.timingSource)
         assertEquals("TestFlicker", metadata.id)
-        assertEquals("STATEFUL", metadata.effectMode)
+        assertEquals("STATEFUL", metadata.fxMode)
     }
 
     @Test
@@ -125,8 +125,8 @@ class WallClockTimingTest {
             |name: Test Effect
             |category: dimmer
             |outputType: SLIDER
-            |effectMode: STANDARD
-            |compatibleProperties: [dimmer]
+            |fxMode: STANDARD
+            |compatibleAttributes: [dimmer]
             |parameters: []
             |---*/
             |
@@ -151,7 +151,7 @@ class WallClockTimingTest {
         FxInstance(
             effect = SineSlider(),
             target = SliderTarget(FxTargetRef.FixtureRef("test"), "dimmer"),
-            timing = FxTiming(beatDivision = cycleSeconds),
+            timing = FxTiming(cycle = cycleSeconds),
         ).apply {
             timingSource = TimingSource.WALL_CLOCK
         }
@@ -201,7 +201,7 @@ class WallClockTimingTest {
         assertEquals(
             0.25,
             unscaled.calculateWallClockPhaseForMember(
-                1, unscaledDyn, unscaledDyn.distributionStrategy.calculateOffset(member, 1),
+                1, unscaledDyn, unscaledDyn.order.calculateOffset(member, 1),
             ),
             1e-9,
         )
@@ -212,7 +212,7 @@ class WallClockTimingTest {
         assertEquals(
             0.5,
             fast.calculateWallClockPhaseForMember(
-                1, fastDyn, fastDyn.distributionStrategy.calculateOffset(member, 1),
+                1, fastDyn, fastDyn.order.calculateOffset(member, 1),
             ),
             1e-9,
         )

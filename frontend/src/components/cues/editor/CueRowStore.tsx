@@ -8,41 +8,41 @@ import { PressCueContext, type PressCue } from '@/components/press/pressCue'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { withoutInfrastructure } from '@/lib/infrastructure'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import { cueEffectInput, cueLayerInput } from '@/lib/cueUtils'
+import { cueFxInput, cueLayerInput } from '@/lib/cueUtils'
 import type {
   CookedRow,
   Cue,
-  CueAdHocEffect,
+  CueAdHocFx,
   CueLayer,
   CueLayerDetail,
   CueLayerPressResponse,
   CuePatchInput,
-  CuePropertyAssignment,
+  CueAttributeAssignment,
 } from '@/api/cuesApi'
 import {
   CueRowDraft,
   applyCueRowEntries,
-  canonicalCueProperty,
+  canonicalCueAttribute,
   cueRowKey,
   restoreCueRows,
   rowsWithKeys,
   type CueRowTargetType,
 } from './cueRowDraft'
 import { appendItem, replaceAt } from './cueListEdits'
-import { lastIndexOfDraft } from '@/components/fx/draftEffect'
+import { lastIndexOfDraft } from '@/components/fx/draftFx'
 
 /**
  * What one save changed, for its Undo: the rows' keys and the rows the cue held under them before
  * it, and the whole layer or effect list as it stood before, for each list the save wrote.
  */
 interface UndoStep {
-  rows?: { keys: readonly string[]; rows: readonly CuePropertyAssignment[] }
+  rows?: { keys: readonly string[]; rows: readonly CueAttributeAssignment[] }
   layers?: readonly CueLayer[]
-  adHocEffects?: readonly CueAdHocEffect[]
+  adHocFx?: readonly CueAdHocFx[]
 }
 
 /** One of the cue's two other child lists, as the Looks and FX tabs write them. */
-export type CueChildList = 'layers' | 'adHocEffects'
+export type CueChildList = 'layers' | 'adHocFx'
 
 /**
  * A gesture on one child list: the list as the desk holds it in — a layer with its `id`, an effect
@@ -53,7 +53,7 @@ export type CueListEdit<T> = (stored: readonly T[]) => T[] | null
 
 interface ListEdits {
   layers: CueListEdit<CueLayerDetail> | null
-  adHocEffects: CueListEdit<CueAdHocEffect> | null
+  adHocFx: CueListEdit<CueAdHocFx> | null
 }
 
 /**
@@ -77,10 +77,10 @@ export type CueRowSaveState = 'clean' | 'dirty' | 'saving' | 'error'
  * One cue's own rows, in the shape the Values grid reads and writes them (show-cue-editing plan
  * §3.3) — `LookRowStore`'s shape, over a cue.
  *
- * **Server state** is the cue's details (its `propertyAssignments`) and its cook (`/cooked`); the
+ * **Server state** is the cue's details (its `attributeAssignments`) and its cook (`/cooked`); the
  * **draft** holds own values the operator set and own rows they took away, notifying per key.
  * Writes go to the draft and schedule a flush — 400 ms of quiet, 2 s at most (D10) — which builds
- * the whole `propertyAssignments` list from the cue **as the desk holds it at flush time** — read
+ * the whole `attributeAssignments` list from the cue **as the desk holds it at flush time** — read
  * past the cache (`fetchLatestCue`), since another client's edit does not invalidate it — keeping
  * each row's fade, move-in-dark and sort order, and PATCHes it. A flush sends only the entries no
  * save has carried, and saves run one after another. The PATCH is a stored write and sends nothing
@@ -105,14 +105,14 @@ export interface CueRowStoreValue {
   cookFailed: boolean
   draft: CueRowDraft
   /** What the grid draws at one head and property — the draft over the cook. See [lookupCueCell]. */
-  lookup: (headKey: string, propertyName: string, group?: string) => CueCellValue | undefined
+  lookup: (headKey: string, attribute: string, group?: string) => CueCellValue | undefined
   /**
    * The value a single-axis position edit takes its other axis from: the draft, else the composed
    * cell — never the wire (the Look arm's rule).
    */
-  composedValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string) => string | undefined
-  setValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string, value: string) => void
-  removeValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string) => void
+  composedValue: (targetType: CueRowTargetType, targetKey: string, attribute: string) => string | undefined
+  setValue: (targetType: CueRowTargetType, targetKey: string, attribute: string, value: string) => void
+  removeValue: (targetType: CueRowTargetType, targetKey: string, attribute: string) => void
   /** Every head the cue holds an own row on, or a layer composes onto — D14's rows. */
   heads: ReadonlySet<string>
   /** Groups holding an own row of the cue's — drawn as a group row. */
@@ -122,12 +122,12 @@ export interface CueRowStoreValue {
   /**
    * A gesture on the cue's layers or effects (the Looks and FX tabs, §3.3): [edit] is applied to the
    * list as the desk holds it at flush time, after any gesture still pending on that list, and the
-   * whole list is PATCHed — never `propertyAssignments`. Coalesced with the rows' flush (400 ms,
+   * whole list is PATCHed — never `attributeAssignments`. Coalesced with the rows' flush (400 ms,
    * 2 s); [now] saves at once, for a discrete gesture (a reorder, a toggle, an add). Answers
    * whether the write that carried it landed.
    */
   editLayers: (edit: CueListEdit<CueLayerDetail>, now?: boolean) => Promise<boolean>
-  editEffects: (edit: CueListEdit<CueAdHocEffect>, now?: boolean) => Promise<boolean>
+  editFx: (edit: CueListEdit<CueAdHocFx>, now?: boolean) => Promise<boolean>
   /**
    * A layer or effect gesture is waiting for its flush or its PATCH: a tab drawing its gesture
    * ahead of the desk keeps drawing it until this goes false and the cue is read again.
@@ -160,8 +160,8 @@ export const CUE_ROW_SAVE_DEBOUNCE_MS = 400
 export const CUE_ROW_SAVE_CEILING_MS = 2000
 
 const EMPTY_ROWS: readonly CookedRow[] = []
-const EMPTY_ASSIGNMENTS: readonly CuePropertyAssignment[] = []
-const EMPTY_EFFECTS: readonly CueAdHocEffect[] = []
+const EMPTY_ASSIGNMENTS: readonly CueAttributeAssignment[] = []
+const EMPTY_FX: readonly CueAdHocFx[] = []
 
 export function CueRowStoreProvider({
   projectId,
@@ -216,7 +216,7 @@ export function CueRowStoreProvider({
   /** What the last save changed — the rows' keys and the rows they replaced — for its Undo. */
   const undoRef = useRef<UndoStep | null>(null)
   /** The layer and effect gestures no flush has carried yet, each list's composed into one edit. */
-  const listEditsRef = useRef<ListEdits>({ layers: null, adHocEffects: null })
+  const listEditsRef = useRef<ListEdits>({ layers: null, adHocFx: null })
   /** Those gestures' answers — what the flush that takes them settles, and counts back down. */
   const carriedRef = useRef<((landed: boolean) => void)[]>([])
   const cueLabel = cue ? cueLabelOf(cue) : 'Cue'
@@ -308,9 +308,9 @@ export function CueRowStoreProvider({
     setUndoSeq((n) => n + 1)
     void enqueue((latest) => ({
       body: {
-        ...(step.rows ? { propertyAssignments: restoreCueRows(latest.propertyAssignments, step.rows.keys, step.rows.rows) } : {}),
+        ...(step.rows ? { attributeAssignments: restoreCueRows(latest.attributeAssignments, step.rows.keys, step.rows.rows) } : {}),
         ...(step.layers ? { layers: [...step.layers] } : {}),
-        ...(step.adHocEffects ? { adHocEffects: [...step.adHocEffects] } : {}),
+        ...(step.adHocFx ? { adHocFx: [...step.adHocFx] } : {}),
       },
       undo: null,
     })).then((result) => {
@@ -323,11 +323,11 @@ export function CueRowStoreProvider({
     // Only what no save has carried yet: a sent entry is in the cue, or about to be, and sending it
     // again would re-assert it over a later edit of that row from elsewhere.
     const sent = draft.unsaved()
-    const { layers: layerEdit, adHocEffects: effectEdit } = listEditsRef.current
-    listEditsRef.current = { layers: null, adHocEffects: null }
+    const { layers: layerEdit, adHocFx: fxEdit } = listEditsRef.current
+    listEditsRef.current = { layers: null, adHocFx: null }
     const carried = carriedRef.current
     carriedRef.current = []
-    if (sent.size === 0 && layerEdit == null && effectEdit == null) return
+    if (sent.size === 0 && layerEdit == null && fxEdit == null) return
     if (sent.size > 0) draft.markSending(sent)
     const keys = [...sent.keys()]
     // One PATCH for everything pending, so one Undo puts back everything it changed.
@@ -335,18 +335,18 @@ export function CueRowStoreProvider({
       const body: CuePatchInput = {}
       const step: UndoStep = {}
       if (sent.size > 0) {
-        body.propertyAssignments = applyCueRowEntries(latest.propertyAssignments, sent)
-        step.rows = { keys, rows: rowsWithKeys(latest.propertyAssignments, keys) }
+        body.attributeAssignments = applyCueRowEntries(latest.attributeAssignments, sent)
+        step.rows = { keys, rows: rowsWithKeys(latest.attributeAssignments, keys) }
       }
       const layers = layerEdit?.(latest.layers) ?? null
       if (layers != null) {
         body.layers = layers.map(cueLayerInput)
         step.layers = latest.layers.map(cueLayerInput)
       }
-      const effects = effectEdit?.(latest.adHocEffects) ?? null
+      const effects = fxEdit?.(latest.adHocFx) ?? null
       if (effects != null) {
-        body.adHocEffects = effects.map(cueEffectInput)
-        step.adHocEffects = latest.adHocEffects.map(cueEffectInput)
+        body.adHocFx = effects.map(cueFxInput)
+        step.adHocFx = latest.adHocFx.map(cueFxInput)
       }
       return Object.keys(body).length === 0 ? null : { body, undo: step }
     }).then((result) => {
@@ -383,19 +383,19 @@ export function CueRowStoreProvider({
   }, [])
 
   const setValue = useCallback(
-    (targetType: CueRowTargetType, targetKey: string, propertyName: string, value: string) => {
+    (targetType: CueRowTargetType, targetKey: string, attribute: string, value: string) => {
       if (readOnlyRef.current) return
-      draft.set(targetType, targetKey, propertyName, value)
+      draft.set(targetType, targetKey, attribute, value)
       schedule()
     },
     [draft, schedule],
   )
   const removeValue = useCallback(
-    (targetType: CueRowTargetType, targetKey: string, propertyName: string) => {
+    (targetType: CueRowTargetType, targetKey: string, attribute: string) => {
       if (readOnlyRef.current) return
-      const key = cueRowKey(targetType, targetKey, propertyName)
-      const stored = (entry.cue?.propertyAssignments ?? []).some(
-        (row) => cueRowKey(row.targetType, row.targetKey, row.propertyName) === key,
+      const key = cueRowKey(targetType, targetKey, attribute)
+      const stored = (entry.cue?.attributeAssignments ?? []).some(
+        (row) => cueRowKey(row.targetType, row.targetKey, row.attribute) === key,
       )
       if (!stored && !draft.isSent(key)) {
         // No own row to take away: ⌫ over a Look-won cell, or over a value set here and not yet
@@ -403,7 +403,7 @@ export function CueRowStoreProvider({
         draft.discard([key])
         return
       }
-      draft.remove(targetType, targetKey, propertyName)
+      draft.remove(targetType, targetKey, attribute)
       schedule()
     },
     [draft, entry, schedule],
@@ -433,8 +433,8 @@ export function CueRowStoreProvider({
     (edit: CueListEdit<CueLayerDetail>, now = false) => editList('layers', edit, now),
     [editList],
   )
-  const editEffects = useCallback(
-    (edit: CueListEdit<CueAdHocEffect>, now = false) => editList('adHocEffects', edit, now),
+  const editFx = useCallback(
+    (edit: CueListEdit<CueAdHocFx>, now = false) => editList('adHocFx', edit, now),
     [editList],
   )
 
@@ -444,19 +444,20 @@ export function CueRowStoreProvider({
    * The desk's answer is the cue as stored, and its layers land in the cache at once.
    */
   const pressLayer = useCallback<PressCue['pressLayer']>(
-    async (source, targets, families) => {
+    async (source) => {
       if (readOnlyRef.current) return null
       flushRef.current()
       const args = { ...argsRef.current, cueId: entry.cueId }
+      const pressed =
+        'lookId' in source
+          ? { lookId: source.lookId }
+          : {
+              paletteId: source.paletteId,
+              targets: source.targets.map((t) => ({ type: t.type, key: t.key })),
+              ...(source.families != null && source.families.length > 0 ? { families: [...source.families] } : {}),
+            }
       const result = await enqueue<UndoStep, CueLayerPressResponse>((latest) => ({
-        send: () =>
-          pressCueLayer({
-            projectId: args.projectId,
-            cueId: args.cueId,
-            ...source,
-            targets: targets.map((t) => ({ type: t.type, key: t.key })),
-            ...(families != null && families.length > 0 ? { families: [...families] } : {}),
-          }).unwrap(),
+        send: () => pressCueLayer({ projectId: args.projectId, cueId: args.cueId, ...pressed }).unwrap(),
         undo: { layers: latest.layers.map(cueLayerInput) },
       }))
       if (result == null || !result.ok || result.answer == null) return null
@@ -478,17 +479,17 @@ export function CueRowStoreProvider({
   const landValues = useCallback<PressCue['landValues']>(
     (values) => {
       if (readOnlyRef.current) return 0
-      for (const value of values) setValue(value.target.type === 'group' ? 'group' : 'fixture', value.target.key, value.propertyName, value.value)
+      for (const value of values) setValue(value.target.type === 'group' ? 'group' : 'fixture', value.target.key, value.attribute, value.value)
       return values.length
     },
     [setValue],
   )
 
   /** A bare effect stored in draft — appended, or in place of the one the picker is auditioning. */
-  const pickEffect = useCallback<PressCue['pickEffect']>(
+  const pickFx = useCallback<PressCue['pickFx']>(
     (effect, replacing) =>
-      editList<CueAdHocEffect>(
-        'adHocEffects',
+      editList<CueAdHocFx>(
+        'adHocFx',
         (stored) => {
           const at = replacing == null ? -1 : lastIndexOfDraft(stored, replacing)
           return at < 0 ? appendItem(stored, effect) : replaceAt(stored, at, effect)
@@ -501,7 +502,7 @@ export function CueRowStoreProvider({
   // Retire what the server now states, once a cook read after the save has landed.
   useEffect(() => {
     if (!cue || cookAt == null) return
-    draft.reconcile(cue.propertyAssignments, cookAt)
+    draft.reconcile(cue.attributeAssignments, cookAt)
   }, [cue, cookAt, draft])
 
   // A pending edit lands when the editor goes — a card collapsing on a GO from elsewhere, a pane
@@ -516,10 +517,10 @@ export function CueRowStoreProvider({
   }, [])
 
   const rows = cookedData?.rows ?? EMPTY_ROWS
-  const assignments = cue?.propertyAssignments ?? EMPTY_ASSIGNMENTS
+  const assignments = cue?.attributeAssignments ?? EMPTY_ASSIGNMENTS
   const cookedByKey = useMemo(() => {
     const out = new Map<string, CookedRow>()
-    for (const row of rows) out.set(lookRowKey(row.targetKey, canonicalCueProperty(row.propertyName)), row)
+    for (const row of rows) out.set(lookRowKey(row.targetKey, canonicalCueAttribute(row.attribute)), row)
     return out
   }, [rows])
 
@@ -529,7 +530,7 @@ export function CueRowStoreProvider({
   const overriddenRef = useRef(new Map<string, string>())
   for (const row of rows) {
     if (row.layerId != null && row.layerSource?.name) {
-      overriddenRef.current.set(lookRowKey(row.targetKey, canonicalCueProperty(row.propertyName)), row.layerSource.name)
+      overriddenRef.current.set(lookRowKey(row.targetKey, canonicalCueAttribute(row.attribute)), row.layerSource.name)
     }
   }
 
@@ -560,7 +561,7 @@ export function CueRowStoreProvider({
   const storedGroupRows = useMemo(() => {
     const out = new Map<string, string>()
     for (const row of assignments) {
-      if (row.targetType === 'group') out.set(cueRowKey('group', row.targetKey, row.propertyName), row.value)
+      if (row.targetType === 'group') out.set(cueRowKey('group', row.targetKey, row.attribute), row.value)
     }
     return out
   }, [assignments])
@@ -573,19 +574,19 @@ export function CueRowStoreProvider({
       value: v,
       source: { kind: 'own', targetType, targetKey, overrides: overriddenRef.current.get(cellKey) },
     })
-    const lookup = (headKey: string, rawProperty: string, group?: string): CueCellValue | undefined => {
-      const propertyName = canonicalCueProperty(rawProperty)
-      const cellKey = lookRowKey(headKey, propertyName)
+    const lookup = (headKey: string, rawAttribute: string, group?: string): CueCellValue | undefined => {
+      const attribute = canonicalCueAttribute(rawAttribute)
+      const cellKey = lookRowKey(headKey, attribute)
       if (group != null) {
         // A group row draws the group's **own** row and nothing else: what its members compose to is
         // on their own rows.
-        const pending = draft.get('group', group, propertyName)
+        const pending = draft.get('group', group, attribute)
         if (pending?.kind === 'removed') return undefined
         if (pending?.kind === 'set') return own('group', group, pending.value, cellKey)
-        const stored = storedGroupRows.get(cueRowKey('group', group, propertyName))
+        const stored = storedGroupRows.get(cueRowKey('group', group, attribute))
         return stored == null ? undefined : own('group', group, stored, cellKey)
       }
-      const pending = draft.get('fixture', headKey, propertyName)
+      const pending = draft.get('fixture', headKey, attribute)
       if (pending?.kind === 'set') return own('fixture', headKey, pending.value, cellKey)
       const cooked = cookedByKey.get(cellKey)
       const sourceType = cooked?.sourceTargetType ?? (cooked ? (cooked.targetType === 'group' ? 'group' : 'fixture') : null)
@@ -596,11 +597,11 @@ export function CueRowStoreProvider({
       }
       // A group's own row reaches its members unless a fixture row of their own beats it.
       for (const name of groupsByHead.get(headKey) ?? []) {
-        const groupPending = draft.get('group', name, propertyName)
+        const groupPending = draft.get('group', name, attribute)
         if (groupPending?.kind === 'set') return own('group', name, groupPending.value, cellKey)
       }
       if (cookedOwn && sourceType === 'group' && sourceKey != null) {
-        if (draft.get('group', sourceKey, propertyName)?.kind !== 'removed') return own('group', sourceKey, cooked.value, cellKey)
+        if (draft.get('group', sourceKey, attribute)?.kind !== 'removed') return own('group', sourceKey, cooked.value, cellKey)
         return undefined
       }
       if (cooked != null && cooked.layerId != null) {
@@ -608,17 +609,17 @@ export function CueRowStoreProvider({
       }
       return undefined
     }
-    const composedValue = (targetType: CueRowTargetType, targetKey: string, rawProperty: string): string | undefined => {
-      const propertyName = canonicalCueProperty(rawProperty)
-      const pending = draft.get(targetType, targetKey, propertyName)
+    const composedValue = (targetType: CueRowTargetType, targetKey: string, rawAttribute: string): string | undefined => {
+      const attribute = canonicalCueAttribute(rawAttribute)
+      const pending = draft.get(targetType, targetKey, attribute)
       if (pending?.kind === 'set') return pending.value
       if (targetType === 'group') {
-        const stored = storedGroupRows.get(cueRowKey('group', targetKey, propertyName))
+        const stored = storedGroupRows.get(cueRowKey('group', targetKey, attribute))
         if (stored != null) return stored
         const member = (fixtures ?? []).find((f) => f.groups.includes(targetKey))
-        return member ? cookedByKey.get(lookRowKey(member.key, propertyName))?.value : undefined
+        return member ? cookedByKey.get(lookRowKey(member.key, attribute))?.value : undefined
       }
-      return cookedByKey.get(lookRowKey(targetKey, propertyName))?.value
+      return cookedByKey.get(lookRowKey(targetKey, attribute))?.value
     }
 
     const heads = new Set<string>()
@@ -668,7 +669,7 @@ export function CueRowStoreProvider({
       ownGroups,
       ownTargets,
       editLayers,
-      editEffects,
+      editFx,
       listsBusy: listsInFlight > 0,
       undoSeq,
       undo,
@@ -698,7 +699,7 @@ export function CueRowStoreProvider({
     setValue,
     removeValue,
     editLayers,
-    editEffects,
+    editFx,
     listsInFlight,
     undoSeq,
     undo,
@@ -709,7 +710,7 @@ export function CueRowStoreProvider({
   // Keyed on what the bands read, not on the cue: a value save refetches the cue, and every cell in
   // the grid reads this context.
   const layeredKey = (cue?.layers ?? []).flatMap((layer) => (layer.source ? [`${layer.source.kind}:${layer.source.id}`] : [])).join('|')
-  const effects = cue?.adHocEffects ?? EMPTY_EFFECTS
+  const effects = cue?.adHocFx ?? EMPTY_FX
   const pressCue = useMemo<PressCue>(
     () => ({
       projectId,
@@ -720,9 +721,9 @@ export function CueRowStoreProvider({
       effects,
       pressLayer,
       landValues,
-      pickEffect,
+      pickFx,
     }),
-    [projectId, cueId, cueLabel, readOnly, layeredKey, effects, pressLayer, landValues, pickEffect],
+    [projectId, cueId, cueLabel, readOnly, layeredKey, effects, pressLayer, landValues, pickFx],
   )
 
   return (
@@ -734,9 +735,9 @@ export function CueRowStoreProvider({
   )
 }
 
-/** What a save or its Undo changed, in the toast's words: `values`, `looks and effects`. */
+/** What a save or its Undo changed, in the toast's words: `values`, `looks and FX`. */
 function wordsFor(step: UndoStep): string {
-  const words = [step.rows && 'values', step.layers && 'looks', step.adHocEffects && 'effects'].filter((w): w is string => !!w)
+  const words = [step.rows && 'values', step.layers && 'looks', step.adHocFx && 'FX'].filter((w): w is string => !!w)
   return words.length <= 1 ? (words[0] ?? 'values') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
 }
 

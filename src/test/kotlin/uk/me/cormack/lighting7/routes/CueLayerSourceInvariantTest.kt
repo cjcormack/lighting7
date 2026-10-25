@@ -19,8 +19,8 @@ import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateRow
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteRow
 import uk.me.cormack.lighting7.models.LayerSourceKind
 import uk.me.cormack.lighting7.models.LayerSourceShape
 import uk.me.cormack.lighting7.models.layerSourceShape
@@ -54,16 +54,16 @@ import kotlin.test.fail
 class CueLayerSourceInvariantTest : RouteIntegrationTest() {
 
     /** A template with one deferred colour row, in the seeded project. */
-    private fun seedTemplate(name: String): DaoTemplate = transaction(state.database) {
-        val template = DaoTemplate.new {
+    private fun seedPalette(name: String): DaoPalette = transaction(state.database) {
+        val template = DaoPalette.new {
             this.project = DaoProject.findById(projectId)!!
             this.name = name
         }
-        DaoTemplateRow.new {
-            this.template = template
+        DaoPaletteRow.new {
+            this.palette = template
             targetType = DEFERRED_TARGET_TYPE
             targetKey = ""
-            propertyName = "rgbColour"
+            attribute = "rgbColour"
             value = "#ff9d4a"
             sortOrder = 0
         }
@@ -117,7 +117,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
     @Test
     fun `the CHECK constraint refuses a layer naming both records`() {
         val cue = seedCueInStack("both")
-        val template = seedTemplate("both-template")
+        val template = seedPalette("both-template")
         val look = transaction(state.database) {
             DaoLook.new {
                 this.project = DaoProject.findById(projectId)!!
@@ -129,7 +129,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
                 DaoCueLayer.new {
                     this.cue = cue
                     this.look = look
-                    this.template = template
+                    this.palette = template
                     targets = emptyList()
                     sortOrder = 0
                 }
@@ -145,12 +145,12 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
     @Test
     fun `layerSourceShape is the one verdict, and only the malformed shapes warn`() {
         assertEquals(LayerSourceShape.LOOK, layerSourceShape("a-look", null))
-        assertEquals(LayerSourceShape.TEMPLATE, layerSourceShape(null, 7))
+        assertEquals(LayerSourceShape.PALETTE, layerSourceShape(null, 7))
         assertEquals(LayerSourceShape.NEITHER, layerSourceShape(null, null))
         assertEquals(LayerSourceShape.BOTH, layerSourceShape("a-look", 7))
 
         assertNull(LayerSourceShape.LOOK.problem)
-        assertNull(LayerSourceShape.TEMPLATE.problem)
+        assertNull(LayerSourceShape.PALETTE.problem)
         assertNotNull(LayerSourceShape.NEITHER.problem)
         assertNotNull(LayerSourceShape.BOTH.problem)
 
@@ -165,11 +165,11 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         val cue = seedCueInStack("copy-me")
-        val template = seedTemplate("copy-template")
-        val (sourceCueId, templateId) = transaction(state.database) {
+        val template = seedPalette("copy-template")
+        val (sourceCueId, paletteId) = transaction(state.database) {
             DaoCueLayer.new {
                 this.cue = cue
-                this.template = template
+                this.palette = template
                 targets = emptyList()
                 sortOrder = 0
             }
@@ -186,7 +186,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
         transaction(state.database) {
             val layer = DaoCue.findById(copiedCueId)!!.layers.single()
             assertEquals(
-                templateId, layer.template?.id?.value,
+                paletteId, layer.palette?.id?.value,
                 "the copied layer should still name the template",
             )
             assertNull(layer.look, "and should not have grown a look")
@@ -197,7 +197,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
         val details = client.get("/api/rest/projects/$projectId/cues/$copiedCueId")
         assertEquals(HttpStatusCode.OK, details.status, details.bodyAsText())
         val source = assertNotNull(details.body<CueDetails>().layers.single().source)
-        assertEquals(LayerSourceKind.TEMPLATE.name, source.kind)
-        assertEquals(templateId, source.id)
+        assertEquals(LayerSourceKind.PALETTE.name, source.kind)
+        assertEquals(paletteId, source.id)
     }
 }

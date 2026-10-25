@@ -30,7 +30,7 @@ class CaptureCueAssignmentsTest {
         return fixtures
     }
 
-    private fun slider(v: UByte) = CueAssignmentResolver.PropertyValue.Slider(v)
+    private fun slider(v: UByte) = CueAssignmentResolver.AttributeValue.Slider(v)
 
     @Test
     fun `no group hints - all rows emit as fixture`() {
@@ -59,7 +59,7 @@ class CaptureCueAssignmentsTest {
         val row = out.single()
         assertEquals("group", row.targetType)
         assertEquals("front-wash", row.targetKey)
-        assertEquals("dimmer", row.propertyName)
+        assertEquals("dimmer", row.attribute)
         assertEquals("150", row.value)
     }
 
@@ -126,11 +126,11 @@ class CaptureCueAssignmentsTest {
         assertEquals(2, out.size)
         val groupRow = out.first { it.targetType == "group" }
         assertEquals("front-wash", groupRow.targetKey)
-        assertEquals("dimmer", groupRow.propertyName)
+        assertEquals("dimmer", groupRow.attribute)
         assertEquals("200", groupRow.value)
         val fixtureRow = out.first { it.targetType == "fixture" }
         assertEquals("hex-1", fixtureRow.targetKey)
-        assertEquals("uv", fixtureRow.propertyName)
+        assertEquals("uv", fixtureRow.attribute)
         assertEquals("50", fixtureRow.value)
     }
 

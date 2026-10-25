@@ -1,16 +1,16 @@
-import type { ElementDescriptor, Fixture, PropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
+import type { ElementDescriptor, Fixture, AttributeDescriptor, SliderAttributeDescriptor } from '@/store/fixtures'
 import { SUBSELECT_MODE_LABELS } from '@/lib/cellsSubSelection'
 import { elementFilterIncludes } from '@/components/fx/fxEditorModel'
 import { buildSheetRows, type SheetFamily, type SheetRow, type SheetRowGroup } from './sheetRows'
 
 /**
  * One pip on the head strip (fixture-fx-sheets plan D13): a head of a multi-head fixture, or a
- * member of a group. [properties] are its own descriptors — what its rows read and write.
+ * member of a group. [attributes] are its own descriptors — what its rows read and write.
  */
 export interface PickHead {
   key: string
   name: string
-  properties: readonly PropertyDescriptor[]
+  attributes: readonly AttributeDescriptor[]
 }
 
 /**
@@ -92,7 +92,7 @@ export function pickedHeads<H extends PickHead>(heads: readonly H[], pick: HeadP
 
 /** A multi-head fixture's heads, in the desk's element order. */
 export function headsOfFixture(fixture: Fixture): PickHead[] {
-  return (fixture.elements ?? []).map((e: ElementDescriptor) => ({ key: e.key, name: e.displayName, properties: e.properties }))
+  return (fixture.elements ?? []).map((e: ElementDescriptor) => ({ key: e.key, name: e.displayName, attributes: e.attributes }))
 }
 
 /**
@@ -112,9 +112,9 @@ export interface PickRowGroup {
 /**
  * The rows a set of heads share, grouped by family in D3's order: a row is drawn only where **every**
  * picked head has a row of that id and kind — the rule the desk's group aggregation uses
- * (`generateGroupPropertyDescriptors`: only properties common to all members, matched by name and
+ * (`generateGroupAttributeDescriptors`: only properties common to all members, matched by name and
  * type), so a pick over a mixed group offers what a write could land on everywhere. A **setting**
- * also needs the same options on every head, level for level (the desk's `aggregateSettingProperty`
+ * also needs the same options on every head, level for level (the desk's `aggregateSettingAttribute`
  * refuses a group setting otherwise): the row writes one option's level to every head, and on a
  * model whose list differs that level is another option.
  *
@@ -125,7 +125,7 @@ export function rowsOverHeads(
   optionsFor: (head: PickHead) => Parameters<typeof buildSheetRows>[1] = () => ({}),
 ): PickRowGroup[] {
   if (heads.length === 0) return []
-  const perHead = heads.map((h) => buildSheetRows(h.properties, optionsFor(h)))
+  const perHead = heads.map((h) => buildSheetRows(h.attributes, optionsFor(h)))
   const byId = perHead.map((groups) => new Map(groups.flatMap((g: SheetRowGroup) => g.rows).map((r) => [r.id, r])))
   return perHead[0]
     .map((group) => ({
@@ -142,8 +142,8 @@ export function rowsOverHeads(
 /** A setting row's options, name and level in order, as every other head's must be; true for any other kind. */
 function sameOptions(a: SheetRow, b: SheetRow | undefined): boolean {
   if (a.kind !== 'setting' || b?.kind !== 'setting') return true
-  const x = a.property.options
-  const y = b.property.options
+  const x = a.attribute.options
+  const y = b.attribute.options
   return x.length === y.length && x.every((o, i) => o.name === y[i].name && o.level === y[i].level)
 }
 
@@ -179,7 +179,7 @@ export function pickCountLabel(heads: readonly PickHead[], pick: HeadPick): stri
  * has none of its own, and **no** Intensity row of a head's own — a head has no dimmer channel, and
  * the row would only scale its colour, which the colour row already sets.
  */
-export function headRowOptions(fixtureDimmer: SliderPropertyDescriptor | undefined) {
+export function headRowOptions(fixtureDimmer: SliderAttributeDescriptor | undefined) {
   return () => ({ fallbackDimmer: fixtureDimmer, dimmerElsewhere: true })
 }
 
@@ -218,14 +218,14 @@ export function groupSheetMembers(
   for (const f of fixtures) (f.elements ?? []).forEach((element, index) => elements.set(element.key, { fixture: f, index, element }))
   return members.flatMap((m): GroupSheetMember[] => {
     const fixture = byKey.get(m.fixtureKey)
-    if (fixture != null) return [{ key: fixture.key, name: fixture.name, properties: fixture.properties, fixture, elementIndex: null }]
+    if (fixture != null) return [{ key: fixture.key, name: fixture.name, attributes: fixture.attributes, fixture, elementIndex: null }]
     const head = elements.get(m.fixtureKey)
     if (head == null) return []
     return [
       {
         key: head.element.key,
         name: m.fixtureName || `${head.fixture.name} · ${head.element.displayName}`,
-        properties: head.element.properties,
+        attributes: head.element.attributes,
         fixture: head.fixture,
         elementIndex: head.index,
       },
@@ -243,8 +243,8 @@ export function headAsFixture(fixture: Fixture, head: PickHead): Fixture {
     ...fixture,
     key: head.key,
     name: `${fixture.name} · ${head.name}`,
-    properties: [...head.properties],
+    attributes: [...head.attributes],
     elements: undefined,
-    elementGroupProperties: undefined,
+    elementGroupAttributes: undefined,
   }
 }

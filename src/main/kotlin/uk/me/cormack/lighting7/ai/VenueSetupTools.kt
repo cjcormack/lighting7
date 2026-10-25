@@ -156,7 +156,7 @@ internal class VenueSetupTools(private val state: State) {
         if (from == current && !dryRun && input.bool("reloadLiveShow") != true) {
             return failure(
                 "Project $from is the current project: extracting moves its rig into the venue and reloads it: the " +
-                    "rig holds its levels and each live cue, the programmer and hand-run effects come back, but every effect " +
+                    "rig holds its levels and each live cue, the programmer and hand-run FX come back, but every FX " +
                     "restarts and a cue's one-shot events do not fire again. Run it with dryRun first; send reloadLiveShow: true " +
                     "only when the operator has said the desk is not in use for a show.",
             )
@@ -209,8 +209,8 @@ internal class VenueSetupTools(private val state: State) {
         if (projectId == current && !dryRun && input.bool("reloadLiveShow") != true) {
             return failure(
                 "Project $projectId is the current project: attaching reloads it onto the venue: the rig holds its levels and " +
-                    "each live cue, the programmer and hand-run effects come back, but every effect restarts, and the programmer's values " +
-                    "and effects on a fixture the attach renames do not come back (the review's notes name them). Run it with dryRun " +
+                    "each live cue, the programmer and hand-run FX come back, but every FX restarts, and the programmer's values " +
+                    "and FX on a fixture the attach renames do not come back (the review's notes name them). Run it with dryRun " +
                     "first; send reloadLiveShow: true only when the operator has said the desk is not in use for a show.",
             )
         }
@@ -447,7 +447,7 @@ internal class VenueSetupTools(private val state: State) {
             val fixtures = state.show.fixtures
             if (tally.elements.isNotEmpty()) fixtures.stageElementListChanged()
             if (report.looks.isNotEmpty()) fixtures.lookListChanged()
-            if (report.templates.isNotEmpty()) fixtures.templateListChanged()
+            if (report.palettes.isNotEmpty()) fixtures.paletteListChanged()
             if (tally.stacks.isNotEmpty()) {
                 fixtures.cueStackListChanged()
                 fixtures.cueListChanged()
@@ -455,7 +455,7 @@ internal class VenueSetupTools(private val state: State) {
         }
         return success(
             "${if (dryRun) "Checked" else "Copied"}: ${tally.elements.size} element(s), ${report.looks.size} Look(s), " +
-                "${report.templates.size} palette(s), ${tally.stacks.size} stack(s) into project ${to.project.id.value}" +
+                "${report.palettes.size} palette(s), ${tally.stacks.size} stack(s) into project ${to.project.id.value}" +
                 if (report.unresolved.isEmpty()) "" else "; ${report.unresolved.size} reference(s) did not resolve",
             buildJsonObject {
                 put("dryRun", dryRun)
@@ -463,8 +463,8 @@ internal class VenueSetupTools(private val state: State) {
                 putJsonArray("elements") { tally.elements.forEach { add(it) } }
                 putJsonArray("looks") { report.looks.forEach { add(it) } }
                 if (report.looksLinked.isNotEmpty()) putJsonArray("looksLinked") { report.looksLinked.forEach { add(it) } }
-                if (report.templates.isNotEmpty()) putJsonArray("palettes") { report.templates.forEach { add(it) } }
-                if (report.templatesLinked.isNotEmpty()) putJsonArray("palettesLinked") { report.templatesLinked.forEach { add(it) } }
+                if (report.palettes.isNotEmpty()) putJsonArray("palettes") { report.palettes.forEach { add(it) } }
+                if (report.palettesLinked.isNotEmpty()) putJsonArray("palettesLinked") { report.palettesLinked.forEach { add(it) } }
                 putJsonArray("stacks") {
                     tally.stacks.forEach { (name, cues) -> addJsonObject { put("name", name); put("cues", cues) } }
                 }
@@ -477,7 +477,7 @@ internal class VenueSetupTools(private val state: State) {
                 put(
                     "note",
                     "Copies are new records with new ids, named as the source names them. A cue two copied stacks share is copied " +
-                        "once and shared in the target. A Look or palette a copied cue layers or an effect parameter names is " +
+                        "once and shared in the target. A Look or palette a copied cue layers or an FX parameter names is " +
                         "copied with it, or — when the target already has one of that name — linked to the target's (looksLinked). " +
                         "Rows naming a fixture or group the target lacks are kept and read as missing; a scenery change, cue event " +
                         "or script trigger that cannot resolve is left out. Prompt-book anchors are never copied: anchor the cues " +

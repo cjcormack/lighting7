@@ -25,7 +25,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 import uk.me.cormack.lighting7.fixture.media.FittedSlot
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
-import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -55,7 +55,7 @@ class PatchMediaRouteTest : RouteIntegrationTest() {
         assertEquals("true", r25["estimate"]!!.jsonPrimitive.content)
 
         val types = client.get("/api/rest/fixture-types").body<List<FixtureTypeDetails>>()
-        val settings = types.single { it.typeKey == rev }.properties.filterIsInstance<SettingPropertyDescriptor>().associateBy { it.name }
+        val settings = types.single { it.typeKey == rev }.attributes.filterIsInstance<SettingAttributeDescriptor>().associateBy { it.name }
         assertEquals("GEL", settings["gelScroller"]?.media)
         assertEquals("GOBO_OR_GEL", settings["fbWheelPos"]?.media)
         assertEquals("GEL", settings["mediaFrame"]?.media)
@@ -193,16 +193,16 @@ class PatchMediaRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val id = createPatch(client, "rev-1", rev, 1)
         // R26 Light Red, which the stock string does not hold: stock snaps elsewhere, fitted to frame 9.
-        val request = TemplateResolveRequest(
-            rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "#ee5b5e")),
-            targets = listOf(TemplateTargetDto("fixture", "rev-1")),
+        val request = PaletteResolveRequest(
+            rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "#ee5b5e")),
+            targets = listOf(PaletteTargetDto("fixture", "rev-1")),
         )
-        suspend fun resolve(): TemplateResolutionDto = client.post("/api/rest/projects/$projectId/palettes/resolve") {
+        suspend fun resolve(): PaletteResolutionDto = client.post("/api/rest/projects/$projectId/palettes/resolve") {
             contentType(ContentType.Application.Json); setBody(request)
-        }.body<TemplateResolveResponse>().entries.single()
+        }.body<PaletteResolveResponse>().entries.single()
 
         val stock = resolve()
-        assertEquals("gelScroller", stock.resolvedPropertyName)
+        assertEquals("gelScroller", stock.resolvedAttributeName)
         assertTrue(stock.value != "165", "the stock string holds no R26: $stock")
 
         put(client, id, "media" to slots("gelScroller", "L201_FULL_CT_BLUE", """{"gel": "R26"}"""))
@@ -214,8 +214,8 @@ class PatchMediaRouteTest : RouteIntegrationTest() {
 
     // — helpers ————————————————————————————————————————————————————————
 
-    private fun slots(property: String, option: String, content: String): JsonElement =
-        Json.parseToJsonElement("""{"slots": {"$property": {"$option": $content}}}""")
+    private fun slots(attribute: String, option: String, content: String): JsonElement =
+        Json.parseToJsonElement("""{"slots": {"$attribute": {"$option": $content}}}""")
 
     private suspend fun put(client: HttpClient, patchId: Int, vararg fields: Pair<String, JsonElement>): HttpResponse =
         client.put("/api/rest/projects/$projectId/patches/$patchId") {

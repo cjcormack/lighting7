@@ -50,8 +50,8 @@ const MOVER: NonNullable<CellResolution> = {
   panMax: 255,
   tiltMin: 0,
   tiltMax: 255,
-  panProperty: sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 540 }),
-  tiltProperty: sliderProp('tilt', 'tilt', chan(2), { axis: 'TILT', degMin: 0, degMax: 270 }),
+  panAttribute: sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 540 }),
+  tiltAttribute: sliderProp('tilt', 'tilt', chan(2), { axis: 'TILT', degMin: 0, degMax: 270 }),
 }
 
 /** A head with pan/tilt sliders and no annotation at all. */
@@ -63,8 +63,8 @@ const SILENT: NonNullable<CellResolution> = {
   panMax: 255,
   tiltMin: 0,
   tiltMax: 255,
-  panProperty: sliderProp('pan', 'pan', chan(3), { axis: 'PAN' }),
-  tiltProperty: sliderProp('tilt', 'tilt', chan(4), { axis: 'TILT' }),
+  panAttribute: sliderProp('pan', 'pan', chan(3), { axis: 'PAN' }),
+  tiltAttribute: sliderProp('tilt', 'tilt', chan(4), { axis: 'TILT' }),
 }
 
 function draw(
@@ -149,7 +149,7 @@ describe('PositionCell', () => {
   it('reads an inverted axis as raw DMX — the scale is DMX, not degrees', async () => {
     const inverted: NonNullable<CellResolution> = {
       ...MOVER,
-      panProperty: sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 540, inverted: true }),
+      panAttribute: sliderProp('pan', 'pan', chan(1), { axis: 'PAN', degMin: 0, degMax: 540, inverted: true }),
     }
     draw([inverted], { value: { kind: 'position', isUniform: true, pan: 0, tilt: 128, panNormalized: 0, tiltNormalized: 128 / 255 } })
     await screen.findByRole('spinbutton', { name: 'Pan' })

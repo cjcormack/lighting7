@@ -4,7 +4,7 @@ import type { SpreadCurve, SpreadOrder } from '@/store/programmerOps'
  * The arithmetic behind the Spread panel's **client-walked** kinds (editor-kit plan D2, D3, D15).
  *
  * The desk resolves every spread over a property in the template vocabulary — a level, a colour, a
- * position, a beam role — through `POST /programmer/spread`, because only it knows a group's
+ * position, a beam role — through `POST /programmer/fan`, because only it knows a group's
  * member order, each head's range, which cells a fixture has and what a colour means on a head with
  * amber (`lib/spreadIntent.ts`'s reason). This module walks only what the desk has no grammar for:
  *
@@ -17,10 +17,10 @@ import type { SpreadCurve, SpreadOrder } from '@/store/programmerOps'
  * `fanColours` is deleted: a colour spread is desk-resolved, in Lab, per head. What was
  * `sheet/fanMath.ts` is this file.
  *
- * [spreadFractions] mirrors lighting7's `fx/SpreadPlan.kt` — the four curves, the four orders and
- * `parts` — so a raw spread over Speed reads the same shape a desk-resolved spread over Dimmer does
+ * [spreadFractions] mirrors lighting7's `fx/FanPlan.kt` — the four curves, the four orders and
+ * `runs` — so a raw spread over Speed reads the same shape a desk-resolved spread over Dimmer does
  * on the heads beside it. **Random included**: the desk deals its permutation with
- * `java.util.Random(seed * 31 + count)` and a Fisher–Yates walk (`DistributionStrategy.RANDOM`),
+ * `java.util.Random(seed * 31 + count)` and a Fisher–Yates walk (`SpreadOrder.RANDOM`),
  * and [javaRandom] is that generator's 48-bit congruence ported bit for bit, pinned in
  * `spreadPlans.test.ts` against permutations the JDK itself dealt — so one seed shuffles the same
  * heads the same way on both sides, and a Dimmer spread and a Speed spread at Order: Random line
@@ -35,11 +35,11 @@ export function spreadPositions(count: number, order: SpreadOrder, seed = 0): nu
   if (count === 1) return [0]
   const last = count - 1
   switch (order) {
-    case 'LINEAR':
+    case 'NORMAL':
       return Array.from({ length: count }, (_, i) => i / last)
     case 'REVERSE':
       return Array.from({ length: count }, (_, i) => (last - i) / last)
-    case 'CENTER_OUT': {
+    case 'CENTRE_OUT': {
       // The desk's rank from the centre: symmetric pairs share a position and the two ends reach 1.
       const centre = last / 2
       const rank = (i: number) => {
@@ -64,7 +64,7 @@ export function spreadPositions(count: number, order: SpreadOrder, seed = 0): nu
 }
 
 /** The fraction `t` of the way from *from* to *to* at position `x`, for the three curves that are a function of position. */
-function curveAt(curve: Exclude<SpreadCurve, 'WINGS'>, x: number): number {
+function curveAt(curve: Exclude<SpreadCurve, 'MIRROR_OUT'>, x: number): number {
   switch (curve) {
     case 'LINE':
       return x
@@ -76,8 +76,8 @@ function curveAt(curve: Exclude<SpreadCurve, 'WINGS'>, x: number): number {
 }
 
 /**
- * Wings over one run: two mirrored fans meeting at the centre, *to* at each outer end and *from*
- * in the middle, an odd run's centre head in both — the desk's `SpreadPlan.wings`.
+ * Mirror out over one run: two mirrored fans meeting at the centre, *to* at each outer end and *from*
+ * in the middle, an odd run's centre head in both — the desk's `FanPlan.wings`.
  */
 function wings(size: number, order: SpreadOrder, seed: number): number[] {
   const out = new Array<number>(size).fill(0)
@@ -93,19 +93,19 @@ function wings(size: number, order: SpreadOrder, seed: number): number[] {
 }
 
 /**
- * The fraction `t ∈ [0, 1]` of each of [count] steps: the order cut into [parts] contiguous runs —
+ * The fraction `t ∈ [0, 1]` of each of [count] steps: the order cut into [runs] contiguous runs —
  * the first runs one longer when it does not divide — each run's positions under [order] through
  * [curve]. One step in a run sits at 0 (*from*), as it does on the desk.
  */
-export function spreadFractions(count: number, curve: SpreadCurve, order: SpreadOrder = 'LINEAR', parts = 1, seed = 0): number[] {
+export function spreadFractions(count: number, curve: SpreadCurve, order: SpreadOrder = 'NORMAL', runs = 1, seed = 0): number[] {
   if (count <= 0) return []
-  const runs = Math.max(1, Math.min(Math.round(parts), count))
-  const base = Math.floor(count / runs)
-  const extra = count % runs
+  const runCount = Math.max(1, Math.min(Math.round(runs), count))
+  const base = Math.floor(count / runCount)
+  const extra = count % runCount
   const out: number[] = []
-  for (let i = 0; i < runs; i++) {
+  for (let i = 0; i < runCount; i++) {
     const size = base + (i < extra ? 1 : 0)
-    if (curve === 'WINGS') {
+    if (curve === 'MIRROR_OUT') {
       out.push(...wings(size, order, seed))
     } else {
       for (const x of spreadPositions(size, order, seed)) out.push(clamp01(curveAt(curve, x)))

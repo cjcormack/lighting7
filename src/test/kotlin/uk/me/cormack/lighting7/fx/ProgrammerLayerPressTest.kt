@@ -24,7 +24,7 @@ class ProgrammerLayerPressTest {
         val store: ProgrammerStore,
         val stack: ProgrammerLayerStack,
         val looks: MutableMap<UUID, LookSnapshot>,
-        val templates: MutableMap<UUID, TemplateSnapshot>,
+        val palettes: MutableMap<UUID, PaletteSnapshot>,
     )
 
     private fun newRig(): Rig {
@@ -37,9 +37,9 @@ class ProgrammerLayerPressTest {
         }
         val store = ProgrammerStore()
         val looks = HashMap<UUID, LookSnapshot>()
-        val templates = HashMap<UUID, TemplateSnapshot>()
+        val palettes = HashMap<UUID, PaletteSnapshot>()
         val lookRegistry = LookRegistry(fixtures = { fixtures }, loader = { looks[it] })
-        val templateRegistry = TemplateRegistry(loader = { templates[it] })
+        val paletteRegistry = PaletteRegistry(loader = { palettes[it] })
         val engine = FxEngine(
             fixtures = fixtures,
             speedMasters = SpeedMasterBank(),
@@ -49,45 +49,45 @@ class ProgrammerLayerPressTest {
         val stack = ProgrammerLayerStack(
             fixtures = { fixtures },
             lookRegistry = { lookRegistry },
-            templateRegistry = { templateRegistry },
+            paletteRegistry = { paletteRegistry },
             engine = { engine },
             store = store,
             state = { null },
         )
-        return Rig(store, stack, looks, templates)
+        return Rig(store, stack, looks, palettes)
     }
 
     private fun Rig.colour(name: String, hex: String): LayerSource {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
-        templates[uuid] = TemplateSnapshot(
-            templateId = name.hashCode(), templateUuid = uuid, name = name, fadeDurationMs = null,
-            rows = listOf(TemplateRowEntry(target = null, propertyName = "rgbColour", value = "$hex;policy=extract")),
+        palettes[uuid] = PaletteSnapshot(
+            paletteId = name.hashCode(), paletteUuid = uuid, name = name, fadeDurationMs = null,
+            rows = listOf(PaletteRowEntry(target = null, attribute = "rgbColour", value = "$hex;policy=extract")),
         )
-        return LayerSource.template(name.hashCode(), uuid, name)
+        return LayerSource.palette(name.hashCode(), uuid, name)
     }
 
     private fun Rig.level(name: String, level: Int): LayerSource {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
-        templates[uuid] = TemplateSnapshot(
-            templateId = name.hashCode(), templateUuid = uuid, name = name, fadeDurationMs = null,
-            rows = listOf(TemplateRowEntry(target = null, propertyName = "dimmer", value = "pct:$level")),
+        palettes[uuid] = PaletteSnapshot(
+            paletteId = name.hashCode(), paletteUuid = uuid, name = name, fadeDurationMs = null,
+            rows = listOf(PaletteRowEntry(target = null, attribute = "dimmer", value = "pct:$level")),
         )
-        return LayerSource.template(name.hashCode(), uuid, name)
+        return LayerSource.palette(name.hashCode(), uuid, name)
     }
 
     private fun Rig.colourEffect(name: String): LayerSource {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
-        templates[uuid] = TemplateSnapshot(
-            templateId = name.hashCode(), templateUuid = uuid, name = name, fadeDurationMs = null,
+        palettes[uuid] = PaletteSnapshot(
+            paletteId = name.hashCode(), paletteUuid = uuid, name = name, fadeDurationMs = null,
             rows = emptyList(),
-            effect = StoredEffect(
-                effectType = "ColourCycle", category = "colour", propertyName = "rgbColour",
-                beatDivision = 4.0, blendMode = "OVERRIDE", distribution = "LINEAR", phaseOffset = 0.0,
-                elementMode = null, elementFilter = null, stepTiming = null, parameters = emptyMap(),
+            effect = StoredFx(
+                fxType = "ColourCycle", family = "colour", attribute = "rgbColour",
+                cycle = 4.0, blendMode = "OVERRIDE", order = "NORMAL", phaseOffset = 0.0,
+                elementMode = null, elementFilter = null, timing = null, parameters = emptyMap(),
                 speedMasterUuid = null, rateSpeedMasterUuid = null,
             ),
         )
-        return LayerSource.template(name.hashCode(), uuid, name)
+        return LayerSource.palette(name.hashCode(), uuid, name)
     }
 
     private fun Rig.look(name: String): LayerSource {
@@ -95,7 +95,7 @@ class ProgrammerLayerPressTest {
         looks[uuid] = LookSnapshot(
             lookId = name.hashCode(), lookUuid = uuid, name = name,
             rows = listOf("hex-1", "hex-2", "hex-3").map {
-                LookRowEntry(target = TargetRef.Fixture(it), propertyName = "rgbColour", value = "#00ff00")
+                LookRowEntry(target = TargetRef.Fixture(it), attribute = "rgbColour", value = "#00ff00")
             },
             effects = emptyList(),
         )
@@ -107,7 +107,7 @@ class ProgrammerLayerPressTest {
     private fun Rig.press(source: LayerSource, vararg keys: String, siblings: Set<UUID> = emptySet()) =
         stack.toggle(
             source, on(*keys),
-            propertyMask = if (source.isTemplate) templates.getValue(source.uuid).familyOf()?.name else null,
+            attributeMask = if (source.isPalette) palettes.getValue(source.uuid).familyOf()?.name else null,
             releaseSiblings = siblings,
         )
 
@@ -230,15 +230,15 @@ class ProgrammerLayerPressTest {
         val rig = newRig()
         rig.press(rig.colour("Red", "#ff0000"), "hex-1", "hex-3")
         val uuid = UUID.nameUUIDFromBytes("Spot".toByteArray())
-        rig.templates[uuid] = TemplateSnapshot(
-            templateId = 98, templateUuid = uuid, name = "Spot", fadeDurationMs = null,
+        rig.palettes[uuid] = PaletteSnapshot(
+            paletteId = 98, paletteUuid = uuid, name = "Spot", fadeDurationMs = null,
             rows = listOf(
-                TemplateRowEntry(target = TargetRef.Fixture("hex-1"), propertyName = "rgbColour", value = "#ffffff;policy=extract"),
-                TemplateRowEntry(target = TargetRef.Fixture("hex-2"), propertyName = "rgbColour", value = "#ffffff;policy=extract"),
+                PaletteRowEntry(target = TargetRef.Fixture("hex-1"), attribute = "rgbColour", value = "#ffffff;policy=extract"),
+                PaletteRowEntry(target = TargetRef.Fixture("hex-2"), attribute = "rgbColour", value = "#ffffff;policy=extract"),
             ),
         )
 
-        val outcome = rig.stack.toggle(LayerSource.template(98, uuid, "Spot"), on("hex-1", "hex-3"), propertyMask = "COLOUR")
+        val outcome = rig.stack.toggle(LayerSource.palette(98, uuid, "Spot"), on("hex-1", "hex-3"), attributeMask = "COLOUR")
 
         assertEquals(1, outcome.released)
         assertEquals(listOf("Red: hex-3", "Spot: hex-1,hex-3"), rig.layers(), "hex-3, which Spot does not reach, keeps Red")
@@ -283,11 +283,11 @@ class ProgrammerLayerPressTest {
 
     private fun Rig.perFixture(name: String, vararg keys: String): LayerSource {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
-        templates[uuid] = TemplateSnapshot(
-            templateId = name.hashCode(), templateUuid = uuid, name = name, fadeDurationMs = null,
-            rows = keys.map { TemplateRowEntry(target = TargetRef.Fixture(it), propertyName = "rgbColour", value = "#ffffff;policy=extract") },
+        palettes[uuid] = PaletteSnapshot(
+            paletteId = name.hashCode(), paletteUuid = uuid, name = name, fadeDurationMs = null,
+            rows = keys.map { PaletteRowEntry(target = TargetRef.Fixture(it), attribute = "rgbColour", value = "#ffffff;policy=extract") },
         )
-        return LayerSource.template(name.hashCode(), uuid, name)
+        return LayerSource.palette(name.hashCode(), uuid, name)
     }
 
     @Test
@@ -296,11 +296,11 @@ class ProgrammerLayerPressTest {
         rig.press(rig.colour("Red", "#ff0000"), "hex-2", "hex-3")
         val focus = rig.perFixture("Focus", "hex-1", "hex-2")
 
-        val on = rig.stack.toggle(focus, emptyList(), propertyMask = "COLOUR")
+        val on = rig.stack.toggle(focus, emptyList(), attributeMask = "COLOUR")
 
         assertEquals(1, on.released)
         assertEquals(listOf("Red: hex-3", "Focus: hex-1,hex-2"), rig.layers())
-        assertEquals("removed", rig.stack.toggle(focus, emptyList(), propertyMask = "COLOUR").action, "and a second press takes it off")
+        assertEquals("removed", rig.stack.toggle(focus, emptyList(), attributeMask = "COLOUR").action, "and a second press takes it off")
     }
 
     @Test
@@ -308,7 +308,7 @@ class ProgrammerLayerPressTest {
         // The shape Include leaves: the palette's layer with no targets of its own.
         val rig = newRig()
         val focus = rig.perFixture("Focus", "hex-1", "hex-2")
-        rig.stack.add(focus, emptyList(), propertyMask = "COLOUR")
+        rig.stack.add(focus, emptyList(), attributeMask = "COLOUR")
 
         assertEquals(1, rig.press(rig.colour("Red", "#ff0000"), "hex-1").released)
 

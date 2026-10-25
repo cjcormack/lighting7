@@ -8,7 +8,7 @@ import {
 
 /**
  * The canonical assignment-value string form shared by cue assignments and the programmer
- * (`Layer3Resolver.PropertyValue.serialize()` / `parseAssignmentValue()` in lighting7):
+ * (`Layer3Resolver.AttributeValue.serialize()` / `parseAssignmentValue()` in lighting7):
  *
  * - sliders and settings — `"0".."255"`
  * - colours — `"#rrggbb"` with optional `;wNNN` / `;aNNN` / `;uvNNN` tags, emitted only for
@@ -27,7 +27,7 @@ import {
  * programmer entry or a cue row any more, so both are simply unparseable strings here, handled by
  * the same fallback as junk: return null and let the caller sample live DMX.
  *
- * The one reference grammar still alive is `tmpl:{uuid}`, and it is legal only inside an **FX
+ * The one reference grammar still alive is `pal:{uuid}`, and it is legal only inside an **FX
  * colour parameter**, never as a value — `colourUtils.ts` owns it end to end and resolves it
  * itself. It never reaches this parser either.
  */
@@ -114,7 +114,7 @@ export function serializeColour(
  * different answer. The `ref:` value grammar retired in session 4 of the looks-and-layers plan, and
  * with it `PALETTE_REF_PREFIX` / `parsePaletteRefUuid` / `isPaletteRefValue` / `serializePaletteRef`.
  * The positional `P1` grammar went too. What replaced neither of them but occupies the same
- * ground is `tmpl:{uuid}` in `components/fx/colourUtils.ts` — an FX *parameter* grammar, not a
+ * ground is `pal:{uuid}` in `components/fx/colourUtils.ts` — an FX *parameter* grammar, not a
  * value grammar, pinned by `colourUtils.test.ts`.
  */
 export function parseProgrammerEntryValue(entry: { value: string }): ProgrammerParsedValue | null {

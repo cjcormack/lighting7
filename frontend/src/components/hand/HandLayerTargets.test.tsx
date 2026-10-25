@@ -31,20 +31,20 @@ function route(name: string) {
       return {
         unwrap: () =>
           verdict.ok
-            ? Promise.resolve({ action: toggleAction.current, effectCount: 0, skippedFamilies: [] })
+            ? Promise.resolve({ action: toggleAction.current, fxCount: 0 })
             : Promise.reject(new Error('refused')),
       }
     },
   ]
 }
-vi.mock('@/store/templates', () => ({
-  useToggleTemplateMutation: route('toggleTemplate'),
-  useApplyTemplateMutation: route('applyTemplate'),
+vi.mock('@/store/palettes', () => ({
+  useTogglePaletteMutation: route('togglePalette'),
+  useApplyPaletteMutation: route('applyPalette'),
 }))
 vi.mock('@/store/looks', () => ({
   useToggleLookMutation: route('toggleLook'),
   useApplyLookMutation: route('applyLook'),
-  useAbsorbLookEffectsMutation: route('absorb'),
+  useAbsorbLookFxMutation: route('absorb'),
 }))
 vi.mock('react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-router')>()),
@@ -89,12 +89,12 @@ import { HandPlaceStrip } from './HandTarget'
  */
 const wrap = (ui: ReactNode) => render(<Provider store={store}>{ui}</Provider>)
 
-const hold = (kind: 'TEMPLATE' | 'LOOK' | 'CUE', over: Record<string, unknown> = {}) => ({
+const hold = (kind: 'PALETTE' | 'LOOK' | 'CUE', over: Record<string, unknown> = {}) => ({
   kind,
   id: 8,
   uuid: `${kind.toLowerCase()}-uuid-8`,
-  template: kind === 'TEMPLATE' ? { id: 8, name: 'Amber', kind: 'value', isGeneric: true, rows: [] } : null,
-  look: kind === 'LOOK' ? { id: 8, name: 'Warm Wash', effectCount: 0, rowCount: 2 } : null,
+  palette: kind === 'PALETTE' ? { id: 8, name: 'Amber', kind: 'value', isGeneric: true, rows: [] } : null,
+  look: kind === 'LOOK' ? { id: 8, name: 'Warm Wash', fxCount: 0, rowCount: 2 } : null,
   cue: kind === 'CUE' ? { id: 8, name: 'Verse', entries: [{ stackId: 1, stackName: 'Act I', entryId: 108, cueNumber: '3' }] } : null,
   pickedUpOn: null,
   holdId: 1,
@@ -114,11 +114,11 @@ const cue = (): Cue =>
     layers: [
       {
         lookId: 3,
-        templateId: null,
+        paletteId: null,
         sortOrder: 1,
         enabled: true,
         targets: [],
-        propertyMask: null,
+        attributeMask: null,
         blendMode: 'OVERRIDE',
         amount: 1,
         stomp: false,
@@ -129,8 +129,8 @@ const cue = (): Cue =>
         randomWindowMs: null,
       },
     ],
-    adHocEffects: [],
-    propertyAssignments: [],
+    adHocFx: [],
+    attributeAssignments: [],
     triggers: [],
     autoAdvance: false,
     autoAdvanceDelayMs: null,
@@ -183,15 +183,15 @@ describe('the programmer’s layer stack', () => {
 
   it('presses the record onto the desk selection, then drops naming it', async () => {
     selection.targets = [{ type: 'fixture', key: 'par-1' }]
-    await withHold(<HandProgrammerLayerStrip />, hold('TEMPLATE'), true)
+    await withHold(<HandProgrammerLayerStrip />, hold('PALETTE'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
-    await waitFor(() => expect(handWs.dropped).toEqual(['template-uuid-8']))
+    await waitFor(() => expect(handWs.dropped).toEqual(['palette-uuid-8']))
     expect(pressed).toEqual([
       {
-        route: 'toggleTemplate',
-        args: { projectId: 1, templateId: 8, targets: [{ type: 'fixture', key: 'par-1' }], propertyMask: undefined, families: undefined },
+        route: 'togglePalette',
+        args: { projectId: 1, paletteId: 8, targets: [{ type: 'fixture', key: 'par-1' }], attributeMask: undefined, families: undefined },
       },
     ])
   })
@@ -200,15 +200,25 @@ describe('the programmer’s layer stack', () => {
     selection.following = false
     selection.targets = [{ type: 'fixture', key: 'par-1' }]
     selection.local = [{ type: 'group', key: 'wash' }]
+    await withHold(<HandProgrammerLayerStrip />, hold('PALETTE'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    await waitFor(() => expect(pressed).toHaveLength(1))
+    expect(pressed[0]).toMatchObject({
+      route: 'togglePalette',
+      args: { projectId: 1, paletteId: 8, targets: [{ type: 'group', key: 'wash' }] },
+    })
+  })
+
+  it('presses a Look naming no targets, whatever is selected', async () => {
+    selection.targets = [{ type: 'fixture', key: 'par-1' }]
     await withHold(<HandProgrammerLayerStrip />, hold('LOOK'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
     await waitFor(() => expect(pressed).toHaveLength(1))
-    expect(pressed[0]).toEqual({
-      route: 'toggleLook',
-      args: { projectId: 1, lookId: 8, targets: [{ type: 'group', key: 'wash' }], families: undefined },
-    })
+    expect(pressed[0]).toEqual({ route: 'toggleLook', args: { projectId: 1, lookId: 8 } })
   })
 
   it('says so when the place took the record off heads it already covered', async () => {
@@ -261,7 +271,7 @@ describe('a cue’s stack', () => {
   })
 
   it('undoes by patching back the layers read BEFORE the place', async () => {
-    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('TEMPLATE'), true)
+    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('PALETTE'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
@@ -276,10 +286,10 @@ describe('a cue’s stack', () => {
     expect(undone.layers[0]!.lookId).toBe(3)
   })
 
-  it('appends onto an unlinked window’s own selection', async () => {
+  it('appends a palette onto an unlinked window’s own selection', async () => {
     selection.following = false
     selection.local = [{ type: 'fixture', key: 'par-4' }]
-    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('LOOK'), true)
+    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('PALETTE'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
@@ -288,10 +298,19 @@ describe('a cue’s stack', () => {
     expect(sent.layers[1]!.targets).toEqual([{ type: 'fixture', key: 'par-4' }])
   })
 
-  it('with a host — the cue editor’s Looks tab — presses into the cue on its targets, never its own PATCH', async () => {
-    const pressLayer = vi.fn((_source: unknown, _targets: unknown, _families: unknown) =>
-      Promise.resolve({ action: 'applied' as const, cue: {} as never }),
-    )
+  it('appends a Look naming no targets, whatever is selected', async () => {
+    selection.targets = [{ type: 'fixture', key: 'par-4' }]
+    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('LOOK'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    await waitFor(() => expect(patches).toHaveLength(1))
+    const sent = patches[0] as { layers: { targets: unknown[] }[] }
+    expect(sent.layers[1]!.targets).toEqual([])
+  })
+
+  it('with a host — the cue editor’s Looks tab — presses into the cue, never its own PATCH', async () => {
+    const pressLayer = vi.fn((_source: unknown) => Promise.resolve({ action: 'applied' as const, cue: {} as never }))
     const pressCue = {
       projectId: 1,
       cueId: 5,
@@ -301,7 +320,7 @@ describe('a cue’s stack', () => {
       effects: [],
       pressLayer,
       landValues: vi.fn(() => 0),
-      pickEffect: vi.fn(() => Promise.resolve(true)),
+      pickFx: vi.fn(() => Promise.resolve(true)),
     }
     const host = { targets: [{ type: 'group' as const, key: 'Front' }] }
     await withHold(
@@ -315,7 +334,8 @@ describe('a cue’s stack', () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
     await waitFor(() => expect(pressLayer).toHaveBeenCalledTimes(1))
-    expect(pressLayer).toHaveBeenCalledWith({ lookId: 8 }, [{ type: 'group', key: 'Front' }], null)
+    // A Look names none of the host's targets: it lands whole.
+    expect(pressLayer).toHaveBeenCalledWith({ lookId: 8 })
     expect(patches).toHaveLength(0)
     expect(pressed).toHaveLength(0)
   })

@@ -45,13 +45,13 @@ import { MaskPicker, useMaskDraft } from '@/components/programmer/maskPicker'
 import {
   FAMILY_LABELS,
   formatFamilyList,
-  parsePropertyMask,
-  serializePropertyMask,
+  parseAttributeMask,
+  serializeAttributeMask,
 } from '@/lib/attributeFamily'
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import type { CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { LayerSource } from '@/api/cuesApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 
@@ -74,7 +74,7 @@ export interface LookStackLayer {
   source?: LayerSource | null
   enabled?: boolean
   targets: CueTarget[]
-  propertyMask?: string | null
+  attributeMask?: string | null
   blendMode?: string
   amount?: number
   stomp?: boolean
@@ -106,7 +106,7 @@ export interface LayerHandlers {
   onSetEnabled: (index: number, enabled: boolean) => void
   onSetAmount: (index: number, amount: number) => void
   onSetBlendMode: (index: number, blendMode: string) => void
-  onSetPropertyMask: (index: number, propertyMask: string | null) => void
+  onSetAttributeMask: (index: number, attributeMask: string | null) => void
   onSetStomp: (index: number, stomp: boolean) => void
   /**
    * Point the value grid at this layer's Look.
@@ -124,9 +124,10 @@ export interface LayerHandlers {
    */
   onDetach?: (index: number) => void
   /**
-   * Point this layer at the host's selection — the cue editor's Values selection
+   * Point a palette layer at the host's selection — the cue editor's Values selection
    * (show-cue-editing plan §4.1). Optional: only a host with a selection of its own passes it, and
-   * only the wide row draws it. The host says why it is refused through `targetsRefusal`.
+   * only the wide row draws it, never on a Look's layer, which names no targets. The host says why
+   * it is refused through `targetsRefusal`.
    */
   onSetTargets?: (index: number) => void
   /** Open the layer's Look or palette in its library. Optional, the cue editor's *Open Look*. */
@@ -148,7 +149,7 @@ interface LookStackProps<T extends LookStackLayer> {
    * the two ids come from different tables and can collide — and because a caller that has only one
    * library loaded should not have to fake the other.
    */
-  templatesById?: ReadonlyMap<number, TemplateSummary>
+  palettesById?: ReadonlyMap<number, PaletteSummary>
   /** False while the libraries are in flight, so a layer is never painted as missing mid-fetch. */
   looksLoaded: boolean
   handlers: LayerHandlers
@@ -191,7 +192,7 @@ interface LookStackProps<T extends LookStackLayer> {
 export function LookStack<T extends LookStackLayer>({
   layers,
   looksById,
-  templatesById,
+  palettesById,
   looksLoaded,
   handlers,
   onAdd,
@@ -232,7 +233,7 @@ export function LookStack<T extends LookStackLayer>({
             sortableId={ids[i]}
             layer={layer}
             index={i}
-            info={describeStackSource(layer.source, looksById, templatesById, looksLoaded)}
+            info={describeStackSource(layer.source, looksById, palettesById, looksLoaded)}
             handlers={handlers}
             sortable={!readOnly}
             showTargets
@@ -278,7 +279,7 @@ export interface StackSourceInfo {
   families: readonly AttributeFamily[]
   /** The library has loaded and does not hold it — the row draws as missing. */
   missing: boolean
-  isTemplate: boolean
+  isPalette: boolean
   /**
    * What that template holds (fx-templates D1), for the wave on the badge.
    *
@@ -286,20 +287,20 @@ export interface StackSourceInfo {
    * the template library knows a layer names a template but not which kind, and drawing the plain
    * chip is the honest answer there.
    */
-  templateKind?: 'value' | 'effect'
+  paletteKind?: 'value' | 'fx'
 }
 
 export function describeStackSource(
   source: LayerSource | null | undefined,
   looksById: ReadonlyMap<number, LookSummary>,
-  templatesById: ReadonlyMap<number, TemplateSummary> | undefined,
+  palettesById: ReadonlyMap<number, PaletteSummary> | undefined,
   librariesLoaded: boolean,
 ): StackSourceInfo {
   if (source == null) {
-    return { name: undefined, families: [], missing: librariesLoaded, isTemplate: false }
+    return { name: undefined, families: [], missing: librariesLoaded, isPalette: false }
   }
-  if (source.kind === 'TEMPLATE') {
-    const template = templatesById?.get(source.id)
+  if (source.kind === 'PALETTE') {
+    const template = palettesById?.get(source.id)
     return {
       name: source.name ?? template?.name,
       // A template is in exactly one family, and it is derived from its rows the same way a Look's
@@ -308,9 +309,9 @@ export function describeStackSource(
       // Only claimable when this caller actually has the template library: a cue's read surface may
       // not, and painting a layer as missing because the *caller* did not load a list would be a
       // lie about the data.
-      missing: librariesLoaded && templatesById != null && template == null,
-      isTemplate: true,
-      templateKind: template?.kind,
+      missing: librariesLoaded && palettesById != null && template == null,
+      isPalette: true,
+      paletteKind: template?.kind,
     }
   }
   const look = looksById.get(source.id)
@@ -318,7 +319,7 @@ export function describeStackSource(
     name: source.name ?? look?.name,
     families: look?.families ?? [],
     missing: librariesLoaded && look == null,
-    isTemplate: false,
+    isPalette: false,
   }
 }
 
@@ -363,8 +364,8 @@ export function LayerRow({
   // Resolved by `describeStackSource`: the layer's own `source.name` arrives with the read, so a row
   // is labelled before either library lands; the library lookup only adds the families and the
   // deleted-since-read case.
-  const { name, missing, isTemplate, templateKind } = info
-  const isEffect = templateKind === 'effect'
+  const { name, missing, isPalette, paletteKind } = info
+  const isFx = paletteKind === 'fx'
 
   return (
     <SortableShell sortable={sortable} sortableId={sortableId}>
@@ -402,16 +403,16 @@ export function LayerRow({
               <LookNameBadge
                 name={name}
                 missing={missing}
-                isTemplate={isTemplate}
-                isEffect={isEffect}
+                isPalette={isPalette}
+                isFx={isFx}
               />
             </button>
           ) : (
             <LookNameBadge
               name={name}
               missing={missing}
-              isTemplate={isTemplate}
-              isEffect={isEffect}
+              isPalette={isPalette}
+              isFx={isFx}
             />
           )}
 
@@ -423,7 +424,7 @@ export function LayerRow({
 
           {readOnly ? (
             <>
-              {layer.propertyMask && (
+              {layer.attributeMask && (
                 <Badge
                   variant="outline"
                   className="shrink-0 px-1.5 py-0 text-[10px]"
@@ -432,7 +433,7 @@ export function LayerRow({
                   {/* The same label the editable trigger shows, not the raw wire string. Wording one
                       surface `[COLOUR]` and the other `[Colour]` would undo the reason this row is
                       shared between them. */}
-                  [{formatFamilyList(parsePropertyMask(layer.propertyMask))}]
+                  [{formatFamilyList(parseAttributeMask(layer.attributeMask))}]
                 </Badge>
               )}
               {layer.blendMode && layer.blendMode !== 'OVERRIDE' && (
@@ -444,9 +445,9 @@ export function LayerRow({
           ) : (
             <LayerBlendMaskPopover
               blendMode={layer.blendMode ?? 'OVERRIDE'}
-              propertyMask={layer.propertyMask ?? null}
+              attributeMask={layer.attributeMask ?? null}
               onSetBlendMode={(mode) => handlers?.onSetBlendMode(index, mode)}
-              onSetPropertyMask={(mask) => handlers?.onSetPropertyMask(index, mask)}
+              onSetAttributeMask={(mask) => handlers?.onSetAttributeMask(index, mask)}
               timing={handlers?.onSetTiming != null ? layer : undefined}
               onSetTiming={(timing) => handlers?.onSetTiming?.(index, timing)}
             />
@@ -460,7 +461,7 @@ export function LayerRow({
                 <Badge
                   variant="outline"
                   className="shrink-0 px-1.5 py-0 text-[10px]"
-                  title="Switches off the effects of every layer below this one"
+                  title="Switches off the FX of every layer below this one"
                 >
                   STOMP
                 </Badge>
@@ -473,14 +474,16 @@ export function LayerRow({
                 />
               )}
 
-          {showTargets && (
+          {/* A Look's layer names no targets — it lands whole (absolute-looks plan D1) — so only a
+              palette's draws them. */}
+          {showTargets && isPalette && (
             <span className="flex min-w-0 flex-wrap items-center gap-1">
               {layer.targets.length === 0 ? (
                 <span
                   className="text-[10px] text-muted-foreground"
-                  title="No targets on the layer, so the look's own rows decide where it lands"
+                  title="No targets on the layer, so the palette's own rows decide where it lands"
                 >
-                  look&rsquo;s own targets
+                  its own heads
                 </span>
               ) : (
                 layer.targets.map((t) => (
@@ -498,7 +501,7 @@ export function LayerRow({
 
           <span className="flex-1" />
 
-          {!readOnly && handlers?.onSetTargets && (
+          {!readOnly && isPalette && handlers?.onSetTargets && (
             <Button
               type="button"
               variant="ghost"
@@ -519,7 +522,7 @@ export function LayerRow({
               size="icon"
               className="size-6 shrink-0 text-muted-foreground"
               aria-label={`Open ${layer.source.name}`}
-              title={isTemplate ? 'Open this palette in the palette library' : 'Open this look in the Looks library — a change there changes every cue that layers it'}
+              title={isPalette ? 'Open this palette in the palette library' : 'Open this look in the Looks library — a change there changes every cue that layers it'}
               onClick={() => handlers.onOpenSource?.(index)}
             >
               <ExternalLink className="size-3.5" />
@@ -607,9 +610,9 @@ export function LayerSettingsPopover({
         </div>
         <BlendMaskFields
           blendMode={layer.blendMode ?? 'OVERRIDE'}
-          propertyMask={layer.propertyMask ?? null}
+          attributeMask={layer.attributeMask ?? null}
           onSetBlendMode={(mode) => handlers.onSetBlendMode(index, mode)}
-          onSetPropertyMask={(mask) => handlers.onSetPropertyMask(index, mask)}
+          onSetAttributeMask={(mask) => handlers.onSetAttributeMask(index, mask)}
         />
         <div className="flex items-center justify-between gap-2">
           <StompButton
@@ -634,7 +637,7 @@ export function LayerSettingsPopover({
             variant="outline"
             size="sm"
             className="h-7 w-full"
-            title="Turn this layer into your own values and effects, with nothing on stage moving"
+            title="Turn this layer into your own values and FX, with nothing on stage moving"
             onClick={() => handlers.onDetach?.(index)}
           >
             <Unlink className="size-3.5" />
@@ -721,8 +724,8 @@ function StompButton({
         index === 0
           ? 'Stomp lower layers — no layer is below this one, so it suppresses nothing until this layer is moved up the stack'
           : stomp
-            ? 'Stomping: the effects of every layer below this one are switched off on the properties it sets'
-            : 'Stomp lower layers — switches off their effects on the properties this layer sets. Use it when an effect below is fighting a value here.'
+            ? 'Stomping: the FX of every layer below this one are switched off on the attributes it sets'
+            : 'Stomp lower layers — switches off their FX on the attributes this layer sets. Use it when an FX below is fighting a value here.'
       }
       onClick={onToggle}
     >
@@ -805,21 +808,21 @@ function SortableRow({
  */
 function LayerBlendMaskPopover({
   blendMode,
-  propertyMask,
+  attributeMask,
   onSetBlendMode,
-  onSetPropertyMask,
+  onSetAttributeMask,
   timing,
   onSetTiming,
 }: {
   blendMode: string
-  propertyMask: string | null
+  attributeMask: string | null
   onSetBlendMode: (blendMode: string) => void
-  onSetPropertyMask: (propertyMask: string | null) => void
+  onSetAttributeMask: (attributeMask: string | null) => void
   /** The layer's timing and masters, drawn under the blend and mask — a cue layer's only. */
   timing?: LayerTiming
   onSetTiming?: (timing: LayerTiming) => void
 }) {
-  const families = parsePropertyMask(propertyMask)
+  const families = parseAttributeMask(attributeMask)
   const masked = families.length > 0
   const nonDefaultBlend = blendMode !== 'OVERRIDE'
   const label = masked
@@ -855,9 +858,9 @@ function LayerBlendMaskPopover({
       >
         <BlendMaskFields
           blendMode={blendMode}
-          propertyMask={propertyMask}
+          attributeMask={attributeMask}
           onSetBlendMode={onSetBlendMode}
-          onSetPropertyMask={onSetPropertyMask}
+          onSetAttributeMask={onSetAttributeMask}
         />
         {timing != null && onSetTiming != null && (
           <div className="space-y-1.5 border-t pt-3">
@@ -873,14 +876,14 @@ function LayerBlendMaskPopover({
 /** The blend select and the mask picker — the body of both densities' popovers. */
 function BlendMaskFields({
   blendMode,
-  propertyMask,
+  attributeMask,
   onSetBlendMode,
-  onSetPropertyMask,
+  onSetAttributeMask,
 }: {
   blendMode: string
-  propertyMask: string | null
+  attributeMask: string | null
   onSetBlendMode: (blendMode: string) => void
-  onSetPropertyMask: (propertyMask: string | null) => void
+  onSetAttributeMask: (attributeMask: string | null) => void
 }) {
   return (
     <>
@@ -904,7 +907,7 @@ function BlendMaskFields({
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Asserts</Label>
-        <LayerMaskPicker propertyMask={propertyMask} onSetPropertyMask={onSetPropertyMask} />
+        <LayerMaskPicker attributeMask={attributeMask} onSetAttributeMask={onSetAttributeMask} />
       </div>
     </>
   )
@@ -912,21 +915,21 @@ function BlendMaskFields({
 
 /**
  * A layer's mask, written on every change. `MaskPicker` speaks families and the wire a
- * comma-separated string; `serializePropertyMask` folds both "none" and "all four" to null, so an
+ * comma-separated string; `serializeAttributeMask` folds both "none" and "all four" to null, so an
  * unmasked layer has exactly one representation. `useMaskDraft` holds the picker's own state over
  * that fold — switched off with all four ticked writes nothing and stays off, and nothing ticked
  * is never written — so *All attributes* does not switch itself back on under the pointer.
  */
 function LayerMaskPicker({
-  propertyMask,
-  onSetPropertyMask,
+  attributeMask,
+  onSetAttributeMask,
 }: {
-  propertyMask: string | null
-  onSetPropertyMask: (propertyMask: string | null) => void
+  attributeMask: string | null
+  onSetAttributeMask: (attributeMask: string | null) => void
 }) {
-  const stored = parsePropertyMask(propertyMask)
+  const stored = parseAttributeMask(attributeMask)
   const [draft, setDraft] = useMaskDraft(stored.length > 0 ? stored : null, (families) =>
-    onSetPropertyMask(serializePropertyMask(families ?? [])),
+    onSetAttributeMask(serializeAttributeMask(families ?? [])),
   )
   return <MaskPicker value={draft} onChange={setDraft} />
 }

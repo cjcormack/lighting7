@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.CompositionRule
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,18 +18,18 @@ class CueAssignmentResolverTest {
         priority: Int,
         fadeWeight: Double,
         targetKey: String = "fx-1",
-        propertyName: String = "dimmer",
+        attribute: String = "dimmer",
         value: UByte,
-        category: PropertyCategory = PropertyCategory.DIMMER,
+        category: AttributeCategory = AttributeCategory.DIMMER,
     ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
         fadeWeight = fadeWeight,
         targetKey = targetKey,
         targetIsGroup = false,
-        propertyName = propertyName,
+        attribute = attribute,
         category = category,
-        value = CueAssignmentResolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.AttributeValue.Slider(value),
     )
 
     private fun colour(
@@ -44,9 +44,9 @@ class CueAssignmentResolverTest {
         fadeWeight = fadeWeight,
         targetKey = targetKey,
         targetIsGroup = false,
-        propertyName = "rgbColour",
-        category = PropertyCategory.COLOUR,
-        value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(red, green, blue))),
+        attribute = "rgbColour",
+        category = AttributeCategory.COLOUR,
+        value = CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color(red, green, blue))),
     )
 
     private fun position(
@@ -64,9 +64,9 @@ class CueAssignmentResolverTest {
         fadeWeight = fadeWeight,
         targetKey = targetKey,
         targetIsGroup = targetIsGroup,
-        propertyName = "position",
-        category = PropertyCategory.PAN,
-        value = CueAssignmentResolver.PropertyValue.Position(pan, tilt),
+        attribute = "position",
+        category = AttributeCategory.PAN,
+        value = CueAssignmentResolver.AttributeValue.Position(pan, tilt),
         moveInDark = moveInDark,
     )
 
@@ -83,7 +83,7 @@ class CueAssignmentResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
         ))
         val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")]
-        assertIs<CueAssignmentResolver.PropertyValue.Slider>(v)
+        assertIs<CueAssignmentResolver.AttributeValue.Slider>(v)
         assertEquals(180u.toUByte(), v.value)
     }
 
@@ -94,7 +94,7 @@ class CueAssignmentResolverTest {
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 100u), // → 50 after scale
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(180u.toUByte(), v.value)
     }
 
@@ -106,7 +106,7 @@ class CueAssignmentResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, value = 200u),
-        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(50u.toUByte(), v.value)
     }
 
@@ -115,7 +115,7 @@ class CueAssignmentResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, value = 200u),
-        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(125u.toUByte(), v.value)
     }
 
@@ -124,7 +124,7 @@ class CueAssignmentResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.0, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 200u),
-        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(200u.toUByte(), v.value)
     }
 
@@ -133,7 +133,7 @@ class CueAssignmentResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 180u),
-        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(180u.toUByte(), v.value)
     }
 
@@ -143,7 +143,7 @@ class CueAssignmentResolverTest {
         val v = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.5, value = 50u),
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, value = 200u),
-        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        ))[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(125u.toUByte(), v.value)
     }
 
@@ -152,17 +152,17 @@ class CueAssignmentResolverTest {
         val assignment1 = CueAssignmentResolver.Assignment(
             cueId = 1, priority = 1, fadeWeight = 0.5,
             targetKey = "fx-1", targetIsGroup = false,
-            propertyName = "mode", category = PropertyCategory.SETTING,
+            attribute = "mode", category = AttributeCategory.SETTING,
             compositionOverride = CompositionRule.HTP,
-            value = CueAssignmentResolver.PropertyValue.Setting(60u),
+            value = CueAssignmentResolver.AttributeValue.Setting(60u),
         )
         val assignment2 = assignment1.copy(
             cueId = 2, priority = 2,
-            value = CueAssignmentResolver.PropertyValue.Setting(200u),
+            value = CueAssignmentResolver.AttributeValue.Setting(200u),
         )
         val v = resolver.resolve(listOf(assignment1, assignment2))[
             CueAssignmentResolver.Key.fixture("fx-1", "mode")
-        ] as CueAssignmentResolver.PropertyValue.Setting
+        ] as CueAssignmentResolver.AttributeValue.Setting
         assertEquals(130u.toUByte(), v.channelValue)
     }
 
@@ -173,7 +173,7 @@ class CueAssignmentResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 1.0, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 1.0, red = 0, green = 0, blue = 255),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.PropertyValue.Colour
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.AttributeValue.Colour
         assertEquals(Color(0, 0, 255), v.value.color)
     }
 
@@ -184,7 +184,7 @@ class CueAssignmentResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 0.4, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 0.6, red = 0, green = 0, blue = 255),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.PropertyValue.Colour
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.AttributeValue.Colour
         // Linear RGB: (1 - 0.6) * red + 0.6 * blue per channel.
         assertEquals(102, v.value.color.red, "red")
         assertEquals(0, v.value.color.green, "green")
@@ -195,11 +195,11 @@ class CueAssignmentResolverTest {
     fun `LTP slider interpolates during crossfade`() {
         val result = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.3, value = 100u,
-                category = PropertyCategory.PAN, propertyName = "pan"),
+                category = AttributeCategory.PAN, attribute = "pan"),
             slider(cueId = 2, priority = 2, fadeWeight = 0.7, value = 200u,
-                category = PropertyCategory.PAN, propertyName = "pan"),
+                category = AttributeCategory.PAN, attribute = "pan"),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.AttributeValue.Slider
         // outgoing 100 → incoming 200 at progress 0.7 → 100 + 100 * 0.7 = 170
         assertEquals(170u.toUByte(), v.value)
     }
@@ -214,11 +214,11 @@ class CueAssignmentResolverTest {
     fun `LTP crossfade start — outgoing at 1 pins outgoing value`() {
         val result = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u,
-                category = PropertyCategory.PAN, propertyName = "pan"),
+                category = AttributeCategory.PAN, attribute = "pan"),
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, value = 200u,
-                category = PropertyCategory.PAN, propertyName = "pan"),
+                category = AttributeCategory.PAN, attribute = "pan"),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.AttributeValue.Slider
         // progress 0 → 100 + (200 - 100) * 0 = 100 (outgoing value).
         assertEquals(100u.toUByte(), v.value)
     }
@@ -228,11 +228,11 @@ class CueAssignmentResolverTest {
         // Symmetric: progress reaches 1.0, outgoing filtered out (weight=0), winner stands.
         val result = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 0.0, value = 100u,
-                category = PropertyCategory.PAN, propertyName = "pan"),
+                category = AttributeCategory.PAN, attribute = "pan"),
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 200u,
-                category = PropertyCategory.PAN, propertyName = "pan"),
+                category = AttributeCategory.PAN, attribute = "pan"),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "pan")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(200u.toUByte(), v.value)
     }
 
@@ -242,7 +242,7 @@ class CueAssignmentResolverTest {
             colour(cueId = 1, priority = 1, fadeWeight = 1.0, red = 255, green = 0, blue = 0),
             colour(cueId = 2, priority = 2, fadeWeight = 0.0, red = 0, green = 0, blue = 255),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.PropertyValue.Colour
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "rgbColour")] as CueAssignmentResolver.AttributeValue.Colour
         assertEquals(Color(255, 0, 0), v.value.color, "outgoing red dominates at progress 0")
     }
 
@@ -252,31 +252,31 @@ class CueAssignmentResolverTest {
         val earlyIn = resolver.resolve(listOf(
             CueAssignmentResolver.Assignment(
                 cueId = 1, priority = 1, fadeWeight = 0.4, targetKey = "fx-1", targetIsGroup = false,
-                propertyName = "mode", category = PropertyCategory.SETTING,
-                value = CueAssignmentResolver.PropertyValue.Setting(10u),
+                attribute = "mode", category = AttributeCategory.SETTING,
+                value = CueAssignmentResolver.AttributeValue.Setting(10u),
             ),
             CueAssignmentResolver.Assignment(
                 cueId = 2, priority = 2, fadeWeight = 0.4, targetKey = "fx-1", targetIsGroup = false,
-                propertyName = "mode", category = PropertyCategory.SETTING,
-                value = CueAssignmentResolver.PropertyValue.Setting(50u),
+                attribute = "mode", category = AttributeCategory.SETTING,
+                value = CueAssignmentResolver.AttributeValue.Setting(50u),
             ),
         ))
-        val early = earlyIn[CueAssignmentResolver.Key.fixture("fx-1", "mode")] as CueAssignmentResolver.PropertyValue.Setting
+        val early = earlyIn[CueAssignmentResolver.Key.fixture("fx-1", "mode")] as CueAssignmentResolver.AttributeValue.Setting
         assertEquals(10u.toUByte(), early.channelValue, "below 50% should still be outgoing")
 
         val lateIn = resolver.resolve(listOf(
             CueAssignmentResolver.Assignment(
                 cueId = 1, priority = 1, fadeWeight = 0.6, targetKey = "fx-1", targetIsGroup = false,
-                propertyName = "mode", category = PropertyCategory.SETTING,
-                value = CueAssignmentResolver.PropertyValue.Setting(10u),
+                attribute = "mode", category = AttributeCategory.SETTING,
+                value = CueAssignmentResolver.AttributeValue.Setting(10u),
             ),
             CueAssignmentResolver.Assignment(
                 cueId = 2, priority = 2, fadeWeight = 0.6, targetKey = "fx-1", targetIsGroup = false,
-                propertyName = "mode", category = PropertyCategory.SETTING,
-                value = CueAssignmentResolver.PropertyValue.Setting(50u),
+                attribute = "mode", category = AttributeCategory.SETTING,
+                value = CueAssignmentResolver.AttributeValue.Setting(50u),
             ),
         ))
-        val late = lateIn[CueAssignmentResolver.Key.fixture("fx-1", "mode")] as CueAssignmentResolver.PropertyValue.Setting
+        val late = lateIn[CueAssignmentResolver.Key.fixture("fx-1", "mode")] as CueAssignmentResolver.AttributeValue.Setting
         assertEquals(50u.toUByte(), late.channelValue, "at/above 50% should flip to incoming")
     }
 
@@ -287,12 +287,12 @@ class CueAssignmentResolverTest {
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 100u).copy(targetIsGroup = true),
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 200u).copy(targetIsGroup = false),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(200u.toUByte(), v.value, "fixture-level contributor wins")
     }
 
     @Test
-    fun `per-property composition override switches HTP to LTP`() {
+    fun `per-attribute composition override switches HTP to LTP`() {
         // Dimmer category is HTP by default; override to LTP → highest priority wins, not max.
         val result = resolver.resolve(listOf(
             slider(cueId = 1, priority = 1, fadeWeight = 1.0, value = 200u)
@@ -300,7 +300,7 @@ class CueAssignmentResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 1.0, value = 50u)
                 .copy(compositionOverride = CompositionRule.LTP),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(50u.toUByte(), v.value, "LTP picks highest-priority (cueId 2 at 50) despite lower value")
     }
 
@@ -309,7 +309,7 @@ class CueAssignmentResolverTest {
         val result = resolver.resolve(listOf(
             slider(cueId = 1, priority = 5, fadeWeight = 0.2, value = 200u),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.PropertyValue.Slider
+        val v = result[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")] as CueAssignmentResolver.AttributeValue.Slider
         // Single HTP contributor: max(200 * 0.2) = 40.
         assertEquals(40u.toUByte(), v.value)
     }
@@ -332,7 +332,7 @@ class CueAssignmentResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.0, pan = 192u, tilt = 192u, moveInDark = true),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
         assertEquals(192u.toUByte(), v.pan, "snap to incoming pan at fade start")
         assertEquals(192u.toUByte(), v.tilt, "snap to incoming tilt at fade start")
     }
@@ -346,7 +346,7 @@ class CueAssignmentResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 192u, tilt = 192u, moveInDark = true),
         ))
-        val midPos = mid[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val midPos = mid[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
         assertEquals(192u.toUByte(), midPos.pan, "snap holds at progress 0.5")
         assertEquals(192u.toUByte(), midPos.tilt, "snap holds at progress 0.5")
 
@@ -357,7 +357,7 @@ class CueAssignmentResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.99, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.99, pan = 192u, tilt = 192u, moveInDark = true),
         ))
-        val latePos = late[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val latePos = late[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
         assertEquals(192u.toUByte(), latePos.pan, "snap holds at progress 0.99")
         assertEquals(192u.toUByte(), latePos.tilt, "snap holds at progress 0.99")
     }
@@ -371,7 +371,7 @@ class CueAssignmentResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.0, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.0, pan = 200u, tilt = 200u, moveInDark = false),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
         // At fade start the outgoing wins (priority tie-break by fadeWeight) and `winner.fadeWeight >= 1.0`
         // returns winner.value → outgoing position (0,0).
         assertEquals(0u.toUByte(), v.pan)
@@ -387,7 +387,7 @@ class CueAssignmentResolverTest {
             slider(cueId = 2, priority = 2, fadeWeight = 0.5, targetKey = "head-1", value = 255u),
             position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
         // Linear blend at progress 0.5: pan = 0 + (200 - 0) * 0.5 = 100. (winner = incoming on priority.)
         assertEquals(100u.toUByte(), v.pan)
         assertEquals(100u.toUByte(), v.tilt)
@@ -403,7 +403,7 @@ class CueAssignmentResolverTest {
             position(cueId = 1, priority = 1, fadeWeight = 0.5, pan = 0u, tilt = 0u),
             position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
         assertEquals(100u.toUByte(), v.pan, "no dimmer evidence → linear blend at 0.5")
         assertEquals(100u.toUByte(), v.tilt)
     }
@@ -421,7 +421,7 @@ class CueAssignmentResolverTest {
             position(cueId = 1, priority = 1, fadeWeight = 1.0, pan = 100u, tilt = 100u, moveInDark = true),
         ))
         // Single Position contributor → winner.value returned directly. Position(100,100).
-        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
         assertEquals(100u.toUByte(), v.pan)
         assertEquals(100u.toUByte(), v.tilt)
     }
@@ -443,8 +443,8 @@ class CueAssignmentResolverTest {
             position(cueId = 2, priority = 2, fadeWeight = 0.3, targetKey = "head-1", pan = 220u, tilt = 220u, moveInDark = true, targetIsGroup = true),
             position(cueId = 2, priority = 2, fadeWeight = 0.3, targetKey = "head-2", pan = 220u, tilt = 220u, moveInDark = true, targetIsGroup = true),
         ))
-        val h1 = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
-        val h2 = result[CueAssignmentResolver.Key.fixture("head-2", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val h1 = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
+        val h2 = result[CueAssignmentResolver.Key.fixture("head-2", "position")] as CueAssignmentResolver.AttributeValue.Position
         assertEquals(220u.toUByte(), h1.pan)
         assertEquals(220u.toUByte(), h2.pan)
     }
@@ -462,7 +462,7 @@ class CueAssignmentResolverTest {
             position(cueId = 1, priority = 1, fadeWeight = 0.5, pan = 0u, tilt = 0u),
             position(cueId = 2, priority = 2, fadeWeight = 0.5, pan = 200u, tilt = 200u, moveInDark = true),
         ))
-        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.PropertyValue.Position
+        val v = result[CueAssignmentResolver.Key.fixture("head-1", "position")] as CueAssignmentResolver.AttributeValue.Position
         assertEquals(200u.toUByte(), v.pan, "armed by cueId=1's dimmer=0")
         assertEquals(200u.toUByte(), v.tilt)
     }
@@ -471,45 +471,45 @@ class CueAssignmentResolverTest {
 
     @Test
     fun `parseAssignmentValue - slider from numeric string`() {
-        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "180")
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(180u.toUByte()), v)
+        val v = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.DIMMER, "dimmer", "180")
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(180u.toUByte()), v)
     }
 
     @Test
     fun `parseAssignmentValue - slider clamps out of range`() {
-        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.UV, "uv", "999")
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u.toUByte()), v)
-        val neg = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "-10")
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u.toUByte()), neg)
+        val v = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.UV, "uv", "999")
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u.toUByte()), v)
+        val neg = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.DIMMER, "dimmer", "-10")
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u.toUByte()), neg)
     }
 
     @Test
     fun `parseAssignmentValue - setting category produces Setting value`() {
-        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.SETTING, "mode", "64")
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(64u.toUByte()), v)
+        val v = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.SETTING, "mode", "64")
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(64u.toUByte()), v)
     }
 
     @Test
     fun `parseAssignmentValue - OTHER category produces Setting value`() {
-        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.OTHER, "misc", "32")
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(32u.toUByte()), v)
+        val v = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.OTHER, "misc", "32")
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(32u.toUByte()), v)
     }
 
     @Test
     fun `parseAssignmentValue - colour from hex`() {
-        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "#FF0000")
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
+        val v = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.COLOUR, "rgbColour", "#FF0000")
+        assertIs<CueAssignmentResolver.AttributeValue.Colour>(v)
         assertEquals(Color.RED, v.value.color)
     }
 
     @Test
     fun `parseAssignmentValue - a template reference is refused rather than read as white`() {
-        // The point of the refusal. `tmpl:` is legal in an *effect parameter* and nowhere else, and
+        // The point of the refusal. `pal:` is legal in an *effect parameter* and nowhere else, and
         // an assignment value is a literal. Without the guard `parseExtendedColour` would take this
         // unrecognised string and answer white — the exact silent failure the retired positional
         // grammar had when its list was empty.
         val v = CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "rgbColour", "tmpl:2f1c8a3e-0000-4000-8000-000000000001",
+            AttributeCategory.COLOUR, "rgbColour", "pal:2f1c8a3e-0000-4000-8000-000000000001",
         )
         assertNull(v, "a template reference in a value must be skipped with a warn, not resolved")
     }
@@ -518,15 +518,15 @@ class CueAssignmentResolverTest {
     fun `parseAssignmentValue - an unparseable colour still reads as white`() {
         // Unchanged behaviour, pinned beside the refusal above so the contrast is visible: only the
         // reference *shape* is rejected; ordinary junk keeps the loud-white fallback.
-        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "P1")
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
+        val v = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.COLOUR, "rgbColour", "P1")
+        assertIs<CueAssignmentResolver.AttributeValue.Colour>(v)
         assertEquals(Color.WHITE, v.value.color)
     }
 
     @Test
     fun `parseAssignmentValue - colour from named value with extended channels`() {
-        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", "red;w32;uv16")
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(v)
+        val v = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.COLOUR, "rgbColour", "red;w32;uv16")
+        assertIs<CueAssignmentResolver.AttributeValue.Colour>(v)
         assertEquals(Color.RED, v.value.color)
         assertEquals(32u.toUByte(), v.value.white)
         assertEquals(16u.toUByte(), v.value.uv)
@@ -534,69 +534,69 @@ class CueAssignmentResolverTest {
 
     @Test
     fun `parseAssignmentValue - position from pan-comma-tilt`() {
-        val v = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", "100,200")
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(100u.toUByte(), 200u.toUByte()), v)
+        val v = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.PAN, "position", "100,200")
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(100u.toUByte(), 200u.toUByte()), v)
     }
 
     @Test
     fun `parseAssignmentValue - position rejects malformed pair`() {
-        assertNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", "100"))
-        assertNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", "abc,def"))
-        assertNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", "1,2,3"))
+        assertNull(CueAssignmentResolver.parseAssignmentValue(AttributeCategory.PAN, "position", "100"))
+        assertNull(CueAssignmentResolver.parseAssignmentValue(AttributeCategory.PAN, "position", "abc,def"))
+        assertNull(CueAssignmentResolver.parseAssignmentValue(AttributeCategory.PAN, "position", "1,2,3"))
     }
 
     @Test
     fun `parseAssignmentValue - slider rejects non-numeric`() {
-        assertNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", "nope"))
+        assertNull(CueAssignmentResolver.parseAssignmentValue(AttributeCategory.DIMMER, "dimmer", "nope"))
     }
 
-    // ─── PropertyValue.serialize round-trip ───────────────────────────────
+    // ─── AttributeValue.serialize round-trip ───────────────────────────────
 
     @Test
     fun `serialize round-trip - slider`() {
-        val original = CueAssignmentResolver.PropertyValue.Slider(180u)
-        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.DIMMER, "dimmer", original.serialize())
+        val original = CueAssignmentResolver.AttributeValue.Slider(180u)
+        val parsed = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.DIMMER, "dimmer", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize round-trip - setting`() {
-        val original = CueAssignmentResolver.PropertyValue.Setting(64u)
-        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.SETTING, "mode", original.serialize())
+        val original = CueAssignmentResolver.AttributeValue.Setting(64u)
+        val parsed = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.SETTING, "mode", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize round-trip - plain colour`() {
-        val original = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(255, 128, 64)))
-        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", original.serialize())
+        val original = CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color(255, 128, 64)))
+        val parsed = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.COLOUR, "rgbColour", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize round-trip - extended colour with white amber and uv`() {
-        val original = CueAssignmentResolver.PropertyValue.Colour(
+        val original = CueAssignmentResolver.AttributeValue.Colour(
             ExtendedColour(Color(10, 20, 30), white = 40u, amber = 50u, uv = 60u)
         )
-        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, "rgbColour", original.serialize())
+        val parsed = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.COLOUR, "rgbColour", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize round-trip - position`() {
-        val original = CueAssignmentResolver.PropertyValue.Position(pan = 100u, tilt = 200u)
-        val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", original.serialize())
+        val original = CueAssignmentResolver.AttributeValue.Position(pan = 100u, tilt = 200u)
+        val parsed = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.PAN, "position", original.serialize())
         assertEquals(original, parsed)
     }
 
     @Test
     fun `serialize slider produces decimal string without u suffix`() {
-        assertEquals("0", CueAssignmentResolver.PropertyValue.Slider(0u).serialize())
-        assertEquals("255", CueAssignmentResolver.PropertyValue.Slider(255u).serialize())
+        assertEquals("0", CueAssignmentResolver.AttributeValue.Slider(0u).serialize())
+        assertEquals("255", CueAssignmentResolver.AttributeValue.Slider(255u).serialize())
     }
 
     @Test
     fun `serialize position emits pan-comma-tilt`() {
-        assertEquals("128,200", CueAssignmentResolver.PropertyValue.Position(128u, 200u).serialize())
+        assertEquals("128,200", CueAssignmentResolver.AttributeValue.Position(128u, 200u).serialize())
     }
 }

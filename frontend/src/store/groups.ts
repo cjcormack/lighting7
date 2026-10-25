@@ -8,8 +8,8 @@ import {
   GroupDetail,
   ApplyFxRequest,
   ApplyFxResponse,
-  GroupActiveEffect,
-  GroupPropertyDescriptor,
+  GroupActiveFx,
+  GroupAttributeDescriptor,
 } from "../api/groupsApi"
 
 // `GroupList` freshness is not wired here: the group register only changes inside
@@ -17,9 +17,9 @@ import {
 // tag. The groups WS layer that used to claim this job was deleted along with the backend's
 // `GroupSocket` — it had been announcing frames the server never sent.
 
-// Invalidate GroupActiveEffects when any FX changes (shared /fx/{id} endpoints)
+// Invalidate GroupActiveFxList when any FX changes (shared /fx/{id} endpoints)
 lightingApi.fx.subscribe(() => {
-  store.dispatch(restApi.util.invalidateTags(['GroupActiveEffects']))
+  store.dispatch(restApi.util.invalidateTags(['GroupActiveFxList']))
 })
 
 // === Types ===
@@ -39,12 +39,12 @@ export const groupsApi = restApi.injectEndpoints({
     }),
 
     // Get group properties (aggregated property descriptors for all members)
-    groupProperties: build.query<GroupPropertyDescriptor[], string>({
-      query: (name) => `groups/${encodeURIComponent(name)}/properties`,
+    groupAttributes: build.query<GroupAttributeDescriptor[], string>({
+      query: (name) => `groups/${encodeURIComponent(name)}/attributes`,
       providesTags: (_result, _error, name) => [{ type: 'GroupList', id: name }],
     }),
 
-    // The distribution-strategy vocabulary is not fetched: `DistributionStrategy` is a closed
+    // The distribution-strategy vocabulary is not fetched: `SpreadOrder` is a closed
     // union in `api/groupsApi.ts` and the pickers render it directly, so the route's list would
     // only be a second spelling of the same set.
 
@@ -52,7 +52,7 @@ export const groupsApi = restApi.injectEndpoints({
      * Reorder a group's members from the Groups views (venue-visit plan S7): the patch-group PUT's
      * `memberOrder`, sending only the members the view shows — the desk keeps every other member in
      * its place, and so does the optimistic update here ([placeInOrder]), which moves the runtime
-     * group's members (renumbering `index`, which `distributionSteps` is read by) and the list's
+     * group's members (renumbering `index`, which `orderSteps` is read by) and the list's
      * `memberKeys` so a drop does not snap back. A failure rolls both back; the errorToastMiddleware
      * reports it. The PUT reloads the rig before it answers, so the tags it invalidates refetch the
      * desk's own order.
@@ -91,10 +91,10 @@ export const groupsApi = restApi.injectEndpoints({
     }),
 
     // Get active effects for a group
-    groupActiveEffects: build.query<GroupActiveEffect[], string>({
+    groupActiveFx: build.query<GroupActiveFx[], string>({
       query: (groupName) => `groups/${encodeURIComponent(groupName)}/fx/active`,
       providesTags: (_result, _error, groupName) => [
-        { type: 'GroupActiveEffects', id: groupName },
+        { type: 'GroupActiveFxList', id: groupName },
       ],
     }),
 
@@ -107,7 +107,7 @@ export const groupsApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { groupName }) => [
         { type: 'GroupList', id: groupName },
-        { type: 'GroupActiveEffects', id: groupName },
+        { type: 'GroupActiveFxList', id: groupName },
         'GroupList',
       ],
     }),
@@ -122,8 +122,8 @@ export const groupsApi = restApi.injectEndpoints({
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, { groupName }) => [
-        { type: 'GroupActiveEffects', id: groupName },
-        'FixtureEffects',
+        { type: 'GroupActiveFxList', id: groupName },
+        'FixtureFx',
       ],
     }),
 
@@ -134,8 +134,8 @@ export const groupsApi = restApi.injectEndpoints({
         method: 'POST',
       }),
       invalidatesTags: (_result, _error, { groupName }) => [
-        { type: 'GroupActiveEffects', id: groupName },
-        'FixtureEffects',
+        { type: 'GroupActiveFxList', id: groupName },
+        'FixtureFx',
       ],
     }),
 
@@ -146,10 +146,10 @@ export const groupsApi = restApi.injectEndpoints({
         method: 'DELETE',
       }),
       invalidatesTags: (_result, _error, { groupName }) => [
-        { type: 'GroupActiveEffects', id: groupName },
+        { type: 'GroupActiveFxList', id: groupName },
         { type: 'GroupList', id: groupName },
         'GroupList',
-        'FixtureEffects',
+        'FixtureFx',
       ],
     }),
   }),
@@ -159,8 +159,8 @@ export const groupsApi = restApi.injectEndpoints({
 export const {
   useGroupListQuery,
   useGroupQuery,
-  useGroupPropertiesQuery,
-  useGroupActiveEffectsQuery,
+  useGroupAttributesQuery,
+  useGroupActiveFxQuery,
   useApplyGroupFxMutation,
   usePauseGroupFxMutation,
   useResumeGroupFxMutation,

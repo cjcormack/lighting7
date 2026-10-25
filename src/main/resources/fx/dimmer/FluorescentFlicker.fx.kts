@@ -1,11 +1,11 @@
 /*---
 id: FluorescentFlicker
 name: Fluorescent Flicker
-category: dimmer
+family: intensity
 outputType: SLIDER
-effectMode: STATEFUL
+fxMode: STATEFUL
 timingSource: WALL_CLOCK
-compatibleProperties: [dimmer, uv]
+compatibleAttributes: [dimmer, uv]
 parameters:
   - name: onLevel
     type: ubyte

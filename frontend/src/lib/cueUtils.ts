@@ -1,4 +1,4 @@
-import type { Cue, CueAdHocEffect, CueInput, CueLayer } from '@/api/cuesApi'
+import type { Cue, CueAdHocFx, CueInput, CueLayer } from '@/api/cuesApi'
 import { formatMs } from './formatMs'
 
 const CURVE_LABELS: Record<string, string> = {
@@ -99,11 +99,11 @@ export function cueLayerInput(layer: CueLayer): CueLayer {
     // Session 3: a layer applies a Look **or** a template. Missing from this rebuild it would be
     // dropped on every inline cue edit — and because both ids are optional now, the compiler would
     // not have said a word. Exactly the failure the comment below describes.
-    templateId: layer.templateId,
+    paletteId: layer.paletteId,
     sortOrder: layer.sortOrder,
     enabled: layer.enabled,
     targets: layer.targets,
-    propertyMask: layer.propertyMask,
+    attributeMask: layer.attributeMask,
     blendMode: layer.blendMode,
     amount: layer.amount,
     stomp: layer.stomp,
@@ -120,7 +120,7 @@ export function cueLayerInput(layer: CueLayer): CueLayer {
 }
 
 /** An effect as the cue's write takes it: everything but the read-only `uuid`. */
-export function cueEffectInput(effect: CueAdHocEffect): CueAdHocEffect {
+export function cueFxInput(effect: CueAdHocFx): CueAdHocFx {
   const { uuid: _uuid, ...input } = effect
   return input
 }
@@ -133,8 +133,8 @@ export function buildCueInput(cue: Cue): CueInput {
     // `uuid` is the response's name for the stored effect, never a write field: the desk matches an
     // effect by its target, property and type, so a body echoing it back would claim an identity
     // the write does not read.
-    adHocEffects: cue.adHocEffects.map(cueEffectInput),
-    propertyAssignments: cue.propertyAssignments.map((a) => ({ ...a })),
+    adHocFx: cue.adHocFx.map(cueFxInput),
+    attributeAssignments: cue.attributeAssignments.map((a) => ({ ...a })),
     triggers: cue.triggers.map((t) => ({
       triggerType: t.triggerType,
       delayMs: t.delayMs,

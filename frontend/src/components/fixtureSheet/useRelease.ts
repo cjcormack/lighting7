@@ -3,18 +3,18 @@ import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { useProgrammerRevision } from '@/store/programmer'
-import { isLocalEffect, partialSweepMessage } from '../fixtures-list/cellEffects'
+import { isLocalFx, partialSweepMessage } from '../fixtures-list/cellFx'
 import type { TargetCleared } from '@/api/programmerWsApi'
-import { useRemoveFxMutation, type ActiveEffect } from '@/store/fixtureFx'
+import { useRemoveFxMutation, type ActiveFx } from '@/store/fixtureFx'
 import type { Fixture } from '@/store/fixtures'
 import { sheetTargetKey, type SheetTarget } from './sheetContext'
-import { parseSelectionKey, selectionItems } from '@/lib/effectTargets'
+import { parseSelectionKey, selectionItems } from '@/lib/fxTargets'
 
 /**
  * Whether the desk's `clearTarget` stops [effect]: one on the target itself, or a selection whose
  * every item is inside it — a selection that also drives heads outside is left running.
  */
-function releaseStops(effect: ActiveEffect, keys: ReadonlySet<string>, ownGroup: string | null): boolean {
+function releaseStops(effect: ActiveFx, keys: ReadonlySet<string>, ownGroup: string | null): boolean {
   const items = selectionItems(effect)
   if (items != null) return items.length > 0 && items.every((t) => (t.type === 'group' ? t.key === ownGroup : keys.has(t.key)))
   return effect.isGroupTarget ? effect.targetKey === ownGroup : keys.has(effect.targetKey)
@@ -24,7 +24,7 @@ function releaseStops(effect: ActiveEffect, keys: ReadonlySet<string>, ownGroup:
 export interface HeldOnFixture {
   /** Property entries on the fixture or its heads, plus raw channels in its footprint. */
   values: number
-  /** Local effects on it: the operator's own, on the fixture or a head (`isLocalEffect`). */
+  /** Local effects on it: the operator's own, on the fixture or a head (`isLocalFx`). */
   effects: number
 }
 
@@ -39,7 +39,7 @@ export function fixtureHeadKeys(fixture: Fixture): Set<string> {
  * as `clearEntry` does), the raw-channel sideband inside the fixture's channels, and the local
  * effects targeted at it. A group effect is not counted — Release leaves it running and names it.
  */
-export function heldOnFixture(fixture: Fixture, effects: readonly ActiveEffect[] | undefined): HeldOnFixture {
+export function heldOnFixture(fixture: Fixture, effects: readonly ActiveFx[] | undefined): HeldOnFixture {
   return heldOnTarget({ type: 'fixture', fixture }, effects)
 }
 
@@ -48,7 +48,7 @@ export function heldOnFixture(fixture: Fixture, effects: readonly ActiveEffect[]
  * desk's `clearTarget` walks the group's fixtures), their sideband, the members' own local effects
  * and the group's own; another group's effect is left running and is not counted.
  */
-export function heldOnTarget(target: SheetTarget, effects: readonly ActiveEffect[] | undefined): HeldOnFixture {
+export function heldOnTarget(target: SheetTarget, effects: readonly ActiveFx[] | undefined): HeldOnFixture {
   // The desk's roots: the fixture, or the group's members — a member that is one head of a bar is
   // that head alone, with no footprint of its own (`clearTarget` walks only DMX fixtures' channels).
   const fixtures =
@@ -71,22 +71,22 @@ export function heldOnTarget(target: SheetTarget, effects: readonly ActiveEffect
   }
   const ownGroup = target.type === 'group' ? target.group.name : null
   const local = (effects ?? []).filter(
-    (e) => isLocalEffect(e) && releaseStops(e, keys, ownGroup),
+    (e) => isLocalFx(e) && releaseStops(e, keys, ownGroup),
   ).length
   return { values, effects: local }
 }
 
-/** The held line, `3 values · 2 effects held`, or null when the fixture holds nothing. */
+/** The held line, `3 values · 2 FX held`, or null when the fixture holds nothing. */
 export function heldLine({ values, effects }: HeldOnFixture): string | null {
   const parts = [
     values > 0 ? `${values} value${values === 1 ? '' : 's'}` : null,
-    effects > 0 ? `${effects} effect${effects === 1 ? '' : 's'}` : null,
+    effects > 0 ? `${effects} FX` : null,
   ].filter(Boolean)
   return parts.length === 0 ? null : `${parts.join(' · ')} held`
 }
 
 /** Re-counted on every programmer event; cheap — one pass over the entries. */
-export function useHeldOnTarget(target: SheetTarget, effects: readonly ActiveEffect[] | undefined): HeldOnFixture {
+export function useHeldOnTarget(target: SheetTarget, effects: readonly ActiveFx[] | undefined): HeldOnFixture {
   const revision = useProgrammerRevision()
   return useMemo(() => {
     void revision
@@ -96,10 +96,10 @@ export function useHeldOnTarget(target: SheetTarget, effects: readonly ActiveEff
 
 /** The toast a Release answers with, in the desk's own count. */
 export function releaseMessage(name: string, cleared: TargetCleared): string {
-  if (cleared.values === 0 && cleared.effects === 0) return `${name} held nothing to release`
+  if (cleared.values === 0 && cleared.fx === 0) return `${name} held nothing to release`
   const parts = [
     cleared.values > 0 ? `${cleared.values} value${cleared.values === 1 ? '' : 's'}` : null,
-    cleared.effects > 0 ? `${cleared.effects} effect${cleared.effects === 1 ? '' : 's'}` : null,
+    cleared.fx > 0 ? `${cleared.fx} FX` : null,
   ].filter(Boolean)
   return `Released ${parts.join(' and ')} on ${name}`
 }
@@ -141,9 +141,9 @@ export interface ReleaseTarget {
 export function releaseAllMessage(targets: readonly ReleaseTarget[], cleared: readonly TargetCleared[], alsoStopped = 0): string {
   if (targets.length === 1 && cleared.length === 1 && alsoStopped === 0) return releaseMessage(targets[0].name, cleared[0])
   const values = cleared.reduce((n, c) => n + c.values, 0)
-  const effects = cleared.reduce((n, c) => n + c.effects, 0) + alsoStopped
+  const fx = cleared.reduce((n, c) => n + c.fx, 0) + alsoStopped
   const on = `${targets.length} ${targets.length === 1 ? 'target' : 'targets'}`
-  return releaseMessage(on, { targetType: 'fixture', targetKey: '', values, effects, partial: [] })
+  return releaseMessage(on, { targetType: 'fixture', targetKey: '', values, fx, partial: [] })
 }
 
 /**
@@ -170,16 +170,16 @@ export function useReleaseTargets(targets: readonly ReleaseTarget[]): () => Prom
     const released = new Set(targets.map((t) => `${t.type}:${t.key}`))
     const reported = [
       ...new Map(
-        cleared.flatMap((c) => c.partial).filter((p) => !(p.isGroupTarget && groups.has(p.targetKey))).map((p) => [p.effectId, p]),
+        cleared.flatMap((c) => c.partial).filter((p) => !(p.isGroupTarget && groups.has(p.targetKey))).map((p) => [p.fxId, p]),
       ).values(),
     ]
     const within = reported.filter((p) => {
       const items = parseSelectionKey(p.targetKey)
       return items.length > 0 && items.every((t) => released.has(`${t.type}:${t.key}`))
     })
-    const stopped = await Promise.allSettled(within.map((p) => removeFx({ id: p.effectId, fixtureKey: p.targetKey }).unwrap()))
-    const stoppedIds = new Set(within.filter((_, i) => stopped[i].status === 'fulfilled').map((p) => p.effectId))
-    const partial = reported.filter((p) => !stoppedIds.has(p.effectId))
+    const stopped = await Promise.allSettled(within.map((p) => removeFx({ id: p.fxId, fixtureKey: p.targetKey }).unwrap()))
+    const stoppedIds = new Set(within.filter((_, i) => stopped[i].status === 'fulfilled').map((p) => p.fxId))
+    const partial = reported.filter((p) => !stoppedIds.has(p.fxId))
     if (cleared.length > 0) toast.success(releaseAllMessage(targets, cleared, stoppedIds.size))
     if (partial.length > 0) {
       toast.warning(targets.length === 1 ? partialSweepMessage(partial, `this ${targets[0].type}`) : partialSweepMessage(partial))

@@ -8,7 +8,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * One pan or tilt axis's **travel**, in degrees, as its `@FixtureProperty(degMin =, degMax =)`
+ * One pan or tilt axis's **travel**, in degrees, as its `@FixtureAttribute(degMin =, degMax =)`
  * declares it — a mover's pan 0–540, tilt 0–270. The mechanical centre (the DMX midpoint) is the
  * middle of the range. [zeroDeg] is where the head sits at a signed angle of 0, exactly as the
  * Stage view's `axisZeroDeg` reads it: the declared `forwardDeg`, else the centre.

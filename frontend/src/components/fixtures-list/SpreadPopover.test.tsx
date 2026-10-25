@@ -24,15 +24,15 @@ vi.mock('./useCellWriters', async (importOriginal) => ({
   useCellWriters: () => writers,
 }))
 
-const focusedTemplate = vi.hoisted(() => ({ current: null as unknown }))
-vi.mock('../programmer/FocusedTemplateLayer', () => ({ useFocusedTemplateLayer: () => focusedTemplate.current }))
+const focusedPalette = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('../programmer/FocusedPaletteLayer', () => ({ useFocusedPaletteLayer: () => focusedPalette.current }))
 const scopeState = vi.hoisted(() => ({ current: null as null | { kind: 'output' | 'local' } | { kind: 'layer'; layerId: number } }))
 vi.mock('../programmer/ProgrammerScope', () => ({ useProgrammerScope: () => scopeState.current }))
 const lookStore = vi.hoisted(() => ({
   current: null as null | {
-    setValue: (targetKey: string, propertyName: string, value: string) => void
+    setValue: (targetKey: string, attribute: string, value: string) => void
     lookName?: string
-    draft?: { get: (targetKey: string, propertyName: string) => string | undefined }
+    draft?: { get: (targetKey: string, attribute: string) => string | undefined }
     serverRows?: Map<string, unknown>
   },
 }))
@@ -40,7 +40,7 @@ vi.mock('../programmer/LookRowStore', () => ({ useLookRowStore: () => lookStore.
 // The desk's mask, distinguishable from the marquee's so the test can see which one a request carries.
 const deskMask = vi.hoisted(() => ({ current: ['POSITION'] as string[] | null }))
 vi.mock('../../store/selection', () => ({ usePressFamilies: () => deskMask.current }))
-vi.mock('../../store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
+vi.mock('../../store/palettes', () => ({ usePaletteListQuery: () => ({ data: [] }) }))
 // Store-bound; the endpoint picker is not under test here.
 vi.mock('../editor/ColourEditor', () => ({ ColourEditor: () => <div data-testid="colour-endpoint" /> }))
 
@@ -73,7 +73,7 @@ const FIXTURES = [
 function rowsOf(textFilter = '', expandedFixtures = new Set<string>()): Row[] {
   return buildRows({
     fixtures: FIXTURES,
-    groups: [{ name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] }],
+    groups: [{ name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' }],
     expandedGroups: new Set(['Front wash']),
     expandedFixtures,
     textFilter,
@@ -86,7 +86,7 @@ function column(col: SpreadColumn['col'], rowIds: string[], rows = rowsOf()): Sp
 
 const draw = (columns: SpreadColumn[], props: Partial<React.ComponentProps<typeof SpreadPopover>> = {}) =>
   render(<SpreadPopover columns={columns} projectId={6} desk {...props} />)
-const open = () => fireEvent.click(screen.getByRole('button', { name: 'Spread' }))
+const open = () => fireEvent.click(screen.getByRole('button', { name: 'Fan' }))
 const apply = () => fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 const lastRequest = () => spread.mock.calls.at(-1)![0]
 const radio = (group: string, name: string | RegExp) => within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name })
@@ -126,7 +126,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
-  focusedTemplate.current = null
+  focusedPalette.current = null
   scopeState.current = null
   lookStore.current = null
 })
@@ -163,12 +163,12 @@ describe('the targets (D4)', () => {
       ],
       // The press pair's mask — the desk's while following — not the marquee's.
       families: ['POSITION'],
-      property: 'dimmer',
+      attribute: 'dimmer',
       from: 'pct:0',
       to: 'pct:100',
       curve: 'LINE',
-      order: 'LINEAR',
-      parts: 1,
+      order: 'NORMAL',
+      runs: 1,
       over: 'HEADS',
       seed: 0,
       fadeMs: 0,
@@ -204,14 +204,14 @@ describe('the targets (D4)', () => {
     expect(lastRequest()).toMatchObject({ families: ['INTENSITY'] })
   })
 
-  it('offers the Property row from what the heads can take: Level · Strobe over a Dimmer marquee whose heads include a strobe', () => {
+  it('offers the Attribute row from what the heads can take: Level · Strobe over a Dimmer marquee whose heads include a strobe', () => {
     draw([column('dimmer', ['group:Front wash'])])
     open()
-    const properties = within(screen.getByRole('radiogroup', { name: 'Property' })).getAllByRole('radio')
-    expect(properties.map((r) => r.textContent)).toEqual(['Level', 'Strobe'])
-    fireEvent.click(radio('Property', 'Strobe'))
+    const attributes = within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio')
+    expect(attributes.map((r) => r.textContent)).toEqual(['Level', 'Strobe'])
+    fireEvent.click(radio('Attribute', 'Strobe'))
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'strobe' })
+    expect(lastRequest()).toMatchObject({ attribute: 'strobe' })
   })
 
   it('offers both families live when the marquee spans two, with the first column’s answered', () => {
@@ -221,25 +221,25 @@ describe('the targets (D4)', () => {
     expect(radio('Family', 'Colour')).toBeEnabled()
     fireEvent.click(radio('Family', 'Colour'))
     // The Colour family over an RGB and an RGBW head: Colour · White.
-    expect(within(screen.getByRole('radiogroup', { name: 'Property' })).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Colour', 'White'])
+    expect(within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Colour', 'White'])
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'rgbColour', families: ['POSITION'] })
+    expect(lastRequest()).toMatchObject({ attribute: 'rgbColour', families: ['POSITION'] })
   })
 
-  it('Over defaults to Heads, and offers Cells with the count where a selected fixture has cells', () => {
+  it('Over defaults to Heads, and offers Elements with the count where a selected fixture has cells', () => {
     const { unmount } = draw([column('dimmer', ['group:Front wash'])])
     open()
     expect(radio('Over', 'Heads')).toHaveAttribute('aria-checked', 'true')
     // Pressable with nothing to split: the desk spreads it as Heads.
-    expect(radio('Over', /^Cells/)).toBeEnabled()
-    expect(radio('Over', /^Cells/)).toHaveTextContent(/^Cells$/)
+    expect(radio('Over', /^Elements/)).toBeEnabled()
+    expect(radio('Over', /^Elements/)).toHaveTextContent(/^Elements$/)
     unmount()
     draw([column('dimmer', ['group:Front wash', 'fixture:bar'])])
     open()
-    const cells = radio('Over', /^Cells/)
+    const cells = radio('Over', /^Elements/)
     expect(cells).toBeEnabled()
     // The bar's two cells, and each par as one.
-    expect(cells).toHaveTextContent('Cells4')
+    expect(cells).toHaveTextContent('Elements4')
     fireEvent.click(cells)
     apply()
     expect(lastRequest()).toMatchObject({ over: 'CELLS' })
@@ -259,8 +259,8 @@ describe('the scope arm (D6)', () => {
     expect(lastRequest()).toMatchObject({ write: false })
     await answer({
       written: [
-        { target: { type: 'fixture', key: 'par-1' }, propertyName: 'dimmer', value: '0' },
-        { target: { type: 'fixture', key: 'par-2' }, propertyName: 'dimmer', value: '255' },
+        { target: { type: 'fixture', key: 'par-1' }, attribute: 'dimmer', value: '0' },
+        { target: { type: 'fixture', key: 'par-2' }, attribute: 'dimmer', value: '255' },
       ],
     })
     expect(setValue).toHaveBeenCalledTimes(2)
@@ -279,16 +279,16 @@ describe('the scope arm (D6)', () => {
     lookStore.current = {
       setValue: vi.fn(),
       lookName: 'Warm Wash',
-      draft: { get: (key, property) => (key === 'spot-1' && property === 'position' ? '100,90' : undefined) },
+      draft: { get: (key, attribute) => (key === 'spot-1' && attribute === 'position' ? '100,90' : undefined) },
       serverRows: new Map(),
     }
     draw([{ col: 'position', targets: expandSelectionToTargets(rows, new Set(['fixture:spot-1', 'fixture:spot-2'])) }], { scopeLabel: 'Warm Wash' })
     open()
-    fireEvent.click(radio('Spread mode', 'Fan'))
+    fireEvent.click(radio('Fan mode', 'About each position'))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Pan amount' }), { target: { value: '10' } })
     apply()
     expect(lastRequest()).toMatchObject({
-      mode: 'FAN',
+      mode: 'ABOUT',
       write: false,
       fan: { pan: 10 },
       base: [{ target: { type: 'fixture', key: 'spot-1' }, value: '100,90' }],
@@ -305,8 +305,8 @@ describe('the scope arm (D6)', () => {
     apply()
     await answer({
       written: [
-        { target: { type: 'fixture', key: 'par-1' }, propertyName: 'dimmer', value: '0' },
-        { target: { type: 'fixture', key: 'par-2' }, propertyName: 'dimmer', value: 'pct:100' },
+        { target: { type: 'fixture', key: 'par-1' }, attribute: 'dimmer', value: '0' },
+        { target: { type: 'fixture', key: 'par-2' }, attribute: 'dimmer', value: 'pct:100' },
       ],
     })
     expect(setValue).not.toHaveBeenCalled()
@@ -316,13 +316,13 @@ describe('the scope arm (D6)', () => {
     vi.clearAllMocks()
     open()
     apply()
-    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, propertyName: 'rgbColour', value: '#FF0000;policy=extract' }] })
+    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, attribute: 'rgbColour', value: '#FF0000;policy=extract' }] })
     expect(setValue).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/#FF0000;policy=extract/), expect.anything())
   })
 
   it('tells an intent string from a literal by shape', () => {
-    for (const intent of ['pct:50', 'pos:-12,30', 'deg:240,135', 'dmx:40', 'tmpl:0b2a4c6e-1111-2222-3333-444455556666', '#FF0000;policy=extract', '#ff0000;policy=rgbonly']) {
+    for (const intent of ['pct:50', 'pos:-12,30', 'deg:240,135', 'dmx:40', 'pal:0b2a4c6e-1111-2222-3333-444455556666', '#FF0000;policy=extract', '#ff0000;policy=rgbonly']) {
       expect(isIntentString(intent)).toBe(true)
     }
     for (const literal of ['0', '128', '255', '#ff0000', '#bb4400;w68', '#0044bb;w68;a10;uv200', '128,64']) {
@@ -333,15 +333,15 @@ describe('the scope arm (D6)', () => {
   it('refuses in Output scope — a read of the cook — with the reason Set and Clear give', () => {
     scopeState.current = { kind: 'output' }
     draw([column('dimmer', ['group:Front wash'])])
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('read of the cook'))
   })
 
   it('refuses onto a focused palette layer, and says why', () => {
-    focusedTemplate.current = { layerId: 7, templateId: 4, kind: 'effect' }
+    focusedPalette.current = { layerId: 7, paletteId: 4, kind: 'fx' }
     draw([column('dimmer', ['group:Front wash'])])
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('switch to Local'))
   })
@@ -363,7 +363,7 @@ describe('the plan kinds', () => {
 
   it('Gobo and Prism build no plan, and the button says which columns can', () => {
     draw([column('gobo', ['fixture:mover'])])
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('in a column it can drive'))
     expect(button).not.toHaveAttribute('title', expect.stringContaining('Select cells'))
@@ -371,7 +371,7 @@ describe('the plan kinds', () => {
 
   it('is disabled with nothing selected, and says so', () => {
     draw([])
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('Select cells'))
   })
@@ -384,7 +384,7 @@ describe('the plan kinds', () => {
   it('a Dimmer + Speed marquee draws a chooser between the desk-resolved plan and the raw one', () => {
     draw([column('dimmer', ['fixture:mover']), column('speed', ['fixture:mover', 'fixture:bar'])])
     open()
-    expect(screen.getByRole('combobox', { name: 'Column to spread' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Column to fan' })).toBeInTheDocument()
   })
 })
 
@@ -396,6 +396,6 @@ describe('the seed', () => {
     expect(document.querySelector('[data-spread-panel]')).not.toBeNull()
     expect(radio('Family', 'Colour')).toHaveAttribute('aria-checked', 'true')
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'rgbColour', from: '#FF0007;policy=extract', to: '#2456FF;policy=extract' })
+    expect(lastRequest()).toMatchObject({ attribute: 'rgbColour', from: '#FF0007;policy=extract', to: '#2456FF;policy=extract' })
   })
 })

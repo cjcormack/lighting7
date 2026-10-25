@@ -1,13 +1,13 @@
 import type { BuskCueEntry, BuskPad, BuskPadKind } from '@/api/buskApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
-import { templateRowsSwatch } from '@/lib/templateIntent'
-import { effectSpeedLabel } from '@/components/fx/fxConstants'
+import { paletteRowsSwatch } from '@/lib/paletteIntent'
+import { fxSpeedLabel } from '@/components/fx/fxConstants'
 import { isAroundSpelling } from '@/components/fx/centreMode'
-import { effectDynamicsParts } from '@/lib/effectDynamics'
+import { fxDynamicsParts } from '@/lib/fxDynamics'
 import { cn } from '@/lib/utils'
-import type { EffectPresence } from './buskingTypes'
+import type { FxPresence } from './buskingTypes'
 
 /**
  * Everything a pad draws, derived from the record the pad embeds.
@@ -16,7 +16,7 @@ import type { EffectPresence } from './buskingTypes'
  * same face without any hooks**: the ghost lives for a second, is rendered outside the pad's place
  * in the tree, and must not subscribe to anything. So `detail` here is always a finished string —
  * which is also why an effect template's live speed-master label is *not* in it. The pad itself
- * renders `EffectPadDetail` over the top; the ghost shows the frozen line and is none the worse.
+ * renders `FxPadDetail` over the top; the ghost shows the frozen line and is none the worse.
  */
 export interface PadFace {
   kind: BuskPadKind
@@ -25,7 +25,7 @@ export interface PadFace {
   detail: string
   /** A colour, for a generic single-row colour template. Null for everything else. */
   swatch: string | null
-  isEffect: boolean
+  isFx: boolean
   /** Tooltip only: the mock has room for a name and one line, and a third pushed the pad taller. */
   notes: string | null
   cueNumber: string | null
@@ -37,13 +37,13 @@ export interface PadFace {
  *
  * Keeps `isOfferable`'s per-fixture exclusion, for its reason: such a template holds one colour
  * *per head*, so there is no single one to show. The row-count exclusion is gone with the rule that
- * made it necessary — [templateRowsSwatch] reads the *colour* row rather than `rows[0]`, so a
+ * made it necessary — [paletteRowsSwatch] reads the *colour* row rather than `rows[0]`, so a
  * template holding a hex plus an explicit amber draws its hex instead of whichever row sorted first.
  * An effect template holds no rows at all and falls out of that function as null.
  */
-export function templateSwatch(template: TemplateSummary): string | null {
+export function paletteSwatch(template: PaletteSummary): string | null {
   if (!template.isGeneric) return null
-  return templateRowsSwatch(template.rows)
+  return paletteRowsSwatch(template.rows)
 }
 
 /**
@@ -53,8 +53,8 @@ export function templateSwatch(template: TemplateSummary): string | null {
  */
 export function describeLookContents(look: LookSummary): string {
   const parts: string[] = []
-  if (look.effectCount > 0) {
-    parts.push(`${look.effectCount} ${look.effectCount === 1 ? 'effect' : 'effects'}`)
+  if (look.fxCount > 0) {
+    parts.push(`${look.fxCount} FX`)
   }
   if (look.rowCount > 0) {
     parts.push(`${look.rowCount} ${look.rowCount === 1 ? 'value' : 'values'}`)
@@ -64,17 +64,17 @@ export function describeLookContents(look: LookSummary): string {
   return parts.length === 0 ? 'empty' : parts.join(' · ')
 }
 
-export function describeTemplate(template: TemplateSummary): string {
-  if (template.kind === 'effect') {
-    if (template.effect == null) return 'Effect'
+export function describePalette(template: PaletteSummary): string {
+  if (template.kind === 'fx') {
+    if (template.fx == null) return 'FX'
     // No master label: that reads a live bank through a hook, and this string has to be renderable
-    // by the overlay ghost. The pad draws `EffectPadDetail` over it and gains the `· M2`.
-    const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource, template.effect.seconds)
+    // by the overlay ghost. The pad draws `FxPadDetail` over it and gains the `· M2`.
+    const speed = fxSpeedLabel(template.fx.cycle, template.fx.timingSource, template.fx.seconds)
     return [
-      template.effect.effectType,
+      template.fx.fxType,
       speed,
-      isAroundSpelling(template.effect) ? 'around' : null,
-      ...effectDynamicsParts(template.effect),
+      isAroundSpelling(template.fx) ? 'around' : null,
+      ...fxDynamicsParts(template.fx),
     ]
       .filter(Boolean)
       .join(' · ')
@@ -87,11 +87,11 @@ export function describeTemplate(template: TemplateSummary): string {
 }
 
 const EMPTY_FACE: PadFace = {
-  kind: 'TEMPLATE',
+  kind: 'PALETTE',
   name: 'Missing',
   detail: 'this record is gone',
   swatch: null,
-  isEffect: false,
+  isFx: false,
   notes: null,
   cueNumber: null,
   stackName: null,
@@ -123,14 +123,14 @@ export function cueStacksLabel(entries: readonly BuskCueEntry[]): string {
  * could be mid-flight) still draws something rather than throwing.
  */
 export function padFaceOf(pad: BuskPad): PadFace {
-  if (pad.kind === 'TEMPLATE' && pad.template != null) {
+  if (pad.kind === 'PALETTE' && pad.palette != null) {
     return {
-      kind: 'TEMPLATE',
-      name: pad.template.name,
-      detail: describeTemplate(pad.template),
-      swatch: templateSwatch(pad.template),
-      isEffect: pad.template.kind === 'effect',
-      notes: pad.template.notes,
+      kind: 'PALETTE',
+      name: pad.palette.name,
+      detail: describePalette(pad.palette),
+      swatch: paletteSwatch(pad.palette),
+      isFx: pad.palette.kind === 'fx',
+      notes: pad.palette.notes,
       cueNumber: null,
       stackName: null,
     }
@@ -141,7 +141,7 @@ export function padFaceOf(pad: BuskPad): PadFace {
       name: pad.look.name,
       detail: describeLookContents(pad.look),
       swatch: null,
-      isEffect: false,
+      isFx: false,
       notes: pad.look.notes,
       cueNumber: null,
       stackName: null,
@@ -154,7 +154,7 @@ export function padFaceOf(pad: BuskPad): PadFace {
       name: pad.cue.name,
       detail: stacks,
       swatch: null,
-      isEffect: false,
+      isFx: false,
       notes: null,
       cueNumber: cueNumbersLabel(pad.cue.entries ?? []),
       stackName: stacks,
@@ -183,13 +183,13 @@ export const PAD_FACE_SHELL = 'flex-col items-center justify-center text-center'
  *
  * An effect template holds no rows, so there is no value to preview — the glyph the whole desk uses
  * for FX stands in its place. The four surfaces that draw it (`BuskPad`, `LibraryPalette`,
- * `TemplateStrip`'s chip and `ApplyPicker`'s pad) had four hand-written copies of this class
+ * `PaletteStrip`'s chip and `ApplyPicker`'s pad) had four hand-written copies of this class
  * string, which is the drift this module exists to prevent; the icon is `AudioWaveform` at every one
  * of them, and that half is stated here rather than enforced, because a lucide import cannot live in
  * a `.ts` file. Other sizes elsewhere (`size-3.5` in a menu, `size-3 text-white` on a coloured tile)
  * are deliberately not this — they are not a pad's swatch slot.
  */
-export const EFFECT_GLYPH_CLASS = 'size-3 shrink-0 text-muted-foreground'
+export const FX_GLYPH_CLASS = 'size-3 shrink-0 text-muted-foreground'
 
 /**
  * The presence ladder: how much of the selection a record covers, as a shell.
@@ -198,7 +198,7 @@ export const EFFECT_GLYPH_CLASS = 'size-3 shrink-0 text-muted-foreground'
  * drag ghost (so a lifted pad looks like itself), and the FX cue-slot overlay's Look tile
  * (`slotLitClass`). A tweak to the ring belongs in this one function.
  */
-export function padPresenceClass(presence: EffectPresence): string {
+export function padPresenceClass(presence: FxPresence): string {
   return cn(
     presence === 'none' && 'border-border bg-card',
     presence === 'some' && 'border-primary/40 bg-primary/10',

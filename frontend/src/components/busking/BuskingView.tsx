@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useDispatch, useSelector } from 'react-redux'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useCueRings } from '@/store/cueHolds'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { enterBuskEdit, exitBuskEdit, selectBuskEdit } from '@/store/buskEditSlice'
@@ -49,11 +49,10 @@ import { toast } from 'sonner'
 import { lastPadOfBank, libraryStarterLayout, recordsOnPage, removePad, toLayoutRequest } from '@/lib/buskLayout'
 import { recordsOnRig } from '@/lib/buskRig'
 import { buskAddBody } from '@/lib/buskAdd'
-import { skippedRowsMessage } from '@/lib/selectionMask'
 import { followIsForced, relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
 import { windowName } from '@/lib/windowIdentity'
 import type { BuskPad } from '@/api/buskApi'
-import { lookLayerPresence, templateLayerPresence } from './lookPresence'
+import { lookPresence, paletteLayerPresence } from './lookPresence'
 import { COMPACT_FOCUS_WORD_CLASS, EDIT_WORD_CLASS, FOCUS_WORD_CLASS, RigBand, VERB_WORD_CLASS } from './RigBand'
 import { RigStrip, RigStripContent } from './RigStrip'
 import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
@@ -67,7 +66,7 @@ import { LibraryPalette } from './LibraryPalette'
 import { useBuskingState } from './useBuskingState'
 import { useSelectionVerbs } from './selectionVerbs'
 import type { PadBehaviour } from './padBehaviour'
-import { type EffectPresence } from './buskingTypes'
+import { type FxPresence } from './buskingTypes'
 import { cueOpenPath } from '@/lib/cuesTable'
 
 /**
@@ -140,11 +139,10 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * programmer's palette strip's now, and the AI's.
  *
  * **There is no empty-selection dim.** The pools used to grey themselves out with nothing selected,
- * which is now wrong in three ways: a per-fixture template names its own heads, a Look with no
- * deferred effect names its own fixtures, and a cue has no targets at all — so all three are
- * legitimately pressable with an empty selection. The two that genuinely need one are refused *by
- * name* server-side (`PALETTE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`), and a sentence saying so
- * is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim has
+ * which is now wrong in three ways: a per-fixture palette names its own heads, a Look lands whole,
+ * and a cue has no targets at all — so all three are legitimately pressable with an empty
+ * selection. The one that genuinely needs one, a generic palette, is refused *by name* server-side
+ * (`PALETTE_NEEDS_SELECTION`), and a sentence saying so is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim has
  * nothing left to be per.
  *
  * **No transport of its own.** The stack cards and the pinned-cue grid went with the layout; GO and
@@ -182,7 +180,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   const verbs = useSelectionVerbs(selectedTargets)
   const { data: pages, isLoading } = useBuskPagesQuery(projectId)
   const { data: rig } = useBuskRigQuery(projectId)
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const { data: looks } = useLookListQuery({ projectId })
   const cueRings = useCueRings(projectId)
   const { editing } = useSelector(selectBuskEdit)
@@ -374,13 +372,13 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   }, [editing, activePage, dispatch])
 
   const presenceOf = useCallback(
-    (pad: BuskPad): EffectPresence => {
+    (pad: BuskPad): FxPresence => {
       const applied = programmerApplied ?? []
-      if (pad.kind === 'TEMPLATE' && pad.template != null) {
-        return templateLayerPresence(applied, selectedLayerTargets, pad.template.id)
+      if (pad.kind === 'PALETTE' && pad.palette != null) {
+        return paletteLayerPresence(applied, selectedLayerTargets, pad.palette.id)
       }
       if (pad.kind === 'LOOK' && pad.look != null) {
-        return lookLayerPresence(applied, selectedLayerTargets, pad.look.id)
+        return lookPresence(applied, pad.look.id)
       }
       return 'none'
     },
@@ -399,9 +397,9 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
         // The pair a press acts on — the desk's while following, this tab's own when unlinked
         // (multi-screen plan D4) — and never pre-refused from the mask held here: the mask is
         // tested on the on arm only, so a lit pad still comes off under a mask that excludes it,
-        // and only the desk knows which arm this is. A refusal (`PALETTE_OUTSIDE_MASK`,
-        // `LOOK_OUTSIDE_MASK`) arrives as a 400 whose message names both families, and
-        // `errorToastMiddleware` toasts it as it toasts every rejected mutation.
+        // and only the desk knows which arm this is. A refusal (`PALETTE_OUTSIDE_MASK`) arrives as
+        // a 400 whose message names both families, and `errorToastMiddleware` toasts it as it
+        // toasts every rejected mutation. A Look pad's press ignores the pair: a Look lands whole.
         void pressPad({
           projectId,
           padId: pad.id,
@@ -409,25 +407,17 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
           families: families ?? undefined,
         })
           .unwrap()
-          .then((result) => {
-            // The skip is reported on the pressing window (D6) — this one. The marquee's window
-            // learns the way it learns every layer: `programmer.layerState` carries the mask, and
-            // `LookStack` draws the badge. *Rows*, not the family: the cook masks a layer's rows
-            // and not its effects, so a Look's effect in a skipped family still runs.
-            const message = skippedRowsMessage(result.skippedFamilies ?? [], families)
-            if (message != null) toast.warning(message)
-          })
           .catch(ignoreReportedError)
       },
       onApplyValues: (pad) => {
-        if (pad.kind === 'TEMPLATE' && pad.template != null) {
-          void pressValues({ kind: 'template', template: pad.template }, 'asValues')
+        if (pad.kind === 'PALETTE' && pad.palette != null) {
+          void pressValues({ kind: 'palette', palette: pad.palette }, 'asValues')
         } else if (pad.kind === 'LOOK' && pad.look != null) {
           void pressValues({ kind: 'look', look: pad.look }, 'asValues')
         }
       },
       onInspect: (pad) => {
-        if (pad.kind === 'TEMPLATE') navigate(`/projects/${projectId}/palettes`)
+        if (pad.kind === 'PALETTE') navigate(`/projects/${projectId}/palettes`)
         else if (pad.kind === 'LOOK') navigate(`/projects/${projectId}/looks`)
         // A cue opens at its first entry; a loose cue in the Cues table, filtered to it.
         else if (pad.cue != null) navigate(cueOpenPath(projectId, pad.cue))
@@ -436,7 +426,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       // cue, and placing it elsewhere makes a second pad rather than moving this one. (The MIDI
       // door is `PickUpPad(padUuid)` and resolves to the same record server-side.)
       onPickUp: (pad) => {
-        const id = pad.template?.id ?? pad.look?.id ?? pad.cue?.id
+        const id = pad.palette?.id ?? pad.look?.id ?? pad.cue?.id
         if (id != null) handPickUp(pad.kind, id)
       },
       // A place is this window's own append followed by `hand.drop` (D12). The append answers the

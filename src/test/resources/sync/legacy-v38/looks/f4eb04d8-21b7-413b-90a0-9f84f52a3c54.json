@@ -1,0 +1,46 @@
+{
+  "fx": [
+    {
+      "attribute": "dimmer",
+      "blendMode": "MULTIPLY",
+      "cycle": 1.0,
+      "family": "intensity",
+      "fxType": "SquareWave",
+      "order": "NORMAL",
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "0f854739-f612-431f-97ad-cfe058291983"
+    },
+    {
+      "attribute": "dimmer",
+      "blendMode": "OVERRIDE",
+      "cycle": 1.0,
+      "family": "intensity",
+      "fxType": "SineWave",
+      "order": "NORMAL",
+      "sortOrder": 1,
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "5882e8b6-c9b9-4bac-a3c7-41b6f0999d90"
+    },
+    {
+      "attribute": "position",
+      "blendMode": "OVERRIDE",
+      "cycle": 4.0,
+      "family": "position",
+      "fxType": "Circle",
+      "order": "NORMAL",
+      "parameters": {
+        "panCenter": "100",
+        "panRadius": "30",
+        "tiltCenter": "140"
+      },
+      "sortOrder": 2,
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "2cbe543a-7781-436a-983a-d49291d51e2a"
+    }
+  ],
+  "name": "stacked",
+  "uuid": "f4eb04d8-21b7-413b-90a0-9f84f52a3c54"
+}

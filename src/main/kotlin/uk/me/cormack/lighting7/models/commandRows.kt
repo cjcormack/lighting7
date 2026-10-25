@@ -35,16 +35,16 @@ fun stripCommandRows(project: DaoProject): Int {
         rig.groups().associate { g -> g.name to rig.members(g).map { it.fixturePatch.fixtureTypeKey } }
     }
 
-    fun namedCommand(type: String?, key: String?, property: String?) = index.refusal(type, key, property, "") != null
+    fun namedCommand(type: String?, key: String?, attribute: String?) = index.refusal(type, key, attribute, "") != null
 
-    fun inSharedBand(targetType: String?, targetKey: String?, property: String, value: String): Boolean {
+    fun inSharedBand(targetType: String?, targetKey: String?, attribute: String, value: String): Boolean {
         val level = value.trim().toIntOrNull()?.takeIf { it in 0..255 } ?: return false
         val types = when (targetType?.lowercase()) {
             "fixture" -> listOfNotNull(targetKey?.let { typeByKey[it] })
             "group" -> memberTypesByGroup[targetKey].orEmpty()
             else -> return false
         }
-        return types.any { t -> FixtureCommands.sharedBandsForTypeKey(t)[property]?.any { level in it.range } == true }
+        return types.any { t -> FixtureCommands.sharedBandsForTypeKey(t)[attribute]?.any { level in it.range } == true }
     }
 
     var stripped = 0
@@ -53,33 +53,33 @@ fun stripCommandRows(project: DaoProject): Int {
         DaoLookRow.find { DaoLookRows.look inList looks }
             .filter {
                 val key = it.elementKey?.let { e -> "${it.targetKey}.$e" } ?: it.targetKey
-                namedCommand(it.targetType, key, it.propertyName) ||
-                    (it.elementKey == null && inSharedBand(it.targetType, it.targetKey, it.propertyName, it.value))
+                namedCommand(it.targetType, key, it.attribute) ||
+                    (it.elementKey == null && inSharedBand(it.targetType, it.targetKey, it.attribute, it.value))
             }
             .forEach { it.delete(); stripped++ }
-        DaoLookEffect.find { DaoLookEffects.look inList looks }
-            .filter { namedCommand(it.targetType, it.targetKey, it.propertyName) }
+        DaoLookFxEntity.find { DaoLookFx.look inList looks }
+            .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
-    val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.map { it.id }
+    val templates = DaoPalette.find { DaoPalettes.project eq project.id }.map { it.id }
     if (templates.isNotEmpty()) {
-        DaoTemplateRow.find { DaoTemplateRows.template inList templates }
-            .filter { namedCommand(it.targetType, it.targetKey, it.propertyName) }
+        DaoPaletteRow.find { DaoPaletteRows.palette inList templates }
+            .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoTemplateEffect.find { DaoTemplateEffects.template inList templates }
-            .filter { namedCommand(null, null, it.propertyName) }
+        DaoPaletteFxEntity.find { DaoPaletteFx.palette inList templates }
+            .filter { namedCommand(null, null, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     val cues = DaoCue.find { DaoCues.project eq project.id }.map { it.id }
     if (cues.isNotEmpty()) {
-        DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList cues }
+        DaoCueAttributeAssignment.find { DaoCueAttributeAssignments.cue inList cues }
             .filter {
-                namedCommand(it.targetType, it.targetKey, it.propertyName) ||
-                    inSharedBand(it.targetType, it.targetKey, it.propertyName, it.value)
+                namedCommand(it.targetType, it.targetKey, it.attribute) ||
+                    inSharedBand(it.targetType, it.targetKey, it.attribute, it.value)
             }
             .forEach { it.delete(); stripped++ }
-        DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList cues }
-            .filter { namedCommand(it.targetType, it.targetKey, it.propertyName) }
+        DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList cues }
+            .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     return stripped

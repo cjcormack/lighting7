@@ -5,12 +5,12 @@ import type { UpdateFxRequest } from '@/api/fxApi'
 import { lightingApi } from '@/api/lightingApi'
 import { useWindowPressPair } from '@/hooks/usePress'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { isEffectSplit, useSplitFx, type ActiveEffect } from '@/store/fixtureFx'
+import { isFxSplit, useSplitFx, type ActiveFx } from '@/store/fixtureFx'
 import type { Fixture } from '@/store/fixtures'
 import { useIsDeskConnected } from '@/store/status'
 import { FxEditor } from './FxEditor'
-import { splitScopeOf } from './effectSplit'
-import { useStopEffect } from './useEffectControls'
+import { splitScopeOf } from './fxSplit'
+import { useStopFx } from './useFxControls'
 
 /**
  * One editing session across a split: the copies an edit follows. The **host** holds it, beside the
@@ -22,8 +22,8 @@ export type SplitSession = { session: number; ids: readonly number[] } | null
 
 /**
  * The live effect editor that **follows the selection** (apply-model plan D5, §4.5's split editor),
- * wherever it is drawn: inside `FxEditorPopover` — the FX table's *Edit…*, an FX lens chip, a
- * band's running chip — and inline under a row of the busk Effects tab.
+ * wherever it is drawn: inside `FxEditorPopover` — an FX lens chip, a band's running chip — in the
+ * FX editor's inspector, and inline under a row of the busk Effects tab.
  *
  * The desk answers a split with new ids: the host is told the one to read from now on ([onFollow])
  * and the session the copies share ([onSessionChange]), and reads [effect] live from the running
@@ -37,17 +37,20 @@ export function SplitFxEditor({
   onClose,
   onStop,
   onFollow,
+  layout,
 }: {
-  effect: ActiveEffect
+  effect: ActiveFx
   /** The heads an edit is for — a cell's batch, the busk pair's targets. Absent, the window's pair's. */
   selection?: readonly CueTarget[]
   session: SplitSession
   onSessionChange: (session: SplitSession) => void
   onClose: () => void
   /** Absent: no stop is offered — a pad's effect, which the pad releases. */
-  onStop?: (effect: ActiveEffect) => void
+  onStop?: (effect: ActiveFx) => void
   /** A split replaced the effect: the host reads this id from now on — the edited copy it follows. */
-  onFollow?: (effectId: number) => void
+  onFollow?: (fxId: number) => void
+  /** `FxFields`' section order: the FX editor's inspector draws its own. */
+  layout?: 'editor' | 'inspector'
 }) {
   const session = follow != null && follow.ids.includes(effect.id) ? follow.session : effect.id
   const followed = follow != null && follow.session === session ? follow.ids : null
@@ -68,6 +71,7 @@ export function SplitFxEditor({
       onSplit={onFollow != null ? onSplit : undefined}
       onDone={onClose}
       onStop={onStop == null ? undefined : () => onStop(effect)}
+      layout={layout}
     />
   )
 }
@@ -83,7 +87,7 @@ function useEditSelection(selection: readonly CueTarget[] | undefined): readonly
  * head the effect paints selected — or none of them — every move edits it in place, phase kept. With
  * **some** of them it says so — *Hex 1–2 of Hex 1–4* — and **holds** the edit: *Apply to Hex 1–2*
  * sends it once, over REST with the heads as `targets`, and the desk splits them off at the phase
- * they had (only REST answers the copies, `EffectSplitResponse`; the `updateFx` frame answers only
+ * they had (only REST answers the copies, `FxSplitResponse`; the `updateFx` frame answers only
  * `fxChanged` REMOVED and ADDED). The editor then **follows the edited copies** — one per head, each
  * keeping one phase offset — and is live again, every move sent to each. *Edit all 4* sends what is
  * held to the whole effect in place and carries on live.
@@ -100,8 +104,9 @@ function SplitEditor({
   onSplit,
   onDone,
   onStop,
+  layout,
 }: {
-  effect: ActiveEffect
+  effect: ActiveFx
   selection: readonly CueTarget[] | undefined
   /** The copies an earlier split of this session left the edit on. */
   followed: readonly number[] | null
@@ -109,11 +114,12 @@ function SplitEditor({
   onSplit?: (ids: readonly number[]) => void
   onDone: () => void
   onStop?: () => void
+  layout?: 'editor' | 'inspector'
 }) {
   const { fixtures } = useFixtureLookup()
   const connected = useIsDeskConnected()
   const editSelection = useEditSelection(selection)
-  const stopEffect = useStopEffect()
+  const stopFx = useStopFx()
   const { splitFx, splitting } = useSplitFx()
   const [whole, setWhole] = useState(false)
   const [held, setHeld] = useState<UpdateFxRequest | null>(null)
@@ -151,7 +157,7 @@ function SplitEditor({
     const answer = await splitFx(effect.id, { ...held, targets })
     if (answer == null || !alive.current) return
     setHeld(null)
-    if (isEffectSplit(answer)) onSplit?.(answer.edited.map((e) => e.id))
+    if (isFxSplit(answer)) onSplit?.(answer.edited.map((e) => e.id))
     else setWhole(true)
   }
 
@@ -166,7 +172,7 @@ function SplitEditor({
     onStop == null
       ? undefined
       : () => {
-          for (const id of alsoIds ?? []) stopEffect({ ...effect, id })
+          for (const id of alsoIds ?? []) stopFx({ ...effect, id })
           onStop()
         }
 
@@ -177,7 +183,7 @@ function SplitEditor({
           data-fx-split
           className="flex flex-wrap items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/[0.06] px-2 py-1.5 text-[11px]"
         >
-          <span className="min-w-0 flex-1 truncate" title={`The selection holds ${split.coveredLabel} of the ${split.heads.length} heads this effect runs on`}>
+          <span className="min-w-0 flex-1 truncate" title={`The selection holds ${split.coveredLabel} of the ${split.heads.length} heads this FX runs on`}>
             <span className="font-medium">{split.coveredLabel}</span>
             <span className="text-muted-foreground"> of {split.totalLabel}</span>
           </span>
@@ -207,12 +213,13 @@ function SplitEditor({
       {/* Inert while the split is on its way: a move now would land on an effect about to go. */}
       <div inert={splitting} className={splitting ? 'opacity-60' : undefined}>
         <FxEditor
-          key={`${effect.id}:${effect.effectType}:${generation}`}
+          key={`${effect.id}:${effect.fxType}:${generation}`}
           effect={effect}
           hold={split != null ? setHeld : undefined}
           alsoIds={alsoIds}
           onDone={onDone}
           onStop={stop}
+          layout={layout}
         />
       </div>
     </div>

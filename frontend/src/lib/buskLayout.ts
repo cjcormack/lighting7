@@ -1,7 +1,7 @@
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type {
   BuskBank,
   BuskColumn,
@@ -47,7 +47,7 @@ export interface PadAddress extends BankAddress {
 
 /** A library record on its way onto a page. Carries the record so the new pad can draw itself. */
 export type PaletteRecord =
-  | { kind: 'TEMPLATE'; template: TemplateSummary }
+  | { kind: 'PALETTE'; palette: PaletteSummary }
   | { kind: 'LOOK'; look: LookSummary }
   | { kind: 'CUE'; cue: BuskCue }
 
@@ -140,7 +140,7 @@ export function parseBuskDragId(id: string): ParsedBuskId | null {
   const gutter = /^bgut:(\d+)\.(\d+)$/.exec(id)
   if (gutter) return { kind: 'gutter', row: +gutter[1], column: +gutter[2] }
 
-  const palette = /^palette:(template|look|cue):(\d+)$/.exec(id)
+  const palette = /^palette:(palette|look|cue):(\d+)$/.exec(id)
   if (palette) {
     return {
       kind: 'palette',
@@ -191,7 +191,7 @@ export function padAt(page: BuskPage, at: PadAddress): BuskPad | null {
   return bankAt(page, at)?.pads[at.pad] ?? null
 }
 
-/** `template:7` / `look:3` / `cue:12` for every record with a pad here — the palette's *on page*. */
+/** `palette:7` / `look:3` / `cue:12` for every record with a pad here — the palette's *on page*. */
 export function recordsOnPage(page: BuskPage): Set<string> {
   const keys = new Set<string>()
   forEachPad(page, (pad) => {
@@ -202,7 +202,7 @@ export function recordsOnPage(page: BuskPage): Set<string> {
 }
 
 export function padRecordId(pad: BuskPad): number | null {
-  if (pad.kind === 'TEMPLATE') return pad.template?.id ?? null
+  if (pad.kind === 'PALETTE') return pad.palette?.id ?? null
   if (pad.kind === 'LOOK') return pad.look?.id ?? null
   return pad.cue?.id ?? null
 }
@@ -259,7 +259,7 @@ export function mintLocalKey(): string {
 
 export function newPad(record: PaletteRecord): BuskPad {
   const base = { localKey: mintLocalKey(), kind: record.kind }
-  if (record.kind === 'TEMPLATE') return { ...base, template: record.template }
+  if (record.kind === 'PALETTE') return { ...base, palette: record.palette }
   if (record.kind === 'LOOK') return { ...base, look: record.look }
   return { ...base, cue: record.cue }
 }
@@ -319,7 +319,7 @@ function padInput(pad: BuskPad): BuskLayoutPadInput {
   if (pad.id != null) input.padId = pad.id
   const recordId = padRecordId(pad)
   if (recordId != null) {
-    if (pad.kind === 'TEMPLATE') input.templateId = recordId
+    if (pad.kind === 'PALETTE') input.paletteId = recordId
     else if (pad.kind === 'LOOK') input.lookId = recordId
     else input.cueId = recordId
   }
@@ -602,8 +602,8 @@ function clampIndex(index: number, length: number): number {
 const STARTER_FAMILIES: readonly AttributeFamily[] = ['COLOUR', 'POSITION', 'BEAM', 'INTENSITY']
 
 /**
- * *Start from your library* (D11): a stacking bank per family holding that family's templates, a
- * Looks bank of every Look that can be busked, and an empty Cues bank.
+ * *Start from your library* (D11): a stacking bank per family holding that family's palettes, a
+ * Looks bank of every Look, and an empty Cues bank.
  *
  * **Nothing solo, and no template groups or pinned cues are read.** Both are being deleted in
  * session 3, so a generator that carried them would have to be rewritten immediately; and a page
@@ -612,7 +612,7 @@ const STARTER_FAMILIES: readonly AttributeFamily[] = ['COLOUR', 'POSITION', 'BEA
  * shows where things go.
  */
 export function libraryStarterLayout(
-  templates: readonly TemplateSummary[],
+  templates: readonly PaletteSummary[],
   looks: readonly LookSummary[],
 ): BuskLayoutRequest {
   const familyColumns: BuskLayoutColumn[] = STARTER_FAMILIES.map((family) => ({
@@ -622,7 +622,7 @@ export function libraryStarterLayout(
         name: FAMILY_LABELS[family].singular,
         solo: false,
         flow: 'WRAP' as const,
-        pads: templates.filter((t) => t.family === family).map((t) => ({ templateId: t.id })),
+        pads: templates.filter((t) => t.family === family).map((t) => ({ paletteId: t.id })),
       },
     ],
   }))
@@ -639,7 +639,7 @@ export function libraryStarterLayout(
                 name: 'Looks',
                 solo: false,
                 flow: 'WRAP',
-                pads: looks.filter((l) => l.hasDeferredEffects).map((l) => ({ lookId: l.id })),
+                pads: looks.map((l) => ({ lookId: l.id })),
               },
             ],
           },

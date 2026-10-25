@@ -1,0 +1,828 @@
+import { useCallback, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { ArrowRight, CopyPlus, Hand, LayoutGrid, Layers, Trash2, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
+import { CopyToProjectSheet } from '@/components/sheet/CopyToProjectSheet'
+import { CountReadOut, ReadOnlyNote } from '@/components/sheet/LibraryReadOuts'
+import { LibraryVerb, oneRecordReason } from '@/components/sheet/LibraryVerb'
+import { libraryNameColumn } from '@/components/sheet/LibraryNameColumn'
+import { libraryPermission } from '@/components/sheet/libraryScope'
+import { reportSheetWriteFailure } from '@/components/sheet/reportSheetWriteFailure'
+import { SelectionBar } from '@/components/sheet/SelectionBar'
+import { SheetTable } from '@/components/sheet/SheetTable'
+import { NumberCell } from '@/components/sheet/cells/NumberCell'
+import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
+import { TextCell } from '@/components/sheet/cells/TextCell'
+import { listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
+import { PHONE_FOLDED_CLASS } from '@/components/sheet/toolbarFolds'
+import { useSheet } from '@/components/sheet/useSheet'
+import { useDuplicateBatch } from '@/components/sheet/useDuplicateBatch'
+import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
+import { hasCentre, storedCentreMode, withCentreMode, type CentreMode } from '@/components/fx/fxEditorModel'
+import { findFxEntry } from '@/components/busking/buskingTypes'
+import type { FxLibraryEntry } from '@/store/fixtureFx'
+import { handPickUp } from '@/store/hand'
+import { useCopyPaletteMutation, useSavePaletteMutation } from '@/store/palettes'
+import type { PaletteFx, PaletteInput, PaletteSummary } from '@/api/palettesApi'
+import type { SpeedMaster } from '@/api/speedMastersApi'
+import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
+import { usePaletteDelete } from './usePaletteDelete'
+import { PaletteValue } from './PaletteValue'
+import { PaletteValueCell, type PaletteValueDraft, type PaletteValueLanding } from './PaletteValueCell'
+import { applyValueChanges, seedValues, paletteRowsFromValues, paletteRowsKey } from './familyControls/paletteRows'
+import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+
+export type PaletteColumnKey = 'holds' | 'value' | 'fade' | 'master' | 'notes' | 'layers' | 'pages' | 'pressed'
+
+export interface PaletteSheetRow extends SheetRow {
+  /** Absent on a family divider. */
+  palette?: PaletteSummary
+}
+
+/** A member row — every row but a divider carries its template. */
+type MemberRow = PaletteSheetRow & { palette: PaletteSummary }
+
+export function paletteRowId(paletteId: number): string {
+  return `pal:${paletteId}`
+}
+
+/**
+ * The Master column's *Seconds* (venue-visit plan D7): the effect follows no master — a beat effect's
+ * division read as seconds, a wall-clock effect's rate master null. Never on the wire; the wire says
+ * `seconds`.
+ */
+export const SECONDS = 'seconds'
+
+/**
+ * Master 1 before the bank has loaded — a beat effect's null master, which is master 1 whether or
+ * not its uuid is known yet. Without it that cell read `undefined` until the masters query landed,
+ * so a marquee over it skipped a row that does take a master. Never on the wire: it canonicalises
+ * to null, the spelling every writer uses for master 1.
+ */
+const MASTER_1 = 'master-1'
+
+export interface PaletteSheetProps {
+  projectId: number
+  /** The rows to draw, dividers included — the route groups them under *All* (`groupRows`). */
+  rows: readonly PaletteSheetRow[]
+  /** Every template in the library, for Duplicate's `(Copy n)` names. */
+  library: readonly PaletteSummary[]
+  /** This project's speed masters, for the Master column. */
+  masters: readonly SpeedMaster[]
+  /**
+   * The effect library, for the Value column's *Centre* on a movement effect template (D16) —
+   * fetched by the route, as the masters are, so no row subscribes to anything.
+   */
+  fxLibrary?: readonly FxLibraryEntry[]
+  isCurrentProject: boolean
+  projectName: string
+  onOpenPalette: (template: PaletteSummary) => void
+}
+
+/**
+ * **The template library as a sheet** (library-sheets plan §3.2, session 2), replacing
+ * `PaletteListRow` and its `…` menu. The route draws the family chips and groups the rows under
+ * family dividers; this draws the columns and the bar.
+ *
+ * - **Holds** is a read-out. **Value** reads the template's own grammar in one line — the swatch
+ *   and `#FF9D4A · Extract white`, `50%`, `-20 / +10` (a position, centre-relative) for a generic value; *4 heads · per
+ *   fixture*; the effect and its speed — read from `rows ?? []`, since an effect template's empty
+ *   list is omitted on the wire. On a **generic value** template it is `PaletteValueCell` (session
+ *   3, D6): the editor's own family controls, `PUT {rows}` through the lifted rows builder, the
+ *   origin's family only (see the column), Clear refused, no Spread. Per-fixture and effect
+ *   templates read out and are skipped by name.
+ * - **Fade** is a `NumberCell` in seconds on **value** templates: `PUT {fadeDurationMs,
+ *   fadeDurationMsPresent: true}`. Clear writes null — *default (none)*, the caller's default, which
+ *   a press applies at 0 — and Spread is the kit's `duration` plan. An effect template has no
+ *   arrival to time, so its Fade is `undefined`: blank, and skipped by name.
+ * - **Master** is an `OptionCell` on **effect** templates — `PUT {effect}` with **one field
+ *   changed**: `speedMasterUuid` for a `BEAT` effect, `rateSpeedMasterUuid` for a `WALL_CLOCK` one
+ *   (§Speed Masters' two references; a beat effect never reads the rate master, and a wall-clock
+ *   one never reads the beat master). The PUT deletes and recreates the effect row and republishes,
+ *   so **a running instance restarts** — the editor says so. A null beat master is M1; a null rate
+ *   master is **unscaled**, which is not M1. An effect whose type no longer resolves in the library
+ *   has no `timingSource`, so which field to write is unknown: its Master is blank and skipped.
+ * - **Notes** writes `{notes, notesPresent: true}`; the name `PUT {name}`. Both metadata only.
+ * - **Layers**, **Pages** and **Pressed** are read-outs; Pressed is `lastPressedAt`, which
+ *   `palettePressed` patches into the list live.
+ *
+ * The verbs, the read-only scope and the refusals are `LookSheet`'s rules (D11, D12, D14), with
+ * **Spread** added and **Include** dropped: a template is applied, never included.
+ */
+export function PaletteSheet({
+  projectId,
+  rows,
+  library,
+  masters,
+  fxLibrary,
+  isCurrentProject,
+  projectName,
+  onOpenPalette,
+}: PaletteSheetProps) {
+  const [savePalette] = useSavePaletteMutation()
+  const [copyPalette] = useCopyPaletteMutation()
+  const scope = useMemo(() => libraryPermission(isCurrentProject, projectName), [isCurrentProject, projectName])
+
+  const master1 = useMemo(() => masters.find((m) => m.masterIndex === 1) ?? null, [masters])
+  const masterByUuid = useMemo(() => new Map(masters.map((m) => [m.uuid, m])), [masters])
+  const beatOptions = useMemo<SheetOption[]>(
+    () => masters.map((m) => ({ value: m.uuid, label: `M${m.masterIndex} · ${m.name}` })),
+    [masters],
+  )
+  /** Seconds, then every master — one question for every effect, as the editor's chip asks it. */
+  const timingOptions = useMemo<SheetOption[]>(
+    () => [{ value: SECONDS, label: 'Seconds' }, ...beatOptions],
+    [beatOptions],
+  )
+
+  /** One PUT, its refusal toasted by code under the column's key (D14). */
+  const put = useCallback(
+    (template: PaletteSummary, column: string, body: PaletteInput) => {
+      savePalette({ projectId, paletteId: template.id, ...body })
+        .unwrap()
+        .catch((err: unknown) => reportSheetWriteFailure(err, { key: `templates:${column}` }))
+    },
+    [projectId, savePalette],
+  )
+
+  /**
+   * The Master column's value for one effect template — `seconds` when it follows no master (D7),
+   * else the stored uuid, **canonical**: a beat effect's null is master 1, so it reads as M1's uuid
+   * and an M1 commit writes null back. Undefined where the effect type is unknown.
+   */
+  const masterValue = useCallback(
+    (effect: PaletteFx): string | undefined => {
+      if (effect.timingSource == null) return undefined
+      if (isOnSeconds(effect, effect.timingSource)) return SECONDS
+      if (effect.timingSource === 'WALL_CLOCK') return effect.rateSpeedMasterUuid ?? SECONDS
+      return effect.speedMasterUuid ?? master1?.uuid ?? MASTER_1
+    },
+    [master1],
+  )
+
+  /**
+   * The effect with its timing changed, and only if it moves. Null where the choice cannot apply:
+   * a master this project does not have, or an effect whose type no longer resolves.
+   *
+   * A **beat** effect moving between Seconds and a master keeps its speed — the division converted
+   * at the master's stored tempo, the one this sheet reads — so a pad does not change speed under a
+   * timing edit. A wall-clock effect's number is seconds either way, and its master is its rate
+   * master.
+   */
+  const fxWithMaster = useCallback(
+    (effect: PaletteFx, choice: string): PaletteFx | null | 'same' => {
+      if (choice !== SECONDS && choice !== MASTER_1 && !masterByUuid.has(choice)) return null
+      if (effect.timingSource == null) return null
+      const wallClock = effect.timingSource === 'WALL_CLOCK'
+      const onSeconds = isOnSeconds(effect, effect.timingSource)
+      const bpmOf = (uuid: string | null | undefined) =>
+        (uuid != null && uuid !== MASTER_1 ? masterByUuid.get(uuid) : master1)?.bpm ?? 0
+      // The flag is written only where it moves, so an edit of a palette that never used it sends
+      // the effect as it was with the one field changed. A wall-clock effect's Seconds is its null
+      // rate master, which needs no flag.
+      const offSeconds = effect.seconds === true ? { seconds: false } : {}
+      if (choice === SECONDS) {
+        if (onSeconds) return 'same'
+        if (wallClock) return { ...effect, rateSpeedMasterUuid: null }
+        return {
+          ...effect,
+          seconds: true,
+          speedMasterUuid: null,
+          rateSpeedMasterUuid: null,
+          cycle: beatsToSeconds(effect.cycle, bpmOf(effect.speedMasterUuid)),
+        }
+      }
+      if (wallClock) {
+        const next = choice === MASTER_1 ? (master1?.uuid ?? null) : choice
+        if (next == null) return null
+        if (!onSeconds && effect.rateSpeedMasterUuid === next) return 'same'
+        return { ...effect, ...offSeconds, rateSpeedMasterUuid: next }
+      }
+      // Master 1 has two spellings — its uuid and the null that means it — so both sides are
+      // compared canonically, and M1 is written as null, the spelling every other writer uses.
+      const next = canonicalBeat(choice, master1)
+      if (!onSeconds && canonicalBeat(effect.speedMasterUuid, master1) === next) return 'same'
+      return {
+        ...effect,
+        ...offSeconds,
+        speedMasterUuid: next,
+        ...(onSeconds ? { cycle: secondsToBeats(effect.cycle, bpmOf(choice)) } : {}),
+      }
+    },
+    [master1, masterByUuid],
+  )
+
+  const columns = useMemo<SheetColumn<PaletteSheetRow, PaletteColumnKey>[]>(
+    () => [
+      {
+        key: 'holds',
+        label: 'Holds',
+        width: '64px',
+        value: () => undefined,
+        display: (row) =>
+          row.palette ? (
+            <span className={row.palette.kind === 'fx' ? 'mx-1.5 text-xs text-violet-400' : 'mx-1.5 text-xs text-muted-foreground'}>
+              {row.palette.kind === 'fx' ? 'FX' : 'Value'}
+            </span>
+          ) : null,
+      },
+      {
+        key: 'value',
+        label: 'Value',
+        width: 'minmax(150px, 200px)',
+        // Editable on a generic value template (D6) and, since fixture-fx-sheets session 5, on a
+        // **movement effect template**, whose one question here is D16's *Centre* — `Around
+        // current position | Absolute`, an `OptionCell` over the effect's blend and centre. A
+        // per-fixture template's values were recorded per head and any other effect template holds
+        // no value, so those read out — `undefined` here — and open the editor from the pencil; a
+        // marquee over them skips them by name. **No `kind`**: the column takes commits from its
+        // own editors alone, and the family rule lives in `write`, since one column cannot carry a
+        // per-row `value:<family>` kind.
+        value: (row) =>
+          row.palette == null
+            ? undefined
+            : row.palette.kind === 'fx'
+              ? centreValue(row.palette, fxLibrary)
+              : paletteValueDraft(row.palette),
+        display: (row) => (row.palette ? <PaletteValue palette={row.palette} /> : null),
+        cell: (row, props) => {
+          if (typeof props.value === 'string') {
+            return (
+              <OptionCell
+                {...(props as React.ComponentProps<typeof OptionCell>)}
+                label="Centre"
+                options={CENTRE_OPTIONS}
+                face={row.palette ? <PaletteValue palette={row.palette} /> : null}
+              />
+            )
+          }
+          const cellProps = props as React.ComponentProps<typeof PaletteValueCell>
+          return (
+            <PaletteValueCell
+              {...cellProps}
+              face={row.palette ? <PaletteValue palette={row.palette} /> : null}
+              landing={() => valueLanding(cellProps.value.family, cellProps.batchRows() as PaletteSheetRow[])}
+            />
+          )
+        },
+        write: (batch, value) => {
+          if (value === 'around' || value === 'absolute') {
+            // D16's question, landed on every movement template in the batch: the blend and the
+            // centre pair, through the live editor's own rule (`withCentreMode`). A PUT of the
+            // effect recreates it — a running instance restarts, as the Master column says.
+            const values: string[] = []
+            for (const row of batch as MemberRow[]) {
+              const effect = row.palette.fx
+              if (effect == null) {
+                values.push(row.palette.name)
+                continue
+              }
+              const entry = findFxEntry(fxLibrary, effect.fxType)
+              if (storedCentreMode(effect, entry) === value || centreValue(row.palette, fxLibrary) == null) continue
+              put(row.palette, 'value', { fx: { ...effect, ...withCentreMode(effect, value) } })
+            }
+            if (values.length > 0) {
+              toast.info(`${listNames(values, 'palette')} ${values.length === 1 ? 'holds a value' : 'hold values'} — no centre to set · skipped`, {
+                id: 'sheet-write:templates:value-skip',
+              })
+            }
+            return true
+          }
+          if (!isPaletteValueDraft(value) || value.changes == null) return false
+          const { family, changes } = value
+          const emptied: string[] = []
+          for (const row of batch as MemberRow[]) {
+            // The origin's family only: a colour draft on an intensity template would be refused
+            // as a change of family, and is named as skipped on the editor's read-out instead. A
+            // movement effect template in the batch holds no value to write (`valueLanding` names it).
+            if (row.palette.kind !== 'value' || row.palette.family !== family) continue
+            // **What changed, over this template's own values** — never the origin's whole draft.
+            // The PUT replaces a template's rows, so the draft would delete a sibling's strobe,
+            // its white, another beam role, on an Enter that changed nothing.
+            const own = seedValues(row.palette)
+            const next = paletteRowsFromValues(family, applyValueChanges(own, changes))
+            // The write boundary refuses a value template with no rows: a removal that would leave
+            // one empty is skipped and named. (The editor refuses an empty origin before this.)
+            if (next.length === 0) {
+              emptied.push(row.palette.name)
+              continue
+            }
+            // Compared through the builder on both sides, so a stored row that parses to the same
+            // intent — a lower-case hex, an older row order — is no change.
+            if (paletteRowsKey(next) !== paletteRowsKey(paletteRowsFromValues(family, own))) {
+              put(row.palette, 'value', { rows: next })
+            }
+          }
+          if (emptied.length > 0) {
+            toast.info(`${listNames(emptied, 'palette')} would hold no value — skipped`, {
+              id: 'sheet-write:templates:value-skip',
+            })
+          }
+          return true
+        },
+        clearRefusal: 'A palette holds a value — set another one instead',
+        skipNote: (skipped) => {
+          const one = skipped.length === 1
+          const effect = (row: PaletteSheetRow) => row.palette?.kind === 'fx'
+          const perHead = (row: PaletteSheetRow) => row.palette?.kind === 'value' && !row.palette.isGeneric
+          const reason = skipped.every(effect)
+            ? one ? 'runs an FX' : 'run FX'
+            : skipped.every(perHead)
+              ? one ? 'holds a value per head' : 'hold values per head'
+              : skipped.every((row) => effect(row) || perHead(row))
+                ? 'hold FX or per-head values'
+                : 'cannot be set here'
+          return `${listNames(skipped.map(paletteRowName), 'palette')} ${reason} — open to change · skipped`
+        },
+      },
+      {
+        key: 'fade',
+        label: 'Fade',
+        kind: 'fade',
+        width: '72px',
+        // Seconds, the editor's unit. A null fade is the caller's default — *(none)* — and a press
+        // applies it at 0, so the editor opens at 0 for one; an effect template has no fade at all.
+        value: (row) =>
+          row.palette?.kind === 'value' ? (row.palette.fadeDurationMs ?? 0) / 1000 : undefined,
+        cell: (row, props) => (
+          <NumberCell
+            {...(props as React.ComponentProps<typeof NumberCell>)}
+            unit="s"
+            min={0}
+            step={0.1}
+            format={formatSeconds}
+            note="How long a press takes to arrive — empty is the default (none), which lands at once"
+            face={
+              row.palette?.fadeDurationMs != null ? (
+                <span className="mx-1.5 font-mono text-xs tabular-nums">{formatSeconds(row.palette.fadeDurationMs / 1000)}s</span>
+              ) : (
+                <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
+              )
+            }
+          />
+        ),
+        write: (batch, value) => {
+          if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return false
+          const ms = Math.round(value * 1000)
+          for (const row of batch as MemberRow[]) {
+            // Compared as the press lands it: a null fade applies at 0, so 0 over a null fade
+            // changes nothing — and the editor opens a null fade at 0, so Enter on it untouched
+            // must not turn *default (none)* into an explicit 0s.
+            if ((row.palette.fadeDurationMs ?? 0) !== ms) {
+              put(row.palette, 'fade', { fadeDurationMs: ms, fadeDurationMsPresent: true })
+            }
+          }
+          return true
+        },
+        clear: (batch) => {
+          for (const row of batch as MemberRow[]) {
+            if (row.palette.fadeDurationMs != null) put(row.palette, 'fade', { fadeDurationMs: null, fadeDurationMsPresent: true })
+          }
+        },
+        skipNote: (skipped) =>
+          `${listNames(skipped.map(paletteRowName), 'palette')} ${skipped.length === 1 ? 'runs an FX' : 'run FX'} — no fade to time · skipped`,
+        spread: (batch): SpreadPlan | null =>
+          batch.length === 0
+            ? null
+            : {
+                kind: 'duration',
+                col: 'fade',
+                label: 'Fade',
+                count: batch.length,
+                names: batch.map(paletteRowName),
+                apply: (ms) => {
+                  ;(batch as MemberRow[]).forEach((row, i) => {
+                    const next = Math.max(0, Math.round(ms[i]))
+                    if (next !== (row.palette.fadeDurationMs ?? 0)) {
+                      put(row.palette, 'fade', { fadeDurationMs: next, fadeDurationMsPresent: true })
+                    }
+                  })
+                },
+              },
+      },
+      {
+        key: 'master',
+        label: 'Master',
+        kind: 'master',
+        width: 'minmax(96px, 120px)',
+        value: (row) => (row.palette?.fx != null ? masterValue(row.palette.fx) : undefined),
+        cell: (row, props) => {
+          const effect = row.palette?.fx
+          const wallClock = effect?.timingSource === 'WALL_CLOCK'
+          const seconds = effect != null && isOnSeconds(effect, effect.timingSource)
+          const uuid = wallClock ? effect?.rateSpeedMasterUuid : (effect?.speedMasterUuid ?? master1?.uuid)
+          const master = !seconds && uuid != null ? masterByUuid.get(uuid) : undefined
+          return (
+            <OptionCell
+              {...(props as React.ComponentProps<typeof OptionCell>)}
+              options={timingOptions}
+              face={
+                master != null ? (
+                  <span className="mx-1.5 truncate text-xs">
+                    <span className="font-mono font-bold">M{master.masterIndex}</span> {master.name}
+                  </span>
+                ) : (
+                  <span className="mx-1.5 text-xs text-muted-foreground">{seconds ? 'Seconds' : 'M1'}</span>
+                )
+              }
+            />
+          )
+        },
+        write: (batch, value) => {
+          if (typeof value !== 'string') return false
+          const refused: string[] = []
+          for (const row of batch as MemberRow[]) {
+            const effect = row.palette.fx
+            if (effect == null) continue
+            const next = fxWithMaster(effect, value)
+            if (next === 'same') continue
+            if (next == null) {
+              refused.push(row.palette.name)
+              continue
+            }
+            // The whole effect with the one field changed: the PUT replaces the effect half, so a
+            // body carrying only the master would be refused, and every other field is the
+            // template's own. It recreates the effect — a running instance restarts.
+            put(row.palette, 'master', { fx: next })
+          }
+          if (refused.length > 0) {
+            toast.info(
+              `${listNames(refused, 'palette')} skipped — the master is not this project's, or the FX is unknown here`,
+              { id: 'sheet-write:templates:master-skip' },
+            )
+          }
+          return true
+        },
+        clear: (batch) => {
+          for (const row of batch as MemberRow[]) {
+            const effect = row.palette.fx
+            if (effect == null) continue
+            // Each kind's default: master 1 for a beat effect, Seconds (unscaled) for a wall-clock one.
+            const next = fxWithMaster(effect, effect.timingSource === 'WALL_CLOCK' ? SECONDS : MASTER_1)
+            if (next != null && next !== 'same') put(row.palette, 'master', { fx: next })
+          }
+        },
+        cellTitle: (row) =>
+          row.palette?.fx != null
+            ? 'Changing the master recreates the FX — a running instance restarts'
+            : undefined,
+        skipNote: (skipped) => {
+          const values = skipped.filter((row) => row.palette?.kind === 'value')
+          return values.length === skipped.length
+            ? `${listNames(skipped.map(paletteRowName), 'palette')} ${skipped.length === 1 ? 'holds a value' : 'hold values'} — no master · skipped`
+            : `${listNames(skipped.map(paletteRowName), 'palette')} · no master to set · skipped`
+        },
+      },
+      {
+        key: 'notes',
+        label: 'Notes',
+        kind: 'notes',
+        width: 'minmax(120px, 1fr)',
+        value: (row) => (row.palette ? (row.palette.notes ?? '') : undefined),
+        cell: (row, props) => (
+          <TextCell
+            {...(props as React.ComponentProps<typeof TextCell>)}
+            allowEmpty
+            face={
+              row.palette?.notes ? (
+                <span className="mx-1.5 truncate text-xs text-muted-foreground">{row.palette.notes}</span>
+              ) : (
+                <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
+              )
+            }
+          />
+        ),
+        write: (batch, value) => {
+          if (typeof value !== 'string') return false
+          const next = value.trim() === '' ? null : value.trim()
+          for (const row of batch as MemberRow[]) {
+            if (next !== (row.palette.notes ?? null)) put(row.palette, 'notes', { notes: next, notesPresent: true })
+          }
+          return true
+        },
+        clear: (batch) => {
+          for (const row of batch as MemberRow[]) {
+            if (row.palette.notes) put(row.palette, 'notes', { notes: null, notesPresent: true })
+          }
+        },
+      },
+      {
+        key: 'layers',
+        label: 'Layers',
+        width: '64px',
+        value: () => undefined,
+        display: (row) =>
+          row.palette ? (
+            <CountReadOut
+              count={row.palette.layerCount}
+              icon={<Layers className="size-3" />}
+              title={`Applied by ${row.palette.layerCount} cue layer${row.palette.layerCount === 1 ? '' : 's'} — these gate the delete`}
+            />
+          ) : null,
+      },
+      {
+        key: 'pages',
+        label: 'Pages',
+        width: '64px',
+        value: () => undefined,
+        display: (row) =>
+          row.palette ? (
+            <CountReadOut
+              count={row.palette.buskPageCount}
+              icon={<LayoutGrid className="size-3" />}
+              title={`On ${row.palette.buskPageCount} busk page${row.palette.buskPageCount === 1 ? '' : 's'} — a hint, not a use`}
+            />
+          ) : null,
+      },
+      {
+        key: 'pressed',
+        label: 'Pressed',
+        width: '80px',
+        value: () => undefined,
+        display: (row) => (row.palette ? <PressedAgo at={row.palette.lastPressedAt} /> : null),
+      },
+    ],
+    [fxLibrary, fxWithMaster, master1, masterByUuid, masterValue, put, timingOptions],
+  )
+
+  const openRow = useCallback(
+    (row: PaletteSheetRow) => {
+      if (row.palette) onOpenPalette(row.palette)
+    },
+    [onOpenPalette],
+  )
+  const sheet = useSheet<PaletteSheetRow, PaletteColumnKey>({
+    rows,
+    columns,
+    permission: scope.permission,
+    copy: scope.copy,
+    cellDisabled: scope.readOnly ? cellsInert : undefined,
+    noun: 'palette',
+    rowName: paletteRowName,
+    onOpenRow: isCurrentProject ? openRow : undefined,
+  })
+  const { selectedRows, cellCount, clearByLadder, setRows } = sheet
+  const selected = useMemo(
+    () => selectedRows.flatMap((row) => (row.palette ? [row.palette] : [])),
+    [selectedRows],
+  )
+
+  const { run: runDelete, busy: deleting, dialog: deleteDialog } = usePaletteDelete({
+    projectId,
+    onDeleted: () => clearByLadder(),
+    onKept: (kept) => setRows(kept.map((t) => paletteRowId(t.id))),
+  })
+
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copying, setCopying] = useState<readonly PaletteSummary[]>([])
+
+  const copyHere = useCallback(
+    (template: PaletteSummary, newName: string) =>
+      copyPalette({ projectId, paletteId: template.id, targetProjectId: projectId, newName }).unwrap(),
+    [copyPalette, projectId],
+  )
+  const { duplicate, duplicating } = useDuplicateBatch({
+    library,
+    name: paletteName,
+    copy: copyHere,
+    toastKey: 'templates',
+  })
+
+  const count = selected.length
+  const noun = count === 1 ? 'palette' : 'palettes'
+  const verbs =
+    count > 0 ? (
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        {cellCount > 0 && (
+          <CellSelectionActions
+            copy={sheet.copy}
+            permission={sheet.permission}
+            setRef={sheet.setButtonRef}
+            onSet={sheet.toggleCellEditor}
+            onClear={sheet.clearSelectedCells}
+            spread={
+              <SpreadPanel
+                host="popover"
+                plans={sheet.spreadPlans}
+                disabledReason={scope.reason}
+                drivableHint="fade"
+                className={PHONE_FOLDED_CLASS}
+              />
+            }
+          />
+        )}
+        {isCurrentProject && (
+          <LibraryVerb
+            icon={Hand}
+            label="Pick up"
+            title={`Pick up ${selected[0]?.name ?? 'this palette'} — place it on another screen`}
+            disabledReason={oneRecordReason('Pick up', 'palette', count)}
+            onClick={() => handPickUp('PALETTE', selected[0].id)}
+          />
+        )}
+        <LibraryVerb
+          icon={CopyPlus}
+          label="Duplicate"
+          title={`Duplicate ${count} ${noun} in this project`}
+          disabledReason={scope.reason ?? (duplicating ? 'Duplicating…' : null)}
+          onClick={() => void duplicate(selected)}
+        />
+        <LibraryVerb
+          icon={ArrowRight}
+          label="Copy to…"
+          title={`Copy ${count} ${noun} to another project`}
+          onClick={() => {
+            setCopying(selected)
+            setCopyOpen(true)
+          }}
+        />
+        <LibraryVerb
+          icon={Trash2}
+          label="Delete"
+          destructive
+          title={`Delete ${count} ${noun}`}
+          disabledReason={scope.reason ?? (deleting ? 'Deleting…' : null)}
+          onClick={() => void runDelete(selected)}
+        />
+        <Button variant="ghost" size="sm" onClick={clearByLadder} title="Deselect all">
+          <X className="size-3.5" />
+          <span className="hidden sm:inline">Deselect</span>
+        </Button>
+      </div>
+    ) : null
+
+  const firstColumn = useMemo(
+    () =>
+      libraryNameColumn<PaletteSheetRow>({
+        label: 'Palette',
+        width: `${NAME_WIDTH}px`,
+        noun: 'palette',
+        name: (row) => row.palette?.name ?? '',
+        rename: (row, next) => {
+          if (row.palette) put(row.palette, 'name', { name: next })
+        },
+        renameDisabled: scope.readOnly ? () => true : undefined,
+        onOpen: isCurrentProject ? openRow : undefined,
+        openLabel: (row) => `Edit ${row.palette?.name ?? 'palette'}`,
+      }),
+    [isCurrentProject, openRow, put, scope.readOnly],
+  )
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="@container">
+        <SelectionBar
+          rowLabel={count > 0 ? `${count} ${noun}` : null}
+          cellLabel={cellCount > 0 ? `${cellCount} cell${cellCount === 1 ? '' : 's'}` : null}
+          cellTitle={`${count} ${noun} · ${sheet.family ?? ''} — edit once, applies to all`}
+          family={sheet.family}
+          hints={{ entry: cellCount > 0 && sheet.permission.entry, clear: cellCount > 0 && sheet.permission.clear }}
+          strip={scope.reason != null ? <ReadOnlyNote reason={scope.reason} /> : undefined}
+          verbs={verbs}
+          marqueeDragging={sheet.marqueeDragging}
+          foldForStrip={false}
+        />
+      </div>
+      <SheetTable<PaletteSheetRow, PaletteColumnKey>
+        {...sheet.tableProps}
+        minWidth={`${NAME_WIDTH + MIN_TRACKS}px`}
+        firstColumn={firstColumn}
+      />
+      {deleteDialog}
+      <CopyToProjectSheet<PaletteSummary>
+        open={copyOpen}
+        onOpenChange={setCopyOpen}
+        items={copying}
+        noun="palette"
+        name={(t) => t.name}
+        sourceProjectId={projectId}
+        copy={(t, targetProjectId, newName) =>
+          copyPalette({ projectId, paletteId: t.id, targetProjectId, newName }).unwrap()
+        }
+      />
+    </div>
+  )
+}
+
+/**
+ * The name column's track. With the other tracks' floors (64 + 150 + 72 + 96 + 120 + 64 + 64 + 80
+ * = 710) the sheet needs 890px, inside the ~940 the iPad frame (1180×820) leaves it with the
+ * sidebar open.
+ */
+const NAME_WIDTH = 180
+const MIN_TRACKS = 710
+
+/** A beat master uuid as stored: master 1 is null, whichever of its two spellings came in. */
+function canonicalBeat(uuid: string | null | undefined, master1: SpeedMaster | null): string | null {
+  return uuid == null || uuid === MASTER_1 || uuid === master1?.uuid ? null : uuid
+}
+
+function cellsInert(): boolean {
+  return true
+}
+
+function paletteName(template: PaletteSummary): string {
+  return template.name
+}
+
+function paletteRowName(row: PaletteSheetRow): string {
+  return row.palette?.name ?? row.id
+}
+
+/** `1.5`, `2`, `0.25` — seconds as the Fade column prints them. */
+function formatSeconds(seconds: number): string {
+  return String(Math.round(seconds * 1000) / 1000)
+}
+
+/**
+ * A generic value template's Value — its family and its draft, parsed by `seedValues` — or
+ * undefined for a per-fixture or effect template, which read out. Cached per template object, so a
+ * row's cell sees one identity until the list refetches.
+ */
+function paletteValueDraft(template: PaletteSummary): PaletteValueDraft | undefined {
+  // A null family is a template whose rows name no known property: there is no control to mount.
+  const family = template.family
+  if (template.kind !== 'value' || !template.isGeneric || family == null) return undefined
+  let draft = DRAFTS.get(template)
+  if (draft == null) {
+    draft = { family, values: seedValues(template) }
+    DRAFTS.set(template, draft)
+  }
+  return draft
+}
+const DRAFTS = new WeakMap<PaletteSummary, PaletteValueDraft>()
+
+function isPaletteValueDraft(value: unknown): value is PaletteValueDraft {
+  return typeof value === 'object' && value != null && 'family' in value && 'values' in value
+}
+
+/**
+ * The batch a Value commit lands on — the templates of the origin's family — and the rest named,
+ * the read-out's half of `write`'s family rule: *Amber and Deep Blue are Colour · skipped*.
+ */
+function valueLanding(family: AttributeFamily, batch: readonly PaletteSheetRow[]): PaletteValueLanding {
+  // A movement effect template answers this column too (its Centre), so a marquee over both kinds
+  // carries it into a value's batch: it holds no value, and is named as an effect.
+  const effects = batch.filter((row) => row.palette?.kind === 'fx')
+  const other = batch.filter((row) => row.palette != null && row.palette.kind !== 'fx' && row.palette.family !== family)
+  const families = [...new Set(other.flatMap((row) => (row.palette?.family != null ? [row.palette.family] : [])))]
+  const parts = [
+    other.length === 0
+      ? null
+      : `${listNames(other.map(paletteRowName), 'palette')} ${other.length === 1 ? 'is' : 'are'} ${formatFamilyList(families, ' and ')}`,
+    effects.length === 0
+      ? null
+      : `${listNames(effects.map(paletteRowName), 'palette')} ${effects.length === 1 ? 'runs an FX' : 'run FX'}`,
+  ].filter(Boolean)
+  return {
+    count: batch.length - other.length - effects.length,
+    skipped: parts.length === 0 ? null : `${parts.join('; ')} · skipped`,
+  }
+}
+
+/** D16's two answers, in the Value column's `OptionCell` for a movement effect template. */
+const CENTRE_OPTIONS: readonly SheetOption[] = [
+  { value: 'around', label: 'Around current position' },
+  { value: 'absolute', label: 'Absolute' },
+]
+
+/**
+ * The Value column's value for an effect template: its *Centre* (D16) where the effect asks the
+ * question — `''` for a blend that is neither, which presses neither option — and `undefined` for
+ * an effect with no centre or a type the library no longer has, which reads out and is skipped.
+ */
+function centreValue(template: PaletteSummary, library: readonly FxLibraryEntry[] | undefined): CentreMode | '' | undefined {
+  const effect = template.fx
+  if (effect == null) return undefined
+  const entry = findFxEntry(library, effect.fxType)
+  if (entry == null) return undefined
+  const mode = storedCentreMode(effect, entry)
+  if (mode != null) return mode
+  return hasCentre(entry) ? '' : undefined
+}
+
+/** When a template was last pressed on this desk — `12s ago`, `3m ago`, `1h ago`, `2d ago`; `—` never. */
+export function pressedAgo(at: string | null | undefined, now: number = Date.now()): string | null {
+  if (at == null) return null
+  // Parsed, never compared as text: `Instant.toString()` drops the fraction on an exact second.
+  const then = Date.parse(at)
+  if (!Number.isFinite(then)) return null
+  const s = Math.max(0, Math.round((now - then) / 1000))
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
+function PressedAgo({ at }: { at: string | null | undefined }) {
+  const text = pressedAgo(at)
+  if (text == null) return <span className="mx-2 text-xs text-muted-foreground/45">—</span>
+  return (
+    <span className="mx-2 whitespace-nowrap text-[11.5px] text-muted-foreground" title={at ?? undefined}>
+      {text}
+    </span>
+  )
+}

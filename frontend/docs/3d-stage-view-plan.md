@@ -26,7 +26,7 @@ visualiser must:
 - **Coordinates**: reset & start clean. Existing `stageX/stageY` percentages
   are dropped; fixtures are re-placed in the new 3D editor in metres.
 - **Live DMX path**: reuse existing per-channel hooks
-  (`useSliderValue`, `useColourValue` from `src/hooks/usePropertyValues.ts`).
+  (`useSliderValue`, `useColourValue` from `src/hooks/useAttributeValues.ts`).
   Each `<FixtureModel>` reads channels inside `useFrame` and applies pan/tilt
   + colour imperatively. No backend WebSocket changes needed.
 - **2D view**: keep as fallback with a user-facing 2D ↔ 3D toggle on the
@@ -65,12 +65,12 @@ next one can be picked up cold:
 
 ## Cross-repo work
 
-- **Pan/tilt range metadata** is a backend gap: `FixtureTypeInfo.properties`
+- **Pan/tilt range metadata** is a backend gap: `FixtureTypeInfo.attributes`
   exposes slider min/max in raw DMX units but not the degree mapping or
-  tilt inversion (today that info lives only in `@FixtureProperty`
+  tilt inversion (today that info lives only in `@FixtureAttribute`
   annotation strings). This will be fixed in `lighting7` as part of
   Session 5 — adding `degMin`, `degMax`, `inverted`, and an `axis`
-  enum (`PAN | TILT | NONE`) to slider property descriptors, populated
+  enum (`PAN | TILT | NONE`) to slider attribute descriptors, populated
   from the Kotlin annotations during registry build. The frontend wires
   these into `<FixtureModel>`'s `useFrame` so live moving-head beam
   direction works on first ship of the 3D view.
@@ -446,16 +446,16 @@ the raw `stageX/Y/Z`.
 
 **Goal**: render the scene from REST + live DMX. No editing yet.
 
-- **Backend prep (lighting7)** — extend `PropertyDescriptor` for slider
-  properties with:
+- **Backend prep (lighting7)** — extend `AttributeDescriptor` for slider
+  attributes with:
   - `axis: "PAN" | "TILT" | "NONE"` (defaults to NONE)
   - `degMin: Double?`, `degMax: Double?` — degree mapping at slider min/max
   - `inverted: Boolean` — flips direction (some fixtures invert tilt)
 
-  Populate from existing `@FixtureProperty` annotations in
+  Populate from existing `@FixtureAttribute` annotations in
   `FixtureTypeRegistry.kt` (parse the annotation strings, or, cleaner, add
   optional Kotlin annotation parameters and migrate the registered fixtures
-  in the same change). Surface these on `FixtureTypeInfo.properties` over
+  in the same change). Surface these on `FixtureTypeInfo.attributes` over
   REST. Frontend `FixtureTypeInfo` slider type updated to match.
 - New route `/stage` (or rename existing). New `src/routes/Stage.tsx` containing:
   - 2D ↔ 3D toggle button (segmented control, persisted in localStorage).
@@ -476,7 +476,7 @@ the raw `stageX/Y/Z`.
     discovery doc lines 42–80.
   - Static position from `worldPositionFor(patch, riggings)`.
   - **Live colour** via `useColourValue` (or `useSettingColourPreview` /
-    gel fallback) reusing the same property-resolution logic from
+    gel fallback) reusing the same attribute-resolution logic from
     `StageMarker.tsx:36-46`.
   - **Live intensity** via `useNormalizedIntensity` pattern at
     `StageMarker.tsx:190-204`.
@@ -486,7 +486,7 @@ the raw `stageX/Y/Z`.
     direction vector via `panTiltToDir`. Apply imperatively to head group
     quaternion + cone + floor pool inside `useFrame`, no React re-renders.
 - Reuse colour-source resolution (`findColourSource`,
-  `findDimmerProperty` from `src/store/fixtures.ts`) — do NOT duplicate.
+  `findDimmerAttribute` from `src/store/fixtures.ts`) — do NOT duplicate.
 
 **Critical files**:
 - `src/routes/Stage.tsx` (new — replaces or wraps current stage route)
@@ -507,12 +507,12 @@ without React re-renders (observe via React DevTools Profiler).
 - _Status_: Done
 - _Completed_: 2026-05-03
 - _What landed_:
-  - **Backend (lighting7)**: extended `@FixtureProperty` with `axis`
+  - **Backend (lighting7)**: extended `@FixtureAttribute` with `axis`
     (new `PanTiltAxis` enum: `PAN | TILT | NONE`), `degMin`, `degMax`,
     `inverted` optional params (NaN as the unset sentinel for the doubles,
     converted to `null` on reflect). Threaded through
-    `Fixture.Property` and both slider-creation paths in
-    `DmxFixture.kt` (top-level + element). `SliderPropertyDescriptor` in
+    `Fixture.Attribute` and both slider-creation paths in
+    `DmxFixture.kt` (top-level + element). `SliderAttributeDescriptor` in
     `routes/lightFixtures.kt` gained 4 nullable wire fields. Every
     moving-head fixture in the registry got `axis = PanTiltAxis.PAN/TILT`
     and degree ranges from datasheet:
@@ -524,10 +524,10 @@ without React re-renders (observe via React DevTools Profiler).
     (180°/90°). Laserworld CS-1000 RGB Mk3 was deliberately skipped — its
     "Pan/Tilt" channels are galvo offsets, not real head rotation; tagging
     it would mislead the 3D view.
-  - **Frontend types**: `SliderPropertyDescriptor` in
+  - **Frontend types**: `SliderAttributeDescriptor` in
     `src/store/fixtures.ts` mirrors the new wire fields (`axis`,
-    `degMin`, `degMax`, `inverted`). Added `findPanProperty` and
-    `findTiltProperty` helpers alongside `findDimmerProperty`.
+    `degMin`, `degMax`, `inverted`). Added `findPanAttribute` and
+    `findTiltAttribute` helpers alongside `findDimmerAttribute`.
   - **`src/lib/stageCoords.ts`**: added `dmxToDegrees(dmx, slider, base?)`
     (returns `null` when the slider lacks both deg bounds — head stays
     static; never invent a range), `headQuaternionFor(panDeg, tiltDeg)`
@@ -589,9 +589,9 @@ without React re-renders (observe via React DevTools Profiler).
     into the degree calculation — the 3D view reads coarse-only, which
     gives 256-step resolution over the head's full sweep (more than
     enough for visual rendering).
-  - **`PositionPropertyDescriptor` was deliberately not extended.** Per
+  - **`PositionAttributeDescriptor` was deliberately not extended.** Per
     plan-strict scope the slider variant is the one the frontend reads
-    (via `findPanProperty/findTiltProperty` against `axis ===
+    (via `findPanAttribute/findTiltAttribute` against `axis ===
     'PAN'/'TILT'`). For fixtures that surface only a position descriptor
     and no axis-tagged sliders, the head will render static — acceptable
     for now because the existing reflection emits both descriptors for
@@ -610,7 +610,7 @@ without React re-renders (observe via React DevTools Profiler).
     again):
     1. **Unify the colour-source dispatch between
        `StageMarker.tsx` and `FixtureModel.tsx`.** Both files run the
-       identical `findColourSource` / `findDimmerProperty` /
+       identical `findColourSource` / `findDimmerAttribute` /
        `acceptsGel + gelCode → findGel` discriminator and then split
        into a leaf-per-source (Colour / Setting / Gel / Dimmer-only /
        Placeholder). The leaves diverge in *what* they render (CSS vs
@@ -640,15 +640,15 @@ without React re-renders (observe via React DevTools Profiler).
          place.
        - `normaliseSliderDmx(dmx, min, max)` — the `(value - min)
          / span` clamp logic in `dmxToDegrees` is also in
-         `usePropertyValues.ts:260–263`,
-         `useGroupPropertyValues.ts:407–410`,
+         `useAttributeValues.ts:260–263`,
+         `useGroupAttributeValues.ts:407–410`,
          `PropertyVisualizers.tsx:247–251`, and
          `GroupPropertyVisualizers.tsx:299–300`. Lift to a shared
          helper (likely in `src/lib/stageCoords.ts` or
          `src/lib/dmx.ts`).
     3. **Backend pan/tilt description strings now duplicate
        structured `degMin`/`degMax`.** Annotations like
-       `@FixtureProperty("Pan adjustment 0-540°", category = PAN,
+       `@FixtureAttribute("Pan adjustment 0-540°", category = PAN,
        degMin = 0.0, degMax = 540.0, ...)` carry the range in two
        places. A future cleanup could either auto-suffix the
        degree range when the structured fields are set
@@ -908,7 +908,7 @@ disabled with an explanatory tooltip.
     width matches the real bar. Thickness extracted into a named constant
     (`RIGGING_THICKNESS_M = 0.18`).
   - **16-bit pan/tilt via PAN_FINE / TILT_FINE channels.** Added
-    `findPanFineProperty` / `findTiltFineProperty` (matches sliders by
+    `findPanFineAttribute` / `findTiltFineAttribute` (matches sliders by
     `category === 'pan_fine' / 'tilt_fine'`) in `src/store/fixtures.ts`.
     `BeamDirector` in `FixtureModel.tsx` subscribes to coarse + fine via
     parallel `useSliderValue` calls (using `makeFallbackSlider` for the
@@ -943,7 +943,7 @@ disabled with an explanatory tooltip.
 - _Open follow-ups_:
   - **Zoom (beam-angle DMX channel → cone radius) deferred.** Implementing
     cleanly needs a backend descriptor extension: a new
-    `PropertyCategory.ZOOM` (or an extension of the `axis` enum to cover
+    `AttributeCategory.ZOOM` (or an extension of the `axis` enum to cover
     beam-angle sliders) plus `degMin`/`degMax` populated from the fixture
     annotations, so `dmxToDegrees` can be reused for beam angle the way
     Session 5 set it up for pan/tilt. None of the registered fixtures

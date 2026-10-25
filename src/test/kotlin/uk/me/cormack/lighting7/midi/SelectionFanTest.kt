@@ -10,9 +10,9 @@ import uk.me.cormack.lighting7.routes.AimOutcome
 import uk.me.cormack.lighting7.routes.AimRequest
 import uk.me.cormack.lighting7.routes.aimIntoProgrammer
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.routes.SpreadOutcome
-import uk.me.cormack.lighting7.routes.SpreadRequest
-import uk.me.cormack.lighting7.routes.spreadIntoProgrammer
+import uk.me.cormack.lighting7.routes.FanOutcome
+import uk.me.cormack.lighting7.routes.FanRequest
+import uk.me.cormack.lighting7.routes.fanIntoProgrammer
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -42,8 +42,8 @@ class SelectionFanTest : RouteIntegrationTest() {
     private fun fixture(key: String) = CueTargetDto("fixture", key)
 
     private fun place(keys: List<String>, intent: String) {
-        val request = SpreadRequest(targets = keys.map(::fixture), property = "position", from = intent, to = intent)
-        assertIs<SpreadOutcome.Done>(spreadIntoProgrammer(state, request, null))
+        val request = FanRequest(targets = keys.map(::fixture), attribute = "position", from = intent, to = intent)
+        assertIs<FanOutcome.Done>(fanIntoProgrammer(state, request, null))
     }
 
     /** A control swept from the centre, a step at a time, to [to] — as a hand turns it. */
@@ -104,7 +104,7 @@ class SelectionFanTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a tilt written on its own property since the fan last wrote is kept, not snapped back`() = testApplication {
+    fun `a tilt written on its own attribute since the fan last wrote is kept, not snapped back`() = testApplication {
         seed()
         mountTestApp(state)
         place(movers, "pos:0,0")
@@ -112,9 +112,9 @@ class SelectionFanTest : RouteIntegrationTest() {
         val fan = state.selectionFan
         sweep(FanAxis.PAN, 74)
         val spot1 = state.show.fixtures.untypedGroupableFixture("spot-1")
-        state.show.fxEngine.programmer.writeProperties(
+        state.show.fxEngine.programmer.writeAttributes(
             ProgrammerOwner.SURFACE,
-            listOf(ProgrammerWriter.PropertyWrite(spot1, "tilt", CueAssignmentResolver.PropertyValue.Slider(180u))),
+            listOf(ProgrammerWriter.AttributeWrite(spot1, "tilt", CueAssignmentResolver.AttributeValue.Slider(180u))),
         )
         fan.turn(FanAxis.PAN, 75u)
         fan.turn(FanAxis.PAN, 65u)

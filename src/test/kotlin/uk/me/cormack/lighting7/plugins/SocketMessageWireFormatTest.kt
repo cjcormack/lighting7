@@ -39,7 +39,7 @@ import kotlin.test.assertTrue
  *
  * One inbound + one outbound representative per domain; the goal is structural coverage,
  * not exhaustive per-leaf testing. Domain-specific field-level tests (e.g. programmer
- * setProperty value parsing) live in the per-domain test file.
+ * setAttribute value parsing) live in the per-domain test file.
  */
 class SocketMessageWireFormatTest {
 
@@ -48,14 +48,14 @@ class SocketMessageWireFormatTest {
     // ─── Palettes ───────────────────────────────────────────────────────────
 
     @Test
-    fun `palette domain — the list and press frames say palette, the stored binding still says template`() {
-        assertTrue(json.encodeToString<OutMessage>(TemplateListChangedOutMessage).contains(""""type":"paletteListChanged""""))
-        val pressed = json.encodeToString<OutMessage>(TemplatePressedOutMessage(templateId = 3, lastPressedAt = "2026-10-15T10:00:00.000Z"))
+    fun `palette domain — the list and press frames and the stored binding say palette`() {
+        assertTrue(json.encodeToString<OutMessage>(PaletteListChangedOutMessage).contains(""""type":"paletteListChanged""""))
+        val pressed = json.encodeToString<OutMessage>(PalettePressedOutMessage(paletteId = 3, lastPressedAt = "2026-10-15T10:00:00.000Z"))
         assertTrue(pressed.contains(""""type":"palettePressed""""), pressed)
-        assertTrue(pressed.contains(""""templateId":3"""), "field names keep the stored word: $pressed")
-        // A rename here would orphan every saved control_surface_bindings row.
-        val binding = json.encodeToString<BindingTarget>(BindingTarget.PressTemplate("u"))
-        assertTrue(binding.contains(""""type":"pressTemplate""""), binding)
+        assertTrue(pressed.contains(""""paletteId":3"""), "field names keep the stored word: $pressed")
+        // Stored in control_surface_bindings: a rename needs a database step and a LegacyNames entry.
+        val binding = json.encodeToString<BindingTarget>(BindingTarget.PressPalette("u"))
+        assertTrue(binding.contains(""""type":"pressPalette""""), binding)
     }
 
     // ─── Channel domain ─────────────────────────────────────────────────────
@@ -203,17 +203,17 @@ class SocketMessageWireFormatTest {
                 """"bpm":120.0,"isRunning":false,"source":"MANUAL"}]}"""
         )
         val bare = assertIs<SpeedMastersStateOutMessage>(without).masters.single()
-        assertEquals(null, bare.usage)
+        assertEquals(null, bare.family)
         assertEquals(null, bare.followNum)
         assertEquals(null, bare.followDen)
 
         val with = json.decodeFromString<OutMessage>(
             """{"type":"speedMasters.state","masters":[{"uuid":null,"index":2,"name":"Movement",""" +
-                """"bpm":60.0,"isRunning":true,"source":"MANUAL","usage":"position",""" +
+                """"bpm":60.0,"isRunning":true,"source":"MANUAL","family":"position",""" +
                 """"followNum":1,"followDen":2}]}"""
         )
         val follower = assertIs<SpeedMastersStateOutMessage>(with).masters.single()
-        assertEquals("position", follower.usage)
+        assertEquals("position", follower.family)
         assertEquals(1, follower.followNum)
         assertEquals(2, follower.followDen)
     }
@@ -280,15 +280,15 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `FxChangedOutMessage encodes enum as kebab string`() {
-        val encoded = json.encodeToString<OutMessage>(FxChangedOutMessage(FxChangeType.REMOVED, effectId = 7L))
+        val encoded = json.encodeToString<OutMessage>(FxChangedOutMessage(FxChangeType.REMOVED, fxId = 7L))
         assertTrue(encoded.contains(""""changeType":"removed""""), "got: $encoded")
-        assertTrue(encoded.contains(""""effectId":7"""))
+        assertTrue(encoded.contains(""""fxId":7"""))
     }
 
     @Test
     fun `FxChangedOutMessage round-trips every FxChangeType case`() {
         for (case in FxChangeType.entries) {
-            val out = FxChangedOutMessage(case, effectId = if (case == FxChangeType.CLEARED) null else 1L)
+            val out = FxChangedOutMessage(case, fxId = if (case == FxChangeType.CLEARED) null else 1L)
             val encoded = json.encodeToString<OutMessage>(out)
             val decoded = assertIs<FxChangedOutMessage>(json.decodeFromString<OutMessage>(encoded))
             assertEquals(case, decoded.changeType)
@@ -327,12 +327,12 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `surface domain — surfaceEncoderBank set and state cross the wire`() {
-        val raw = """{"type":"surfaceEncoderBank.set","deviceTypeKey":"akai-mini","propertyName":"colour"}"""
+        val raw = """{"type":"surfaceEncoderBank.set","deviceTypeKey":"akai-mini","attribute":"colour"}"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<SurfaceInMessage>(decoded)
         val leaf = assertIs<SurfaceEncoderBankSetInMessage>(decoded)
         assertEquals("akai-mini", leaf.deviceTypeKey)
-        assertEquals("colour", leaf.propertyName)
+        assertEquals("colour", leaf.attribute)
 
         assertIs<SurfaceEncoderBankStateInMessage>(
             json.decodeFromString<InMessage>("""{"type":"surfaceEncoderBank.state"}"""),
@@ -344,18 +344,18 @@ class SocketMessageWireFormatTest {
         val encoded = json.encodeToString(out)
         assertTrue(encoded.contains(""""type":"surfaceEncoderBank.state""""), encoded)
         // A hue selection carries no axis on the wire; another axis is spelled by its serial name.
-        assertTrue(encoded.contains(""""akai-mini":{"propertyName":"colour"}"""), encoded)
-        assertTrue(encoded.contains(""""x-touch":{"propertyName":"rgbColour","colourAxis":"saturation"}"""), encoded)
+        assertTrue(encoded.contains(""""akai-mini":{"attribute":"colour"}"""), encoded)
+        assertTrue(encoded.contains(""""x-touch":{"attribute":"rgbColour","colourAxis":"saturation"}"""), encoded)
     }
 
     @Test
     fun `surface domain — surfaceEncoderBank set carries a colour axis, and defaults to none`() {
         val withAxis = json.decodeFromString<InMessage>(
-            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","propertyName":"rgbColour","colourAxis":"hueFine"}""",
+            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","attribute":"rgbColour","colourAxis":"hueFine"}""",
         )
         assertEquals(ColourAxis.HUE_FINE, assertIs<SurfaceEncoderBankSetInMessage>(withAxis).colourAxis)
         val without = json.decodeFromString<InMessage>(
-            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","propertyName":"rgbColour"}""",
+            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","attribute":"rgbColour"}""",
         )
         assertEquals(null, assertIs<SurfaceEncoderBankSetInMessage>(without).colourAxis)
     }
@@ -366,12 +366,12 @@ class SocketMessageWireFormatTest {
             "type":"surfaceLearn.commit",
             "sessionId":"s-1",
             "bank":"A",
-            "target":{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"dimmer"}
+            "target":{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}
         }"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<SurfaceInMessage>(decoded)
         val leaf = assertIs<SurfaceLearnCommitInMessage>(decoded)
-        val target = assertIs<BindingTarget.FixtureProperty>(leaf.target)
+        val target = assertIs<BindingTarget.FixtureAttribute>(leaf.target)
         assertEquals("hex-1", target.fixtureKey)
     }
 
@@ -541,7 +541,7 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `programmer domain — set routes via ProgrammerInMessage`() {
-        val raw = """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}"""
+        val raw = """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"200"}"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<ProgrammerInMessage>(decoded)
         val leaf = assertIs<ProgrammerSetInMessage>(decoded)
@@ -591,12 +591,12 @@ class SocketMessageWireFormatTest {
         // release) rather than sending targetType=group. Optional, so existing senders are
         // unaffected.
         val withHint = json.decodeFromString<InMessage>(
-            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200","sourceGroup":"front-wash"}"""
+            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"200","sourceGroup":"front-wash"}"""
         )
         assertEquals("front-wash", assertIs<ProgrammerSetInMessage>(withHint).sourceGroup)
 
         val without = json.decodeFromString<InMessage>(
-            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}"""
+            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"200"}"""
         )
         assertEquals(null, assertIs<ProgrammerSetInMessage>(without).sourceGroup)
     }
@@ -626,7 +626,7 @@ class SocketMessageWireFormatTest {
             blind = false,
             entries = listOf(
                 ProgrammerEntryDto(
-                    targetKey = "hex-1", propertyName = "dimmer", value = "200",
+                    targetKey = "hex-1", attribute = "dimmer", value = "200",
                     owner = "web", touched = true, sourceGroup = null, owners = listOf("web"),
                 ),
             ),

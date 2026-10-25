@@ -7,7 +7,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
@@ -31,7 +31,7 @@ class DeskSelectionTest {
     private val wash = CueTargetDto("group", "front-wash")
     private val screen1 = SelectionSource.window("Screen 1")
     private val screen2 = SelectionSource.window("Screen 2")
-    private val colour = setOf(PropertyMaskGroup.COLOUR)
+    private val colour = setOf(AttributeFamily.COLOUR)
 
     private fun fixtures(): Fixtures {
         val fixtures = Fixtures()
@@ -159,8 +159,8 @@ class DeskSelectionTest {
         val s = selection()
         s.set(listOf(hex1), emptySet())
         assertNull(s.state.value.families, "nothing named is every attribute")
-        s.set(listOf(hex1), PropertyMaskGroup.entries.toSet())
-        assertNull(s.state.value.families, "every group named is every attribute, as parseMaskGroups reads it")
+        s.set(listOf(hex1), AttributeFamily.entries.toSet())
+        assertNull(s.state.value.families, "every group named is every attribute, as parseFamilies reads it")
     }
 
     @Test
@@ -184,13 +184,13 @@ class DeskSelectionTest {
         val s = selection()
         s.set(listOf(hex1, wash), colour, screen1)
 
-        s.setFamilies(setOf(PropertyMaskGroup.POSITION, PropertyMaskGroup.COLOUR), screen2)
+        s.setFamilies(setOf(AttributeFamily.POSITION, AttributeFamily.COLOUR), screen2)
         assertEquals(
-            DeskSelection.Snapshot(listOf(hex1, wash), setOf(PropertyMaskGroup.POSITION, PropertyMaskGroup.COLOUR), screen2),
+            DeskSelection.Snapshot(listOf(hex1, wash), setOf(AttributeFamily.POSITION, AttributeFamily.COLOUR), screen2),
             s.state.value,
             "the family pill's write: the heads as written, a group still a group",
         )
-        s.setFamilies(PropertyMaskGroup.entries.toSet(), screen2)
+        s.setFamilies(AttributeFamily.entries.toSet(), screen2)
         assertNull(s.state.value.families, "every group named is every attribute")
         assertEquals(listOf(hex1, wash), s.targets)
 

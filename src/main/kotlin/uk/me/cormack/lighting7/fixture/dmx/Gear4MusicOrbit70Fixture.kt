@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
@@ -95,24 +95,24 @@ sealed class Gear4MusicOrbit70Fixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode13Ch =
             Mode13Ch(this, transaction)
 
-        @FixtureProperty("Pan (coarse)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt (coarse)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Pan/tilt rotation speed (fast → slow)", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Pan/tilt rotation speed (fast → slow)", category = AttributeCategory.SPEED)
         val rotationSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
         /**
@@ -130,8 +130,8 @@ sealed class Gear4MusicOrbit70Fixture(
          * strobe at 1–20 Hz, the pulses at 0.5–2 Hz and the random flash at 4 Hz — gear4music
          * states none. Checked on the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 7, StrobeKind.CLOSED),
                 StrobeBand(8, 15, StrobeKind.OPEN),
@@ -150,7 +150,7 @@ sealed class Gear4MusicOrbit70Fixture(
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX, fullOnValue = LED_OPEN,
         )
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             transaction, universe,
             firstChannel + 7,
@@ -158,13 +158,13 @@ sealed class Gear4MusicOrbit70Fixture(
             firstChannel + 9,
         )
 
-        @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
+        @FixtureAttribute(category = AttributeCategory.WHITE, bundleWithColour = true)
         override val white: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
-        @FixtureProperty("Static colour select", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Static colour select", category = AttributeCategory.COLOUR)
         val staticColour: Slider = DmxSlider(transaction, universe, firstChannel + 11)
 
-        @FixtureProperty("Built-in program", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Built-in program", category = AttributeCategory.SETTING)
         val program = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, Program.entries.toTypedArray(),
         )

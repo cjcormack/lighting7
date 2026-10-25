@@ -15,8 +15,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.midi.GlobalScalerState
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.routes.alignEffect
-import uk.me.cormack.lighting7.routes.registerUserEffect
+import uk.me.cormack.lighting7.routes.alignFx
+import uk.me.cormack.lighting7.routes.registerUserFx
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.state.CommandOutput
@@ -65,7 +65,7 @@ class Show(
         // parallel unless disabled via `fx.parallelCompile=false`.
         val fileLoader = FxFileLoader(fxScriptCompiler)
         val parallel = state.config.optionalBoolean("fx.parallelCompile", default = true)
-        fileLoader.loadBuiltInEffects(this, parallel = parallel) { done, total ->
+        fileLoader.loadBuiltInFx(this, parallel = parallel) { done, total ->
             // Only drive the boot bar on the *initial* boot. This constructor also runs on a
             // runtime project switch (ProjectManager.switchProject), where the previous show is
             // already started (isStarted == true) — reporting there would rewind the global boot
@@ -94,8 +94,8 @@ class Show(
 
             // Covers create and delete. A *contents* change goes through
             // `republishForLookEdit`, which invalidates the one Look directly.
-            // `templateListChanged` is deliberately not handled here — a Look expansion holds no
-            // template data; `templateRegistry` below has its own listener for that.
+            // `paletteListChanged` is deliberately not handled here — a Look expansion holds no
+            // template data; `paletteRegistry` below has its own listener for that.
             override fun lookListChanged() = registry.invalidateAll()
         })
     }
@@ -107,13 +107,13 @@ class Show(
      * rows are intents resolved per head at cook, with no group expansion and no literals flattened
      * against the patch, so a repatch or a group edit cannot make a cached snapshot wrong. Only the
      * template's own list changing (create / rename / delete) has to drop it — a *contents* change
-     * goes through `republishForTemplateEdit`, which invalidates the one entry.
+     * goes through `republishForPaletteEdit`, which invalidates the one entry.
      */
-    val templateRegistry = TemplateRegistry(
-        loader = { uuid -> loadTemplateSnapshot(state.database, uuid) },
+    val paletteRegistry = PaletteRegistry(
+        loader = { uuid -> loadPaletteSnapshot(state.database, uuid) },
     ).also { registry ->
         fixtures.registerListener(object : FixturesChangeListener {
-            override fun templateListChanged() = registry.invalidateAll()
+            override fun paletteListChanged() = registry.invalidateAll()
         })
     }
 
@@ -214,7 +214,7 @@ class Show(
     val programmerLayerStack = ProgrammerLayerStack(
         fixtures = { fixtures },
         lookRegistry = { lookRegistry },
-        templateRegistry = { templateRegistry },
+        paletteRegistry = { paletteRegistry },
         engine = { fxEngine },
         store = programmerStore,
         state = { state },
@@ -230,7 +230,7 @@ class Show(
         // following it; this show's registry publishes into it from its first (empty) frame.
         holdsSink = state.cueHoldsFrame,
         onHoldsChanged = { fixtures.cueHoldsChanged() },
-        effectAligner = EffectAligner(::alignEffect),
+        fxAligner = FxAligner(::alignFx),
     )
 
     /**
@@ -364,9 +364,9 @@ class Show(
 
         // Start the FX engine after fixtures are loaded.
         //
-        // GlobalScope is accepted here for now, deliberately: the engine's two loops live as
-        // long as the show does, [fxEngine.stop] cancels them by hand, and it catches per pass
-        // so neither loop can die on its own. The cost of the shortcut is that a Show which is
+        // GlobalScope is accepted here for now, deliberately: the engine's loops live as long as
+        // the show does, [fxEngine.stop] cancels them by hand, and the pass loop catches per pass
+        // so it cannot die on its own. The cost of the shortcut is that a Show which is
         // dropped without close() leaks its loops, and there is no parent to cancel the tree in
         // one move — the same bargain the other long-lived subsystems here have struck
         // (ArtNetController's transmit loop, the MIDI registry). If any of them grows a real
@@ -418,17 +418,19 @@ class Show(
                 if (effects.size < carry.effects.size) {
                     logger.info("Reload dropped {} effect(s) whose target is no longer patched", carry.effects.size - effects.size)
                 }
-                if (effects.isNotEmpty()) fxEngine.addEffects(effects)
+                // In apply order, so each Local FX re-ranked on the way in lands where it stood in its lane.
+                val applyOrder = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
+                if (effects.isNotEmpty()) fxEngine.addFxBatch(effects.sortedWith(applyOrder))
             }
 
             // Before the GOs, so the effects they bring back arrive at their stack's size. A stack the
             // reload removed is dropped.
-            step("carry the stacks' effect sizes") {
-                if (carry.stackEffectSizes.isNotEmpty()) {
+            step("carry the stacks' FX amounts") {
+                if (carry.stackFxAmounts.isNotEmpty()) {
                     val stacks = transaction(state.database) {
                         DaoCueStack.find { DaoCueStacks.project eq project.id }.mapTo(HashSet()) { it.id.value }
                     }
-                    cueStackManager.effectSizes.restore(carry.stackEffectSizes.filterKeys { it in stacks })
+                    cueStackManager.fxAmounts.restore(carry.stackFxAmounts.filterKeys { it in stacks })
                 }
             }
 
@@ -453,7 +455,7 @@ class Show(
             // Every patched property, from what composes it now. Effect-covered and parked keys are
             // skipped by the publish itself — an effect repaints its own on the next tick.
             step("republish the rig") {
-                val keys = PropertyChannelWriter.channelKeyIndex(fixtures).propertyKeys.values.flatten().toSet()
+                val keys = AttributeChannelWriter.channelKeyIndex(fixtures).attributeKeys.values.flatten().toSet()
                 fxEngine.programmer.republishKeys(keys)
             }
 
@@ -572,7 +574,7 @@ class Show(
                     name = it.name,
                     bpm = it.bpm,
                     source = it.sourceEnum,
-                    usage = it.usageCategory,
+                    family = it.family,
                     followNum = it.followRatio?.first,
                     followDen = it.followRatio?.second,
                     followTargetUuid = it.followTarget,
@@ -609,12 +611,12 @@ class Show(
             var loaded = 0
             val elapsed = measureTime {
                 for (definition in definitions) {
-                    val result = registerUserEffect(state, definition)
+                    val result = registerUserFx(state, definition)
                     if (result.success) {
                         loaded++
                     } else {
-                        val effectId = transaction(state.database) { definition.effectId }
-                        System.err.println("Failed to load user FX definition '$effectId':")
+                        val fxId = transaction(state.database) { definition.fxId }
+                        System.err.println("Failed to load user FX definition '$fxId':")
                         result.diagnostics.forEach { d ->
                             System.err.println("  ${d.severity}: ${d.message} ${d.location ?: ""}")
                         }
@@ -811,7 +813,7 @@ class Show(
                     ScriptType.FX_CALC -> {
                         val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("phase", 0.5))
-                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
+                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.FxContext.SINGLE))
                             providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
                         })
                         result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
@@ -821,18 +823,9 @@ class Show(
                         val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                             providedProperties(Pair("tick", uk.me.cormack.lighting7.fx.MasterClock.ClockTick(0L, 0L, 0, 0.0, 0L)))
                             providedProperties(Pair("deltaMs", 0L))
-                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
+                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.FxContext.SINGLE))
                             providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
                             providedProperties(Pair("state", mutableMapOf<String, Any>()))
-                        })
-                        result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
-                    }
-
-                    ScriptType.FX_CALC_COMPOSITE -> {
-                        val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
-                            providedProperties(Pair("phase", 0.5))
-                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
-                            providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
                         })
                         result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
                     }

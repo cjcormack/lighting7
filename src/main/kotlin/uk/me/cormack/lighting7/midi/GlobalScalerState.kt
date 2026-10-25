@@ -6,8 +6,8 @@ import uk.me.cormack.lighting7.dmx.TransmitModifier
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.DmxFixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
@@ -52,7 +52,7 @@ import kotlin.math.roundToInt
  *
  * Implementation:
  *   - Classifies every DMX channel by walking [Fixtures] at fixture-change time and reading the
- *     `@FixtureProperty.category` annotations. The classification is two sets of packed
+ *     `@FixtureAttribute.category` annotations. The classification is two sets of packed
  *     `(universe << 20) | channel` keys held in an [AtomicReference] for lock-free lookup on the
  *     hot path.
  *   - Registers itself as a [TransmitModifier] on every controller in [Fixtures] when
@@ -121,15 +121,15 @@ class GlobalScalerState(
         for (fixture in fixtures.fixtures) {
             if (fixture !is DmxFixture) continue
             val universe = fixture.universe.universe
-            val own = fixture.fixtureProperties.map { property ->
-                property.category to runCatching { property.classProperty.call(fixture) }.getOrNull()
+            val own = fixture.fixtureAttributes.map { attribute ->
+                attribute.category to runCatching { attribute.classProperty.call(fixture) }.getOrNull()
             }
-            val fixtureDimmed = own.any { (category, _) -> category == PropertyCategory.DIMMER }
+            val fixtureDimmed = own.any { (category, _) -> category == AttributeCategory.DIMMER }
             classify(universe, own, dimmerless = !fixtureDimmed, scaled, strobe)
             if (fixture is MultiElementFixture<*>) {
                 for (element in fixture.elements) {
-                    val elementOwn = elementProperties(element)
-                    val elementDimmed = elementOwn.any { (category, _) -> category == PropertyCategory.DIMMER }
+                    val elementOwn = elementAttributes(element)
+                    val elementDimmed = elementOwn.any { (category, _) -> category == AttributeCategory.DIMMER }
                     classify(universe, elementOwn, dimmerless = !fixtureDimmed && !elementDimmed, scaled, strobe)
                 }
             }
@@ -137,28 +137,28 @@ class GlobalScalerState(
         classification.set(Classification(scaled, strobe))
     }
 
-    private fun elementProperties(element: FixtureElement<*>): List<Pair<PropertyCategory, Any?>> =
-        FixturePropertyCatalogue.of(element::class).all.map { property ->
+    private fun elementAttributes(element: FixtureElement<*>): List<Pair<AttributeCategory, Any?>> =
+        FixtureAttributeCatalogue.of(element::class).all.map { attribute ->
             @Suppress("UNCHECKED_CAST")
-            val read = property.classProperty as kotlin.reflect.KProperty1<Any, *>
-            property.category to runCatching { read.call(element) }.getOrNull()
+            val read = attribute.classProperty as kotlin.reflect.KProperty1<Any, *>
+            attribute.category to runCatching { read.call(element) }.getOrNull()
         }
 
     private fun classify(
         universe: Int,
-        properties: List<Pair<PropertyCategory, Any?>>,
+        attributes: List<Pair<AttributeCategory, Any?>>,
         dimmerless: Boolean,
         scaled: MutableSet<Long>,
         strobe: MutableSet<Long>,
     ) {
-        for ((category, value) in properties) {
+        for ((category, value) in attributes) {
             if (value == null) continue
             when (category) {
-                PropertyCategory.DIMMER, PropertyCategory.UV -> addValueChannels(universe, value, scaled)
-                PropertyCategory.STROBE, PropertyCategory.RING -> addValueChannels(universe, value, strobe)
-                PropertyCategory.COLOUR ->
+                AttributeCategory.DIMMER, AttributeCategory.UV -> addValueChannels(universe, value, scaled)
+                AttributeCategory.STROBE, AttributeCategory.RING -> addValueChannels(universe, value, strobe)
+                AttributeCategory.COLOUR ->
                     if (dimmerless && (value is DmxColour || value is DmxWhiteMixColour)) addValueChannels(universe, value, scaled)
-                PropertyCategory.WHITE, PropertyCategory.AMBER ->
+                AttributeCategory.WHITE, AttributeCategory.AMBER ->
                     if (dimmerless && value is DmxSlider) addValueChannels(universe, value, scaled)
                 else -> Unit
             }
@@ -231,11 +231,11 @@ fun grandMasterLevelOf7Bit(value7Bit: UByte): Double = value7Bit.toInt() * GRAND
 fun grandMasterLevelTo7Bit(level: Double): UByte =
     (level / GRAND_MASTER_FULL * 127.0).roundToInt().coerceIn(0, 127).toUByte()
 
-/** A control's 0..127 as a stack effect size, 0–1 (effects plan D10). */
-fun stackEffectSizeOf7Bit(value7Bit: UByte): Double = value7Bit.toInt() / 127.0
+/** A control's 0..127 as a stack FX amount, 0–1 (effects plan D10). */
+fun stackFxAmountOf7Bit(value7Bit: UByte): Double = value7Bit.toInt() / 127.0
 
-/** A stack effect size as a control's 0..127: [stackEffectSizeOf7Bit]'s inverse, rounded. */
-fun stackEffectSizeTo7Bit(size: Double): UByte = (size * 127.0).roundToInt().coerceIn(0, 127).toUByte()
+/** A stack FX amount as a control's 0..127: [stackFxAmountOf7Bit]'s inverse, rounded. */
+fun stackFxAmountTo7Bit(amount: Double): UByte = (amount * 127.0).roundToInt().coerceIn(0, 127).toUByte()
 
 /** [value] scaled by [level] percent, rounded. */
 internal fun scaleLevel(value: UByte, level: Double): UByte =

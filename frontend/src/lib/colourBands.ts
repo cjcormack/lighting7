@@ -36,7 +36,7 @@ export function isAnimatedBand(option: SettingOption | undefined): boolean {
 
 /**
  * The option whose band holds [level]: the last whose start is at or below it, else the first —
- * `resolveSettingOption`'s rule (`hooks/usePropertyValues.ts`), restated here so this pure module
+ * `resolveSettingOption`'s rule (`hooks/useAttributeValues.ts`), restated here so this pure module
  * reaches no hook module. Options are level-ascending, as the desk sorts them.
  */
 export function bandOption(options: readonly SettingOption[], level: number): SettingOption | undefined {

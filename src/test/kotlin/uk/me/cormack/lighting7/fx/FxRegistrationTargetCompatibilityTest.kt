@@ -11,13 +11,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Guard for sweep item **A11**: every built-in effect's `compatibleProperties` must name
+ * Guard for sweep item **A11**: every built-in effect's `compatibleAttributes` must name
  * properties that resolve to an [FxTarget] able to apply that effect's [FxOutputType].
  *
  * Why this needs a test rather than review: a mismatched [FxOutput] is *silently dropped* by
  * [FxTarget.applyValueToFixture] — no light, no error, no log. The seven position effects declared
  * `[pan, tilt]` against a `POSITION` output for the desk's whole life, and every frontend picker
- * duly posted `propertyName: "pan"`, which resolves to a [SliderTarget] that discards an
+ * duly posted `attribute: "pan"`, which resolves to a [SliderTarget] that discards an
  * [FxOutput.Position]. Nothing in the suite noticed, because nothing applied a position effect
  * through a target resolver. This test is that missing coverage; before the fix it goes red on all
  * seven.
@@ -63,8 +63,10 @@ class FxRegistrationTargetCompatibilityTest {
     private data class BuiltIn(
         val path: String,
         val id: String,
+        val category: String,
+        val fxMode: String,
         val outputType: FxOutputType,
-        val compatibleProperties: List<String>,
+        val compatibleAttributes: List<String>,
     )
 
     private fun builtIns(): List<BuiltIn> {
@@ -80,23 +82,25 @@ class FxRegistrationTargetCompatibilityTest {
             BuiltIn(
                 path = path,
                 id = metadata.id,
+                category = metadata.family,
+                fxMode = metadata.fxMode,
                 outputType = FxOutputType.valueOf(metadata.outputType),
-                compatibleProperties = metadata.compatibleProperties,
+                compatibleAttributes = metadata.compatibleAttributes,
             )
         }
     }
 
     @Test
-    fun `every built-in advertises only properties its output type can drive`() {
+    fun `every built-in advertises only attributes its output type can drive`() {
         val failures = mutableListOf<String>()
 
         for (effect in builtIns()) {
             assertTrue(
-                effect.compatibleProperties.isNotEmpty(),
-                "fx/${effect.path} declares no compatibleProperties, so no surface can offer it",
+                effect.compatibleAttributes.isNotEmpty(),
+                "fx/${effect.path} declares no compatibleAttributes, so no surface can offer it",
             )
 
-            for (prop in effect.compatibleProperties) {
+            for (prop in effect.compatibleAttributes) {
                 val fixture = representatives[prop]
                 // Not a skip: an unknown name means either a typo in the frontmatter or a new
                 // property this guard hasn't been taught, and both need a human.
@@ -107,10 +111,10 @@ class FxRegistrationTargetCompatibilityTest {
                 }
 
                 // outputType = null withholds FxTargetFactory's pan/tilt coercion on purpose.
-                // That coercion exists to repair rows *already persisted* with propertyName
+                // That coercion exists to repair rows *already persisted* with attribute
                 // "pan"; it is not a licence for dishonest metadata. The frontend resolves a
-                // property name with no such help — `ConfigureEffectSheet` takes
-                // compatibleProperties[0] outright — so the name must stand on its own.
+                // property name with no such help — `ConfigureFxSheet` takes
+                // compatibleAttributes[0] outright — so the name must stand on its own.
                 val target = FxTargetFactory.forFixture(
                     fixture.key, prop, outputType = null, fixture = fixture,
                 )
@@ -122,7 +126,31 @@ class FxRegistrationTargetCompatibilityTest {
             }
         }
 
-        assertTrue(failures.isEmpty(), "Incompatible compatibleProperties:\n" + failures.joinToString("\n"))
+        assertTrue(failures.isEmpty(), "Incompatible compatibleAttributes:\n" + failures.joinToString("\n"))
+    }
+
+    /**
+     * The library by family (terminology plan §4.2): the renamed ids, no Breathe, Lightning Strike a
+     * standard Intensity FX, and the two Steps FX one family. `dimmer` and `palette` are Intensity's
+     * and Steps' stored spellings.
+     */
+    @Test
+    fun `the library's families hold today's ids`() {
+        val byFamily = builtIns().groupBy({ it.category }, { it.id }).mapValues { it.value.toSet() }
+        assertEquals(
+            mapOf(
+                "intensity" to setOf(
+                    "SineWave", "RampUp", "RampDown", "Ramp", "Pulse", "SquareWave", "DimmerStrobe", "Flicker",
+                    "CandleFlicker", "FluorescentFlicker", "LightningStrike",
+                ),
+                "colour" to setOf("ColourCycle", "RainbowCycle", "ColourStrobe", "ColourWave", "ColourFade", "ColourFlicker"),
+                "position" to setOf("Circle", "Figure8", "Sweep", "PanSweep", "TiltSweep", "RandomPosition"),
+                "beam" to setOf("ZoomWave", "IrisPulse", "FrostPulse", "FocusPull"),
+                STEPS_CATEGORY to setOf(PALETTE_STEPS_ID, SLOT_STEPS_ID),
+            ),
+            byFamily,
+        )
+        assertTrue(builtIns().all { it.fxMode == "STANDARD" || it.fxMode == "STATEFUL" }, "the composite mode is gone")
     }
 
     // ─── The coercion itself ────────────────────────────────────────────────
@@ -167,7 +195,7 @@ class FxRegistrationTargetCompatibilityTest {
     }
 
     @Test
-    fun `an unresolvable property name degrades to a setting target rather than throwing`() {
+    fun `an unresolvable attribute name degrades to a setting target rather than throwing`() {
         // Cue, Look and Include spawn all route through FxTargetFactory at fire time. A recorded
         // row naming a property the fixture has since lost must not take the show down.
         val hex = HexFixture(universe, key = "hex-1", fixtureName = "Hex 1", firstChannel = 1)

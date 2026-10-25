@@ -55,7 +55,7 @@ export interface LookSheetProps {
  * sheet never grows a value grid for one. Families, Preview and Contents are read-outs derived
  * server-side, Cue layers and Busk pages are counts, and **Notes is the one value cell** — beside the
  * name's rename in the first column. Both write `PUT {name}` / `PUT {notes}` alone, metadata only:
- * a body without `rows` or `effects` is what tells the desk to leave the contents alone.
+ * a body without `rows` or `fx` is what tells the desk to leave the contents alone.
  *
  * **The row verbs are on the bar** (D11): Include and Pick up act on one Look and are disabled over
  * several with the reason; Duplicate, Copy to… and Delete take the batch. Pick up is not drawn off
@@ -121,8 +121,8 @@ export function LookSheet({ projectId, looks, library, isCurrentProject, project
           <span className="mx-1.5 flex min-w-0 flex-1 overflow-hidden">
             <LookPreviewStrip
               preview={row.look.preview}
-              effectTypes={row.look.effectTypes}
-              effectCount={row.look.effectCount}
+              fxTypes={row.look.fxTypes}
+              fxCount={row.look.fxCount}
             />
           </span>
         ),
@@ -383,10 +383,10 @@ function cellsInert(): boolean {
 /**
  * What a Look covers, in one line — `12 fixtures · 24 rows · 1 fx`. The row's subtitle before the
  * sheet (`LookListRow`'s `describeContents`), with the effect count folded in now that it has no
- * badge of its own. A Look with deferred effects says so: that is what makes it pad-eligible.
+ * badge of its own.
  */
 export function describeLookContents(look: LookSummary): string {
-  if (look.targetCount === 0 && look.effectCount === 0) {
+  if (look.targetCount === 0 && look.fxCount === 0) {
     // A Look that only moves scenery is a scenery Look (scenery-programmer plan D9, D10) — the busk
     // pad that flies the moon — and its Scenery column says what it moves.
     return (look.scenery?.length ?? 0) > 0 ? 'Scenery only' : 'Empty'
@@ -394,8 +394,7 @@ export function describeLookContents(look: LookSummary): string {
   const parts: string[] = []
   if (look.targetCount > 0) parts.push(`${look.targetCount} fixture${look.targetCount === 1 ? '' : 's'}`)
   if (look.rowCount > 0) parts.push(`${look.rowCount} row${look.rowCount === 1 ? '' : 's'}`)
-  if (look.effectCount > 0) parts.push(`${look.effectCount} fx`)
-  if (look.hasDeferredEffects) parts.push('effects follow the layer')
+  if (look.fxCount > 0) parts.push(`${look.fxCount} FX`)
   return parts.join(' · ')
 }
 

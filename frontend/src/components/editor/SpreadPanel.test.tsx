@@ -56,7 +56,7 @@ function intentPlan(over: Partial<IntentSpreadPlan> = {}): IntentSpreadPlan {
 }
 
 const radio = (group: string, name: string | RegExp) => within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name })
-const open = () => fireEvent.click(screen.getByRole('button', { name: 'Spread' }))
+const open = () => fireEvent.click(screen.getByRole('button', { name: 'Fan' }))
 const apply = () => fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 async function answer(value: SpreadResponse, index = pending.length - 1) {
   await act(async () => {
@@ -103,26 +103,26 @@ afterEach(() => {
 describe('the popover host', () => {
   it('offers the trigger where a plan has two steps, and says why not otherwise', () => {
     const { unmount } = render(<SpreadPanel host="popover" plans={[intentPlan()]} />)
-    expect(screen.getByRole('button', { name: 'Spread' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Fan' })).not.toBeDisabled()
     unmount()
     render(<SpreadPanel host="popover" plans={[]} />)
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('Select cells'))
     cleanup()
     // One point is a set, not a spread — unless the one head is a bar spread over its cells.
     render(<SpreadPanel host="popover" plans={[intentPlan({ count: 1, targets: [{ type: 'fixture', key: 'par-1' }] })]} drivableHint="dimmer" />)
-    const one = screen.getByRole('button', { name: 'Spread' })
+    const one = screen.getByRole('button', { name: 'Fan' })
     expect(one).toBeDisabled()
     expect(one).toHaveAttribute('title', expect.stringContaining('in a column it can drive — dimmer'))
     cleanup()
     render(<SpreadPanel host="popover" plans={[intentPlan({ count: 1, cellCount: 12, targets: [{ type: 'fixture', key: 'bar' }] })]} />)
-    expect(screen.getByRole('button', { name: 'Spread' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Fan' })).not.toBeDisabled()
   })
 
   it('names the columns it can drive when the marquee sits in one it cannot — not "select cells"', () => {
     render(<SpreadPanel host="popover" plans={[]} noSelection={false} drivableHint="dimmer, colour" />)
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('in a column it can drive'))
     expect(button).not.toHaveAttribute('title', expect.stringContaining('Select cells'))
@@ -131,7 +131,7 @@ describe('the popover host', () => {
   it('carries the surface’s refusal on the trigger, and a way past it where one is offered', () => {
     const onRefused = vi.fn()
     render(<SpreadPanel host="popover" plans={[intentPlan()]} disabledReason="Locked — unlock the show to edit" onRefused={onRefused} />)
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).not.toBeDisabled()
     expect(button).toHaveAttribute('title', 'Locked — unlock the show to edit')
     fireEvent.click(button)
@@ -149,11 +149,11 @@ describe('the popover host', () => {
     const raw: RawSpreadPlan = { kind: 'raw', col: 'speed', label: 'Speed', count: 2, cellCount: 0, apply: vi.fn() }
     const { unmount } = render(<SpreadPanel host="popover" plans={[intentPlan()]} />)
     open()
-    expect(screen.queryByRole('combobox', { name: 'Column to spread' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Column to fan' })).toBeNull()
     unmount()
     render(<SpreadPanel host="popover" plans={[intentPlan(), raw]} />)
     open()
-    expect(screen.getByRole('combobox', { name: 'Column to spread' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Column to fan' })).toBeInTheDocument()
   })
 })
 
@@ -181,19 +181,19 @@ describe('the family segment and the Property row', () => {
     const plan = intentPlan({
       families: ['INTENSITY', 'COLOUR'],
       initial: { family: 'COLOUR' },
-      propertiesFor: (family) =>
+      attributesFor: (family) =>
         family === 'COLOUR'
           ? [
-              { propertyName: 'rgbColour', family: 'COLOUR', label: 'Colour', intent: 'colour' },
-              { propertyName: 'white', family: 'COLOUR', label: 'White', intent: 'level' },
+              { attribute: 'rgbColour', family: 'COLOUR', label: 'Colour', intent: 'colour' },
+              { attribute: 'white', family: 'COLOUR', label: 'White', intent: 'level' },
             ]
-          : [{ propertyName: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' }],
+          : [{ attribute: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' }],
     })
     render(<SpreadPanel host="docked" plans={[plan]} />)
-    const properties = within(screen.getByRole('radiogroup', { name: 'Property' })).getAllByRole('radio')
-    expect(properties.map((r) => r.textContent)).toEqual(['Colour', 'White'])
+    const attributes = within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio')
+    expect(attributes.map((r) => r.textContent)).toEqual(['Colour', 'White'])
     fireEvent.click(radio('Family', 'Intensity'))
-    expect(screen.queryByRole('radiogroup', { name: 'Property' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Attribute' })).toBeNull()
   })
 
   it('re-answers the family when the host moves the marquee to another column', () => {
@@ -217,12 +217,12 @@ describe('the request', () => {
         { type: 'fixture', key: 'par-2' },
       ],
       families: ['INTENSITY'],
-      property: 'dimmer',
+      attribute: 'dimmer',
       from: 'pct:0',
       to: 'pct:60',
       curve: 'LINE',
-      order: 'LINEAR',
-      parts: 1,
+      order: 'NORMAL',
+      runs: 1,
       over: 'HEADS',
       seed: 0,
     })
@@ -234,7 +234,7 @@ describe('the request', () => {
     render(<SpreadPanel host="docked" plans={[intentPlan({ write: false, onAnswer, mask: ['POSITION'], initial: { family: 'INTENSITY' } })]} />)
     apply()
     expect(lastBody().write).toBe(false)
-    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, propertyName: 'dimmer', value: '128' }], skippedFamilies: ['INTENSITY'] })
+    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, attribute: 'dimmer', value: '128' }], skippedFamilies: ['INTENSITY'] })
     expect(toast.warning).toHaveBeenCalledWith('Intensity rows skipped — the selection is Position', { id: expect.any(String) })
     expect(onAnswer).toHaveBeenCalledTimes(1)
     expect(onAnswer.mock.calls[0][0].written[0].value).toBe('128')
@@ -262,14 +262,14 @@ describe('the request', () => {
 
   it('names the curve, order, parts and over — and Stage L→R is not on offer', () => {
     render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 4, initial: { family: 'INTENSITY' } })]} />)
-    fireEvent.click(radio('Curve', 'Wings'))
+    fireEvent.click(radio('Curve', 'Mirror out'))
     fireEvent.click(radio('Order', 'Centre out'))
-    fireEvent.click(radio('Parts', '3'))
-    fireEvent.click(radio('Over', /^Cells/))
+    fireEvent.click(radio('Runs', '3'))
+    fireEvent.click(radio('Over', /^Elements/))
     expect(within(screen.getByRole('radiogroup', { name: 'Order' })).queryByRole('radio', { name: 'Stage L→R' })).toBeNull()
     expect(document.querySelector('[data-spread-order-unavailable="Stage L→R"]')).toHaveTextContent('not on the desk yet')
     apply()
-    expect(lastBody()).toMatchObject({ curve: 'WINGS', order: 'CENTER_OUT', parts: 3, over: 'CELLS' })
+    expect(lastBody()).toMatchObject({ curve: 'MIRROR_OUT', order: 'CENTRE_OUT', runs: 3, over: 'CELLS' })
     fireEvent.click(radio('Order', 'Random'))
     apply()
     expect(lastBody()).toMatchObject({ order: 'RANDOM', seed: 0 })
@@ -280,27 +280,27 @@ describe('the request', () => {
 
   it('offers Over: Cells everywhere, with the count only where a plan has cells', () => {
     const { unmount } = render(<SpreadPanel host="docked" plans={[intentPlan()]} />)
-    expect(radio('Over', /^Cells/)).toBeEnabled()
-    expect(radio('Over', /^Cells/)).toHaveTextContent(/^Cells$/)
+    expect(radio('Over', /^Elements/)).toBeEnabled()
+    expect(radio('Over', /^Elements/)).toHaveTextContent(/^Elements$/)
     expect(radio('Over', 'Heads')).toHaveAttribute('aria-checked', 'true')
     unmount()
     render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 12 })]} />)
-    const cells = radio('Over', /^Cells/)
+    const cells = radio('Over', /^Elements/)
     expect(cells).toBeEnabled()
-    expect(cells).toHaveTextContent('Cells12')
+    expect(cells).toHaveTextContent('Elements12')
   })
 
   it('keeps Over: Cells through a selection with no cells, and sends Heads there', () => {
     const { rerender } = render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 12 })]} />)
-    fireEvent.click(radio('Over', /^Cells/))
+    fireEvent.click(radio('Over', /^Elements/))
     apply()
     expect(lastBody()).toMatchObject({ over: 'CELLS' })
     rerender(<SpreadPanel host="docked" plans={[intentPlan()]} />)
-    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Over', /^Elements/)).toHaveAttribute('aria-checked', 'true')
     apply()
     expect(lastBody()).toMatchObject({ over: 'HEADS' })
     rerender(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 4 })]} />)
-    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Over', /^Elements/)).toHaveAttribute('aria-checked', 'true')
     apply()
     expect(lastBody()).toMatchObject({ over: 'CELLS' })
   })
@@ -320,18 +320,18 @@ describe('the request', () => {
     fireEvent.click(inB.getByRole('switch', { name: 'Live — apply as I adjust' }))
     send.mockClear()
     const inA = within(screen.getByTestId('a'))
-    fireEvent.click(within(inA.getByRole('radiogroup', { name: 'Over' })).getByRole('radio', { name: /^Cells/ }))
-    expect(within(inB.getByRole('radiogroup', { name: 'Over' })).getByRole('radio', { name: /^Cells/ })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(within(inA.getByRole('radiogroup', { name: 'Over' })).getByRole('radio', { name: /^Elements/ }))
+    expect(within(inB.getByRole('radiogroup', { name: 'Over' })).getByRole('radio', { name: /^Elements/ })).toHaveAttribute('aria-checked', 'true')
     // A, which moved it, has Live off; B, which only followed, must not write over its selection.
     expect(send).not.toHaveBeenCalled()
   })
 
   it('keeps Over through the panel unmounting — an empty selection — and mounts again on it', () => {
     const { unmount } = render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 12 })]} />)
-    fireEvent.click(radio('Over', /^Cells/))
+    fireEvent.click(radio('Over', /^Elements/))
     unmount()
     render(<SpreadPanel host="docked" plans={[intentPlan({ cellCount: 4 })]} />)
-    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Over', /^Elements/)).toHaveAttribute('aria-checked', 'true')
     apply()
     expect(lastBody()).toMatchObject({ over: 'CELLS' })
     fireEvent.click(radio('Over', 'Heads'))
@@ -348,7 +348,7 @@ describe('the chosen plan', () => {
     const { unmount } = render(<SpreadPanel host="popover" plans={[intentPlan(), raw]} />)
     open()
     expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('combobox', { name: 'Column to spread' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Column to fan' }))
     fireEvent.click(screen.getByRole('option', { name: 'Speed' }))
     expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
     unmount()
@@ -371,8 +371,8 @@ describe('the chosen plan', () => {
     const plan = intentPlan({
       families: ['COLOUR'],
       initial: { family: 'COLOUR' },
-      colourTemplates: [
-        { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] } as never,
+      colourPalettes: [
+        { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ attribute: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] } as never,
       ],
     })
     render(<SpreadPanel host="docked" plans={[plan]} colourEditor={Stub as never} />)
@@ -467,7 +467,7 @@ describe('the four kinds', () => {
     expect(screen.queryByRole('checkbox', { name: 'Reverse' })).toBeNull()
     // Cells with no cells to split steps over the heads, and the plan is told so.
     open()
-    fireEvent.click(radio('Over', /^Cells/))
+    fireEvent.click(radio('Over', /^Elements/))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(apply).toHaveBeenLastCalledWith([0, 50, 100], 'HEADS')
   })
@@ -509,7 +509,7 @@ describe('the four kinds', () => {
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '1s' } })
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '4s' } })
     expect(screen.getByText(/Q1 1.0s · Q2 2.0s · Q4 3.0s · Q5 4.0s/)).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Spread' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Fan' })).toBeNull()
     fireEvent.click(radio('Curve', 'Mirror'))
     expect(screen.getByText(/Q1 4.0s · Q2 2.0s · Q4 2.0s · Q5 4.0s/)).toBeInTheDocument()
     fireEvent.click(radio('Curve', 'Line'))
@@ -521,10 +521,10 @@ describe('the four kinds', () => {
     const plan = intentPlan({
       families: ['INTENSITY', 'POSITION'],
       initial: { family: 'POSITION' },
-      propertiesFor: (family) =>
+      attributesFor: (family) =>
         family === 'POSITION'
-          ? [{ propertyName: 'position', family: 'POSITION', label: 'Position', intent: 'position' }]
-          : [{ propertyName: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' }],
+          ? [{ attribute: 'position', family: 'POSITION', label: 'Position', intent: 'position' }]
+          : [{ attribute: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' }],
     })
     render(<SpreadPanel host="popover" plans={[plan]} />)
     open()
@@ -533,7 +533,7 @@ describe('the four kinds', () => {
     expect(pan).toHaveValue(-16)
     fireEvent.change(pan, { target: { value: '-40' } })
     fireEvent.keyDown(pan, { key: 'Enter' })
-    expect(lastBody()).toMatchObject({ property: 'position', from: 'pos:-40,0', to: 'pos:16,0' })
+    expect(lastBody()).toMatchObject({ attribute: 'position', from: 'pos:-40,0', to: 'pos:16,0' })
     // Enter applied and closed the popover.
     expect(document.querySelector('[data-spread-panel]')).toBeNull()
   })
@@ -549,10 +549,10 @@ describe('Fan (venue-visit plan S12)', () => {
       ],
       families: ['POSITION'],
       initial: { family: 'POSITION' },
-      propertiesFor: () => [{ propertyName: 'position', family: 'POSITION', label: 'Position', intent: 'position' }],
+      attributesFor: () => [{ attribute: 'position', family: 'POSITION', label: 'Position', intent: 'position' }],
       ...over,
     })
-  const toFan = () => fireEvent.click(radio('Spread mode', 'Fan'))
+  const toFan = () => fireEvent.click(radio('Fan mode', 'About each position'))
   const amount = (axis: 'Pan' | 'Tilt') => screen.getByRole('spinbutton', { name: `${axis} amount` })
   const base = (key: string, value: string) => ({ target: { type: 'fixture' as const, key }, value })
 
@@ -567,10 +567,10 @@ describe('Fan (venue-visit plan S12)', () => {
     expect(screen.getByRole('slider', { name: 'Tilt fan' })).toBeTruthy()
     // The curve pictures read against the midline, each head's own position.
     expect(document.querySelector('[data-curve-picture="LINE"] [data-curve-midline]')).not.toBeNull()
-    expect(getSpreadFanPrefs()).toEqual({ mode: 'FAN', axes: 'BOTH' })
+    expect(getSpreadFanPrefs()).toEqual({ mode: 'ABOUT', axes: 'BOTH' })
     cleanup()
     render(<SpreadPanel host="docked" plans={[intentPlan({ initial: { family: 'INTENSITY' } })]} />)
-    expect(screen.queryByRole('radiogroup', { name: 'Spread mode' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Fan mode' })).toBeNull()
   })
 
   it('opens a fresh panel in the mode and axes it was last left in', () => {
@@ -579,7 +579,7 @@ describe('Fan (venue-visit plan S12)', () => {
     fireEvent.click(radio('Fan axes', 'Tilt'))
     unmount()
     render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
-    expect(radio('Spread mode', 'Fan')).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Fan mode', 'About each position')).toHaveAttribute('aria-checked', 'true')
     expect(radio('Fan axes', 'Tilt')).toHaveAttribute('aria-checked', 'true')
   })
 
@@ -588,7 +588,7 @@ describe('Fan (venue-visit plan S12)', () => {
     toFan()
     fireEvent.change(amount('Pan'), { target: { value: '20' } })
     apply()
-    expect(lastBody()).toMatchObject({ property: 'position', mode: 'FAN', fan: { pan: 20 } })
+    expect(lastBody()).toMatchObject({ attribute: 'position', mode: 'ABOUT', fan: { pan: 20 } })
     expect(lastBody()).not.toHaveProperty('from')
     expect(lastBody()).not.toHaveProperty('to')
     expect(lastBody()).not.toHaveProperty('base')
@@ -614,10 +614,10 @@ describe('Fan (venue-visit plan S12)', () => {
     toFan()
     expect(radio('Fan in', 'Stage')).toHaveAttribute('aria-checked', 'true')
     expect(radio('Fan axes', 'Across')).toHaveAttribute('aria-checked', 'true')
-    expect(radio('Over', 'Cells')).toBeDisabled()
+    expect(radio('Over', 'Elements')).toBeDisabled()
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Across amount' }), { target: { value: '1.5' } })
     apply()
-    expect(lastBody()).toMatchObject({ mode: 'FAN', fan: { x: 1.5 }, over: 'HEADS' })
+    expect(lastBody()).toMatchObject({ mode: 'ABOUT', fan: { x: 1.5 }, over: 'HEADS' })
     expect(lastBody()).not.toHaveProperty('near')
     const fine = { ...base('spot-1', '128,128'), panFine: 7, tiltFine: 9 }
     const near = [{ target: { type: 'fixture' as const, key: 'spot-1' }, panDeg: 250, tiltDeg: 60 }]
@@ -771,7 +771,7 @@ describe('Fan (venue-visit plan S12)', () => {
     const plan = positionPlan({ families: ['INTENSITY', 'POSITION'], initial: undefined, mask: ['POSITION'] })
     render(<SpreadPanel host="popover" plans={[plan]} seed={{ fan: true, key: 1 }} onSeedConsumed={onSeedConsumed} />)
     expect(document.querySelector('[data-spread-panel]')).not.toBeNull()
-    expect(radio('Spread mode', 'Fan')).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Fan mode', 'About each position')).toHaveAttribute('aria-checked', 'true')
     expect(onSeedConsumed).toHaveBeenCalled()
   })
 })
@@ -789,7 +789,7 @@ describe('what it reaches', () => {
 
   it('draws Wings as two fans meeting at the centre, so it is not Mirror’s V', () => {
     render(<SpreadPanel host="docked" plans={[intentPlan()]} />)
-    const wings = document.querySelector('[data-curve-picture="WINGS"]')!
+    const wings = document.querySelector('[data-curve-picture="MIRROR_OUT"]')!
     const mirror = document.querySelector('[data-curve-picture="MIRROR"]')!
     expect(wings.querySelectorAll('polyline')).toHaveLength(2)
     expect(wings.querySelector('line')).not.toBeNull()

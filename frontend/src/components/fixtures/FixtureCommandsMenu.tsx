@@ -24,7 +24,7 @@ import { useCurrentProjectQuery } from '@/store/projects'
 import { useVisiblePatchListQuery } from '@/store/patches'
 import { useRunFixtureCommandMutation } from '@/store/commands'
 import { useGetParkStateListQuery, type ParkState } from '@/store/park'
-import type { CommandPropertyDescriptor } from '@/store/fixtures'
+import type { CommandAttributeDescriptor } from '@/store/fixtures'
 import { useRigSafety } from '@/store/rigSafety'
 import { clockLabel, restrikeLeft } from '@/lib/rigSafety'
 import { useNow } from '@/components/rigSafety/useNow'
@@ -51,7 +51,7 @@ export function alongsideSentence(whys: readonly string[]): string {
  * also cuts a hold short when a park lands mid-hold; the menu says so before the press rather than
  * after it. Its own channel first, then its preconditions' (which are on the command's universe).
  */
-export function parkedChannelOf(command: CommandPropertyDescriptor, parks: readonly ParkState[]): number | null {
+export function parkedChannelOf(command: CommandAttributeDescriptor, parks: readonly ParkState[]): number | null {
   const { universe } = command.channel
   const parked = new Set(parks.filter((p) => p.universe === universe).map((p) => p.channel))
   const held = [command.channel.channelNo, ...(command.alongside ?? []).map((a) => a.channel.channelNo)]
@@ -96,7 +96,7 @@ export function FixtureCommandsMenu({
 }: {
   fixtureKey: string
   fixtureName: string
-  commands: readonly CommandPropertyDescriptor[]
+  commands: readonly CommandAttributeDescriptor[]
   /** False on a read-only surface or with the desk unreachable. */
   canRun: boolean
 }) {
@@ -106,17 +106,17 @@ export function FixtureCommandsMenu({
   const patch = patches?.find((p) => p.key === fixtureKey)
   const [run] = useRunFixtureCommandMutation()
   const { data: parks } = useGetParkStateListQuery()
-  const [asking, setAsking] = useState<CommandPropertyDescriptor | null>(null)
-  const [running, setRunning] = useState<{ command: CommandPropertyDescriptor; endsAt: number } | null>(null)
+  const [asking, setAsking] = useState<CommandAttributeDescriptor | null>(null)
+  const [running, setRunning] = useState<{ command: CommandAttributeDescriptor; endsAt: number } | null>(null)
   const secondsLeft = useSecondsLeft(running?.endsAt ?? null)
   const rig = useRigSafety()
   const lampOff = rig.lampsOff.find((l) => l.fixture === fixtureKey)
   const now = useNow(lampOff != null && lampOff.restrikeRemainingMs > 0, lampOff ? rig.receivedAt + lampOff.restrikeRemainingMs : undefined)
-  const restrikeOf = (c: CommandPropertyDescriptor) => (c.role === 'LAMP_ON' ? restrikeLeft(rig, fixtureKey, now) : 0)
+  const restrikeOf = (c: CommandAttributeDescriptor) => (c.role === 'LAMP_ON' ? restrikeLeft(rig, fixtureKey, now) : 0)
 
   const ready = canRun && project != null && patch != null && running == null
 
-  const start = (command: CommandPropertyDescriptor) => {
+  const start = (command: CommandAttributeDescriptor) => {
     if (project == null || patch == null) return
     setRunning({ command, endsAt: Date.now() + command.holdMs })
     run({ projectId: project.id, patchId: patch.id, command: command.name })
@@ -129,7 +129,7 @@ export function FixtureCommandsMenu({
       .finally(() => setRunning(null))
   }
 
-  const choose = (command: CommandPropertyDescriptor) => {
+  const choose = (command: CommandAttributeDescriptor) => {
     if (!ready) return
     if (command.confirm) setAsking(command)
     else start(command)

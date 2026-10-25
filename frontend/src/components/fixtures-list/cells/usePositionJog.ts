@@ -2,12 +2,12 @@ import { useMemo } from 'react'
 import { useCueRowStore } from '../../cues/editor/CueRowStore'
 import { useLiveJogRefusal, useStageJog, type StageJogHost } from '../../editor/StageJog'
 import { useEditorContext } from '../../programmer/EditorContext'
-import { useFocusedTemplateLayer } from '../../programmer/FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from '../../programmer/FocusedPaletteLayer'
 import { useLookRowStore } from '../../programmer/LookRowStore'
 import { landValuesInLook } from '../../programmer/landValuesInLook'
 import { useProgrammerScope } from '../../programmer/ProgrammerScope'
 import { parseProgrammerValue } from '../../../lib/programmerValue'
-import { templateTargetsOf, type WriteTarget } from '../rowModel'
+import { paletteTargetsOf, type WriteTarget } from '../rowModel'
 import { lookPositionOf } from '../useCellWriters'
 import type { AimBase, AimResponse } from '../../../store/programmerOps'
 
@@ -19,14 +19,14 @@ import type { AimBase, AimResponse } from '../../../store/programmerOps'
  */
 export function usePositionJog(targets: readonly WriteTarget[], projectId?: number) {
   const scope = useProgrammerScope()
-  const focusedTemplate = useFocusedTemplateLayer()
+  const focusedPalette = useFocusedPaletteLayer()
   const lookStore = useLookRowStore()
   const editorContext = useEditorContext()
   const cueStoreRaw = useCueRowStore()
   const cueStore = editorContext.kind === 'cue' ? cueStoreRaw : null
   const layerStore = scope?.kind === 'layer' ? lookStore : null
 
-  const keys = useMemo(() => templateTargetsOf(targets).map((target) => target.key), [targets])
+  const keys = useMemo(() => paletteTargetsOf(targets).map((target) => target.key), [targets])
   const live = useLiveJogRefusal(keys, cueStore == null ? projectId : undefined)
 
   const draft = useMemo<StageJogHost['draft']>(() => {
@@ -44,7 +44,7 @@ export function usePositionJog(targets: readonly WriteTarget[], projectId?: numb
         onAnswer: (answer: AimResponse) =>
           landValuesInLook(
             layerStore,
-            (answer.written ?? []).map((write) => ({ target: write.target, propertyName: 'position', value: write.value })),
+            (answer.written ?? []).map((write) => ({ target: write.target, attribute: 'position', value: write.value })),
           ),
       }
     }
@@ -57,7 +57,7 @@ export function usePositionJog(targets: readonly WriteTarget[], projectId?: numb
     ? 'This cue is read-only here — unlock the show to edit its values'
     : scope?.kind === 'output'
       ? 'Output is a read of the cook — switch to Local to move these heads'
-      : focusedTemplate != null
+      : focusedPalette != null
         ? 'This layer applies a palette — switch to Local to move these heads'
         : live.refusal
   return { ...jog, refusal }

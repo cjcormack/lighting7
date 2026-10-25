@@ -1,10 +1,10 @@
 /*---
 id: SquareWave
 name: Square Wave
-category: dimmer
+family: intensity
 outputType: SLIDER
-effectMode: STANDARD
-compatibleProperties: [dimmer, uv]
+fxMode: STANDARD
+compatibleAttributes: [dimmer, uv]
 parameters:
   - name: min
     type: ubyte

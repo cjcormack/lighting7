@@ -29,7 +29,7 @@ object FixtureColours {
     val RESERVED: Map<String, String> = linkedMapOf(
         "blue" to "your values",
         "amber" to "a park",
-        "violet" to "an effect",
+        "violet" to "an FX",
         "sky" to "a cue",
         "teal" to "a Look and the venue",
     )

@@ -4,9 +4,9 @@ import {
   getChannelValue,
   resolveSettingOption,
   subscribeToChannels,
-} from '../../hooks/usePropertyValues'
+} from '../../hooks/useAttributeValues'
 import { computeCombinedCss } from '../../lib/colourMath'
-import { resolutionChannels, resolutionPropertyNames, resolveCell } from './columns'
+import { resolutionChannels, resolutionAttributeNames, resolveCell } from './columns'
 import { resolveTargetCells, rowWriteTargets } from './rowModel'
 import type { CellResolution, ColumnKey } from './columns'
 import type { Row } from './rowModel'
@@ -19,7 +19,7 @@ import { whiteMixColour } from '../../lib/whiteMix'
  * aggregates every member that has the property.
  *
  * This is also what the group cards and the stage views display —
- * `useGroupPropertyValues.ts` projects its group descriptors into
+ * `useGroupAttributeValues.ts` projects its group descriptors into
  * [CellResolution]s and reads through [aggregateCellValue]. There used to be a
  * second implementation there, and the two had already diverged over extended
  * emitters (see [aggregateCellValue]).
@@ -57,9 +57,9 @@ export type CellValue =
  * position cell built from separate pan/tilt sliders is a single resolution backed by two
  * independent properties.
  */
-export interface CellPropertyKey {
+export interface CellAttributeKey {
   targetKey: string
-  propertyName: string
+  attribute: string
 }
 
 export interface RowCell {
@@ -80,7 +80,7 @@ export interface RowCell {
    */
   targetKeys: string[]
   /** Every (target, property) the cell covers — the programmer's key space. */
-  keys: CellPropertyKey[]
+  keys: CellAttributeKey[]
 }
 
 export type RowValues = Partial<Record<ColumnKey, CellValue>>
@@ -98,15 +98,15 @@ export function buildRowCells(row: Row, visibleColumns: readonly ColumnKey[]): R
   for (const col of visibleColumns) {
     const resolutions: NonNullable<CellResolution>[] = []
     const targetKeys: string[] = []
-    const keys: CellPropertyKey[] = []
+    const keys: CellAttributeKey[] = []
     for (const target of targets) {
       for (const { target: resolved, resolution } of resolveTargetCells(target, col)) {
         resolutions.push(resolution)
         // `resolved` is the element for a multi-head fallback, the target itself otherwise —
         // exactly the key the backend stores the programmer entry under.
         targetKeys.push(resolved.key)
-        for (const propertyName of resolutionPropertyNames(resolution)) {
-          keys.push({ targetKey: resolved.key, propertyName })
+        for (const attribute of resolutionAttributeNames(resolution)) {
+          keys.push({ targetKey: resolved.key, attribute })
         }
       }
     }
@@ -124,7 +124,7 @@ export function buildRowCells(row: Row, visibleColumns: readonly ColumnKey[]): R
 export function buildCueRowCells(row: Row, visibleColumns: readonly ColumnKey[]): RowCell[] {
   const cells = buildRowCells(row, visibleColumns)
   if (row.kind !== 'group') return cells
-  return cells.filter((cell) => row.members.some((member) => resolveCell(member.properties, cell.col) != null))
+  return cells.filter((cell) => row.members.some((member) => resolveCell(member.attributes, cell.col) != null))
 }
 
 /**
@@ -139,7 +139,7 @@ export function buildCueRowCells(row: Row, visibleColumns: readonly ColumnKey[])
  * that never came off the wire at all. `scopedCellValue.ts` feeds it a lookup built from
  * programmer entries or a Look's stored rows; nothing about the maths differs, and duplicating
  * it for each scope is how the four kinds drift apart. It also lets the group cards and stage
- * views pass their `ChannelSource` selection in (`useGroupPropertyValues.ts`).
+ * views pass their `ChannelSource` selection in (`useGroupAttributeValues.ts`).
  *
  * **The extended-emitter averaging rule, stated once because it is the thing the two former
  * implementations disagreed about**: each of white/amber/UV is averaged over the members that
@@ -161,7 +161,7 @@ export function aggregateCellValue(
     case 'slider': {
       const values = resolutions
         .filter((r) => r.kind === 'slider')
-        .map((r) => readChannel(r.property.channel))
+        .map((r) => readChannel(r.attribute.channel))
       const min = Math.min(...values)
       const max = Math.max(...values)
       return { kind: 'slider', min, max, isUniform: min === max }
@@ -170,12 +170,12 @@ export function aggregateCellValue(
       const members = resolutions
         .filter((r) => r.kind === 'colour')
         .map((r) => ({
-          r: readChannel(r.property.redChannel),
-          g: readChannel(r.property.greenChannel),
-          b: readChannel(r.property.blueChannel),
-          w: r.property.whiteChannel ? readChannel(r.property.whiteChannel) : undefined,
-          a: r.property.amberChannel ? readChannel(r.property.amberChannel) : undefined,
-          uv: r.property.uvChannel ? readChannel(r.property.uvChannel) : undefined,
+          r: readChannel(r.attribute.redChannel),
+          g: readChannel(r.attribute.greenChannel),
+          b: readChannel(r.attribute.blueChannel),
+          w: r.attribute.whiteChannel ? readChannel(r.attribute.whiteChannel) : undefined,
+          a: r.attribute.amberChannel ? readChannel(r.attribute.amberChannel) : undefined,
+          uv: r.attribute.uvChannel ? readChannel(r.attribute.uvChannel) : undefined,
         }))
       const head = members[0]
       const isUniform = members.every(
@@ -215,7 +215,7 @@ export function aggregateCellValue(
       const members = resolutions
         .filter((r) => r.kind === 'white-mix')
         .map((r) =>
-          whiteMixColour(r.property, readChannel(r.property.warmChannel), readChannel(r.property.coldChannel)),
+          whiteMixColour(r.attribute, readChannel(r.attribute.warmChannel), readChannel(r.attribute.coldChannel)),
         )
       const isUniform = members.every((m) => m[0] === members[0][0] && m[1] === members[0][1] && m[2] === members[0][2])
       const avg = (i: number) => Math.round(members.reduce((sum, m) => sum + m[i], 0) / members.length)
@@ -246,13 +246,13 @@ export function aggregateCellValue(
     case 'colour-setting': {
       const levels = resolutions
         .filter((r) => r.kind === 'setting' || r.kind === 'colour-setting')
-        .map((r) => readChannel(r.property.channel))
+        .map((r) => readChannel(r.attribute.channel))
       const isUniform = levels.every((level) => level === levels[0])
       return {
         kind: 'setting',
         isUniform,
         level: levels[0],
-        option: isUniform ? resolveSettingOption(first.property.options, levels[0]) : undefined,
+        option: isUniform ? resolveSettingOption(first.attribute.options, levels[0]) : undefined,
       }
     }
   }

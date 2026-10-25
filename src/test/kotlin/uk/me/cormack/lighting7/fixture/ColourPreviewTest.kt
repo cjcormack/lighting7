@@ -6,7 +6,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.RobeColorSpot575Fixture
 import uk.me.cormack.lighting7.fixture.dmx.VarytecEasymoveXl60SpotFixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
+import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -37,14 +37,14 @@ class ColourPreviewTest {
                 }
             }
             for ((where, owner) in owners) {
-                for (p in FixturePropertyCatalogue.of(owner::class).all) {
+                for (p in FixtureAttributeCatalogue.of(owner::class).all) {
                     val setting = p.classProperty.getter.call(owner) as? DmxFixtureSetting<*> ?: continue
                     for (option in setting.sortedValues) {
                         val colour = option as? DmxFixtureColourSettingValue
                         colour?.colourPreview?.let { preview ->
                             assertTrue(hex.matches(preview), "$where's ${p.name} ${option.name} preview $preview is not #RRGGBB")
                         }
-                        if (p.category != PropertyCategory.COLOUR) {
+                        if (p.category != AttributeCategory.COLOUR) {
                             assertTrue(colour?.noColour != true, "$where's ${p.name} is no colour setting but marks ${option.name} noColour")
                             continue
                         }
@@ -57,7 +57,7 @@ class ColourPreviewTest {
                         )
                         if (colour.noColour) noColourBands++
                     }
-                    if (p.category == PropertyCategory.COLOUR) settings++
+                    if (p.category == AttributeCategory.COLOUR) settings++
                 }
             }
         }
@@ -68,7 +68,7 @@ class ColourPreviewTest {
     @Test
     fun `the marker reaches the descriptor, and only where it is set`() {
         val robe = RobeColorSpot575Fixture.Mode2Ch(universe, "spot-1", "Spot 1", 1)
-        val wheel = robe.generatePropertyDescriptors().filterIsInstance<SettingPropertyDescriptor>().single { it.name == "colour1" }
+        val wheel = robe.generateAttributeDescriptors().filterIsInstance<SettingAttributeDescriptor>().single { it.name == "colour1" }
         val byName = wheel.options.associateBy { it.name }
         assertEquals(true, byName.getValue("SCROLL_CW").noColour)
         assertEquals(true, byName.getValue("AUTO_RANDOM").noColour)
@@ -80,7 +80,7 @@ class ColourPreviewTest {
     @Test
     fun `the Varytec's wheel draws a colour at every indexed position, never black`() {
         val varytec = VarytecEasymoveXl60SpotFixture.Mode11Ch(universe, "vary-1", "Vary 1", 1)
-        val wheel = varytec.generatePropertyDescriptors().filterIsInstance<SettingPropertyDescriptor>().single { it.category == "colour" }
+        val wheel = varytec.generateAttributeDescriptors().filterIsInstance<SettingAttributeDescriptor>().single { it.category == "colour" }
         for (option in wheel.options) {
             if (option.noColour == true) continue
             val preview = option.colourPreview

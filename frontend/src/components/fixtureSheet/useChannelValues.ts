@@ -1,5 +1,5 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react'
-import { getChannelValue, subscribeToChannels } from '@/hooks/usePropertyValues'
+import { getChannelValue, subscribeToChannels } from '@/hooks/useAttributeValues'
 import { useChannelSource } from '@/hooks/useChannelSource'
 import type { ChannelRef } from '@/store/fixtures'
 

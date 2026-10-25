@@ -1,7 +1,7 @@
-import type { PropertyCategory } from '@/store/fixtures'
+import type { AttributeCategory } from '@/store/fixtures'
 
 /**
- * An attribute family — the backend's `PropertyMaskGroup`, and what a Look's `families` are drawn
+ * An attribute family — the backend's `AttributeFamily`, and what a Look's `families` are drawn
  * from. It is derived, never declared: a Look spanning colour and position reports both.
  *
  * Called "family" rather than "palette type" because a Look has no type, and because "palette" now
@@ -18,7 +18,7 @@ export const ATTRIBUTE_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'POS
  * [ATTRIBUTE_FAMILIES]' declaration order. Shared by `/palettes` and `ApplyPicker`, which mount
  * the same `PartitionChips`.
  */
-export const TEMPLATE_FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
+export const PALETTE_FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
 
 /** Operator-facing labels. Plural names the *bank*, which is what the library's filter shows. */
 export const FAMILY_LABELS: Record<AttributeFamily, { singular: string; plural: string }> = {
@@ -52,7 +52,7 @@ export function formatFamilyList(
 /**
  * Which attribute family a property belongs to, from its category.
  *
- * A direct mirror of the backend's `PropertyCategory.maskGroup()` (`fx/PropertyMask.kt`), which
+ * A direct mirror of the backend's `AttributeCategory.family()` (`fx/AttributeMask.kt`), which
  * is the only definition that matters — a family *is* a mask group, so a client that classified a
  * property differently would file a Look under an attribute it cannot cover.
  *
@@ -63,7 +63,7 @@ export function formatFamilyList(
  * `position` is the synthetic pan/tilt pair, which has no category of its own; it is handled by
  * the `pan`/`tilt` arms via the descriptors it was built from.
  */
-const FAMILY_BY_CATEGORY: Record<PropertyCategory, AttributeFamily> = {
+const FAMILY_BY_CATEGORY: Record<AttributeCategory, AttributeFamily> = {
   dimmer: 'INTENSITY',
   strobe: 'INTENSITY',
   pan: 'POSITION',
@@ -105,35 +105,35 @@ const FAMILY_BY_CATEGORY: Record<PropertyCategory, AttributeFamily> = {
  * needed the question the other way round — from an entry's category to a family, which is this.
  */
 export function familyForCategory(category: string): AttributeFamily {
-  // `position` is the synthetic pan/tilt pair. It has no entry in `PropertyCategory` — the
+  // `position` is the synthetic pan/tilt pair. It has no entry in `AttributeCategory` — the
   // backend answers it before its own category lookup for the same reason — but it does appear
   // as a descriptor's category, so it is answered here rather than falling into BEAM.
   if (category === 'position') return 'POSITION'
-  // Loose `string` rather than `PropertyCategory`, because group property descriptors carry an
+  // Loose `string` rather than `AttributeCategory`, because group property descriptors carry an
   // untyped category off the wire. The Record above still forces every known category to be
   // classified; an unrecognised one lands in BEAM, which is where the backend's own catch-all
   // categories (`SETTING`, `OTHER`) go.
-  return FAMILY_BY_CATEGORY[category as PropertyCategory] ?? 'BEAM'
+  return FAMILY_BY_CATEGORY[category as AttributeCategory] ?? 'BEAM'
 }
 
 /**
  * Which family an **effect library `category`** belongs to — `familyForCategory`'s sibling, and a
  * different question from a different vocabulary.
  *
- * A mirror of `familyForEffectCategory` in lighting7's `routes/projectLooks.kt`. Keep the two in
+ * A mirror of `attributeFamilyForFxFamily` in lighting7's `routes/projectLooks.kt`. Keep the two in
  * step: it is what derives an effect template's family, and a client that classified a category
  * differently would offer the operator a template the write boundary then refuses.
  *
- * **Do not fold this into [familyForCategory].** That one is keyed by `PropertyCategory` — the
+ * **Do not fold this into [familyForCategory].** That one is keyed by `AttributeCategory` — the
  * *property* vocabulary, which has `pan` and `tilt` and no `position` at all — and it is total,
  * answering BEAM for anything it does not recognise. This one is over the effect library's own
- * `category`, and its `null` is load-bearing: `controls` has no tempo and `composite` spans
- * families, so neither can name a family, and saying BEAM for them would be a wrong answer rather
- * than a catch-all. The two vocabularies share two spellings (`dimmer`, `colour`) and nothing else.
+ * `category`, and its `null` is load-bearing: `controls` has no tempo and `steps` (the Steps FX)
+ * steps another family, so neither names one, and saying BEAM for them would be a wrong answer
+ * rather than a catch-all. The two vocabularies share one spelling (`colour`) and nothing else.
  */
-export function familyForEffectCategory(category: string): AttributeFamily | null {
+export function attributeFamilyForFxFamily(category: string): AttributeFamily | null {
   switch (category.toLowerCase()) {
-    case 'dimmer':
+    case 'intensity':
       return 'INTENSITY'
     case 'colour':
     case 'color':
@@ -151,9 +151,9 @@ export function familyForEffectCategory(category: string): AttributeFamily | nul
  * The families an **effect template** can be banked under (fx-templates D4): all four, since the
  * effect library's `beam` category (effects plan D6) gave Beam effects of its own.
  *
- * Mirrors `TEMPLATE_EFFECT_FAMILIES` in `routes/projectTemplates.kt`.
+ * Mirrors `PALETTE_FX_FAMILIES` in `routes/projectPalettes.kt`.
  */
-export const TEMPLATE_EFFECT_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
+export const PALETTE_FX_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
 
 /**
  * How many patched heads an effect template of this family would run on.
@@ -194,7 +194,7 @@ export function parseFamilySlug(raw: string | undefined): AttributeFamily | null
 }
 
 /**
- * Parse a layer's `propertyMask` — the comma-separated wire form — into families.
+ * Parse a layer's `attributeMask` — the comma-separated wire form — into families.
  *
  * `null` / `undefined` / empty means **no mask**, i.e. every family, and this returns `[]` for all
  * three. That is the convention the backend applies, so the two agree without a translation step.
@@ -205,7 +205,7 @@ export function parseFamilySlug(raw: string | undefined): AttributeFamily | null
  * a stored value naming a family this client has never heard of should still let the operator edit
  * the ones it does know instead of rendering nothing.
  */
-export function parsePropertyMask(mask: string | null | undefined): AttributeFamily[] {
+export function parseAttributeMask(mask: string | null | undefined): AttributeFamily[] {
   if (!mask) return []
   const names = mask.split(',').map((part) => part.trim().toUpperCase())
   return ATTRIBUTE_FAMILIES.filter((family) => names.includes(family))
@@ -216,14 +216,14 @@ export function parsePropertyMask(mask: string | null | undefined): AttributeFam
  *
  * **Both an empty selection and a complete one serialize to `null`**, and that is the load-bearing
  * part. A mask naming all four families composes identically to no mask at all, but it is not the
- * same value: `propertyMask` distinguishes null from a string, so storing `"INTENSITY,POSITION,
+ * same value: `attributeMask` distinguishes null from a string, so storing `"INTENSITY,POSITION,
  * COLOUR,BEAM"` would make the row render a four-family badge that says nothing and would survive
  * as noise if a fifth family were ever added. Normalising to null keeps "unmasked" one value.
  *
  * Output is in [ATTRIBUTE_FAMILIES] order regardless of selection order, so a mask has one
  * canonical spelling and re-selecting the same families is not a change.
  */
-export function serializePropertyMask(families: readonly AttributeFamily[]): string | null {
+export function serializeAttributeMask(families: readonly AttributeFamily[]): string | null {
   const selected = ATTRIBUTE_FAMILIES.filter((family) => families.includes(family))
   if (selected.length === 0 || selected.length === ATTRIBUTE_FAMILIES.length) return null
   return selected.join(',')

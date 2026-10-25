@@ -38,7 +38,7 @@ import uk.me.cormack.lighting7.routes.deleteOwnPatch
 import uk.me.cormack.lighting7.routes.deleteOwnUniverse
 import uk.me.cormack.lighting7.routes.republishCueIfLive
 import uk.me.cormack.lighting7.routes.republishForLookEdit
-import uk.me.cormack.lighting7.routes.republishForTemplateEdit
+import uk.me.cormack.lighting7.routes.republishForPaletteEdit
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.venue.VenueRigGuard
@@ -166,7 +166,7 @@ internal class PatchEditTools(private val state: State) {
             if (key.isEmpty()) rowProblems += "key must be a non-blank string"
             if (newKey.isEmpty()) rowProblems += "newKey must be a non-blank string"
             if (newKey.length > 100) rowProblems += "newKey must be at most 100 characters"
-            if ('.' in newKey) rowProblems += "newKey may not contain '.': a fixture's cells are named <key>.<cell>"
+            if ('.' in newKey) rowProblems += "newKey may not contain '.': a fixture's elements are named <key>.<element>"
             if (key.isNotEmpty() && key == newKey) rowProblems += "newKey is the same as key"
             problems += rowProblems.map { "$where ('$key'): $it" }
             if (rowProblems.isEmpty()) key to newKey else null
@@ -463,9 +463,9 @@ internal class PatchEditTools(private val state: State) {
             fixtures.lookListChanged()
             if (target.isCurrent) touched.looks.forEach { republishForLookEdit(state, it) }
         }
-        if (touched.templates.isNotEmpty()) {
-            fixtures.templateListChanged()
-            if (target.isCurrent) touched.templates.forEach { republishForTemplateEdit(state, it) }
+        if (touched.palettes.isNotEmpty()) {
+            fixtures.paletteListChanged()
+            if (target.isCurrent) touched.palettes.forEach { republishForPaletteEdit(state, it) }
         }
         if (touched.cues.isNotEmpty()) {
             if (target.isCurrent) touched.cues.forEach { republishCueIfLive(state, it) }
@@ -488,7 +488,7 @@ internal class PatchEditTools(private val state: State) {
         putJsonObject("rewritten") {
             put("cues", touched.cues.size)
             put("looks", touched.looks.size)
-            put("palettes", touched.templates.size)
+            put("palettes", touched.palettes.size)
             put("bindings", touched.bindings)
             put("buskRigCells", touched.buskTiles)
         }

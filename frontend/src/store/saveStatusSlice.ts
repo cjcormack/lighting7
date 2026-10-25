@@ -38,6 +38,8 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   // with the value-level references they resolved.
 
   // ── Live output: DMX and effects state, none of it persisted ──
+  // The FX editor's preview: a read the desk answers by sampling, asked on every change it hears.
+  'previewFx',
   'updateChannel',
   'parkChannel',
   'unparkChannel',
@@ -57,13 +59,13 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'applyLook',
   // The template gestures, for the same reason `toggleLook` is here: they land on the rig and the
   // strip reports what happened itself, so a save-status spinner would be describing a press.
-  'applyTemplate',
-  'toggleTemplate',
+  'applyPalette',
+  'togglePalette',
   // A busk pad's press, for the same reason: whatever it holds, it drives the rig rather than
   // saving anything. The layout write behind the *page* is a save and stays out of this set, which
   // is what lets the page strip's "Saved" fall out of the show-wide counters with no state of its own.
   'pressBuskPad',
-  'resolveTemplate',
+  'resolvePalette',
 
   // ── Compile / run: long-running, and each already reports its own outcome ──
   'compileProjectScript',

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LayerRow, LookStack, describeStackSource, type LookStackLayer } from './LookStack'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 vi.mock('@/store/speedMasters', () => ({
   useSpeedMasterLiveQuery: () => ({
@@ -27,9 +27,8 @@ function look(overrides: Partial<LookSummary> = {}): LookSummary {
     notes: null,
     families: ['COLOUR'],
     rowCount: 3,
-    effectCount: 0,
+    fxCount: 0,
     targetCount: 3,
-    hasDeferredEffects: false,
     preview: [],
     layerCount: 1,
     buskPageCount: 0,
@@ -42,7 +41,7 @@ const LOOKS = new Map([
   [8, look({ id: 8, uuid: 'u8', name: 'Slow Pulse', families: ['INTENSITY'] })],
 ])
 
-function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSummary {
+function paletteSummary(overrides: Partial<PaletteSummary> = {}): PaletteSummary {
   return {
     id: 4,
     uuid: 'ut4',
@@ -57,11 +56,11 @@ function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSumm
       {
         targetType: 'deferred',
         targetKey: '',
-        propertyName: 'rgbColour',
+        attribute: 'rgbColour',
         value: '#FF9D4A;policy=extract',
       },
     ],
-    effect: null,
+    fx: null,
     layerCount: 0,
     lastPressedAt: null,
     buskPageCount: 0,
@@ -73,13 +72,22 @@ function layer(overrides: Partial<LookStackLayer> = {}): LookStackLayer {
   return {
     source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
     enabled: true,
-    targets: [{ type: 'group', key: 'front-wash' }],
-    propertyMask: null,
+    targets: [],
+    attributeMask: null,
     blendMode: 'OVERRIDE',
     amount: 1,
     stomp: false,
     ...overrides,
   }
+}
+
+/** A palette's layer, which names targets where a Look's names none. */
+function paletteLayer(overrides: Partial<LookStackLayer> = {}): LookStackLayer {
+  return layer({
+    source: { kind: 'PALETTE', id: 4, uuid: 'p4', name: 'Amber' },
+    targets: [{ type: 'group', key: 'front-wash' }],
+    ...overrides,
+  })
 }
 
 function handlers() {
@@ -89,7 +97,7 @@ function handlers() {
     onSetEnabled: vi.fn(),
     onSetAmount: vi.fn(),
     onSetBlendMode: vi.fn(),
-    onSetPropertyMask: vi.fn(),
+    onSetAttributeMask: vi.fn(),
     onSetStomp: vi.fn(),
   }
 }
@@ -215,7 +223,7 @@ describe('LookStack', () => {
   it('reads a layer’s mask and blend off the trigger', () => {
     // The mask and blend became editable in session 4, so the trigger *is* the read-out — an
     // operator who cannot see the mask cannot explain why a layer only moves colour.
-    renderStack([layer({ propertyMask: 'COLOUR', blendMode: 'MAX' })])
+    renderStack([layer({ attributeMask: 'COLOUR', blendMode: 'MAX' })])
     expect(screen.getByText('[Colour]')).toBeInTheDocument()
     expect(screen.getByText('MAX')).toBeInTheDocument()
   })
@@ -263,7 +271,7 @@ describe('LookStack', () => {
   })
 
   it('reports a mask change by index, normalising all-four to no mask', async () => {
-    // The load-bearing half of `serializePropertyMask`: a mask naming all four families composes
+    // The load-bearing half of `serializeAttributeMask`: a mask naming all four families composes
     // identically to no mask, so storing one would render a badge that says nothing.
     //
     // Only the *mask* half of the popover is driven here. `MaskPicker` is a switch and checkboxes, but the
@@ -271,10 +279,10 @@ describe('LookStack', () => {
     // dnd-kit gets, where the pointer sequence isn't drivable so the handle and the pure helper are
     // asserted instead. Here that means the trigger's read-out below plus `attributeFamily`'s own
     // round-trip tests, rather than a fake select that would only prove the mock works.
-    const { handlers: h } = renderStack([layer({ propertyMask: 'INTENSITY,POSITION,COLOUR' })])
+    const { handlers: h } = renderStack([layer({ attributeMask: 'INTENSITY,POSITION,COLOUR' })])
     fireEvent.click(screen.getByTitle(/How this layer combines/))
     fireEvent.click(await screen.findByLabelText('Beam'))
-    expect(h.onSetPropertyMask).toHaveBeenCalledWith(0, null)
+    expect(h.onSetAttributeMask).toHaveBeenCalledWith(0, null)
   })
 
   it('writes a cue layer’s timing and masters from its settings popover, by index', async () => {
@@ -294,7 +302,7 @@ describe('LookStack', () => {
     renderStack([layer({ delayMs: 500, speedMasterUuid: 'm2' })], { handlers: { ...handlers(), onSetTiming } })
     fireEvent.click(screen.getByTitle(/This layer’s settings/))
     expect(((await screen.findByLabelText('Delay (ms)')) as HTMLInputElement).value).toBe('500')
-    fireEvent.click(screen.getByRole('button', { name: /Remove override — each effect follows its own master/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Remove override — each FX follows its own master/ }))
     expect(onSetTiming).toHaveBeenCalledWith(0, { speedMasterUuid: null })
   })
 
@@ -310,9 +318,11 @@ describe('LookStack', () => {
     expect(screen.getAllByTitle(/How this layer combines/)).toHaveLength(2)
   })
 
-  it('says a layer with no targets uses the look’s own', () => {
-    renderStack([layer({ targets: [] })])
-    expect(screen.getByText(/look’s own targets/)).toBeInTheDocument()
+  it('draws targets on a palette’s layer only — a Look’s names none, since it lands whole', () => {
+    renderStack([layer(), paletteLayer(), paletteLayer({ targets: [] })])
+    expect(screen.getAllByText('front-wash')).toHaveLength(1)
+    expect(screen.getAllByText('its own heads')).toHaveLength(1)
+    expect(screen.queryByText(/look’s own targets/)).toBeNull()
   })
 
   it('gives every layer a drag handle', () => {
@@ -381,8 +391,10 @@ describe('LookStack — a host with a selection of its own (the cue editor’s L
     const onSetTargets = vi.fn()
     const onOpenSource = vi.fn()
     const h = { ...handlers(), onSetTargets, onOpenSource }
-    render(<LookStack layers={[layer(), layer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" precedenceNote="" />)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Targets' })[1])
+    render(<LookStack layers={[layer(), paletteLayer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" precedenceNote="" />)
+    // Targets on the palette's layer alone: a Look's names none.
+    expect(screen.getAllByRole('button', { name: 'Targets' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Targets' }))
     expect(onSetTargets).toHaveBeenCalledWith(1)
     fireEvent.click(screen.getAllByRole('button', { name: 'Open Warm Wash' })[0])
     expect(onOpenSource).toHaveBeenCalledWith(0)
@@ -395,7 +407,7 @@ describe('LookStack — a host with a selection of its own (the cue editor’s L
 
   it('draws Targets refused with the host’s reason', () => {
     const h = { ...handlers(), onSetTargets: vi.fn() }
-    render(<LookStack layers={[layer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" targetsRefusal="Select fixtures first" />)
+    render(<LookStack layers={[paletteLayer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" targetsRefusal="Select fixtures first" />)
     const targets = screen.getByRole('button', { name: 'Targets' })
     expect(targets).toBeDisabled()
     expect(targets).toHaveAttribute('title', 'Select fixtures first')
@@ -422,23 +434,23 @@ describe('LookStack — a host with a selection of its own (the cue editor’s L
 
 /**
  * The template arm, which had no coverage at all: every existing case passes a LOOK source and
- * `undefined` for the template library, so neither the `isTemplate` badge nor the kind was pinned.
+ * `undefined` for the template library, so neither the `isPalette` badge nor the kind was pinned.
  */
 describe('describeStackSource — palette layers', () => {
-  const templates = new Map<number, TemplateSummary>([
-    [4, templateSummary({ id: 4, name: 'Amber Key', kind: 'value' })],
-    [5, templateSummary({ id: 5, name: 'Amber Breathe', kind: 'effect', rows: [] })],
+  const templates = new Map<number, PaletteSummary>([
+    [4, paletteSummary({ id: 4, name: 'Amber Key', kind: 'value' })],
+    [5, paletteSummary({ id: 5, name: 'Amber Breathe', kind: 'fx', rows: [] })],
   ])
   const source = (id: number, name: string) =>
-    ({ kind: 'TEMPLATE', id, uuid: `ut${id}`, name }) as const
+    ({ kind: 'PALETTE', id, uuid: `ut${id}`, name }) as const
 
   it('reports the family and the kind from the library entry', () => {
     expect(describeStackSource(source(5, 'Amber Breathe'), LOOKS, templates, true)).toEqual({
       name: 'Amber Breathe',
       families: ['COLOUR'],
       missing: false,
-      isTemplate: true,
-      templateKind: 'effect',
+      isPalette: true,
+      paletteKind: 'fx',
     })
   })
 
@@ -446,9 +458,9 @@ describe('describeStackSource — palette layers', () => {
     // A surface that did not load the list knows a layer names a template but not which kind, and
     // it must not be painted as missing on that account either.
     const info = describeStackSource(source(5, 'Amber Breathe'), LOOKS, undefined, true)
-    expect(info.templateKind).toBeUndefined()
+    expect(info.paletteKind).toBeUndefined()
     expect(info.missing).toBe(false)
-    expect(info.isTemplate).toBe(true)
+    expect(info.isPalette).toBe(true)
   })
 
   it('draws the wave beside the palette only for an effect palette', () => {

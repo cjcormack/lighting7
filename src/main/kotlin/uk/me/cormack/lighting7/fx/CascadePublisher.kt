@@ -26,10 +26,10 @@ class CascadePublisher internal constructor(
     /** Layer 1 park query — see [FxEngine]'s constructor doc for the semantics. */
     private val parkManager: ParkManager?,
     /**
-     * The (fixtureKey, propertyName) pairs running effects cover, cached by the engine on
-     * its effect-list epoch — see `FxEngine.coveredByRunningEffects`.
+     * The (fixtureKey, attribute) pairs running effects cover, cached by the engine on
+     * its effect-list epoch — see `FxEngine.coveredByRunningFx`.
      */
-    private val coveredByRunningEffects: () -> Set<Pair<String, String>>,
+    private val coveredByRunningFx: () -> Set<Pair<String, String>>,
     private val throttle: FxLogThrottle,
 ) {
     // The Layer 4 publish lock (the engine's old `cueAssignmentsLock`). Serialises every
@@ -49,7 +49,7 @@ class CascadePublisher internal constructor(
 
     /**
      * Transmit the composed cascade fallback (cue layer → programmer → baseline) for each
-     * affected (fixtureKey, propertyName) key. Same publish machinery as
+     * affected (fixtureKey, attribute) key. Same publish machinery as
      * [publishCueLayerToControllers], scoped to a caller-supplied key set rather than the
      * full Layer 4 diff.
      *
@@ -73,10 +73,10 @@ class CascadePublisher internal constructor(
     ): Unit = locked {
         if (keys.isEmpty()) return@locked
 
-        val coveredByEffects = coveredByRunningEffects()
+        val coveredByFx = coveredByRunningFx()
 
-        if (coveredByEffects.isNotEmpty() &&
-            keys.all { (it.targetKey to it.propertyName) in coveredByEffects }) {
+        if (coveredByFx.isNotEmpty() &&
+            keys.all { (it.targetKey to it.attribute) in coveredByFx }) {
             return@locked
         }
 
@@ -85,7 +85,7 @@ class CascadePublisher internal constructor(
         var wrote = false
 
         for (key in keys) {
-            if ((key.targetKey to key.propertyName) in coveredByEffects) continue
+            if ((key.targetKey to key.attribute) in coveredByFx) continue
 
             val fixture = try {
                 fixturesWithTx.untypedGroupableFixture(key.targetKey)
@@ -96,7 +96,7 @@ class CascadePublisher internal constructor(
                 continue
             }
 
-            val target = inferTargetForProperty(fixture, key) ?: continue
+            val target = inferTargetForAttribute(fixture, key) ?: continue
             if (allChannelsParked(target, fixture)) continue
 
             try {
@@ -104,8 +104,8 @@ class CascadePublisher internal constructor(
                 target.resetToFallback(fixture, fallback, perKeyFadeMs[key] ?: fadeMs)
                 wrote = true
             } catch (e: Exception) {
-                throttle.log("cascade-publish-${key.targetKey}.${key.propertyName}", e) {
-                    "FX engine: failed to publish cascade for ${key.targetKey}.${key.propertyName}"
+                throttle.log("cascade-publish-${key.targetKey}.${key.attribute}", e) {
+                    "FX engine: failed to publish cascade for ${key.targetKey}.${key.attribute}"
                 }
             }
         }
@@ -120,10 +120,10 @@ class CascadePublisher internal constructor(
      * running, and the effect-reset pass is the only other site that writes the composed
      * cascade onto controllers.
      *
-     * Walks the union of (fixtureKey, propertyName) keys from the before and after cue-layer
+     * Walks the union of (fixtureKey, attribute) keys from the before and after cue-layer
      * snapshots' indexes, without materialising a union key set — crossfade ticks run this
      * per frame. Skips keys a currently-running effect covers (the effect tick will paint
-     * them; the set comes from [coveredByRunningEffects], cached until the effect list or
+     * them; the set comes from [coveredByRunningFx], cached until the effect list or
      * fixture register moves) and fully-parked targets (park wins at transmit regardless).
      * Otherwise opens a single [ControllerTransaction] and writes the resolved fallback via
      * [FxTarget.resetToFallback] — same mechanism the tick loops' reset pass uses.
@@ -154,7 +154,7 @@ class CascadePublisher internal constructor(
         val afterIndex = after.index
         if (beforeIndex.isEmpty() && afterIndex.isEmpty()) return
 
-        val coveredByEffects = coveredByRunningEffects()
+        val coveredByFx = coveredByRunningFx()
         // Empty for every cue whose rows asked for no fade, which is the common case — so the
         // compound-key allocation `publishKey` otherwise avoids is skipped entirely rather than
         // done and discarded.
@@ -166,9 +166,9 @@ class CascadePublisher internal constructor(
 
         fun publishKey(
             fixtureKey: String,
-            propertyName: String,
-            beforeValue: CueAssignmentResolver.PropertyValue?,
-            afterValue: CueAssignmentResolver.PropertyValue?,
+            attribute: String,
+            beforeValue: CueAssignmentResolver.AttributeValue?,
+            afterValue: CueAssignmentResolver.AttributeValue?,
         ) {
             // Skip keys whose composed Layer 4 value didn't actually change. Crossfade ticks
             // call republish at ~60 fps; mid-fade the eased weight often quantises to the
@@ -176,10 +176,10 @@ class CascadePublisher internal constructor(
             // keeps a constant composed value the whole way through. Equality is a cheap
             // data-class check.
             if (beforeValue == afterValue) return
-            if ((fixtureKey to propertyName) in coveredByEffects) return
+            if ((fixtureKey to attribute) in coveredByFx) return
 
             val typeSource = afterValue ?: beforeValue ?: return
-            val target = resolveTargetForCueLayerKey(fixtureKey, propertyName, typeSource)
+            val target = resolveTargetForCueLayerKey(fixtureKey, attribute, typeSource)
 
             try {
                 val fixture = fixturesWithTx.untypedGroupableFixture(fixtureKey)
@@ -192,29 +192,29 @@ class CascadePublisher internal constructor(
                 val fadeMs = when {
                     restage != null -> restage.durationMs
                     rowFades.isEmpty() || afterValue == null -> 0L
-                    else -> rowFades[CueAssignmentResolver.Key.fixture(fixtureKey, propertyName)] ?: 0L
+                    else -> rowFades[CueAssignmentResolver.Key.fixture(fixtureKey, attribute)] ?: 0L
                 }
                 target.resetToFallback(fixture, fallback, fadeMs, restage?.curve ?: EasingCurve.LINEAR)
                 wrote = true
             } catch (e: Exception) {
-                throttle.log("layer4-publish-$fixtureKey.$propertyName", e) {
-                    "FX engine: failed to publish Layer 4 for $fixtureKey.$propertyName"
+                throttle.log("layer4-publish-$fixtureKey.$attribute", e) {
+                    "FX engine: failed to publish Layer 4 for $fixtureKey.$attribute"
                 }
             }
         }
 
-        for ((fixtureKey, afterProperties) in afterIndex) {
-            val beforeProperties = beforeIndex[fixtureKey]
-            for ((propertyName, afterValue) in afterProperties) {
-                publishKey(fixtureKey, propertyName, beforeProperties?.get(propertyName), afterValue)
+        for ((fixtureKey, afterAttributes) in afterIndex) {
+            val beforeAttributes = beforeIndex[fixtureKey]
+            for ((attribute, afterValue) in afterAttributes) {
+                publishKey(fixtureKey, attribute, beforeAttributes?.get(attribute), afterValue)
             }
         }
         // Keys present before but released in this publish.
-        for ((fixtureKey, beforeProperties) in beforeIndex) {
-            val afterProperties = afterIndex[fixtureKey]
-            for ((propertyName, beforeValue) in beforeProperties) {
-                if (afterProperties?.containsKey(propertyName) != true) {
-                    publishKey(fixtureKey, propertyName, beforeValue, null)
+        for ((fixtureKey, beforeAttributes) in beforeIndex) {
+            val afterAttributes = afterIndex[fixtureKey]
+            for ((attribute, beforeValue) in beforeAttributes) {
+                if (afterAttributes?.containsKey(attribute) != true) {
+                    publishKey(fixtureKey, attribute, beforeValue, null)
                 }
             }
         }
@@ -225,26 +225,26 @@ class CascadePublisher internal constructor(
     /**
      * Infer the [FxTarget] kind for a cascade publish from the backing DMX property type on
      * [fixture]. Mirrors the type-dispatch that [resolveTargetForCueLayerKey] does from a
-     * [CueAssignmentResolver.PropertyValue], but resolves the backing value by name via
-     * [PropertyChannelWriter.resolveProperty] instead — the clear path doesn't have a value
+     * [CueAssignmentResolver.AttributeValue], but resolves the backing value by name via
+     * [AttributeChannelWriter.resolveAttribute] instead — the clear path doesn't have a value
      * in hand. Handles [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement]s
      * as well as whole fixtures.
      *
      * Returns null when the property can't be resolved; caller should skip that key.
      */
-    internal fun inferTargetForProperty(
+    internal fun inferTargetForAttribute(
         fixture: GroupableFixture,
         key: CueAssignmentResolver.Key,
     ): FxTarget? {
-        if (key.propertyName.equals("position", ignoreCase = true)) {
+        if (key.attribute.equals("position", ignoreCase = true)) {
             if (fixture !is WithPosition) return null
-            return PositionTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
+            return PositionTarget(FxTargetRef.fixture(key.targetKey), key.attribute)
         }
-        val resolved = PropertyChannelWriter.resolveProperty(fixture, key.propertyName) ?: return null
+        val resolved = AttributeChannelWriter.resolveAttribute(fixture, key.attribute) ?: return null
         return when (resolved.value) {
-            is DmxColour, is DmxWhiteMixColour -> ColourTarget(FxTargetRef.fixture(key.targetKey), key.propertyName)
-            is DmxFixtureSetting<*> -> SettingTarget(key.targetKey, key.propertyName)
-            is DmxSlider -> SliderTarget(key.targetKey, key.propertyName)
+            is DmxColour, is DmxWhiteMixColour -> ColourTarget(FxTargetRef.fixture(key.targetKey), key.attribute)
+            is DmxFixtureSetting<*> -> SettingTarget(key.targetKey, key.attribute)
+            is DmxSlider -> SliderTarget(key.targetKey, key.attribute)
             else -> null
         }
     }
@@ -256,17 +256,17 @@ class CascadePublisher internal constructor(
      */
     private fun resolveTargetForCueLayerKey(
         fixtureKey: String,
-        propertyName: String,
-        typeSource: CueAssignmentResolver.PropertyValue,
+        attribute: String,
+        typeSource: CueAssignmentResolver.AttributeValue,
     ): FxTarget = when (typeSource) {
-        is CueAssignmentResolver.PropertyValue.Slider ->
-            SliderTarget(fixtureKey, propertyName)
-        is CueAssignmentResolver.PropertyValue.Colour ->
-            ColourTarget(FxTargetRef.fixture(fixtureKey), propertyName)
-        is CueAssignmentResolver.PropertyValue.Position ->
-            PositionTarget(FxTargetRef.fixture(fixtureKey), propertyName)
-        is CueAssignmentResolver.PropertyValue.Setting ->
-            SettingTarget(fixtureKey, propertyName)
+        is CueAssignmentResolver.AttributeValue.Slider ->
+            SliderTarget(fixtureKey, attribute)
+        is CueAssignmentResolver.AttributeValue.Colour ->
+            ColourTarget(FxTargetRef.fixture(fixtureKey), attribute)
+        is CueAssignmentResolver.AttributeValue.Position ->
+            PositionTarget(FxTargetRef.fixture(fixtureKey), attribute)
+        is CueAssignmentResolver.AttributeValue.Setting ->
+            SettingTarget(fixtureKey, attribute)
     }
 
     /**
@@ -276,15 +276,15 @@ class CascadePublisher internal constructor(
      * parent's own properties answered null for every head channel, and Record, Clear, Blind
      * and provenance all treated the head as an address nothing covers.
      *
-     * Read from [PropertyChannelWriter.channelKeyIndex], built once per
+     * Read from [AttributeChannelWriter.channelKeyIndex], built once per
      * [Fixtures.structureVersion] and shared with the channel-mapping frame's per-address keys —
      * one walk, so the DMX sheet and the desk cannot disagree about which properties an address
      * has, and [ProvenanceService.compute] (which asks once per sideband slot) pays a map lookup.
-     * [PropertyChannelWriter.coveringKeysByChannel] states which key wins where several drive one
+     * [AttributeChannelWriter.coveringKeysByChannel] states which key wins where several drive one
      * address.
      */
     fun resolveChannelCoveringKey(universe: Int, channel: Int): CueAssignmentResolver.Key? =
-        PropertyChannelWriter.channelKeyIndex(fixtures).coveringKeys[universe to channel]
+        AttributeChannelWriter.channelKeyIndex(fixtures).coveringKeys[universe to channel]
 
     /**
      * Every (target, property) key whose channels include (universe, channel) — the address's
@@ -293,8 +293,8 @@ class CascadePublisher internal constructor(
      * a raw write filed under the first, which is what provenance needs to know (fixture-fx-sheets
      * plan W4). Same index, same one walk.
      */
-    fun resolveChannelPropertyKeys(universe: Int, channel: Int): List<CueAssignmentResolver.Key> =
-        PropertyChannelWriter.channelKeyIndex(fixtures).propertyKeys[universe to channel] ?: emptyList()
+    fun resolveChannelAttributeKeys(universe: Int, channel: Int): List<CueAssignmentResolver.Key> =
+        AttributeChannelWriter.channelKeyIndex(fixtures).attributeKeys[universe to channel] ?: emptyList()
 
     /** The parked value of (universe, channel), or null when it is not parked or nothing parks. */
     internal fun parkedValue(universe: Int, channel: Int): UByte? =
@@ -313,7 +313,7 @@ class CascadePublisher internal constructor(
         fixture: GroupableFixture,
     ): Boolean {
         val pm = parkManager ?: return false
-        return target.isPropertyFullyParked(fixture, pm)
+        return target.isAttributeFullyParked(fixture, pm)
     }
 }
 

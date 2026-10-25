@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fx.parseMaskGroupsLenient
+import uk.me.cormack.lighting7.fx.parseFamiliesLenient
 import uk.me.cormack.lighting7.fx.toMaskNames
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.DeskSelection
@@ -33,7 +33,7 @@ sealed class SelectionInMessage : InMessage()
 
 /**
  * Replace the selection — the whole fact (D2). Order is the client's; duplicates collapse.
- * [families] absent or empty is every attribute; a name outside `PropertyMaskGroup` is dropped.
+ * [families] absent or empty is every attribute; a name outside `AttributeFamily` is dropped.
  */
 @Serializable
 @SerialName("selection.set")
@@ -57,7 +57,7 @@ data class SelectionToggleInMessage(
 
 /**
  * Replace the mask and keep the heads — the family pill's write (apply-model plan D3). [families]
- * absent or empty is every attribute; a name outside `PropertyMaskGroup` is dropped, as on
+ * absent or empty is every attribute; a name outside `AttributeFamily` is dropped, as on
  * `selection.set`. The mover is stamped as for any write.
  */
 @Serializable
@@ -112,12 +112,12 @@ suspend fun handleSelection(scope: SocketScope, message: SelectionInMessage) {
     when (message) {
         is SelectionSetInMessage -> selection.set(
             message.targets,
-            parseMaskGroupsLenient(message.families),
+            parseFamiliesLenient(message.families),
             scope.selectionSource(message.sourceName),
         )
         is SelectionToggleInMessage -> selection.toggle(message.target, scope.selectionSource(message.sourceName))
         is SelectionSetFamiliesInMessage -> selection.setFamilies(
-            parseMaskGroupsLenient(message.families),
+            parseFamiliesLenient(message.families),
             scope.selectionSource(message.sourceName),
         )
         is SelectionClearInMessage -> selection.clear()

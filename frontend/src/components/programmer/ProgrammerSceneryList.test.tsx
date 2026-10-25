@@ -34,7 +34,7 @@ const store = {
   programmer: { projectId: 6, elements: [] } as ProgrammerScenery,
   blind: false,
   scope: { kind: 'local' } as ProgrammerScope | null,
-  layers: [] as { layerId: number; source: { kind: 'LOOK' | 'TEMPLATE'; id: number; uuid: string; name: string } }[],
+  layers: [] as { layerId: number; source: { kind: 'LOOK' | 'PALETTE'; id: number; uuid: string; name: string } }[],
   lookScenery: [] as SceneryChange[],
   lookSceneryById: {} as Record<number, SceneryChange[]>,
   lookLoaded: true,
@@ -380,7 +380,7 @@ describe('the read-only arms', () => {
 
   it('a focused palette layer is read-only: a palette carries no scenery', () => {
     store.scope = { kind: 'layer', layerId: 4 }
-    store.layers = [{ layerId: 4, source: { kind: 'TEMPLATE', id: 2, uuid: 'u2', name: 'Warm' } }]
+    store.layers = [{ layerId: 4, source: { kind: 'PALETTE', id: 2, uuid: 'u2', name: 'Warm' } }]
     draw()
     expect(row('sofa')!.title).toBe('A palette carries no scenery')
     for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()

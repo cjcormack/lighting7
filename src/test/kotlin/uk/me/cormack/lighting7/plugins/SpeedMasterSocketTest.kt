@@ -141,7 +141,7 @@ class SpeedMasterSocketTest : RouteIntegrationTest() {
             DaoSpeedMaster
                 .find { DaoSpeedMasters.masterIndex eq 2 }
                 .single { it.project.id.value == projectId }
-                .usageCategory = "position"
+                .family = "position"
         }
         state.show.reloadSpeedMasters()
         val client = createWsClient()
@@ -149,7 +149,7 @@ class SpeedMasterSocketTest : RouteIntegrationTest() {
         client.webSocket("/api") {
             val stateFrame = awaitOfType<SpeedMastersStateOutMessage>()
             val follower = stateFrame.masters.single { it.uuid == followerUuid }
-            assertEquals("position", follower.usage)
+            assertEquals("position", follower.family)
             assertEquals(1, follower.followNum)
             assertEquals(3, follower.followDen)
 

@@ -1,11 +1,11 @@
 import { useRef, useMemo, useSyncExternalStore, useCallback } from 'react'
 import { lightingApi } from '../api/lightingApi'
-import { getChannelValue, subscribeToChannels } from './usePropertyValues'
-import type { ChannelRef, ColourPropertyDescriptor } from '../store/fixtures'
-import type { GroupColourPropertyDescriptor } from '../api/groupsApi'
+import { getChannelValue, subscribeToChannels } from './useAttributeValues'
+import type { ChannelRef, ColourAttributeDescriptor } from '../store/fixtures'
+import type { GroupColourAttributeDescriptor } from '../api/groupsApi'
 
 // The read primitives above used to be private copies here. They now come from
-// usePropertyValues, and are used at their default (output) source on purpose: every consumer
+// useAttributeValues, and are used at their default (output) source on purpose: every consumer
 // of this hook is a live editing control, so it must read and write the real wire whatever a
 // stage view happens to be previewing.
 
@@ -24,7 +24,7 @@ export type VirtualDimmerResult = {
  * Stores last-known colour ratios so raising from 0 restores the hue.
  */
 export function useVirtualDimmer(
-  colourProp: ColourPropertyDescriptor,
+  colourProp: ColourAttributeDescriptor,
   fixtureKey?: string,
 ): VirtualDimmerResult {
   // Store colour ratios for restoring hue when raising from zero
@@ -156,7 +156,7 @@ export type GroupVirtualDimmerResult = {
  * Writing: scales each member's RGB proportionally.
  */
 export function useGroupVirtualDimmer(
-  colourProp: GroupColourPropertyDescriptor
+  colourProp: GroupColourAttributeDescriptor
 ): GroupVirtualDimmerResult {
   // Store per-member colour ratios for restoring hue when raising from zero
   const lastRatiosRef = useRef<Map<string, { r: number; g: number; b: number }>>(new Map())

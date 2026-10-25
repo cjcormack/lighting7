@@ -16,15 +16,18 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.inList
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.UUID
+import kotlin.reflect.KMutableProperty1
 import uk.me.cormack.lighting7.models.asDuration
 
 
@@ -41,8 +44,10 @@ internal data class CapturedState(
      * [uk.me.cormack.lighting7.fx.ProgrammerStore.layers] directly.
      */
     val layers: List<CueLayerDto>,
-    val adHocEffects: List<CueAdHocEffectDto>,
-    val propertyAssignments: List<CuePropertyAssignmentDto>,
+    val adHocFx: List<CueAdHocFxDto>,
+    val attributeAssignments: List<CueAttributeAssignmentDto>,
+    /** The id of the Local effect each of [adHocFx] was captured from; null for any other FX. */
+    val adHocSourceIds: List<Long?> = emptyList(),
 )
 
 /**
@@ -51,28 +56,30 @@ internal data class CapturedState(
  * single composed value — see [captureCueAssignments] for the shape-preservation rules.
  */
 internal fun captureCurrentState(state: State): CapturedState {
-    val activeEffects = state.show.fxEngine.getActiveEffects()
+    // In stored apply order, so the ad-hoc FX are numbered in the order they fold on stage.
+    val activeFx = state.show.fxEngine.let { it.inStoredApplyOrder(it.getActiveFx()) }
 
-    // Keyed by the **source record**, Look or template: an effect names where it came from and
+    // Keyed by the **source record**, Look or palette: an effect names where it came from and
     // nothing else, so one palette applied twice to different targets collapses into one layer
     // covering both — the honest reading of a *snapshot*, since the stage cannot tell you it was
     // two gestures. A Look's layer names no targets: it lands whole.
     //
     // Keyed by (kind, id) rather than by a bare int, and this is load-bearing rather than tidy.
-    // A template layer spawns effects since fx-templates D5, so the old `effect.lookId != null`
+    // A palette layer spawns effects since fx-templates D5, so the old `effect.lookId != null`
     // fork sent every one of them down the ad-hoc arm below — Record would have written a
-    // template's effect onto the cue as a loose child, silently severing the tracking that is the
-    // entire point of layering a template. The kind has to be part of the key for the same reason
-    // it is part of `CueLayerDto`: id 3 as a Look and id 3 as a template are different records.
+    // palette's effect onto the cue as a loose child, silently severing the tracking that is the
+    // entire point of layering a palette. The kind has to be part of the key for the same reason
+    // it is part of `CueLayerDto`: id 3 as a Look and id 3 as a palette are different records.
     //
     // (kind, id) rather than the whole `LayerSource`: its `name` is part of its equality, and an
     // instance stamped before a rename holds the old label — so keying on the whole value would
-    // split one record into two layers whenever a Look or template was renamed with its effects
+    // split one record into two layers whenever a Look or palette was renamed with its effects
     // still up, which is exactly the collapse this map exists to do.
     val layerTargets = mutableMapOf<Pair<LayerSourceKind, Int>, MutableList<CueTargetDto>>()
-    val adHocEffects = mutableListOf<CueAdHocEffectDto>()
+    val adHocFx = mutableListOf<CueAdHocFxDto>()
+    val adHocSourceIds = mutableListOf<Long?>()
 
-    for (effect in activeEffects) {
+    for (effect in activeFx) {
         // A leaving instance is on its way off the stage: whatever held it has let it go.
         if (effect.leaving) continue
         val targetType = effect.target.targetRef.discriminator
@@ -90,31 +97,33 @@ internal fun captureCurrentState(state: State): CapturedState {
         } else {
             // One dynamics snapshot per row — see the same pattern in programmerCapture.kt.
             val dyn = effect.dynamics
-            adHocEffects.add(CueAdHocEffectDto(
+            adHocFx.add(CueAdHocFxDto(
                 targetType = targetType,
                 targetKey = targetKey,
-                effectType = effect.effectTypeId,
-                category = recordedEffectCategory(effect),
-                propertyName = effect.target.propertyName,
-                beatDivision = effect.timing.beatDivision,
+                fxType = effect.fxTypeId,
+                family = recordedFxFamily(effect),
+                attribute = effect.target.attribute,
+                cycle = effect.timing.cycle,
                 blendMode = effect.blendMode.name,
-                distribution = dyn.distributionStrategy.javaClass.simpleName,
+                order = dyn.order.javaClass.simpleName,
                 phaseOffset = effect.storedPhaseOffset(dyn),
                 elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
                 elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
-                stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) dyn.stepTiming else null,
+                timing = if (dyn.timing != effect.effect.defaultTiming) dyn.timing else null,
                 parameters = effect.effect.parameters,
+                sortOrder = adHocFx.size,
                 speedMasterUuid = effect.speedMasterUuid?.toString(),
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
                 seconds = effect.seconds,
-                size = dyn.size,
+                amount = dyn.amount,
                 direction = dyn.direction.name,
-                nShot = dyn.nShot,
+                runs = dyn.runs,
                 spread = dyn.spread,
                 wings = dyn.wings,
-                blocks = dyn.blocks,
-                groups = dyn.groups,
+                segments = dyn.segments,
+                parts = dyn.parts,
             ))
+            adHocSourceIds += effect.id.takeIf { effect.isLocalFx }
         }
     }
 
@@ -124,30 +133,31 @@ internal fun captureCurrentState(state: State): CapturedState {
         // `layerSourceShape`.
         CueLayerDto(
             lookId = sourceId.takeIf { kind == LayerSourceKind.LOOK },
-            templateId = sourceId.takeIf { kind == LayerSourceKind.TEMPLATE },
+            paletteId = sourceId.takeIf { kind == LayerSourceKind.PALETTE },
             targets = targets.takeUnless { kind == LayerSourceKind.LOOK }.orEmpty(),
             sortOrder = index,
         )
     }
 
-    val propertyAssignments = captureCueAssignments(state)
+    val attributeAssignments = captureCueAssignments(state)
 
     return CapturedState(
         layers = layerDtos,
-        adHocEffects = adHocEffects,
-        propertyAssignments = propertyAssignments,
+        adHocFx = adHocFx,
+        attributeAssignments = attributeAssignments,
+        adHocSourceIds = adHocSourceIds,
     )
 }
 
 /**
  * Layer 4 snapshot for `snapshot-from-live` / `/current-state`. Values come from the resolver
  * ([uk.me.cormack.lighting7.fx.LayerResolver.currentCueLayerState]) so HTP / LTP / crossfade
- * composition is authoritative. Each active cue's DB rows contribute `(groupKey, propertyName)`
+ * composition is authoritative. Each active cue's DB rows contribute `(groupKey, attribute)`
  * hints: a hint collapses to a single group row iff every member's composed value matches;
  * otherwise members fall through to per-fixture emission. Preserves operator-authored group
- * shape after surface edits (Phase 6 group-scoped `DefaultSurfaceActions.writeGroupProperty`).
+ * shape after surface edits (Phase 6 group-scoped `DefaultSurfaceActions.writeGroupAttribute`).
  */
-private fun captureCueAssignments(state: State): List<CuePropertyAssignmentDto> {
+private fun captureCueAssignments(state: State): List<CueAttributeAssignmentDto> {
     val engine = state.show.fxEngine
     val programmerOverlay = programmerOverlayForSnapshot(state)
     val cueLayerSnapshot = if (programmerOverlay.values.isEmpty()) {
@@ -168,12 +178,12 @@ private fun captureCueAssignments(state: State): List<CuePropertyAssignmentDto> 
     } else transaction(state.database) {
         val hints = LinkedHashSet<Pair<String, String>>()
         val cues = DaoCue.find { DaoCues.id inList activeCueIds }
-            .with(DaoCue::propertyAssignments)
+            .with(DaoCue::attributeAssignments)
             .toList()
         for (cue in cues) {
-            for (row in cue.propertyAssignments) {
+            for (row in cue.attributeAssignments) {
                 if (row.targetType == TargetRef.Group.TYPE) {
-                    hints.add(row.targetKey to canonicalPropertyName(row.propertyName))
+                    hints.add(row.targetKey to canonicalAttributeName(row.attribute))
                 }
             }
         }
@@ -193,7 +203,7 @@ private fun captureCueAssignments(state: State): List<CuePropertyAssignmentDto> 
 
 /** The programmer's contribution to a stage snapshot: winning values plus their group hints. */
 private data class ProgrammerOverlay(
-    val values: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
+    val values: Map<CueAssignmentResolver.Key, CueAssignmentResolver.AttributeValue>,
     val groupHints: Set<Pair<String, String>>,
 )
 
@@ -219,62 +229,62 @@ private fun programmerOverlayForSnapshot(state: State): ProgrammerOverlay {
     }
     // `allowElements`: a head the programmer holds is on stage, and a cue can hold it.
     val (entries, _) = collectProgrammerEntries(state, RecordSource.ALL, mask = null, allowElements = true)
-    val values = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>(entries.size)
+    val values = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.AttributeValue>(entries.size)
     val hints = LinkedHashSet<Pair<String, String>>()
     for (entry in entries) {
-        values[CueAssignmentResolver.Key.fixture(entry.fixtureKey, entry.propertyName)] = entry.value
-        entry.sourceGroup?.let { hints.add(it to entry.propertyName) }
+        values[CueAssignmentResolver.Key.fixture(entry.fixtureKey, entry.attribute)] = entry.value
+        entry.sourceGroup?.let { hints.add(it to entry.attribute) }
     }
     return ProgrammerOverlay(values, hints)
 }
 
 /** Pure snapshot-collapse pass — extracted from [captureCueAssignments] for DB-less testing. */
 internal fun captureCueAssignmentsFromSnapshot(
-    cueLayerSnapshot: Map<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>,
+    cueLayerSnapshot: Map<CueAssignmentResolver.Key, CueAssignmentResolver.AttributeValue>,
     groupHints: Set<Pair<String, String>>,
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
-): List<CuePropertyAssignmentDto> {
+): List<CueAttributeAssignmentDto> {
     if (cueLayerSnapshot.isEmpty()) return emptyList()
 
-    val emitted = mutableListOf<CuePropertyAssignmentDto>()
-    val covered = HashSet<Pair<String, String>>() // (fixtureKey, propertyName)
+    val emitted = mutableListOf<CueAttributeAssignmentDto>()
+    val covered = HashSet<Pair<String, String>>() // (fixtureKey, attribute)
 
-    for ((groupKey, propertyName) in groupHints) {
+    for ((groupKey, attribute) in groupHints) {
         val members = try {
             fixtures.untypedGroup(groupKey).fixtures.filterIsInstance<Fixture>()
         } catch (_: IllegalStateException) { emptyList() }
         if (members.isEmpty()) continue
 
         val firstMember = members.first()
-        val firstMemberValue = cueLayerSnapshot[CueAssignmentResolver.Key.fixture(firstMember.key, propertyName)]
+        val firstMemberValue = cueLayerSnapshot[CueAssignmentResolver.Key.fixture(firstMember.key, attribute)]
             ?: continue
         val uniform = members.all { member ->
             member === firstMember ||
-                cueLayerSnapshot[CueAssignmentResolver.Key.fixture(member.key, propertyName)] == firstMemberValue
+                cueLayerSnapshot[CueAssignmentResolver.Key.fixture(member.key, attribute)] == firstMemberValue
         }
         if (!uniform) continue
 
         emitted.add(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = TargetRef.Group.TYPE,
                 targetKey = groupKey,
-                propertyName = propertyName,
+                attribute = attribute,
                 value = firstMemberValue.serialize(),
                 sortOrder = emitted.size,
             )
         )
-        for (member in members) covered.add(member.key to propertyName)
+        for (member in members) covered.add(member.key to attribute)
     }
 
     val fixtureRows = cueLayerSnapshot.entries
-        .filter { (key, _) -> (key.targetKey to key.propertyName) !in covered }
-        .sortedWith(compareBy({ it.key.targetKey }, { it.key.propertyName }))
+        .filter { (key, _) -> (key.targetKey to key.attribute) !in covered }
+        .sortedWith(compareBy({ it.key.targetKey }, { it.key.attribute }))
     for ((key, value) in fixtureRows) {
         emitted.add(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = TargetRef.Fixture.TYPE,
                 targetKey = key.targetKey,
-                propertyName = key.propertyName,
+                attribute = key.attribute,
                 value = value.serialize(),
                 sortOrder = emitted.size,
             )
@@ -297,11 +307,11 @@ internal fun captureCueAssignmentsFromSnapshot(
  */
 internal fun DaoCueLayer.toDto(): CueLayerDto? = CueLayerDto(
     lookId = look?.id?.value,
-    templateId = template?.id?.value,
+    paletteId = palette?.id?.value,
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
-    propertyMask = propertyMask,
+    attributeMask = attributeMask,
     blendMode = blendMode,
     amount = amount,
     stomp = stomp,
@@ -321,16 +331,16 @@ internal fun DaoCueLayer.toDto(): CueLayerDto? = CueLayerDto(
  * dead-reference diagnostics are surfaced (Phase 6). Apply-path and snapshot callers keep
  * using [toDto] — they don't need health and shouldn't pay the lookup cost.
  */
-private fun DaoCuePropertyAssignment.toDtoWithHealth(
+private fun DaoCueAttributeAssignment.toDtoWithHealth(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
-): CuePropertyAssignmentDto {
+): CueAttributeAssignmentDto {
     val base = toDto()
     // Only the *target* is checkable now. Until session 4 a row's value could be a `ref:{uuid}`,
     // and this also reported whether the referenced Look covered the target; with the grammar gone
     // a row's value is always a literal, so there is no second reference to validate.
     return base.copy(
         health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, base.target, base.propertyName, allowElements = true,
+            fixtures, base.target, base.attribute, allowElements = true,
         ),
     )
 }
@@ -338,7 +348,7 @@ private fun DaoCuePropertyAssignment.toDtoWithHealth(
 
 /**
  * Convert a DaoCue entity to CueDetails API response. Property-assignment rows are tagged
- * with [AssignmentHealth] by resolving each `(targetType, targetKey, propertyName)` against
+ * with [AssignmentHealth] by resolving each `(targetType, targetKey, attribute)` against
  * [fixtures] — dead references surface in the UI with markers (Phase 6) rather than
  * silently dropping at apply time.
  *
@@ -365,7 +375,7 @@ internal fun DaoCue.toCueDetails(
             sortOrder = trigger.sortOrder,
         )
     }
-    val assignmentDetails = this.propertyAssignments.sortedBy { it.sortOrder }
+    val assignmentDetails = this.attributeAssignments.sortedBy { it.sortOrder }
         .map { it.toDtoWithHealth(fixtures) }
     val slot = if (contextEntryId != null) slots.firstOrNull { it.entry.id.value == contextEntryId } else slots.singleOrNull()
     val entry = slot?.entry
@@ -374,8 +384,8 @@ internal fun DaoCue.toCueDetails(
         id = this.id.value,
         name = this.name,
         layers = this.layers.sortedBy { it.sortOrder }.mapNotNull { it.toDto() },
-        adHocEffects = this.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
-        propertyAssignments = assignmentDetails,
+        adHocFx = adHocFxInOrder().map { it.toDto() },
+        attributeAssignments = assignmentDetails,
         triggers = triggerDetails,
         cueStackId = stack?.id?.value,
         cueStackName = stack?.name,
@@ -414,16 +424,16 @@ internal fun EntrySlot.toPlaceDto() = CueEntryPlaceDto(
 /**
  * A cue layer's referent, resolved for the write path: exactly one field is non-null.
  *
- * A tiny type rather than a `Pair<DaoLook?, DaoTemplate?>` so the exactly-one rule is stated once
+ * A tiny type rather than a `Pair<DaoLook?, DaoPalette?>` so the exactly-one rule is stated once
  * where it is established, instead of at each of the two assignments that consume it.
  */
 internal class ResolvedLayerSource private constructor(
     val look: DaoLook?,
-    val template: DaoTemplate?,
+    val palette: DaoPalette?,
 ) {
     companion object {
         fun ofLook(look: DaoLook) = ResolvedLayerSource(look, null)
-        fun ofTemplate(template: DaoTemplate) = ResolvedLayerSource(null, template)
+        fun ofPalette(palette: DaoPalette) = ResolvedLayerSource(null, palette)
     }
 }
 
@@ -438,17 +448,17 @@ internal class ResolvedLayerSource private constructor(
  */
 internal fun resolveCueLayerSource(layer: CueLayerDto): ResolvedLayerSource? {
     val lookId = layer.lookId
-    val templateId = layer.templateId
+    val paletteId = layer.paletteId
     // A wire DTO has no id on the write path by design, so the warning names what it does have:
     // without it a malformed write logs a line no operator can trace back to a layer.
-    val wellFormed = layerSourceShape(lookId, templateId).wellFormedOrWarn {
+    val wellFormed = layerSourceShape(lookId, paletteId).wellFormedOrWarn {
         "from the wire (sortOrder=${layer.sortOrder}, targets=${layer.targets.joinToString { "${it.type}:${it.key}" }})"
     }
     if (!wellFormed) return null
     return if (lookId != null) {
         DaoLook.findById(lookId)?.let { ResolvedLayerSource.ofLook(it) }
     } else {
-        DaoTemplate.findById(templateId!!)?.let { ResolvedLayerSource.ofTemplate(it) }
+        DaoPalette.findById(paletteId!!)?.let { ResolvedLayerSource.ofPalette(it) }
     }
 }
 
@@ -461,20 +471,20 @@ internal fun resolveCueLayerSource(layer: CueLayerDto): ResolvedLayerSource? {
  */
 internal fun resolveLayerSourceRecords(source: LayerSource): ResolvedLayerSource? = when (source.kind) {
     LayerSourceKind.LOOK -> DaoLook.findById(source.id)?.let { ResolvedLayerSource.ofLook(it) }
-    LayerSourceKind.TEMPLATE -> DaoTemplate.findById(source.id)?.let { ResolvedLayerSource.ofTemplate(it) }
+    LayerSourceKind.PALETTE -> DaoPalette.findById(source.id)?.let { ResolvedLayerSource.ofPalette(it) }
 }
 
 /**
  * Does this stored layer apply the same record [dto] names?
  *
  * The identity half of Record's `(source, targets)` upsert key. Comparing **both** columns rather
- * than one id is what stops a Look and a template that happen to share an int PK from matching each
+ * than one id is what stops a Look and a palette that happen to share an int PK from matching each
  * other — two tables, two id spaces, and Record would otherwise overwrite the wrong layer.
  *
  * Must run inside a transaction.
  */
 internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
-    look?.id?.value == dto.lookId && template?.id?.value == dto.templateId
+    look?.id?.value == dto.lookId && palette?.id?.value == dto.paletteId
 
 /**
  * Is this stored layer the one [dto] describes — Record's whole `(source, targets)` key? A Look's
@@ -512,75 +522,78 @@ internal fun checkCueSpeedMasters(
  *
  * Message-returning rather than throwing, because [writeCueChildren] serves surfaces with three
  * different ways of saying "no" — a 400, a `ToolExecutionResult`, Record's outcome type — and only
- * the first can afford a stack trace.
+ * the first can afford a stack trace. The one throw is a Look layer naming targets, refused by name
+ * ([LookLayerTargetedException]).
  */
 internal fun validateCueChildren(
-    adHocEffects: List<CueAdHocEffectDto>,
+    adHocFx: List<CueAdHocFxDto>,
     layers: List<CueLayerDto>,
-    propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
+    attributeAssignments: List<CueAttributeAssignmentDto> = emptyList(),
+    registry: FxRegistry,
 ): String? {
     // A selection is an effect's target only (effects plan D3): a value row and a layer name a
     // fixture or a group.
-    propertyAssignments.withIndex().firstOrNull { (_, row) -> TargetRef.ofOrNull(row.targetType, row.targetKey) == null }
-        ?.let { (i, row) -> return "propertyAssignments[$i]: unknown target type '${row.targetType}' — expected 'fixture' or 'group'" }
+    attributeAssignments.withIndex().firstOrNull { (_, row) -> TargetRef.ofOrNull(row.targetType, row.targetKey) == null }
+        ?.let { (i, row) -> return "attributeAssignments[$i]: unknown target type '${row.targetType}' — expected 'fixture' or 'group'" }
+    checkLookLayersUntargeted(layers)
     for (layer in layers) {
-        // A Look layer's targets are dropped, not judged (absolute-looks plan P2).
-        layer.withStoredTargets().targets.firstOrNull { TargetRef.ofOrNull(it.type, it.key) == null }
+        layer.targets.firstOrNull { TargetRef.ofOrNull(it.type, it.key) == null }
             ?.let { return "A layer's target must be a fixture or a group, not '${it.type}'" }
-        EffectSpecCoercion.Strict.problem(blendMode = layer.blendMode)?.let { return it }
+        FxSpecCoercion.Strict.problem(blendMode = layer.blendMode)?.let { return it }
     }
-    adHocEffects.withIndex().firstOrNull { (_, e) -> EffectTargetRef.ofOrNull(e.targetType, e.targetKey) == null }
+    adHocFx.withIndex().firstOrNull { (_, e) -> FxTargetsRef.ofOrNull(e.targetType, e.targetKey) == null }
         ?.let { (i, e) ->
-            return "adHocEffects[$i]: unknown target '${e.targetType}' — expected 'fixture', 'group' or " +
-                "'${EffectTargetRef.Selection.TYPE}' with a list of fixtures and groups"
+            return "adHocFx[$i]: unknown target '${e.targetType}' — expected 'fixture', 'group' or " +
+                "'${FxTargetsRef.Selection.TYPE}' with a list of fixtures and groups"
         }
-    for (effect in adHocEffects) {
-        EffectSpecCoercion.Strict.problem(
+    for (effect in adHocFx) {
+        FxSpecCoercion.Strict.problem(
             blendMode = effect.blendMode,
-            distribution = effect.distribution,
+            order = effect.order,
             elementMode = effect.elementMode,
             elementFilter = effect.elementFilter,
             direction = effect.direction,
-            size = effect.size,
-            nShot = effect.nShot,
+            amount = effect.amount,
+            runs = effect.runs,
             spread = effect.spread,
             wings = effect.wings,
-            blocks = effect.blocks,
-            groups = effect.groups,
+            segments = effect.segments,
+            parts = effect.parts,
         )?.let { return it }
+        registry.fxWriteProblem(effect.fxType, effect.parameters, effect.family)?.let { return it }
     }
     return null
 }
 
 /** A cue row's identity within its cue: what it is on, never what it holds (show-cue-editing plan §3.4). */
-internal data class CueRowKey(val targetType: String, val targetKey: String, val propertyName: String)
+internal data class CueRowKey(val targetType: String, val targetKey: String, val attribute: String)
 
-internal fun cueRowKey(targetType: String, targetKey: String, propertyName: String) =
-    CueRowKey(targetType, targetKey, canonicalPropertyName(propertyName))
+internal fun cueRowKey(targetType: String, targetKey: String, attribute: String) =
+    CueRowKey(targetType, targetKey, canonicalAttributeName(attribute))
 
-internal val DaoCuePropertyAssignment.rowKey get() = cueRowKey(targetType, targetKey, propertyName)
+internal val DaoCueAttributeAssignment.rowKey get() = cueRowKey(targetType, targetKey, attribute)
 
-internal val CuePropertyAssignmentDto.rowKey get() = cueRowKey(targetType, targetKey, propertyName)
+internal val CueAttributeAssignmentDto.rowKey get() = cueRowKey(targetType, targetKey, attribute)
 
 /** A cue effect's identity within its cue: the effect, and what it runs on. */
-internal data class CueEffectKey(val targetType: String, val targetKey: String, val propertyName: String?, val effectType: String)
+internal data class CueFxKey(val targetType: String, val targetKey: String, val attribute: String?, val fxType: String)
 
-internal fun cueEffectKey(targetType: String, targetKey: String, propertyName: String?, effectType: String) =
-    CueEffectKey(targetType, targetKey, propertyName?.let(::canonicalPropertyName), effectType)
+internal fun cueFxKey(targetType: String, targetKey: String, attribute: String?, fxType: String) =
+    CueFxKey(targetType, targetKey, attribute?.let(::canonicalAttributeName), fxType)
 
-internal val DaoCueAdHocEffect.effectKey get() = cueEffectKey(targetType, targetKey, propertyName, effectType)
+internal val DaoCueAdHocFxEntity.fxKey get() = cueFxKey(targetType, targetKey, attribute, fxType)
 
-internal val CueAdHocEffectDto.effectKey get() = cueEffectKey(targetType, targetKey, propertyName, effectType)
+internal val CueAdHocFxDto.fxKey get() = cueFxKey(targetType, targetKey, attribute, fxType)
 
 /**
  * A cue layer's identity within its cue: the record it applies. Both ids, because a Look and a
- * template are two tables with two id spaces — the reason [appliesSameSourceAs] compares both.
+ * palette are two tables with two id spaces — the reason [appliesSameSourceAs] compares both.
  */
-internal data class CueLayerKey(val lookId: Int?, val templateId: Int?)
+internal data class CueLayerKey(val lookId: Int?, val paletteId: Int?)
 
-internal val DaoCueLayer.layerKey get() = CueLayerKey(look?.id?.value, template?.id?.value)
+internal val DaoCueLayer.layerKey get() = CueLayerKey(look?.id?.value, palette?.id?.value)
 
-internal val ResolvedLayerSource.layerKey get() = CueLayerKey(look?.id?.value, template?.id?.value)
+internal val ResolvedLayerSource.layerKey get() = CueLayerKey(look?.id?.value, palette?.id?.value)
 
 /** A script hook's identity within its cue: when it fires, and what it runs. */
 internal data class CueHookKey(val triggerType: TriggerType, val scriptId: Int)
@@ -595,11 +608,11 @@ internal val DaoCueTrigger.hookKey get() = CueHookKey(triggerType, script.id.val
  * (stack-timeline plan P4): breaking or joining a run changes nothing on stage now.
  */
 internal fun DaoCue.stageContent(): List<List<Any?>> = listOf(
-    propertyAssignmentsInOrder().map { it.toDto() }.map { listOf(it.targetType, it.targetKey, it.propertyName, it.value) },
+    attributeAssignmentsInOrder().map { it.toDto() }.map { listOf(it.targetType, it.targetKey, it.attribute, it.value) },
     layersInOrder().mapNotNull { it.toDto() }
         .filter { it.delayMs == null && it.intervalMs == null }
         .map { it.copy(sortOrder = 0, randomWindowMs = null) },
-    adHocEffectsInOrder().map { it.toDto() }
+    adHocFxInOrder().map { it.toDto() }
         .filter { it.delayMs == null && it.intervalMs == null }
         .map { it.copy(sortOrder = 0, randomWindowMs = null, runUuid = null) },
 )
@@ -607,10 +620,41 @@ internal fun DaoCue.stageContent(): List<List<Any?>> = listOf(
 /** A cue's stored layers, in their order. Sorted in memory: Exposed refuses to order a loaded referrer collection. */
 internal fun DaoCue.layersInOrder(): List<DaoCueLayer> = layers.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
-internal fun DaoCue.adHocEffectsInOrder(): List<DaoCueAdHocEffect> = adHocEffects.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+internal fun DaoCue.adHocFxInOrder(): List<DaoCueAdHocFxEntity> = adHocFx.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
-internal fun DaoCue.propertyAssignmentsInOrder(): List<DaoCuePropertyAssignment> =
-    propertyAssignments.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+/**
+ * A home's FX after a write from the programmer, bottom first (FX editor plan §3.5): [stored] in its
+ * stored order, the rows the write wrote ([written], in apply order) taking the places of the stored
+ * ones among them, and the rest of them after everything. A row the write did not touch keeps its
+ * place. Each row's [sortOrder] becomes its index, unless the order is the stored one and nothing was
+ * added, when the stored numbers stand; answers the rows whose place moved.
+ */
+internal fun <T : Any> renumberInApplyOrder(
+    stored: List<T>,
+    written: List<T>,
+    sortOrder: KMutableProperty1<T, Int>,
+): Set<T> {
+    val writtenRows = Collections.newSetFromMap(IdentityHashMap<T, Boolean>())
+    // A row written twice (two of the write's FX matched it) takes the place of its first.
+    val queue = ArrayDeque(written.filter { writtenRows.add(it) })
+    val ordered = stored.map { if (it in writtenRows) queue.removeFirst() else it } + queue
+    val moved = Collections.newSetFromMap(IdentityHashMap<T, Boolean>())
+    for ((index, row) in ordered.withIndex()) if (stored.getOrNull(index) !== row) moved += row
+    if (moved.isEmpty()) return moved
+    for ((index, row) in ordered.withIndex()) if (sortOrder.get(row) != index) sortOrder.set(row, index)
+    return moved
+}
+
+/**
+ * [items] in their list's order: as they are when their sort orders already rise along the list,
+ * else renumbered by position — so an explicit list, whatever sort orders it sends, is stored in the
+ * order it was written.
+ */
+internal fun <T> inListOrder(items: List<T>, order: (T) -> Int, renumbered: (T, Int) -> T): List<T> =
+    if (items.zipWithNext().all { (a, b) -> order(a) < order(b) }) items else items.mapIndexed { i, item -> renumbered(item, i) }
+
+internal fun DaoCue.attributeAssignmentsInOrder(): List<DaoCueAttributeAssignment> =
+    attributeAssignments.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
 internal fun DaoCue.triggersInOrder(): List<DaoCueTrigger> = triggers.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
@@ -633,7 +677,7 @@ private fun normalisedTriggerType(raw: String): TriggerType = when (raw) {
  *
  * A child that survives the write is updated in place rather than recreated, so it keeps its `uuid`
  * and a one-value edit reads as one changed record in a sync diff (show-cue-editing plan P3, §3.4).
- * Each kind is matched by its natural key — [CueRowKey], [CueLayerKey], [CueEffectKey],
+ * Each kind is matched by its natural key — [CueRowKey], [CueLayerKey], [CueFxKey],
  * [CueHookKey] — and [pairByKey] pairs the n-th incoming item of a key with the n-th stored one in
  * `sortOrder` order, so a key held twice pairs deterministically. Everything else about a survivor
  * is the incoming item's; the rest are inserted or deleted. `writeLookChildren` is the Look's twin.
@@ -657,30 +701,33 @@ private fun normalisedTriggerType(raw: String): TriggerType = when (raw) {
  * `uuid` instead of their key, a new one takes the uuid it names, and an effect takes its run key —
  * so a cue is put back exactly as an edit found it.
  *
+ * Answers the ad-hoc rows written, one per [adHocFx] item and in its order.
+ *
  * Must be called inside a transaction.
  */
 internal fun writeCueChildren(
     cue: DaoCue,
-    adHocEffects: List<CueAdHocEffectDto>? = null,
-    propertyAssignments: List<CuePropertyAssignmentDto>? = null,
+    adHocFx: List<CueAdHocFxDto>? = null,
+    attributeAssignments: List<CueAttributeAssignmentDto>? = null,
     triggers: List<CueTriggerDto>? = null,
     layers: List<CueLayerDto>? = null,
     created: Boolean = false,
     restore: Boolean = false,
-) {
-    val newEffects = adHocEffects.orEmpty()
-    val newRows = propertyAssignments.orEmpty()
-    validateCueChildren(newEffects, layers.orEmpty(), newRows)?.let { throw IllegalArgumentException(it) }
+    registry: FxRegistry,
+): List<DaoCueAdHocFxEntity> {
+    val newFx = adHocFx.orEmpty()
+    val newRows = attributeAssignments.orEmpty()
+    validateCueChildren(newFx, layers.orEmpty(), newRows, registry)?.let { throw IllegalArgumentException(it) }
     // No cue row and no effect may name a one-shot trigger (stage-view plan session 9, D15) — every
     // problem at once, before anything is written, so the caller's transaction rolls back whole.
     // The index is queries; build it only when some name could be refused at all.
     // Nor a fixture command (fixture optics plan session 7), by the same rules and with its own code.
-    val mayTrigger = newRows.any { TriggerIndex.mayRefuse(it.propertyName) } || newEffects.any { TriggerIndex.mayRefuse(it.propertyName) }
+    val mayTrigger = newRows.any { TriggerIndex.mayRefuse(it.attribute) } || newFx.any { TriggerIndex.mayRefuse(it.attribute) }
     // A row is also refused for a level inside a command's band on a property that shares its channel.
-    val mayCommand = newRows.any { CommandIndex.mayRefuseRow(it.propertyName) } || newEffects.any { CommandIndex.mayRefuse(it.propertyName) }
+    val mayCommand = newRows.any { CommandIndex.mayRefuseRow(it.attribute) } || newFx.any { CommandIndex.mayRefuse(it.attribute) }
     if (mayTrigger || mayCommand) {
-        val refs = newRows.mapIndexed { i, a -> TriggerIndex.RowRef(a.targetType, a.targetKey, a.propertyName, "propertyAssignments[$i]", a.value) } +
-            newEffects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "adHocEffects[$i]") }
+        val refs = newRows.mapIndexed { i, a -> TriggerIndex.RowRef(a.targetType, a.targetKey, a.attribute, "attributeAssignments[$i]", a.value) } +
+            newFx.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.attribute, "adHocFx[$i]") }
         if (mayTrigger) TriggerIndex.of(cue.project).check(refs)
         if (mayCommand) CommandIndex.of(cue.project).check(refs)
     }
@@ -692,8 +739,7 @@ internal fun writeCueChildren(
     }
 
     if (layers != null) {
-        // A Look layer names no targets (absolute-looks plan P2): a write naming some stores none.
-        val resolved = layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer.withStoredTargets() to it } }
+        val resolved = layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer to it } }
         val existing = if (created) emptyList() else cue.layersInOrder()
         val pairing = if (restore) {
             pairByKey(existing, resolved, { it.uuid to it.layerKey }, { (layer, source) -> restoredUuid(layer.uuid) to source.layerKey })
@@ -709,24 +755,26 @@ internal fun writeCueChildren(
                 DaoCueLayer.new {
                     this.cue = cue
                     this.look = source.look
-                    this.template = source.template
+                    this.palette = source.palette
                     take(layer)
                     if (restore) layer.uuid?.let { uuid = UUID.fromString(it) }
                 }
             }
         }
     }
-    if (adHocEffects != null) {
-        val existing = if (created) emptyList() else cue.adHocEffectsInOrder()
-        val incoming = adHocEffects.map { it.canonicalTarget() }
+    val writtenFx = ArrayList<DaoCueAdHocFxEntity>()
+    if (adHocFx != null) {
+        val existing = if (created) emptyList() else cue.adHocFxInOrder()
+        val incoming = inListOrder(adHocFx, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) }
+            .map { it.canonicalTarget() }
         val pairing = if (restore) {
-            pairByKey(existing, incoming, { it.uuid to it.effectKey }, { restoredUuid(it.uuid) to it.effectKey })
+            pairByKey(existing, incoming, { it.uuid to it.fxKey }, { restoredUuid(it.uuid) to it.fxKey })
         } else {
-            pairByKey(existing, incoming, { it.effectKey }, { it.effectKey })
+            pairByKey(existing, incoming, { it.fxKey }, { it.fxKey })
         }
         pairing.unmatched.forEach { it.delete() }
         for ((effect, stored) in pairing.pairs) {
-            val row = stored?.apply { take(effect) } ?: DaoCueAdHocEffect.new {
+            val row = stored?.apply { take(effect) } ?: DaoCueAdHocFxEntity.new {
                 this.cue = cue
                 targetType = effect.targetType
                 targetKey = effect.targetKey
@@ -734,16 +782,17 @@ internal fun writeCueChildren(
                 if (restore) effect.uuid?.let { uuid = UUID.fromString(it) }
             }
             if (restore) row.runUuid = effect.runUuid?.let(UUID::fromString)
+            writtenFx += row
         }
     }
-    if (propertyAssignments != null) {
-        val pairing = pairByKey(if (created) emptyList() else cue.propertyAssignmentsInOrder(), propertyAssignments, { it.rowKey }, { it.rowKey })
+    if (attributeAssignments != null) {
+        val pairing = pairByKey(if (created) emptyList() else cue.attributeAssignmentsInOrder(), attributeAssignments, { it.rowKey }, { it.rowKey })
         pairing.unmatched.forEach { it.delete() }
         for ((row, stored) in pairing.pairs) {
             if (stored != null) {
                 stored.take(row)
             } else {
-                DaoCuePropertyAssignment.new {
+                DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = row.targetType
                     targetKey = row.targetKey
@@ -772,17 +821,18 @@ internal fun writeCueChildren(
             }
         }
     }
+    return writtenFx
 }
 
 /** A restored child's uuid, or a fresh one — which no stored row holds — for a child that names none. */
 private fun restoredUuid(uuid: String?): UUID = uuid?.let(UUID::fromString) ?: UUID.randomUUID()
 
-/** [layer] onto this layer, but for the record [writeCueChildren] matched it on; a Look layer's targets are none. */
+/** [layer] onto this layer, but for the record [writeCueChildren] matched it on. */
 internal fun DaoCueLayer.take(layer: CueLayerDto) {
     sortOrder = layer.sortOrder
     enabled = layer.enabled
-    targets = layer.withStoredTargets().targets
-    propertyMask = layer.propertyMask
+    targets = layer.targets
+    attributeMask = layer.attributeMask
     blendMode = layer.blendMode
     amount = layer.amount
     stomp = layer.stomp
@@ -797,17 +847,17 @@ internal fun DaoCueLayer.take(layer: CueLayerDto) {
  * [effect] onto this effect, but for the target [writeCueChildren] matched it on. Its `uuid` and run
  * key are the stored row's, never the write's (stack-timeline plan P2).
  */
-internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
-    effectType = effect.effectType
-    category = effect.category
-    propertyName = effect.propertyName
-    beatDivision = effect.beatDivision
+internal fun DaoCueAdHocFxEntity.take(effect: CueAdHocFxDto) {
+    fxType = effect.fxType
+    family = effect.family
+    attribute = effect.attribute
+    cycle = effect.cycle
     blendMode = effect.blendMode
-    distribution = effect.distribution
+    order = effect.order
     phaseOffset = effect.phaseOffset
     elementMode = effect.elementMode
     elementFilter = effect.elementFilter
-    stepTiming = effect.stepTiming
+    timing = storedTiming(effect.timing)
     parameters = effect.parameters
     delay = effect.delayMs.asDuration()
     interval = effect.intervalMs.asDuration()
@@ -817,18 +867,18 @@ internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
     speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
     rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
     seconds = effect.seconds
-    size = effect.size
-    direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
-    nShot = effect.nShot
+    amount = effect.amount
+    direction = FxSpecCoercion.Names.canonicalDirection(effect.direction)
+    runs = effect.runs
     this.spread = effect.spread
     this.wings = effect.wings
-    this.blocks = effect.blocks
-    this.groups = effect.groups
+    this.segments = effect.segments
+    this.parts = effect.parts
 }
 
 /** [row] onto this row, but for the target [writeCueChildren] matched it on. */
-internal fun DaoCuePropertyAssignment.take(row: CuePropertyAssignmentDto) {
-    propertyName = row.propertyName
+internal fun DaoCueAttributeAssignment.take(row: CueAttributeAssignmentDto) {
+    attribute = row.attribute
     value = row.value
     fadeDuration = row.fadeDurationMs.asDuration()
     sortOrder = row.sortOrder
@@ -850,8 +900,8 @@ private fun DaoCueTrigger.take(trigger: CueTriggerDto) {
  */
 internal fun deleteCueChildren(cue: DaoCue) {
     cue.layers.forEach { it.delete() }
-    cue.adHocEffects.forEach { it.delete() }
-    cue.propertyAssignments.forEach { it.delete() }
+    cue.adHocFx.forEach { it.delete() }
+    cue.attributeAssignments.forEach { it.delete() }
     cue.triggers.forEach { it.delete() }
 }
 
@@ -884,49 +934,49 @@ private fun findElement(fixture: Fixture, elementKey: String): FixtureElement<*>
 
 /**
  * Element counterpart to [fixtureCategoryFor]. Elements aren't `Fixture`s and so have no
- * [Fixture.fixtureProperties] of their own; their `@FixtureProperty` metadata comes from the
- * shared [FixturePropertyCatalogue] keyed on the element class.
+ * [Fixture.fixtureAttributes] of their own; their `@FixtureAttribute` metadata comes from the
+ * shared [FixtureAttributeCatalogue] keyed on the element class.
  */
 private fun elementCategoryFor(
     element: FixtureElement<*>,
-    propertyName: String,
-): Pair<PropertyCategory, CompositionRule>? {
-    val canonical = canonicalPropertyName(propertyName)
+    attribute: String,
+): Pair<AttributeCategory, CompositionRule>? {
+    val canonical = canonicalAttributeName(attribute)
     if (canonical.equals("position", ignoreCase = true)) {
-        val pan = findElementProperty(element, "pan") ?: return null
-        findElementProperty(element, "tilt") ?: return null
+        val pan = findElementAttribute(element, "pan") ?: return null
+        findElementAttribute(element, "tilt") ?: return null
         return pan.category to pan.composition
     }
-    val property = findElementProperty(element, canonical) ?: return null
-    return property.category to property.composition
+    val declared = findElementAttribute(element, canonical) ?: return null
+    return declared.category to declared.composition
 }
 
-private fun findElementProperty(element: FixtureElement<*>, name: String): Fixture.Property? =
-    FixturePropertyCatalogue.of(element::class).byName[name]
+private fun findElementAttribute(element: FixtureElement<*>, name: String): Fixture.Attribute? =
+    FixtureAttributeCatalogue.of(element::class).byName[name]
 
 /**
- * The category Record files a running effect under: the step effects' own (effects plan §3.6) —
+ * The family Record files a running effect under: the step effects' own (effects plan §3.6) —
  * Slot Steps is a beam effect whatever setting it steps, Palette Steps is its palettes' family,
- * read off the property it drives (a strobe in an Intensity palette is `dimmer`, not `controls`) —
- * else [categoryFromPropertyName].
+ * read off the property it drives (a strobe in an Intensity palette is `intensity`, not `controls`) —
+ * else [categoryFromAttributeName].
  */
-internal fun recordedEffectCategory(effect: FxInstance): String {
-    val propertyName = effect.target.propertyName
+internal fun recordedFxFamily(effect: FxInstance): String {
+    val attribute = effect.target.attribute
     return when {
-        effect.effectTypeId.equals(SLOT_STEPS_ID, ignoreCase = true) -> "beam"
-        effect.effectTypeId.equals(PALETTE_STEPS_ID, ignoreCase = true) ->
-            TemplateProperty.ofOrNull(propertyName)?.family?.let(::effectCategoryForFamily)
-                ?: categoryFromPropertyName(propertyName)
-        else -> categoryFromPropertyName(propertyName)
+        effect.fxTypeId.equals(SLOT_STEPS_ID, ignoreCase = true) -> "beam"
+        effect.fxTypeId.equals(PALETTE_STEPS_ID, ignoreCase = true) ->
+            PaletteAttribute.ofOrNull(attribute)?.family?.let(::fxFamilyForAttributeFamily)
+                ?: categoryFromAttributeName(attribute)
+        else -> categoryFromAttributeName(attribute)
     }
 }
 
 /**
  * Infer effect category from property name for from-state capture.
  */
-internal fun categoryFromPropertyName(propertyName: String): String {
-    return when (propertyName.lowercase()) {
-        "dimmer" -> "dimmer"
+internal fun categoryFromAttributeName(attribute: String): String {
+    return when (attribute.lowercase()) {
+        "dimmer" -> "intensity"
         "colour", "color", "rgbcolour" -> "colour"
         "position" -> "position"
         "zoom", "iris", "frost", "focus" -> "beam"
@@ -1003,3 +1053,11 @@ internal fun setEntryNumber(entry: DaoCueStackEntry, incoming: String?) {
     entry.cueNumberAuto = false
     renumberAutoEntries(stack, cueEntryIds(stack))
 }
+
+/**
+ * Why a write read as a raw [JsonObject] names a field it does not take, or null. A partial write
+ * reads only the keys it knows, so without this an old field name (terminology plan P5) would be a
+ * silent 200 that changed nothing.
+ */
+internal fun unknownFieldsProblem(body: JsonObject, known: Set<String>): String? =
+    (body.keys - known).takeIf { it.isNotEmpty() }?.let { "Unknown field(s): ${it.joinToString()}" }

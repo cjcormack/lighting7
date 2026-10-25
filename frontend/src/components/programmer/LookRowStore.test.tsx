@@ -6,16 +6,16 @@ const saveLook = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve({
 const LOOKS = vi.hoisted(() => ({
   3: {
     id: 3,
-    rows: [{ targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '10' }],
+    rows: [{ targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '10' }],
   },
   4: {
     id: 4,
-    rows: [{ targetType: 'fixture', targetKey: 'b', propertyName: 'dimmer', value: '20' }],
+    rows: [{ targetType: 'fixture', targetKey: 'b', attribute: 'dimmer', value: '20' }],
   },
 }))
 /** Which layer the grid is pointed at — mutable, because moving the focus is a scenario. */
 const focused = vi.hoisted(() => ({ current: 7 }))
-/** The last `useLookQuery` call, so the TEMPLATE case can assert the fetch was skipped. */
+/** The last `useLookQuery` call, so the palette case can assert the fetch was skipped. */
 const lookQuery = vi.hoisted(() => ({ last: null as { lookId: number; skip?: boolean } | null }))
 
 vi.mock('@/store/programmer', () => ({
@@ -25,28 +25,28 @@ vi.mock('@/store/programmer', () => ({
         layerId: 7,
         source: { kind: 'LOOK', id: 3, uuid: 'u3', name: 'Warm Wash' },
         targets: [],
-        propertyMask: null,
+        attributeMask: null,
       },
       {
         layerId: 8,
         source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Cold Wash' },
         targets: [],
-        propertyMask: null,
+        attributeMask: null,
       },
       {
         layerId: 9,
         source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Cold Wash' },
         targets: [{ type: 'fixture', key: 'b' }],
-        propertyMask: null,
+        attributeMask: null,
       },
-      // A TEMPLATE layer whose `source.id` **collides with LOOK 3** on purpose: the two live in
+      // A palette layer whose `source.id` **collides with LOOK 3** on purpose: the two live in
       // different tables and share an int PK space, so a gate written against `source.id` alone
       // would hand this layer Warm Wash's rows and let the grid edit them.
       {
         layerId: 10,
-        source: { kind: 'TEMPLATE', id: 3, uuid: 't3', name: 'Warm Tilt' },
+        source: { kind: 'PALETTE', id: 3, uuid: 't3', name: 'Warm Tilt' },
         targets: [],
-        propertyMask: null,
+        attributeMask: null,
       },
     ],
   }),
@@ -104,9 +104,6 @@ describe('LookRowStoreProvider', () => {
     draw()
     expect(captured?.lookId).toBe(3)
     expect(captured?.lookName).toBe('Warm Wash')
-    // `targets: []` means "the Look's own targets", not "no targets" — reading it as an empty set
-    // would dim every row in the grid on an ordinary bound layer.
-    expect(captured?.targetedKeys).toBeNull()
   })
 
   it('coalesces a burst of commits into one save', () => {
@@ -124,7 +121,7 @@ describe('LookRowStoreProvider', () => {
     expect(saveLook).toHaveBeenCalledWith({
       projectId: 1,
       lookId: 3,
-      rows: [{ targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '119' }],
+      rows: [{ targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '119' }],
     })
   })
 
@@ -176,35 +173,28 @@ describe('LookRowStoreProvider', () => {
     expect(saveLook).toHaveBeenCalledWith({
       projectId: 1,
       lookId: 3,
-      rows: [{ targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '200' }],
+      rows: [{ targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '200' }],
     })
   })
 
-  it('refuses a write to a fixture outside the layer targets', () => {
-    // The paint guard (`pointer-events-none`) only stops a *click*; the marquee selects by
-    // rectangle off the rows wrapper, so a batch commit can still reach an untargeted row.
-    // Widening a layer has to stay an explicit press.
+  it('lands every write in the Look, whatever the layer once named', () => {
+    // A Look's layer names no targets (absolute-looks plan D1), so there is no head outside it:
+    // layer 9 still carries a target list from an older desk, and the write to `a` lands anyway.
     focused.current = 9
     draw()
-    expect(captured?.targetedKeys).toEqual(new Set(['b']))
     act(() => captured?.setValue('a', 'dimmer', '200'))
-    act(() => void vi.advanceTimersByTime(400))
-    expect(saveLook).not.toHaveBeenCalled()
-
-    // …and the targeted one still writes, so this is a filter and not a lock.
-    act(() => captured?.setValue('b', 'dimmer', '200'))
     act(() => void vi.advanceTimersByTime(400))
     expect(saveLook).toHaveBeenCalledTimes(1)
   })
 
-  it('stays disengaged for a focused TEMPLATE layer, whatever id it carries', () => {
+  it('stays disengaged for a focused palette layer, whatever id it carries', () => {
     // **The LOOK-only gate.** A template is one family of intents edited in its own family-native
     // editor; projecting its generic row onto every targeted row would silently convert it to a
     // per-fixture one on the first edit. `LayerRowNotices` explains that in the grid — it does not
     // enforce it, this does. Asserted on the store's own output rather than on the notice, so the
     // pin survives any rewording there.
     //
-    // Layer 10 names TEMPLATE 3 while layer 7 names LOOK 3, so the tempting simplification of
+    // Layer 10 names palette 3 while layer 7 names LOOK 3, so the tempting simplification of
     // `layer?.source.kind === 'LOOK' ? layer.source.id : undefined` to `layer?.source.id` fails
     // here and nowhere else in this file.
     focused.current = 10

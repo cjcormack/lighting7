@@ -20,12 +20,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatError } from '@/lib/formatError'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { useLookQuery, useSaveLookMutation } from '@/store/looks'
-import { useEffectLibraryQuery } from '@/store/fixtureFx'
-import { EffectSummary } from '@/components/fx/EffectSummary'
-import { fromLookEffect } from '@/components/fx/effectSummaryTypes'
+import { useFxLibraryQuery } from '@/store/fixtureFx'
+import { FxSummary } from '@/components/fx/FxSummary'
+import { fromLookFx } from '@/components/fx/fxSummaryTypes'
 import { useInclude } from '@/components/programmer/useInclude'
 import { LookValueChip } from './lookValueChips'
-import { DEFERRED_TARGET_TYPE, type LookSummary } from '@/api/looksApi'
+import type { LookSummary } from '@/api/looksApi'
 import { useLookDelete } from './useLookDelete'
 import { SceneryEditor } from '@/components/scenery/SceneryEditor'
 import { useSetLookSceneryMutation } from '@/store/scenery'
@@ -86,7 +86,7 @@ export function LookDetailSheet({
   })
   const { include, isLoading: isIncluding } = useInclude(projectId)
   // For each effect's parameter labels and colour swatches; only while the sheet is open.
-  const { data: library } = useEffectLibraryQuery(undefined, { skip: !open })
+  const { data: library } = useFxLibraryQuery(undefined, { skip: !open })
 
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
@@ -112,14 +112,14 @@ export function LookDetailSheet({
   const rowsByTarget = useMemo(() => {
     const byTarget = new Map<
       string,
-      { targetKey: string; values: { property: string; value: string }[] }
+      { targetKey: string; values: { attribute: string; value: string }[] }
     >()
     for (const row of detail?.rows ?? []) {
       // A cell's row under the cell's own key: a colour held per zone reads as one line per zone
       // rather than three unlabelled chips under the fixture.
       const key = row.elementKey ?? row.targetKey
       const bucket = byTarget.get(key) ?? { targetKey: key, values: [] }
-      bucket.values.push({ property: row.propertyName, value: row.value })
+      bucket.values.push({ attribute: row.attribute, value: row.value })
       byTarget.set(key, bucket)
     }
     return [...byTarget.values()]
@@ -133,12 +133,12 @@ export function LookDetailSheet({
   // snapshot taken when the library row was clicked.
   const layerCount = detail?.layerCount ?? look.layerCount
   const families = detail?.families ?? look.families
-  const effects = detail?.effects ?? []
-  const effectCount = detail?.effects.length ?? look.effectCount
+  const effects = detail?.fx ?? []
+  const fxCount = detail?.fx.length ?? look.fxCount
 
   const save = async () => {
     if (name.trim() === '') return
-    // Only the metadata keys. Omitting `rows` and `effects` is what tells the backend to leave the
+    // Only the metadata keys. Omitting `rows` and `fx` is what tells the backend to leave the
     // contents alone — sending `[]` would clear them, and clear them out from under every cue
     // resolving through this Look.
     await saveLook({
@@ -164,7 +164,7 @@ export function LookDetailSheet({
           <SheetTitle>{look.name}</SheetTitle>
           <SheetDescription>
             {look.targetCount} fixture{look.targetCount === 1 ? '' : 's'}
-            {effectCount > 0 ? ` · ${effectCount} effect${effectCount === 1 ? '' : 's'}` : ''} · used by{' '}
+            {fxCount > 0 ? ` · ${fxCount} FX` : ''} · used by{' '}
             {layerCount} cue layer{layerCount === 1 ? '' : 's'}
           </SheetDescription>
         </SheetHeader>
@@ -210,8 +210,8 @@ export function LookDetailSheet({
 
           <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
             To change what this look holds, <strong>Include</strong> it into the programmer, edit
-            its values and effects on stage, then <strong>Update</strong> — only what you changed is
-            written back, and every cue layering it moves with it. An effect marked{' '}
+            its values and FX on stage, then <strong>Update</strong> — only what you changed is
+            written back, and every cue layering it moves with it. An FX marked{' '}
             <em>on the layer&apos;s targets</em> runs on the desk selection while included.
           </div>
 
@@ -257,7 +257,7 @@ export function LookDetailSheet({
                           per element for the same property, so the property alone is not unique. */}
                       {bucket.values.map((v, index) => (
                         <LookValueChip
-                          key={`${bucket.targetKey}-${v.property}-${index}`}
+                          key={`${bucket.targetKey}-${v.attribute}-${index}`}
                           value={v.value}
                         />
                       ))}
@@ -272,24 +272,19 @@ export function LookDetailSheet({
           <div className="space-y-2">
             <Label className="flex items-center gap-1.5">
               <AudioWaveform className="size-3.5" />
-              Effects
+              FX
             </Label>
             {isFetching && !detail ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : effects.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No effects.</p>
+              <p className="text-sm text-muted-foreground">No FX.</p>
             ) : (
               <div className="space-y-1.5">
                 {effects.map((effect, index) => (
-                  <EffectSummary
-                    key={`${effect.effectType}-${effect.targetKey}-${index}`}
-                    effect={fromLookEffect(effect, library)}
-                    target={
-                      effect.targetType === DEFERRED_TARGET_TYPE
-                        ? undefined
-                        : { type: effect.targetType, key: effect.targetKey }
-                    }
-                    badge={effect.targetType === DEFERRED_TARGET_TYPE ? "on the layer's targets" : undefined}
+                  <FxSummary
+                    key={`${effect.fxType}-${effect.targetKey}-${index}`}
+                    effect={fromLookFx(effect, library)}
+                    target={{ type: effect.targetType, key: effect.targetKey }}
                   />
                 ))}
               </div>

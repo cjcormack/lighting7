@@ -37,9 +37,9 @@ function member(key: string, index: number): GroupMember {
 }
 
 const members = ['a', 'b', 'c', 'd'].map(member)
-const steps = { LINEAR: [1, 2, 3, 4], CENTER_OUT: [2, 1, 1, 2] }
+const steps = { NORMAL: [1, 2, 3, 4], CENTRE_OUT: [2, 1, 1, 2] }
 
-function renderList(defaultDistribution = 'LINEAR') {
+function renderList(defaultOrder = 'NORMAL') {
   return render(
     <GroupMembersSection
       members={members}
@@ -47,8 +47,8 @@ function renderList(defaultDistribution = 'LINEAR') {
       onFixtureClick={() => {}}
       layout="list"
       groupName="wash"
-      distributionSteps={steps}
-      defaultDistribution={defaultDistribution}
+      orderSteps={steps}
+      defaultOrder={defaultOrder}
     />,
   )
 }
@@ -78,7 +78,7 @@ describe('the group sheet’s member list (venue-visit plan S7)', () => {
   })
 
   it('reads its steps under the group’s own distribution', () => {
-    renderList('CENTER_OUT')
+    renderList('CENTRE_OUT')
     expect(rows().map((r) => r.textContent)).toEqual(['1Astep 2', '2Bstep 1', '3Cstep 1', '4Dstep 2'])
   })
 

@@ -1,0 +1,30 @@
+{
+  "flow": "WRAP",
+  "name": "Bars",
+  "sortOrder": 0,
+  "tiles": [
+    {
+      "cellMode": "HALVES",
+      "cellSplit": 3,
+      "patchUuid": "88a6c300-a5f6-4abe-8076-f1975eb95db0",
+      "sortOrder": 0,
+      "uuid": "8885560a-5c6b-41e7-90dc-b461743a0736"
+    },
+    {
+      "cellMode": "PER_CELL",
+      "patchUuid": "88a6c300-a5f6-4abe-8076-f1975eb95db0",
+      "sortOrder": 1,
+      "uuid": "1c28567f-40d9-439f-8eb6-9913fa68dd31"
+    },
+    {
+      "cellMode": "WHOLE",
+      "elementKey": "bar-1.pixel-3",
+      "label": "Pixel 4",
+      "patchUuid": "88a6c300-a5f6-4abe-8076-f1975eb95db0",
+      "sortOrder": 2,
+      "uuid": "b0fba275-b15e-4653-8a21-e7e99a3ba832"
+    }
+  ],
+  "uuid": "77230d54-db7b-486e-a18a-341ceefffc1b",
+  "width": 6
+}

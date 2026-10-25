@@ -15,7 +15,7 @@ describe('fixtureFx reset to palette', () => {
 
   beforeEach(() => {
     installRelativeUrlRequest()
-    fetchMock = installRecordingFetch({ 'fx/12/reset': { id: 12, effectType: 'Pulse' } })
+    fetchMock = installRecordingFetch({ 'fx/12/reset': { id: 12, fxType: 'Pulse' } })
   })
 
   afterEach(() => {
@@ -24,7 +24,7 @@ describe('fixtureFx reset to palette', () => {
   })
 
   it('POSTs /fx/{id}/reset and answers the reset effect', async () => {
-    const result = await store.dispatch(fixtureFxApi.endpoints.resetFxToTemplate.initiate({ id: 12 }))
+    const result = await store.dispatch(fixtureFxApi.endpoints.resetFxToPalette.initiate({ id: 12 }))
     expect(result.data).toMatchObject({ id: 12 })
     const request = fetchMock.mock.calls.map((call) => call[0] as Request).find((r) => r.url.includes('fx/12/reset'))
     expect(request?.method).toBe('POST')

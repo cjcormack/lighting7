@@ -37,9 +37,9 @@ import { cn } from '@/lib/utils'
  * or not is not.
  */
 
-/** The candidate a held record makes, which is only ever these two facts. */
+/** The candidate a held record makes: its kind. */
 export function handCandidate(held: HeldRecord): HandCandidate {
-  return { kind: held.kind, hasDeferredEffects: held.look?.hasDeferredEffects }
+  return { kind: held.kind }
 }
 
 /**

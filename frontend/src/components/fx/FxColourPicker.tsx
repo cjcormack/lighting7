@@ -5,11 +5,11 @@ import {
   resolveColourToHex,
   parseExtendedColour,
   serializeExtendedColour,
-  isTemplateRef,
+  isPaletteRef,
   type ExtendedChannelFlags,
   type ExtendedColour,
 } from './colourUtils'
-import { useColourTemplates } from './FxColourTemplates'
+import { useColourPalettes } from './FxColourPalettes'
 import { ColourEditorBody } from './ColourEditorBody'
 
 interface FxColourPickerProps {
@@ -28,8 +28,8 @@ export function FxColourPicker({
   description,
   extendedChannels,
 }: FxColourPickerProps) {
-  const { templates, labelFor, swatchFor } = useColourTemplates()
-  const isRef = isTemplateRef(value)
+  const { palettes: templates, labelFor, swatchFor } = useColourPalettes()
+  const isRef = isPaletteRef(value)
 
   const [isOpen, setIsOpen] = useState(false)
   const [localColour, setLocalColour] = useState<ExtendedColour>(() => parseExtendedColour(value))
@@ -42,7 +42,7 @@ export function FxColourPicker({
   // "I want this colour, not that template".
   useEffect(() => {
     if (isOpen) {
-      const resolved = isTemplateRef(value) ? swatchFor(value) : null
+      const resolved = isPaletteRef(value) ? swatchFor(value) : null
       setLocalColour(parseExtendedColour(resolved ?? value))
     }
   }, [isOpen, value, swatchFor])
@@ -87,8 +87,8 @@ export function FxColourPicker({
             colour={localColour}
             onColourChange={emitChange}
             rawValue={value}
-            onPickTemplate={onChange}
-            templates={templates}
+            onPickPalette={onChange}
+            palettes={templates}
             extendedChannels={extendedChannels}
           />
         </PopoverContent>

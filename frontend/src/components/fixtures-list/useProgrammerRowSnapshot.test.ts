@@ -18,8 +18,8 @@ const harness = vi.hoisted(() => {
     stateSubscribers,
     isBlind: () => blind,
     /** Advance the api's own map — and only `notify: true` announces it, like the real client. */
-    setEntry(targetKey: string, propertyName: string, value: string, opts: { notify?: boolean } = {}) {
-      const id = `${targetKey}|${propertyName}`
+    setEntry(targetKey: string, attribute: string, value: string, opts: { notify?: boolean } = {}) {
+      const id = `${targetKey}|${attribute}`
       entries.set(id, { value })
       if (opts.notify) for (const fn of [...(keySubscribers.get(id) ?? [])]) fn()
     },
@@ -28,8 +28,8 @@ const harness = vi.hoisted(() => {
       if (patch.blind !== undefined) blind = patch.blind
       for (const fn of [...stateSubscribers]) fn({ blind })
     },
-    subscriberCount(targetKey: string, propertyName: string) {
-      return keySubscribers.get(`${targetKey}|${propertyName}`)?.size ?? 0
+    subscriberCount(targetKey: string, attribute: string) {
+      return keySubscribers.get(`${targetKey}|${attribute}`)?.size ?? 0
     },
     reset() {
       entries.clear()
@@ -44,11 +44,11 @@ vi.mock('@/api/lightingApi', () => ({
   lightingApi: {
     programmer: {
       isBlind: harness.isBlind,
-      getKeyState: (targetKey: string, propertyName: string) => ({
-        entry: harness.entries.get(`${targetKey}|${propertyName}`),
+      getKeyState: (targetKey: string, attribute: string) => ({
+        entry: harness.entries.get(`${targetKey}|${attribute}`),
       }),
-      subscribeToKey: (targetKey: string, propertyName: string, fn: () => void) => {
-        const id = `${targetKey}|${propertyName}`
+      subscribeToKey: (targetKey: string, attribute: string, fn: () => void) => {
+        const id = `${targetKey}|${attribute}`
         let set = harness.keySubscribers.get(id)
         if (!set) {
           set = new Set()
@@ -67,10 +67,10 @@ vi.mock('@/api/lightingApi', () => ({
 
 import { lightingApi } from '@/api/lightingApi'
 import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
-import type { CellPropertyKey, RowCell } from './useRowValues'
+import type { CellAttributeKey, RowCell } from './useRowValues'
 import type { ColumnKey } from './columns'
 
-function cellFor(col: ColumnKey, keys: CellPropertyKey[]): RowCell {
+function cellFor(col: ColumnKey, keys: CellAttributeKey[]): RowCell {
   return { col, resolutions: [], targetKeys: [], keys }
 }
 
@@ -83,16 +83,16 @@ function computeEntryValues(cells: readonly RowCell[]): Record<string, string | 
   }
   for (const cell of cells) {
     for (const key of cell.keys) {
-      out[`${key.targetKey}|${key.propertyName}`] = lightingApi.programmer.getKeyState(
+      out[`${key.targetKey}|${key.attribute}`] = lightingApi.programmer.getKeyState(
         key.targetKey,
-        key.propertyName,
+        key.attribute,
       ).entry?.value
     }
   }
   return out
 }
 
-const CELLS: readonly RowCell[] = [cellFor('dimmer', [{ targetKey: 'f1', propertyName: 'dimmer' }])]
+const CELLS: readonly RowCell[] = [cellFor('dimmer', [{ targetKey: 'f1', attribute: 'dimmer' }])]
 const OFF: readonly RowCell[] = []
 
 function render(initialCells: readonly RowCell[] = CELLS) {

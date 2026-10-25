@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TemplateSummary } from '@/api/templatesApi'
-import { parseTemplateIntent, serializeTemplateIntent, type TemplateIntent } from '@/lib/templateIntent'
+import type { PaletteSummary } from '@/api/palettesApi'
+import { parsePaletteIntent, serializePaletteIntent, type PaletteIntent } from '@/lib/paletteIntent'
 import { PositionControl } from './PositionControl'
-import { seedValues, templateRowsFromValues, valueChanges } from './templateRows'
+import { seedValues, paletteRowsFromValues, valueChanges } from './paletteRows'
 
 /**
  * A palette's position, centre-relative (venue-visit plan D3), and P3's promise about one stored
@@ -24,15 +24,15 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-const OLD: TemplateSummary = {
+const OLD: PaletteSummary = {
   id: 1,
   uuid: 'u',
   name: 'Downstage',
   family: 'POSITION',
   kind: 'value',
   isGeneric: true,
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value: 'deg:270,135' }],
-} as unknown as TemplateSummary
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'position', value: 'deg:270,135' }],
+} as unknown as PaletteSummary
 
 describe('PositionControl', () => {
   it('shows a stored degree palette on the centre scale, and says it is still in degrees', () => {
@@ -46,16 +46,16 @@ describe('PositionControl', () => {
   it('leaves an unedited degree palette exactly as stored', () => {
     const values = seedValues(OLD)
     expect(valueChanges(values, values)).toEqual({})
-    expect(templateRowsFromValues('POSITION', values).map((r) => r.value)).toEqual(['deg:270,135'])
+    expect(paletteRowsFromValues('POSITION', values).map((r) => r.value)).toEqual(['deg:270,135'])
   })
 
   it('writes centre-relative once the position is moved', () => {
-    const onChange = vi.fn<(intent: TemplateIntent | null) => void>()
-    render(<PositionControl value={parseTemplateIntent('deg:270,135') ?? undefined} onChange={onChange} />)
+    const onChange = vi.fn<(intent: PaletteIntent | null) => void>()
+    render(<PositionControl value={parsePaletteIntent('deg:270,135') ?? undefined} onChange={onChange} />)
     const pan = screen.getByRole('spinbutton', { name: 'Pan' })
     fireEvent.change(pan, { target: { value: '-30' } })
     const intent = onChange.mock.calls.at(-1)?.[0]
     expect(intent).toEqual({ kind: 'position', pan: -30, tilt: 0, unit: 'centre' })
-    expect(serializeTemplateIntent(intent!)).toBe('pos:-30,0')
+    expect(serializePaletteIntent(intent!)).toBe('pos:-30,0')
   })
 })

@@ -156,7 +156,7 @@ class ProjectImporterReplaceTest {
         // untouched survivors and tripped uniqueIndex(project, name).
         val projectId = seedRichProject(state)
         val origNames = transaction(state.database) {
-            DaoProject.findById(projectId)!!.templates.map { it.name }.toSet()
+            DaoProject.findById(projectId)!!.palettes.map { it.name }.toSet()
         }
         assertTrue(origNames.isNotEmpty(), "test sanity: rich fixture should seed templates")
 
@@ -168,7 +168,7 @@ class ProjectImporterReplaceTest {
 
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
-            val names = project.templates.map { it.name }
+            val names = project.palettes.map { it.name }
             assertEquals(origNames, names.toSet(), "template set should be unchanged after replace")
             assertEquals(names.size, names.toSet().size, "no duplicate template names after replace")
 

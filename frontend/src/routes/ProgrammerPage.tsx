@@ -9,9 +9,10 @@ import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar
 import { useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { createMarqueeStore, MarqueeStoreContext } from '@/components/fixtures-list/marqueeContext'
 import { createFxSelectionStore, FxSelectionStoreContext } from '@/components/fixtures-list/fxSelection'
+import { createRemaskStore, RemaskStoreContext } from '@/components/fixtures-list/remaskStore'
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
 import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
-import { FocusedTemplateLayerProvider } from '@/components/programmer/FocusedTemplateLayer'
+import { FocusedPaletteLayerProvider } from '@/components/programmer/FocusedPaletteLayer'
 import { ProgrammerRail } from '@/components/programmer/ProgrammerRail'
 import { ProgrammerScopeProvider } from '@/components/programmer/ProgrammerScope'
 import {
@@ -115,6 +116,8 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
   // publishes into it and each ringable cell reads it, so it outlives the table's mount and a
   // selection change re-renders only the cells whose ring moves.
   const [fxSelectionStore] = useState(createFxSelectionStore)
+  // The list's family-pill write, for the FX editor's header to draw the same pill.
+  const [remaskStore] = useState(createRemaskStore)
 
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
   // the body centred on the spinner or the sentence, so nothing changes shape when the grid
@@ -144,6 +147,7 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
   return (
     <MarqueeStoreContext.Provider value={marqueeStore}>
       <FxSelectionStoreContext.Provider value={fxSelectionStore}>
+      <RemaskStoreContext.Provider value={remaskStore}>
       <ProgrammerSheetsProvider projectId={projectIdNum}>
         <div className="flex h-full flex-col">
           <ShowHeader
@@ -190,6 +194,7 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
           <ProgrammerBody projectId={projectIdNum} />
         </div>
       </ProgrammerSheetsProvider>
+      </RemaskStoreContext.Provider>
       </FxSelectionStoreContext.Provider>
     </MarqueeStoreContext.Provider>
   )
@@ -301,7 +306,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
           layer has no `LookRowStore` (that one owns a row draft and engages only for a LOOK), and
           the grid, the notices and the scope band all need to know what it holds. */}
       <LookRowStoreProvider projectId={projectId}>
-        <FocusedTemplateLayerProvider projectId={projectId}>
+        <FocusedPaletteLayerProvider projectId={projectId}>
           <EditorContextProvider value={{ kind: 'live' }}>
             <ProgrammerWorkspace
               header={
@@ -345,7 +350,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
               rail={<ProgrammerRail projectId={projectId} />}
             />
           </EditorContextProvider>
-        </FocusedTemplateLayerProvider>
+        </FocusedPaletteLayerProvider>
       </LookRowStoreProvider>
     </ProgrammerScopeProvider>
   )

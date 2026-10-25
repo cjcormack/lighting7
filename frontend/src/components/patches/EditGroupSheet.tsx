@@ -181,7 +181,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
           <div className="space-y-1.5">
             <Label>Members ({members.length})</Label>
             <p className="text-xs text-muted-foreground">
-              {lockedReason ?? 'Effects and a spread over the group run in this order. Drag to reorder.'}
+              {lockedReason ?? 'FX and a fan over the group run in this order. Drag to reorder.'}
             </p>
           </div>
 

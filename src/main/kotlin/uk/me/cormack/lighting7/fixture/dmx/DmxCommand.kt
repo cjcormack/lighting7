@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.dmx.Universe
  * [@FixtureCommand][uk.me.cormack.lighting7.fixture.FixtureCommand], which carries how long to hold
  * it.
  *
- * Deliberately **not** a [Slider][uk.me.cormack.lighting7.fixture.property.Slider] or a
+ * Deliberately **not** a [Slider][uk.me.cormack.lighting7.fixture.attribute.Slider] or a
  * [DmxFixtureSetting], and it carries no transaction: nothing writes a command through a fixture.
  * The desk holds it — `state/CommandOutput.kt`, above composition and under park — for its declared
  * time, then gives the channel back. Because it is not a property type, every path that resolves a

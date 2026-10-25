@@ -1,0 +1,8 @@
+{
+  "controlId": "button-9",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 11,
+  "targetPayload": "{\"type\":\"pressPad\",\"padUuid\":\"92042133-476f-481d-a3f1-6ee5574cd8e4\"}",
+  "targetType": "pressPad",
+  "uuid": "e8e70d89-773e-4db7-bb06-5ce0aaa06a65"
+}

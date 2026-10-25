@@ -11,7 +11,7 @@ import {
   Vector3,
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { RING_INNER, RING_SEGMENTS } from '../../../lib/ringEffect'
+import { RING_INNER, RING_SEGMENTS } from '../../../lib/ringFx'
 import type { BodySpec } from './archetype'
 import type { Mount } from './mount'
 

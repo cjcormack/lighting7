@@ -28,14 +28,14 @@ const clearSelection = vi.fn()
 const subselectSelection = vi.fn()
 const maskSelection = vi.fn()
 
-const movers = { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] }
+const movers = { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' }
 const par = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: [] }
 const bar = {
   key: 'bar-1',
   name: 'Bar L',
   typeKey: 'bar',
   groups: [],
-  elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, properties: [] })),
+  elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, attributes: [] })),
 }
 
 // The store's readers over a real `lib/deskFollow.ts`, so the local arm is the real one.

@@ -181,7 +181,7 @@ describe('the menu', () => {
     const dialog = document.querySelector('[data-switch-confirm]') as HTMLElement
     expect(within(dialog).getByText('Put TCH Test on the rig?')).toBeInTheDocument()
     expect(dialog.textContent).toContain(
-      'Sleeping Beauty’s cues, programmer and effects stop, and every channel goes dark except those TCH Test parks (4).',
+      'Sleeping Beauty’s cues, programmer and FX stop, and every channel goes dark except those TCH Test parks (4).',
     )
     expect(dialog.querySelector('[data-switch-line="held"]')!.textContent).toBe(
       'TCH Test is behind TCH venue on output (v7, v8 published). It opens held: only parked channels reach the rig.',

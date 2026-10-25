@@ -22,7 +22,7 @@ import java.util.UUID
  *  * **Which identities exist** comes from the documents themselves — the value of any field
  *    named `uuid`, at any nesting depth. That covers records addressed by filename
  *    (`cues/{uuid}.json`) *and* records embedded in a parent document (a fixture group's
- *    `members`, an FX preset's `propertyAssignments`), which is why this doesn't use
+ *    `members`, an FX preset's `attributeAssignments`), which is why this doesn't use
  *    [RecordHasher.scanRecordKeys]: that enumerates *records*, and an embedded child is not
  *    one. Every reference field is named `{table}Uuid` rather than `uuid`, so a reference can
  *    never mint an identity of its own — it always resolves to a record whose `uuid` field

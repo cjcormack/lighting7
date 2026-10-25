@@ -377,7 +377,7 @@ export function CueActions({
             key: 'update-stage',
             label: 'Update stage…',
             icon: <RefreshCw className="size-3.5" />,
-            title: 'Send this cue’s stored values and effects to the stage, over its own fade',
+            title: 'Send this cue’s stored values and FX to the stage, over its own fade',
             onSelect: guarded(() =>
               dialogs.openUpdateStage({ projectId, cueId: one.cueId, name: one.cueNumber ? `Q${one.cueNumber} ${one.name}` : one.name }),
             ),

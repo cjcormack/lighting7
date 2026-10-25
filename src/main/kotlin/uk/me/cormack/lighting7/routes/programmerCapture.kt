@@ -3,9 +3,9 @@ package uk.me.cormack.lighting7.routes
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
@@ -16,17 +16,17 @@ import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.storedPhaseOffset
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
@@ -82,10 +82,10 @@ enum class RecordSkipReason {
     MISSING_FIXTURE,
 
     /** The property no longer resolves on that fixture (renamed or removed). */
-    MISSING_PROPERTY,
+    MISSING_ATTRIBUTE,
 
     /** A sideband channel with no backing property — cue assignments have no channel form. */
-    NO_BACKING_PROPERTY,
+    NO_BACKING_ATTRIBUTE,
 
     /** Filtered out by the request's attribute mask. */
     MASKED_OUT,
@@ -101,7 +101,7 @@ enum class RecordSkipReason {
 /** One entry that couldn't be recorded, named however it can be. */
 data class RecordSkip(
     val targetKey: String? = null,
-    val propertyName: String? = null,
+    val attribute: String? = null,
     val universe: Int? = null,
     val channel: Int? = null,
     val reason: RecordSkipReason,
@@ -115,22 +115,22 @@ data class RecordSkip(
  */
 data class RecordEntry(
     val fixtureKey: String,
-    val propertyName: String,
-    val value: CueAssignmentResolver.PropertyValue,
+    val attribute: String,
+    val value: CueAssignmentResolver.AttributeValue,
     val sourceGroup: String?,
-    val maskGroup: PropertyMaskGroup?,
+    val family: AttributeFamily?,
     /**
      * The programmer's own value for this key when [value] is not it — set only where
      * `reconcileBundledEmitterEntries` rewrote a colour or an emitter to the on-stage value its
      * bundle partner decided. Update reads it: "did the operator change this since Include?" is
      * a question about the slot, not about a value derived from another key.
      */
-    val reconciledFrom: CueAssignmentResolver.PropertyValue? = null,
+    val reconciledFrom: CueAssignmentResolver.AttributeValue? = null,
 )
 
 /** Everything one Record source produced, ready to be written into a cue. */
 data class ProgrammerRecording(
-    val rows: List<CuePropertyAssignmentDto>,
+    val rows: List<CueAttributeAssignmentDto>,
     /**
      * The programmer's Look-layer stack, in order — the *structure* Record saves.
      *
@@ -142,9 +142,15 @@ data class ProgrammerRecording(
      * `collectProgrammerRecording`.
      */
     val layers: List<CueLayerDto>,
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
     val groupRowsEmitted: Int,
     val skipped: List<RecordSkip>,
+    /**
+     * The live instance each of [adHocFx] was captured from, by [FxInstance.id] and index, so
+     * a write can point it at the child it became; null for a stage snapshot's FX no Local effect
+     * stands for.
+     */
+    val adHocSourceIds: List<Long?> = emptyList(),
 )
 
 /**
@@ -163,7 +169,7 @@ data class ProgrammerRecording(
 internal fun collectProgrammerEntries(
     state: State,
     source: RecordSource,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     /**
      * Restrict to these target keys (groups already expanded; a cell's element key is its own
      * entry). Null or empty = no restriction. A key is in scope when the scope **covers** it —
@@ -189,46 +195,46 @@ internal fun collectProgrammerEntries(
 
     fun accept(
         fixtureKey: String,
-        rawPropertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
+        rawAttributeName: String,
+        value: CueAssignmentResolver.AttributeValue,
         sourceGroup: String?,
         seq: Long,
     ) {
-        val propertyName = canonicalPropertyName(rawPropertyName)
-        val mapKey = fixtureKey to propertyName
+        val attribute = canonicalAttributeName(rawAttributeName)
+        val mapKey = fixtureKey to attribute
         // Older than what already claimed this property — the newer write is what's on stage.
         if (seqs[mapKey]?.let { it >= seq } == true) return
         if (scopeTargets != null && !coverage.covers(scopeTargets, CueTargetDto(TargetRef.Fixture.TYPE, fixtureKey))) {
-            skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.OUT_OF_SCOPE)
+            skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.OUT_OF_SCOPE)
             return
         }
         val fixture = try {
             fixtures.untypedGroupableFixture(fixtureKey)
         } catch (_: Exception) {
-            skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_FIXTURE)
+            skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MISSING_FIXTURE)
             return
         }
         if (fixture !is Fixture && !allowElements) {
-            skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.ELEMENT_TARGET)
+            skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.ELEMENT_TARGET)
             return
         }
-        val maskGroup = maskGroupForProperty(fixture, propertyName)
-        if (maskGroup == null) {
-            skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)
+        val family = familyForAttribute(fixture, attribute)
+        if (family == null) {
+            skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MISSING_ATTRIBUTE)
             return
         }
-        if (!maskAllows(mask, maskGroup)) {
-            skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MASKED_OUT)
+        if (!maskAllows(mask, family)) {
+            skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MASKED_OUT)
             return
         }
-        entries[mapKey] = RecordEntry(fixtureKey, propertyName, value, sourceGroup, maskGroup)
+        entries[mapKey] = RecordEntry(fixtureKey, attribute, value, sourceGroup, family)
         seqs[mapKey] = seq
     }
 
     for (entry in store.entries()) {
         val top = entry.slots.firstOrNull() ?: continue
         if (source == RecordSource.TOUCHED && !top.touched) continue
-        accept(entry.fixtureKey, entry.propertyName, top.value.resolved, top.sourceGroup, top.seq)
+        accept(entry.fixtureKey, entry.attribute, top.value.resolved, top.sourceGroup, top.seq)
     }
 
     // Sideband slots that a property covers can still be recorded — a raw pan/tilt drag from
@@ -244,11 +250,11 @@ internal fun collectProgrammerEntries(
             skips += RecordSkip(
                 universe = channelEntry.universe,
                 channel = channelEntry.channel,
-                reason = RecordSkipReason.NO_BACKING_PROPERTY,
+                reason = RecordSkipReason.NO_BACKING_ATTRIBUTE,
             )
             continue
         }
-        val canonical = canonicalPropertyName(key.propertyName)
+        val canonical = canonicalAttributeName(key.attribute)
         // Cheap pre-check before the fixture/output reads below, which aren't free.
         if (seqs[key.targetKey to canonical]?.let { it >= top.seq } == true) continue
         val fixture = try {
@@ -260,9 +266,9 @@ internal fun collectProgrammerEntries(
         // The sideband holds one channel; the property it backs may span several (a colour
         // bundle, both position axes), so the value is read from the output rather than from
         // the slot — the other channels' current values have to come from somewhere.
-        val value = readOutputPropertyValue(state, fixture, canonical, channelEntry.universe)
+        val value = readOutputAttributeValue(state, fixture, canonical, channelEntry.universe)
         if (value == null) {
-            skips += RecordSkip(key.targetKey, canonical, reason = RecordSkipReason.MISSING_PROPERTY)
+            skips += RecordSkip(key.targetKey, canonical, reason = RecordSkipReason.MISSING_ATTRIBUTE)
             continue
         }
         accept(key.targetKey, canonical, value, sourceGroup = null, seq = top.seq)
@@ -284,7 +290,7 @@ internal fun collectProgrammerEntries(
  * — and makes the cue read honestly in the editor, where the colour row otherwise shows a W the
  * rig never had.
  *
- * Only the bundle's own colour takes part ([FixturePropertyCatalogue.Entry.colour]) — a colour
+ * Only the bundle's own colour takes part ([FixtureAttributeCatalogue.Entry.colour]) — a colour
  * macro is COLOUR-category too and carries no emitter. Every reader of [collectProgrammerEntries]
  * gets this: Record, the stage snapshot overlay, and Update, which decides "changed since Include"
  * on the slot's own value ([RecordEntry.reconciledFrom]) so an untouched pair is never rewritten,
@@ -300,45 +306,45 @@ private fun reconcileBundledEmitterEntries(
 ) {
     for (fixtureKey in entries.keys.mapTo(LinkedHashSet()) { it.first }) {
         val fixture = runCatching { fixtures.untypedGroupableFixture(fixtureKey) }.getOrNull() ?: continue
-        val catalogue = FixturePropertyCatalogue.of(fixture::class)
+        val catalogue = FixtureAttributeCatalogue.of(fixture::class)
         if (catalogue.bundledByCategory.isEmpty()) continue
         // The bundle's own colour only — a colour macro is COLOUR-category too, and is no part of it.
         val colourKey = fixtureKey to (catalogue.colour?.name ?: continue)
         val colourEntry = entries[colourKey] ?: continue
-        val original = (colourEntry.value as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: continue
+        val original = (colourEntry.value as? CueAssignmentResolver.AttributeValue.Colour)?.value ?: continue
         val colourSeq = seqs[colourKey] ?: continue
         var colour = original
-        for ((category, property) in catalogue.bundledByCategory) {
-            val emitterKey = fixtureKey to property.name
+        for ((category, attribute) in catalogue.bundledByCategory) {
+            val emitterKey = fixtureKey to attribute.name
             val emitter = entries[emitterKey] ?: continue
-            val level = (emitter.value as? CueAssignmentResolver.PropertyValue.Slider)?.value ?: continue
+            val level = (emitter.value as? CueAssignmentResolver.AttributeValue.Slider)?.value ?: continue
             val emitterSeq = seqs[emitterKey] ?: continue
             val onStage = if (colourSeq > emitterSeq) {
                 when (category) {
-                    PropertyCategory.WHITE -> colour.white
-                    PropertyCategory.AMBER -> colour.amber
-                    PropertyCategory.UV -> colour.uv
+                    AttributeCategory.WHITE -> colour.white
+                    AttributeCategory.AMBER -> colour.amber
+                    AttributeCategory.UV -> colour.uv
                     else -> continue
                 }
             } else {
                 level
             }
             colour = when (category) {
-                PropertyCategory.WHITE -> colour.copy(white = onStage)
-                PropertyCategory.AMBER -> colour.copy(amber = onStage)
-                PropertyCategory.UV -> colour.copy(uv = onStage)
+                AttributeCategory.WHITE -> colour.copy(white = onStage)
+                AttributeCategory.AMBER -> colour.copy(amber = onStage)
+                AttributeCategory.UV -> colour.copy(uv = onStage)
                 else -> colour
             }
             if (onStage != level) {
                 entries[emitterKey] = emitter.copy(
-                    value = CueAssignmentResolver.PropertyValue.Slider(onStage),
+                    value = CueAssignmentResolver.AttributeValue.Slider(onStage),
                     reconciledFrom = emitter.value,
                 )
             }
         }
         if (colour != original) {
             entries[colourKey] = colourEntry.copy(
-                value = CueAssignmentResolver.PropertyValue.Colour(colour),
+                value = CueAssignmentResolver.AttributeValue.Colour(colour),
                 reconciledFrom = colourEntry.value,
             )
         }
@@ -353,12 +359,12 @@ private fun reconcileBundledEmitterEntries(
  */
 internal fun ProgrammerLayer.toCueLayerDto() = CueLayerDto(
     // Exactly one, from the source's own kind — the DTO's write contract.
-    lookId = source.id.takeUnless { source.isTemplate },
-    templateId = source.id.takeIf { source.isTemplate },
+    lookId = source.id.takeUnless { source.isPalette },
+    paletteId = source.id.takeIf { source.isPalette },
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
-    propertyMask = propertyMask,
+    attributeMask = attributeMask,
     blendMode = blendMode,
     amount = amount,
     stomp = stomp,
@@ -399,7 +405,7 @@ internal fun targetInScope(fixtures: Fixtures, target: TargetRef, scope: Set<Str
 }
 
 /** [targetInScope] for an effect's target: a selection is in scope when every item it names is. */
-internal fun effectTargetInScope(fixtures: Fixtures, target: EffectTargetRef, scope: Set<String>?): Boolean =
+internal fun fxTargetInScope(fixtures: Fixtures, target: FxTargetsRef, scope: Set<String>?): Boolean =
     target.items.all { targetInScope(fixtures, it, scope) }
 
 /**
@@ -415,7 +421,7 @@ internal fun effectTargetInScope(fixtures: Fixtures, target: EffectTargetRef, sc
 internal fun collectProgrammerRecording(
     state: State,
     source: RecordSource,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     includeFx: Boolean,
     targets: Set<String>? = null,
 ): ProgrammerRecording {
@@ -427,33 +433,35 @@ internal fun collectProgrammerRecording(
         // function's scope filter and has to apply its own — without this, a scoped Record from
         // "Whole stage" would silently capture the entire rig.
         val captured = captureCurrentState(state)
-        val rows = ArrayList<CuePropertyAssignmentDto>(captured.propertyAssignments.size)
+        val rows = ArrayList<CueAttributeAssignmentDto>(captured.attributeAssignments.size)
         val skipped = ArrayList<RecordSkip>()
-        for (row in captured.propertyAssignments) {
+        for (row in captured.attributeAssignments) {
             // Scope before mask: an operator who narrowed by fixture should see the reason they
             // chose, not an attribute reason that happens to also apply.
             if (!targetInScope(fixtures, row.target, scope)) {
                 skipped += RecordSkip(
-                    row.targetKey, row.propertyName, reason = RecordSkipReason.OUT_OF_SCOPE,
+                    row.targetKey, row.attribute, reason = RecordSkipReason.OUT_OF_SCOPE,
                 )
                 continue
             }
-            if (!maskAllows(mask, maskGroupForRow(fixtures, row))) {
+            if (!maskAllows(mask, familyForRow(fixtures, row))) {
                 skipped += RecordSkip(
-                    row.targetKey, row.propertyName, reason = RecordSkipReason.MASKED_OUT,
+                    row.targetKey, row.attribute, reason = RecordSkipReason.MASKED_OUT,
                 )
                 continue
             }
             rows += row
         }
+        val adHoc = if (includeFx) {
+            captured.adHocFx.zip(captured.adHocSourceIds).filter { (effect, _) ->
+                maskAllows(mask, familyForAdHoc(fixtures, effect)) &&
+                    fxTargetInScope(fixtures, effect.target, scope)
+            }
+        } else emptyList()
         return ProgrammerRecording(
             rows = renumber(rows),
-            adHocEffects = if (includeFx) {
-                captured.adHocEffects.filter {
-                    maskAllows(mask, maskGroupForAdHoc(fixtures, it)) &&
-                        effectTargetInScope(fixtures, it.target, scope)
-                }
-            } else emptyList(),
+            adHocFx = adHoc.map { it.first },
+            adHocSourceIds = adHoc.map { it.second },
             groupRowsEmitted = rows.count { it.targetType == TargetRef.Group.TYPE },
             skipped = skipped,
             // A stage snapshot describes what is *on stage*, which is not the same as what the
@@ -468,12 +476,12 @@ internal fun collectProgrammerRecording(
     val (entries, entrySkips) = collectProgrammerEntries(state, source, mask, scope, allowElements = true)
     val collapsed = collapseRecordingToAssignments(entries, fixtures)
 
-    val bandEffects = if (includeFx) {
+    val bandFx = if (includeFx) {
         // A leaving instance is a release fading out, not something the programmer holds.
-        state.show.fxEngine.getActiveEffects()
+        state.show.fxEngine.getActiveFx()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
-    val adHoc = fxInstancesToCueChildren(bandEffects, mask, fixtures, scope)
+    val captured = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandFx), mask, fixtures, scope)
 
     // **`ALL` means flatten; `TOUCHED` means save the structure.** The distinction is not a
     // convenience — emitting layers *and* the rows they cook to would put both representations of
@@ -494,13 +502,14 @@ internal fun collectProgrammerRecording(
     return ProgrammerRecording(
         rows = collapsed.rows,
         layers = layers,
-        adHocEffects = adHoc,
+        adHocFx = captured.map { it.second },
         groupRowsEmitted = collapsed.groupRows,
         skipped = entrySkips + collapsed.skipped,
+        adHocSourceIds = captured.map { it.first.id },
     )
 }
 
-private fun renumber(rows: List<CuePropertyAssignmentDto>): List<CuePropertyAssignmentDto> =
+private fun renumber(rows: List<CueAttributeAssignmentDto>): List<CueAttributeAssignmentDto> =
     rows.mapIndexed { index, row -> if (row.sortOrder == index) row else row.copy(sortOrder = index) }
 
 /**
@@ -508,15 +517,15 @@ private fun renumber(rows: List<CuePropertyAssignmentDto>): List<CuePropertyAssi
  * first member for group rows). Null when nothing resolves — the caller decides what that
  * means, and for the destructive `UPDATE_EXISTING` pass it deliberately means "leave alone".
  */
-internal fun maskGroupForRow(fixtures: Fixtures, row: CuePropertyAssignmentDto): PropertyMaskGroup? {
+internal fun familyForRow(fixtures: Fixtures, row: CueAttributeAssignmentDto): AttributeFamily? {
     val fixture = fixtures.referenceFixtureFor(row.target) ?: return null
-    return maskGroupForProperty(fixture, row.propertyName)
+    return familyForAttribute(fixture, row.attribute)
 }
 
-private fun maskGroupForAdHoc(fixtures: Fixtures, effect: CueAdHocEffectDto): PropertyMaskGroup? {
-    val propertyName = effect.propertyName ?: return null
+private fun familyForAdHoc(fixtures: Fixtures, effect: CueAdHocFxDto): AttributeFamily? {
+    val attribute = effect.attribute ?: return null
     val fixture = fixtures.referenceFixtureFor(effect.target) ?: return null
-    return maskGroupForProperty(fixture, propertyName)
+    return familyForAttribute(fixture, attribute)
 }
 
 /**
@@ -530,11 +539,13 @@ private fun maskGroupForAdHoc(fixtures: Fixtures, effect: CueAdHocEffectDto): Pr
  * would be detached from the Look, so a later Look edit would no longer move it. That is the same
  * double-representation trap [RecordSource.ALL] avoids on the value side.
  *
- * Everything else — a manually applied effect, a busked one — becomes an ad-hoc child.
+ * Everything else — a manually applied effect, a busked one — becomes an ad-hoc child, its place
+ * in [instances] as its `sortOrder`: callers pass them in [FxEngine.inStoredApplyOrder], so the cue
+ * spawns them back in the order they applied. Each child is answered beside the instance it came from.
  */
 internal fun fxInstancesToCueChildren(
     instances: List<FxInstance>,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     fixtures: Fixtures,
     /**
      * Fixture scope, as [targetInScope] reads it. An effect is captured only when every head it
@@ -542,9 +553,9 @@ internal fun fxInstancesToCueChildren(
      * chase into the cue would be a worse surprise than dropping the chase and saying so.
      */
     scope: Set<String>? = null,
-): List<CueAdHocEffectDto> {
+): List<Pair<FxInstance, CueAdHocFxDto>> {
     if (instances.isEmpty()) return emptyList()
-    val adHocEffects = ArrayList<CueAdHocEffectDto>()
+    val adHocFx = ArrayList<Pair<FxInstance, CueAdHocFxDto>>()
 
     for (effect in instances) {
         // Owned by a layer: recorded as part of that layer, not as a loose child.
@@ -552,15 +563,15 @@ internal fun fxInstancesToCueChildren(
 
         val targetType = effect.target.targetRef.discriminator
         val targetKey = effect.target.targetKey
-        val target = EffectTargetRef.of(targetType, targetKey)
+        val target = FxTargetsRef.of(targetType, targetKey)
 
-        if (!effectTargetInScope(fixtures, target, scope)) continue
+        if (!fxTargetInScope(fixtures, target, scope)) continue
 
         // An FX is masked by the property it drives, so "record only the colours" doesn't drag
         // a position wave along with them.
         if (mask != null) {
             val fixture = fixtures.referenceFixtureFor(target)
-            val group = fixture?.let { maskGroupForProperty(it, effect.target.propertyName) }
+            val group = fixture?.let { familyForAttribute(it, effect.target.attribute) }
             if (!maskAllows(mask, group)) continue
         }
 
@@ -568,43 +579,45 @@ internal fun fxInstancesToCueChildren(
         // straddling a concurrent edit would record an explicit value equal to the default
         // instead of the track-the-default null.
         val dyn = effect.dynamics
-        adHocEffects.add(
-                CueAdHocEffectDto(
+        adHocFx.add(
+            effect to CueAdHocFxDto(
                     targetType = targetType,
                     targetKey = targetKey,
-                    effectType = effect.effectTypeId,
-                    category = recordedEffectCategory(effect),
-                    propertyName = effect.target.propertyName,
-                    beatDivision = effect.timing.beatDivision,
+                    fxType = effect.fxTypeId,
+                    family = recordedFxFamily(effect),
+                    attribute = effect.target.attribute,
+                    cycle = effect.timing.cycle,
                     blendMode = effect.blendMode.name,
-                    distribution = dyn.distributionStrategy.javaClass.simpleName,
+                    order = dyn.order.javaClass.simpleName,
                     phaseOffset = effect.storedPhaseOffset(dyn),
                     elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
                     elementFilter = if (dyn.elementFilter != uk.me.cormack.lighting7.fx.ElementFilter.ALL) {
                         dyn.elementFilter.name
                     } else null,
-                    stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) {
-                        dyn.stepTiming
+                    timing = if (dyn.timing != effect.effect.defaultTiming) {
+                        dyn.timing
                     } else null,
                     parameters = effect.effect.parameters,
-                    sortOrder = adHocEffects.size,
+                    sortOrder = adHocFx.size,
+                    // The cue child Include brought it back from, which Merge writes it onto.
+                    uuid = effect.programmerOrigin?.childUuid,
                     // The effect's timing (venue-visit plan S15, D7) — its master, or Seconds. The
                     // masters were left behind here before S15, so a recorded busk fell back to master 1.
                     speedMasterUuid = effect.speedMasterUuid?.toString(),
                     rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
                     seconds = effect.seconds,
-                    size = dyn.size,
+                    amount = dyn.amount,
                     direction = dyn.direction.name,
-                    nShot = dyn.nShot,
+                    runs = dyn.runs,
                     spread = dyn.spread,
                     wings = dyn.wings,
-                    blocks = dyn.blocks,
-                    groups = dyn.groups,
+                    segments = dyn.segments,
+                    parts = dyn.parts,
                 )
         )
     }
 
-    return adHocEffects
+    return adHocFx
 }
 
 /**
@@ -617,31 +630,31 @@ internal fun fxInstancesToCueChildren(
  * Deliberately does *not* consult programmer property entries — the caller has already
  * preferred those, and re-reading them here would make the precedence rule live in two places.
  */
-internal fun readOutputPropertyValue(
+internal fun readOutputAttributeValue(
     state: State,
     fixture: GroupableFixture,
-    propertyName: String,
+    attribute: String,
     universe: Int,
-): CueAssignmentResolver.PropertyValue? {
-    val canonical = canonicalPropertyName(propertyName)
+): CueAssignmentResolver.AttributeValue? {
+    val canonical = canonicalAttributeName(attribute)
     if (canonical.equals("position", ignoreCase = true)) {
         val positioned = fixture as? WithPosition ?: return null
         val pan = positioned.pan as? DmxSlider
         val tilt = positioned.tilt as? DmxSlider
         if (pan == null || tilt == null) return null
-        return CueAssignmentResolver.PropertyValue.Position(
+        return CueAssignmentResolver.AttributeValue.Position(
             channelOutput(state, universe, pan.channelNo),
             channelOutput(state, universe, tilt.channelNo),
         )
     }
     return when (
-        val raw = uk.me.cormack.lighting7.fx.PropertyChannelWriter
-            .resolveProperty(fixture, canonical)?.value
+        val raw = uk.me.cormack.lighting7.fx.AttributeChannelWriter
+            .resolveAttribute(fixture, canonical)?.value
     ) {
-        is DmxColour -> CueAssignmentResolver.PropertyValue.Colour(
+        is DmxColour -> CueAssignmentResolver.AttributeValue.Colour(
             readOutputColour(state, fixture, raw, universe),
         )
-        is DmxWhiteMixColour -> CueAssignmentResolver.PropertyValue.Colour(
+        is DmxWhiteMixColour -> CueAssignmentResolver.AttributeValue.Colour(
             ExtendedColour(
                 raw.mix.colourOf(
                     channelOutput(state, universe, raw.warm.channelNo),
@@ -650,9 +663,9 @@ internal fun readOutputPropertyValue(
             ),
         )
         is DmxFixtureSetting<*> ->
-            CueAssignmentResolver.PropertyValue.Setting(channelOutput(state, universe, raw.channelNo))
+            CueAssignmentResolver.AttributeValue.Setting(channelOutput(state, universe, raw.channelNo))
         is DmxSlider ->
-            CueAssignmentResolver.PropertyValue.Slider(channelOutput(state, universe, raw.channelNo))
+            CueAssignmentResolver.AttributeValue.Slider(channelOutput(state, universe, raw.channelNo))
         else -> null
     }
 }
@@ -672,11 +685,11 @@ internal fun readOutputColour(
     dmxColour: DmxColour,
     universe: Int,
 ): ExtendedColour {
-    // The class catalogue rather than `Fixture.bundledProperty`, so a head of a multi-head
+    // The class catalogue rather than `Fixture.bundledAttribute`, so a head of a multi-head
     // fixture reads its own bundled white: a head is no `Fixture`, and a cast that dropped it
     // read that white as 0 — which a single-component colour write then put on the wire.
-    val bundledByCategory = fixture?.let { FixturePropertyCatalogue.of(it::class).bundledByCategory }
-    fun bundled(category: PropertyCategory): UByte {
+    val bundledByCategory = fixture?.let { FixtureAttributeCatalogue.of(it::class).bundledByCategory }
+    fun bundled(category: AttributeCategory): UByte {
         val prop = bundledByCategory?.get(category) ?: return 0u
         val dmx = try {
             @Suppress("UNCHECKED_CAST")
@@ -692,9 +705,9 @@ internal fun readOutputColour(
             channelOutput(state, universe, dmxColour.greenSlider.channelNo).toInt(),
             channelOutput(state, universe, dmxColour.blueSlider.channelNo).toInt(),
         ),
-        bundled(PropertyCategory.WHITE),
-        bundled(PropertyCategory.AMBER),
-        bundled(PropertyCategory.UV),
+        bundled(AttributeCategory.WHITE),
+        bundled(AttributeCategory.AMBER),
+        bundled(AttributeCategory.UV),
     )
 }
 

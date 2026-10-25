@@ -27,7 +27,7 @@ describe('recordNote', () => {
       record({ created: false, assignmentsRemoved: 1, fxWritten: 2, republishedLive: true, warnings: ['Cue 9 is live elsewhere'] }),
     )
     expect(note.title).toBe('Updated “Storm” — 3 values written, 1 removed.')
-    expect(note.description).toBe('2 effects · the live cue was republished — Cue 9 is live elsewhere')
+    expect(note.description).toBe('2 FX · the live cue was republished — Cue 9 is live elsewhere')
     expect(note.warn).toBe(true)
     expect(recordNote(record({ skipped: [{ reason: 'MASKED_OUT' }] as RecordResponse['skipped'] })).warn).toBe(true)
   })
@@ -36,24 +36,24 @@ describe('recordNote', () => {
 describe('recordLookNote', () => {
   it('counts rows and the effects moved in', () => {
     const note = recordLookNote({
-      look: { name: 'Night' }, created: true, rowsWritten: 1, rowsRemoved: 0, effectsWritten: 2, groupRowsEmitted: 0,
+      look: { name: 'Night' }, created: true, rowsWritten: 1, rowsRemoved: 0, fxWritten: 2, groupRowsEmitted: 0,
       skipped: [], programmerKeysRefreshed: 0, cuesRepublished: [], sceneryWritten: 0,
     } as unknown as RecordLookResponse)
-    expect(note).toEqual({ title: 'Created “Night” — 1 row written, 2 effects moved in.', description: undefined, warn: false })
+    expect(note).toEqual({ title: 'Created “Night” — 1 row written, 2 FX moved in.', description: undefined, warn: false })
   })
 })
 
 describe('includeNote', () => {
   it('turns amber when it left timed effects or entries out', () => {
     const note = includeNote({ name: 'Storm', entriesWritten: 2, fxSpawned: 0, fxAlreadyRunning: 0, fxTimedSkipped: 1, skipped: [] } as never)
-    expect(note).toEqual({ title: 'Included “Storm” — 2 values.', description: '1 timed effect(s) not included.', warn: true })
+    expect(note).toEqual({ title: 'Included “Storm” — 2 values.', description: '1 timed FX not included.', warn: true })
     expect(includeNote({ name: 'Storm', entriesWritten: 2, fxSpawned: 0, fxAlreadyRunning: 0, skipped: [{ reason: 'MASKED_OUT' }] } as never).warn).toBe(true)
   })
 
   it('says how many effects were already running, under the count', () => {
     expect(includeNote({ name: 'Storm', entriesWritten: 2, fxSpawned: 1, fxAlreadyRunning: 1 } as never)).toEqual({
-      title: 'Included “Storm” — 2 values, 1 effect(s).',
-      description: '1 effect(s) were already running on stage.',
+      title: 'Included “Storm” — 2 values, 1 FX.',
+      description: '1 FX already running on stage.',
       warn: false,
     })
   })
@@ -80,7 +80,7 @@ describe('updateNote', () => {
   it('says how many live cues a Look update moved', () => {
     const note = updateNote({
       applied: true, results: [], warnings: [],
-      lookResult: { lookName: 'Night', rowsWritten: 4, effectsWritten: 0, sceneryWritten: 1, cuesRepublished: [7, 8] },
+      lookResult: { lookName: 'Night', rowsWritten: 4, fxWritten: 0, sceneryWritten: 1, cuesRepublished: [7, 8] },
     } as unknown as UpdateResponse)
     expect(note.title).toBe('Updated “Night” — 4 rows written, 1 scenery change, 2 live cue(s) moved with it.')
   })

@@ -1,24 +1,24 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { EditorLabel } from '@/components/editor/EditorLabel'
-import { EffectsBand, PaletteBand, PaletteFooter } from '@/components/editor/PaletteBands'
+import { FxBand, PaletteBand, PaletteFooter } from '@/components/editor/PaletteBands'
 import { targetEmitters } from '@/components/fixtures-list/rowModel'
 import type { CellCommit } from '@/components/fixtures-list/rowModel'
-import { PickPositionControls, pickGroups } from '@/components/fixtureSheet/PickPropertyRow'
-import { LevelControl } from '@/components/fixtureSheet/PropertyRow'
+import { PickPositionControls, pickGroups } from '@/components/fixtureSheet/PickAttributeRow'
+import { LevelControl } from '@/components/fixtureSheet/AttributeRow'
 import type { PositionResolution } from '@/components/fixtureSheet/sheetRows'
 import { writePickPosition } from '@/components/fixtureSheet/sheetWrites'
 import { useChannelValues } from '@/components/fixtureSheet/useChannelValues'
-import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
+import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
-import { templatePropertyFor } from '@/lib/templateIntent'
+import { paletteAttributeFor } from '@/lib/paletteIntent'
 import { cn } from '@/lib/utils'
-import type { ChannelRef, Fixture, SliderPropertyDescriptor } from '@/store/fixtures'
+import type { ChannelRef, Fixture, SliderAttributeDescriptor } from '@/store/fixtures'
 import { useIsDeskConnected } from '@/store/status'
 import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
 import { writeTargetsOf } from './ColourSheet'
-import { beamPropertiesOf, familyUnits, headsWithout, positionOf, sliderOf, writeUnitLevels, type FamilyUnit } from './familyHeads'
+import { beamAttributesOf, familyUnits, headsWithout, positionOf, sliderOf, writeUnitLevels, type FamilyUnit } from './familyHeads'
 
 /**
  * The busk side sheet's **Level**, **Position** and **Beam** tabs (apply-model plan §4.5, D10): the
@@ -61,7 +61,7 @@ function useTabSelection(selectedTargets: Map<string, BuskingTarget>) {
 function FamilyTab({
   projectId,
   family,
-  property,
+  attribute,
   pressTargets,
   emitters,
   families,
@@ -70,7 +70,7 @@ function FamilyTab({
 }: {
   projectId: number
   family: AttributeFamily
-  property: string
+  attribute: string
   pressTargets: readonly { type: 'group' | 'fixture'; key: string }[]
   emitters: readonly string[]
   families: AttributeFamily[] | null
@@ -87,17 +87,17 @@ function FamilyTab({
         <PaletteBand
           projectId={projectId}
           family={family}
-          property={property}
+          attribute={attribute}
           targets={pressTargets}
           families={families}
           emitters={emitters}
           scope="programmer"
         />
         {children}
-        <EffectsBand
+        <FxBand
           projectId={projectId}
           family={family}
-          property={property}
+          attribute={attribute}
           targets={pressTargets}
           families={families}
           scope="programmer"
@@ -109,7 +109,7 @@ function FamilyTab({
         onSave={() => setSaving(true)}
         className="shrink-0 px-3 py-2"
       />
-      <NewTemplateFromSelectionSheet
+      <NewPaletteFromSelectionSheet
         open={saving}
         onOpenChange={setSaving}
         projectId={projectId}
@@ -140,7 +140,7 @@ function LeftOut({ count, what }: { count: number; what: string }) {
 }
 
 /** A level over the units: the slider at the highest head, the track drawing the range below it. */
-function UnitLevel({ label, units }: { label: string; units: readonly FamilyUnit<SliderPropertyDescriptor>[] }) {
+function UnitLevel({ label, units }: { label: string; units: readonly FamilyUnit<SliderAttributeDescriptor>[] }) {
   const connected = useIsDeskConnected()
   const refs = useMemo<ChannelRef[]>(() => units.flatMap((u) => u.heads.map((h) => h.resolution.channel)), [units])
   const values = useChannelValues(refs)
@@ -176,7 +176,7 @@ export function LevelSheet({ projectId, selectedTargets, families }: FamilyTabPr
     <FamilyTab
       projectId={projectId}
       family="INTENSITY"
-      property="dimmer"
+      attribute="dimmer"
       pressTargets={pressTargets}
       emitters={emitters}
       families={families}
@@ -196,30 +196,30 @@ export function LevelSheet({ projectId, selectedTargets, families }: FamilyTabPr
 /** The **Beam** tab: one Beam level, chosen from those the selection carries. */
 export function BeamSheet({ projectId, selectedTargets, families }: FamilyTabProps) {
   const { fixtures, selected, pressTargets, emitters } = useTabSelection(selectedTargets)
-  const properties = useMemo(() => beamPropertiesOf(selected, fixtures), [selected, fixtures])
+  const attributes = useMemo(() => beamAttributesOf(selected, fixtures), [selected, fixtures])
   const [chosen, setChosen] = useState<string | null>(null)
   // The operator's choice while the selection still carries it, else the first it does — zoom
   // where there is one — and zoom with nothing selected, so the bands still offer something.
-  const property = chosen != null && properties.includes(chosen) ? chosen : (properties[0] ?? 'zoom')
-  const units = useMemo(() => familyUnits(selected, fixtures, sliderOf(property)), [selected, fixtures, property])
-  const without = useMemo(() => headsWithout(selected, fixtures, sliderOf(property)), [selected, fixtures, property])
-  const label = templatePropertyFor(property)?.label ?? property
+  const attribute = chosen != null && attributes.includes(chosen) ? chosen : (attributes[0] ?? 'zoom')
+  const units = useMemo(() => familyUnits(selected, fixtures, sliderOf(attribute)), [selected, fixtures, attribute])
+  const without = useMemo(() => headsWithout(selected, fixtures, sliderOf(attribute)), [selected, fixtures, attribute])
+  const label = paletteAttributeFor(attribute)?.label ?? attribute
   const row =
-    properties.length > 1 ? (
-      <div role="radiogroup" aria-label="Beam property" className="flex flex-wrap items-center gap-1">
-        {properties.map((name) => (
+    attributes.length > 1 ? (
+      <div role="radiogroup" aria-label="Beam attribute" className="flex flex-wrap items-center gap-1">
+        {attributes.map((name) => (
           <button
             key={name}
             type="button"
             role="radio"
-            aria-checked={name === property}
+            aria-checked={name === attribute}
             onClick={() => setChosen(name)}
             className={cn(
               'h-7 rounded-md border px-2.5 text-xs font-medium',
-              name === property ? 'border-primary bg-primary/10 text-foreground' : 'text-muted-foreground hover:text-foreground',
+              name === attribute ? 'border-primary bg-primary/10 text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            {templatePropertyFor(name)?.label ?? name}
+            {paletteAttributeFor(name)?.label ?? name}
           </button>
         ))}
       </div>
@@ -228,17 +228,17 @@ export function BeamSheet({ projectId, selectedTargets, families }: FamilyTabPro
     <FamilyTab
       projectId={projectId}
       family="BEAM"
-      property={property}
+      attribute={attribute}
       pressTargets={pressTargets}
       emitters={emitters}
       families={families}
       above={row}
     >
       {units.length === 0 ? (
-        <NoHeads selected={selected.length} what={properties.length === 0 ? 'beam level' : label.toLowerCase()} />
+        <NoHeads selected={selected.length} what={attributes.length === 0 ? 'beam level' : label.toLowerCase()} />
       ) : (
         <>
-          <UnitLevel key={property} label={label} units={units} />
+          <UnitLevel key={attribute} label={label} units={units} />
           <LeftOut count={without} what={label.toLowerCase()} />
         </>
       )}
@@ -255,7 +255,7 @@ export function PositionSheet({ projectId, selectedTargets, families }: FamilyTa
     <FamilyTab
       projectId={projectId}
       family="POSITION"
-      property="position"
+      attribute="position"
       pressTargets={pressTargets}
       emitters={emitters}
       families={families}

@@ -75,7 +75,7 @@ function draw() {
   )
 }
 
-const body = () => screen.getByRole('complementary', { name: 'Colour and spread' })
+const body = () => screen.getByRole('complementary', { name: 'Colour and fan' })
 const strip = () => screen.getByText('expand').parentElement as HTMLElement
 const bottomHandle = () => screen.getByText('open sheet').parentElement as HTMLElement
 const handle = () => screen.getByRole('separator', { name: 'Resize the rail' })

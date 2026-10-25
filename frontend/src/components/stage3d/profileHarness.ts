@@ -36,7 +36,7 @@ import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { StageElementDto } from '../../api/stageElementApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
-import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../store/fixtures'
+import type { Fixture, FixtureTypeInfo, AttributeDescriptor } from '../../store/fixtures'
 import type { HarnessImages } from './harnessImages'
 
 const HARNESS_TYPE_KEY = '__profileHarness_type__'
@@ -85,12 +85,12 @@ export interface HarnessData {
 // Stage is W (X right) × D (Y upstage) × H (Z up) in metres.
 // Beam-shaping channels for the synthetic fixture, so the harness exercises
 // the gobo/focus/prism code paths rather than silently skipping them (every
-// findXxx returned undefined when `properties` was empty). The gobo option at
+// findXxx returned undefined when `attributes` was empty). The gobo option at
 // level 0 carries a pattern, so all 50 fixtures sample the gobo texture *at
 // rest* — the worst case for the pool shaders. The prism is out at level 0;
 // engage it while profiling by writing DMX 1/4 ≥ 8 (all fixtures share the
 // channel refs, so one write drives the whole rig).
-function makeBeamShapingProperties(): PropertyDescriptor[] {
+function makeBeamShapingAttributes(): AttributeDescriptor[] {
   const ch = (channelNo: number) => ({ universe: 1, channelNo })
   return [
     {
@@ -164,7 +164,7 @@ export function buildHarness(
   const riggings = makeRiggings(stageW, stageD, stageH)
   const regions = makeRegions(stageW, stageD)
   const patches = makePatches(stageW, stageD, stageH, riggings)
-  const beamShaping = makeBeamShapingProperties()
+  const beamShaping = makeBeamShapingAttributes()
   const syntheticType: FixtureTypeInfo = {
     typeKey: HARNESS_TYPE_KEY,
     manufacturer: 'Harness',
@@ -173,8 +173,8 @@ export function buildHarness(
     channelCount: 4,
     isRegistered: true,
     capabilities: [],
-    properties: beamShaping,
-    elementGroupProperties: null,
+    attributes: beamShaping,
+    elementGroupAttributes: null,
     acceptsBeamAngle: true,
     acceptsGel: false,
     kind: 'MOVING_HEAD',
@@ -187,10 +187,9 @@ export function buildHarness(
     firstChannel: 1,
     channelCount: 4,
     channels: [],
-    properties: beamShaping,
+    attributes: beamShaping,
     capabilities: [],
     groups: [],
-    compatibleLookIds: [],
   }
   return { patches, regions, riggings, syntheticFixture, syntheticType }
 }
@@ -400,7 +399,7 @@ export const FOCUS_HARNESS_HEADS: ReadonlyArray<{ key: string; x: number; focusM
 const FOCUS_HARNESS_Z = 2.8
 
 function buildFocusHarness(stageD: number): HarnessData {
-  const focusProperty = (channelNo: number): PropertyDescriptor => ({
+  const focusAttribute = (channelNo: number): AttributeDescriptor => ({
     type: 'slider',
     name: 'focus',
     displayName: 'Focus',
@@ -419,8 +418,8 @@ function buildFocusHarness(stageD: number): HarnessData {
     channelCount: 1,
     isRegistered: true,
     capabilities: [],
-    properties: [focusProperty(FOCUS_HARNESS_HEADS[0].channelNo)],
-    elementGroupProperties: null,
+    attributes: [focusAttribute(FOCUS_HARNESS_HEADS[0].channelNo)],
+    elementGroupAttributes: null,
     acceptsBeamAngle: true,
     acceptsGel: false,
     kind: 'PROFILE',
@@ -436,10 +435,9 @@ function buildFocusHarness(stageD: number): HarnessData {
       firstChannel: head.channelNo,
       channelCount: 1,
       channels: [],
-      properties: [focusProperty(head.channelNo)],
+      attributes: [focusAttribute(head.channelNo)],
       capabilities: [],
       groups: [],
-      compatibleLookIds: [],
     })
     return {
       id: i + 1,
@@ -502,7 +500,7 @@ export const DRAPE_HARNESS_CHANNELS = { pan: 31, tilt: 32, focus: 33 } as const
  */
 function buildDrapeHarness(): HarnessData {
   const ch = (channelNo: number) => ({ universe: 1, channelNo })
-  const properties: PropertyDescriptor[] = [
+  const attributes: AttributeDescriptor[] = [
     {
       type: 'slider', name: 'pan', displayName: 'Pan', category: 'pan', axis: 'PAN',
       channel: ch(DRAPE_HARNESS_CHANNELS.pan), min: 0, max: 255, degMin: 0, degMax: 530,
@@ -524,8 +522,8 @@ function buildDrapeHarness(): HarnessData {
     channelCount: 3,
     isRegistered: true,
     capabilities: [],
-    properties,
-    elementGroupProperties: null,
+    attributes,
+    elementGroupAttributes: null,
     acceptsBeamAngle: true,
     acceptsGel: false,
     kind: 'MOVING_HEAD',
@@ -539,10 +537,9 @@ function buildDrapeHarness(): HarnessData {
     firstChannel: DRAPE_HARNESS_CHANNELS.pan,
     channelCount: 3,
     channels: [],
-    properties,
+    attributes,
     capabilities: [],
     groups: [],
-    compatibleLookIds: [],
   }
   const bar: RiggingDto = {
     id: 1,
@@ -761,8 +758,8 @@ function buildMaterialHarness(mode: MaterialHarness): HarnessData {
     channelCount: 1,
     isRegistered: true,
     capabilities: [],
-    properties: [],
-    elementGroupProperties: null,
+    attributes: [],
+    elementGroupAttributes: null,
     acceptsBeamAngle: true,
     acceptsGel: false,
     kind: 'PROFILE',
@@ -776,10 +773,9 @@ function buildMaterialHarness(mode: MaterialHarness): HarnessData {
     firstChannel: 1,
     channelCount: 1,
     channels: [],
-    properties: [],
+    attributes: [],
     capabilities: [],
     groups: [],
-    compatibleLookIds: [],
   }
   const patches: FixturePatch[] = spots.map((spot, i) => ({
     id: i + 1,
@@ -976,7 +972,7 @@ export function clothScene(mode: ClothHarness, images: HarnessImages = {}): { sp
  */
 function buildClothHarness(mode: ClothHarness, images: HarnessImages): HarnessData {
   const { spots, elements } = clothScene(mode, images)
-  const dimmer = (channelNo: number): PropertyDescriptor => ({
+  const dimmer = (channelNo: number): AttributeDescriptor => ({
     type: 'slider',
     name: 'dimmer',
     displayName: 'Dimmer',
@@ -993,8 +989,8 @@ function buildClothHarness(mode: ClothHarness, images: HarnessImages): HarnessDa
     channelCount: 1,
     isRegistered: true,
     capabilities: [],
-    properties: [dimmer(CLOTH_HARNESS_CHANNELS.front)],
-    elementGroupProperties: null,
+    attributes: [dimmer(CLOTH_HARNESS_CHANNELS.front)],
+    elementGroupAttributes: null,
     acceptsBeamAngle: true,
     acceptsGel: false,
     kind: 'PROFILE',
@@ -1011,10 +1007,9 @@ function buildClothHarness(mode: ClothHarness, images: HarnessImages): HarnessDa
       firstChannel: channelNo,
       channelCount: 1,
       channels: [],
-      properties: [dimmer(channelNo)],
+      attributes: [dimmer(channelNo)],
       capabilities: [],
       groups: [],
-      compatibleLookIds: [],
     })
     return {
       id: i + 1,

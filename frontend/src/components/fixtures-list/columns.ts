@@ -1,27 +1,27 @@
 import {
   findColourSource,
-  findDimmerProperty,
-  findFocusProperty,
-  findGoboProperties,
-  findIrisProperty,
-  findPanProperty,
-  findPrismProperty,
-  findTiltProperty,
+  findDimmerAttribute,
+  findFocusAttribute,
+  findGoboAttributes,
+  findIrisAttribute,
+  findPanAttribute,
+  findPrismAttribute,
+  findTiltAttribute,
   findWheel,
-  findWhiteMixProperty,
-  findZoomProperty,
+  findWhiteMixAttribute,
+  findZoomAttribute,
 } from '../../store/fixtures'
 import { familyForCategory } from '../../lib/attributeFamily'
 import type { AttributeFamily } from '../../lib/attributeFamily'
 import type {
   ChannelRef,
-  ColourPropertyDescriptor,
-  PositionPropertyDescriptor,
-  PropertyCategory,
-  PropertyDescriptor,
-  SettingPropertyDescriptor,
-  SliderPropertyDescriptor,
-  WhiteMixPropertyDescriptor,
+  ColourAttributeDescriptor,
+  PositionAttributeDescriptor,
+  AttributeCategory,
+  AttributeDescriptor,
+  SettingAttributeDescriptor,
+  SliderAttributeDescriptor,
+  WhiteMixAttributeDescriptor,
 } from '../../store/fixtures'
 
 /**
@@ -79,7 +79,7 @@ export const DEFAULT_COLUMN_VISIBILITY: Record<ColumnKey, boolean> = Object.from
  * built from in the first place (see this file's header).
  *
  * Exists so a column *header* can be classified without a fixture to ask, which is what layer
- * scope needs to grey out the columns outside a layer's `propertyMask`. Per-cell classification
+ * scope needs to grey out the columns outside a layer's `attributeMask`. Per-cell classification
  * still goes through the resolution's own descriptor, because one column can carry different
  * property kinds across fixture types.
  *
@@ -89,11 +89,11 @@ export const DEFAULT_COLUMN_VISIBILITY: Record<ColumnKey, boolean> = Object.from
  * column to the category it already is, and `columns.test.ts` pins it against `familyForCategory`
  * so the two cannot drift.
  */
-export const COLUMN_CATEGORY: Record<ColumnKey, PropertyCategory> = {
+export const COLUMN_CATEGORY: Record<ColumnKey, AttributeCategory> = {
   dimmer: 'dimmer',
   colour: 'colour',
   // The synthetic pan/tilt pair; `familyForCategory` answers it ahead of its own lookup.
-  position: 'position' as PropertyCategory,
+  position: 'position' as AttributeCategory,
   gobo: 'gobo',
   zoom: 'zoom',
   focus: 'focus',
@@ -115,7 +115,7 @@ export function columnFamily(col: ColumnKey): AttributeFamily {
  * have: a marquee across the Colour column means colour and nothing else.
  *
  * Shared because two callers a few pixels apart on one line of the selection bar must not answer
- * differently — `TemplateStrip` filters its chips by it, and the bar badges it beside the counts,
+ * differently — `PaletteStrip` filters its chips by it, and the bar badges it beside the counts,
  * and a disagreement between them would read as a bug. What is shared is the **rule**, not one
  * evaluation of it: each call site still runs its own pass. Cheap enough (a `Set` over the
  * marquee's cells) that the bar's own `SelectionBar` memoises it once and hands it down rather
@@ -142,18 +142,18 @@ export function cellFamilies(cells: readonly { col: ColumnKey }[]): AttributeFam
  * is keyed by (target, property name), not by channel, and the two position shapes must be
  * written differently — a real `position` descriptor takes one `programmer.setPosition`, while
  * a pan/tilt slider pair takes one `programmer.set` per axis (lifting a single axis into a
- * `position` entry would freeze the other). `property` alone says which shape it is; the axis
- * sliders ride on both, for their degree annotations. See [resolutionPropertyNames].
+ * `position` entry would freeze the other). `attribute` alone says which shape it is; the axis
+ * sliders ride on both, for their degree annotations. See [resolutionAttributeNames].
  */
 export type CellResolution =
-  | { kind: 'slider'; property: SliderPropertyDescriptor }
-  | { kind: 'colour'; property: ColourPropertyDescriptor }
+  | { kind: 'slider'; attribute: SliderAttributeDescriptor }
+  | { kind: 'colour'; attribute: ColourAttributeDescriptor }
   /** A colour *wheel* — a setting whose options carry colour previews. Takes
    *  option levels, not RGB. */
-  | { kind: 'colour-setting'; property: SettingPropertyDescriptor }
+  | { kind: 'colour-setting'; attribute: SettingAttributeDescriptor }
   /** A warm/cold white pair (venue-visit plan D8). Reads and takes a colour like an RGB head —
    *  the desk lands it as the nearest mix — and its editor is a warmth control. */
-  | { kind: 'white-mix'; property: WhiteMixPropertyDescriptor }
+  | { kind: 'white-mix'; attribute: WhiteMixAttributeDescriptor }
   | {
       kind: 'position'
       pan: ChannelRef
@@ -163,15 +163,15 @@ export type CellResolution =
       tiltMin: number
       tiltMax: number
       /** Set when the fixture exposes a real `position` descriptor; writes then go to it. */
-      property?: PositionPropertyDescriptor
+      attribute?: PositionAttributeDescriptor
       /**
        * The axis sliders, whenever the fixture declares them — what the position was paired from
        * when there is no descriptor, and where the degree annotations live either way.
        */
-      panProperty?: SliderPropertyDescriptor
-      tiltProperty?: SliderPropertyDescriptor
+      panAttribute?: SliderAttributeDescriptor
+      tiltAttribute?: SliderAttributeDescriptor
     }
-  | { kind: 'setting'; property: SettingPropertyDescriptor }
+  | { kind: 'setting'; attribute: SettingAttributeDescriptor }
   | null
 
 function sameChannel(a: ChannelRef, b: ChannelRef): boolean {
@@ -180,12 +180,12 @@ function sameChannel(a: ChannelRef, b: ChannelRef): boolean {
 
 /** A wheel-like channel (slider or setting) as a cell resolution. */
 function findWheelLike(
-  properties: PropertyDescriptor[],
-  category: PropertyCategory,
+  attributes: AttributeDescriptor[],
+  category: AttributeCategory,
 ): CellResolution {
-  const prop = findWheel(properties, category)
+  const prop = findWheel(attributes, category)
   if (!prop) return null
-  return prop.type === 'slider' ? { kind: 'slider', property: prop } : { kind: 'setting', property: prop }
+  return prop.type === 'slider' ? { kind: 'slider', attribute: prop } : { kind: 'setting', attribute: prop }
 }
 
 /**
@@ -200,30 +200,30 @@ function findWheelLike(
  *   channels only. The fine channels are a sub-step refinement; leaving them
  *   untouched is harmless.
  */
-export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): CellResolution {
+export function resolveCell(attributes: AttributeDescriptor[], col: ColumnKey): CellResolution {
   switch (col) {
     case 'dimmer': {
-      const prop = findDimmerProperty(properties)
-      return prop ? { kind: 'slider', property: prop } : null
+      const prop = findDimmerAttribute(attributes)
+      return prop ? { kind: 'slider', attribute: prop } : null
     }
     case 'colour': {
-      const source = findColourSource(properties)
+      const source = findColourSource(attributes)
       if (!source) {
-        const whiteMix = findWhiteMixProperty(properties)
-        return whiteMix ? { kind: 'white-mix', property: whiteMix } : null
+        const whiteMix = findWhiteMixAttribute(attributes)
+        return whiteMix ? { kind: 'white-mix', attribute: whiteMix } : null
       }
       return source.type === 'colour'
-        ? { kind: 'colour', property: source.property }
-        : { kind: 'colour-setting', property: source.property }
+        ? { kind: 'colour', attribute: source.attribute }
+        : { kind: 'colour-setting', attribute: source.attribute }
     }
     case 'position': {
       // Prefer a real position descriptor; otherwise pair the pan/tilt sliders.
-      const posProp = properties.find((p) => p.type === 'position')
+      const posProp = attributes.find((p) => p.type === 'position')
       if (posProp) {
         // The descriptor carries no degrees, so the axes ride along for their annotations — only
         // when they are the descriptor's own channels.
-        const panAxis = findPanProperty(properties)
-        const tiltAxis = findTiltProperty(properties)
+        const panAxis = findPanAttribute(attributes)
+        const tiltAxis = findTiltAttribute(attributes)
         return {
           kind: 'position',
           pan: posProp.panChannel,
@@ -232,13 +232,13 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
           panMax: posProp.panMax,
           tiltMin: posProp.tiltMin,
           tiltMax: posProp.tiltMax,
-          property: posProp,
-          ...(panAxis && sameChannel(panAxis.channel, posProp.panChannel) ? { panProperty: panAxis } : {}),
-          ...(tiltAxis && sameChannel(tiltAxis.channel, posProp.tiltChannel) ? { tiltProperty: tiltAxis } : {}),
+          attribute: posProp,
+          ...(panAxis && sameChannel(panAxis.channel, posProp.panChannel) ? { panAttribute: panAxis } : {}),
+          ...(tiltAxis && sameChannel(tiltAxis.channel, posProp.tiltChannel) ? { tiltAttribute: tiltAxis } : {}),
         }
       }
-      const pan = findPanProperty(properties)
-      const tilt = findTiltProperty(properties)
+      const pan = findPanAttribute(attributes)
+      const tilt = findTiltAttribute(attributes)
       if (!pan || !tilt) return null
       return {
         kind: 'position',
@@ -248,44 +248,44 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
         panMax: pan.max,
         tiltMin: tilt.min,
         tiltMax: tilt.max,
-        panProperty: pan,
-        tiltProperty: tilt,
+        panAttribute: pan,
+        tiltAttribute: tilt,
       }
     }
     case 'gobo': {
-      // The first wheel in DMX channel order (`findGoboProperties`, fixture-optics session 4) — the
+      // The first wheel in DMX channel order (`findGoboAttributes`, fixture-optics session 4) — the
       // Robe ColorSpot 575's static wheel, where reflection order used to give its rotating one.
-      const wheel = findGoboProperties(properties)[0]
+      const wheel = findGoboAttributes(attributes)[0]
       if (!wheel) return null
       return wheel.type === 'slider'
-        ? { kind: 'slider', property: wheel }
-        : { kind: 'setting', property: wheel }
+        ? { kind: 'slider', attribute: wheel }
+        : { kind: 'setting', attribute: wheel }
     }
     case 'zoom': {
       // A slider, or a stepped zoom's setting (the Robe ColorSpot 575's three angles).
-      const prop = findZoomProperty(properties)
+      const prop = findZoomAttribute(attributes)
       if (!prop) return null
-      return prop.type === 'slider' ? { kind: 'slider', property: prop } : { kind: 'setting', property: prop }
+      return prop.type === 'slider' ? { kind: 'slider', attribute: prop } : { kind: 'setting', attribute: prop }
     }
     case 'focus': {
-      const prop = findFocusProperty(properties)
-      return prop ? { kind: 'slider', property: prop } : null
+      const prop = findFocusAttribute(attributes)
+      return prop ? { kind: 'slider', attribute: prop } : null
     }
     case 'iris': {
-      const prop = findIrisProperty(properties)
-      return prop ? { kind: 'slider', property: prop } : null
+      const prop = findIrisAttribute(attributes)
+      return prop ? { kind: 'slider', attribute: prop } : null
     }
     case 'prism': {
-      const wheel = findPrismProperty(properties)
+      const wheel = findPrismAttribute(attributes)
       if (!wheel) return null
       return wheel.type === 'slider'
-        ? { kind: 'slider', property: wheel }
-        : { kind: 'setting', property: wheel }
+        ? { kind: 'slider', attribute: wheel }
+        : { kind: 'setting', attribute: wheel }
     }
     case 'strobe':
-      return findWheelLike(properties, 'strobe')
+      return findWheelLike(attributes, 'strobe')
     case 'speed':
-      return findWheelLike(properties, 'speed')
+      return findWheelLike(attributes, 'speed')
   }
 }
 
@@ -294,9 +294,9 @@ export function resolutionChannels(res: CellResolution): ChannelRef[] {
   if (!res) return []
   switch (res.kind) {
     case 'slider':
-      return [res.property.channel]
+      return [res.attribute.channel]
     case 'colour': {
-      const p = res.property
+      const p = res.attribute
       const refs = [p.redChannel, p.greenChannel, p.blueChannel]
       if (p.whiteChannel) refs.push(p.whiteChannel)
       if (p.amberChannel) refs.push(p.amberChannel)
@@ -304,10 +304,10 @@ export function resolutionChannels(res: CellResolution): ChannelRef[] {
       return refs
     }
     case 'white-mix':
-      return [res.property.warmChannel, res.property.coldChannel]
+      return [res.attribute.warmChannel, res.attribute.coldChannel]
     case 'colour-setting':
     case 'setting':
-      return [res.property.channel]
+      return [res.attribute.channel]
     case 'position':
       return [res.pan, res.tilt]
   }
@@ -315,7 +315,7 @@ export function resolutionChannels(res: CellResolution): ChannelRef[] {
 
 /**
  * Every backend property name a resolution covers — the programmer/provenance keys for the
- * cell, paired with `WriteTarget.key` to form a `(targetKey, propertyName)` lookup.
+ * cell, paired with `WriteTarget.key` to form a `(targetKey, attribute)` lookup.
  *
  * Usually one name. Position is the exception: a fixture with separate pan/tilt sliders has
  * two independent properties behind a single cell, and both must be consulted (for ownership
@@ -324,7 +324,7 @@ export function resolutionChannels(res: CellResolution): ChannelRef[] {
  * Names come straight off the descriptors, which carry the backend's own vocabulary —
  * `dimmer`, `rgbColour`, `position`, `pan`, `tilt`.
  */
-export function resolutionPropertyNames(res: CellResolution): string[] {
+export function resolutionAttributeNames(res: CellResolution): string[] {
   if (!res) return []
   switch (res.kind) {
     case 'slider':
@@ -332,12 +332,12 @@ export function resolutionPropertyNames(res: CellResolution): string[] {
     case 'white-mix':
     case 'colour-setting':
     case 'setting':
-      return [res.property.name]
+      return [res.attribute.name]
     case 'position': {
-      if (res.property) return [res.property.name]
+      if (res.attribute) return [res.attribute.name]
       const names: string[] = []
-      if (res.panProperty) names.push(res.panProperty.name)
-      if (res.tiltProperty) names.push(res.tiltProperty.name)
+      if (res.panAttribute) names.push(res.panAttribute.name)
+      if (res.tiltAttribute) names.push(res.tiltAttribute.name)
       return names
     }
   }

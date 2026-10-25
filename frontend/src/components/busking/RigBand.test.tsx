@@ -121,10 +121,10 @@ import { RigBand } from './RigBand'
 import { RigStrip } from './RigStrip'
 
 function group(name: string, memberCount: number): GroupSummary {
-  return { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NONE', compatibleLookIds: [] }
+  return { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE' }
 }
 
-const barCells = [0, 1, 2, 3].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, properties: [] }))
+const barCells = [0, 1, 2, 3].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, attributes: [] }))
 const barFixture = { key: 'bar-1', name: 'Bar L', typeKey: 'bar', elements: barCells, groups: [] } as unknown as Fixture
 const parFixture = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: [] } as unknown as Fixture
 const barPatch: BuskRigPatch = { id: 11, key: 'bar-1', name: 'Bar L', elements: barCells.map((c) => ({ key: c.key, name: c.displayName })) }
@@ -358,7 +358,7 @@ describe('the rig band', () => {
   it('draws the live bar and the pips through the stage’s colour dispatch, the pips beside the tile’s button', () => {
     rigData = builtRig()
     draw()
-    const pips = screen.getByRole('group', { name: 'Bar L cells' })
+    const pips = screen.getByRole('group', { name: 'Bar L elements' })
     expect(pips.children).toHaveLength(4)
     expect((pips.children[2] as HTMLElement).style.background).toBe('rgb(0, 0, 2)')
     // A button cannot hold buttons: the row is a sibling of the tile's press, over the same box.
@@ -463,7 +463,7 @@ describe('the rig band', () => {
       rigData = builtRig()
       const onToggle = vi.fn()
       draw([], { onToggle, editing: true })
-      expect(screen.getByRole('group', { name: 'Bar L cells' }).className).toContain('pointer-events-none')
+      expect(screen.getByRole('group', { name: 'Bar L elements' }).className).toContain('pointer-events-none')
       fireEvent.pointerDown(pip(1), mouse)
       expect(onToggle).not.toHaveBeenCalled()
     })
@@ -500,9 +500,9 @@ describe('the rig band', () => {
     const order = [...row.querySelectorAll('button, [data-rig-family]')].map(
       (el) => el.getAttribute('aria-label') ?? el.textContent,
     )
-    expect(order.slice(0, 3)).toEqual(['Cells: All', 'Previous along the rig', 'Next along the rig'])
+    expect(order.slice(0, 3)).toEqual(['Elements: All', 'Previous along the rig', 'Next along the rig'])
     // *Release n* after the verbs, before Clear (fixture-fx-sheets plan D18).
-    expect(order.slice(3, 8)).toEqual(['Spread…', 'Locate', 'Highlight', 'Release 1', 'Clear'])
+    expect(order.slice(3, 8)).toEqual(['Fan…', 'Locate', 'Highlight', 'Release 1', 'Clear'])
     // The selection's link badge is a button in Split — the toggle's linked face (desk-follow D11).
     expect(order.slice(8)).toEqual(['Colour', 'Following the desk selection', 'Focus here'])
     const state = row.querySelector('[data-rig-row-state]') as HTMLElement
@@ -548,7 +548,7 @@ describe('the rig band', () => {
         const pill = state.querySelector('[data-busk-blind]') as HTMLElement
         expect(pill, focus).not.toBeNull()
         expect(pill).toHaveTextContent('Blind')
-        expect(pill.title).toMatch(/values and effects held: the programmer is not reaching the stage/)
+        expect(pill.title).toMatch(/values and FX held: the programmer is not reaching the stage/)
         // A reporter, never a control.
         expect(pill.tagName).not.toBe('BUTTON')
         expect(pill.className).toContain('amber')
@@ -658,7 +658,7 @@ describe('the rig band', () => {
 
   it('folds the verbs to their icons first, the Cells prefix and Focus words after, and the label last before the floor (D15, D20)', () => {
     draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }])
-    for (const name of ['Spread…', 'Locate', 'Highlight', 'Clear']) {
+    for (const name of ['Fan…', 'Locate', 'Highlight', 'Clear']) {
       const button = screen.getByRole('button', { name })
       expect(button.querySelector('svg')).not.toBeNull()
       const word = [...button.querySelectorAll('span')].find((el) => el.textContent === name)!
@@ -710,8 +710,8 @@ describe('the rig band', () => {
     // — and under the floor the prefix's range runs up to the floor, the verbs' words no longer
     // returning to take its place.
     draw([{ type: 'group', name: 'Front wash', group: groups[0] }])
-    const trigger = screen.getByRole('button', { name: 'Cells: All' })
-    const prefix = [...trigger.querySelectorAll('span')].find((el) => el.textContent === 'Cells: ')!
+    const trigger = screen.getByRole('button', { name: 'Elements: All' })
+    const prefix = [...trigger.querySelectorAll('span')].find((el) => el.textContent === 'Elements: ')!
     const short = trigger.querySelector('[data-cells-mode]') as HTMLElement
     const prefixRange = range(prefix.className)
     expect(prefixRange.utility).toBe('inline')
@@ -725,10 +725,10 @@ describe('the rig band', () => {
   it('reads its mode word when the Cells control folds — never a bare glyph (D15)', () => {
     const onSubselect = vi.fn()
     draw([{ type: 'group', name: 'Front wash', group: groups[0] }], { onSubselect })
-    const trigger = screen.getByRole('button', { name: 'Cells: All' })
+    const trigger = screen.getByRole('button', { name: 'Elements: All' })
     // Three spans: the prefix and the full word fold together, the short word is drawn in their place.
     const spans = [...trigger.querySelectorAll('span')]
-    const prefix = spans.find((el) => el.textContent === 'Cells: ')!
+    const prefix = spans.find((el) => el.textContent === 'Elements: ')!
     const full = spans.find((el) => el.textContent === 'All' && !el.hasAttribute('data-cells-mode'))!
     const short = trigger.querySelector('[data-cells-mode]') as HTMLElement
     const [focusRung] = FOCUS_WORD_CLASS.match(/@\[\d+px\]/)!
@@ -745,10 +745,10 @@ describe('the rig band', () => {
       ['Masters only', 'MASTERS', 'Masters'],
       ['Invert', 'INVERT', 'Invert'],
     ] as const) {
-      fireEvent.pointerDown(screen.getByRole('button', { name: /^Cells:/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.pointerDown(screen.getByRole('button', { name: /^Elements:/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
       fireEvent.click(screen.getByRole('menuitemradio', { name: item }))
       expect(onSubselect).toHaveBeenLastCalledWith(mode)
-      expect(screen.getByRole('button', { name: `Cells: ${item}` }).querySelector('[data-cells-mode]')).toHaveTextContent(word)
+      expect(screen.getByRole('button', { name: `Elements: ${item}` }).querySelector('[data-cells-mode]')).toHaveTextContent(word)
     }
   })
 
@@ -773,7 +773,7 @@ describe('the rig band', () => {
     expect(Number(TWO_ROWS_CLASS.match(/\d+/)![0])).toBeLessThan(Number(FOCUS_WORD_CLASS.match(/\d+/)![0]))
     expect(verbs.className).toContain('shrink-0')
     // What sits on each row.
-    expect(within(verbs).getByRole('button', { name: 'Cells: All' })).toBeInTheDocument()
+    expect(within(verbs).getByRole('button', { name: 'Elements: All' })).toBeInTheDocument()
     expect(within(verbs).getByRole('button', { name: 'Clear' })).toBeInTheDocument()
     expect(within(state).getByRole('button', { name: 'Targets: This window' })).toBeInTheDocument()
     expect(within(state).getByText('Colour')).toBeInTheDocument()
@@ -784,8 +784,8 @@ describe('the rig band', () => {
   it('presses the Cells menu as one op per filter — all seven in one menu — and labels only the last press', () => {
     const onSubselect = vi.fn()
     draw([{ type: 'group', name: 'Front wash', group: groups[0] }], { onSubselect })
-    const trigger = screen.getByRole('button', { name: 'Cells: All' })
-    expect(trigger).toHaveTextContent('Cells: All')
+    const trigger = screen.getByRole('button', { name: 'Elements: All' })
+    expect(trigger).toHaveTextContent('Elements: All')
     for (const [item, mode] of [
       ['Odd', 'ODD'],
       ['Even', 'EVEN'],
@@ -795,16 +795,16 @@ describe('the rig band', () => {
       ['Masters only', 'MASTERS'],
       ['All', 'ALL'],
     ] as const) {
-      fireEvent.pointerDown(screen.getByRole('button', { name: /^Cells:/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+      fireEvent.pointerDown(screen.getByRole('button', { name: /^Elements:/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
       // A radio item, since the seven are one choice; a step is not among them.
       expect(screen.queryByRole('menuitemradio', { name: /Next|Prev/ })).toBeNull()
       fireEvent.click(screen.getByRole('menuitemradio', { name: item }))
       expect(onSubselect).toHaveBeenLastCalledWith(mode)
-      expect(screen.getByRole('button', { name: `Cells: ${item}` })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: `Elements: ${item}` })).toBeInTheDocument()
     }
     expect(onSubselect).toHaveBeenCalledTimes(7)
     // Nothing on the face is derived from the selection: the desk keeps no sub-selection state.
-    expect(screen.getByRole('button', { name: 'Cells: All' })).not.toHaveAttribute('aria-pressed')
+    expect(screen.getByRole('button', { name: 'Elements: All' })).not.toHaveAttribute('aria-pressed')
   })
 
   it('steps the selection along the rig from two buttons beside the menu, which never become its label', () => {
@@ -815,33 +815,33 @@ describe('the rig band', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Previous along the rig' }))
     expect(onSubselect).toHaveBeenLastCalledWith('PREV')
     // A step moves the selection; it is not a mode the menu remembers.
-    expect(screen.getByRole('button', { name: 'Cells: All' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Elements: All' })).toBeInTheDocument()
   })
 
-  it('draws the family pill, and Spread… opens the side sheet’s Spread tab', () => {
+  it('draws the family pill, and Fan… opens the side sheet’s Fan tab', () => {
     draw([{ type: 'group', name: 'Front wash', group: groups[0] }], {}, ['COLOUR'])
     expect(screen.getByText('Colour')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Targets:/ })).toBeNull()
     expect(getBuskSheet()).not.toBe('spread')
-    fireEvent.click(screen.getByRole('button', { name: 'Spread…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fan…' }))
     // The verb writes the sheet fact and nothing else: the selection is untouched.
     expect(getBuskSheet()).toBe('spread')
   })
 
-  it('offers Spread… in the compact verbs menu too, opening the same tab', () => {
+  it('offers Fan… in the compact verbs menu too, opening the same tab', () => {
     draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { compact: true })
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Selection verbs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Spread…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fan…' }))
     expect(getBuskSheet()).toBe('spread')
   })
 
   it('folds the Cells menu’s seven filters and the two steps into the compact verbs menu below md', () => {
     const onSubselect = vi.fn()
     draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { compact: true, onSubselect })
-    expect(screen.queryByRole('button', { name: /^Cells:/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Elements:/ })).not.toBeInTheDocument()
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Selection verbs' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
-      'All', 'Odd', 'Even', '1st half', '2nd half', 'Invert', 'Masters only', 'Previous along the rig', 'Next along the rig', 'Spread…', 'Locate', 'Release 1', 'Clear',
+      'All', 'Odd', 'Even', '1st half', '2nd half', 'Invert', 'Masters only', 'Previous along the rig', 'Next along the rig', 'Fan…', 'Locate', 'Release 1', 'Clear',
     ])
     fireEvent.click(screen.getByRole('menuitem', { name: 'Invert' }))
     expect(onSubselect).toHaveBeenCalledWith('INVERT')
@@ -1137,7 +1137,7 @@ describe('the rig band', () => {
       fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
       expect(screen.getByRole('button', { name: 'Show every target' })).toBeEnabled()
       // The play verbs step aside while editing: tiles are drag handles, not toggles.
-      expect(screen.queryByRole('button', { name: 'Cells: All' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Elements: All' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
     })
 

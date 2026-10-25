@@ -49,7 +49,7 @@ object ScriptSourceWrapper {
         ScriptType.FX_DEFINITION, ScriptType.FX_APPLICATION -> WrappedScriptSource(userScript, 0)
 
         ScriptType.FX_CALC -> calcLambda(
-            "(Double, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams) " +
+            "(Double, uk.me.cormack.lighting7.fx.FxContext, uk.me.cormack.lighting7.fx.TypedParams) " +
                 "-> uk.me.cormack.lighting7.fx.FxOutput",
             "phase, context, params",
             userScript,
@@ -57,16 +57,9 @@ object ScriptSourceWrapper {
 
         ScriptType.FX_CALC_STATEFUL -> calcLambda(
             "(uk.me.cormack.lighting7.fx.MasterClock.ClockTick, Long, " +
-                "uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams, " +
+                "uk.me.cormack.lighting7.fx.FxContext, uk.me.cormack.lighting7.fx.TypedParams, " +
                 "MutableMap<String, Any>) -> uk.me.cormack.lighting7.fx.FxOutput",
             "tick, deltaMs, context, params, state",
-            userScript,
-        )
-
-        ScriptType.FX_CALC_COMPOSITE -> calcLambda(
-            "(Double, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams) " +
-                "-> Map<uk.me.cormack.lighting7.fx.FxOutputType, uk.me.cormack.lighting7.fx.FxOutput>",
-            "phase, context, params",
             userScript,
         )
     }
@@ -79,7 +72,6 @@ object ScriptSourceWrapper {
             ScriptType.FX_APPLICATION -> createJvmCompilationConfigurationFromTemplate<FxApplicationScript>()
             ScriptType.FX_CALC -> createJvmCompilationConfigurationFromTemplate<FxCalcScript>()
             ScriptType.FX_CALC_STATEFUL -> createJvmCompilationConfigurationFromTemplate<FxStatefulCalcScript>()
-            ScriptType.FX_CALC_COMPOSITE -> createJvmCompilationConfigurationFromTemplate<FxCompositeCalcScript>()
         }
 
     /**

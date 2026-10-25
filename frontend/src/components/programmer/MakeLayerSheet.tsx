@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatError } from '@/lib/formatError'
-import { serializePropertyMask } from '@/lib/attributeFamily'
+import { serializeAttributeMask } from '@/lib/attributeFamily'
 import { useRecordLookMutation } from '@/store/programmerOps'
 import { programmerAddLayer, programmerClearEntry } from '@/store/programmer'
 import { selectTargetKeys } from '@/store/selectionSlice'
@@ -103,16 +103,16 @@ export function MakeLayerSheet({
       }).unwrap()
 
       try {
+        // A Look's layer names no targets — it lands whole — and keeps the promotion's mask.
         programmerAddLayer({
           lookId: response.look.id,
-          targets,
           // The layer asserts exactly what was promoted, so the families left behind in Local
           // still win — they are above every layer.
-          propertyMask: serializePropertyMask(maskToWire(mask) ?? []) ?? undefined,
+          attributeMask: serializeAttributeMask(maskToWire(mask) ?? []) ?? undefined,
         })
         for (const row of response.look.rows) {
           if (row.targetType === 'deferred') continue
-          programmerClearEntry(row.targetType, row.targetKey, row.propertyName)
+          programmerClearEntry(row.targetType, row.targetKey, row.attribute)
         }
       } catch (e) {
         setPartial(

@@ -38,7 +38,7 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         handleUpdateChannel(state, UpdateChannelInMessage(universe, channel, level, fadeTime = 0))
 
     @Test
-    fun `shim lifts a slider channel to a property entry`() = testApplication {
+    fun `shim lifts a slider channel to an attribute entry`() = testApplication {
         mountTestApp(state)
         seedHex("hex-shim", startChannel = 1)
 
@@ -47,24 +47,24 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         val slot = state.show.programmerStore.get("hex-shim", "dimmer")!!
         assertEquals(ProgrammerOwner.WEB, slot.owner)
         assertTrue(slot.touched)
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(200u), slot.value.resolved)
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(200u), slot.value.resolved)
     }
 
     @Test
-    fun `shim lifts a colour sub-channel to the whole colour property`() = testApplication {
+    fun `shim lifts a colour sub-channel to the whole colour attribute`() = testApplication {
         mountTestApp(state)
         seedHex("hex-col", startChannel = 1)
 
         // Red to 200: siblings (green/blue, currently 0) freeze into the entry.
         busk(0, 2, 200u)
-        val first = programmerValue(state, "hex-col", "rgbColour") as CueAssignmentResolver.PropertyValue.Colour
+        val first = programmerValue(state, "hex-col", "rgbColour") as CueAssignmentResolver.AttributeValue.Colour
         assertEquals(200, first.value.color.red)
         assertEquals(0, first.value.color.green)
         assertEquals(0, first.value.color.blue)
 
         // Green to 100: composes with the existing entry rather than resetting red.
         busk(0, 3, 100u)
-        val second = programmerValue(state, "hex-col", "rgbColour") as CueAssignmentResolver.PropertyValue.Colour
+        val second = programmerValue(state, "hex-col", "rgbColour") as CueAssignmentResolver.AttributeValue.Colour
         assertEquals(200, second.value.color.red, "earlier red drag survives")
         assertEquals(100, second.value.color.green)
     }
@@ -138,42 +138,42 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         seedHex("hex-band", startChannel = 1)
 
-        val banded: AddEffectResponse = client.post("/api/rest/fx/add") {
+        val banded: AddFxResponse = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
             setBody(
-                AddEffectRequest(
-                    effectType = "SineWave",
+                AddFxRequest(
+                    fxType = "SineWave",
                     fixtureKey = "hex-band",
-                    propertyName = "dimmer",
+                    attribute = "dimmer",
                     programmerOwned = true,
                 )
             )
         }.body()
 
-        val plain: AddEffectResponse = client.post("/api/rest/fx/add") {
+        val plain: AddFxResponse = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
             setBody(
-                AddEffectRequest(
-                    effectType = "SineWave",
+                AddFxRequest(
+                    fxType = "SineWave",
                     fixtureKey = "hex-band",
-                    propertyName = "strobe",
+                    attribute = "strobe",
                 )
             )
         }.body()
 
-        val bandInstance = state.show.fxEngine.getEffect(banded.effectId)!!
+        val bandInstance = state.show.fxEngine.getFx(banded.fxId)!!
         assertTrue(
             FxEngine.isProgrammerFxPriority(bandInstance.priority),
             "programmerOwned lands in the reserved band, above every cue-derived priority",
         )
-        assertEquals(0, state.show.fxEngine.getEffect(plain.effectId)!!.priority)
+        assertEquals(0, state.show.fxEngine.getFx(plain.fxId)!!.priority)
 
         val response = clearProgrammerCompletely(state, 0)
-        assertEquals(1, response.effectsCleared, "only the band effect is swept")
+        assertEquals(1, response.fxCleared, "only the band effect is swept")
 
-        val surviving = state.show.fxEngine.getActiveEffects().map { it.id }.toSet()
-        assertTrue(banded.effectId !in surviving, "programmer FX go with the programmer values")
-        assertTrue(plain.effectId in surviving, "plain manual effects are not the programmer's")
+        val surviving = state.show.fxEngine.getActiveFx().map { it.id }.toSet()
+        assertTrue(banded.fxId !in surviving, "programmer FX go with the programmer values")
+        assertTrue(plain.fxId in surviving, "plain manual effects are not the programmer's")
     }
 
     @Test
@@ -188,7 +188,7 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         )
         val locateWrites = state.show.programmerStore.entries()
             .filter { it.fixtureKey == "hex-prune" }
-            .map { it.propertyName }
+            .map { it.attribute }
         assertTrue(locateWrites.size > 1, "locate asserts several properties")
 
         // Clearing one property keeps the fixture located — other writes remain.
@@ -202,10 +202,10 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         )
 
         // Clearing the rest releases the last LOCATE write and drops the locate state.
-        for (property in locateWrites.drop(1)) {
+        for (attribute in locateWrites.drop(1)) {
             uk.me.cormack.lighting7.plugins.ProgrammerHandler.clearEntry(
                 state, uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-prune"),
-                property, fadeMs = 0,
+                attribute, fadeMs = 0,
             )
         }
         assertTrue(

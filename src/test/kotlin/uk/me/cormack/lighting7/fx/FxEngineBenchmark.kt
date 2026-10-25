@@ -8,14 +8,14 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.SpeedMasterSource
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.HueSweepColour
@@ -35,7 +35,8 @@ import kotlin.test.Test
  *
  * 1. **`beat and wall-clock tick throughput`** — the original scenario. 4 universes of
  *    [HexFixture] with a beat [SliderTarget] and a wall-clock [SliderTarget] per fixture.
- *    Deliberately frozen: it is what the 2026-04-22 baseline was measured on.
+ *    Deliberately frozen: it is what the 2026-04-22 baseline was measured on. Since one compose
+ *    pass paints every running effect, both its windows time all of them.
  * 2. **`group colour chase on multi-element fixtures across two masters`** — sweep item
  *    C1 (per-tick target re-expansion) and the C6 allocation bundle.
  * 3. **`crossfade republish throughput`** — sweep item C3.
@@ -103,7 +104,7 @@ class FxEngineBenchmark {
          * measured. One effect per fixture is a plausible full-rig cue; the quadratic this
          * scenario exists to catch is 1+2+…+N, so N is the only knob that matters.
          */
-        const val SPAWN_EFFECTS = 168
+        const val SPAWN_FX = 168
         const val SPAWN_REPEATS = 8
         const val WARMUP_SPAWNS = 3
 
@@ -112,10 +113,10 @@ class FxEngineBenchmark {
          * what makes the per-row group expansion and allowed-set rebuild visible; a second Look
          * carries the bound effects `coversTarget` used to re-expand for, and a template layer
          * over the same group is what pays the per-head intent parse and the double catalogue
-         * walk in [TemplateResolver].
+         * walk in [PaletteResolver].
          */
         const val COOK_LOOK_ROWS = 40
-        const val COOK_LOOK_EFFECTS = 24
+        const val COOK_LOOK_FX = 24
         const val COOK_REPEATS = 200
         const val WARMUP_COOKS = 40
         const val OUTGOING_CUE = 1
@@ -190,7 +191,7 @@ class FxEngineBenchmark {
         )
 
         // Populate half the fixtures with cue-level Layer 4 dimmer assignments so
-        // `resetActiveProperties` actually has Layer 4 work to do during effect reset.
+        // `resetActiveAttributes` actually has Layer 4 work to do during effect reset.
         val assignments = fixtures.fixtures.filterIndexed { i, _ -> i % 2 == 0 }.map { f ->
             CueAssignmentResolver.Assignment(
                 cueId = 1,
@@ -198,10 +199,10 @@ class FxEngineBenchmark {
                 fadeWeight = 1.0,
                 targetKey = f.key,
                 targetIsGroup = false,
-                propertyName = "dimmer",
-                category = PropertyCategory.DIMMER,
+                attribute = "dimmer",
+                category = AttributeCategory.DIMMER,
                 compositionOverride = CompositionRule.UNSET,
-                value = CueAssignmentResolver.PropertyValue.Slider(128u),
+                value = CueAssignmentResolver.AttributeValue.Slider(128u),
             )
         }
         engine.cueLayer.setAssignments(1, assignments)
@@ -212,18 +213,18 @@ class FxEngineBenchmark {
             val beatFx = FxInstance(
                 effect = SineSlider(),
                 target = SliderTarget(f.key, "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                 blendMode = BlendMode.MAX,
             )
-            engine.addEffect(beatFx)
+            engine.addFx(beatFx)
 
             val wallFx = FxInstance(
                 effect = WindowedSlider(value = 80u),
                 target = SliderTarget(f.key, "uv"),
-                timing = FxTiming(beatDivision = 1.0),
+                timing = FxTiming(cycle = 1.0),
                 blendMode = BlendMode.OVERRIDE,
             ).apply { timingSource = TimingSource.WALL_CLOCK }
-            engine.addEffect(wallFx)
+            engine.addFx(wallFx)
         }
         return Rig(controllers, engine, fixtures)
     }
@@ -235,7 +236,7 @@ class FxEngineBenchmark {
         val rig = newRig()
         println(
             "[setup] universes=$UNIVERSES fixtures=${rig.fixtures.fixtures.size} " +
-                "effects=${rig.engine.getActiveEffects().size}",
+                "effects=${rig.engine.getActiveFx().size}",
         )
 
         // Warm up: JIT & load class paths so the measured window isn't paying for first-time
@@ -287,11 +288,11 @@ class FxEngineBenchmark {
      *
      * The fixture choice is load-bearing, not incidental:
      * - `Mode48Ch` implements `MultiElementFixture<RgbwPixel>` and deliberately does *not*
-     *   implement `WithColour` itself. That is what pushes `processGroupEffect` past its
+     *   implement `WithColour` itself. That is what pushes `processGroupFx` past its
      *   direct-application branch and down the element-expansion path this scenario exists
      *   to measure (C1).
      * - `RgbwPixel` is `WithColour, WithWhite` with `bundleWithColour = true` on `white`, which
-     *   drives the element branch of [PropertyChannelWriter]'s per-class property catalogue.
+     *   drives the element branch of [AttributeChannelWriter]'s per-class property catalogue.
      *
      * This scenario does **not** measure sweep item C2, though it claimed to until 2026-08-24.
      * `RgbwPixel` is a [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement],
@@ -362,10 +363,10 @@ class FxEngineBenchmark {
                     fadeWeight = 1.0,
                     targetKey = key,
                     targetIsGroup = false,
-                    propertyName = "rgbColour",
-                    category = PropertyCategory.COLOUR,
+                    attribute = "rgbColour",
+                    category = AttributeCategory.COLOUR,
                     compositionOverride = CompositionRule.UNSET,
-                    value = CueAssignmentResolver.PropertyValue.Colour(
+                    value = CueAssignmentResolver.AttributeValue.Colour(
                         ExtendedColour(Color(40, 0, 90), white = 20u),
                     ),
                 )
@@ -378,26 +379,26 @@ class FxEngineBenchmark {
         val flatChase = FxInstance(
             effect = HueSweepColour(),
             target = ColourTarget.forGroup("bars-a"),
-            timing = FxTiming(beatDivision = BeatDivision.ONE_BAR),
+            timing = FxTiming(cycle = CycleLength.ONE_BAR),
             blendMode = BlendMode.OVERRIDE,
         ).apply {
             elementMode = ElementMode.FLAT
-            distributionStrategy = DistributionStrategy.LINEAR
+            order = SpreadOrder.NORMAL
         }
-        engine.addEffect(flatChase)
+        engine.addFx(flatChase)
 
         // Second master, and the RANDOM strategy whose per-member Fisher-Yates C6 calls out.
         val randomChase = FxInstance(
             effect = HueSweepColour(saturation = 0.8f),
             target = ColourTarget.forGroup("bars-b"),
-            timing = FxTiming(beatDivision = BeatDivision.ONE_BAR),
+            timing = FxTiming(cycle = CycleLength.ONE_BAR),
             blendMode = BlendMode.OVERRIDE,
         ).apply {
             elementMode = ElementMode.FLAT
-            distributionStrategy = DistributionStrategy.RANDOM()
+            order = SpreadOrder.RANDOM()
             speedMasterUuid = master2
         }
-        engine.addEffect(randomChase)
+        engine.addFx(randomChase)
 
         // PER_FIXTURE wall-clock effect rate-scaled by master 2 — exercises
         // `processElementKeys` under `PhaseSource.WallClock` and `SpeedMasterBank.rateScales()`
@@ -411,14 +412,14 @@ class FxEngineBenchmark {
                 ),
             ),
             target = ColourTarget.forGroup("bars-a"),
-            timing = FxTiming(beatDivision = 2.0),
+            timing = FxTiming(cycle = 2.0),
             blendMode = BlendMode.MAX,
         ).apply {
             elementMode = ElementMode.PER_FIXTURE
             timingSource = TimingSource.WALL_CLOCK
             rateSpeedMasterUuid = master2
         }
-        engine.addEffect(wallChase)
+        engine.addFx(wallChase)
 
         // The FLAT and PER_FIXTURE arms take different lists out of the cached expansion
         // (`flat` vs `perFixture`), and the PER_FIXTURE effect above never reaches the FLAT
@@ -427,18 +428,18 @@ class FxEngineBenchmark {
         val wallFlatChase = FxInstance(
             effect = HueSweepColour(brightness = 0.7f),
             target = ColourTarget.forGroup("bars-b"),
-            timing = FxTiming(beatDivision = 4.0),
+            timing = FxTiming(cycle = 4.0),
             blendMode = BlendMode.MAX,
         ).apply {
             elementMode = ElementMode.FLAT
             timingSource = TimingSource.WALL_CLOCK
         }
-        engine.addEffect(wallFlatChase)
+        engine.addFx(wallFlatChase)
 
         val elementsPerGroup = barsA.size * PIXELS_PER_BAR
 
-        // Setup guards. Both element-expansion branches bail quietly — `processGroupEffect`
-        // returns when the elements lack the property, `resolveEffectFixtureKeys` returns an
+        // Setup guards. Both element-expansion branches bail quietly — `processGroupFx`
+        // returns when the elements lack the property, `resolveFxFixtureKeys` returns an
         // empty list — so a subtly wrong rig benchmarks nothing while still printing
         // plausible microsecond numbers. Nothing else in the suite drives a multi-element
         // fixture through the engine, so this is a live failure mode, not a hypothetical.
@@ -450,8 +451,8 @@ class FxEngineBenchmark {
         check(covered.first().contains('.')) {
             "expansion resolved to fixture keys, not element keys: ${covered.first()}"
         }
-        check(engine.getActiveEffects().size == 4) {
-            "expected 4 chase effects, got ${engine.getActiveEffects().size}"
+        check(engine.getActiveFx().size == 4) {
+            "expected 4 chase effects, got ${engine.getActiveFx().size}"
         }
         // Both element modes on both tick loops — the four branches C1's fix rewrites.
         check(engine.fixtureKeysCoveredBy(wallFlatChase).size == elementsPerGroup) {
@@ -497,7 +498,7 @@ class FxEngineBenchmark {
             "[setup] universes=$UNIVERSES bars=${rig.fixtures.fixtures.size} " +
                 "elements=${rig.fixtures.fixtures.size * PIXELS_PER_BAR} " +
                 "elementsPerGroup=${rig.elementsPerGroup} " +
-                "effects=${rig.engine.getActiveEffects().size} masters=2",
+                "effects=${rig.engine.getActiveFx().size} masters=2",
         )
 
         // Single `runBlocking` around each window: the production collect loops are already in
@@ -556,7 +557,7 @@ class FxEngineBenchmark {
      *
      * The effect mix is chosen so both halves of `republishCueAssignments` are paid:
      * - per-fixture dimmer effects *cover* the cues' dimmer rows, so those keys skip the
-     *   write path — but they still cost a `resolveEffectFixtureKeys` walk per publish;
+     *   write path — but they still cost a `resolveFxFixtureKeys` walk per publish;
      * - a group UV effect adds a group expansion to that same walk without overlapping any
      *   cue row;
      * - the colour rows are covered by nothing, so they go through `resetToFallback` on
@@ -595,10 +596,10 @@ class FxEngineBenchmark {
                         fadeWeight = 1.0,
                         targetKey = f.key,
                         targetIsGroup = false,
-                        propertyName = "dimmer",
-                        category = PropertyCategory.DIMMER,
+                        attribute = "dimmer",
+                        category = AttributeCategory.DIMMER,
                         compositionOverride = CompositionRule.UNSET,
-                        value = CueAssignmentResolver.PropertyValue.Slider(level),
+                        value = CueAssignmentResolver.AttributeValue.Slider(level),
                     ),
                     CueAssignmentResolver.Assignment(
                         cueId = cueId,
@@ -606,10 +607,10 @@ class FxEngineBenchmark {
                         fadeWeight = 1.0,
                         targetKey = f.key,
                         targetIsGroup = false,
-                        propertyName = "rgbColour",
-                        category = PropertyCategory.COLOUR,
+                        attribute = "rgbColour",
+                        category = AttributeCategory.COLOUR,
                         compositionOverride = CompositionRule.UNSET,
-                        value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(colour)),
+                        value = CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(colour)),
                     ),
                 )
             }
@@ -620,20 +621,20 @@ class FxEngineBenchmark {
         engine.cueLayer.setAssignments(INCOMING_CUE, incoming)
 
         for (f in fixtures.fixtures) {
-            engine.addEffect(
+            engine.addFx(
                 FxInstance(
                     effect = SineSlider(),
                     target = SliderTarget(f.key, "dimmer"),
-                    timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                    timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                     blendMode = BlendMode.MAX,
                 ),
             )
         }
-        engine.addEffect(
+        engine.addFx(
             FxInstance(
                 effect = WindowedSlider(value = 120u),
                 target = SliderTarget.forGroup("all-hexes", "uv"),
-                timing = FxTiming(beatDivision = BeatDivision.WHOLE),
+                timing = FxTiming(cycle = CycleLength.ONE_BAR),
                 blendMode = BlendMode.OVERRIDE,
             ),
         )
@@ -661,7 +662,7 @@ class FxEngineBenchmark {
         val rig = newCrossfadeRig()
         println(
             "[setup] universes=$UNIVERSES fixtures=${rig.fixtures.fixtures.size} " +
-                "cueRows=${rig.rowsPerCue * 2} effects=${rig.engine.getActiveEffects().size} " +
+                "cueRows=${rig.rowsPerCue * 2} effects=${rig.engine.getActiveFx().size} " +
                 "frames=$CROSSFADE_FRAMES",
         )
 
@@ -695,7 +696,7 @@ class FxEngineBenchmark {
 
     /**
      * [ColourTarget] over real [Fixture]s carrying bundled W/A/UV sliders — sweep item C2's
-     * `fixtureProperties.find {}` + `KProperty1.call` half.
+     * `fixtureAttributes.find {}` + `KProperty1.call` half.
      *
      * This scenario exists because **no other rig reaches that code at all**, contrary to what
      * scenario 2's docs claimed before this was written. [ColourTarget] gates all four of its
@@ -704,8 +705,8 @@ class FxEngineBenchmark {
      * park paths), and scenario 2's `RgbwPixel` is a
      * [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement], which does *not*
      * extend [Fixture]. Elements resolve through
-     * [PropertyChannelWriter]'s per-class catalogue instead, so scenario 2 measures the group
-     * expansion (C1) and [DistributionStrategy.RANDOM]'s permutation (C6) — not this.
+     * [AttributeChannelWriter]'s per-class catalogue instead, so scenario 2 measures the group
+     * expansion (C1) and [SpreadOrder.RANDOM]'s permutation (C6) — not this.
      *
      * The fixture choice is load-bearing: [HexFixture] declares `amber`, `white` **and** `uv`
      * with `bundleWithColour = true`, so each colour write pays the scan three times. A
@@ -714,7 +715,7 @@ class FxEngineBenchmark {
      *
      * Three of the four bundled helpers are covered:
      * - `applyExtendedChannel` — ungated, once per fixture per tick via the effect write;
-     * - `setExtendedChannel` — via `resetToFallback`, which `resetActiveProperties` drives for
+     * - `setExtendedChannel` — via `resetToFallback`, which `resetActiveAttributes` drives for
      *   every active property every tick, so the Layer 4 colour rows below are required;
      * - `extendedComponent` — via `composeProgrammerOver`, behind the per-fixture gate at
      *   `LayerResolver.fallbackFor`. Half the rig gets a programmer colour entry so the gate is
@@ -760,10 +761,10 @@ class FxEngineBenchmark {
                     fadeWeight = 1.0,
                     targetKey = f.key,
                     targetIsGroup = false,
-                    propertyName = "rgbColour",
-                    category = PropertyCategory.COLOUR,
+                    attribute = "rgbColour",
+                    category = AttributeCategory.COLOUR,
                     compositionOverride = CompositionRule.UNSET,
-                    value = CueAssignmentResolver.PropertyValue.Colour(
+                    value = CueAssignmentResolver.AttributeValue.Colour(
                         ExtendedColour(Color(30, 10, 70), white = 25u, amber = 15u, uv = 40u),
                     ),
                 )
@@ -773,7 +774,7 @@ class FxEngineBenchmark {
         // One per-fixture colour effect. Every entry carries non-zero W/A/UV so all three
         // bundled categories resolve on every tick rather than short-circuiting on zero.
         for (f in fixtures.fixtures) {
-            engine.addEffect(
+            engine.addFx(
                 FxInstance(
                     effect = SteppedColour(
                         colours = listOf(
@@ -783,7 +784,7 @@ class FxEngineBenchmark {
                         ),
                     ),
                     target = ColourTarget(f.key),
-                    timing = FxTiming(beatDivision = BeatDivision.HALF),
+                    timing = FxTiming(cycle = CycleLength.TWO_BEATS),
                     blendMode = BlendMode.OVERRIDE,
                 ),
             )
@@ -797,7 +798,7 @@ class FxEngineBenchmark {
                 ProgrammerOwner.WEB,
                 f.key,
                 "rgbColour",
-                CueAssignmentResolver.PropertyValue.Colour(
+                CueAssignmentResolver.AttributeValue.Colour(
                     ExtendedColour(Color(10, 200, 30), white = 70u, amber = 15u, uv = 45u),
                 ),
             )
@@ -806,11 +807,11 @@ class FxEngineBenchmark {
         // Setup guards, in scenario 2's style: every one of these has a silent-no-op failure
         // mode that still prints believable microseconds.
         val sample = fixtures.fixtures.first() as HexFixture
-        val bundled = sample.fixtureProperties.filter { it.bundleWithColour }.map { it.category }.toSet()
-        check(bundled == setOf(PropertyCategory.WHITE, PropertyCategory.AMBER, PropertyCategory.UV)) {
+        val bundled = sample.fixtureAttributes.filter { it.bundleWithColour }.map { it.category }.toSet()
+        check(bundled == setOf(AttributeCategory.WHITE, AttributeCategory.AMBER, AttributeCategory.UV)) {
             "the rig fixture must declare all three bundled colour channels, got $bundled"
         }
-        check(engine.getActiveEffects().all { it.target is ColourTarget }) {
+        check(engine.getActiveFx().all { it.target is ColourTarget }) {
             "every effect must be a ColourTarget, or the bundled write path is not exercised"
         }
         check(1 in engine.cueLayer.activeCueIds()) { "Layer 4 colour rows did not land" }
@@ -847,7 +848,7 @@ class FxEngineBenchmark {
         val rig = newColourRig()
         println(
             "[setup] universes=$UNIVERSES fixtures=${rig.fixtures.fixtures.size} " +
-                "colourEffects=${rig.engine.getActiveEffects().size} " +
+                "colourEffects=${rig.engine.getActiveFx().size} " +
                 "programmerCovered=${rig.programmerCovered}",
         )
 
@@ -883,11 +884,11 @@ class FxEngineBenchmark {
     }
 
     private fun spawnInstances(fixtures: Fixtures): List<FxInstance> =
-        fixtures.fixtures.take(SPAWN_EFFECTS).map { f ->
+        fixtures.fixtures.take(SPAWN_FX).map { f ->
             FxInstance(
                 effect = SineSlider(),
                 target = SliderTarget(f.key, "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                 blendMode = BlendMode.MAX,
             )
         }
@@ -895,9 +896,9 @@ class FxEngineBenchmark {
     /**
      * Sweep item C7: the cost of putting a cue's effects up.
      *
-     * `[spawn-each]` is the pre-C7 shape — one `addEffect` per effect, each rebuilding the
+     * `[spawn-each]` is the pre-C7 shape — one `addFx` per effect, each rebuilding the
      * sorted snapshots and re-broadcasting the whole active-effect list, so the Nth add walks
-     * N entries. `[spawn-batch]` is the same effects through `addEffects`: one rebuild, one
+     * N entries. `[spawn-batch]` is the same effects through `addFxBatch`: one rebuild, one
      * broadcast. Both run against a fresh engine per sample so neither inherits the other's
      * population, and both run in the same JVM in the same sitting — the only comparison at
      * this resolution that means anything (see `docs/testing-engineering.md`).
@@ -907,7 +908,7 @@ class FxEngineBenchmark {
         assumeBenchmarkEnabled()
 
         val fixtures = newRigFixtures()
-        println("[setup] universes=$UNIVERSES fixtures=${fixtures.fixtures.size} spawnEffects=$SPAWN_EFFECTS")
+        println("[setup] universes=$UNIVERSES fixtures=${fixtures.fixtures.size} spawnFx=$SPAWN_FX")
 
         fun measure(label: String, spawn: (FxEngine, List<FxInstance>) -> Unit) {
             repeat(WARMUP_SPAWNS) { spawn(newSpawnEngine(fixtures), spawnInstances(fixtures)) }
@@ -926,8 +927,8 @@ class FxEngineBenchmark {
             summarize(label, timings, alloc, sampleName = "spawn")
         }
 
-        measure("spawn-each") { engine, instances -> instances.forEach { engine.addEffect(it) } }
-        measure("spawn-batch") { engine, instances -> engine.addEffects(instances) }
+        measure("spawn-each") { engine, instances -> instances.forEach { engine.addFx(it) } }
+        measure("spawn-batch") { engine, instances -> engine.addFxBatch(instances) }
     }
 
     // ─── Scenario 6: the cook ───────────────────────────────────────────────
@@ -936,7 +937,7 @@ class FxEngineBenchmark {
         val fixtures: Fixtures,
         val layers: List<CookLayer>,
         val resolveLook: (UUID) -> LookSnapshot?,
-        val resolveTemplate: (UUID) -> TemplateSnapshot?,
+        val resolvePalette: (UUID) -> PaletteSnapshot?,
     )
 
     /**
@@ -947,7 +948,7 @@ class FxEngineBenchmark {
      * too. The effect Look's effects are bound to the fixtures inside that group, which is the
      * `coversTarget` case — a fixture the layer covers only *through* a group, so the name-match
      * fast path misses and the expansion runs. The template layer's rows are deferred, so each fans
-     * over every head and pays [TemplateResolver] per head.
+     * over every head and pays [PaletteResolver] per head.
      *
      * No `State`, no engine, no database: [CueComposer] cooks values from plain snapshots (see its
      * `resolveLook` parameter), which is what lets this scenario be a straight function call.
@@ -979,7 +980,7 @@ class FxEngineBenchmark {
             rows = (0 until COOK_LOOK_ROWS).map { i ->
                 LookRowEntry(
                     target = TargetRef.Group("everything"),
-                    propertyName = if (i % 2 == 0) "dimmer" else "rgbColour",
+                    attribute = if (i % 2 == 0) "dimmer" else "rgbColour",
                     value = if (i % 2 == 0) "${100 + i}" else "#20${"%02x".format(i * 5)}70",
                 )
             },
@@ -993,20 +994,20 @@ class FxEngineBenchmark {
             lookUuid = UUID.nameUUIDFromBytes("cook-effects".toByteArray()),
             name = "Cook Effects",
             rows = emptyList(),
-            effects = (0 until COOK_LOOK_EFFECTS).map { i ->
-                EffectEntry(
-                    target = EffectTargetRef.Single(TargetRef.Fixture(heads[i % heads.size])),
-                    effect = StoredEffect(
-                        effectType = "SineWave",
-                        category = "dimmer",
-                        propertyName = "dimmer",
-                        beatDivision = BeatDivision.HALF,
+            effects = (0 until COOK_LOOK_FX).map { i ->
+                FxEntry(
+                    target = FxTargetsRef.Single(TargetRef.Fixture(heads[i % heads.size])),
+                    effect = StoredFx(
+                        fxType = "SineWave",
+                        family = "intensity",
+                        attribute = "dimmer",
+                        cycle = CycleLength.TWO_BEATS,
                         blendMode = "OVERRIDE",
-                        distribution = "LINEAR",
+                        order = "NORMAL",
                         phaseOffset = 0.0,
                         elementMode = null,
                         elementFilter = null,
-                        stepTiming = null,
+                        timing = null,
                         parameters = mapOf("min" to "40", "max" to "220"),
                         speedMasterUuid = null,
                         rateSpeedMasterUuid = null,
@@ -1016,14 +1017,14 @@ class FxEngineBenchmark {
         )
 
         // Deferred template rows: each fans over every head in the layer's group.
-        val template = TemplateSnapshot(
-            templateId = 3,
-            templateUuid = UUID.nameUUIDFromBytes("cook-template".toByteArray()),
+        val template = PaletteSnapshot(
+            paletteId = 3,
+            paletteUuid = UUID.nameUUIDFromBytes("cook-template".toByteArray()),
             name = "Cook Template",
             fadeDurationMs = null,
             rows = listOf(
-                TemplateRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"),
-                TemplateRowEntry(target = null, propertyName = "dimmer", value = "pct:70"),
+                PaletteRowEntry(target = null, attribute = "rgbColour", value = "#FF9D4A;policy=extract"),
+                PaletteRowEntry(target = null, attribute = "dimmer", value = "pct:70"),
             ),
         )
 
@@ -1034,7 +1035,7 @@ class FxEngineBenchmark {
                 sortOrder = 0, targets = onEverything, layerId = 1,
             ),
             CookLayer(
-                source = LayerSource.template(template.templateId, template.templateUuid, template.name),
+                source = LayerSource.palette(template.paletteId, template.paletteUuid, template.name),
                 sortOrder = 1, targets = onEverything, layerId = 2,
             ),
             CookLayer(
@@ -1044,7 +1045,7 @@ class FxEngineBenchmark {
         )
 
         val looks = listOf(valueLook, effectLook).associateBy { it.lookUuid }
-        val templates = mapOf(template.templateUuid to template)
+        val templates = mapOf(template.paletteUuid to template)
         return CookRig(fixtures, layers, { looks[it] }, { templates[it] })
     }
 
@@ -1052,7 +1053,7 @@ class FxEngineBenchmark {
      * Sweep item C8: the cost of cooking a layer stack.
      *
      * `[cook-split]` is the pre-C8 shape — [CueComposer.cook] for the rows, then
-     * [CueComposer.cookEffects] for the effects, then [CueComposer.contributingLayers] a third time
+     * [CueComposer.cookFx] for the effects, then [CueComposer.contributingLayers] a third time
      * to rank them. `[cook-once]` is [CueComposer.cookAll]: one pass, one sort, each Look snapshot
      * read once, the layer's targets expanded once for both halves.
      *
@@ -1073,7 +1074,7 @@ class FxEngineBenchmark {
         val rig = newCookRig()
         println(
             "[setup] universes=$UNIVERSES fixtures=${rig.fixtures.fixtures.size} " +
-                "layers=${rig.layers.size} lookRows=$COOK_LOOK_ROWS lookEffects=$COOK_LOOK_EFFECTS",
+                "layers=${rig.layers.size} lookRows=$COOK_LOOK_ROWS lookFx=$COOK_LOOK_FX",
         )
 
         fun measure(label: String, cook: (CookRig) -> Unit) {
@@ -1092,9 +1093,9 @@ class FxEngineBenchmark {
         measure("cook-split") { r ->
             CueComposer.cook(
                 fixtures = r.fixtures, cueId = 1, priority = 1, layers = r.layers,
-                localRows = emptyList(), resolveLook = r.resolveLook, resolveTemplate = r.resolveTemplate,
+                localRows = emptyList(), resolveLook = r.resolveLook, resolvePalette = r.resolvePalette,
             )
-            CueComposer.cookEffects(r.fixtures, 1, r.layers, r.resolveLook, r.resolveTemplate)
+            CueComposer.cookFx(r.fixtures, 1, r.layers, r.resolveLook, r.resolvePalette)
             CueComposer.contributingLayers(r.layers)
                 .withIndex()
                 .associate { (index, layer) -> layer.layerId to index }
@@ -1102,7 +1103,7 @@ class FxEngineBenchmark {
         measure("cook-once") { r ->
             CueComposer.cookAll(
                 fixtures = r.fixtures, cueId = 1, priority = 1, layers = r.layers,
-                localRows = emptyList(), resolveLook = r.resolveLook, resolveTemplate = r.resolveTemplate,
+                localRows = emptyList(), resolveLook = r.resolveLook, resolvePalette = r.resolvePalette,
             )
         }
     }

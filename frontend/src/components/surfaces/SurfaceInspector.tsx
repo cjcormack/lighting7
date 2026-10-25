@@ -1,19 +1,19 @@
 import { useState } from "react"
 import { AlertTriangle, Radio, Trash2, Wand2 } from "lucide-react"
 import { useFixtureListQuery } from "@/store/fixtures"
-import { useGroupPropertiesQuery } from "@/store/groups"
-import { useColourValue, useSliderValue } from "@/hooks/usePropertyValues"
-import { useGroupColourValues, useGroupSliderValues } from "@/hooks/useGroupPropertyValues"
+import { useGroupAttributesQuery } from "@/store/groups"
+import { useColourValue, useSliderValue } from "@/hooks/useAttributeValues"
+import { useGroupColourValues, useGroupSliderValues } from "@/hooks/useGroupAttributeValues"
 import type {
   ChannelRef,
-  ColourPropertyDescriptor,
-  PropertyDescriptor,
-  SliderPropertyDescriptor,
+  ColourAttributeDescriptor,
+  AttributeDescriptor,
+  SliderAttributeDescriptor,
 } from "@/store/fixtures"
 import type {
-  GroupColourPropertyDescriptor,
-  GroupPropertyDescriptor,
-  GroupSliderPropertyDescriptor,
+  GroupColourAttributeDescriptor,
+  GroupAttributeDescriptor,
+  GroupSliderAttributeDescriptor,
 } from "@/api/groupsApi"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -411,7 +411,7 @@ function LiveCard({
 }) {
   const selection = useDeskSelection()
   const isSelectionTarget =
-    resolved?.target.type === "selectionProperty" ||
+    resolved?.target.type === "selectionAttribute" ||
     resolved?.target.type === "selectionFan" ||
     resolved?.target.type === "selectTarget" ||
     resolved?.target.type === "locateSelection"
@@ -462,29 +462,29 @@ function LiveCard({
  * **A component, and four leaves, because the value hooks take a descriptor and hooks cannot be
  * conditional.** `useSliderValue` and `useGroupColourValues` want different shapes and subscribe to
  * different channel sets, so choosing between them inside one component would mean calling one of
- * them with a fabricated descriptor. `EffectPadDetail` is the same shape for the same reason.
+ * them with a fabricated descriptor. `FxPadDetail` is the same shape for the same reason.
  *
  * Only **slider** and **colour** are drawn, which is not a simplification: those are exactly the
- * two `PropertyChannelResolver` writes from a continuous control, so a binding on anything else has
+ * two `AttributeChannelResolver` writes from a continuous control, so a binding on anything else has
  * no stage value to report. A `flash` is unwrapped first — its inner target is the property it
  * drives.
  */
 function StageValue({ target }: { target: BindingTarget }) {
   const inner = effectiveTarget(target)
-  if (inner.type === "fixtureProperty") {
+  if (inner.type === "fixtureAttribute") {
     return (
       <FixtureStageValue
         fixtureKey={inner.fixtureKey}
-        propertyName={inner.propertyName}
+        attribute={inner.attribute}
         axis={inner.colourAxis}
       />
     )
   }
-  if (inner.type === "groupProperty") {
+  if (inner.type === "groupAttribute") {
     return (
       <GroupStageValue
         groupName={inner.groupName}
-        propertyName={inner.propertyName}
+        attribute={inner.attribute}
         axis={inner.colourAxis}
       />
     )
@@ -496,7 +496,7 @@ function StageValue({ target }: { target: BindingTarget }) {
  * A bundled emitter — `white`, `amber`, `uv` — is not in the descriptor list (the fixture
  * descriptor folds it into the colour's `whiteChannel` …), but it is a slider the desk drives by
  * that name, so its stage line is drawn from a descriptor minted here off the colour's channel ref.
- * The name → channel-key rule is the one `hooks/useTargetProperties.ts` offers the chips by.
+ * The name → channel-key rule is the one `hooks/useTargetAttributes.ts` offers the chips by.
  */
 const EMITTER_CHANNELS = {
   white: "whiteChannel",
@@ -505,20 +505,20 @@ const EMITTER_CHANNELS = {
 } as const
 
 function fixtureEmitterDescriptor(
-  properties: readonly PropertyDescriptor[] | undefined,
-  propertyName: string,
-): SliderPropertyDescriptor | undefined {
-  const key = EMITTER_CHANNELS[propertyName as keyof typeof EMITTER_CHANNELS]
+  attributes: readonly AttributeDescriptor[] | undefined,
+  attribute: string,
+): SliderAttributeDescriptor | undefined {
+  const key = EMITTER_CHANNELS[attribute as keyof typeof EMITTER_CHANNELS]
   if (key == null) return undefined
-  for (const property of properties ?? []) {
-    if (property.type !== "colour") continue
-    const channel = property[key]
+  for (const declared of attributes ?? []) {
+    if (declared.type !== "colour") continue
+    const channel = declared[key]
     if (channel == null) continue
     return {
       type: "slider",
-      name: propertyName,
-      displayName: propertyName,
-      category: propertyName as SliderPropertyDescriptor["category"],
+      name: attribute,
+      displayName: attribute,
+      category: attribute as SliderAttributeDescriptor["category"],
       channel,
       min: 0,
       max: 255,
@@ -528,22 +528,22 @@ function fixtureEmitterDescriptor(
 }
 
 function groupEmitterDescriptor(
-  properties: readonly GroupPropertyDescriptor[] | undefined,
-  propertyName: string,
-): GroupSliderPropertyDescriptor | undefined {
-  const key = EMITTER_CHANNELS[propertyName as keyof typeof EMITTER_CHANNELS]
+  attributes: readonly GroupAttributeDescriptor[] | undefined,
+  attribute: string,
+): GroupSliderAttributeDescriptor | undefined {
+  const key = EMITTER_CHANNELS[attribute as keyof typeof EMITTER_CHANNELS]
   if (key == null) return undefined
-  for (const property of properties ?? []) {
-    if (property.type !== "colour") continue
-    const memberChannels = property.memberColourChannels
+  for (const declared of attributes ?? []) {
+    if (declared.type !== "colour") continue
+    const memberChannels = declared.memberColourChannels
       .map((member) => member[key])
       .filter((channel): channel is ChannelRef => channel != null)
     if (memberChannels.length === 0) continue
     return {
       type: "slider",
-      name: propertyName,
-      displayName: propertyName,
-      category: propertyName,
+      name: attribute,
+      displayName: attribute,
+      category: attribute,
       min: 0,
       max: 255,
       memberChannels,
@@ -562,88 +562,88 @@ function StageLine({ label, value }: { label: string; value: string }) {
 
 function FixtureStageValue({
   fixtureKey,
-  propertyName,
+  attribute,
   axis,
 }: {
   fixtureKey: string
-  propertyName: string
+  attribute: string
   axis: ColourAxis | null | undefined
 }) {
   const { data: fixtures } = useFixtureListQuery()
-  const properties = fixtures?.find((f) => f.key === fixtureKey)?.properties
-  const property =
-    properties?.find((p) => p.name === propertyName) ??
-    fixtureEmitterDescriptor(properties, propertyName)
+  const attributes = fixtures?.find((f) => f.key === fixtureKey)?.attributes
+  const declared =
+    attributes?.find((p) => p.name === attribute) ??
+    fixtureEmitterDescriptor(attributes, attribute)
   // The axis is on the label only. The *Position* line above is already the desk's reading on
   // that axis (`ControlState.value` comes from `computeValue7Bit`); an HSV computed here would be
   // a second copy of the read rule, and the two would drift.
-  const label = `${fixtureKey}.${propertyName}${axisSuffix(axis)}`
-  if (property?.type === "slider") return <FixtureSliderValue property={property} label={label} />
-  if (property?.type === "colour") return <FixtureColourValue property={property} label={label} />
+  const label = `${fixtureKey}.${attribute}${axisSuffix(axis)}`
+  if (declared?.type === "slider") return <FixtureSliderValue attribute={declared} label={label} />
+  if (declared?.type === "colour") return <FixtureColourValue attribute={declared} label={label} />
   return null
 }
 
 function FixtureSliderValue({
-  property,
+  attribute,
   label,
 }: {
-  property: SliderPropertyDescriptor
+  attribute: SliderAttributeDescriptor
   label: string
 }) {
-  return <StageLine label={label} value={String(useSliderValue(property))} />
+  return <StageLine label={label} value={String(useSliderValue(attribute))} />
 }
 
 function FixtureColourValue({
-  property,
+  attribute,
   label,
 }: {
-  property: ColourPropertyDescriptor
+  attribute: ColourAttributeDescriptor
   label: string
 }) {
-  const { r, g, b } = useColourValue(property)
+  const { r, g, b } = useColourValue(attribute)
   return <StageLine label={label} value={`${r}, ${g}, ${b}`} />
 }
 
 function GroupStageValue({
   groupName,
-  propertyName,
+  attribute,
   axis,
 }: {
   groupName: string
-  propertyName: string
+  attribute: string
   axis: ColourAxis | null | undefined
 }) {
-  const { data: properties } = useGroupPropertiesQuery(groupName)
-  const property =
-    properties?.find((p) => p.name === propertyName) ??
-    groupEmitterDescriptor(properties, propertyName)
-  const label = `${groupName}.${propertyName}${axisSuffix(axis)}`
-  if (property?.type === "slider") return <GroupSliderValue property={property} label={label} />
-  if (property?.type === "colour") return <GroupColourValue property={property} label={label} />
+  const { data: attributes } = useGroupAttributesQuery(groupName)
+  const declared =
+    attributes?.find((p) => p.name === attribute) ??
+    groupEmitterDescriptor(attributes, attribute)
+  const label = `${groupName}.${attribute}${axisSuffix(axis)}`
+  if (declared?.type === "slider") return <GroupSliderValue attribute={declared} label={label} />
+  if (declared?.type === "colour") return <GroupColourValue attribute={declared} label={label} />
   return null
 }
 
 function GroupSliderValue({
-  property,
+  attribute,
   label,
 }: {
-  property: GroupSliderPropertyDescriptor
+  attribute: GroupSliderAttributeDescriptor
   label: string
 }) {
   // The group hook already answers "do the members agree", which is the same question D10 puts to
   // the motor: a mixed group is why the encoder ring beside this line is dark.
-  const { min, max, isUniform } = useGroupSliderValues(property)
+  const { min, max, isUniform } = useGroupSliderValues(attribute)
   return <StageLine label={label} value={isUniform ? String(min) : `${min}–${max} (mixed)`} />
 }
 
 function GroupColourValue({
-  property,
+  attribute,
   label,
 }: {
-  property: GroupColourPropertyDescriptor
+  attribute: GroupColourAttributeDescriptor
   label: string
 }) {
-  const { avgR, avgG, avgB, isUniform } = useGroupColourValues(property)
+  const { avgR, avgG, avgB, isUniform } = useGroupColourValues(attribute)
   return (
     <StageLine
       label={label}

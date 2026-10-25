@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
-import { familyForCategory, parsePropertyMask } from '../../lib/attributeFamily'
-import { columnFamily, resolutionPropertyNames } from './columns'
+import { familyForCategory, parseAttributeMask } from '../../lib/attributeFamily'
+import { columnFamily, resolutionAttributeNames } from './columns'
 import { cellValueFromParts, isLocalEntry, stagedPartFor } from './scopedCellValue'
 import { parseProgrammerEntryValue, parseProgrammerValue } from '../../lib/programmerValue'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
-import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from '../programmer/FocusedPaletteLayer'
 import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
 import { useEditorContext } from '../programmer/EditorContext'
 import { useCueRowStore, type CueCellSource, type CueRowStoreValue } from '../cues/editor/CueRowStore'
@@ -15,7 +15,7 @@ import type { AttributeFamily } from '../../lib/attributeFamily'
 import type { CellState, CueCellStateSource, RowCellStates, StagedPart } from './scopedCellValue'
 import type { RowCell } from './useRowValues'
 import type { LookRowStoreValue } from '../programmer/LookRowStore'
-import type { FocusedTemplateLayerValue } from '../programmer/FocusedTemplateLayer'
+import type { FocusedPaletteLayerValue } from '../programmer/FocusedPaletteLayer'
 import type { StagedValue } from './useRowOwnership'
 
 /**
@@ -43,7 +43,7 @@ export function useScopedRowValues(
 ): RowCellStates {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
-  const focusedTemplate = useFocusedTemplateLayer()
+  const focusedPalette = useFocusedPaletteLayer()
   // The cue editor's Values grid (show-cue-editing plan §3.3): the draft over the cook. A fourth
   // source, called on every row like the other three and handed no cells when it is off.
   const editor = useEditorContext()
@@ -60,7 +60,7 @@ export function useScopedRowValues(
 
   const local = useLocalRowValues(localCells)
   const layer = useLayerRowValues(layerCells, store)
-  const template = useTemplateRowValues(layerCells, focusedTemplate, live)
+  const template = usePaletteRowValues(layerCells, focusedPalette, live)
 
   return useMemo(() => {
     if (inCue) return cue
@@ -71,7 +71,7 @@ export function useScopedRowValues(
     // at all — which the grid renders as live, editable cells writing straight to Local while the
     // band overhead says "One layer". `LayerRowNotices` had been claiming the opposite since it
     // shipped.
-    if (kind === 'layer') return focusedTemplate != null ? template : layer
+    if (kind === 'layer') return focusedPalette != null ? template : layer
     // Output is a read of the cook: every cell has a value and none of them is editable here.
     // Editing "the output" would have to pick a destination, and the point of the scope switcher
     // is that the operator says which.
@@ -81,7 +81,7 @@ export function useScopedRowValues(
       if (value) states[cell.col] = { value, editable: false }
     }
     return states
-  }, [inCue, cue, kind, cells, live, local, layer, template, focusedTemplate])
+  }, [inCue, cue, kind, cells, live, local, layer, template, focusedPalette])
 }
 
 const EMPTY_CELLS: readonly RowCell[] = []
@@ -107,8 +107,8 @@ function useLocalRowValues(cells: readonly RowCell[]): RowCellStates {
 }
 
 function computeLocalRowStates(cells: readonly RowCell[]): RowCellStates {
-  const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
-    const state = lightingApi.programmer.getKeyState(targetKey, propertyName)
+  const lookup = (targetKey: string, attribute: string): StagedValue | undefined => {
+    const state = lightingApi.programmer.getKeyState(targetKey, attribute)
     if (!isLocalEntry(state)) return undefined
     return parseProgrammerEntryValue(state.entry!) ?? undefined
   }
@@ -147,7 +147,7 @@ function useLayerRowValues(
       cells
         .flatMap((cell) =>
           cell.resolutions.flatMap((res, i) =>
-            resolutionPropertyNames(res).map((name) => lookRowKey(cell.targetKeys[i], name)),
+            resolutionAttributeNames(res).map((name) => lookRowKey(cell.targetKeys[i], name)),
           ),
         )
         .join(KEY_LIST_SEP),
@@ -179,24 +179,22 @@ function useLayerRowValues(
     // A dependency, not a read: the counter is what re-derives the cells after a draft write.
     void draftVersion
     if (cells.length === 0 || !store) return EMPTY_STATES
-    const mask = parsePropertyMask(store.propertyMask)
-    const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
-      const pending = store.draft.get(targetKey, propertyName)
+    const mask = parseAttributeMask(store.attributeMask)
+    const lookup = (targetKey: string, attribute: string): StagedValue | undefined => {
+      const pending = store.draft.get(targetKey, attribute)
       if (pending !== undefined) return parseProgrammerValue(pending) ?? undefined
-      return store.serverRows.get(lookRowKey(targetKey, propertyName))
+      return store.serverRows.get(lookRowKey(targetKey, attribute))
     }
 
     const states: RowCellStates = {}
     for (const cell of cells) {
-      const tone = cellTone(cell, mask, store.targetedKeys)
+      const tone = cellTone(cell, mask, null)
       const parts: (StagedPart | undefined)[] = cell.resolutions.map((res, i) =>
         stagedPartFor(res, cell.targetKeys[i], lookup),
       )
       const state: CellState = {
         value: cellValueFromParts(cell.resolutions, parts),
-        // A cell an untargeted fixture would receive is shown but not editable, and a masked-out
-        // column is inert. Widening a layer's targets is always the explicit affordance on the
-        // row — never a side effect of dragging a marquee across the grid.
+        // A masked-out column is inert. A Look's layer names no targets, so no row is outside it.
         editable: tone === undefined,
       }
       if (tone) state.tone = tone
@@ -225,9 +223,9 @@ function useLayerRowValues(
  * Pure — no subscription of its own. `live` is the row's existing channel read, already the reason
  * this row re-renders.
  */
-function useTemplateRowValues(
+function usePaletteRowValues(
   cells: readonly RowCell[],
-  focused: FocusedTemplateLayerValue | null,
+  focused: FocusedPaletteLayerValue | null,
   live: ReturnType<typeof useRowValues>,
 ): RowCellStates {
   return useMemo(() => {
@@ -239,7 +237,7 @@ function useTemplateRowValues(
       if (tone) state.tone = tone
       // `kind` is undefined until the library lands, and that is deliberately not treated as
       // "value": showing an empty grid and then filling it would be the wrong flash of the two.
-      if (focused.kind === 'effect' && tone === undefined) {
+      if (focused.kind === 'fx' && tone === undefined) {
         const value = live[cell.col]
         if (value) state.value = value
       }
@@ -257,7 +255,7 @@ function useTemplateRowValues(
  * write either way sends the operator to fix the wrong thing.
  *
  * Takes the mask and targets rather than a store, because both layer arms ask it: a Look layer's
- * come from `LookRowStore` and a template layer's from `FocusedTemplateLayer`, and the two must not
+ * come from `LookRowStore` and a template layer's from `FocusedPaletteLayer`, and the two must not
  * disagree about which cells a layer reaches.
  */
 function cellTone(
@@ -281,7 +279,7 @@ function cellFamily(cell: RowCell): AttributeFamily {
   const first = cell.resolutions[0]
   if (first) {
     if (first.kind === 'position') return 'POSITION'
-    return familyForCategory(first.property.category)
+    return familyForCategory(first.attribute.category)
   }
   return columnFamily(cell.col)
 }
@@ -320,8 +318,8 @@ function useCueRowValues(
     const states: RowCellStates = {}
     for (const cell of cells) {
       const sources: CueCellSource[] = []
-      const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
-        const hit = store.lookup(targetKey, propertyName, group)
+      const lookup = (targetKey: string, attribute: string): StagedValue | undefined => {
+        const hit = store.lookup(targetKey, attribute, group)
         if (!hit) return undefined
         const staged = parseProgrammerValue(hit.value)
         if (staged) sources.push(hit.source)

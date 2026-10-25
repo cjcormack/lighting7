@@ -15,12 +15,11 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       return `Fixture '${health.fixtureKey}' no longer exists`
     case "missingGroup":
       return `Group '${health.groupName}' no longer exists`
-    case "missingProperty":
-      return `Property '${health.propertyName}' is not defined on '${health.targetKey}'`
-    // Three reference cases stood here — `missingPalette`, `missingPaletteEntry`, and before them
-    // `paletteTypeMismatch`. All retired with the `ref:` value grammar (session 4): a row cannot
-    // hold a reference, so a reference that resolves to nothing is not a state to describe. Note
-    // the `default` arm below still catches them if an older server sends one.
+    case "missingAttribute":
+      return `Attribute '${health.attribute}' is not defined on '${health.targetKey}'`
+    // Three reference cases for the old `ref:` value grammar stood here; all retired with it
+    // (looks-and-layers session 4): a row cannot hold a reference, so a reference that resolves to
+    // nothing is not a state to describe. The `missingPalette` below is a binding's, and unrelated.
     case "missingStack":
       return `Cue stack #${health.stackId} no longer exists`
     case "missingCue":
@@ -31,15 +30,15 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       // Unlike an effect, which degrades to master 1, a dead tempo binding does nothing —
       // silently retuning the global tempo instead would be worse than being visibly dead.
       return "The speed master this controls no longer exists"
-    case "unknownProperty":
+    case "unknownAttribute":
       // A selection or encoder-bank property, so there is no target to name — what makes it dead
       // is that nothing in the patch has the property at all.
-      return `No fixture in this patch has a '${health.propertyName}' property`
+      return `No fixture in this patch has a '${health.attribute}' attribute`
     // The record variants. Each names its uuid rather than a resolved name, because this function
     // is pure and has no library to look one up in — the same line `describeTarget` draws.
     case "missingLook":
       return "The Look this button presses no longer exists"
-    case "missingTemplate":
+    case "missingPalette":
       return "The palette this button presses no longer exists"
     case "missingPad":
       return "The busk pad this button presses is no longer on any page"
@@ -55,10 +54,6 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     // desk re-evaluates on every registry change so the row goes green without a rebind.
     case "missingWindow":
       return `“${health.windowName}” is not signed in on any screen`
-    case "lookNeedsSelection":
-      // Not missing — still there, and the fix is different: give the effect its targets, or bind
-      // the button to something a press can land on by itself.
-      return "This Look has a deferred effect, so it needs a selection — a button has none to give"
     case "unknownTarget":
       // The row the backend's tolerant decode kept rather than failing the whole project on. It
       // is dead here and rebindable; on the build that wrote it, it works.

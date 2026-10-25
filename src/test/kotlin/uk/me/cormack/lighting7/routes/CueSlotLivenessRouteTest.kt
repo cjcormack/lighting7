@@ -13,10 +13,10 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.LayerSourceKind
-import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -56,11 +56,11 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
                 NewCue(
                     name = name,
                     cueStackId = stackId,
-                    propertyAssignments = listOf(
-                        CuePropertyAssignmentDto(
+                    attributeAssignments = listOf(
+                        CueAttributeAssignmentDto(
                             targetType = TargetRef.Fixture.TYPE,
                             targetKey = "hex-1",
-                            propertyName = "dimmer",
+                            attribute = "dimmer",
                             value = dimmer.toString(),
                         ),
                     ),
@@ -88,12 +88,12 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = name,
                     rows = listOf(LookRowDto("fixture", "hex-1", "dimmer", "200")),
-                    effects = if (effect) {
+                    fx = if (effect) {
                         listOf(
-                            LookEffectDto(
+                            LookFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                                beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                                cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                             ),
                         )
                     } else {

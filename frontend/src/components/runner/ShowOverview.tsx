@@ -48,7 +48,7 @@ import {
 } from '@/store/cueStacks'
 import { CueStackForm } from '@/components/cues/CueStackForm'
 import { DeleteStackDialog } from './DeleteStackDialog'
-import { StackEffectSizeControl } from './StackEffectSizeControl'
+import { StackFxAmountControl } from './StackFxAmountControl'
 import { InlineEditField } from '@/components/InlineEditField'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { isCueRow, type CueStack, type CueStackInput } from '@/api/cueStacksApi'
@@ -152,7 +152,7 @@ function SortableStackEntry({
       <span className="hidden @[560px]:block text-xs text-muted-foreground shrink-0">
         {cueCount} cues &middot; {stack.loop ? 'Loop' : 'Sequential'}
       </span>
-      <StackEffectSizeControl
+      <StackFxAmountControl
         stackId={stack.id}
         stackName={stack.name}
         className="hidden @[480px]:flex shrink-0"

@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.state
 
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.SpreadOver
+import uk.me.cormack.lighting7.fx.FanOver
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.BuskRigFixture
@@ -25,8 +25,8 @@ class BuskRigOrderTest {
         assertTrue(file.cases.isNotEmpty())
         for (case in file.cases) {
             val order = order(case.rig)
-            assertEquals(case.stepsHeads, order.steps(SpreadOver.HEADS), "${case.note}: steps over heads")
-            assertEquals(case.stepsCells, order.steps(SpreadOver.CELLS), "${case.note}: steps over cells")
+            assertEquals(case.stepsHeads, order.steps(FanOver.HEADS), "${case.note}: steps over heads")
+            assertEquals(case.stepsCells, order.steps(FanOver.CELLS), "${case.note}: steps over cells")
             assertEquals(case.sortOutput, order.sort(case.sortInput), "${case.note}: sort")
         }
     }
@@ -48,13 +48,13 @@ class BuskRigOrderTest {
      */
     @Test
     fun `the empty rig's fallback leaves an infrastructure fixture out`() {
-        val before = order("empty").steps(SpreadOver.HEADS)
+        val before = order("empty").steps(FanOver.HEADS)
         val hex2 = listOf(CueTargetDto("fixture", "hex-2"))
         assertTrue(hex2 in before, "the file's empty rig steps hex-2 as a fixture")
 
         fixtures.setPatchMetadata("hex-2", Fixtures.FixturePatchMetadata(gelCode = null, infrastructure = true))
         val after = order("empty")
-        assertEquals(before - setOf(hex2), after.steps(SpreadOver.HEADS))
+        assertEquals(before - setOf(hex2), after.steps(FanOver.HEADS))
     }
 
     /**
@@ -66,7 +66,7 @@ class BuskRigOrderTest {
         val ungrouped = BuskRigFixture.fixtures(file.fixtures, emptyList())
         ungrouped.setPatchMetadata("hex-2", Fixtures.FixturePatchMetadata(gelCode = null, infrastructure = true))
         val order = BuskRigOrder(ungrouped, BuskRigFixture.rig(file.rigs.getValue("empty")))
-        assertTrue(listOf(CueTargetDto("fixture", "hex-2")) !in order.steps(SpreadOver.HEADS), "not offered")
+        assertTrue(listOf(CueTargetDto("fixture", "hex-2")) !in order.steps(FanOver.HEADS), "not offered")
         assertEquals(
             listOf("hex-1", "hex-2", "bar-1"),
             order.sort(listOf("bar-1", "hex-2", "hex-1").map { CueTargetDto("fixture", it) }).map { it.key },

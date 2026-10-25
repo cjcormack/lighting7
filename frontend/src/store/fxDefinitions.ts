@@ -1,45 +1,46 @@
+import type { Timing } from '../api/fxApi'
 import { restApi } from './restApi'
-import type { EffectParameterDef } from './fixtureFx'
+import type { FxParameterDef } from './fixtureFx'
 
 // === Types ===
 
 export interface FxDefinition {
   id: number
-  effectId: string
+  fxId: string
   name: string
-  category: string
+  family: string
   outputType: string
-  effectMode: string
-  parameters: EffectParameterDef[]
-  compatibleProperties: string[]
+  fxMode: string
+  parameters: FxParameterDef[]
+  compatibleAttributes: string[]
   script: string
-  defaultStepTiming: boolean
+  defaultTiming: Timing
   timingSource?: 'BEAT' | 'WALL_CLOCK'
 }
 
 export interface CreateFxDefinitionRequest {
-  effectId: string
+  fxId: string
   name: string
-  category: string
+  family: string
   outputType?: string
-  effectMode?: string
-  parameters?: EffectParameterDef[]
-  compatibleProperties?: string[]
+  fxMode?: string
+  parameters?: FxParameterDef[]
+  compatibleAttributes?: string[]
   script: string
-  defaultStepTiming?: boolean
+  defaultTiming?: Timing
   timingSource?: string
 }
 
 export interface UpdateFxDefinitionRequest {
-  effectId?: string
+  fxId?: string
   name?: string
-  category?: string
+  family?: string
   outputType?: string
-  effectMode?: string
-  parameters?: EffectParameterDef[]
-  compatibleProperties?: string[]
+  fxMode?: string
+  parameters?: FxParameterDef[]
+  compatibleAttributes?: string[]
   script?: string
-  defaultStepTiming?: boolean
+  defaultTiming?: Timing
   timingSource?: string
 }
 
@@ -48,10 +49,10 @@ export interface UpdateFxDefinitionRequest {
 export const fxDefinitionsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     // The running show's definitions — the `fx_definitions` rows, not the effect vocabulary (that
-    // is `effectLibrary` in `store/fixtureFx.ts`, built-ins included). The FX Library sheet reads it
+    // is `fxLibrary` in `store/fixtureFx.ts`, built-ins included). The FX Library sheet reads it
     // for one fact the library entry does not carry: which `USER` entries are **custom** (a
-    // definition's `effectId` is the entry's id) and which a script registered (library-sheets plan
-    // §3.2). Tagged `FxLibrary`, so the `fxDefinitionListChanged` bridge beside `effectLibrary`
+    // definition's `fxId` is the entry's id) and which a script registered (library-sheets plan
+    // §3.2). Tagged `FxLibrary`, so the `fxDefinitionListChanged` bridge beside `fxLibrary`
     // invalidates it on the same frame, and so do the three definition writes below.
     fxDefinitionList: build.query<FxDefinition[], void>({
       query: () => 'fx/definitions',

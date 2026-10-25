@@ -49,10 +49,10 @@ class CueSharingRoutesTest : RouteIntegrationTest() {
     /** A cue setting hex-1's dimmer to [level], so it shows on stage when live. */
     private fun cue(name: String, level: Int = 100): Int = transaction(state.database) {
         DaoCue.new { project = DaoProject[projectId]; this.name = name }.also { cue ->
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "dimmer"; value = "$level"; sortOrder = 0
+                attribute = "dimmer"; value = "$level"; sortOrder = 0
             }
         }.id.value
     }

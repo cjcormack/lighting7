@@ -859,7 +859,7 @@ class McpSetupToolsTest : RouteIntegrationTest() {
             "build_cue_stack",
             """{"stackName":"Act 2","cues":[
                 {"name":"Interval","marker":true,"number":"12A"},
-                {"number":"13","name":"Storm","layers":[{"lookId":99999,"targets":[{"type":"group","key":"FOH"}]}]}
+                {"number":"13","name":"Storm","layers":[{"lookId":99999}]}
             ]}""",
         )
         assertFalse(result.success)
@@ -869,6 +869,24 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         transaction(state.database) {
             assertTrue(DaoCueStack.find { DaoCueStacks.name eq "Act 2" }.empty(), "nothing is written")
         }
+    }
+
+    @Test
+    fun `build_cue_stack refuses a Look layer naming targets, with the row's other problems`() {
+        val lookId = transaction(state.database) {
+            DaoLook.new { name = "Warm"; project = state.projectManager.currentProject }.id.value
+        }
+        val result = call(
+            "build_cue_stack",
+            """{"stackName":"Act 2","cues":[{"number":"13","name":"Storm","layers":[
+                {"lookId":$lookId,"targets":[{"type":"group","key":"FOH"}]},{"lookId":99999,"blendMode":"BOGUS"}
+            ]}]}""",
+        )
+        assertFalse(result.success)
+        val problems = result.problems()
+        assertTrue(problems.any { "layers[0]" in it && "LOOK_LAYER_TARGETED" in it }, problems.toString())
+        assertTrue(problems.any { "no look 99999" in it }, problems.toString())
+        assertTrue(problems.any { "BOGUS" in it }, "the row's other problems are named in the same answer: $problems")
     }
 
     @Test
@@ -918,7 +936,7 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         // An anchor names an entry; a cue id alone names no place (cue model plan D4).
         val byCue = call("mark_up_prompt_book", """{"anchors":[{"cueId":${cueIds[0]},"at":{"pdfPage":2,"y":0.4}}]}""")
         assertFalse(byCue.success)
-        assertTrue(byCue.problems().single().contains("cueId alone names no place"), byCue.result)
+        assertTrue("cueId names no place" in byCue.result, byCue.result)
         val unknown = call("mark_up_prompt_book", """{"anchors":[{"stackId":$stackId,"number":"9","at":{"pdfPage":2,"y":0.4}}]}""")
         assertTrue(unknown.problems().single().contains("no cue numbered '9'"), unknown.result)
         val twice = call(

@@ -4,15 +4,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import {
-  EMITTER_PROPERTIES,
+  EMITTER_ATTRIBUTES,
   EMITTER_TINTS,
   WHITE_POLICIES,
   WHITE_POLICY_LABELS,
-  templatePropertyFor,
-  type TemplateIntent,
+  paletteAttributeFor,
+  type PaletteIntent,
   type WhitePolicy,
-} from '@/lib/templateIntent'
-import { colourPolicyLocked, effectiveColourPolicy, type TemplateValues } from './templateRows'
+} from '@/lib/paletteIntent'
+import { colourPolicyLocked, effectiveColourPolicy, type PaletteValues } from './paletteRows'
 
 /**
  * The colour family: a hex with a white/amber policy, plus the three emitters set outright.
@@ -31,13 +31,13 @@ export function ColourControl({
   values,
   onChange,
 }: {
-  values: TemplateValues
-  onChange: (propertyName: string, intent: TemplateIntent | null) => void
+  values: PaletteValues
+  onChange: (attribute: string, intent: PaletteIntent | null) => void
 }) {
   const value = values.rgbColour
   const current = value?.kind === 'colour' ? value : null
   const hex = current?.hex ?? '#FF9D4A'
-  // Seeded from the parsed value, not from a UI default. `parseTemplateIntent` reads a stored colour
+  // Seeded from the parsed value, not from a UI default. `parsePaletteIntent` reads a stored colour
   // with no policy token as `rgbonly` — matching every other reader of that string — so defaulting
   // the buttons to `extract` here showed Extract selected for a row that was not, and wrote Extract
   // on the next edit the operator made for some other reason. `effectiveColourPolicy` then collapses
@@ -126,10 +126,10 @@ export function ColourControl({
             deliberately, rather than `ExtendedChannelSlider`'s. That component always shows a
             slider, and a slider resting at 0 is exactly the reading this control must not give:
             here "off" means the template does not mention the emitter, not that it drives it to 0. */}
-        {EMITTER_PROPERTIES.map((name) => {
+        {EMITTER_ATTRIBUTES.map((name) => {
           const intent = values[name]
           const level = intent?.kind === 'level' ? intent.value : null
-          const label = templatePropertyFor(name)?.label ?? name
+          const label = paletteAttributeFor(name)?.label ?? name
           return (
             <div key={name} className="space-y-1">
               <div className="flex items-center justify-between gap-2">

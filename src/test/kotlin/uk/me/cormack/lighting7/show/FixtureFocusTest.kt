@@ -95,10 +95,10 @@ class FixtureFocusTest {
     @Test
     fun `a focus slider with no declared range has no focus range`() {
         val head = TestFocusHead(Universe(0, 0), "head", 1)
-        val focus = assertNotNull(head.fixtureProperty("focus"))
+        val focus = assertNotNull(head.fixtureAttribute("focus"))
         assertNull(focus.focusRange(head.focus))
         val rev = Source4RevolutionFixture.BaseFrame31Ch(Universe(0, 0), "rev", "Rev", 1)
-        val range = assertNotNull(rev.fixtureProperty("focus")!!.focusRange(rev.focus as DmxSlider))
+        val range = assertNotNull(rev.fixtureAttribute("focus")!!.focusRange(rev.focus as DmxSlider))
         assertEquals(FocusRange(2.0, 40.0, false, 0, 255), range)
     }
 
@@ -130,7 +130,7 @@ class FixtureFocusTest {
     @Test
     fun `every focus type declares a mover body with its head, so the desk measures from its lens`() {
         val focusTypes = FixtureTypeRegistry.allTypes.filter { t ->
-            t.properties.any { (it as? uk.me.cormack.lighting7.routes.SliderPropertyDescriptor)?.category == "focus" }
+            t.attributes.any { (it as? uk.me.cormack.lighting7.routes.SliderAttributeDescriptor)?.category == "focus" }
         }
         assertTrue(focusTypes.size >= 5, focusTypes.map { it.typeKey }.toString())
         for (t in focusTypes) {
@@ -145,17 +145,17 @@ class FixtureFocusTest {
     @Test
     fun `Locate parks a declared range at its middle distance, solved back to DMX`() {
         val rev = Source4RevolutionFixture.BaseFrame31Ch(Universe(0, 0), "rev", "Rev", 1)
-        val focus = LocateValueResolver.resolve(rev).single { it.propertyName == "focus" }.value
+        val focus = LocateValueResolver.resolve(rev).single { it.attribute == "focus" }.value
         // 21 m, the middle of 2–40 m; mid-DMX would be 3.8 m.
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(243u), focus)
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(243u), focus)
         assertTrue(abs(FocusRange(2.0, 40.0, false, 0, 255).distanceAt(243.0) - 21.0) < 0.5)
     }
 
     @Test
     fun `Locate keeps mid-DMX for a focus with no declared range`() {
         val head = TestFocusHead(Universe(0, 0), "head", 1)
-        val focus = LocateValueResolver.resolve(head).single { it.propertyName == "focus" }.value
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(128u), focus)
+        val focus = LocateValueResolver.resolve(head).single { it.attribute == "focus" }.value
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(128u), focus)
     }
 
     // ─── depthOfField ───────────────────────────────────────────────────────

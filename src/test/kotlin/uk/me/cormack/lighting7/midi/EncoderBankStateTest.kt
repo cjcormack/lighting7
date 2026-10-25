@@ -17,45 +17,45 @@ class EncoderBankStateTest {
     private val key = "x-touch-compact-standard"
 
     @Test
-    fun `an unset device is on the default property`() {
+    fun `an unset device is on the default attribute`() {
         val state = EncoderBankState()
         assertEquals(EncoderBankState.DEFAULT, state.selectionFor(key))
-        assertEquals("dimmer", EncoderBankState.DEFAULT_PROPERTY)
+        assertEquals("dimmer", EncoderBankState.DEFAULT_ATTRIBUTE)
         assertEquals(EncoderBankSelection("dimmer"), EncoderBankState.DEFAULT)
         assertTrue(state.selections.value.isEmpty())
     }
 
     @Test
-    fun `setProperty reports whether it changed anything`() {
+    fun `setAttribute reports whether it changed anything`() {
         val state = EncoderBankState()
-        assertTrue(state.setProperty(key, "colour"))
+        assertTrue(state.setAttribute(key, "colour"))
         assertEquals(EncoderBankSelection("colour"), state.selectionFor(key))
-        assertFalse(state.setProperty(key, "colour"))
+        assertFalse(state.setAttribute(key, "colour"))
         // Setting a device back to the default drops it from the map rather than storing it.
-        assertTrue(state.setProperty(key, "dimmer"))
+        assertTrue(state.setAttribute(key, "dimmer"))
         assertTrue(state.selections.value.isEmpty())
-        assertFalse(state.setProperty(key, "dimmer"))
+        assertFalse(state.setAttribute(key, "dimmer"))
     }
 
     @Test
     fun `devices are independent`() {
         val state = EncoderBankState()
-        state.setProperty(key, "pan")
-        state.setProperty("other-device", "tilt")
-        assertEquals("pan", state.selectionFor(key).propertyName)
-        assertEquals("tilt", state.selectionFor("other-device").propertyName)
+        state.setAttribute(key, "pan")
+        state.setAttribute("other-device", "tilt")
+        assertEquals("pan", state.selectionFor(key).attribute)
+        assertEquals("tilt", state.selectionFor("other-device").attribute)
     }
 
     @Test
-    fun `a change is emitted with its previous property`() = runTest {
+    fun `a change is emitted with its previous attribute`() = runTest {
         val state = EncoderBankState()
         val collected = mutableListOf<EncoderBankState.EncoderBankChange>()
         val job = launch { state.changes.collect { collected += it } }
         yield()
 
-        state.setProperty(key, "colour")
-        state.setProperty(key, "colour")  // no-op, emits nothing
-        state.setProperty(key, "pan")
+        state.setAttribute(key, "colour")
+        state.setAttribute(key, "colour")  // no-op, emits nothing
+        state.setAttribute(key, "pan")
         yield()
         job.cancel()
 
@@ -71,8 +71,8 @@ class EncoderBankStateTest {
     @Test
     fun `clearAll wipes every device back to the default`() = runTest {
         val state = EncoderBankState()
-        state.setProperty(key, "colour")
-        state.setProperty("other-device", "tilt")
+        state.setAttribute(key, "colour")
+        state.setAttribute("other-device", "tilt")
 
         state.clearAll()
 
@@ -84,7 +84,7 @@ class EncoderBankStateTest {
     // ─── Colour axes ────────────────────────────────────────────────────
 
     @Test
-    fun `another axis of the same property is another bank`() = runTest {
+    fun `another axis of the same attribute is another bank`() = runTest {
         val state = EncoderBankState()
         val collected = mutableListOf<EncoderBankState.EncoderBankChange>()
         val job = launch { state.changes.collect { collected += it } }
@@ -111,7 +111,7 @@ class EncoderBankStateTest {
         val state = EncoderBankState()
         assertTrue(state.set(key, EncoderBankSelection("rgbColour")))
         assertFalse(state.set(key, EncoderBankSelection("rgbColour", ColourAxis.HUE)), "null and HUE are one bank")
-        assertTrue(state.setProperty(key, "rgbColour", ColourAxis.HUE_FINE))
+        assertTrue(state.setAttribute(key, "rgbColour", ColourAxis.HUE_FINE))
         assertEquals(ColourAxis.HUE_FINE, state.selectionFor(key).colourAxis)
     }
 

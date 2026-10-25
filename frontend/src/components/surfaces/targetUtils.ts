@@ -4,7 +4,7 @@ import type {
   ControlSurfaceType,
   FanAxis,
 } from "@/store/surfaces"
-import { STRIP_FADER_PROPERTY } from "@/lib/surfaceResolve"
+import { STRIP_FADER_ATTRIBUTE } from "@/lib/surfaceResolve"
 import { axisSuffix } from "@/lib/colourAxis"
 import { SUBSELECT_MODE_LABELS } from "@/lib/cellsSubSelection"
 import type { BuskFocus } from "@/lib/buskWindow"
@@ -17,8 +17,8 @@ export function effectiveTarget(target: BindingTarget): BindingTarget {
 }
 
 export type BindingTargetMatcher =
-  | { type: "fixtureProperty"; fixtureKey: string; propertyName: string }
-  | { type: "groupProperty"; groupName: string; propertyName: string }
+  | { type: "fixtureAttribute"; fixtureKey: string; attribute: string }
+  | { type: "groupAttribute"; groupName: string; attribute: string }
   | { type: "fireCue"; cueId: number }
   | { type: "cueStack"; stackId: number }
 
@@ -41,25 +41,25 @@ export function matchesBindingTarget(
 ): boolean {
   const eff = effectiveTarget(target)
   switch (match.type) {
-    case "fixtureProperty":
+    case "fixtureAttribute":
       return (
-        (eff.type === "fixtureProperty" &&
+        (eff.type === "fixtureAttribute" &&
           eff.fixtureKey === match.fixtureKey &&
-          eff.propertyName === match.propertyName) ||
+          eff.attribute === match.attribute) ||
         (eff.type === "strip" &&
           eff.target.type === "fixture" &&
           eff.target.key === match.fixtureKey &&
-          match.propertyName === STRIP_FADER_PROPERTY)
+          match.attribute === STRIP_FADER_ATTRIBUTE)
       )
-    case "groupProperty":
+    case "groupAttribute":
       return (
-        (eff.type === "groupProperty" &&
+        (eff.type === "groupAttribute" &&
           eff.groupName === match.groupName &&
-          eff.propertyName === match.propertyName) ||
+          eff.attribute === match.attribute) ||
         (eff.type === "strip" &&
           eff.target.type === "group" &&
           eff.target.key === match.groupName &&
-          match.propertyName === STRIP_FADER_PROPERTY)
+          match.attribute === STRIP_FADER_ATTRIBUTE)
       )
     case "fireCue":
       return eff.type === "fireCue" && eff.cueId === match.cueId
@@ -68,7 +68,7 @@ export function matchesBindingTarget(
         (eff.type === "cueStackGo" ||
           eff.type === "cueStackBack" ||
           eff.type === "cueStackPause" ||
-          eff.type === "stackEffectSize") &&
+          eff.type === "stackFxAmount") &&
         eff.stackId === match.stackId
       )
   }
@@ -77,10 +77,10 @@ export function matchesBindingTarget(
 export function describeTarget(target: BindingTarget): string {
   switch (target.type) {
     // A colour axis other than hue is spelled out; hue is the default and reads as it always has.
-    case "fixtureProperty":
-      return `${target.fixtureKey}.${target.propertyName}${axisSuffix(target.colourAxis)}`
-    case "groupProperty":
-      return `${target.groupName}.${target.propertyName}${axisSuffix(target.colourAxis)}`
+    case "fixtureAttribute":
+      return `${target.fixtureKey}.${target.attribute}${axisSuffix(target.colourAxis)}`
+    case "groupAttribute":
+      return `${target.groupName}.${target.attribute}${axisSuffix(target.colourAxis)}`
     case "cueStackGo":
       return `Go · stack ${target.stackId}`
     case "cueStackBack":
@@ -99,8 +99,8 @@ export function describeTarget(target: BindingTarget): string {
       return "Grand Master"
     case "grandMasterFader":
       return "Grand Master fader"
-    case "stackEffectSize":
-      return `FX size · stack ${target.stackId}`
+    case "stackFxAmount":
+      return `FX amount · stack ${target.stackId}`
     case "setBank":
       return `Bank ${target.bank} (${target.deviceTypeKey})`
     // The uuid is not resolved to a name here: this is a pure function with no access to the
@@ -115,8 +115,8 @@ export function describeTarget(target: BindingTarget): string {
     // The selection-relative arms name no target of their own, so `Sel` is doing real work: it is
     // the whole difference between "this control writes colour on the movers" and "this control
     // writes colour on whatever is selected".
-    case "selectionProperty":
-      return `Sel · ${target.propertyName}${axisSuffix(target.colourAxis)}`
+    case "selectionAttribute":
+      return `Sel · ${target.attribute}${axisSuffix(target.colourAxis)}`
     case "selectionFan":
       return `Sel · fan ${FAN_AXIS_WORDS[target.axis]}`
     case "selectTarget":
@@ -131,7 +131,7 @@ export function describeTarget(target: BindingTarget): string {
     case "strip":
       return `Strip · ${target.target.key}`
     case "encoderBankSet":
-      return `Encoder bank · ${target.propertyName}${axisSuffix(target.colourAxis)}`
+      return `Encoder bank · ${target.attribute}${axisSuffix(target.colourAxis)}`
     // The record variants name a **uuid**, and this function deliberately does not resolve it — the
     // same rule `speedMasterBpm` above follows, for the same reason: this is pure and has no
     // library to ask. A caller that wants "Apply Warm Wash" resolves it and says so itself, which
@@ -139,8 +139,8 @@ export function describeTarget(target: BindingTarget): string {
     // between two bindings of the same kind without pretending to be a name.
     case "applyLook":
       return `Apply Look ${shortUuid(target.lookUuid)}`
-    case "pressTemplate":
-      return `Press palette ${shortUuid(target.templateUuid)}`
+    case "pressPalette":
+      return `Press palette ${shortUuid(target.paletteUuid)}`
     case "pressPad":
       return `Press pad ${shortUuid(target.padUuid)}`
     // The hand's three (multi-screen plan §3.5). Same uuid rule as the record variants above.
@@ -168,7 +168,7 @@ export function describeTarget(target: BindingTarget): string {
     case "selectionPrev":
       return "Selection · prev"
     case "selectionCells":
-      return `Cells · ${SUBSELECT_MODE_LABELS[target.mode]}`
+      return `Elements · ${SUBSELECT_MODE_LABELS[target.mode]}`
     // A row this build cannot decode, kept by the tolerant decode so it can be rebound rather than
     // silently dropped. Naming the discriminator is the only useful thing to say about it.
     case "unknown":

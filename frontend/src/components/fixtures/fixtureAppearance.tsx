@@ -1,20 +1,20 @@
 import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import {
   findColourSource,
-  findDimmerProperty,
+  findDimmerAttribute,
   findGroupColourSource,
-  findStrobeProperties,
+  findStrobeAttributes,
   resolveFixtureKind,
-  type ColourPropertyDescriptor,
+  type ColourAttributeDescriptor,
   type Fixture,
   type FixtureTypeInfo,
-  type SettingPropertyDescriptor,
-  type SliderPropertyDescriptor,
+  type SettingAttributeDescriptor,
+  type SliderAttributeDescriptor,
 } from '../../store/fixtures'
-import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
+import type { GroupColourAttributeDescriptor } from '../../api/groupsApi'
 import type { FixturePatch } from '../../api/patchApi'
 import { findGel } from '../../lib/gels'
-import { colourFilters, filterColour, fittedProperties } from '../../lib/fittedMedia'
+import { colourFilters, filterColour, fittedAttributes } from '../../lib/fittedMedia'
 import { useGelIndex } from '../../hooks/useGelIndex'
 import { useLanternIndex } from '../../hooks/useLanternIndex'
 import { lampHex, unitLamp, type Lamp } from '../../lib/lamp'
@@ -23,7 +23,7 @@ import {
   subscribeToChannels,
   useColourValue,
   useSettingValue,
-} from '../../hooks/usePropertyValues'
+} from '../../hooks/useAttributeValues'
 import { useChannelSource } from '../../hooks/useChannelSource'
 import { strobeAnimates, strobeFactor } from '../../lib/strobeBands'
 import {
@@ -33,7 +33,7 @@ import {
   sourceBandLevel,
   useColourBandTime,
 } from '../../lib/colourBands'
-import { useGroupColourValues } from '../../hooks/useGroupPropertyValues'
+import { useGroupColourValues } from '../../hooks/useGroupAttributeValues'
 import { colourFactor, useNormalizedIntensity } from '../../hooks/useNormalizedIntensity'
 import { computeNormalizedHueCss } from '../../lib/colourMath'
 
@@ -81,7 +81,7 @@ interface FixtureAppearanceProps {
  * Resolve a fixture's colour source and hand the resulting [FixtureAppearance] to `children`.
  *
  * A render prop rather than a hook, and that is forced rather than chosen. Each colour source needs
- * a *different* set of value hooks — `useColourValue` wants a `ColourPropertyDescriptor`,
+ * a *different* set of value hooks — `useColourValue` wants a `ColourAttributeDescriptor`,
  * `useGroupColourValues` subscribes to a variable-length channel list, and a gel fixture needs
  * neither — so they cannot be collapsed behind one hook without breaking hook order. Splitting them
  * across leaf components gives each a fixed hook set, which is the trick the old `StageMarker` already used
@@ -97,19 +97,19 @@ export function FixtureAppearanceSource({
   // patch's fitted media (`lib/fittedMedia.ts`), so a scroller draws the unit's own string. The 3D
   // scene makes the same overlay, per placement.
   const gels = useGelIndex()
-  const properties = useMemo(
-    () => fittedProperties(fixture?.properties, patch.media, gels),
-    [fixture?.properties, patch.media, gels],
+  const attributes = useMemo(
+    () => fittedAttributes(fixture?.attributes, patch.media, gels),
+    [fixture?.attributes, patch.media, gels],
   )
   // The discriminator is pure, so it resolves here rather than through hooks.
   const colourSource = useMemo(
-    () => (properties ? findColourSource(properties) : undefined),
-    [properties],
+    () => (attributes ? findColourSource(attributes) : undefined),
+    [attributes],
   )
   const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
   const dimmerProp = useMemo(
-    () => findDimmerProperty(properties),
-    [properties],
+    () => findDimmerAttribute(attributes),
+    [attributes],
   )
   // `acceptsGel` matters: a gel code on a fixture whose type doesn't take gel is stale data, and
   // colouring by it would contradict both other surfaces.
@@ -128,13 +128,13 @@ export function FixtureAppearanceSource({
   // The unit's colour filters — a second colour wheel, a media frame's gel, a dichroic in a wheel
   // (`colourFilters`). The 3D scene's `filteredHex` is the other copy of this step.
   const filters = useMemo(
-    () => colourFilters(properties, colourSource),
-    [properties, colourSource],
+    () => colourFilters(attributes, colourSource),
+    [attributes, colourSource],
   )
   // The strobe channels (fixture-optics plan D12): a level factor on every leaf's answer — a closed
   // band dark, a strobe flashing under the three-flash rule (`lib/strobeBands.ts`). The 3D scene's
   // `liveStrobeFactor` is the other copy.
-  const strobes = useMemo(() => findStrobeProperties(properties), [properties])
+  const strobes = useMemo(() => findStrobeAttributes(attributes), [attributes])
 
   if (!fixture) return <PlaceholderAppearance>{children}</PlaceholderAppearance>
   const emit =
@@ -156,7 +156,7 @@ export function FixtureAppearanceSource({
 
   if (colourSource?.type === 'colour') {
     return (
-      <ColourAppearance colourProp={colourSource.property} dimmerProp={dimmerProp} filters={filters}>
+      <ColourAppearance colourProp={colourSource.attribute} dimmerProp={dimmerProp} filters={filters}>
         {emit}
       </ColourAppearance>
     )
@@ -164,7 +164,7 @@ export function FixtureAppearanceSource({
 
   if (colourSource?.type === 'setting') {
     return (
-      <SettingColourAppearance settingProp={colourSource.property} dimmerProp={dimmerProp} filters={filters}>
+      <SettingColourAppearance settingProp={colourSource.attribute} dimmerProp={dimmerProp} filters={filters}>
         {emit}
       </SettingColourAppearance>
     )
@@ -195,7 +195,7 @@ export function FixtureAppearanceSource({
 
 type LeafProps = { children: (appearance: FixtureAppearance) => ReactNode }
 
-type StrobeProperty = SliderPropertyDescriptor | SettingPropertyDescriptor
+type StrobeAttribute = SliderAttributeDescriptor | SettingAttributeDescriptor
 
 /**
  * [appearance] with its level — and every pixel's — multiplied by the strobe channels' factor at the
@@ -207,12 +207,12 @@ function StrobeGate({
   appearance,
   children,
 }: {
-  strobes: readonly StrobeProperty[]
+  strobes: readonly StrobeAttribute[]
   appearance: FixtureAppearance
   children: (appearance: FixtureAppearance) => ReactNode
 }) {
   const levels = useStrobeLevels(strobes)
-  const read = useCallback((p: StrobeProperty) => levels[strobes.indexOf(p)] ?? 0, [levels, strobes])
+  const read = useCallback((p: StrobeAttribute) => levels[strobes.indexOf(p)] ?? 0, [levels, strobes])
   const timeS = useColourBandTime(strobeAnimates(strobes, read))
   const factor = strobeFactor(strobes, read, timeS)
   if (factor === 1) return <>{children(appearance)}</>
@@ -232,7 +232,7 @@ function StrobeGate({
  * into a string, which compares by value, so an unchanged batch is the same snapshot and renders
  * nothing.
  */
-function useStrobeLevels(strobes: readonly StrobeProperty[]): number[] {
+function useStrobeLevels(strobes: readonly StrobeAttribute[]): number[] {
   const source = useChannelSource()
   const channels = useMemo(() => strobes.map((p) => p.channel), [strobes])
   const subscribe = useCallback(
@@ -257,7 +257,7 @@ function Filtered({
   children,
 }: {
   hex: string
-  filters: readonly SettingPropertyDescriptor[]
+  filters: readonly SettingAttributeDescriptor[]
   children: (hex: string) => ReactNode
 }) {
   if (filters.length === 0) return <>{children(hex)}</>
@@ -275,8 +275,8 @@ function FilterStep({
   children,
 }: {
   hex: string
-  filter: SettingPropertyDescriptor
-  rest: readonly SettingPropertyDescriptor[]
+  filter: SettingAttributeDescriptor
+  rest: readonly SettingAttributeDescriptor[]
   children: (hex: string) => ReactNode
 }) {
   // The filter's slot colour, or — on a band with no single colour (the Robe's second wheel
@@ -294,13 +294,13 @@ function FilterStep({
  * its preview, its wheel's palette at the time for a scroll or random band, or undefined where the
  * band says nothing. The 3D dispatch reads `settingColourAt` at the scene clock's time instead.
  */
-function useSettingBandColour(setting: SettingPropertyDescriptor): string | undefined {
+function useSettingBandColour(setting: SettingAttributeDescriptor): string | undefined {
   const { level, option } = useSettingValue(setting)
   const timeS = useColourBandTime(isAnimatedBand(option))
   return settingColourAt(setting.options, level, timeS)
 }
 
-const NO_FILTERS: readonly SettingPropertyDescriptor[] = []
+const NO_FILTERS: readonly SettingAttributeDescriptor[] = []
 
 function ColourAppearance({
   colourProp,
@@ -308,9 +308,9 @@ function ColourAppearance({
   filters = NO_FILTERS,
   children,
 }: LeafProps & {
-  colourProp: ColourPropertyDescriptor
-  dimmerProp?: SliderPropertyDescriptor
-  filters?: readonly SettingPropertyDescriptor[]
+  colourProp: ColourAttributeDescriptor
+  dimmerProp?: SliderAttributeDescriptor
+  filters?: readonly SettingAttributeDescriptor[]
 }) {
   const colour = useColourValue(colourProp)
   // Effective intensity = dimmer × colour, so a colour-only fixture at RGB 0 reads as dark
@@ -336,9 +336,9 @@ function SettingColourAppearance({
   filters = NO_FILTERS,
   children,
 }: LeafProps & {
-  settingProp: SettingPropertyDescriptor
-  dimmerProp?: SliderPropertyDescriptor
-  filters?: readonly SettingPropertyDescriptor[]
+  settingProp: SettingAttributeDescriptor
+  dimmerProp?: SliderAttributeDescriptor
+  filters?: readonly SettingAttributeDescriptor[]
 }) {
   // The band's colour — a preview, or a scroll or random band's wheel colours in turn — else open
   // white, never black for want of data; a blackout band is dark (`lib/colourBands.ts`). A dimmer at
@@ -357,7 +357,7 @@ function FixedColourAppearance({
   dimmerProp,
   filters = NO_FILTERS,
   children,
-}: LeafProps & { hex: string; dimmerProp?: SliderPropertyDescriptor; filters?: readonly SettingPropertyDescriptor[] }) {
+}: LeafProps & { hex: string; dimmerProp?: SliderAttributeDescriptor; filters?: readonly SettingAttributeDescriptor[] }) {
   // No colour channels (gel or dimmer-only), so the colour magnitude is implicitly 1 and the
   // dimmer alone is the level. A gel fixture with no dimmer reads full on by design — there is
   // no brightness signal to gate it on.
@@ -375,8 +375,8 @@ function LampAppearance({
 }: LeafProps & {
   lamp: Lamp
   gelHex: string | null
-  dimmerProp?: SliderPropertyDescriptor
-  filters?: readonly SettingPropertyDescriptor[]
+  dimmerProp?: SliderAttributeDescriptor
+  filters?: readonly SettingAttributeDescriptor[]
 }) {
   const intensity = useNormalizedIntensity(dimmerProp)
   const hex = lampHex(lamp, intensity, gelHex)
@@ -400,8 +400,8 @@ function MultiPixelAppearance({
   dimmerProp,
   children,
 }: LeafProps & {
-  groupColourProp: GroupColourPropertyDescriptor
-  dimmerProp?: SliderPropertyDescriptor
+  groupColourProp: GroupColourAttributeDescriptor
+  dimmerProp?: SliderAttributeDescriptor
 }) {
   const group = useGroupColourValues(groupColourProp)
   const dimmerFactor = useNormalizedIntensity(dimmerProp)

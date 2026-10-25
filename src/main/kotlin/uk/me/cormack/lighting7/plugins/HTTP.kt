@@ -11,7 +11,7 @@ fun Application.configureHTTP() {
         info {
             title = "Lighting7 API"
             version = "0.0.1"
-            description = "REST API for controlling DMX fixtures, Philips Hue, scenes, effects, and show management"
+            description = "REST API for controlling DMX fixtures, Philips Hue, scenes, FX, and show management"
         }
     }
 

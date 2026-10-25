@@ -53,9 +53,14 @@ export interface SheetCellProps<V> {
 
 const NO_ROWS: readonly SheetRow[] = []
 
-/** *4 cues*, *1 fixture*: the count in the sheet's noun, pluralised by an `s`. */
+/** A sheet's noun in the plural: an `s`, except *FX*, which is its own plural. */
+export function nounPlural(noun: string): string {
+  return noun === 'FX' ? noun : `${noun}s`
+}
+
+/** *4 cues*, *1 fixture*, *3 FX*: the count in the sheet's noun. */
 export function batchLabelOf(count: number, noun: string): string {
-  return `${count} ${count === 1 ? noun : `${noun}s`}`
+  return `${count} ${count === 1 ? noun : nounPlural(noun)}`
 }
 const noop = () => {}
 
@@ -247,7 +252,7 @@ export function splitBatch<Row extends SheetRow, C extends string>(
  * count (`6 masters`), since a popover's read-out is one line. [noun] is the count's word.
  */
 export function listNames(names: readonly string[], noun = 'row'): string {
-  if (names.length > 4) return `${names.length} ${noun}s`
+  if (names.length > 4) return `${names.length} ${nounPlural(noun)}`
   if (names.length <= 1) return names[0] ?? ''
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }

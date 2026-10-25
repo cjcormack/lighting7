@@ -19,7 +19,7 @@ import { worldEndpointsFor } from "./stageGeometry"
 import { STAGE_PROJECTIONS, project, unproject } from "./stageProjection"
 import type { FixturePatch } from "../api/patchApi"
 import type { RiggingDto } from "../api/riggingApi"
-import type { SliderPropertyDescriptor } from "../store/fixtures"
+import type { SliderAttributeDescriptor } from "../store/fixtures"
 
 const APPROX = 1e-9
 
@@ -71,7 +71,7 @@ function baseRig(overrides: Partial<RiggingDto> = {}): RiggingDto {
   }
 }
 
-function baseSlider(overrides: Partial<SliderPropertyDescriptor> = {}): SliderPropertyDescriptor {
+function baseSlider(overrides: Partial<SliderAttributeDescriptor> = {}): SliderAttributeDescriptor {
   return {
     type: "slider",
     name: "pan",

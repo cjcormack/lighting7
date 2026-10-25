@@ -3,8 +3,8 @@ import { resolveCell } from '@/components/fixtures-list/columns'
 import type { PickWrite } from '@/components/fixtureSheet/sheetPick'
 import type { PositionResolution } from '@/components/fixtureSheet/sheetRows'
 import { serializeLevel } from '@/lib/programmerValue'
-import { templatePropertiesForFamily } from '@/lib/templateIntent'
-import type { Fixture, PropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
+import { paletteAttributesForFamily } from '@/lib/paletteIntent'
+import type { Fixture, AttributeDescriptor, SliderAttributeDescriptor } from '@/store/fixtures'
 import type { BuskingTarget } from './buskingTypes'
 
 /**
@@ -30,15 +30,15 @@ export interface FamilyUnit<R> {
 export function familyUnits<R>(
   selected: readonly BuskingTarget[],
   fixtures: readonly Fixture[],
-  resolve: (properties: PropertyDescriptor[]) => R | null,
+  resolve: (attributes: AttributeDescriptor[]) => R | null,
 ): FamilyUnit<R>[] {
   const own = (fixture: Fixture) => {
-    const resolution = resolve(fixture.properties)
+    const resolution = resolve(fixture.attributes)
     return resolution == null ? null : { key: fixture.key, resolution }
   }
   const cells = (fixture: Fixture) =>
     (fixture.elements ?? []).flatMap((element) => {
-      const resolution = resolve(element.properties)
+      const resolution = resolve(element.attributes)
       return resolution == null ? [] : [{ key: element.key, resolution }]
     })
   const headsOf = (fixture: Fixture) => {
@@ -72,7 +72,7 @@ export function familyUnits<R>(
     const heads =
       target.element != null
         ? (() => {
-            const resolution = resolve(target.element.properties)
+            const resolution = resolve(target.element.attributes)
             return resolution == null ? [] : [{ key: target.element.key, resolution }]
           })()
         : headsOf(target.fixture)
@@ -88,16 +88,16 @@ export function familyUnits<R>(
 export function headsWithout(
   selected: readonly BuskingTarget[],
   fixtures: readonly Fixture[],
-  resolve: (properties: PropertyDescriptor[]) => unknown,
+  resolve: (attributes: AttributeDescriptor[]) => unknown,
 ): number {
   const has = (fixture: Fixture) =>
-    resolve(fixture.properties) != null || (fixture.elements ?? []).some((e) => resolve(e.properties) != null)
+    resolve(fixture.attributes) != null || (fixture.elements ?? []).some((e) => resolve(e.attributes) != null)
   const without = new Set<string>()
   for (const target of selected) {
     if (target.type === 'group') {
       for (const fixture of fixtures) if (fixture.groups.includes(target.name) && !has(fixture)) without.add(fixture.key)
     } else if (target.element != null) {
-      if (resolve(target.element.properties) == null) without.add(target.element.key)
+      if (resolve(target.element.attributes) == null) without.add(target.element.key)
     } else if (!has(target.fixture)) {
       without.add(target.fixture.key)
     }
@@ -106,16 +106,16 @@ export function headsWithout(
 }
 
 /** A level slider of [category] — `dimmer`, `zoom`, `iris` — the property a Level or Beam tab drives. */
-export function sliderOf(category: string): (properties: PropertyDescriptor[]) => SliderPropertyDescriptor | null {
-  return (properties) =>
+export function sliderOf(category: string): (attributes: AttributeDescriptor[]) => SliderAttributeDescriptor | null {
+  return (attributes) =>
     // A fine channel shares its coarse slider's category, and is never the level.
-    (properties.find((p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === category && p.fineOf == null) ??
+    (attributes.find((p): p is SliderAttributeDescriptor => p.type === 'slider' && p.category === category && p.fineOf == null) ??
       null)
 }
 
 /** Pan and tilt as the grid's position cell resolves them. */
-export function positionOf(properties: PropertyDescriptor[]): PositionResolution | null {
-  return resolveCell(properties, 'position') as PositionResolution | null
+export function positionOf(attributes: AttributeDescriptor[]): PositionResolution | null {
+  return resolveCell(attributes, 'position') as PositionResolution | null
 }
 
 /**
@@ -123,10 +123,10 @@ export function positionOf(properties: PropertyDescriptor[]): PositionResolution
  * carry (zoom, focus, iris, frost), in the palette vocabulary's order, where some selected head has
  * one. A Beam setting (gobo, prism) is a setting cell's, not a level's.
  */
-export function beamPropertiesOf(selected: readonly BuskingTarget[], fixtures: readonly Fixture[]): string[] {
-  return templatePropertiesForFamily('BEAM')
+export function beamAttributesOf(selected: readonly BuskingTarget[], fixtures: readonly Fixture[]): string[] {
+  return paletteAttributesForFamily('BEAM')
     .filter((p) => p.intent === 'percent')
-    .map((p) => p.propertyName)
+    .map((p) => p.attribute)
     .filter((name) => familyUnits(selected, fixtures, sliderOf(name)).length > 0)
 }
 
@@ -135,7 +135,7 @@ export function beamPropertiesOf(selected: readonly BuskingTarget[], fixtures: r
  * entry under its own property's name (a cell's may differ from its fixture's), a group member's
  * carrying the group.
  */
-export function writeUnitLevels(units: readonly FamilyUnit<SliderPropertyDescriptor>[], level: number, fadeMs?: number): void {
+export function writeUnitLevels(units: readonly FamilyUnit<SliderAttributeDescriptor>[], level: number, fadeMs?: number): void {
   for (const { write, heads } of units) {
     if (write.kind === 'group') {
       const head = heads[0]

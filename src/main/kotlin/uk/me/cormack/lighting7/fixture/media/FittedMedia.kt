@@ -14,7 +14,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.GoboPattern
 import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacement
-import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
+import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
 
 /**
  * What is loaded into one slot of a unit: a gel by its library code, or a gobo by its pattern
@@ -46,8 +46,8 @@ data class FittedMedia(
 ) {
     val isEmpty: Boolean get() = slots.values.all { it.isEmpty() }
 
-    /** The slot this unit has fitted for [option] of [propertyName], or null for the stock. */
-    fun slot(propertyName: String, option: String): FittedSlot? = slots[propertyName]?.get(option)
+    /** The slot this unit has fitted for [option] of [attribute], or null for the stock. */
+    fun slot(attribute: String, option: String): FittedSlot? = slots[attribute]?.get(option)
 
     /**
      * This unit's media layered over [base]'s, option by option — a placement's over its patch's:
@@ -74,17 +74,17 @@ data class FittedMedia(
         if (loadable.isEmpty()) {
             return listOf("$where: '$typeKey' has no loadable settings, so nothing can be fitted to it")
         }
-        val properties = FixtureTypeRegistry.typeInfoForKey(typeKey)?.properties.orEmpty().map { it.name }.toSet()
+        val attributes = FixtureTypeRegistry.typeInfoForKey(typeKey)?.attributes.orEmpty().map { it.name }.toSet()
         return buildList {
-            for ((propertyName, options) in slots.toSortedMap()) {
-                val at = "$where.slots.$propertyName"
-                val setting = loadable[propertyName]
+            for ((attribute, options) in slots.toSortedMap()) {
+                val at = "$where.slots.$attribute"
+                val setting = loadable[attribute]
                 if (setting == null) {
                     add(
-                        if (propertyName in properties) {
-                            "$at: $propertyName is not loadable (the type's loadable settings are ${loadable.keys.sorted().joinToString()})"
+                        if (attribute in attributes) {
+                            "$at: $attribute is not loadable (the type's loadable settings are ${loadable.keys.sorted().joinToString()})"
                         } else {
-                            "$at: '$typeKey' has no property $propertyName"
+                            "$at: '$typeKey' has no attribute $attribute"
                         },
                     )
                     continue
@@ -95,7 +95,7 @@ data class FittedMedia(
                     val atOption = "$at.$optionName"
                     val option = byName[optionName]
                     if (option == null) {
-                        add("$atOption: $propertyName has no option $optionName (its options are ${setting.options.joinToString { it.name }})")
+                        add("$atOption: $attribute has no option $optionName (its options are ${setting.options.joinToString { it.name }})")
                         continue
                     }
                     if (option.loadable != true) {
@@ -104,11 +104,11 @@ data class FittedMedia(
                     }
                     if (content.gel != null && content.gobo != null) add("$atOption: a slot holds a gel or a gobo, not both")
                     content.gel?.let { code ->
-                        if (!slot.takesGel) add("$atOption: $propertyName's slots take gobos, not gels")
+                        if (!slot.takesGel) add("$atOption: $attribute's slots take gobos, not gels")
                         else if (GelLibrary.byCode(code) == null) add("$atOption: unknown gel '$code' (see GET /gels)")
                     }
                     content.gobo?.let { pattern ->
-                        if (!slot.takesGobo) add("$atOption: $propertyName's slots take gels, not gobos")
+                        if (!slot.takesGobo) add("$atOption: $attribute's slots take gels, not gobos")
                         else if (pattern !in GOBO_NAMES) add("$atOption: unknown gobo '$pattern' (the library's are ${GOBO_NAMES.joinToString()})")
                     }
                 }
@@ -124,9 +124,9 @@ data class FittedMedia(
          * [typeKey]'s loadable settings, by property name: its fixture-level setting descriptors
          * that declare `media`. Empty for an unknown type and for every type but a loadable one.
          */
-        fun loadableSettings(typeKey: String): Map<String, SettingPropertyDescriptor> =
-            FixtureTypeRegistry.typeInfoForKey(typeKey)?.properties.orEmpty()
-                .filterIsInstance<SettingPropertyDescriptor>()
+        fun loadableSettings(typeKey: String): Map<String, SettingAttributeDescriptor> =
+            FixtureTypeRegistry.typeInfoForKey(typeKey)?.attributes.orEmpty()
+                .filterIsInstance<SettingAttributeDescriptor>()
                 .filter { it.media != null }
                 .associateBy { it.name }
 
@@ -141,17 +141,17 @@ data class FittedMedia(
             if (element == null || element is JsonNull) return Result.success(null)
             val problems = mutableListOf<String>()
             val obj = element as? JsonObject
-                ?: return failure(listOf("$where must be an object {slots: {<property>: {<option>: {gel?, gobo?}}}} or null"))
+                ?: return failure(listOf("$where must be an object {slots: {<attribute>: {<option>: {gel?, gobo?}}}} or null"))
             (obj.keys - "slots").takeIf { it.isNotEmpty() }?.let { problems += "$where has unknown field(s) ${it.sorted().joinToString()}" }
             val slotsElement = obj["slots"]
             val slots = sortedMapOf<String, Map<String, FittedSlot>>()
             if (slotsElement != null && slotsElement !is JsonNull) {
-                val byProperty = slotsElement as? JsonObject
-                if (byProperty == null) {
-                    problems += "$where.slots must be an object keyed by property name"
+                val byAttribute = slotsElement as? JsonObject
+                if (byAttribute == null) {
+                    problems += "$where.slots must be an object keyed by attribute name"
                 } else {
-                    for ((propertyName, optionsElement) in byProperty) {
-                        val at = "$where.slots.$propertyName"
+                    for ((attribute, optionsElement) in byAttribute) {
+                        val at = "$where.slots.$attribute"
                         val byOption = optionsElement as? JsonObject
                         if (byOption == null) {
                             problems += "$at must be an object keyed by option name"
@@ -179,7 +179,7 @@ data class FittedMedia(
                             }
                             options[optionName] = FittedSlot(gel = text("gel"), gobo = text("gobo")?.lowercase())
                         }
-                        if (options.isNotEmpty()) slots[propertyName] = options
+                        if (options.isNotEmpty()) slots[attribute] = options
                     }
                 }
             }
@@ -211,7 +211,7 @@ data class FittedMedia(
 }
 
 /**
- * The colour [option] of [propertyName] draws on a unit fitted with this media — the backend's half
+ * The colour [option] of [attribute] draws on a unit fitted with this media — the backend's half
  * of the per-unit resolution (the Stage view's is `lib/fittedMedia.ts`):
  *
  * - a fitted gel is its library colour (a code the library does not hold — an archive from a desk
@@ -222,20 +222,20 @@ data class FittedMedia(
  *
  * Null media is a unit with nothing fitted: every option its stock.
  */
-fun FittedMedia?.colourOf(propertyName: String, option: DmxFixtureSettingValue): String? {
+fun FittedMedia?.colourOf(attribute: String, option: DmxFixtureSettingValue): String? {
     val stock = (option as? DmxFixtureColourSettingValue)?.colourPreview
-    val fitted = this?.slot(propertyName, option.name) ?: return stock
+    val fitted = this?.slot(attribute, option.name) ?: return stock
     fitted.gel?.let { return GelLibrary.byCode(it)?.color ?: stock }
     if (fitted.gobo != null) return null
     return OPEN_WHITE
 }
 
-/** The gobo pattern [option] of [propertyName] carries on a unit fitted with this media — the
+/** The gobo pattern [option] of [attribute] carries on a unit fitted with this media — the
  *  stock `gobo` where it has fitted nothing, else the fitted pattern (null for a gel or an empty
  *  slot). Lowercase, as the wire carries it. */
-fun FittedMedia?.goboOf(propertyName: String, option: DmxFixtureSettingValue): String? {
+fun FittedMedia?.goboOf(attribute: String, option: DmxFixtureSettingValue): String? {
     val stock = (option as? DmxFixtureGoboSettingValue)?.gobo?.serialized()
-    val fitted = this?.slot(propertyName, option.name) ?: return stock
+    val fitted = this?.slot(attribute, option.name) ?: return stock
     return fitted.gobo
 }
 

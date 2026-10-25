@@ -430,7 +430,7 @@ describe('CueSheet', () => {
     // Rows 3 and 4 are cues 4 and 5 (row 2 is the marker, which a rectangle skips).
     dragFade(0, 4)
     expect(screen.getByText('4 cells')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Spread' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fan' }))
     const from = await screen.findByLabelText('From')
     fireEvent.change(from, { target: { value: '1s' } })
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '4s' } })
@@ -455,7 +455,7 @@ describe('CueSheet', () => {
     expect(screen.getByText('2 cells')).toBeInTheDocument()
     expect(screen.getByText(/Locked — cells are read-only/)).toBeInTheDocument()
     // 3. The bar's verbs, with the reason. 4. The window keyboard, refused through the permission.
-    for (const name of ['Set', 'Clear cells', 'Spread']) {
+    for (const name of ['Set', 'Clear cells', 'Fan']) {
       const button = screen.getByRole('button', { name })
       expect(button).toBeDisabled()
       expect(button).toHaveAttribute('title', expect.stringContaining('Locked'))
@@ -707,11 +707,11 @@ describe('CueSheet — the bottom pane', () => {
   })
 
   it("a row's Layers and FX read-outs select it and open the pane on that tab", () => {
-    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { layerCount: 3, adHocEffectCount: 1 }), cue(4)] } })
+    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { layerCount: 3, adHocFxCount: 1 }), cue(4)] } })
     fireEvent.click(within(row(2)).getByTitle(/Looks in the editor below/))
     expect(row(2)).toHaveAttribute('data-state', 'selected')
     expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', 'looks')
-    fireEvent.click(within(row(2)).getByTitle(/effects in the editor below/))
+    fireEvent.click(within(row(2)).getByTitle(/FX in the editor below/))
     expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', 'fx')
     // A plain click on another row is that window's own tab, not the read-out's.
     fireEvent.click(row(4).firstElementChild as HTMLElement)
@@ -719,8 +719,8 @@ describe('CueSheet — the bottom pane', () => {
   })
 
   it('a read-out’s tab is spent once the pane leaves its row', () => {
-    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { adHocEffectCount: 1 }), cue(4)] } })
-    fireEvent.click(within(row(2)).getByTitle(/effects in the editor below/))
+    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { adHocFxCount: 1 }), cue(4)] } })
+    fireEvent.click(within(row(2)).getByTitle(/FX in the editor below/))
     expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', 'fx')
     fireEvent.click(row(4).firstElementChild as HTMLElement)
     fireEvent.click(row(2).firstElementChild as HTMLElement)

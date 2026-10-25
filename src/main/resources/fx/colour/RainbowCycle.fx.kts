@@ -1,10 +1,10 @@
 /*---
 id: RainbowCycle
 name: Rainbow Cycle
-category: colour
+family: colour
 outputType: COLOUR
-effectMode: STANDARD
-compatibleProperties: [rgbColour]
+fxMode: STANDARD
+compatibleAttributes: [rgbColour]
 parameters:
   - name: saturation
     type: double

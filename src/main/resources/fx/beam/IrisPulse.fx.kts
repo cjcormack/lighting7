@@ -1,10 +1,10 @@
 /*---
 id: IrisPulse
 name: Iris Pulse
-category: beam
+family: beam
 outputType: SLIDER
-effectMode: STANDARD
-compatibleProperties: [iris]
+fxMode: STANDARD
+compatibleAttributes: [iris]
 parameters:
   - name: min
     type: ubyte

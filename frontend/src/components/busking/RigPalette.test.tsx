@@ -39,9 +39,9 @@ function draw(onRig = new Set<string>()) {
 const rowNames = () => Array.from(document.querySelectorAll('.min-h-10 .truncate:not(.text-\\[11px\\])')).map((el) => el.textContent)
 
 beforeEach(() => {
-  groups = [{ name: 'Front wash', memberCount: 6, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NONE', compatibleLookIds: [] }]
+  groups = [{ name: 'Front wash', memberCount: 6, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE' }]
   fixtures = [
-    { key: 'bar-1', name: 'Bar L', typeKey: 'bar', elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, properties: [] })), groups: [] } as unknown as Fixture,
+    { key: 'bar-1', name: 'Bar L', typeKey: 'bar', elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, attributes: [] })), groups: [] } as unknown as Fixture,
     { key: 'smoke', name: 'Smoke', typeKey: 'smoke', groups: [] } as unknown as Fixture,
   ]
   patches = [
@@ -58,7 +58,7 @@ describe('the Rig tab', () => {
     expect(screen.getByText('Groups · 1')).toBeInTheDocument()
     expect(screen.getByText('Fixtures · 2')).toBeInTheDocument()
     expect(rowNames()).toEqual(['Front wash', 'Bar L', 'Smoke'])
-    expect(screen.getByText('3 not on the rig · a cell drags out as its own tile.')).toBeInTheDocument()
+    expect(screen.getByText('3 not on the rig · an element drags out as its own tile.')).toBeInTheDocument()
   })
 
   it('says `on rig` for a record with a tile, and counts the rest', () => {
@@ -96,18 +96,18 @@ describe('the Rig tab', () => {
   it('expands a multi-head fixture’s cells under it, each a draggable row of its own', () => {
     draw(new Set(['cell:bar-1.pixel-1']))
     expect(screen.queryByText('Cell 1')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Show the cells of Bar L' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show the elements of Bar L' }))
     expect(screen.getByText('Cell 1')).toBeInTheDocument()
     expect(screen.getByText('bar-1.pixel-0')).toBeInTheDocument()
     expect(screen.getByLabelText('Place Cell 2')).toBeInTheDocument()
     // The cell on the rig says so; its parent does not.
     expect(screen.getAllByText('on rig')).toHaveLength(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Hide the cells of Bar L' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the elements of Bar L' }))
     expect(screen.queryByText('Cell 1')).not.toBeInTheDocument()
   })
 
   it('offers a group with no patched member as a row that says why and drags nowhere', () => {
-    groups = [...groups, { name: 'Empty group', memberCount: 0, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NONE', compatibleLookIds: [] }]
+    groups = [...groups, { name: 'Empty group', memberCount: 0, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE' }]
     draw()
     expect(screen.getByText('no patched member · cannot be placed until it has one')).toBeInTheDocument()
     expect(screen.getByLabelText('Place Empty group')).toBeDisabled()

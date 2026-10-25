@@ -1,0 +1,1112 @@
+<title>FX Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the desk drawings break out to the full 1240 width and scale to fit. */
+:root {
+  --bg: #f5f4f7; --card: #ffffff; --fg: #1b1a20; --muted: #5e5b68; --line: #dddae3;
+  --accent: #6a3dcb; --accent-soft: #efe8fd; --amber: #8f5500; --amber-soft: #fbefd9;
+  --go: #1f7a45; --go-soft: #dcf2e4;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 60px; }
+.read { max-width: 760px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(32px, 5vw, 52px); font-weight: 800; line-height: 1.04; }
+h2 { font-size: 25px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; color: var(--muted); max-width: 64ch; }
+.lede b, .muted b { color: var(--fg); font-weight: 600; }
+.muted { color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+code { background: color-mix(in srgb, var(--line) 60%, transparent); padding: 1px 5px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 18px; }
+.head { display: flex; flex-direction: column; gap: 8px; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--line); background: var(--card); white-space: nowrap; }
+.pill.fx { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.pill.ask { background: var(--amber-soft); color: var(--amber); border-color: transparent; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 36px; align-items: start; }
+.cols > * { min-width: 0; }
+.findings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 12px; }
+.finding { padding: 14px 16px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.finding.key { border-color: var(--accent); background: var(--accent-soft); }
+.finding.warn { border-color: var(--amber); background: var(--amber-soft); }
+.finding h3 { font-family: var(--body); font-size: 15px; font-weight: 600; letter-spacing: 0; }
+.finding p { font-size: 14px; color: var(--muted); }
+.finding p b { color: var(--fg); font-weight: 600; }
+.calls { display: grid; border-top: 1px solid var(--line); }
+.call { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 2px 16px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.call .id { font-family: var(--mono); font-weight: 500; font-size: 13px; color: var(--muted); padding-top: 2px; }
+.call h3 { font-family: var(--body); font-size: 15px; font-weight: 600; letter-spacing: 0; }
+.call p { color: var(--muted); font-size: 14.5px; }
+.call p b { color: var(--fg); font-weight: 600; }
+.call .alt { font-size: 13.5px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 640px; }
+th { text-align: left; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--fg); }
+td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+td b { color: var(--fg); font-weight: 600; }
+pre { margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; }
+button { font: inherit; font-size: 13px; font-weight: 600; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }
+
+/* The pipeline: how the attributes meet */
+.pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px; counter-reset: step; }
+.stepc { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.stepc .n { font-family: var(--mono); font-size: 11.5px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.stepc b { font-weight: 600; }
+.stepc p { font-size: 13.5px; color: var(--muted); }
+.stepc.time { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.stepc.out { border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); }
+
+/* Frames that hold the desk drawings */
+.board { border: 1px solid var(--line); border-radius: 12px; background: #0b0b0e; overflow: hidden; }
+.board.actual .stage { overflow-x: auto; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--line); }
+.bar h3 { margin-right: auto; }
+.bar span { font-size: 13px; color: var(--muted); }
+.stage { position: relative; overflow: hidden; }
+.stage > .desk { transform-origin: 0 0; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px 28px; padding: 0; margin: 0; list-style: none; }
+.notes li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; font-size: 14px; color: var(--muted); }
+.notes li b { color: var(--fg); font-weight: 600; }
+.notes .k { width: 22px; height: 22px; border-radius: 50%; background: #f59e0b; color: #1a1000; font: 700 12px/22px var(--mono); text-align: center; }
+.small-boards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 18px; align-items: start; }
+.sb { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sb .board { overflow-x: auto; }
+.sb p { font-size: 14px; color: var(--muted); }
+
+/* ===== The desk, drawn dark as it runs ===== */
+.desk {
+  --d-bg: #0b0b0e; --d-card: #16161a; --d-card2: #1d1d22; --d-bd: #2a2a31; --d-bd2: #36363e;
+  --d-fg: #f4f4f5; --d-mfg: #a1a1aa; --d-dim: #71717a; --d-pri: #4f8cf7;
+  --d-fx: #8b5cf6; --d-fx2: #b49cfb; --d-fxs: rgba(139, 92, 246, 0.16);
+  --d-amber: #f59e0b; --d-sky: #38bdf8; --d-cue: #0ea5e9;
+  --d-int: #e4e4e7; --d-col: #f472b6; --d-pos: #38bdf8; --d-beam: #fbbf24;
+  color-scheme: dark; background: var(--d-bg); color: var(--d-fg);
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  width: 1360px; position: relative; user-select: none;
+}
+.desk button { white-space: nowrap; font: inherit; font-size: 12px; font-weight: 500; color: var(--d-fg); background: transparent; border: 1px solid var(--d-bd); border-radius: 6px; padding: 0 9px; height: 26px; cursor: pointer; }
+.desk button:hover { border-color: var(--d-bd2); background: var(--d-card2); }
+.desk button:focus-visible { outline: 2px solid var(--d-pri); outline-offset: 1px; }
+.desk .lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--d-mfg); }
+.desk .ro { font-size: 10.5px; color: var(--d-dim); }
+.desk .num { font-variant-numeric: tabular-nums; }
+.desk .seg { display: inline-flex; border: 1px solid var(--d-bd); border-radius: 7px; padding: 2px; gap: 2px; background: var(--d-bg); }
+.desk .seg button { border: 0; height: 22px; padding: 0 8px; border-radius: 5px; color: var(--d-mfg); }
+.desk .seg button[aria-pressed="true"] { background: var(--d-card2); color: var(--d-fg); box-shadow: inset 0 0 0 1px var(--d-bd2); }
+.desk .seg.fx button[aria-pressed="true"] { background: var(--d-fxs); color: var(--d-fx2); box-shadow: inset 0 0 0 1px rgba(139,92,246,.45); }
+.desk .chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--d-bd); font-size: 11px; color: var(--d-mfg); white-space: nowrap; }
+.desk .chip.fx { border-color: rgba(139,92,246,.5); color: var(--d-fx2); }
+.desk .chip.link { border-color: rgba(79,140,247,.5); color: #93b8ff; }
+.dk-rowb { height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--d-bd); background: var(--d-card); }
+.dk-rowb .tabs { display: inline-flex; gap: 2px; }
+.dk-rowb .tabs span { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 6px; color: var(--d-mfg); font-size: 12.5px; }
+.dk-rowb .tabs span.on { background: var(--d-card2); color: var(--d-fg); box-shadow: inset 0 -2px 0 var(--d-pri); }
+.dk-rowb .tabs i { font-style: normal; font-size: 10.5px; color: var(--d-dim); }
+.dk-rowb .sp { flex: 1; }
+.dk-body { display: grid; grid-template-columns: 248px minmax(0, 1fr) 340px; min-height: 700px; }
+.dk-col { border-right: 1px solid var(--d-bd); display: flex; flex-direction: column; min-width: 0; }
+.dk-col:last-child { border-right: 0; }
+.dk-subhead { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--d-bd); }
+.dk-subhead b { font-weight: 600; }
+/* list */
+.lane { border-bottom: 1px solid var(--d-bd); padding: 8px 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.lane-h { display: flex; align-items: center; gap: 6px; padding: 0 4px; height: 20px; }
+.lane-h .sw { width: 8px; height: 8px; border-radius: 2px; }
+.lane-h .cnt { margin-left: auto; color: var(--d-dim); font-size: 11px; }
+.card { border: 1px solid var(--d-bd); background: var(--d-card); border-radius: 8px; padding: 6px 8px 7px 8px; display: grid; grid-template-columns: 10px minmax(0,1fr) auto; gap: 2px 6px; cursor: pointer; position: relative; }
+.card:hover { border-color: var(--d-bd2); }
+.card.picked { border-color: var(--d-fx); box-shadow: 0 0 0 1px var(--d-fx) inset; background: #1b1626; }
+.card.ro { background: transparent; border-style: dashed; }
+.card.drop-before::before { content: ""; position: absolute; left: 6px; right: 6px; top: -5px; height: 2px; background: var(--d-pri); border-radius: 2px; }
+.card .grip { grid-row: 1 / span 2; color: var(--d-dim); font-size: 10px; letter-spacing: -1px; padding-top: 2px; cursor: grab; }
+.card .nm { font-weight: 600; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .vb { display: flex; gap: 2px; align-items: center; }
+.card .vb button { height: 20px; padding: 0 5px; font-size: 10.5px; border-color: transparent; color: var(--d-mfg); }
+.card .vb button[aria-pressed="true"] { color: #fde68a; border-color: rgba(245,158,11,.5); }
+.card .dt { grid-column: 2 / span 2; display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 10.5px; color: var(--d-mfg); align-items: center; }
+.card .amt { width: 34px; height: 4px; border-radius: 2px; background: var(--d-bd); position: relative; overflow: hidden; display: inline-block; }
+.card .amt i { position: absolute; inset: 0 auto 0 0; background: var(--d-fx2); }
+.card .cov { color: var(--d-amber); }
+.under { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--d-mfg); padding: 2px 4px; border-top: 1px dashed var(--d-bd); margin-top: 2px; padding-top: 6px; }
+.under .sw2 { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--d-bd2); }
+.addfx { align-self: flex-start; height: 22px !important; font-size: 11px !important; color: var(--d-mfg) !important; border-style: dashed !important; }
+.list-foot { margin-top: auto; white-space: nowrap; padding: 10px 12px; display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--d-bd); }
+/* graph */
+.g-tools { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 36px; border-bottom: 1px solid var(--d-bd); }
+.g-tools .bpm { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.g-read { height: 24px; display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 11px; color: var(--d-mfg); border-bottom: 1px solid var(--d-bd); }
+.g-read b { color: var(--d-fg); font-weight: 600; }
+.g-lane { border-bottom: 1px solid var(--d-bd); padding: 6px 12px 8px; }
+.g-lane-h { display: flex; align-items: center; gap: 8px; height: 20px; margin-bottom: 4px; }
+.g-lane-h .key { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--d-dim); }
+.g-lane-h .key i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; }
+.g-lane-row { display: flex; gap: 12px; align-items: flex-start; }
+.g-lane canvas { display: block; }
+.g-path { border: 1px solid var(--d-bd); border-radius: 6px; background: var(--d-card); }
+/* inspector */
+.ins { padding: 0 14px 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.ins-h { display: flex; align-items: center; gap: 8px; height: 44px; border-bottom: 1px solid var(--d-bd); margin: 0 -14px; padding: 0 14px; }
+.ins-h .nm { font-weight: 600; font-size: 14px; }
+.ins-h .arr { color: var(--d-dim); font-size: 12px; }
+.ins-h .sp { flex: 1; }
+.fld { display: flex; flex-direction: column; gap: 5px; }
+.fld-row { display: flex; align-items: center; gap: 8px; }
+.fld-row .grow { flex: 1; min-width: 0; }
+.desk input[type="range"] { width: 100%; accent-color: var(--d-fx); height: 16px; margin: 0; }
+.desk select { font: inherit; font-size: 12px; color: var(--d-fg); background: var(--d-bg); border: 1px solid var(--d-bd); border-radius: 6px; height: 26px; padding: 0 6px; }
+.field { width: 54px; height: 26px; border: 1px solid var(--d-bd); border-radius: 6px; display: inline-flex; align-items: center; justify-content: flex-end; padding: 0 7px; font-size: 12px; background: var(--d-bg); }
+.step { display: inline-flex; align-items: center; border: 1px solid var(--d-bd); border-radius: 6px; height: 26px; }
+.step button { border: 0; height: 24px; width: 22px; padding: 0; color: var(--d-mfg); }
+.step span { min-width: 22px; text-align: center; font-size: 12px; }
+.disc { border-top: 1px solid var(--d-bd); padding-top: 10px; display: flex; flex-direction: column; gap: 9px; }
+.disc-h { display: flex; align-items: center; gap: 8px; }
+.disc-h .sum { color: var(--d-dim); font-size: 11px; margin-left: auto; text-align: right; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.shapes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.shapes button { height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 3px 4px; font-size: 10.5px; color: var(--d-mfg); }
+.shapes button[aria-pressed="true"] { border-color: var(--d-fx); color: var(--d-fx2); background: var(--d-fxs); }
+.shapes canvas { display: block; }
+.ladder { display: grid; grid-template-columns: 62px minmax(0,1fr) 42px; gap: 3px 8px; align-items: center; font-size: 10.5px; color: var(--d-mfg); }
+.ladder .tr { position: relative; height: 12px; border-bottom: 1px solid var(--d-bd); }
+.ladder .tr i { position: absolute; top: 2px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: var(--d-fx2); }
+.ladder .tr i.h { background: #fff; box-shadow: 0 0 0 2px var(--d-fx); }
+.ladder .c { text-align: right; color: var(--d-dim); }
+.fld.hl .lbl, .disc.hl > .disc-h .lbl { color: var(--d-fx2); }
+.picker { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
+.picker .rows { display: flex; flex-direction: column; border: 1px solid var(--d-bd); border-radius: 8px; overflow: hidden; }
+.picker .rows button { border: 0; border-bottom: 1px solid var(--d-bd); border-radius: 0; height: 32px; text-align: left; display: flex; align-items: center; gap: 8px; }
+.picker .rows button:last-child { border-bottom: 0; }
+.picker .rows button i { width: 6px; height: 6px; border-radius: 50%; background: var(--d-dim); }
+.ins-foot { margin-top: auto; border-top: 1px solid var(--d-bd); padding: 10px 14px; display: flex; gap: 8px; align-items: center; }
+.ins-foot .ro { margin-right: auto; }
+.mk { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #f59e0b; color: #1a1000; font: 700 12px/22px ui-monospace, Menlo, monospace; text-align: center; box-shadow: 0 0 0 3px rgba(11,11,14,.9); z-index: 5; pointer-events: none; }
+
+/* small static boards */
+.mini { background: #0b0b0e; color: #f4f4f5; font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; padding: 12px; color-scheme: dark; }
+.mini .row { display: flex; align-items: center; gap: 6px; }
+.mini .mlbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #a1a1aa; }
+.mini .mchip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid #2a2a31; color: #a1a1aa; font-size: 11px; white-space: nowrap; }
+.mini .mchip.on { border-color: #8b5cf6; color: #b49cfb; background: rgba(139,92,246,.16); }
+.mini .mbtn { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border: 1px solid #2a2a31; border-radius: 6px; font-size: 11.5px; }
+.mini .mcard { border: 1px solid #2a2a31; background: #16161a; border-radius: 8px; padding: 7px 9px; }
+.mini .mute { color: #71717a; font-size: 11px; }
+.mini canvas { display: block; }
+.mini table { min-width: 0; font-size: 11.5px; }
+.mini th { color: #a1a1aa; border-bottom: 1px solid #36363e; font-size: 9.5px; padding: 6px 8px 6px 0; }
+.mini td { color: #d4d4d8; border-bottom: 1px solid #2a2a31; padding: 7px 8px 7px 0; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="head read" style="gap:14px">
+  <div class="eyebrow">lighting7 · design record · 2026-10-23 · approved</div>
+  <h1>FX editor</h1>
+  <p class="lede">The FX on a selection, <b>seen together and seen over time</b>. The programmer's FX tab becomes a list of every FX on the selected heads, by family and in the order they apply; a graph of what each head and element will do; and the live editor beside them.</p>
+  <div class="stats">
+    <span class="pill fx">Gated on the terminology plan</span>
+    <span class="pill">15 decisions</span>
+    <span class="pill">9 sessions, gated</span>
+    <span class="pill ask">15 questions answered</span>
+  </div>
+  <p class="muted" style="font-size:14px">Every word on this page is the terminology plan's: <b>FX</b>, <b>Cycle</b>, <b>Amount</b>, <b>Order</b> (<i>Normal</i>, <i>Centre in</i>…), <b>Segments</b>, <b>Parts</b>, <b>element</b>, <b>attribute</b>, <b>family</b> (<i>Intensity</i> first), <b>Runs</b>, <b>Timing: Per cycle | Per head</b>. The plan is <code>docs/plans/completed/fx-editor-plan.md</code>.</p>
+</header>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">The brief</div>
+    <h2>Build stacks, and see what the attributes do</h2>
+    <p class="muted">Chris asked for an FX editor in the programmer that helps <b>build stacked FX</b> and shows <b>how an FX's attributes interact</b>, as a timeline of how colour, intensity and the rest change on each head and element. And: what else would make FX programming simpler without taking power away?</p>
+  </div>
+  <div class="findings">
+    <div class="finding"><h3>One FX at a time</h3><p>The live editor (<code>FxEditor</code>) opens one FX in a tray, a popover or a busk row. <b>Nothing shows the FX on a selection together</b>, or what they add up to.</p></div>
+    <div class="finding"><h3>No door for a second FX of a family</h3><p>The FX press takes the selected heads off every other Local FX of its family. <b>Two Intensity FX on one head</b> come only from a palette layer, a Look, a cue or a script.</p></div>
+    <div class="finding warn"><h3>Local FX sit under the layers' FX</h3><p>Local FX take the bottom of the programmer band; a layer's FX take the band plus its rank. <b>A Local Pulse loses to a pressed palette's FX</b>, though a Local value beats every layer and the Stack table draws Local on top.</p></div>
+    <div class="finding warn"><h3>Beat and wall-clock FX do not combine</h3><p>Each tick loop resets its keys and applies its own FX in its own transaction. <b>A Sine Wave with a Candle Flicker <i>Within</i> it shows one or the other</b>, whatever the blend; the engineering doc says otherwise.</p></div>
+    <div class="finding"><h3>Order is creation order</h3><p>Two Local FX on one key apply in the order they were made, and nothing can change it. A cue keeps its FX's order; <b>a Look stores none</b>.</p></div>
+    <div class="finding key"><h3>Nothing samples an FX off the stage</h3><p>FX are Kotlin scripts, user FX included, and the client never computes an output. <b>The graph has to come from the desk</b>, through the engine's own functions, which today mutate the instance as they read it.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">The editor</div>
+    <h2>List · graph · inspector, on the selection</h2>
+    <p class="muted">The FX tab gains <b>Selection · All</b>. <i>All</i> is today's table. <i>Selection</i> is drawn below at desk width, Hex 1–8 selected, three lanes stacked. <b>It works</b>: pick a card, move a control, drag a Local card, press <i>+ FX</i>, Solo. The graph here is drawn by a small copy of the desk's rules (spread offsets ported from <code>lib/spreadShape.ts</code>, waveforms from the <code>.fx.kts</code> files) so the page can run on its own; the editor will draw the desk's samples.</p>
+  </div>
+  <div class="board" id="mainBoard" data-w="1360">
+    <div class="bar"><h3>Programmer · FX · Selection</h3><span>Drawn dark, as the desk is</span><button type="button" class="fitbtn">Actual size</button></div>
+    <div class="stage">
+      <div class="desk" id="desk">
+        <div class="dk-rowb">
+          <div class="tabs"><span>▦ Values</span><span>≡ Stack <i>2</i></span><span class="on">∿ FX <i>6</i></span><span>⛰ Scenery</span></div>
+          <div class="seg" role="group" aria-label="FX view"><button type="button" aria-pressed="true">Selection</button><button type="button" aria-pressed="false">All</button></div>
+          <span class="sp"></span>
+          <span class="chip">All attributes</span>
+          <span class="chip link">⛓ Desk</span>
+        </div>
+        <div class="dk-body">
+          <div class="dk-col" id="listCol">
+            <div class="dk-subhead"><b>Hex 1–8</b><span class="ro">8 heads · Local</span></div>
+            <div id="lanes"></div>
+            <div class="list-foot"><button type="button">Record as Look…</button><span class="ro" id="fxCount"></span></div>
+          </div>
+          <div class="dk-col" id="graphCol">
+            <div class="g-tools">
+              <div class="seg" role="group" aria-label="Window" id="winSeg"></div>
+              <div class="seg fx" role="group" aria-label="Draw" id="viewSeg"></div>
+              <button type="button" id="rowSeg" aria-pressed="false">Rig order</button>
+              <button type="button" id="asSeen" aria-pressed="false">As seen</button>
+              <div class="bpm"><span class="chip num" id="bpmChip">M1 · 120</span><button type="button" id="tapBtn">Tap</button><button type="button" id="playBtn" aria-label="Pause the playhead">❚❚</button></div>
+            </div>
+            <div class="g-read" id="gRead"></div>
+            <div id="gLanes"></div>
+          </div>
+          <div class="dk-col" id="insCol"></div>
+        </div>
+        <div class="mk" data-mk="1">1</div>
+        <div class="mk" data-mk="2">2</div>
+        <div class="mk" data-mk="3">3</div>
+        <div class="mk" data-mk="4">4</div>
+        <div class="mk" data-mk="5">5</div>
+        <div class="mk" data-mk="6">6</div>
+        <div class="mk" data-mk="7">7</div>
+      </div>
+    </div>
+  </div>
+  <ol class="notes">
+    <li><span class="k">1</span><span><b>Lanes, top wins.</b> Each family's FX in apply order, top first. A card shows Cycle and master, the blend in the family's words, Amount, and Direction and Runs where they are not the default.</span></li>
+    <li><span class="k">2</span><span><b>From below.</b> A programmer layer's FX (<i>Night · pressed</i>) and a cue's (<i>on Q12</i>, read-only) sit under the Local ones; <i>covered</i> says a full Replace above hides them. Lower the Sine Wave's Amount and the cue's Ramp shows through.</span></li>
+    <li><span class="k">3</span><span><b>Underneath, and + FX.</b> Each lane ends with what it sits on now. <i>+ FX</i> on a lane holding a Local FX asks <b>Replace · Stack</b>; Stack starts on the family's stacking blend.</span></li>
+    <li><span class="k">4</span><span><b>The window, and what to draw.</b> <i>Result</i> is the lane after every FX over what is underneath; <i>This FX</i> is the picked FX alone. The violet line is always the picked FX's own output, the dashed one what is underneath.</span></li>
+    <li><span class="k">5</span><span><b>Rows are elements</b> in the picked FX's Order, so a chase reads as a diagonal. Ticks mark where each row's cycle starts; brackets show Segments; P1, P2 name Parts; hatching is an element holding under Runs. Drag the violet grip at the first cycle's end to change Cycle.</span></li>
+    <li><span class="k">6</span><span><b>Tempo where you read it.</b> The master's BPM and Tap sit on the graph's toolbar; the playhead follows the master. Pausing it pauses the drawing, not the stage.</span></li>
+    <li><span class="k">7</span><span><b>Spread, explained.</b> <i>Shapes</i> set Order, Spread, Wings, Segments and Parts in one tap. The offset ladder draws each element after each step. Hovering a control lights what it changes on the graph.</span></li>
+  </ol>
+</section>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">How the attributes meet</div>
+    <h2>From Order to the stage, in the order the desk applies them</h2>
+    <p class="muted">The graph's marks and the ladder are this pipeline drawn. Steps 1–5 decide when each element's cycle starts; 6–8 turn the clock into a phase; 9–11 turn the phase into what reaches the stage.</p>
+  </div>
+  <div class="pipe">
+    <div class="stepc"><span class="n">1 · Order</span><b>Each element gets a rank</b><p>Normal, Reverse, Centre out, Centre in, Random, Ping-pong, Position, Unified.</p></div>
+    <div class="stepc"><span class="n">2 · Segments</span><b>Neighbours share a rank</b><p>Segments 2: elements 1–2 move together, then 3–4.</p></div>
+    <div class="stepc"><span class="n">3 · Wings</span><b>The ranks mirror</b><p>Wings 2: the second half runs the first half backwards. Not under a mirrored Order.</p></div>
+    <div class="stepc"><span class="n">4 · Parts</span><b>The ranks repeat</b><p>Parts 2: the spread repeats every two elements, so odd and even alternate.</p></div>
+    <div class="stepc"><span class="n">5 · Spread</span><b>Ranks become offsets</b><p>100 % spreads the ranks over one cycle; 50 % over half; 0 % is unison.</p></div>
+    <div class="stepc time"><span class="n">6 · Cycle · Timing</span><b>The clock</b><p>Cycle is one pass, on a master or in seconds. <i>Per head</i> stretches it by the ranks.</p></div>
+    <div class="stepc time"><span class="n">7 · Phase · Runs</span><b>Each element's own clock</b><p>The clock less its offset, plus Phase. Outside Runs an element holds what is underneath.</p></div>
+    <div class="stepc time"><span class="n">8 · Direction</span><b>Forward, back, bounce</b><p>Read on the element's own cycles.</p></div>
+    <div class="stepc out"><span class="n">9 · Shape</span><b>The waveform</b><p>The FX's parameters: levels, colours, sizes, ratios.</p></div>
+    <div class="stepc out"><span class="n">10 · Blend</span><b>Over what is underneath</b><p>Replace, Within, Add, Max, Min; Around for movement. Folded in apply order.</p></div>
+    <div class="stepc out"><span class="n">11 · Amount</span><b>How much reaches the stage</b><p><code>before + (blended − before) × Amount × FX amount</code></p></div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">Building a stack</div>
+    <h2>Two FX on one attribute is a choice, not an accident</h2>
+    <p class="muted">Today a second FX of a family always replaces the first on those heads. The editor keeps that as <b>Replace</b> and adds <b>Stack</b>: the new FX goes on top and nothing comes off. The list makes the order visible and changeable, and Record keeps it.</p>
+  </div>
+  <div class="cols">
+    <div class="calls">
+      <div class="call"><span class="id">Int</span><div><h3>Intensity stacks <i>Within</i></h3><p>A Dimmer Strobe stacked on a Sine Wave runs <b>inside</b> it: <code>b × e / 255</code>. The chase still reads; the strobe rides it.</p></div></div>
+      <div class="call"><span class="id">Pos</span><div><h3>Position stacks <i>Around</i></h3><p>A Circle stacked on a Pan Sweep orbits the sweep: <code>b + e − 128</code>.</p></div></div>
+      <div class="call"><span class="id">Col</span><div><h3>Colour and Beam stack <i>Replace</i> at 50 %</h3><p>Half of the new FX over the old one. Raise Amount to take over, lower it to tint.</p></div></div>
+      <div class="call"><span class="id">Ord</span><div><h3>Drag to reorder; Record keeps it</h3><p>A cue's FX already store an order; a Look's gain one. Local FX move above every layer's FX, as Local values sit above layers.</p></div></div>
+    </div>
+    <div class="board"><div class="mini" id="stackMini"></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">Simpler, same power</div>
+    <h2>What else the editor can do for the operator</h2>
+    <p class="muted">Each is a faster way to set fields that already exist. None stores anything new, and every field stays reachable.</p>
+  </div>
+  <div class="calls" style="max-width:900px">
+    <div class="call"><span class="id">D11</span><div><h3>Shapes</h3><p>Nine named spreads, each with its drawing: <b>Unison, Chase, Back, Centre out, Centre in, Pairs, Odd/even, Mirror, Random</b>. One tap sets Order, Spread, Wings, Segments and Parts; the lit chip is the one the fields match, else <i>Custom</i>.</p></div></div>
+    <div class="call"><span class="id">D9</span><div><h3>The offset ladder and hover lights</h3><p>Five dot rows, one per spread step, so Segments, Wings and Parts can be read before they are run. Hover a control and the graph lights what it changes.</p></div></div>
+    <div class="call"><span class="id">D12</span><div><h3>Handles on the graph</h3><p>Drag a cycle's edge for Cycle, the chase line for Spread, a row sideways for Phase, the level lines for min and max. Each writes the field the inspector writes, through the same 50 ms floor.</p></div></div>
+    <div class="call"><span class="id">D13</span><div><h3>Match</h3><p><i>Same cycle as…</i> and <i>Same spread as…</i> another FX in the list, copied once, so a colour chase and an intensity chase can be lined up in one move.</p></div></div>
+    <div class="call"><span class="id">D14</span><div><h3>Solo in the graph</h3><p>See one FX alone over what is underneath without touching the stage.</p></div></div>
+    <div class="call"><span class="id">D6</span><div><h3>Replace · Stack</h3><p>The family rule stays the default; stacking is one segment away and starts on a blend that makes sense for the family.</p></div></div>
+    <div class="call"><span class="id">4.4</span><div><h3>Tempo on the toolbar</h3><p>The master's BPM and Tap where the cycle is being read.</p></div></div>
+    <div class="call"><span class="id">—</span><div><h3>Left out, on purpose</h3><p class="alt">A waveform drawn by hand, per-element overrides inside one FX, Amount over 100 % and live links between FX were declined in earlier plans or are follow-ups (<code>FU-FX-AMPLITUDE</code>, <code>FU-FX-LINKED-TIMING</code>). Drawing the graph's moment on the Stage view is <code>FU-FX-STAGE-SCRUB</code>.</p></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">Other places</div>
+    <h2>The same graph wherever an FX is edited</h2>
+  </div>
+  <div class="small-boards">
+    <div class="sb"><div class="board"><div class="mini" id="phoneMini" style="max-width:360px"></div></div><p><b>Phone, or a narrow window.</b> The list folds to lane chips, the graph to a strip of the picked FX's lane, the inspector below. No handles under a finger.</p></div>
+    <div class="sb"><div class="board"><div class="mini" id="palMini"></div></div><p><b>The FX palette editor.</b> The strip under its fields, on eight notional heads or the selection, replaces today's striped preview.</p></div>
+    <div class="sb"><div class="board"><div class="mini" id="allMini" style="width:560px"></div></div><p><b>All.</b> Today's table, every running FX. A row's press selects that FX's heads and opens it in <i>Selection</i>.</p></div>
+    <div class="sb"><div class="board"><div class="mini" id="trayMini"></div></div><p><b>The fixture sheet's tray</b> keeps its rows and gains ⤢, which opens the programmer's FX editor on that fixture. The cue editor's FX tab and the busk Effects tab draw the strip under the open row.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">On the desk</div>
+    <h2>Three changes behind the views</h2>
+  </div>
+  <div class="cols">
+    <div class="finding"><h3>A preview route, sampled by the engine</h3><p><code>POST /fx/preview</code> takes the selection, running FX by id or drafts, and a window; it answers each element's samples per attribute, <i>Result</i>, each FX's own output, the start offsets, holding spans, the ladder, and the clock for the playhead. <b>It calls the engine's own phase, spread, waveform, blend and weight functions</b>, split out of the instance so reading them changes nothing, and a parity test holds it to the tick. Stateful FX are sampled from a fresh, seeded copy and marked <i>representative</i>.</p></div>
+    <div class="finding"><h3>One compose pass</h3><p>Either clock wakes one pass that resets each covered key once and folds every FX, beat and wall-clock, in apply order, in one transaction. Mixed stacks then mean what the graph shows. Closes <code>FU-PERF-FRAME-TXN-UNIFY</code>.</p></div>
+    <div class="finding"><h3>Apply order and Stack</h3><p>Local FX move above layers' FX in the band and get a rank; <code>programmer.moveFx</code> changes it. The press takes <code>stack: true</code>. A Look's FX gain <code>sort_order</code>, synced at <code>formatVersion</code> 39.</p></div>
+  </div>
+<pre>POST /projects/{id}/fx/preview
+{ "targets": [{"type":"group","key":"hex-all"}],
+  "fx": [{"effectId": 412}, {"effectId": 413, "draft": {"cycle": 2.0}}],
+  "include": "STACK", "window": {"beats": 8} }
+→ { "window": {"beats": 8, "samples": 384, "sampleMs": 10.4},
+    "clock": [{"speedMasterUuid": "…", "tickAtStart": 92160, "msPerBeat": 500}],
+    "rows":  [{"key": "hex-1", "label": "Hex 1"}, …],
+    "lanes": [{"family": "intensity", "attributes": [{"attribute": "dimmer", "kind": "SLIDER",
+               "underneath": 153, "result": "base64…", "fx": [{"effectId": 412, "output": "base64…"}]}]}],
+    "fx":    [{"effectId": 412, "starts": [0, 0.125, …], "holding": [], "slots": 8,
+               "ladder": {"order": […], "segments": […], "wings": […], "parts": […], "spread": […]}}] }</pre>
+</section>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">Implementation</div>
+    <h2>Nine sessions, each gated on the terminology plan</h2>
+    <p class="muted">A session starts only when the terminology sessions in its gate are done and on <code>main</code>. Work that adds nothing the terminology plan renames can start now; anything else waits until the names it would use are final.</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>#</th><th>Session</th><th>Side</th><th>Gate: terminology on main</th><th>Lands</th></tr></thead>
+    <tbody>
+      <tr><td>1a</td><td><b>The sampler</b></td><td>backend</td><td>3</td><td>Pure phase and blend functions shared with the tick, <code>FxSampler</code>, a parity test.</td></tr>
+      <tr><td>1b</td><td><b>The preview route</b></td><td>backend</td><td>5</td><td><code>POST /fx/preview</code> in the wire's final names.</td></tr>
+      <tr><td>2</td><td><b>One compose pass</b></td><td>backend</td><td>none; best before 5</td><td>Beat and wall-clock FX fold together; the doc corrected.</td></tr>
+      <tr><td>3a</td><td><b>The band and Stack</b></td><td>backend</td><td>none; best before 5</td><td>Local FX above layers, <code>localRank</code>, <code>programmer.moveFx</code>, <code>stack: true</code>.</td></tr>
+      <tr><td>3b</td><td><b>Apply order kept</b></td><td>backend</td><td>4</td><td>Look FX order, Record keeps it, v39.</td></tr>
+      <tr><td>4</td><td><b>The editor's shell</b></td><td>frontend</td><td>5, and 6 done or not started</td><td>Selection · All, the list, + FX with Replace · Stack, the inspector.</td></tr>
+      <tr><td>5</td><td><b>The graph</b></td><td>frontend</td><td>as 4</td><td>Lanes, rows, marks, playhead, path panel.</td></tr>
+      <tr><td>6</td><td><b>Shapes, ladder, handles, Match</b></td><td>frontend</td><td>as 4</td><td>The simplifiers.</td></tr>
+      <tr><td>7</td><td><b>Other hosts</b></td><td>frontend</td><td>as 4</td><td>Palette editor, cue FX tab, busk Effects tab, the tray's ⤢, the phone.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="head read">
+    <div class="eyebrow">Questions</div>
+    <h2>Fifteen calls, all answered as recommended</h2>
+    <p class="muted">Answered by Chris on 2026-10-23 in one round. Each answer is in bold; the options declined are under it.</p>
+  </div>
+  <div class="calls">
+    <div class="call"><span class="id">Q1</span><div><h3>Where does the editor live?</h3><p><b>The FX tab's <i>Selection</i> view.</b></p><p class="alt">Declined: a fourth rail tab (too narrow for a graph); a route of its own (loses row C and the selection).</p></div></div>
+    <div class="call"><span class="id">Q2</span><div><h3>Beat and wall-clock FX on one key?</h3><p><b>Fix the engine: one compose pass.</b></p><p class="alt">Declined: keep two loops, warn in the list and draw the graph as the stage behaves.</p></div></div>
+    <div class="call"><span class="id">Q3</span><div><h3>A second FX of a family on the same heads?</h3><p><b>Ask Replace · Stack, starting on Replace.</b></p><p class="alt">Declined: always stack and let × take the old one off; a modifier key on the press.</p></div></div>
+    <div class="call"><span class="id">Q4</span><div><h3>The blend a stacked FX starts on?</h3><p><b>Intensity Within, Position Around, Colour and Beam Replace at 50 %.</b></p><p class="alt">Declined: the FX's own starting blend, which puts a second Intensity FX on Replace.</p></div></div>
+    <div class="call"><span class="id">Q5</span><div><h3>Apply order editable and kept?</h3><p><b>Yes; Look FX gain an order, v39.</b></p><p class="alt">Declined: creation order, drawn but fixed.</p></div></div>
+    <div class="call"><span class="id">Q6</span><div><h3>Local FX above layers' FX?</h3><p><b>Yes, as Local values are.</b></p><p class="alt">Declined: keep today's ranks and draw them.</p></div></div>
+    <div class="call"><span class="id">Q7</span><div><h3>Where does the graph's data come from?</h3><p><b>The desk's sampler.</b></p><p class="alt">Declined: a client copy of the waveforms, which misses user FX and Steps and doubles every rule.</p></div></div>
+    <div class="call"><span class="id">Q8</span><div><h3>What is underneath in the graph?</h3><p><b>What the attribute holds now.</b></p><p class="alt">Declined: a flat zero; a level the operator picks.</p></div></div>
+    <div class="call"><span class="id">Q9</span><div><h3>Rows in which order?</h3><p><b>The picked FX's Order, with <i>Rig</i> to hold them.</b></p><p class="alt">Declined: always rig order.</p></div></div>
+    <div class="call"><span class="id">Q10</span><div><h3>Handles in the first version?</h3><p><b>Yes: Cycle, Spread, Phase, min and max.</b></p><p class="alt">Declined: the inspector only, handles later.</p></div></div>
+    <div class="call"><span class="id">Q11</span><div><h3>Shapes?</h3><p><b>Yes, the nine.</b></p><p class="alt">Declined: none; a list the operator saves.</p></div></div>
+    <div class="call"><span class="id">Q12</span><div><h3>Match?</h3><p><b>Copy once.</b></p><p class="alt">Declined: a stored link that follows later edits.</p></div></div>
+    <div class="call"><span class="id">Q13</span><div><h3>Solo?</h3><p><b>The graph's only.</b></p><p class="alt">Declined: a stage mute, which needs a flag beside Amount.</p></div></div>
+    <div class="call"><span class="id">Q14</span><div><h3>Other hosts?</h3><p><b>Palette editor, cue FX tab and busk Effects tab get the strip; the tray links in.</b></p><p class="alt">Declined: the programmer only.</p></div></div>
+    <div class="call"><span class="id">Q15</span><div><h3>Names?</h3><p><b>FX editor; list, graph, inspector; Shapes; offset ladder; Match.</b></p><p class="alt">Declined: <i>Scope</i> (taken by the programmer's scope) and <i>Phaser</i> (grandMA3's word). <i>Timeline</i> is the stack view's mode.</p></div></div>
+  </div>
+</section>
+
+<footer class="read muted" style="font-size:13.5px">The checked-in files are the authority: <code>docs/plans/completed/fx-editor-plan.md</code> and <code>docs/plans/fx-editor-design/</code>. This page is a convenience; republish it from <code>fx-editor-design/fx-editor.html</code> after a change.</footer>
+</div>
+
+<script>
+(() => {
+'use strict';
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- The desk's spread, ported from lib/spreadShape.ts (new Order names) ---------- */
+function javaRandom(seed) {
+  const MASK = (1n << 48n) - 1n;
+  let s = (BigInt(seed) ^ 0x5DEECE66Dn) & MASK;
+  const next = (bits) => { s = (s * 0x5DEECE66Dn + 0xBn) & MASK; return Number(s >> BigInt(48 - bits)); };
+  return { nextInt(bound) {
+    if ((bound & -bound) === bound) return Number((BigInt(bound) * BigInt(next(31))) >> 31n);
+    let bits, val;
+    do { bits = next(31); val = bits % bound; } while (bits - val + (bound - 1) >= 2 ** 31);
+    return val;
+  } };
+}
+const MIRRORED = new Set(['CENTRE_OUT', 'CENTRE_IN']);
+function orderRanks(order, n) {
+  const lin = () => Array.from({ length: n }, (_, i) => i);
+  switch (order) {
+    case 'REVERSE': return { ranks: Array.from({ length: n }, (_, i) => n - 1 - i), count: n };
+    case 'UNIFIED': return { ranks: Array(n).fill(0), count: 1 };
+    case 'CENTRE_OUT': case 'CENTRE_IN': {
+      const slots = Math.floor((n + 1) / 2);
+      if (n <= 1) return { ranks: Array(n).fill(0), count: slots };
+      const c = (n - 1) / 2;
+      const co = (i) => { const d = Math.abs(i - c); return n % 2 === 0 ? Math.trunc(d - 0.5) : Math.trunc(d); };
+      return { ranks: Array.from({ length: n }, (_, i) => order === 'CENTRE_OUT' ? co(i) : slots - 1 - co(i)), count: slots };
+    }
+    case 'RANDOM': {
+      if (n <= 1) return { ranks: Array(n).fill(0), count: n };
+      const r = javaRandom(n); const d = lin();
+      for (let i = n - 1; i >= 1; i--) { const j = r.nextInt(i + 1); [d[i], d[j]] = [d[j], d[i]]; }
+      return { ranks: d, count: n };
+    }
+    case 'POSITIONAL': return { ranks: Array.from({ length: n }, (_, i) => (n > 1 ? i / (n - 1) : 0.5) * n), count: n };
+    default: return { ranks: lin(), count: n };
+  }
+}
+/* spreadOffsets, with each step kept for the ladder */
+function spreadSteps(order, n, sh) {
+  const { ranks, count: oc } = orderRanks(order, n);
+  const steps = [{ name: 'Order', ranks: ranks.slice(), count: oc }];
+  const def = sh.spread === 1 && sh.wings === 1 && sh.segments === 1 && sh.parts === 0;
+  if (def) {
+    const offsets = order === 'POSITIONAL' ? ranks.map((r) => r / n) : ranks.map((r) => r / oc);
+    for (const nm of ['Segments', 'Wings', 'Parts']) steps.push({ name: nm, ranks: ranks.slice(), count: oc });
+    steps.push({ name: 'Spread', ranks: offsets.map((o) => o * oc), count: oc, offsets });
+    return { offsets, slots: order === 'POSITIONAL' ? n : oc, steps, orderSlots: oc };
+  }
+  let count = Math.max(oc, 1);
+  const wingsApply = !MIRRORED.has(order);
+  const countsRanks = sh.segments > 1 || (wingsApply && sh.wings > 1) || (sh.parts >= 1 && sh.parts < count);
+  let r = order === 'POSITIONAL' && countsRanks
+    ? Array.from({ length: n }, (_, i) => Math.round((n > 1 ? i / (n - 1) : 0.5) * Math.max(n - 1, 0)))
+    : ranks.slice();
+  if (sh.segments > 1) { const b = sh.segments; count = Math.ceil(count / b); r = r.map((x) => Math.min(Math.floor(x / b), count - 1)); }
+  steps.push({ name: 'Segments', ranks: r.slice(), count });
+  if (sh.wings > 1 && wingsApply) {
+    const w = sh.wings; const m = Math.ceil(count / w);
+    r = r.map((x) => {
+      const run = Math.max(0, Math.min(w - 1, Math.floor(x / m))); const local = x - run * m;
+      if (run % 2 === 1) { const len = Math.max(1, Math.min(m, count - run * m)); return Math.max(0, len - 1 - local); }
+      return local;
+    });
+    count = m;
+  }
+  steps.push({ name: 'Wings', ranks: r.slice(), count });
+  if (sh.parts >= 1 && sh.parts < count) { const g = sh.parts; r = r.map((x) => x - g * Math.floor(x / g)); count = g; }
+  steps.push({ name: 'Parts', ranks: r.slice(), count });
+  const offsets = r.map((x) => (sh.spread * x) / count);
+  steps.push({ name: 'Spread', ranks: offsets.map((o) => o * count), count, offsets });
+  return { offsets, slots: count, steps, orderSlots: oc };
+}
+
+/* ---------- Waveforms, from src/main/resources/fx ---------- */
+const quadOut = (t) => 1 - (1 - t) * (1 - t);
+const lerp = (a, b, t) => a + (b - a) * t;
+function hexRgb(h) { const v = parseInt(h.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+function hsv(h, s, v) { const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][((i % 6) + 6) % 6]; return [r * 255, g * 255, b * 255]; }
+const LIB = {
+  intensity: {
+    SineWave:     { name: 'Sine Wave',     params: { min: ['level', 0], max: ['level', 255] }, f: (p, a) => a.min + (a.max - a.min) * (Math.sin(p * 2 * Math.PI) + 1) / 2 },
+    Pulse:        { name: 'Pulse',         params: { min: ['level', 0], max: ['level', 255], attack: ['ratio', 0.1], hold: ['ratio', 0.3] },
+                    f: (p, a) => { const rel = Math.max(1e-6, 1 - a.attack - a.hold);
+                      if (p < a.attack) return lerp(a.min, a.max, quadOut(p / Math.max(a.attack, 1e-6)));
+                      if (p < a.attack + a.hold) return a.max; return lerp(a.max, a.min, quadOut((p - a.attack - a.hold) / rel)); } },
+    Ramp:         { name: 'Ramp',          params: { min: ['level', 0], max: ['level', 255] }, f: (p, a) => a.min + (a.max - a.min) * (p < 0.5 ? p * 2 : 2 * (1 - p)) },
+    RampUp:       { name: 'Ramp Up',       params: { min: ['level', 0], max: ['level', 255] }, f: (p, a) => a.min + (a.max - a.min) * p },
+    SquareWave:   { name: 'Square Wave',   params: { min: ['level', 0], max: ['level', 255], duty: ['ratio', 0.5] }, f: (p, a) => (p < a.duty ? a.max : a.min) },
+    DimmerStrobe: { name: 'Dimmer Strobe', params: { off: ['level', 0], on: ['level', 255], onRatio: ['ratio', 0.1] }, f: (p, a) => (p < a.onRatio ? a.on : a.off) },
+  },
+  colour: {
+    ColourCycle:  { name: 'Colour Cycle',  params: { colours: ['colours', ['#ff2d6f', '#ffae00', '#2f6bff']], fade: ['ratio', 0.5] },
+                    f: (p, a) => { const c = a.colours, n = c.length, seg = 1 / n, i = Math.min(n - 1, Math.floor(p / seg)), sp = (p - i * seg) / seg, hold = 1 - a.fade;
+                      const A = hexRgb(c[i]), B = hexRgb(c[(i + 1) % n]); if (sp < hold) return A; const t = (sp - hold) / Math.max(a.fade, 1e-6); return [lerp(A[0], B[0], t), lerp(A[1], B[1], t), lerp(A[2], B[2], t)]; } },
+    RainbowCycle: { name: 'Rainbow Cycle', params: { saturation: ['ratio', 1] }, f: (p, a) => hsv(p, a.saturation, 1) },
+  },
+  position: {
+    Circle:  { name: 'Circle',   params: { panSize: ['steps', 48], tiltSize: ['steps', 36] }, f: (p, a) => [128 + a.panSize * Math.cos(p * 2 * Math.PI), 128 + a.tiltSize * Math.sin(p * 2 * Math.PI)] },
+    Figure8: { name: 'Figure 8', params: { panSize: ['steps', 48], tiltSize: ['steps', 24] }, f: (p, a) => [128 + a.panSize * Math.sin(p * 2 * Math.PI), 128 + a.tiltSize * Math.sin(4 * Math.PI * p)] },
+  },
+};
+const PARAM_LABEL = { min: 'Min', max: 'Max', attack: 'Attack', hold: 'Hold', duty: 'Duty', off: 'Off', on: 'On', onRatio: 'On for', colours: 'Colours', fade: 'Fade', saturation: 'Saturation', panSize: 'Pan size', tiltSize: 'Tilt size' };
+const FAMILY = { intensity: { word: 'Intensity', sw: '#e4e4e7' }, colour: { word: 'Colour', sw: '#f472b6' }, position: { word: 'Position', sw: '#38bdf8' } };
+const CYCLES = [[0.125, '⅛ beat'], [0.25, '¼ beat'], [0.5, '½ beat'], [1, '1 beat'], [2, '2 beats'], [4, '1 bar'], [8, '2 bars'], [16, '4 bars']];
+const cycleLabel = (b) => (CYCLES.find((c) => c[0] === b) || [0, b + ' beats'])[1];
+const ORDERS = [['NORMAL', 'Normal'], ['REVERSE', 'Reverse'], ['CENTRE_OUT', 'Centre out'], ['CENTRE_IN', 'Centre in'], ['RANDOM', 'Random'], ['PING_PONG', 'Ping-pong'], ['POSITIONAL', 'Position'], ['UNIFIED', 'Unified']];
+const BLENDS = { intensity: [['REPLACE', 'Replace'], ['WITHIN', 'Within'], ['ADD', 'Add'], ['MAX', 'Max'], ['MIN', 'Min']],
+                 colour: [['REPLACE', 'Replace'], ['WITHIN', 'Within'], ['ADD', 'Add'], ['MAX', 'Max'], ['MIN', 'Min']],
+                 position: [['AROUND', 'Around'], ['ABSOLUTE', 'Absolute']] };
+const blendWord = (b) => ({ REPLACE: 'Replace', WITHIN: 'Within', ADD: 'Add', MAX: 'Max', MIN: 'Min', AROUND: 'Around', ABSOLUTE: 'Absolute' })[b];
+const SHAPES = [
+  ['Unison', { order: 'UNIFIED', spread: 1, wings: 1, segments: 1, parts: 0 }],
+  ['Chase', { order: 'NORMAL', spread: 1, wings: 1, segments: 1, parts: 0 }],
+  ['Back', { order: 'REVERSE', spread: 1, wings: 1, segments: 1, parts: 0 }],
+  ['Centre out', { order: 'CENTRE_OUT', spread: 1, wings: 1, segments: 1, parts: 0 }],
+  ['Centre in', { order: 'CENTRE_IN', spread: 1, wings: 1, segments: 1, parts: 0 }],
+  ['Pairs', { order: 'NORMAL', spread: 1, wings: 1, segments: 2, parts: 0 }],
+  ['Odd/even', { order: 'NORMAL', spread: 1, wings: 1, segments: 1, parts: 2 }],
+  ['Mirror', { order: 'NORMAL', spread: 1, wings: 2, segments: 1, parts: 0 }],
+  ['Random', { order: 'RANDOM', spread: 1, wings: 1, segments: 1, parts: 0 }],
+];
+const N = 8;
+const HEADS = Array.from({ length: N }, (_, i) => 'Hex ' + (i + 1));
+
+/* ---------- State ---------- */
+let seq = 0;
+function mk(family, type, over) {
+  const def = LIB[family][type]; const params = {};
+  for (const [k, [, v]] of Object.entries(def.params)) params[k] = Array.isArray(v) ? v.slice() : v;
+  return Object.assign({ id: 'fx' + (++seq), family, type, cycle: 4, amount: 1, direction: 'F', order: 'NORMAL', spread: 1, wings: 1, segments: 1, parts: 0,
+    blend: family === 'position' ? 'AROUND' : 'REPLACE', phase: 0, timing: 'CYCLE', runs: null, home: 'local', params }, over || {});
+}
+const S = {
+  bpm: 120, playing: !reduceMotion, beat: 0, last: null, win: '2b', view: 'result', rows: 'order', asSeen: false, solo: null, hl: null, adding: null, addMode: 'replace', hoverX: null, hoverRow: null,
+  lanes: {
+    intensity: { under: 153, underLabel: 'Q12 Warm · 60 %', fx: [] },
+    colour: { under: [255, 206, 160], underLabel: 'Q12 Warm', fx: [] },
+    position: { under: [128, 140], underLabel: 'Q12 · 0, +12', fx: [] },
+  },
+  fx: {},
+  picked: null,
+};
+function add(lane, f, top) { S.fx[f.id] = f; if (top) S.lanes[lane].fx.unshift(f.id); else S.lanes[lane].fx.push(f.id); return f; }
+const sine = add('intensity', mk('intensity', 'SineWave', { cycle: 4, order: 'NORMAL' }));
+add('intensity', mk('intensity', 'DimmerStrobe', { cycle: 0.5, order: 'UNIFIED', blend: 'WITHIN', amount: 0.5, params: { off: 0, on: 255, onRatio: 0.35 } }), true);
+add('intensity', mk('intensity', 'Ramp', { cycle: 16, order: 'UNIFIED', home: 'cue', homeLabel: 'on Q12' }));
+add('colour', mk('colour', 'ColourCycle', { cycle: 8, order: 'CENTRE_OUT' }));
+add('colour', mk('colour', 'RainbowCycle', { cycle: 16, home: 'layer', homeLabel: 'Night · pressed' }));
+add('position', mk('position', 'Circle', { cycle: 8, spread: 0.5, wings: 2 }));
+S.picked = sine.id;
+
+/* ---------- Sampling (the page's stand-in for POST /fx/preview) ---------- */
+function plan(f) { return spreadSteps(f.order, N, f); }
+function effCycle(f, pl) { return f.cycle * (f.timing === 'HEAD' ? Math.max(1, pl.slots) : 1); }
+/* member phase at beat t, or NaN while holding — FxInstance.shapeMemberPhase's order */
+function phaseOf(f, pl, i, t) {
+  const cyc = effCycle(f, pl); let base = t / cyc; const off = pl.offsets[i];
+  const whole = Math.floor(base); let frac = base - whole;
+  if (f.order === 'PING_PONG') { const s = Math.max(1, pl.orderSlots); const tri = frac < 0.5 ? frac * 2 : 2 * (1 - frac); frac = tri * (s - 1) / s; }
+  const own = whole + frac - off;
+  if (f.runs != null && (own < 0 || own >= f.runs)) return NaN;
+  let p = ((frac + f.phase - off) % 1 + 1) % 1;
+  if (f.direction === 'B') p = p === 0 ? 0 : 1 - p;
+  else if (f.direction === 'X') { const c = Math.floor(own + f.phase); if (((c % 2) + 2) % 2 === 1) p = p === 0 ? 0 : 1 - p; }
+  return p;
+}
+function rawOut(f, pl, i, t) { const p = phaseOf(f, pl, i, t); if (Number.isNaN(p)) return null; return LIB[f.family][f.type].f(p, f.params); }
+const clamp = (v) => Math.max(0, Math.min(255, v));
+function blend1(b, e, mode) { switch (mode) { case 'WITHIN': return b * e / 255; case 'ADD': return clamp(b + e); case 'MAX': return Math.max(b, e); case 'MIN': return Math.min(b, e); default: return e; } }
+function compose(lane, i, t, plans, only) {
+  const L = S.lanes[lane];
+  let v = Array.isArray(L.under) ? L.under.slice() : L.under;
+  const order = L.fx.slice().reverse(); // bottom first
+  for (const id of order) {
+    const f = S.fx[id]; if (only && id !== only) continue; if (!only && S.solo && S.solo !== id) continue;
+    const o = rawOut(f, plans[id], i, t); if (o == null) continue;
+    const w = f.amount;
+    if (lane === 'intensity') { const bl = blend1(v, o, f.blend); v = v + (bl - v) * w; }
+    else if (lane === 'colour') { v = v.map((b, k) => { const bl = blend1(b, o[k], f.blend); return b + (bl - b) * w; }); }
+    else { const bl = f.blend === 'AROUND' ? [clamp(v[0] + o[0] - 128), clamp(v[1] + o[1] - 128)] : o; v = [v[0] + (bl[0] - v[0]) * w, v[1] + (bl[1] - v[1]) * w]; }
+  }
+  return v;
+}
+/* Is an FX fully covered by a full-weight Replace above it on every head? */
+function coveredBy(lane, id) {
+  const L = S.lanes[lane]; const idx = L.fx.indexOf(id);
+  for (let k = 0; k < idx; k++) { const g = S.fx[L.fx[k]]; if (g.amount >= 1 && (g.blend === 'REPLACE' || g.blend === 'ABSOLUTE') && g.runs == null) return g; }
+  return null;
+}
+function windowBeats() { const f = S.fx[S.picked]; if (!f) return 8; const pl = plan(f); const c = effCycle(f, pl);
+  return { '1c': c, '2c': 2 * c, '2b': 8, '8b': 32 }[S.win]; }
+
+/* ---------- DOM helpers ---------- */
+const $ = (id) => document.getElementById(id);
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v; else if (k === 'style') el.style.cssText = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()) { if (c == null || c === false) continue; el.append(c.nodeType ? c : document.createTextNode(String(c))); }
+  return el;
+}
+function seg(opts, value, onPick, cls) {
+  return h('div', { class: 'seg' + (cls ? ' ' + cls : ''), role: 'group' }, opts.map(([v, label]) =>
+    h('button', { type: 'button', 'aria-pressed': String(v === value), onclick: () => onPick(v) }, label)));
+}
+const pct = (v) => Math.round(v * 100) + ' %';
+
+/* ---------- The list ---------- */
+let dragId = null;
+function renderList() {
+  const root = $('lanes'); root.textContent = '';
+  let total = 0;
+  for (const lane of Object.keys(S.lanes)) {
+    const L = S.lanes[lane]; total += L.fx.length;
+    const box = h('div', { class: 'lane' },
+      h('div', { class: 'lane-h' }, h('span', { class: 'sw', style: 'background:' + FAMILY[lane].sw }), h('span', { class: 'lbl' }, FAMILY[lane].word), h('span', { class: 'cnt' }, L.fx.length + ' FX')));
+    for (const id of L.fx) {
+      const f = S.fx[id]; const ro = f.home !== 'local'; const cov = coveredBy(lane, id);
+      const dt = [h('span', { class: 'num' }, cycleLabel(f.cycle) + ' · M1'), h('span', null, blendWord(f.blend)),
+        h('span', { title: 'Amount ' + pct(f.amount) }, h('span', { class: 'amt' }, h('i', { style: 'width:' + f.amount * 100 + '%' })), ' ', pct(f.amount))];
+      if (f.direction !== 'F') dt.push(h('span', null, f.direction === 'B' ? '←' : '↔'));
+      if (f.runs != null) dt.push(h('span', null, f.runs + ' runs'));
+      if (f.order !== 'NORMAL') dt.push(h('span', null, ORDERS.find((o) => o[0] === f.order)[1]));
+      if (ro) dt.push(h('span', { style: 'color:' + (f.home === 'cue' ? '#7dd3fc' : '#93b8ff') }, f.homeLabel));
+      if (cov) dt.push(h('span', { class: 'cov' }, 'covered'));
+      const card = h('div', { class: 'card' + (id === S.picked ? ' picked' : '') + (ro ? ' ro' : ''), draggable: ro ? null : 'true', 'data-id': id, tabindex: '0',
+        onclick: (e) => { if (e.target.closest('.vb')) return; S.picked = id; S.adding = null; renderAll(); },
+        onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); S.picked = id; S.adding = null; renderAll(); } },
+        ondragstart: (e) => { dragId = id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', id); } catch (_) { /* some browsers refuse */ } },
+        ondragover: (e) => { if (!dragId || ro || S.fx[dragId].family !== lane || dragId === id) return; e.preventDefault(); root.querySelectorAll('.drop-before').forEach((c) => c.classList.remove('drop-before')); card.classList.add('drop-before'); },
+        ondragleave: () => card.classList.remove('drop-before'),
+        ondrop: (e) => { e.preventDefault(); card.classList.remove('drop-before'); if (!dragId || S.fx[dragId].family !== lane) return;
+          const arr = L.fx.filter((x) => x !== dragId); arr.splice(arr.indexOf(id), 0, dragId); L.fx = arr; dragId = null; renderAll(); },
+        ondragend: () => { dragId = null; root.querySelectorAll('.drop-before').forEach((c) => c.classList.remove('drop-before')); } },
+        h('span', { class: 'grip', 'aria-hidden': 'true' }, ro ? '' : '⋮⋮'),
+        h('span', { class: 'nm' }, LIB[f.family][f.type].name),
+        h('span', { class: 'vb' },
+          h('button', { type: 'button', 'aria-pressed': String(S.solo === id), title: 'Solo in the graph', onclick: () => { S.solo = S.solo === id ? null : id; renderAll(); } }, 'S'),
+          ro ? null : h('button', { type: 'button', title: 'Stop', onclick: () => { L.fx = L.fx.filter((x) => x !== id); delete S.fx[id]; if (S.solo === id) S.solo = null; if (S.picked === id) S.picked = L.fx[0] || Object.keys(S.fx)[0]; renderAll(); } }, '×')),
+        h('div', { class: 'dt' }, dt));
+      box.append(card);
+    }
+    const sw = lane === 'intensity' ? 'background:rgb(' + [L.under, L.under, L.under] + ')' : lane === 'colour' ? 'background:rgb(' + L.under + ')' : 'background:#0b0b0e';
+    box.append(h('div', { class: 'under' }, h('span', { class: 'sw2', style: sw }), h('span', null, 'Underneath · ' + L.underLabel)));
+    box.append(h('button', { type: 'button', class: 'addfx', onclick: () => { S.adding = lane; S.addMode = L.fx.some((x) => S.fx[x].home === 'local') ? 'replace' : 'add'; renderInspector(); } }, '+ FX'));
+    root.append(box);
+  }
+  $('fxCount').textContent = total + ' FX on these heads';
+}
+
+/* ---------- The graph ---------- */
+const GW = 682, LABEL = 58;
+const laneSpec = { intensity: { rowH: 30 }, colour: { rowH: 16 }, position: { rowH: 22 } };
+const canv = {};
+function setupGraph() {
+  const root = $('gLanes'); root.textContent = '';
+  for (const lane of Object.keys(S.lanes)) {
+    const rh = laneSpec[lane].rowH; const H = rh * N + 4;
+    const c = h('canvas', { width: GW + LABEL, height: H, style: `width:${GW + LABEL}px;height:${H}px`, 'aria-label': FAMILY[lane].word + ' graph' });
+    const keys = lane === 'colour'
+      ? [h('span', { class: 'key' }, 'strip = Result')]
+      : [h('span', { class: 'key' }, h('i', { style: 'border-color:#d4d4d8' }), 'Result'), h('span', { class: 'key' }, h('i', { style: 'border-color:#a78bfa' }), 'picked FX'), h('span', { class: 'key' }, h('i', { style: 'border-color:#71717a;border-top-style:dashed' }), 'Underneath')];
+    if (lane === 'position') keys.splice(0, 3, h('span', { class: 'key' }, h('i', { style: 'border-color:#38bdf8' }), 'Pan'), h('span', { class: 'key' }, h('i', { style: 'border-color:#fbbf24' }), 'Tilt'), h('span', { class: 'key' }, 'rows ±64 steps about the centre'));
+    const row = h('div', { class: 'g-lane-row' }, c);
+    let path = null;
+    const laneEl = h('div', { class: 'g-lane' }, h('div', { class: 'g-lane-h' }, h('span', { class: 'lbl' }, FAMILY[lane].word), keys), row);
+    if (lane === 'position') { path = h('canvas', { class: 'g-path', width: 132, height: 132, style: 'width:132px;height:132px', 'aria-label': 'Position paths' });
+      laneEl.append(h('div', { class: 'g-lane-row', style: 'margin-top:8px;margin-left:' + LABEL + 'px;align-items:flex-start' }, path,
+        h('div', { style: 'display:flex;flex-direction:column;gap:4px;max-width:300px' }, h('span', { class: 'lbl' }, 'Path'), h('span', { class: 'ro' }, 'Each element\u2019s pan and tilt over the window, a dot where the playhead is. Pan across, tilt up.')))); }
+    root.append(laneEl);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    for (const cv of [c, path]) { if (!cv) continue; const w = cv.width, hh = cv.height; cv.width = w * dpr; cv.height = hh * dpr; cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0); cv._w = w; cv._h = hh; }
+    canv[lane] = { c, path };
+    c.addEventListener('pointermove', (e) => { const r = c.getBoundingClientRect(); const sx = c._w / r.width; S.hoverX = (e.clientX - r.left) * sx - LABEL; S.hoverRow = Math.floor((e.clientY - r.top) * sx / rh); S.hoverLane = lane; if (drag) { onDrag(S.hoverX); } c.style.cursor = drag || nearGrip(lane, S.hoverX, (e.clientY - r.top) * sx) ? 'ew-resize' : 'crosshair'; });
+    c.addEventListener('pointerleave', () => { S.hoverX = null; });
+    c.addEventListener('pointerdown', (e) => { const r = c.getBoundingClientRect(); const sx = c._w / r.width; const x = (e.clientX - r.left) * sx - LABEL; if (nearGrip(lane, x, (e.clientY - r.top) * sx)) { drag = { lane }; c.setPointerCapture(e.pointerId); e.preventDefault(); } });
+    c.addEventListener('pointerup', (e) => { if (drag) { drag = null; c.releasePointerCapture(e.pointerId); renderList(); renderInspector(); } });
+  }
+}
+let drag = null;
+function gripX(lane) { const f = S.fx[S.picked]; if (!f || f.family !== lane) return null; return effCycle(f, plan(f)) / windowBeats() * GW; }
+function nearGrip(lane, x, y) { const gx = gripX(lane); return gx != null && Math.abs(x - gx) < 7 && y < laneSpec[lane].rowH * N; }
+function onDrag(x) {
+  const f = S.fx[S.picked]; const pl = plan(f); const per = f.timing === 'HEAD' ? Math.max(1, pl.slots) : 1;
+  const beats = Math.max(0.01, x / GW * windowBeats()) / per;
+  let best = CYCLES[0][0]; for (const [b] of CYCLES) if (Math.abs(Math.log(b / beats)) < Math.abs(Math.log(best / beats))) best = b;
+  if (best !== f.cycle) { f.cycle = best; updateInspectorCycle(); }
+}
+function rowOrder(f, pl) {
+  const idx = Array.from({ length: N }, (_, i) => i);
+  if (S.rows === 'rig' || !f) return idx;
+  return idx.sort((a, b) => pl.offsets[a] - pl.offsets[b] || a - b);
+}
+function draw() {
+  const wb = windowBeats(); const picked = S.fx[S.picked]; const plans = {};
+  for (const id of Object.keys(S.fx)) plans[id] = plan(S.fx[id]);
+  const ppl = plans[S.picked]; const rows = rowOrder(picked, ppl);
+  const play = ((S.beat % wb) + wb) % wb / wb * GW;
+  const samples = 280; const dx = GW / samples;
+  const intensityAt = {};
+  // Intensity first, so Colour can be drawn as seen.
+  for (const lane of ['intensity', 'colour', 'position']) {
+    const { c } = canv[lane]; const ctx = c.getContext('2d'); const rh = laneSpec[lane].rowH; const W = c._w;
+    ctx.clearRect(0, 0, W, c._h);
+    const only = S.view === 'this' && picked && picked.family === lane ? S.picked : null;
+    const showPicked = picked && picked.family === lane;
+    // beat grid
+    for (let b = 0; b <= wb; b += wb > 16 ? 4 : 1) { const x = LABEL + b / wb * GW; ctx.fillStyle = b % 4 === 0 ? '#2a2a31' : '#1d1d22'; ctx.fillRect(Math.round(x), 0, 1, rh * N); }
+    // first cycle shade when Cycle is hovered
+    if (showPicked && S.hl === 'cycle') { ctx.fillStyle = 'rgba(139,92,246,.10)'; ctx.fillRect(LABEL, 0, gripX(lane), rh * N); }
+    rows.forEach((i, r) => {
+      const y0 = r * rh;
+      if (r % 2 === 1) { ctx.fillStyle = 'rgba(255,255,255,0.018)'; ctx.fillRect(LABEL, y0, GW, rh); }
+      // label
+      ctx.fillStyle = S.hoverX != null && S.hoverLane === lane && S.hoverRow === r ? '#f4f4f5' : '#a1a1aa';
+      ctx.font = '11px ui-sans-serif, system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.fillText(HEADS[i], 6, y0 + rh / 2);
+      if (lane === 'intensity') {
+        const pts = []; const praw = [];
+        for (let s = 0; s <= samples; s++) {
+          const t = s / samples * wb; const v = compose('intensity', i, t, plans, only); pts.push(v);
+          praw.push(showPicked ? rawOut(picked, ppl, i, t) : null);
+        }
+        intensityAt[i] = pts;
+        ctx.beginPath(); ctx.moveTo(LABEL, y0 + rh - 1);
+        pts.forEach((v, s) => ctx.lineTo(LABEL + s * dx, y0 + rh - 1 - v / 255 * (rh - 3)));
+        ctx.lineTo(LABEL + GW, y0 + rh - 1); ctx.closePath();
+        ctx.fillStyle = only ? 'rgba(167,139,250,.30)' : 'rgba(228,228,231,.30)'; ctx.fill();
+        ctx.beginPath(); pts.forEach((v, s) => { const x = LABEL + s * dx, y = y0 + rh - 1 - v / 255 * (rh - 3); s ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+        ctx.strokeStyle = only ? '#a78bfa' : '#d4d4d8'; ctx.lineWidth = 1; ctx.stroke();
+        // underneath
+        const uy = y0 + rh - 1 - S.lanes.intensity.under / 255 * (rh - 3);
+        ctx.setLineDash([3, 3]); ctx.strokeStyle = '#71717a'; ctx.beginPath(); ctx.moveTo(LABEL, uy); ctx.lineTo(LABEL + GW, uy); ctx.stroke(); ctx.setLineDash([]);
+        if (showPicked) {
+          ctx.beginPath(); let pen = false;
+          praw.forEach((v, s) => { if (v == null) { pen = false; return; } const x = LABEL + s * dx, y = y0 + rh - 1 - v / 255 * (rh - 3); pen ? ctx.lineTo(x, y) : ctx.moveTo(x, y); pen = true; });
+          ctx.strokeStyle = S.hl === 'amount' ? '#c4b5fd' : '#8b5cf6'; ctx.lineWidth = S.hl === 'amount' ? 2 : 1.2; ctx.stroke(); ctx.lineWidth = 1;
+        }
+      } else if (lane === 'colour') {
+        for (let s = 0; s < samples; s++) {
+          const t = (s + 0.5) / samples * wb; let v = compose('colour', i, t, plans, only);
+          if (S.asSeen && intensityAt[i]) { const k = intensityAt[i][s] / 255; v = v.map((x) => x * k); }
+          ctx.fillStyle = `rgb(${v.map(Math.round)})`; ctx.fillRect(LABEL + s * dx, y0 + 1, dx + 0.6, rh - 2);
+        }
+      } else {
+        for (const [k, col] of [[0, '#38bdf8'], [1, '#fbbf24']]) {
+          ctx.beginPath();
+          for (let s = 0; s <= samples; s++) { const t = s / samples * wb; const v = compose('position', i, t, plans, only)[k]; const y = y0 + rh / 2 - Math.max(-1, Math.min(1, (v - 128) / 64)) * (rh / 2 - 1); s ? ctx.lineTo(LABEL + s * dx, y) : ctx.moveTo(LABEL + s * dx, y); }
+          ctx.strokeStyle = col; ctx.globalAlpha = 0.9; ctx.stroke(); ctx.globalAlpha = 1;
+        }
+        ctx.fillStyle = '#2a2a31'; ctx.fillRect(LABEL, y0 + rh / 2, GW, 1);
+      }
+      // the picked FX's marks
+      if (showPicked) {
+        const cyc = effCycle(picked, ppl);
+        const hlStart = S.hl === 'spread' || S.hl === 'order';
+        for (let k = -1; k * cyc < wb + cyc; k++) {
+          const tb = (k + ppl.offsets[i]) * cyc; if (tb < 0 || tb > wb) continue;
+          const x = LABEL + tb / wb * GW;
+          ctx.fillStyle = hlStart ? '#c4b5fd' : '#8b5cf6';
+          ctx.beginPath(); ctx.moveTo(x - (hlStart ? 4 : 3), y0); ctx.lineTo(x + (hlStart ? 4 : 3), y0); ctx.lineTo(x, y0 + (hlStart ? 6 : 4)); ctx.closePath(); ctx.fill();
+        }
+        // holding under Runs
+        if (picked.runs != null) {
+          ctx.save(); ctx.beginPath(); ctx.rect(LABEL, y0, GW, rh); ctx.clip();
+          for (let s = 0; s < samples; s++) {
+            const t = (s + 0.5) / samples * wb; if (!Number.isNaN(phaseOf(picked, ppl, i, t))) continue;
+            ctx.strokeStyle = S.hl === 'runs' ? 'rgba(245,158,11,.75)' : 'rgba(245,158,11,.35)';
+            const x = LABEL + s * dx; ctx.beginPath(); ctx.moveTo(x, y0 + rh); ctx.lineTo(x + rh, y0); ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+    });
+    // Segments brackets and Parts tags, from the ladder
+    if (showPicked) {
+      const segRanks = ppl.steps[1].ranks; const partRanks = ppl.steps[3].ranks; const hlSeg = S.hl === 'segments'; const hlPart = S.hl === 'parts';
+      if (picked.segments > 1) {
+        let start = 0;
+        for (let r = 1; r <= N; r++) {
+          if (r === N || segRanks[rows[r]] !== segRanks[rows[start]]) {
+            if (r - start > 1) { ctx.strokeStyle = hlSeg ? '#c4b5fd' : '#6d5bb0'; ctx.lineWidth = hlSeg ? 2 : 1; ctx.beginPath(); ctx.moveTo(LABEL - 3, start * rh + 3); ctx.lineTo(LABEL - 6, start * rh + 3); ctx.lineTo(LABEL - 6, r * rh - 3); ctx.lineTo(LABEL - 3, r * rh - 3); ctx.stroke(); ctx.lineWidth = 1; }
+            start = r;
+          }
+        }
+      }
+      if (picked.parts > 1 && picked.parts < ppl.steps[2].count) {
+        rows.forEach((i, r) => { ctx.fillStyle = hlPart ? '#c4b5fd' : '#7c6bc2'; ctx.font = '9px ui-monospace, Menlo, monospace'; ctx.fillText('P' + (Math.floor((ppl.steps[2].ranks[i]) / picked.parts) + 1), LABEL - 20, r * rh + rh / 2); });
+      }
+      if (picked.wings > 1 && !MIRRORED.has(picked.order)) {
+        // mirror mark between wings, in rig order
+        ctx.strokeStyle = S.hl === 'wings' ? '#c4b5fd' : '#6d5bb0'; ctx.setLineDash([2, 3]);
+        const m = Math.ceil(ppl.steps[1].count / picked.wings);
+        for (let w = 1; w < picked.wings; w++) { const firstOfWing = rows.findIndex((i) => Math.floor(ppl.steps[1].ranks[i] / m) === w); if (firstOfWing > 0 && S.rows === 'rig') { ctx.beginPath(); ctx.moveTo(LABEL, firstOfWing * rh); ctx.lineTo(LABEL + GW, firstOfWing * rh); ctx.stroke(); } }
+        ctx.setLineDash([]);
+      }
+      // cycle grip
+      const gx = LABEL + gripX(lane);
+      if (gx <= LABEL + GW) { ctx.fillStyle = '#8b5cf6'; ctx.fillRect(gx - 1, 0, 2, rh * N); ctx.fillStyle = '#c4b5fd'; ctx.fillRect(gx - 3, rh * N / 2 - 9, 6, 18); }
+    }
+    // playhead and hover line
+    ctx.fillStyle = 'rgba(79,140,247,.9)'; ctx.fillRect(LABEL + play, 0, 1.5, rh * N);
+    if (S.hoverX != null && S.hoverX >= 0 && S.hoverX <= GW) { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(LABEL + S.hoverX, 0, 1, rh * N); }
+    // path panel
+    if (lane === 'position') {
+      const p = canv.position.path; const pc = p.getContext('2d'); const PW = p._w;
+      pc.clearRect(0, 0, PW, PW); pc.fillStyle = '#1d1d22'; pc.fillRect(PW / 2, 6, 1, PW - 12); pc.fillRect(6, PW / 2, PW - 12, 1);
+      const tNow = ((S.beat % wb) + wb) % wb;
+      rows.forEach((i, r) => {
+        const hue = 260 - r * 22; pc.beginPath();
+        for (let s = 0; s <= 160; s++) { const t = s / 160 * wb; const [pn, tl] = compose('position', i, t, plans, only); const x = 6 + pn / 255 * (PW - 12), y = PW - 6 - tl / 255 * (PW - 12); s ? pc.lineTo(x, y) : pc.moveTo(x, y); }
+        pc.strokeStyle = `hsla(${hue},70%,70%,.35)`; pc.stroke();
+        const [pn, tl] = compose('position', i, tNow, plans, only);
+        pc.fillStyle = `hsl(${hue},80%,72%)`; pc.beginPath(); pc.arc(6 + pn / 255 * (PW - 12), PW - 6 - tl / 255 * (PW - 12), 3, 0, Math.PI * 2); pc.fill();
+      });
+    }
+  }
+  // readout
+  const rd = $('gRead');
+  if (S.hoverX != null && S.hoverX >= 0 && S.hoverX <= GW && S.hoverRow != null && S.hoverRow < N) {
+    const t = S.hoverX / GW * wb; const i = rows[S.hoverRow];
+    const iv = compose('intensity', i, t, plans, null), cv = compose('colour', i, t, plans, null), pv = compose('position', i, t, plans, null);
+    const ph = picked ? phaseOf(picked, ppl, i, t) : NaN;
+    rd.innerHTML = `<span>Beat <b class="num">${(t + 1).toFixed(2)}</b></span><span><b>${HEADS[i]}</b></span><span>Intensity <b class="num">${Math.round(iv / 2.55)} %</b></span><span>Colour <b class="num">#${cv.map((x) => Math.round(x).toString(16).padStart(2, '0')).join('')}</b></span><span>Pan, tilt <b class="num">${Math.round(pv[0] - 128)}, ${Math.round(pv[1] - 128)}</b></span><span>Phase <b class="num">${Number.isNaN(ph) ? 'holding' : Math.round(ph * 360) + '°'}</b></span>`;
+  } else {
+    rd.innerHTML = `<span>Window <b>${({ '1c': '1 cycle', '2c': '2 cycles', '2b': '2 bars', '8b': '8 bars' })[S.win]}</b> · ${+wb.toFixed(3)} beats</span><span>${S.solo ? 'Solo: <b>' + LIB[S.fx[S.solo].family][S.fx[S.solo].type].name + '</b>' : 'Hover a row to read it'}</span>`;
+  }
+}
+
+/* ---------- The graph's toolbar ---------- */
+function renderTools() {
+  const w = $('winSeg'); w.replaceWith(Object.assign(seg([['1c', '1 cycle'], ['2c', '2 cycles'], ['2b', '2 bars'], ['8b', '8 bars']], S.win, (v) => { S.win = v; renderTools(); }), { id: 'winSeg' }));
+  const v = $('viewSeg'); v.replaceWith(Object.assign(seg([['result', 'Result'], ['this', 'This FX']], S.view, (x) => { S.view = x; renderTools(); }, 'fx'), { id: 'viewSeg' }));
+  $('rowSeg').setAttribute('aria-pressed', String(S.rows === 'rig'));
+  $('asSeen').setAttribute('aria-pressed', String(S.asSeen));
+  $('bpmChip').textContent = 'M1 · ' + Math.round(S.bpm);
+  $('playBtn').textContent = S.playing ? '❚❚' : '▶'; $('playBtn').setAttribute('aria-label', S.playing ? 'Pause the playhead' : 'Run the playhead');
+}
+$('rowSeg').addEventListener('click', () => { S.rows = S.rows === 'rig' ? 'order' : 'rig'; renderTools(); });
+$('asSeen').addEventListener('click', () => { S.asSeen = !S.asSeen; renderTools(); });
+$('playBtn').addEventListener('click', () => { S.playing = !S.playing; S.last = null; renderTools(); });
+let taps = [];
+$('tapBtn').addEventListener('click', () => { const now = performance.now(); taps = taps.filter((t) => now - t < 2500); taps.push(now);
+  if (taps.length >= 2) { const iv = (taps[taps.length - 1] - taps[0]) / (taps.length - 1); S.bpm = Math.max(20, Math.min(300, 60000 / iv)); renderTools(); } });
+
+/* ---------- The inspector ---------- */
+function field(label, key, control, extra) { return h('div', { class: 'fld', 'data-hl': key, onmouseenter: () => { S.hl = key; }, onmouseleave: () => { S.hl = null; } }, h('div', { class: 'fld-row' }, h('span', { class: 'lbl' }, label), extra || null), control); }
+function slider(min, max, step, value, onInput, fmt, id) {
+  const out = h('span', { class: 'field num', id: id || null }, fmt(value));
+  const inp = h('input', { type: 'range', min, max, step, value, 'aria-label': id || 'value', oninput: (e) => { const v = parseFloat(e.target.value); onInput(v); out.textContent = fmt(v); renderList(); } });
+  return h('div', { class: 'fld-row' }, h('div', { class: 'grow' }, inp), out);
+}
+function stepper(value, min, max, onSet, label) {
+  return h('div', { class: 'step' }, h('button', { type: 'button', 'aria-label': 'Fewer ' + label, onclick: () => onSet(Math.max(min, value - 1)) }, '−'), h('span', { class: 'num' }, value === 0 ? 'Off' : value), h('button', { type: 'button', 'aria-label': 'More ' + label, onclick: () => onSet(Math.min(max, value + 1)) }, '+'));
+}
+function shapeIcon(shape) {
+  const c = h('canvas', { width: 44, height: 14, style: 'width:44px;height:14px' }); const ctx = c.getContext('2d');
+  const pl = spreadSteps(shape.order, N, shape);
+  pl.offsets.forEach((o, i) => { const x = 3 + i * 5.3; const y = 12 - (o % 1) * 10; ctx.fillStyle = '#a78bfa'; ctx.fillRect(x, y - 1, 3, 3); });
+  return c;
+}
+function matchesShape(f, sh) { return f.order === sh.order && f.spread === sh.spread && f.wings === sh.wings && f.segments === sh.segments && f.parts === sh.parts; }
+function updateInspectorCycle() { renderInspector(); renderList(); }
+function renderInspector() {
+  const col = $('insCol'); col.textContent = '';
+  if (S.adding) { col.append(renderPicker()); placeMarkers(); return; }
+  const f = S.fx[S.picked]; if (!f) return;
+  const ro = f.home !== 'local'; const def = LIB[f.family][f.type]; const set = (patch) => { Object.assign(f, patch); renderAll(); };
+  const pl = plan(f);
+  const head = h('div', { class: 'ins-h' }, h('span', { class: 'nm' }, def.name), h('span', { class: 'arr' }, '→ ' + ({ intensity: 'dimmer', colour: 'colour', position: 'position' })[f.family]), h('span', { class: 'sp' }),
+    ro ? h('span', { class: 'chip', style: 'color:#7dd3fc' }, f.homeLabel) : h('span', { class: 'chip fx' }, 'Local · live'));
+  const body = h('div', { class: 'ins' }, head);
+  if (f.home === 'cue') {
+    body.append(h('p', { class: 'ro', style: 'font-size:12px' }, 'A cue\'s FX is read-only here: its home is Q12, whose next GO would put back anything changed. Open the cue to edit it.'), h('button', { type: 'button' }, 'Open Q12'));
+    col.append(body); return;
+  }
+  // Top row: Cycle · Amount · Direction · Order
+  body.append(field('Cycle', 'cycle', h('div', { class: 'seg', style: 'display:grid;grid-template-columns:repeat(4,1fr)' }, CYCLES.map(([b, l]) => h('button', { type: 'button', 'aria-pressed': String(b === f.cycle), onclick: () => set({ cycle: b }) }, l))), h('span', { class: 'chip', style: 'margin-left:auto' }, 'M1 · ' + Math.round(S.bpm))));
+  body.append(field('Amount', 'amount', slider(0, 100, 1, Math.round(f.amount * 100), (v) => { f.amount = v / 100; }, (v) => v + ' %', 'amount')));
+  body.append(h('div', { class: 'fld-row', style: 'gap:12px;align-items:flex-end' },
+    field('Direction', 'direction', seg([['F', '→'], ['B', '←'], ['X', '↔']], f.direction, (v) => set({ direction: v }))),
+    h('div', { class: 'grow' }, field('Order', 'order', h('select', { 'aria-label': 'Order', style: 'width:100%', onchange: (e) => { const o = e.target.value; set({ order: o, wings: MIRRORED.has(o) ? 1 : f.wings }); } }, ORDERS.map(([v, l]) => h('option', { value: v, selected: v === f.order }, l)))))));
+  // Shape
+  const shape = h('div', { class: 'disc' }, h('div', { class: 'disc-h' }, h('span', { class: 'lbl' }, 'Shape'), h('span', { class: 'sum' }, Object.keys(def.params).map((k) => PARAM_LABEL[k]).join(' · '))));
+  for (const [k, [kind]] of Object.entries(def.params)) {
+    if (kind === 'colours') {
+      shape.append(field(PARAM_LABEL[k], 'p', h('div', { class: 'fld-row' }, f.params.colours.map((cv, ci) => h('input', { type: 'color', value: cv, 'aria-label': 'Colour ' + (ci + 1), style: 'width:40px;height:26px;border:1px solid #2a2a31;border-radius:6px;background:#0b0b0e;padding:1px', oninput: (e) => { f.params.colours[ci] = e.target.value; } })))));
+    } else if (kind === 'level') {
+      shape.append(field(PARAM_LABEL[k], 'p', slider(0, 100, 1, Math.round(f.params[k] / 2.55), (v) => { f.params[k] = v * 2.55; }, (v) => v + ' %')));
+    } else if (kind === 'ratio') {
+      shape.append(field(PARAM_LABEL[k], 'p', slider(1, 100, 1, Math.round(f.params[k] * 100), (v) => { f.params[k] = v / 100; }, (v) => v + ' %')));
+    } else {
+      shape.append(field(PARAM_LABEL[k], 'p', slider(0, 127, 1, f.params[k], (v) => { f.params[k] = v; }, (v) => String(v))));
+    }
+  }
+  body.append(shape);
+  // Spread
+  const shapeName = (SHAPES.find(([, sh]) => matchesShape(f, sh)) || ['Custom'])[0];
+  const spread = h('div', { class: 'disc' }, h('div', { class: 'disc-h' }, h('span', { class: 'lbl' }, 'Spread'), h('span', { class: 'sum' }, shapeName + ' · ' + pct(f.spread))));
+  spread.append(h('div', { class: 'shapes', onmouseenter: () => { S.hl = 'spread'; }, onmouseleave: () => { S.hl = null; } }, SHAPES.map(([nm, sh]) => h('button', { type: 'button', 'aria-pressed': String(matchesShape(f, sh)), onclick: () => set(Object.assign({}, sh)) }, shapeIcon(sh), nm))));
+  spread.append(field('Spread', 'spread', slider(0, 200, 5, Math.round(f.spread * 100), (v) => { f.spread = v / 100; }, (v) => v + ' %', 'spread')));
+  spread.append(h('div', { class: 'grid3' },
+    field('Wings', 'wings', MIRRORED.has(f.order) ? h('span', { class: 'ro', style: 'height:26px;display:flex;align-items:center' }, 'two already') : stepper(f.wings, 1, 4, (v) => set({ wings: v }), 'wings')),
+    field('Segments', 'segments', stepper(f.segments, 1, 4, (v) => set({ segments: v }), 'segments')),
+    field('Parts', 'parts', stepper(f.parts, 0, 4, (v) => set({ parts: v }), 'parts'))));
+  // the ladder
+  const lad = h('div', { class: 'ladder' });
+  for (const st of pl.steps) {
+    const tr = h('div', { class: 'tr' }); const isSpread = st.name === 'Spread'; const scale = isSpread ? Math.max(1, f.spread) : 1;
+    st.ranks.forEach((r, i) => { const x = isSpread ? st.offsets[i] / scale : (st.count > 1 ? r / st.count : 0); tr.append(h('i', { style: `left:calc(4px + ${x} * (100% - 8px))`, title: HEADS[i] + ': ' + (isSpread ? Math.round(st.offsets[i] * 100) + ' % of a cycle' : 'rank ' + r) })); });
+    lad.append(h('span', null, st.name), tr, h('span', { class: 'c num' }, isSpread ? pct(f.spread) : st.count));
+  }
+  spread.append(h('div', { class: 'fld' }, h('div', { class: 'fld-row' }, h('span', { class: 'lbl' }, 'Offset ladder'), h('span', { class: 'ro', style: 'margin-left:auto' }, 'each element after each step')), lad));
+  body.append(spread);
+  // Over what's underneath
+  body.append(h('div', { class: 'disc' }, field(f.family === 'position' ? 'Centre' : 'Over what’s underneath', 'amount', seg(BLENDS[f.family], f.blend, (v) => set({ blend: v })))));
+  // Advanced
+  body.append(h('div', { class: 'disc' }, h('div', { class: 'disc-h' }, h('span', { class: 'lbl' }, 'Advanced')),
+    field('Phase', 'spread', slider(0, 360, 5, Math.round(f.phase * 360), (v) => { f.phase = v / 360; }, (v) => v + '°')),
+    h('div', { class: 'fld-row', style: 'gap:12px;align-items:flex-end' },
+      field('Timing', 'cycle', seg([['CYCLE', 'Per cycle'], ['HEAD', 'Per head']], f.timing, (v) => set({ timing: v }))),
+      field('Runs', 'runs', h('div', { class: 'fld-row' }, seg([['f', 'Forever'], ['c', 'Count']], f.runs == null ? 'f' : 'c', (v) => set({ runs: v === 'f' ? null : 2 })), f.runs != null ? stepper(f.runs, 1, 8, (v) => set({ runs: v }), 'runs') : null)))));
+  col.append(body);
+  col.append(h('div', { class: 'ins-foot' }, h('span', { class: 'ro' }, f.home === 'layer' ? 'This running instance only' : 'Live: each change lands as you make it'),
+    f.home === 'layer' ? h('button', { type: 'button' }, 'Update palette') : h('button', { type: 'button' }, 'Revert'), h('button', { type: 'button' }, 'Done')));
+}
+function renderPicker() {
+  const lane = S.adding; const L = S.lanes[lane]; const hasLocal = L.fx.some((x) => S.fx[x].home === 'local');
+  const body = h('div', { class: 'ins' }, h('div', { class: 'ins-h' }, h('span', { class: 'nm' }, '+ FX'), h('span', { class: 'arr' }, FAMILY[lane].word + ' · Hex 1–8'), h('span', { class: 'sp' }), h('button', { type: 'button', onclick: () => { S.adding = null; renderInspector(); } }, 'Cancel')));
+  const pk = h('div', { class: 'picker' });
+  if (hasLocal) {
+    pk.append(h('div', { class: 'fld' }, h('span', { class: 'lbl' }, 'With the FX already here'), seg([['replace', 'Replace'], ['stack', 'Stack']], S.addMode, (v) => { S.addMode = v; renderInspector(); }, 'fx'),
+      h('span', { class: 'ro' }, S.addMode === 'replace' ? 'Takes these heads off the lane’s Local FX, as the press does today.' : 'Goes on top; nothing comes off. Starts ' + ({ intensity: 'Within', colour: 'Replace at 50 %', position: 'Around' })[lane] + '.')));
+  }
+  pk.append(h('div', { class: 'rows' }, Object.entries(LIB[lane]).map(([type, d]) => h('button', { type: 'button', onclick: () => {
+    const stack = hasLocal && S.addMode === 'stack';
+    const over = stack ? ({ intensity: { blend: 'WITHIN' }, colour: { blend: 'REPLACE', amount: 0.5 }, position: { blend: 'AROUND' } })[lane] : {};
+    if (hasLocal && !stack) { for (const x of L.fx.filter((x) => S.fx[x].home === 'local')) delete S.fx[x]; L.fx = L.fx.filter((x) => S.fx[x]); if (S.solo && !S.fx[S.solo]) S.solo = null; }
+    const nf = add(lane, mk(lane, type, Object.assign({ cycle: 4 }, over)), true);
+    S.picked = nf.id; S.adding = null; renderAll(); } }, h('i'), d.name))));
+  pk.append(h('span', { class: 'ro' }, 'A tap starts it on one bar on M1; another tap swaps it, phase kept.'));
+  body.append(pk);
+  return body;
+}
+
+/* ---------- Note markers, anchored to what they name ---------- */
+const MK = { 1: () => document.querySelector('#lanes .lane .card'), 2: () => document.querySelector('#lanes .card.ro'), 3: () => document.querySelector('#lanes .addfx'),
+  4: () => $('viewSeg'), 5: () => canv.intensity && canv.intensity.c, 6: () => $('bpmChip'), 7: () => document.querySelector('#insCol .shapes') };
+function placeMarkers() {
+  const desk = $('desk'); const dr = desk.getBoundingClientRect(); const sc = dr.width / 1360 || 1;
+  for (const m of desk.querySelectorAll('.mk')) {
+    const a = MK[m.dataset.mk] && MK[m.dataset.mk](); if (!a) { m.hidden = true; continue; } m.hidden = false;
+    const r = a.getBoundingClientRect();
+    m.style.left = ((r.left - dr.left) / sc - 12) + 'px'; m.style.top = ((r.top - dr.top) / sc - 12) + 'px';
+  }
+}
+/* ---------- Loop ---------- */
+function renderAll() { renderList(); renderInspector(); renderTools(); placeMarkers(); }
+function frame(now) {
+  if (S.playing) { if (S.last != null) S.beat += (now - S.last) / 60000 * S.bpm; S.last = now; } else S.last = null;
+  draw();
+  requestAnimationFrame(frame);
+}
+setupGraph(); renderAll(); requestAnimationFrame(frame);
+
+/* ---------- Fit the desk to the page ---------- */
+function fit(board) {
+  const stage = board.querySelector('.stage'); const desk = stage.firstElementChild; const w = +board.dataset.w;
+  const actual = board.classList.contains('actual');
+  const s = actual ? 1 : Math.min(1, stage.clientWidth / w);
+  desk.style.transform = s === 1 ? '' : `scale(${s})`;
+  stage.style.height = desk.offsetHeight * s + 'px';
+}
+for (const b of document.querySelectorAll('.board[data-w]')) {
+  const btn = b.querySelector('.fitbtn');
+  btn.addEventListener('click', () => { b.classList.toggle('actual'); btn.textContent = b.classList.contains('actual') ? 'Fit to width' : 'Actual size'; fit(b); });
+  fit(b); placeMarkers();
+  if (window.ResizeObserver) new ResizeObserver(() => { fit(b); placeMarkers(); }).observe(b.querySelector('.stage'));
+}
+window.addEventListener('resize', () => document.querySelectorAll('.board[data-w]').forEach(fit));
+
+/* ---------- Small static boards ---------- */
+function strip(canvas, f, rowsN, rowH, mode) {
+  const ctx = canvas.getContext('2d'); const W = canvas.width, Hh = canvas.height; const pl = spreadSteps(f.order, rowsN, f);
+  ctx.fillStyle = '#0b0b0e'; ctx.fillRect(0, 0, W, Hh);
+  for (let i = 0; i < rowsN; i++) {
+    const y0 = i * rowH;
+    for (let x = 0; x < W; x++) {
+      const t = x / W * 8; const cyc = f.cycle; const p = (((t / cyc) - pl.offsets[i]) % 1 + 1) % 1;
+      const o = LIB[f.family][f.type].f(p, f.params);
+      if (mode === 'colour') { ctx.fillStyle = `rgb(${o.map(Math.round)})`; ctx.fillRect(x, y0 + 1, 1, rowH - 2); }
+      else if (mode === 'pos') { ctx.fillStyle = '#38bdf8'; ctx.fillRect(x, y0 + rowH / 2 - (o[0] - 128) / 128 * (rowH / 2 - 1), 1, 1.2); ctx.fillStyle = '#fbbf24'; ctx.fillRect(x, y0 + rowH / 2 - (o[1] - 128) / 128 * (rowH / 2 - 1), 1, 1.2); }
+      else { const v = o / 255; ctx.fillStyle = 'rgba(228,228,231,.35)'; ctx.fillRect(x, y0 + rowH - 1 - v * (rowH - 3), 1, v * (rowH - 3)); }
+    }
+  }
+}
+function mcanvas(w, hh) { return h('canvas', { width: w, height: hh, style: `width:${w}px;max-width:100%;height:auto` }); }
+// Stack panel
+(() => {
+  const root = $('stackMini');
+  const base = mk('intensity', 'SineWave', { cycle: 4 }); const st = mk('intensity', 'DimmerStrobe', { cycle: 0.25, order: 'UNIFIED', blend: 'WITHIN', amount: 1 });
+  const cv = mcanvas(380, 150); const ctx = cv.getContext('2d'); const pb = spreadSteps('NORMAL', 4, base), ps = spreadSteps('UNIFIED', 4, st);
+  ctx.fillStyle = '#0b0b0e'; ctx.fillRect(0, 0, 380, 150);
+  for (let i = 0; i < 4; i++) {
+    const y0 = i * 36 + 4; ctx.fillStyle = '#a1a1aa'; ctx.font = '10px ui-sans-serif, system-ui'; ctx.fillText('Hex ' + (i + 1), 4, y0 + 18);
+    ctx.beginPath(); let first = true;
+    for (let x = 0; x < 320; x++) {
+      const t = x / 320 * 8; const pB = (((t / 4) - pb.offsets[i]) % 1 + 1) % 1; const b = LIB.intensity.SineWave.f(pB, base.params);
+      const pS = (((t / 0.25)) % 1 + 1) % 1; const e = LIB.intensity.DimmerStrobe.f(pS, Object.assign({}, st.params, { off: 90 }));
+      const v = b * e / 255; const X = 54 + x;
+      ctx.fillStyle = 'rgba(228,228,231,.4)'; ctx.fillRect(X, y0 + 30 - v / 255 * 28, 1, v / 255 * 28);
+      const yb = y0 + 30 - b / 255 * 28; if (first) { ctx.moveTo(X, yb); first = false; } else ctx.lineTo(X, yb);
+    }
+    ctx.strokeStyle = '#8b5cf6'; ctx.stroke();
+  }
+  root.append(h('div', { class: 'row', style: 'gap:8px;margin-bottom:8px' }, h('span', { class: 'mlbl' }, 'Intensity'), h('span', { class: 'mchip on' }, 'Dimmer Strobe · ¼ beat · Within'), h('span', { class: 'mute' }, 'over'), h('span', { class: 'mchip' }, 'Sine Wave · 1 bar · Replace')));
+  root.append(cv, h('div', { class: 'mute', style: 'margin-top:6px' }, 'Violet: the Sine Wave alone. Fill: with the Dimmer Strobe stacked Within it (off at 35 %).'));
+})();
+// Phone
+(() => {
+  const root = $('phoneMini');
+  root.append(h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:8px' }, h('b', null, 'Hex 1–8'), h('span', { class: 'mchip' }, '⛓ Desk')));
+  root.append(h('div', { class: 'row', style: 'gap:5px;flex-wrap:wrap;margin-bottom:8px' }, h('span', { class: 'mchip on' }, 'Intensity 2'), h('span', { class: 'mchip' }, 'Colour 1'), h('span', { class: 'mchip' }, 'Position 1'), h('span', { class: 'mchip' }, '+ FX')));
+  root.append(h('div', { class: 'row', style: 'gap:5px;margin-bottom:6px' }, h('span', { class: 'mchip on' }, 'Sine Wave'), h('span', { class: 'mchip' }, 'Dimmer Strobe')));
+  const c = mcanvas(336, 6 * 16); strip(c, mk('intensity', 'SineWave', { cycle: 4 }), 6, 16); root.append(c);
+  root.append(h('div', { class: 'mute', style: 'margin:4px 0 10px' }, '6 of 8 rows · scroll for more'));
+  root.append(h('div', { class: 'mlbl', style: 'margin-bottom:4px' }, 'Cycle'), h('div', { class: 'row', style: 'gap:4px;flex-wrap:wrap;margin-bottom:8px' }, ['½ beat', '1 beat', '1 bar', '2 bars'].map((l) => h('span', { class: 'mbtn', style: l === '1 bar' ? 'border-color:#8b5cf6;color:#b49cfb' : '' }, l))));
+  root.append(h('div', { class: 'row', style: 'gap:12px' }, h('div', null, h('div', { class: 'mlbl' }, 'Amount'), h('span', { class: 'mbtn' }, '100 %')), h('div', null, h('div', { class: 'mlbl' }, 'Direction'), h('span', { class: 'mbtn' }, '→ ← ↔')), h('div', null, h('div', { class: 'mlbl' }, 'Order'), h('span', { class: 'mbtn' }, 'Normal ▾'))));
+})();
+// Palette editor
+(() => {
+  const root = $('palMini');
+  root.append(h('div', { class: 'row', style: 'justify-content:space-between;margin-bottom:10px' }, h('b', null, 'Palette · Slow circle'), h('span', { class: 'mute' }, 'Position · FX')));
+  root.append(h('div', { class: 'mute', style: 'margin-bottom:8px' }, 'Circle · 2 bars · Around · Spread 50 % · 2 wings'));
+  root.append(h('div', { class: 'row', style: 'gap:6px;margin-bottom:6px' }, h('span', { class: 'mlbl' }, 'Graph'), h('span', { class: 'mchip' }, 'On the selection'), h('span', { class: 'mchip on' }, 'On eight heads')));
+  const c = mcanvas(396, 8 * 14); strip(c, mk('position', 'Circle', { cycle: 8, spread: 0.5, wings: 2 }), 8, 14, 'pos'); root.append(c);
+  root.append(h('div', { class: 'row', style: 'gap:8px;margin-top:10px;justify-content:flex-end' }, h('span', { class: 'mbtn' }, 'Cancel'), h('span', { class: 'mbtn', style: 'background:#4f8cf7;border-color:#4f8cf7;color:#0b0b0e' }, 'Save')));
+})();
+// All
+(() => {
+  const root = $('allMini');
+  root.append(h('div', { class: 'row', style: 'gap:8px;margin-bottom:8px' }, h('span', { class: 'mchip' }, 'Selection'), h('span', { class: 'mchip on' }, 'All'), h('span', { class: 'mute', style: 'margin-left:auto' }, '9 running FX')));
+  const rows = [['Sine Wave', 'dimmer', 'Hex 1–8', '1 bar · M1', 'Yours'], ['Dimmer Strobe', 'dimmer', 'Hex 1–8', '½ beat · M1', 'Yours'], ['Colour Cycle', 'colour', 'Hex 1–8', '2 bars · M1', 'Yours'], ['Circle', 'position', 'Spots 1–4', '2 bars · M2', 'Layers'], ['Ramp', 'dimmer', 'Hex 1–8', '4 bars · M1', 'Cue']];
+  root.append(h('table', null, h('thead', null, h('tr', null, ['FX', 'Attribute', 'Target', 'Cycle', 'Home', ''].map((x) => h('th', null, x)))),
+    h('tbody', null, rows.map((r, k) => h('tr', { style: k === 3 ? 'background:rgba(139,92,246,.10)' : '' }, r.map((x) => h('td', null, x)), h('td', null, k === 3 ? h('span', { class: 'mchip on' }, 'Open in Selection') : ''))))));
+})();
+// Tray
+(() => {
+  const root = $('trayMini');
+  root.append(h('div', { class: 'row', style: 'gap:8px;margin-bottom:8px' }, h('span', { class: 'mlbl' }, 'FX · 3'), h('span', { class: 'mchip' }, 'Sine Wave'), h('span', { class: 'mchip' }, 'Dimmer Strobe'), h('span', { class: 'mchip' }, '+1'), h('span', { class: 'mbtn', style: 'margin-left:auto' }, '+ FX'), h('span', { class: 'mbtn', title: 'Open in FX editor', style: 'border-color:#8b5cf6;color:#b49cfb' }, '⤢')));
+  root.append(h('div', { class: 'mcard' }, h('div', { class: 'row', style: 'justify-content:space-between' }, h('b', null, 'Sine Wave'), h('span', { class: 'mute' }, '1 bar · M1 · Replace')),
+    h('div', { class: 'mute' }, '→ dimmer · via Hex all'), (() => { const c = mcanvas(392, 4 * 12); strip(c, mk('intensity', 'SineWave', { cycle: 4 }), 4, 12); c.style.marginTop = '6px'; return c; })()));
+  root.append(h('div', { class: 'mute', style: 'margin-top:6px' }, '⤢ opens the programmer, FX tab, Selection, on Hex 3.'));
+})();
+})();
+</script>

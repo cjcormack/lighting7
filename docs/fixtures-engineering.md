@@ -1,10 +1,10 @@
 # Fixture System Engineering Documentation
 
-This document describes the fixture abstraction layer that maps physical lighting devices to controllable properties.
+This document describes the fixture abstraction layer that maps physical lighting devices to controllable attributes.
 
 ## Overview
 
-The fixture system provides a type-safe, trait-based abstraction over raw DMX channels. Instead of manipulating channel numbers directly, scripts and UI work with named fixtures and semantic properties like `dimmer`, `rgbColour`, and `strobe`.
+The fixture system provides a type-safe, trait-based abstraction over raw DMX channels. Instead of manipulating channel numbers directly, scripts and UI work with named fixtures and semantic attributes like `dimmer`, `rgbColour`, and `strobe`.
 
 ## Architecture
 
@@ -51,7 +51,7 @@ The fixture system provides a type-safe, trait-based abstraction over raw DMX ch
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Property Types                                  │
+│                         Attribute Types                                 │
 │                                                                         │
 │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐     │
 │   │    DmxSlider    │  │    DmxColour    │  │ DmxFixtureSetting   │     │
@@ -80,7 +80,7 @@ sealed class Fixture(
 
 **Key members:**
 - `typeKey`: Extracted from `@FixtureType` annotation
-- `fixtureProperties`: List of properties marked with `@FixtureProperty`
+- `fixtureAttributes`: List of attributes marked with `@FixtureAttribute`
 - `withTransaction()`: Creates a copy bound to a transaction
 - `blackout()`: Sets dimmer to 0 and colour to black
 
@@ -102,17 +102,17 @@ Adds DMX-specific addressing. The `channelDescriptions()` method returns a map o
 
 Fixtures compose capabilities through trait interfaces (in `fixture/trait/`):
 
-| Trait | Property | Purpose |
-|-------|----------|---------|
+| Trait | Attribute | Purpose |
+|-------|-----------|---------|
 | `WithDimmer` | `dimmer: Slider` | Master brightness control |
 | `WithColour` | `rgbColour: Colour` | RGB color mixing |
 | `WithStrobe` | `strobe: Strobe` | Strobe effect control |
 | `WithUv` | `uv: Slider` | UV channel control |
 | `WithPosition` | `pan: Slider, tilt: Slider` | Pan/tilt control |
 
-## Property Interfaces
+## Attribute Interfaces
 
-Properties (in `fixture/property/`) provide a unified interface for fixture and group control:
+Attributes (in `fixture/attribute/`) provide a unified interface for fixture and group control:
 
 ### Slider
 
@@ -165,10 +165,10 @@ below the bands it must not reach (the Robe's pulses and random strobe; the MAC 
 lamp, which are its fixture commands, §"@FixtureCommand"). A higher intensity is always a faster strobe: `fastToSlow` runs it down a band whose
 fastest end is its first value (the MAC 250's "strobe, fast → slow", where `strobe()` wrote the
 slowest rate for 255 until session 6). `strobeLevel(intensity)` is the pure value `strobe` writes. What each range of the channel *does* — closed, open, strobe at a rate — is the
-property's declared bands, not the class's (§"Beam vocabulary"); `StrobeBandsTest` holds the two to
+attribute's declared bands, not the class's (§"Beam vocabulary"); `StrobeBandsTest` holds the two to
 one answer.
 
-## DMX Property Implementations
+## DMX Attribute Implementations
 
 ### DmxSlider
 
@@ -207,11 +207,11 @@ Creates three `DmxSlider` instances internally.
 
 ### DmxWhiteMixColour — a warm/cold white pair as a colour
 
-A head with a warm and a cold white and no RGB — the 2-cell blinder's cells — takes colour as
+A head with a warm and a cold white and no RGB — the 2-cell blinder's elements — takes colour as
 the nearest mix of its two whites (venue-visit plan D8). `DmxWhiteMixColour` is a `Colour` over the
 head's own two white `DmxSlider`s, named `rgbColour` like any colour so palettes, cues, Looks, the
-programmer's `setColour`, Spread and colour effects all reach it; the sliders stay as properties for
-direct control. The mapping is `fixture/property/WhiteMix.kt`, a small colour-temperature model built
+programmer's `setColour`, Spread and colour FX all reach it; the sliders stay as attributes for
+direct control. The mapping is `fixture/attribute/WhiteMix.kt`, a small colour-temperature model built
 for reuse by a second WW/CW type:
 
 - **The whites** are each the black body at the type's declared temperature, seen against the
@@ -235,32 +235,32 @@ for reuse by a second WW/CW type:
 
 Where it lands:
 
-- `TemplateResolver.resolveColour` has a third arm, after RGB and before a wheel: the value is the
-  colour the nearest mix *makes* (what the cell reads back as), reported `Snapped` with the mix's
+- `PaletteResolver.resolveColour` has a third arm, after RGB and before a wheel: the value is the
+  colour the nearest mix *makes* (what the element reads back as), reported `Snapped` with the mix's
   temperature and ΔE (the editor's "3000 K · ΔE …" badge) unless the mix reproduces the colour (ΔE under 1, `Exact`).
-  A cell has colour, so `TemplateFanOut` carries a palette pressed on the blinder's parent to both
-  cells unchanged.
-- `PropertyChannelWriter` resolves it to the two whites' writes and lists them as its channels.
+  An element has colour, so `PaletteFanOut` carries a palette pressed on the blinder's parent to both
+  elements unchanged.
+- `AttributeChannelWriter` resolves it to the two whites' writes and lists them as its channels.
   Each channel is still covered by its own slider (`coveringKeysByChannel`: single-channel wins), so a
-  raw write to one is filed under `warmWhite` or `coldWhite`. A colour and a slider on the same cell
+  raw write to one is filed under `warmWhite` or `coldWhite`. A colour and a slider on the same element
   drive one channel through two keys, as `position` and `pan` do: nothing reconciles them, and the
   last to change wins.
 - **The grand master** scales a white mix's two channels only on a head with no dimmer (D12), and
-  each channel is in its scaled set once however many properties cover it. The blinder has a master
+  each channel is in its scaled set once however many attributes cover it. The blinder has a master
   dimmer, so its whites are left to it, as they always were.
 - Locate leaves a white mix alone; the whites themselves go to full, as before.
-- The head's descriptor is `WhiteMixPropertyDescriptor` (`type: "whiteMix"`, its two channels and the
-  declared temperatures), and its "all heads" form `GroupWhiteMixPropertyDescriptor` (heads whose
-  whites match). That form is what makes a multi-head type with white-mix cells report `colour`
-  among its capabilities and list the cells' `rgbColour` in MCP's `list_fixture_types`
-  (`whites` names the pair), and what a preset row on a cell is checked against. On the client, `lib/whiteMix.ts` mirrors
+- The head's descriptor is `WhiteMixAttributeDescriptor` (`type: "whiteMix"`, its two channels and the
+  declared temperatures), and its "all heads" form `GroupWhiteMixAttributeDescriptor` (heads whose
+  whites match). That form is what makes a multi-head type with white-mix elements report `colour`
+  among its capabilities and list the elements' `rgbColour` in MCP's `list_fixture_types`
+  (`whites` names the pair), and what a preset row on an element is checked against. On the client, `lib/whiteMix.ts` mirrors
   the model (`src/test/resources/fixture/whiteMix.fixture.json`, generated by an independent port,
   pins both). The fixtures table resolves it to a `white-mix` cell that reads as a colour and edits a
-  **warmth** and a level (`WarmthCell`, with the RGB cell's *Save as palette…* and *Spread…*); the
+  **warmth** and a level (`WarmthCell`, with the RGB cell's *Save as palette…* and *Fan…*); the
   fixture sheet gives it a Warmth row beside its two sliders, with the same controls
   (`editor/WarmthEditor`); the busk Colour sheet and the RGB picker write it RGB alone, and Pick
   reads it. The Stage view
-  still draws the cells from their two white sliders — the same channels — rather than from the
+  still draws the elements from their two white sliders — the same channels — rather than from the
   declared temperatures.
 - A palette cannot yet hold a temperature: `FU-TMPL-KELVIN`.
 
@@ -284,7 +284,7 @@ enum class ProgramMode(override val level: UByte) : DmxFixtureSettingValue {
     SOUND_ACTIVE(201u),
 }
 
-@FixtureProperty
+@FixtureAttribute
 val mode = DmxFixtureSetting(transaction, universe, channelNo, ProgramMode.entries.toTypedArray())
 
 // In script:
@@ -293,10 +293,10 @@ fixture.mode.setting = ProgramMode.SOUND_ACTIVE
 
 The `valueForLevel()` method finds the appropriate enum value for a raw DMX level (useful when reading back state).
 
-**As an effect's target** (`SettingTarget`, `fx/FxTarget.kt`) a setting takes a byte, discrete: always
+**As an FX's target** (`SettingTarget`, `fx/FxTarget.kt`) a setting takes a byte, discrete: always
 written over what is underneath whatever the blend, and only from half weight up (`weighDiscrete`),
-since a slot has no halfway. A level effect on one writes raw bytes and lands on whichever option
-holds them. **Slot Steps** (effects plan session 7, `docs/fx-engineering.md` §"Step Effects") steps
+since a slot has no halfway. A level FX on one writes raw bytes and lands on whichever option
+holds them. **Slot Steps** (effects plan session 7, `docs/fx-engineering.md` §"Step FX") steps
 one by **option name** instead: each name is looked up in the head's own options — the enum's name,
 ignoring case, spaces, underscores and dashes, so *Gobo 3* is `GOBO_3` — so two models carrying the
 slot at different levels each land on their own, and a head without it holds what is underneath on
@@ -369,13 +369,13 @@ second, the beam and the colour as the time a channel takes across its whole DMX
 eases what it draws toward the DMX at those rates; the desk outputs nothing differently. See
 §"Travel and timing channels".
 
-### @FixtureProperty
+### @FixtureAttribute
 
 ```kotlin
 @Target(AnnotationTarget.PROPERTY)
-annotation class FixtureProperty(
+annotation class FixtureAttribute(
     val description: String = "",
-    val category: PropertyCategory = PropertyCategory.OTHER,
+    val category: AttributeCategory = AttributeCategory.OTHER,
     // … composition, bundleWithColour, compactDisplay, axis …
     val degMin: Double = Double.NaN,
     val degMax: Double = Double.NaN,
@@ -398,25 +398,25 @@ annotation class FixtureProperty(
 )
 ```
 
-Marks a property as controllable. The `fixtureProperties` list on `Fixture` collects these via reflection for:
+Marks an attribute as controllable. The `fixtureAttributes` list on `Fixture` collects these via reflection for:
 - Channel description generation
-- REST API property enumeration
+- REST API attribute enumeration
 - FX engine targeting
 
 `composition` overrides the category's HTP/LTP rule (`CompositionRule.UNSET` inherits it);
-`bundleWithColour` folds a white, amber or UV slider into the RGB colour property; `compactDisplay`
-promotes the property to the compact card; `axis` marks a slider as pan or tilt. The rest are the
+`bundleWithColour` folds a white, amber or UV slider into the RGB colour attribute; `compactDisplay`
+promotes the attribute to the compact card; `axis` marks a slider as pan or tilt. The rest are the
 beam vocabulary, below and in §"Beam vocabulary".
 
-**A property may not be named an alias.** Stored rows and FX targets name a property by its Kotlin
-name, and `canonicalPropertyName` reads `colour` / `color` / `rgbcolour` (any case) as "this head's
-RGB colour", rewriting it to `rgbColour` at every lookup. A property *named* one of those would never
+**An attribute may not be named an alias.** Stored rows and FX targets name an attribute by its Kotlin
+name, and `canonicalAttributeName` reads `colour` / `color` / `rgbcolour` (any case) as "this head's
+RGB colour", rewriting it to `rgbColour` at every lookup. An attribute *named* one of those would never
 be reached: its rows would be rewritten to a name the head does not have and silently dropped. So a
-colour wheel is `colourWheel`, and `FixturePropertyNameAliasTest` walks every fixture and element
+colour wheel is `colourWheel`, and `FixtureAttributeNameAliasTest` walks every fixture and element
 class and fails on any name the alias would rewrite (`rgbColour` itself is its own canonical form).
 
-**A slider's optics.** The Stage view reads optional fields off the property descriptor
-(`SliderPropertyDescriptor`). `NaN` means unset, because an annotation cannot default a `Double` to
+**A slider's optics.** The Stage view reads optional fields off the attribute descriptor
+(`SliderAttributeDescriptor`). `NaN` means unset, because an annotation cannot default a `Double` to
 null, and reflects as null:
 
 - `degMin` / `degMax`: a PAN or TILT slider's travel in degrees (with `axis`), or a ZOOM slider's
@@ -444,7 +444,7 @@ null, and reflects as null:
 - A ZOOM slider's `degMin` / `degMax` may run either way: the Source Four Revolution's DMX 0 is its
   widest, so it declares `degMin = 35.0, degMax = 15.0`. A zoom that declares no angle is silently
   inert, the view keeping the patch's, the type's or the family's fixed angle — so `ZoomAnglesTest`
-  holds every zoom in the library, fixture and cell, to one of two forms with no exemption: a
+  holds every zoom in the library, fixture and element, to one of two forms with no exemption: a
   **slider** declaring both ends, or a **stepped zoom** — a ZOOM *setting* whose every option is a
   `DmxFixtureZoomSettingValue` carrying its `zoomDeg` (fixture-optics plan D2). The Robe ColorSpot
   575's is the one stepped zoom: 15°, 18° and 22°, each again with focus correction, which a slider
@@ -460,12 +460,12 @@ null, and reflects as null:
   `frontend/src/components/stage3d/beamOptics.ts`): above `activeMax` an effect band is drawn as the
   band's last value, never read as more of the same. `LibraryOpticsTest` holds every declared band
   inside its slider and running upwards.
-- `fineOf`: names the coarse property this one is the low byte of, so the pair decodes as one
+- `fineOf`: names the coarse attribute this one is the low byte of, so the pair decodes as one
   value — the 16-bit `coarse × 256 + fine`, rescaled to the coarse range (`combineFinePair`). Empty,
-  the default, on every other property, and reflected as null.
+  the default, on every other attribute, and reflected as null.
   It generalises the PAN_FINE / TILT_FINE pairing to any 16-bit pair — pan and tilt keep theirs. A
-  fine property carries its coarse one's category, and every client finder that picks *the*
-  property of a category skips it (`findFineProperty` in `frontend/src/store/fixtures.ts` finds it
+  fine attribute carries its coarse one's category, and every client finder that picks *the*
+  attribute of a category skips it (`findFineAttribute` in `frontend/src/store/fixtures.ts` finds it
   by name).
 - `rpmMax` / `indexDegMax`: on a GOBO_ROTATION slider whose wheel has a **GOBO_ROTATION_MODE**
   channel — a setting whose bands are named `INDEX`, `ROTATE_FWD` and `ROTATE_REV` — the speed in
@@ -481,7 +481,7 @@ null, and reflects as null:
 
 **A setting's media.** `media` (`MediaSlot.NONE`, the default, reflects as null) marks a setting
 whose options can be **loaded** — `GEL`, `GOBO` or `GOBO_OR_GEL` — and rides the setting's
-descriptor (`SettingPropertyDescriptor.media`, each option's `loadable`). What is loaded is each
+descriptor (`SettingAttributeDescriptor.media`, each option's `loadable`). What is loaded is each
 unit's, not the type's: see §"Fitted media".
 
 Every value a fixture declares that its manufacturer does not state carries an `// Estimate:`
@@ -516,7 +516,7 @@ the point the other way cuts it at the bottom, and so does a standing head tilte
 standing head is a hung one turned over. Which side of the real head each frame sits on is an
 estimate (`FU-MANUAL-S4REV-OPTICS` step 4).
 
-Both categories are LTP and in the BEAM mask group, and stored and recorded like any other slider;
+Both categories are LTP and in the Beam family, and stored and recorded like any other slider;
 neither is in the palette grammar or Spread's vocabulary, so neither can be spread. **Locate** takes every blade out
 (the DMX for depth 0: DMX min, or max where inverted) and squares every rotation (the DMX for 0°,
 solved through its degree range — 128 on the Revolution's ±45°), as ChamSys locates them.
@@ -527,7 +527,7 @@ the director reads the eight channels every frame and packs them where a lantern
 and a fixture with DMX blades never draws a lantern's beside them.
 
 `ShutterBladesTest` holds the library to it: every SHUTTER names a blade and declares `depthMax`,
-every SHUTTER_ROTATION names a blade and declares a degree range, a fixture (or cell) declares at
+every SHUTTER_ROTATION names a blade and declares a degree range, a fixture (or element) declares at
 most one of each per blade, nothing else declares `blade` or `depthMax`, and no type with framing
 shutters is `acceptsLantern` — so a unit's blades have one source. The Revolution's blade sides,
 depth and rotation sign are estimates (`// Estimate:` at the source; `FU-MANUAL-S4REV-OPTICS`).
@@ -536,12 +536,12 @@ depth and rotation sign are estimates (`// Estimate:` at the source; `FU-MANUAL-
 
 Everything the Stage view can draw of a beam is declared on the type, as annotations and as fields
 on a setting's options — no table holds it, and nothing a Look stores names it (fixture-optics plan
-D1). It reaches the client on `GET /fixture-types` (`FixtureTypeDetails`, `SliderPropertyDescriptor`,
+D1). It reaches the client on `GET /fixture-types` (`FixtureTypeDetails`, `SliderAttributeDescriptor`,
 `SettingOption`) and on `GET /fixtures`, and `frontend/src/store/fixtures.ts` mirrors each field. A
 value no manufacturer states carries `// Estimate:` at its source (D15).
 
-**Categories** (`PropertyCategory`). A channel's category is how the view knows what it is:
-`DIMMER`, `COLOUR` (an RGB property, a colour wheel, a scroller, an RGB head's colour preset),
+**Categories** (`AttributeCategory`). A channel's category is how the view knows what it is:
+`DIMMER`, `COLOUR` (an RGB attribute, a colour wheel, a scroller, an RGB head's colour preset),
 `WHITE` / `AMBER` / `UV` (emitters, usually `bundleWithColour`), `STROBE`, `PAN` / `TILT` and their
 `_FINE` bytes, `SPEED`; the beam roles `GOBO`, `GOBO_ROTATION`, `GOBO_ROTATION_MODE` (a wheel's
 function: `INDEX`, `ROTATE_FWD`, `ROTATE_REV` bands), `PRISM`, `PRISM_ROTATION`, `FOCUS`, `ZOOM`,
@@ -568,7 +568,7 @@ because one channel mixes bands:
 | `ringColour` / `ringChase` | `DmxFixtureRingSettingValue` | On a RING setting, the colour the ring shows in this band, or that it chases round the ring; neither is off. |
 
 **Every COLOUR option is a colour or a no-colour band** (D8): `ColourPreviewTest` fails any option of
-a COLOUR setting, fixture or cell, that carries neither a `#RRGGBB` preview nor `noColour` — or both
+a COLOUR setting, fixture or element, that carries neither a `#RRGGBB` preview nor `noColour` — or both
 — and any preview anywhere that is not six hex digits. An option that said nothing drew its beam
 black, which is how every Varytec beam and every scroll band did until session 5. The marker is an
 annotation rather than a guess from the option's name because the names are every manufacturer's
@@ -576,11 +576,11 @@ own (`SCROLL_CW`, `RAINBOW_EFFECT`, `AUTOMATIC_COLOUR_CHANGE`, `ALL_COL`, `ORIGI
 list that missed one would draw it black again; the test can then close the hole. Where the setting
 is the beam's colour — a colour wheel, or the Robe's second wheel as a filter — the Stage view
 **animates a no-colour band through the wheel's own previews** on both colour dispatches
-(`frontend/src/lib/colourBands.ts`); beside an RGB property the setting is a preset on the same
+(`frontend/src/lib/colourBands.ts`); beside an RGB attribute the setting is a preset on the same
 emitters and the view never reads it. A blackout band is a black preview (`#000000`, the Slender
 bar's), which the view draws dark and a palette never snaps to.
 
-**On a slider** — `SliderPropertyDescriptor`, each null when unset:
+**On a slider** — `SliderAttributeDescriptor`, each null when unset:
 
 | Field | On | Means |
 |---|---|---|
@@ -591,7 +591,7 @@ bar's), which the view draws dark and a palette never snaps to.
 | `rpmMax` / `indexDegMax` | GOBO_ROTATION with a mode channel | Speed at DMX max in a rotate band; angle at DMX max when indexing. |
 | `blade` / `depthMax` | SHUTTER, SHUTTER_ROTATION | Which blade, and an insertion's depth at DMX max (`ShutterBladesTest`). |
 | `activeMin` / `activeMax` | any | The proportional band; the view holds its ends outside it. |
-| `fineOf` | a low byte | The coarse property it refines, read as one 16-bit value. |
+| `fineOf` | a low byte | The coarse attribute it refines, read as one 16-bit value. |
 | `strobeBands` | STROBE | What each band of the channel does to the light (below). |
 | `timing` / `timingSecondsPerStep` / `timingFastFrom` | SPEED | One of the fixture's own timing channels: which families it stretches, its seconds per DMX step, and the DMX from which it means "fastest" (§"Travel and timing channels"). |
 
@@ -599,11 +599,11 @@ bar's), which the view draws dark and a palette never snaps to.
 different things to the light — the MAC 250's runs closed, open, strobe, pulses, random strobes, a
 reset and the lamp — and the view drew all of them lit until session 6, so a MAC 250 at strobe 0,
 dark on the rig, drew at full. Each band is declared from the manual as a `StrobeBand` in the
-slider's `@FixtureProperty(strobe = […])`:
+slider's `@FixtureAttribute(strobe = […])`:
 
 ```kotlin
-@FixtureProperty(
-    category = PropertyCategory.STROBE,
+@FixtureAttribute(
+    category = AttributeCategory.STROBE,
     strobe = [
         StrobeBand(0, 19, StrobeKind.CLOSED),
         StrobeBand(20, 49, StrobeKind.OPEN),
@@ -630,10 +630,10 @@ slider's `@FixtureProperty(strobe = […])`:
   from the option's level to the next option's, on the wire as `SettingOption.strobeKind` and friends.
   The library has none yet; Locate opens one at its first `OPEN` option.
 
-On the wire it is `SliderPropertyDescriptor.strobeBands` (`[{from, to, kind, hzMin?, hzMax?,
+On the wire it is `SliderAttributeDescriptor.strobeBands` (`[{from, to, kind, hzMin?, hzMax?,
 inverted?}]`), null on every other slider. `StrobeBandsTest` holds the library to it: every STROBE
 slider declares bands, well formed and covering its range; every flashing band a positive rate and no
-other band one; nothing but a STROBE property declares bands; every STROBE setting's options declare a
+other band one; nothing but a STROBE attribute declares bands; every STROBE setting's options declare a
 kind; and every strobe writer agrees with its bands — `fullOnValue` (what `fullOn()` and Locate
 write) lands in an `OPEN` band and every `strobe(1..255)` in a flashing one, never at a lower declared
 rate than the intensity below it.
@@ -688,7 +688,7 @@ Revolution — a quiet theatre unit — at 90°, its beam across its range in 1.
 in 2.5 s.
 
 **Timing channels** are the fixture's own, and they stretch the base speeds (D14). A SPEED slider
-declares one with `@FixtureProperty(timing = …, timingSecondsPerStep = …)`:
+declares one with `@FixtureAttribute(timing = …, timingSecondsPerStep = …)`:
 
 - `timing` (`TimingRole`) names the families it stretches: `POSITION` (pan and tilt), `BEAM`,
   `COLOUR` or `ALL`. `TimingRole.NONE`, the default, reflects as null.
@@ -714,7 +714,7 @@ declares one with `@FixtureProperty(timing = …, timingSecondsPerStep = …)`:
 
 `TravelVocabularyTest` holds every timing channel to being a SPEED slider with a positive
 `timingSecondsPerStep` and a `timingFastFrom` inside its range. On the wire they are
-`SliderPropertyDescriptor.timing` / `timingSecondsPerStep` / `timingFastFrom`, null elsewhere.
+`SliderAttributeDescriptor.timing` / `timingSecondsPerStep` / `timingFastFrom`, null elsewhere.
 
 **The Revolution** is the one fixture with timing channels: ch 9 Focus Timing, ch 10 Color Timing and
 ch 11 Beam Timing. The manual's channel table has a *Timing Channel* column (p14 [10]), and it settles what
@@ -746,12 +746,12 @@ val output1: DmxTrigger = DmxTrigger(universe, firstChannel, armChannelNo = firs
 ```
 
 A **one-shot trigger** (stage-view plan session 9, D15) is an output that spends something physical
-when it fires — a confetti tube — so it is **its own property kind, not a `@FixtureProperty`**. A
+when it fires — a confetti tube — so it is **its own attribute kind, not a `@FixtureAttribute`**. A
 `DmxTrigger` is a channel and its **arm** channel, nothing more: it is not a `Slider` and carries no
-transaction, so nothing that resolves a property by name — the programmer, a cue row, a Look row, a
-palette, an effect target, Record, a surface fader — finds one, and nothing composes or crossfades
+transaction, so nothing that resolves an attribute by name — the programmer, a cue row, a Look row, a
+palette, an FX target, Record, a surface fader — finds one, and nothing composes or crossfades
 it. The Equinox Twin Shot MKII is the one fixture with triggers: `output1` (A) and `output2` (B),
-armed by its shared `master`, which is no property either.
+armed by its shared `master`, which is no attribute either.
 
 - **The desk owns the channels.** `state/TriggerOutput.kt` (one per show, rebuilt on every register
   change) holds every trigger channel at idle and every arm channel at the desk's arm, **above
@@ -774,16 +774,16 @@ armed by its shared `master`, which is no property either.
   trigger, `spent_at`): a fire marks its tube spent, `POST …/patches/{id}/reload` loads it again, and
   firing a spent tube warns (409 `TRIGGER_SPENT`) and sends nothing.
 - **Refused by name at every write boundary** (`fixture/TriggerGuard.kt`'s `TriggerIndex`): a Look
-  row or effect, a palette row or effect, a cue row or ad-hoc effect, a programmer value, a live
-  effect (`FxTargetFactory`, every door an effect is spawned through) and a surface binding naming a
+  row or FX, a palette row or FX, a cue row or ad-hoc FX, a programmer value, a live
+  FX (`FxTargetFactory`, every door an FX is spawned through) and a surface binding naming a
   trigger or its arm — on a fixture, on a group with a cannon in it, or, for a row with no target
   of its own, by any trigger's name — answer 400 `TRIGGER_NOT_STORABLE` naming every refused row.
   Record and Update capture from the programmer, which can hold none, and a busk pad presses a record
   that can hold none. The sync importer strips such a row from an older archive, and a one-off pass at
   startup stripped the rows stored before this.
 
-On the wire a trigger is a `TriggerPropertyDescriptor` (`type: "trigger"`, its channel, its arm
-channel and its label) at the end of a fixture's `properties` — so the cannon's panel can name its
+On the wire a trigger is a `TriggerAttributeDescriptor` (`type: "trigger"`, its channel, its arm
+channel and its label) at the end of a fixture's `attributes` — so the cannon's panel can name its
 tubes, and a client drawing controls from the list skips it. The DMX sheet names the channels
 `Tube A (trigger)` and `Master enable (arm)`.
 
@@ -801,9 +801,9 @@ val resetScroller = DmxCommand(universe, firstChannel + 11, 149u, bandMin = 147u
 A **fixture command** (fixture optics plan session 7, D13) is a level the fixture acts on when it is
 held on a channel for a while — a reset, a lamp strike, a lamp off. A reset recorded into a Look
 re-homes every head on every recall and a lamp off in a cue is a dark head for eight minutes, so a
-command is, like a trigger, **its own kind, not a `@FixtureProperty`**: a `DmxCommand` is a channel,
+command is, like a trigger, **its own kind, not a `@FixtureAttribute`**: a `DmxCommand` is a channel,
 a level, the manual's band around it, an idle level and the preconditions it holds (`alongside`),
-nothing more — not a `Slider`, no transaction — so nothing that resolves a property by name finds
+nothing more — not a `Slider`, no transaction — so nothing that resolves an attribute by name finds
 one, and nothing composes or crossfades it. `FixtureCommands.of(fixture)` resolves a fixture's
 commands (`fixture/FixtureCommand.kt`, cached per class like the triggers).
 
@@ -817,12 +817,12 @@ The library's commands:
 | Varytec Easymove XL 60, Shehds LED19 (both modes) | `reset` | dedicated (the old two-option `reset` setting) | 5 s, estimate |
 | Equinox Fusion 100 Spot (5 / 15ch), Gear4music Orbit-70, Slender Beam Bar Quad 27ch | `reset` | shared with the setting it was an option of | 5 s, estimate |
 
-- **Dedicated or shared, read from the fixture.** A command channel no property covers is
+- **Dedicated or shared, read from the fixture.** A command channel no attribute covers is
   *dedicated*: the desk owns it outright, holding it at its idle level (0) between commands, and a raw
-  `updateChannel` on it is dropped (logged), as on a trigger channel. A channel a property drives is
+  `updateChannel` on it is dropped (logged), as on a trigger channel. A channel an attribute drives is
   *shared*: composition owns it between commands, and the **band guard** — `CommandOutput` is also a
   `TransmitModifier` — sends any value inside a command's band as the channel's idle level, whatever
-  wrote it (a typed `208` on the MAC's strobe, a programmer level, an effect, a script). That guard is
+  wrote it (a typed `208` on the MAC's strobe, a programmer level, an FX, a script). That guard is
   the half of "no path can hold a reset" a name check cannot reach: `strobe = 208` is a strobe row by
   name. The five RESET setting options this session removed stay removed: `FixtureCommandsTest` fails
   if a shared channel's setting offers an option inside a command's band.
@@ -858,13 +858,13 @@ The library's commands:
   one a level inside a command's band. A park at idle on a dedicated channel is a lock-out and
   allowed. A reload seeds every dedicated command channel idle (`DbFixtureLoader`).
 - **Refused by name at every write boundary**, beside the trigger refusal and on its three rules
-  (`fixture/CommandGuard.kt`'s `CommandIndex`): a Look row or effect, a palette row or effect, a cue
-  row or ad-hoc effect, a programmer value, a live effect (`FxTargetFactory`), a group effect and a
+  (`fixture/CommandGuard.kt`'s `CommandIndex`): a Look row or FX, a palette row or FX, a cue
+  row or ad-hoc FX, a programmer value, a live FX (`FxTargetFactory`), a group FX and a
   surface binding naming a command — on a fixture, on a group with such a fixture in it, or, for a row
   with no target of its own, by any command's name — answer 400 `COMMAND_NOT_STORABLE` naming every
-  refused row. `FixtureCommandsTest` keeps every command name clear of every property and trigger name
+  refused row. `FixtureCommandsTest` keeps every command name clear of every attribute and trigger name
   in the library, since a generic row is refused by all of them. A **stored** Look or cue row is also
-  refused by level, by the strip's own rule below (`CommandIndex.levelRefusal`): a property sharing a
+  refused by level, by the strip's own rule below (`CommandIndex.levelRefusal`): an attribute sharing a
   command's channel holding a level inside its band (`strobe = 210` on a MAC 250 is its reset), on the
   fixture by its type, on a group by every member's. So the write boundary and the strip agree, and
   no row is accepted only to vanish on the next import or clone. A Record whose programmer holds such
@@ -872,18 +872,18 @@ The library's commands:
   because the band guard sends it as idle.
 - **Stored rows** were stripped once at startup and are stripped on every sync import
   (`models/commandRows.kt`'s `stripCommandRows`): by name (the Varytec's and the Shehds' old `reset = 255`), and by level — a
-  Look or cue row on a property sharing a command's channel holding a level in its band (the Fusion's
+  Look or cue row on an attribute sharing a command's channel holding a level in its band (the Fusion's
   motor mode at 251, the Orbit's program at 200, the Slender's special function at 200, a MAC 250
   strobe row at 208–255), a group row judged by every member's type. Palette rows hold intents and
-  effects their own parameters, so neither is judged by level; the band guard covers whatever they
+  FX their own parameters, so neither is judged by level; the band guard covers whatever they
   produce. A removed option is stored as a level, never a name, so nothing failed to load before the
   pass: a level in a band went out as idle.
 
-On the wire a command is a `CommandPropertyDescriptor` (`type: "command"`: label, description,
+On the wire a command is a `CommandAttributeDescriptor` (`type: "command"`: label, description,
 `holdMs`, `confirm`, its channel, `dedicated`, `alongside`) at the very end of a fixture's
-`properties`, after any trigger — the panel's *Commands* menu reads it and a client drawing controls
+`attributes`, after any trigger — the panel's *Commands* menu reads it and a client drawing controls
 from the list skips it. The DMX sheet names a dedicated command channel `Reset (command)` for one
-command and `5 commands` for several; a shared one keeps its property's name. It runs over REST, `POST
+command and `5 commands` for several; a shared one keeps its attribute's name. It runs over REST, `POST
 /api/rest/projects/{id}/patches/{pid}/commands/{command}`, which answers when the hold ends
 (`completed: false` when it was cut short) — no WS frame, the hold is the request — and from MCP's
 `run_fixture_command` (`docs/mcp-engineering.md`). `describe_rig` lists each fixture's commands with
@@ -947,7 +947,7 @@ desk-owned, attached to each show as it starts, like the effects service — and
   cool-down out on its *The desk has quit* screen.
 - **Ready lasts only while it is true** (D14). It clears on anything that sends output again: the
   provenance revision moving (`ProvenanceService.programmerRevision` — every programmer write, cue
-  layer change, effect start or stop, park and Look republish, never a crossfade tick), any command
+  layer change, FX start or stop, park and Look republish, never a crossfade tick), any command
   but a lamp-off starting (`CommandOutput`'s start hook), the blackout released, or another show
   attached. The blackout itself stays until *Undo* or *Release*.
 - **Undo** (`POST …/rig-safe/undo`, D18) strikes, staggered and restrike-aware, the lamps *Make rig
@@ -1076,17 +1076,17 @@ class MyFixture(
         MyFixture(this, transaction)
 ```
 
-### Step 2: Define Properties
+### Step 2: Define Attributes
 
-Map each DMX channel to a property:
+Map each DMX channel to an attribute:
 
 ```kotlin
     // Channel 1: Dimmer
-    @FixtureProperty
+    @FixtureAttribute
     override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
     // Channels 2-4: RGB
-    @FixtureProperty
+    @FixtureAttribute
     override val rgbColour = DmxColour(
         transaction, universe,
         firstChannel + 1,  // Red
@@ -1100,7 +1100,7 @@ Map each DMX channel to a property:
         AUTO(128u),
     }
 
-    @FixtureProperty
+    @FixtureAttribute
     val mode = DmxFixtureSetting(transaction, universe, firstChannel + 4, Mode.entries.toTypedArray())
 }
 ```
@@ -1192,7 +1192,7 @@ sealed class MyBarFixture(
     @FixtureType("my-bar-6ch")
     class Mode6Ch(...) : MyBarFixture(..., 6, ...), WithDimmer {
         override val mode = Mode.MODE_6CH
-        // 6-channel properties...
+        // 6-channel attributes...
     }
 
     @FixtureType("my-bar-14ch")
@@ -1200,7 +1200,7 @@ sealed class MyBarFixture(
         WithDimmer, MultiElementFixture<Head>
     {
         override val mode = Mode.MODE_14CH
-        // 14-channel properties + per-head control...
+        // 14-channel attributes + per-head control...
     }
 }
 ```
@@ -1231,7 +1231,7 @@ inner class BasicHead(
 
 // Full head for advanced modes
 inner class FullHead(...) : Head(...), WithPosition {
-    // Additional properties like fine control, speed, etc.
+    // Additional attributes like fine control, speed, etc.
 }
 ```
 
@@ -1273,11 +1273,11 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `Fixture.kt` | Sealed base class |
 | `DmxFixture.kt` | DMX-specific base with addressing |
 | `FixtureType.kt` | Class annotation |
-| `FixtureProperty.kt` | Property annotation |
-| `property/Slider.kt` | Single-value interface, AggregateSlider |
-| `property/Colour.kt` | RGB colour interface, AggregateColour |
-| `property/Position.kt` | Position interface |
-| `property/Strobe.kt` | Strobe interface |
+| `FixtureAttribute.kt` | Attribute annotation |
+| `attribute/Slider.kt` | Single-value interface, AggregateSlider |
+| `attribute/Colour.kt` | RGB colour interface, AggregateColour |
+| `attribute/Position.kt` | Position interface |
+| `attribute/Strobe.kt` | Strobe interface |
 | `trait/WithDimmer.kt` | Dimmer trait |
 | `trait/WithColour.kt` | Colour trait |
 | `trait/WithStrobe.kt` | Strobe trait |
@@ -1286,8 +1286,8 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `dmx/DmxSlider.kt` | DMX slider implementation |
 | `dmx/DmxColour.kt` | DMX RGB implementation |
 | `dmx/DmxFixtureSetting.kt` | DMX enum mapping |
-| `group/property/GroupSlider.kt` | AggregateSlider for groups |
-| `group/property/GroupColour.kt` | AggregateColour for groups |
+| `group/attribute/GroupSlider.kt` | AggregateSlider for groups |
+| `group/attribute/GroupColour.kt` | AggregateColour for groups |
 | `group/GroupExtensions.kt` | Extension properties for groups |
 | `DmxChannelMode.kt` | Multi-mode channel configuration interface |
 | `MultiModeFixtureFamily.kt` | Multi-mode fixture marker interface |
@@ -1300,7 +1300,7 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 
 Every type `FixtureTypeRegistry` serves, as `GET /fixture-types` answered it at the fixture optics
 plan's session 5 (2026-10-04). **Capabilities** is the type's `capabilities` list — what a palette
-or an effect can find on it — and a type's full beam vocabulary is in its descriptors
+or an FX can find on it — and a type's full beam vocabulary is in its descriptors
 (§"Beam vocabulary"). Classes are in `fixture/dmx/`; a multi-mode family is a sealed class with one
 `@FixtureType` per mode.
 
@@ -1359,7 +1359,7 @@ view** (where its raw channels are driven). It is never offered as a target.
 It is presentational, like `stageHidden`, and deliberately so:
 
 - It still patches, outputs and takes part in anything that already names it — a group, a cue, a
-  Look row, an effect, a surface binding. Hiding is about what the operator is *offered*, not what
+  Look row, an FX, a surface binding. Hiding is about what the operator is *offered*, not what
   the desk *does*. Nothing sweeps references when the flag is set.
 - It implies `stageHidden` on the Stage without writing it: the Stage never shows infrastructure
   under any flag, not even as the selected patch the picker keeps drawn.
@@ -1371,7 +1371,7 @@ Where the rule lives:
 | `FixturePatchDto` / `CreatePatchRequest` / patch `PUT` | The field. The PUT applies it **without a rebuild** (`PUT_KEYS_WITHOUT_REBUILD`) — the loader builds nothing from it — and, when it flips, calls `Fixtures.announceFixturesChanged()` so every window refetches `GET /fixtures` and drops (or regains) the fixture, without tearing down every controller of a live rig for a view flag. It is **not** in `METADATA_ONLY_PUT_KEYS`, because that set is also the bulk placement route's allowlist, and that route announces nothing: the bulk route refuses it. |
 | `Fixtures.FixturePatchMetadata.infrastructure` / `isInfrastructure` / `operatorFixtures` / `infrastructureKeys()` | The running show's copy, set by `DbFixtureLoader`. Every `setPatchMetadata` caller passes the flag through, or a metadata-only edit (a gel) would reset it. `operatorFixtures` is the register minus infrastructure under one read lock — what a server-side "every fixture" that *offers* reads. |
 | `DmxFixtureDetails.infrastructure` (`GET /fixtures`) | What the frontend filters on. The list still **carries** the fixture, so a key a cue or group holds still resolves. |
-| `BuskRigOrder` / `DeskSelection` | The empty rig's *steps* leave it out (`operatorFixtures`), mirrored by the client's `effectiveRig`, so *All* / *Next* / *Invert* never reach a power dimmer. A group that contains one still steps as the group; a tile placed before the flag was set stays. `positions()` still ranks it: ordering a head a caller already named (a spread) is not offering one. |
+| `BuskRigOrder` / `DeskSelection` | The empty rig's *steps* leave it out (`operatorFixtures`), mirrored by the client's `effectiveRig`, so *All* / *Next* / *Invert* never reach a power dimmer. A group that contains one still steps as the group; a tile placed before the flag was set stays. `positions()` still ranks it: ordering a head a caller already named (a fan) is not offering one. |
 | `POST /palettes/resolve` | Empty `targets` ("the whole patch", the palette editor's *Resolves to* panel) is `operatorFixtures`; a target that names one still resolves it. |
 | `RigBriefing` (`describe_rig`), `get_current_state` | The briefing lists it under its own *Infrastructure* heading; `get_current_state`'s fixture list marks it `infrastructure: true`. |
 | MCP `patch_fixtures` / `get_patch` | Take and report `infrastructure`; a row that omits it leaves an existing fixture's flag alone. |
@@ -1598,7 +1598,7 @@ D9 and D14). A DMX fixture never takes either — its body is its type's `body`,
 iris and framing shutters are its channels, which its looks drive.
 
 **The library** is a desk resource, `src/main/resources/lanterns/library.json`, shipped the way the
-`.fx.kts` effects are and read once by `fixture/lantern/LanternLibrary.kt`; `GET /lanterns` answers
+`.fx.kts` FX are and read once by `fixture/lantern/LanternLibrary.kt`; `GET /lanterns` answers
 it whole. About 25 entries — Source Fours at each fixed angle and the two zooms, Silhouette,
 Patt 23, Cantata, Prelude, SL, Acclaim, Cantata F, Rama, Patt 743, Quartet, the PCs, the four Par 64
 lamps and a Par 16, a Coda flood, an Iris cyc and a house downlight. Each carries an id, a name and
@@ -1679,7 +1679,7 @@ and kind (`frontend/src/lib/lamp.ts`, `frontend/docs/stage-vis-engineering.md` �
 ### Stored locate
 
 **A unit's stored locate is where Locate points it** (venue-visit plan D6, D17): pan and tilt, coarse
-and fine, in place of its default — the centre of travel, or a pan's declared front. Every other property Locate writes keeps its category
+and fine, in place of its default — the centre of travel, or a pan's declared front. Every other attribute Locate writes keeps its category
 default — full, open, white, the zoom at its middle — stored locate or not. It is
 `fixture_patches.locate`, canonical JSON `[{head?, pan, tilt, panFine?, tiltFine?}]`
 (`fixture/locate/StoredLocate.kt`, `DaoFixturePatch.storedLocate`), one entry per **unit** that pans
@@ -1695,7 +1695,7 @@ no fine byte stored locates with fine 0, as the default does.
   unit with an entry gets its `position` and fine sliders from it, clamped into each slider's range; a
   unit without one centres — but for a pan that declares its front (`forwardDeg`), which locates
   there, fine included, so tilt runs up and downstage as on any other mover. `LocateValueResolver.axesOf` is the one statement of a unit's axes (its
-  `WithPosition` sliders and its `PAN_FINE` / `TILT_FINE` properties), which the store reads and
+  `WithPosition` sliders and its `PAN_FINE` / `TILT_FINE` attributes), which the store reads and
   `StoredLocate.unitsOf` checks against. Locate over a group resolves per member, as it always has,
   so each member takes its own patch's entry.
 - **Set locate from current** — `POST /projects/{id}/locate/store {targets}` (`routes/locateStore.kt`):
@@ -1747,7 +1747,7 @@ D1, D6): the manual settles the bands, the venue settles what is in the slots, a
 rig can carry different strings. The type declares which settings are loadable and their stock
 contents; each unit overrides them slot by slot.
 
-**The vocabulary.** `@FixtureProperty(media = …)` on a setting: `GEL` (a slot takes a gel — a
+**The vocabulary.** `@FixtureAttribute(media = …)` on a setting: `GEL` (a slot takes a gel — a
 scroller's frame, a media frame's wing), `GOBO` (a pattern) or `GOBO_OR_GEL` (either — a module
 wheel holds a gobo or a dichroic). Each option's **stock** content is what it already declares: its
 `colourPreview` (`DmxFixtureColourSettingValue`) or its `gobo` (`DmxFixtureGoboSettingValue`). An
@@ -1759,8 +1759,8 @@ empty) and its media frame `GEL` (IN takes the wing's gel, OUT nothing; the wing
 
 **The rules**, which `MediaSlotsTest` holds every library type to:
 
-1. `media` only on a **setting-backed** property, and only on the fixture itself — never a slider,
-   never a cell, since a cell is no unit.
+1. `media` only on a **setting-backed** attribute, and only on the fixture itself — never a slider,
+   never an element, since an element is no unit.
 2. `GEL` and `GOBO_OR_GEL` only where the options can carry a colour (the option type implements
    `DmxFixtureColourSettingValue`); `GOBO` and `GOBO_OR_GEL` only where they can carry a pattern
    (`DmxFixtureGoboSettingValue`). A stock with nowhere to live has nothing to be replaced.
@@ -1776,7 +1776,7 @@ empty) and its media frame `GEL` (IN takes the wing's gel, OUT nothing; the wing
            "fbWheelPos": {"SLOT_1": {"gobo": "breakup"}}}}
 ```
 
-keyed by the setting's property name, then the option's name, naming only the options that differ
+keyed by the setting's attribute name, then the option's name, naming only the options that differ
 from the stock. A slot holds `{gel: code}` (a code from the desk's gel library, `GET /gels`),
 `{gobo: pattern}` (one of the 16 `GoboPattern` names, lowercase) or `{}` — **an empty slot**, fitted
 with nothing, so the frame is open; that is not the same as no entry, which leaves the stock. Null,
@@ -1788,7 +1788,7 @@ all call, following `resolvePatchFocus`: on a patch a `media` key absent is **ke
 **clears**; within an `extraPlacements` entry it is plain, as every placement field is (the entry is
 a whole placement), so a client that re-sends the list carries each placement's media. It refuses,
 **every problem at once** and each by its path: a type with no loadable settings, an unknown
-property, one that is not loadable, an unknown option, an option that is no slot, an unknown gel
+attribute, one that is not loadable, an unknown option, an option that is no slot, an unknown gel
 code or gobo pattern, a gel where the slot takes none, a gobo where it takes none, and a slot holding
 both. `FittedMedia.parse` refuses the shape first (a wrong JSON type is a problem named, never a 500).
 An MCP re-patch to another type drops stored media the new type cannot hold. Import is **not**
@@ -1811,12 +1811,12 @@ its pattern and no colour, an empty slot to open white and no pattern
 (`FittedMedia.colourOf` / `goboOf`). Where it happens:
 
 - **The client overlays it, per unit**, on the type's descriptor (`frontend/src/lib/fittedMedia.ts`'s
-  `fittedProperties`). A descriptor is per fixture, and a fixture with extra placements is several
+  `fittedAttributes`). A descriptor is per fixture, and a fixture with extra placements is several
   units — two scrollers on one address, each its own string — so only the surface drawing a
   placement knows which unit it is drawing; a backend-resolved descriptor could answer for the
   patch alone. The Stage view, the 2D appearance and the patch sheet all overlay the same way
   (`frontend/docs/stage-vis-engineering.md` §"Fitted media").
-- **The desk resolves it for what it answers alone**: `TemplateResolver.nearestColourSlot` snaps a
+- **The desk resolves it for what it answers alone**: `PaletteResolver.nearestColourSlot` snaps a
   colour against the unit's fitted colours (the patch's own: a placement's DMX is the patch's, so a
   snap can answer for one unit, and the note names the fitted gel, *L201_FULL_CT_BLUE (R26)*);
   Locate's white frame is the one open on this unit; `describe_rig` lists each unit's fitted media.
@@ -2096,7 +2096,7 @@ field (`frontend/src/components/stage/elementProblems.ts`).
 heads at a stage coordinate (metres, the frame above), and the `aim_fixtures` MCP tool (with
 a `dryRun`) is the same call; `write: false` answers without writing. `show/FixtureAim.kt`'s `aimAt` solves each head's pan and tilt;
 `routes/programmerAim.kt` reads the placements, converts to DMX and writes the programmer as owner
-`WEB`, like a spread — so Record captures an aim, Blind previews it and Clear releases it. The
+`WEB`, like a fan — so Record captures an aim, Blind previews it and Clear releases it. The
 Stage view's fixture sheet (its *Aim…* popover), its docked aim panel and a click on its Plan
 (venue-visit plan S13), and the programmer's position popup (*Aim…*), are the UI, all one call
 with a typed or clicked point.
@@ -2124,7 +2124,7 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
 `basePitchDeg` is its focus, not its mount, so it is never flagged.
 
 - **Travel degrees come from the annotation.** A head aims only where both its pan and tilt carry
-  `@FixtureProperty(degMin =, degMax =)`; signed angles are about the axis's zero — a pan's
+  `@FixtureAttribute(degMin =, degMax =)`; signed angles are about the axis's zero — a pan's
   declared `forwardDeg`, else the middle of the range — as the view's `axisZeroDeg` reads them. Pan repeats every 360°, and tilting either way off the axis
   reaches the same direction with pan half a turn apart, so every candidate inside the travel is
   tried and the one nearest both zeros wins — never the long way round, the same answer for the same
@@ -2133,10 +2133,10 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
   hemisphere behind it.
 - **Fine channels are written.** A head with `PAN_FINE` / `TILT_FINE` sliders gets 16 bits
   (`coarse + fine / 256`, as the view combines them); one step of an 8-bit 540° pan is about 2°,
-  some 37 cm at a 10 m throw. The degree→DMX mapping is `TemplateResolver`'s (range, inversion,
+  some 37 cm at a 10 m throw. The degree→DMX mapping is `PaletteResolver`'s (range, inversion,
   the coarse slider's own `min..max`).
 - **Everything else is skipped by name**, never guessed at: a fixed head, an axis with no degree
-  range, an unplaced fixture, a cell (it has no placement of its own), a point at the fixture or
+  range, an unplaced fixture, an element (it has no placement of its own), a point at the fixture or
   outside its travel (the reason says how far out).
 - **It aims from the placement point.** The drawn head pivots a few centimetres along the body axis
   from it, so the drawn beam passes that close to the point; a real head is as close as its
@@ -2145,7 +2145,7 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
   like any other entry — so `aim_fixtures` takes `saveAsPalette`: a new palette with one
   fixture-specific `position` row per aimed head, centre-relative (`pos:pan,tilt`, the palette
   grammar since venue-visit plan D3: each head's own coarse bytes about DMX 128), which
-  `TemplateResolver` turns back into exactly the aim's coarse channels. The fine channel is not part
+  `PaletteResolver` turns back into exactly the aim's coarse channels. The fine channel is not part
   of the palette scale, so the palette lands the aim to within a coarse step; the programmer write is
   exact, fine channels included. (It held travel degrees, `deg:`, until D3; those rows still resolve.) It is a focus
   palette cues, Looks and busk pads can reference, and it outlives the programmer. The palette is
@@ -2195,9 +2195,9 @@ was made from (a group sheet, the busk Position tab), so each head writes with i
 `sourceGroup`, as the pad's own writes do; it names no head of its own. `aim_fixtures` does not offer
 the arm.
 
-One head's step is `routes/programmerAim.kt`'s `jogHead`, which the spread route's **stage fan**
-(`mode: FAN` with `fan: {x?, y?}`, `docs/lighting-composition-model.md` §"A fan is a spread about each
-head's own position") shares: there each head's `(dx, dy)` is the fan's amount times its weight, so
+One head's step is `routes/programmerAim.kt`'s `jogHead`, which the Fan route's **stage fan**
+(`mode: ABOUT` with `fan: {x?, y?}`, `docs/lighting-composition-model.md` §"A fan about each head's
+own position") shares: there each head's `(dx, dy)` is the fan's amount times its weight, so
 the heads' landing points spread apart across the plane rather than move together.
 
 ### Focusing a head on a point
@@ -2231,7 +2231,7 @@ aim skipped is not pointing there, and is listed as not focused.
   `FixtureFocusTest` holds every focus type to a declared mover body and head, so the desk never
   has to guess the view's words; a type without one would be measured from its placement point.
 - **Everything else is skipped by name**: a head with no focus channel, a focus that declares no
-  range, an unplaced fixture, a cell (it has no placement of its own), a point outside the head's
+  range, an unplaced fixture, an element (it has no placement of its own), a point outside the head's
   range (the reason gives the distance and the range). An empty selection is 400
   `FOCUS_NEEDS_SELECTION`; a missing point or one off any stage (`checkStageCoord`'s ±500 m) is 400
   `FOCUS_INVALID` — aim's two refusals, the selection checked first.
@@ -2246,7 +2246,7 @@ A patch or a group carries **one colour** (tables-colours plan D7): `fixture_pat
 `fixture_groups.colour`, a nullable `varchar(16)` holding one of ten keys — `red`, `orange`,
 `yellow`, `lime`, `green`, `cyan`, `pink`, `brown`, `white`, `grey` (`models/fixtureColours.kt`). Five
 hues are **reserved** because the desk already draws something in them — blue (your values), amber (a
-park), violet (an effect), sky (a cue), teal (a Look and the venue) — and are never a colour. The
+park), violet (an FX), sky (a cue), teal (a Look and the venue) — and are never a colour. The
 stored value is the key; each key's light and dark values are the frontend's. It is **identity
 only**: it marks which fixture a name, a tile or a label is, and nothing builds output from it.
 
@@ -2388,7 +2388,7 @@ refuses one, and so does MCP's `switch_project`), and **refuses every write**: t
 of the `/projects/{id}/…` subtree (`routes/projectWriteGuard.kt`) answers any request but `GET`,
 `HEAD` and `OPTIONS` to one with 409 `VENUE_VERSION_READ_ONLY` — every `withProject` route, and the
 few that resolve their project another way (a project's `PUT` and `DELETE`, `set-current`, clone,
-export). A copy names its target in the body (`POST /projects/{source}/{looks|templates|scripts}/{id}/copy`),
+export). A copy names its target in the body (`POST /projects/{source}/{looks|palettes|scripts}/{id}/copy`),
 so the three copy routes judge the target by the same rule (`refusedCopyTarget`); `POST /cues/copy-from`
 names its target in the path, so the guard judges it there. Its reads answer, so a client draws a removed patch from the installed version's patch list.
 Deleting a venue deletes its versions with it, and is refused 409 `VENUE_IN_USE` while a show pins
@@ -2727,8 +2727,8 @@ or a facet override is). One transaction:
    `VENUE_UPDATE_UNDECIDED`, an unknown or unfitting answer 400 `VENUE_UPDATE_INVALID`.
 5. **Dead references**: every fixture key and group name the update takes out of the rig that the
    show still names, with who names them — wherever a key is stored, as `RigKeyReferences` walks it:
-   cue rows, layer targets and ad-hoc effects (a selection's items too), Look rows (a cell's element key
-   too) and effects, palette rows, surface bindings and scripts (`VenueRigChecks.deadReferences`, shared
+   cue rows, layer targets and ad-hoc FX (a selection's items too), Look rows (an element's key
+   too) and FX, palette rows, surface bindings and scripts (`VenueRigChecks.deadReferences`, shared
    with Attach). The rows stay and read as *Missing fixture*, as a deleted fixture's do.
 6. **Parks** follow by themselves: the show's own parks and its releases are keyed by channel, so the
    pin moving is all an Update does to them. The review's `carryOver` lists each as `PARK` or
@@ -2751,7 +2751,7 @@ classification, the hold and *Run against*.
 `POST /projects/{id}/venue/extract {name, include?, dryRun?}` — admin only — moves a show's room and
 house rig into a new venue, publishes v1 and pins the show to it (`venue/VenueExtract.kt`), so the
 show loads **the same fixtures at the same addresses**, now through its pin (`ShowsOnVenueTest`
-compares the loaded rig — every channel's fixture and property, every group's members — and the
+compares the loaded rig — every channel's fixture and attribute, every group's members — and the
 scope's uuids before and after, on `RichProjectFixture`).
 
 - **What moves** — `include`, absent for all: `UNIVERSES`, `PATCHES` (with their placements),
@@ -2795,7 +2795,7 @@ name, the show or the parts change (session 7).
 show (venue plan D9, session 7; `venue/VenueDetach.kt`): the archive, and the rare show that leaves
 its hall. Moving a show to another venue by its keys is `FU-VENUE-TOURING`, not this. It is Extract's
 mirror, and `VenueDetachTest` checks it the way `ShowsOnVenueTest` checks Extract: the loaded rig —
-every channel's fixture and property, every group's members — and the scope's uuids are the same
+every channel's fixture and attribute, every group's members — and the scope's uuids are the same
 before and after, on `seedShowOnVenue`, whose three overrides must come over applied.
 
 - **What is copied** is the effective rig at the **pinned** version, less what the show owns: every
@@ -2898,8 +2898,8 @@ default applied when unanswered.
 - **The replaced rows** are deleted, children first, and the show's parks the venue's now hold.
 - **Then** the overrides with their base, the recolours (§"Fixture colours"), the hides, the releases and every kept row's fresh uuid (its
   placements' too), and the *Take venue's* renames through `RigKeyReferences.rewrite` — cue rows, layer
-  targets and ad-hoc effects, Look rows and effects, palette rows, bindings, busk rig cell tiles and
-  each item of a selection effect. Scripts are never rewritten.
+  targets and ad-hoc FX, Look rows and FX, palette rows, bindings, busk rig element tiles and
+  each item of a selection FX. Scripts are never rewritten.
 - **The venue's guards** run on a fresh `RigScope`, the ones Update runs (`venue/VenueRigChecks.kt`): a
   key, head number or name a show record shares with a visible venue record is a blocker; an address
   overlap the attach introduces — two units that did not overlap before, named by their uuids after —
@@ -2918,7 +2918,7 @@ default applied when unanswered.
 `hides`, `additions`, `incoming`, `renames`, `decisions`, `blockers`) plus `overlaps`, `deadReferences`,
 each rename's reach (`usedBy`: who names the key, read before writing), `behind`, `installed` and
 `runAgainst`, and `notes`: for a live show, the renamed fixtures whose programmer values, Locate and
-hand-run effects the reload drops, since the carry names them by their old key (as a `rename_fixtures`
+hand-run FX the reload drops, since the carry names them by their old key (as a `rename_fixtures`
 or a sync pull leaves them). **A live show reloads** (the carry), and one attached behind on output keeps running
 against its pin rather than going dark (`VenueHoldService.runAgainstOnLoad`, recorded before the reload,
 as a publish does for a running show); one not live opens held next time, as any behind show. **Who.**

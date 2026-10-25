@@ -22,7 +22,7 @@ import { CueSlotOverviewPanel } from './CueSlotOverviewPanel'
  * The FX cue-slot overlay, after the busk layout took over how slots are filled.
  *
  * Three behavioural decisions land here and nothing else guards them: a **Look** tile presses
- * `/looks/{id}/toggle` with an *empty* target list (the derive-from-its-own-fixtures contract), a
+ * `/looks/{id}/toggle` naming no targets (a Look lands whole), a
  * Look tile lights from the programmer's **applied** feed rather than from cue liveness, and every
  * editing affordance follows the **busk view's** edit mode rather than a long press on the panel.
  *
@@ -53,7 +53,7 @@ interface Recorded {
  * A fetch mock that records **bodies**.
  *
  * `installRecordingFetch` cannot: RTK Query hands `fetch` a `Request`, whose body is only readable
- * asynchronously, so an `init.body` reader sees nothing. The empty target list is the contract this
+ * asynchronously, so an `init.body` reader sees nothing. A Look press naming no targets is the contract this
  * file exists to pin, so it has to be read off the request itself.
  */
 function draw() {
@@ -107,7 +107,7 @@ describe('the FX cue-slot overlay', () => {
     vi.unstubAllGlobals()
   })
 
-  it('presses a Look tile with an empty target list', async () => {
+  it('presses a Look tile naming no targets', async () => {
     const { calls } = draw()
     fireEvent.pointerDown(await screen.findByLabelText('Storm Wash'))
     fireEvent.pointerUp(screen.getByLabelText('Storm Wash'))
@@ -115,9 +115,8 @@ describe('the FX cue-slot overlay', () => {
     await waitFor(() => {
       const toggle = writes(calls).find((c) => c.url.includes('/looks/6/toggle'))
       expect(toggle).toBeTruthy()
-      // The empty array *is* the contract: the route derives the targets from the Look's own
-      // patched fixtures, which is why only a Look with no deferred effect may sit in a slot.
-      expect(toggle!.body).toEqual({ targets: [] })
+      // A Look lands whole (absolute-looks plan D1): the press names neither targets nor a mask.
+      expect(toggle!.body).toEqual({})
     })
   })
 
@@ -155,13 +154,13 @@ describe('the FX cue-slot overlay', () => {
     const tile = await screen.findByLabelText('Storm Wash')
     expect(tile.getAttribute('aria-pressed')).toBe('false')
 
-    // A TEMPLATE layer carrying the same int PK must not light a Look's tile: the two id spaces
+    // A palette layer carrying the same int PK must not light a Look's tile: the two id spaces
     // are different tables.
     act(() => {
       programmerWs.push({
         applied: [
           {
-            source: { kind: 'TEMPLATE', id: 6, uuid: 't6', name: 'Amber Key' },
+            source: { kind: 'PALETTE', id: 6, uuid: 't6', name: 'Amber Key' },
             targets: [{ type: 'fixture', key: 'hex-1', state: 'all' }],
           },
         ],

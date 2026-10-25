@@ -11,13 +11,13 @@ import uk.me.cormack.lighting7.fixture.BodyArchetype
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.TargetRef
@@ -88,7 +88,7 @@ internal data class FocusRequest(
 @Serializable
 internal data class FocusResponse(
     val written: List<FocusWriteDto> = emptyList(),
-    val skipped: List<SpreadSkipDto> = emptyList(),
+    val skipped: List<FanSkipDto> = emptyList(),
 )
 
 /**
@@ -127,26 +127,26 @@ internal fun focusIntoProgrammer(
     }
     if (fadeMs != null && fadeMs < 0) return FocusOutcome.Invalid("fadeMs must not be negative")
 
-    val skipped = ArrayList<SpreadSkipDto>()
+    val skipped = ArrayList<FanSkipDto>()
     val heads = headsOf(state, targets, skipped)
     val placements = aimPlacements(state, project, heads.keys)
     val hints = groupHintsForTargets(state.show.fixtures, targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
     val at = StagePoint(point.x, point.y, point.z)
 
-    val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
+    val writes = ArrayList<ProgrammerWriter.AttributeWrite>()
     val written = ArrayList<FocusWriteDto>()
     for ((key, head) in heads) {
         val target = CueTargetDto(TargetRef.Fixture.TYPE, key)
         when (val focus = focusHead(head, placements[key], at)) {
-            is HeadFocus.Skip -> skipped += SpreadSkipDto(target, focus.reason)
+            is HeadFocus.Skip -> skipped += FanSkipDto(target, focus.reason)
             is HeadFocus.Focused -> {
-                writes += ProgrammerWriter.PropertyWrite(head, focus.propertyName, focus.value, hints[key])
+                writes += ProgrammerWriter.AttributeWrite(head, focus.attribute, focus.value, hints[key])
                 written += FocusWriteDto(target, focus.value.serialize(), roundCentimetre(focus.distanceM))
             }
         }
     }
     if (write && writes.isNotEmpty()) {
-        state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs ?: 0)
+        state.show.fxEngine.programmer.writeAttributes(ProgrammerOwner.WEB, writes, fadeMs = fadeMs ?: 0)
     }
     return FocusOutcome.Done(FocusResponse(written, skipped))
 }
@@ -154,8 +154,8 @@ internal fun focusIntoProgrammer(
 internal sealed interface HeadFocus {
     data class Skip(val reason: String) : HeadFocus
     data class Focused(
-        val propertyName: String,
-        val value: CueAssignmentResolver.PropertyValue.Slider,
+        val attribute: String,
+        val value: CueAssignmentResolver.AttributeValue.Slider,
         val distanceM: Double,
     ) : HeadFocus
 }
@@ -165,13 +165,13 @@ internal sealed interface HeadFocus {
  * a test can hand it a head no patch can name — a focus with no declared range.
  */
 internal fun focusHead(head: GroupableFixture, placement: AimPlacement?, point: StagePoint): HeadFocus {
-    if (head is FixtureElement<*>) return HeadFocus.Skip("a cell has no placement of its own — focus its fixture")
+    if (head is FixtureElement<*>) return HeadFocus.Skip("an element has no placement of its own — focus its fixture")
     if (head !is Fixture) return HeadFocus.Skip("no focus channel")
-    val property = head.fixtureProperties.firstOrNull { it.category == PropertyCategory.FOCUS && it.fineOf == null }
+    val attribute = head.fixtureAttributes.firstOrNull { it.category == AttributeCategory.FOCUS && it.fineOf == null }
         ?: return HeadFocus.Skip("no focus channel")
-    val slider = PropertyChannelWriter.resolveProperty(head, property.name)?.value as? DmxSlider
+    val slider = AttributeChannelWriter.resolveAttribute(head, attribute.name)?.value as? DmxSlider
         ?: return HeadFocus.Skip("focus is not DMX-backed")
-    val range = property.focusRange(slider) ?: return HeadFocus.Skip("focus declares no range")
+    val range = attribute.focusRange(slider) ?: return HeadFocus.Skip("focus declares no range")
     val from = placement?.world ?: return HeadFocus.Skip("not placed on the stage")
 
     val distance = distanceFromLens(head, placement, from, point)
@@ -179,7 +179,7 @@ internal fun focusHead(head: GroupableFixture, placement: AimPlacement?, point: 
         "out of focus range — the point is ${formatMetres(distance)} m away; " +
             "focus reaches ${formatMetres(range.nearM)}–${formatMetres(range.farM)} m",
     )
-    return HeadFocus.Focused(property.name, CueAssignmentResolver.PropertyValue.Slider(dmx.toUByte()), distance)
+    return HeadFocus.Focused(attribute.name, CueAssignmentResolver.AttributeValue.Slider(dmx.toUByte()), distance)
 }
 
 /**

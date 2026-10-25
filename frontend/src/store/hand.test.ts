@@ -32,7 +32,7 @@ const held = (over: Partial<HeldRecord> = {}): HeldRecord => ({
   kind: 'LOOK',
   id: 4,
   uuid: 'look-uuid-4',
-  template: null,
+  palette: null,
   look: { name: 'Warm Wash' } as HeldRecord['look'],
   cue: null,
   pickedUpOn: null,
@@ -50,8 +50,8 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('pick up and let go', () => {
   it('sends hand.pickUp with the kind and the record id', () => {
-    handPickUp('TEMPLATE', 12)
-    expect(handWs.pickedUp).toEqual([{ kind: 'TEMPLATE', id: 12 }])
+    handPickUp('PALETTE', 12)
+    expect(handWs.pickedUp).toEqual([{ kind: 'PALETTE', id: 12 }])
   })
 
   it('sends a BARE hand.drop for the chip and Escape — "whatever is there" is what they mean', () => {
@@ -151,7 +151,7 @@ describe('heldName', () => {
   it('reads the summary the frame carries, per kind', () => {
     expect(heldName(held())).toBe('Warm Wash')
     expect(
-      heldName(held({ kind: 'TEMPLATE', look: null, template: { name: 'Amber' } as never })),
+      heldName(held({ kind: 'PALETTE', look: null, palette: { name: 'Amber' } as never })),
     ).toBe('Amber')
     expect(heldName(held({ kind: 'CUE', look: null, cue: { name: 'Blackout' } as never }))).toBe(
       'Blackout',

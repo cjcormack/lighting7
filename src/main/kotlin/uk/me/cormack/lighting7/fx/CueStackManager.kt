@@ -51,8 +51,8 @@ class CueStackManager(
     holdsSink: MutableStateFlow<CueHolds.Frame> = MutableStateFlow(CueHolds.Frame.EMPTY),
     /** After every hold change: the surfaces' cue-pad LEDs. */
     onHoldsChanged: () -> Unit = {},
-    /** How [CueHolds] edits an effect run it hands on in place — `routes.alignEffect`. */
-    effectAligner: EffectAligner,
+    /** How [CueHolds] edits an effect run it hands on in place — `routes.alignFx`. */
+    fxAligner: FxAligner,
 ) {
     private data class ActiveStackState(
         val stackId: Int,
@@ -103,21 +103,21 @@ class CueStackManager(
     private val crossfades = CueCrossfadeDriver(fxEngine)
 
     /** What holds each cue live — stacks and loose presses alike. See [CueHolds]. */
-    val holds: CueHolds = CueHolds(fxEngine, crossfades, projectId, holdsSink, onHoldsChanged, effectAligner)
+    val holds: CueHolds = CueHolds(fxEngine, crossfades, projectId, holdsSink, onHoldsChanged, fxAligner)
 
     /**
-     * Each stack's effect size (effects plan D10): a runtime weight on the effects its cues run,
+     * Each stack's FX amount (effects plan D10): a runtime weight on the effects its cues run,
      * 100 % at load. Per show, so a project switch drops it; a reload carries it (`ShowCarry`).
      */
-    val effectSizes: StackEffectSizes = StackEffectSizes().also { fxEngine.stackEffectSizes = it }
+    val fxAmounts: StackFxAmounts = StackFxAmounts().also { fxEngine.stackFxAmounts = it }
 
     /**
-     * Set [stackId]'s effect size, 0–1, and answer it as held. Every change re-sends provenance —
-     * coalesced there, and as a cue-fade-only update, since a size moves no programmer value — because
+     * Set [stackId]'s FX amount, 0–1, and answer it as held. Every change re-sends provenance —
+     * coalesced there, and as a cue-fade-only update, since an FX amount moves no programmer value — because
      * any weight can change what is on stage: a setting effect paints from half weight up.
      */
-    fun setEffectSize(stackId: Int, size: Double): Double {
-        val (before, after) = effectSizes.change(stackId, size)
+    fun setFxAmount(stackId: Int, amount: Double): Double {
+        val (before, after) = fxAmounts.change(stackId, amount)
         if (before != after) fxEngine.provenance.emitUpdate(cueFadeOnly = true)
         return after
     }
@@ -146,9 +146,9 @@ class CueStackManager(
         return id.takeIf { it != NO_STACK }
     }
 
-    /** [stackId] is deleted: its effect size and its uuid's resolution go with it. */
+    /** [stackId] is deleted: its FX amount and its uuid's resolution go with it. */
     fun forgetStack(stackId: Int) {
-        effectSizes.forget(stackId)
+        fxAmounts.forget(stackId)
         stackIdsByUuid.values.removeIf { it == stackId }
     }
 
@@ -159,7 +159,7 @@ class CueStackManager(
         val entryId: Int,
         val cueId: Int,
         val cueName: String,
-        val effectCount: Int,
+        val fxCount: Int,
     )
 
     /**
@@ -273,8 +273,8 @@ class CueStackManager(
         // Only the side that really moved fades: an incoming cue already held elsewhere is at full,
         // an outgoing cue still held elsewhere stays at full. Either side's rows or effects make it a
         // fade, so an effect-only cue fades too (and a cancel can find what it was fading).
-        val incomingFades = useCrossfade && incoming.first && (incoming.hasRows || incoming.fadingEffects > 0)
-        val outgoingFades = useCrossfade && outgoing != null && (outgoing.fadingRows || outgoing.fadingEffects > 0)
+        val incomingFades = useCrossfade && incoming.first && (incoming.hasRows || incoming.fadingFx > 0)
+        val outgoingFades = useCrossfade && outgoing != null && (outgoing.fadingRows || outgoing.fadingFx > 0)
 
         // Update active state. The GO consumed any armed standby — the next one is positional again
         // until an operator arms another.
@@ -320,7 +320,7 @@ class CueStackManager(
             entryId = entryId,
             cueId = cueData.cueId,
             cueName = cueData.cueName,
-            effectCount = incoming.effectCount,
+            fxCount = incoming.fxCount,
         )
     }
 
@@ -380,7 +380,7 @@ class CueStackManager(
                 cueName = transaction(state.database) {
                     DaoCue.findById(next.cueId)?.name ?: "Unknown"
                 },
-                effectCount = 0,
+                fxCount = 0,
             )
         }
 
@@ -452,9 +452,9 @@ class CueStackManager(
         crossfades.cancel(stackId, holds::isHeld)
 
         var removed = stackState?.let {
-            holds.release(appState, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId), CueHolds.Departure.SNAP).effectsRemoved
+            holds.release(appState, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId), CueHolds.Departure.SNAP).fxRemoved
         } ?: 0
-        removed += fxEngine.removeEffectsForCueStack(stackId)
+        removed += fxEngine.removeFxForCueStack(stackId)
         // A stopped stack has nothing on deck: the standby went with it. Published after the
         // teardown so the frame describes the stack as it now is.
         runState.consumeStandby(stackId)
@@ -563,10 +563,10 @@ class CueStackManager(
 
     // ─── Private helpers ─────────────────────────────────────────────────
 
-    // `createInstanceForStack` stood here. It was `createEffectInstance` with a `stackId`
+    // `createInstanceForStack` stood here. It was `createFxInstance` with a `stackId`
     // parameter, which existed only to resolve `P1` against the stack's positional colour list.
     // With that list gone the two bodies were identical — and this copy had lost the
-    // `prewarmTemplateColours` call the shared one makes, so a stack GO left the first `tmpl:`
+    // `prewarmPaletteColours` call the shared one makes, so a stack GO left the first `pal:`
     // resolve to the 50 Hz tick loop, where it opens a transaction.
 }
 

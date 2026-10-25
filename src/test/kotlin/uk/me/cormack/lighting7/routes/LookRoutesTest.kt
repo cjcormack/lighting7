@@ -11,13 +11,14 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
-import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -52,14 +53,14 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "128", fadeDurationMs = 750L,
+                            attribute = "dimmer", value = "128", fadeDurationMs = 750L,
                         ),
                     ),
-                    effects = listOf(
-                        LookEffectDto(
+                    fx = listOf(
+                        LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
                 )
@@ -70,17 +71,16 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals("dim-50", created.name)
         assertEquals("128", created.rows.single().value)
         assertEquals(750L, created.rows.single().fadeDurationMs)
-        assertEquals("Pulse", created.effects.single().effectType)
+        assertEquals("Pulse", created.fx.single().fxType)
         val lookId = created.id
 
         val list = client.get(base()).body<List<LookDto>>()
         val summary = list.single { it.id == lookId }
         assertEquals(1, summary.rowCount)
-        assertEquals(1, summary.effectCount)
-        assertFalse(summary.hasDeferredEffects, "a Look effect names its own target")
+        assertEquals(1, summary.fxCount)
 
         val fetched = client.get("${base()}/$lookId").body<LookDetails>()
-        assertEquals("dimmer", fetched.rows.single().propertyName)
+        assertEquals("dimmer", fetched.rows.single().attribute)
 
         // Rows and effects are replaced wholesale when present.
         val putResp = client.put("${base()}/$lookId") {
@@ -91,11 +91,11 @@ class LookRoutesTest : RouteIntegrationTest() {
                     put("rows", buildJsonArray {
                         add(buildJsonObject {
                             put("targetType", "fixture"); put("targetKey", "hex-1")
-                            put("propertyName", "dimmer"); put("value", "192")
+                            put("attribute", "dimmer"); put("value", "192")
                         })
                         add(buildJsonObject {
                             put("targetType", "fixture"); put("targetKey", "hex-1")
-                            put("propertyName", "uv"); put("value", "64")
+                            put("attribute", "uv"); put("value", "64")
                         })
                     })
                 }
@@ -105,11 +105,11 @@ class LookRoutesTest : RouteIntegrationTest() {
         val updated = putResp.body<LookDetails>()
         assertEquals("dim-75", updated.name)
         assertEquals(2, updated.rows.size)
-        val byProp = updated.rows.associateBy { it.propertyName }
+        val byProp = updated.rows.associateBy { it.attribute }
         assertEquals("192", byProp.getValue("dimmer").value)
         assertEquals("64", byProp.getValue("uv").value)
         assertEquals(
-            1, updated.effects.size,
+            1, updated.fx.size,
             "omitting `effects` leaves them alone — absent is not the same as empty",
         )
 
@@ -127,7 +127,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "Warm",
                     rows = listOf(
-                        LookRowDto(targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "#ff8800"),
+                        LookRowDto(targetType = "fixture", targetKey = "hex-1", attribute = "colour", value = "#ff8800"),
                     ),
                 )
             )
@@ -152,7 +152,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "Warm",
                     rows = listOf(
-                        LookRowDto(targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "#ff8800"),
+                        LookRowDto(targetType = "fixture", targetKey = "hex-1", attribute = "colour", value = "#ff8800"),
                     ),
                 )
             )
@@ -177,7 +177,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "colour",
+                            attribute = "colour",
                             value = "ref:2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02",
                         ),
                     ),
@@ -194,7 +194,7 @@ class LookRoutesTest : RouteIntegrationTest() {
             // The guard the rest of B6 rests on: `LookRowEntry.target` is non-null and
             // `loadLookSnapshot` drops a row whose discriminator names no arm, so this rejection is
             // the only thing keeping a deferred row from reaching the database and then vanishing
-            // silently at cue time. `validateLookEffects` refuses the same discriminator for effects.
+            // silently at cue time. `validateLookFx` refuses the same discriminator for effects.
             mountTestApp(state)
             val client = jsonClient()
             val resp = client.post(base()) {
@@ -205,7 +205,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         rows = listOf(
                             LookRowDto(
                                 targetType = DEFERRED_TARGET_TYPE, targetKey = "",
-                                propertyName = "dimmer", value = "180",
+                                attribute = "dimmer", value = "180",
                             ),
                         ),
                     )
@@ -223,17 +223,17 @@ class LookRoutesTest : RouteIntegrationTest() {
         testApplication {
             mountTestApp(state)
             val client = jsonClient()
-            fun effect(targetType: String, targetKey: String, blendMode: String = "OVERRIDE") = LookEffectDto(
+            fun effect(targetType: String, targetKey: String, blendMode: String = "OVERRIDE") = LookFxDto(
                 targetType = targetType, targetKey = targetKey,
-                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                beatDivision = 0.5, blendMode = blendMode, distribution = "LINEAR",
+                fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                cycle = 0.5, blendMode = blendMode, order = "NORMAL",
             )
             val resp = client.post(base()) {
                 contentType(ContentType.Application.Json)
                 setBody(
                     CreateLookRequest(
                         name = "Deferred",
-                        effects = listOf(
+                        fx = listOf(
                             effect("fixture", "hex-1"),
                             effect(DEFERRED_TARGET_TYPE, ""),
                             effect("fixture", "hex-2", blendMode = "ADD"),
@@ -243,23 +243,72 @@ class LookRoutesTest : RouteIntegrationTest() {
             }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = resp.bodyAsText()
-            assertTrue("effects[1]: A look effect must name its own fixture, group or selection" in body, body)
-            assertTrue("effects[2]: Unknown blendMode 'ADD'" in body, body)
-            assertFalse("effects[0]" in body, body)
+            assertTrue("fx[1]: A Look FX must name its own fixture, group or selection" in body, body)
+            assertTrue("fx[2]: Unknown blendMode 'ADD'" in body, body)
+            assertFalse("fx[0]" in body, body)
             assertTrue(client.get(base()).body<List<LookDto>>().none { it.name == "Deferred" }, "nothing is written")
 
             val lookId = client.post(base()) {
                 contentType(ContentType.Application.Json)
-                setBody(CreateLookRequest(name = "Bound", effects = listOf(effect("group", "front-wash"))))
+                setBody(CreateLookRequest(name = "Bound", fx = listOf(effect("group", "front-wash"))))
             }.body<LookDetails>().id
             val put = client.put("${base()}/$lookId") {
                 contentType(ContentType.Application.Json)
                 setBody(buildJsonObject {
-                    put("effects", TestJson.encodeToJsonElement(listOf(effect(DEFERRED_TARGET_TYPE, ""))))
+                    put("fx", TestJson.encodeToJsonElement(listOf(effect(DEFERRED_TARGET_TYPE, ""))))
                 })
             }
             assertEquals(HttpStatusCode.BadRequest, put.status)
-            assertEquals("group", client.get("${base()}/$lookId").body<LookDetails>().effects.single().targetType, "the PUT wrote nothing")
+            assertEquals("group", client.get("${base()}/$lookId").body<LookDetails>().fx.single().targetType, "the PUT wrote nothing")
+        }
+
+    @Test
+    fun `a put naming an old field is refused rather than dropped`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            val pulse = LookFxDto(
+                targetType = "group", targetKey = "front-wash", fxType = "Pulse", family = "intensity",
+                attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL", amount = 0.4,
+            )
+            val lookId = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(CreateLookRequest(name = "Bound", fx = listOf(pulse)))
+            }.body<LookDetails>().id
+
+            val oldList = client.put("${base()}/$lookId") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("effects", buildJsonArray {}) })
+            }
+            assertEquals(HttpStatusCode.BadRequest, oldList.status, oldList.bodyAsText())
+            assertTrue("effects" in oldList.bodyAsText(), oldList.bodyAsText())
+
+            val oldField = client.put("${base()}/$lookId") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("fx", buildJsonArray {
+                        add(buildJsonObject {
+                            TestJson.encodeToJsonElement(pulse).let { it as kotlinx.serialization.json.JsonObject }
+                                .forEach { (k, v) -> if (k != "amount") put(k, v) }
+                            put("size", 0.9)
+                        })
+                    })
+                })
+            }
+            assertEquals(HttpStatusCode.BadRequest, oldField.status, oldField.bodyAsText())
+            assertTrue("size" in oldField.bodyAsText(), oldField.bodyAsText())
+            assertEquals(0.4, client.get("${base()}/$lookId").body<LookDetails>().fx.single().amount, "the PUT wrote nothing")
+
+            val oldRow = client.put("${base()}/$lookId") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("rows", kotlinx.serialization.json.Json.parseToJsonElement(
+                        """[{"targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}]""",
+                    ))
+                })
+            }
+            assertEquals(HttpStatusCode.BadRequest, oldRow.status, oldRow.bodyAsText())
+            assertTrue("propertyName" in oldRow.bodyAsText(), oldRow.bodyAsText())
         }
 
     @Test
@@ -267,7 +316,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         testApplication {
             // The failure this closes: `blendMode: "ADD"` used to reach `varchar(50)` intact and
             // read back as itself, so the UI rendered "ADD" as the layer's blend while every spawn
-            // warned and played OVERRIDE. `EffectSpecCoercion.Lenient` exists to *survive* a row an
+            // warned and played OVERRIDE. `FxSpecCoercion.Lenient` exists to *survive* a row an
             // older build wrote, not to paper over one this build accepted.
             mountTestApp(state)
             val client = jsonClient()
@@ -276,11 +325,11 @@ class LookRoutesTest : RouteIntegrationTest() {
                 setBody(
                     CreateLookRequest(
                         name = "Bad Blend",
-                        effects = listOf(
-                            LookEffectDto(
+                        fx = listOf(
+                            LookFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                                beatDivision = 0.5, blendMode = "ADD", distribution = "LINEAR",
+                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                                cycle = 0.5, blendMode = "ADD", order = "NORMAL",
                             ),
                         ),
                     )
@@ -295,11 +344,11 @@ class LookRoutesTest : RouteIntegrationTest() {
                 setBody(
                     CreateLookRequest(
                         name = "Bad Filter",
-                        effects = listOf(
-                            LookEffectDto(
+                        fx = listOf(
+                            LookFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                                beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                                cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                                 elementFilter = "THIRDS",
                             ),
                         ),
@@ -341,8 +390,8 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "Wash",
                     rows = listOf(
-                        LookRowDto(targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "#ff8800"),
-                        LookRowDto(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "200"),
+                        LookRowDto(targetType = "fixture", targetKey = "hex-1", attribute = "colour", value = "#ff8800"),
+                        LookRowDto(targetType = "fixture", targetKey = "hex-1", attribute = "dimmer", value = "200"),
                     ),
                 )
             )
@@ -414,14 +463,14 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "200",
+                            attribute = "dimmer", value = "200",
                         ),
                     ),
-                    effects = listOf(
-                        LookEffectDto(
+                    fx = listOf(
+                        LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
                 )
@@ -457,11 +506,11 @@ class LookRoutesTest : RouteIntegrationTest() {
             setBody(
                 CreateLookRequest(
                     name = "Pulse",
-                    effects = listOf(
-                        LookEffectDto(
+                    fx = listOf(
+                        LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
                 ),
@@ -476,9 +525,9 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, empty.status, empty.bodyAsText())
         val pressed = empty.body<ToggleLookResponse>()
         assertEquals("applied", pressed.action)
-        assertEquals(1, pressed.effectCount)
+        assertEquals(1, pressed.fxCount)
         assertTrue(state.show.programmerStore.layers.single().targets.isEmpty())
-        assertEquals(listOf("hex-1"), state.show.fxEngine.programmerLayerEffects().values.map { it.target.targetKey })
+        assertEquals(listOf("hex-1"), state.show.fxEngine.programmerLayerFx().values.map { it.target.targetKey })
 
         val missing = client.post("${base()}/999999/toggle") {
             contentType(ContentType.Application.Json)
@@ -500,11 +549,11 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "Warm pulse",
                     rows = listOf(LookRowDto("fixture", "hex-1", "dimmer", "200")),
-                    effects = listOf(
-                        LookEffectDto(
+                    fx = listOf(
+                        LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "ColourPulse", category = "colour", propertyName = "rgbColour",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            fxType = "ColourWave", family = "colour", attribute = "rgbColour",
+                            cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
                 ),
@@ -519,9 +568,8 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
         val applied = on.body<ToggleLookResponse>()
         assertEquals("applied", applied.action, "nothing of it is Position, and it goes on all the same")
-        assertTrue(applied.skippedFamilies.isEmpty())
-        assertNull(state.show.programmerStore.layers.single().propertyMask, "the press gives the layer no mask (D3)")
-        assertEquals(1, applied.effectCount)
+        assertNull(state.show.programmerStore.layers.single().attributeMask, "the press gives the layer no mask (D3)")
+        assertEquals(1, applied.fxCount)
 
         // A mask name outside the vocabulary is ignored with the rest of the mask.
         val off = client.post("${base()}/$lookId/toggle") {
@@ -610,7 +658,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "180",
+                            attribute = "dimmer", value = "180",
                         ),
                     ),
                 )
@@ -650,7 +698,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "180",
+                            attribute = "dimmer", value = "180",
                         ),
                     ),
                 )
@@ -680,11 +728,11 @@ class LookRoutesTest : RouteIntegrationTest() {
             setBody(
                 CreateLookRequest(
                     name = "Pulse Only",
-                    effects = listOf(
-                        LookEffectDto(
+                    fx = listOf(
+                        LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
                 )

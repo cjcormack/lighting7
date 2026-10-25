@@ -15,8 +15,8 @@ vi.mock('sonner', () => ({ toast }))
 import { useReleaseTargets } from './useRelease'
 
 const selectionKey = '[{"key":"par-1","type":"fixture"},{"key":"par-2","type":"fixture"}]'
-const chase = { effectId: 9, effectType: 'Chase', targetKey: selectionKey, isGroupTarget: false, propertyName: 'dimmer' }
-const cleared = (key: string): TargetCleared => ({ targetType: 'fixture', targetKey: key, values: 1, effects: 0, partial: [chase] })
+const chase = { fxId: 9, fxType: 'Chase', targetKey: selectionKey, isGroupTarget: false, attribute: 'dimmer' }
+const cleared = (key: string): TargetCleared => ({ targetType: 'fixture', targetKey: key, values: 1, fx: 0, partial: [chase] })
 
 afterEach(() => vi.clearAllMocks())
 
@@ -31,7 +31,7 @@ describe('Release over a selection (effects plan D3)', () => {
     await result.current()
     expect(removeFx).toHaveBeenCalledTimes(1)
     expect(removeFx).toHaveBeenCalledWith({ id: 9, fixtureKey: selectionKey })
-    expect(toast.success.mock.calls[0][0]).toMatch(/1 effect/)
+    expect(toast.success.mock.calls[0][0]).toMatch(/1 FX/)
     expect(toast.warning).not.toHaveBeenCalled()
   })
 

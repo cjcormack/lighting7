@@ -255,7 +255,7 @@ internal val createProjectTool = ToolDef(
 
 internal val switchProjectTool = ToolDef(
     name = "switch_project",
-    description = "Make another project the current one. This stops the running show: every effect and cue stops and all DMX output goes to zero before the new project's patch loads, except channels the new project parks, which hold their level into its park. Choosing the project that is already current is the same clean restart. Only do it when the operator has said the desk is not in use for a show, or asked for the switch. Call describe_rig afterwards.",
+    description = "Make another project the current one. This stops the running show: every FX and cue stops and all DMX output goes to zero before the new project's patch loads, except channels the new project parks, which hold their level into its park. Choosing the project that is already current is the same clean restart. Only do it when the operator has said the desk is not in use for a show, or asked for the switch. Call describe_rig afterwards.",
     inputSchema = objectSchema(required = listOf("projectId")) {
         prop("projectId", "integer", "From list_projects.")
     },
@@ -266,7 +266,7 @@ internal val listFixtureTypesTool = ToolDef(
     description = "List the fixture types this desk can patch — each a manufacturer, model and DMX mode with its channel count. Match every fixture in a patch list to a typeKey from here by manufacturer, model and mode/channel count; a mode is a separate typeKey. Conventional (dimmer-driven) lanterns — profiles, fresnels, PARs, cyc floods, practicals — all patch as 'generic-dimmer', one channel each. A fixture with no match cannot be patched: tell the operator which ones, since adding a fixture type is a code change. A type marked acceptsLength (a lightstrip) has no fixed size: give each such fixture its installed lengthM when patching or placing it; defaultLengthM is only what is drawn until then. A type marked acceptsLantern (generic-dimmer) is hung with a lantern from the desk's library: give each its lanternType when the plot names one. A type listed with `loadable` has settings whose slots hold fitted media — a gel scroller's string, a module wheel's gobos or dichroics, a media frame's gel — each listed with its slots and their stock content: give a unit its `media` when the plot names what is loaded.",
     inputSchema = objectSchema {
         prop("query", "string", "Optional case-insensitive filter on manufacturer, model, mode or typeKey.")
-        prop("properties", "boolean", "Also list each type's settable properties — name, kind (slider, colour, position, setting), category, and a setting's option names — and, for a multi-head type, the properties of each cell (cellProperties). These are the names create_look's values take. A cell property the type has no fixture-level property for is set on every cell by naming the fixture, or on one cell by the cell's own key (describe_rig lists each fixture's cells). Long: narrow it with query.")
+        prop("attributes", "boolean", "Also list each type's settable attributes — name, kind (slider, colour, position, setting), category, and a setting's option names — and, for a multi-head type, the attributes of each element (cellAttributes). These are the names create_look's values take. An element attribute the type has no fixture-level attribute for is set on every element by naming the fixture, or on one element by the element's own key (describe_rig lists each fixture's elements). Long: narrow it with query.")
     },
 )
 
@@ -291,7 +291,7 @@ private val patchRowSchema = objectSchema(required = listOf("name", "fixtureType
     put("groups", buildJsonObject {
         put("type", "array")
         put("items", buildJsonObject { put("type", "string") })
-        put("description", "Group names to add this fixture to (created on demand), e.g. positions like 'FOH' or 'LX1', or roles like 'Front wash'. Groups are how looks, cues and effects address many fixtures at once.")
+        put("description", "Group names to add this fixture to (created on demand), e.g. positions like 'FOH' or 'LX1', or roles like 'Front wash'. Groups are how looks, cues and FX address many fixtures at once.")
     })
     prop("infrastructure", "boolean", "Patched but not a lighting fixture — a dimmer channel switching hard power, a relay, a hazer's fan. Hidden from every desk view but Patches and Channels, and never offered as a target; don't put it in groups. Omit to leave an existing fixture's flag as it is.")
     placementProps()
@@ -351,16 +351,16 @@ internal val unpatchFixturesTool = ToolDef(
 
 private val renameRowSchema = objectSchema(required = listOf("key", "newKey")) {
     prop("key", "string", "The fixture's key now, from get_patch.")
-    prop("newKey", "string", "Its new key: unique in the project, at most 100 characters, no '.' (a fixture's cells are named <key>.<cell>).")
+    prop("newKey", "string", "Its new key: unique in the project, at most 100 characters, no '.' (a fixture's elements are named <key>.<element>).")
 }
 
 internal val renameFixturesTool = ToolDef(
     name = "rename_fixtures",
     description = "Change patched fixtures' keys in a project (the current one unless projectId names another) — every other tool names a fixture by its key, so this is how a key typed wrong at patch time is put right. " +
         "patch_fixtures cannot do it: there the key is the fixture's identity, and a new key patches a new fixture. " +
-        "The project's cues, Looks, palettes, surface bindings and busk rig cells that name the old key (or one of its cells) are rewritten to the new one; scripts are Kotlin source and are not — the answer's `scriptsNotRewritten` names any that mention an old key. " +
+        "The project's cues, Looks, palettes, surface bindings and busk rig tiles that name the old key (or one of its elements) are rewritten to the new one; scripts are Kotlin source and are not — the answer's `scriptsNotRewritten` names any that mention an old key. " +
         "Keys can be swapped in one call. On a show on a venue only the show's own fixtures can be renamed, and a new key may not be a venue fixture's. " +
-        "On the current project a cue or Look already running is recomposed under the new key; the programmer's own values and effects already running are not, so clear and re-apply them. " +
+        "On the current project a cue or Look already running is recomposed under the new key; the programmer's own values and FX already running are not, so clear and re-apply them. " +
         "Everything is checked first and nothing is written if anything fails; dryRun answers what would change.",
     inputSchema = objectSchema(required = listOf("fixtures")) {
         arrayProp("fixtures", renameRowSchema)
@@ -379,7 +379,7 @@ private val groupEditSchema = objectSchema(required = listOf("name")) {
     stringListProp(
         "members",
         "The group's whole membership, in order — fixture keys from get_patch. Members not listed leave the group; the fixtures stay patched. " +
-            "Order is how a group's effects and spreads run across it. Not with add or remove.",
+            "Order is how a group's FX and fans run across it. Not with add or remove.",
     )
     stringListProp("add", "Fixture keys to append to the group, in order. One already in it is left where it is.")
     stringListProp("remove", "Fixture keys to take out of the group. The fixtures stay patched.")
@@ -395,7 +395,7 @@ internal val editGroupsTool = ToolDef(
     description = "Change a project's fixture groups (the current one unless projectId names another): take fixtures out of a group, set its whole membership and order, append to it, rename it, or make a new one. " +
         "patch_fixtures only ever adds a fixture to a group; this is how one leaves. delete_groups deletes a group. " +
         "On a show on a venue only the show's own groups can be edited (a show's group may hold the venue's fixtures); a venue group is the venue's. " +
-        "On the current project a renamed group's cues and Looks already running are recomposed under the new name; the programmer's own values and effects already running are not. " +
+        "On the current project a renamed group's cues and Looks already running are recomposed under the new name; the programmer's own values and FX already running are not. " +
         "Everything is checked first and nothing is written if any row fails; dryRun answers what would change.",
     inputSchema = objectSchema(required = listOf("groups")) {
         arrayProp("groups", groupEditSchema)
@@ -456,6 +456,20 @@ private val pointSchema = objectSchema(required = listOf("x", "y", "z")) {
     prop("z", "number")
 }
 
+/**
+ * What `get_scene` answers beside a row's fields and `set_scene` ignores, so a row read back can be
+ * corrected and resent as it stands: a seating's seat count, a seat view's resolved eye, a note that
+ * its seating has gone, a painted face's image size, the owner, a model's own size. Declared on both
+ * row schemas, or the undeclared-argument check would refuse the resent row.
+ */
+internal val SCENE_READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note", "paintImages", "owner", "modelSize")
+
+private fun JsonObjectBuilder.sceneReadOnlyProps() {
+    SCENE_READ_ONLY_FIELDS.forEach { name ->
+        put(name, buildJsonObject { put("description", "Read-only: get_scene answers it and set_scene ignores it.") })
+    }
+}
+
 private val sceneElementSchema = objectSchema(required = listOf("name")) {
     prop("name", "string", "Unique name: 'Hall', 'Proscenium', 'Stalls', 'SR wall', 'Sofa'. An existing name updates that element — fields you send overwrite, fields you omit keep.")
     enumProp("kind", StageElementKind.entries.map { it.name }, "Required for a new element. ROOM: an inward-facing shell. PROSCENIUM: a wall with an opening. FLAT: a panel with doors and windows. DRAPE: soft goods. PLATFORM: a deck, rostrum or balcony. SEATING: rows of seats (viewpoints sit in them). OBJECT: furniture, plants, signs, a flown piece — or, with shape MODEL, any shape built from parts.")
@@ -494,6 +508,7 @@ private val sceneElementSchema = objectSchema(required = listOf("name")) {
         "Copy another element's model: the named OBJECT's MODEL parts, and its size and finish wherever this row leaves them out — so {name: 'Tree 4', x: 2, y: 5, modelFrom: 'Tree 1'} is another tree. " +
             "params may still add flies, travelS or states, but not parts. The source is the scene as it stands at this row: a stored element, or one an earlier row of this call sets. A copy is independent: changing the source later does not change it.",
     )
+    sceneReadOnlyProps()
 }
 
 /**
@@ -520,6 +535,7 @@ private val sceneViewpointSchema = objectSchema(required = listOf("name")) {
     prop("fovDeg", "number", "Lens, 15–90. EYE and SEAT only; default 50 standing, 52 seated.")
     prop("seating", "string", "SEAT: the seating element's name. May be omitted when the scene has one.")
     prop("seat", "string", "SEAT: row letter and number, e.g. 'F6'.")
+    sceneReadOnlyProps()
 }
 
 internal const val PROSCENIUM_HALL_TEMPLATE = "proscenium-hall"
@@ -665,6 +681,9 @@ private val venueFixtureOverrideSchema = objectSchema(required = listOf("key")) 
         put("properties", buildJsonObject {
             PatchFacet.entries.forEach { f -> enumProp(f.name, listOf("SHOW", "VENUE", "KEEP_MINE")) }
         })
+        // A facet's name is read in any case (describe_rig prints them lower-case) and the tool
+        // refuses an unknown one itself, so the keys are a map's rather than fixed properties.
+        put("additionalProperties", buildJsonObject { put("type", "string") })
     })
     put("address", buildJsonObject {
         put("type", "object")
@@ -801,7 +820,7 @@ internal val extractVenueTool = ToolDef(
     description = "Turn the room and house rig of an existing show into a venue, publish it as v1, and put that show on it — in one step, all or nothing. " +
         "Moved into the venue (each record keeps its identity, so nothing the show's cues and Looks name breaks): the VENUE-layer scene elements, Fixed seating, camera viewpoints and seat views in Fixed seating, and — unless include leaves them out — the universes, patch, riggings, regions and groups. " +
         "The show keeps its SET-layer elements, cues, Looks, palettes and prompt book, and draws and outputs exactly as before, now reading the room from the venue. Preset seating is copied into the venue and also stays the show's. " +
-        "Admin only. Run it with dryRun first: it answers exactly what would move. Extracting the current project reloads it — the rig holds its levels and the live cues, programmer and hand-run effects come back, restarting every effect — so that needs reloadLiveShow.",
+        "Admin only. Run it with dryRun first: it answers exactly what would move. Extracting the current project reloads it — the rig holds its levels and the live cues, programmer and hand-run FX come back, restarting every FX — so that needs reloadLiveShow.",
     inputSchema = objectSchema(required = listOf("fromProjectId", "name")) {
         prop("fromProjectId", "integer", "The show whose room and rig become the venue (list_projects). It must not already be on a venue.")
         prop("name", "string", "The venue's name: unique on the desk, so not the show's own name. At most 50 characters.")
@@ -811,7 +830,7 @@ internal val extractVenueTool = ToolDef(
             "The parts to move; absent moves all of them. PARKS moves the show's parked channels, which then reach it (and every show on the venue) from the version. Leave out UNIVERSES, PATCHES, RIGGINGS and GROUPS for a venue with no house rig. Parts that point at each other must move together (a patch with its universe and rigging); the refusal says which.",
         )
         prop("dryRun", "boolean", "Answer what would move and keep nothing. Default false.")
-        prop("reloadLiveShow", "boolean", "Required to extract from the current project: it reloads, restarting every running effect. Only when the operator has said the desk is free.")
+        prop("reloadLiveShow", "boolean", "Required to extract from the current project: it reloads, restarting every running FX. Only when the operator has said the desk is free.")
     },
 )
 
@@ -822,7 +841,7 @@ internal val attachToVenueTool = ToolDef(
         "Records pair by identity, then by key (fixture key, universe number, name); a show detached from this venue is matched three ways against the version it left, so its changes and the venue's are told apart. " +
         "Run it with dryRun first: the answer is the review — output and drawing changes, what is inherited, overridden, kept, hidden, brought in and renamed, the choices it offers (`decisions`, each with a default) " +
         "and the address `overlaps` it introduces, which must be answered — then send the same call with decisions and without dryRun. Blockers refuse it (ATTACH_BLOCKED) until the show changes. " +
-        "Either role may attach. Attaching the current project reloads it — the rig holds its levels and the live cues, programmer and hand-run effects come back, except the programmer's values and effects on a fixture the attach renames, which name its old key — so that needs reloadLiveShow.",
+        "Either role may attach. Attaching the current project reloads it — the rig holds its levels and the live cues, programmer and hand-run FX come back, except the programmer's values and FX on a fixture the attach renames, which name its old key — so that needs reloadLiveShow.",
     inputSchema = objectSchema(required = listOf("projectId", "venueId")) {
         prop("projectId", "integer", "The standalone show to attach (list_projects). Not a venue, and not a show already on one.")
         prop("venueId", "integer", "The venue to attach it to (list_venues).")
@@ -859,7 +878,7 @@ internal val copyToProjectTool = ToolDef(
     name = "copy_to_project",
     description = "Copy show content from one project into another, without switching to either: scene elements by name, cue stacks by id with all their cues, and Looks by id. " +
         "References are found in the target: between two projects on one venue a cue's scenery and events find the venue's element and fixture by identity, whatever version each pins; otherwise a scenery change finds the element of the same name (or one copied in the same call) and an event the fixture of the same key and type. " +
-        "A cue layer's Look or palette, and a palette an effect parameter names (tmpl:), is the target's of the same name — copied along when the target has none. Speed masters map by number, scripts by name. " +
+        "A cue layer's Look or palette, and a palette an FX parameter names (pal:), is the target's of the same name — copied along when the target has none. Speed masters map by number, scripts by name. " +
         "Painted cloths bring their images. Copies get new ids and keep their names; a name the target already uses is refused. " +
         "Anything that does not resolve in the target is listed in `unresolved` rather than guessed: rows naming a fixture or group the target lacks are kept (they read as missing), a scenery change, event or script trigger that cannot resolve is left out. Prompt-book anchors are not copied. " +
         "All or nothing; run it with dryRun first. Stored data only — it changes no output.",

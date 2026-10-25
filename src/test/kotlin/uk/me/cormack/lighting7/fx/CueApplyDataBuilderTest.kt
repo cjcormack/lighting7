@@ -6,9 +6,9 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueTrigger
 import uk.me.cormack.lighting7.models.DaoLook
@@ -52,12 +52,12 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
             DaoLookRow.new {
                 this.look = look
                 targetType = "fixture"; targetKey = fixtureKey
-                propertyName = "colour"; value = hex; sortOrder = 0
+                attribute = "colour"; value = hex; sortOrder = 0
             }
             look
         }
 
-    private fun cueColour(fixtureKey: String): CueAssignmentResolver.PropertyValue.Colour {
+    private fun cueColour(fixtureKey: String): CueAssignmentResolver.AttributeValue.Colour {
         val value = state.show.fxEngine.layerResolver
             .currentCueLayerState[CueAssignmentResolver.Key.fixture(fixtureKey, "rgbColour")]
         return assertIs(value)
@@ -109,16 +109,16 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
                 sortOrder = 3; targets = emptyList()
                 delay = Duration.ofMillis(400L)
             }
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "dimmer"; value = "128"; sortOrder = 0
+                attribute = "dimmer"; value = "128"; sortOrder = 0
             }
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 delay = Duration.ofMillis(750L)
             }
@@ -150,11 +150,11 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
         assertEquals(1, applyData.layers.size, "layers — the field the GO path used to drop")
         assertEquals(look.id.value, applyData.layers.single().source.id)
         assertEquals(400L, applyData.layers.single().delayMs)
-        assertEquals(1, applyData.propertyAssignments.size, "rows — the field the AI path dropped")
+        assertEquals(1, applyData.attributeAssignments.size, "rows — the field the AI path dropped")
         assertEquals(1, applyData.triggers.size, "triggers — the other field the AI path dropped")
         assertEquals(5_000L, applyData.triggers.single().intervalMs)
-        assertEquals(1, applyData.adHocEffects.size)
-        assertEquals(750L, applyData.adHocEffects.single().delayMs, "ad-hoc timing, dropped too")
+        assertEquals(1, applyData.adHocFx.size)
+        assertEquals(750L, applyData.adHocFx.single().delayMs, "ad-hoc timing, dropped too")
     }
 
     /**

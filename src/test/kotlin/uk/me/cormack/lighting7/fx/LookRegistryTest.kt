@@ -89,7 +89,7 @@ class LookRegistryTest {
     }
 
     @Test
-    fun `property names are canonicalised on both sides`() {
+    fun `attribute names are canonicalised on both sides`() {
         // `colour` / `color` / `rgbColour` all name one property. Whichever alias the palette was
         // stored with, any alias must find it — a silent miss here is indistinguishable from
         // "this palette doesn't cover the fixture".

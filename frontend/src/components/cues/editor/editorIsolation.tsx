@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode, type RefObject } from 'react'
 import { NoProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import { NoLookRowStore } from '@/components/programmer/LookRowStore'
-import { NoFocusedTemplateLayer } from '@/components/programmer/FocusedTemplateLayer'
+import { NoFocusedPaletteLayer } from '@/components/programmer/FocusedPaletteLayer'
 import { RailTabClaimContext } from '@/components/programmer/railTab'
 import { activeKeyRegion, useKeyRegionTracking } from '@/components/sheet/keyRegion'
 import { useCueActionDialogs } from '@/components/runner/cueActionDialogs'
@@ -17,9 +17,9 @@ export function CueEditorIsolation({ children }: { children: ReactNode }) {
   return (
     <NoProgrammerScope>
       <NoLookRowStore>
-        <NoFocusedTemplateLayer>
+        <NoFocusedPaletteLayer>
           <RailTabClaimContext.Provider value={null}>{children}</RailTabClaimContext.Provider>
-        </NoFocusedTemplateLayer>
+        </NoFocusedPaletteLayer>
       </NoLookRowStore>
     </NoProgrammerScope>
   )

@@ -36,7 +36,7 @@ export function ApplyUpdateDialog({ open, onOpenChange, status }: ApplyUpdateDia
 
   const version = status.stagedVersion ?? status.latest?.version ?? ''
   const deskName = install?.friendlyName ?? ''
-  const effectCount = status.live.activeEffectCount
+  const fxCount = status.live.activeFxCount
   const activeStack = status.live.activeStackName
 
   /**
@@ -45,7 +45,7 @@ export function ApplyUpdateDialog({ open, onOpenChange, status }: ApplyUpdateDia
    * which destroys the friction at exactly the moment it matters. When nothing is running, a
    * plain click is honest.
    */
-  const isLive = effectCount > 0 || activeStack != null
+  const isLive = fxCount > 0 || activeStack != null
   // `deskName` must be non-empty before a match counts. Without that check, an unresolved or
   // failed `useInstallQuery` leaves `deskName` as '' — and `typed` also starts as '' — so the
   // gate would be satisfied by typing nothing at all, which is precisely the case it exists to
@@ -82,7 +82,7 @@ export function ApplyUpdateDialog({ open, onOpenChange, status }: ApplyUpdateDia
         <DialogHeader>
           <DialogTitle>Install lighting7 {version} and restart?</DialogTitle>
           <DialogDescription>
-            This stops the lighting desk. DMX output stops, any running effects stop, and every
+            This stops the lighting desk. DMX output stops, any running FX stop, and every
             connected phone or tablet disconnects. It usually takes one to three minutes, and
             lighting7 reopens by itself when it&apos;s done.
           </DialogDescription>
@@ -93,9 +93,9 @@ export function ApplyUpdateDialog({ open, onOpenChange, status }: ApplyUpdateDia
             <Alert variant="destructive">
               <TriangleAlert className="h-4 w-4" />
               <AlertDescription>
-                {effectCount > 0 && (
+                {fxCount > 0 && (
                   <span className="font-medium">
-                    {effectCount} {effectCount === 1 ? 'effect is' : 'effects are'} running right now.
+                    {fxCount} FX {fxCount === 1 ? 'is' : 'are'} running right now.
                   </span>
                 )}
                 {activeStack && (

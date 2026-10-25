@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import type { TemplateSummary } from '@/api/templatesApi'
-import type { SettingPropertyDescriptor } from '@/store/fixtures'
+import type { PaletteSummary } from '@/api/palettesApi'
+import type { SettingAttributeDescriptor } from '@/store/fixtures'
 
-const wire = vi.hoisted(() => ({ templates: [] as TemplateSummary[] }))
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: wire.templates, isLoading: false }) }))
+const wire = vi.hoisted(() => ({ templates: [] as PaletteSummary[] }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: wire.templates, isLoading: false }) }))
 vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
 
 import { FxPaletteListPicker, FxSlotListPicker } from './FxStepListPickers'
 
-const palette = (name: string, family: TemplateSummary['family'], propertyName: string, value: string) =>
+const palette = (name: string, family: PaletteSummary['family'], attribute: string, value: string) =>
   ({
     id: 1,
     uuid: `uuid-${name}`,
@@ -21,9 +21,9 @@ const palette = (name: string, family: TemplateSummary['family'], propertyName: 
     isGeneric: true,
     kind: 'value',
     requiredEmitters: [],
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName, value }],
-    effect: null,
-  }) as unknown as TemplateSummary
+    rows: [{ targetType: 'deferred', targetKey: '', attribute, value }],
+    fx: null,
+  }) as unknown as PaletteSummary
 
 const GOBO = {
   type: 'setting',
@@ -35,7 +35,7 @@ const GOBO = {
     { name: 'GOBO_3', level: 30, displayName: 'Gobo 3' },
     { name: 'GOBO_5', level: 50, displayName: 'Gobo 5' },
   ],
-} as unknown as SettingPropertyDescriptor
+} as unknown as SettingAttributeDescriptor
 
 afterEach(cleanup)
 
@@ -48,20 +48,20 @@ describe('FxPaletteListPicker', () => {
     ]
     const onChange = vi.fn()
     render(
-      <FxPaletteListPicker label="Palettes" value="tmpl:uuid-Centre,tmpl:uuid-Downstage" propertyName="position" readOnly={false} onChange={onChange} />,
+      <FxPaletteListPicker label="Palettes" value="pal:uuid-Centre,pal:uuid-Downstage" attribute="position" readOnly={false} onChange={onChange} />,
     )
     const steps = within(screen.getByRole('list', { name: 'Palettes' })).getAllByRole('listitem')
     expect(steps.map((s) => s.getAttribute('data-step'))).toEqual(['Centre', 'Downstage'])
 
     fireEvent.click(screen.getByRole('button', { name: 'Move Downstage earlier' }))
-    expect(onChange).toHaveBeenLastCalledWith('tmpl:uuid-Downstage,tmpl:uuid-Centre')
+    expect(onChange).toHaveBeenLastCalledWith('pal:uuid-Downstage,pal:uuid-Centre')
     fireEvent.click(screen.getByRole('button', { name: 'Remove Centre' }))
-    expect(onChange).toHaveBeenLastCalledWith('tmpl:uuid-Downstage')
+    expect(onChange).toHaveBeenLastCalledWith('pal:uuid-Downstage')
   })
 
   it('names a reference it cannot find as missing, and asks for two or more', () => {
     wire.templates = [palette('Centre', 'POSITION', 'position', 'pos:0,0')]
-    render(<FxPaletteListPicker label="Palettes" value="tmpl:uuid-gone" readOnly={false} onChange={() => {}} />)
+    render(<FxPaletteListPicker label="Palettes" value="pal:uuid-gone" readOnly={false} onChange={() => {}} />)
     expect(screen.getByText('Missing palette')).toBeTruthy()
     expect(screen.getByText(/Two palettes or more/)).toBeTruthy()
   })

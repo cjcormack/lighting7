@@ -62,8 +62,8 @@ export const cueStacksApi = restApi.injectEndpoints({
         ...(result?.entries ?? []).flatMap((e) => (e.cueId != null ? [{ type: 'Cue' as const, id: e.cueId }] : [])),
         { type: 'LookList', id: projectId },
         'LookList',
-        { type: 'TemplateList', id: projectId },
-        'TemplateList',
+        { type: 'PaletteList', id: projectId },
+        'PaletteList',
         'StageElement',
         'Fixture',
         'GroupList',
@@ -412,8 +412,8 @@ export const cueStacksApi = restApi.injectEndpoints({
         }
       },
       invalidatesTags: () => [
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
 
@@ -443,8 +443,8 @@ export const cueStacksApi = restApi.injectEndpoints({
         }
       },
       invalidatesTags: () => [
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
 
@@ -498,8 +498,8 @@ export const cueStacksApi = restApi.injectEndpoints({
         }
       },
       invalidatesTags: () => [
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
 
@@ -595,8 +595,8 @@ export const cueStacksApi = restApi.injectEndpoints({
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'ProgramState', id: projectId },
         'CueStackList',
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
 
@@ -617,8 +617,8 @@ export const cueStacksApi = restApi.injectEndpoints({
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'ProgramState', id: projectId },
         'CueStackList',
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
 
@@ -646,8 +646,8 @@ export const cueStacksApi = restApi.injectEndpoints({
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'ProgramState', id: projectId },
         'CueStackList',
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
 
@@ -677,8 +677,8 @@ export const cueStacksApi = restApi.injectEndpoints({
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'ProgramState', id: projectId },
         'CueStackList',
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
   }),

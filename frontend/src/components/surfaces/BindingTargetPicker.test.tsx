@@ -5,12 +5,12 @@ import type { BindingTarget } from '@/store/surfaces'
 
 // The picker is store-connected on five axes; stub them all so this stays a unit test of
 // which kinds are offered for which control type. The fixture list is behind
-// `useRigProperties`, which is where the target-less kinds (selection property, encoder bank)
+// `useRigAttributes`, which is where the target-less kinds (selection property, encoder bank)
 // get their vocabulary.
 vi.mock('@/store/groups', () => ({
   useGroupListQuery: () => ({ data: [{ name: 'front-wash', memberCount: 2 }] }),
   // The axis field looks a group's property up to see whether it is a colour.
-  useGroupPropertiesQuery: () => ({
+  useGroupAttributesQuery: () => ({
     data: [
       { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', min: 0, max: 255, memberChannels: [] },
       { type: 'colour', name: 'rgbColour', displayName: 'colour', category: 'colour', memberColourChannels: [] },
@@ -22,7 +22,7 @@ const rigFixtures = vi.hoisted(() => [
   {
     key: 'hex-1',
     name: 'Hex 1',
-    properties: [
+    attributes: [
       { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', channel: { universe: 0, channelNo: 1 }, min: 0, max: 255 },
       { type: 'colour', name: 'rgbColour', displayName: 'colour', category: 'colour', redChannel: { universe: 0, channelNo: 2 }, greenChannel: { universe: 0, channelNo: 3 }, blueChannel: { universe: 0, channelNo: 4 } },
     ],
@@ -54,13 +54,13 @@ vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({
     data: [
-      { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredEffects: false },
-      { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredEffects: true },
+      { id: 1, uuid: 'look-warm', name: 'Warm wash' },
+      { id: 2, uuid: 'look-pulse', name: 'Pulse' },
     ],
   }),
 }))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR' }] }),
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR' }] }),
 }))
 vi.mock('@/store/busk', () => ({
   useBuskPagesQuery: () => ({
@@ -168,7 +168,7 @@ describe('BindingTargetPicker record targets', () => {
   // unlisted variant shows "Fixture property" and nothing else.
   it.each([
     ['Look — apply', 'Look', { type: 'applyLook', lookUuid: 'look-warm' } as BindingTarget],
-    ['Palette — press', 'Palette', { type: 'pressTemplate', templateUuid: 'tmpl-red' } as BindingTarget],
+    ['Palette — press', 'Palette', { type: 'pressPalette', paletteUuid: 'tmpl-red' } as BindingTarget],
     ['Busk pad — press', 'Busk pad', { type: 'pressPad', padUuid: 'pad-1' } as BindingTarget],
     ['Busk page — show', 'Page', { type: 'buskPageSet', pageUuid: 'page-verse' } as BindingTarget],
   ])('offers %s and renders its body', (kindLabel, fieldLabel, value) => {
@@ -180,7 +180,7 @@ describe('BindingTargetPicker record targets', () => {
   it.each([
     ['Busk window — focus', 'Window', { type: 'buskFocusSet', windowName: 'Screen 2', focus: 'pads' } as BindingTarget],
     ['Busk window — sheet', 'Window', { type: 'buskSheetToggle', windowName: 'Screen 2' } as BindingTarget],
-    ['Selection — cells', 'Mode', { type: 'selectionCells', mode: 'ODD' } as BindingTarget],
+    ['Selection — elements', 'Mode', { type: 'selectionCells', mode: 'ODD' } as BindingTarget],
   ])('offers %s and renders its body (busk-further plan D14)', (kindLabel, fieldLabel, value) => {
     renderPicker(false, value)
     expect(screen.getByText(kindLabel)).toBeInTheDocument()
@@ -208,14 +208,14 @@ describe('BindingTargetPicker record targets', () => {
     expect(screen.getByText(/wrapping at the ends/)).toBeInTheDocument()
   })
 
-  it("offers a stack's FX size on a fader, and a change of stack lets the old stack's uuid go", () => {
-    const onChange = renderPicker(true, { type: 'stackEffectSize', stackId: 4, stackUuid: 'uuid-act-1' })
-    expect(screen.getByText('Cue stack — FX size')).toBeInTheDocument()
+  it("offers a stack's FX amount on a fader, and a change of stack lets the old stack's uuid go", () => {
+    const onChange = renderPicker(true, { type: 'stackFxAmount', stackId: 4, stackUuid: 'uuid-act-1' })
+    expect(screen.getByText('Cue stack — FX amount')).toBeInTheDocument()
     expect(screen.getByText('Act 1')).toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('combobox')[1]!)
     fireEvent.click(screen.getByRole('option', { name: 'Act 2' }))
     // The uuid wins at dispatch, so keeping Act 1's would leave the fader on Act 1.
-    expect(onChange).toHaveBeenLastCalledWith({ type: 'stackEffectSize', stackId: 9, stackUuid: null })
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'stackFxAmount', stackId: 9, stackUuid: null })
   })
 
   it('offers the selection fan on a fader, with its axis', () => {
@@ -229,7 +229,7 @@ describe('BindingTargetPicker record targets', () => {
 
   it('does not offer a record kind on a fader', () => {
     // Every one is a press, and a fader has no press — `refuseWrongKind` would refuse the row.
-    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' })
+    renderPicker(true, { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'dimmer' })
     expect(screen.queryByText('Look — apply')).toBeNull()
   })
 
@@ -238,16 +238,13 @@ describe('BindingTargetPicker record targets', () => {
     expect(screen.getByText('Warm wash')).toBeInTheDocument()
   })
 
-  it('offers a Look that needs a selection, but not as a choosable option', () => {
-    // `SurfaceLibrary`'s drag chip already excludes one of these outright, to avoid the write
-    // boundary's `BINDING_LOOK_NEEDS_SELECTION`. The picker's manual "Change target" door has to
-    // enforce the same rule itself rather than let the operator pick it and hit the 400 on save.
+  it('offers every Look as a choosable option, since a Look lands whole', () => {
     renderPicker(false, { type: 'applyLook', lookUuid: 'look-warm' })
     // Two comboboxes are on screen: "Target type" and this body's own "Look" field — the second
     // is the one that lists the library.
     fireEvent.click(screen.getAllByRole('combobox')[1]!)
     const pulse = screen.getByRole('option', { name: /Pulse/ })
-    expect(pulse.getAttribute('aria-disabled')).toBe('true')
+    expect(pulse.getAttribute('aria-disabled')).not.toBe('true')
   })
 })
 
@@ -256,10 +253,10 @@ describe('BindingTargetPicker colour axes', () => {
   // write boundary refuses the axis by name (`BINDING_AXIS_NEEDS_COLOUR`), and a field that led
   // there would be a way to learn the rule from a 400.
   it.each([
-    ['a fixture', { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' } as BindingTarget, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' } as BindingTarget],
-    ['a group', { type: 'groupProperty', groupName: 'front-wash', propertyName: 'rgbColour' } as BindingTarget, { type: 'groupProperty', groupName: 'front-wash', propertyName: 'dimmer' } as BindingTarget],
-    ['the selection', { type: 'selectionProperty', propertyName: 'rgbColour' } as BindingTarget, { type: 'selectionProperty', propertyName: 'dimmer' } as BindingTarget],
-    ['the encoder bank', { type: 'encoderBankSet', propertyName: 'rgbColour' } as BindingTarget, { type: 'encoderBankSet', propertyName: 'dimmer' } as BindingTarget],
+    ['a fixture', { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour' } as BindingTarget, { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'dimmer' } as BindingTarget],
+    ['a group', { type: 'groupAttribute', groupName: 'front-wash', attribute: 'rgbColour' } as BindingTarget, { type: 'groupAttribute', groupName: 'front-wash', attribute: 'dimmer' } as BindingTarget],
+    ['the selection', { type: 'selectionAttribute', attribute: 'rgbColour' } as BindingTarget, { type: 'selectionAttribute', attribute: 'dimmer' } as BindingTarget],
+    ['the encoder bank', { type: 'encoderBankSet', attribute: 'rgbColour' } as BindingTarget, { type: 'encoderBankSet', attribute: 'dimmer' } as BindingTarget],
   ])('offers a colour axis on %s only for a colour property', (_what, onColour, onSlider) => {
     const continuous = onColour.type !== 'encoderBankSet'
     const { unmount } = render(
@@ -274,20 +271,20 @@ describe('BindingTargetPicker colour axes', () => {
   })
 
   it('shows the axis a binding carries, and hue when it carries none', () => {
-    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'saturation' })
+    renderPicker(true, { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour', colourAxis: 'saturation' })
     expect(screen.getByText('Saturation')).toBeInTheDocument()
     cleanup()
-    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' })
+    renderPicker(true, { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour' })
     expect(screen.getByText('Hue')).toBeInTheDocument()
   })
 
   it('drops the axis when the property changes', () => {
     // A colour → dimmer edit that kept `saturation` would save a 400.
     const onChange = renderPicker(true, {
-      type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'saturation',
+      type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour', colourAxis: 'saturation',
     })
     fireEvent.change(screen.getByPlaceholderText('dimmer'), { target: { value: 'dimmer' } })
-    expect(onChange).toHaveBeenCalledWith({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' })
+    expect(onChange).toHaveBeenCalledWith({ type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'dimmer' })
     expect('colourAxis' in onChange.mock.calls[0]![0]).toBe(false)
   })
 })
@@ -301,7 +298,7 @@ describe('BindingTargetPicker infrastructure fixtures', () => {
       { key: 'hazer-power', displayName: 'Hazer power', infrastructure: true },
       { key: 'relay-1', displayName: 'Relay 1', infrastructure: true },
     ]
-    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hazer-power', propertyName: 'dimmer' })
+    renderPicker(true, { type: 'fixtureAttribute', fixtureKey: 'hazer-power', attribute: 'dimmer' })
     expect(screen.getByText('Hazer power (infrastructure)')).toBeInTheDocument()
     // The second combobox is the Fixture field (the first is the target kind).
     fireEvent.click(screen.getAllByRole('combobox')[1]!)

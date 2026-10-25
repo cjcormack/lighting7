@@ -14,8 +14,8 @@ import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
@@ -103,20 +103,20 @@ internal fun republishForLookDelete(state: State, lookUuid: UUID, layeringCueIds
  * Only two things differ — which cache to drop, and which FK column to search — so those are the
  * two parameters.
  */
-internal fun republishForTemplateEdit(state: State, templateUuid: UUID): LookRepublishOutcome =
+internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): LookRepublishOutcome =
     republishForSourceEdit(
         state,
-        templateUuid,
-        kind = "template",
+        paletteUuid,
+        kind = "palette",
         // One call, not the old invalidate-then-re-warm pair: `refresh` reads the new snapshot on
         // this thread and publishes it *with* the version bump. That bump is what a running effect
-        // naming this template watches (`TypedParams`, keyed on `TemplateRegistry.versionFor`), so
-        // any gap between the two lets the first re-resolve of a `tmpl:` parameter happen on the
-        // 50 Hz tick loop and open a transaction there — the one thing `prewarmTemplateColours`
+        // naming this palette watches (`TypedParams`, keyed on `PaletteRegistry.versionFor`), so
+        // any gap between the two lets the first re-resolve of a `pal:` parameter happen on the
+        // 50 Hz tick loop and open a transaction there — the one thing `prewarmPaletteColours`
         // exists to keep off that thread.
-        invalidate = { state.show.templateRegistry.refresh(templateUuid) },
-        referencing = { activeCueIds -> cuesReferencingTemplate(state, templateUuid, activeCueIds) },
-        allReferencing = { cuesReferencingTemplate(state, templateUuid, restrictTo = null) },
+        invalidate = { state.show.paletteRegistry.refresh(paletteUuid) },
+        referencing = { activeCueIds -> cuesReferencingPalette(state, paletteUuid, activeCueIds) },
+        allReferencing = { cuesReferencingPalette(state, paletteUuid, restrictTo = null) },
     )
 
 private fun republishForSourceEdit(
@@ -182,7 +182,7 @@ private fun republishForSourceEdit(
             // `replaceAssignments` reads an absent entry as "this cook found no stomper".
             rebuiltStomp[cueId] = cooked.values.stompSuppression
             // Its effects are not republished: an edit that moved them leaves it edited since GO.
-            state.show.cueStackManager.holds.markIfLayerEffectsMoved(cueId, cooked.effects)
+            state.show.cueStackManager.holds.markIfLayerFxMoved(cueId, cooked.effects)
         }
         if (rebuilt.isNotEmpty()) republished += engine.cueLayer.replaceAssignments(rebuilt, rebuiltStomp)
     }
@@ -224,14 +224,14 @@ private fun republishForSourceEdit(
     )
 }
 
-/** Mark each of [cueIds] a hold has whose layer effects the edit moved ([uk.me.cormack.lighting7.fx.CueHolds.markIfLayerEffectsMoved]). */
+/** Mark each of [cueIds] a hold has whose layer effects the edit moved ([uk.me.cormack.lighting7.fx.CueHolds.markIfLayerFxMoved]). */
 private fun markRowlessCues(state: State, cueIds: Set<Int>) {
     val holds = state.show.cueStackManager.holds
     val held = cueIds.filter(holds::isHeld)
     if (held.isEmpty()) return
     val applyDataByCue = transaction(state.database) { buildCueApplyDataForCues(held) }
     for ((cueId, applyData) in applyDataByCue) {
-        holds.markIfLayerEffectsMoved(cueId, buildCombinedCueLayerCook(state, cueId, applyData).effects)
+        holds.markIfLayerFxMoved(cueId, buildCombinedCueLayerCook(state, cueId, applyData).effects)
     }
 }
 
@@ -255,22 +255,22 @@ internal fun cuesReferencingLook(
 }
 
 /**
- * Which cues depend on [templateUuid]. The same indexed-FK query as [cuesReferencingLook], on the
+ * Which cues depend on [paletteUuid]. The same indexed-FK query as [cuesReferencingLook], on the
  * other column, and [restrictTo] means the same thing there.
  */
-internal fun cuesReferencingTemplate(
+internal fun cuesReferencingPalette(
     state: State,
-    templateUuid: UUID,
+    paletteUuid: UUID,
     restrictTo: Set<Int>?,
 ): Set<Int> = cuesLayering(state, restrictTo) {
-    DaoTemplate.find { DaoTemplates.uuid eq templateUuid }.firstOrNull()
-        ?.let { DaoCueLayers.template eq it.id }
+    DaoPalette.find { DaoPalettes.uuid eq paletteUuid }.firstOrNull()
+        ?.let { DaoCueLayers.palette eq it.id }
 }
 
 /**
  * The shared body of the two queries above: the same scan with the same [restrictTo] semantics,
  * differing only in which FK column names the edited record. Shared for the reason
- * [republishForTemplateEdit] gives for sharing its own body — the restriction logic has two callers
+ * [republishForPaletteEdit] gives for sharing its own body — the restriction logic has two callers
  * on two paths, and a change that lands on one and misses the other makes Look and template
  * republish disagree silently.
  *

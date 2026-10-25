@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-// scopedCellValue reaches useRowValues, which imports hooks/usePropertyValues and opens a
+// scopedCellValue reaches useRowValues, which imports hooks/useAttributeValues and opens a
 // WebSocket at import time — replace it before anything imports it.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -30,10 +30,10 @@ const cellFor = (fixtures: Fixture[], col: ColumnKey, groups = false): RowCell =
   return buildRowCells(rows[0], [col])[0]
 }
 
-/** A lookup over a plain `{ 'key.property': StagedValue }` table. */
+/** A lookup over a plain `{ 'key.attribute': StagedValue }` table. */
 const lookupOver =
-  (table: Record<string, StagedValue>) => (targetKey: string, propertyName: string) =>
-    table[`${targetKey}.${propertyName}`]
+  (table: Record<string, StagedValue>) => (targetKey: string, attribute: string) =>
+    table[`${targetKey}.${attribute}`]
 
 const partsFor = (cell: RowCell, table: Record<string, StagedValue>) =>
   cell.resolutions.map((res, i) => stagedPartFor(res, cell.targetKeys[i], lookupOver(table)))
@@ -174,7 +174,7 @@ describe('stagedPartFor', () => {
 
 describe('isLocalEntry', () => {
   const entry = (owner: string) => ({
-    entry: { targetKey: 'a', propertyName: 'dimmer', value: '120', owner, touched: true, owners: [owner] },
+    entry: { targetKey: 'a', attribute: 'dimmer', value: '120', owner, touched: true, owners: [owner] },
   })
 
   it('is true for a value the operator set', () => {
@@ -197,13 +197,13 @@ describe('isLocalEntry', () => {
     expect(
       isLocalEntry({
         ...entry('web'),
-        provenance: { targetKey: 'a', propertyName: 'dimmer', source: 'CUE', cueId: 4 },
+        provenance: { targetKey: 'a', attribute: 'dimmer', source: 'CUE', cueId: 4 },
       }),
     ).toBe(true)
     expect(
       isLocalEntry({
         ...entry('web'),
-        provenance: { targetKey: 'a', propertyName: 'dimmer', source: 'PARKED' },
+        provenance: { targetKey: 'a', attribute: 'dimmer', source: 'PARKED' },
       }),
     ).toBe(true)
   })

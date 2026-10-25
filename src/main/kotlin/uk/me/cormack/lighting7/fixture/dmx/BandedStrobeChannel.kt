@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.property.Strobe
+import uk.me.cormack.lighting7.fixture.attribute.Strobe
 import kotlin.math.roundToInt
 
 /**

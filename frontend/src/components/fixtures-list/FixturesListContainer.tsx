@@ -15,7 +15,7 @@ import { useEscapeEditorSnapshot } from '../sheet/useEscapeEditorSnapshot'
 import { useCellEditorRequests } from '../sheet/useCellEditorRequests'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useLookRowStore } from '../programmer/LookRowStore'
-import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from '../programmer/FocusedPaletteLayer'
 import { useRailTabClaim } from '../programmer/railTab'
 import { PositionFanContext } from './cells/PositionSpreadTool'
 import { usePublishMarquee, type MarqueeSnapshot } from './marqueeContext'
@@ -34,11 +34,11 @@ import {
 } from '../sheet/cellEntry'
 import { focusedByPointer, usePointerFocusTracking } from '../sheet/pointerFocus'
 import { editorIsOpen } from '../editor/EditorSurface'
-import { cellFamilies, resolutionPropertyNames } from './columns'
+import { cellFamilies, resolutionAttributeNames } from './columns'
 import { familiesKey } from '../../lib/selectionMask'
 import { headName } from '../../lib/headName'
-import { cellEffectKey } from './cellEffects'
-import { useClearCellEffects } from './useClearCellEffects'
+import { cellFxKey } from './cellFx'
+import { useClearCellFx } from './useClearCellFx'
 import { arrowOfKey, type CellArrow, type CellRef } from '../sheet/cellSelectionModel'
 
 /** This list's cell, over its closed column vocabulary. */
@@ -56,6 +56,7 @@ import {
   countFixtureRows,
   expandSelectionToTargets,
   wholeGroupOf,
+  elementRowId,
   fixtureRowId,
   groupRowId,
   memberRowId,
@@ -68,7 +69,7 @@ import {
   rowWriteTargets,
   targetFamilies,
   targetEmitters,
-  templateTargetsFor,
+  paletteTargetsFor,
   treeKeyAction,
 } from './rowModel'
 import { buildRowCells } from './useRowValues'
@@ -207,7 +208,7 @@ export interface FixturesListContainerProps {
      * Where a template press lands: the cells' fixtures when there is a marquee, otherwise the
      * selected rows'. Already `{type: 'fixture', key}`, so the strip sends it as it is.
      */
-    templateTargets: readonly LocateTarget[]
+    paletteTargets: readonly LocateTarget[]
     /** The families those targets can take at all — the capability half of the strip's filter. */
     targetFamilies: readonly AttributeFamily[]
     /**
@@ -552,8 +553,8 @@ export function FixturesListContainer({
   // Where a template press lands, and what those heads can take — the one selection's rows, which
   // under a marquee are the cells' rows. Published through `renderToolbar` rather than read from
   // Redux by the strip: `selectTargetKeys` is already flattened to member keys.
-  const templateTargets = useMemo(
-    () => templateTargetsFor(rows, selectedRowIds),
+  const paletteTargets = useMemo(
+    () => paletteTargetsFor(rows, selectedRowIds),
     [rows, selectedRowIds],
   )
   // From the **same list** the press is sent to, resolved back to what each target is, so the two
@@ -574,18 +575,18 @@ export function FixturesListContainer({
     }
     return byKey
   }, [fixtures])
-  const templateWriteTargets = useMemo(
+  const paletteWriteTargets = useMemo(
     () =>
-      templateTargets.flatMap((target) => {
+      paletteTargets.flatMap((target) => {
         const writeTarget = writeTargetByKey.get(target.key)
         return writeTarget ? [writeTarget] : []
       }),
-    [templateTargets, writeTargetByKey],
+    [paletteTargets, writeTargetByKey],
   )
-  const templateFamilies = useMemo(() => targetFamilies(templateWriteTargets), [templateWriteTargets])
+  const paletteFamilies = useMemo(() => targetFamilies(paletteWriteTargets), [paletteWriteTargets])
   // The family alone cannot filter a template that names an emitter: white, amber, UV and the hex
   // are all COLOUR. Derived from the same list for the same reason the families are.
-  const templateEmitters = useMemo(() => targetEmitters(templateWriteTargets), [templateWriteTargets])
+  const paletteEmitters = useMemo(() => targetEmitters(paletteWriteTargets), [paletteWriteTargets])
 
   // One desk, one selection (plan D2) — the programmer scope only, and only while this tab
   // follows the desk (multi-screen plan D8); see the hook. It sees the unified ids, so a marquee
@@ -730,8 +731,8 @@ export function FixturesListContainer({
   // focused template layer too, and `useCellWriters` would take a commit from either as a live
   // write. Both keys read the same answer, and no editor is opened where Enter would be refused,
   // so the hint beside it cannot promise a key that does nothing.
-  const focusedTemplate = useFocusedTemplateLayer()
-  const keys = cellKeyboardPermission(scope, focusedTemplate != null)
+  const focusedPalette = useFocusedPaletteLayer()
+  const keys = cellKeyboardPermission(scope, focusedPalette != null)
   // Whether the table's marquee is mid-gesture. Kept here rather than in the table because the
   // only consumer is a *toolbar* — a sibling above the rows, which `renderToolbar` builds — and
   // the table sets it twice a drag, so nothing renders at pointer rate for it.
@@ -876,28 +877,28 @@ export function FixturesListContainer({
    * **It clears the cells' local effects too**, which is not a second gesture bolted on: the
    * programmer's own whole-desk Clear has always swept values and programmer-band FX together, and
    * an effect busked onto three cells was otherwise only removable one instance at a time in the
-   * rail. `cellEffects.ts` owns which effects qualify and why a partly-covered one is left alone;
-   * the same `fixtureKey|propertyName` pairs this loop clears are what it matches on, collected
+   * rail. `cellFx.ts` owns which effects qualify and why a partly-covered one is left alone;
+   * the same `fixtureKey|attribute` pairs this loop clears are what it matches on, collected
    * here rather than re-derived so the two halves cannot reach different heads.
    */
   const canClearCells = keys.clear
   const canTypeCells = keys.entry
-  const clearCellEffects = useClearCellEffects(canClearCells)
+  const clearCellFx = useClearCellFx(canClearCells)
   const clearSelectedCells = useCallback(() => {
     if (!canClearCells) return
     const cleared = new Set<string>()
     for (const { col, targets } of columnTargets) {
       for (const outer of targets) {
         for (const { target, resolution } of resolveTargetCells(outer, col)) {
-          for (const propertyName of resolutionPropertyNames(resolution)) {
-            writers.clearValue(target.key, propertyName)
-            cleared.add(cellEffectKey(target.key, propertyName))
+          for (const attribute of resolutionAttributeNames(resolution)) {
+            writers.clearValue(target.key, attribute)
+            cleared.add(cellFxKey(target.key, attribute))
           }
         }
       }
     }
-    clearCellEffects(cleared)
-  }, [canClearCells, clearCellEffects, columnTargets, writers])
+    clearCellFx(cleared)
+  }, [canClearCells, clearCellFx, columnTargets, writers])
 
   // Continuous drag commits (slider/colour/position editors fire per pointer
   // move) are throttled to ~30Hz with a trailing call, because each commit
@@ -1071,10 +1072,10 @@ export function FixturesListContainer({
     cellCount > 0 ? cellFamilies(cellSelection.cells) : null,
     (a, b) => familiesKey(a) === familiesKey(b),
   )
-  // Held by content for `columnTargets`' reason: `templateTargets` follows `rows`' identity.
-  const pressTargets = useContentStable(templateTargets, sameKeys)
-  const pressFamilies = useContentStable(templateFamilies, (a, b) => familiesKey(a) === familiesKey(b))
-  const pressEmitters = useContentStable(templateEmitters, (a, b) => a.join() === b.join())
+  // Held by content for `columnTargets`' reason: `paletteTargets` follows `rows`' identity.
+  const pressTargets = useContentStable(paletteTargets, sameKeys)
+  const pressFamilies = useContentStable(paletteFamilies, (a, b) => familiesKey(a) === familiesKey(b))
+  const pressEmitters = useContentStable(paletteEmitters, (a, b) => a.join() === b.join())
   const press = useMemo(
     () => ({ targets: pressTargets, askedFamilies: pressAsked, targetFamilies: pressFamilies, targetEmitters: pressEmitters }),
     [pressTargets, pressAsked, pressFamilies, pressEmitters],
@@ -1119,34 +1120,49 @@ export function FixturesListContainer({
   // Without this guard that would silently re-apply the old Include's selection over whatever
   // they had since selected, and reset their filter and scroll position with it.
   const appliedIncludeNonceRef = useRef(0)
+  // An unmount clears the selection (`useListSelection`), so the request is forgotten with it: a
+  // remount that keeps this ref — StrictMode's — then applies it again, as a fresh mount would.
+  useEffect(
+    () => () => {
+      appliedIncludeNonceRef.current = 0
+    },
+    [],
+  )
   useEffect(() => {
     if (includeNonce === 0 || appliedIncludeNonceRef.current === includeNonce) return
     const { fixtureKeys, groupKeys } = includeSelection
     // Prefer the group row when the sheet is in rollup mode and the whole group came in —
     // that is the shape the operator was working in, and it keeps the row count readable.
     const wanted: RowId[] = []
+    const groupSet = grouped ? new Set(groupKeys) : new Set<string>()
     if (grouped) {
-      const groupSet = new Set(groupKeys)
       for (const name of groupKeys) {
         if (groups.some((g) => g.name === name)) wanted.push(groupRowId(name))
       }
-      for (const key of fixtureKeys) {
-        const fixture = fixtures.find((f) => f.key === key)
-        if (!fixture) continue
-        const parent = fixture.groups.find((name) => groups.some((g) => g.name === name))
-        // Skip members already covered by a selected group row.
-        if (parent && groupSet.has(parent)) continue
-        if (parent) {
-          setExpandedGroups((prev) => (prev.has(parent) ? prev : new Set(prev).add(parent)))
-          wanted.push(memberRowId(parent, key))
-        } else {
-          wanted.push(fixtureRowId(key))
-        }
+    }
+    /** A fixture's own row — its member row under its first group in rollup mode — or null when a selected group row covers it. */
+    const fixtureRowFor = (fixture: Fixture): RowId | null => {
+      if (!grouped) return fixtureRowId(fixture.key)
+      const parent = fixture.groups.find((name) => groups.some((g) => g.name === name))
+      if (parent == null) return fixtureRowId(fixture.key)
+      // Skip members already covered by a selected group row.
+      if (groupSet.has(parent)) return null
+      setExpandedGroups((prev) => (prev.has(parent) ? prev : new Set(prev).add(parent)))
+      return memberRowId(parent, fixture.key)
+    }
+    for (const key of fixtureKeys) {
+      const fixture = fixtures.find((f) => f.key === key)
+      if (fixture) {
+        const id = fixtureRowFor(fixture)
+        if (id != null) wanted.push(id)
+        continue
       }
-    } else {
-      for (const key of fixtureKeys) {
-        if (fixtures.some((f) => f.key === key)) wanted.push(fixtureRowId(key))
-      }
+      // A cell's key: its row under its fixture's, opened.
+      const parent = fixtures.find((f) => (f.elements ?? []).some((e) => e.key === key))
+      if (parent == null) continue
+      const parentRow = fixtureRowFor(parent) ?? fixtureRowId(parent.key)
+      setExpandedFixtures((prev) => (prev.has(parent.key) ? prev : new Set(prev).add(parent.key)))
+      wanted.push(elementRowId(parentRow, key))
     }
     // Nothing resolved — the fixtures may still be loading, so leave the nonce unapplied and
     // let the next run (when they arrive) do it.
@@ -1454,7 +1470,7 @@ export function FixturesListContainer({
   const selectionActions =
     cellCount > 0 ? (
       <CellSelectionActions
-        copy={cellActionCopy(scope, focusedTemplate != null, cellCount)}
+        copy={cellActionCopy(scope, focusedPalette != null, cellCount)}
         permission={keys}
         setRef={setButtonRef}
         onSet={toggleCellEditor}
@@ -1517,9 +1533,9 @@ export function FixturesListContainer({
           cells: cellSelection.cells,
           cellEntryKey: cellCount > 0 && keys.entry,
           cellClearKey: cellCount > 0 && keys.clear,
-          templateTargets,
-          targetFamilies: templateFamilies,
-          targetEmitters: templateEmitters,
+          paletteTargets,
+          targetFamilies: paletteFamilies,
+          targetEmitters: paletteEmitters,
           marqueeDragging,
           remask: remaskDesk,
         })
@@ -1545,7 +1561,7 @@ export function FixturesListContainer({
               cells={cellSelection.cells}
               cellEntryKey={cellCount > 0 && keys.entry}
               cellClearKey={cellCount > 0 && keys.clear}
-              templateTargets={templateTargets}
+              paletteTargets={paletteTargets}
               marqueeDragging={marqueeDragging}
             />
           </div>
@@ -1655,7 +1671,7 @@ function sameTargets(a: readonly WriteTarget[], b: readonly WriteTarget[]): bool
     a.length === b.length &&
     a.every((t, i) => {
       const u = b[i]
-      return t === u || (t.key === u.key && t.properties === u.properties && t.elements === u.elements && t.fixtureKey === u.fixtureKey && t.cellIndex === u.cellIndex)
+      return t === u || (t.key === u.key && t.attributes === u.attributes && t.elements === u.elements && t.fixtureKey === u.fixtureKey && t.cellIndex === u.cellIndex)
     })
   )
 }

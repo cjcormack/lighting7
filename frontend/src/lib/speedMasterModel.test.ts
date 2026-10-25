@@ -3,7 +3,7 @@ import {
   FOLLOW_RATIOS,
   SLIDE_MAX_BPM,
   SLIDE_MIN_BPM,
-  SPEED_MASTER_USAGES,
+  SPEED_MASTER_FAMILIES,
   bpmAtSlideFraction,
   bpmSlideFraction,
   derivedBpm,
@@ -15,36 +15,36 @@ import {
   leaderNameOf,
   formatFollowRatio,
   isFollowing,
-  resolveSpeedMasterForCategory,
-  usageLabel,
+  resolveSpeedMasterForFamily,
+  masterFamilyLabel,
 } from './speedMasterModel'
-import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
+import { FX_FAMILY_INFO } from '@/components/fx/fxConstants'
 
-describe('usage vocabulary vs the effect library', () => {
+describe('family vocabulary vs the effect library', () => {
   it('names only categories the effect library actually has', () => {
-    // Not a coincidence to be kept in step by hand — a master's usage *is* an effect
-    // `category`, because routing is the literal comparison `usage === effect.category`. A
-    // usage naming a category no effect carries could never match anything, and the operator
+    // Not a coincidence to be kept in step by hand — a master's family *is* an effect
+    // `category`, because routing is the literal comparison `family === effect.category`. A
+    // family naming a category no effect carries could never match anything, and the operator
     // would be offered a routing rule that silently does nothing.
-    for (const usage of SPEED_MASTER_USAGES) {
-      expect(EFFECT_CATEGORY_INFO[usage]).toBeDefined()
+    for (const family of SPEED_MASTER_FAMILIES) {
+      expect(FX_FAMILY_INFO[family]).toBeDefined()
     }
   })
 
   it('excludes the two categories that cannot own a tempo', () => {
-    // `controls` is settings sliders — a level has no beat. `composite` spans families, so no
-    // single master is *the* default for it. Both land on master 1 through a null uuid, which
-    // is what an unmatched category is defined to do. lighting7's SpeedMasterUsageVocabularyTest
-    // asserts the same two exclusions on the server's copy of this list.
-    expect(SPEED_MASTER_USAGES).not.toContain('controls')
-    expect(SPEED_MASTER_USAGES).not.toContain('composite')
+    // `controls` is settings sliders — a level has no beat, so it lands on master 1 through a null
+    // uuid, which is what an unmatched category is defined to do. `steps` is the Steps FX's,
+    // stamped by the family each one steps instead. lighting7's GlossaryVocabularyTest asserts the
+    // same exclusions on the server's copy of this list.
+    expect(SPEED_MASTER_FAMILIES).not.toContain('controls')
+    expect(SPEED_MASTER_FAMILIES).not.toContain('steps')
   })
 
-  it('labels a usage the way the effect library labels the category', () => {
-    expect(usageLabel('position')).toBe(EFFECT_CATEGORY_INFO.position.label)
+  it('labels a family the way the effect library labels the category', () => {
+    expect(masterFamilyLabel('position')).toBe(FX_FAMILY_INFO.position.label)
     // A category minted by someone's own .fx.kts has no entry; print it rather than nothing.
-    expect(usageLabel('sparkle')).toBe('sparkle')
-    expect(usageLabel(null)).toBeNull()
+    expect(masterFamilyLabel('sparkle')).toBe('sparkle')
+    expect(masterFamilyLabel(null)).toBeNull()
   })
 })
 
@@ -135,33 +135,33 @@ describe('eligibleFollowTargets', () => {
   })
 })
 
-describe('resolveSpeedMasterForCategory', () => {
+describe('resolveSpeedMasterForFamily', () => {
   const bank = [
-    { uuid: 'm1', usage: null },
-    { uuid: 'm2', usage: 'position' },
-    { uuid: 'm3', usage: 'colour' },
+    { uuid: 'm1', family: null },
+    { uuid: 'm2', family: 'position' },
+    { uuid: 'm3', family: 'colour' },
   ]
 
   it('routes an effect to the master claiming its category', () => {
-    expect(resolveSpeedMasterForCategory(bank, 'position')).toBe('m2')
-    expect(resolveSpeedMasterForCategory(bank, 'colour')).toBe('m3')
+    expect(resolveSpeedMasterForFamily(bank, 'position')).toBe('m2')
+    expect(resolveSpeedMasterForFamily(bank, 'colour')).toBe('m3')
   })
 
   it('falls back to master 1 for anything unclaimed', () => {
     // null is master 1 on every wire in this system, so these three are one answer, not three
-    // failure modes: an untagged family, a composite effect, and a category a user's own
-    // .fx.kts invented.
-    expect(resolveSpeedMasterForCategory(bank, 'dimmer')).toBeNull()
-    expect(resolveSpeedMasterForCategory(bank, 'composite')).toBeNull()
-    expect(resolveSpeedMasterForCategory(bank, 'sparkle')).toBeNull()
-    expect(resolveSpeedMasterForCategory(bank, null)).toBeNull()
-    expect(resolveSpeedMasterForCategory(undefined, 'position')).toBeNull()
+    // failure modes: an untagged family, a settings effect, and a category a user's own .fx.kts
+    // invented.
+    expect(resolveSpeedMasterForFamily(bank, 'intensity')).toBeNull()
+    expect(resolveSpeedMasterForFamily(bank, 'controls')).toBeNull()
+    expect(resolveSpeedMasterForFamily(bank, 'sparkle')).toBeNull()
+    expect(resolveSpeedMasterForFamily(bank, null)).toBeNull()
+    expect(resolveSpeedMasterForFamily(undefined, 'position')).toBeNull()
   })
 
   it('ignores a claimant with no uuid', () => {
     // The pre-load synthetic master 1 has a null uuid; stamping an effect with it would be
     // stamping nothing.
-    expect(resolveSpeedMasterForCategory([{ uuid: null, usage: 'dimmer' }], 'dimmer')).toBeNull()
+    expect(resolveSpeedMasterForFamily([{ uuid: null, family: 'intensity' }], 'intensity')).toBeNull()
   })
 })
 

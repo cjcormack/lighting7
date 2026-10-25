@@ -8,36 +8,39 @@ import { sendGesture } from './wsGesture'
  * Which way each head runs its cycle (effects plan D5): the desk applies it to every member's phase.
  * Forward is the absence on every wire shape.
  */
-export type EffectDirection = 'FORWARD' | 'BACKWARD' | 'BOUNCE'
+export type FxDirection = 'FORWARD' | 'BACKWARD' | 'BOUNCE'
+
+/** An FX's Timing (terminology plan D22): one cycle for the whole FX, or one per head. */
+export type Timing = 'CYCLE' | 'HEAD'
 
 /**
- * One running effect, exactly as the backend's single `EffectDto` (`fx/EffectDto.kt`) reports
+ * One running effect, exactly as the backend's single `FxDto` (`fx/FxDto.kt`) reports
  * it — the `fxState` frame and `GET /api/rest/fx/active` now return the same shape, so this and
- * `ActiveEffect` in `store/fixtureFx.ts` describe one wire type. Collapsing the two TS
+ * `ActiveFx` in `store/fixtureFx.ts` describe one wire type. Collapsing the two TS
  * declarations is frontend-sweep work; the fields below are the source of truth.
  *
  * Backend sweep item F8 changed three things here: `phase` is now `currentPhase`, `targetKey` is
- * the bare fixture/group key with `propertyName` alongside it (it used to be the composite
- * `"key.property"`), and `effectType` is the registry id rather than the effect's display name.
+ * the bare fixture/group key with `attribute` alongside it (it used to be the composite
+ * `"key.attribute"`), and `fxType` is the registry id rather than the effect's display name.
  */
-export interface FxEffectState {
+export interface ActiveFxState {
   id: number
   /** Registry id, the string an Update hands back — not the effect's display name. */
-  effectType: string
+  fxType: string
   /** Fixture or group key, *without* the property suffix. */
   targetKey: string
-  propertyName: string
-  beatDivision: number
+  attribute: string
+  cycle: number
   blendMode: string
   isRunning: boolean
   phaseOffset: number
   currentPhase: number
   parameters: Record<string, string>
   isGroupTarget: boolean
-  distributionStrategy?: string | null
+  order?: string | null
   elementMode?: string | null
   elementFilter?: string | null
-  stepTiming?: boolean
+  timing?: Timing
   /** The Look this effect came out of, when it came out of one. */
   lookId?: number | null
   /** The programmer layer that spawned it. Null for an effect the operator busked directly. */
@@ -47,25 +50,25 @@ export interface FxEffectState {
   timingSource?: string
   /** True when the effect sits in the programmer's priority band. */
   programmerOwned?: boolean
-  /** The envelope — see `ActiveEffect.intensityMultiplier`. */
+  /** The envelope — see `ActiveFx.intensityMultiplier`. */
   intensityMultiplier?: number
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
-  /** D7's reading: follows no master. See `ActiveEffect.seconds`. */
+  /** D7's reading: follows no master. See `ActiveFx.seconds`. */
   seconds?: boolean
-  /** Size (effects plan D2), 0–1: how much reaches the stage over what is underneath. Absent at 1. */
-  size?: number
+  /** Amount (effects plan D2), 0–1: how much reaches the stage over what is underneath. Absent at 1. */
+  amount?: number
   /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. Absent when forward. */
-  direction?: EffectDirection
+  direction?: FxDirection
   /** Runs (D9): the cycles an N-shot runs; absent or null runs forever. */
-  nShot?: number | null
+  runs?: number | null
   /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
   spread?: number
   wings?: number
-  blocks?: number
-  groups?: number
+  segments?: number
+  parts?: number
   // `speedMasterIndex` and `rateSpeedMasterIndex` — the 1-based display positions the server
   // numbered the bank at — were declared beside the two uuids and never read. The FX-sheet chip
   // resolves both indices from the live master list, which is the only way they can't drift from a
@@ -79,24 +82,24 @@ export interface FxEffectState {
  * master (see `store/speedMasters.ts`).
  */
 export interface FxState {
-  activeEffects: FxEffectState[]
+  activeFx: ActiveFxState[]
 }
 
 /**
  * An edit to a running effect: every field optional, absent = keep. The body of `PUT /fx/{id}` and
  * the `updateFx` frame both — the desk parses the two through one function
- * (`applyEffectUpdate`), so this one declaration serves both doors.
+ * (`applyFxUpdate`), so this one declaration serves both doors.
  */
 export interface UpdateFxRequest {
-  effectType?: string
+  fxType?: string
   parameters?: Record<string, string>
-  beatDivision?: number
+  cycle?: number
   blendMode?: string
   phaseOffset?: number
-  distributionStrategy?: string
+  order?: string
   elementMode?: string
   elementFilter?: string
-  stepTiming?: boolean
+  timing?: Timing
   /**
    * Reassign the effect's speed master (omitted = no change, like every other field). The
    * picker always sends a concrete uuid — master 1's uuid means "back to the default".
@@ -112,26 +115,26 @@ export interface UpdateFxRequest {
    * master is master 1; a wall-clock effect must name one).
    */
   seconds?: boolean
-  /** Size (effects plan D2), 0–1. Edited in place: the phase is kept. */
-  size?: number
+  /** Amount (effects plan D2), 0–1. Edited in place: the phase is kept. */
+  amount?: number
   /** Direction (D5). Edited in place. */
-  direction?: EffectDirection
+  direction?: FxDirection
   /** Runs (D9), at least 1. A new count runs from the next pass. */
-  nShot?: number
-  /** True puts an N-shot back to running forever; never beside [nShot]. */
+  runs?: number
+  /** True puts an N-shot back to running forever; never beside [runs]. */
   runForever?: boolean
   /**
-   * The spread's shape (effects plan D4); each absent keeps it, groups 0 turns them off. Edited in
+   * The spread's shape (effects plan D4); each absent keeps it, parts 0 turns them off. Edited in
    * place like the Order, phase kept; wings under a mirrored order are refused.
    */
   spread?: number
   wings?: number
-  blocks?: number
-  groups?: number
+  segments?: number
+  parts?: number
   /**
    * The heads this edit is for (apply-model plan §3.4, D5): absent, or every head the effect paints,
    * is the in-place edit; some of them splits those off — only a Local effect's, and no change to
-   * the spread's shape. Over REST the split answers `EffectSplitResponse`; the frame answers only
+   * the spread's shape. Over REST the split answers `FxSplitResponse`; the frame answers only
    * `fxChanged` REMOVED and ADDED, so an editor that must follow the edited copy splits over REST.
    */
   targets?: { type: 'fixture' | 'group'; key: string }[]
@@ -141,17 +144,25 @@ export interface UpdateFxRequest {
  * A refused `updateFx`, unicast to the socket that sent it (fixture-fx-sheets plan W3).
  * `FX_NOT_FOUND` for an effect that is not running, `FX_UPDATE_REFUSED` for a field the desk's
  * strict policy refuses — `PUT /fx/{id}`'s 404 and 400. Keyed by the effect, so a live drag that
- * keeps being refused can replace one toast rather than stack one per frame.
+ * keeps being refused can replace one toast rather than stack one per frame. A refused
+ * `programmer.moveFx` is `FX_NOT_FOUND` or `FX_MOVE_NOT_LOCAL`, keyed by the FX it moved.
  */
 export interface FxError {
-  effectId: number
-  code: 'FX_NOT_FOUND' | 'FX_UPDATE_REFUSED' | string
+  fxId: number
+  code: 'FX_NOT_FOUND' | 'FX_UPDATE_REFUSED' | 'FX_MOVE_NOT_LOCAL' | string
   message: string
 }
 
+/** An `fxChanged` frame: an FX added, removed or updated (a move re-ranking it included). */
+export interface FxChange {
+  /** `FxChangeType`'s wire names (`plugins/FxSocket.kt`). */
+  changeType: 'added' | 'removed' | 'updated' | 'cleared'
+  fxId?: number
+}
+
 type FxMessage =
-  | { type: 'fxState'; activeEffects: FxEffectState[] }
-  | { type: 'fxChanged'; changeType: string; effectId?: number }
+  | { type: 'fxState'; activeFx: ActiveFxState[] }
+  | ({ type: 'fxChanged' } & FxChange)
   | ({ type: 'fxError' } & FxError)
 
 // === API Interface ===
@@ -166,22 +177,32 @@ export interface FxApi {
    * `fxChanged`, or an `fxError` on [subscribeToErrors]. An operator gesture: a closed socket
    * toasts and answers false.
    */
-  updateFx(effectId: number, update: UpdateFxRequest): boolean
+  updateFx(fxId: number, update: UpdateFxRequest): boolean
+  /**
+   * `programmer.moveFx` (FX editor plan §3.5): re-rank Local FX [fxId] directly below [above]'s,
+   * or at the bottom of the Local FX for null. Answered `fxChanged` UPDATED for each FX whose
+   * priority moved, or an `fxError` (`FX_MOVE_NOT_LOCAL` for an FX that is not Local). An operator
+   * gesture, as [updateFx] is.
+   */
+  moveFx(fxId: number, above: number | null): boolean
   /** Every `fxError` this socket is sent — `store/fixtureFx.ts` toasts each, keyed per effect. */
   subscribeToErrors(fn: (error: FxError) => void): Subscription
+  /** Every `fxChanged`, naming the FX it is about — the FX editor's preview re-asks on one in its list. */
+  subscribeToChanges(fn: (change: FxChange) => void): Subscription
 }
 
 export function createFxApi(conn: InternalApiConnection): FxApi {
   let nextSubscriptionId = 1
   const stateSubscriptions = new Map<number, (state: FxState) => void>()
 
-  let currentState: FxState = { activeEffects: [] }
+  let currentState: FxState = { activeFx: [] }
 
   const notifyState = (state: FxState) => {
     stateSubscriptions.forEach((fn) => fn(state))
   }
 
   const errorSubscriptions = new Map<number, (error: FxError) => void>()
+  const changeSubscriptions = new Map<number, (change: FxChange) => void>()
 
   conn.subscribe((evType, _ev, frame) => {
     if (evType === InternalEventType.message) {
@@ -189,13 +210,15 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
       if (message == null) return
 
       if (message.type === 'fxState') {
-        currentState = { activeEffects: message.activeEffects }
+        currentState = { activeFx: message.activeFx }
         notifyState(currentState)
       } else if (message.type === 'fxChanged') {
         // Re-request full state to get updated effect list
         conn.send(JSON.stringify({ type: 'fxState' }))
+        const change: FxChange = { changeType: message.changeType, fxId: message.fxId }
+        changeSubscriptions.forEach((fn) => fn(change))
       } else if (message.type === 'fxError') {
-        const error: FxError = { effectId: message.effectId, code: message.code, message: message.message }
+        const error: FxError = { fxId: message.fxId, code: message.code, message: message.message }
         errorSubscriptions.forEach((fn) => fn(error))
       }
     }
@@ -216,8 +239,12 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
       }
     },
 
-    updateFx(effectId: number, update: UpdateFxRequest): boolean {
-      return sendGesture(conn, { type: 'updateFx', effectId, ...update })
+    updateFx(fxId: number, update: UpdateFxRequest): boolean {
+      return sendGesture(conn, { type: 'updateFx', fxId, ...update })
+    },
+
+    moveFx(fxId: number, above: number | null): boolean {
+      return sendGesture(conn, { type: 'programmer.moveFx', fxId, above })
     },
 
     subscribeToErrors(fn: (error: FxError) => void): Subscription {
@@ -226,6 +253,16 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
       return {
         unsubscribe: () => {
           errorSubscriptions.delete(thisId)
+        },
+      }
+    },
+
+    subscribeToChanges(fn: (change: FxChange) => void): Subscription {
+      const thisId = nextSubscriptionId++
+      changeSubscriptions.set(thisId, fn)
+      return {
+        unsubscribe: () => {
+          changeSubscriptions.delete(thisId)
         },
       }
     },

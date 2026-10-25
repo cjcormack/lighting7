@@ -13,14 +13,14 @@ import kotlinx.serialization.Serializable
 /**
  * What a device's strip encoders drive: a property, and for a colour property which of its
  * axes. `colourAxis` null is hue ([ColourAxis]); it is meaningless on a slider property and the
- * strip encoder derived from it drops its turn there ([PropertyChannelResolver.toPropertyValue]).
+ * strip encoder derived from it drops its turn there ([AttributeChannelResolver.toAttributeValue]).
  *
  * `@Serializable` because `surfaceEncoderBank.state` carries it as it stands — a map of these,
  * one per device type, an absent device meaning [EncoderBankState.DEFAULT].
  */
 @Serializable
 data class EncoderBankSelection(
-    val propertyName: String,
+    val attribute: String,
     val colourAxis: ColourAxis? = null,
 )
 
@@ -32,8 +32,8 @@ data class EncoderBankSelection(
  *
  * Two ways to move it:
  *   1. A button bound to [BindingTarget.EncoderBankSet] → [SurfaceInputRouter] calls
- *      [setProperty] for the device the button is on.
- *   2. The frontend's `surfaceEncoderBank.set` message → the handler calls [setProperty].
+ *      [setAttribute] for the device the button is on.
+ *   2. The frontend's `surfaceEncoderBank.set` message → the handler calls [setAttribute].
  *
  * Session state, like the active bank: it survives a device unplug, and unlike the active bank
  * it is **reset on project switch**, because the vocabulary it draws from is the patch's
@@ -72,7 +72,7 @@ class EncoderBankState {
      * would compare through [effective] while storing the other spelling, so `(dimmer, HUE)`
      * would be held where [DEFAULT] belongs and a later `set` naming the same property with no
      * axis would be a no-op that could not clear it. A stored axis on a *slider* property is not
-     * cosmetic: [PropertyChannelResolver.toPropertyValue] answers null for any non-null axis on a
+     * cosmetic: [AttributeChannelResolver.toAttributeValue] answers null for any non-null axis on a
      * slider, so every strip encoder on the device would drop its turn and its ring go dark.
      */
     fun set(deviceTypeKey: String, selection: EncoderBankSelection): Boolean {
@@ -89,8 +89,8 @@ class EncoderBankState {
     }
 
     /** [set], for the callers that name a property (and optionally its axis) rather than a selection. */
-    fun setProperty(deviceTypeKey: String, propertyName: String, colourAxis: ColourAxis? = null): Boolean =
-        set(deviceTypeKey, EncoderBankSelection(propertyName, colourAxis))
+    fun setAttribute(deviceTypeKey: String, attribute: String, colourAxis: ColourAxis? = null): Boolean =
+        set(deviceTypeKey, EncoderBankSelection(attribute, colourAxis))
 
     /** Wipe all state, so an encoder bank never leaks across a project switch. */
     fun clearAll() {
@@ -99,9 +99,9 @@ class EncoderBankState {
 
     companion object {
         /** What a device's encoders drive until something says otherwise. */
-        const val DEFAULT_PROPERTY: String = "dimmer"
+        const val DEFAULT_ATTRIBUTE: String = "dimmer"
 
-        /** [DEFAULT_PROPERTY] on its own: the selection an absent device reads as. */
-        val DEFAULT: EncoderBankSelection = EncoderBankSelection(DEFAULT_PROPERTY)
+        /** [DEFAULT_ATTRIBUTE] on its own: the selection an absent device reads as. */
+        val DEFAULT: EncoderBankSelection = EncoderBankSelection(DEFAULT_ATTRIBUTE)
     }
 }

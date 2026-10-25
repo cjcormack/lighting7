@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import { createSyncStore, sessionStorageArea } from './syncStore'
 
-/** Spread's two modes on Position: *Ends* (From → To) or *Fan*, an amount about each head's own position. */
-export type SpreadMode = 'ENDS' | 'FAN'
+/** The Fan's two modes on Position: *Between* two values (From → To) or *About* each head's own position. */
+export type SpreadMode = 'BETWEEN' | 'ABOUT'
 
 /** Which axes a fan moves. */
 export type FanAxes = 'PAN' | 'TILT' | 'BOTH'
@@ -21,11 +21,11 @@ export interface SpreadFanPrefs {
  */
 const store = createSyncStore<SpreadFanPrefs>({
   key: 'desk.spread.fan',
-  fallback: { mode: 'ENDS', axes: 'PAN' },
+  fallback: { mode: 'BETWEEN', axes: 'PAN' },
   parse: (parsed) => {
     const value = (parsed ?? {}) as Partial<SpreadFanPrefs>
     return {
-      mode: value.mode === 'FAN' ? 'FAN' : 'ENDS',
+      mode: value.mode === 'ABOUT' ? 'ABOUT' : 'BETWEEN',
       axes: value.axes === 'TILT' || value.axes === 'BOTH' ? value.axes : 'PAN',
     }
   },

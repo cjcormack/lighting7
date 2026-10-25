@@ -36,18 +36,18 @@ async function mountChip() {
   await waitFor(() => expect(handWs.callback).not.toBeNull())
 }
 
-const templateHold = {
-  kind: 'TEMPLATE',
+const paletteHold = {
+  kind: 'PALETTE',
   id: 3,
   uuid: 'tmpl-uuid-3',
-  template: {
+  palette: {
     id: 3,
     uuid: 'tmpl-uuid-3',
     name: 'Warm Amber',
     kind: 'value',
     family: 'COLOUR',
     isGeneric: true,
-    rows: [{ propertyName: 'colour', value: '#ff9d4a' }],
+    rows: [{ attribute: 'colour', value: '#ff9d4a' }],
     notes: null,
   },
   look: null,
@@ -94,16 +94,16 @@ describe('HandChip', () => {
 
   it('builds the ghost from the frame’s own summary, with no second fetch', async () => {
     await mountChip()
-    await fire(templateHold)
+    await fire(paletteHold)
     expect(await screen.findByText('Warm Amber')).toBeTruthy()
-    // `describeTemplate`'s value arm, derived from the embedded DTO alone — the chip asked no
+    // `describePalette`'s value arm, derived from the embedded DTO alone — the chip asked no
     // library for it, and the mock would have answered nothing if it had.
     expect(screen.getByText('Colour')).toBeTruthy()
   })
 
   it('lets go of whatever is there when × is pressed — a BARE drop, never a guarded one', async () => {
     await mountChip()
-    await fire(templateHold)
+    await fire(paletteHold)
     await act(async () => {
       screen.getByLabelText('Let go of Warm Amber').click()
     })
@@ -112,7 +112,7 @@ describe('HandChip', () => {
 
   it('drops on Escape when nothing else claims the key', async () => {
     await mountChip()
-    await fire(templateHold)
+    await fire(paletteHold)
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     })
@@ -128,7 +128,7 @@ describe('HandChip', () => {
     document.body.appendChild(editor)
     try {
       await mountChip()
-      await fire(templateHold)
+      await fire(paletteHold)
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
       })
@@ -144,7 +144,7 @@ describe('HandChip', () => {
     document.body.appendChild(dialog)
     try {
       await mountChip()
-      await fire(templateHold)
+      await fire(paletteHold)
       await act(async () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
       })
@@ -156,7 +156,7 @@ describe('HandChip', () => {
 
   it('ignores an Escape another handler has already claimed', async () => {
     await mountChip()
-    await fire(templateHold)
+    await fire(paletteHold)
     await act(async () => {
       const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
       event.preventDefault()
@@ -167,12 +167,12 @@ describe('HandChip', () => {
 
   it('remounts on a re-pick-up of the same record — the key is the hold, not the uuid', async () => {
     await mountChip()
-    await fire(templateHold)
+    await fire(paletteHold)
     const first = document.querySelector('[data-hand-chip]')
     // A *different hold* of the same record: same kind, same id, same uuid, new `holdId`. Nothing
     // else about the frame moves, so the key is the only thing that can make this a new element —
     // which is the whole reason `holdId` exists on the wire.
-    await fire({ ...templateHold, holdId: 2 })
+    await fire({ ...paletteHold, holdId: 2 })
     const second = document.querySelector('[data-hand-chip]')
     expect(second).not.toBeNull()
     expect(second).not.toBe(first)

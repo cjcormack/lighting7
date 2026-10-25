@@ -42,20 +42,20 @@ import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.models.warnMalformedBuskRigTile
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
-import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
+import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
-import uk.me.cormack.lighting7.sync.dto.LookEffectJson
+import uk.me.cormack.lighting7.sync.dto.LookFxJson
 import uk.me.cormack.lighting7.sync.dto.SceneryChangeJson
 import uk.me.cormack.lighting7.sync.dto.CueEventJson
 import uk.me.cormack.lighting7.sync.dto.CueSpeedMasterJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
-import uk.me.cormack.lighting7.sync.dto.TemplateJson
-import uk.me.cormack.lighting7.sync.dto.TemplateEffectJson
-import uk.me.cormack.lighting7.sync.dto.TemplateRowJson
+import uk.me.cormack.lighting7.sync.dto.PaletteJson
+import uk.me.cormack.lighting7.sync.dto.PaletteFxJson
+import uk.me.cormack.lighting7.sync.dto.PaletteRowJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
-import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
+import uk.me.cormack.lighting7.sync.dto.CueAttributeAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.BuskBankJson
 import uk.me.cormack.lighting7.sync.dto.BuskColumnJson
 import uk.me.cormack.lighting7.sync.dto.BuskPadJson
@@ -110,9 +110,9 @@ import uk.me.cormack.lighting7.routes.heldAutoNumbers
  * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
  * /cues/{uuid}.json               -- v32: what a cue is; no stack, position, number or follow
  * /cueStackEntries/{uuid}.json    -- v32: one place in a stack's list (a cue's, or a marker)
- * /cuePropertyAssignments/{uuid}.json
+ * /cueAttributeAssignments/{uuid}.json  -- v38: was cuePropertyAssignments/
  * /cueLayers/{uuid}.json
- * /cueAdHocEffects/{uuid}.json
+ * /cueAdHocFx/{uuid}.json        -- v38: was cueAdHocEffects/
  * /cueTriggers/{uuid}.json
  * /fixturePatches/{uuid}.json
  * /universeConfigs/{uuid}.json     -- omits machine-local `address` field
@@ -121,8 +121,8 @@ import uk.me.cormack.lighting7.routes.heldAutoNumbers
  * /stageElements/{uuid}.json
  * /stageViewpoints/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
- * /looks/{uuid}.json               -- rows and effects embedded inline
- * /templates/{uuid}.json           -- rows, or one effect, embedded inline
+ * /looks/{uuid}.json               -- rows and FX (`fx`) embedded inline
+ * /palettes/{uuid}.json            -- v38: was templates/; rows, or one FX (`fx`), embedded inline
  * /speedMasters/{uuid}.json
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json           -- a cue, or (v10+) a Look
@@ -548,7 +548,7 @@ class ProjectExporter(private val state: State) {
                             uuid = r.uuid.toString(),
                             targetType = r.targetType,
                             targetKey = r.targetKey,
-                            propertyName = r.propertyName,
+                            attribute = r.attribute,
                             value = r.value,
                             fadeDurationMs = r.fadeDuration?.toMillis(),
                             elementKey = r.elementKey,
@@ -558,31 +558,31 @@ class ProjectExporter(private val state: State) {
                 val effects = l.effects
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                     .map { e ->
-                        LookEffectJson(
+                        LookFxJson(
                             uuid = e.uuid.toString(),
                             targetType = e.targetType,
                             targetKey = e.targetKey,
-                            effectType = e.effectType,
-                            category = e.category,
-                            propertyName = e.propertyName,
-                            beatDivision = e.beatDivision,
+                            fxType = e.fxType,
+                            family = e.family,
+                            attribute = e.attribute,
+                            cycle = e.cycle,
                             blendMode = e.blendMode,
-                            distribution = e.distribution,
+                            order = e.order,
                             phaseOffset = e.phaseOffset,
                             elementMode = e.elementMode,
                             elementFilter = e.elementFilter,
-                            stepTiming = e.stepTiming,
+                            timing = e.timing,
                             parameters = e.parameters,
                             speedMasterUuid = e.speedMasterUuid?.toString(),
                             rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
                             seconds = e.seconds,
-                            size = e.size,
+                            amount = e.amount,
                             direction = e.direction,
-                            nShot = e.nShot,
+                            runs = e.runs,
                             spread = e.spread,
                             wings = e.wings,
-                            blocks = e.blocks,
-                            groups = e.groups,
+                            segments = e.segments,
+                            parts = e.parts,
                             sortOrder = e.sortOrder,
                         )
                     }
@@ -591,13 +591,13 @@ class ProjectExporter(private val state: State) {
                     name = l.name,
                     notes = l.notes,
                     rows = rows,
-                    effects = effects,
+                    fx = effects,
                     scenery = lookSceneryOf(l.id).map { it.toJson() },
                 )
             }
 
-            count += writeAll(targetDir, "templates", project.templates.toList(), TemplateJson.serializer(), { it.uuid }, liveKeys) { t ->
-                TemplateJson(
+            count += writeAll(targetDir, "palettes", project.palettes.toList(), PaletteJson.serializer(), { it.uuid }, liveKeys) { t ->
+                PaletteJson(
                     uuid = t.uuid.toString(),
                     name = t.name,
                     notes = t.notes,
@@ -605,40 +605,40 @@ class ProjectExporter(private val state: State) {
                     rows = t.rows
                         .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                         .map { r ->
-                            TemplateRowJson(
+                            PaletteRowJson(
                                 uuid = r.uuid.toString(),
                                 targetType = r.targetType,
                                 targetKey = r.targetKey,
-                                propertyName = r.propertyName,
+                                attribute = r.attribute,
                                 value = r.value,
                                 sortOrder = r.sortOrder,
                             )
                         },
                     // At most one (D2), so no `sortedWith` — there is no order to stabilise.
-                    effect = t.effect?.let { e ->
-                        TemplateEffectJson(
+                    fx = t.effect?.let { e ->
+                        PaletteFxJson(
                             uuid = e.uuid.toString(),
-                            effectType = e.effectType,
-                            category = e.category,
-                            propertyName = e.propertyName,
-                            beatDivision = e.beatDivision,
+                            fxType = e.fxType,
+                            family = e.family,
+                            attribute = e.attribute,
+                            cycle = e.cycle,
                             blendMode = e.blendMode,
-                            distribution = e.distribution,
+                            order = e.order,
                             phaseOffset = e.phaseOffset,
                             elementMode = e.elementMode,
                             elementFilter = e.elementFilter,
-                            stepTiming = e.stepTiming,
+                            timing = e.timing,
                             parameters = e.parameters,
                             speedMasterUuid = e.speedMasterUuid?.toString(),
                             rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
                             seconds = e.seconds,
-                            size = e.size,
+                            amount = e.amount,
                             direction = e.direction,
-                            nShot = e.nShot,
+                            runs = e.runs,
                             spread = e.spread,
                             wings = e.wings,
-                            blocks = e.blocks,
-                            groups = e.groups,
+                            segments = e.segments,
+                            parts = e.parts,
                         )
                     },
                 )
@@ -652,7 +652,7 @@ class ProjectExporter(private val state: State) {
                     bpm = m.bpm,
                     source = m.source,
                     notes = m.notes,
-                    usage = m.usageCategory,
+                    family = m.family,
                     // Through the sanitising getter, not the raw columns: a half-written or
                     // non-positive pair (or a ratio on master 1) reads as "manual" on every
                     // other surface, and exporting the junk verbatim would clone/sync it.
@@ -671,15 +671,15 @@ class ProjectExporter(private val state: State) {
                 )
                 FxDefinitionJson(
                     uuid = d.uuid.toString(),
-                    effectId = d.effectId,
+                    fxId = d.fxId,
                     name = d.name,
-                    category = d.category,
+                    family = d.family,
                     outputType = d.outputType,
-                    effectMode = d.effectMode,
+                    fxMode = d.fxMode.name,
                     parameters = parametersJson,
-                    compatibleProperties = d.compatibleProperties,
+                    compatibleAttributes = d.compatibleAttributes,
                     script = d.script,
-                    defaultStepTiming = d.defaultStepTiming,
+                    defaultTiming = d.defaultTiming,
                     timingSource = d.timingSource,
                 )
             }
@@ -728,7 +728,7 @@ class ProjectExporter(private val state: State) {
                                                     BuskPadJson(
                                                         uuid = pad.uuid.toString(),
                                                         sortOrder = pad.sortOrder,
-                                                        templateUuid = pad.template?.uuid?.toString(),
+                                                        paletteUuid = pad.palette?.uuid?.toString(),
                                                         lookUuid = pad.look?.uuid?.toString(),
                                                         cueUuid = pad.cue?.uuid?.toString(),
                                                     )
@@ -821,33 +821,33 @@ class ProjectExporter(private val state: State) {
         val cues = project.cues.toList()
         if (cues.isEmpty()) return 0
 
-        val propAssignDir = dir.resolve("cuePropertyAssignments")
+        val propAssignDir = dir.resolve("cueAttributeAssignments")
         val cueLayerDir = dir.resolve("cueLayers")
-        val adHocDir = dir.resolve("cueAdHocEffects")
+        val adHocDir = dir.resolve("cueAdHocFx")
         val triggerDir = dir.resolve("cueTriggers")
         var count = 0
 
         cues.forEach { c ->
             val cueUuid = c.uuid.toString()
 
-            c.propertyAssignments.forEach { a ->
+            c.attributeAssignments.forEach { a ->
                 Files.createDirectories(propAssignDir)
                 writeJson(
                     propAssignDir.resolve("${a.uuid}.json"),
-                    CuePropertyAssignmentJson.serializer(),
-                    CuePropertyAssignmentJson(
+                    CueAttributeAssignmentJson.serializer(),
+                    CueAttributeAssignmentJson(
                         uuid = a.uuid.toString(),
                         cueUuid = cueUuid,
                         targetType = a.targetType,
                         targetKey = a.targetKey,
-                        propertyName = a.propertyName,
+                        attribute = a.attribute,
                         value = a.value,
                         fadeDurationMs = a.fadeDuration?.toMillis(),
                         sortOrder = a.sortOrder,
                         moveInDark = a.moveInDark,
                     ),
                 )
-                liveKeys.add(RecordKey("cuePropertyAssignments", a.uuid))
+                liveKeys.add(RecordKey("cueAttributeAssignments", a.uuid))
                 count++
             }
 
@@ -860,11 +860,11 @@ class ProjectExporter(private val state: State) {
                         uuid = l.uuid.toString(),
                         cueUuid = cueUuid,
                         lookUuid = l.look?.uuid?.toString(),
-                        templateUuid = l.template?.uuid?.toString(),
+                        paletteUuid = l.palette?.uuid?.toString(),
                         sortOrder = l.sortOrder,
                         enabled = l.enabled,
                         targets = l.targets,
-                        propertyMask = l.propertyMask,
+                        attributeMask = l.attributeMask,
                         blendMode = l.blendMode,
                         amount = l.amount,
                         stomp = l.stomp,
@@ -879,26 +879,26 @@ class ProjectExporter(private val state: State) {
                 count++
             }
 
-            c.adHocEffects.forEach { e ->
+            c.adHocFx.forEach { e ->
                 Files.createDirectories(adHocDir)
                 writeJson(
                     adHocDir.resolve("${e.uuid}.json"),
-                    CueAdHocEffectJson.serializer(),
-                    CueAdHocEffectJson(
+                    CueAdHocFxJson.serializer(),
+                    CueAdHocFxJson(
                         uuid = e.uuid.toString(),
                         cueUuid = cueUuid,
                         targetType = e.targetType,
                         targetKey = e.targetKey,
-                        effectType = e.effectType,
-                        category = e.category,
-                        propertyName = e.propertyName,
-                        beatDivision = e.beatDivision,
+                        fxType = e.fxType,
+                        family = e.family,
+                        attribute = e.attribute,
+                        cycle = e.cycle,
                         blendMode = e.blendMode,
-                        distribution = e.distribution,
+                        order = e.order,
                         phaseOffset = e.phaseOffset,
                         elementMode = e.elementMode,
                         elementFilter = e.elementFilter,
-                        stepTiming = e.stepTiming,
+                        timing = e.timing,
                         parameters = e.parameters,
                         delayMs = e.delay?.toMillis(),
                         intervalMs = e.interval?.toMillis(),
@@ -907,17 +907,17 @@ class ProjectExporter(private val state: State) {
                         speedMasterUuid = e.speedMasterUuid?.toString(),
                         rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
                         seconds = e.seconds,
-                        size = e.size,
+                        amount = e.amount,
                         direction = e.direction,
-                        nShot = e.nShot,
+                        runs = e.runs,
                         spread = e.spread,
                         wings = e.wings,
-                        blocks = e.blocks,
-                        groups = e.groups,
+                        segments = e.segments,
+                        parts = e.parts,
                         runUuid = e.runUuid?.toString(),
                     ),
                 )
-                liveKeys.add(RecordKey("cueAdHocEffects", e.uuid))
+                liveKeys.add(RecordKey("cueAdHocFx", e.uuid))
                 count++
             }
 
@@ -955,7 +955,7 @@ class ProjectExporter(private val state: State) {
             writeJson(
                 sub.resolve("${s.uuid}.meta.json"),
                 ScriptMetaJson.serializer(),
-                ScriptMetaJson(s.uuid.toString(), s.name, s.scriptType),
+                ScriptMetaJson(s.uuid.toString(), s.name, s.scriptType.name),
             )
             liveKeys.add(RecordKey("scripts", s.uuid))
         }

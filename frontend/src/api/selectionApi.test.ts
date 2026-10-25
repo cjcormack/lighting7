@@ -21,7 +21,7 @@ describe('createSelectionWsApi', () => {
   })
 
   it('omits families for no mask, and for all four — the desk’s own spelling', () => {
-    // `parseMaskGroupsLenient` folds empty and complete to null; sending it folded is what lets
+    // `parseFamiliesLenient` folds empty and complete to null; sending it folded is what lets
     // the echo compare equal to what was sent.
     const { conn, sent } = fakeWsConnection()
     const api = createSelectionWsApi(conn)

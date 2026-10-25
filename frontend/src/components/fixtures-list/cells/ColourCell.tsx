@@ -1,9 +1,9 @@
 import { memo, useCallback, useMemo, useState } from 'react'
-import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
+import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import { useRailTabClaim } from '@/components/programmer/railTab'
 import { ColourPickerPopover } from '../../fixtures/ColourPickerPopover'
 import type { CellResolution } from '../columns'
-import { templateTargetsOf, type CellBatch, type CellCommit, type WriteTarget } from '../rowModel'
+import { paletteTargetsOf, type CellBatch, type CellCommit, type WriteTarget } from '../rowModel'
 import type { CellValue } from '../useRowValues'
 import type { ColourPaletteSource } from '../../editor/ColourEditor'
 import { useCueBandProject, usePressCue } from '../../press/pressCue'
@@ -90,8 +90,8 @@ const COLOUR_FAMILY = ['COLOUR'] as const
 
 const NO_TARGETS: readonly WriteTarget[] = []
 
-const hasColourDescriptor = (properties: readonly { type: string }[]) =>
-  properties.some((p) => p.type === 'colour' || p.type === 'whiteMix')
+const hasColourDescriptor = (attributes: readonly { type: string }[]) =>
+  attributes.some((p) => p.type === 'colour' || p.type === 'whiteMix')
 
 /**
  * The batch's targets as a **colour commit** lands on them, which is what the editor counts,
@@ -109,13 +109,13 @@ const hasColourDescriptor = (properties: readonly { type: string }[]) =>
 export function colourTargetsOf(targets: readonly WriteTarget[]): WriteTarget[] {
   const out: WriteTarget[] = []
   for (const target of targets) {
-    if (hasColourDescriptor(target.properties)) {
+    if (hasColourDescriptor(target.attributes)) {
       out.push(target)
       continue
     }
     ;(target.elements ?? []).forEach((element, index) => {
-      if (hasColourDescriptor(element.properties)) {
-        out.push({ key: element.key, properties: element.properties, fixtureKey: target.key, cellIndex: index })
+      if (hasColourDescriptor(element.attributes)) {
+        out.push({ key: element.key, attributes: element.attributes, fixtureKey: target.key, cellIndex: index })
       }
     })
   }
@@ -133,7 +133,7 @@ export function colourTargetsOf(targets: readonly WriteTarget[]): WriteTarget[] 
  * the batch's **union** read off its colour descriptors (a head without the emitter takes no byte —
  * `useCellWriters` folds an undeliverable white into RGB), the read-out counting them, Pick over the
  * batch's heads through the editor's own hidden leaves, *Save as template…* opening
- * `NewTemplateFromSelectionSheet` with Colour answered over the marquee's fixtures, the Palettes band
+ * `NewPaletteFromSelectionSheet` with Colour answered over the marquee's fixtures, the Palettes band
  * in every form (apply-model plan §4.3) pressing onto the batch under Colour, and *Spread…* handing the colour to row C's Spread panel as *From*.
  * The targets the editor gets are the batch's as a colour commit lands on them
  * (`colourTargetsOf`): one per RGB colour cell, and the label line counts that list rather than
@@ -147,12 +147,12 @@ export function colourTargetsOf(targets: readonly WriteTarget[]): WriteTarget[] 
  */
 export const ColourCell = memo(function ColourCell(props: ColourCellProps) {
   const batchTargets = props.batch?.targets ?? NO_TARGETS
-  const templateTargets = useMemo(() => templateTargetsOf(colourTargetsOf(batchTargets)), [batchTargets])
+  const paletteTargets = useMemo(() => paletteTargetsOf(colourTargetsOf(batchTargets)), [batchTargets])
   // Heads whose colour is a warm/cold white pair alone get a warmth control; a batch that mixes
   // them with RGB heads keeps the picker, and the desk lands the colour on each pair as its
   // nearest mix.
   if (isWarmthOnly(props.batch?.resolutions ?? props.resolutions)) {
-    return <WarmthCell {...props} templateTargets={templateTargets} />
+    return <WarmthCell {...props} paletteTargets={paletteTargets} />
   }
   return <RgbColourCell {...props} />
 })
@@ -222,11 +222,11 @@ const RgbColourCell = memo(function RgbColourCell({
   // With no batch (a read-only mount) the row's own resolutions stand in.
   const heads = batch ?? { count: 1, skipped: 0, resolutions }
   const targets = useMemo(() => colourTargetsOf(heads.targets ?? NO_TARGETS), [heads.targets])
-  const hasWhite = heads.resolutions.some((r) => r.kind === 'colour' && r.property.whiteChannel != null)
-  const hasAmber = heads.resolutions.some((r) => r.kind === 'colour' && r.property.amberChannel != null)
-  const hasUv = heads.resolutions.some((r) => r.kind === 'colour' && r.property.uvChannel != null)
+  const hasWhite = heads.resolutions.some((r) => r.kind === 'colour' && r.attribute.whiteChannel != null)
+  const hasAmber = heads.resolutions.some((r) => r.kind === 'colour' && r.attribute.amberChannel != null)
+  const hasUv = heads.resolutions.some((r) => r.kind === 'colour' && r.attribute.uvChannel != null)
 
-  const templateTargets = useMemo(() => templateTargetsOf(targets), [targets])
+  const paletteTargets = useMemo(() => paletteTargetsOf(targets), [targets])
   // A white-mix row in a batch with RGB heads opens this picker, but its face still reads as a
   // warmth, as the same row does outside the batch.
   const rowMix = isWarmthOnly(resolutions) ? firstWhiteMix(resolutions) : undefined
@@ -236,8 +236,8 @@ const RgbColourCell = memo(function RgbColourCell({
   const inCue = usePressCue() != null
   const bandProject = projectId ?? cueProjectId
   const palettes = useMemo<ColourPaletteSource | undefined>(
-    () => (bandProject == null ? undefined : { projectId: bandProject, targets: templateTargets, families: COLOUR_FAMILY }),
-    [bandProject, templateTargets],
+    () => (bandProject == null ? undefined : { projectId: bandProject, targets: paletteTargets, families: COLOUR_FAMILY }),
+    [bandProject, paletteTargets],
   )
 
   const [saveMounted, setSaveMounted] = useState(false)
@@ -351,12 +351,12 @@ const RgbColourCell = memo(function RgbColourCell({
         </button>
       </ColourPickerPopover>
       {saveMounted && projectId != null && (
-        <NewTemplateFromSelectionSheet
+        <NewPaletteFromSelectionSheet
           open={saving}
           onOpenChange={setSaving}
           projectId={projectId}
           families={COLOUR_FAMILY}
-          targets={templateTargets}
+          targets={paletteTargets}
         />
       )}
     </>

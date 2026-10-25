@@ -10,10 +10,14 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
 import org.junit.Test
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -169,6 +173,65 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
             patched.body<ErrorResponse>().error.contains("Unknown blendMode 'ADD'"),
             patched.body<ErrorResponse>().error,
         )
+    }
+
+    @Test
+    fun `a patch naming an old field is refused rather than dropped`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val stack = client.newStack("Act 1")
+        val cue = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Fine", cueStackId = stack))
+        }.body<CueDetails>()
+
+        val oldList = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("adHocEffects", JsonArray(emptyList())) })
+        }
+        assertEquals(HttpStatusCode.BadRequest, oldList.status, oldList.bodyAsText())
+        assertTrue("adHocEffects" in oldList.body<ErrorResponse>().error, oldList.body<ErrorResponse>().error)
+
+        val pulse = Json.encodeToJsonElement(
+            CueAdHocFxDto(
+                targetType = "fixture", targetKey = "foh-1", fxType = "Pulse", family = "intensity",
+                attribute = "dimmer", cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
+            ),
+        ).jsonObject
+        val oldField = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("adHocFx", JsonArray(listOf(JsonObject(pulse + ("size" to JsonPrimitive(0.5)))))) })
+        }
+        assertEquals(HttpStatusCode.BadRequest, oldField.status, oldField.bodyAsText())
+        assertTrue("size" in oldField.body<ErrorResponse>().error, oldField.body<ErrorResponse>().error)
+
+        // A layer naming its palette by the old field would decode with no source, be dropped, and
+        // take the cue's own layer with it.
+        val oldLayer = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("layers", Json.parseToJsonElement("""[{"templateId":1}]""")) })
+        }
+        assertEquals(HttpStatusCode.BadRequest, oldLayer.status, oldLayer.bodyAsText())
+        assertTrue("templateId" in oldLayer.body<ErrorResponse>().error, oldLayer.body<ErrorResponse>().error)
+
+        // A row naming its attribute by the old field would decode with none, and a hook carrying a
+        // field it does not take is refused the same way.
+        for ((list, item, old) in listOf(
+            Triple("attributeAssignments", """[{"targetType":"fixture","targetKey":"foh-1","propertyName":"dimmer","value":"200"}]""", "propertyName"),
+            Triple("triggers", """[{"triggerType":"ACTIVATION","scriptId":1,"scriptName":"Go"}]""", "scriptName"),
+        )) {
+            val refused = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put(list, Json.parseToJsonElement(item)) })
+            }
+            assertEquals(HttpStatusCode.BadRequest, refused.status, refused.bodyAsText())
+            assertTrue(old in refused.body<ErrorResponse>().error, refused.body<ErrorResponse>().error)
+        }
+        val oldAssignments = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("propertyAssignments", JsonArray(emptyList())) })
+        }
+        assertEquals(HttpStatusCode.BadRequest, oldAssignments.status, oldAssignments.bodyAsText())
     }
 
     @Test

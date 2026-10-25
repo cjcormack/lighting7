@@ -5,14 +5,14 @@ import { ColourEditor } from '@/components/editor/ColourEditor'
 import { SpreadPanel, type IntentSpreadPlan, type SpreadRequestBody, type SpreadSeed } from '@/components/editor/SpreadPanel'
 import { useEditorCramped } from '@/components/editor/EditorSurface'
 import { targetFamilies } from '@/components/fixtures-list/rowModel'
-import { isSpreadColourTemplate } from '@/components/fx/FxColourTemplates'
+import { isSpreadColourPalette } from '@/components/fx/FxColourPalettes'
 import { RecordLookSheet } from '@/components/programmer/RecordLookSheet'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { selectedCells } from '@/lib/cellsSubSelection'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { useSpreadMutation } from '@/store/programmerOps'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { writeTargetsOf } from './ColourSheet'
 import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
 
@@ -28,7 +28,7 @@ export type { SpreadSeed } from '@/components/editor/SpreadPanel'
  * Cells chip counts, one expansion (`lib/cellsSubSelection.ts`) pinned against the desk's own
  * fixture, so the two cannot answer "how many cells" differently — the selection's mask, the
  * mutation with the programmer fade read at send time, the Colour tab's seed hand-over, and the
- * footer's save. Everything else — the form, the endpoint editors, Curve · Order · Parts · Over,
+ * footer's save. Everything else — the form, the endpoint editors, Curve · Order · Runs · Over,
  * Live and Apply / Send again, the keyboard, the desk's answer read for its `skippedFamilies` and
  * nothing drawn from it — is the panel's, shared with the programmer's row C. Nothing here changed
  * to the eye when the body moved into the panel.
@@ -63,8 +63,8 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
   const selected = useMemo(() => [...selectedTargets.values()], [selectedTargets])
   const { fixtures } = useFixtureLookup()
   const [spread] = useSpreadMutation()
-  const { data: templates } = useTemplateListQuery({ projectId })
-  const colourTemplates = useMemo(() => (templates ?? []).filter(isSpreadColourTemplate), [templates])
+  const { data: templates } = usePaletteListQuery({ projectId })
+  const colourPalettes = useMemo(() => (templates ?? []).filter(isSpreadColourPalette), [templates])
 
   const writeTargets = useMemo(() => writeTargetsOf(selected, fixtures), [selected, fixtures])
   const available = useMemo(() => targetFamilies(writeTargets), [writeTargets])
@@ -92,10 +92,10 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
       cellCount,
       families: available,
       mask: families,
-      colourTemplates,
+      colourPalettes,
       send,
     }),
-    [layerTargets, cellCount, available, families, colourTemplates, send],
+    [layerTargets, cellCount, available, families, colourPalettes, send],
   )
   const plans = useMemo(() => [plan], [plan])
 
@@ -115,7 +115,7 @@ export function SpreadSheet({ projectId, selectedTargets, families, seed, onSeed
             size="sm"
             className="h-7 min-w-0 text-xs"
             disabled={selected.length === 0}
-            title="Record the selection’s Local values as a Look — a spread is a result, not a palette"
+            title="Record the selection’s Local values as a Look — a fan is a result, not a palette"
             onClick={() => setSaving(true)}
           >
             <Save className="size-3.5" /> <span className="truncate">Save as Look…</span>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { PatchPlacementInput } from '@/api/patchApi'
-import type { SettingOption, SettingPropertyDescriptor } from '@/store/fixtures'
+import type { SettingOption, SettingAttributeDescriptor } from '@/store/fixtures'
 import { GOBO_PATTERNS } from '@/components/stage3d/goboPatterns'
 import { findGel, type GelIndex } from '@/lib/gels'
 import {
@@ -22,7 +22,7 @@ const FITTABLE_GOBOS = GOBO_PATTERNS.filter((name) => name !== 'open')
 
 interface MediaBoxProps {
   /** The type's loadable settings (`loadableSettings`), the stock in their options. */
-  settings: readonly SettingPropertyDescriptor[]
+  settings: readonly SettingAttributeDescriptor[]
   gels: GelIndex
   /** The patch's own fitted media. */
   media: FittedMedia | null
@@ -123,7 +123,7 @@ function MediaSetting({
   effective,
   onSlot,
 }: {
-  setting: SettingPropertyDescriptor
+  setting: SettingAttributeDescriptor
   gels: GelIndex
   own: Record<string, FittedSlot>
   inherited: Record<string, FittedSlot>
@@ -173,7 +173,7 @@ function MediaSlotRow({
   onSlot,
 }: {
   number: number | null
-  setting: SettingPropertyDescriptor
+  setting: SettingAttributeDescriptor
   option: SettingOption
   gels: GelIndex
   own: FittedSlot | undefined

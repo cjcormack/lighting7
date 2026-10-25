@@ -133,8 +133,8 @@ describe('SpeedMasterDetailSheet', () => {
         error: 'in use',
         code: 'SPEED_MASTER_IN_USE',
         referenceCount: 6,
-        lookEffectCount: 1,
-        cueAdHocEffectCount: 2,
+        lookFxCount: 1,
+        cueAdHocFxCount: 2,
         cueLayerCount: 0,
         cueTempoCount: 2,
         cueIds: [84, 91],
@@ -150,8 +150,8 @@ describe('SpeedMasterDetailSheet', () => {
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog).toHaveTextContent('Delete 1 master?')
     expect(dialog).toHaveTextContent('M5 · Slow Wash')
-    expect(dialog).toHaveTextContent('1 look effect')
-    expect(dialog).toHaveTextContent('2 cue effects')
+    expect(dialog).toHaveTextContent('1 look FX')
+    expect(dialog).toHaveTextContent('2 cue FX')
     expect(dialog).toHaveTextContent('2 cues setting its tempo')
     expect(dialog).toHaveTextContent('cues 84, 91')
     expect(dialog).toHaveTextContent('followed by Chase')
@@ -307,20 +307,20 @@ describe('SpeedMasterDetailSheet', () => {
 
     await waitFor(() => expect(saveMaster).toHaveBeenCalledTimes(1))
     expect(saveMaster.mock.calls[0][0]).not.toHaveProperty('followNum')
-    expect(saveMaster.mock.calls[0][0]).not.toHaveProperty('usage')
+    expect(saveMaster.mock.calls[0][0]).not.toHaveProperty('family')
   })
 
-  it('seeds the usage select from the master', () => {
+  it('seeds the family select from the master', () => {
     // Routing is a fact about the bank, so the sheet has to show the one already set before it
     // can be changed — and "Not routed" is a real value, not an empty state.
-    renderSheet(master({ usage: 'position' }))
-    expect(screen.getByRole('combobox', { name: 'Default usage' })).toHaveTextContent(
+    renderSheet(master({ family: 'position' }))
+    expect(screen.getByRole('combobox', { name: 'Default family' })).toHaveTextContent(
       /movement/i,
     )
 
     cleanup()
     renderSheet(master())
-    expect(screen.getByRole('combobox', { name: 'Default usage' })).toHaveTextContent(
+    expect(screen.getByRole('combobox', { name: 'Default family' })).toHaveTextContent(
       'Not routed',
     )
   })

@@ -17,14 +17,18 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import uk.me.cormack.lighting7.fx.EffectSpecCoercion
+import uk.me.cormack.lighting7.fixture.CommandIndex
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fx.FxRegistry
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.LayerPress
 import uk.me.cormack.lighting7.fx.LayerPressRules
 import uk.me.cormack.lighting7.fx.TargetCoverage
-import uk.me.cormack.lighting7.fx.parseMaskGroups
-import uk.me.cormack.lighting7.fx.toPropertyMask
+import uk.me.cormack.lighting7.fx.parseFamilies
+import uk.me.cormack.lighting7.fx.toAttributeMask
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
@@ -44,6 +48,12 @@ import java.util.UUID
  * - `layerSettings` writes one layer's fields, as the cue editor's Looks tab does.
  * - `replace` swaps one cell's record for another's in each cue that has it: in place, rank and
  *   settings kept, where the cue lacks the replacement; the old one off where it has it.
+ * - `fxOn` copies an effect row of this stack into a cue, taking its run key — or a fresh one given
+ *   to both when it has none — so the copy joins the source's run (D6, D7). `fxOff` deletes a row.
+ * - `breakRun` gives a cell and the cells of its run below it a fresh run key; `joinRun` gives them
+ *   the key of the cell directly above in the column. Neither changes what is on stage, so neither
+ *   marks a held cue edited (P4) — but a held cue's running FX take the key they now have, since
+ *   that is what its next GO hands a run on by.
  * - `scenerySet` / `sceneryClear` write one element's change, checked as every scenery list is.
  * - `restore` is Undo (P5): a cue's layers, effects and scenery put back exactly as an answer's
  *   `before` holds them, uuids and run keys included.
@@ -81,6 +91,7 @@ internal fun Route.routeApiRestCueStackTimelineEdit(state: State) {
                     val response = outcome.response
                     if (!request.dryRun) {
                         for (cueId in response.edited) state.show.cueStackManager.holds.markEdited(cueId)
+                        restampRunKeys(state, response.changed)
                         if (response.changed.isNotEmpty()) {
                             state.show.fixtures.cueListChanged()
                             state.show.fixtures.cueStackListChanged()
@@ -90,6 +101,24 @@ internal fun Route.routeApiRestCueStackTimelineEdit(state: State) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Each held cue among [cueIds] has its running ad-hoc FX take their rows' run keys as stored. A GO
+ * hands a run on by the instance's key (stack-timeline plan §3.3), which is stamped at spawn, so a
+ * key the batch wrote reaches a live cue only this way. Nothing on stage moves.
+ */
+private fun restampRunKeys(state: State, cueIds: List<Int>) {
+    val holds = state.show.cueStackManager.holds
+    val held = cueIds.filterTo(HashSet()) { holds.isHeld(it) }
+    if (held.isEmpty()) return
+    val keys: Map<UUID, UUID?> = transaction(state.database) {
+        held.flatMap { DaoCue.findById(it)?.adHocFxInOrder().orEmpty() }.associate { it.uuid to it.runUuid }
+    }
+    for (instance in state.show.fxEngine.getActiveFx()) {
+        val row = instance.layerFxUuid ?: continue
+        if (instance.cueId in held && row in keys) instance.runUuid = keys[row]
     }
 }
 
@@ -110,12 +139,12 @@ internal sealed interface TimelineEditOutcome {
 internal fun editTimeline(state: State, project: DaoProject, stackId: Int, request: TimelineEditRequest): TimelineEditOutcome {
     val fixtures = state.show.fixtures
     val coverage = TargetCoverage { fixtures }
-    val rules = LayerPressRules({ state.show.templateRegistry }, coverage)
+    val rules = LayerPressRules({ state.show.paletteRegistry }, coverage)
     val holds = state.show.cueStackManager.holds
     return transaction(state.database) {
         val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id }
             ?: return@transaction TimelineEditOutcome.NotFound
-        val batch = TimelineBatch(project, stack, rules, coverage, isHeld = holds::isHeld)
+        val batch = TimelineBatch(project, stack, rules, coverage, isHeld = holds::isHeld, registry = state.show.fxRegistry)
         request.ops.forEachIndexed { index, raw -> batch.run(index, raw) }
         val outcome = if (batch.problems.isNotEmpty()) TimelineEditOutcome.Invalid(batch.problems) else TimelineEditOutcome.Edited(batch.answer())
         if (outcome !is TimelineEditOutcome.Edited || request.dryRun) TransactionManager.current().rollback()
@@ -130,9 +159,14 @@ private class TimelineBatch(
     private val rules: LayerPressRules,
     private val coverage: TargetCoverage,
     private val isHeld: (Int) -> Boolean,
+    private val registry: FxRegistry,
 ) {
     val problems = mutableListOf<TimelineEditProblem>()
-    private val cueIds: Set<Int> = entriesOf(stack).mapNotNullTo(LinkedHashSet()) { it.cueId }
+
+    /** The stack's cue entries in list order, markers left out, as entry id and cue id: the rows a column runs down. */
+    private val places: List<Pair<Int, Int>> = entriesOf(stack).mapNotNull { entry -> entry.cueId?.let { entry.id.value to it } }
+    private val cueOrder: List<Int> = places.map { it.second }
+    private val cueIds: Set<Int> = cueOrder.toSet()
 
     /**
      * Every layer of the stack's cues as the batch found it, by row id: what `settingsFrom` names
@@ -142,24 +176,40 @@ private class TimelineBatch(
         cueIds.flatMap { id -> DaoCue.findById(id)?.layersInOrder()?.mapNotNull { it.toDto() }.orEmpty() }
             .mapNotNull { layer -> layer.id?.let { it to layer } }
             .toMap()
+
+    /** Every effect of the stack's cues as the batch found it, by uuid: what `fxOn` copies when an earlier op deleted its source. */
+    private val startFx: Map<UUID, CueAdHocFxDto> =
+        cueIds.flatMap { id -> DaoCue.findById(id)?.adHocFxInOrder().orEmpty() }.associate { it.uuid to it.toDto() }
     private val elements by lazy { sceneryElementsOf(project) }
     private val masters by lazy { speedMastersOf(project).mapTo(HashSet()) { it.uuid } }
 
     /** Each touched cue as the batch found it, and its stage content then when it is held. */
     private val before = LinkedHashMap<Int, TimelineCueSnapshotDto>()
+
+    /** Each touched cue's run keys that two of its FX already shared as the batch found it — P3 refuses only a new one. */
+    private val sharedBefore = HashMap<Int, Set<UUID>>()
     private val stageBefore = HashMap<Int, List<List<Any?>>>()
     private val released = mutableListOf<TimelineReleasedDto>()
+
+    /** The cues the op running now has written, for P3's check once it is done. */
+    private val opTouched = LinkedHashSet<Int>()
 
     fun run(index: Int, raw: JsonObject) {
         val problem = { message: String -> problems += TimelineEditProblem(index, message) }
         val kind = (raw["op"] as? JsonPrimitive)?.contentOrNull
         val body = JsonObject(raw - "op")
+        val problemsBefore = problems.size
+        opTouched.clear()
         try {
             when (kind) {
                 "layerOn" -> layerOn(OP_JSON.decodeFromJsonElement(LayerOnOp.serializer(), body), problem)
                 "layerOff" -> layerOff(OP_JSON.decodeFromJsonElement(LayerOffOp.serializer(), body), problem)
                 "layerSettings" -> layerSettings(OP_JSON.decodeFromJsonElement(LayerSettingsOp.serializer(), body), problem)
                 "replace" -> replace(OP_JSON.decodeFromJsonElement(ReplaceOp.serializer(), body), problem)
+                "fxOn" -> fxOn(OP_JSON.decodeFromJsonElement(FxOnOp.serializer(), body), problem)
+                "fxOff" -> fxOff(OP_JSON.decodeFromJsonElement(FxCellOp.serializer(), body), problem)
+                "breakRun" -> breakRun(OP_JSON.decodeFromJsonElement(FxCellOp.serializer(), body), problem)
+                "joinRun" -> joinRun(OP_JSON.decodeFromJsonElement(FxCellOp.serializer(), body), problem)
                 "scenerySet" -> scenerySet(index, OP_JSON.decodeFromJsonElement(ScenerySetOp.serializer(), body), problem)
                 "sceneryClear" -> sceneryClear(index, OP_JSON.decodeFromJsonElement(SceneryClearOp.serializer(), body), problem)
                 "restore" -> restore(index, OP_JSON.decodeFromJsonElement(RestoreOp.serializer(), body), problem)
@@ -171,6 +221,7 @@ private class TimelineBatch(
         } catch (e: IllegalArgumentException) {
             problem(e.message ?: "refused")
         }
+        if (problems.size == problemsBefore) opTouched.forEach { cueId -> runKeyCollision(cueId)?.let(problem) }
     }
 
     fun answer(): TimelineEditResponse {
@@ -189,7 +240,7 @@ private class TimelineBatch(
     private fun layerOn(op: LayerOnOp, problem: (String) -> Unit) {
         val cue = cueOf(op.cueId, problem) ?: return
         val record = recordOf(op.source, problem) ?: return
-        val target = cellTargetOf(record, op.target, problem) ?: if (record is PressedRecord.Palette && op.target != null) return else null
+        val target = cellTargetOf(record, op.target, problem) ?: if (op.target != null) return else null
         val settings = op.settingsFrom?.let { id ->
             val from = startLayers[id] ?: return problem("settingsFrom names no layer of this stack")
             if (!from.isOf(record)) return problem("settingsFrom is a layer of another record")
@@ -201,7 +252,7 @@ private class TimelineBatch(
     private fun layerOff(op: LayerOffOp, problem: (String) -> Unit) {
         val cue = cueOf(op.cueId, problem) ?: return
         val record = recordOf(op.source, problem) ?: return
-        val target = cellTargetOf(record, op.target, problem) ?: if (record is PressedRecord.Palette && op.target != null) return else null
+        val target = cellTargetOf(record, op.target, problem) ?: if (op.target != null) return else null
         press(cue, record, listOfNotNull(target), on = false, settings = null, problem)
     }
 
@@ -224,9 +275,7 @@ private class TimelineBatch(
         if (from == null || to == null) return
         val fromTarget = cellTargetOf(from, op.from.target, problem)
         val toTarget = cellTargetOf(to, op.to.target, problem)
-        if ((from is PressedRecord.Palette && op.from.target != null && fromTarget == null) ||
-            (to is PressedRecord.Palette && op.to.target != null && toTarget == null)
-        ) return
+        if ((op.from.target != null && fromTarget == null) || (op.to.target != null && toTarget == null)) return
         if (from.source == to.source && fromTarget == toTarget) return problem("from and to are the same cell")
         val cues = op.cueIds.map { cueOf(it, problem) }
         if (cues.any { it == null }) return
@@ -267,10 +316,10 @@ private class TimelineBatch(
         // A palette's mask is its family; a Look keeps the cell's mask only where the cell was a Look's.
         val mask = when {
             to is PressedRecord.Palette -> to.family?.name
-            from.source.isTemplate -> null
-            else -> fromLayer.propertyMask
+            from.source.isPalette -> null
+            else -> fromLayer.attributeMask
         }
-        val on = decide(to, listOfNotNull(toTarget), afterOff, fromLayer.copy(propertyMask = mask), problem) ?: return
+        val on = decide(to, listOfNotNull(toTarget), afterOff, fromLayer.copy(attributeMask = mask), problem) ?: return
         val next = when (val result = on.result) {
             is LayerPress.Result.Removed -> afterOff
             is LayerPress.Result.Applied -> {
@@ -285,6 +334,118 @@ private class TimelineBatch(
             }
         }
         write(cue, next)
+    }
+
+    /**
+     * The row [FxOnOp.fromFxUuid] names copied into the cue at the top of its effects, unless the cue
+     * already fills that column. The copy carries the source's run key; a source with none is given
+     * a fresh one, and the copy shares it, so the two draw — and a GO plays them — as one run.
+     */
+    private fun fxOn(op: FxOnOp, problem: (String) -> Unit) {
+        val cue = cueOf(op.cueId, problem) ?: return
+        val uuid = uuidOf(op.fromFxUuid, "fromFxUuid", problem) ?: return
+        val live = DaoCueAdHocFxEntity.find { DaoCueAdHocFx.uuid eq uuid }
+            .firstOrNull { it.readValues[DaoCueAdHocFx.cue].value in cueIds }
+        val source = live?.toDto() ?: startFx[uuid] ?: return problem("fromFxUuid names no effect of this stack's cues")
+        val rows = cue.adHocFxInOrder()
+        if (rows.any { it.fxKey == source.fxKey }) return
+        // Only the copy is checked: the cue's other effects are not written, so a stale one cannot refuse it.
+        val copy = source.copy(uuid = null, runUuid = null, sortOrder = (rows.maxOfOrNull { it.sortOrder } ?: -1) + 1).canonicalTarget()
+        validateCueChildren(listOf(copy), emptyList(), emptyList(), registry)?.let { return problem(it) }
+        val ref = listOf(TriggerIndex.RowRef(copy.targetType, copy.targetKey, copy.attribute, "fromFxUuid"))
+        if (TriggerIndex.mayRefuse(copy.attribute)) TriggerIndex.of(project).check(ref)
+        if (CommandIndex.mayRefuse(copy.attribute)) CommandIndex.of(project).check(ref)
+        val key = when {
+            live == null -> source.runUuid?.let(UUID::fromString) ?: UUID.randomUUID()
+            live.runUuid != null -> live.runUuid!!
+            else -> UUID.randomUUID().also { key ->
+                touch(live.cue)
+                live.runUuid = key
+            }
+        }
+        touch(cue)
+        DaoCueAdHocFxEntity.new {
+            this.cue = cue
+            targetType = copy.targetType
+            targetKey = copy.targetKey
+            take(copy)
+            runUuid = key
+        }
+    }
+
+    private fun fxOff(op: FxCellOp, problem: (String) -> Unit) {
+        val cue = cueOf(op.cueId, problem) ?: return
+        val row = fxRowOf(cue, op.fxUuid, problem) ?: return
+        touch(cue)
+        row.delete()
+    }
+
+    /** A fresh key for the cell and the cells of its run below it. A cell in no run has none to break. */
+    private fun breakRun(op: FxCellOp, problem: (String) -> Unit) {
+        val cue = cueOf(op.cueId, problem) ?: return
+        val row = fxRowOf(cue, op.fxUuid, problem) ?: return
+        val at = placeOf(cue, op.entryId, problem) ?: return
+        val old = row.runUuid ?: return
+        rekeyRun(cue, row, at, from = old, to = UUID.randomUUID())
+    }
+
+    /**
+     * The key of the cell directly above in the column — the cue entry above, markers passed over —
+     * for the cell and the rest of its run below, a fresh one given to that cell too when it has none
+     * (C5: an effect stored before the key joins this way). Refused when that cell is empty: a run
+     * joins neighbours only, so a key taken across a gap would join nothing.
+     */
+    private fun joinRun(op: FxCellOp, problem: (String) -> Unit) {
+        val cue = cueOf(op.cueId, problem) ?: return
+        val row = fxRowOf(cue, op.fxUuid, problem) ?: return
+        val at = placeOf(cue, op.entryId, problem) ?: return
+        val above = (if (at > 0) columnRowOf(cueOrder[at - 1], row.fxKey) else null)
+            ?: return problem("cue ${op.cueId} has no filled cell directly above it in its column to join")
+        val key = above.runUuid ?: UUID.randomUUID().also { key ->
+            touch(above.cue)
+            above.runUuid = key
+        }
+        val old = row.runUuid
+        when (old) {
+            key -> return
+            null -> {
+                touch(cue)
+                row.runUuid = key
+            }
+            else -> rekeyRun(cue, row, at, from = old, to = key)
+        }
+    }
+
+    /**
+     * [row], at place [at], and the cells of its run below it — down the stack, markers passed over,
+     * while the column's cell carries [from] — re-keyed to [to]. A later place of the same cue is the
+     * same row, already re-keyed, and the walk goes on past it.
+     */
+    private fun rekeyRun(cue: DaoCue, row: DaoCueAdHocFxEntity, at: Int, from: UUID, to: UUID) {
+        touch(cue)
+        row.runUuid = to
+        val fxKey = row.fxKey
+        for (cueId in cueOrder.drop(at + 1)) {
+            val below = columnRowOf(cueId, fxKey) ?: break
+            when {
+                below.id == row.id -> continue
+                below.runUuid == from -> {
+                    touch(below.cue)
+                    below.runUuid = to
+                }
+                else -> break
+            }
+        }
+    }
+
+    /**
+     * The place in the stack an op on [cue] means: the entry [entryId] names, else the cue's first. A
+     * cue placed twice has a cell at each place, and the cell above or below differs between them.
+     */
+    private fun placeOf(cue: DaoCue, entryId: Int?, problem: (String) -> Unit): Int? {
+        if (entryId == null) return cueOrder.indexOf(cue.id.value)
+        val at = places.indexOfFirst { (entry, cueId) -> entry == entryId && cueId == cue.id.value }
+        return at.takeIf { it >= 0 } ?: null.also { problem("entryId $entryId is not a place of cue ${cue.id.value} in this stack") }
     }
 
     private fun scenerySet(index: Int, op: ScenerySetOp, problem: (String) -> Unit) {
@@ -316,9 +477,10 @@ private class TimelineBatch(
         touch(cue)
         writeCueChildren(
             cue,
-            adHocEffects = inOrder(op.adHocEffects, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) },
-            layers = inOrder(op.layers, { it.sortOrder }) { layer, i -> layer.copy(sortOrder = i) },
+            adHocFx = inListOrder(op.adHocFx, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) },
+            layers = inListOrder(op.layers, { it.sortOrder }) { layer, i -> layer.copy(sortOrder = i) },
             restore = true,
+            registry = registry,
         )
         // A `before` change carries its element's name and kind beside it, which a list does not take.
         val items = op.scenery.map { item -> JsonObject(item.filterKeys { it in RESTORED_SCENERY_KEYS }) }
@@ -374,8 +536,8 @@ private class TimelineBatch(
     private fun recordOf(source: TimelineSourceRef, problem: (String) -> Unit): PressedRecord.Found? {
         val read = when (source.kind.uppercase()) {
             "LOOK" -> readPressedRecord(project, null, source.id)
-            "TEMPLATE" -> readPressedRecord(project, source.id, null)
-            else -> return null.also { problem("source.kind must be LOOK or TEMPLATE, not '${source.kind}'") }
+            "PALETTE" -> readPressedRecord(project, source.id, null)
+            else -> return null.also { problem("source.kind must be LOOK or PALETTE, not '${source.kind}'") }
         }
         return when (read) {
             is PressedRecord.Missing -> null.also { problem(read.message) }
@@ -384,16 +546,44 @@ private class TimelineBatch(
     }
 
     /**
-     * A cell's target: a palette's as named, checked; a Look's none, whatever an op names, since a
-     * Look lands whole (absolute-looks plan D1).
+     * A cell's target: a palette's as named, checked. A Look lands whole (absolute-looks plan D1), so
+     * its cell names none, and one naming a target is refused (`LOOK_LAYER_TARGETED`).
      */
     private fun cellTargetOf(record: PressedRecord.Found, target: CueTargetDto?, problem: (String) -> Unit): CueTargetDto? {
-        if (record is PressedRecord.Look || target == null) return null
+        if (target == null) return null
+        if (record is PressedRecord.Look) return null.also { problem(lookLayerTargetedMessage("target")) }
         if (TargetRef.ofOrNull(target.type, target.key) == null) {
             return null.also { problem("A layer's target must be a fixture or a group: ${target.type}:${target.key}") }
         }
         return target
     }
+
+    private fun uuidOf(raw: String, field: String, problem: (String) -> Unit): UUID? =
+        runCatching { UUID.fromString(raw) }.getOrNull() ?: null.also { problem("$field must be a uuid") }
+
+    /** The effect of [cue] whose uuid is [raw]. */
+    private fun fxRowOf(cue: DaoCue, raw: String, problem: (String) -> Unit): DaoCueAdHocFxEntity? {
+        val uuid = uuidOf(raw, "fxUuid", problem) ?: return null
+        return cue.adHocFxInOrder().firstOrNull { it.uuid == uuid }
+            ?: null.also { problem("fxUuid names no effect of cue ${cue.id.value}") }
+    }
+
+    /** The row a cue's cell in an effect column shows: its first effect with that signature. */
+    private fun columnRowOf(cueId: Int, fxKey: CueFxKey): DaoCueAdHocFxEntity? =
+        DaoCue.findById(cueId)?.adHocFxInOrder()?.firstOrNull { it.fxKey == fxKey }
+
+    /**
+     * P3: a run key names one effect in a cue, so a write may not make two of its effects share one.
+     * A key two already shared as the batch found the cue — an older archive's — is not this op's.
+     */
+    private fun runKeyCollision(cueId: Int): String? {
+        val shared = sharedKeysOf(cueId).firstOrNull { it !in sharedBefore[cueId].orEmpty() } ?: return null
+        return "cue $cueId would hold run key $shared on two effects — a run key names one effect in a cue"
+    }
+
+    private fun sharedKeysOf(cueId: Int): Set<UUID> =
+        DaoCue.findById(cueId)?.adHocFxInOrder().orEmpty().mapNotNull { it.runUuid }
+            .groupingBy { it }.eachCount().filterValues { it > 1 }.keys
 
     private fun elementUuidOf(raw: String, problem: (String) -> Unit): UUID? {
         val uuid = runCatching { UUID.fromString(raw) }.getOrNull()
@@ -406,14 +596,16 @@ private class TimelineBatch(
     /** Remember [cue] as the batch found it, the first time an op writes it. */
     private fun touch(cue: DaoCue) {
         val id = cue.id.value
+        opTouched += id
         if (id in before) return
         before[id] = snapshotOf(cue)
+        sharedBefore[id] = sharedKeysOf(id)
         if (isHeld(id)) stageBefore[id] = cue.stageContent()
     }
 
     private fun write(cue: DaoCue, layers: List<CueLayerDto>) {
         touch(cue)
-        writeCueChildren(cue, layers = layers.mapIndexed { index, layer -> layer.copy(sortOrder = index) })
+        writeCueChildren(cue, layers = layers.mapIndexed { index, layer -> layer.copy(sortOrder = index) }, registry = registry)
     }
 
     private fun writeScenery(cue: DaoCue, index: Int, items: List<JsonElement>, uuids: List<UUID?>, problem: (String) -> Unit) {
@@ -445,22 +637,22 @@ private class TimelineBatch(
                 }
                 "blendMode" -> {
                     val blend = primitive?.takeIf { it.isString }?.contentOrNull
-                    val refusal = blend?.let { EffectSpecCoercion.Strict.problem(blendMode = it) }
+                    val refusal = blend?.let { FxSpecCoercion.Strict.problem(blendMode = it) }
                     when {
                         blend == null -> found += "fields.blendMode must be a blend mode"
                         refusal != null -> found += "fields.blendMode: $refusal"
                         else -> out = out.copy(blendMode = blend)
                     }
                 }
-                "propertyMask" -> {
+                "attributeMask" -> {
                     val names = primitive?.takeIf { it.isString }?.contentOrNull?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
                     when {
-                        isNull -> out = out.copy(propertyMask = null)
-                        names == null -> found += "fields.propertyMask must be a mask or null"
+                        isNull -> out = out.copy(attributeMask = null)
+                        names == null -> found += "fields.attributeMask must be a mask or null"
                         else -> try {
-                            out = out.copy(propertyMask = parseMaskGroups(names)?.toPropertyMask())
+                            out = out.copy(attributeMask = parseFamilies(names)?.toAttributeMask())
                         } catch (e: IllegalArgumentException) {
-                            found += "fields.propertyMask: ${e.message}"
+                            found += "fields.attributeMask: ${e.message}"
                         }
                     }
                 }
@@ -489,9 +681,12 @@ private class TimelineBatch(
 
     private companion object {
         val RESTORED_SCENERY_KEYS = setOf("elementUuid", "state", "transitionMs")
-        val OP_KINDS = listOf("layerOn", "layerOff", "layerSettings", "replace", "scenerySet", "sceneryClear", "restore")
+        val OP_KINDS = listOf(
+            "layerOn", "layerOff", "layerSettings", "replace", "fxOn", "fxOff", "breakRun", "joinRun",
+            "scenerySet", "sceneryClear", "restore",
+        )
         val LAYER_FIELDS = listOf(
-            "enabled", "amount", "blendMode", "propertyMask", "stomp",
+            "enabled", "amount", "blendMode", "attributeMask", "stomp",
             "delayMs", "intervalMs", "randomWindowMs", "speedMasterUuid", "rateSpeedMasterUuid",
         )
     }
@@ -501,17 +696,9 @@ private class TimelineBatch(
 private fun snapshotOf(cue: DaoCue) = TimelineCueSnapshotDto(
     cueId = cue.id.value,
     layers = cue.layersInOrder().mapNotNull { it.toDto() },
-    adHocEffects = cue.adHocEffectsInOrder().map { it.toDto() },
+    adHocFx = cue.adHocFxInOrder().map { it.toDto() },
     scenery = cueSceneryOf(cue.id).map { it.toDto() },
 )
-
-/**
- * [items] with their stored orders kept where those say the order on their own, else renumbered by
- * place: a row put back gets a new row id, so two that shared an order would no longer tie-break
- * the way they did.
- */
-private fun <T> inOrder(items: List<T>, order: (T) -> Int, renumbered: (T, Int) -> T): List<T> =
-    if (items.zipWithNext().all { (a, b) -> order(a) < order(b) }) items else items.mapIndexed { i, item -> renumbered(item, i) }
 
 /** A stored change back in a scenery list's item shape, its uuid beside it. */
 private fun sceneryItemOf(change: SceneryChangeDto): JsonObject = JsonObject(
@@ -546,7 +733,7 @@ internal data class CueStackTimelineEditResource(val parent: CueStackTimelineRes
 @Serializable
 internal data class TimelineEditRequest(val ops: List<JsonObject>, val dryRun: Boolean = false)
 
-/** A Look or a palette, as the Timeline names one: `LOOK` or `TEMPLATE`, and its id. */
+/** A Look or a palette, as the Timeline names one: `LOOK` or `PALETTE`, and its id. */
 @Serializable
 internal data class TimelineSourceRef(val kind: String, val id: Int)
 
@@ -567,6 +754,13 @@ internal data class LayerSettingsOp(val cueId: Int, val layerId: Int, val fields
 internal data class ReplaceOp(val cueIds: List<Int>, val from: TimelineCellRef, val to: TimelineCellRef, val keepSettings: Boolean = true)
 
 @Serializable
+internal data class FxOnOp(val cueId: Int, val fromFxUuid: String)
+
+/** An effect cell: the cue, its effect row's uuid, and — for a cue placed twice — the entry whose cell it is. */
+@Serializable
+internal data class FxCellOp(val cueId: Int, val fxUuid: String, val entryId: Int? = null)
+
+@Serializable
 internal data class ScenerySetOp(val cueId: Int, val elementUuid: String, val state: JsonObject, val transitionMs: Long? = null)
 
 @Serializable
@@ -576,7 +770,7 @@ internal data class SceneryClearOp(val cueId: Int, val elementUuid: String)
 internal data class RestoreOp(
     val cueId: Int,
     val layers: List<CueLayerDto>,
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
     val scenery: List<JsonObject>,
 )
 
@@ -609,6 +803,6 @@ internal data class TimelineReleasedDto(val cueId: Int, val source: LayerSourceD
 internal data class TimelineCueSnapshotDto(
     val cueId: Int,
     val layers: List<CueLayerDto>,
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
     val scenery: List<SceneryChangeDto>,
 )

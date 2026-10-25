@@ -4,7 +4,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.models.BuskPadKind
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -33,11 +33,11 @@ internal object BuskPressService {
 
     /** What a press did, or why it did nothing. */
     sealed interface Outcome {
-        /** [kind] is `TEMPLATE`, `LOOK` or `CUE`; [action] is `"applied"` or `"removed"`. */
+        /** [kind] is `PALETTE`, `LOOK` or `CUE`; [action] is `"applied"` or `"removed"`. */
         data class Pressed(
             val kind: String,
             val action: String,
-            val effectCount: Int,
+            val fxCount: Int,
             val released: Int,
         ) : Outcome
 
@@ -75,11 +75,11 @@ internal object BuskPressService {
         val bank = pad.bank
         if (bank.column.page.project.id.value != projectId) return null
         val record = when (pad.kind) {
-            BuskPadKind.TEMPLATE -> pad.template!!.let { t ->
-                PressRecord.Template(
-                    source = LayerSource.template(t.id.value, t.uuid, t.name),
+            BuskPadKind.PALETTE -> pad.palette!!.let { t ->
+                PressRecord.Palette(
+                    source = LayerSource.palette(t.id.value, t.uuid, t.name),
                     family = t.familyOf(),
-                    isGeneric = t.isGenericTemplate(),
+                    isGeneric = t.isGenericPalette(),
                 )
             }
             BuskPadKind.LOOK -> PressRecord.Look(pad.look!!.layerSource())
@@ -105,7 +105,7 @@ internal object BuskPressService {
             layerSiblings = siblings
                 .mapNotNullTo(HashSet()) { sibling ->
                     when (sibling.kind) {
-                        BuskPadKind.TEMPLATE -> sibling.template!!.uuid
+                        BuskPadKind.PALETTE -> sibling.palette!!.uuid
                         BuskPadKind.LOOK -> sibling.look!!.uuid
                         BuskPadKind.CUE, null -> null
                     }
@@ -122,7 +122,7 @@ internal object BuskPressService {
     /**
      * Apply [plan] with [targets] as the press's selection and [families] as its attribute mask.
      *
-     * Runs outside any transaction: it touches the engine, not the database. [beatDivision] is the
+     * Runs outside any transaction: it touches the engine, not the database. [cycle] is the
      * screen's only extra — hardware has no way to send one — and is null for a surface press.
      * [fadeMs] is the screen's programmer fade (effects plan D13), 0 for a surface press; a cue pad's
      * loose hold ignores it, as a loose hold has no fade.
@@ -139,8 +139,8 @@ internal object BuskPressService {
         state: State,
         plan: PressPlan,
         targets: List<CueTargetDto>,
-        families: Set<PropertyMaskGroup>? = null,
-        beatDivision: Double? = null,
+        families: Set<AttributeFamily>? = null,
+        cycle: Double? = null,
         fadeMs: Long = 0,
     ): Outcome {
         val holds = state.show.cueStackManager.holds
@@ -158,14 +158,14 @@ internal object BuskPressService {
         return when (val record = plan.record) {
             is PressRecord.Layer -> {
                 val pressTargets = when (record) {
-                    is PressRecord.Template -> {
+                    is PressRecord.Palette -> {
                         // A generic template's rows take their targets from the press, so with
                         // none the layer would assert nothing while lighting the pad. A
                         // per-fixture template names its own heads and lands on them.
                         if (record.isGeneric && targets.isEmpty()) {
                             return Outcome.Refused(
                                 "This palette needs a selection to press onto",
-                                CODE_TEMPLATE_NEEDS_SELECTION,
+                                CODE_PALETTE_NEEDS_SELECTION,
                             )
                         }
                         targets.map { CueTargetDto(it.type, it.key) }
@@ -175,31 +175,31 @@ internal object BuskPressService {
                 }
                 // The same dead-pad reading under a mask: a layer the cook would skip whole is
                 // refused rather than lit — on the *on* arm only (`pressWouldRelease`).
-                if (record is PressRecord.Template && families != null && !maskAllows(families, record.family) &&
+                if (record is PressRecord.Palette && families != null && !maskAllows(families, record.family) &&
                     !pressWouldRelease(state, record.source.uuid, pressTargets)
                 ) {
                     return Outcome.Refused(
-                        templateOutsideMaskMessage(record.source.name, record.family, families),
-                        CODE_TEMPLATE_OUTSIDE_MASK,
+                        paletteOutsideMaskMessage(record.source.name, record.family, families),
+                        CODE_PALETTE_OUTSIDE_MASK,
                     )
                 }
                 try {
                     val outcome = stack.toggle(
                         source = record.source,
                         targets = pressTargets,
-                        propertyMask = (record as? PressRecord.Template)?.family?.name,
-                        beatDivisionOverride = beatDivision,
+                        attributeMask = (record as? PressRecord.Palette)?.family?.name,
+                        cycleOverride = cycle,
                         releaseSiblings = plan.layerSiblings,
                         fadeMs = fadeMs,
                     )
                     val stopped = if (outcome.action == "applied") stopCueSiblings() else 0
                     // The busk-pad door of the press log. Templates only — a Look has no recents
                     // row — and only on the arm that put it on, since a release is not a press
-                    // (`TemplatePressLog`). A refusal above has already returned.
-                    if (record is PressRecord.Template && outcome.action == "applied") {
-                        TemplatePressLog.record(state, plan.projectId, record.source.id)
+                    // (`PalettePressLog`). A refusal above has already returned.
+                    if (record is PressRecord.Palette && outcome.action == "applied") {
+                        PalettePressLog.record(state, plan.projectId, record.source.id)
                     }
-                    Outcome.Pressed(record.kind.name, outcome.action, outcome.effectCount, outcome.released + stopped)
+                    Outcome.Pressed(record.kind.name, outcome.action, outcome.fxCount, outcome.released + stopped)
                 } catch (e: IllegalStateException) {
                     Outcome.TargetMissing(e.message ?: "Target not found")
                 }
@@ -213,9 +213,9 @@ internal object BuskPressService {
                     val stopped = stopCueSiblings()
                     val press = holds.takeLooseCue(state, record.cueId)
                         ?: return Outcome.NotFound
-                    Outcome.Pressed(BuskPadKind.CUE.name, "applied", press.acquired.effectCount, released + stopped)
+                    Outcome.Pressed(BuskPadKind.CUE.name, "applied", press.acquired.fxCount, released + stopped)
                 } else {
-                    val removed = holds.dropLoose(state, record.cueId).effectsRemoved
+                    val removed = holds.dropLoose(state, record.cueId).fxRemoved
                     Outcome.Pressed(BuskPadKind.CUE.name, "removed", removed, 0)
                 }
             }
@@ -228,7 +228,7 @@ internal object BuskPressService {
         projectId: Int,
         padUuid: UUID,
         targets: List<CueTargetDto>,
-        families: Set<PropertyMaskGroup>? = null,
+        families: Set<AttributeFamily>? = null,
     ): Outcome = planByUuid(state, projectId, padUuid)?.let { apply(state, it, targets, families) } ?: Outcome.NotFound
 }
 
@@ -256,8 +256,8 @@ internal sealed interface PressRecord {
     }
 
     /** [family] is the template's own (`familyOf`), the mask its layer carries and the one a selection mask tests. */
-    data class Template(override val source: LayerSource, val family: PropertyMaskGroup?, val isGeneric: Boolean) : Layer {
-        override val kind get() = BuskPadKind.TEMPLATE
+    data class Palette(override val source: LayerSource, val family: AttributeFamily?, val isGeneric: Boolean) : Layer {
+        override val kind get() = BuskPadKind.PALETTE
     }
 
     data class Look(override val source: LayerSource) : Layer {

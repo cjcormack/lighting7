@@ -78,8 +78,8 @@ export function CueValueGrid({
       textFilter: '',
     })
 
-    const lookup = (targetKey: string, propertyName: string) =>
-      cooked.rows.get(lookRowKey(targetKey, propertyName))
+    const lookup = (targetKey: string, attribute: string) =>
+      cooked.rows.get(lookRowKey(targetKey, attribute))
 
     // Two passes: resolve every row's cells, then keep the columns something actually filled. A
     // cue with no position values should not be read against an empty Position column.
@@ -117,7 +117,7 @@ export function CueValueGrid({
   if (model.resolved.length === 0 || model.columns.length === 0) {
     return (
       <p className="px-1 py-2 text-xs text-muted-foreground">
-        This cue asserts no values of its own. Anything on stage from it is coming from its effects.
+        This cue asserts no values of its own. Anything on stage from it is coming from its FX.
       </p>
     )
   }
@@ -203,7 +203,7 @@ function layerFor(
   const names = new Set<string>()
   for (const cell of cells) {
     for (const key of cell.keys) {
-      const hit = layerByKey.get(lookRowKey(key.targetKey, key.propertyName))
+      const hit = layerByKey.get(lookRowKey(key.targetKey, key.attribute))
       if (hit?.name) names.add(hit.name)
     }
   }

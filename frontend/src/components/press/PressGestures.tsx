@@ -2,12 +2,12 @@ import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent, typ
 import { useNavigate } from 'react-router'
 import { Hand, Layers, ListChecks, Pencil, Undo2 } from 'lucide-react'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
-import type { EffectPresence } from '@/components/busking/buskingTypes'
+import type { FxPresence } from '@/components/busking/buskingTypes'
 import { useLongPress, type LongPressHandlers } from '@/hooks/useLongPress'
 import type { PressGesture, PressInto } from '@/hooks/usePress'
 import { handPickUp } from '@/store/hand'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 /**
  * The press **gestures** on a palette chip or pad, the same on every surface (apply-model plan D8,
@@ -48,21 +48,24 @@ export function usePressGestures(
 
 /**
  * The menu's first item: the tap's verb for this selection, which the hold menu names out loud. With
- * nothing selected the ring cannot say — a per-fixture palette or a Look then lands on its own heads,
- * and comes off them if it is already there — so the verb names both.
+ * nothing selected the ring cannot say — a per-fixture palette then lands on its own heads, and comes
+ * off them if it is already there — so the verb names both. A Look is [whole]: it lands whole whatever
+ * is selected, so its ring always says which way the tap goes.
  */
 export function tapVerb(
   into: PressInto,
-  presence: EffectPresence,
+  presence: FxPresence,
   hasTargets = true,
   ownHeads = true,
+  whole = false,
 ): { label: string; gesture: PressGesture } {
   if (into.kind === 'look') return { label: `Into ${into.lookName}`, gesture: 'press' }
   if (into.kind === 'cue') {
-    return hasTargets || ownHeads
+    return whole || hasTargets || ownHeads
       ? { label: `Put on or take off in ${into.cueLabel}`, gesture: 'press' }
       : { label: 'Put on — select fixtures first', gesture: 'press' }
   }
+  if (whole) return presence === 'all' ? { label: 'Take off', gesture: 'off' } : { label: 'Put on', gesture: 'press' }
   if (!hasTargets) {
     return ownHeads
       ? { label: 'Put on or take off its own heads', gesture: 'press' }
@@ -74,14 +77,14 @@ export function tapVerb(
 }
 
 /** The chip's and the pad's shared `title`: every gesture stated, since ⌥click is not guessed. */
-export function templatePressTitle(template: TemplateSummary, into: PressInto): string {
+export function palettePressTitle(template: PaletteSummary, into: PressInto): string {
   if (into.kind === 'look') return `Click to write “${template.name}” into ${into.lookName} · hold or right-click for more`
   if (into.kind === 'cue') {
-    return template.kind === 'effect'
+    return template.kind === 'fx'
       ? `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · hold or right-click for more`
       : `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · ⌥click to set its values as ${into.cueLabel}’s own · hold or right-click for more`
   }
-  return template.kind === 'effect'
+  return template.kind === 'fx'
     ? `Click to run “${template.name}” as a layer that tracks it · ⌥click to run a copy · hold or right-click for more`
     : `Click to put “${template.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`
 }
@@ -99,7 +102,7 @@ export function templatePressTitle(template: TemplateSummary, into: PressInto): 
  */
 export function PalettePressButton({
   projectId,
-  template,
+  palette: template,
   into,
   presence,
   hasTargets = true,
@@ -107,13 +110,13 @@ export function PalettePressButton({
   children,
 }: {
   projectId: number
-  template: TemplateSummary
+  palette: PaletteSummary
   into: PressInto
   /** The ring the button draws, which decides the menu's first verb. */
-  presence: EffectPresence
+  presence: FxPresence
   /** False when the press carries no targets — the ring cannot then say which way it goes. */
   hasTargets?: boolean
-  onGesture: (template: TemplateSummary, gesture: PressGesture) => void
+  onGesture: (template: PaletteSummary, gesture: PressGesture) => void
   /** The button itself, given the gesture handlers to spread. */
   children: (handlers: ReturnType<typeof usePressGestures>) => ReactElement
 }) {
@@ -128,7 +131,7 @@ export function PalettePressButton({
       <PopoverContent align="start" className="w-auto min-w-44 p-1">
         <PalettePressMenu
           projectId={projectId}
-          template={template}
+          palette={template}
           into={into}
           presence={presence}
           hasTargets={hasTargets}
@@ -146,7 +149,7 @@ export function PalettePressButton({
 /** A palette's menu: the tap's verb, *Apply as values*, *Pick up*, *Edit palette…*. Mounted only while open. */
 function PalettePressMenu({
   projectId,
-  template,
+  palette: template,
   into,
   presence,
   hasTargets,
@@ -154,9 +157,9 @@ function PalettePressMenu({
   onDone,
 }: {
   projectId: number
-  template: TemplateSummary
+  palette: PaletteSummary
   into: PressInto
-  presence: EffectPresence
+  presence: FxPresence
   hasTargets: boolean
   onGesture: (gesture: PressGesture) => void
   onDone: () => void
@@ -169,11 +172,11 @@ function PalettePressMenu({
       presence={presence}
       hasTargets={hasTargets}
       ownHeads={!template.isGeneric}
-      asValues={into.kind === 'programmer' || (into.kind === 'cue' && template.kind !== 'effect')}
+      asValues={into.kind === 'programmer' || (into.kind === 'cue' && template.kind !== 'fx')}
       onGesture={onGesture}
       onPickUp={() => {
         onDone()
-        handPickUp('TEMPLATE', template.id)
+        handPickUp('PALETTE', template.id)
       }}
       onEdit={() => {
         onDone()
@@ -185,22 +188,20 @@ function PalettePressMenu({
 }
 
 /**
- * A Look's pad with the same gestures and menu as a palette's — *Put on* or *Take off these heads*,
- * *Apply as values*, *Pick up* — for the one picker's Looks (apply-model plan §4.2). No *Edit* item:
- * `/looks` opens no single Look yet. A Look with no targets lands on its own fixtures.
+ * A Look's pad with the same gestures and menu as a palette's — *Put on* or *Take off*, *Apply as
+ * values*, *Pick up* — for the one picker's Looks (apply-model plan §4.2). No *Edit* item: `/looks`
+ * opens no single Look yet. A Look lands whole, whatever is selected (absolute-looks plan D1).
  */
 export function LookPressButton({
   look,
   into,
   presence,
-  hasTargets = true,
   onGesture,
   children,
 }: {
   look: Pick<LookSummary, 'id' | 'name'>
   into: PressInto
-  presence: EffectPresence
-  hasTargets?: boolean
+  presence: FxPresence
   onGesture: (look: Pick<LookSummary, 'id' | 'name'>, gesture: PressGesture) => void
   children: (handlers: ReturnType<typeof usePressGestures>) => ReactElement
 }) {
@@ -216,8 +217,9 @@ export function LookPressButton({
           name={look.name}
           into={into}
           presence={presence}
-          hasTargets={hasTargets}
+          hasTargets
           ownHeads
+          whole
           onGesture={(g) => {
             setMenuOpen(false)
             gesture(g)
@@ -238,6 +240,7 @@ function PressMenuItems({
   presence,
   hasTargets,
   ownHeads,
+  whole = false,
   asValues = into.kind === 'programmer',
   onGesture,
   onPickUp,
@@ -246,10 +249,12 @@ function PressMenuItems({
 }: {
   name: string
   into: PressInto
-  presence: EffectPresence
+  presence: FxPresence
   hasTargets: boolean
-  /** A press with no targets lands on the record's own heads — a per-fixture palette, a Look. */
+  /** A press with no targets lands on the palette's own heads — a per-fixture palette. */
   ownHeads: boolean
+  /** A Look: it lands whole, whatever is selected ([tapVerb]). */
+  whole?: boolean
   /** Offer *Apply as values* — the programmer's, and a value palette's in the cue. */
   asValues?: boolean
   onGesture: (gesture: PressGesture) => void
@@ -258,7 +263,7 @@ function PressMenuItems({
   onEdit?: () => void
   editLabel?: string
 }) {
-  const verb = tapVerb(into, presence, hasTargets, ownHeads)
+  const verb = tapVerb(into, presence, hasTargets, ownHeads, whole)
   return (
     <div role="menu" aria-label={name} className="flex flex-col">
       <MenuItem icon={verb.gesture === 'off' ? Undo2 : Layers} label={verb.label} onSelect={() => onGesture(verb.gesture)} />

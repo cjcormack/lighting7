@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { LegacyAppliedRedirect, LegacyTemplatesRedirect } from './legacyRedirects'
+import { LegacyAppliedRedirect, LegacyPalettesRedirect } from './legacyRedirects'
 
 vi.mock('../store/projects', () => ({
   useCurrentProjectQuery: () => ({ data: { id: 7 }, isLoading: false }),
@@ -17,8 +17,8 @@ function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/projects/:projectId/templates" element={<LegacyTemplatesRedirect />} />
-        <Route path="/templates" element={<LegacyTemplatesRedirect />} />
+        <Route path="/projects/:projectId/templates" element={<LegacyPalettesRedirect />} />
+        <Route path="/templates" element={<LegacyPalettesRedirect />} />
         <Route path="/projects/:projectId/palettes" element={<Landed />} />
         <Route path="/projects/:projectId/programmer/applied" element={<LegacyAppliedRedirect />} />
         <Route path="/projects/:projectId/programmer" element={<Landed />} />
@@ -30,7 +30,7 @@ function renderAt(path: string) {
 afterEach(cleanup)
 
 /** An old `/templates?family=` deep link must still land on the palettes, filter and all. */
-describe('LegacyTemplatesRedirect', () => {
+describe('LegacyPalettesRedirect', () => {
   it('carries a project palette link, search included, to its palettes', () => {
     renderAt('/projects/3/templates?family=colour')
     expect(screen.getByTestId('landed')).toHaveTextContent('/projects/3/palettes?family=colour')

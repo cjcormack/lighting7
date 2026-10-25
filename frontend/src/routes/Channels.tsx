@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Loader2, Lock, LockOpen, MoreHorizontal, SlidersHorizontal, Undo2 } from "lucide-react"
 import { useUpdateChannelMutation } from "../store/channels"
-import { useChannelValue } from "@/hooks/usePropertyValues"
+import { useChannelValue } from "@/hooks/useAttributeValues"
 import { useGetChannelMappingListQuery, type ChannelMappingEntry } from "../store/channelMapping"
 import {
   useGetParkStateListQuery,

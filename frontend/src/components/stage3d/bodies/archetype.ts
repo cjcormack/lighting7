@@ -13,9 +13,9 @@ import {
 } from '../../../lib/lanterns'
 import {
   findColourSource,
-  findDimmerProperty,
-  findRingProperty,
-  findTiltProperty,
+  findDimmerAttribute,
+  findRingAttribute,
+  findTiltAttribute,
   resolveFixtureKind,
   type ElementDescriptor,
   type Fixture,
@@ -24,7 +24,7 @@ import {
   type FixtureTypeInfo,
 } from '../../../store/fixtures'
 import { MAX_CELLS, MAX_LIGHTS_PER_FIXTURE } from '../emitterLayout'
-import { RING_INNER } from '../../../lib/ringEffect'
+import { RING_INNER } from '../../../lib/ringFx'
 
 export { MAX_CELLS, MAX_LIGHTS_PER_FIXTURE }
 
@@ -312,9 +312,9 @@ export interface BodyInput {
 
 /** Whether an element has a colour or a level of its own, so it is drawn as a cell. */
 export function elementHasColour(element: ElementDescriptor): boolean {
-  const props = element.properties ?? []
+  const props = element.attributes ?? []
   if (findColourSource(props)) return true
-  if (findDimmerProperty(props)) return true
+  if (findDimmerAttribute(props)) return true
   return props.some((p) => p.type === 'slider' && (p.category === 'white' || p.category === 'amber'))
 }
 
@@ -344,8 +344,8 @@ export function bodyInputFor(
     kind: lantern ? LANTERN_FAMILY_KIND[lantern.family] : ownKind,
     typeKey: fixtureType?.typeKey ?? fixture?.typeKey ?? '',
     typeName: [fixtureType?.manufacturer, fixtureType?.model].filter(Boolean).join(' '),
-    hasTilt: findTiltProperty(fixture?.properties) != null,
-    hasRing: findRingProperty(fixture?.properties) != null,
+    hasTilt: findTiltAttribute(fixture?.attributes) != null,
+    hasRing: findRingAttribute(fixture?.attributes) != null,
     colourElements: colourElementsOf(fixture),
     acceptsBeamAngle: fixtureType?.acceptsBeamAngle === true,
     acceptsLength: fixtureType?.acceptsLength === true,

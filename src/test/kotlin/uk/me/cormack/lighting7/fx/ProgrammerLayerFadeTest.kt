@@ -50,7 +50,7 @@ class ProgrammerLayerFadeTest {
         val stack = ProgrammerLayerStack(
             fixtures = { fixtures },
             lookRegistry = { registry },
-            templateRegistry = { TemplateRegistry(loader = { null }) },
+            paletteRegistry = { PaletteRegistry(loader = { null }) },
             engine = { engine },
             store = store,
             state = { null },
@@ -68,7 +68,7 @@ class ProgrammerLayerFadeTest {
             rows = listOf(
                 LookRowEntry(
                     target = TargetRef.Fixture("hex-1"),
-                    propertyName = "dimmer",
+                    attribute = "dimmer",
                     value = dimmer.toString(),
                     fadeDurationMs = fadeDurationMs,
                 ),

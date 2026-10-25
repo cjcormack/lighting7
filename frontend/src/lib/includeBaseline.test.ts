@@ -29,7 +29,7 @@ describe('snapshotEntries', () => {
   it('keeps only the value, keyed as the programmer keys it', () => {
     const entry = (value: string): ProgrammerEntry => ({
       targetKey: 'f:1',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       value,
       owner: 'web',
       touched: true,
@@ -41,7 +41,7 @@ describe('snapshotEntries', () => {
 
   it('leaves out a value a layer holds, since Update writes the layer and not its values', () => {
     const held: ProgrammerEntry = {
-      targetKey: 'f:1', propertyName: 'dimmer', value: '200', owner: 'layers', touched: false, owners: ['layers'],
+      targetKey: 'f:1', attribute: 'dimmer', value: '200', owner: 'layers', touched: false, owners: ['layers'],
     }
     expect(snapshotEntries(new Map([['f:1|dimmer', held]])).size).toBe(0)
   })

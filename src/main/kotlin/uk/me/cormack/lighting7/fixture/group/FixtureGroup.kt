@@ -14,22 +14,22 @@ enum class SymmetricMode {
     /** Mirror left/right halves (common for stage wash) */
     MIRROR,
 
-    /** Effects radiate outward from center */
-    CENTER_OUT,
+    /** Effects radiate outward from the centre */
+    CENTRE_OUT,
 
-    /** Effects converge toward center from edges */
-    EDGES_IN
+    /** Effects converge on the centre from the edges */
+    CENTRE_IN
 }
 
 /**
  * Group-level metadata for effect behavior.
  *
  * @property symmetricMode How effects should be distributed symmetrically
- * @property defaultDistribution Default distribution strategy for this group
+ * @property defaultOrderName The default Order for this group
  */
 data class GroupMetadata(
     val symmetricMode: SymmetricMode = SymmetricMode.NONE,
-    val defaultDistributionName: String = "LINEAR"
+    val defaultOrderName: String = "NORMAL"
 )
 
 /**

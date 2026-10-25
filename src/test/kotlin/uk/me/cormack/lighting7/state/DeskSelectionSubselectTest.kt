@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.state
 
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.testsupport.BuskRigFixture
 import kotlin.test.assertEquals
@@ -39,9 +39,9 @@ class DeskSelectionSubselectTest {
     fun `a rewrite keeps the mask and stamps the mover`() {
         val s = selection("built")
         val bar = CueTargetDto("fixture", "bar-1")
-        s.set(listOf(bar), setOf(PropertyMaskGroup.COLOUR), SelectionSource.window("Screen 1"))
+        s.set(listOf(bar), setOf(AttributeFamily.COLOUR), SelectionSource.window("Screen 1"))
         s.subselect(SubselectMode.ODD, SelectionSource.SURFACE)
-        assertEquals(setOf(PropertyMaskGroup.COLOUR), s.state.value.families)
+        assertEquals(setOf(AttributeFamily.COLOUR), s.state.value.families)
         assertEquals(SelectionSource.SURFACE, s.state.value.source)
     }
 

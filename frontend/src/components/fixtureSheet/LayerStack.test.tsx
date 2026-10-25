@@ -20,8 +20,8 @@ describe('describeStackLayer', () => {
       value: '204',
     })
     expect(
-      describeStackLayer(layer({ kind: 'EFFECT', effectType: 'Pulse', cueId: 12, beatDivision: 0.25, heldBack: true }), cueLabel).detail,
-    ).toContain("Q12's effect")
+      describeStackLayer(layer({ kind: 'FX', fxType: 'Pulse', cueId: 12, cycle: 0.25, heldBack: true }), cueLabel).detail,
+    ).toContain("Q12's FX")
     expect(describeStackLayer(layer({ kind: 'CUE', cueId: 12, value: '153', layerSource: { kind: 'LOOK', id: 1, name: 'Warm' } as never }), cueLabel)).toEqual({
       title: 'Q12',
       detail: 'the Look layer Warm',
@@ -31,16 +31,16 @@ describe('describeStackLayer', () => {
   })
 
   it('says why an effect is held back, by the desk’s reason — Blind, a stomp, your value (D7)', () => {
-    const layer = (over: Partial<KeyStackLayer>): KeyStackLayer => ({ kind: 'PROGRAMMER_EFFECT', onStage: false, effectType: 'Pulse', ...over })
+    const layer = (over: Partial<KeyStackLayer>): KeyStackLayer => ({ kind: 'PROGRAMMER_FX', onStage: false, fxType: 'Pulse', ...over })
     expect(describeStackLayer(layer({ heldBack: true, heldBackReason: 'BLIND' }), cueLabel).detail).toBe(
-      'programmer effect · Blind holds it; it is still running and paints in phase when Blind goes off',
+      'programmer FX · Blind holds it; it is still running and paints in phase when Blind goes off',
     )
-    expect(describeStackLayer(layer({ kind: 'EFFECT', cueId: 12, heldBack: true, heldBackReason: 'STOMP' }), cueLabel).detail).toContain(
+    expect(describeStackLayer(layer({ kind: 'FX', cueId: 12, heldBack: true, heldBackReason: 'STOMP' }), cueLabel).detail).toContain(
       'a layer above stomps it',
     )
     // An older desk sends no reason: what it held back, your value held back.
-    expect(describeStackLayer(layer({ kind: 'EFFECT', cueId: 12, heldBack: true }), cueLabel).detail).toContain('your value holds it back')
-    expect(describeStackLayer(layer({ heldBack: false }), cueLabel).detail).toBe('programmer effect')
+    expect(describeStackLayer(layer({ kind: 'FX', cueId: 12, heldBack: true }), cueLabel).detail).toContain('your value holds it back')
+    expect(describeStackLayer(layer({ heldBack: false }), cueLabel).detail).toBe('programmer FX')
   })
 
   it('says a slot age in words', () => {
@@ -57,14 +57,14 @@ describe('LayerStack', () => {
     const answer: KeyStackAnswer = {
       targetType: 'fixture',
       targetKey: 'wash-2',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       blind: false,
       stacks: [
         {
           targetKey: 'wash-2',
           layers: [
             { kind: 'PROGRAMMER', onStage: true, owner: 'web', value: '204', ageMs: 0 },
-            { kind: 'EFFECT', onStage: false, effectType: 'Pulse', cueId: 12, heldBack: true },
+            { kind: 'FX', onStage: false, fxType: 'Pulse', cueId: 12, heldBack: true },
             { kind: 'BASE', onStage: false, value: '0' },
           ],
         },
@@ -80,7 +80,7 @@ describe('LayerStack', () => {
     await act(async () => {
       render(
         <FixtureSheetContext.Provider value={context}>
-          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} propertyName="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
+          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} attribute="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
         </FixtureSheetContext.Provider>,
       )
     })
@@ -96,13 +96,13 @@ describe('LayerStack', () => {
     const answer: KeyStackAnswer = {
       targetType: 'fixture',
       targetKey: 'wash-2',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       blind: true,
       stacks: [
         {
           targetKey: 'wash-2',
           layers: [
-            { kind: 'PROGRAMMER_EFFECT', onStage: false, effectType: 'Pulse', heldBack: true, heldBackReason: 'BLIND' },
+            { kind: 'PROGRAMMER_FX', onStage: false, fxType: 'Pulse', heldBack: true, heldBackReason: 'BLIND' },
             { kind: 'PROGRAMMER', onStage: false, owner: 'web', value: '204', ageMs: 0 },
             { kind: 'BASE', onStage: true, value: '0' },
           ],
@@ -115,7 +115,7 @@ describe('LayerStack', () => {
     await act(async () => {
       render(
         <FixtureSheetContext.Provider value={context}>
-          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} propertyName="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
+          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} attribute="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
         </FixtureSheetContext.Provider>,
       )
     })
@@ -131,7 +131,7 @@ describe('LayerStack', () => {
     const answer: KeyStackAnswer = {
       targetType: 'group',
       targetKey: 'front',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       blind: false,
       stacks: [
         { targetKey: 'hex-1', layers: [programmer] },
@@ -151,7 +151,7 @@ describe('LayerStack', () => {
     await act(async () => {
       render(
         <FixtureSheetContext.Provider value={context}>
-          <LayerStack open onOpenChange={() => {}} heads={heads} group="front" propertyName="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
+          <LayerStack open onOpenChange={() => {}} heads={heads} group="front" attribute="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
         </FixtureSheetContext.Provider>,
       )
     })
@@ -168,10 +168,10 @@ describe('LayerStack', () => {
   it('re-asks once for a move that touches every picked head, not once per head', async () => {
     const keyStack = vi
       .spyOn(lightingApi.programmer, 'keyStack')
-      .mockImplementation(async (targetType, targetKey, propertyName) => ({
+      .mockImplementation(async (targetType, targetKey, attribute) => ({
         targetType,
         targetKey,
-        propertyName,
+        attribute,
         blind: false,
         stacks: [{ targetKey, layers: [{ kind: 'BASE', onStage: true, value: '0' }] }],
       }))
@@ -185,7 +185,7 @@ describe('LayerStack', () => {
     await act(async () => {
       render(
         <FixtureSheetContext.Provider value={context}>
-          <LayerStack open onOpenChange={() => {}} heads={heads} propertyName="rgbColour" label="Colour" trigger={<button type="button">chip</button>} />
+          <LayerStack open onOpenChange={() => {}} heads={heads} attribute="rgbColour" label="Colour" trigger={<button type="button">chip</button>} />
         </FixtureSheetContext.Provider>,
       )
     })
@@ -196,9 +196,9 @@ describe('LayerStack', () => {
   })
 
   it('draws the heads the desk answered for when another head’s ask fails', async () => {
-    vi.spyOn(lightingApi.programmer, 'keyStack').mockImplementation(async (targetType, targetKey, propertyName) => {
+    vi.spyOn(lightingApi.programmer, 'keyStack').mockImplementation(async (targetType, targetKey, attribute) => {
       if (targetKey === 'p2') throw new Error('no such head')
-      return { targetType, targetKey, propertyName, blind: false, stacks: [{ targetKey, layers: [{ kind: 'BASE', onStage: true, value: '0' }] }] }
+      return { targetType, targetKey, attribute, blind: false, stacks: [{ targetKey, layers: [{ kind: 'BASE', onStage: true, value: '0' }] }] }
     })
     vi.spyOn(lightingApi.programmer, 'subscribeToKey').mockReturnValue({ unsubscribe: () => {} })
     const context = { cueLabel, connected: true } as unknown as FixtureSheetContextValue
@@ -212,7 +212,7 @@ describe('LayerStack', () => {
               { key: 'p1', name: 'P1' },
               { key: 'p2', name: 'P2' },
             ]}
-            propertyName="rgbColour"
+            attribute="rgbColour"
             label="Colour"
             trigger={<button type="button">chip</button>}
           />

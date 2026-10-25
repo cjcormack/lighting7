@@ -5,54 +5,52 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { LookFamilyFilter } from '@/components/ViewSwitcher'
 import { PartitionChips } from '@/components/sheet/LibraryRow'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { useEditorForm } from '@/components/editor/EditorSurface'
-import { EffectPadDetail } from '@/components/busking/EffectPadDetail'
+import { FxPadDetail } from '@/components/busking/FxPadDetail'
 import {
-  describeTemplate,
-  EFFECT_GLYPH_CLASS,
+  describePalette,
+  FX_GLYPH_CLASS,
   PAD_FACE_SHELL,
   PAD_SHELL,
   padPresenceClass,
-  templateSwatch,
+  paletteSwatch,
 } from '@/components/busking/padFace'
-import { lookIsApplied } from '@/components/busking/lookPresence'
-import type { EffectPresence } from '@/components/busking/buskingTypes'
-import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
-import { LookPressButton, PalettePressButton, templatePressTitle } from './PressGestures'
+import type { FxPresence } from '@/components/busking/buskingTypes'
+import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
+import { LookPressButton, PalettePressButton, palettePressTitle } from './PressGestures'
 import { usePress, usePressInCue, usePressLook, type PressGesture, type PressInto, type PressPair } from '@/hooks/usePress'
 import { usePressCue } from './pressCue'
 import { pressPresence } from './pressPresence'
-import { selectionKeyOf, storedEffectOf } from '@/components/fx/draftEffect'
+import { selectionKeyOf, storedFxOf } from '@/components/fx/draftFx'
 import { FxEditor } from '@/components/fx/FxEditor'
-import { FxPicker, type AuditionedEffect } from '@/components/fx/FxPicker'
+import { FxPicker, type AuditionedFx } from '@/components/fx/FxPicker'
 import { pickerFamilyForSheet } from '@/components/fx/fxEditorModel'
-import { effectTargetOf } from '@/components/fx/selectionEffectTarget'
+import { fxTargetOf } from '@/components/fx/selectionFxTarget'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { useActiveEffectsQuery, useEffectLibraryQuery } from '@/store/fixtureFx'
+import { useActiveFxQuery, useFxLibraryQuery } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
-import { useStopEffect } from '@/components/fx/useEffectControls'
-import { FAMILY_LABELS, TEMPLATE_FAMILY_ORDER, type AttributeFamily } from '@/lib/attributeFamily'
-import { lookOutsideMaskReason, outsideMaskReason, paletteFits, type PaletteFit } from '@/lib/paletteOffer'
-import { recentTemplates } from '@/lib/templateRecents'
+import { useStopFx } from '@/components/fx/useFxControls'
+import { FAMILY_LABELS, PALETTE_FAMILY_ORDER, type AttributeFamily } from '@/lib/attributeFamily'
+import { outsideMaskReason, paletteFits, type PaletteFit } from '@/lib/paletteOffer'
+import { recentPalettes } from '@/lib/paletteRecents'
 import { cn } from '@/lib/utils'
-import { useAbsorbLookEffectsMutation, useLookListQuery } from '@/store/looks'
+import { useAbsorbLookFxMutation, useLookListQuery } from '@/store/looks'
 import { useProgrammerAppliedQuery } from '@/store/programmer'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useVenueMode } from '@/store/venues'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
-import type { CueAdHocEffect } from '@/api/cuesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
+import type { CueAdHocFx } from '@/api/cuesApi'
 
 /**
- * Which library the picker draws. `effects` is the bare effects (`FxPicker` on the bare effect
+ * Which library the picker draws. `fx` is the bare effects (`FxPicker` on the bare effect
  * press) above the effect palettes that fit — ⌘K *Apply FX*, the FX table's *+ Effect* and a band's
  * *+ Effect …*; the palettes' own Effects section reaches it too.
  */
-export type ApplyLibrary = 'palettes' | 'looks' | 'effects'
+export type ApplyLibrary = 'palettes' | 'looks' | 'fx'
 
 /**
  * The one picker (apply-model plan §4.2): every library door opens it — the palette strip's
@@ -69,12 +67,11 @@ export type ApplyLibrary = 'palettes' | 'looks' | 'effects'
  *  - **The pad is the busk page's pad**, its ring the desk's resolved applied state, so a record is
  *    one thing whichever surface it is pressed from. None while a Look layer is focused: a press
  *    writes that Look there.
- *  - **Outside the mask is shown, dimmed, with the reason** — what the selection's heads could take
- *    but its attribute mask leaves out. Still pressable: the desk tests the mask on the on arm only,
- *    so a lit one comes off, and an on press is refused there with the desk's own sentence.
- *  - **A Look can land on its own fixtures** — *On its own fixtures*, chosen by default with nothing
- *    selected. A Look whose effects take the layer's targets has none to land on, and is shown
- *    outside with that reason.
+ *  - **Outside the mask is shown, dimmed, with the reason** — the palettes the selection's heads
+ *    could take but its attribute mask leaves out. Still pressable: the desk tests the mask on the on
+ *    arm only, so a lit one comes off, and an on press is refused there with the desk's own sentence.
+ *  - **A Look lands whole** (absolute-looks plan D1): its press names neither the selection nor its
+ *    mask, and its ring is whether a layer of it is on, so the Looks are one list.
  *  - **In the cue editor it writes the cue** (`usePressCue`, apply-model plan §3.6): a palette or a
  *    Look goes on as a cue layer, or comes off, and the effects arm stores a bare effect in draft;
  *    a pad is ringed where the cue layers its record. Nothing reaches the stage.
@@ -94,7 +91,7 @@ export function ApplyPicker({
   saveFamilies,
   offerNew = true,
   scope,
-  property,
+  attribute,
 }: {
   projectId: number
   open: boolean
@@ -122,45 +119,35 @@ export function ApplyPicker({
   /** `usePress`'s scope — a door that always writes Local passes `'programmer'`. */
   scope?: 'window' | 'programmer'
   /** The effects library's property — a cell's — which `FxPicker` prefers and opens the family of. */
-  property?: string
+  attribute?: string
 }) {
   const form = useEditorForm()
   const { isVenue } = useVenueMode(projectId)
   const [search, setSearch] = useState('')
   const [chip, setChip] = useState<LookFamilyFilter>('ALL')
-  const [ownFixtures, setOwnFixtures] = useState(pair.targets.length === 0)
   // The palettes' Effects section's *+ Effect …*: the effects arm, until the operator goes back.
-  const [effectsView, setEffectsView] = useState(false)
-  const shown: ApplyLibrary = library === 'effects' || effectsView ? 'effects' : library
+  const [fxView, setFxView] = useState(false)
+  const shown: ApplyLibrary = library === 'fx' || fxView ? 'fx' : library
   const [newOpen, setNewOpen] = useState(false)
   // Mounted on the first *New from selection* and kept: it holds a draft, which must survive the
   // selection emptying under it, and its hooks are not worth paying for until it is asked for.
   const [newMounted, setNewMounted] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // A fresh search each time it opens: the last one belonged to the last selection. A Look lands
-  // on its own fixtures by default only when there is nothing selected for it to land on.
+  // A fresh search each time it opens: the last one belonged to the last selection.
   useEffect(() => {
     if (!open) return
     setSearch('')
     setChip('ALL')
-    setOwnFixtures(pair.targets.length === 0)
-    setEffectsView(false)
-    // Only on opening — a selection moving under an open picker must not flip the operator's switch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setFxView(false)
   }, [open])
 
-  const lookOwn = library === 'looks' && ownFixtures
-  const pressPair = useMemo<PressPair>(
-    () => (lookOwn ? { targets: [], families: pair.families } : pair),
-    [lookOwn, pair],
-  )
-  const { press, into } = usePress(projectId, pressPair, scope == null ? undefined : { scope })
+  const { press, into } = usePress(projectId, pair, scope == null ? undefined : { scope })
   const { data: applied } = useProgrammerAppliedQuery()
   const cue = usePressCue()
 
-  const onTemplate = useCallback(
-    (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
+  const onPalette = useCallback(
+    (template: PaletteSummary, gesture: PressGesture) => void press({ kind: 'palette', palette: template }, gesture),
     [press],
   )
   const onLook = useCallback(
@@ -168,7 +155,7 @@ export function ApplyPicker({
     [press],
   )
 
-  const { data: templates } = useTemplateListQuery({ projectId }, { skip: !projectId || library !== 'palettes' })
+  const { data: templates } = usePaletteListQuery({ projectId }, { skip: !projectId || library !== 'palettes' })
   const { data: looks } = useLookListQuery({ projectId }, { skip: !projectId || library !== 'looks' })
 
   const term = search.trim().toLowerCase()
@@ -185,17 +172,17 @@ export function ApplyPicker({
   )
   // Effect palettes are narrowed by the property their effect drives, as the cell's Effects band
   // narrows them, so the band and its *All …* offer one set.
-  const { data: effectLibrary } = useEffectLibraryQuery(undefined, { skip: !open || library !== 'palettes' })
-  const fitContext = useMemo(() => ({ library: effectLibrary, templates }), [effectLibrary, templates])
+  const { data: fxLibrary } = useFxLibraryQuery(undefined, { skip: !open || library !== 'palettes' })
+  const fitContext = useMemo(() => ({ library: fxLibrary, templates }), [fxLibrary, templates])
   const fitting = useMemo(
     () =>
       !open || library !== 'palettes'
-        ? NO_TEMPLATES
-        : (templates ?? NO_TEMPLATES).filter((t) => paletteFits(t, paletteFit, fitContext)),
+        ? NO_PALETTES
+        : (templates ?? NO_PALETTES).filter((t) => paletteFits(t, paletteFit, fitContext)),
     [open, library, templates, paletteFit, fitContext],
   )
   const familyChips = useMemo(
-    () => TEMPLATE_FAMILY_ORDER.filter((f) => fitting.some((t) => t.family === f)),
+    () => PALETTE_FAMILY_ORDER.filter((f) => fitting.some((t) => t.family === f)),
     [fitting],
   )
   const shownPalettes = useMemo(
@@ -211,49 +198,31 @@ export function ApplyPicker({
     if (!open) return NO_SECTIONS
     if (library === 'looks') {
       const all = (looks ?? []).filter((look) => matches(look.name))
-      const inside: LookSummary[] = []
-      const outside: { look: LookSummary; reason: string }[] = []
-      for (const look of all) {
-        const reason =
-          lookOwn && look.hasDeferredEffects
-            ? 'its effects take the selection — select fixtures first'
-            : lookOutsideMaskReason(look.families, mask)
-        if (reason == null) inside.push(look)
-        else outside.push({ look, reason })
-      }
-      return [
-        { key: 'all', label: 'All', caption: 'A–Z', items: inside.map((look) => ({ kind: 'look' as const, look })) },
-        {
-          key: 'outside',
-          label: 'Outside the mask',
-          caption: lookOwn ? 'what this press cannot land' : 'nothing of theirs is in the selection’s attributes',
-          items: outside.map(({ look, reason }) => ({ kind: 'look' as const, look, reason })),
-        },
-      ]
+      return [{ key: 'all', label: 'All', caption: 'A–Z', items: all.map((look) => ({ kind: 'look' as const, look })) }]
     }
     const inside = shownPalettes.filter((t) => outsideMaskReason(t.family, mask) == null)
     const outside = shownPalettes.flatMap((t) => {
       const reason = outsideMaskReason(t.family, mask)
-      return reason == null ? [] : [{ kind: 'palette' as const, template: t, reason }]
+      return reason == null ? [] : [{ kind: 'palette' as const, palette: t, reason }]
     })
-    const palettes = (list: readonly TemplateSummary[]) => list.map((template) => ({ kind: 'palette' as const, template }))
+    const palettes = (list: readonly PaletteSummary[]) => list.map((palette) => ({ kind: 'palette' as const, palette }))
     return [
-      { key: 'recent', label: 'Recent', caption: 'what you pressed last', items: palettes(recentTemplates(inside)) },
-      { key: 'all', label: 'All', caption: 'A–Z', items: palettes(inside.filter((t) => t.kind !== 'effect' && t.isGeneric)) },
+      { key: 'recent', label: 'Recent', caption: 'what you pressed last', items: palettes(recentPalettes(inside)) },
+      { key: 'all', label: 'All', caption: 'A–Z', items: palettes(inside.filter((t) => t.kind !== 'fx' && t.isGeneric)) },
       // Never an effect palette: an effect fans over whatever the layer names, so `isGeneric` is
       // true for every one of them (fx-templates D3). This arm is the focus-position case.
       { key: 'per-fixture', label: 'Per fixture', caption: 'name their own heads', items: palettes(inside.filter((t) => !t.isGeneric)) },
       {
-        key: 'effects',
-        label: 'Effects',
+        key: 'fx',
+        label: 'FX',
         caption: 'one running instance each',
-        items: [...palettes(inside.filter((t) => t.kind === 'effect')), { kind: 'bare' as const }],
+        items: [...palettes(inside.filter((t) => t.kind === 'fx')), { kind: 'bare' as const }],
       },
       { key: 'outside', label: 'Outside the mask', caption: 'the heads could take these; the mask leaves them out', items: outside },
     ]
     // `matches` reads `term`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, library, looks, lookOwn, mask, shownPalettes, term])
+  }, [open, library, looks, mask, shownPalettes, term])
 
   /**
    * What the panel draws, which is the last real set while it is closing: Radix keeps the content
@@ -264,14 +233,10 @@ export function ApplyPicker({
   if (sections !== NO_SECTIONS) lastSections.current = sections
   const drawnSections = sections === NO_SECTIONS ? lastSections.current : sections
 
-  const presenceOfTemplate = (template: TemplateSummary): EffectPresence =>
-    pressPresence(into, cue, applied, pair.targets, 'TEMPLATE', template.id)
-  const presenceOfLook = (look: LookSummary): EffectPresence =>
-    into.kind === 'programmer' && lookOwn
-      ? lookIsApplied(applied ?? [], look.id)
-        ? 'all'
-        : 'none'
-      : pressPresence(into, cue, applied, pair.targets, 'LOOK', look.id)
+  const presenceOfPalette = (template: PaletteSummary): FxPresence =>
+    pressPresence(into, cue, applied, pair.targets, 'PALETTE', template.id)
+  const presenceOfLook = (look: LookSummary): FxPresence =>
+    pressPresence(into, cue, applied, pair.targets, 'LOOK', look.id)
 
   const total = library === 'looks' ? (looks?.length ?? 0) : (templates?.length ?? 0)
   const offered = library === 'looks' ? (looks?.length ?? 0) : fitting.length
@@ -317,21 +282,6 @@ export function ApplyPicker({
             </Badge>
             on {heads} head{heads === 1 ? '' : 's'}
           </span>
-        ) : library === 'looks' ? (
-          <ToggleGroup
-            type="single"
-            aria-label="Where a Look lands"
-            value={ownFixtures ? 'own' : 'selection'}
-            onValueChange={(next) => next && setOwnFixtures(next === 'own')}
-            className="h-8 shrink-0"
-          >
-            <ToggleGroupItem value="selection" disabled={heads === 0} className="h-8 px-2 text-xs">
-              On {heads} selected
-            </ToggleGroupItem>
-            <ToggleGroupItem value="own" className="h-8 px-2 text-xs">
-              On its own fixtures
-            </ToggleGroupItem>
-          </ToggleGroup>
         ) : null}
       </div>
 
@@ -364,26 +314,26 @@ export function ApplyPicker({
                       key="bare"
                       type="button"
                       data-picker-bare-effects
-                      title="A library effect over the selection — one Local effect, taking these heads off the family’s others"
-                      onClick={() => setEffectsView(true)}
+                      title="A library FX over the selection — one Local FX, taking these heads off the family’s others"
+                      onClick={() => setFxView(true)}
                       className={cn(padClass('none'), 'border-dashed')}
                     >
                       <span className="flex items-center gap-1.5">
-                        <Plus className={EFFECT_GLYPH_CLASS} />
-                        <PadName presence="none">Effect…</PadName>
+                        <Plus className={FX_GLYPH_CLASS} />
+                        <PadName presence="none">FX…</PadName>
                       </span>
                       <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">from the library</span>
                     </button>
                   ) : item.kind === 'palette' ? (
-                    <TemplatePad
-                      key={`t${item.template.id}`}
+                    <PalettePad
+                      key={`t${item.palette.id}`}
                       projectId={projectId}
-                      template={item.template}
+                      palette={item.palette}
                       into={into}
-                      presence={presenceOfTemplate(item.template)}
+                      presence={presenceOfPalette(item.palette)}
                       hasTargets={heads > 0}
                       reason={item.reason}
-                      onGesture={onTemplate}
+                      onGesture={onPalette}
                     />
                   ) : (
                     <LookPad
@@ -391,8 +341,6 @@ export function ApplyPicker({
                       look={item.look}
                       into={into}
                       presence={presenceOfLook(item.look)}
-                      hasTargets={!lookOwn && heads > 0}
-                      reason={item.reason}
                       onGesture={onLook}
                     />
                   ),
@@ -439,8 +387,8 @@ export function ApplyPicker({
   )
 
   const title =
-    shown === 'effects'
-      ? 'Effects'
+    shown === 'fx'
+      ? 'FX'
       : library === 'looks'
         ? 'Looks'
         : family != null
@@ -448,16 +396,16 @@ export function ApplyPicker({
           : 'Palettes'
   const asPopover = form === 'popover' && anchorRef != null
   const content =
-    shown === 'effects' ? (
+    shown === 'fx' ? (
       <EffectsArm
         projectId={projectId}
         open={open}
         pair={pair}
         fit={paletteFit}
         family={family}
-        property={property}
+        attribute={attribute}
         scope={scope}
-        onBack={library === 'effects' ? undefined : () => setEffectsView(false)}
+        onBack={library === 'fx' ? undefined : () => setFxView(false)}
       />
     ) : (
       body
@@ -479,7 +427,7 @@ export function ApplyPicker({
             // cell's Slot Steps), up to the same 540px.
             className={cn(
               'flex max-h-[calc(100dvh-6rem)] w-[560px] max-w-[calc(100vw-1.5rem)] flex-col p-0 min-[900px]:w-[640px]',
-              shown === 'effects' ? 'max-h-[min(540px,calc(100dvh-6rem))]' : 'h-[540px]',
+              shown === 'fx' ? 'max-h-[min(540px,calc(100dvh-6rem))]' : 'h-[540px]',
             )}
             // A click on the door while this is open is an outside press *and* the door's own
             // toggle; refusing the dismissal leaves the door's `onClick` the single thing deciding.
@@ -504,7 +452,7 @@ export function ApplyPicker({
             className="flex flex-col gap-0 p-0"
             style={
               form === 'bottom-sheet'
-                ? shown === 'effects'
+                ? shown === 'fx'
                   ? { maxHeight: '80svh' }
                   : { height: '80svh' }
                 : // `SheetContent`'s own `sm:max-w-sm` silently wins over an inline width.
@@ -526,7 +474,7 @@ export function ApplyPicker({
         </Sheet>
       )}
       {newMounted && (
-        <NewTemplateFromSelectionSheet
+        <NewPaletteFromSelectionSheet
           open={newOpen}
           onOpenChange={setNewOpen}
           projectId={projectId}
@@ -539,8 +487,8 @@ export function ApplyPicker({
 }
 
 type PickerItem =
-  | { kind: 'palette'; template: TemplateSummary; reason?: string }
-  | { kind: 'look'; look: LookSummary; reason?: string }
+  | { kind: 'palette'; palette: PaletteSummary; reason?: string }
+  | { kind: 'look'; look: LookSummary }
   /** The Effects section's way to the bare effects. */
   | { kind: 'bare' }
 
@@ -552,7 +500,7 @@ interface PickerSection {
 }
 
 /** The closed panel's answers, as module constants so `=== NO_SECTIONS` can tell "shut" from "empty". */
-const NO_TEMPLATES: readonly TemplateSummary[] = []
+const NO_PALETTES: readonly PaletteSummary[] = []
 const NO_SECTIONS: readonly PickerSection[] = []
 
 /** The pad's dimmed arm and its reason, under the face. */
@@ -564,17 +512,17 @@ function PadReason({ reason }: { reason?: string }) {
   )
 }
 
-function PadDot({ presence }: { presence: EffectPresence }) {
+function PadDot({ presence }: { presence: FxPresence }) {
   return presence === 'none' ? null : (
     <div className={cn('absolute top-1.5 right-1.5 size-2 rounded-full', presence === 'all' ? 'bg-primary' : 'bg-primary/50')} />
   )
 }
 
-function padClass(presence: EffectPresence, reason?: string) {
+function padClass(presence: FxPresence, reason?: string) {
   return cn(PAD_SHELL, PAD_FACE_SHELL, 'w-full active:scale-95 hover:brightness-110', padPresenceClass(presence), reason != null && 'opacity-55')
 }
 
-function PadName({ presence, children }: { presence: EffectPresence; children: ReactNode }) {
+function PadName({ presence, children }: { presence: FxPresence; children: ReactNode }) {
   return (
     <span className={cn('text-sm leading-tight font-medium', presence !== 'none' ? 'text-primary' : 'text-foreground')}>
       {children}
@@ -583,9 +531,9 @@ function PadName({ presence, children }: { presence: EffectPresence; children: R
 }
 
 /** One palette: the busk page's face, pressed the chip's way. */
-function TemplatePad({
+function PalettePad({
   projectId,
-  template,
+  palette: template,
   into,
   presence,
   hasTargets,
@@ -593,19 +541,19 @@ function TemplatePad({
   onGesture,
 }: {
   projectId: number
-  template: TemplateSummary
+  palette: PaletteSummary
   into: PressInto
-  presence: EffectPresence
+  presence: FxPresence
   hasTargets: boolean
   reason?: string
-  onGesture: (template: TemplateSummary, gesture: PressGesture) => void
+  onGesture: (template: PaletteSummary, gesture: PressGesture) => void
 }) {
-  const swatch = templateSwatch(template)
-  const isEffect = template.kind === 'effect'
+  const swatch = paletteSwatch(template)
+  const isFx = template.kind === 'fx'
   return (
     <PalettePressButton
       projectId={projectId}
-      template={template}
+      palette={template}
       into={into}
       presence={presence}
       hasTargets={hasTargets}
@@ -616,11 +564,11 @@ function TemplatePad({
           type="button"
           {...handlers}
           data-picker-palette={template.id}
-          title={reason ?? templatePressTitle(template, into)}
+          title={reason ?? palettePressTitle(template, into)}
           className={padClass(presence, reason)}
         >
           <span className="flex items-center gap-1.5">
-            {isEffect && <AudioWaveform className={EFFECT_GLYPH_CLASS} />}
+            {isFx && <AudioWaveform className={FX_GLYPH_CLASS} />}
             {swatch && (
               <span
                 aria-hidden
@@ -631,7 +579,7 @@ function TemplatePad({
             <PadName presence={presence}>{template.name}</PadName>
           </span>
           <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
-            {isEffect ? <EffectPadDetail template={template} /> : describeTemplate(template)}
+            {isFx ? <FxPadDetail palette={template} /> : describePalette(template)}
           </span>
           <PadReason reason={reason} />
           <PadDot presence={presence} />
@@ -646,33 +594,28 @@ function LookPad({
   look,
   into,
   presence,
-  hasTargets,
-  reason,
   onGesture,
 }: {
   look: LookSummary
   into: PressInto
-  presence: EffectPresence
-  hasTargets: boolean
-  reason?: string
+  presence: FxPresence
   onGesture: (look: Pick<LookSummary, 'id' | 'name'>, gesture: PressGesture) => void
 }) {
   return (
-    <LookPressButton look={look} into={into} presence={presence} hasTargets={hasTargets} onGesture={onGesture}>
+    <LookPressButton look={look} into={into} presence={presence} onGesture={onGesture}>
       {(handlers) => (
         <button
           type="button"
           {...handlers}
           data-picker-look={look.id}
           title={
-            reason ??
-            (into.kind === 'look'
+            into.kind === 'look'
               ? 'Looks don’t nest — focus Local to press one'
               : into.kind === 'cue'
                 ? `Click to put “${look.name}” on in ${into.cueLabel} as a layer, or take it off · hold or right-click for more`
-                : `Click to put “${look.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`)
+                : `Click to put “${look.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`
           }
-          className={padClass(presence, reason)}
+          className={padClass(presence)}
         >
           <span className="flex items-center gap-1.5">
             <Layers className="size-3 shrink-0 text-muted-foreground" />
@@ -680,9 +623,8 @@ function LookPad({
           </span>
           <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
             {look.families.map((f) => FAMILY_LABELS[f].singular).join(' · ')}
-            {look.effectCount > 0 && ` · ${look.effectCount} effect${look.effectCount === 1 ? '' : 's'}`}
+            {look.fxCount > 0 && ` · ${look.fxCount} FX`}
           </span>
-          <PadReason reason={reason} />
           <PadDot presence={presence} />
         </button>
       )}
@@ -693,7 +635,7 @@ function LookPad({
 /**
  * The effects arm: the add sheet ⌘K and *+ Effect* had, folded into the one picker (apply-model plan §5). Above,
  * **`FxPicker` on the bare effect press** — a tap starts one Local effect over the pair the door
- * handed it (`POST /programmer/effects`, its mask the pair's), which first takes those heads off
+ * handed it (`POST /programmer/fx`, its mask the pair's), which first takes those heads off
  * every other Local effect of its family; another tap swaps it, phase kept; *Edit <name>* opens the
  * live editor here, whose Done comes back to the list. Below, the **effect palettes** that fit,
  * pressed the chip's way through `usePress`.
@@ -714,7 +656,7 @@ function EffectsArm({
   pair,
   fit,
   family,
-  property,
+  attribute,
   scope,
   onBack,
 }: {
@@ -723,7 +665,7 @@ function EffectsArm({
   pair: PressPair
   fit: PaletteFit
   family: AttributeFamily | null
-  property?: string
+  attribute?: string
   scope?: 'window' | 'programmer'
   /** Back to the palettes — absent where the door opened the effects. */
   onBack?: () => void
@@ -734,25 +676,25 @@ function EffectsArm({
   const cue = usePressInCue(options)
   // The cue's draft this session picked, on the selection it was picked over — what a second tap
   // swaps (show-cue-editing plan D17). A tap over another selection adds afresh.
-  const [picked, setPicked] = useState<{ effect: CueAdHocEffect; over: string } | null>(null)
-  const [absorb] = useAbsorbLookEffectsMutation()
+  const [picked, setPicked] = useState<{ effect: CueAdHocFx; over: string } | null>(null)
+  const [absorb] = useAbsorbLookFxMutation()
   const { fixtures } = useFixtureLookup()
   const { data: groups } = useGroupListQuery()
-  const { data: active } = useActiveEffectsQuery()
-  const { data: templates } = useTemplateListQuery({ projectId }, { skip: !projectId })
+  const { data: active } = useActiveFxQuery()
+  const { data: templates } = usePaletteListQuery({ projectId }, { skip: !projectId })
   const { data: applied } = useProgrammerAppliedQuery()
-  const { data: library } = useEffectLibraryQuery()
-  const stopEffect = useStopEffect()
-  const target = useMemo(() => effectTargetOf(pair.targets, fixtures, groups), [pair.targets, fixtures, groups])
+  const { data: library } = useFxLibraryQuery()
+  const stopFx = useStopFx()
+  const target = useMemo(() => fxTargetOf(pair.targets, fixtures, groups), [pair.targets, fixtures, groups])
   const over = selectionKeyOf(pair.targets)
   const swapping = picked != null && picked.over === over ? picked.effect : null
-  const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+  const [current, setCurrent] = useState<AuditionedFx | null>(null)
   const [editing, setEditing] = useState(false)
-  const live = current != null ? ((active ?? []).find((e) => e.id === current.effectId) ?? null) : null
+  const live = current != null ? ((active ?? []).find((e) => e.id === current.fxId) ?? null) : null
 
   /** The open editor's "land what the floor holds" — written before the effect goes into the Look. */
   const flushEditor = useRef<(() => void) | null>(null)
-  const session = useRef<{ current: AuditionedEffect | null; look: typeof look; finished: boolean }>({
+  const session = useRef<{ current: AuditionedFx | null; look: typeof look; finished: boolean }>({
     current: null,
     look,
     finished: false,
@@ -765,7 +707,7 @@ function EffectsArm({
     s.finished = true
     if (s.current == null || s.look == null) return
     flushEditor.current?.()
-    void absorb({ projectId: s.look.projectId, lookId: s.look.lookId, effectIds: [s.current.effectId] })
+    void absorb({ projectId: s.look.projectId, lookId: s.look.lookId, fxIds: [s.current.fxId] })
   }, [absorb])
   // A fresh session per open, the one before it finished first; a close or an unmount finishes it.
   useEffect(() => {
@@ -780,23 +722,23 @@ function EffectsArm({
   }, [open, finish])
   useEffect(() => finish, [finish])
 
-  const onTemplate = useCallback(
-    (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
+  const onPalette = useCallback(
+    (template: PaletteSummary, gesture: PressGesture) => void press({ kind: 'palette', palette: template }, gesture),
     [press],
   )
   const context = useMemo(() => ({ library, templates }), [library, templates])
-  const effectFit = useMemo<PaletteFit>(
-    () => ({ ...fit, families: family != null ? [family] : fit.families, property: property ?? fit.property }),
-    [fit, family, property],
+  const fxFit = useMemo<PaletteFit>(
+    () => ({ ...fit, families: family != null ? [family] : fit.families, attribute: attribute ?? fit.attribute }),
+    [fit, family, attribute],
   )
   const mask = pair.families
   const palettes = useMemo(
     () =>
-      (templates ?? NO_TEMPLATES).filter((t) => t.kind === 'effect' && paletteFits(t, effectFit, context)).map((t) => ({
-        template: t,
+      (templates ?? NO_PALETTES).filter((t) => t.kind === 'fx' && paletteFits(t, fxFit, context)).map((t) => ({
+        palette: t,
         reason: outsideMaskReason(t.family, mask) ?? undefined,
       })),
-    [templates, effectFit, context, mask],
+    [templates, fxFit, context, mask],
   )
   const heads = pair.targets.length
   const pressFamilies = useMemo(() => ({ projectId, families: pair.families }), [projectId, pair.families])
@@ -817,22 +759,22 @@ function EffectsArm({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
         {target == null ? (
-          <p className="px-0.5 py-6 text-center text-xs text-muted-foreground">Select the heads the effect should drive first.</p>
+          <p className="px-0.5 py-6 text-center text-xs text-muted-foreground">Select the heads the FX should drive first.</p>
         ) : cue != null ? (
           <div className="pt-1">
             <FxPicker
               target={target}
               initialFamily={pickerFamilyForSheet(family)}
-              preferredProperty={property ?? fit.property}
+              preferredAttribute={attribute ?? fit.attribute}
               draft={{
-                current: swapping == null ? null : { effectType: swapping.effectType, propertyName: swapping.propertyName ?? '' },
+                current: swapping == null ? null : { fxType: swapping.fxType, attribute: swapping.attribute ?? '' },
                 onPick: (pick) => {
-                  const effect = storedEffectOf(pick, target)
+                  const effect = storedFxOf(pick, target)
                   // Taken as picked at once, so a quick second tap swaps it; a write that did not
                   // land puts back what was picked before, so no later tap swaps a stranger.
                   const before = picked
                   setPicked({ effect, over })
-                  void cue.pickEffect(effect, swapping).then((ok) => {
+                  void cue.pickFx(effect, swapping).then((ok) => {
                     if (!ok) setPicked((now) => (now?.effect === effect ? before : now))
                   })
                 },
@@ -843,15 +785,15 @@ function EffectsArm({
           <div className="flex flex-col gap-2 pt-1">
             <Button variant="ghost" size="sm" className="h-7 self-start gap-1 px-1.5 text-xs" onClick={() => setEditing(false)}>
               <ChevronLeft className="size-3.5" />
-              Effects
+              FX
             </Button>
             <FxEditor
-              key={`${live.id}:${live.effectType}`}
+              key={`${live.id}:${live.fxType}`}
               effect={live}
               onDone={() => setEditing(false)}
               onStop={() => {
                 // Stopped, so nothing is left to absorb: the session's effect is cleared with it.
-                stopEffect(live)
+                stopFx(live)
                 setCurrent(null)
                 setEditing(false)
               }}
@@ -863,7 +805,7 @@ function EffectsArm({
             <FxPicker
               target={target}
               initialFamily={pickerFamilyForSheet(family)}
-              preferredProperty={property ?? fit.property}
+              preferredAttribute={attribute ?? fit.attribute}
               current={current}
               onCurrent={setCurrent}
               onEdit={() => setEditing(true)}
@@ -874,20 +816,20 @@ function EffectsArm({
         {palettes.length > 0 && !(editing && live != null) && (
           <section data-picker-section="effect-palettes">
             <div className="flex items-center gap-2 px-0.5 pt-3 pb-1.5">
-              <EditorLabel className="whitespace-nowrap">Effect palettes</EditorLabel>
+              <EditorLabel className="whitespace-nowrap">FX palettes</EditorLabel>
               <span className="text-[10px] text-muted-foreground">a layer tracking the palette</span>
             </div>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">
-              {palettes.map(({ template, reason }) => (
-                <TemplatePad
+              {palettes.map(({ palette: template, reason }) => (
+                <PalettePad
                   key={`t${template.id}`}
                   projectId={projectId}
-                  template={template}
+                  palette={template}
                   into={into}
-                  presence={pressPresence(into, cue, applied, pair.targets, 'TEMPLATE', template.id)}
+                  presence={pressPresence(into, cue, applied, pair.targets, 'PALETTE', template.id)}
                   hasTargets={heads > 0}
                   reason={reason}
-                  onGesture={onTemplate}
+                  onGesture={onPalette}
                 />
               ))}
             </div>

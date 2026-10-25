@@ -37,7 +37,7 @@ export function buildStaticRows(
   const layerByKey = new Map<string, { layerId?: number | null; name?: string | null }>()
 
   const put = (targetKey: string, row: CookedRow, staged: StagedValue) => {
-    const key = lookRowKey(targetKey, row.propertyName)
+    const key = lookRowKey(targetKey, row.attribute)
     out.set(key, staged)
     // Set *or cleared*: a fixture row from the cue's own assignments overriding a group row a
     // layer won must also drop the layer attribution, or the cell would credit a look for a value

@@ -1,0 +1,32 @@
+{
+  "fx": {
+    "amount": 0.75,
+    "attribute": "rgbColour",
+    "blendMode": "MAX",
+    "cycle": 2.0,
+    "direction": "BOUNCE",
+    "elementFilter": "EVEN",
+    "elementMode": "FLAT",
+    "family": "colour",
+    "fxType": "ColourWave",
+    "order": "REVERSE",
+    "parameters": {
+      "colours": "pal:28331295-cc48-4af6-9fc9-8c12c81e8f26",
+      "depth": "0.6"
+    },
+    "parts": 2,
+    "phaseOffset": 0.125,
+    "rateSpeedMasterUuid": "739f9da6-ac3c-4128-ad34-48dad89d43a6",
+    "runs": 3,
+    "seconds": true,
+    "segments": 2,
+    "speedMasterUuid": "739f9da6-ac3c-4128-ad34-48dad89d43a6",
+    "spread": 1.5,
+    "timing": "CYCLE",
+    "uuid": "e86de97a-6226-4a7a-b0e2-024015020e76",
+    "wings": 3
+  },
+  "name": "amber-breathe",
+  "notes": "slow warm breathe on the selection",
+  "uuid": "5fa2456a-a607-45f9-8398-49a65cb1c066"
+}

@@ -12,12 +12,13 @@ import kotlinx.serialization.Serializable
  * `docs/plans/completed/control-surface-plan.md` §"Phase 7" for the sibling binding-health pattern this
  * intentionally mirrors — both subsystems consume the same ADT via
  * [uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator] and [uk.me.cormack.lighting7.midi.BindingHealthEvaluator].
- * Cue consumers see [Ok] / [MissingFixture] / [MissingGroup] / [MissingProperty]; the
+ * Cue consumers see [Ok] / [MissingFixture] / [MissingGroup] / [MissingAttribute]; the
  * binding-specific variants are produced only by the surface evaluator.
  *
- * Two reference variants, `MissingPalette` and `MissingPaletteEntry`, retired with the `ref:` value
- * grammar in session 4 of the looks-and-layers plan, along with the `PaletteTypeMismatch` arm that
- * had already gone in session 2. A row can no longer *hold* a reference, so a reference that
+ * Two reference variants for the old `ref:` value grammar (a named palette, which became a Look)
+ * retired with it in session 4 of the looks-and-layers plan, along with the type-mismatch arm that
+ * had already gone in session 2. Today's [MissingPalette] is unrelated: a binding naming a deleted
+ * palette. A row can no longer *hold* a reference, so a reference that
  * resolves to nothing is not a state this ADT has to describe: a layer naming a deleted Look simply
  * contributes nothing, and the Look-delete guard is an indexed FK query rather than a health
  * diagnosis.
@@ -39,15 +40,15 @@ sealed class AssignmentHealth {
     data class MissingGroup(val groupName: String) : AssignmentHealth()
 
     /**
-     * The target exists, but [propertyName] is not a known annotated property on it.
+     * The target exists, but [attribute] is not a known annotated property on it.
      * [targetKey] echoes the original fixture / group key for UI context.
      */
     @Serializable
-    @SerialName("missingProperty")
-    data class MissingProperty(val targetKey: String, val propertyName: String) : AssignmentHealth()
+    @SerialName("missingAttribute")
+    data class MissingAttribute(val targetKey: String, val attribute: String) : AssignmentHealth()
 
     /**
-     * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` / `stackEffectSize` binding
+     * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` / `stackFxAmount` binding
      * no longer exists in the project. Control-surface-only.
      */
     @Serializable
@@ -79,14 +80,14 @@ sealed class AssignmentHealth {
     data class MissingSpeedMaster(val masterUuid: String) : AssignmentHealth()
 
     /**
-     * A `selectionProperty` binding names a property no fixture in the patch declares as a
+     * A `selectionAttribute` binding names a property no fixture in the patch declares as a
      * continuous (slider / colour) property, so no selection could ever give it something to
      * write. Control-surface-only. A property *some* fixtures lack is not this: the write
      * simply skips those heads.
      */
     @Serializable
-    @SerialName("unknownProperty")
-    data class UnknownProperty(val propertyName: String) : AssignmentHealth()
+    @SerialName("unknownAttribute")
+    data class UnknownAttribute(val attribute: String) : AssignmentHealth()
 
     /**
      * A `applyLook` binding names a Look that no longer exists in the project. Control-surface-only,
@@ -97,10 +98,10 @@ sealed class AssignmentHealth {
     @SerialName("missingLook")
     data class MissingLook(val lookUuid: String) : AssignmentHealth()
 
-    /** A `pressTemplate` binding names a template that no longer exists. Control-surface-only. */
+    /** A `pressPalette` binding names a palette that no longer exists. Control-surface-only. */
     @Serializable
-    @SerialName("missingTemplate")
-    data class MissingTemplate(val templateUuid: String) : AssignmentHealth()
+    @SerialName("missingPalette")
+    data class MissingPalette(val paletteUuid: String) : AssignmentHealth()
 
     /**
      * A `pressPad` binding names a busk pad that no longer exists — the page was deleted, the pad
@@ -157,17 +158,17 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.Ok -> "ok"
     is AssignmentHealth.MissingFixture -> "missing fixture '${health.fixtureKey}'"
     is AssignmentHealth.MissingGroup -> "missing group '${health.groupName}'"
-    is AssignmentHealth.MissingProperty ->
-        "missing property '${health.propertyName}' on '${health.targetKey}'"
+    is AssignmentHealth.MissingAttribute ->
+        "missing attribute '${health.attribute}' on '${health.targetKey}'"
     is AssignmentHealth.MissingStack -> "missing cue stack id=${health.stackId}"
     is AssignmentHealth.MissingCue -> "missing cue id=${health.cueId}"
     is AssignmentHealth.UnknownBank ->
         "unknown bank '${health.bankId}' for device '${health.deviceTypeKey}'"
     is AssignmentHealth.MissingSpeedMaster -> "missing speed master ${health.masterUuid}"
-    is AssignmentHealth.UnknownProperty -> "no patched fixture has property '${health.propertyName}'"
+    is AssignmentHealth.UnknownAttribute -> "no patched fixture has attribute '${health.attribute}'"
     is AssignmentHealth.UnknownTarget -> "unknown binding target type '${health.targetType}'"
     is AssignmentHealth.MissingLook -> "missing Look ${health.lookUuid}"
-    is AssignmentHealth.MissingTemplate -> "missing template ${health.templateUuid}"
+    is AssignmentHealth.MissingPalette -> "missing palette ${health.paletteUuid}"
     is AssignmentHealth.MissingPad -> "missing busk pad ${health.padUuid}"
     is AssignmentHealth.MissingBank -> "missing busk bank ${health.bankUuid}"
     is AssignmentHealth.MissingPage -> "missing busk page ${health.pageUuid}"

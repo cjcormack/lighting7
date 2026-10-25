@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
@@ -71,10 +71,10 @@ sealed class AdjFogFuryJettFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode7Ch =
             Mode7Ch(this, transaction)
 
-        @FixtureProperty("Fog trigger (0–31 off, 32–255 max fog)", category = PropertyCategory.OTHER)
+        @FixtureAttribute("Fog trigger (0–31 off, 32–255 max fog)", category = AttributeCategory.OTHER)
         val fog: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             transaction, universe,
             firstChannel + 1,
@@ -82,7 +82,7 @@ sealed class AdjFogFuryJettFixture(
             firstChannel + 3,
         )
 
-        @FixtureProperty(category = PropertyCategory.AMBER, bundleWithColour = true)
+        @FixtureAttribute(category = AttributeCategory.AMBER, bundleWithColour = true)
         override val amber: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
         /**
@@ -99,8 +99,8 @@ sealed class AdjFogFuryJettFixture(
          * strobe and random strobe at 1–20 Hz and the pulse at 0.5–2 Hz — ADJ states none. Checked
          * on the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 31, StrobeKind.OPEN),
                 StrobeBand(32, 95, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -113,7 +113,7 @@ sealed class AdjFogFuryJettFixture(
             strobeMin = 32u, strobeMax = 95u,
         )
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 6)
     }
 }

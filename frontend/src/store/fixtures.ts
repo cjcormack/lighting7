@@ -2,7 +2,7 @@ import { restApi } from "./restApi"
 import { useWithoutInfrastructure } from "@/lib/infrastructure"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
-import type { GroupColourPropertyDescriptor, GroupPropertyDescriptor } from "../api/groupsApi"
+import type { GroupColourAttributeDescriptor, GroupAttributeDescriptor } from "../api/groupsApi"
 import type { Lantern } from "../lib/lanterns"
 import type { Gel } from "../lib/gels"
 
@@ -121,8 +121,8 @@ export type FixtureTypeInfo = {
   channelCount: number | null
   isRegistered: boolean
   capabilities: string[]
-  properties: PropertyDescriptor[]
-  elementGroupProperties: GroupPropertyDescriptor[] | null
+  attributes: AttributeDescriptor[]
+  elementGroupAttributes: GroupAttributeDescriptor[] | null
   acceptsBeamAngle?: boolean
   acceptsGel?: boolean
   gelCompactDisplay?: CompactDisplayRole | null
@@ -186,16 +186,16 @@ export type ChannelRef = {
 }
 
 // Property descriptor types (discriminated union)
-export type PropertyDescriptor =
-  | SliderPropertyDescriptor
-  | ColourPropertyDescriptor
-  | WhiteMixPropertyDescriptor
-  | PositionPropertyDescriptor
-  | SettingPropertyDescriptor
-  | TriggerPropertyDescriptor
-  | CommandPropertyDescriptor
+export type AttributeDescriptor =
+  | SliderAttributeDescriptor
+  | ColourAttributeDescriptor
+  | WhiteMixAttributeDescriptor
+  | PositionAttributeDescriptor
+  | SettingAttributeDescriptor
+  | TriggerAttributeDescriptor
+  | CommandAttributeDescriptor
 
-export type PropertyCategory =
+export type AttributeCategory =
   | 'dimmer'
   | 'colour'
   | 'pan'
@@ -207,7 +207,7 @@ export type PropertyCategory =
   | 'amber'
   | 'white'
   | 'speed'
-  // Beam-shaping roles (mirrors the backend PropertyCategory). Split out of
+  // Beam-shaping roles (mirrors the backend AttributeCategory). Split out of
   // 'setting'/'other' so the 3D stage view can recognise them, the same way it
   // already keys off 'pan'/'tilt'. An older backend simply never sends these,
   // and every findXxx below returns undefined — the renderer then behaves
@@ -238,11 +238,11 @@ export type PropertyCategory =
 
 export type CompactDisplayRole = 'primary' | 'secondary'
 
-export type SliderPropertyDescriptor = {
+export type SliderAttributeDescriptor = {
   type: 'slider'
   name: string
   displayName: string
-  category: PropertyCategory
+  category: AttributeCategory
   channel: ChannelRef
   min: number
   max: number
@@ -278,16 +278,16 @@ export type SliderPropertyDescriptor = {
   /** A `shutter` slider: the blade's depth at DMX max (DMX min when `inverted`), as a fraction of
    *  the field's diameter — the lantern focus's unit, so 0.5 reaches the centre. DMX min is out. */
   depthMax?: number
-  /** The DMX at which the slider's proportional band starts (`@FixtureProperty.activeMin`); absent
+  /** The DMX at which the slider's proportional band starts (`@FixtureAttribute.activeMin`); absent
    *  is `min`. Below it the Stage view holds the band's start value. */
   activeMin?: number
   /** The DMX at which it ends — above it the channel is effects (the Robe's iris and frost pulse
    *  above 179), and the view holds the band's end value. Absent is `max`. */
   activeMax?: number
-  /** A `strobe` slider's bands, in DMX order (`@FixtureProperty.strobe`, fixture-optics plan D12):
+  /** A `strobe` slider's bands, in DMX order (`@FixtureAttribute.strobe`, fixture-optics plan D12):
    *  what each range of the channel does to the light. Decoded by `lib/strobeBands.ts`. */
   strobeBands?: StrobeBand[]
-  /** One of the fixture's own **timing channels** (`@FixtureProperty.timing`, fixture-optics plan
+  /** One of the fixture's own **timing channels** (`@FixtureAttribute.timing`, fixture-optics plan
    *  D14) — the families it stretches. Null or absent on every other slider. Read by
    *  `lib/travel.ts`; the desk sends the channel as composed. */
   timing?: TimingRole | null
@@ -320,7 +320,7 @@ export type ShutterBladeName = 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT'
 /** The blades in the wire's order — top, bottom, left, right — which `packBlades` packs in. */
 export const BLADE_ORDER: readonly ShutterBladeName[] = ['TOP', 'BOTTOM', 'LEFT', 'RIGHT']
 
-export type ColourPropertyDescriptor = {
+export type ColourAttributeDescriptor = {
   type: 'colour'
   name: string
   displayName: string
@@ -339,7 +339,7 @@ export type ColourPropertyDescriptor = {
  * takes any colour as the two whites' nearest mix, and its colour is the one the two channels make
  * (`lib/whiteMix.ts`). The channels are also the head's own `white` sliders, listed beside it.
  */
-export type WhiteMixPropertyDescriptor = {
+export type WhiteMixAttributeDescriptor = {
   type: 'whiteMix'
   name: string
   displayName: string
@@ -351,7 +351,7 @@ export type WhiteMixPropertyDescriptor = {
   compactDisplay?: CompactDisplayRole
 }
 
-export type PositionPropertyDescriptor = {
+export type PositionAttributeDescriptor = {
   type: 'position'
   name: string
   displayName: string
@@ -406,14 +406,14 @@ export type SettingOption = {
   ringChase?: boolean
 }
 
-/** What a loadable setting's slots take (`@FixtureProperty(media =)`, fixture optics plan D6). */
+/** What a loadable setting's slots take (`@FixtureAttribute(media =)`, fixture optics plan D6). */
 export type MediaSlot = 'GEL' | 'GOBO' | 'GOBO_OR_GEL'
 
-export type SettingPropertyDescriptor = {
+export type SettingAttributeDescriptor = {
   type: 'setting'
   name: string
   displayName: string
-  category: PropertyCategory
+  category: AttributeCategory
   channel: ChannelRef
   options: SettingOption[]
   compactDisplay?: CompactDisplayRole
@@ -429,7 +429,7 @@ export type SettingPropertyDescriptor = {
  * the desk is armed; [armChannel] follows the desk's arm. Listed so the panel can name its tubes and
  * the DMX sheet its channels.
  */
-export type TriggerPropertyDescriptor = {
+export type TriggerAttributeDescriptor = {
   type: 'trigger'
   /** The trigger's name (`output1`) — what a fire, a cue event and a binding name. */
   name: string
@@ -446,8 +446,8 @@ export type TriggerPropertyDescriptor = {
 }
 
 /** A fixture's one-shot triggers, in the order the desk lists them; empty for every other fixture. */
-export function triggersOf(properties: readonly PropertyDescriptor[] | undefined): TriggerPropertyDescriptor[] {
-  return (properties ?? []).filter((p): p is TriggerPropertyDescriptor => p.type === 'trigger')
+export function triggersOf(attributes: readonly AttributeDescriptor[] | undefined): TriggerAttributeDescriptor[] {
+  return (attributes ?? []).filter((p): p is TriggerAttributeDescriptor => p.type === 'trigger')
 }
 
 /**
@@ -457,7 +457,7 @@ export function triggersOf(properties: readonly PropertyDescriptor[] | undefined
  * (`POST …/patches/{id}/commands/{name}`), and the desk holds its level for [holdMs] before giving
  * the channel back. Listed so the menu can name its commands and the DMX sheet its channel.
  */
-export type CommandPropertyDescriptor = {
+export type CommandAttributeDescriptor = {
   type: 'command'
   /** The command's name (`resetScroller`) — what the route and `run_fixture_command` name. */
   name: string
@@ -481,15 +481,15 @@ export type CommandPropertyDescriptor = {
 }
 
 /** A fixture's commands, in the order the desk lists them; empty for every fixture with none. */
-export function commandsOf(properties: readonly PropertyDescriptor[] | undefined): CommandPropertyDescriptor[] {
-  return (properties ?? []).filter((p): p is CommandPropertyDescriptor => p.type === 'command')
+export function commandsOf(attributes: readonly AttributeDescriptor[] | undefined): CommandAttributeDescriptor[] {
+  return (attributes ?? []).filter((p): p is CommandAttributeDescriptor => p.type === 'command')
 }
 
 export type ElementDescriptor = {
   index: number
   key: string
   displayName: string
-  properties: PropertyDescriptor[]
+  attributes: AttributeDescriptor[]
 }
 
 export type ModeInfo = {
@@ -510,25 +510,12 @@ export type Fixture = {
     channelNo: number
     description: string
   }[]
-  properties: PropertyDescriptor[]
+  attributes: AttributeDescriptor[]
   elements?: ElementDescriptor[]
-  elementGroupProperties?: GroupPropertyDescriptor[]
+  elementGroupAttributes?: GroupAttributeDescriptor[]
   mode?: ModeInfo
   capabilities: string[]
   groups: string[]
-  /**
-   * Ids of the Looks the backend reports as compatible with this fixture.
-   *
-   * **Capability-only**: "does this head have colour/position at all", never "was this Look
-   * authored against that model", and no Look is excluded on any other ground — the "deferred
-   * Looks only" this used to claim describes nothing now that every Look row is bound. It
-   * answers for a Look's *deferred effects*, which are what the layer's targets supply.
-   *
-   * Known hole, and it is the backend's to close: a rows-only Look has an empty capability set,
-   * so it is reported compatible with everything. Do not filter here — compatibility is one
-   * answer, given server-side, or it drifts.
-   */
-  compatibleLookIds: number[]
   gelCode?: string | null
   /**
    * Patched as **infrastructure** — a dimmer channel on hard power, a relay, a hazer's fan — not
@@ -554,15 +541,15 @@ export function useVisibleFixtureListQuery(options?: Parameters<typeof useFixtur
 /**
  * Find the property promoted to the compact card primary slot (top row).
  */
-export function findCompactPrimary(properties: PropertyDescriptor[]): PropertyDescriptor | undefined {
-  return properties.find((p) => p.compactDisplay === 'primary')
+export function findCompactPrimary(attributes: AttributeDescriptor[]): AttributeDescriptor | undefined {
+  return attributes.find((p) => p.compactDisplay === 'primary')
 }
 
 /**
  * Find the property promoted to the compact card secondary slot (bottom row).
  */
-export function findCompactSecondary(properties: PropertyDescriptor[]): PropertyDescriptor | undefined {
-  return properties.find((p) => p.compactDisplay === 'secondary')
+export function findCompactSecondary(attributes: AttributeDescriptor[]): AttributeDescriptor | undefined {
+  return attributes.find((p) => p.compactDisplay === 'secondary')
 }
 
 /**
@@ -570,27 +557,27 @@ export function findCompactSecondary(properties: PropertyDescriptor[]): Property
  * Either a direct colour property (type: 'colour') or a setting with category 'colour'.
  */
 export type ColourSource =
-  | { type: 'colour'; property: ColourPropertyDescriptor }
-  | { type: 'setting'; property: SettingPropertyDescriptor }
+  | { type: 'colour'; attribute: ColourAttributeDescriptor }
+  | { type: 'setting'; attribute: SettingAttributeDescriptor }
 
 /**
  * Find the colour source from an array of properties.
  * Prioritizes colour properties over colour settings.
  * If multiple colour settings exist, returns the first one.
  */
-export function findColourSource(properties: PropertyDescriptor[]): ColourSource | undefined {
+export function findColourSource(attributes: AttributeDescriptor[]): ColourSource | undefined {
   // First, look for a direct colour property
-  const colourProp = properties.find((p) => p.type === 'colour')
+  const colourProp = attributes.find((p) => p.type === 'colour')
   if (colourProp) {
-    return { type: 'colour', property: colourProp as ColourPropertyDescriptor }
+    return { type: 'colour', attribute: colourProp as ColourAttributeDescriptor }
   }
 
   // Fall back to the first setting with category 'colour'
-  const colourSetting = properties.find(
+  const colourSetting = attributes.find(
     (p) => p.type === 'setting' && p.category === 'colour'
   )
   if (colourSetting) {
-    return { type: 'setting', property: colourSetting as SettingPropertyDescriptor }
+    return { type: 'setting', attribute: colourSetting as SettingAttributeDescriptor }
   }
 
   return undefined
@@ -600,10 +587,10 @@ export function findColourSource(properties: PropertyDescriptor[]): ColourSource
  * A head's warm/cold white pair, when its colour is one (`lib/whiteMix.ts`). Kept apart from
  * [findColourSource]: the views that draw a colour read the pair's two `white` sliders directly.
  */
-export function findWhiteMixProperty(
-  properties: readonly PropertyDescriptor[] | undefined,
-): WhiteMixPropertyDescriptor | undefined {
-  return properties?.find((p): p is WhiteMixPropertyDescriptor => p.type === 'whiteMix')
+export function findWhiteMixAttribute(
+  attributes: readonly AttributeDescriptor[] | undefined,
+): WhiteMixAttributeDescriptor | undefined {
+  return attributes?.find((p): p is WhiteMixAttributeDescriptor => p.type === 'whiteMix')
 }
 
 /**
@@ -613,9 +600,9 @@ export function findWhiteMixProperty(
  */
 export function findGroupColourSource(
   fixture: Fixture | undefined,
-): GroupColourPropertyDescriptor | undefined {
-  return fixture?.elementGroupProperties?.find(
-    (p): p is GroupColourPropertyDescriptor => p.type === 'colour',
+): GroupColourAttributeDescriptor | undefined {
+  return fixture?.elementGroupAttributes?.find(
+    (p): p is GroupColourAttributeDescriptor => p.type === 'colour',
   )
 }
 
@@ -623,11 +610,11 @@ export function findGroupColourSource(
  * Find the dimmer slider on a fixture or element. Used widely for
  * brightness-derived UI (compact cards, stage markers, gel swatches).
  */
-export function findDimmerProperty(
-  properties: PropertyDescriptor[] | undefined,
-): SliderPropertyDescriptor | undefined {
-  return properties?.find(
-    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'dimmer',
+export function findDimmerAttribute(
+  attributes: AttributeDescriptor[] | undefined,
+): SliderAttributeDescriptor | undefined {
+  return attributes?.find(
+    (p): p is SliderAttributeDescriptor => p.type === 'slider' && p.category === 'dimmer',
   )
 }
 
@@ -637,12 +624,12 @@ export function findDimmerProperty(
  * the LED Lightbar's strobe and random strobe — and the light is gated by both. A channel from an
  * older desk, declaring nothing, is left out: it draws open, as it always did.
  */
-export function findStrobeProperties(
-  properties: PropertyDescriptor[] | undefined,
-): Array<SliderPropertyDescriptor | SettingPropertyDescriptor> {
+export function findStrobeAttributes(
+  attributes: AttributeDescriptor[] | undefined,
+): Array<SliderAttributeDescriptor | SettingAttributeDescriptor> {
   return (
-    properties?.filter(
-      (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
+    attributes?.filter(
+      (p): p is SliderAttributeDescriptor | SettingAttributeDescriptor =>
         p.category === 'strobe' &&
         !isFine(p) &&
         ((p.type === 'slider' && (p.strobeBands?.length ?? 0) > 0) ||
@@ -652,42 +639,42 @@ export function findStrobeProperties(
 }
 
 /** Find the pan slider (axis === 'PAN') for moving-head head rotation. */
-export function findPanProperty(
-  properties: PropertyDescriptor[] | undefined,
-): SliderPropertyDescriptor | undefined {
-  return properties?.find(
-    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.axis === 'PAN',
+export function findPanAttribute(
+  attributes: AttributeDescriptor[] | undefined,
+): SliderAttributeDescriptor | undefined {
+  return attributes?.find(
+    (p): p is SliderAttributeDescriptor => p.type === 'slider' && p.axis === 'PAN',
   )
 }
 
 /** Find the tilt slider (axis === 'TILT') for moving-head head rotation. */
-export function findTiltProperty(
-  properties: PropertyDescriptor[] | undefined,
-): SliderPropertyDescriptor | undefined {
-  return properties?.find(
-    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.axis === 'TILT',
+export function findTiltAttribute(
+  attributes: AttributeDescriptor[] | undefined,
+): SliderAttributeDescriptor | undefined {
+  return attributes?.find(
+    (p): p is SliderAttributeDescriptor => p.type === 'slider' && p.axis === 'TILT',
   )
 }
 
 /**
  * Find the optional 8-bit fine pan slider (category === 'pan_fine') for
- * 16-bit head positioning. Combined with `findPanProperty` to give 65536-step
+ * 16-bit head positioning. Combined with `findPanAttribute` to give 65536-step
  * resolution; absent on fixtures without sub-step pan precision.
  */
-export function findPanFineProperty(
-  properties: PropertyDescriptor[] | undefined,
-): SliderPropertyDescriptor | undefined {
-  return properties?.find(
-    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'pan_fine',
+export function findPanFineAttribute(
+  attributes: AttributeDescriptor[] | undefined,
+): SliderAttributeDescriptor | undefined {
+  return attributes?.find(
+    (p): p is SliderAttributeDescriptor => p.type === 'slider' && p.category === 'pan_fine',
   )
 }
 
-/** Fine tilt counterpart to {@link findPanFineProperty}. */
-export function findTiltFineProperty(
-  properties: PropertyDescriptor[] | undefined,
-): SliderPropertyDescriptor | undefined {
-  return properties?.find(
-    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'tilt_fine',
+/** Fine tilt counterpart to {@link findPanFineAttribute}. */
+export function findTiltFineAttribute(
+  attributes: AttributeDescriptor[] | undefined,
+): SliderAttributeDescriptor | undefined {
+  return attributes?.find(
+    (p): p is SliderAttributeDescriptor => p.type === 'slider' && p.category === 'tilt_fine',
   )
 }
 
@@ -698,17 +685,17 @@ export function findTiltFineProperty(
 // behaviour rather than needing a capability check.
 
 /** A fine (low-byte) slider: never "the" property of its category — see `fineOf`. */
-function isFine(p: PropertyDescriptor): boolean {
+function isFine(p: AttributeDescriptor): boolean {
   return p.type === 'slider' && p.fineOf != null
 }
 
 /** A continuous beam slider by category (focus / zoom / iris / frost). */
 function findSlider(
-  properties: PropertyDescriptor[] | undefined,
-  category: PropertyCategory,
-): SliderPropertyDescriptor | undefined {
-  return properties?.find(
-    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === category && !isFine(p),
+  attributes: AttributeDescriptor[] | undefined,
+  category: AttributeCategory,
+): SliderAttributeDescriptor | undefined {
+  return attributes?.find(
+    (p): p is SliderAttributeDescriptor => p.type === 'slider' && p.category === category && !isFine(p),
   )
 }
 
@@ -716,13 +703,13 @@ function findSlider(
  * The fine slider declared `fineOf` the coarse property, if any: the low byte of a 16-bit pair, read
  * with `combineFinePair` in stage3d/beamOptics.ts.
  */
-export function findFineProperty(
-  properties: PropertyDescriptor[] | undefined,
-  coarse: PropertyDescriptor | undefined,
-): SliderPropertyDescriptor | undefined {
+export function findFineAttribute(
+  attributes: AttributeDescriptor[] | undefined,
+  coarse: AttributeDescriptor | undefined,
+): SliderAttributeDescriptor | undefined {
   if (!coarse) return undefined
-  return properties?.find(
-    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.fineOf === coarse.name,
+  return attributes?.find(
+    (p): p is SliderAttributeDescriptor => p.type === 'slider' && p.fineOf === coarse.name,
   )
 }
 
@@ -732,11 +719,11 @@ export function findFineProperty(
  * Martin MAC 250, Robe ColorSpot 575 and Varytec Easymove.
  */
 export function findWheel(
-  properties: PropertyDescriptor[] | undefined,
-  category: PropertyCategory,
-): SliderPropertyDescriptor | SettingPropertyDescriptor | undefined {
-  return properties?.find(
-    (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
+  attributes: AttributeDescriptor[] | undefined,
+  category: AttributeCategory,
+): SliderAttributeDescriptor | SettingAttributeDescriptor | undefined {
+  return attributes?.find(
+    (p): p is SliderAttributeDescriptor | SettingAttributeDescriptor =>
       (p.type === 'slider' || p.type === 'setting') && p.category === category && !isFine(p),
   )
 }
@@ -749,12 +736,12 @@ export function findWheel(
  * practice, guaranteed nothing — so the channel decides, and a rig's layers never swap with a
  * build. Fine (low-byte) sliders are never a wheel.
  */
-export function findGoboProperties(
-  properties: PropertyDescriptor[] | undefined,
-): Array<SliderPropertyDescriptor | SettingPropertyDescriptor> {
+export function findGoboAttributes(
+  attributes: AttributeDescriptor[] | undefined,
+): Array<SliderAttributeDescriptor | SettingAttributeDescriptor> {
   const wheels =
-    properties?.filter(
-      (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
+    attributes?.filter(
+      (p): p is SliderAttributeDescriptor | SettingAttributeDescriptor =>
         (p.type === 'slider' || p.type === 'setting') && p.category === 'gobo' && !isFine(p),
     ) ?? []
   // Stable, so two wheels on one channel (never in the library) keep descriptor order.
@@ -762,15 +749,15 @@ export function findGoboProperties(
 }
 
 /**
- * Which of [wheels] (as [findGoboProperties] orders them) a gobo rotation channel turns: the wheel
+ * Which of [wheels] (as [findGoboAttributes] orders them) a gobo rotation channel turns: the wheel
  * it **follows** — the nearest at or below its channel — which is how every type in the library lays
  * them out (the MAC 250's wheel then its rotation; the Robe's static wheel, rotating wheel, then the
  * rotating wheel's index/speed; the Revolution's position, function, rotation). A rotation channel
  * before every wheel turns the first. -1 with no rotation channel or no wheel: nothing turns.
  */
 export function goboRotationWheel(
-  wheels: ReadonlyArray<SliderPropertyDescriptor | SettingPropertyDescriptor>,
-  rotation: SliderPropertyDescriptor | SettingPropertyDescriptor | undefined,
+  wheels: ReadonlyArray<SliderAttributeDescriptor | SettingAttributeDescriptor>,
+  rotation: SliderAttributeDescriptor | SettingAttributeDescriptor | undefined,
 ): number {
   if (!rotation || wheels.length === 0) return -1
   const at = rotation.channel
@@ -783,49 +770,49 @@ export function goboRotationWheel(
   return best < 0 ? 0 : best
 }
 
-export function findGoboRotationProperty(properties: PropertyDescriptor[] | undefined) {
-  return findWheel(properties, 'gobo_rotation')
+export function findGoboRotationAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findWheel(attributes, 'gobo_rotation')
 }
 
 /** A wheel's function channel, which says whether its gobo rotation is an index or a speed. */
-export function findGoboRotationModeProperty(properties: PropertyDescriptor[] | undefined) {
-  return findWheel(properties, 'gobo_rotation_mode')
+export function findGoboRotationModeAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findWheel(attributes, 'gobo_rotation_mode')
 }
 
-export function findPrismProperty(properties: PropertyDescriptor[] | undefined) {
-  return findWheel(properties, 'prism')
+export function findPrismAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findWheel(attributes, 'prism')
 }
 
-export function findPrismRotationProperty(properties: PropertyDescriptor[] | undefined) {
-  return findWheel(properties, 'prism_rotation')
+export function findPrismRotationAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findWheel(attributes, 'prism_rotation')
 }
 
-export function findLedMacroProperty(properties: PropertyDescriptor[] | undefined) {
-  return findWheel(properties, 'led_macro')
+export function findLedMacroAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findWheel(attributes, 'led_macro')
 }
 
 /** The LED ring's effect setting — a ring around the lens, drawn beside the beam. */
-export function findRingProperty(
-  properties: PropertyDescriptor[] | undefined,
-): SettingPropertyDescriptor | undefined {
-  return properties?.find(
-    (p): p is SettingPropertyDescriptor => p.type === 'setting' && p.category === 'ring',
+export function findRingAttribute(
+  attributes: AttributeDescriptor[] | undefined,
+): SettingAttributeDescriptor | undefined {
+  return attributes?.find(
+    (p): p is SettingAttributeDescriptor => p.type === 'setting' && p.category === 'ring',
   )
 }
 
 /** The rate of the LED ring's chases. */
-export function findRingSpeedProperty(
-  properties: PropertyDescriptor[] | undefined,
-): SliderPropertyDescriptor | undefined {
-  return findSlider(properties, 'ring_speed')
+export function findRingSpeedAttribute(
+  attributes: AttributeDescriptor[] | undefined,
+): SliderAttributeDescriptor | undefined {
+  return findSlider(attributes, 'ring_speed')
 }
 
-export function findMovementMacroProperty(properties: PropertyDescriptor[] | undefined) {
-  return findWheel(properties, 'movement_macro')
+export function findMovementMacroAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findWheel(attributes, 'movement_macro')
 }
 
-export function findFocusProperty(properties: PropertyDescriptor[] | undefined) {
-  return findSlider(properties, 'focus')
+export function findFocusAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findSlider(attributes, 'focus')
 }
 
 /**
@@ -833,8 +820,8 @@ export function findFocusProperty(properties: PropertyDescriptor[] | undefined) 
  * as the full beam angle at DMX min/max, or a **stepped zoom** — a setting whose options carry
  * `zoomDeg` (the Robe ColorSpot 575's three angles). `resolveZoomDeg` reads both.
  */
-export function findZoomProperty(properties: PropertyDescriptor[] | undefined) {
-  return findWheel(properties, 'zoom')
+export function findZoomAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findWheel(attributes, 'zoom')
 }
 
 /**
@@ -844,19 +831,19 @@ export function findZoomProperty(properties: PropertyDescriptor[] | undefined) {
  * declares no scale (`depthMax`, or `degMin`/`degMax`) is left out, as the library's guard test
  * (`ShutterBladesTest`) refuses one.
  */
-export interface ShutterProperties {
-  depth: Array<SliderPropertyDescriptor | undefined>
-  rotation: Array<SliderPropertyDescriptor | undefined>
+export interface ShutterAttributes {
+  depth: Array<SliderAttributeDescriptor | undefined>
+  rotation: Array<SliderAttributeDescriptor | undefined>
 }
 
-export function findShutterProperties(
-  properties: PropertyDescriptor[] | undefined,
-): ShutterProperties | undefined {
-  if (!properties) return undefined
+export function findShutterAttributes(
+  attributes: AttributeDescriptor[] | undefined,
+): ShutterAttributes | undefined {
+  if (!attributes) return undefined
   let found = false
-  const depth: Array<SliderPropertyDescriptor | undefined> = [undefined, undefined, undefined, undefined]
-  const rotation: Array<SliderPropertyDescriptor | undefined> = [undefined, undefined, undefined, undefined]
-  for (const p of properties) {
+  const depth: Array<SliderAttributeDescriptor | undefined> = [undefined, undefined, undefined, undefined]
+  const rotation: Array<SliderAttributeDescriptor | undefined> = [undefined, undefined, undefined, undefined]
+  for (const p of attributes) {
     if (p.type !== 'slider' || isFine(p) || p.blade == null) continue
     const i = BLADE_ORDER.indexOf(p.blade)
     if (i < 0) continue
@@ -871,10 +858,10 @@ export function findShutterProperties(
   return found ? { depth, rotation } : undefined
 }
 
-export function findIrisProperty(properties: PropertyDescriptor[] | undefined) {
-  return findSlider(properties, 'iris')
+export function findIrisAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findSlider(attributes, 'iris')
 }
 
-export function findFrostProperty(properties: PropertyDescriptor[] | undefined) {
-  return findSlider(properties, 'frost')
+export function findFrostAttribute(attributes: AttributeDescriptor[] | undefined) {
+  return findSlider(attributes, 'frost')
 }

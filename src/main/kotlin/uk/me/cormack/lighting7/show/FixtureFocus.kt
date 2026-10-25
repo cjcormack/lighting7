@@ -7,7 +7,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * A FOCUS slider's declared range (`@FixtureProperty(focusNearM =, focusFarM =, inverted =)`) over
+ * A FOCUS slider's declared range (`@FixtureAttribute(focusNearM =, focusFarM =, inverted =)`) over
  * its DMX `min..max` — the facts both directions of the focus mapping are made from.
  *
  * The forward direction is the Stage view's `resolveDeclaredFocusDistance`
@@ -68,7 +68,7 @@ fun FocusRange.middleDmx(): Int = dmxFor((nearM + farM) / 2)
  * The range a FOCUS property declares over [slider], or null where it declares none (or one no lens
  * has) — such a slider keeps racking over the throw in the view, and nothing solves for it.
  */
-fun Fixture.Property.focusRange(slider: DmxSlider): FocusRange? {
+fun Fixture.Attribute.focusRange(slider: DmxSlider): FocusRange? {
     val near = focusNearM ?: return null
     val far = focusFarM ?: return null
     return FocusRange(near, far, inverted, slider.min.toInt(), slider.max.toInt()).takeIf { it.usable }

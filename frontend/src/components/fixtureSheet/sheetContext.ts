@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import type { ActiveEffect } from '@/store/fixtureFx'
+import type { ActiveFx } from '@/store/fixtureFx'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { GroupSheetMember } from './sheetPick'
@@ -55,16 +55,16 @@ export interface FixtureSheetContextValue {
   /** The desk is reachable. Offline the sheet is read-only (D2). */
   connected: boolean
   blind: boolean
-  /** The desk's whole active-effect list; rows narrow it with `effectsReaching`. */
-  effects: readonly ActiveEffect[]
+  /** The desk's whole active-effect list; rows narrow it with `fxReaching`. */
+  effects: readonly ActiveFx[]
   /**
-   * The targets whose effects can paint one head — `effectsReaching`'s two arguments: the head, its
+   * The targets whose effects can paint one head — `fxReaching`'s two arguments: the head, its
    * fixture when it is a head of one (the desk paints a fixture's effect onto its heads), and the
    * groups that fixture is in.
    */
   reachOf: (headKey: string) => { keys: readonly string[]; groups: readonly string[] }
   cueLabel: (cueId: number) => string | undefined
-  effectDetail: (effect: ActiveEffect) => string
+  fxDetail: (effect: ActiveFx) => string
   /** The row whose full editor is open (Colour, Position). One at a time — call 5. */
   openRowId: string | null
   setOpenRowId: (id: string | null) => void
@@ -73,6 +73,13 @@ export interface FixtureSheetContextValue {
 }
 
 export const FixtureSheetContext = createContext<FixtureSheetContextValue | null>(null)
+
+/**
+ * A modal host's close, for a gesture that leaves the sheet for another page (the tray's *Open in FX
+ * editor*): a host mounted outside the routed page — the overview panel's, the busk view's — outlives
+ * the navigation. Null where the sheet is part of the page, which the navigation takes with it.
+ */
+export const SheetCloseContext = createContext<(() => void) | null>(null)
 
 export function useFixtureSheet(): FixtureSheetContextValue {
   const value = useContext(FixtureSheetContext)

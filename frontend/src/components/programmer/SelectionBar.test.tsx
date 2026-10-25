@@ -12,7 +12,7 @@ import type { ColumnKey } from '@/components/fixtures-list/columns'
  * toolbar's (`selection`) whichever shape the selection is in, since rows and cells became one
  * selection; this bar drew a second X for the cells-only case until then.
  */
-vi.mock('./TemplateStrip', () => ({ TemplateStrip: () => <div data-testid="strip" /> }))
+vi.mock('./PaletteStrip', () => ({ PaletteStrip: () => <div data-testid="strip" /> }))
 const shortViewport = vi.hoisted(() => ({ current: false }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => shortViewport.current }))
 // The desk chip's readers: the desk's fact and this tab's name; follow/local is the real store.
@@ -57,7 +57,7 @@ function bar(over: Partial<React.ComponentProps<typeof SelectionBar>> = {}) {
       cells={CELLS}
       cellEntryKey={false}
       cellClearKey={false}
-      templateTargets={[
+      paletteTargets={[
         { type: 'fixture', key: 'a' },
         { type: 'fixture', key: 'b' },
       ]}
@@ -118,7 +118,7 @@ describe('SelectionBar', () => {
   })
 
   it('draws no Deselect of its own with nothing selected', () => {
-    render(bar({ cells: [], templateTargets: [] }))
+    render(bar({ cells: [], paletteTargets: [] }))
     expect(screen.queryByRole('button', { name: /Deselect/ })).not.toBeInTheDocument()
     expect(screen.getByText('Nothing selected')).toBeInTheDocument()
   })
@@ -246,7 +246,7 @@ describe('SelectionBar', () => {
       expect(screen.getByText('Colour').compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(badge.compareDocumentPosition(screen.getByTestId('strip')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       live.unmount()
-      render(bar({ cells: [], templateTargets: [] }))
+      render(bar({ cells: [], paletteTargets: [] }))
       expect(screen.getByRole('button', { name: 'Following the desk selection' })).toBeInTheDocument()
     })
 
@@ -264,7 +264,7 @@ describe('SelectionBar', () => {
 
     it('is drawn with nothing selected too', () => {
       unlinkFromDesk({ targets: [], families: null })
-      render(bar({ cells: [], templateTargets: [] }))
+      render(bar({ cells: [], paletteTargets: [] }))
       expect(screen.getByRole('button', { name: 'This window' })).toBeInTheDocument()
     })
 
@@ -301,7 +301,7 @@ describe('SelectionBar', () => {
     expect(live.container.firstElementChild!.className).toContain('h-10')
     expect(live.container.firstElementChild!.className).not.toContain('h-[34px]')
     live.unmount()
-    const reserved = render(bar({ cells: [], templateTargets: [] }))
+    const reserved = render(bar({ cells: [], paletteTargets: [] }))
     expect(reserved.container.firstElementChild!.className).toContain('h-10')
   })
 })

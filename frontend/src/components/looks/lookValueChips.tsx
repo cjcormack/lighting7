@@ -115,8 +115,8 @@ export function LookPreviewSwatches({
 const STRIP_GAP_PX = 4
 
 /** An effect type's id as words: `ColourCycle` → `Colour Cycle`. */
-function effectTypeLabel(effectType: string): string {
-  return effectType.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+function fxTypeLabel(fxType: string): string {
+  return fxType.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
 }
 
 /**
@@ -131,21 +131,21 @@ function effectTypeLabel(effectType: string): string {
  */
 export function LookPreviewStrip({
   preview,
-  effectTypes,
-  effectCount,
+  fxTypes,
+  fxCount,
 }: {
   preview: readonly string[]
   /** The Look's effect types, each once; absent from an older desk. */
-  effectTypes?: readonly string[]
-  effectCount: number
+  fxTypes?: readonly string[]
+  fxCount: number
 }) {
   const lineRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
   const [shown, setShown] = useState(preview.length)
-  const effectNames = (effectTypes ?? []).map(effectTypeLabel)
-  const effectsTitle =
-    effectCount > 0
-      ? `${effectCount} effect${effectCount === 1 ? '' : 's'}${effectNames.length > 0 ? `: ${effectNames.join(', ')}` : ''}`
+  const fxNames = (fxTypes ?? []).map(fxTypeLabel)
+  const fxTitle =
+    fxCount > 0
+      ? `${fxCount} FX${fxNames.length > 0 ? `: ${fxNames.join(', ')}` : ''}`
       : ''
 
   useLayoutEffect(() => {
@@ -170,22 +170,22 @@ export function LookPreviewStrip({
     const observer = new ResizeObserver(fit)
     observer.observe(line)
     return () => observer.disconnect()
-  }, [preview, effectCount])
+  }, [preview, fxCount])
 
   if (preview.length === 0) {
-    if (effectCount === 0) return null
+    if (fxCount === 0) return null
     return (
-      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={effectsTitle}>
-        <AudioWaveform className="size-3.5 shrink-0 text-violet-400" aria-label="Effects only" />
-        <span className="truncate">{effectNames.length > 0 ? effectNames.join(', ') : effectsTitle}</span>
+      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={fxTitle}>
+        <AudioWaveform className="size-3.5 shrink-0 text-violet-400" aria-label="FX only" />
+        <span className="truncate">{fxNames.length > 0 ? fxNames.join(', ') : fxTitle}</span>
       </span>
     )
   }
 
   const hidden = preview.length - shown
-  const effectsGlyph =
-    effectCount > 0 ? (
-      <AudioWaveform className="size-3.5 shrink-0 text-violet-400" aria-label={effectsTitle} />
+  const fxGlyph =
+    fxCount > 0 ? (
+      <AudioWaveform className="size-3.5 shrink-0 text-violet-400" aria-label={fxTitle} />
     ) : null
 
   return (
@@ -193,7 +193,7 @@ export function LookPreviewStrip({
       ref={lineRef}
       data-preview-line
       className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap"
-      title={[preview.join('  '), effectsTitle].filter(Boolean).join(' · ')}
+      title={[preview.join('  '), fxTitle].filter(Boolean).join(' · ')}
     >
       {/* The measuring copy: every chip, a `+N` as wide as the widest, and the glyph. Absolute and
           invisible, so it takes no room and is never read; `aria-hidden` for the same reason. */}
@@ -208,13 +208,13 @@ export function LookPreviewStrip({
           </span>
         ))}
         <MoreChip data-preview-more count={preview.length} />
-        {effectCount > 0 && <span data-preview-effects className="inline-flex size-3.5 shrink-0" />}
+        {fxCount > 0 && <span data-preview-effects className="inline-flex size-3.5 shrink-0" />}
       </div>
       {preview.slice(0, shown).map((value, index) => (
         <LookValueChip key={`${value}-${index}`} value={value} />
       ))}
       {hidden > 0 && <MoreChip count={hidden} />}
-      {effectsGlyph}
+      {fxGlyph}
     </div>
   )
 }

@@ -8,15 +8,15 @@ internal data class AxisDmx(val coarse: UByte, val fine: UByte?)
 
 /**
  * A travel-degree position to its axis's DMX: the same mapping as the position template's
- * (`TemplateResolver.degreesToDmx`, and the Stage view's `degreesToDmx`) — the fraction along the
+ * (`PaletteResolver.degreesToDmx`, and the Stage view's `degreesToDmx`) — the fraction along the
  * annotated range, flipped for an inverted axis, laid over the coarse slider's own `min..max` —
  * carried to 16 bits when [fine] is given, as the Stage view reads it back (`coarse + fine / 256`).
  */
-internal fun travelToDmx(degrees: Double, property: Fixture.Property, coarse: DmxSlider, fine: DmxSlider?): AxisDmx {
-    val degMin = property.degMin!!
-    val degMax = property.degMax!!
+internal fun travelToDmx(degrees: Double, attribute: Fixture.Attribute, coarse: DmxSlider, fine: DmxSlider?): AxisDmx {
+    val degMin = attribute.degMin!!
+    val degMax = attribute.degMax!!
     val fraction = ((degrees - degMin) / (degMax - degMin)).coerceIn(0.0, 1.0)
-    val effective = if (property.inverted) 1.0 - fraction else fraction
+    val effective = if (attribute.inverted) 1.0 - fraction else fraction
     val min = coarse.min.toInt()
     val max = coarse.max.toInt()
     val exact = min + effective * (max - min)
@@ -31,13 +31,13 @@ internal fun travelToDmx(degrees: Double, property: Fixture.Property, coarse: Dm
  * to its travel degrees. With no fine, the coarse byte is taken as exact, which is what
  * [travelToDmx] rounds a coarse-only head to.
  */
-internal fun dmxToTravel(coarse: UByte, fine: UByte?, property: Fixture.Property, coarseSlider: DmxSlider): Double {
-    val degMin = property.degMin!!
-    val degMax = property.degMax!!
+internal fun dmxToTravel(coarse: UByte, fine: UByte?, attribute: Fixture.Attribute, coarseSlider: DmxSlider): Double {
+    val degMin = attribute.degMin!!
+    val degMax = attribute.degMax!!
     val min = coarseSlider.min.toInt()
     val max = coarseSlider.max.toInt()
     val exact = coarse.toInt() + (fine?.toInt() ?: 0) / 256.0
     val effective = ((exact - min) / (max - min).coerceAtLeast(1)).coerceIn(0.0, 1.0)
-    val fraction = if (property.inverted) 1.0 - effective else effective
+    val fraction = if (attribute.inverted) 1.0 - effective else effective
     return degMin + fraction * (degMax - degMin)
 }

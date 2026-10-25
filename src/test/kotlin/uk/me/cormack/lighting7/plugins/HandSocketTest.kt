@@ -11,7 +11,7 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -39,8 +39,8 @@ import kotlin.test.assertTrue
  */
 class HandSocketTest : RouteIntegrationTest() {
 
-    private fun seedTemplate(name: String, project: Int = projectId): Int = transaction(state.database) {
-        DaoTemplate.new {
+    private fun seedPalette(name: String, project: Int = projectId): Int = transaction(state.database) {
+        DaoPalette.new {
             this.project = DaoProject.findById(project)!!
             this.name = name
         }.id.value
@@ -84,7 +84,7 @@ class HandSocketTest : RouteIntegrationTest() {
     @Test
     fun `a pick-up carries the record's own summary DTO, for each of the three kinds`() = testApplication {
         mountTestApp(state)
-        val templateId = seedTemplate("Warm wash")
+        val paletteId = seedPalette("Warm wash")
         val lookId = seedLook("Act 1 opener")
         val cueId = seedCue("Cue 3")
         val client = createWsClient()
@@ -92,11 +92,11 @@ class HandSocketTest : RouteIntegrationTest() {
         client.webSocket("/api") {
             awaitOfType<HandStateOutMessage>()
 
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", templateId))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
             val template = awaitOfType<HandStateOutMessage> { it.item != null }.item!!
-            assertEquals(BuskPadKind.TEMPLATE, template.kind)
-            assertEquals(templateId, template.id)
-            assertEquals("Warm wash", template.template?.name, "the ghost's face comes from the frame, not a fetch")
+            assertEquals(BuskPadKind.PALETTE, template.kind)
+            assertEquals(paletteId, template.id)
+            assertEquals("Warm wash", template.palette?.name, "the ghost's face comes from the frame, not a fetch")
             assertNull(template.look)
             assertNull(template.cue)
             assertTrue(template.expiresAtMs > template.pickedUpAtMs, "the desk stamped its own expiry")
@@ -104,7 +104,7 @@ class HandSocketTest : RouteIntegrationTest() {
             sendSerialized<InMessage>(HandPickUpInMessage("LOOK", lookId))
             val look = awaitOfType<HandStateOutMessage> { it.item?.kind == BuskPadKind.LOOK }.item!!
             assertEquals("Act 1 opener", look.look?.name)
-            assertNull(look.template, "a second pick-up replaces — there is no both")
+            assertNull(look.palette, "a second pick-up replaces — there is no both")
 
             sendSerialized<InMessage>(HandPickUpInMessage("CUE", cueId))
             val cue = awaitOfType<HandStateOutMessage> { it.item?.kind == BuskPadKind.CUE }.item!!
@@ -117,8 +117,8 @@ class HandSocketTest : RouteIntegrationTest() {
     fun `a pick-up resolves in this project only`() = testApplication {
         mountTestApp(state)
         val otherProjectId = seedMinimalProject(state, projectName = "Second project", universe = 1)
-        val foreign = seedTemplate("Another show's template", project = otherProjectId)
-        val mine = seedTemplate("This show's template")
+        val foreign = seedPalette("Another show's template", project = otherProjectId)
+        val mine = seedPalette("This show's template")
         val client = createWsClient()
 
         client.webSocket("/api") {
@@ -127,13 +127,13 @@ class HandSocketTest : RouteIntegrationTest() {
             // A template that exists — in the wrong project. Dropped, with no reply and no hand.
             // The pick-up of *this* project's template behind it is the stopping point: every
             // `hand.state` up to and including it must be the empty one, or the foreign row landed.
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", foreign))
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", mine))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", foreign))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", mine))
             val held = awaitOfType<HandStateOutMessage> { it.item != null }.item!!
             assertEquals(mine, held.id, "only the current project's template reached the hand")
 
             // And nothing at all, likewise: the hand keeps what it holds.
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", 999_999))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", 999_999))
             sendSerialized<InMessage>(HandDropInMessage())
             assertNull(awaitOfType<HandStateOutMessage> { it.item == null }.item)
         }
@@ -142,21 +142,21 @@ class HandSocketTest : RouteIntegrationTest() {
     @Test
     fun `a malformed kind is dropped rather than closing the socket`() = testApplication {
         mountTestApp(state)
-        val templateId = seedTemplate("Warm wash")
+        val paletteId = seedPalette("Warm wash")
         val client = createWsClient()
 
         client.webSocket("/api") {
             awaitOfType<HandStateOutMessage>()
-            sendSerialized<InMessage>(HandPickUpInMessage("CUE_STACK", templateId))
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", templateId))
-            assertEquals(templateId, awaitOfType<HandStateOutMessage> { it.item != null }.item?.id)
+            sendSerialized<InMessage>(HandPickUpInMessage("CUE_STACK", paletteId))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
+            assertEquals(paletteId, awaitOfType<HandStateOutMessage> { it.item != null }.item?.id)
         }
     }
 
     @Test
     fun `a pick-up is stamped with the announcing window, never with a payload`() = testApplication {
         mountTestApp(state)
-        val templateId = seedTemplate("Warm wash")
+        val paletteId = seedPalette("Warm wash")
         val client = createWsClient()
 
         client.webSocket("/api") {
@@ -166,7 +166,7 @@ class HandSocketTest : RouteIntegrationTest() {
             sendSerialized<InMessage>(announce(name = "Screen 2"))
             val row = awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }.windows.single()
 
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", templateId))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
             val held = awaitOfType<HandStateOutMessage> { it.item != null }.item!!
             assertEquals(SelectionSource.KIND_WINDOW, held.pickedUpOn?.kind)
             assertEquals("Screen 2", held.pickedUpOn?.name)
@@ -177,12 +177,12 @@ class HandSocketTest : RouteIntegrationTest() {
     @Test
     fun `a drop empties the hand, and dropping again sends nothing`() = testApplication {
         mountTestApp(state)
-        val templateId = seedTemplate("Warm wash")
+        val paletteId = seedPalette("Warm wash")
         val client = createWsClient()
 
         client.webSocket("/api") {
             awaitOfType<HandStateOutMessage>()
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", templateId))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
             awaitOfType<HandStateOutMessage> { it.item != null }
 
             sendSerialized<InMessage>(HandDropInMessage())
@@ -191,7 +191,7 @@ class HandSocketTest : RouteIntegrationTest() {
             // The second drop is a no-op, so it emits no frame: the next `hand.state` to arrive is
             // the one the pick-up after it causes, not an echo of the drop.
             sendSerialized<InMessage>(HandDropInMessage())
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", templateId))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
             val frames = collectUntilOfType<HandStateOutMessage>()
             assertTrue(
                 frames.filterIsInstance<HandStateOutMessage>().none { it.item == null },
@@ -208,7 +208,7 @@ class HandSocketTest : RouteIntegrationTest() {
     @Test
     fun `a drop naming a record lets go only of that record`() = testApplication {
         mountTestApp(state)
-        val templateId = seedTemplate("Warm wash")
+        val paletteId = seedPalette("Warm wash")
         val lookId = seedLook("Act 1 opener")
         val client = createWsClient()
 
@@ -216,7 +216,7 @@ class HandSocketTest : RouteIntegrationTest() {
             // Both unasked connect frames first, so the bank state that fences the stale drop
             // below can only be the reply to its request, never the queued connect push.
             awaitEachOf(HandStateOutMessage::class, SurfaceBankStateOutMessage::class)
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", templateId))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
             val template = awaitOfType<HandStateOutMessage> { it.item != null }.item!!
 
             // Window A places its template; in the gap window B picks up a Look. A's drop names the
@@ -275,14 +275,14 @@ class HandSocketTest : RouteIntegrationTest() {
     fun `a project switch empties the hand, where a window survives it`() = testApplication {
         mountTestApp(state)
         val otherProjectId = seedMinimalProject(state, projectName = "Second project", universe = 1)
-        val templateId = seedTemplate("Warm wash")
+        val paletteId = seedPalette("Warm wash")
         val client = createWsClient()
 
         client.webSocket("/api") {
             sendSerialized<InMessage>(announce())
             awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }
 
-            sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", templateId))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
             awaitOfType<HandStateOutMessage> { it.item != null }
 
             state.projectManager.switchProject(otherProjectId)

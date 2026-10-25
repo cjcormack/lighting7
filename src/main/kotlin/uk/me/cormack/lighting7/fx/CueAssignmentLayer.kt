@@ -279,7 +279,7 @@ class CueAssignmentLayer internal constructor(
      * cue-trigger side to close that gap itself rather than depending on every current and future
      * caller to remember the pairing. Safe to call even while the cue's rows are still fading out
      * in a crossfade: [isLayerStomped] only suppresses *live effects* tagged with this cue's layer
-     * ids, and those are already removed (via [FxEngine.removeEffectsForCueStack]) before a
+     * ids, and those are already removed (via [FxEngine.removeFxForCueStack]) before a
      * crossfade starts — the suppression entry has nothing left to affect by the time this runs.
      */
     fun clearStompSuppression(cueId: Int) {
@@ -288,7 +288,7 @@ class CueAssignmentLayer internal constructor(
         }
     }
 
-    /** Drop every cue's Layer 4 contribution — used by [FxEngine.stop] / [FxEngine.clearAllEffects]. */
+    /** Drop every cue's Layer 4 contribution — used by [FxEngine.stop] / [FxEngine.clearAllFx]. */
     fun clearAll() {
         publisher.locked {
             if (cueStompSuppression.isNotEmpty()) {
@@ -361,7 +361,7 @@ class CueAssignmentLayer internal constructor(
      * stomping layer is an escape hatch, not everyday authoring — so the usual tick pays two
      * volatile reads and no map lookups.
      */
-    fun isLayerStomped(effect: FxInstance, fixtureKey: String, propertyName: String): Boolean {
+    fun isLayerStomped(effect: FxInstance, fixtureKey: String, attribute: String): Boolean {
         if (cueStompFlat.isEmpty() && programmerStompFlat.isEmpty()) return false
         val cueLayerId = effect.cueLayerId
         val programmerLayerId = effect.programmerLayerId
@@ -370,7 +370,7 @@ class CueAssignmentLayer internal constructor(
             programmerLayerId != null -> programmerStompFlat[programmerLayerId]
             else -> return false
         }
-        return layerStomp?.get(fixtureKey)?.contains(propertyName) == true
+        return layerStomp?.get(fixtureKey)?.contains(attribute) == true
     }
 
     /** Which stack [cueId]'s published assignments belong to — its highest hold's ([holdStackOf]). */

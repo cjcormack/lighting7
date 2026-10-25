@@ -32,7 +32,7 @@ vi.mock('@/components/fixtures-list/FixturesListContainer', () => ({
           cells: [],
           cellEntryKey: false,
           cellClearKey: false,
-          templateTargets: [],
+          paletteTargets: [],
           targetFamilies: [],
           targetEmitters: [],
           marqueeDragging: false,

@@ -104,7 +104,7 @@ class VenueHoldTest : RouteIntegrationTest() {
         assertEquals(150u.toUByte(), controller.transmittedValue(hex.firstChannel + 1), "a park gets through the hold")
 
         // Arm, fire and command: VENUE_HOLD. A rehearsal is drawn and sends nothing, so it stands.
-        awaitEffectsOn(f.showId)
+        awaitFxOn(f.showId)
         assertCode(HttpStatusCode.Conflict, VenueHoldService.CODE_VENUE_HOLD, client.post("/api/rest/projects/${f.showId}/effects/arm") { json("""{"on":true}""") })
         val cannon = patchId(f.showId, "cannon-1")
         assertCode(HttpStatusCode.Conflict, VenueHoldService.CODE_VENUE_HOLD, client.post("/api/rest/projects/${f.showId}/patches/$cannon/fire") { json("""{"trigger":"output1"}""") })
@@ -150,7 +150,7 @@ class VenueHoldTest : RouteIntegrationTest() {
         assertEquals(0u.toUByte(), controller.transmittedValue(start + 2), "v3's arm")
         assertEquals(255u.toUByte(), controller.transmittedValue(start + 3), "the rest of the hex is live")
         // Still no arm while behind.
-        awaitEffectsOn(f.showId)
+        awaitFxOn(f.showId)
         assertCode(HttpStatusCode.Conflict, VenueHoldService.CODE_VENUE_HOLD, client.post("/api/rest/projects/${f.showId}/effects/arm") { json("""{"on":true}""") })
 
         // A reload of the same project at the same pin keeps it.
@@ -267,7 +267,7 @@ class VenueHoldTest : RouteIntegrationTest() {
     }
 
     /** The effects service follows a switch on the project collector: wait for it to reach [showId]. */
-    private suspend fun awaitEffectsOn(showId: Int) {
+    private suspend fun awaitFxOn(showId: Int) {
         repeat(200) {
             if (state.effectsService.armed.value.projectId == showId) return
             delay(10)

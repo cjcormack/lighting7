@@ -325,7 +325,7 @@ class VenueAttach(private val state: State) {
             blockers = plan.blockers + clashes,
             deadReferences = dead,
             notes = if (live && w.fixtureRenames.isNotEmpty()) listOf(
-                "The live show reloads, and the programmer's values, Locate and hand-run effects on a renamed fixture " +
+                "The live show reloads, and the programmer's values, Locate and hand-run FX on a renamed fixture " +
                     "(${w.fixtureRenames.entries.joinToString { (from, to) -> "$from → $to" }}) do not come back: they name its old key.",
             ) else emptyList(),
         )

@@ -22,7 +22,7 @@ import {
 } from './beamMask'
 import { resolveEdgeHardness } from './beamOptics'
 import { LAMBERT_LOBES } from './scene/lobes'
-import type { SliderPropertyDescriptor } from '../../store/fixtures'
+import type { SliderAttributeDescriptor } from '../../store/fixtures'
 
 /** Blades in the wire's order: top, bottom, left, right. */
 function blades(...b: Array<[number, number]>) {
@@ -265,7 +265,7 @@ describe('the beam edge', () => {
   })
 
   it('stays frosted at the focal plane: the lift does not lift frost', () => {
-    const frost: SliderPropertyDescriptor = {
+    const frost: SliderAttributeDescriptor = {
       type: 'slider', name: 'frost', displayName: 'Frost', category: 'frost', channel: { universe: 1, channelNo: 1 }, min: 0, max: 255,
     }
     expect(resolveEdgeHardness(0.12, frost, 255, true)).toBeCloseTo(0, 9)

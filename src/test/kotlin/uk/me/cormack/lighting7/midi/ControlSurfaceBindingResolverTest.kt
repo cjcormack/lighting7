@@ -32,7 +32,7 @@ class ControlSurfaceBindingResolverTest {
         deviceTypeKey: String = "x-touch-compact-standard",
         controlId: String = "fader-1",
         bank: String? = null,
-        target: BindingTarget = BindingTarget.FixtureProperty("hex-1", "dimmer"),
+        target: BindingTarget = BindingTarget.FixtureAttribute("hex-1", "dimmer"),
         projectId: Int = 1,
         health: AssignmentHealth = AssignmentHealth.Ok,
     ) = ControlSurfaceBindingService.ResolvedBinding(
@@ -116,7 +116,7 @@ class ControlSurfaceBindingResolverTest {
         )
 
         val fader = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
-        assertEquals(BindingTarget.GroupProperty("front-wash", "dimmer"), fader.target)
+        assertEquals(BindingTarget.GroupAttribute("front-wash", "dimmer"), fader.target)
         // The strip row's identity, policy and health carry to every control it covers.
         assertEquals(9, fader.id)
         assertEquals("fader-1", fader.controlId)
@@ -137,11 +137,11 @@ class ControlSurfaceBindingResolverTest {
         )
 
         assertEquals(
-            BindingTarget.GroupProperty("front-wash", "dimmer"),
+            BindingTarget.GroupAttribute("front-wash", "dimmer"),
             svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"))?.target,
         )
         assertEquals(
-            BindingTarget.GroupProperty("front-wash", "colour"),
+            BindingTarget.GroupAttribute("front-wash", "colour"),
             svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("colour"))?.target,
         )
     }
@@ -195,11 +195,11 @@ class ControlSurfaceBindingResolverTest {
         )
 
         assertEquals(
-            BindingTarget.GroupProperty("movers", "dimmer"),
+            BindingTarget.GroupAttribute("movers", "dimmer"),
             svc.resolve(1, KEY, "fader-1", activeBank = "layer-a", encoderBank = EncoderBankSelection("dimmer"))?.target,
         )
         assertEquals(
-            BindingTarget.GroupProperty("front-wash", "dimmer"),
+            BindingTarget.GroupAttribute("front-wash", "dimmer"),
             svc.resolve(1, KEY, "fader-1", activeBank = "layer-b", encoderBank = EncoderBankSelection("dimmer"))?.target,
         )
     }

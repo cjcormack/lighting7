@@ -11,8 +11,8 @@ import { useCueEdited } from '@/store/cueHolds'
 import type { TimelineEditOp } from '@/api/stackTimelineApi'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
-import { useTemplateListQuery } from '@/store/templates'
-import { templateRowsSwatch } from '@/lib/templateIntent'
+import { usePaletteListQuery } from '@/store/palettes'
+import { paletteRowsSwatch } from '@/lib/paletteIntent'
 import { useStageElementListQuery } from '@/store/stageElements'
 import { useDeskSelection } from '@/store/selection'
 import { useCueFade } from '@/hooks/useCueFade'
@@ -23,6 +23,7 @@ import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import type { CuePlace } from '@/lib/cuePlaces'
 import {
+  breakRunVerb,
   cellAt,
   cells as deriveCells,
   columns as deriveColumns,
@@ -32,16 +33,21 @@ import {
   editsColumn,
   fillDownOps,
   filter as filterColumns,
+  fxColumnId,
+  fxRunAt,
+  joinRunVerb,
   kindCounts,
   markerMarkAt,
   moveColumn,
   offOps,
   onOps,
   recordColumnId,
+  extraColumnId,
   runMarkAt,
   runs as deriveRuns,
   sceneryColumnId,
   selectedLayers,
+  settingsChangeLabel,
   TIMELINE_KINDS,
   toggleOps,
   withExtraColumns,
@@ -75,6 +81,7 @@ import { useSharedCueActionDialogs } from './cueActionDialogsContext'
 import {
   describeEdit,
   TimelineAddColumn,
+  TimelineFxRunPopover,
   TimelineReplacePopover,
   TimelineSceneryPopover,
   TimelineSettingsPopover,
@@ -94,21 +101,21 @@ const NEXT_ROW_CLASS = 'bg-blue-500/[0.05] shadow-[inset_3px_0_0_rgb(59,130,246)
 const RUN_CLASS: Record<TimelineKind, string> = {
   look: 'bg-teal-400/20 before:bg-teal-300',
   palette: 'bg-zinc-400/20 before:bg-zinc-300',
-  effect: 'bg-violet-400/25 before:bg-violet-300',
+  fx: 'bg-violet-400/25 before:bg-violet-300',
   scenery: 'bg-amber-300/25',
 }
 const KIND_SWATCH: Record<TimelineKind, string> = {
   look: 'bg-teal-300',
   palette: 'bg-zinc-300',
-  effect: 'bg-violet-300',
+  fx: 'bg-violet-300',
   scenery: 'bg-amber-300',
 }
-const KIND_LABEL: Record<TimelineKind, string> = { look: 'Looks', palette: 'Palettes', effect: 'Effects', scenery: 'Scenery' }
+const KIND_LABEL: Record<TimelineKind, string> = { look: 'Looks', palette: 'Palettes', fx: 'FX', scenery: 'Scenery' }
 /** The tracked state's line down a scenery column. */
 const TRACK_LINE_CLASS = 'pointer-events-none absolute inset-y-[-1px] left-1/2 -ml-px w-0.5 bg-amber-300/40'
 
 /** The column's tab in the cue editor (C2). */
-const PANE_TAB: Record<TimelineKind, CueEditorTab> = { look: 'looks', palette: 'looks', effect: 'fx', scenery: 'scenery' }
+const PANE_TAB: Record<TimelineKind, CueEditorTab> = { look: 'looks', palette: 'looks', fx: 'fx', scenery: 'scenery' }
 
 const FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
 
@@ -143,12 +150,13 @@ export interface StackTimelineProps {
  * (`GET …/cue-stacks/{id}/timeline`) by `lib/stackTimeline/`. A filled cell is that cue's own
  * layer, row or change; neighbouring cells draw as one bar, an effect's only on a shared run key.
  *
- * **Editing Looks, palettes and scenery** (§4.4): a click selects a cell and a second click — or ⏎ —
- * toggles it (a scenery cell's second click opens its popover), ⌫ turns the selection off, a run's
- * end drags to fill or empty the cells it crosses, and the bar's *On · Off · Fill ↓ · Replace with…
- * · Settings…* act on a range. **Every gesture is one request** to `timeline/edit`
- * (`useTimelineEdits`), nothing is sent to the stage, and its answer is one Undo (⌘Z, or the toast).
- * Locked, the cells read and every write asks to unlock. Effect cells select and read only.
+ * **Editing** (§4.4): a click selects a cell and a second click — or ⏎ — toggles it (a scenery
+ * cell's second click opens its popover, as a filled FX cell's opens its run's), ⌫ turns the
+ * selection off, a run's end drags to fill or empty the cells it crosses — an FX cell filled from a
+ * neighbour joins its run — and the bar's *On · Off · Fill ↓ · Replace with… · Settings…* act on a
+ * range. **Every gesture is one request** to `timeline/edit` (`useTimelineEdits`), nothing is sent to
+ * the stage, and its answer is one Undo (⌘Z, or the toast). Locked, the cells read and every write
+ * asks to unlock.
  *
  * One selected cell opens `CueEditorPane` on its cue at its column's tab; a range over several cues
  * folds it (C2).
@@ -171,10 +179,10 @@ export function StackTimeline({
   const { data: groups } = useGroupListQuery()
   const { data: elements } = useStageElementListQuery(projectId)
   const deskSelection = useDeskSelection()
-  const { data: palettes } = useTemplateListQuery({ projectId })
+  const { data: palettes } = usePaletteListQuery({ projectId })
   /** A generic colour palette's colour, as its busk pad draws it; a per-fixture one has none. */
   const swatches = useMemo(
-    () => new Map((palettes ?? []).flatMap((p) => (p.isGeneric ? [[p.id, templateRowsSwatch(p.rows)] as const] : []))),
+    () => new Map((palettes ?? []).flatMap((p) => (p.isGeneric ? [[p.id, paletteRowsSwatch(p.rows)] as const] : []))),
     [palettes],
   )
 
@@ -238,7 +246,7 @@ export function StackTimeline({
   useEffect(() => {
     if (extras.length === 0 || timeline == null || timeline.stackId !== stack.id) return
     const derived = new Set(derivedColumns.map((c) => c.id))
-    const kept = extras.filter((e) => !derived.has(recordColumnId(e.kind, e.sourceId, e.target)))
+    const kept = extras.filter((e) => !derived.has(extraColumnId(e)))
     if (kept.length !== extras.length) extraStore.set(kept)
   }, [derivedColumns, extraStore, extras, stack.id, timeline])
   const facet = useMemo(
@@ -285,15 +293,22 @@ export function StackTimeline({
   /** Locked, a write asks to unlock — where the lock is the operator's to lift. */
   const refuseVerb = locked && onRequestUnlock ? askToUnlock : undefined
   const edits = useTimelineEdits(projectId, stack.id, { locked, onLocked: refuseVerb })
+  /** Each FX row's column, by its uuid: what an FX op names. */
+  const fxColumnByUuid = useMemo(
+    () => new Map((timeline?.entries ?? []).flatMap((e) => e.fx.map((fx) => [fx.uuid, fxColumnId(fx)] as const))),
+    [timeline],
+  )
   const columnOfOp = useCallback(
     (op: TimelineEditOp) => {
       if (op.op === 'layerOn' || op.op === 'layerOff') {
         return byId.get(recordColumnId(op.source.kind === 'LOOK' ? 'look' : 'palette', op.source.id, op.target ?? null))
       }
       if (op.op === 'scenerySet' || op.op === 'sceneryClear') return byId.get(sceneryColumnId(op.elementUuid))
+      if (op.op === 'fxOn') return byId.get(fxColumnByUuid.get(op.fromFxUuid) ?? '')
+      if (op.op === 'fxOff' || op.op === 'breakRun' || op.op === 'joinRun') return byId.get(fxColumnByUuid.get(op.fxUuid) ?? '')
       return undefined
     },
-    [byId],
+    [byId, fxColumnByUuid],
   )
   const { send } = edits
   const gesture = useCallback(
@@ -302,6 +317,7 @@ export function StackTimeline({
   )
 
   const [sceneryEdit, setSceneryEdit] = useState<{ entryId: number; columnId: string } | null>(null)
+  const [fxEdit, setFxEdit] = useState<{ entryId: number; columnId: string } | null>(null)
   const [drag, setDrag] = useState<{ columnId: string; fromEntryId: number; toEntryId: number; x: number; y: number } | null>(null)
   const dragColumn = drag == null ? null : (byId.get(drag.columnId) ?? null)
   // Keyed on the rows the drag spans, not the pointer, so a move within one row rebuilds no cells.
@@ -358,7 +374,7 @@ export function StackTimeline({
         return {
         key: column.id,
         label: `${column.name} · ${column.sub}`,
-        width: column.kind === 'effect' || column.kind === 'scenery' ? '92px' : '84px',
+        width: column.kind === 'fx' || column.kind === 'scenery' ? '92px' : '84px',
         gutter: false,
         group: {
           key: column.kind,
@@ -390,7 +406,7 @@ export function StackTimeline({
             previous={previousEntry.has(row.entry.entryId) ? cellAt(grid, previousEntry.get(row.entry.entryId)!, column.id) : null}
             ghost={dragging ? (dragGhosts?.get(row.entry.entryId) ?? null) : null}
             onHandle={
-              !locked && (column.kind === 'look' || column.kind === 'palette')
+              !locked && column.kind !== 'scenery'
                 ? (e) => startDragRef.current(column, row.entry.entryId, e)
                 : undefined
             }
@@ -441,7 +457,7 @@ export function StackTimeline({
   })
   const { selectedRows, cellCount, setRows, scrollTo, cellSelection } = sheet
 
-  /** The selected cells this session edits — Look, palette and scenery cells of cue rows. */
+  /** The selected cells the verbs edit — Look, palette, FX and scenery cells of cue rows. */
   const addresses = useMemo<TimelineCellAddress[]>(
     () =>
       cellSelection.cells.flatMap((cell) => {
@@ -509,6 +525,10 @@ export function StackTimeline({
     }
     if (column.kind === 'scenery') {
       setSceneryEdit({ entryId: row.entry.entryId, columnId: column.id })
+      return
+    }
+    if (column.kind === 'fx' && cellAt(grid, row.entry.entryId, column.id).filled != null) {
+      setFxEdit({ entryId: row.entry.entryId, columnId: column.id })
       return
     }
     gesture(toggleOps(cueOrder, grid, column, row.entry.entryId))
@@ -639,6 +659,14 @@ export function StackTimeline({
   const sceneryCell = sceneryEdit == null ? null : cellAt(grid, sceneryEdit.entryId, sceneryEdit.columnId)
   const sceneryChange = sceneryCell?.filled?.kind === 'scenery' ? sceneryCell.filled : null
 
+  const fxColumn = fxEdit == null ? null : (byId.get(fxEdit.columnId) ?? null)
+  const fxRun = fxEdit == null || fxColumn == null ? [] : fxRunAt(cueOrder, grid, marks, fxColumn, fxEdit.entryId)
+  // A cell emptied or a column filtered away under the popover closes it, so a later fill cannot reopen it.
+  const fxRunGone = fxEdit != null && (fxRun.length === 0 || !shown.some((c) => c.id === fxEdit.columnId))
+  useEffect(() => {
+    if (fxRunGone) setFxEdit(null)
+  }, [fxRunGone])
+
   const dragScope =
     drag == null || dragColumn == null || dragGhosts == null || dragGhosts.size === 0
       ? null
@@ -703,7 +731,7 @@ export function StackTimeline({
           projectId={projectId}
           deskTargets={deskSelection}
           targetName={names.target}
-          onAdd={(column) => extraStore.set([...extras.filter((e) => recordColumnId(e.kind, e.sourceId, e.target) !== recordColumnId(column.kind, column.sourceId, column.target)), column])}
+          onAdd={(column) => extraStore.set([...extras.filter((e) => extraColumnId(e) !== extraColumnId(column)), column])}
         />
       </div>
       <div className="@container">
@@ -792,7 +820,7 @@ export function StackTimeline({
                 }
               : undefined
           }
-          minWidth={`${260 + 116 + shown.reduce((n, c) => n + (c.kind === 'effect' || c.kind === 'scenery' ? 92 : 84), 0)}px`}
+          minWidth={`${260 + 116 + shown.reduce((n, c) => n + (c.kind === 'fx' || c.kind === 'scenery' ? 92 : 84), 0)}px`}
           rowClass={(row) =>
             !isCueRow(row.entry)
               ? undefined
@@ -851,6 +879,28 @@ export function StackTimeline({
             gesture([{ op: 'sceneryClear', cueId: sceneryCue.cueId, elementUuid: sceneryColumn.elementUuid! }])
             setSceneryEdit(null)
           }}
+        />
+      )}
+      {fxEdit != null && fxColumn != null && fxRun.length > 0 && (
+        <TimelineFxRunPopover
+          key={`${fxEdit.entryId}|${fxEdit.columnId}`}
+          anchor={() =>
+            sheetRef.current?.querySelector(`[data-row-id="${entryRowId(fxEdit.entryId)}"] [data-cell="${CSS.escape(fxEdit.columnId)}"]`) ?? null
+          }
+          column={fxColumn}
+          run={fxRun}
+          entryId={fxEdit.entryId}
+          cueLabel={cueLabel}
+          cues={cuesWords}
+          breakRun={breakRunVerb(cueOrder, grid, marks, fxColumn, fxEdit.entryId)}
+          joinRun={joinRunVerb(cueOrder, grid, marks, fxColumn, fxEdit.entryId)}
+          locked={locked}
+          onRefused={refuseVerb}
+          onClose={() => setFxEdit(null)}
+          onSend={(op) => gesture([op])}
+          onEdit={() =>
+            setTabRequest((prev) => ({ key: `${entryRowId(fxEdit.entryId)}|${fxEdit.columnId}`, tab: 'fx', seq: (prev?.seq ?? 0) + 1 }))
+          }
         />
       )}
       {dragScope != null && drag != null && (
@@ -950,22 +1000,6 @@ function TimelineHeader({
   )
 }
 
-/** What changed inside an effect's run, as the ◆ says it — the first setting that moved. */
-export function settingsChangeLabel(before: Record<string, unknown>, after: Record<string, unknown>): string | null {
-  for (const key of Object.keys(after)) {
-    const a = JSON.stringify(before[key])
-    const b = JSON.stringify(after[key])
-    if (a === b) continue
-    const value = after[key]
-    if (key === 'beatDivision' && typeof value === 'number') return `${value} beat${value === 1 ? '' : 's'}`
-    if (key === 'size' && typeof value === 'number') return `${Math.round(value * 100)}%`
-    if (key === 'parameters') return 'params'
-    if (key.endsWith('Uuid')) return 'master'
-    return typeof value === 'string' || typeof value === 'number' ? `${key} ${value}` : key
-  }
-  return null
-}
-
 function runSegmentClass(kind: TimelineKind, mark: Pick<TimelineRunMark, 'start' | 'end'>, extra?: string): string {
   return cn(
     'absolute inset-x-2 z-[1] flex items-center gap-1 overflow-hidden whitespace-nowrap pl-2 pr-1.5 text-[10px]',
@@ -1001,7 +1035,7 @@ function TimelineCellView({
   onClick: (e: React.MouseEvent) => void
   onHandle?: (e: React.PointerEvent) => void
 }) {
-  const handle = onHandle != null && mark.end && cell.filled?.kind === 'layer'
+  const handle = onHandle != null && mark.end && (cell.filled?.kind === 'layer' || cell.filled?.kind === 'fx')
   return (
     // The whole cell, over the kit's 2px padding, so a run's segments meet across the row line.
     <div className="group/cell absolute inset-0" onClick={onClick}>
@@ -1070,8 +1104,8 @@ function TimelineCellFace({
         ))}
       </>
     )
-  } else if (filled.kind === 'effect') {
-    const before = previous?.filled?.kind === 'effect' ? previous.filled.effect.settings : null
+  } else if (filled.kind === 'fx') {
+    const before = previous?.filled?.kind === 'fx' ? previous.filled.effect.settings : null
     const change = mark.changed && before ? settingsChangeLabel(before, filled.effect.settings) : null
     body = (
       <>
@@ -1086,10 +1120,10 @@ function TimelineCellFace({
       <span className={runSegmentClass(column.kind, mark, off ? 'border border-teal-300/60 bg-transparent text-muted-foreground before:hidden' : undefined)}>
         {body}
       </span>
-      {column.kind === 'effect' && mark.restart && (
+      {column.kind === 'fx' && mark.restart && (
         <i aria-hidden className="absolute inset-x-3.5 -top-px z-[3] border-t-2 border-dotted border-violet-300" />
       )}
-      {column.kind === 'effect' && mark.changed && (
+      {column.kind === 'fx' && mark.changed && (
         <i aria-hidden className="absolute left-1/2 -top-[5px] z-[3] -ml-1 size-[9px] rotate-45 border border-background bg-violet-300" />
       )}
     </span>
@@ -1123,7 +1157,7 @@ function cellTitle(column: TimelineColumn, cell: TimelineCell, cue: CueStackCueR
   if (filled.kind === 'layer') {
     return `${column.name} · ${column.sub} in ${at} — rank ${filled.rank}${filled.glyphs.length ? ` · ${filled.glyphs.join(' ')}` : ''}`
   }
-  if (filled.kind === 'effect') return `${column.name} · ${column.sub} in ${at}${filled.effect.runUuid ? '' : ' — in no run'}`
+  if (filled.kind === 'fx') return `${column.name} · ${column.sub} in ${at}${filled.effect.runUuid ? '' : ' — in no run'}`
   return `${column.name} in ${at} — ${sceneryWords(filled.state, filled.transitionMs)}`
 }
 
@@ -1134,10 +1168,10 @@ function TimelineLegend({ cues, markers, columns }: { cues: number; markers: num
         {cues} cue{cues === 1 ? '' : 's'}
         {markers > 0 ? ` · ${markers} marker${markers === 1 ? '' : 's'}` : ''} · {columns} column{columns === 1 ? '' : 's'}
       </span>
-      {(['look', 'palette', 'effect'] as const).map((kind) => (
+      {(['look', 'palette', 'fx'] as const).map((kind) => (
         <span key={kind} className="inline-flex items-center gap-1.5">
           <LegendSwatch className={cn('relative overflow-hidden before:absolute before:inset-y-0 before:left-0 before:w-0.5', RUN_CLASS[kind])} />
-          {kind === 'effect' ? 'Effect run' : kind === 'look' ? 'Look' : 'Palette'}
+          {kind === 'fx' ? 'FX run' : kind === 'look' ? 'Look' : 'Palette'}
         </span>
       ))}
       <span className="inline-flex items-center gap-1.5">

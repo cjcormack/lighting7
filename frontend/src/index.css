@@ -223,7 +223,7 @@
    a preference.** Tailwind v4 emits every utility inside `@layer utilities`, and react-colorful
    injects its own stylesheet unlayered; an unlayered declaration beats a layered one whatever its
    specificity, so `[&_.react-colorful]:h-44` on a wrapper is generated, applied, and loses to the
-   library's `height: 200px`. (`TemplateEditor`'s `!w-40` / `!h-32` work only because an important
+   library's `height: 200px`. (`PaletteEditor`'s `!w-40` / `!h-32` work only because an important
    layered declaration beats an unlayered normal one.) And an arbitrary variant reads `_` as a
    space, so `[&_.react-colorful__hue]:…` targets `.react-colorful hue`. Measured in the app on
    2026-09-22: the square drew 200 and the hue 12 with both utilities on the row.
@@ -232,7 +232,7 @@
    selectors are unscoped so that they stay that way: `ColourEditor` (the programmer's colour cell,
    the group property visualisers through `ColourPickerPopover`, the fixture sheet's colour row, the busk Colour
    tab and the Spread panel's endpoint picker in every host), plus `fx/ColourEditorBody` and
-   `templates/TemplateEditor`, which mount `react-colorful` directly. One app should not hold two
+   `templates/PaletteEditor`, which mount `react-colorful` directly. One app should not hold two
    answers to how far a hue strip sits from its square. Anything added here lands on all of them:
    check them. */
 .react-colorful__saturation {

@@ -9,27 +9,27 @@ import {
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import type { CueTarget } from '@/api/cuesApi'
-import { stackEffectSizeOf } from '@/api/stackEffectSizeApi'
+import { stackFxAmountOf } from '@/api/stackFxAmountApi'
 import { isHeldBack, isHeldByBlind } from '@/lib/heldBack'
-import { useActiveEffectsQuery, type ActiveEffect } from '@/store/fixtureFx'
+import { useActiveFxQuery, type ActiveFx } from '@/store/fixtureFx'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useStableCallback } from '@/hooks/useStableCallback'
-import { effectSpeedLabel } from '../fx/fxConstants'
+import { fxSpeedLabel } from '../fx/fxConstants'
 import { FxEditorPopover } from '../fx/FxEditorPopover'
-import { useStopEffect } from '../fx/useEffectControls'
+import { useStopFx } from '../fx/useFxControls'
 import {
-  EMPTY_CELL_EFFECT_INDEX,
-  buildCellEffectIndex,
-  cellEffectKey,
-  createCellEffectStore,
+  EMPTY_CELL_FX_INDEX,
+  buildCellFxIndex,
+  cellFxKey,
+  createCellFxStore,
   fixturesOfRows,
-  useCellEffects,
-  type CellEffectStore,
-} from './cellEffects'
+  useCellFx,
+  type CellFxStore,
+} from './cellFx'
 import { useFxRinged } from './fxSelection'
 import { LENS_CHIP_FACE, lensChipTone } from './lensChip'
 import type { Row } from './rowModel'
-import type { CellPropertyKey } from './useRowValues'
+import type { CellAttributeKey } from './useRowValues'
 
 /**
  * **The FX lens** (tables-colours plan D3): a Values cell an effect drives carries a violet chip
@@ -38,7 +38,7 @@ import type { CellPropertyKey } from './useRowValues'
  * FX row selected on the FX tab (`fxSelection.ts`), the cells it paints are ringed.
  *
  * **One index, read per cell.** [CellFxLensHost] subscribes to the effect list once for the grid
- * and builds `cellEffects.ts`'s index over the whole rig, as the desk expands an effect; each cell reads its
+ * and builds `cellFx.ts`'s index over the whole rig, as the desk expands an effect; each cell reads its
  * own effects through the index's selector store, so an `fxChanged` re-renders the indexer and the
  * cells whose effects moved, and never a row.
  *
@@ -58,20 +58,20 @@ export const LENS_REASON_WORDS: Readonly<Record<LensHeldReason, string>> = {
   BLIND: 'held · Blind',
 }
 
-/** What the lens reads of the desk at render — the programmer's keys, Blind and the stacks' FX size. */
+/** What the lens reads of the desk at render — the programmer's keys, Blind and the stacks' FX amount. */
 export interface LensDesk {
   blind: boolean
-  holds: (headKey: string, propertyName: string) => boolean
+  holds: (headKey: string, attribute: string) => boolean
   /** The source provenance names on a key, or null. */
-  source: (headKey: string, propertyName: string) => string | null
-  stackSize: (stackId: number) => number
+  source: (headKey: string, attribute: string) => string | null
+  stackFxAmount: (stackId: number) => number
 }
 
 const liveDesk = (): LensDesk => ({
   blind: lightingApi.programmer.isBlind(),
-  holds: (head, property) => lightingApi.programmer.getKeyState(head, property).entry != null,
-  source: (head, property) => lightingApi.programmer.getKeyState(head, property).provenance?.source ?? null,
-  stackSize: (stackId) => stackEffectSizeOf(lightingApi.stackEffectSize.get(), stackId),
+  holds: (head, attribute) => lightingApi.programmer.getKeyState(head, attribute).entry != null,
+  source: (head, attribute) => lightingApi.programmer.getKeyState(head, attribute).provenance?.source ?? null,
+  stackFxAmount: (stackId) => stackFxAmountOf(lightingApi.stackFxAmount.get(), stackId),
 })
 
 /**
@@ -81,34 +81,34 @@ const liveDesk = (): LensDesk => ({
  * cannot see directly, so it is read off provenance: the desk names no effect on a key whose every
  * painter it skipped, so a running, weighted effect under a key provenance gives to a cue is one a
  * layer above has stomped. The weight's other factors are checked first, so an effect at no size,
- * an envelope at nothing, a leaving or spent one, or a stack at FX size 0 is never called stomped.
+ * an envelope at nothing, a leaving or spent one, or a stack at FX amount 0 is never called stomped.
  */
-export function lensHeldReason(effect: ActiveEffect, heads: readonly string[], desk: LensDesk): { reason: LensHeldReason; on: number } | null {
+export function lensHeldReason(effect: ActiveFx, heads: readonly string[], desk: LensDesk): { reason: LensHeldReason; on: number } | null {
   if (isHeldByBlind(effect, desk.blind)) return { reason: 'BLIND', on: heads.length }
   const mine = heads.filter((head) => isHeldBack(effect, head, desk.holds, desk.blind)).length
   if (mine > 0) return { reason: 'PROGRAMMER', on: mine }
   if (!couldPaint(effect, desk)) return null
-  const stomped = heads.filter((head) => desk.source(head, effect.propertyName) === 'CUE').length
+  const stomped = heads.filter((head) => desk.source(head, effect.attribute) === 'CUE').length
   return stomped > 0 ? { reason: 'STOMP', on: stomped } : null
 }
 
-function couldPaint(effect: ActiveEffect, desk: LensDesk): boolean {
+function couldPaint(effect: ActiveFx, desk: LensDesk): boolean {
   if (!effect.isRunning || effect.spent === true || effect.leaving === true) return false
-  if ((effect.size ?? 1) <= 0 || effect.intensityMultiplier <= 0) return false
-  return effect.cueStackId == null || desk.stackSize(effect.cueStackId) > 0
+  if ((effect.amount ?? 1) <= 0 || effect.intensityMultiplier <= 0) return false
+  return effect.cueStackId == null || desk.stackFxAmount(effect.cueStackId) > 0
 }
 
 /** The division as the chip says it: a fraction of a beat as its glyph alone (`½`), else the label. */
-export function lensDivision(effect: ActiveEffect): string {
-  const label = effectSpeedLabel(effect.beatDivision, effect.timingSource, effect.seconds === true) ?? ''
+export function lensDivision(effect: ActiveFx): string {
+  const label = fxSpeedLabel(effect.cycle, effect.timingSource, effect.seconds === true) ?? ''
   const fraction = /^([⅛¼½¾⅓⅔]) beat$/.exec(label)
   return fraction != null ? fraction[1] : label
 }
 
 interface LensActions {
-  store: CellEffectStore
-  /** Open the live editor on [effectId] at [anchor], splitting for [selection]'s heads. */
-  open: (effectId: number, anchor: HTMLElement, selection: readonly CueTarget[] | undefined) => void
+  store: CellFxStore
+  /** Open the live editor on [fxId] at [anchor], splitting for [selection]'s heads. */
+  open: (fxId: number, anchor: HTMLElement, selection: readonly CueTarget[] | undefined) => void
 }
 
 const LensActionsContext = createContext<LensActions | null>(null)
@@ -121,7 +121,7 @@ const LensActionsContext = createContext<LensActions | null>(null)
  * never remounts a row under an open editor.
  */
 export function CellFxLensHost({ rows, enabled, children }: { rows: readonly Row[]; enabled: boolean; children: ReactNode }) {
-  const [store] = useState(createCellEffectStore)
+  const [store] = useState(createCellFxStore)
   const [editing, setEditing] = useState<LensEditing | null>(null)
   const anchor = useRef<HTMLElement | null>(null)
   const actions = useMemo<LensActions>(
@@ -162,22 +162,22 @@ function LensIndexer({
   anchor,
 }: {
   rows: readonly Row[]
-  store: CellEffectStore
+  store: CellFxStore
   editing: LensEditing | null
   onEditingChange: (next: LensEditing | null) => void
   anchor: RefObject<HTMLElement | null>
 }) {
-  const { data: effects } = useActiveEffectsQuery()
+  const { data: effects } = useActiveFxQuery()
   // The whole rig, not the filtered rows: a group's first member and a head filter's halves are
   // read over every member, so a filter hiding some must not move the cells an effect paints.
   const { fixtures: rig } = useFixtureLookup()
   const fixtures = useMemo(() => rig ?? fixturesOfRows(rows), [rig, rows])
-  const index = useMemo(() => buildCellEffectIndex(effects, fixtures), [effects, fixtures])
+  const index = useMemo(() => buildCellFxIndex(effects, fixtures), [effects, fixtures])
   // Before paint, so a cell never draws a frame of the index before last; emptied when the lens
   // goes off, so a cell that outlives it reads nothing stale.
   useLayoutEffect(() => store.set(index), [index, store])
-  useLayoutEffect(() => () => store.set(EMPTY_CELL_EFFECT_INDEX), [store])
-  const stop = useStopEffect()
+  useLayoutEffect(() => () => store.set(EMPTY_CELL_FX_INDEX), [store])
+  const stop = useStopFx()
   // The live instance each render, so the editor closes when its effect stops. Not cleared then: a
   // split can take the edited instance off the list a moment before naming the copy to follow.
   const effect = editing != null ? (effects ?? []).find((e) => e.id === editing.id) ?? null : null
@@ -198,7 +198,7 @@ function LensIndexer({
 }
 
 /** Read by a cell where no grid lens is mounted, so the cell's hooks run the same either way. */
-const NO_EFFECTS_STORE = createCellEffectStore()
+const NO_FX_STORE = createCellFxStore()
 
 /**
  * One cell's lens: the chip and the ring, or [fallback] where the lens is off or no indexed effect
@@ -212,13 +212,13 @@ export function CellFxLens({
   selection,
   fallback,
 }: {
-  keys: readonly CellPropertyKey[]
+  keys: readonly CellAttributeKey[]
   /** The heads a split edit is for — the cell's batch, read at the click. */
   selection: () => readonly CueTarget[] | undefined
   fallback: ReactNode
 }) {
   const actions = useContext(LensActionsContext)
-  const effects = useCellEffects(actions?.store ?? NO_EFFECTS_STORE, keys)
+  const effects = useCellFx(actions?.store ?? NO_FX_STORE, keys)
   const select = useStableCallback(selection)
   if (actions == null || effects.length === 0) return <>{fallback}</>
 
@@ -226,7 +226,7 @@ export function CellFxLens({
   const index = actions.store.get()
   const lines = effects.map((effect) => {
     const heads = keys
-      .filter((k) => k.propertyName === effect.propertyName && index.byKey.get(cellEffectKey(k.targetKey, k.propertyName))?.some((e) => e.id === effect.id))
+      .filter((k) => k.attribute === effect.attribute && index.byKey.get(cellFxKey(k.targetKey, k.attribute))?.some((e) => e.id === effect.id))
       .map((k) => k.targetKey)
     return { effect, heads, held: lensHeldReason(effect, heads, desk) }
   })
@@ -235,7 +235,7 @@ export function CellFxLens({
   const title = [
     ...lines.map(({ effect, heads, held }) =>
       [
-        `${effect.effectType} · ${effect.propertyName} · ${lensDivision(effect)}`,
+        `${effect.fxType} · ${effect.attribute} · ${lensDivision(effect)}`,
         !effect.isRunning ? 'paused' : null,
         held == null ? null : `${LENS_REASON_WORDS[held.reason]}${heads.length > 1 ? ` on ${held.on} of ${heads.length}` : ''}`,
       ]
@@ -265,7 +265,7 @@ const LensChip = memo(function LensChip({
   selection,
 }: {
   actions: LensActions
-  effects: readonly ActiveEffect[]
+  effects: readonly ActiveFx[]
   /** Each effect's held-back reason, comma-joined, empty where it paints — a string, for the memo. */
   reasons: string
   shown: number
@@ -286,7 +286,7 @@ const LensChip = memo(function LensChip({
       type="button"
       data-fx-lens={effect.id}
       data-held-reason={reason ?? undefined}
-      aria-label={`${effect.effectType}${reason != null ? `, ${LENS_REASON_WORDS[reason]}` : ''} — edit`}
+      aria-label={`${effect.fxType}${reason != null ? `, ${LENS_REASON_WORDS[reason]}` : ''} — edit`}
       title={title}
       // Its own gesture: neither the marquee's drag nor the cell's selection.
       onPointerDown={(e) => e.stopPropagation()}
@@ -332,7 +332,7 @@ const LensChip = memo(function LensChip({
                 }}
               >
                 <AudioWaveform className="size-3.5 text-violet-400" />
-                <span className={cn('flex-1', held[i] != null && 'line-through text-muted-foreground')}>{each.effectType}</span>
+                <span className={cn('flex-1', held[i] != null && 'line-through text-muted-foreground')}>{each.fxType}</span>
                 <span className="font-mono text-[10px] text-muted-foreground">{lensDivision(each)}</span>
               </DropdownMenuItem>
             ))}

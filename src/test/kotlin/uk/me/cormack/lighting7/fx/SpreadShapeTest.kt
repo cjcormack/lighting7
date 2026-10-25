@@ -1,12 +1,13 @@
 package uk.me.cormack.lighting7.fx
 
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.models.Timing
 import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.math.abs
 import kotlin.test.Test
@@ -32,12 +33,12 @@ class SpreadShapeTest {
         val heads: Int,
         val spread: Double = 1.0,
         val wings: Int = 1,
-        val blocks: Int = 1,
-        val groups: Int = 0,
+        val segments: Int = 1,
+        val parts: Int = 0,
         val offsets: List<Double>,
         val slots: Int,
     ) {
-        val shape get() = SpreadShape(spread, wings, blocks, groups)
+        val shape get() = SpreadShape(spread, wings, segments, parts)
     }
 
     @Serializable
@@ -57,7 +58,7 @@ class SpreadShapeTest {
     fun `the plan matches the shared vector`() {
         assertTrue(vector.cases.size >= 20, "the vector covers the orders and each field")
         for (case in vector.cases) {
-            val strategy = assertNotNull(DistributionStrategy.byName(case.order), case.name)
+            val strategy = assertNotNull(SpreadOrder.byName(case.order), case.name)
             val plan = DistributionPlan.forElements(strategy, case.heads, case.shape)
             assertEquals(case.offsets.size, plan.offsets.size, case.name)
             for ((i, expected) in case.offsets.withIndex()) {
@@ -70,17 +71,33 @@ class SpreadShapeTest {
             assertEquals(case.slots, plan.slots, "${case.name}: slots")
             // The per-pass slot count the step timing and ping-pong read agrees with the plan's.
             val dyn = FxDynamics(
-                stepTiming = false, distributionStrategy = strategy,
-                spread = case.spread, wings = case.wings, blocks = case.blocks, groups = case.groups,
+                timing = Timing.CYCLE, order = strategy,
+                spread = case.spread, wings = case.wings, segments = case.segments, parts = case.parts,
             )
             assertEquals(case.slots, dyn.distinctSlots(case.heads), "${case.name}: FxDynamics.distinctSlots")
         }
     }
 
     @Test
+    fun `the offset ladder's last rung is the plan's offsets before Spread`() {
+        for (case in vector.cases) {
+            val strategy = assertNotNull(SpreadOrder.byName(case.order), case.name)
+            val ladder = DistributionPlan.elementLadder(strategy, case.heads, case.shape)
+            val plan = DistributionPlan.forElements(strategy, case.heads, case.shape)
+            val parts = SpreadShaping.Step.PARTS.ordinal
+            assertEquals(case.slots, ladder.counts[parts], "${case.name}: the last rung's count is the slots")
+            if (case.shape.isDefault) continue
+            for (i in 0 until case.heads) {
+                val offset = case.spread * ladder.ranks[parts][i] / ladder.counts[parts]
+                assertTrue(abs(plan.offsets[i] - offset) < 1e-9, "${case.name}: head $i's ladder gives $offset, not ${plan.offsets[i]}")
+            }
+        }
+    }
+
+    @Test
     fun `the default shape leaves every order's offsets exactly as they were`() {
         // P6: an effect that names no shape runs bit for bit as before session 2.
-        val strategies = DistributionStrategy.availableStrategies.map { DistributionStrategy.fromName(it) }
+        val strategies = SpreadOrder.availableOrders.map { SpreadOrder.fromName(it) }
         for (strategy in strategies) {
             for (n in 1..20) {
                 val members = List(n) { i -> Member(i, if (n > 1) i.toDouble() / (n - 1) else 0.5) }
@@ -89,7 +106,7 @@ class SpreadShapeTest {
                 assertEquals(strategy.distinctSlots(n), plan.slots, "$strategy over $n")
                 assertEquals(
                     strategy.distinctSlots(n),
-                    FxDynamics(stepTiming = false, distributionStrategy = strategy).distinctSlots(n),
+                    FxDynamics(timing = Timing.CYCLE, order = strategy).distinctSlots(n),
                     "$strategy over $n",
                 )
             }
@@ -99,12 +116,12 @@ class SpreadShapeTest {
     @Test
     fun `every order's ranks give back its offsets over its slots`() {
         // Step 1: the rank the shaping starts from is the Order's own, so Spread 100 % is a no-op too.
-        val strategies = DistributionStrategy.availableStrategies.map { DistributionStrategy.fromName(it) }
+        val strategies = SpreadOrder.availableOrders.map { SpreadOrder.fromName(it) }
         for (strategy in strategies) {
             for (n in 1..20) {
                 val members = List(n) { i -> Member(i, if (n > 1) i.toDouble() / (n - 1) else 0.5) }
                 val plain = DistributionPlan.of(strategy, members)
-                val viaRanks = DistributionPlan.of(strategy, members, SpreadShape(groups = 64))
+                val viaRanks = DistributionPlan.of(strategy, members, SpreadShape(parts = 64))
                 for (i in 0 until n) {
                     assertTrue(abs(plain.offsets[i] - viaRanks.offsets[i]) < 1e-12, "$strategy over $n, member $i")
                 }
@@ -114,51 +131,51 @@ class SpreadShapeTest {
 
     @Test
     fun `blocks of 3 over 12 heads give 4 slots`() {
-        val plan = DistributionPlan.forElements(DistributionStrategy.LINEAR, 12, SpreadShape(blocks = 3))
+        val plan = DistributionPlan.forElements(SpreadOrder.NORMAL, 12, SpreadShape(segments = 3))
         assertEquals(4, plan.slots)
         assertEquals(listOf(0.0, 0.25, 0.5, 0.75), plan.offsets.distinct())
-        val dyn = FxDynamics(stepTiming = true, blocks = 3)
+        val dyn = FxDynamics(timing = Timing.HEAD, segments = 3)
         assertEquals(4, dyn.distinctSlots(12))
     }
 
     @Test
     fun `wings under a mirrored order are ignored by the plan and refused at the write boundary`() {
-        for (order in listOf(DistributionStrategy.CENTER_OUT, DistributionStrategy.EDGES_IN, DistributionStrategy.SPLIT)) {
+        for (order in listOf(SpreadOrder.CENTRE_OUT, SpreadOrder.CENTRE_IN)) {
             val winged = DistributionPlan.forElements(order, 8, SpreadShape(wings = 2))
             val plain = DistributionPlan.forElements(order, 8)
             assertContentEquals(plain.offsets, winged.offsets, "$order: a stored winged row runs as if unwinged")
-            val problem = EffectSpecCoercion.Strict.spreadProblem(null, 2, null, null, order)
+            val problem = FxSpecCoercion.Strict.spreadProblem(null, 2, null, null, order)
             assertNotNull(problem, "$order refuses wings")
             assertTrue("two wings already" in problem, problem)
         }
         // The REST/MCP/Look boundary's one call names the order by its stored string.
-        assertNotNull(EffectSpecCoercion.Strict.problem(distribution = "CENTER_OUT", wings = 2))
-        assertNull(EffectSpecCoercion.Strict.problem(distribution = "CENTER_OUT", wings = 1, blocks = 2))
-        assertNull(EffectSpecCoercion.Strict.problem(distribution = "LINEAR", wings = 2))
-        // No order is LINEAR, which takes wings.
-        assertNull(EffectSpecCoercion.Strict.problem(wings = 2))
+        assertNotNull(FxSpecCoercion.Strict.problem(order = "CENTRE_OUT", wings = 2))
+        assertNull(FxSpecCoercion.Strict.problem(order = "CENTRE_OUT", wings = 1, segments = 2))
+        assertNull(FxSpecCoercion.Strict.problem(order = "NORMAL", wings = 2))
+        // No order is NORMAL, which takes wings.
+        assertNull(FxSpecCoercion.Strict.problem(wings = 2))
     }
 
     @Test
     fun `each field is refused outside its range`() {
-        val linear = DistributionStrategy.LINEAR
-        assertNotNull(EffectSpecCoercion.Strict.spreadProblem(-0.1, null, null, null, linear))
-        assertNotNull(EffectSpecCoercion.Strict.spreadProblem(2.01, null, null, null, linear))
-        assertNotNull(EffectSpecCoercion.Strict.spreadProblem(Double.NaN, null, null, null, linear))
-        assertNull(EffectSpecCoercion.Strict.spreadProblem(2.0, null, null, null, linear))
-        assertNull(EffectSpecCoercion.Strict.spreadProblem(0.0, null, null, null, linear))
-        assertNotNull(EffectSpecCoercion.Strict.spreadProblem(null, 0, null, null, linear))
-        assertNotNull(EffectSpecCoercion.Strict.spreadProblem(null, null, 0, null, linear))
-        assertNotNull(EffectSpecCoercion.Strict.spreadProblem(null, null, null, -1, linear))
-        assertNotNull(EffectSpecCoercion.Strict.spreadProblem(null, null, SpreadShape.MAX_COUNT + 1, null, linear))
-        assertNull(EffectSpecCoercion.Strict.spreadProblem(null, null, null, 0, linear), "groups 0 is off")
+        val linear = SpreadOrder.NORMAL
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(-0.1, null, null, null, linear))
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(2.01, null, null, null, linear))
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(Double.NaN, null, null, null, linear))
+        assertNull(FxSpecCoercion.Strict.spreadProblem(2.0, null, null, null, linear))
+        assertNull(FxSpecCoercion.Strict.spreadProblem(0.0, null, null, null, linear))
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(null, 0, null, null, linear))
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(null, null, 0, null, linear))
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(null, null, null, -1, linear))
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(null, null, SpreadShape.MAX_COUNT + 1, null, linear))
+        assertNull(FxSpecCoercion.Strict.spreadProblem(null, null, null, 0, linear), "groups 0 is off")
     }
 
     @Test
     fun `a stored shape out of range is clamped on spawn, not refused`() {
-        val clamped = EffectSpecCoercion.Lenient.spreadShape(3.0, 0, -2, -1) { "test row" }
-        assertEquals(SpreadShape(spread = 2.0, wings = 1, blocks = 1, groups = 0), clamped)
-        val nan = EffectSpecCoercion.Lenient.spreadShape(Double.NaN, 1, 1, 0) { "test row" }
+        val clamped = FxSpecCoercion.Lenient.spreadShape(3.0, 0, -2, -1) { "test row" }
+        assertEquals(SpreadShape(spread = 2.0, wings = 1, segments = 1, parts = 0), clamped)
+        val nan = FxSpecCoercion.Lenient.spreadShape(Double.NaN, 1, 1, 0) { "test row" }
         assertEquals(1.0, nan.spread)
     }
 
@@ -203,25 +220,25 @@ class SpreadShapeTest {
      * A step chase, windowed as `fx-engineering.md` §"Step-Chase Windowing" describes: a member is lit
      * while its own phase is inside the first `1 / numDistinctSlots` of the cycle.
      */
-    private class StepChase : Effect {
+    private class StepChase : Fx {
         override val name = "Step Chase"
         override val outputType = FxOutputType.SLIDER
-        override val defaultStepTiming = true
-        override fun calculate(phase: Double, context: EffectContext): FxOutput =
+        override val defaultTiming = Timing.HEAD
+        override fun calculate(phase: Double, context: FxContext): FxOutput =
             FxOutput.Slider(if (phase < 1.0 / context.numDistinctSlots) 255u else 0u)
     }
 
     /** A constant level, whatever the phase. */
-    private class Level(private val value: UByte) : Effect {
+    private class Level(private val value: UByte) : Fx {
         override val name = "Level"
         override val outputType = FxOutputType.SLIDER
-        override fun calculate(phase: Double, context: EffectContext): FxOutput = FxOutput.Slider(value)
+        override fun calculate(phase: Double, context: FxContext): FxOutput = FxOutput.Slider(value)
     }
 
     /** 40 under every head, from the programmer — what an N-shot member hands back to. */
     private fun Rig.underneath() {
         for (i in 0 until 4) {
-            programmer.put(ProgrammerOwner.WEB, "hex-$i", "dimmer", CueAssignmentResolver.PropertyValue.Slider(40u))
+            programmer.put(ProgrammerOwner.WEB, "hex-$i", "dimmer", CueAssignmentResolver.AttributeValue.Slider(40u))
         }
     }
 
@@ -233,9 +250,9 @@ class SpreadShapeTest {
     @Test
     fun `a step chase with groups of 2 has no gap`() {
         val rig = newRig()
-        val effect = FxInstance(StepChase(), SliderTarget.forGroup("quad", "dimmer"), FxTiming(BeatDivision.QUARTER))
-        effect.updateDynamics { it.copy(stepTiming = true, groups = 2) }
-        rig.engine.addEffect(effect)
+        val effect = FxInstance(StepChase(), SliderTarget.forGroup("quad", "dimmer"), FxTiming(CycleLength.ONE_BEAT))
+        effect.updateDynamics { it.copy(timing = Timing.HEAD, parts = 2) }
+        rig.engine.addFx(effect)
 
         // Two slots, so a step is one beat and the cycle two: the odd heads and the even heads take
         // turns, and at no tick is the group dark. Under the unshaped four slots the window was a
@@ -255,10 +272,10 @@ class SpreadShapeTest {
     fun `a 2-shot under Spread 50 percent ends when its last member's own clock reaches two`() {
         val rig = newRig()
         rig.underneath()
-        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(BeatDivision.QUARTER))
+        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(CycleLength.ONE_BEAT))
         effect.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE
-        effect.updateDynamics { it.copy(nShot = 2, spread = 0.5) }
-        rig.engine.addEffect(effect)
+        effect.updateDynamics { it.copy(runs = 2, spread = 0.5) }
+        rig.engine.addFx(effect)
 
         // One beat (24 ticks) a cycle, started at tick 100. Spread 50 % puts the four heads at offsets
         // 0, 1/8, 2/8 and 3/8 — 0, 3, 6 and 9 ticks — each running its own two cycles from there.
@@ -268,48 +285,48 @@ class SpreadShapeTest {
         assertEquals(listOf(40, 200, 200, 200), rig.levels(148), "head 0 hands back after its own two")
         assertEquals(listOf(40, 40, 200, 200), rig.levels(151), "head 1 after its own")
         assertEquals(listOf(40, 40, 40, 200), rig.levels(154), "head 2 after its own")
-        assertNotNull(rig.engine.getEffect(effect.id), "running while the last head has runs left")
+        assertNotNull(rig.engine.getFx(effect.id), "running while the last head has runs left")
         assertEquals(listOf(40, 40, 40, 200), rig.levels(156), "the last head's last tick")
         assertEquals(listOf(40, 40, 40, 40), rig.levels(157), "the last head hands back")
-        assertNull(rig.engine.getEffect(effect.id), "two cycles past the largest shaped offset, the effect is gone")
+        assertNull(rig.engine.getFx(effect.id), "two cycles past the largest shaped offset, the effect is gone")
     }
 
     @Test
     fun `a 2-shot under Groups of 2 ends two cycles past its group's largest offset`() {
         val rig = newRig()
         rig.underneath()
-        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(BeatDivision.QUARTER))
+        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(CycleLength.ONE_BEAT))
         effect.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE
-        effect.updateDynamics { it.copy(nShot = 2, groups = 2) }
-        rig.engine.addEffect(effect)
+        effect.updateDynamics { it.copy(runs = 2, parts = 2) }
+        rig.engine.addFx(effect)
 
         // Groups of 2 put the heads at 0, ½, 0, ½ — never ¾, the unshaped last head's offset.
         assertEquals(listOf(200, 40, 200, 40), rig.levels(100), "the odd heads wait half a cycle")
         assertEquals(listOf(200, 200, 200, 200), rig.levels(112), "half a cycle in, all four run")
         assertEquals(listOf(40, 200, 40, 200), rig.levels(148), "the even heads hand back after their own two")
-        assertNotNull(rig.engine.getEffect(effect.id))
+        assertNotNull(rig.engine.getFx(effect.id))
         assertEquals(listOf(40, 40, 40, 40), rig.levels(160), "the odd heads after theirs")
-        assertNull(rig.engine.getEffect(effect.id), "two cycles past ½, not past ¾, the effect is gone")
+        assertNull(rig.engine.getFx(effect.id), "two cycles past ½, not past ¾, the effect is gone")
     }
 
     @Test
     fun `an edit to the shape is in place, phase kept, and re-plans the offsets`() {
         val rig = newRig()
-        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(BeatDivision.QUARTER))
-        rig.engine.addEffect(effect)
+        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(CycleLength.ONE_BEAT))
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(10))
         val id = effect.id
 
-        val updated = assertNotNull(rig.engine.updateEffect(id, newSpread = 0.5, newGroups = 2))
+        val updated = assertNotNull(rig.engine.updateFx(id, newSpread = 0.5, newParts = 2))
         assertEquals(id, updated.id, "the id is kept")
         assertTrue(updated === effect, "a dynamics-only edit keeps the instance, and so its phase")
         assertEquals(0.5, updated.dynamics.spread)
-        assertEquals(2, updated.dynamics.groups)
+        assertEquals(2, updated.dynamics.parts)
         assertEquals(1, updated.dynamics.wings, "a field not sent is kept")
 
         rig.engine.processBeatTick(tick(11))
         val plans = assertNotNull(updated.distributionPlans, "the next pass re-planned")
-        assertEquals(SpreadShape(spread = 0.5, groups = 2), plans.shape)
+        assertEquals(SpreadShape(spread = 0.5, parts = 2), plans.shape)
         assertContentEquals(doubleArrayOf(0.0, 0.25, 0.0, 0.25), plans.members.offsets)
     }
 
@@ -317,14 +334,14 @@ class SpreadShapeTest {
     fun `ping-pong sweeps the same way whatever the shape, which sets only the offsets`() {
         // The sweep is the Order's own (N − 1)/N: Spread 0 does not freeze it, a little Spread does
         // not nearly freeze it, and Blocks folding every head to one slot does not either.
-        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(BeatDivision.QUARTER))
-        val base = FxDynamics(stepTiming = false, distributionStrategy = DistributionStrategy.PING_PONG)
+        val effect = FxInstance(Level(200u), SliderTarget.forGroup("quad", "dimmer"), FxTiming(CycleLength.ONE_BEAT))
+        val base = FxDynamics(timing = Timing.CYCLE, order = SpreadOrder.PING_PONG)
         val shapes = listOf(
             base.copy(spread = 0.0),
             base.copy(spread = 0.01),
             base.copy(spread = 0.5),
-            base.copy(blocks = 8),
-            base.copy(groups = 2, wings = 2),
+            base.copy(segments = 8),
+            base.copy(parts = 2, wings = 2),
         )
         for (n in 0L until 24L) {
             val expected = effect.calculatePhaseForMember(tick(n), 8, base, 0.0)

@@ -234,7 +234,7 @@ export function PhoneSheet({
           <button
             type="button"
             data-sheet-grabber
-            aria-label={`Sheet height: ${height === 'peek' ? 'header and effects' : height}. Drag, or tap to change`}
+            aria-label={`Sheet height: ${height === 'peek' ? 'header and FX' : height}. Drag, or tap to change`}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={(e) => endDrag(e, false)}

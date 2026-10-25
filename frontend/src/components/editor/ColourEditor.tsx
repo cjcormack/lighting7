@@ -13,7 +13,7 @@ import {
 import { RgbColorPicker, type RgbColor } from 'react-colorful'
 import { Pipette, Save, Waves } from 'lucide-react'
 import { toast } from 'sonner'
-import type { TemplateTarget } from '@/api/templatesApi'
+import type { PaletteTarget } from '@/api/palettesApi'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { ExtendedChannelSlider } from '@/components/fixtures/ExtendedChannelSlider'
@@ -25,13 +25,13 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss, parseCssRgb } from '@/lib/colourMath'
 import { LiveAppearanceReporter, pickSelectionColour, targetHeads, type PickedColour } from '@/lib/liveAppearance'
 import { cn } from '@/lib/utils'
-import type { ColourPropertyDescriptor } from '@/store/fixtures'
+import type { ColourAttributeDescriptor } from '@/store/fixtures'
 import { usePatchListQuery } from '@/store/patches'
 import { EditorField } from './EditorField'
 import { EditorFooter } from './EditorFooter'
 import { EditorReadout } from './EditorReadout'
 import { numericSeed } from './useEditorKeyboard'
-import { EffectsBand, PaletteBand } from './PaletteBands'
+import { FxBand, PaletteBand } from './PaletteBands'
 
 /** The whole of what this editor writes: three colour bytes and the three bundled emitters. */
 export interface ColourChannels {
@@ -80,7 +80,7 @@ function zeroIfHeld(value: number | undefined): number | undefined {
 export interface ColourPaletteSource {
   projectId: number
   /** Where a chip press lands — fixtures by key, a cell by its element key. */
-  targets: readonly TemplateTarget[]
+  targets: readonly PaletteTarget[]
   /** The press's mask: *Colour* in the programmer's cell (the cell's own family), the busk pair's in its tab. */
   families: readonly AttributeFamily[] | null
   /** `usePress`'s scope — the busk tab passes `'programmer'`: it writes Local whatever the grid is pointed at. */
@@ -292,8 +292,8 @@ function channelByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)))
 }
 
-function colourDescriptorOf(properties: readonly { type: string }[]): ColourPropertyDescriptor | null {
-  return (properties.find((p) => p.type === 'colour') as ColourPropertyDescriptor | undefined) ?? null
+function colourDescriptorOf(attributes: readonly { type: string }[]): ColourAttributeDescriptor | null {
+  return (attributes.find((p) => p.type === 'colour') as ColourAttributeDescriptor | undefined) ?? null
 }
 
 export type ColourEmitter = 'white' | 'amber' | 'uv'
@@ -308,9 +308,9 @@ export type ColourEmitter = 'white' | 'amber' | 'uv'
 export function emitterHeadCounts(targets: readonly WriteTarget[]): Record<ColourEmitter | 'any', number> {
   const counts = { white: 0, amber: 0, uv: 0, any: 0 }
   for (const target of targets) {
-    const descriptors = [target.properties, ...(target.elements ?? []).map((e) => e.properties)]
+    const descriptors = [target.attributes, ...(target.elements ?? []).map((e) => e.attributes)]
       .map(colourDescriptorOf)
-      .filter((d): d is ColourPropertyDescriptor => d != null)
+      .filter((d): d is ColourAttributeDescriptor => d != null)
     const white = descriptors.some((d) => d.whiteChannel != null)
     const amber = descriptors.some((d) => d.amberChannel != null)
     const uv = descriptors.some((d) => d.uvChannel != null)
@@ -801,12 +801,12 @@ export function ColourEditor({
         className={docked ? 'border-t px-3 pt-2 pb-2' : undefined}
       />
     )
-  const effectsBand =
+  const fxBand =
     effects == null ? null : (
-      <EffectsBand
+      <FxBand
         projectId={effects.projectId}
         family="COLOUR"
-        property="rgbColour"
+        attribute="rgbColour"
         targets={effects.targets}
         families={effects.families}
         scope={effects.scope}
@@ -822,13 +822,13 @@ export function ColourEditor({
     ) : (
       band
     )
-  const effectsSection =
-    effectsBand != null && readOnly ? (
+  const fxSection =
+    fxBand != null && readOnly ? (
       <div inert className="opacity-50">
-        {effectsBand}
+        {fxBand}
       </div>
     ) : (
-      effectsBand
+      fxBand
     )
 
   // The footer: the save first, then Pick and Spread…, the busk Colour tab's shape. **One line,
@@ -863,7 +863,7 @@ export function ColourEditor({
       >
         <Pipette className="size-3.5" /> <span className={wordClass}>Pick</span>
       </Button>
-      {/* A plain button, not a switch: it opens the Spread panel and holds no state of its own, so a
+      {/* A plain button, not a switch: it opens the Fan panel and holds no state of its own, so a
           `role="switch"` that never read checked promised a toggle it could not be. */}
       <Button
         type="button"
@@ -871,11 +871,11 @@ export function ColourEditor({
         size="sm"
         className="h-7 text-xs"
         disabled={onSpread == null || readOnly}
-        aria-label="Spread to a second colour…"
-        title={onSpread == null ? 'No Spread panel to open from here' : readOnly ? 'This scope takes no value to spread' : 'Open Spread with this colour as From'}
+        aria-label="Fan to a second colour…"
+        title={onSpread == null ? 'No Fan panel to open from here' : readOnly ? 'This scope takes no value to fan' : 'Open Fan with this colour as From'}
         onClick={() => onSpread?.(toChannels(currentChannels()))}
       >
-        <Waves className="size-3.5" /> <span className={wordClass}>Spread…</span>
+        <Waves className="size-3.5" /> <span className={wordClass}>Fan…</span>
       </Button>
     </EditorFooter>
   ) : null
@@ -903,7 +903,7 @@ export function ColourEditor({
             {readout}
           </div>
           {bandSection}
-          {effectsSection}
+          {fxSection}
         </div>
         {footerRow}
       </div>
@@ -918,7 +918,7 @@ export function ColourEditor({
       {/* The popover's 12px padding is 2px short of the knob's 14px overhang, and the popover scrolls. */}
       <div className="px-0.5">{controls}</div>
       {readout}
-      {effectsSection}
+      {fxSection}
       {footerRow}
     </div>
   )

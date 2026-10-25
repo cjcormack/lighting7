@@ -1,19 +1,13 @@
 import type { SceneryChange, SceneryState } from './sceneryApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { AssignmentHealth } from './cuesApi'
-import type { EffectDirection } from './fxApi'
+import type { FxDirection, Timing } from './fxApi'
 
 /**
- * The `targetType` discriminator marking an **effect** as deferred: it names no target of its own and
- * takes its targets from the layer referencing the Look.
- *
- * A *row* can no longer carry it — the write boundary refuses one, because a value you point at a
- * selection is a template now (`templatesApi.ts`). Effects keep it, because fanning an effect over
- * the layer's targets is a different thing from holding a value for nobody.
- *
- * Deliberately a magic string rather than an arm of the fixture/group union, mirroring the
- * backend's `DEFERRED_TARGET_TYPE` — a deferred row reaching code that expects a resolvable target
- * is a bug we want loud rather than silently fanned out over the whole rig.
+ * The `targetType` an older desk wrote for a Look row naming no target of its own. Neither a row nor
+ * an effect can carry it now — the write boundary refuses both, a Look being whole (absolute-looks
+ * plan D1, D2) — and a value pointed at a selection is a palette (`palettesApi.ts`). Kept so the
+ * focused layer's grid can list such a row rather than draw it on a fixture.
  */
 export const DEFERRED_TARGET_TYPE = 'deferred' as const
 
@@ -35,7 +29,7 @@ export const SELECTION_TARGET_TYPE = 'selection' as const
 export interface LookRow {
   targetType: LookTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
   value: string
   fadeDurationMs?: number | null
   /** The cell this row is on, by its own full key (`shehds-1.zone-2`). Null = the whole fixture. */
@@ -51,23 +45,23 @@ export interface LookRow {
  * The `delayMs` / `intervalMs` / `randomWindowMs` triple is deliberately absent: timing belongs to
  * the layer applying the Look, not to the Look itself.
  */
-export interface LookEffect {
+export interface LookFx {
   /**
-   * A row's vocabulary, or `selection` (effects plan D3): one effect over an ordered list of
+   * A fixture, a group, or `selection` (effects plan D3): one effect over an ordered list of
    * fixtures and groups, its [targetKey] the list's canonical JSON. Only an effect may name one.
    */
-  targetType: LookTargetType | typeof SELECTION_TARGET_TYPE
+  targetType: 'fixture' | 'group' | typeof SELECTION_TARGET_TYPE
   targetKey: string
-  effectType: string
-  category: string
-  propertyName?: string | null
-  beatDivision: number
+  fxType: string
+  family: string
+  attribute?: string | null
+  cycle: number
   blendMode: string
-  distribution: string
+  order: string
   phaseOffset?: number
   elementMode?: string | null
   elementFilter?: string | null
-  stepTiming?: boolean | null
+  timing?: Timing | null
   parameters: Record<string, string>
   /** Speed master this effect subscribes to, as the master's uuid (null → master 1). */
   speedMasterUuid?: string | null
@@ -75,21 +69,21 @@ export interface LookEffect {
   rateSpeedMasterUuid?: string | null
   /**
    * On *Seconds* (venue-visit plan D7): the effect follows no master, and a beat effect's
-   * `beatDivision` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
-   * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
+   * `cycle` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
+   * master, flag or not — read it through `isOnSeconds` (`lib/fxTiming.ts`). Absent = false.
    */
   seconds?: boolean
-  /** Size (effects plan D2), 0–1; absent at 1. */
-  size?: number
+  /** Amount (effects plan D2), 0–1; absent at 1. */
+  amount?: number
   /** Direction (D5); absent when forward. */
-  direction?: EffectDirection
+  direction?: FxDirection
   /** Runs (D9); absent or null runs forever. */
-  nShot?: number | null
+  runs?: number | null
   /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
   spread?: number
   wings?: number
-  blocks?: number
-  groups?: number
+  segments?: number
+  parts?: number
   sortOrder?: number
 }
 
@@ -115,26 +109,12 @@ export interface LookSummary {
    */
   families: AttributeFamily[]
   rowCount: number
-  effectCount: number
+  fxCount: number
   targetCount: number
-  /**
-   * True when any **effect** takes its targets from the layer applying this Look rather than naming
-   * one.
-   *
-   * Rows can no longer be deferred at all — session 3 moved that half of the entity out to
-   * templates — so this is now only about effects, where a deferred target still means "fan over
-   * whatever the layer points at". It is what makes a Look eligible for a busking pad: a pad
-   * supplies the targets on the press.
-   *
-   * There was an `editorFixtureType` beside it, naming the type the form editor built a synthetic
-   * fixture from. It went with the deferred rows, and with it the compatibility gate that refused
-   * "Amber Key" to every head it was not authored against (D6).
-   */
-  hasDeferredEffects: boolean
   /** Up to 8 distinct literals, most-frequent first, so a row can preview without a detail fetch. */
   preview: string[]
   /** The effects it runs, by type, each once in the Look's order. Absent from an older desk. */
-  effectTypes?: string[]
+  fxTypes?: string[]
   /**
    * How many cue layers reference this Look. Gates delete.
    *
@@ -179,7 +159,7 @@ export interface LookDetails {
   notes: string | null
   families: AttributeFamily[]
   rows: LookRow[]
-  effects: LookEffect[]
+  fx: LookFx[]
   layerCount: number
   usedByCueIds: number[]
   usedByCueNames: string[]
@@ -198,7 +178,7 @@ export interface LookInput {
   name?: string
   notes?: string | null
   rows?: LookRow[]
-  effects?: LookEffect[]
+  fx?: LookFx[]
 }
 
 export interface CopyLookRequest {
@@ -223,31 +203,19 @@ export interface LookInUseError {
   cueNames: string[]
 }
 
-export interface ToggleLookTarget {
-  type: 'group' | 'fixture'
-  key: string
-}
-
+/**
+ * A Look's press, `POST /looks/{id}/toggle`: on puts one layer of it on top, off takes every layer of
+ * it off. It names no targets and no mask — a Look lands whole (absolute-looks plan D1, D3).
+ */
 export interface ToggleLookRequest {
-  targets: ToggleLookTarget[]
-  /**
-   * The selection's attribute mask (multi-screen plan D4, D5): the layer lands with
-   * `propertyMask = mask ∩ the Look's families`, the cook skips the rows outside it, and the
-   * response names them; nothing inside is 400 `LOOK_OUTSIDE_MASK`. Absent is every attribute.
-   * Tested on the **on** arm only — an off press comes off under any mask.
-   */
-  families?: AttributeFamily[]
-  beatDivision?: number
+  cycle?: number
 }
 
 /**
- * *Apply as values* for a Look (apply-model plan §3.5): its rows over the targets — or its own
- * fixtures with none — as Local `web` values, its effects as Local effects, and nothing left on the
- * stack. Not a toggle. `families` is the selection's mask, as on [ToggleLookRequest].
+ * *Apply as values* for a Look (apply-model plan §3.5): its rows as Local `web` values, its effects
+ * as Local effects, and nothing left on the stack. Not a toggle; the whole Look, as a press lands it.
  */
 export interface ApplyLookRequest {
-  targets: ToggleLookTarget[]
-  families?: AttributeFamily[]
   /** Over every value; absent is each row's own fade, as a press lands them. */
   fadeMs?: number
 }
@@ -255,19 +223,11 @@ export interface ApplyLookRequest {
 export interface ApplyLookResponse {
   /** Programmer values written into Local. */
   written: number
-  /** The Local effects started, one per effect and target. */
-  effectIds: number[]
-  /** The Look's families the mask left out, as on [ToggleLookResponse]. */
-  skippedFamilies: string[]
+  /** The Local effects started, one per effect. */
+  fxIds: number[]
 }
 
 export interface ToggleLookResponse {
   action: 'applied' | 'removed'
-  effectCount: number
-  /**
-   * The Look's families the mask left out, in declaration order — the pressing window's toast
-   * (D6). Empty for an unmasked press and on the off arm. Says *rows* when toasted: the layer's
-   * mask filters its rows, not its effects.
-   */
-  skippedFamilies: string[]
+  fxCount: number
 }

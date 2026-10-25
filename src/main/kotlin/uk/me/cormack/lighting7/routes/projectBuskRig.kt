@@ -282,12 +282,12 @@ internal fun applyBuskRig(fixtures: Fixtures, project: DaoProject, request: Busk
                     val cells = liveCells(fixtures, patch.key)
                     val elementKey = tile.elementKey?.trim()?.takeIf { it.isNotEmpty() }
                     if (elementKey != null) {
-                        if (cells == null) return BuskRigOutcome.Ref("Tile at $at names cell '$elementKey' of '${patch.key}', which is not in the live rig")
+                        if (cells == null) return BuskRigOutcome.Ref("Tile at $at names element '$elementKey' of '${patch.key}', which is not in the live rig")
                         if (cells.none { it.key == elementKey }) {
-                            return BuskRigOutcome.Ref("Tile at $at names cell '$elementKey', which '${patch.key}' does not have")
+                            return BuskRigOutcome.Ref("Tile at $at names element '$elementKey', which '${patch.key}' does not have")
                         }
                         if (mode == BuskRigCellMode.PER_CELL || mode == BuskRigCellMode.HALVES) {
-                            return BuskRigOutcome.Invalid("Tile at $at is one cell and cannot be split")
+                            return BuskRigOutcome.Invalid("Tile at $at is one element and cannot be split")
                         }
                         TileWrite(tile, null, patch, elementKey, mode, null, label)
                     } else {
@@ -298,12 +298,12 @@ internal fun applyBuskRig(fixtures: Fixtures, project: DaoProject, request: Busk
                                     ?: return BuskRigOutcome.Invalid("Tile at $at is HALVES and needs a cellSplit")
                                 if (split < 2) return BuskRigOutcome.Invalid("Tile at $at has cellSplit $split; HALVES needs at least 2")
                                 if (split > count) {
-                                    return BuskRigOutcome.Invalid("Tile at $at has cellSplit $split but '${patch.key}' has $count cells")
+                                    return BuskRigOutcome.Invalid("Tile at $at has cellSplit $split but '${patch.key}' has $count elements")
                                 }
                                 split
                             }
                             BuskRigCellMode.PER_CELL -> {
-                                if (cells.isNullOrEmpty()) return BuskRigOutcome.Invalid("Tile at $at is PER_CELL but '${patch.key}' has no cells")
+                                if (cells.isNullOrEmpty()) return BuskRigOutcome.Invalid("Tile at $at is PER_CELL but '${patch.key}' has no elements")
                                 null
                             }
                             BuskRigCellMode.PIPS, BuskRigCellMode.WHOLE -> null
@@ -429,5 +429,5 @@ private fun groupSummary(fixtures: Fixtures, dao: DaoFixtureGroup): GroupSummary
             memberCount = dao.members.count().toInt(),
             capabilities = emptyList(),
             symmetricMode = SymmetricMode.NONE.name,
-            defaultDistribution = "LINEAR",
+            defaultOrder = "NORMAL",
         )

@@ -12,7 +12,7 @@ import { GOBO_SLOT_COUNT } from './goboPatterns'
  * layer A's pattern in the atlas (`goboAtlas.ts`; 5 bits each, 0 open). 24 bits, every integer a
  * float32 holds, and every division the decode makes is by a power of two, so the GPU unpacks exactly
  * what the director packed. One angle is enough because a type has one gobo rotation channel
- * (`findGoboRotationProperty`), so one wheel turns (`goboRotationWheel`) and the other — the Robe's
+ * (`findGoboRotationAttribute`), so one wheel turns (`goboRotationWheel`) and the other — the Robe's
  * static wheel — holds still in the frame, which the gate rotation already turns. The angle's step is
  * 0.044°: a 128 px pattern moves 0.05 of a texel at its rim a step, so a spinning gobo never visibly
  * steps.

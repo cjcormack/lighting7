@@ -382,9 +382,9 @@ export const buskRigWs: { callback: null | (() => void) } = { callback: null }
  * `palettePressed` (keyed, patched in place). Spelled out rather than left to the fallback Proxy
  * because a test has to *fire* the pressed one — the Proxy can only make subscribing safe.
  */
-export const templatesWs: {
+export const palettesWs: {
   changed: null | (() => void)
-  pressed: null | ((event: { templateId: number; lastPressedAt: string }) => void)
+  pressed: null | ((event: { paletteId: number; lastPressedAt: string }) => void)
 } = { changed: null, pressed: null }
 
 /**
@@ -461,20 +461,20 @@ export function lightingApiMock() {
           }
         },
       },
-      templates: {
+      palettes: {
         subscribe: (fn: () => void) => {
-          templatesWs.changed = fn
+          palettesWs.changed = fn
           return {
             unsubscribe: () => {
-              templatesWs.changed = null
+              palettesWs.changed = null
             },
           }
         },
-        subscribePressed: (fn: (event: { templateId: number; lastPressedAt: string }) => void) => {
-          templatesWs.pressed = fn
+        subscribePressed: (fn: (event: { paletteId: number; lastPressedAt: string }) => void) => {
+          palettesWs.pressed = fn
           return {
             unsubscribe: () => {
-              templatesWs.pressed = null
+              palettesWs.pressed = null
             },
           }
         },
@@ -537,9 +537,9 @@ export function lightingApiMock() {
         lastIncluded: () => programmerWs.state.lastIncluded,
         // The programmer's scenery has its own frame and subscription; the mock holds none.
         scenery: () => ({ projectId: null, elements: [] }),
-        getKeyState: (targetKey: string, propertyName: string) => ({
-          entry: programmerWs.state.entries.get(`${targetKey}|${propertyName}`),
-          provenance: programmerWs.state.provenance.get(`${targetKey}|${propertyName}`),
+        getKeyState: (targetKey: string, attribute: string) => ({
+          entry: programmerWs.state.entries.get(`${targetKey}|${attribute}`),
+          provenance: programmerWs.state.provenance.get(`${targetKey}|${attribute}`),
         }),
         subscribe: (fn: (state: unknown) => void) => {
           programmerWs.callbacks.push(fn)
@@ -571,10 +571,10 @@ export function lightingApiMock() {
         clearScenery: () => {},
         // The two request/reply frames (fixture-fx-sheets W1, W2) answer promises. A test that cares
         // about the answer spies on these; the defaults are an empty stack and an empty release.
-        keyStack: (targetType: string, targetKey: string, propertyName: string) =>
-          Promise.resolve({ targetType, targetKey, propertyName, blind: false, stacks: [] }),
+        keyStack: (targetType: string, targetKey: string, attribute: string) =>
+          Promise.resolve({ targetType, targetKey, attribute, blind: false, stacks: [] }),
         clearTarget: (targetType: string, targetKey: string) =>
-          Promise.resolve({ targetType, targetKey, values: 0, effects: 0, partial: [] }),
+          Promise.resolve({ targetType, targetKey, values: 0, fx: 0, partial: [] }),
       },
       // Spelled out for the reason `status` is: `store/selection.ts`'s `queryFn` seeds its cache
       // entry from `getState()`, and the fallback Proxy would hand it back a Subscription — which

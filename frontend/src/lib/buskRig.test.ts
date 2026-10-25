@@ -57,8 +57,7 @@ const frontWash: GroupSummary = {
   memberCount: 2,
   capabilities: [],
   symmetricMode: 'NONE',
-  defaultDistribution: 'LINEAR',
-  compatibleLookIds: [],
+  defaultOrder: 'NORMAL',
 }
 
 /** The 12-pixel bar's cells, as the fixture type names them — test data, not a parse. */
@@ -499,7 +498,7 @@ describe('the show-all fallback is the desk’s rig order', () => {
   it('draws every group then every fixture, in list order — the server fixture’s `empty` case', () => {
     const groups: GroupSummary[] = serverFixture.groups.map((g) => ({ ...frontWash, name: g.name, memberCount: g.members.length }))
     const fixtures = serverFixture.fixtures.map(
-      (f) => ({ key: f.key, name: f.key, typeKey: f.type, elements: fixtureCells(f.key, f.type).map((c, index) => ({ index, key: c.key, displayName: c.name, properties: [] })) }) as unknown as Fixture,
+      (f) => ({ key: f.key, name: f.key, typeKey: f.type, elements: fixtureCells(f.key, f.type).map((c, index) => ({ index, key: c.key, displayName: c.name, attributes: [] })) }) as unknown as Fixture,
     )
     const effective = effectiveRig({ rows: [] }, groups, fixtures)
     expect(effective.fallback).toBe(true)
@@ -517,7 +516,7 @@ describe('the show-all fallback is the desk’s rig order', () => {
           name: f.key,
           typeKey: f.type,
           infrastructure: f.key === 'hex-2',
-          elements: fixtureCells(f.key, f.type).map((c, index) => ({ index, key: c.key, displayName: c.name, properties: [] })),
+          elements: fixtureCells(f.key, f.type).map((c, index) => ({ index, key: c.key, displayName: c.name, attributes: [] })),
         }) as unknown as Fixture,
     )
     const hex2 = [{ type: 'fixture', key: 'hex-2' }]

@@ -20,34 +20,34 @@ import uk.me.cormack.lighting7.fixture.TriggerIndex
  */
 fun stripTriggerRows(project: DaoProject): Int {
     val index = TriggerIndex.of(project)
-    fun refused(type: String?, key: String?, property: String?) = index.refusal(type, key, property, "") != null
+    fun refused(type: String?, key: String?, attribute: String?) = index.refusal(type, key, attribute, "") != null
 
     var stripped = 0
     val looks = DaoLook.find { DaoLooks.project eq project.id }.map { it.id }
     if (looks.isNotEmpty()) {
         DaoLookRow.find { DaoLookRows.look inList looks }
-            .filter { refused(it.targetType, it.elementKey?.let { e -> "${it.targetKey}.$e" } ?: it.targetKey, it.propertyName) }
+            .filter { refused(it.targetType, it.elementKey?.let { e -> "${it.targetKey}.$e" } ?: it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoLookEffect.find { DaoLookEffects.look inList looks }
-            .filter { refused(it.targetType, it.targetKey, it.propertyName) }
+        DaoLookFxEntity.find { DaoLookFx.look inList looks }
+            .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
-    val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.map { it.id }
+    val templates = DaoPalette.find { DaoPalettes.project eq project.id }.map { it.id }
     if (templates.isNotEmpty()) {
-        DaoTemplateRow.find { DaoTemplateRows.template inList templates }
-            .filter { refused(it.targetType, it.targetKey, it.propertyName) }
+        DaoPaletteRow.find { DaoPaletteRows.palette inList templates }
+            .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoTemplateEffect.find { DaoTemplateEffects.template inList templates }
-            .filter { refused(null, null, it.propertyName) }
+        DaoPaletteFxEntity.find { DaoPaletteFx.palette inList templates }
+            .filter { refused(null, null, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     val cues = DaoCue.find { DaoCues.project eq project.id }.map { it.id }
     if (cues.isNotEmpty()) {
-        DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList cues }
-            .filter { refused(it.targetType, it.targetKey, it.propertyName) }
+        DaoCueAttributeAssignment.find { DaoCueAttributeAssignments.cue inList cues }
+            .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList cues }
-            .filter { refused(it.targetType, it.targetKey, it.propertyName) }
+        DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList cues }
+            .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     return stripped

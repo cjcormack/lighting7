@@ -340,9 +340,9 @@ internal fun Route.routeApiRestProjects(state: State) {
         // The files survive because the record / include / make-hard halves are being rewritten
         // against layers; the tables and routes go in the retirement pass.
         routeApiRestProjectLooks(state)
-        routeApiRestLookAbsorbEffects(state)
-        routeApiRestProjectTemplates(state)
-        routeApiRestTemplateRecord(state)
+        routeApiRestLookAbsorbFx(state)
+        routeApiRestProjectPalettes(state)
+        routeApiRestPaletteRecord(state)
         routeApiRestProjectSpeedMasters(state)
         routeApiRestProjectCues(state)
         routeApiRestCueCooked(state)
@@ -351,8 +351,9 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectCueSlots(state)
         routeApiRestProjectBusk(state)
         routeApiRestProjectBuskRig(state)
-        routeApiRestProgrammerSpread(state)
-        routeApiRestProgrammerEffects(state)
+        routeApiRestProgrammerFan(state)
+        routeApiRestProgrammerFx(state)
+        routeApiRestFxPreview(state)
         routeApiRestProgrammerAim(state)
         routeApiRestProgrammerFocus(state)
         routeApiRestBuskPress(state)
@@ -372,7 +373,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectScenery(state)
         routeApiRestProjectEffects(state)
         routeApiRestProjectGrandMaster(state)
-        routeApiRestProjectStackEffectSize(state)
+        routeApiRestProjectStackFxAmount(state)
         routeApiRestProjectFixtureCommands(state)
         routeApiRestProjectRigSafety(state)
         routeApiRestProjectUniverseConfigs(state)
@@ -732,7 +733,7 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
     // Templates after cues: deleteCueChildren already dropped any layer pointing at
     // one. No DB-level cascade on `templates.project_id`, so an un-deleted template
     // blocks project.delete() outright.
-    project.templates.forEach { template ->
+    project.palettes.forEach { template ->
         template.rows.forEach { it.delete() }
         template.effects.forEach { it.delete() }
         template.delete()

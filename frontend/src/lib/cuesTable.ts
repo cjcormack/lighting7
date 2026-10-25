@@ -182,7 +182,7 @@ export function cueSortValue(cue: Cue, key: string): SortValue {
     case 'layers':
       return cue.layers.length
     case 'fx':
-      return cue.adHocEffects.length
+      return cue.adHocFx.length
     case 'scenery':
       return cue.scenery?.length ?? 0
     case 'events':

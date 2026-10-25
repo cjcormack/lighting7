@@ -62,7 +62,7 @@ export function StackTabStrip({
   unlockedWarning?: boolean
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
-  // The shared hook, since session 4 of the space plan: this component, `TemplateStrip` and
+  // The shared hook, since session 4 of the space plan: this component, `PaletteStrip` and
   // `FixturesTable` each had their own copy of the same scroll/resize/measure machinery. It
   // observes the tab row inside the scroller as well as the scroller itself, which is what used
   // to be the `stacks` dependency on the layout effect here, and it owns the scroll listener that

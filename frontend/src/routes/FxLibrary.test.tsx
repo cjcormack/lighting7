@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EffectLibraryEntry } from '../store/fixtureFx'
+import type { FxLibraryEntry } from '../store/fixtureFx'
 import type { FxDefinition } from '../store/fxDefinitions'
 
 const createDefinition = vi.fn((_body: unknown): Promise<unknown> => Promise.resolve({ id: 99 }))
@@ -30,15 +30,15 @@ vi.mock('../store/projects', () => ({
   useProjectQuery: () => ({ data: { id: 6, name: 'Experiment', isCurrent }, isLoading: false }),
 }))
 
-function entry(name: string, over: Partial<EffectLibraryEntry> = {}): EffectLibraryEntry {
+function entry(name: string, over: Partial<FxLibraryEntry> = {}): FxLibraryEntry {
   return {
     name,
-    category: 'dimmer',
+    family: 'intensity',
     outputType: 'SLIDER',
-    effectMode: 'STANDARD',
+    fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [{ name: 'min', type: 'ubyte', defaultValue: '0', description: '' }],
-    compatibleProperties: ['dimmer'],
+    compatibleAttributes: ['dimmer'],
     source: 'BUILT_IN',
     sourceDefinitionId: null,
     script: 'FxOutput.Slider(0u)',
@@ -51,22 +51,22 @@ const LIBRARY = [
   entry('Pulse'),
   entry('PulseCustom', { source: 'USER', sourceDefinitionId: 3 }),
   entry('RandomFlicker', { source: 'USER', sourceDefinitionId: 7, timingSource: 'WALL_CLOCK' }),
-  entry('WarmFlicker', { category: 'colour', outputType: 'COLOUR', compatibleProperties: ['rgbColour'], source: 'USER', sourceDefinitionId: 12 }),
-  entry('ColourChase', { category: 'colour', outputType: 'COLOUR', compatibleProperties: ['rgbColour'] }),
+  entry('WarmFlicker', { family: 'colour', outputType: 'COLOUR', compatibleAttributes: ['rgbColour'], source: 'USER', sourceDefinitionId: 12 }),
+  entry('ColourChase', { family: 'colour', outputType: 'COLOUR', compatibleAttributes: ['rgbColour'] }),
 ]
 
-function definition(id: number, effectId: string, name: string): FxDefinition {
+function definition(id: number, fxId: string, name: string): FxDefinition {
   return {
     id,
-    effectId,
+    fxId,
     name,
-    category: 'dimmer',
+    family: 'intensity',
     outputType: 'SLIDER',
-    effectMode: 'STANDARD',
+    fxMode: 'STANDARD',
     parameters: [],
-    compatibleProperties: ['dimmer'],
+    compatibleAttributes: ['dimmer'],
     script: '',
-    defaultStepTiming: false,
+    defaultTiming: 'CYCLE',
     timingSource: 'BEAT',
   }
 }
@@ -74,7 +74,7 @@ function definition(id: number, effectId: string, name: string): FxDefinition {
 const DEFINITIONS = [definition(3, 'PulseCustom', 'Pulse (Custom)'), definition(7, 'RandomFlicker', 'Random Flicker')]
 
 vi.mock('../store/fixtureFx', () => ({
-  useEffectLibraryQuery: () => ({ data: LIBRARY, isLoading: false }),
+  useFxLibraryQuery: () => ({ data: LIBRARY, isLoading: false }),
 }))
 vi.mock('../store/fxDefinitions', () => ({
   useFxDefinitionListQuery: () => ({ data: DEFINITIONS, isLoading: false }),
@@ -83,8 +83,8 @@ vi.mock('../store/fxDefinitions', () => ({
   useDeleteFxDefinitionMutation: () => [(id: unknown) => ({ unwrap: () => deleteDefinition(id) })],
 }))
 // The three sheets it opens are markers here: what matters is which one, with what.
-vi.mock('../components/fxLibrary/EffectDetailSheet', () => ({
-  EffectDetailSheet: ({ effect, source }: { effect: EffectLibraryEntry; source: string }) => (
+vi.mock('../components/fxLibrary/FxDetailSheet', () => ({
+  FxDetailSheet: ({ effect, source }: { effect: FxLibraryEntry; source: string }) => (
     <div data-testid="detail">
       {effect.name}:{source}
     </div>
@@ -118,8 +118,8 @@ function draw() {
   )
 }
 
-function row(effectId: string): HTMLElement {
-  return document.querySelector(`[data-row-id="fx:${effectId}"]`) as HTMLElement
+function row(fxId: string): HTMLElement {
+  return document.querySelector(`[data-row-id="fx:${fxId}"]`) as HTMLElement
 }
 
 function divider(category: string): HTMLElement | null {
@@ -167,7 +167,7 @@ describe('FX Library sheet', () => {
 
   it('groups the rows under category dividers under All, and a chip narrows them', () => {
     draw()
-    expect(divider('dimmer')).toHaveTextContent('Dimmer · 3')
+    expect(divider('intensity')).toHaveTextContent('Intensity · 3')
     expect(divider('colour')).toHaveTextContent('Colour · 2')
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Category' })).getByRole('button', { name: /Colour/ }))
     expect(divider('colour')).toBeNull()
@@ -197,7 +197,7 @@ describe('FX Library sheet', () => {
   it('renames a custom row with its name alone, and offers no rename on a built-in or a script’s effect', () => {
     draw()
     fireEvent.doubleClick(within(row('RandomFlicker')).getByText('Random Flicker'))
-    const field = screen.getByLabelText('Effect name') as HTMLInputElement
+    const field = screen.getByLabelText('FX name') as HTMLInputElement
     fireEvent.change(field, { target: { value: 'Candle' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(updateDefinition).toHaveBeenCalledWith({ id: 7, name: 'Candle' })
@@ -211,15 +211,15 @@ describe('FX Library sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fork' }))
     await waitFor(() => expect(createDefinition).toHaveBeenCalledTimes(1))
     expect(createDefinition.mock.calls[0][0]).toMatchObject({
-      effectId: 'PulseCustom2',
+      fxId: 'PulseCustom2',
       name: 'Pulse (Custom 2)',
-      category: 'dimmer',
+      family: 'intensity',
       outputType: 'SLIDER',
-      effectMode: 'STANDARD',
-      compatibleProperties: ['dimmer'],
+      fxMode: 'STANDARD',
+      compatibleAttributes: ['dimmer'],
       script: 'FxOutput.Slider(0u)',
       timingSource: 'BEAT',
-      defaultStepTiming: false,
+      defaultTiming: 'CYCLE',
     })
     expect(await screen.findByTestId('edit')).toHaveTextContent('99:Pulse')
   })
@@ -228,11 +228,11 @@ describe('FX Library sheet', () => {
     draw()
     selectRows('Pulse', 'ColourChase')
     expect(screen.getByRole('button', { name: 'Fork' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute('title', 'Fork takes one effect — select just one')
+    expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute('title', 'Fork takes one FX — select just one')
     selectRows('RandomFlicker')
     expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute(
       'title',
-      'Only a built-in forks — edit this custom effect directly',
+      'Only a built-in forks — edit this custom FX directly',
     )
   })
 
@@ -245,7 +245,7 @@ describe('FX Library sheet', () => {
     expect(deleteDefinition.mock.calls.map(([id]) => id)).toEqual([3, 7])
     expect(toastInfo).toHaveBeenCalledTimes(1)
     const skipped = String(toastInfo.mock.calls[0][0])
-    expect(skipped).toContain('Pulse: built-in effects cannot be deleted')
+    expect(skipped).toContain('Pulse: built-in FX cannot be deleted')
     expect(skipped).toContain('Warm Flicker: a script registers it')
   })
 
@@ -259,12 +259,12 @@ describe('FX Library sheet', () => {
     isCurrent = false
     draw()
     selectRows('RandomFlicker')
-    const reason = 'Not the running project — Effects shows and edits the running show’s effects'
+    const reason = 'Not the running project — FX shows and edits the running show’s FX'
     expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute('title', reason)
     expect(screen.getByRole('button', { name: 'Fork' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
     expect(within(row('RandomFlicker')).queryByTitle('Double-click to rename')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'New effect' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New FX' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Open Random Flicker' }))
     expect(screen.getByTestId('detail')).toHaveTextContent('RandomFlicker:custom')
   })

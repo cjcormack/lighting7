@@ -10,7 +10,7 @@ import { useRiggingListQuery } from '@/store/riggings'
 import { useSpeedMasterListQuery } from '@/store/speedMasters'
 import { useStageRegionListQuery } from '@/store/stageRegions'
 import { useSurfaceBindingsQuery } from '@/store/surfaces'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useGetUniverseQuery } from '@/store/universes'
 
 /**
@@ -40,7 +40,7 @@ export function useHomeCounts(project: ProjectDetail): HomeCounts {
   // The cue list rather than `ProjectDetail.cueCount`: the list's tag is the one cue writes invalidate.
   const { data: cues } = useProjectCueListQuery(id, show)
   const { data: looks } = useLookListQuery({ projectId: id }, show)
-  const { data: palettes } = useTemplateListQuery({ projectId: id }, show)
+  const { data: palettes } = usePaletteListQuery({ projectId: id }, show)
   const { data: speedMasters } = useSpeedMasterListQuery({ projectId: id }, show)
 
   return {

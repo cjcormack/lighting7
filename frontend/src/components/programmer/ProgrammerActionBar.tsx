@@ -28,7 +28,7 @@ import {
   useProgrammerSummaryQuery,
 } from '@/store/programmer'
 import { useIsDeskConnected } from '@/store/status'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { includedCueEntry, includedCueId, includedTargetParts } from '@/lib/includedTarget'
 import { useProgrammerSheets } from './ProgrammerSheets'
@@ -112,7 +112,7 @@ const FADE_OPTIONS = [
  */
 export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const { data: summary } = useProgrammerSummaryQuery()
-  const { data: activeEffects } = useActiveEffectsQuery()
+  const { data: activeFx } = useActiveFxQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const fadeMs = useProgrammerFade()
   const sheets = useProgrammerSheets()
@@ -134,7 +134,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // applying a busking effect creates a band FX with no value entry behind it. Gating the button on
   // the entry count alone would leave the documented escape hatch disabled in exactly the case an
   // operator most needs it.
-  const programmerFxCount = activeEffects?.filter((e) => e.programmerOwned).length ?? 0
+  const programmerFxCount = activeFx?.filter((e) => e.programmerOwned).length ?? 0
   // And held scenery (scenery-programmer plan D1): Clear drops it on the same fade, and a programmer
   // holding only a flown moon must still be clearable. Counted from `programmer.sceneryState`, since
   // the desk's `programmer.cleared` reply counts values and effects only.
@@ -235,7 +235,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           !deskConnected
             ? `Stage — Blind: ${DESK_OFFLINE_LABEL}, so it cannot be changed`
             : blind
-              ? 'Stage — Blind is on: programmer values and effects are held out of the stage output'
+              ? 'Stage — Blind is on: programmer values and FX are held out of the stage output'
               : 'Stage — Blind: edit without the rig showing it'
         }
         onClick={() => programmerSetBlind(!blind, fade)}

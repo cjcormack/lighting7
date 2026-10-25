@@ -26,7 +26,7 @@ import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 import { BuskRedirect, ProjectBusk } from "./routes/Busk";
 import { LooksRedirect, ProjectLooks } from "./routes/Looks";
 import { CuesRedirect, ProjectCues } from "./routes/Cues";
-import { TemplatesRedirect, ProjectTemplates } from "./routes/Templates";
+import { PalettesRedirect, ProjectPalettes } from "./routes/Palettes";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
 import ProjectHome, { ProjectHomeRedirect } from "./routes/ProjectHome";
 import { PatchesRedirect, ProjectPatches } from "./routes/Patches";
@@ -45,7 +45,7 @@ import {
   LegacyFxRedirect,
   LegacyProgramRedirect,
   LegacyRunRedirect,
-  LegacyTemplatesRedirect,
+  LegacyPalettesRedirect,
 } from "./routes/legacyRedirects";
 import { SurfacesRedirect } from "./routes/Surfaces";
 import { DiagnosticsRedirect } from "./routes/Diagnostics";
@@ -219,20 +219,20 @@ function getAppRouter() {
         // one — so `?family=` deep-links from Cmd+K land on a filtered view of one page.
         {
           path: "projects/:projectId/palettes",
-          element: <ProjectTemplates />,
+          element: <ProjectPalettes />,
         },
         {
           path: "palettes",
-          element: <TemplatesRedirect />,
+          element: <PalettesRedirect />,
         },
         // Legacy `/templates` → `/palettes`, search preserved for the old `?family=` deep links.
         {
           path: "projects/:projectId/templates",
-          element: <LegacyTemplatesRedirect />,
+          element: <LegacyPalettesRedirect />,
         },
         {
           path: "templates",
-          element: <LegacyTemplatesRedirect />,
+          element: <LegacyPalettesRedirect />,
         },
         {
           path: "projects/:projectId/speed-masters",

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useFieldAutosave } from '@/hooks/useFieldAutosave'
 import { formatError } from '@/lib/formatError'
-import { triggersOf, useFixtureTypeListQuery, type TriggerPropertyDescriptor } from '@/store/fixtures'
+import { triggersOf, useFixtureTypeListQuery, type TriggerAttributeDescriptor } from '@/store/fixtures'
 import { useVisiblePatchListQuery } from '@/store/patches'
 import type { CueEvent, CueEventWriteItem } from '@/api/cuesApi'
 
@@ -14,7 +14,7 @@ export interface CannonOption {
   patchId: number
   key: string
   name: string
-  triggers: readonly TriggerPropertyDescriptor[]
+  triggers: readonly TriggerAttributeDescriptor[]
 }
 
 /** The project's patched fixtures with one-shot triggers, by name. */
@@ -22,7 +22,7 @@ export function useCannons(projectId: number): CannonOption[] {
   const { data: patches } = useVisiblePatchListQuery(projectId)
   const { data: types } = useFixtureTypeListQuery()
   return useMemo(() => {
-    const byType = new Map((types ?? []).map((t) => [t.typeKey, triggersOf(t.properties)]))
+    const byType = new Map((types ?? []).map((t) => [t.typeKey, triggersOf(t.attributes)]))
     return (patches ?? [])
       .map((p) => ({ patchId: p.id, key: p.key, name: p.displayName, triggers: byType.get(p.fixtureTypeKey) ?? [] }))
       .filter((c) => c.triggers.length > 0)

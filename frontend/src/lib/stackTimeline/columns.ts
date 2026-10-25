@@ -1,5 +1,5 @@
 import type { CueTarget } from '@/api/cuesApi'
-import type { StackTimeline, TimelineEffect, TimelineLayer } from '@/api/stackTimelineApi'
+import type { StackTimeline, TimelineFx, TimelineLayer } from '@/api/stackTimelineApi'
 import { TIMELINE_KINDS, type TimelineColumn, type TimelineKind } from './model'
 import type { StoredExtraColumn } from './columnOrder'
 
@@ -24,13 +24,16 @@ export function layerColumnId(layer: TimelineLayer, target: CueTarget | null): s
   return `${layer.source.kind === 'LOOK' ? 'look' : 'palette'}:${layer.source.id}:${targetId(target)}`
 }
 
-/** Every column one layer fills: one per target it names, or one for its own fixtures (D3). */
+/**
+ * Every column one layer fills: a Look's one, since it lands whole (absolute-looks plan D1); a
+ * palette's one per target it names, or one for its own heads (D3).
+ */
 export function layerTargets(layer: TimelineLayer): (CueTarget | null)[] {
-  return layer.targets.length === 0 ? [null] : layer.targets
+  return layer.source.kind === 'LOOK' || layer.targets.length === 0 ? [null] : layer.targets
 }
 
-export function effectColumnId(effect: TimelineEffect): string {
-  return `effect:${effect.effectType}:${effect.propertyName ?? ''}:${effect.targetType}:${effect.targetKey}`
+export function fxColumnId(effect: TimelineFx): string {
+  return `fx:${effect.fxType}:${effect.attribute ?? ''}:${effect.targetType}:${effect.targetKey}`
 }
 
 export function sceneryColumnId(elementUuid: string): string {
@@ -51,13 +54,13 @@ function targetHeads(layer: TimelineLayer, target: CueTarget | null, names: Time
   return layer.heads.filter((head) => covered.has(head) || covered.has(names.parentOf?.(head) ?? ''))
 }
 
-function effectLabel(effect: TimelineEffect): string {
-  const property = effect.propertyName
-  return property ? `${effect.effectType} · ${property.charAt(0).toUpperCase()}${property.slice(1)}` : effect.effectType
+function fxLabel(effect: TimelineFx): string {
+  const attribute = effect.attribute
+  return attribute ? `${effect.fxType} · ${attribute.charAt(0).toUpperCase()}${attribute.slice(1)}` : effect.fxType
 }
 
 /** A selection target's key as the timeline names it: each item's key, joined. */
-function effectSub(effect: TimelineEffect, names: TimelineNames): string {
+function fxSub(effect: TimelineFx, names: TimelineNames): string {
   if (effect.targetType === 'selection') {
     try {
       const items = JSON.parse(effect.targetKey) as CueTarget[]
@@ -99,7 +102,7 @@ export function columns(timeline: StackTimeline, names: TimelineNames, order: re
             id: layerColumnId(layer, target),
             kind,
             name: layer.source.name,
-            sub: target == null ? (kind === 'look' ? 'own fixtures' : 'own heads') : names.target(target),
+            sub: kind === 'look' ? 'Look' : target == null ? 'own heads' : names.target(target),
             sourceId: layer.source.id,
             target,
           },
@@ -108,16 +111,16 @@ export function columns(timeline: StackTimeline, names: TimelineNames, order: re
         )
       }
     }
-    for (const effect of entry.effects) {
+    for (const effect of entry.fx) {
       add(
         {
-          id: effectColumnId(effect),
-          kind: 'effect',
-          name: effectLabel(effect),
-          sub: effectSub(effect, names),
+          id: fxColumnId(effect),
+          kind: 'fx',
+          name: fxLabel(effect),
+          sub: fxSub(effect, names),
           sourceId: null,
           target: null,
-          effect: { effectType: effect.effectType, propertyName: effect.propertyName, targetType: effect.targetType, targetKey: effect.targetKey },
+          effect: { fxType: effect.fxType, attribute: effect.attribute, targetType: effect.targetType, targetKey: effect.targetKey },
         },
         effect.heads,
         effect.family ? [effect.family] : [],
@@ -182,11 +185,16 @@ export function recordColumnId(kind: 'look' | 'palette', sourceId: number, targe
   return `${kind}:${sourceId}:${targetId(target)}`
 }
 
+/** A stored extra's column id: a Look's names no target, whatever an older window stored with it. */
+export function extraColumnId(extra: Pick<StoredExtraColumn, 'kind' | 'sourceId' | 'target'>): string {
+  return recordColumnId(extra.kind, extra.sourceId, extra.kind === 'look' ? null : extra.target)
+}
+
 /**
  * [columns] with this window's added [extras] (§4.4), each kind in this window's [order] with its
  * extras after its own until the order names them — an extra the stack now fills is derived
- * already, so it is left out. An extra's heads are its target's: a fixture or cell itself, a
- * group's members; on its own fixtures it reaches nothing until a cell is filled.
+ * already, so it is left out, and two extras naming one column ([extraColumnId]) add it once. An extra's heads are its target's: a fixture or cell itself, a
+ * group's members; a Look's, and a palette's on its own heads, reach nothing until a cell is filled.
  */
 export function withExtraColumns(
   columns: readonly TimelineColumn[],
@@ -195,18 +203,23 @@ export function withExtraColumns(
   order: readonly string[] | null = null,
 ): TimelineColumn[] {
   const ids = new Set(columns.map((c) => c.id))
-  const added = extras
-    .map((extra): TimelineColumn => ({
-      id: recordColumnId(extra.kind, extra.sourceId, extra.target),
+  const added: TimelineColumn[] = []
+  for (const extra of extras) {
+    const id = extraColumnId(extra)
+    if (ids.has(id)) continue
+    ids.add(id)
+    const target = extra.kind === 'look' ? null : extra.target
+    added.push({
+      id,
       kind: extra.kind,
       name: extra.name,
-      sub: extra.target == null ? (extra.kind === 'look' ? 'own fixtures' : 'own heads') : names.target(extra.target),
+      sub: extra.kind === 'look' ? 'Look' : target == null ? 'own heads' : names.target(target),
       families: extra.families,
-      heads: extra.target == null ? [] : extra.target.type === 'group' ? [...(names.members?.(extra.target.key) ?? [])] : [extra.target.key],
+      heads: target == null ? [] : target.type === 'group' ? [...(names.members?.(target.key) ?? [])] : [target.key],
       sourceId: extra.sourceId,
-      target: extra.target,
-    }))
-    .filter((c) => !ids.has(c.id))
+      target,
+    })
+  }
   return TIMELINE_KINDS.flatMap((kind) =>
     applyColumnOrder([...columns.filter((c) => c.kind === kind), ...added.filter((c) => c.kind === kind)], order),
   )

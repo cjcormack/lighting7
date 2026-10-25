@@ -20,11 +20,11 @@ import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOWER
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_INVALID
 import uk.me.cormack.lighting7.models.DaoProject
@@ -33,13 +33,13 @@ import uk.me.cormack.lighting7.models.DaoSpeedMasters
 import uk.me.cormack.lighting7.models.SpeedMasterSettingsError
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.ensureDefaultSpeedMasters
-import uk.me.cormack.lighting7.models.normaliseSpeedMasterUsage
+import uk.me.cormack.lighting7.models.normaliseSpeedMasterFamily
 import uk.me.cormack.lighting7.models.validateSpeedMasterSettings
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
 // The delete-guard half of the speed-master error vocabulary. The write-boundary half
-// (CODE_SPEED_MASTER_FOLLOWER / _USAGE_TAKEN / _CANNOT_FOLLOW / _INVALID / _UNKNOWN) lives in
+// (CODE_SPEED_MASTER_FOLLOWER / _FAMILY_TAKEN / _CANNOT_FOLLOW / _INVALID / _UNKNOWN) lives in
 // models/speedMasters.kt beside validateSpeedMasterSettings, because the socket needs it too —
 // grep both files for the full client-facing set.
 
@@ -99,7 +99,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
     }
 
     /**
-     * Rename / notes / bpm / usage / follow ratio. The stored bpm is the master's starting
+     * Rename / notes / bpm / family / follow ratio. The stored bpm is the master's starting
      * default; when the project is live, the write also retunes the running clock so a typed
      * tempo takes effect immediately. (Knob-drag / tap tempo goes over the `speedMasters.*` WS
      * family instead — this route is the "typed a number into a form" path.)
@@ -117,6 +117,10 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
     put<ProjectSpeedMasterResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val body = call.receive<JsonObject>()
+            unknownFieldsProblem(body, SPEED_MASTER_PUT_FIELDS)?.let { problem ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
+                return@withProject
+            }
             val requestedBpm = body["bpm"].nullableDouble()
             validateBpm(requestedBpm)?.let { error ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
@@ -142,16 +146,16 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
 
                 // Effective post-write values: what the row will hold if this write lands.
                 // Carried-forward values come through the same sanitisers every read path
-                // uses (`followRatio`; an untouched usage skips re-validation), NOT the raw
+                // uses (`followRatio`; an untouched family skips re-validation), NOT the raw
                 // columns — an imported row is written verbatim by design (see
                 // ProjectImporter), and validating its untouched junk here would 400/409
                 // every later PUT on it, rename and notes edits included. Only what this
                 // request actually sends goes through the write-boundary rules.
-                val usagePatched = "usage" in body
-                val effectiveUsage = if (usagePatched) {
-                    normaliseSpeedMasterUsage(body["usage"].nullableString())
+                val familyPatched = "family" in body
+                val effectiveFamily = if (familyPatched) {
+                    normaliseSpeedMasterFamily(body["family"].nullableString())
                 } else {
-                    master.usageCategory
+                    master.family
                 }
                 val storedRatio = master.followRatio
                 val followPatched = "followNum" in body
@@ -173,7 +177,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
 
                     else -> master.followTargetUuid
                 }
-                // Same carve-out as the untouched usage above: a target this request did not
+                // Same carve-out as the untouched family above: a target this request did not
                 // send is carried-forward junk, and a leader force-deleted out from under the
                 // row would otherwise 400 every later PUT on it — rename and notes edits
                 // included — for a link the bank has already degraded to manual.
@@ -182,7 +186,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 validateSpeedMasterSettings(
                     project = project,
                     masterIndex = master.masterIndex,
-                    usage = if (usagePatched) effectiveUsage else null,
+                    family = if (familyPatched) effectiveFamily else null,
                     followNum = effectiveNum,
                     followDen = effectiveDen,
                     followTargetUuid = effectiveTarget,
@@ -228,7 +232,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 if ("notes" in body) {
                     master.notes = body["notes"].nullableString()?.trim()?.takeIf { it.isNotEmpty() }
                 }
-                master.usageCategory = effectiveUsage
+                master.family = effectiveFamily
                 master.followNum = effectiveNum
                 master.followDen = effectiveDen
                 master.followTargetUuid = effectiveTarget
@@ -315,8 +319,8 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                         error = "Speed master is referenced by ${outcome.usage.describe()}",
                         code = CODE_SPEED_MASTER_IN_USE,
                         referenceCount = outcome.usage.total,
-                        lookEffectCount = outcome.usage.lookEffects,
-                        cueAdHocEffectCount = outcome.usage.cueAdHocEffects,
+                        lookFxCount = outcome.usage.lookFx,
+                        cueAdHocFxCount = outcome.usage.cueAdHocFx,
                         cueLayerCount = outcome.usage.cueLayers,
                         cueTempoCount = outcome.usage.cueTempos,
                         cueIds = outcome.usage.cueIds,
@@ -342,10 +346,10 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
 internal sealed interface CreateSpeedMasterOutcome {
     data class Created(val dto: SpeedMasterDto) : CreateSpeedMasterOutcome
 
-    /** Malformed request — blank name, out-of-range bpm, bad usage/ratio. */
+    /** Malformed request — blank name, out-of-range bpm, bad family/ratio. */
     data class Invalid(val error: String, val code: String? = null) : CreateSpeedMasterOutcome
 
-    /** A master of that name — or claiming that usage — already exists in the project. */
+    /** A master of that name — or claiming that family — already exists in the project. */
     data class Conflict(val error: String, val code: String? = null) : CreateSpeedMasterOutcome
 }
 
@@ -396,7 +400,7 @@ internal fun createSpeedMaster(
                 CODE_SPEED_MASTER_INVALID,
             )
     }
-    val usage = normaliseSpeedMasterUsage(request.usage)
+    val family = normaliseSpeedMasterFamily(request.family)
 
     val outcome = transaction(state.database) {
         ensureDefaultSpeedMasters(project)
@@ -411,7 +415,7 @@ internal fun createSpeedMaster(
         validateSpeedMasterSettings(
             project = project,
             masterIndex = nextIndex,
-            usage = usage,
+            family = family,
             followNum = request.followNum,
             followDen = request.followDen,
             followTargetUuid = followTarget,
@@ -431,7 +435,7 @@ internal fun createSpeedMaster(
             this.name = name
             request.bpm?.let { bpm = it }
             this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
-            usageCategory = usage
+            this.family = family
             followNum = request.followNum
             followDen = request.followDen
             followTargetUuid = followTarget
@@ -480,8 +484,8 @@ data class SpeedMasterDto(
     /** `MANUAL` / `TAP` — how the tempo was last set. Display only. */
     val source: String,
     val notes: String? = null,
-    /** Effect-library category this master is the apply-time default for; null routes nothing. */
-    val usage: String? = null,
+    /** FX library family this master is the apply-time default for; null routes nothing. */
+    val family: String? = null,
     /** Follow ratio over [followTargetUuid] (`bpm = leader × num/den`); both null = manual. */
     val followNum: Int? = null,
     val followDen: Int? = null,
@@ -497,8 +501,8 @@ data class CreateSpeedMasterRequest(
     val name: String? = null,
     val bpm: Double? = null,
     val notes: String? = null,
-    /** See [SpeedMasterDto.usage]; validated against the canonical set. */
-    val usage: String? = null,
+    /** See [SpeedMasterDto.family]; validated against the canonical set. */
+    val family: String? = null,
     /** See [SpeedMasterDto.followNum]; both-or-neither, positive. */
     val followNum: Int? = null,
     val followDen: Int? = null,
@@ -512,8 +516,8 @@ data class SpeedMasterInUseResponse(
     val code: String,
     val referenceCount: Int,
     /** Effects stored on a Look. Was `presetEffectCount`, over `fx_presets`. */
-    val lookEffectCount: Int,
-    val cueAdHocEffectCount: Int,
+    val lookFxCount: Int,
+    val cueAdHocFxCount: Int,
     /** Per-layer speed-master overrides. Was `cuePresetApplicationCount`. */
     val cueLayerCount: Int,
     /** Cues that set the master's tempo on GO (S16). */
@@ -529,9 +533,9 @@ data class SpeedMasterInUseResponse(
 
 /** Persisted references to one speed master. Live FX instances are excluded — they rebind to master 1. */
 internal data class SpeedMasterUsage(
-    /** Effects stored on a **Look** (`DaoLookEffects`). Was `presetEffects`. */
-    val lookEffects: Int,
-    val cueAdHocEffects: Int,
+    /** Effects stored on a **Look** (`DaoLookFx`). Was `presetEffects`. */
+    val lookFx: Int,
+    val cueAdHocFx: Int,
     /** Per-layer speed-master overrides (`DaoCueLayers`). Was `cuePresetApplications`. */
     val cueLayers: Int,
     val cueIds: List<Int>,
@@ -544,11 +548,11 @@ internal data class SpeedMasterUsage(
     /** Cues that set this master's tempo on GO (S16): a forced delete leaves them naming it, skipped at GO. */
     val cueTempos: Int = 0,
 ) {
-    val total: Int get() = lookEffects + cueAdHocEffects + cueLayers + cueTempos + followers.size
+    val total: Int get() = lookFx + cueAdHocFx + cueLayers + cueTempos + followers.size
 
     fun describe(): String = buildList {
-        if (lookEffects > 0) add("$lookEffects look effect${if (lookEffects == 1) "" else "s"}")
-        if (cueAdHocEffects > 0) add("$cueAdHocEffects cue effect${if (cueAdHocEffects == 1) "" else "s"}")
+        if (lookFx > 0) add("$lookFx Look FX")
+        if (cueAdHocFx > 0) add("$cueAdHocFx cue FX")
         if (cueLayers > 0) add("$cueLayers cue layer${if (cueLayers == 1) "" else "s"}")
         if (cueTempos > 0) add("$cueTempos cue${if (cueTempos == 1) "" else "s"} setting its tempo")
         if (followers.isNotEmpty()) add("${followers.joinToString(", ")} following it")
@@ -598,21 +602,21 @@ internal fun speedMasterUsageFor(
     // much in use as one an effect runs on, and counting only the latter would let the
     // delete guard wave through a master that a look still depends on.
     //
-    // Reads `DaoLookEffects` through `project.looks`, where it read `project.fxPresets` and their
+    // Reads `DaoLookFx` through `project.looks`, where it read `project.fxPresets` and their
     // JSON `effects` blob until session 4. Same question, better shape: a look effect's masters are
     // real nullable columns rather than fields inside an opaque blob, so this could be a query
     // rather than a scan — kept as a scan only because the Look count per project is small and the
     // rows are already loaded by the referrer.
-    val lookEffectCounts = mutableMapOf<UUID, Int>()
+    val lookFxCounts = mutableMapOf<UUID, Int>()
     project.looks.forEach { look ->
         look.effects.forEach { effect ->
-            // Compared as UUIDs, not strings. `DaoLookEffects` gave these real `javaUUID` columns;
+            // Compared as UUIDs, not strings. `DaoLookFx` gave these real `javaUUID` columns;
             // the preset era stored them as strings inside a JSON blob, which is why the old code
             // went through `uuidStrings`.
             val referenced = listOfNotNull(effect.speedMasterUuid, effect.rateSpeedMasterUuid)
                 .distinct()
                 .filter { it in uuidSet }
-            referenced.forEach { lookEffectCounts.merge(it, 1, Int::plus) }
+            referenced.forEach { lookFxCounts.merge(it, 1, Int::plus) }
         }
     }
 
@@ -632,10 +636,10 @@ internal fun speedMasterUsageFor(
         return out
     }
 
-    val adHocRows = DaoCueAdHocEffect
+    val adHocRows = DaoCueAdHocFxEntity
         .find {
-            (DaoCueAdHocEffects.speedMasterUuid inList uuidSet) or
-                (DaoCueAdHocEffects.rateSpeedMasterUuid inList uuidSet)
+            (DaoCueAdHocFx.speedMasterUuid inList uuidSet) or
+                (DaoCueAdHocFx.rateSpeedMasterUuid inList uuidSet)
         }
         .byMaster({ it.speedMasterUuid }, { it.rateSpeedMasterUuid }, { it.cue.id.value })
     val layerRows = DaoCueLayer
@@ -657,8 +661,8 @@ internal fun speedMasterUsageFor(
         val layerCues = layerRows[uuid] ?: emptyList()
         val tempoCueIds = tempoCues[uuid].orEmpty()
         SpeedMasterUsage(
-            lookEffects = lookEffectCounts[uuid] ?: 0,
-            cueAdHocEffects = adHocCues.size,
+            lookFx = lookFxCounts[uuid] ?: 0,
+            cueAdHocFx = adHocCues.size,
             cueLayers = layerCues.size,
             cueIds = (adHocCues + layerCues + tempoCueIds).distinct().sorted(),
             followers = followerNames[uuid].orEmpty().sorted(),
@@ -748,9 +752,14 @@ private fun DaoSpeedMaster.toDto(references: SpeedMasterUsage): SpeedMasterDto =
     bpm = bpm,
     source = source,
     notes = notes,
-    usage = usageCategory,
+    family = family,
     followNum = followRatio?.first,
     followDen = followRatio?.second,
     followTargetUuid = followTarget?.toString(),
     referenceCount = references.total,
+)
+
+/** Every field the speed-master PUT reads; anything else is refused by name. */
+private val SPEED_MASTER_PUT_FIELDS = setOf(
+    "name", "bpm", "notes", "family", "followNum", "followDen", "followTargetUuid",
 )

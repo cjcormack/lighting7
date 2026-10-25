@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Strobe
+import uk.me.cormack.lighting7.fixture.attribute.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
@@ -81,10 +81,10 @@ class WhexFixture(
         SLOW(204u),
     }
 
-    @FixtureProperty(category = PropertyCategory.DIMMER)
+    @FixtureAttribute(category = AttributeCategory.DIMMER)
     override val dimmer = DmxSlider(transaction, universe, firstChannel, max = maxDimmerLevel)
 
-    @FixtureProperty(category = PropertyCategory.COLOUR)
+    @FixtureAttribute(category = AttributeCategory.COLOUR)
     override val rgbColour = DmxColour(
         transaction,
         universe,
@@ -93,19 +93,19 @@ class WhexFixture(
         firstChannel + 3,
     )
 
-    @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
+    @FixtureAttribute(category = AttributeCategory.WHITE, bundleWithColour = true)
     override val white = DmxSlider(transaction, universe, firstChannel + 4)
 
-    @FixtureProperty(category = PropertyCategory.AMBER, bundleWithColour = true)
+    @FixtureAttribute(category = AttributeCategory.AMBER, bundleWithColour = true)
     override val amber = DmxSlider(transaction, universe, firstChannel + 5)
 
-    @FixtureProperty(category = PropertyCategory.UV, bundleWithColour = true)
+    @FixtureAttribute(category = AttributeCategory.UV, bundleWithColour = true)
     override val uv = DmxSlider(transaction, universe, firstChannel + 6)
 
     // Estimate: no manual to hand — 0–9 open below the strobe band [DmxStrobe] writes (its KDoc names
     // only 0), and the strobe's 1–20 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
-    @FixtureProperty(
-        category = PropertyCategory.STROBE,
+    @FixtureAttribute(
+        category = AttributeCategory.STROBE,
         strobe = [
             StrobeBand(0, 9, StrobeKind.OPEN),
             StrobeBand(10, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -113,12 +113,12 @@ class WhexFixture(
     )
     override val strobe = DmxStrobe(transaction, universe, firstChannel + 7)
 
-    @FixtureProperty(category = PropertyCategory.SETTING)
+    @FixtureAttribute(category = AttributeCategory.SETTING)
     val mode = DmxFixtureSetting(transaction, universe, firstChannel + 9, ProgramMode.entries.toTypedArray())
 
-    @FixtureProperty(category = PropertyCategory.SPEED)
+    @FixtureAttribute(category = AttributeCategory.SPEED)
     val programSpeed = DmxSlider(transaction, universe, firstChannel + 10)
 
-    @FixtureProperty(category = PropertyCategory.SETTING)
+    @FixtureAttribute(category = AttributeCategory.SETTING)
     val dimmerMode = DmxFixtureSetting(transaction, universe, firstChannel + 11, DimmerMode.entries.toTypedArray())
 }

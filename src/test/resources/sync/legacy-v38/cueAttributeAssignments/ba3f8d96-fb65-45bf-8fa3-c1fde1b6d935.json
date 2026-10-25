@@ -1,0 +1,9 @@
+{
+  "attribute": "dimmer",
+  "cueUuid": "bcb533ea-6191-44b3-9b6e-0b9d2d92c220",
+  "fadeDurationMs": 1500,
+  "targetKey": "hex-1",
+  "targetType": "fixture",
+  "uuid": "ba3f8d96-fb65-45bf-8fa3-c1fde1b6d935",
+  "value": "255"
+}

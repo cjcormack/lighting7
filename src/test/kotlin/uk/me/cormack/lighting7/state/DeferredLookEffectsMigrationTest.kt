@@ -7,7 +7,7 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
@@ -58,22 +58,22 @@ class DeferredLookEffectsMigrationTest {
     private fun storedEffects(): List<Pair<String, String>> =
         DriverManager.getConnection("jdbc:sqlite:${IntegrationTestDb.path}").use { connection ->
             connection.createStatement().use { s ->
-                s.executeQuery("SELECT target_type, effect_type FROM look_effects ORDER BY id").use { rs ->
+                s.executeQuery("SELECT target_type, fx_type FROM look_fx ORDER BY id").use { rs ->
                     buildList { while (rs.next()) add(rs.getString(1) to rs.getString(2)) }
                 }
             }
         }
 
-    private fun DaoLook.effect(targetType: String, targetKey: String, effectType: String) = DaoLookEffect.new {
+    private fun DaoLook.effect(targetType: String, targetKey: String, fxType: String) = DaoLookFxEntity.new {
         look = this@effect
         this.targetType = targetType
         this.targetKey = targetKey
-        this.effectType = effectType
-        category = "dimmer"
-        propertyName = "dimmer"
-        beatDivision = 1.0
+        this.fxType = fxType
+        family = "intensity"
+        attribute = "dimmer"
+        cycle = 1.0
         blendMode = "OVERRIDE"
-        distribution = "LINEAR"
+        order = "NORMAL"
         parameters = emptyMap()
     }
 

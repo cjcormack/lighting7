@@ -23,7 +23,7 @@ vi.mock('./useRowValues', async () => ({
       resolutions: [
         {
           kind: 'slider',
-          property: {
+          attribute: {
             name: 'dimmer',
             category: 'dimmer',
             min: 0,
@@ -33,7 +33,7 @@ vi.mock('./useRowValues', async () => ({
         },
       ],
       targetKeys: ['a'],
-      keys: [{ targetKey: 'a', propertyName: 'dimmer' }],
+      keys: [{ targetKey: 'a', attribute: 'dimmer' }],
     },
   ],
 }))
@@ -48,7 +48,7 @@ vi.mock('../../api/lightingApi', async () => {
   const programmer = new Proxy(base.programmer as Record<string, unknown>, {
     get: (target, prop: string) =>
       prop === 'getKeyState'
-        ? (key: string, property: string) => ({ entry: heldBack.holds.has(`${key}|${property}`) ? { value: '200' } : null })
+        ? (key: string, attribute: string) => ({ entry: heldBack.holds.has(`${key}|${attribute}`) ? { value: '200' } : null })
         : prop === 'isBlind'
           ? () => heldBack.blind
           : target[prop],
@@ -80,22 +80,22 @@ vi.mock('../programmer/LookRowStore', async () => ({
 }))
 // The *template* half of layer scope, driven the same way. Mutually exclusive with `lookStore` by
 // construction: a layer applies one or the other.
-const focusedTemplate = vi.hoisted(() => ({ current: null as unknown }))
-vi.mock('../programmer/FocusedTemplateLayer', () => ({
-  useFocusedTemplateLayer: () => focusedTemplate.current,
+const focusedPalette = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('../programmer/FocusedPaletteLayer', () => ({
+  useFocusedPaletteLayer: () => focusedPalette.current,
 }))
 
-/** A focused template layer, in the shape `FocusedTemplateLayer` provides. */
-function templateLayer(over: Record<string, unknown> = {}) {
+/** A focused template layer, in the shape `FocusedPaletteLayer` provides. */
+function paletteLayer(over: Record<string, unknown> = {}) {
   return {
     layerId: 7,
-    templateId: 4,
+    paletteId: 4,
     name: 'Amber Breathe',
-    template: {
-      kind: 'effect',
-      effect: { beatDivision: 0.5, timingSource: 'BEAT' },
+    palette: {
+      kind: 'fx',
+      fx: { cycle: 0.5, timingSource: 'BEAT' },
     },
-    kind: 'effect',
+    kind: 'fx',
     mask: [],
     targetedKeys: null,
     targets: [],
@@ -110,8 +110,7 @@ function layerStore(over: Record<string, unknown>) {
     draft: { get: () => undefined, subscribe: () => () => {} },
     setValue: () => {},
     serverRows: new Map(),
-    targetedKeys: null,
-    propertyMask: null,
+    attributeMask: null,
     deferredRows: [],
     elementRows: [],
     loaded: true,
@@ -146,12 +145,12 @@ vi.mock('../fixtures/LocateButton', () => ({ LocateButton: () => null }))
 const lensFx = vi.hoisted(() => ({ effects: [] as unknown[] }))
 vi.mock('@/store/fixtureFx', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/fixtureFx')>()),
-  useActiveEffectsQuery: () => ({ data: lensFx.effects }),
+  useActiveFxQuery: () => ({ data: lensFx.effects }),
 }))
 // The rig the lens expands an effect over; undefined falls back to the rows' own fixtures.
 const lensRig = vi.hoisted(() => ({ fixtures: undefined as unknown[] | undefined }))
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: lensRig.fixtures }) }))
-vi.mock('../fx/useEffectControls', () => ({ useStopEffect: () => () => {} }))
+vi.mock('../fx/useFxControls', () => ({ useStopFx: () => () => {} }))
 vi.mock('../fx/FxEditorPopover', () => ({
   FxEditorPopover: ({ effect }: { effect: { id: number } | null }) => <div data-testid="lens-editor">{effect?.id}</div>,
 }))
@@ -164,7 +163,7 @@ vi.mock('../../store/status', () => ({
 
 import { FixturesTable } from './FixturesTable'
 import { FxSelectionStoreContext, createFxSelectionStore, type FxSelectionStore } from './fxSelection'
-import { chan, makeActiveEffect, sliderProp } from '@/test/fixtureFactories'
+import { chan, makeActiveFx, sliderProp } from '@/test/fixtureFactories'
 import { EditorContextProvider } from '../programmer/EditorContext'
 import { useCellSelection } from '../sheet/useCellSelection'
 import type { Row } from './rowModel'
@@ -338,7 +337,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   scopeState.current = null
   lookStore.current = null
-  focusedTemplate.current = null
+  focusedPalette.current = null
   ownership.current = {}
   deskConnected.current = true
   selectedRows.current = new Set()
@@ -744,7 +743,7 @@ describe('FixturesTable scopes', () => {
   it('greys a column outside the layer mask, and says so rather than hiding it', () => {
     scopeState.current = { kind: 'layer', layerId: 7 }
     // Dimmer is INTENSITY, so a COLOUR-only layer asserts nothing here.
-    lookStore.current = layerStore({ propertyMask: 'COLOUR' })
+    lookStore.current = layerStore({ attributeMask: 'COLOUR' })
     render(<Harness />)
     expect(cellWrapper().className).toContain('opacity-40')
     expect(cellWrapper().className).toContain('pointer-events-none')
@@ -752,7 +751,7 @@ describe('FixturesTable scopes', () => {
 
   it('shows the live value, ringed and with the wave, on an effect palette layer', () => {
     scopeState.current = { kind: 'layer', layerId: 7 }
-    focusedTemplate.current = templateLayer()
+    focusedPalette.current = paletteLayer()
     const { container } = render(<Harness />)
     // The **live** read, not an em-dash: an effect is one rule for every head, and what is worth
     // watching is what it is producing right now. Same value Output shows, which is the point.
@@ -765,7 +764,7 @@ describe('FixturesTable scopes', () => {
 
   it('shows nothing per fixture on a value palette layer', () => {
     scopeState.current = { kind: 'layer', layerId: 7 }
-    focusedTemplate.current = templateLayer({ kind: 'value', template: { kind: 'value', effect: null } })
+    focusedPalette.current = paletteLayer({ kind: 'value', palette: { kind: 'value', fx: null } })
     const { container } = render(<Harness />)
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
     expect(container.querySelector('svg.lucide-audio-waveform')).toBeNull()
@@ -776,7 +775,7 @@ describe('FixturesTable scopes', () => {
     // Tab-then-Enter would otherwise open an editor whose commit falls through `useCellWriters`
     // to a **live** write — literals in Local, on a grid drawing itself as a read.
     scopeState.current = { kind: 'layer', layerId: 7 }
-    focusedTemplate.current = templateLayer()
+    focusedPalette.current = paletteLayer()
     render(<Harness />)
     expect(cellWrapper().className).toContain('pointer-events-none')
     expect(cellButton()).toBeDisabled()
@@ -792,7 +791,7 @@ describe('FixturesTable scopes', () => {
     // The violet ring alone was too quiet beside the blue ones; the badge is what says "this value
     // is moving and Record will not take it" without a hover.
     ownership.current = {
-      dimmer: { source: 'effect', touched: false, isUniform: true, owners: [] },
+      dimmer: { source: 'fx', touched: false, isUniform: true, owners: [] },
       colour: { source: 'programmer', touched: true, isUniform: true, owners: [] },
     }
     render(<Harness />)
@@ -817,7 +816,7 @@ describe('FixturesTable scopes', () => {
     // Absolutely placed in the corner, so the value's own box is untouched.
     expect(dot.className).toContain('absolute')
     expect(dot.className).toContain('top-1 right-1')
-    expect(dot.closest('[data-cell]')?.getAttribute('title')).toMatch(/holds an effect back/)
+    expect(dot.closest('[data-cell]')?.getAttribute('title')).toMatch(/holds an FX back/)
   })
 
   it('draws no dot where nothing is held back — no entry, no reach, or blind', () => {
@@ -914,20 +913,16 @@ describe('FixturesTable scopes', () => {
     expect(jumpButton()).toBeUndefined()
   })
 
-  it('dashes a fixture outside the layer targets, and refuses the edit rather than widening them', () => {
+  it('leaves every fixture editable in a focused Look layer, which names no targets', () => {
+    // A Look lands whole (absolute-looks plan D1): no row is outside its layer.
     scopeState.current = { kind: 'layer', layerId: 7 }
-    // The Look has a value for `a`; this layer's targets exclude it.
     lookStore.current = layerStore({
       serverRows: new Map([[lookRowKey('a', 'dimmer'), { kind: 'level', value: 128 }]]),
-      targetedKeys: new Set(['somewhere-else']),
     })
     render(<Harness />)
-    // The value still shows — "this Look has a value for it, this layer filters it out" is the
-    // useful reading, and hiding it would make the layer look empty.
     expect(screen.getAllByText('50%').length).toBe(ROWS.length)
-    expect(cellWrapper().className).toContain('border-dashed')
-    // A marquee dragged across the grid must never quietly widen a layer to the whole rig.
-    expect(cellWrapper().className).toContain('pointer-events-none')
+    expect(cellWrapper().className).not.toContain('border-dashed')
+    expect(cellWrapper().className).not.toContain('pointer-events-none')
   })
 })
 
@@ -1314,17 +1309,17 @@ describe('FixturesTable two fingers', () => {
  * the corner's badge and dot over, and the plain grid — no FX selection store — draws neither lens.
  */
 describe('FixturesTable — the FX lens', () => {
-  const cue = (over = {}) => makeActiveEffect({ id: 5, effectType: 'Pulse', targetKey: 'a', programmerOwned: false, cueId: 3, beatDivision: 0.5, ...over })
+  const cue = (over = {}) => makeActiveFx({ id: 5, fxType: 'Pulse', targetKey: 'a', programmerOwned: false, cueId: 3, cycle: 0.5, ...over })
   const chips = () => [...document.querySelectorAll<HTMLElement>('[data-fx-lens]')]
   /** The harness's rows with what the lens reads of a fixture — its groups and its dimmer. */
   const LENS_ROWS = ROWS.map((row, i) =>
     row.kind === 'fixture'
-      ? { ...row, fixture: { ...row.fixture, groups: [], properties: [sliderProp('dimmer', 'dimmer', chan(i + 1))] } }
+      ? { ...row, fixture: { ...row.fixture, groups: [], attributes: [sliderProp('dimmer', 'dimmer', chan(i + 1))] } }
       : row,
   ) as Row[]
 
   it('draws the chip with the division where an effect paints the cell, in place of the badge', () => {
-    ownership.current = { dimmer: { source: 'effect', touched: false, isUniform: true, owners: [] } }
+    ownership.current = { dimmer: { source: 'fx', touched: false, isUniform: true, owners: [] } }
     lensFx.effects = [cue()]
     render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
     expect(chips().length).toBeGreaterThan(0)
@@ -1365,7 +1360,7 @@ describe('FixturesTable — the FX lens', () => {
   })
 
   it('offers each effect from a menu where several paint the cell', () => {
-    lensFx.effects = [cue(), cue({ id: 6, effectType: 'Strobe', beatDivision: 4 })]
+    lensFx.effects = [cue(), cue({ id: 6, fxType: 'DimmerStrobe', cycle: 4 })]
     render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
     expect(chips()[0]).toHaveTextContent('½+1')
     fireEvent.pointerDown(chips()[0], { button: 0, ctrlKey: false })
@@ -1376,13 +1371,13 @@ describe('FixturesTable — the FX lens', () => {
   it('reads a group effect over the whole rig, so a filter hiding its first member moves no chip', () => {
     // `x` leads the group and carries the dimmer only on its cells, so the desk paints x's cells
     // and not `a`, which carries it itself. The rows show `a` alone.
-    const a = { key: 'a', name: 'SL Wash 1', groups: ['wash'], properties: [sliderProp('dimmer', 'dimmer', chan(1))] }
+    const a = { key: 'a', name: 'SL Wash 1', groups: ['wash'], attributes: [sliderProp('dimmer', 'dimmer', chan(1))] }
     const x = {
       key: 'x',
       name: 'Bar',
       groups: ['wash'],
-      properties: [],
-      elements: [{ key: 'x.1', displayName: 'Cell 1', index: 0, properties: [sliderProp('dimmer', 'dimmer', chan(9))] }],
+      attributes: [],
+      elements: [{ key: 'x.1', displayName: 'Cell 1', index: 0, attributes: [sliderProp('dimmer', 'dimmer', chan(9))] }],
     }
     const rows = [{ kind: 'fixture', id: 'fixture:a', depth: 0, fixture: a }] as unknown as Row[]
     lensFx.effects = [cue({ targetKey: 'wash', isGroupTarget: true, targetType: 'group' })]
@@ -1412,7 +1407,7 @@ describe('FixturesTable — the FX lens', () => {
   })
 
   it('draws no lens without the programmer’s store, nor in a focused layer, leaving the badge', () => {
-    ownership.current = { dimmer: { source: 'effect', touched: false, isUniform: true, owners: [] } }
+    ownership.current = { dimmer: { source: 'fx', touched: false, isUniform: true, owners: [] } }
     lensFx.effects = [cue()]
     render(<Harness rows={LENS_ROWS} />)
     expect(chips()).toEqual([])

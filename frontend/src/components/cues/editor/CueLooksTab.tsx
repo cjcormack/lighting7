@@ -11,7 +11,7 @@ import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { Fixture } from '@/store/fixtures'
 import { HandCueLayerStrip, type HandCueLayerHost } from '@/components/hand/HandLayerTargets'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import type { Cue, CueLayer, CueLayerDetail, CueTarget } from '@/api/cuesApi'
 import { useCueRowStore } from './CueRowStore'
 import { useCueValuesView } from './CueValuesView'
@@ -75,12 +75,12 @@ function LooksBody({
   const navigate = useNavigate()
   const { fixtures } = useFixtureLookup()
   const { data: looks } = useLookListQuery({ projectId })
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const looksById = useMemo(() => new Map((looks ?? []).map((l) => [l.id, l])), [looks])
-  const templatesById = useMemo(() => new Map((templates ?? []).map((t) => [t.id, t])), [templates])
+  const palettesById = useMemo(() => new Map((templates ?? []).map((t) => [t.id, t])), [templates])
   const readOnly = readOnlyReason != null || store == null
   const unlock = useRefusedEditKeys({ region, readOnly, onRequestUnlock })
-  const [adding, setAdding] = useState<'look' | 'template' | null>(null)
+  const [adding, setAdding] = useState<'look' | 'palette' | null>(null)
 
   // What the tab draws while a write is on its way: each gesture applied to the list it last drew,
   // kept while any is still waiting for its flush or its PATCH, and given up once none is and the
@@ -116,16 +116,22 @@ function LooksBody({
       onSetEnabled: (index, enabled) => set(index, { enabled }),
       onSetAmount: (index, amount) => set(index, { amount }),
       onSetBlendMode: (index, blendMode) => set(index, { blendMode }),
-      onSetPropertyMask: (index, propertyMask) => set(index, { propertyMask }),
+      onSetAttributeMask: (index, attributeMask) => set(index, { attributeMask }),
       onSetStomp: (index, stomp) => set(index, { stomp }),
-      onSetTargets: selection.length > 0 ? (index) => set(index, { targets: selection.map((t) => ({ ...t })) }) : undefined,
+      // A palette's layer only: a Look's names no targets, and the desk refuses one that would.
+      onSetTargets:
+        selection.length > 0
+          ? (index) => {
+              if (layers[index]?.source?.kind === 'PALETTE') set(index, { targets: selection.map((t) => ({ ...t })) })
+            }
+          : undefined,
       // Typed timing coalesces on the store's flush; a master pick is one gesture and saves at once.
       onSetTiming: (index, timing) =>
         set(index, timing, !('delayMs' in timing || 'intervalMs' in timing || 'randomWindowMs' in timing)),
       onOpenSource: (index) => {
         const source = layers[index]?.source
         if (source == null) return
-        const library = source.kind === 'TEMPLATE' ? 'palettes' : 'looks'
+        const library = source.kind === 'PALETTE' ? 'palettes' : 'looks'
         navigate(`/projects/${projectId}/${library}?edit=${source.id}`)
       },
     }
@@ -149,10 +155,10 @@ function LooksBody({
 
   const addTitle = (kind: string) =>
     readOnlyReason ??
-    (selection.length > 0
-      ? `Put a ${kind} on as a layer on the Values selection (${selection.length}), or take it off`
-      : kind === 'look'
-        ? 'Put a look on as a layer of its own fixtures — or select in Values first'
+    (kind === 'look'
+      ? 'Put a look on as a layer, whole, or take it off'
+      : selection.length > 0
+        ? `Put a ${kind} on as a layer on the Values selection (${selection.length}), or take it off`
         : 'Put a per-fixture palette on as a layer — select in Values first for the rest')
 
   return (
@@ -161,7 +167,7 @@ function LooksBody({
       <LookStack
         layers={layers}
         looksById={looksById}
-        templatesById={templatesById}
+        palettesById={palettesById}
         looksLoaded={looks != null && templates != null}
         handlers={shownHandlers}
         readOnly={readOnly}
@@ -191,8 +197,8 @@ function LooksBody({
               className="h-6 gap-1 px-1.5 text-xs"
               disabled={readOnly}
               title={addTitle('palette')}
-              aria-expanded={adding === 'template'}
-              onClick={() => setAdding((a) => (a === 'template' ? null : 'template'))}
+              aria-expanded={adding === 'palette'}
+              onClick={() => setAdding((a) => (a === 'palette' ? null : 'palette'))}
             >
               <Plus className="size-3" />
               <Palette className="size-3" />
@@ -232,19 +238,19 @@ export function cueWriteTargets(targets: readonly CueTarget[], fixtures: readonl
   for (const target of targets) {
     if (target.type === 'group') {
       for (const fixture of fixtures) {
-        if (fixture.groups.includes(target.key)) out.push({ key: fixture.key, properties: fixture.properties, elements: fixture.elements })
+        if (fixture.groups.includes(target.key)) out.push({ key: fixture.key, attributes: fixture.attributes, elements: fixture.elements })
       }
       continue
     }
     const fixture = fixtures.find((f) => f.key === target.key)
     if (fixture != null) {
-      out.push({ key: fixture.key, properties: fixture.properties, elements: fixture.elements })
+      out.push({ key: fixture.key, attributes: fixture.attributes, elements: fixture.elements })
       continue
     }
     for (const parent of fixtures) {
       const element = parent.elements?.find((e) => e.key === target.key)
       if (element != null) {
-        out.push({ key: element.key, properties: element.properties, fixtureKey: parent.key })
+        out.push({ key: element.key, attributes: element.attributes, fixtureKey: parent.key })
         break
       }
     }

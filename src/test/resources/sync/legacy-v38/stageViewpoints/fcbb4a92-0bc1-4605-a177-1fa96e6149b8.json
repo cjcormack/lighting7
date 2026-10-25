@@ -1,0 +1,12 @@
+{
+  "fovDeg": 55.0,
+  "kind": "SEAT",
+  "name": "Row F centre",
+  "seatElementUuid": "6ade2700-6cb9-4d00-a9d9-ce238583b9d8",
+  "seatId": "F5",
+  "sortOrder": 1,
+  "targetX": 0.0,
+  "targetY": 2.4,
+  "targetZ": 0.9,
+  "uuid": "fcbb4a92-0bc1-4605-a177-1fa96e6149b8"
+}

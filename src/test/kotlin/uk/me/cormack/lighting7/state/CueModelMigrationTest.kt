@@ -102,8 +102,8 @@ class CueModelMigrationTest {
     }
 
     /** Every child row's uuid, by its cue, across the tables a cue owns (R2.2's keys). */
-    private fun childrenByCue(): Map<Int, Set<UUID>> =
-        CHILD_TABLES.flatMap { table -> rows("SELECT cue_id, uuid FROM $table") }
+    private fun childrenByCue(tables: List<String>): Map<Int, Set<UUID>> =
+        tables.flatMap { table -> rows("SELECT cue_id, uuid FROM $table") }
             .groupBy({ (it["cue_id"] as Number).toInt() }, { it["uuid"] as UUID })
             .mapValues { (_, uuids) -> uuids.toSet() }
 
@@ -150,7 +150,7 @@ class CueModelMigrationTest {
     @Test
     fun `every cue keeps its id, uuid and children, and a marker goes with its rows`() {
         val cuesBefore = cueUuids()
-        val childrenBefore = childrenByCue()
+        val childrenBefore = childrenByCue(CHILD_TABLES)
         val padsBefore = rows("SELECT id, cue_id FROM busk_pads WHERE cue_id IS NOT NULL")
         assertEquals(setOf(1, 2, 3, 4, 5, 6), cuesBefore.keys)
         assertTrue(childrenBefore.getValue(1).isNotEmpty(), "the fixture's cue 1 has children to keep")
@@ -161,7 +161,7 @@ class CueModelMigrationTest {
 
         val markers = setOf(3, 6)
         assertEquals(cuesBefore - markers, cueUuids(), "every standard cue keeps its id and uuid; the markers are gone")
-        assertEquals(childrenBefore - markers, childrenByCue(), "every child row keeps its cue and its uuid")
+        assertEquals(childrenBefore - markers, childrenByCue(CHILD_TABLES_NOW), "every child row keeps its cue and its uuid")
         assertEquals(
             padsBefore.filterNot { (it["cue_id"] as Number).toInt() in markers },
             rows("SELECT id, cue_id FROM busk_pads WHERE cue_id IS NOT NULL"),
@@ -410,6 +410,11 @@ class CueModelMigrationTest {
             "cue_layers", "cue_ad_hoc_effects", "cue_property_assignments", "cue_triggers", "cue_scenery", "cue_events",
         )
         val DATA_TABLES = listOf("cues", "prompt_book_anchors", "busk_pads", "cue_slots") + CHILD_TABLES
+
+        /** [CHILD_TABLES] once a desk has started: database step 5 renames two of them. */
+        val CHILD_TABLES_NOW = listOf(
+            "cue_layers", "cue_ad_hoc_fx", "cue_attribute_assignments", "cue_triggers", "cue_scenery", "cue_events",
+        )
     }
 
 }

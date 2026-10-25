@@ -71,25 +71,25 @@ class McpPatchEditToolsTest : RouteIntegrationTest() {
     private fun seedReferences(): Seeded = transaction(state.database) {
         val project = DaoProject[projectId]
         val look = DaoLook.new { this.project = project; name = "Warm" }
-        DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "foh-1"; propertyName = "dimmer"; value = "200"; sortOrder = 0 }
+        DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "foh-1"; attribute = "dimmer"; value = "200"; sortOrder = 0 }
         DaoLookRow.new {
             this.look = look; targetType = "fixture"; targetKey = "foh-1"; elementKey = "foh-1.cell-2"
-            propertyName = "dimmer"; value = "100"; sortOrder = 1
+            attribute = "dimmer"; value = "100"; sortOrder = 1
         }
-        DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "foh-10"; propertyName = "dimmer"; value = "50"; sortOrder = 2 }
-        DaoLookRow.new { this.look = look; targetType = "group"; targetKey = "FOH"; propertyName = "dimmer"; value = "10"; sortOrder = 3 }
+        DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "foh-10"; attribute = "dimmer"; value = "50"; sortOrder = 2 }
+        DaoLookRow.new { this.look = look; targetType = "group"; targetKey = "FOH"; attribute = "dimmer"; value = "10"; sortOrder = 3 }
         val stack = DaoCueStack.new { this.project = project; name = "Main" }
         val cue = DaoCue.new { this.project = project; name = "Opening" }.inStack(stack, cueNumber = "1")
-        DaoCuePropertyAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "foh-2"; propertyName = "dimmer"; value = "255" }
+        DaoCueAttributeAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "foh-2"; attribute = "dimmer"; value = "255" }
         // A palette's layer: a Look's names no targets, so only a palette's can name the rig.
-        val amber = DaoTemplate.new { this.project = project; name = "Amber" }
-        DaoTemplateRow.new { template = amber; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; propertyName = "dimmer"; value = "pct:50"; sortOrder = 0 }
-        DaoCueLayer.new { this.cue = cue; this.template = amber; targets = listOf(CueTargetDto("fixture", "foh-1"), CueTargetDto("group", "FOH")) }
+        val amber = DaoPalette.new { this.project = project; name = "Amber" }
+        DaoPaletteRow.new { palette = amber; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "dimmer"; value = "pct:50"; sortOrder = 0 }
+        DaoCueLayer.new { this.cue = cue; this.palette = amber; targets = listOf(CueTargetDto("fixture", "foh-1"), CueTargetDto("group", "FOH")) }
         val binding = DaoControlSurfaceBinding.new {
             this.project = project
             deviceTypeKey = "xtouch-mini"; controlId = "fader-1"
-            targetType = "fixtureProperty"
-            targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureProperty("foh-1", "dimmer"))
+            targetType = "fixtureAttribute"
+            targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureAttribute("foh-1", "dimmer"))
         }
         DaoScript.new { this.project = project; name = "Chase"; script = """fixture<Fixture>("foh-1")""" }
         Seeded(look.id.value, cue.id.value, binding.id.value)
@@ -171,13 +171,13 @@ class McpPatchEditToolsTest : RouteIntegrationTest() {
             lookRows(seeded.lookId),
         )
         transaction(state.database) {
-            assertEquals("foh-1", DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue eq seeded.cueId }.single().targetKey, "foh-2 is foh-1 now")
+            assertEquals("foh-1", DaoCueAttributeAssignment.find { DaoCueAttributeAssignments.cue eq seeded.cueId }.single().targetKey, "foh-2 is foh-1 now")
             assertEquals(
                 listOf(CueTargetDto("fixture", "wash-1"), CueTargetDto("group", "FOH")),
                 DaoCueLayer.find { DaoCueLayers.cue eq seeded.cueId }.single().targets,
             )
             val binding = BindingTargetJson.decodeFromString<BindingTarget>(DaoControlSurfaceBinding[seeded.bindingId].targetPayload)
-            assertEquals(BindingTarget.FixtureProperty("wash-1", "dimmer"), binding)
+            assertEquals(BindingTarget.FixtureAttribute("wash-1", "dimmer"), binding)
         }
         val rewritten = done.json()["rewritten"]!!.jsonObject
         assertEquals(1, rewritten["looks"]!!.jsonPrimitive.int)
@@ -267,10 +267,10 @@ class McpPatchEditToolsTest : RouteIntegrationTest() {
         assertTrue(patched.success, patched.result)
         val lookId = transaction(state.database) {
             val look = DaoLook.new { project = DaoProject[projectId]; name = "Pods" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "pod.b"; propertyName = "dimmer"; value = "1"; sortOrder = 0 }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "pod.b"; attribute = "dimmer"; value = "1"; sortOrder = 0 }
             DaoLookRow.new {
                 this.look = look; targetType = "fixture"; targetKey = "pod"; elementKey = "pod.cell-1"
-                propertyName = "dimmer"; value = "2"; sortOrder = 1
+                attribute = "dimmer"; value = "2"; sortOrder = 1
             }
             look.id.value
         }

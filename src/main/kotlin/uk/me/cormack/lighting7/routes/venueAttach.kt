@@ -79,7 +79,7 @@ internal suspend fun afterAttach(state: State, result: VenueAttach.Result) {
     sceneryOwnersChanged(state)
     val touched = result.touched
     if (touched.looks.isNotEmpty()) fixtures.lookListChanged()
-    if (touched.templates.isNotEmpty()) fixtures.templateListChanged()
+    if (touched.palettes.isNotEmpty()) fixtures.paletteListChanged()
     if (touched.cues.isNotEmpty()) fixtures.cuesRecomposed(touched.cues.toList())
     if (touched.bindings > 0) state.controlSurfaceBindingService.invalidate(projectId)
 }

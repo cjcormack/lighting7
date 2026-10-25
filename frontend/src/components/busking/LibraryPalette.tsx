@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { useCueSlotHover } from '@/components/dnd/useCueSlotHover'
 import { Input } from '@/components/ui/input'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useLookListQuery } from '@/store/looks'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { buskPaletteId, type PaletteRecord } from '@/lib/buskLayout'
@@ -16,8 +16,8 @@ import { cuePlacesByCue } from '@/lib/cuePlaces'
 import { EditorLabel } from '../editor/EditorLabel'
 import {
   describeLookContents,
-  describeTemplate,
-  EFFECT_GLYPH_CLASS,
+  describePalette,
+  FX_GLYPH_CLASS,
   padFaceOf,
   type PadFace,
 } from './padFace'
@@ -37,7 +37,7 @@ import { RigPalette } from './RigPalette'
  * constraint to reach for.
  */
 
-type KindFilter = 'all' | 'template' | 'look' | 'cue'
+type KindFilter = 'all' | 'palette' | 'look' | 'cue'
 type FamilyFilter = 'any' | AttributeFamily
 
 interface PaletteRow {
@@ -51,14 +51,14 @@ interface PaletteRow {
   kind: KindFilter
   families: AttributeFamily[]
   /**
-   * A cue slot could take this: a cue, or a Look bound to its own fixtures (D7).
+   * A cue slot could take this: a cue, or a Look, which lands whole (D7).
    *
    * Read by `slotDrop.ts` when this row is dropped on a slot, and here to dim the row while a slot
    * is the target — derived at the palette because this is the surface that knows what each row is.
    */
   slotEligible: boolean
   swatch: string | null
-  isEffect: boolean
+  isFx: boolean
   cueNumber: string | null
 }
 
@@ -106,7 +106,7 @@ function PaletteRowItem({
           {row.cueNumber}
         </span>
       )}
-      {row.isEffect && <AudioWaveform className={EFFECT_GLYPH_CLASS} />}
+      {row.isFx && <AudioWaveform className={FX_GLYPH_CLASS} />}
       {row.swatch && (
         <span
           aria-hidden
@@ -195,7 +195,7 @@ export function LibraryPalette({
   onRigKeys,
 }: {
   projectId: number
-  /** `template:7` etc. for records with a pad on the page being edited. */
+  /** `palette:7` etc. for records with a pad on the page being edited. */
   onPageKeys: Set<string>
   /** `group:<name>` / `fixture:<key>` / `cell:<elementKey>` for records with a tile on the rig. */
   onRigKeys: Set<string>
@@ -220,7 +220,7 @@ function LibraryTab({
   projectId: number
   onPageKeys: Set<string>
 }) {
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const { data: looks } = useLookListQuery({ projectId })
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   // Once for the whole palette, not per row: it is a monitor subscription, and eight of them would
@@ -233,24 +233,24 @@ function LibraryTab({
   const rows = useMemo<PaletteRow[]>(() => {
     const out: PaletteRow[] = []
     for (const template of templates ?? []) {
-      const pad = { kind: 'TEMPLATE' as const, template }
+      const pad = { kind: 'PALETTE' as const, palette: template }
       const face = padFaceOf(pad)
       out.push({
-        key: `template:${template.id}`,
-        dragId: buskPaletteId('TEMPLATE', template.id),
+        key: `palette:${template.id}`,
+        dragId: buskPaletteId('PALETTE', template.id),
         record: pad,
         face,
         name: template.name,
-        detail: describeTemplate(template),
+        detail: describePalette(template),
         badge: template.family != null ? FAMILY_LABELS[template.family].singular : 'Palette',
-        kind: 'template',
+        kind: 'palette',
         families: template.family != null ? [template.family] : [],
         // The rule is `lib/handTargets.ts`'s, not this row's: a slot takes only what needs no
         // selection, and that answer must be the same one the hand's target affordance gives.
         // These three rows used to state it themselves, which made three copies of it.
-        slotEligible: canHandLand({ kind: 'TEMPLATE' }, 'slot'),
+        slotEligible: canHandLand({ kind: 'PALETTE' }, 'slot'),
         swatch: face.swatch,
-        isEffect: template.kind === 'effect',
+        isFx: template.kind === 'fx',
         cueNumber: null,
       })
     }
@@ -265,16 +265,15 @@ function LibraryTab({
         detail: [
           `${look.targetCount} ${look.targetCount === 1 ? 'fixture' : 'fixtures'}`,
           describeLookContents(look),
-          look.hasDeferredEffects ? null : 'bound',
         ]
           .filter(Boolean)
           .join(' · '),
         badge: 'Look',
         kind: 'look',
         families: look.families,
-        slotEligible: canHandLand({ kind: 'LOOK', hasDeferredEffects: look.hasDeferredEffects }, 'slot'),
+        slotEligible: canHandLand({ kind: 'LOOK' }, 'slot'),
         swatch: null,
-        isEffect: false,
+        isFx: false,
         cueNumber: null,
       })
     }
@@ -300,7 +299,7 @@ function LibraryTab({
         families: [],
         slotEligible: canHandLand({ kind: 'CUE' }, 'slot'),
         swatch: null,
-        isEffect: false,
+        isFx: false,
         cueNumber: face.cueNumber,
       })
     }
@@ -340,14 +339,14 @@ function LibraryTab({
           />
         </div>
         <div className="flex items-center gap-0.5 rounded-[10px] border bg-card p-0.5">
-          {(['all', 'template', 'look', 'cue'] as KindFilter[]).map((value) => (
+          {(['all', 'palette', 'look', 'cue'] as KindFilter[]).map((value) => (
             <SegButton
               key={value}
               active={kind === value}
               onClick={() => setKind(value)}
               className="flex-1"
             >
-              {value === 'all' ? 'All' : value === 'template' ? 'Palettes' : value === 'look' ? 'Looks' : 'Cues'}
+              {value === 'all' ? 'All' : value === 'palette' ? 'Palettes' : value === 'look' ? 'Looks' : 'Cues'}
             </SegButton>
           ))}
         </div>

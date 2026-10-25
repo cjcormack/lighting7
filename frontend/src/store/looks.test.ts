@@ -25,7 +25,7 @@ describe('looks endpoints', () => {
     installRelativeUrlRequest()
     // Keys are matched by substring, most-specific first.
     fetchMock = installRecordingFetch({
-      'projects/1/looks/4/toggle': { action: 'applied', effectCount: 2 },
+      'projects/1/looks/4/toggle': { action: 'applied', fxCount: 2 },
       'projects/1/looks/4/copy': {
         lookId: 9,
         lookName: 'Warm (Copy)',
@@ -101,22 +101,14 @@ describe('looks endpoints', () => {
     expect(new URL(lastRequestTo('force=true')!.url).search).toBe('?force=true')
   })
 
-  it('POST toggleLook addresses the Look by int id', async () => {
-    // A layer and a toggle both name a Look by its int PK; only a stored `ref:` value uses the
-    // uuid, because int PKs are re-minted on sync import.
-    await store.dispatch(
-      looksApi.endpoints.toggleLook.initiate({
-        projectId: 1,
-        lookId: 4,
-        targets: [{ type: 'fixture', key: 'mh-1' }],
-      }),
-    )
+  it('POST toggleLook addresses the Look by int id and names no targets', async () => {
+    // A layer and a toggle both name a Look by its int PK. A Look lands whole (absolute-looks plan
+    // D1), so the press carries no targets and no mask.
+    await store.dispatch(looksApi.endpoints.toggleLook.initiate({ projectId: 1, lookId: 4 }))
     const req = lastRequestTo('looks/4/toggle')
     expect(req).toBeDefined()
     expect(req!.method).toBe('POST')
-    expect(JSON.parse(await req!.clone().text())).toEqual({
-      targets: [{ type: 'fixture', key: 'mh-1' }],
-    })
+    expect(JSON.parse(await req!.clone().text())).toEqual({})
   })
 
   it('copyLook invalidates the *target* project’s library, not this one', async () => {
@@ -131,74 +123,19 @@ describe('looks endpoints', () => {
   })
 
   /**
-   * `compatibleLookIds` is computed server-side and rides on the **fixture and group summaries**,
-   * not on the Look. So a library mutation that doesn't invalidate those two lists leaves a Look
-   * that exists but is offered nowhere: `LookTogglePicker` omits it until something unrelated happens
-   * to refetch. The retired `store/fxPresets.ts`
-   * invalidated both for exactly this reason, and the tags were dropped in the port.
-   *
-   * Asserted behaviourally — a live subscriber refetching — rather than by reading `invalidatesTags`,
-   * because a tag that no query provides would still look right in the source.
+   * Nothing on a fixture or group summary depends on a Look (absolute-looks plan P7 took
+   * `compatibleLookIds` off them), so no Look mutation refetches the fixture list — which matters
+   * most for `saveLook`, which `LookRowStore` sends every 400 ms through a layer-scope drag.
    */
-  // The two `createLook` cases that stood here went with the endpoint in session 3: a Look is
-  // recorded now, never hand-authored, so no client sends `POST /looks`. `deleteLook` below is the
-  // surviving mutation that has to refresh those lists, and it makes the same claim.
-
-  it('deleteLook refetches them too, so the dead id leaves every compatibility list', async () => {
+  it('no Look mutation refetches the fixture list', async () => {
     const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
     await sub
     const before = countRequestsTo('fixtures')
 
+    await store.dispatch(looksApi.endpoints.saveLook.initiate({ projectId: 1, lookId: 4, rows: [], fx: [] }))
     await store.dispatch(looksApi.endpoints.deleteLook.initiate({ projectId: 1, lookId: 4 }))
-    await vi.waitFor(() => expect(countRequestsTo('fixtures')).toBeGreaterThan(before))
-
-    sub.unsubscribe()
-  })
-
-  /**
-   * The economy half of the same claim. `compatibleLookIds` is derived by `compatibleIdsFor` from a
-   * Look's **effect categories** and nothing else, so rows and metadata cannot move it — and
-   * `LookRowStore` writes rows-only bodies every 400 ms for the length of a layer-scope drag. A
-   * `Fixture` invalidation there refetches the list 48 consumers read (and which costs
-   * `loadLookCompatibilityInfos` + `detectCapabilities` per fixture server-side) and hands every one
-   * of them a new array identity mid-drag.
-   *
-   * Both arms in one test on purpose: the effects arm is what proves the subscriber was live and
-   * would have refetched, so the rows arm is a real negative rather than a timing accident.
-   */
-  it('saveLook refetches the compatibility lists only when the body writes effects', async () => {
-    const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
-    await sub
-    const before = countRequestsTo('fixtures')
-
-    await store.dispatch(looksApi.endpoints.saveLook.initiate({ projectId: 1, lookId: 4, rows: [] }))
+    await store.dispatch(looksApi.endpoints.copyLook.initiate({ projectId: 1, lookId: 4, targetProjectId: 2 }))
     expect(countRequestsTo('fixtures')).toBe(before)
-
-    await store.dispatch(
-      looksApi.endpoints.saveLook.initiate({ projectId: 1, lookId: 4, effects: [] }),
-    )
-    await vi.waitFor(() => expect(countRequestsTo('fixtures')).toBeGreaterThan(before))
-
-    sub.unsubscribe()
-  })
-
-  /**
-   * And a copy does too, **whichever project it lands in**. Gating this on
-   * `targetProjectId === projectId` looks like the right economy and is not: `fixtures` and
-   * `groups` are the *active* project's, which the mutation cannot see, so the case that check skips
-   * — copying out of another project's library into the active one, which is what "Copy to Project"
-   * is for — is exactly the case that needs the refresh. This copy is cross-project (source 1,
-   * target 2) precisely so the mistake would show.
-   */
-  it('copyLook refetches the compatibility lists even when the target is another project', async () => {
-    const sub = store.dispatch(fixturesApi.endpoints.fixtureList.initiate())
-    await sub
-    const before = countRequestsTo('fixtures')
-
-    await store.dispatch(
-      looksApi.endpoints.copyLook.initiate({ projectId: 1, lookId: 4, targetProjectId: 2 }),
-    )
-    await vi.waitFor(() => expect(countRequestsTo('fixtures')).toBeGreaterThan(before))
 
     sub.unsubscribe()
   })

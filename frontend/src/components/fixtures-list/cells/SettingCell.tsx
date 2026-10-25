@@ -152,9 +152,9 @@ export const SettingCell = memo(function SettingCell({
   const touchTarget = useEditorForm() !== 'popover'
   const first = resolutions[0]
   // Memoised for its `[]` arm alone, which would otherwise hand `matches` below a fresh identity
-  // every render — the `?? []` trap CLAUDE.md names. `first.property.options` is already stable.
+  // every render — the `?? []` trap CLAUDE.md names. `first.attribute.options` is already stable.
   const options = useMemo(
-    () => (first.kind === 'setting' || first.kind === 'colour-setting' ? first.property.options : []),
+    () => (first.kind === 'setting' || first.kind === 'colour-setting' ? first.attribute.options : []),
     [first],
   )
 
@@ -216,8 +216,8 @@ export const SettingCell = memo(function SettingCell({
 
   const heads = batch ?? { count: 1, skipped: 0, resolutions }
   const skipped = skippedLine(heads.skipped, label.toLowerCase())
-  const family = first.kind === 'setting' || first.kind === 'colour-setting' ? familyForCategory(first.property.category) : 'BEAM'
-  const property = first.kind === 'setting' || first.kind === 'colour-setting' ? first.property.name : ''
+  const family = first.kind === 'setting' || first.kind === 'colour-setting' ? familyForCategory(first.attribute.category) : 'BEAM'
+  const attribute = first.kind === 'setting' || first.kind === 'colour-setting' ? first.attribute.name : ''
 
   return (
     <EditorSurface
@@ -340,7 +340,7 @@ export const SettingCell = memo(function SettingCell({
             Effects band alone — Slot Steps and the effect palettes that step this setting. */}
         {(projectId ?? cueProjectId) != null && (
           <div className="mt-1 border-t px-2 pt-2 pb-1.5">
-            <PaletteBands projectId={projectId} family={family} property={property} targets={heads.targets ?? NO_TARGETS} palettes={false}>
+            <PaletteBands projectId={projectId} family={family} attribute={attribute} targets={heads.targets ?? NO_TARGETS} palettes={false}>
               {null}
             </PaletteBands>
           </div>

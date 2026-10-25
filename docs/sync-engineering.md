@@ -27,7 +27,7 @@ every change can be captured as a local commit; phase 4 adds the remote.
 
 The repo split is:
 
-* **Portable** (synced, lives in JSON): show content — cues, presets, fixture
+* **Portable** (synced, lives in JSON): project content — cues, presets, fixture
   patches, scripts, etc.
 * **Machine-local** (never synced): controller IPs and similar per-rig
   configuration. From Phase 2, the canonical storage is the
@@ -45,7 +45,7 @@ The repo split is:
 
 Parked DMX channels are portable: operators use park to pin "house lights at
 50%" or to protect a hot-powered fixture plugged into a dimmer, both of which
-need to follow the project. They sit alongside the rest of the show graph in
+need to follow the project. They sit alongside the rest of the project graph in
 `parkedChannels/{uuid}.json` and three-way diff with the same record-level
 semantics as cues or fixture patches.
 
@@ -79,9 +79,9 @@ cues/{uuid}.json               # what a cue is; v20+: `scenery` embedded, each c
 cueStackEntries/{uuid}.json    # v32+: one place in a stack's list — cueStackUuid, cueUuid (a cue
                                # entry) or kind MARKER + label, a double ordinal, the number only
                                # when explicit, the follow; see §"Version 32"
-cuePropertyAssignments/{uuid}.json   # carries cueUuid
-cueLayers/{uuid}.json          # carries cueUuid + lookUuid + optional speedMasterUuid
-cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
+cueAttributeAssignments/{uuid}.json  # carries cueUuid; `cuePropertyAssignments/` before v38
+cueLayers/{uuid}.json          # carries cueUuid + lookUuid or paletteUuid + optional speedMasterUuid
+cueAdHocFx/{uuid}.json         # carries cueUuid + optional speedMasterUuid; `cueAdHocEffects/` before v38
 cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
 fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid; a paired
                                # dimmer's other lanterns embedded as `extraPlacements` (v14+);
@@ -100,11 +100,11 @@ stageElements/{uuid}.json      # v18+: the scene document — venue and set elem
 stageViewpoints/{uuid}.json    # v18+: saved views and seats; a seat view names its seating by
                                # `seatElementUuid`
 fixtureGroups/{uuid}.json      # members embedded inline
-looks/{uuid}.json              # rows and effects embedded inline; v20+: `scenery` too
-templates/{uuid}.json          # palettes — rows embedded inline; one attribute family each (v6+).
-                               # Still `templates` on disk and in the DTOs (venue-visit plan D2)
+looks/{uuid}.json              # rows and FX (`fx`, `effects` before v38) embedded inline; v20+: `scenery` too
+palettes/{uuid}.json           # rows or one FX (`fx`) embedded inline; one attribute family each
+                               # (v6+). `templates/` before v38
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default. Also carries
-                               # optional `usage` + `followNum`/`followDen` + `followTargetUuid`
+                               # optional `family` (`usage` before v38) + `followNum`/`followDen` + `followTargetUuid`
                                # (busk-view routing and follow — additive nullable fields, no
                                # formatVersion bump; the exporter writes the ratio through the
                                # sanitising `followRatio` getter, the importer writes it verbatim
@@ -116,9 +116,9 @@ speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default.
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json           # exactly one of cueUuid / lookUuid (lookUuid v10+)
 buskPages/{uuid}.json          # v10+: the busk layout — columns, banks and pads embedded inline;
-                               # a pad names a template, Look or cue by uuid
+                               # a pad names a palette (`paletteUuid`), Look or cue by uuid
 buskRig/{uuid}.json            # v12+: the busk rig — one document per row, tiles embedded inline;
-                               # a tile names a group or a patch by uuid and a cell by its element key.
+                               # a tile names a group or a patch by uuid and an element by its element key.
                                # v13+: a row also carries `flow` (a BuskFlow name, default SCROLL)
                                # and `width` (a share in twelfths, default 12) — the bank's two
                                # layout facts; both default so a v12 archive decodes
@@ -214,14 +214,14 @@ New tables default to **not synced** until explicitly added to
 `ProjectExporter` / `ProjectImporter`. Don't rely on auto-discovery.
 
 **An edit keeps a child's uuid.** A record whose children are written as whole lists — a cue's
-layers, ad-hoc effects, property assignments and script hooks (`writeCueChildren`), a Look's rows
-and effects (`writeLookChildren`) — reconciles the incoming list against what is stored, by each
+layers, ad-hoc FX, attribute assignments and script hooks (`writeCueChildren`), a Look's rows
+and FX (`writeLookChildren`) — reconciles the incoming list against what is stored, by each
 child's natural key, rather than deleting every child and creating it again. A child that survives
 the write is updated in place and keeps its uuid, so a one-value edit is one changed file in the
 working tree, one changed record in the three-way diff and one line in the history, not "every
 child replaced". The keys and the pairing rule are in `docs/cues-engineering.md` §"Key Design
 Decisions". Each child already carried its uuid in the archive, so this needed no `formatVersion`
-change; a template's rows still churn (`FU-SYNC-CHILD-UUID-CHURN`).
+change; a palette's rows still churn (`FU-SYNC-CHILD-UUID-CHURN`).
 
 ## Ordinal contract
 
@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 37`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 39`, `minReader = 39`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -262,7 +262,7 @@ phases:
 **The first rule has a sharp edge, and v8 is where it showed.** "Optional" means *optional to the
 parser*; the question the rule is really asking is what an older reader does with the field
 missing. Where the answer is a valid state, no bump is needed — `SpeedMasterJson`'s four
-routing/follow fields are the worked example: a null usage means "routes nothing", so a v7 reader
+routing/follow fields are the worked example: a null family means "routes nothing", so a v7 reader
 handles a v8 master correctly by ignoring them. Where the answer is a **degraded record**, the
 writer must bump so the older install refuses the repo instead. Ask "would an older reader import
 this record wrong, and then write its mistake back?" rather than "is the field nullable?".
@@ -282,9 +282,9 @@ show detached before Att.1 is one, and an attach of one falls back to the no-ori
 record the show lacks comes in, each offered a hide in the review) rather than doing anything silently.
 So no record degrades, and the writer is still v35.
 
-**Deferred Look effects going (absolute-looks plan D2) took no bump, by the same question.** Nothing
-new is written: every Look effect this desk exports names a fixture, a group or a selection, which a
-v37 reader imports as what it is. The change is on the reading side. A `deferred` effect, which ran on
+**Deferred Look FX going (absolute-looks plan D2) took no bump, by the same question.** Nothing
+new is written: every Look FX this desk exports names a fixture, a group or a selection, which a
+v37 reader imports as what it is. The change is on the reading side. A `deferred` FX, which ran on
 whatever applied its Look, is dropped from any archive by `importLooks` with a warning, as
 `loadLookSnapshot` drops one an older database holds. An older desk that still writes one loses it
 here, and this desk's next push writes the Look without it; that is the decision, not a degraded
@@ -298,9 +298,92 @@ an older desk's targeted Look layer comes in whole, and this desk's next push wr
 
 **A master's `usage` gaining `beam` (effects plan session 6) took no bump, by the same question.**
 `usage` is a free string on the wire: an older reader imports `beam` verbatim, its bank routes
-nothing on it (no effect in its library is `beam`), its write boundary re-validates a usage only when
+nothing on it (no FX in its library is `beam`), its write boundary re-validates a usage only when
 a PUT changes it, and its exporter writes the column back as it found it. Nothing degrades, so a v34
 writer is still v34.
+
+**The FX library's changes (terminology plan session 3) took no bump either, because the old names
+are read rather than written.** Four FX ids were renamed (`Triangle`, `ColourPulse`, `Strobe` and
+`ZoomBreathe` are `Ramp`, `ColourWave`, `DimmerStrobe` and `ZoomWave`), Breathe went, the `pingPong`
+parameter became Direction Bounce, Colour Cycle took literal colours only, `SPLIT` folded into
+`EDGES_IN` and the composite mode and category went. Every archive's FX goes through
+`sync/LegacyNames.kt` on import (§"Old names"), whatever its `formatVersion`, so an older archive
+imports onto today's names. An older desk reading a newer archive meets an id or Order it lacks and
+runs nothing for that FX until it is updated, and plays a bouncing FX it knows wrong (§"Old names"):
+the cases session 4's `formatVersion` 38 closes.
+
+### Old names
+
+`sync/LegacyNames.kt` is the one place an old name lives (terminology plan P3, P5): the registry, the
+REST layer and the client know only today's. It maps by **field**, never by version, because an old
+name never returns with a new meaning in the same field — so it applies to every archive, and to a
+tree that mixes two. `ProjectImporter.readDir` reads each folder under its old names too and passes
+every record through `LegacyNames.record` before decoding it, a record in today's folder winning over
+its namesake in an old one; then every FX goes through `LegacyNames.rewriteFx`. `RecordHasher` keys a
+record in an old folder by today's name, so a merge across the rename pairs a record with itself.
+
+| Where | Old | Today |
+|---|---|---|
+| folder | `templates/`, `cueAdHocEffects/`, `cuePropertyAssignments/` | `palettes/`, `cueAdHocFx/`, `cueAttributeAssignments/` |
+| a stored FX, in any home | `effectType`, `category`, `propertyName`, `beatDivision`, `distribution`, `stepTiming` (boolean), `size`, `nShot`, `blocks`, `groups` | `fxType`, `family`, `attribute`, `cycle`, `order`, `timing` (`HEAD` / `CYCLE`), `amount`, `runs`, `segments`, `parts` |
+| a Look's and a palette's FX | `effects`, `effect` | `fx` |
+| a value row (Look, palette, cue) | `propertyName` | `attribute` |
+| a cue layer | `templateUuid`, `propertyMask` | `paletteUuid`, `attributeMask` |
+| a busk pad | `templateUuid` | `paletteUuid` |
+| a speed master | `usage` | `family` |
+| an FX definition | `effectId`, `category`, `effectMode`, `compatibleProperties`, `defaultStepTiming` (boolean) | `fxId`, `family`, `fxMode`, `compatibleAttributes`, `defaultTiming` |
+| `fxType` | `Triangle`, `ColourPulse`, `Strobe`, `ZoomBreathe` | `Ramp`, `ColourWave`, `DimmerStrobe`, `ZoomWave` |
+| `order` | `LINEAR`, `CENTER_OUT`, `EDGES_IN`, `SPLIT` | `NORMAL`, `CENTRE_OUT`, `CENTRE_IN`, `CENTRE_IN` |
+| `family`, a master's too | `dimmer`, `palette` | `intensity`, `steps` |
+| an FX's `family` | `composite` | the family of its output: `intensity` for Lightning Strike and any slider, else `colour` or `position` |
+| a palette reference, in an FX parameter or a row's value | `tmpl:{uuid}`, any case | `pal:{uuid}` |
+| a surface binding's `targetType` and payload `type` | `pressTemplate`, `stackEffectSize`, `fixtureProperty`, `groupProperty`, `selectionProperty` | `pressPalette`, `stackFxAmount`, `fixtureAttribute`, `groupAttribute`, `selectionAttribute` |
+| a surface binding's attribute target, a flash's nested one included | `propertyName` | `attribute` |
+| Circle's, Figure 8's and Random Position's parameters | `panCenter`, `tiltCenter` | `panCentre`, `tiltCentre` |
+| a palette press's payload | `templateUuid` | `paletteUuid` |
+| an FX definition's `fxMode` | `COMPOSITE` | `STANDARD` (its script must then return one output; logged) |
+| a script's `scriptType` | `FX_CALC_COMPOSITE` | `FX_CALC` (likewise) |
+
+A cue's `fadeCurve` is an easing curve, not an Order, and its `LINEAR` stays. The attribute
+bindings and the centre parameters are v39's (§"Version 39 — attributes and centres").
+
+`LegacyNames.rewriteFx` is §4.2's rewrite of one stored FX, shared with database step 4
+(`state/FxLibraryMigration.kt`, `PRAGMA user_version` 4), which ran it once over every Look, cue and
+palette FX this database held, each named in the log:
+
+- Breathe becomes Sine Wave a quarter-cycle on (phase offset + 0.75, Direction Forward), the same curve.
+- A `pingPong` on Colour Fade, Focus Pull or a sweep becomes Direction Bounce at half the cycle, its
+  phase offset (kept modulo 2, Bounce's parity), spread and runs doubled, which plays the same
+  (`LegacyFxOutputTest`). A spread above 1 stops at 2 and the Ping-pong Order sweeps the halved cycle;
+  both are logged, as their output moves. `pingPong: false` is dropped.
+- A Colour Cycle over palettes alone becomes Palette Steps over them, keeping `fadeRatio` — each
+  palette now lands on each head for itself, the one deliberate change of output (D14). A mixed one
+  takes each palette's colour now.
+- A script FX's `colourList` takes each palette's colour now; a list left with none is black, as it
+  played. A script FX's own id and parameters are never renamed.
+- Lightning Strike drops the colour parameters it computed and never applied.
+
+What keeps the maps by field is that nothing written today holds an old name: every boundary that
+writes or starts an FX refuses a retired id and a `pingPong` on the five FX that bounce
+(`LegacyNames.writeProblem`, through `routes/storedFxRules.kt`), no FX definition may take a retired
+id (`fxDefinitions.kt`, `registerFx`), and every field and value the v38 rename moved is written
+only under its new name.
+
+**An absent `pingPong` is the one rewrite not by name.** Before session 3 a bouncing FX naming none
+ran with it on, its default; since, one naming none means what its Direction says. Step 4 ran once,
+before this database could hold the second kind, so it read an absent one as on. A v37 archive can
+hold either, so a session-3 desk stamped `project.json` with `fxLibrary: 2` (`LegacyNames.FX_LIBRARY`):
+a v37 archive without it reads an absent `pingPong` as on, one with it as today's. From v38 the
+version says it — every v38 archive is written against library 2 — so `project.json` no longer
+carries `fxLibrary`, and `ProjectJson.fxLibrary` is read, never written
+(`LegacyNames.absentPingPongIsOn`). A merge with a v37 remote that says no library first writes an
+explicit `pingPong: "true"` into each bouncing FX that names none in the records the remote supplies,
+then drops the remote's `fxLibrary` (`RemoteSyncEngine.spellOutRemotePingPong`), before the merged
+tree takes this desk's `formatVersion`.
+
+The two mixed-version cases session 3 left open — an older desk playing a bouncing FX written since as
+`pingPong` on, and writing `project.json` back without `fxLibrary` — are closed by v38: no desk older
+than v38 reads a v38 archive (§"Version 38").
 
 **v5 is the worked example of a truly breaking change.** FX presets and named palettes collapsed
 into `looks/`, and `cuePresetApplications/` became `cueLayers/`. `CuePresetApplicationJson.presetUuid`
@@ -328,19 +411,87 @@ reset options left their settings and became fixture commands (`docs/fixtures-en
 any DTO changed: a row stores a setting by its level (`"251"`), never by an option's name, so an older
 archive decodes exactly as before. What changed is which stored rows the desk keeps — every import ends
 with `stripCommandRows` beside `stripTriggerRows`, dropping a row that names a command or holds a
-command's band on a property sharing its channel, and logging how many went. An older reader that
+command's band on an attribute sharing its channel, and logging how many went. An older reader that
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
 
-### Version 37 — effect runs
+**FX editor session 3b is the worked example of an order that needed no version.** A Look's FX
+already carried `sortOrder` (`LookFxJson.sortOrder`, omitted at 0), the exporter wrote them by
+`(sortOrder, uuid)` and the importer read the field; what changed is that Record now writes it in
+apply order and a press spawns by it, ties in id order (`docs/fx-engineering.md` §"Programmer
+suppression and the priority band"). An archive whose Look FX all say 0, as every Look did before
+Record numbered them, imports them in file order, since the importer inserts them as listed. Record
+and an explicit list now write distinct orders (one whose orders do not rise is renumbered by
+position); a tie survives only in a home written before, and in its copies and imports. A desk plays
+such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
+play it the other way round.
 
-Stack-timeline plan session 1 (D7, §3.4; `docs/cues-engineering.md` §"Effect runs"):
-`CueAdHocEffectJson` gains `runUuid`, the run key ad-hoc effects of neighbouring cues share, omitted
-when null, so a show with no runs exports byte-for-byte as at v36 (only `formatVersion.json` says 37).
+### Version 39 — attributes and centres
+
+Terminology plan session 6: the two stored names session 5 left behind. A surface binding's attribute
+targets are `fixtureAttribute`, `groupAttribute` and `selectionAttribute` (`targetType` and the
+payload's `type`), and their `propertyName` — `encoderBankSet`'s too, and a flash's nested target's —
+is `attribute`. Circle's, Figure 8's and Random Position's `panCenter` and `tiltCenter` are
+`panCentre` and `tiltCentre` in every Look, cue and palette FX (D20); a script FX's own parameters
+keep their author's words. `LegacyNames` reads the old names in any archive (`bindingPayload`,
+`centreParameters`), and every write boundary refuses an old centre (`LegacyNames.writeProblem`).
+
+`SUPPORTED_FORMAT_VERSION = 39`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**. `LegacyV38ArchiveTest`
+imports `src/test/resources/sync/legacy-v38/`, `RichProjectFixture` as main exported it at v38 with a
+Circle, a group binding and a flash added for the names that moved (frozen: never regenerate it), and
+re-exports it with only those names moved. **`minReader` moves to 39**: a v38 reader would hold every
+attribute binding as one it does not know, dead, and run each centre at its default. Database step 6,
+`state/AttributeNamesMigration.kt`, renames a database's copies (CLAUDE.md §Database), and names
+in a warning each stored script and FX definition that still says an old centre, which it leaves as
+it is.
+
+A base `sync_state` took at a commit before v39 is re-hashed from that commit's blob, as one before v38
+is (below), so a binding or a Circle nobody touched reads as unchanged rather than as a conflict
+(`PreV39BaseSyncTest`).
+
+### Version 38 — the glossary's words
+
+Terminology plan session 4 (§4.4, the storage half of §4.3): the archive says what the screen says.
+Three folders and every field §"Old names" lists take their new names, and four stored values that are
+also wire values move with them — the Order constants (`NORMAL`, `CENTRE_OUT`, `CENTRE_IN`), palette
+references (`pal:{uuid}`), the family values (`intensity`, and `steps` for the Steps FX's library
+family) and the two surface binding names (`pressPalette`, `stackFxAmount`). A stored FX's Timing is
+`timing`, `CYCLE` or `HEAD`, where it was the boolean `stepTiming`; an FX definition's is `defaultTiming`.
+`project.json` no longer writes `fxLibrary`, since the version implies it.
+
+`SUPPORTED_FORMAT_VERSION = 38`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, because every old name is
+read through `LegacyNames` — `LegacyV37ArchiveTest` imports `src/test/resources/sync/legacy-v37/`,
+`RichProjectFixture` as main exported it at v37 (frozen: never regenerate it), and re-exports it as the
+same archive with only its names moved. **`minReader` moves to 38**, the truly breaking case: a v37
+reader would find every renamed required field (`effectType`, `beatDivision`, `distribution`) missing
+and refuse each FX, or read a renamed optional one (`size`, `nShot`, `templateUuid`) as absent and
+write it away on its next push. As the doc above says, what actually stops an older desk is its own
+`SUPPORTED_FORMAT_VERSION` of 37, which refuses a v38 repo before the working tree moves; `minReader`
+says the same to a reader that checks it.
+
+The database moved in the same session — database step 5, `state/TerminologyMigration.kt`,
+`PRAGMA user_version` 5, backed up first to `<db>.pre-terminology-<utc>.db` (CLAUDE.md §Database) —
+and so did the sync engine's machine-local record keys (`sync_state.table_name`,
+`sync_session_conflict.table_name`), so the first sync after the upgrade sees each record under its
+new folder rather than a deletion and an addition.
+
+A record is **hashed in today's words** (`RecordHasher.recordHash`, the record put through
+`LegacyNames.record` first), so a v37 file and this desk's export of the same record hash alike. The
+hash `sync_state` holds for a commit made before v38 is of the old bytes, so the three-way diff
+re-hashes such a base from that commit's own blob (`RemoteSyncEngine.readSyncStateMeta`, which since
+v39 re-hashes a base from any commit before v39); without it
+every record would read as changed here, and a peer's edit to one this desk never touched would be a
+conflict. `PreV38BaseSyncTest` is that case.
+
+### Version 37 — FX runs
+
+Stack-timeline plan session 1 (D7, §3.4; `docs/cues-engineering.md` §"FX runs"):
+`CueAdHocFxJson` gains `runUuid`, the run key ad-hoc FX of neighbouring cues share, omitted
+when null, so a project with no runs exports byte-for-byte as at v36 (only `formatVersion.json` says 37).
 `SUPPORTED_FORMAT_VERSION = 37`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — a missing key is no run,
-so a v36 archive imports with none (C5: nothing joins its effects for it). The writer's number moves by
-the sharp-edge rule: a v36 reader would import every effect out of its run, and its next
+so a v36 archive imports with none (C5: nothing joins its FX for it). The writer's number moves by
+the sharp-edge rule: a v36 reader would import every FX out of its run, and its next
 wipe-then-export push would write the keys away for every peer.
 
 **Imported as stored**: nothing checks that a key's rows sit in neighbouring cues or that a cue holds
@@ -376,7 +527,7 @@ first group.
 
 Venue-visit plan S16 (D20; `docs/cues-engineering.md` §"Speed masters on a cue"): `CueJson` gains
 `speedMasters` ([`CueSpeedMasterJson`]: `speedMasterUuid`, `bpm`), the masters the cue sets on every
-GO into it, in order. Empty is omitted, so a show whose cues set no tempo exports byte-for-byte as at
+GO into it, in order. Empty is omitted, so a project whose cues set no tempo exports byte-for-byte as at
 v34 (only `formatVersion.json` says 35). The master is named by uuid, so `ExportUuidRemapper`
 re-points it on a clone with no change there. `SUPPORTED_FORMAT_VERSION = 35`;
 `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, since a missing list sets nothing. The writer's number
@@ -386,28 +537,28 @@ masters lack is kept, and skipped at GO as a master deleted under the cue is. St
 on `cues` (`speed_masters`), not a table, so `SyncCoverageTest` gained no row. `RichProjectFixture`'s
 *open* cue sets master 1 and a follower.
 
-### Version 34 — one effect over a selection
+### Version 34 — one FX over a selection
 
-Effects plan session 3 (venue-visit R4.3; `docs/fx-engineering.md` §"Over a selection"): an effect's
+Effects plan session 3 (venue-visit R4.3; `docs/fx-engineering.md` §"Over a selection"): an FX's
 target may be a **selection**, an ordered list of fixtures and groups. No field moved and no column was
-added — `LookEffectJson` and `CueAdHocEffectJson` carry it in the `targetType` / `targetKey` they
+added — `LookFxJson` and `CueAdHocFxJson` carry it in the `targetType` / `targetKey` they
 always had, as `targetType: "selection"` and a `targetKey` holding the list's canonical JSON,
 `[{"key":"par-1","type":"fixture"},{"key":"Front wash","type":"group"}]` (keys alphabetical, no
-whitespace, in selection order — `EffectTargetRef.Selection.key`). `SUPPORTED_FORMAT_VERSION = 34`;
+whitespace, in selection order — `FxTargetsRef.Selection.key`). `SUPPORTED_FORMAT_VERSION = 34`;
 `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, since nothing older uses the value. The writer's number
 moves by the sharp-edge rule: a v33 reader stores a target it cannot spawn, so every cue and Look
-holding one would skip that effect. Imported as stored; a key that does not parse is refused where
-the effect spawns. `target_key` is `text` rather than `varchar(255)` on `look_effects` and
+holding one would skip that FX. Imported as stored; a key that does not parse is refused where
+the FX spawns. `target_key` is `text` rather than `varchar(255)` on `look_effects` and
 `cue_ad_hoc_effects`, since a selection's key outgrows 255 characters; SQLite enforces no width, so
 an existing database needs no migration. The list names fixtures and groups by key, not uuid, so a clone needs no remap —
 and a rename rewrites the keys inside it (`ai/RigKeyReferences.kt`). `RichProjectFixture` carries one
-Look effect and one cue ad-hoc effect over a selection. A project with none exports byte-for-byte as
+Look FX and one cue ad-hoc FX over a selection. A project with none exports byte-for-byte as
 at v33 (only `formatVersion.json` says 34).
 
 ### Version 33 — the spread's shape
 
 Effects plan session 2 (venue-visit R4.2; `docs/fx-engineering.md` §"The spread's shape"):
-`LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `spread` (default 1.0), `wings`
+`LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain `spread` (default 1.0), `wings`
 and `blocks` (default 1) and `groups` (default 0, off), each omitted at its default, and the three
 tables gain the columns `spread`, `spread_wings`, `spread_blocks` and `spread_groups` with the same
 defaults (prefixed because `GROUPS` is an SQLite keyword). `SUPPORTED_FORMAT_VERSION = 33`;
@@ -415,7 +566,7 @@ defaults (prefixed because `GROUPS` is an SQLite keyword). `SUPPORTED_FORMAT_VER
 every older archive decodes and plays as before. The writer's number moves by the sharp-edge rule: a
 v32 reader would run a 50 % ripple over the whole cycle and two wings as one, and its next
 wipe-then-export push would write all four away for every peer. Imported as stored: a value out of
-range is clamped where the effect spawns, not refused here. `RichProjectFixture` sets all four to
+range is clamped where the FX spawns, not refused here. `RichProjectFixture` sets all four to
 non-defaults on every stored shape. A project that shapes no spread exports byte-for-byte as at v32
 (only `formatVersion.json` says 33).
 
@@ -513,33 +664,33 @@ boundary refuses a unit the type does not pan and tilt, and Locate ignores an en
 venue patch's locate is part of its **Focus** facet, so a show's override of it travels in
 `showOverrides/` under the same number. A patch with no stored locate exports byte-for-byte as at v30.
 
-### Version 30 — Size, direction and N-shot
+### Version 30 — Amount, direction and runs
 
-Effects plan session 1 (venue-visit R4.1; `docs/fx-engineering.md` §"Size, direction and N-shot"):
-`LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `size` (default 1.0), `direction`
+Effects plan session 1 (venue-visit R4.1; `docs/fx-engineering.md` §"Amount, direction and runs"):
+`LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain `size` (default 1.0), `direction`
 (default `FORWARD`) and `nShot` (default null), each omitted at its default, and the three tables
 (`look_effects`, `template_effects`, `cue_ad_hoc_effects`) gain the columns `size`, `direction` and
 `n_shot` with the same defaults. `SUPPORTED_FORMAT_VERSION = 30`; `MIN_SUPPORTED_FORMAT_VERSION`
 **stays 5** — each field defaults to what a row without it meant, so every older archive decodes and
 plays as before. The writer's number moves by the sharp-edge rule: a v29 reader would run a 40 %
-breathe at full size, a backward cycle forward and a one-shot forever, and its next wipe-then-export
+Sine Wave at full amount, a backward cycle forward and a single run forever, and its next wipe-then-export
 push would write all three away for every peer. `RichProjectFixture` sets all three to non-defaults
 on every stored shape. A project that uses none exports byte-for-byte as at v29 (only
 `formatVersion.json` says 30).
 
 ### Version 29 — Seconds
 
-An effect may run on *Seconds* (venue-visit plan D7, S15; `docs/fx-engineering.md` §"Seconds"): its
-own cycle, with no speed master. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain
-`seconds` (default false, so omitted), and a beat effect's `beatDivision` is then its cycle in
+An FX may run on *Seconds* (venue-visit plan D7, S15; `docs/fx-engineering.md` §"Seconds"): its
+own cycle, with no speed master. `LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain
+`seconds` (default false, so omitted), and a beat FX's `beatDivision` is then its cycle in
 **seconds**. `SUPPORTED_FORMAT_VERSION = 29`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — the field
 defaults to false, so every older archive decodes as before. The writer's number moves by the
 sharp-edge rule, and it is a semantic change on an existing field as much as a new one: a v28 reader
-would import a ten-second breathe as ten beats of master 1 and write the flag away on its next push.
+would import a ten-second Sine Wave as ten beats of master 1 and write the flag away on its next push.
 A row the desk writes holds no master beside the flag (`RichProjectFixture` keeps its masters there,
-dormant, only so the clone test's remap still has a reference to rewrite). A wall-clock effect with no
+dormant, only so the clone test's remap still has a reference to rewrite). A wall-clock FX with no
 rate master is on Seconds with or without the flag, so an older archive's wall-clock rows mean what they
-meant. A project with no effect on Seconds exports byte-for-byte as at v28 (only `formatVersion.json`
+meant. A project with no FX on Seconds exports byte-for-byte as at v28 (only `formatVersion.json`
 says 29).
 
 ### Version 28 — centre-relative positions
@@ -547,13 +698,13 @@ says 29).
 A palette's position row gains a second unit (venue-visit plan D3, P3): `pos:<pan>,<tilt>`,
 centre-relative coarse DMX — `-128..127` on each axis, 0 the centre of travel (DMX 128), the same
 fraction of travel on every head — beside the `deg:` travel degrees every earlier row holds. **No
-field moved**: `TemplateRowJson.value` is a string the importer stores verbatim, and a `deg:` row
+field moved**: `PaletteRowJson.value` is a string the importer stores verbatim, and a `deg:` row
 exports byte-for-byte as before. What moved is the value's meaning, which is the sharp-edge rule's
 semantic-change arm: a v27 reader parses a `pos:` row as no intent, so `CueComposer`, a press and
 the resolves-to panel skip it with a warn — it would run every new position palette, and every aim
 saved as one, as nothing — while its next push wrote the row back unchanged. `SUPPORTED_FORMAT_VERSION
 = 28` so a v27 install refuses the repo instead; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, because
-a `deg:` row still resolves as angles (`TemplateResolver.resolvePosition` takes both units) and there
+a `deg:` row still resolves as angles (`PaletteResolver.resolvePosition` takes both units) and there
 are no migrations — a stored row becomes `pos:` only when an editor saves a moved position.
 `RichProjectFixture`'s per-fixture position palette holds one row in each unit, so a round trip that
 rewrote either would show.
@@ -771,7 +922,7 @@ omitted then, so a rig with nothing fitted exports byte-for-byte as at v21. `Ric
 patches a Revolution (`rev-1`) whose patch fits a gel, a gobo and an empty frame and whose placement
 fits its own frame and a media-frame gel, all off the default. Two things about the shape:
 
-- **`media` travels as a nested object**, `{slots: {<property>: {<option>: {gel?, gobo?}}}}`, not as
+- **`media` travels as a nested object**, `{slots: {<attribute>: {<option>: {gel?, gobo?}}}}`, not as
   the JSON text the column stores, so a diff reads per slot; canonical JSON sorts its keys like any
   other object's. An empty slot travels as `{}` — fitted with nothing, which is not the same as no
   entry — and is kept. A column that will not parse exports as nothing fitted, the tolerance every
@@ -797,7 +948,7 @@ a list of `CueEventJson` — `uuid`, `patchUuid`, `trigger` (the trigger's name 
 `output1`), `offsetMs` and `sortOrder`. The rows are the `cue_events` table, embedded in their cue
 as its scenery is, so `SyncCoverageTest` records it `Portable("cues", "events")`, and
 `RichProjectFixture` patches a Twin Shot (`cannon-1`) and gives a cue two events, both off the
-default offset and the second off the default sort order. An empty list is omitted, so a show with no
+default offset and the second off the default sort order. An empty list is omitted, so a project with no
 cannon cues exports byte-for-byte as at v20; an event at GO omits its `offsetMs` as a zero sort order
 is omitted. Three things about the shape:
 
@@ -808,10 +959,10 @@ is omitted. Three things about the shape:
   has no such trigger, or when it names a tube the cue already fires (one row per tube, a unique
   index). Its offset is clamped into 0–10 minutes.
 - **The record is the event, never its firing.** Whether a tube is **spent** is the physical cannon
-  in this hall, not the show — `effect_tube_state` is machine-local (§"Machine-local data") — and the
+  in this hall, not the project — `effect_tube_state` is machine-local (§"Machine-local data") — and the
   desk's **arm** is runtime only. Neither travels, and a restart disarms.
 - **An import strips any row naming a trigger.** Until v21 the Twin Shot's `output1`, `output2` and
-  `master` were plain sliders, so a v20 archive may hold a Look, palette or cue row (or an effect)
+  `master` were plain sliders, so a v20 archive may hold a Look, palette or cue row (or an FX)
   raising one; every import ends with `stripTriggerRows` over the imported project, the same pass the
   one-off startup strip ran, and logs how many went. A trigger can no longer be stored at all
   (`TRIGGER_NOT_STORABLE`), so the pass has nothing to find in a v21 archive.
@@ -832,7 +983,7 @@ waits for its own trigger rather than a planned bump.
 rows are (an owner says one thing about each element, and the change is part of the owner's
 record), so `SyncCoverageTest` records them `Portable("cues", "scenery")`, `("cueStacks",
 "scenery")` and `("looks", "scenery")`, and `RichProjectFixture` seeds two on each owner with every
-optional field off its default. An empty list is omitted, so a show with no scenery exports
+optional field off its default. An empty list is omitted, so a project with no scenery exports
 byte-for-byte as at v19. Three things about the shape:
 
 - **The element is a uuid on the wire and a foreign key in the table.** The importer brings
@@ -884,7 +1035,7 @@ It went without `FU-AUTH-ATTRIBUTION`'s columns, as v18 did (stage-view plan §1
 
 **v18 adds two record folders** (stage-view plan session 2, D2 and D6): `stageElements/{uuid}.json`,
 the named venue and set elements the Stage view draws, and `stageViewpoints/{uuid}.json`, the saved
-views and seats. Both tables are portable — the venue is show content, and "Row F" is the venue's,
+views and seats. Both tables are portable — the venue is project content, and "Row F" is the venue's,
 not this Mac's — so both are wired through the exporter and importer, `SyncCoverageTest` records
 them `Portable`, and `RichProjectFixture` seeds a seating, a platform and a drape with every optional
 column off its default.
@@ -993,7 +1144,7 @@ built it (`docs/plans/completed/busk-further-plan.md` §3.1–3.2,
 `docs/lighting-composition-model.md` §"The rig"): one document per **row** with its tiles nested, the way a page carries its columns, so a drag
 on the band changes one file. A tile names its group or patch by uuid as `groupUuid` / `patchUuid`,
 exactly one set — the `BuskPadJson` pattern, two-armed — plus `cellMode`, `cellSplit`, `label` and,
-for a tile that is one cell, its `elementKey`, carried **verbatim**: element keys are opaque, the
+for a tile that is one element, its `elementKey`, carried **verbatim**: element keys are opaque, the
 write boundary validates one against the live fixture on the next write, and the importer cannot
 (the project being imported is not the live show).
 
@@ -1080,7 +1231,7 @@ position omitted for being zero would read as a document with holes. Only the th
 default.
 
 **Session 3 of the same plan removed, under this same number**: `templateGroups/`,
-`TemplateJson.groupUuid` and `sortOrder`, `LookJson.sortOrder`, `CueJson.pinnedToBusk` and
+`PaletteJson.groupUuid` and `sortOrder`, `LookJson.sortOrder`, `CueJson.pinnedToBusk` and
 `CueSlotJson.cueStackUuid`. No v11, because nothing but the dev desk wrote v10 between the two
 sessions, so no peer could hold a repo the later reader would import wrong and push back.
 
@@ -1097,7 +1248,7 @@ slot, and it is why the arity check splits: two arms aborts, none warns.
 > folder and the key.
 
 **v9 was a second instance of the v6 shape**: a new folder, `templateGroups/{uuid}.json` (name and
-top-level `sortOrder` only), plus one optional reference on the palette, `TemplateJson.groupUuid`.
+top-level `sortOrder` only), plus one optional reference on the palette, `PaletteJson.groupUuid`.
 Membership lives on the palette rather than in a member list on the group, so a group document
 never changes when a palette joins or leaves it — one record moves per drag, not two.
 
@@ -1119,16 +1270,16 @@ still a whole palette. Contrast a cue layer, which is nothing without its source
 `ExportUuidRemapper` needs no change for the same reason it needed none at v8: `groupUuid` is a
 uuid string, so a clone's palettes point at the clone's groups by construction.
 
-### Version 8 — a palette may hold an effect
+### Version 8 — a palette may hold an FX
 
 **v8 is the worked example of an optional field that still needs a bump.** `template_effects`
-travels inline as `TemplateJson.effect: TemplateEffectJson? = null` — one new optional field with a
+travels inline as `TemplateJson.effect: TemplateEffectJson? = null` (now `PaletteJson.fx`) — one new optional field with a
 null default, which the rule of thumb above would wave through.
 
 It bumps anyway, because that field is the *record's whole content* rather than an enrichment. A
-palette holds values **or** one effect (fx-templates D1), so an effect palette has no rows at all:
+palette holds values **or** one FX (fx-templates D1), so an FX palette has no rows at all:
 a v7 reader would import it as a hollow, rows-less palette — one its own write boundary would
-refuse — and then write that hollow record back over the effect on its next push. `minReader` stays
+refuse — and then write that hollow record back over the FX on its next push. `minReader` stays
 at **5**, since every older archive still imports untouched; only the writer's number moves, which
 is exactly the v6/v7 shape.
 
@@ -1301,7 +1452,7 @@ UUID that no longer exists.
 
 The transmit interval is machine-local for the same reason the IP is — it
 exists to suit the node and fixtures physically present at one venue, and must
-not follow the show to the next rig. Runtime DMX output picks both up in
+not follow the project to the next rig. Runtime DMX output picks both up in
 [`DbFixtureLoader`](../src/main/kotlin/uk/me/cormack/lighting7/show/DbFixtureLoader.kt).
 
 The legacy `DaoUniverseConfigs.address` column is retained for schema
@@ -1332,7 +1483,7 @@ reach a repo.
 "wholly machine-local" branch of that tree, like `sync_configs`, rather than an override: a row is a
 spent one-shot tube (`patch_uuid`, `trigger`, `spent_at` as a `utcInstant`), and loaded is the absence
 of a row. Whether a confetti tube on this rig has been fired is a fact about the physical cannon in
-this hall, not about the show, so it never travels, is never cloned (`SyncCoverageTest` records it
+this hall, not about the project, so it never travels, is never cloned (`SyncCoverageTest` records it
 `MachineLocal`) and is never wiped by an import. It is keyed by the patch's **uuid** with no foreign
 key, so a row survives a re-import of its project (an import keeps uuids) and simply stops mattering
 for a patch that is gone. `state/EffectsService.kt` reads it into memory when a show starts and writes
@@ -1643,8 +1794,8 @@ serialise:
     one — `ProjectManager.switchProject(currentId, reload = true)` tears down +
     rebuilds the show so fixtures, cues, etc. reflect the new DB state
     immediately, **carrying the running show across**: the rig holds its levels,
-    each live cue is GO'd again, the programmer and hand-run effects come back
-    (effects restart their phase), and whatever the pull changed crossfades in —
+    each live cue is GO'd again, the programmer and hand-run FX come back
+    (FX restart their phase), and whatever the pull changed crossfades in —
     `docs/dmx-engineering.md` §"Handing the rig from one show to the next".
 
 ### Pull-only installs
@@ -1652,8 +1803,8 @@ serialise:
 `sync.push = false` in `local.conf` (default `true`) makes an install
 pull-only. It is read once at startup (`State.syncPushEnabled`) and is
 deliberately in neither the UI nor `example.local.conf`: it exists for
-throwaway installs — a cloud dev container that imports a real show — that
-must never write to the show's repo. Don't rely on read-only repo access for
+throwaway installs — a cloud dev container that imports a real project — that
+must never write to the project's repo. Don't rely on read-only repo access for
 that instead: the cloud session's git proxy was seen letting a push through
 on a repo attached read-only.
 
@@ -1710,7 +1861,7 @@ inside one transaction:
 
 * Validate `project.json`'s UUID matches the existing `DaoProject.uuid` —
   refuse to clobber a different project by accident.
-* Cascade-delete every child row (cues + their preset/property/effect/trigger
+* Cascade-delete every child row (cues + their preset/attribute/FX/trigger
   children, cue stacks, fxPresets, fxDefinitions, scripts, fixture patches,
   groups, universe configs, etc.) using the same FK-safe order as the
   project-delete flow in `routes/projects.kt`.

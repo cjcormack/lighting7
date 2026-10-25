@@ -282,7 +282,7 @@ describe('createSpeedMastersWsApi', () => {
     frame(stateFrame())
 
     frame({ type: 'channelState', changes: [] })
-    frame({ type: 'fxState', activeEffects: [] })
+    frame({ type: 'fxState', activeFx: [] })
 
     expect(api.getState()).toEqual([MASTER_1, MASTER_2])
   })

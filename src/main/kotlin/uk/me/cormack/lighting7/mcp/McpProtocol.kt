@@ -55,8 +55,8 @@ class McpProtocol(private val state: State) {
 
     private val describeRigTool = ToolDef(
         name = DESCRIBE_RIG,
-        description = "Describe the rig and the show as they are now: every fixture and group, the effect " +
-            "library, running effects, parked channels, speed masters (with the uuids other tools take), looks, colour " +
+        description = "Describe the rig and the show as they are now: every fixture and group, the FX " +
+            "library, running FX, parked channels, speed masters (with the uuids other tools take), looks, colour " +
             "palettes, cues and cue stacks. Call this first in a conversation, and again after the " +
             "show changes, because every other tool refers to things by the keys and ids listed here.",
         inputSchema = buildJsonObject {
@@ -218,11 +218,11 @@ class McpProtocol(private val state: State) {
         }
         if (kind != ProjectKind.VENUE) return null
         // `aim_fixtures` acts on the rig as it stands, unless it is told to keep the aims as a palette.
-        val storesTemplate = name == "aim_fixtures" &&
+        val storesPalette = name == "aim_fixtures" &&
             (arguments["saveAsPalette"] as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
         return when {
             name in VENUE_RECORD_TOOLS -> "Record is off in a venue: the programmer here is for testing and focus."
-            (name in VENUE_STORED_WRITE_TOOLS || storesTemplate) && user.role != UserRole.ADMIN ->
+            (name in VENUE_STORED_WRITE_TOOLS || storesPalette) && user.role != UserRole.ADMIN ->
                 "Only an admin can change a venue."
             else -> null
         }

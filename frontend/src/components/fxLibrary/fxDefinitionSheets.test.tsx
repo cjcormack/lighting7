@@ -9,15 +9,15 @@ const updateDefinition = vi.fn((_body: unknown): Promise<unknown> => Promise.res
 
 const DEFINITION: FxDefinition = {
   id: 5,
-  effectId: 'PulseCustom',
+  fxId: 'PulseCustom',
   name: 'Pulse (Custom)',
-  category: 'dimmer',
+  family: 'intensity',
   outputType: 'SLIDER',
-  effectMode: 'STANDARD',
+  fxMode: 'STANDARD',
   parameters: [],
-  compatibleProperties: ['dimmer'],
+  compatibleAttributes: ['dimmer'],
   script: 'FxOutput.Slider(0u)',
-  defaultStepTiming: false,
+  defaultTiming: 'CYCLE',
   timingSource: 'BEAT',
 }
 
@@ -63,14 +63,14 @@ describe('NewFxDefinitionSheet', () => {
     fireEvent.change(name, { target: { value: ' Pulse ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(createDefinition).toHaveBeenCalledTimes(1))
-    expect(createDefinition.mock.calls[0][0]).toMatchObject({ effectId: 'Pulse2', name: 'Pulse' })
+    expect(createDefinition.mock.calls[0][0]).toMatchObject({ fxId: 'Pulse2', name: 'Pulse' })
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(5))
   })
 
   it('offers every category the library draws but Beam, Controls included', () => {
     inSheet(<NewFxDefinitionSheet takenIds={[]} onCreated={() => {}} />)
     fireEvent.click(screen.getAllByRole('combobox')[0])
-    for (const label of ['Dimmer', 'Colour', 'Position', 'Controls', 'Composite']) {
+    for (const label of ['Intensity', 'Colour', 'Position', 'Controls']) {
       expect(screen.getByRole('option', { name: label })).toBeInTheDocument()
     }
     // A beam effect drives one named property, which this form cannot name.
@@ -79,19 +79,18 @@ describe('NewFxDefinitionSheet', () => {
 })
 
 describe('EditFxDefinitionSheet', () => {
-  it('says a fork starts with step timing off, and saves the toggle with the name and script', async () => {
+  it('says a fork starts per cycle, and saves the toggle with the name and script', async () => {
     inSheet(<EditFxDefinitionSheet definitionId={5} forkedFrom="Pulse" onDelete={() => {}} />)
-    expect(screen.getByTestId('fork-step-timing-note')).toHaveTextContent('Forked from Pulse. A fork starts with step timing off')
-    const toggle = screen.getByLabelText('Step timing by default') as HTMLInputElement
-    expect(toggle.checked).toBe(false)
-    fireEvent.click(toggle)
+    expect(screen.getByTestId('fork-step-timing-note')).toHaveTextContent('Forked from Pulse. A fork starts per cycle')
+    expect(screen.getByRole('radio', { name: 'Per cycle' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Per head' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(updateDefinition).toHaveBeenCalledTimes(1))
     expect(updateDefinition.mock.calls[0][0]).toEqual({
       id: 5,
       name: 'Pulse (Custom)',
       script: 'FxOutput.Slider(0u)',
-      defaultStepTiming: true,
+      defaultTiming: 'HEAD',
     })
   })
 

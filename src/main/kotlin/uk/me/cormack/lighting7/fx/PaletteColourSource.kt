@@ -1,0 +1,285 @@
+package uk.me.cormack.lighting7.fx
+
+import org.slf4j.LoggerFactory
+import java.util.UUID
+
+/**
+ * The grammar an **FX colour parameter** uses to name a colour template, and the resolver behind it.
+ *
+ * ## Why a parameter and not a value
+ *
+ * This grammar is legal in exactly one place: the `parameters` map of an effect. It is refused in a
+ * Look row (`validateLookRows`) and in a cue's property assignments
+ * ([CueAssignmentResolver.parseAssignmentValue]), because a *value* is a literal and a dependency on
+ * a template is expressed by a **layer** — which is what a tap on a palette chip already builds.
+ * An effect parameter has no layer to hang off, so it is the one consumer that needs a reference of
+ * its own.
+ *
+ * It replaced the positional colour list (`P1` / `P2` / `P*`, scoped `look > cue > global` by a
+ * `PaletteCascade`), which was the last surviving sense of the word "palette" in this codebase.
+ * `pal:` rather than `ref:` on purpose: `ref:{uuid}` is retired *and* still actively rejected at
+ * the Look write boundary as the `FU-LOOK-NESTED` non-recursion guarantee, so reusing it would
+ * collide with a live check.
+ *
+ * ## What a reference resolves to
+ *
+ * One [ExtendedColour], via [PaletteResolver.resolveColourGeneric] — see that function for why an
+ * effect resolves a colour intent without a head in hand, and what it costs. Only a **generic**
+ * colour template can be named: a per-fixture template (eight heads aimed at one spot) holds no
+ * single colour, so there is nothing for a fixture-agnostic effect output to take from it.
+ *
+ * All of the template's colour-family rows are folded into that one colour — the hex *and* any
+ * explicit `white` / `amber` / `uv` row. A template of emitters alone (a UV-only one, say) resolves
+ * against black, which is the honest reading of what an effect output can express: it has one colour
+ * per frame and no way to say "leave RGB where it is". The layer path keeps that distinction; a
+ * reference cannot.
+ *
+ * ## The one thing to hold when wiring a call site
+ *
+ * [PaletteRegistry.snapshot] falls back to `loadPaletteSnapshot`, which opens its **own
+ * transaction**. So every path that spawns an effect must resolve its references once, on the
+ * request thread, before the effect goes live — never under `FxEngine.cueAssignmentsLock` and never
+ * from the tick loop. [prewarmPaletteColours] is that call. Positional-palette lookups were pure
+ * memory reads; this is the one way the replacement is not like-for-like.
+ */
+
+/** The prefix marking a colour parameter as a reference to a template rather than a literal. */
+const val PALETTE_COLOUR_REF_PREFIX = "pal:"
+
+/** Is this colour string a template reference? Shape only — says nothing about the template existing. */
+fun isPaletteColourRef(value: String): Boolean =
+    value.trim().startsWith(PALETTE_COLOUR_REF_PREFIX, ignoreCase = true)
+
+/** The uuid a reference names, or null when the string is not a reference or the uuid is malformed. */
+fun parsePaletteColourRefUuid(value: String): UUID? {
+    val trimmed = value.trim()
+    if (!isPaletteColourRef(trimmed)) return null
+    val raw = trimmed.substring(PALETTE_COLOUR_REF_PREFIX.length).trim()
+    return runCatching { UUID.fromString(raw) }.getOrNull()
+}
+
+/** Serialise a reference to [paletteUuid]. */
+fun serializePaletteColourRef(paletteUuid: UUID): String = "$PALETTE_COLOUR_REF_PREFIX$paletteUuid"
+
+/**
+ * The colour-family rows of a template a `pal:` reference may name, or **null** when it may not.
+ *
+ * One predicate for the four places that ask the same question — [resolvePaletteColour] here, the
+ * MCP `describe_rig` briefing (`RigBriefing`), the `get_current_state` tool (`AiTools`), and `isOfferable` in the
+ * client's `FxColourPalettes.tsx`. Three of those were independent `rows.singleOrNull()` copies of
+ * "exactly one row", and relaxing that rule for emitters moved only one of them: a generic colour
+ * template holding a hex *and* an explicit amber resolved correctly on the desk while being
+ * invisible to the AI, which could not offer a `pal:` ref it was never told about.
+ *
+ * Two clauses, and the row count is deliberately not one of them:
+ *
+ *  - **At least one colour-family row**, which is what excludes an **effect** template (D12). That
+ *    used to fall out of `singleOrNull` by the accident of an effect template holding no rows; it is
+ *    stated here instead, because accidents do not survive a rule change.
+ *  - **Every colour row deferred.** A per-fixture template (eight heads aimed at one spot) holds a
+ *    different colour per head, so there is no single one for a fixture-agnostic effect output to
+ *    take. This is the clause `singleOrNull` was really standing in for.
+ *
+ * Generic over the row type because the three server-side callers hold different ones — a
+ * `PaletteRowEntry` off a snapshot, a `DaoPaletteRow` out of a transaction — and neither is worth
+ * converting to the other just to ask this.
+ */
+fun <R> genericColourRows(
+    rows: List<R>,
+    attribute: (R) -> String,
+    isDeferred: (R) -> Boolean,
+): List<R>? {
+    val colour = rows.filter {
+        PaletteAttribute.ofOrNull(attribute(it))?.family == AttributeFamily.COLOUR
+    }
+    if (colour.isEmpty() || colour.any { !isDeferred(it) }) return null
+    return colour
+}
+
+private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.fx.PaletteColourSource")
+
+/**
+ * A colour-source function for [TypedParams]: resolves a `pal:` reference, and answers **null** for
+ * anything else so the caller falls through to its own literal parser.
+ *
+ * Null is also the answer for a reference that cannot be honoured — an unknown uuid, a template in
+ * another family, or a per-fixture one. The caller decides what that means: a single-colour
+ * parameter falls back to the literal parser (which reads an unparseable string as white), and a
+ * colour *list* drops the entry, because a list is allowed to be shorter but a colour is not allowed
+ * to be absent.
+ *
+ * It is a [PaletteSource] — the colour resolver *and* Palette Steps' palette lookup
+ * ([PaletteSource.paletteStep]) — so the one argument every spawn site already threads through the
+ * [FxFactory] reaches both, and the factory's shape, which scripts write against, is unchanged.
+ */
+fun paletteColourSource(registry: PaletteRegistry): (String) -> ExtendedColour? = PaletteSource(registry)
+
+/**
+ * What an effect's `pal:` parameters resolve through: one [PaletteRegistry], read from its cache.
+ * Invoked as a function it is the colour source ([paletteColourSource]); [paletteStep] is the same
+ * registry read for a step of Palette Steps (effects plan §3.6), which `TypedParams.paletteSteps`
+ * reaches by asking whether its colour source is one of these.
+ */
+class PaletteSource(private val registry: PaletteRegistry) : (String) -> ExtendedColour? {
+    override fun invoke(raw: String): ExtendedColour? {
+        val uuid = parsePaletteColourRefUuid(raw)
+        return when {
+            uuid == null -> {
+                if (isPaletteColourRef(raw)) logger.warn("Malformed template colour reference '{}'", raw.trim())
+                null
+            }
+            else -> resolvePaletteColour(registry, uuid)
+        }
+    }
+
+    /**
+     * The palette a `pal:` step names, as the intents of its rows, or null — with a warn saying
+     * which way — when it cannot be a step: no such palette, an effect palette, a per-fixture one
+     * (it holds a value per head, not one for every head), or a row whose intent does not parse.
+     */
+    fun paletteStep(raw: String): PaletteStep? {
+        val uuid = parsePaletteColourRefUuid(raw) ?: run {
+            logger.warn("Palette Steps entry '{}' is not a palette reference", raw.trim())
+            return null
+        }
+        val snapshot = registry.snapshot(uuid) ?: run {
+            logger.warn("Palette Steps names no palette: {}", uuid)
+            return null
+        }
+        if (snapshot.effect != null || snapshot.rows.isEmpty() || snapshot.rows.any { !it.isDeferred }) {
+            logger.warn(
+                "Palette '{}' ({}) is not a generic value palette — Palette Steps steps through those only",
+                snapshot.name, uuid,
+            )
+            return null
+        }
+        val rows = snapshot.rows.map { row ->
+            val intent = parsePaletteIntent(row.value) ?: run {
+                logger.warn("Palette '{}' ({}) has an unreadable intent '{}'", snapshot.name, uuid, row.value)
+                return null
+            }
+            row.attribute to intent
+        }
+        return PaletteStep(uuid, snapshot.name, rows)
+    }
+}
+
+/**
+ * Resolve one template uuid to its generic colour, or null with a warn saying which way it failed.
+ *
+ * The three refusals are separate log lines on purpose: "you deleted it", "you pointed a colour
+ * parameter at a position template" and "that template is per-fixture" need different fixes.
+ */
+private fun resolvePaletteColour(registry: PaletteRegistry, uuid: UUID): ExtendedColour? {
+    val snapshot = registry.snapshot(uuid) ?: run {
+        logger.warn("Palette colour reference names no palette: {}", uuid)
+        return null
+    }
+    // Every colour-family row, not just the hex: a template may also name white, amber or UV
+    // explicitly, and those are part of the one colour this reference stands for.
+    val colourRows = genericColourRows(snapshot.rows, { it.attribute }, { it.isDeferred }) ?: run {
+        logger.warn(
+            "Palette '{}' ({}) holds no generic colour — an effect parameter needs one",
+            snapshot.name, uuid,
+        )
+        return null
+    }
+    val intents = colourRows.map { row ->
+        val intent = parsePaletteIntent(row.value) ?: run {
+            logger.warn("Palette '{}' ({}) has an unreadable colour intent '{}'", snapshot.name, uuid, row.value)
+            return null
+        }
+        row.attribute to intent
+    }
+    return PaletteResolver.resolveColourGeneric(intents)
+}
+
+/**
+ * Why [parameters] are refused for an effect of [schema], or null: a `colourList` parameter — Colour
+ * Cycle's `colours` — takes literal colours only (terminology plan D14), and Palette Steps is the FX
+ * that steps through palettes. Every write boundary that takes an effect's parameters asks this,
+ * through `routes/storedFxRules.kt`'s `fxWriteProblem`.
+ */
+fun colourListPaletteProblem(schema: List<ParameterInfo>, parameters: Map<String, String>): String? {
+    val named = schema.firstOrNull { p ->
+        p.type == "colourList" && parameters[p.name].orEmpty().split(",").any { isPaletteColourRef(it) }
+    } ?: return null
+    return "'${named.name}' takes literal colours only, not a palette — Palette Steps steps through palettes"
+}
+
+/** [colourListPaletteProblem] for the effect type [fxType] names; null for a type this desk lacks. */
+fun FxRegistry.colourListPaletteProblem(fxType: String, parameters: Map<String, String>): String? =
+    getRegistration(fxType)?.let { colourListPaletteProblem(it.parameters, parameters) }
+
+/**
+ * Every template uuid the `pal:` references in [parameters] name — the whole set a spawning
+ * effect depends on, which is both what has to be pre-warmed and what its colour cache's version
+ * is scoped to ([PaletteRegistry.versionFor]).
+ *
+ * A malformed reference contributes nothing: it resolves to the literal parser at tick time and
+ * has no template whose edit could change that.
+ */
+fun paletteColourRefsIn(parameters: Map<String, String>): Set<UUID> {
+    val refs = LinkedHashSet<UUID>()
+    parameters.values.forEach { value ->
+        value.split(",").forEach { entry ->
+            parsePaletteColourRefUuid(entry)?.let { refs += it }
+        }
+    }
+    return refs
+}
+
+/**
+ * Read every `pal:` reference in [parameters] through [registry] once, so the registry's cache is
+ * warm before the effect starts ticking.
+ *
+ * Call this on the request thread at every spawn site. The return value is deliberately ignored —
+ * a reference that cannot resolve is reported by [resolvePaletteColour]'s warn and then handled at
+ * tick time by the parameter's own fallback, so failing to pre-warm is a latency bug rather than a
+ * correctness one. It is still a bug: the fallback would otherwise open a transaction from the
+ * 50 Hz loop.
+ */
+fun prewarmPaletteColours(registry: PaletteRegistry, parameters: Map<String, String>) {
+    paletteColourRefsIn(parameters).forEach { registry.snapshot(it) }
+}
+
+/**
+ * Create an effect from a registered type name, with colour-template references resolved.
+ *
+ * This is the whole spawn contract in one place: pre-warm the `pal:` references off the tick
+ * thread, then hand the factory a live resolver and a version counter so a template edited later
+ * re-resolves without the effect being rebuilt. Every surface that names an effect by string goes
+ * through here — REST add and update, cue spawn, group add, and the script `effect()` helper —
+ * because a caller that assembles this by hand is one `resolveColourSource = null` away from a
+ * colour effect that silently ignores its template.
+ *
+ * @throws IllegalArgumentException if [fxType] is not registered (from [FxRegistry.createFx]).
+ */
+fun FxRegistry.createFxWithPalettes(
+    templates: PaletteRegistry,
+    fxType: String,
+    parameters: Map<String, String> = emptyMap(),
+): Fx {
+    // The values `TypedParams` will actually read, resolved by its own rule: a supplied value
+    // wins unless it is blank, otherwise the schema default (see `TypedParams.raw`). Declared
+    // defaults have to be in here — a default that is itself a `pal:` reference would otherwise
+    // first resolve from the 50 Hz tick thread, exactly what pre-warming exists to prevent (no
+    // built-in declares one, but a user `fx_definitions` effect can, and `effect("my-fx")` with
+    // no parameters is ordinary) — and an *overridden* default has to be out, or an effect whose
+    // colour is a literal would still be dropped by an edit to the template it shadowed.
+    val effective = LinkedHashMap<String, String>()
+    getRegistration(fxType)?.parameters?.forEach { effective[it.name] = it.defaultValue }
+    parameters.forEach { (name, value) -> if (value.isNotBlank()) effective[name] = value }
+    val refs = paletteColourRefsIn(effective)
+    // On the calling thread, before the effect can tick — see [prewarmPaletteColours].
+    refs.forEach { templates.snapshot(it) }
+    return createFx(
+        fxType,
+        parameters,
+        resolveColourSource = paletteColourSource(templates),
+        // Scoped to this effect's own references, not the registry's global counter: an effect
+        // naming no template never re-resolves, and one naming template A is not dropped by an
+        // edit to B. See [PaletteRegistry.versionFor].
+        colourSourceVersion = { templates.versionFor(refs) },
+    )
+}

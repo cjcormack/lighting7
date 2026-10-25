@@ -1,8 +1,8 @@
 package uk.me.cormack.lighting7.routes
 
 import org.jetbrains.exposed.v1.core.eq
-import uk.me.cormack.lighting7.fx.TEMPLATE_COLOUR_REF_PREFIX
-import uk.me.cormack.lighting7.fx.parseTemplateColourRefUuid
+import uk.me.cormack.lighting7.fx.PALETTE_COLOUR_REF_PREFIX
+import uk.me.cormack.lighting7.fx.parsePaletteColourRefUuid
 import uk.me.cormack.lighting7.models.*
 import java.util.UUID
 
@@ -13,8 +13,8 @@ import java.util.UUID
 internal class CopyReport {
     val looks = mutableListOf<String>()
     val looksLinked = mutableListOf<String>()
-    val templates = mutableListOf<String>()
-    val templatesLinked = mutableListOf<String>()
+    val palettes = mutableListOf<String>()
+    val palettesLinked = mutableListOf<String>()
     val unresolved = LinkedHashMap<String, LinkedHashSet<String>>()
 
     fun unresolved(what: String, by: String) {
@@ -27,7 +27,7 @@ internal class CopyReport {
  * into [target]. The cue's Duplicate, `POST /cues/copy-from` and MCP's `copy_to_project` all copy
  * through it. Within one project every reference is kept as it is. Across projects:
  *
- *  - A Look or palette a layer applies, or a `tmpl:` reference in an effect parameter names, is the
+ *  - A Look or palette a layer applies, or a `pal:` reference in an effect parameter names, is the
  *    target's of that name, else copied with the cue (its own references mapped the same way).
  *  - A speed master maps by index, a script by name. One the target lacks is reported: a layer's or
  *    effect's is left to master 1, a cue's own tempo pair and a script hook are left out.
@@ -61,14 +61,14 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
     private val sourceMasterIndex by lazy { speedMastersOf(source).associate { it.uuid to it.masterIndex } }
     private val targetMasterByIndex by lazy { speedMastersOf(target).associate { it.masterIndex to it.uuid } }
     private val targetLooks by lazy { DaoLook.find { DaoLooks.project eq target.id }.associateBy { it.name } }
-    private val targetTemplates by lazy { DaoTemplate.find { DaoTemplates.project eq target.id }.associateBy { it.name } }
-    private val sourceTemplatesByUuid by lazy { DaoTemplate.find { DaoTemplates.project eq source.id }.associateBy { it.uuid } }
+    private val targetPalettes by lazy { DaoPalette.find { DaoPalettes.project eq target.id }.associateBy { it.name } }
+    private val sourcePalettesByUuid by lazy { DaoPalette.find { DaoPalettes.project eq source.id }.associateBy { it.uuid } }
 
     /** Venue records match by uuid only between two projects on one venue (D18). */
     private val sameVenue by lazy { venueUuidOf(source)?.let { it == venueUuidOf(target) } == true }
 
     private val lookMap = HashMap<Int, DaoLook>()
-    private val templateMap = HashMap<Int, DaoTemplate>()
+    private val paletteMap = HashMap<Int, DaoPalette>()
     private val addedElements = HashMap<String, DaoStageElement>()
     private val runKeys = HashMap<UUID, UUID>()
 
@@ -96,11 +96,11 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
             DaoCueLayer.new {
                 this.cue = copy
                 look = layer.look?.let(::look)
-                template = layer.template?.let(::template)
+                palette = layer.palette?.let(this@CueCopier::palette)
                 sortOrder = layer.sortOrder
                 enabled = layer.enabled
                 this.targets = targets
-                propertyMask = layer.propertyMask
+                attributeMask = layer.attributeMask
                 blendMode = layer.blendMode
                 amount = layer.amount
                 stomp = layer.stomp
@@ -111,35 +111,35 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 randomWindow = layer.randomWindow
             }
         }
-        for (assignment in cue.propertyAssignments) {
+        for (assignment in cue.attributeAssignments) {
             checkTarget(assignment.targetType, assignment.targetKey, by)
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = copy
                 targetType = assignment.targetType
                 targetKey = assignment.targetKey
-                propertyName = assignment.propertyName
+                attribute = assignment.attribute
                 value = assignment.value
                 fadeDuration = assignment.fadeDuration
                 sortOrder = assignment.sortOrder
                 moveInDark = assignment.moveInDark
             }
         }
-        for (effect in cue.adHocEffects) {
+        for (effect in cue.adHocFxInOrder()) {
             checkTarget(effect.targetType, effect.targetKey, by)
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = copy
                 targetType = effect.targetType
                 targetKey = effect.targetKey
-                effectType = effect.effectType
-                category = effect.category
-                propertyName = effect.propertyName
-                beatDivision = effect.beatDivision
+                fxType = effect.fxType
+                family = effect.family
+                attribute = effect.attribute
+                cycle = effect.cycle
                 blendMode = effect.blendMode
-                distribution = effect.distribution
+                order = effect.order
                 phaseOffset = effect.phaseOffset
                 elementMode = effect.elementMode
                 elementFilter = effect.elementFilter
-                stepTiming = effect.stepTiming
+                timing = effect.timing
                 parameters = parameters(effect.parameters, by)
                 delay = effect.delay
                 interval = effect.interval
@@ -148,13 +148,13 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
                 seconds = effect.seconds
-                size = effect.size
+                amount = effect.amount
                 direction = effect.direction
-                nShot = effect.nShot
+                runs = effect.runs
                 spread = effect.spread
                 wings = effect.wings
-                blocks = effect.blocks
-                groups = effect.groups
+                segments = effect.segments
+                parts = effect.parts
                 runUuid = effect.runUuid?.let { runKeys.getOrPut(it) { UUID.randomUUID() } }
             }
         }
@@ -221,40 +221,40 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 this.look = copy
                 targetType = row.targetType
                 targetKey = row.targetKey
-                propertyName = row.propertyName
+                attribute = row.attribute
                 value = row.value
                 fadeDuration = row.fadeDuration
                 elementKey = row.elementKey
                 sortOrder = row.sortOrder
             }
         }
-        for (effect in look.effects.sortedBy { it.sortOrder }) {
+        for (effect in look.fxInOrder()) {
             checkTarget(effect.targetType, effect.targetKey, by)
-            DaoLookEffect.new {
+            DaoLookFxEntity.new {
                 this.look = copy
                 targetType = effect.targetType
                 targetKey = effect.targetKey
-                effectType = effect.effectType
-                category = effect.category
-                propertyName = effect.propertyName
-                beatDivision = effect.beatDivision
+                fxType = effect.fxType
+                family = effect.family
+                attribute = effect.attribute
+                cycle = effect.cycle
                 blendMode = effect.blendMode
-                distribution = effect.distribution
+                order = effect.order
                 phaseOffset = effect.phaseOffset
                 elementMode = effect.elementMode
                 elementFilter = effect.elementFilter
-                stepTiming = effect.stepTiming
+                timing = effect.timing
                 parameters = parameters(effect.parameters, by)
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
                 seconds = effect.seconds
-                size = effect.size
+                amount = effect.amount
                 direction = effect.direction
-                nShot = effect.nShot
+                runs = effect.runs
                 spread = effect.spread
                 wings = effect.wings
-                blocks = effect.blocks
-                groups = effect.groups
+                segments = effect.segments
+                parts = effect.parts
                 sortOrder = effect.sortOrder
             }
         }
@@ -271,80 +271,80 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
     }
 
     /** The target's palette for [template]: itself within one project, else the target's of its name, else a copy. */
-    fun template(template: DaoTemplate): DaoTemplate {
+    fun palette(template: DaoPalette): DaoPalette {
         if (!crossProject) return template
-        templateMap[template.id.value]?.let { return it }
-        targetTemplates[template.name]?.let {
-            templateMap[template.id.value] = it
-            report.templatesLinked += template.name
+        paletteMap[template.id.value]?.let { return it }
+        targetPalettes[template.name]?.let {
+            paletteMap[template.id.value] = it
+            report.palettesLinked += template.name
             return it
         }
         val by = "palette '${template.name}'"
-        val copy = DaoTemplate.new {
+        val copy = DaoPalette.new {
             project = target
             name = template.name
             notes = template.notes
             fadeDuration = template.fadeDuration
         }
         // Mapped before its effect is copied, so a Palette Steps list naming itself ends here.
-        templateMap[template.id.value] = copy
-        report.templates += template.name
+        paletteMap[template.id.value] = copy
+        report.palettes += template.name
         for (row in template.rows.sortedBy { it.sortOrder }) {
             checkTarget(row.targetType, row.targetKey, by)
-            DaoTemplateRow.new {
-                this.template = copy
+            DaoPaletteRow.new {
+                this.palette = copy
                 targetType = row.targetType
                 targetKey = row.targetKey
-                propertyName = row.propertyName
+                attribute = row.attribute
                 value = row.value
                 sortOrder = row.sortOrder
             }
         }
         for (effect in template.effects) {
-            DaoTemplateEffect.new {
-                this.template = copy
-                effectType = effect.effectType
-                category = effect.category
-                propertyName = effect.propertyName
-                beatDivision = effect.beatDivision
+            DaoPaletteFxEntity.new {
+                this.palette = copy
+                fxType = effect.fxType
+                family = effect.family
+                attribute = effect.attribute
+                cycle = effect.cycle
                 blendMode = effect.blendMode
-                distribution = effect.distribution
+                order = effect.order
                 phaseOffset = effect.phaseOffset
                 elementMode = effect.elementMode
                 elementFilter = effect.elementFilter
-                stepTiming = effect.stepTiming
+                timing = effect.timing
                 parameters = parameters(effect.parameters, by)
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
                 seconds = effect.seconds
-                size = effect.size
+                amount = effect.amount
                 direction = effect.direction
-                nShot = effect.nShot
+                runs = effect.runs
                 spread = effect.spread
                 wings = effect.wings
-                blocks = effect.blocks
-                groups = effect.groups
+                segments = effect.segments
+                parts = effect.parts
             }
         }
         return copy
     }
 
     /**
-     * [parameters] with every `tmpl:{uuid}` mapped as a layer's palette is — a colour reference, or an
+     * [parameters] with every `pal:{uuid}` mapped as a layer's palette is — a colour reference, or an
      * item of a comma-separated list (a colour list, Palette Steps' `palettes`). Anything else is kept
      * byte for byte.
      */
     fun parameters(parameters: Map<String, String>, by: String): Map<String, String> {
-        if (!crossProject || parameters.values.none { TEMPLATE_COLOUR_REF_PREFIX in it.lowercase() }) return parameters
+        if (!crossProject || parameters.values.none { PALETTE_COLOUR_REF_PREFIX in it.lowercase() }) return parameters
         return parameters.mapValues { (_, value) ->
             value.split(",").joinToString(",") { item ->
-                val uuid = parseTemplateColourRefUuid(item) ?: return@joinToString item
-                val named = sourceTemplatesByUuid[uuid]
+                val uuid = parsePaletteColourRefUuid(item) ?: return@joinToString item
+                val named = sourcePalettesByUuid[uuid]
                 if (named == null) {
                     report.unresolved("palette $uuid is not in $sourceName; its reference is kept as it is", by)
                     item
                 } else {
-                    "$TEMPLATE_COLOUR_REF_PREFIX${template(named).uuid}"
+                    "$PALETTE_COLOUR_REF_PREFIX${palette(named).uuid}"
                 }
             }
         }
@@ -401,8 +401,8 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
 
     private fun checkTarget(type: String, key: String, by: String) {
         if (!crossProject) return
-        if (type == EffectTargetRef.Selection.TYPE) {
-            EffectTargetRef.Selection.parseKey(key)?.forEach { checkTarget(it.discriminator, it.key, by) }
+        if (type == FxTargetsRef.Selection.TYPE) {
+            FxTargetsRef.Selection.parseKey(key)?.forEach { checkTarget(it.discriminator, it.key, by) }
             return
         }
         val ok = when (type) {

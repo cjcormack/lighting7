@@ -22,13 +22,13 @@ class FxTickFailureTest {
     private val universe = Universe(0, 0)
 
     /** Throws on `calculate` while [failing] is set; otherwise emits a constant level. */
-    private class FlakyEffect(@Volatile var failing: Boolean = true) : Effect {
+    private class FlakyFx(@Volatile var failing: Boolean = true) : Fx {
         override val name = "Flaky"
         override val outputType = FxOutputType.SLIDER
         var calls = 0
             private set
 
-        override fun calculate(phase: Double, context: EffectContext): FxOutput {
+        override fun calculate(phase: Double, context: FxContext): FxOutput {
             calls++
             if (failing) throw IllegalStateException("effect blew up")
             return FxOutput.Slider(200u)
@@ -58,24 +58,24 @@ class FxTickFailureTest {
         )
     }
 
-    private fun flakyInstance(effect: FlakyEffect, timingSource: TimingSource) = FxInstance(
+    private fun flakyInstance(effect: FlakyFx, timingSource: TimingSource) = FxInstance(
         effect = effect,
         target = SliderTarget("hex-a", "dimmer"),
-        timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        timing = FxTiming(cycle = CycleLength.ONE_BEAT),
     ).also { it.timingSource = timingSource }
 
     @Test
     fun `a beat effect that throws every pass is paused, not retried forever`() {
         val rig = newRig()
-        val effect = FlakyEffect()
-        val id = rig.engine.addEffect(flakyInstance(effect, TimingSource.BEAT))
+        val effect = FlakyFx()
+        val id = rig.engine.addFx(flakyInstance(effect, TimingSource.BEAT))
 
         // One short of the threshold: still running, and still being called.
         for (n in 0L until (FxEngine.MAX_CONSECUTIVE_TICK_FAILURES - 1).toLong()) {
             rig.engine.processBeatTick(tick(n))
         }
         assertTrue(
-            rig.engine.getEffect(id)!!.isRunning,
+            rig.engine.getFx(id)!!.isRunning,
             "a short run of failures must not pause the effect — transient faults clear",
         )
         assertEquals(FxEngine.MAX_CONSECUTIVE_TICK_FAILURES - 1, effect.calls)
@@ -83,7 +83,7 @@ class FxTickFailureTest {
         rig.engine.processBeatTick(tick(FxEngine.MAX_CONSECUTIVE_TICK_FAILURES.toLong()))
 
         assertFalse(
-            rig.engine.getEffect(id)!!.isRunning,
+            rig.engine.getFx(id)!!.isRunning,
             "the effect must be paused once it has failed MAX_CONSECUTIVE_TICK_FAILURES passes",
         )
 
@@ -97,12 +97,12 @@ class FxTickFailureTest {
     @Test
     fun `a wall-clock effect that throws every pass is paused too`() {
         val rig = newRig()
-        val effect = FlakyEffect()
-        val id = rig.engine.addEffect(flakyInstance(effect, TimingSource.WALL_CLOCK))
+        val effect = FlakyFx()
+        val id = rig.engine.addFx(flakyInstance(effect, TimingSource.WALL_CLOCK))
 
         repeat(FxEngine.MAX_CONSECUTIVE_TICK_FAILURES) { rig.engine.processWallClockTick() }
 
-        assertFalse(rig.engine.getEffect(id)!!.isRunning, "the wall-clock path pauses on the same rule")
+        assertFalse(rig.engine.getFx(id)!!.isRunning, "the wall-clock path pauses on the same rule")
     }
 
     @Test
@@ -121,19 +121,19 @@ class FxTickFailureTest {
 
         // Paints member 0 and blows up on member 1 — the shape a script effect indexing a
         // parameter list by member takes. Each pass therefore leaves hex-a painted.
-        val effect = object : Effect {
+        val effect = object : Fx {
             override val name = "Half Broken"
             override val outputType = FxOutputType.SLIDER
-            override fun calculate(phase: Double, context: EffectContext): FxOutput {
+            override fun calculate(phase: Double, context: FxContext): FxOutput {
                 if (context.memberIndex > 0) throw IllegalStateException("no parameter for member")
                 return FxOutput.Slider(200u)
             }
         }
-        val id = engine.addEffect(
+        val id = engine.addFx(
             FxInstance(
                 effect = effect,
                 target = SliderTarget.forGroup("wash", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             ),
         )
 
@@ -144,7 +144,7 @@ class FxTickFailureTest {
 
         engine.processBeatTick(tick(FxEngine.MAX_CONSECUTIVE_TICK_FAILURES.toLong()))
 
-        assertFalse(engine.getEffect(id)!!.isRunning, "the effect is paused")
+        assertFalse(engine.getFx(id)!!.isRunning, "the effect is paused")
         assertEquals(
             0u.toUByte(), controller.currentValues[1],
             "the half-applied frame must not be left frozen on stage — later passes skip a " +
@@ -155,8 +155,8 @@ class FxTickFailureTest {
     @Test
     fun `one good pass clears the failure run`() {
         val rig = newRig()
-        val effect = FlakyEffect()
-        val id = rig.engine.addEffect(flakyInstance(effect, TimingSource.BEAT))
+        val effect = FlakyFx()
+        val id = rig.engine.addFx(flakyInstance(effect, TimingSource.BEAT))
 
         // Fail almost to the threshold, recover for one pass, then fail again for as long.
         // Nothing here should pause: no run is ever long enough.
@@ -174,7 +174,7 @@ class FxTickFailureTest {
         }
 
         assertTrue(
-            rig.engine.getEffect(id)!!.isRunning,
+            rig.engine.getFx(id)!!.isRunning,
             "failures either side of a good pass are two short runs, not one long one",
         )
     }

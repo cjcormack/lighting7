@@ -22,15 +22,15 @@ import { useVisibleFixtureListQuery } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
 import { useLookListQuery } from "@/store/looks"
-import { useTemplateListQuery } from "@/store/templates"
+import { usePaletteListQuery } from "@/store/palettes"
 import { useBuskPagesQuery } from "@/store/busk"
 import { useDeskWindows } from "@/store/windows"
 import { BUSK_FOCUSES } from "@/lib/buskWindow"
 import { SUBSELECT_MODE_LABELS } from "@/lib/cellsSubSelection"
 import { FOCUS_LABELS } from "./targetUtils"
 import { allBanks, allPads } from "@/lib/buskLayout"
-import { padFaceOf, templateSwatch } from "@/components/busking/padFace"
-import { useRigProperties, useTargetProperties, type AvailableProperty } from "@/hooks/useTargetProperties"
+import { padFaceOf, paletteSwatch } from "@/components/busking/padFace"
+import { useRigAttributes, useTargetAttributes, type AvailableAttribute } from "@/hooks/useTargetAttributes"
 import { surfaceDragData, type SurfaceDragData } from "@/lib/surfaceDrop"
 import type { BindingTarget, BankDefinition } from "@/store/surfaces"
 import type { CueTarget } from "@/api/cuesApi"
@@ -61,7 +61,7 @@ import type { CueTarget } from "@/api/cuesApi"
  * **busk page** under *Desk*, which already holds the encoder bank.
  *
  * **Chips are grouped by family inside a row**, with a hairline between groups — intensity,
- * position, colour, beam, then the actions — `TemplateStrip`'s split, sideways. It is what keeps a
+ * position, colour, beam, then the actions — `PaletteStrip`'s split, sideways. It is what keeps a
  * fixture row legible now that a colour is **four chips** (hue, hue fine, sat, bright: one per
  * `ColourAxis`, each carrying its axis on the target and its own swatch) and the bundled emitters
  * (white, amber, UV) sit beside them as faders of their own. `groupChipsByFamily` is the pure half.
@@ -124,44 +124,44 @@ interface LibraryRow {
  * axis alone when the target has one colour property, which is nearly every head; a second colour
  * property gets its name in front so the two rows of axes can be told apart.
  */
-function propertyChips(
+function attributeChips(
   keyPrefix: string,
-  property: AvailableProperty,
-  targetFor: (propertyName: string) => BindingTarget & { colourAxis?: ColourAxis | null },
+  attribute: AvailableAttribute,
+  targetFor: (attribute: string) => BindingTarget & { colourAxis?: ColourAxis | null },
   soleColour: boolean,
 ): LibraryChip[] {
-  const family = familyForCategory(property.category)
-  if (property.type !== "colour") {
+  const family = familyForCategory(attribute.category)
+  if (attribute.type !== "colour") {
     return [
       {
-        key: `${keyPrefix}:${property.name}`,
-        label: property.displayName,
-        target: targetFor(property.name),
+        key: `${keyPrefix}:${attribute.name}`,
+        label: attribute.displayName,
+        target: targetFor(attribute.name),
         swatch: null,
         family,
       },
     ]
   }
   return COLOUR_AXES.map((axis) => ({
-    key: `${keyPrefix}:${property.name}:${axis}`,
+    key: `${keyPrefix}:${attribute.name}:${axis}`,
     label: soleColour
       ? COLOUR_AXIS_LABELS[axis]
-      : `${property.displayName} ${COLOUR_AXIS_LABELS[axis]}`,
-    target: withAxis(targetFor(property.name), axis),
+      : `${attribute.displayName} ${COLOUR_AXIS_LABELS[axis]}`,
+    target: withAxis(targetFor(attribute.name), axis),
     swatch: COLOUR_AXIS_SWATCHES[axis],
     family,
   }))
 }
 
 /** Every chip a list of properties offers — the one place the "sole colour" rule is decided. */
-function chipsForProperties(
+function chipsForAttributes(
   keyPrefix: string,
-  properties: readonly AvailableProperty[],
-  targetFor: (propertyName: string) => BindingTarget & { colourAxis?: ColourAxis | null },
+  attributes: readonly AvailableAttribute[],
+  targetFor: (attribute: string) => BindingTarget & { colourAxis?: ColourAxis | null },
 ): LibraryChip[] {
-  const continuous = properties.filter((property) => property.continuous)
-  const soleColour = continuous.filter((property) => property.type === "colour").length === 1
-  return continuous.flatMap((property) => propertyChips(keyPrefix, property, targetFor, soleColour))
+  const continuous = attributes.filter((attribute) => attribute.continuous)
+  const soleColour = continuous.filter((attribute) => attribute.type === "colour").length === 1
+  return continuous.flatMap((attribute) => attributeChips(keyPrefix, attribute, targetFor, soleColour))
 }
 
 /**
@@ -254,7 +254,7 @@ function ChipButton({
   )
 }
 
-/** `TemplateStrip`'s hairline, verbatim: drawn between two chip groups, never at an end. */
+/** `PaletteStrip`'s hairline, verbatim: drawn between two chip groups, never at an end. */
 function Hairline() {
   return <span aria-hidden data-testid="chip-hairline" className="mx-0.5 h-5 w-px shrink-0 bg-border" />
 }
@@ -348,13 +348,13 @@ function LibraryRowItem({
 // ─── Per-target rows ──────────────────────────────────────────────────
 
 /**
- * A group's or fixture's chips need that target's properties, and `useTargetProperties` is a hook —
+ * A group's or fixture's chips need that target's properties, and `useTargetAttributes` is a hook —
  * so the row is a component. One query per group row, which is what `/groups` already does with a
  * card per group; a fixture row costs nothing extra, the whole patch being one request.
  *
  * **It takes the target as two primitives and mints the object here**, and it is memoized. Both
  * halves are needed and neither works alone: a `{ type, key }` literal built in the caller's `.map`
- * is a fresh identity every render, which defeats `useTargetProperties`' own memo *and* this
+ * is a fresh identity every render, which defeats `useTargetAttributes`' own memo *and* this
  * component's — so a keystroke in the search box would re-run the property map and sort for every
  * visible row on a rig with hundreds of fixtures.
  *
@@ -388,13 +388,13 @@ const TargetRowItem = memo(function TargetRowItem({
     () => ({ type: targetType, key: targetKey }),
     [targetType, targetKey],
   )
-  const { properties } = useTargetProperties(target)
+  const { attributes } = useTargetAttributes(target)
 
   const row = useMemo<LibraryRow>(() => {
-    const chips = chipsForProperties(`${target.type}:${target.key}`, properties, (propertyName) =>
+    const chips = chipsForAttributes(`${target.type}:${target.key}`, attributes, (attribute) =>
       target.type === "group"
-        ? { type: "groupProperty", groupName: target.key, propertyName }
-        : { type: "fixtureProperty", fixtureKey: target.key, propertyName },
+        ? { type: "groupAttribute", groupName: target.key, attribute }
+        : { type: "fixtureAttribute", fixtureKey: target.key, attribute },
     )
     // The strip's own select role, offered on its own so a select button can be put anywhere.
     chips.push(actionChip("select", "select", { type: "selectTarget", target, mode: "toggle" }))
@@ -407,7 +407,7 @@ const TargetRowItem = memo(function TargetRowItem({
       strip: { target },
       chips,
     }
-  }, [properties, target, name, detail, badge, kind])
+  }, [attributes, target, name, detail, badge, kind])
 
   const shown = useMemo(() => filterChips(row, family), [row, family])
   if (shown == null || !rowMatches(shown, needle)) return null
@@ -464,10 +464,10 @@ export function SurfaceLibrary({
   const { data: fixtures } = useVisibleFixtureListQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const { data: looks } = useLookListQuery({ projectId })
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const { data: pages } = useBuskPagesQuery(projectId)
   const windows = useDeskWindows()
-  const rigProperties = useRigProperties()
+  const rigAttributes = useRigAttributes()
   const [search, setSearch] = useState("")
   const [kind, setKind] = useState<KindFilter>("all")
   const [family, setFamily] = useState<FamilyFilter>("any")
@@ -485,9 +485,9 @@ export function SurfaceLibrary({
       kind: "desk",
       strip: null,
       chips: [
-        ...chipsForProperties("sel", rigProperties, (propertyName) => ({
-          type: "selectionProperty",
-          propertyName,
+        ...chipsForAttributes("sel", rigAttributes, (attribute) => ({
+          type: "selectionAttribute",
+          attribute,
         })),
         actionChip("clear", "Clear", { type: "clearSelection" }),
         actionChip("locate", "Locate", { type: "locateSelection" }),
@@ -501,9 +501,9 @@ export function SurfaceLibrary({
       badge: "Desk",
       kind: "desk",
       strip: null,
-      chips: chipsForProperties("bank", rigProperties, (propertyName) => ({
+      chips: chipsForAttributes("bank", rigAttributes, (attribute) => ({
         type: "encoderBankSet",
-        propertyName,
+        attribute,
       })),
     })
 
@@ -520,7 +520,7 @@ export function SurfaceLibrary({
           actionChip("go", "Go", { type: "cueStackGo", stackId: stack.id }),
           actionChip("back", "Back", { type: "cueStackBack", stackId: stack.id }),
           actionChip("pause", "Pause", { type: "cueStackPause", stackId: stack.id }),
-          actionChip("fx-size", "FX size", { type: "stackEffectSize", stackId: stack.id }),
+          actionChip("fx-size", "FX amount", { type: "stackFxAmount", stackId: stack.id }),
         ],
       })
       for (const cue of stack.cues) {
@@ -541,12 +541,12 @@ export function SurfaceLibrary({
     }
 
     // Records on buttons (D6). Each is a **plain row with chips** rather than a `TargetRowItem`:
-    // that component exists to mount `useTargetProperties` per group or fixture and is memoized on
+    // that component exists to mount `useTargetAttributes` per group or fixture and is memoized on
     // primitive target props for exactly that reason, and none of these has a per-target property
     // lookup to do.
     for (const template of templates ?? []) {
       out.push({
-        key: `template:${template.uuid}`,
+        key: `palette:${template.uuid}`,
         name: template.name,
         detail: `${template.family?.toLowerCase() ?? "value"} palette`,
         badge: "Palette",
@@ -561,8 +561,8 @@ export function SurfaceLibrary({
           {
             key: "press",
             label: "Press",
-            target: { type: "pressTemplate", templateUuid: template.uuid },
-            swatch: templateSwatch(template),
+            target: { type: "pressPalette", paletteUuid: template.uuid },
+            swatch: paletteSwatch(template),
             family: template.family,
           },
         ],
@@ -573,16 +573,11 @@ export function SurfaceLibrary({
       out.push({
         key: `look:${look.uuid}`,
         name: look.name,
-        detail: look.hasDeferredEffects ? "needs a selection" : "bound",
+        detail: "its own fixtures",
         badge: "Look",
         kind: "look",
         strip: null,
-        // A Look with a deferred effect presses onto targets it does not have, and the write
-        // boundary refuses it by name — so it is offered with no chip at all rather than with one
-        // that 400s. The detail line above is what says why.
-        chips: look.hasDeferredEffects
-          ? []
-          : [actionChip("apply", "Apply", { type: "applyLook", lookUuid: look.uuid })],
+        chips: [actionChip("apply", "Apply", { type: "applyLook", lookUuid: look.uuid })],
       })
     }
 
@@ -695,7 +690,7 @@ export function SurfaceLibrary({
     })
 
     return out
-  }, [rigProperties, stacks, banks, deviceTypeKey, looks, templates, pages, windows])
+  }, [rigAttributes, stacks, banks, deviceTypeKey, looks, templates, pages, windows])
 
   const needle = search.trim().toLowerCase()
   const showKind = (rowKind: KindFilter) => kind === "all" || kind === rowKind
@@ -713,14 +708,14 @@ export function SurfaceLibrary({
     // Filtered by the family the same way `filterChips` filters a row, or the prediction disagrees
     // with the per-row decision: `Position` + `sat` would keep every row as a candidate and then
     // drop them all, leaving a blank list with the empty state suppressed.
-    const labels = chipsForProperties("", rigProperties, (propertyName) => ({
-      type: "selectionProperty",
-      propertyName,
+    const labels = chipsForAttributes("", rigAttributes, (attribute) => ({
+      type: "selectionAttribute",
+      attribute,
     }))
       .filter((chip) => family === "any" || chip.family === family)
       .map((chip) => chip.label)
     return [...labels, STRIP_HANDLE_LABEL, "select"].map((label) => label.toLowerCase())
-  }, [rigProperties, family])
+  }, [rigAttributes, family])
   const targetChipsMatch = needle.length > 0 && targetChipVocabulary.some((l) => l.includes(needle))
   const matchesName = (name: string) => needle.length === 0 || name.toLowerCase().includes(needle)
   const targetCandidate = (name: string) => matchesName(name) || targetChipsMatch

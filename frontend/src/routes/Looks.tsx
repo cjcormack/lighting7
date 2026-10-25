@@ -138,7 +138,7 @@ export function ProjectLooks() {
             <Link
               to={`/projects/${projectIdNum}/palettes`}
               className="hidden items-center gap-1 whitespace-nowrap text-xs text-muted-foreground hover:text-foreground sm:inline-flex"
-              title="A single value or effect — Amber Key, Slow Breathe — is a palette, applied to a selection"
+              title="A single value or FX — Amber Key, Slow Wave — is a palette, applied to a selection"
             >
               Palettes
               <ArrowRight className="size-3" />

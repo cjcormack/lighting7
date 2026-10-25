@@ -172,13 +172,13 @@ class GroupBuilder<T : GroupableFixture> @PublishedApi internal constructor(priv
      * Configure group-level metadata.
      *
      * @param symmetricMode How effects should be distributed symmetrically
-     * @param defaultDistribution Name of the default distribution strategy
+     * @param defaultOrder Name of the default Order
      */
     fun configure(
         symmetricMode: SymmetricMode = SymmetricMode.NONE,
-        defaultDistribution: String = "LINEAR"
+        defaultOrder: String = "NORMAL"
     ) {
-        groupMetadata = GroupMetadata(symmetricMode, defaultDistribution)
+        groupMetadata = GroupMetadata(symmetricMode, defaultOrder)
     }
 
     /**

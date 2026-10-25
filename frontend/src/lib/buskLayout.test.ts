@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { BuskPage, BuskPad } from '@/api/buskApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import {
   addBankColumn,
   allBanks,
@@ -33,13 +33,13 @@ import {
 // ─── Fixtures ───────────────────────────────────────────────────────────
 
 let nextId = 100
-function templatePad(name: string): BuskPad {
+function palettePad(name: string): BuskPad {
   const id = nextId++
   return {
     id,
     uuid: `pad-${id}`,
-    kind: 'TEMPLATE',
-    template: { id, name } as TemplateSummary,
+    kind: 'PALETTE',
+    palette: { id, name } as PaletteSummary,
   }
 }
 
@@ -66,17 +66,17 @@ function samplePage(): BuskPage {
     rows: [
       {
         columns: [
-          column(6, [bank('Movement', [templatePad('A'), templatePad('B'), templatePad('C')], { solo: true })]),
-          column(3, [bank('Colour', [templatePad('D')]), bank('Beam', [templatePad('E')])]),
+          column(6, [bank('Movement', [palettePad('A'), palettePad('B'), palettePad('C')], { solo: true })]),
+          column(3, [bank('Colour', [palettePad('D')]), bank('Beam', [palettePad('E')])]),
         ],
       },
-      { columns: [column(12, [bank('Cues', [templatePad('F')])])] },
+      { columns: [column(12, [bank('Cues', [palettePad('F')])])] },
     ],
   }
 }
 
 function padNames(page: BuskPage, row: number, col: number, bnk: number): string[] {
-  return page.rows[row].columns[col].banks[bnk].pads.map((p) => p.template?.name ?? p.look?.name ?? '?')
+  return page.rows[row].columns[col].banks[bnk].pads.map((p) => p.palette?.name ?? p.look?.name ?? '?')
 }
 
 function bankNames(page: BuskPage): string[][][] {
@@ -330,7 +330,7 @@ describe('the document rules', () => {
     const copied = toLayoutRequest(next).rows[0].columns[1].banks[1]
     expect(copied.bankId).toBeUndefined()
     expect(copied.pads[0].padId).toBeUndefined()
-    expect(copied.pads[0].templateId).toBe(next.rows[0].columns[1].banks[0].pads[0].template!.id)
+    expect(copied.pads[0].paletteId).toBe(next.rows[0].columns[1].banks[0].pads[0].palette!.id)
   })
 
   it('mints documents the server would accept for + Row and + Bank', () => {
@@ -378,7 +378,7 @@ describe('the document rules', () => {
     const page = samplePage()
     const ids = [...recordsOnPage(page)]
     expect(ids).toHaveLength(6)
-    expect(ids.every((key) => key.startsWith('template:'))).toBe(true)
+    expect(ids.every((key) => key.startsWith('palette:'))).toBe(true)
   })
 })
 
@@ -387,21 +387,21 @@ describe('the first-open generator', () => {
     { id: 1, name: 'Amber', family: 'COLOUR' },
     { id: 2, name: 'Downstage', family: 'POSITION' },
     { id: 3, name: 'Half Up', family: 'INTENSITY' },
-  ] as TemplateSummary[]
+  ] as PaletteSummary[]
   const looks = [
-    { id: 9, name: 'Ballyhoo', hasDeferredEffects: true },
-    { id: 10, name: 'Verse Base', hasDeferredEffects: false },
+    { id: 9, name: 'Ballyhoo' },
+    { id: 10, name: 'Verse Base' },
   ] as LookSummary[]
 
-  it('builds a family bank per family, the buskable Looks and an empty Cues bank', () => {
+  it('builds a family bank per family, every Look and an empty Cues bank', () => {
     const layout = libraryStarterLayout(templates, looks)
     expect(layout.rows).toHaveLength(2)
     const families = layout.rows[0].columns.map((c) => c.banks[0].name)
     expect(families).toEqual(['Colour', 'Position', 'Beam', 'Intensity'])
-    expect(layout.rows[0].columns[0].banks[0].pads).toEqual([{ templateId: 1 }])
+    expect(layout.rows[0].columns[0].banks[0].pads).toEqual([{ paletteId: 1 }])
     // Beam has no templates and still gets its bank — that is where the operator puts the first one.
     expect(layout.rows[0].columns[2].banks[0].pads).toEqual([])
-    expect(layout.rows[1].columns[0].banks[0].pads).toEqual([{ lookId: 9 }])
+    expect(layout.rows[1].columns[0].banks[0].pads).toEqual([{ lookId: 9 }, { lookId: 10 }])
     expect(layout.rows[1].columns[1].banks[0]).toMatchObject({ name: 'Cues', pads: [], flow: 'COLUMN' })
   })
 

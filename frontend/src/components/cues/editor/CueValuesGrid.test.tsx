@@ -3,8 +3,8 @@ import { act, fireEvent, render as rtlRender, screen, waitFor, within } from '@t
 import { Provider } from 'react-redux'
 import { useRef, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Cue, CookedRow, CuePropertyAssignment } from '@/api/cuesApi'
-import type { ColourPropertyDescriptor, Fixture } from '@/store/fixtures'
+import type { Cue, CookedRow, CueAttributeAssignment } from '@/api/cuesApi'
+import type { ColourAttributeDescriptor, Fixture } from '@/store/fixtures'
 
 /**
  * The cue editor's Values grid (show-cue-editing plan session 5): the programmer's table over a
@@ -51,7 +51,7 @@ const data = vi.hoisted(() => ({
   /** The cue as the desk holds it, where it has moved past the cache (another client's edit). */
   desk: new Map<number, Cue>(),
   failNext: false,
-  patches: [] as { cueId: number; propertyAssignments: CuePropertyAssignment[] }[],
+  patches: [] as { cueId: number; attributeAssignments: CueAttributeAssignment[] }[],
   presses: [] as Record<string, unknown>[],
   /** The desk's answers to the next presses, in order. */
   answers: [] as { action: 'applied' | 'removed'; cue: Cue }[],
@@ -70,12 +70,12 @@ vi.mock('@/store/cues', async (importOriginal) => ({
     return found ? Promise.resolve(found) : Promise.reject(new Error('no cue'))
   },
   usePatchProjectCueMutation: () => [
-    (arg: { cueId: number; propertyAssignments: CuePropertyAssignment[] }) => {
+    (arg: { cueId: number; attributeAssignments: CueAttributeAssignment[] }) => {
       if (data.failNext) {
         data.failNext = false
         return { unwrap: () => Promise.reject(new Error('refused')) }
       }
-      data.patches.push({ cueId: arg.cueId, propertyAssignments: arg.propertyAssignments })
+      data.patches.push({ cueId: arg.cueId, attributeAssignments: arg.attributeAssignments })
       return { unwrap: () => Promise.resolve({}) }
     },
   ],
@@ -97,8 +97,8 @@ vi.mock('@/store/programmerOps', async (importOriginal) => ({
         unwrap: () =>
           Promise.resolve({
             written: [
-              { target: { type: 'fixture', key: 'orbit-sr' }, propertyName: 'dimmer', value: '0' },
-              { target: { type: 'fixture', key: 'orbit-sl' }, propertyName: 'dimmer', value: '255' },
+              { target: { type: 'fixture', key: 'orbit-sr' }, attribute: 'dimmer', value: '0' },
+              { target: { type: 'fixture', key: 'orbit-sl' }, attribute: 'dimmer', value: '255' },
             ],
             skipped: [],
           }),
@@ -107,9 +107,9 @@ vi.mock('@/store/programmerOps', async (importOriginal) => ({
   ],
 }))
 const palettes = vi.hoisted(() => ({ list: [] as unknown[] }))
-vi.mock('@/store/templates', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/store/templates')>()),
-  useTemplateListQuery: () => ({ data: palettes.list }),
+vi.mock('@/store/palettes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/palettes')>()),
+  usePaletteListQuery: () => ({ data: palettes.list }),
 }))
 vi.mock('@/store/selection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/selection')>()),
@@ -130,7 +130,7 @@ vi.mock('@/store/fixtures', async (importOriginal) => ({
 vi.mock('@/store/groups', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/groups')>()),
   useGroupListQuery: () => ({
-    data: rig.groups ?? [{ name: 'Front', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', memberKeys: ['orbit-sr', 'orbit-sl'] }],
+    data: rig.groups ?? [{ name: 'Front', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', memberKeys: ['orbit-sr', 'orbit-sl'] }],
   }),
 }))
 const toasts = vi.hoisted(() => ({ last: null as null | { message: string; undo?: () => void } }))
@@ -177,15 +177,15 @@ const orbit = (key: string, first: number) =>
     { name: key === 'orbit-sr' ? 'Orbit SR' : 'Orbit SL', groups: ['Front'] },
   )
 
-function cue(id: number, propertyAssignments: CuePropertyAssignment[]): Cue {
+function cue(id: number, attributeAssignments: CueAttributeAssignment[]): Cue {
   return {
     id,
     name: `Cue ${id}`,
     cueNumber: String(id),
     cueNumberAuto: false,
     layers: [],
-    adHocEffects: [],
-    propertyAssignments,
+    adHocFx: [],
+    attributeAssignments,
     triggers: [],
     cueStackId: 7,
     cueStackName: 'Act 1',
@@ -203,10 +203,10 @@ function cue(id: number, propertyAssignments: CuePropertyAssignment[]): Cue {
 }
 
 const SCRIM = { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Scrim · opaque' } as const
-const layerRow = (key: string, propertyName: string, value: string): CookedRow => ({
+const layerRow = (key: string, attribute: string, value: string): CookedRow => ({
   targetType: 'fixture',
   targetKey: key,
-  propertyName,
+  attribute,
   value,
   layerId: 4,
   layerSource: SCRIM,
@@ -263,7 +263,7 @@ async function typeLevel(percent: string) {
 }
 async function saved(count: number) {
   await waitFor(() => expect(data.patches).toHaveLength(count), { timeout: 3000 })
-  return data.patches[count - 1].propertyAssignments
+  return data.patches[count - 1].attributeAssignments
 }
 
 // jsdom has no `matchMedia`; a desk is tall and wide, so every query answers false (the popover form).
@@ -311,10 +311,10 @@ describe('CueValuesGrid', () => {
     // Own at once, over the Look it beats — and saved as an own row of 80 %.
     expect(cell(1, 'fixture:orbit-sr', 'dimmer')).toHaveAttribute('title', 'Own · overrides Scrim · opaque')
     expect(cell(1, 'fixture:orbit-sr', 'dimmer').className).toContain('blue')
-    expect(await saved(1)).toEqual([{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '204', sortOrder: 0 }])
+    expect(await saved(1)).toEqual([{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '204', sortOrder: 0 }])
 
     // The save read back: the cue holds the row, the cook says own.
-    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '204', sortOrder: 0 }]))
+    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '204', sortOrder: 0 }]))
     fireEvent.keyDown(window, { key: 'Escape' })
     fireEvent.keyDown(window, { key: 'Backspace' })
     // The own row is gone from the draft, so the Look under it shows again …
@@ -327,28 +327,28 @@ describe('CueValuesGrid', () => {
     data.cues.set(
       1,
       cue(1, [
-        { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'position', value: '100,150', fadeDurationMs: 1500, moveInDark: true, sortOrder: 3 },
-        { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', fadeDurationMs: 800, sortOrder: 1 },
+        { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'position', value: '100,150', fadeDurationMs: 1500, moveInDark: true, sortOrder: 3 },
+        { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', fadeDurationMs: 800, sortOrder: 1 },
       ]),
     )
     data.cooked.set(1, [
-      { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'position', value: '100,150', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' },
-      { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' },
+      { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'position', value: '100,150', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' },
+      { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' },
     ])
     render(<Editor cueId={1} />)
     selectCell(1, 'fixture:orbit-sr', 'dimmer')
     await typeLevel('80')
     expect(await saved(1)).toEqual([
-      { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'position', value: '100,150', fadeDurationMs: 1500, moveInDark: true, sortOrder: 3 },
-      { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '204', fadeDurationMs: 800, sortOrder: 1 },
+      { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'position', value: '100,150', fadeDurationMs: 1500, moveInDark: true, sortOrder: 3 },
+      { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '204', fadeDurationMs: 800, sortOrder: 1 },
     ])
   })
 
   it('draws a group’s own row on the group’s row and edits it there', async () => {
-    data.cues.set(1, cue(1, [{ targetType: 'group', targetKey: 'Front', propertyName: 'dimmer', value: '115', sortOrder: 0 }]))
+    data.cues.set(1, cue(1, [{ targetType: 'group', targetKey: 'Front', attribute: 'dimmer', value: '115', sortOrder: 0 }]))
     data.cooked.set(1, [
-      { targetType: 'group', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Front' },
-      { targetType: 'group', targetKey: 'orbit-sl', propertyName: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Front' },
+      { targetType: 'group', targetKey: 'orbit-sr', attribute: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Front' },
+      { targetType: 'group', targetKey: 'orbit-sl', attribute: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Front' },
     ])
     render(<Editor cueId={1} />)
     expect(cell(1, 'group:Front', 'dimmer')).toHaveAttribute('title', 'Own · Front’s row')
@@ -358,15 +358,15 @@ describe('CueValuesGrid', () => {
     selectCell(1, 'group:Front', 'dimmer')
     await typeLevel('80')
     // One group row, rewritten — not a row per member.
-    expect(await saved(1)).toEqual([{ targetType: 'group', targetKey: 'Front', propertyName: 'dimmer', value: '204', sortOrder: 0 }])
+    expect(await saved(1)).toEqual([{ targetType: 'group', targetKey: 'Front', attribute: 'dimmer', value: '204', sortOrder: 0 }])
   })
 
   it('draws a group row only the cells its own row can take — not a colour its members hold on their cells', () => {
     rig.fixtures = [makePixelBar('bar-1', 2, [sliderProp('dimmer', 'dimmer', chan(90))], { name: 'Bar 1', groups: ['Bars'] })]
-    rig.groups = [{ name: 'Bars', memberCount: 1, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', memberKeys: ['bar-1'] }]
-    data.cues.set(1, cue(1, [{ targetType: 'group', targetKey: 'Bars', propertyName: 'dimmer', value: '115', sortOrder: 0 }]))
+    rig.groups = [{ name: 'Bars', memberCount: 1, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', memberKeys: ['bar-1'] }]
+    data.cues.set(1, cue(1, [{ targetType: 'group', targetKey: 'Bars', attribute: 'dimmer', value: '115', sortOrder: 0 }]))
     data.cooked.set(1, [
-      { targetType: 'group', targetKey: 'bar-1', propertyName: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Bars' },
+      { targetType: 'group', targetKey: 'bar-1', attribute: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Bars' },
       layerRow('bar-1.pixel-0', 'rgbColour', '#ff0000'),
     ])
     render(<Editor cueId={1} />)
@@ -378,11 +378,11 @@ describe('CueValuesGrid', () => {
   })
 
   it('Undo puts the list back as it was before the last save', async () => {
-    const before: CuePropertyAssignment[] = [
-      { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', fadeDurationMs: 800, sortOrder: 1 },
+    const before: CueAttributeAssignment[] = [
+      { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', fadeDurationMs: 800, sortOrder: 1 },
     ]
     data.cues.set(1, cue(1, before))
-    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
+    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
     render(<Editor cueId={1} />)
     selectCell(1, 'fixture:orbit-sr', 'dimmer')
     await typeLevel('80')
@@ -394,9 +394,9 @@ describe('CueValuesGrid', () => {
   })
 
   it('sends no programmer, channel or effect frame over a full editing pass (P2)', async () => {
-    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }]))
+    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }]))
     data.cooked.set(1, [
-      { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' },
+      { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' },
       layerRow('orbit-sl', 'position', '100,150'),
     ])
     const probe: { writers?: ReturnType<typeof useCellWriters>; plans?: ReturnType<typeof useMarqueeSpreadPlans> } = {}
@@ -417,7 +417,7 @@ describe('CueValuesGrid', () => {
     await typeLevel('80')
     // Colour and a single-axis position, through the writers the grid writes with.
     act(() => {
-      probe.writers!.writeColour('orbit-sr', (rig.fixtures[0] as Fixture).properties[1] as ColourPropertyDescriptor, 255, 128, 0)
+      probe.writers!.writeColour('orbit-sr', (rig.fixtures[0] as Fixture).attributes[1] as ColourAttributeDescriptor, 255, 128, 0)
       probe.writers!.writePosition('orbit-sl', chan(15), chan(16), 40, undefined)
     })
     // Spread: the desk resolves with `write: false`, and the literals land in the cue.
@@ -432,10 +432,10 @@ describe('CueValuesGrid', () => {
     // The position took its tilt from the composed cell (the Look's 150), never the wire.
     expect(assignments).toEqual(
       expect.arrayContaining([
-        { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '0', sortOrder: 0 },
-        { targetType: 'fixture', targetKey: 'orbit-sl', propertyName: 'dimmer', value: '255', sortOrder: expect.any(Number) },
-        { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'rgbColour', value: '#FF8000', sortOrder: expect.any(Number) },
-        { targetType: 'fixture', targetKey: 'orbit-sl', propertyName: 'position', value: '40,150', sortOrder: expect.any(Number) },
+        { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '0', sortOrder: 0 },
+        { targetType: 'fixture', targetKey: 'orbit-sl', attribute: 'dimmer', value: '255', sortOrder: expect.any(Number) },
+        { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'rgbColour', value: '#FF8000', sortOrder: expect.any(Number) },
+        { targetType: 'fixture', targetKey: 'orbit-sl', attribute: 'position', value: '40,150', sortOrder: expect.any(Number) },
       ]),
     )
     // ⌫ and Undo.
@@ -461,18 +461,18 @@ describe('CueValuesGrid', () => {
       kind: 'value',
       family: 'COLOUR',
       isGeneric: true,
-      rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: hex }],
+      rows: [{ targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: hex }],
       requiredEmitters: [],
-      effect: null,
+      fx: null,
     })
     palettes.list = [colour(1, 'Red', '#ff0000'), colour(2, 'Blue', '#0000ff')]
-    const RED = { kind: 'TEMPLATE', id: 1, uuid: 't1', name: 'Red' } as const
-    const BLUE = { kind: 'TEMPLATE', id: 2, uuid: 't2', name: 'Blue' } as const
+    const RED = { kind: 'PALETTE', id: 1, uuid: 't1', name: 'Red' } as const
+    const BLUE = { kind: 'PALETTE', id: 2, uuid: 't2', name: 'Blue' } as const
     // An own level on the head, so its row is in the grid.
-    const own: CuePropertyAssignment[] = [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }]
+    const own: CueAttributeAssignment[] = [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }]
     const layered = (...sources: (typeof RED | typeof BLUE)[]): Cue => ({
       ...cue(1, own),
-      layers: sources.map((source, i) => ({ templateId: source.id, sortOrder: i, enabled: true, targets: [{ type: 'fixture', key: 'orbit-sr' }], propertyMask: 'COLOUR', source })),
+      layers: sources.map((source, i) => ({ paletteId: source.id, sortOrder: i, enabled: true, targets: [{ type: 'fixture', key: 'orbit-sr' }], attributeMask: 'COLOUR', source })),
     })
     data.cues.set(1, cue(1, own))
     const view = render(<Editor cueId={1} />)
@@ -484,13 +484,13 @@ describe('CueValuesGrid', () => {
     data.answers.push({ action: 'applied', cue: layered(RED) })
     fireEvent.click(await chip(1))
     await waitFor(() => expect(data.presses).toHaveLength(1))
-    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, templateId: 1, targets: [{ type: 'fixture', key: 'orbit-sr' }], families: ['COLOUR'] })
+    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, paletteId: 1, targets: [{ type: 'fixture', key: 'orbit-sr' }], families: ['COLOUR'] })
 
     // The desk replaced Red with Blue on the pressed head; the chip rings where the cue layers it.
     data.answers.push({ action: 'applied', cue: layered(BLUE) })
     fireEvent.click(await chip(2))
     await waitFor(() => expect(data.presses).toHaveLength(2))
-    expect(data.presses[1]).toEqual(expect.objectContaining({ templateId: 2 }))
+    expect(data.presses[1]).toEqual(expect.objectContaining({ paletteId: 2 }))
     data.cues.set(1, layered(BLUE))
     view.rerender(
       <Provider store={store}>
@@ -509,8 +509,8 @@ describe('CueValuesGrid', () => {
   })
 
   it('takes keys only in its own region, and dims the other grid’s selection', async () => {
-    const own = (key: string): CuePropertyAssignment => ({ targetType: 'fixture', targetKey: key, propertyName: 'dimmer', value: '10', sortOrder: 0 })
-    const ownCook = (key: string): CookedRow => ({ targetType: 'fixture', targetKey: key, propertyName: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: key })
+    const own = (key: string): CueAttributeAssignment => ({ targetType: 'fixture', targetKey: key, attribute: 'dimmer', value: '10', sortOrder: 0 })
+    const ownCook = (key: string): CookedRow => ({ targetType: 'fixture', targetKey: key, attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: key })
     data.cues.set(1, cue(1, [own('orbit-sr')]))
     data.cooked.set(1, [ownCook('orbit-sr')])
     data.cues.set(2, cue(2, [own('orbit-sr')]))
@@ -560,10 +560,10 @@ describe('CueValuesGrid', () => {
   })
 
   it('builds a save on the cue as the desk holds it, not the cache', async () => {
-    const mine: CuePropertyAssignment = { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }
-    const theirs: CuePropertyAssignment = { targetType: 'fixture', targetKey: 'orbit-sl', propertyName: 'dimmer', value: '50', sortOrder: 1 }
+    const mine: CueAttributeAssignment = { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }
+    const theirs: CueAttributeAssignment = { targetType: 'fixture', targetKey: 'orbit-sl', attribute: 'dimmer', value: '50', sortOrder: 1 }
     data.cues.set(1, cue(1, [mine]))
-    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
+    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
     // Another client added a row; `cueListChanged` does not reach this cache.
     data.desk.set(1, cue(1, [mine, theirs]))
     render(<Editor cueId={1} />)
@@ -580,9 +580,9 @@ describe('CueValuesGrid', () => {
   })
 
   it('leaves the last Undo standing when a save fails, and sends the edit again', async () => {
-    const before: CuePropertyAssignment = { targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }
+    const before: CueAttributeAssignment = { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }
     data.cues.set(1, cue(1, [before]))
-    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
+    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
     render(<Editor cueId={1} />)
     selectCell(1, 'fixture:orbit-sr', 'dimmer')
     data.failNext = true
@@ -628,9 +628,9 @@ describe('CueValuesGrid', () => {
       </Editor>,
     )
     act(() => {
-      probe.writers!.writeColour('orbit-sr', (rig.fixtures[0] as Fixture).properties[1] as ColourPropertyDescriptor, 0, 0, 0, 255)
+      probe.writers!.writeColour('orbit-sr', (rig.fixtures[0] as Fixture).attributes[1] as ColourAttributeDescriptor, 0, 0, 0, 255)
     })
-    expect(await saved(1)).toEqual([{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'rgbColour', value: '#FFFFFF', sortOrder: 0 }])
+    expect(await saved(1)).toEqual([{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'rgbColour', value: '#FFFFFF', sortOrder: 0 }])
   })
 
   it('claims an Escape that clears its selection, so the sheet it opens in stays open', () => {
@@ -652,8 +652,8 @@ describe('CueValuesGrid', () => {
   })
 
   it('locked, claims ⌫ in the editor and asks to unlock — the transport never sees it', async () => {
-    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }]))
-    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
+    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }]))
+    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
     const unlock = vi.fn()
     // The transport's BACK: a bubble listener standing aside from a claimed key, as `useTransportKeys` does.
     const back = vi.fn()
@@ -681,8 +681,8 @@ describe('CueValuesGrid', () => {
   })
 
   it('reads and writes nothing while read-only', async () => {
-    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }]))
-    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
+    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }]))
+    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
     render(<Editor cueId={1} readOnly />)
     expect(within(cell(1, 'fixture:orbit-sr', 'dimmer')).getByRole('button')).toBeDisabled()
     fireEvent.pointerDown(editor(1))

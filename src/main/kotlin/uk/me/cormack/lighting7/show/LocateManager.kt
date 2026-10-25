@@ -24,7 +24,7 @@ import uk.me.cormack.lighting7.models.TargetRef
  */
 class LocateManager {
     /** One recorded Layer-4 assertion: which target key and property name were written. */
-    data class LocateWrite(val targetKey: String, val propertyName: String)
+    data class LocateWrite(val targetKey: String, val attribute: String)
 
     data class ToggleOutcome(val active: Boolean, val writeCount: Int)
 
@@ -113,14 +113,14 @@ class LocateManager {
     }
 
     /**
-     * Drop the bookkeeping rows matching one released (targetKey, propertyName) write —
+     * Drop the bookkeeping rows matching one released (targetKey, attribute) write —
      * used when a programmer entry clear takes a `LOCATE` slot out from under the manager,
      * so a target whose every write has been cleared stops reporting itself located.
      * Targets with other writes remaining keep their locate state (consistent with the
      * write-less-is-not-stale rule in [toggle]).
      */
-    fun pruneWrite(targetKey: String, propertyName: String) = synchronized(lock) {
-        val write = LocateWrite(targetKey, propertyName)
+    fun pruneWrite(targetKey: String, attribute: String) = synchronized(lock) {
+        val write = LocateWrite(targetKey, attribute)
         var changed = false
         val iterator = active.entries.iterator()
         while (iterator.hasNext()) {

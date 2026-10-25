@@ -3,17 +3,17 @@ import { HexColorPicker } from 'react-colorful'
 import { ExtendedChannelSlider } from '../fixtures/ExtendedChannelSlider'
 import {
   isValidHexColour,
-  parseTemplateRefUuid,
+  parsePaletteRefUuid,
   COLOUR_PRESETS,
   type ExtendedChannelFlags,
   type ExtendedColour,
 } from './colourUtils'
-import { FxColourTemplateRow } from './FxColourTemplates'
-import type { TemplateSummary } from '@/api/templatesApi'
+import { FxColourPaletteRow } from './FxColourPalettes'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 interface ColourEditorBodyProps {
   /**
-   * The colour being edited, **already resolved**: a caller holding a `tmpl:` reference passes the
+   * The colour being edited, **already resolved**: a caller holding a `pal:` reference passes the
    * colour that template currently paints, not the placeholder behind it. That is what makes a
    * reference open at the colour the rig is showing rather than at black, and it is why this
    * component never resolves anything itself — the two callers hold references differently (one
@@ -27,10 +27,13 @@ interface ColourEditorBodyProps {
   onColourChange: (colour: ExtendedColour) => void
   /** The raw stored value, read only for which template chip is highlighted. */
   rawValue: string
-  /** Pick a template: the caller receives a `tmpl:` reference string. */
-  onPickTemplate: (ref: string) => void
-  /** The offerable colour templates, from `useColourTemplates`. */
-  templates: TemplateSummary[]
+  /**
+   * Pick a template: the caller receives a `pal:` reference string. Absent where a colour may not
+   * name a palette — Colour Cycle's list takes literal colours only — and no palettes are offered.
+   */
+  onPickPalette?: (ref: string) => void
+  /** The offerable colour templates, from `useColourPalettes`. */
+  palettes?: PaletteSummary[]
   /** Which extended channels the target fixtures actually have. */
   extendedChannels?: Partial<ExtendedChannelFlags>
 }
@@ -47,8 +50,8 @@ export function ColourEditorBody({
   colour,
   onColourChange,
   rawValue,
-  onPickTemplate,
-  templates,
+  onPickPalette,
+  palettes: templates,
   extendedChannels,
 }: ColourEditorBodyProps) {
   const [hexInput, setHexInput] = useState(colour.hex)
@@ -122,15 +125,17 @@ export function ColourEditorBody({
         ))}
       </div>
 
-      <FxColourTemplateRow
-        templates={templates}
-        currentHex={colour.hex}
-        // The sliders below are part of the colour being dialled in, so *Save as template…* saves
-        // them too — it used to keep the hex and silently drop the amber the operator had just set.
-        currentEmitters={{ white: colour.white, amber: colour.amber, uv: colour.uv }}
-        selectedUuid={parseTemplateRefUuid(rawValue)}
-        onPick={onPickTemplate}
-      />
+      {onPickPalette != null && (
+        <FxColourPaletteRow
+          palettes={templates ?? []}
+          currentHex={colour.hex}
+          // The sliders below are part of the colour being dialled in, so *Save as template…* saves
+          // them too — it used to keep the hex and silently drop the amber the operator had just set.
+          currentEmitters={{ white: colour.white, amber: colour.amber, uv: colour.uv }}
+          selectedUuid={parsePaletteRefUuid(rawValue)}
+          onPick={onPickPalette}
+        />
+      )}
 
       {/* Extended channels (W/A/UV) */}
       {hasExtended && (

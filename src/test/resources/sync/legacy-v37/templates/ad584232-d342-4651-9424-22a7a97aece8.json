@@ -1,0 +1,32 @@
+{
+  "effect": {
+    "beatDivision": 2.0,
+    "blendMode": "MAX",
+    "blocks": 2,
+    "category": "colour",
+    "direction": "BOUNCE",
+    "distribution": "REVERSE",
+    "effectType": "ColourWave",
+    "elementFilter": "EVEN",
+    "elementMode": "FLAT",
+    "groups": 2,
+    "nShot": 3,
+    "parameters": {
+      "colours": "tmpl:8c68a983-63d2-4ed7-88c3-601639edf9fc",
+      "depth": "0.6"
+    },
+    "phaseOffset": 0.125,
+    "propertyName": "rgbColour",
+    "rateSpeedMasterUuid": "15ec39c4-845a-4565-a223-0585b1836c54",
+    "seconds": true,
+    "size": 0.75,
+    "speedMasterUuid": "15ec39c4-845a-4565-a223-0585b1836c54",
+    "spread": 1.5,
+    "stepTiming": false,
+    "uuid": "63a4d8f1-5f02-4bfc-bb2b-72a67225ee11",
+    "wings": 3
+  },
+  "name": "amber-breathe",
+  "notes": "slow warm breathe on the selection",
+  "uuid": "ad584232-d342-4651-9424-22a7a97aece8"
+}

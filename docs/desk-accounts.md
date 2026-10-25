@@ -77,10 +77,10 @@ a version of it is. Two gates carry it:
 - **`/api/rest/venues/…`** — History, diff, publish and discard — is mounted inside `adminOnly {}`.
 - **A venue's own project routes** are guarded by role at the head of the `/projects/{id}/…` subtree
   (`routes/projectWriteGuard.kt`): an operator's write is 403 `VENUE_ADMIN_ONLY`, unless it stores
-  nothing — `set-current` (opening the venue), the programmer's spread, aim and focus, arming and
+  nothing — `set-current` (opening the venue), the programmer's Fan, aim and focus, arming and
   firing, and fixture commands, which act on the rig as it stands. Reads are open to both roles, so
   an operator can look at a venue. *Add venue* (`POST /projects` with `kind: VENUE`) calls
-  `requireAdmin()`. A **copy** into another project (`…/{looks|templates|scripts}/{id}/copy`)
+  `requireAdmin()`. A **copy** into another project (`…/{looks|palettes|scripts}/{id}/copy`)
   names its target in the body, so the target is judged too (`refusedCopyTarget`), and the FX
   definitions, stored in the live project under a path that names none, are refused an operator on a
   live venue (`refusedLiveVenueWrite`). The frontend withholds the draft, History and Publish from an

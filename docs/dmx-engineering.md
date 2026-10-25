@@ -3,8 +3,8 @@
 This document describes the low-level DMX control architecture in Lighting7.
 
 > **See also**: [lighting-composition-model.md](lighting-composition-model.md) for the
-> layered composition model (parking → effects → property assignments → direct writes →
-> baseline) that sits above this transport layer. Parking is Layer 1 in that model.
+> layered composition model (parking → FX → attribute assignments → direct writes →
+> baseline) that sits above this transport layer. Parking is Tier 1 in that model.
 
 ## Overview
 
@@ -112,7 +112,7 @@ sealed interface DmxController {
     fun setValue(channelNo: Int, channelValue: UByte, fadeMs: Long = 0)
     fun getValue(channelNo: Int): UByte
 
-    // Parking (Layer 1)
+    // Parking (Tier 1)
     fun park(channelNo: Int, value: UByte)
     fun unpark(channelNo: Int)
     fun isParked(channelNo: Int): Boolean
@@ -253,7 +253,7 @@ callback with the delta map. This is the **single observation point** for
 - [`SurfaceFeedbackPublisher`](midi-control-surface-engineering.md) to drive motor faders
   and encoder rings in response to composition changes
 
-Because every layer (parking, effects, cues, direct writes, transmit modifiers) converges
+Because every source (parking, FX, cues, direct writes, transmit modifiers) converges
 at this listener, observers never need to know *how* a value got to the wire — only that it
 did.
 
@@ -299,7 +299,7 @@ for each channel:
   [§Refresh interval](#refresh-interval).
 
 This pattern generalises: any feature that needs to transform DMX values at transmit
-time without being part of the composition layers (parking is the other canonical
+time without being part of the composition tiers (parking is the other canonical
 example) can be a `TransmitModifier`.
 
 ## ControllerTransaction
@@ -342,7 +342,7 @@ The `getValue()` method returns the pending value (what will be after `apply()`)
 
 `DmxController` exposes two commit entry points:
 
-- `suspend fun setValuesSuspend(values)` — hot writer paths (FX beat + wall-clock tick loops,
+- `suspend fun setValuesSuspend(values)` — hot writer paths (the FX compose pass,
   MIDI surface input, script coroutines) should call this. Each per-channel update is sent
   and awaited as a child of `coroutineScope`, so the calling coroutine parks on a continuation
   rather than a thread. `ControllerTransaction.applySuspend()` fans commits across universes
@@ -356,13 +356,8 @@ same channel returns the committed value — because each channel's conflated co
 update before the commit returns. The suspend path just doesn't pin a carrier thread on
 `runBlocking` while it waits.
 
-The frame-transaction unification that would share a single `ControllerTransaction` between
-the beat and wall-clock FX loops is not in scope for Phase 8. Continuous streaming has
-since made the *packet-rate* half of that concern structurally impossible — a universe emits
-exactly one frame per tick regardless of how many transactions committed — and the
-coordination cost (shared `AtomicReference` + mutex around the open-close edge) isn't a clear
-win for what remains. Tracked as a future consideration in
-[fx-engineering.md §Future Considerations](fx-engineering.md#future-considerations).
+The FX engine commits one `ControllerTransaction` per compose pass, beat and wall-clock FX
+together — [fx-engineering.md §"Architecture: one compose pass"](fx-engineering.md#architecture-one-compose-pass).
 
 ### Benchmarking
 
@@ -499,7 +494,7 @@ wire = held ? (parked ? value : 0 for each channel) : values
   a moved pin, a newer version or a restart). While it runs, the **installed** version's one-shot
   trigger and arm channels and its fixture-command channels — at the venue's address and, for a unit
   the show re-addresses, at the show's — are reserved: a dedicated one goes out at its idle level
-  whatever the old patch writes there (`Reserve.Fixed`), one the installed rig shares with a property
+  whatever the old patch writes there (`Reserve.Fixed`), one the installed rig shares with an attribute
   (a MAC 250's shutter) at idle only inside a command's band (`Reserve.Band`). Unlike the hold this
   *is* what the wire carries, so the listeners hear it too. A unit the show hides counts: a hide takes
   it out of the show, not off the bar.
@@ -522,8 +517,8 @@ a frame at zero** unless zero is where the next show puts it.
 
 - **Freeze, then tear down.** `ProjectManager.shutdownShow` first freezes every outgoing controller on
   the frame it leaves (`DmxController.freeze`: the transmit loop sends that frame, park still overlaid,
-  whatever the buffer does). Only then is the FX engine stopped — whose reset of every effect-covered
-  property used to reach the wire for a frame or two, a dip — and the controllers closed.
+  whatever the buffer does). Only then is the FX engine stopped — whose reset of every FX-covered
+  attribute used to reach the wire for a frame or two, a dip — and the controllers closed.
 - **The last frame goes first.** `ArtNetController.close` sends its final frame from its own thread as
   the cancel lands, which could follow a successor's first frame on the same universe.
   `Fixtures.register(removeUnused = true)` closes the outgoing controllers and waits for each one's
@@ -548,21 +543,21 @@ a frame at zero** unless zero is where the next show puts it.
   old-patch levels on the new addresses — each live stack's live **entry** and each armed standby
   entry, the cues held loose in press order (cue model plan session 2), the
   `ProgrammerStore` itself (values, layers, sideband, Blind) with the `LocateManager` that pairs
-  with its LOCATE slots, and every effect no cue or programmer layer owns. The successor's controllers are seeded with the frame and **frozen on it**
-  (`Show.start(seedValues)`) while `Show.resume` puts the effects back, GOes each entry again (events not
+  with its LOCATE slots, and every FX no cue or programmer layer owns. The successor's controllers are seeded with the frame and **frozen on it**
+  (`Show.start(seedValues)`) while `Show.resume` puts the FX back, GOes each entry again (events not
   re-fired; its auto-advance timer starts again from the reload), re-arms each standby, takes each
-  loose hold again in press order (events not re-fired), re-cooks the programmer's layers and republishes it, publishes every patched property from
-  whatever now composes it (so a property nothing drives any more releases to its base), and zeroes
+  loose hold again in press order (events not re-fired), re-cooks the programmer's layers and republishes it, publishes every patched attribute from
+  whatever now composes it (so an attribute nothing drives any more releases to its base), and zeroes
   every channel no fixture covers and no programmer channel holds. Then it unfreezes, ramping every
   channel the rebuild moved from its carried value to its new one over `RESUME_FADE_MS` (2 s). A
   universe the reloaded project no longer has is left dark. Each resume step is guarded on its own, so
-  one that fails is logged and the rest still run, and the freeze is always lifted. Effects restart
+  one that fails is logged and the rest still run, and the freeze is always lifted. FX restart
   their phase; cues applied outside a stack (`apply_cue`) are not brought back. The desk selection, encoder bank, busk page, hand
   and the programmer's scenery stay (`State`'s project collector skips their clears on
   `ProjectChangedEvent.reload`), each pruned of what the reload removed.
 
 Regression coverage: `dmx/ControllerHandoverTest` (freeze, `awaitClosed`, no old frame after a
-successor's first), `state/ProjectReloadCarryTest` (a reload with a cue, the programmer, an effect
+successor's first), `state/ProjectReloadCarryTest` (a reload with a cue, the programmer, an FX
 and a park; a crossfaded change and a release; a dropped park handed down; standby and Locate carried;
 the selection pruned; a same-id switch without `reload` a clean start; a switch between two projects
 that park) and `venue/VenueHoldTest` (an Update that lifts the hold starts from the wire, not the
@@ -572,22 +567,22 @@ held composition).
 
 Parked channels are held at a fixed value by [`ParkManager`](../src/main/kotlin/uk/me/cormack/lighting7/dmx/ParkManager.kt)
 and re-applied at transmit time in `ArtNetController.sendCurrentValues()` so they survive
-regardless of what composition above produces. Conceptually parking is **Layer 1** — the
-highest-priority layer — in the composition model; the transmit-time override is a
+regardless of what composition above produces. Conceptually parking is **Tier 1** — the
+highest-priority tier — in the composition model; the transmit-time override is a
 defence-in-depth implementation of that rule. See
-[lighting-composition-model.md](lighting-composition-model.md) §"Layer 1".
+[lighting-composition-model.md](lighting-composition-model.md) §"Tier 1 — Parking".
 
-The FX engine also consults `ParkManager.isParked` during effect reset to skip reset work for
-fully-parked properties (an optimization; the transmit-time override would handle it anyway).
+The FX engine also consults `ParkManager.isParked` during FX reset to skip reset work for
+fully-parked attributes (an optimization; the transmit-time override would handle it anyway).
 
-Unparking hands the parked value down to the layers below (direct-write store + controller
+Unparking hands the parked value down to the tiers below (direct-write store + controller
 buffer) *before* removing the override, via the `UnparkValueSink` that `Show` wires into
 `ParkManager` — so releasing park never moves the output and park/unpark is a safe toggle.
 Regression coverage: `UnparkPreservesValueTest`.
 
 **Whose parks.** A project's parks are its own rows — and, for a show on a venue, its pinned version's
 too, overlaid by its own re-parks and less its releases (`models/VenueParks.kt`; the rule is
-`docs/fixtures-engineering.md` §"Venue parks"). `ParkManager` holds the three layers and recomputes the
+`docs/fixtures-engineering.md` §"Venue parks"). `ParkManager` holds the three park layers and recomputes the
 transmit loop's per-universe view one channel at a time, so `universeView` stays one lookup per frame.
 Every write is the project's own: a re-park writes the show's row, unparking a venue park stores a
 release (and hands the venue's value down, so the output does not move), and unparking the show's
@@ -628,7 +623,7 @@ mapping a linear `[0, 1]` position into an eased position):
 | `STEP_HALF` | Jump at `t = 0.5` |
 
 Defined in `dmx/EasingCurve.kt`. Used by `TickerState` for DMX fades and by cue crossfades
-when the property category is a slider (see
+when the attribute category is a slider (see
 [lighting-composition-model.md §Crossfade](lighting-composition-model.md#crossfade-behaviour)).
 
 ## File Reference
@@ -645,7 +640,7 @@ when the property category is a slider (see
 | `TickerState.kt` | Fade interpolation state machine (curve-aware) |
 | `EasingCurve.kt` | Easing curve implementations |
 | `TransmitModifier.kt` | Post-composition, pre-wire transform hook |
-| `ParkManager.kt` | Layer 1 parking: persistence + in-memory state + WS broadcast |
+| `ParkManager.kt` | Tier 1 parking: persistence + in-memory state + WS broadcast |
 
 ## Dependencies
 

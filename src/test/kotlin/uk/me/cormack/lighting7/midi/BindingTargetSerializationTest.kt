@@ -13,18 +13,18 @@ import kotlin.test.assertTrue
 class BindingTargetSerializationTest {
 
     @Test
-    fun `FixtureProperty round trips with type discriminator`() {
-        val target: BindingTarget = BindingTarget.FixtureProperty(fixtureKey = "hex-1", propertyName = "dimmer")
+    fun `FixtureAttribute round trips with type discriminator`() {
+        val target: BindingTarget = BindingTarget.FixtureAttribute(fixtureKey = "hex-1", attribute = "dimmer")
         val encoded = BindingTargetJson.encodeToString(target)
         val tree = BindingTargetJson.parseToJsonElement(encoded) as JsonObject
-        assertEquals("fixtureProperty", tree["type"]?.jsonPrimitive?.content)
+        assertEquals("fixtureAttribute", tree["type"]?.jsonPrimitive?.content)
         val decoded = BindingTargetJson.decodeFromString<BindingTarget>(encoded)
         assertEquals(target, decoded)
     }
 
     @Test
-    fun `GroupProperty round trips`() {
-        val target: BindingTarget = BindingTarget.GroupProperty(groupName = "front-wash", propertyName = "rgbColour")
+    fun `GroupAttribute round trips`() {
+        val target: BindingTarget = BindingTarget.GroupAttribute(groupName = "front-wash", attribute = "rgbColour")
         val encoded = BindingTargetJson.encodeToString(target)
         assertEquals(target, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
     }
@@ -60,15 +60,15 @@ class BindingTargetSerializationTest {
     }
 
     @Test
-    fun `Flash wraps a FixtureProperty target`() {
+    fun `Flash wraps a FixtureAttribute target`() {
         val flash: BindingTarget = BindingTarget.Flash(
-            target = BindingTarget.FixtureProperty("hex-1", "dimmer"),
+            target = BindingTarget.FixtureAttribute("hex-1", "dimmer"),
             max = 200,
         )
         val encoded = BindingTargetJson.encodeToString(flash)
         val decoded = BindingTargetJson.decodeFromString<BindingTarget>(encoded)
         val round = assertIs<BindingTarget.Flash>(decoded)
-        assertIs<BindingTarget.FixtureProperty>(round.target)
+        assertIs<BindingTarget.FixtureAttribute>(round.target)
         assertEquals(200, round.max)
     }
 
@@ -83,7 +83,7 @@ class BindingTargetSerializationTest {
     fun `Flash rejects an out-of-range max`() {
         assertFailsWith<IllegalArgumentException> {
             BindingTarget.Flash(
-                target = BindingTarget.FixtureProperty("hex-1", "dimmer"),
+                target = BindingTarget.FixtureAttribute("hex-1", "dimmer"),
                 max = 300,
             )
         }
@@ -111,10 +111,10 @@ class BindingTargetSerializationTest {
     }
 
     @Test
-    fun `StackEffectSize round trips and is a continuous target`() {
-        val fader: BindingTarget = BindingTarget.StackEffectSize(stackId = 3, stackUuid = "00000000-0000-4000-8000-000000000003")
+    fun `StackFxAmount round trips and is a continuous target`() {
+        val fader: BindingTarget = BindingTarget.StackFxAmount(stackId = 3, stackUuid = "00000000-0000-4000-8000-000000000003")
         val encoded = BindingTargetJson.encodeToString(fader)
-        assertTrue(encoded.contains("\"type\":\"stackEffectSize\""), encoded)
+        assertTrue(encoded.contains("\"type\":\"stackFxAmount\""), encoded)
         assertEquals(fader, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
         assertEquals(ControlKind.CONTINUOUS, targetControlKind(fader))
     }
@@ -211,7 +211,7 @@ class BindingTargetSerializationTest {
     @Test
     fun `selection variants round trip with their discriminators`() {
         val cases = mapOf(
-            "selectionProperty" to BindingTarget.SelectionProperty("dimmer"),
+            "selectionAttribute" to BindingTarget.SelectionAttribute("dimmer"),
             "selectTarget" to BindingTarget.SelectTarget(
                 uk.me.cormack.lighting7.models.CueTargetDto("group", "front-wash"),
                 BindingTarget.SelectMode.REPLACE,
@@ -278,21 +278,21 @@ class BindingTargetSerializationTest {
     private fun decode(json: String) = BindingTargetJson.decodeFromString<BindingTarget>(json)
 
     @Test
-    fun `a colour axis rides on the four property targets, and a hue binding carries none`() {
-        val fine: BindingTarget = BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.HUE_FINE)
+    fun `a colour axis rides on the four attribute targets, and a hue binding carries none`() {
+        val fine: BindingTarget = BindingTarget.FixtureAttribute("hex-1", "rgbColour", ColourAxis.HUE_FINE)
         assertEquals(
-            """{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"rgbColour","colourAxis":"hueFine"}""",
+            """{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"rgbColour","colourAxis":"hueFine"}""",
             encode(fine),
         )
         assertEquals(fine, decode(encode(fine)))
         // No axis is no field: a new hue binding is byte-identical to one written before axes existed.
         assertEquals(
-            """{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"rgbColour"}""",
-            encode(BindingTarget.FixtureProperty("hex-1", "rgbColour")),
+            """{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"rgbColour"}""",
+            encode(BindingTarget.FixtureAttribute("hex-1", "rgbColour")),
         )
-        val legacy = decode("""{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"rgbColour"}""")
-        assertEquals(BindingTarget.FixtureProperty("hex-1", "rgbColour"), legacy)
-        assertNull((legacy as BindingTarget.FixtureProperty).colourAxis)
+        val legacy = decode("""{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"rgbColour"}""")
+        assertEquals(BindingTarget.FixtureAttribute("hex-1", "rgbColour"), legacy)
+        assertNull((legacy as BindingTarget.FixtureAttribute).colourAxis)
         assertEquals(ColourAxis.HUE, legacy.colourAxis.effective)
 
         val names = mapOf(
@@ -303,14 +303,14 @@ class BindingTargetSerializationTest {
         )
         assertEquals(ColourAxis.entries.toSet(), names.keys, "every axis has a pinned serial name")
         for ((axis, name) in names) {
-            val target: BindingTarget = BindingTarget.SelectionProperty("rgbColour", axis)
+            val target: BindingTarget = BindingTarget.SelectionAttribute("rgbColour", axis)
             assertTrue(encode(target).contains(""""colourAxis":"$name""""), encode(target))
             assertEquals(target, decode(encode(target)))
         }
         for (target in listOf<BindingTarget>(
-            BindingTarget.GroupProperty("front-wash", "rgbColour", ColourAxis.SATURATION),
+            BindingTarget.GroupAttribute("front-wash", "rgbColour", ColourAxis.SATURATION),
             BindingTarget.EncoderBankSet("rgbColour", ColourAxis.BRIGHTNESS),
-            BindingTarget.Flash(BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.SATURATION)),
+            BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-1", "rgbColour", ColourAxis.SATURATION)),
         )) {
             assertEquals(target, decode(encode(target)))
         }
@@ -318,13 +318,13 @@ class BindingTargetSerializationTest {
 
     @Test
     fun `colourAxisOrNull answers for the four carriers and through a flash`() {
-        assertEquals(ColourAxis.SATURATION, BindingTarget.GroupProperty("g", "rgbColour", ColourAxis.SATURATION).colourAxisOrNull())
+        assertEquals(ColourAxis.SATURATION, BindingTarget.GroupAttribute("g", "rgbColour", ColourAxis.SATURATION).colourAxisOrNull())
         assertEquals(ColourAxis.HUE_FINE, BindingTarget.EncoderBankSet("rgbColour", ColourAxis.HUE_FINE).colourAxisOrNull())
         assertEquals(
             ColourAxis.BRIGHTNESS,
-            BindingTarget.Flash(BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.BRIGHTNESS)).colourAxisOrNull(),
+            BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-1", "rgbColour", ColourAxis.BRIGHTNESS)).colourAxisOrNull(),
         )
-        assertNull(BindingTarget.FixtureProperty("hex-1", "rgbColour").colourAxisOrNull())
+        assertNull(BindingTarget.FixtureAttribute("hex-1", "rgbColour").colourAxisOrNull())
         assertNull(BindingTarget.Blackout.colourAxisOrNull())
     }
 }

@@ -38,7 +38,7 @@ vi.mock('@/components/programmer/RecordLookSheet', () => ({
     open ? <div data-testid="record-look" data-targets={JSON.stringify(targets)} /> : null,
 }))
 let templates: unknown[] = []
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: templates }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: templates }) }))
 
 const colour = (extra: Record<string, unknown> = {}) => ({
   type: 'colour',
@@ -52,18 +52,18 @@ const colour = (extra: Record<string, unknown> = {}) => ({
 })
 const dimmer = { type: 'slider', name: 'dimmer', displayName: 'Dimmer', category: 'dimmer', channel: { universe: 1, channelNo: 20 }, min: 0, max: 255 }
 const position = { type: 'position', name: 'position', displayName: 'Position', category: 'position', panChannel: { universe: 1, channelNo: 30 }, tiltChannel: { universe: 1, channelNo: 31 }, panMin: 0, panMax: 255, tiltMin: 0, tiltMax: 255 }
-const par1 = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: ['Front wash'], properties: [colour(), dimmer] } as unknown as Fixture
-const par2 = { key: 'par-2', name: 'PAR 2', typeKey: 'par', groups: ['Front wash'], properties: [colour({ whiteChannel: { universe: 1, channelNo: 4 } }), dimmer] } as unknown as Fixture
-const mover = { key: 'mh-1', name: 'Mover', typeKey: 'mh', groups: [], properties: [dimmer, position] } as unknown as Fixture
+const par1 = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: ['Front wash'], attributes: [colour(), dimmer] } as unknown as Fixture
+const par2 = { key: 'par-2', name: 'PAR 2', typeKey: 'par', groups: ['Front wash'], attributes: [colour({ whiteChannel: { universe: 1, channelNo: 4 } }), dimmer] } as unknown as Fixture
+const mover = { key: 'mh-1', name: 'Mover', typeKey: 'mh', groups: [], attributes: [dimmer, position] } as unknown as Fixture
 const bar = {
   key: 'bar',
   name: 'Bar L',
   typeKey: 'bar',
   groups: [],
-  properties: [dimmer],
+  attributes: [dimmer],
   elements: [
-    { index: 0, key: 'bar.c1', displayName: 'Cell 1', properties: [colour()] },
-    { index: 1, key: 'bar.c2', displayName: 'Cell 2', properties: [colour()] },
+    { index: 0, key: 'bar.c1', displayName: 'Cell 1', attributes: [colour()] },
+    { index: 1, key: 'bar.c2', displayName: 'Cell 2', attributes: [colour()] },
   ],
 } as unknown as Fixture
 const fixtures = [par1, par2, mover, bar]
@@ -78,7 +78,7 @@ import { lookLayerTarget } from './buskingTypes'
 const group: BuskingTarget = {
   type: 'group',
   name: 'Front wash',
-  group: { name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] },
+  group: { name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' },
 }
 const moverTarget: BuskingTarget = { type: 'fixture', key: 'mh-1', fixture: mover }
 const barTarget: BuskingTarget = { type: 'fixture', key: 'bar', fixture: bar }
@@ -143,27 +143,27 @@ describe('the request', () => {
         { type: 'fixture', key: 'bar.c2' },
       ],
       families: ['COLOUR'],
-      property: 'rgbColour',
+      attribute: 'rgbColour',
       from: '#F5B342;policy=extract',
       to: '#2456FF;policy=extract',
       curve: 'LINE',
-      order: 'LINEAR',
-      parts: 1,
+      order: 'NORMAL',
+      runs: 1,
       over: 'HEADS',
       seed: 0,
       fadeMs: 0,
     })
   })
 
-  it('sends a tmpl: reference for a colour endpoint chosen from the library, and only offers generic value colour palettes', () => {
+  it('sends a pal: reference for a colour endpoint chosen from the library, and only offers generic value colour palettes', () => {
     templates = [
-      { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] },
-      { id: 2, uuid: 'u-fx', name: 'Pulse', family: 'COLOUR', kind: 'effect', isGeneric: true, rows: [], requiredEmitters: [] },
+      { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ attribute: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] },
+      { id: 2, uuid: 'u-fx', name: 'Pulse', family: 'COLOUR', kind: 'fx', isGeneric: true, rows: [], requiredEmitters: [] },
       { id: 3, uuid: 'u-per', name: 'Per head', family: 'COLOUR', kind: 'value', isGeneric: false, rows: [], requiredEmitters: [] },
       { id: 4, uuid: 'u-pos', name: 'Home', family: 'POSITION', kind: 'value', isGeneric: true, rows: [], requiredEmitters: [] },
       // A legal colour template with no hex: the desk's `spreadEndpoint` has nothing to interpolate
       // and answers 400, so it is not offered rather than refused after the press.
-      { id: 5, uuid: 'u-uv', name: 'UV only', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ propertyName: 'uv', value: 'dmx:200' }], requiredEmitters: ['uv'] },
+      { id: 5, uuid: 'u-uv', name: 'UV only', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ attribute: 'uv', value: 'dmx:200' }], requiredEmitters: ['uv'] },
     ]
     draw([group])
     fireEvent.click(radio('Family', 'Colour'))
@@ -172,7 +172,7 @@ describe('the request', () => {
     expect([...picker.options].map((o) => o.textContent)).toEqual(['— a colour —', 'Amber'])
     fireEvent.change(picker, { target: { value: 'u-amber' } })
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'rgbColour', from: '#F5B342;policy=extract', to: 'tmpl:u-amber' })
+    expect(lastRequest()).toMatchObject({ attribute: 'rgbColour', from: '#F5B342;policy=extract', to: 'pal:u-amber' })
     // The desk interpolates with From's policy alone; while From is a template that policy is the
     // template row's, so the control goes inert and says why rather than pretending to edit it.
     const policies = () => within(screen.getByRole('radiogroup', { name: 'White policy' })).getAllByRole('radio')
@@ -259,19 +259,19 @@ describe('the desk’s answer', () => {
 })
 
 describe('Over', () => {
-  it('offers Cells with the count where a selected fixture has cells, and keeps it chosen where none does', () => {
+  it('offers Elements with the count where a selected fixture has cells, and keeps it chosen where none does', () => {
     const { rerender } = draw([group, barTarget])
-    const cells = radio('Over', /^Cells/)
+    const cells = radio('Over', /^Elements/)
     expect(cells).toBeEnabled()
-    expect(cells).toHaveTextContent('Cells2')
+    expect(cells).toHaveTextContent('Elements2')
     fireEvent.click(cells)
     // A selection with no cells keeps the choice (the desk spreads it as Heads), and it is still
     // there when the bar comes back.
     rerender(<SpreadSheet projectId={6} selectedTargets={selectionOf(group)} families={null} />)
-    expect(radio('Over', /^Cells/)).toBeEnabled()
-    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Over', /^Elements/)).toBeEnabled()
+    expect(radio('Over', /^Elements/)).toHaveAttribute('aria-checked', 'true')
     rerender(<SpreadSheet projectId={6} selectedTargets={selectionOf(group, barTarget)} families={null} />)
-    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Over', /^Elements/)).toHaveAttribute('aria-checked', 'true')
     // The count is the Cells chip's own expansion (`lib/cellsSubSelection.ts`), so Over: Cells and
     // the chip count cells one way; this is the same three answers the tab's own counter gave.
     const count = (...targets: BuskingTarget[]) =>
@@ -294,7 +294,7 @@ describe('Save as Look…', () => {
         { type: 'fixture', key: 'bar.c2' },
       ]),
     )
-    expect(spreadSheetSrc).not.toMatch(/from-programmer|NewTemplateFromSelectionSheet/)
+    expect(spreadSheetSrc).not.toMatch(/from-programmer|NewPaletteFromSelectionSheet/)
   })
 })
 
@@ -305,7 +305,7 @@ describe('the seed', () => {
     await waitFor(() => expect(onSeedConsumed).toHaveBeenCalledTimes(1))
     expect(radio('Family', 'Colour')).toHaveAttribute('aria-checked', 'true')
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'rgbColour', from: '#FF0007;policy=extract', to: '#2456FF;policy=extract' })
+    expect(lastRequest()).toMatchObject({ attribute: 'rgbColour', from: '#FF0007;policy=extract', to: '#2456FF;policy=extract' })
   })
 
   it('spends the seed without moving the family when the selection cannot take colour', async () => {
@@ -315,6 +315,6 @@ describe('the seed', () => {
     expect(radio('Family', 'Intensity')).toHaveAttribute('aria-checked', 'true')
     expect(within(screen.getByRole('radiogroup', { name: 'Family' })).queryByRole('radio', { name: 'Colour' })).toBeNull()
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'dimmer' })
+    expect(lastRequest()).toMatchObject({ attribute: 'dimmer' })
   })
 })

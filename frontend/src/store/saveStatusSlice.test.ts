@@ -189,7 +189,7 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./fixtureFx'),
       import('./groups'),
       import('./looks'),
-      import('./templates'),
+      import('./palettes'),
       import('./busk'),
       import('./fxDefinitions'),
       import('./scripts'),
@@ -199,6 +199,7 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./programmerOps'),
       import('./perf'),
       import('./status'),
+      import('./fxPreview'),
     ])
 
     const known = new Set(Object.keys(restApi.endpoints))

@@ -1,21 +1,21 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { MemoryRouter } from 'react-router'
 import { useRef, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Cue, CueAdHocEffect, CueLayer, CueLayerDetail, CueTarget } from '@/api/cuesApi'
-import type { EffectLibraryEntry } from '@/store/fixtureFx'
+import type { Cue, CueAdHocFx, CueLayer, CueLayerDetail, CueTarget } from '@/api/cuesApi'
+import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { LayerHandlers } from '@/components/looks/LookStack'
 
 /**
  * The cue editor's Looks and FX tabs (show-cue-editing plan session 6): each gesture one whole-list
- * write of the cue's `layers` or `adHocEffects`, every `sortOrder` restated, built from the cue as
+ * write of the cue's `layers` or `adHocFx`, every `sortOrder` restated, built from the cue as
  * the desk holds it — and **nothing sent to the stage** (P2). The store and the real `lightingApi`
  * are mounted over a socket that records every frame, so P2's test reads the wire itself.
  *
  * `LookStack` is a stand-in that hands its handlers out (its own rows are `LookStack.test.tsx`'s);
- * the FX tab draws the real `FxPicker`, in draft, and the real `FxEffectFields`.
+ * the FX tab draws the real `FxPicker`, in draft, and the real `FxFields`.
  */
 
 const socket = vi.hoisted(() => {
@@ -52,7 +52,7 @@ const data = vi.hoisted(() => ({
   /** While set, the next PATCH is refused. */
   failNext: false,
   selection: [] as CueTarget[],
-  library: [] as EffectLibraryEntry[],
+  library: [] as FxLibraryEntry[],
   addFx: vi.fn(),
 }))
 vi.mock('@/store/cues', async (importOriginal) => ({
@@ -116,24 +116,34 @@ vi.mock('@/components/press/ApplyPicker', async () => {
   }
 })
 vi.mock('@/components/hand/HandLayerTargets', () => ({ HandCueLayerStrip: () => null }))
+// The open FX row's graph strip asks the desk's preview; each ask is read and refused, so the next goes out.
+const previews = vi.hoisted(() => ({ asks: [] as Record<string, unknown>[] }))
+vi.mock('@/store/fxPreview', () => ({
+  usePreviewFxMutation: () => [
+    (body: Record<string, unknown>) => {
+      previews.asks.push(body)
+      return { unwrap: () => Promise.reject(new Error('not asked here')) }
+    },
+  ],
+}))
 vi.mock('@/store/looks', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/looks')>()),
-  useLookListQuery: () => ({ data: [{ id: 4, uuid: 'u4', name: 'Warm', families: [], rowCount: 1, effectCount: 1, targetCount: 1 }] }),
+  useLookListQuery: () => ({ data: [{ id: 4, uuid: 'u4', name: 'Warm', families: [], rowCount: 1, fxCount: 1, targetCount: 1 }] }),
   useLookQuery: () => ({
     data: {
       id: 4,
-      effects: [{ targetType: 'deferred', targetKey: '', effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer', beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR', phaseOffset: 0, parameters: {} }],
+      fx: [{ targetType: 'fixture', targetKey: 'hex-1', fxType: 'Pulse', family: 'intensity', attribute: 'dimmer', cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL', phaseOffset: 0, parameters: {} }],
     },
   }),
 }))
-vi.mock('@/store/templates', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/store/templates')>()),
-  useTemplateListQuery: () => ({ data: [] }),
+vi.mock('@/store/palettes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/palettes')>()),
+  usePaletteListQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/fixtureFx', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/fixtureFx')>()),
-  useEffectLibraryQuery: () => ({ data: data.library }),
-  useActiveEffectsQuery: () => ({ data: [] }),
+  useFxLibraryQuery: () => ({ data: data.library }),
+  useActiveFxQuery: () => ({ data: [] }),
   useAddFixtureFxMutation: () => [data.addFx],
   useRemoveFxMutation: () => [data.addFx],
 }))
@@ -147,7 +157,7 @@ vi.mock('@/store/speedMasters', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/speedMasters')>()),
   useSpeedMasterLiveQuery: () => ({ data: [], master: undefined }),
   useSpeedMasterDisplay: () => null,
-  useSpeedMasterForCategory: () => () => null,
+  useSpeedMasterForFamily: () => () => null,
   useMaster1Uuid: () => 'm1',
 }))
 vi.mock('@/store/status', async (importOriginal) => ({
@@ -170,28 +180,29 @@ import { resetKeyRegion } from '@/components/sheet/keyRegion'
 import { CueRowStoreProvider, useCueRowSaveState, useCueRowStore, type CueRowStoreValue } from './CueRowStore'
 import { usePressCue, type PressCue } from '@/components/press/pressCue'
 import { CueLooksTab } from './CueLooksTab'
-import { CueEffectsTab } from './CueEffectsTab'
+import { CueFxTab } from './CueFxTab'
 import { moveItem } from './cueListEdits'
-import { cueEffectDraftOf, withCueEffectDraft } from '@/components/fx/fxEditorModel'
+import { cueFxDraftOf, withCueFxDraft } from '@/components/fx/fxEditorModel'
 
-const PULSE: EffectLibraryEntry = {
+const PULSE: FxLibraryEntry = {
   name: 'Pulse',
-  category: 'dimmer',
+  family: 'intensity',
   outputType: 'SLIDER',
-  effectMode: 'STANDARD',
+  fxMode: 'STANDARD',
   timingSource: 'BEAT',
-  compatibleProperties: ['dimmer'],
+  compatibleAttributes: ['dimmer'],
   parameters: [
     { name: 'min', type: 'ubyte', defaultValue: '0', description: '' },
     { name: 'max', type: 'ubyte', defaultValue: '255', description: '' },
   ],
 }
-const SINE: EffectLibraryEntry = { ...PULSE, name: 'SineWave' }
+const SINE: FxLibraryEntry = { ...PULSE, name: 'SineWave' }
 
 const WARM = { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Warm' } as const
 const COOL = { kind: 'LOOK', id: 5, uuid: 'u5', name: 'Cool' } as const
-const layer = (source: typeof WARM | typeof COOL, sortOrder: number): CueLayerDetail => ({
-  lookId: source.id,
+const AMBER = { kind: 'PALETTE', id: 6, uuid: 'p6', name: 'Amber' } as const
+const layer = (source: typeof WARM | typeof COOL | typeof AMBER, sortOrder: number): CueLayerDetail => ({
+  ...(source.kind === 'LOOK' ? { lookId: source.id } : { paletteId: source.id }),
   sortOrder,
   enabled: true,
   targets: [],
@@ -199,28 +210,28 @@ const layer = (source: typeof WARM | typeof COOL, sortOrder: number): CueLayerDe
   amount: 1,
   source,
 })
-const pulse = (over: Partial<CueAdHocEffect> = {}): CueAdHocEffect => ({
+const pulse = (over: Partial<CueAdHocFx> = {}): CueAdHocFx => ({
   targetType: 'fixture',
   targetKey: 'orbit-sr',
-  effectType: 'Pulse',
-  category: 'dimmer',
-  propertyName: 'dimmer',
-  beatDivision: 2,
+  fxType: 'Pulse',
+  family: 'intensity',
+  attribute: 'dimmer',
+  cycle: 2,
   blendMode: 'OVERRIDE',
-  distribution: 'LINEAR',
+  order: 'NORMAL',
   phaseOffset: 0,
   elementMode: null,
   elementFilter: null,
-  stepTiming: null,
+  timing: null,
   parameters: { min: '0', max: '255' },
   seconds: true,
-  size: 0.5,
+  amount: 0.5,
   direction: 'BOUNCE',
-  nShot: 3,
+  runs: 3,
   spread: 0.5,
   wings: 2,
-  blocks: 2,
-  groups: 3,
+  segments: 2,
+  parts: 3,
   delayMs: 500,
   sortOrder: 0,
   uuid: 'e-1',
@@ -234,8 +245,8 @@ function cueOf(over: Partial<Cue> = {}): Cue {
     cueNumber: '1',
     cueNumberAuto: false,
     layers: [],
-    adHocEffects: [],
-    propertyAssignments: [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }],
+    adHocFx: [],
+    attributeAssignments: [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }],
     triggers: [],
     cueStackId: 7,
     cueStackName: 'Act 1',
@@ -261,7 +272,7 @@ function Editor({ tab, readOnly = false, onRequestUnlock }: { tab: 'looks' | 'fx
     <CueRowStoreProvider projectId={1} cueId={1} readOnly={readOnly}>
       <div ref={ref} data-key-region data-testid="editor">
         {tab !== 'fx' && <CueLooksTab {...props} />}
-        {tab !== 'looks' && <CueEffectsTab {...props} />}
+        {tab !== 'looks' && <CueFxTab {...props} />}
       </div>
     </CueRowStoreProvider>
   )
@@ -300,6 +311,7 @@ beforeEach(() => {
   data.selection = []
   data.library = [PULSE, SINE]
   data.addFx.mockReset()
+  previews.asks.length = 0
   socket.sent.length = 0
   stack.handlers = null
   picker.props = null
@@ -378,8 +390,8 @@ describe('the Looks tab', () => {
     ])
   })
 
-  it('Targets takes the Values selection; + Look opens the picker on it, whose press writes the cue', async () => {
-    data.cue = cueOf({ layers: [layer(WARM, 0)] })
+  it('Targets takes the Values selection for a palette; + Look opens the picker, whose press writes the cue', async () => {
+    data.cue = cueOf({ layers: [layer(WARM, 0), layer(AMBER, 1)] })
     const view = render(<Editor tab="looks" />)
     expect(stack.props!.targetsRefusal).toMatch(/Select fixtures or groups in Values/)
     data.selection = [{ type: 'group', key: 'Front' }, { type: 'fixture', key: 'orbit-sr' }]
@@ -391,8 +403,12 @@ describe('the Looks tab', () => {
       </Provider>,
     )
     expect(stack.props!.targetsRefusal).toBeNull()
+    // A Look's layer names no targets: nothing is written for it.
     act(() => stack.handlers!.onSetTargets!(0))
-    expect(((await patched(1)).layers as CueLayer[])[0].targets).toEqual(data.selection)
+    act(() => stack.handlers!.onSetTargets!(1))
+    const written = (await patched(1)).layers as CueLayer[]
+    expect(written[0].targets).toEqual([])
+    expect(written[1].targets).toEqual(data.selection)
 
     fireEvent.click(screen.getByRole('button', { name: 'Look' }))
     expect(picker.props!.library).toBe('looks')
@@ -400,8 +416,9 @@ describe('the Looks tab', () => {
     expect(screen.getByTestId('picker').getAttribute('data-into')).toBe('Q1')
     fireEvent.click(screen.getByRole('button', { name: 'press Cool' }))
     await waitFor(() => expect(data.presses).toHaveLength(1))
-    // The desk applies the rule to the stored layers: the client sends the press, not a list.
-    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, lookId: 5, targets: data.selection })
+    // The desk applies the rule to the stored layers: the client sends the press, not a list, and
+    // a Look's names no targets — it lands whole.
+    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, lookId: 5 })
     expect(data.patches).toHaveLength(1)
   })
 
@@ -467,18 +484,18 @@ describe('the FX tab', () => {
     data.cue = cueOf()
     data.selection = [{ type: 'fixture', key: 'orbit-sr' }]
     render(<Editor tab="fx" />)
-    fireEvent.click(screen.getByRole('button', { name: /Effect/ }))
+    fireEvent.click(screen.getByRole('button', { name: /FX/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
-    const first = (await patched(1)).adHocEffects as CueAdHocEffect[]
+    const first = (await patched(1)).adHocFx as CueAdHocFx[]
     expect(first).toEqual([
-      expect.objectContaining({ targetType: 'fixture', targetKey: 'orbit-sr', effectType: 'Pulse', propertyName: 'dimmer', sortOrder: 0 }),
+      expect.objectContaining({ targetType: 'fixture', targetKey: 'orbit-sr', fxType: 'Pulse', attribute: 'dimmer', sortOrder: 0 }),
     ])
     // The desk now holds the Pulse; the cache has not caught up.
-    data.desk = cueOf({ adHocEffects: [{ ...first[0], uuid: 'e-new' }] })
+    data.desk = cueOf({ adHocFx: [{ ...first[0], uuid: 'e-new' }] })
     fireEvent.click(screen.getByRole('button', { name: 'SineWave' }))
-    const second = (await patched(2)).adHocEffects as CueAdHocEffect[]
+    const second = (await patched(2)).adHocFx as CueAdHocFx[]
     // Swapped in place, not appended beside it.
-    expect(second.map((e) => e.effectType)).toEqual(['SineWave'])
+    expect(second.map((e) => e.fxType)).toEqual(['SineWave'])
     expect(data.addFx).not.toHaveBeenCalled()
     expect(socket.sent.filter((f) => /fx/i.test(f.type ?? ''))).toEqual([])
   })
@@ -491,49 +508,73 @@ describe('the FX tab', () => {
     data.cue = cueOf()
     data.selection = [{ type: 'fixture', key: 'orbit-sr' }, { type: 'fixture', key: 'orbit-sl' }]
     render(<Editor tab="fx" />)
-    fireEvent.click(screen.getByRole('button', { name: /Effect/ }))
+    fireEvent.click(screen.getByRole('button', { name: /FX/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
-    const [stored] = (await patched(1)).adHocEffects as CueAdHocEffect[]
+    const [stored] = (await patched(1)).adHocFx as CueAdHocFx[]
     expect(stored.targetType).toBe('selection')
     expect(stored.targetKey).toBe('[{"key":"orbit-sr","type":"fixture"},{"key":"orbit-sl","type":"fixture"}]')
   })
 
   it('an edit keeps Seconds, size, direction, runs and fire timing, and sends the effect without its uuid', async () => {
-    data.cue = cueOf({ adHocEffects: [pulse()] })
+    data.cue = cueOf({ adHocFx: [pulse()] })
     render(<Editor tab="fx" />)
     fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
     const high = screen.getByRole('spinbutton', { name: /^High/ })
     fireEvent.change(high, { target: { value: '50' } })
     fireEvent.keyDown(high, { key: 'Enter' })
-    const [edited] = (await patched(1)).adHocEffects as CueAdHocEffect[]
-    expect(edited).toMatchObject({ seconds: true, size: 0.5, direction: 'BOUNCE', nShot: 3, spread: 0.5, wings: 2, blocks: 2, groups: 3, delayMs: 500, beatDivision: 2 })
+    const [edited] = (await patched(1)).adHocFx as CueAdHocFx[]
+    expect(edited).toMatchObject({ seconds: true, amount: 0.5, direction: 'BOUNCE', runs: 3, spread: 0.5, wings: 2, segments: 2, parts: 3, delayMs: 500, cycle: 2 })
     expect(Number(edited.parameters.max)).toBe(128)
     expect('uuid' in edited).toBe(false)
   })
 
+  it('the open row draws its FX alone on its own targets, include ONLY, saying what is underneath is not drawn', async () => {
+    data.cue = cueOf({ adHocFx: [pulse()] })
+    render(<Editor tab="fx" />)
+    expect(previews.asks).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
+    await waitFor(() => expect(previews.asks).toHaveLength(1))
+    const target = { type: 'fixture', key: 'orbit-sr' }
+    expect(previews.asks[0]).toMatchObject({
+      projectId: 1,
+      targets: [target],
+      include: 'ONLY',
+      fx: [{ draft: { fxType: 'Pulse', attribute: 'dimmer', targets: [target], seconds: true, amount: 0.5, direction: 'BOUNCE', runs: 3 } }],
+    })
+    expect(previews.asks[0]).not.toHaveProperty('notional')
+    expect(document.querySelector('[data-fx-graph-strip="this"]')).toHaveTextContent('What is underneath at its GO is not drawn.')
+    // An edit redraws it: the next ask carries the moved field before anything is saved.
+    const high = screen.getByRole('spinbutton', { name: /^High/ })
+    fireEvent.change(high, { target: { value: '50' } })
+    fireEvent.keyDown(high, { key: 'Enter' })
+    await waitFor(() => expect(previews.asks.length).toBeGreaterThan(1))
+    const last = previews.asks.at(-1) as { fx: { draft: { parameters: Record<string, string> } }[] }
+    expect(Number(last.fx[0].draft.parameters.max)).toBe(128)
+  })
+
   it('a reorder keeps every field of every effect, the spread shape included', () => {
-    const list = [pulse(), pulse({ effectType: 'SineWave', uuid: 'e-2', sortOrder: 1, seconds: false, size: 1, direction: 'FORWARD', nShot: null })]
+    const list = [pulse(), pulse({ fxType: 'SineWave', uuid: 'e-2', sortOrder: 1, seconds: false, amount: 1, direction: 'FORWARD', runs: null })]
     const moved = moveItem(list, 0, 1)!
-    expect(moved.map((e) => [e.effectType, e.sortOrder])).toEqual([
+    expect(moved.map((e) => [e.fxType, e.sortOrder])).toEqual([
       ['SineWave', 0],
       ['Pulse', 1],
     ])
     expect(moved[1]).toEqual({ ...list[0], sortOrder: 1 })
     // And the draft round trip leaves an untouched effect as it was stored (an absent master is null: master 1).
-    expect(withCueEffectDraft(list[0], cueEffectDraftOf(list[0], 'BEAT'))).toEqual({ ...list[0], speedMasterUuid: null, rateSpeedMasterUuid: null })
+    expect(withCueFxDraft(list[0], cueFxDraftOf(list[0], 'BEAT'))).toEqual({ ...list[0], speedMasterUuid: null, rateSpeedMasterUuid: null })
   })
 
   it('finds the effect a gesture was made on by its uuid when the desk’s list has moved, and leaves one it no longer holds', async () => {
-    data.cue = cueOf({ adHocEffects: [pulse(), pulse({ effectType: 'SineWave', uuid: 'e-2', sortOrder: 1 })] })
+    data.cue = cueOf({ adHocFx: [pulse(), pulse({ fxType: 'SineWave', uuid: 'e-2', sortOrder: 1 })] })
     // Another client put a Strobe in front.
     data.desk = cueOf({
-      adHocEffects: [pulse({ effectType: 'Strobe', uuid: 'e-0', sortOrder: 0 }), pulse({ sortOrder: 1 }), pulse({ effectType: 'SineWave', uuid: 'e-2', sortOrder: 2 })],
+      adHocFx: [pulse({ fxType: 'DimmerStrobe', uuid: 'e-0', sortOrder: 0 }), pulse({ sortOrder: 1 }), pulse({ fxType: 'SineWave', uuid: 'e-2', sortOrder: 2 })],
     })
     render(<Editor tab="fx" />)
     fireEvent.click(screen.getByRole('button', { name: 'Remove SineWave' }))
-    expect(((await patched(1)).adHocEffects as CueAdHocEffect[]).map((e) => e.effectType)).toEqual(['Strobe', 'Pulse'])
+    expect(((await patched(1)).adHocFx as CueAdHocFx[]).map((e) => e.fxType)).toEqual(['DimmerStrobe', 'Pulse'])
     // Another client deleted the Pulse: an edit of it writes nothing, and the header is not left Unsaved.
-    data.desk = cueOf({ adHocEffects: [pulse({ effectType: 'Strobe', uuid: 'e-0', sortOrder: 0 })] })
+    data.desk = cueOf({ adHocFx: [pulse({ fxType: 'DimmerStrobe', uuid: 'e-0', sortOrder: 0 })] })
     fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
     const high = screen.getByRole('spinbutton', { name: /^High/ })
     fireEvent.change(high, { target: { value: '50' } })
@@ -543,7 +584,7 @@ describe('the FX tab', () => {
   })
 
   it('locked, a row is no focusable button, so a ⌫ after clicking in it still asks to unlock', async () => {
-    data.cue = cueOf({ adHocEffects: [pulse()] })
+    data.cue = cueOf({ adHocFx: [pulse()] })
     const unlock = vi.fn()
     render(<Editor tab="fx" readOnly onRequestUnlock={unlock} />)
     const row = document.querySelector('[data-cue-effect-row]') as HTMLElement
@@ -557,25 +598,24 @@ describe('the FX tab', () => {
 
   it('opens a row’s editor only once the effect library has, so Seconds is read from it', () => {
     data.library = undefined as never
-    data.cue = cueOf({ adHocEffects: [pulse()] })
+    data.cue = cueOf({ adHocFx: [pulse()] })
     render(<Editor tab="fx" />)
     fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
-    expect(screen.getByText('Reading the effect library…')).toBeTruthy()
+    expect(screen.getByText('Reading the FX library…')).toBeTruthy()
     expect(document.querySelector('[data-cue-effect-editor]')).toBeNull()
   })
 
-  it('lists a Look layer’s deferred effects under the Look, read-only', () => {
+  it('lists no Look layer’s FX: a Look’s FX name their own targets and are the Look’s (absolute-looks plan D2)', () => {
     data.cue = cueOf({ layers: [layer(WARM, 0)] })
     render(<Editor tab="fx" />)
-    const section = screen.getByText(/From Warm/).parentElement!
-    expect(within(section).getByText('Pulse')).toBeTruthy()
+    expect(screen.queryByText(/From Warm/)).toBeNull()
   })
 })
 
 it('a bare effect picked from a band appends after every effect, and a second pick swaps it and nothing else', async () => {
-  const a = pulse({ effectType: 'Strobe', uuid: 'e-a', sortOrder: 0 })
-  const b = pulse({ effectType: 'Flicker', uuid: 'e-b', sortOrder: 1 })
-  data.cue = cueOf({ adHocEffects: [a, b] })
+  const a = pulse({ fxType: 'DimmerStrobe', uuid: 'e-a', sortOrder: 0 })
+  const b = pulse({ fxType: 'Flicker', uuid: 'e-b', sortOrder: 1 })
+  data.cue = cueOf({ adHocFx: [a, b] })
   const probe: { cue?: PressCue | null } = {}
   function Probe() {
     probe.cue = usePressCue()
@@ -587,13 +627,13 @@ it('a bare effect picked from a band appends after every effect, and a second pi
     </CueRowStoreProvider>,
   )
   const first = pulse()
-  act(() => void probe.cue!.pickEffect(first, null))
-  const appended = (await patched(1)).adHocEffects as CueAdHocEffect[]
-  expect(appended.map((e) => [e.effectType, e.sortOrder])).toEqual([['Strobe', 0], ['Flicker', 1], ['Pulse', 2]])
-  data.desk = cueOf({ adHocEffects: appended.map((e, i) => ({ ...e, uuid: e.uuid ?? `e-${i}` })) })
-  act(() => void probe.cue!.pickEffect(pulse({ effectType: 'SineWave' }), first))
-  const swapped = (await patched(2)).adHocEffects as CueAdHocEffect[]
-  expect(swapped.map((e) => e.effectType)).toEqual(['Strobe', 'Flicker', 'SineWave'])
+  act(() => void probe.cue!.pickFx(first, null))
+  const appended = (await patched(1)).adHocFx as CueAdHocFx[]
+  expect(appended.map((e) => [e.fxType, e.sortOrder])).toEqual([['DimmerStrobe', 0], ['Flicker', 1], ['Pulse', 2]])
+  data.desk = cueOf({ adHocFx: appended.map((e, i) => ({ ...e, uuid: e.uuid ?? `e-${i}` })) })
+  act(() => void probe.cue!.pickFx(pulse({ fxType: 'SineWave' }), first))
+  const swapped = (await patched(2)).adHocFx as CueAdHocFx[]
+  expect(swapped.map((e) => e.fxType)).toEqual(['DimmerStrobe', 'Flicker', 'SineWave'])
 })
 
 it('a press after a save that failed leaves Save failed standing', async () => {
@@ -610,8 +650,8 @@ it('a press after a save that failed leaves Save failed standing', async () => {
     </CueRowStoreProvider>,
   )
   data.failNext = true
-  void probe.cue!.pickEffect(pulse(), null)
-  await act(async () => void (await probe.cue!.pressLayer({ templateId: 2 }, [{ type: 'fixture', key: 'hex-1' }], null)))
+  void probe.cue!.pickFx(pulse(), null)
+  await act(async () => void (await probe.cue!.pressLayer({ paletteId: 2, targets: [{ type: 'fixture', key: 'hex-1' }], families: null })))
   expect(data.presses).toHaveLength(1)
   expect(probe.state).toBe('error')
 })
@@ -628,7 +668,7 @@ it('a read-only cue stores no picked effect', async () => {
       <Probe />
     </CueRowStoreProvider>,
   )
-  await expect(probe.cue!.pickEffect(pulse(), null)).resolves.toBe(false)
+  await expect(probe.cue!.pickFx(pulse(), null)).resolves.toBe(false)
   expect(data.patches).toHaveLength(0)
 })
 
@@ -649,20 +689,20 @@ it('one flush carries the rows and a list in one PATCH, and one Undo puts both b
     void probe.store!.editLayers((list) => list.map((l, i) => ({ ...l, enabled: i !== 0 })))
   })
   const body = await patched(1)
-  expect(Object.keys(body).sort()).toEqual(['cueId', 'layers', 'projectId', 'propertyAssignments'])
+  expect(Object.keys(body).sort()).toEqual(['attributeAssignments', 'cueId', 'layers', 'projectId'])
   // The desk now holds what that save wrote.
   data.desk = cueOf({
     layers: [{ ...layer(WARM, 0), id: 1, enabled: false }, { ...layer(COOL, 1), id: 2 }],
-    propertyAssignments: body.propertyAssignments as Cue['propertyAssignments'],
+    attributeAssignments: body.attributeAssignments as Cue['attributeAssignments'],
   })
   act(() => probe.store!.undo())
   const undone = await patched(2)
   expect((undone.layers as CueLayer[]).map((l) => l.enabled)).toEqual([true, true])
-  expect((undone.propertyAssignments as Cue['propertyAssignments']).map((r) => r.value)).toEqual(['10'])
+  expect((undone.attributeAssignments as Cue['attributeAssignments']).map((r) => r.value)).toEqual(['10'])
 })
 
 it('sends no programmer, channel or effect frame over a full pass of both tabs (P2)', async () => {
-  data.cue = cueOf({ layers: [layer(WARM, 0), layer(COOL, 1)], adHocEffects: [pulse()] })
+  data.cue = cueOf({ layers: [layer(WARM, 0), layer(COOL, 1)], adHocFx: [pulse()] })
   data.selection = [{ type: 'fixture', key: 'orbit-sr' }]
   render(<Editor tab="both" />)
   act(() => {
@@ -670,7 +710,7 @@ it('sends no programmer, channel or effect frame over a full pass of both tabs (
     stack.handlers!.onSetEnabled(0, false)
     stack.handlers!.onSetAmount(1, 0.5)
     stack.handlers!.onSetBlendMode(1, 'MAX')
-    stack.handlers!.onSetPropertyMask(1, 'COLOUR')
+    stack.handlers!.onSetAttributeMask(1, 'COLOUR')
     stack.handlers!.onSetStomp(1, true)
     stack.handlers!.onSetTargets!(0)
   })
@@ -678,7 +718,7 @@ it('sends no programmer, channel or effect frame over a full pass of both tabs (
   const high = screen.getByRole('spinbutton', { name: /^High/ })
   fireEvent.change(high, { target: { value: '40' } })
   fireEvent.keyDown(high, { key: 'Enter' })
-  fireEvent.click(screen.getByRole('button', { name: /^Effect$|Effect/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'FX' }))
   fireEvent.click(screen.getByRole('button', { name: 'SineWave' }))
   act(() => stack.handlers!.onRemove(0))
   fireEvent.click(screen.getByRole('button', { name: 'Look' }))
@@ -686,7 +726,7 @@ it('sends no programmer, channel or effect frame over a full pass of both tabs (
   await waitFor(() => expect(data.presses).toHaveLength(1))
   await waitFor(() => expect(data.patches.length).toBeGreaterThanOrEqual(3), { timeout: 3000 })
   // Every write is the cue's layers or effects, never its own rows.
-  expect(data.patches.every((p) => !('propertyAssignments' in p))).toBe(true)
+  expect(data.patches.every((p) => !('attributeAssignments' in p))).toBe(true)
   const banned = socket.sent.filter(
     (frame) =>
       /^(programmer|channels|fx)\./.test(frame.type ?? '') ||

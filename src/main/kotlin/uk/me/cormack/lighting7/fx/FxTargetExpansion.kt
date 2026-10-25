@@ -23,7 +23,7 @@ internal class MemberSlot(
  * branch the engine takes for it, and the exact key lists that branch walks.
  *
  * The engine used to re-derive all of this per effect per tick — twice over, once in
- * `resolveEffectFixtureKeys` for the reset pass and again in the `process*` pass — with every
+ * `resolveFxFixtureKeys` for the reset pass and again in the `process*` pass — with every
  * `untypedGroup` / `untypedFixture` lookup taking `Fixtures.registerLock.read`. None of it can
  * change between ticks: `FixtureGroup.members` is an immutable list, `allMembers` is `by lazy`,
  * and `MultiElementFixture.elements` is bound in each fixture's constructor. The only thing that
@@ -49,7 +49,7 @@ internal class FxTargetExpansion(
      *
      * `elementMode` is deliberately *not* part of the identity: it selects between [perFixture]
      * and [flat] at dispatch time, and both are built here, so toggling it costs nothing.
-     * `distributionStrategy` is not either — it moves the offsets, not which keys resolve.
+     * `order` is not either — it moves the offsets, not which keys resolve.
      */
     val elementFilter: ElementFilter,
     /** Which branch the engine takes for this effect. */
@@ -58,7 +58,7 @@ internal class FxTargetExpansion(
      * Every fixture/element key the effect writes to — what the effect *covers*, for the reset
      * pass, provenance and the Layer 4 publish paths.
      *
-     * **Deliberately not filtered by [elementFilter]**, matching the `resolveEffectFixtureKeys`
+     * **Deliberately not filtered by [elementFilter]**, matching the `resolveFxFixtureKeys`
      * this replaces. Coverage and application are different questions and the two lists really
      * do differ: `SECOND_HALF` on a one-element fixture covers that element while painting
      * nothing on it, so the reset pass returns it to the layer below and nothing repaints. That

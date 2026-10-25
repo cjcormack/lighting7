@@ -26,25 +26,25 @@ abstract class DmxFixture(
         val channelDescriptions = mutableMapOf<Int, String>()
 
         // Add fixture-level properties
-        fixtureProperties.forEach {
+        fixtureAttributes.forEach {
             val name = if (it.description == "") {
                 it.name
             } else {
                 it.description
             }
 
-            when (val property = checkNotNull(it.classProperty.call(this))) {
-                is DmxSlider -> channelDescriptions[property.channelNo] = name
+            when (val attribute = checkNotNull(it.classProperty.call(this))) {
+                is DmxSlider -> channelDescriptions[attribute.channelNo] = name
                 is DmxColour -> {
-                    channelDescriptions[property.redSlider.channelNo] = "$name Red"
-                    channelDescriptions[property.greenSlider.channelNo] = "$name Green"
-                    channelDescriptions[property.blueSlider.channelNo] = "$name Blue"
+                    channelDescriptions[attribute.redSlider.channelNo] = "$name Red"
+                    channelDescriptions[attribute.greenSlider.channelNo] = "$name Green"
+                    channelDescriptions[attribute.blueSlider.channelNo] = "$name Blue"
                 }
-                is DmxFixtureSetting<*> -> channelDescriptions[property.channelNo] = name
+                is DmxFixtureSetting<*> -> channelDescriptions[attribute.channelNo] = name
                 // Its channels are its two white sliders, which name them.
                 is DmxWhiteMixColour -> {}
 
-                else -> throw Error("Unsupported property type ${property::class}")
+                else -> throw Error("Unsupported property type ${attribute::class}")
             }
         }
 
@@ -67,7 +67,7 @@ abstract class DmxFixture(
             for (element in elements) {
                 val elementPrefix = "Head ${element.elementIndex + 1}"
 
-                for (prop in FixturePropertyCatalogue.of(element::class).all) {
+                for (prop in FixtureAttributeCatalogue.of(element::class).all) {
                     @Suppress("UNCHECKED_CAST")
                     val propTyped = prop.classProperty as kotlin.reflect.KProperty1<Any, *>
                     val value = propTyped.call(element) ?: continue
@@ -97,24 +97,24 @@ abstract class DmxFixture(
         }
     }
 
-    fun generatePropertyDescriptors(): List<PropertyDescriptor> {
+    fun generateAttributeDescriptors(): List<AttributeDescriptor> {
         // First pass: collect all properties
-        val descriptors = mutableListOf<PropertyDescriptor>()
-        var colourDescriptor: ColourPropertyDescriptor? = null
+        val descriptors = mutableListOf<AttributeDescriptor>()
+        var colourDescriptor: ColourAttributeDescriptor? = null
 
         // Track extended colour channels for bundling (marked with bundleWithColour = true)
         var whiteChannel: ChannelRef? = null
         var amberChannel: ChannelRef? = null
         var uvChannel: ChannelRef? = null
 
-        for (prop in fixtureProperties) {
+        for (prop in fixtureAttributes) {
             val value = prop.classProperty.call(this) ?: continue
-            val displayName = prop.description.ifEmpty { prop.name.formatPropertyName() }
+            val displayName = prop.description.ifEmpty { prop.name.formatAttributeName() }
 
             when (value) {
                 is DmxColour -> {
                     // Create base colour descriptor, will add extended channels after
-                    colourDescriptor = ColourPropertyDescriptor(
+                    colourDescriptor = ColourAttributeDescriptor(
                         name = prop.name,
                         displayName = displayName,
                         redChannel = ChannelRef(universe.universe, value.redSlider.channelNo),
@@ -128,9 +128,9 @@ abstract class DmxFixture(
                     // Check if this is an extended colour channel to bundle
                     if (prop.bundleWithColour) {
                         when (prop.category) {
-                            PropertyCategory.WHITE -> whiteChannel = ChannelRef(universe.universe, value.channelNo)
-                            PropertyCategory.AMBER -> amberChannel = ChannelRef(universe.universe, value.channelNo)
-                            PropertyCategory.UV -> uvChannel = ChannelRef(universe.universe, value.channelNo)
+                            AttributeCategory.WHITE -> whiteChannel = ChannelRef(universe.universe, value.channelNo)
+                            AttributeCategory.AMBER -> amberChannel = ChannelRef(universe.universe, value.channelNo)
+                            AttributeCategory.UV -> uvChannel = ChannelRef(universe.universe, value.channelNo)
                             else -> {} // Ignore other bundleWithColour sliders
                         }
                     } else {
@@ -158,7 +158,7 @@ abstract class DmxFixture(
             val tiltSlider = this.tilt
             if (panSlider is DmxSlider && tiltSlider is DmxSlider) {
                 descriptors.add(
-                    PositionPropertyDescriptor(
+                    PositionAttributeDescriptor(
                         name = "position",
                         displayName = "Position",
                         panChannel = ChannelRef(universe.universe, panSlider.channelNo),
@@ -177,7 +177,7 @@ abstract class DmxFixture(
         // skips a type it does not know.
         for (trigger in FixtureTriggers.of(this)) {
             descriptors.add(
-                TriggerPropertyDescriptor(
+                TriggerAttributeDescriptor(
                     name = trigger.name,
                     displayName = trigger.spec.description,
                     label = trigger.spec.label,
@@ -192,7 +192,7 @@ abstract class DmxFixture(
         // from this list draws none for them (a command runs from the panel's Commands menu).
         for (command in FixtureCommands.of(this)) {
             descriptors.add(
-                CommandPropertyDescriptor(
+                CommandAttributeDescriptor(
                     name = command.name,
                     displayName = command.spec.label,
                     description = command.spec.description,
@@ -214,12 +214,12 @@ abstract class DmxFixture(
         if (this !is MultiElementFixture<*>) return null
 
         return elements.map { element ->
-            val properties = extractElementProperties(element)
+            val attributes = extractElementAttributes(element)
             ElementDescriptor(
                 index = element.elementIndex,
                 key = element.elementKey,
                 displayName = "Head ${element.elementIndex + 1}",
-                properties = properties
+                attributes = attributes
             )
         }
     }
@@ -234,33 +234,33 @@ abstract class DmxFixture(
      *
      * @return List of group property descriptors, or null if not a multi-element fixture or has fewer than 2 elements
      */
-    fun generateElementGroupPropertyDescriptors(): List<GroupPropertyDescriptor>? {
+    fun generateElementGroupAttributeDescriptors(): List<GroupAttributeDescriptor>? {
         val elementDescriptors = generateElementDescriptors() ?: return null
         if (elementDescriptors.size < 2) return null
 
         val template = elementDescriptors.first()
 
-        return template.properties.mapNotNull { templateProp ->
+        return template.attributes.mapNotNull { templateProp ->
             val allMatching = elementDescriptors.map { elem ->
-                elem.properties.find { it.name == templateProp.name && it::class == templateProp::class }
+                elem.attributes.find { it.name == templateProp.name && it::class == templateProp::class }
             }
             if (allMatching.any { it == null }) return@mapNotNull null
 
             @Suppress("UNCHECKED_CAST")
             when (templateProp) {
-                is SliderPropertyDescriptor -> GroupSliderPropertyDescriptor(
+                is SliderAttributeDescriptor -> GroupSliderAttributeDescriptor(
                     name = templateProp.name,
                     displayName = templateProp.displayName,
                     category = templateProp.category,
                     min = templateProp.min,
                     max = templateProp.max,
-                    memberChannels = allMatching.map { (it as SliderPropertyDescriptor).channel }
+                    memberChannels = allMatching.map { (it as SliderAttributeDescriptor).channel }
                 )
-                is ColourPropertyDescriptor -> GroupColourPropertyDescriptor(
+                is ColourAttributeDescriptor -> GroupColourAttributeDescriptor(
                     name = templateProp.name,
                     displayName = templateProp.displayName,
                     memberColourChannels = elementDescriptors.mapIndexed { idx, elem ->
-                        val p = allMatching[idx] as ColourPropertyDescriptor
+                        val p = allMatching[idx] as ColourAttributeDescriptor
                         MemberColourChannels(
                             fixtureKey = elem.key,
                             redChannel = p.redChannel,
@@ -272,11 +272,11 @@ abstract class DmxFixture(
                         )
                     }
                 )
-                is PositionPropertyDescriptor -> GroupPositionPropertyDescriptor(
+                is PositionAttributeDescriptor -> GroupPositionAttributeDescriptor(
                     name = templateProp.name,
                     displayName = templateProp.displayName,
                     memberPositionChannels = elementDescriptors.mapIndexed { idx, elem ->
-                        val p = allMatching[idx] as PositionPropertyDescriptor
+                        val p = allMatching[idx] as PositionAttributeDescriptor
                         MemberPositionChannels(
                             fixtureKey = elem.key,
                             panChannel = p.panChannel,
@@ -288,22 +288,22 @@ abstract class DmxFixture(
                         )
                     }
                 )
-                is SettingPropertyDescriptor -> GroupSettingPropertyDescriptor(
+                is SettingAttributeDescriptor -> GroupSettingAttributeDescriptor(
                     name = templateProp.name,
                     displayName = templateProp.displayName,
                     category = templateProp.category,
                     options = templateProp.options,
                     memberChannels = elementDescriptors.mapIndexed { idx, _ ->
-                        val p = allMatching[idx] as SettingPropertyDescriptor
+                        val p = allMatching[idx] as SettingAttributeDescriptor
                         MemberSettingChannel(fixtureKey = elementDescriptors[idx].key, channel = p.channel)
                     }
                 )
-                is WhiteMixPropertyDescriptor -> {
-                    val pairs = allMatching.map { it as WhiteMixPropertyDescriptor }
+                is WhiteMixAttributeDescriptor -> {
+                    val pairs = allMatching.map { it as WhiteMixAttributeDescriptor }
                     if (pairs.any { it.warmKelvin != templateProp.warmKelvin || it.coldKelvin != templateProp.coldKelvin }) {
                         null
                     } else {
-                        GroupWhiteMixPropertyDescriptor(
+                        GroupWhiteMixAttributeDescriptor(
                             name = templateProp.name,
                             displayName = templateProp.displayName,
                             warmKelvin = templateProp.warmKelvin,
@@ -315,25 +315,25 @@ abstract class DmxFixture(
                     }
                 }
                 // A head never carries a trigger or a command (they are fixture-level), and neither has an "all heads" control.
-                is TriggerPropertyDescriptor -> null
-                is CommandPropertyDescriptor -> null
+                is TriggerAttributeDescriptor -> null
+                is CommandAttributeDescriptor -> null
             }
         }
     }
 
-    private fun extractElementProperties(element: FixtureElement<*>): List<PropertyDescriptor> {
-        val descriptors = mutableListOf<PropertyDescriptor>()
+    private fun extractElementAttributes(element: FixtureElement<*>): List<AttributeDescriptor> {
+        val descriptors = mutableListOf<AttributeDescriptor>()
 
-        for (prop in FixturePropertyCatalogue.of(element::class).all) {
+        for (prop in FixtureAttributeCatalogue.of(element::class).all) {
             @Suppress("UNCHECKED_CAST")
             val propTyped = prop.classProperty as kotlin.reflect.KProperty1<Any, *>
             val value = propTyped.call(element) ?: continue
-            val displayName = prop.description.ifEmpty { prop.name.formatPropertyName() }
+            val displayName = prop.description.ifEmpty { prop.name.formatAttributeName() }
 
             when (value) {
                 is DmxColour -> {
                     descriptors.add(
-                        ColourPropertyDescriptor(
+                        ColourAttributeDescriptor(
                             name = prop.name,
                             displayName = displayName,
                             redChannel = ChannelRef(universe.universe, value.redSlider.channelNo),
@@ -362,7 +362,7 @@ abstract class DmxFixture(
             val tiltSlider = element.tilt
             if (panSlider is DmxSlider && tiltSlider is DmxSlider) {
                 descriptors.add(
-                    PositionPropertyDescriptor(
+                    PositionAttributeDescriptor(
                         name = "position",
                         displayName = "Position",
                         panChannel = ChannelRef(universe.universe, panSlider.channelNo),
@@ -379,8 +379,8 @@ abstract class DmxFixture(
         return descriptors
     }
 
-    private fun whiteMixDescriptor(prop: Fixture.Property, value: DmxWhiteMixColour, displayName: String) =
-        WhiteMixPropertyDescriptor(
+    private fun whiteMixDescriptor(prop: Fixture.Attribute, value: DmxWhiteMixColour, displayName: String) =
+        WhiteMixAttributeDescriptor(
             name = prop.name,
             displayName = displayName,
             warmChannel = ChannelRef(value.warm.universe.universe, value.warm.channelNo),
@@ -395,10 +395,10 @@ abstract class DmxFixture(
     // block, so a new per-option field added to one silently missed multi-cell
     // fixtures in the other.
     private fun buildSettingDescriptor(
-        prop: Fixture.Property,
+        prop: Fixture.Attribute,
         setting: DmxFixtureSetting<*>,
         displayName: String,
-    ): SettingPropertyDescriptor = SettingPropertyDescriptor(
+    ): SettingAttributeDescriptor = SettingAttributeDescriptor(
         name = prop.name,
         displayName = displayName,
         category = prop.category.name.lowercase(),
@@ -427,10 +427,10 @@ abstract class DmxFixture(
     )
 
     private fun buildSliderDescriptor(
-        prop: Fixture.Property,
+        prop: Fixture.Attribute,
         slider: DmxSlider,
         displayName: String,
-    ): SliderPropertyDescriptor = SliderPropertyDescriptor(
+    ): SliderAttributeDescriptor = SliderAttributeDescriptor(
         name = prop.name,
         displayName = displayName,
         category = prop.category.name.lowercase(),
@@ -467,7 +467,7 @@ abstract class DmxFixture(
         timingFastFrom = prop.timingFastFrom,
     )
 
-    private fun String.formatPropertyName(): String {
+    private fun String.formatAttributeName(): String {
         return this.replace(Regex("([a-z])([A-Z])"), "$1 $2")
             .replaceFirstChar { it.uppercase() }
     }

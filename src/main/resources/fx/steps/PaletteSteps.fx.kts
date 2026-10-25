@@ -1,15 +1,15 @@
 /*---
 id: PaletteSteps
 name: Palette Steps
-category: palette
+family: steps
 outputType: STEPS
-effectMode: STANDARD
-compatibleProperties: [dimmer, strobe, rgbColour, position, zoom, focus, iris, frost, prism]
+fxMode: STANDARD
+compatibleAttributes: [dimmer, strobe, rgbColour, position, zoom, focus, iris, frost, prism]
 parameters:
   - name: palettes
     type: paletteList
     default: ""
-    description: Comma-separated generic value palettes of one family, tmpl:{uuid} each — the steps, each resolved on every head for itself
+    description: Comma-separated generic value palettes of one family, pal:{uuid} each — the steps, each resolved on every head for itself
   - name: fadeRatio
     type: double
     default: "0.5"

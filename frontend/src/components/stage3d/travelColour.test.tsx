@@ -10,7 +10,7 @@ import { settingColourAt } from '../../lib/colourBands'
 import { travelRates } from '../../lib/travel'
 import { chan, settingProp, sliderProp } from '../../test/fixtureFactories'
 
-// usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket at
+// useAttributeValues imports lightingApi for its writers, and the real module opens a WebSocket at
 // import time. The reads all go through the injected ChannelSource.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -99,7 +99,7 @@ function mount(source: ChannelSource, filters: typeof MEDIA_FRAME[] = [], travel
     <ChannelSourceProvider source={s}>
       <ColourSync
         hasFixture
-        colourSource={{ type: 'setting', property: SCROLLER }}
+        colourSource={{ type: 'setting', attribute: SCROLLER }}
         gel={null}
         filters={filters}
         dimmerProp={undefined}

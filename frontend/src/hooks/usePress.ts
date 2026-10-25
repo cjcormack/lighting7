@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import type { CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import { useMarquee } from '@/components/fixtures-list/marqueeContext'
 import { useLookRowStore, type LookRowStoreValue } from '@/components/programmer/LookRowStore'
 import { landValuesInLook } from '@/components/programmer/landValuesInLook'
@@ -10,15 +10,14 @@ import { usePressCue, type PressCue } from '@/components/press/pressCue'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { PaletteFit } from '@/lib/paletteOffer'
-import { skippedRowsMessage } from '@/lib/selectionMask'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { useRemoveFxMutation } from '@/store/fixtureFx'
-import { useAbsorbLookEffectsMutation, useApplyLookMutation, useToggleLookMutation } from '@/store/looks'
+import { useAbsorbLookFxMutation, useApplyLookMutation, useToggleLookMutation } from '@/store/looks'
 import { usePressFamilies, useSelectionPair } from '@/store/selection'
-import { useApplyTemplateMutation, useToggleTemplateMutation } from '@/store/templates'
+import { useApplyPaletteMutation, useTogglePaletteMutation } from '@/store/palettes'
 
 export type PressSource =
-  | { kind: 'template'; template: TemplateSummary }
+  | { kind: 'palette'; palette: PaletteSummary }
   | { kind: 'look'; look: Pick<LookSummary, 'id' | 'name'> }
 
 export type PressGesture = 'press' | 'asValues' | 'off'
@@ -113,12 +112,13 @@ export function usePressInCue(options: PressOptions = {}): PressCue | null {
  * One press, whatever it is pressed from (apply-model plan §4.1).
  *
  * A press is **source × selection pair → scope**. The source is a palette or a Look; the pair is the
- * targets and the attribute mask the door is acting on — the window's (`useWindowPress`), a cell
+ * targets and the attribute mask a palette press acts on — a Look's press names neither, since a Look
+ * lands whole (absolute-looks plan D1) — the window's (`useWindowPress`), a cell
  * batch, a fixture sheet's one target, a cue slot's none; the scope is where the programmer is
  * pointed. This hook sends the one route that combination calls for and reports the answer one way,
  * and every press door — the palette strip and the picker, the popup's Palettes bands, a busk
- * pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look
- * picker and a cue slot's Look — calls it, so no two surfaces can answer "what does a press do"
+ * pad's *Apply as values*, the hand's place on the programmer's stack and a cue slot's Look — calls
+ * it, so no two surfaces can answer "what does a press do"
  * differently.
  *
  * **The desk owns every rule** (plan P2). Coverage, family replacement, widening and the mask test
@@ -126,7 +126,7 @@ export function usePressInCue(options: PressOptions = {}): PressCue | null {
  * back. It pre-refuses one thing only: a **palette with no targets that would land nowhere** — a
  * generic one on either gesture, a per-fixture one applied as values — which the palette routes take
  * without refusing (the busk pad's route refuses it by name, `PALETTE_NEEDS_SELECTION`). A per-fixture
- * palette's tap names its own heads and a Look with none lands on its own fixtures, so both go out; and nothing is refused from
+ * palette's tap names its own heads, so it goes out; and nothing is refused from
  * the mask this window holds — it is tested on the on arm only, and only the desk knows which arm a
  * press is on. A refusal arrives as a 400 whose message `errorToastMiddleware` toasts.
  *
@@ -138,7 +138,7 @@ export function usePressInCue(options: PressOptions = {}): PressCue | null {
  * **With a Look layer focused, a press goes into the Look** (D7, plan §3.6): a value palette is
  * resolved on the desk with `write: false` and each head's literal lands in the layer's draft
  * through `LookRowStore`, which saves through the Look's own PUT; an effect palette's effect is
- * started on the heads the layer targets and then absorbed into the Look (`absorb-effects`, *+
+ * started on the selected heads and then absorbed into the Look (`absorb-fx`, *+
  * Effect*'s path) — and stopped again if the absorb is refused, so nothing is left on stage; a Look is
  * refused, since Looks don't nest. No `programmer.*` frame is sent. A door that writes Local whatever
  * the grid is pointed at — the fixture sheet, a cue slot — passes `scope: 'programmer'`.
@@ -152,11 +152,11 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
   const look = usePressLook(options)
   const cue = usePressInCue(options)
 
-  const [applyTemplate] = useApplyTemplateMutation()
-  const [toggleTemplate] = useToggleTemplateMutation()
+  const [applyPalette] = useApplyPaletteMutation()
+  const [togglePalette] = useTogglePaletteMutation()
   const [applyLook] = useApplyLookMutation()
   const [toggleLook] = useToggleLookMutation()
-  const [absorb] = useAbsorbLookEffectsMutation()
+  const [absorb] = useAbsorbLookFxMutation()
   const [removeFx] = useRemoveFxMutation()
 
   const into = useMemo<PressInto>(
@@ -174,7 +174,7 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
       const targets = [...pair.targets]
       const families = pair.families != null && pair.families.length > 0 ? [...pair.families] : undefined
       // A per-fixture palette's toggle names its own heads; its apply does not, so it lands nowhere.
-      if (source.kind === 'template' && targets.length === 0 && (source.template.isGeneric || gesture === 'asValues')) {
+      if (source.kind === 'palette' && targets.length === 0 && (source.palette.isGeneric || gesture === 'asValues')) {
         toast.error('Select the fixtures this should land on first')
         return null
       }
@@ -185,11 +185,11 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
             return null
           }
           if (gesture === 'asValues') {
-            if (source.kind === 'look' || source.template.kind === 'effect') {
-              toast.error(`In ${cue.cueLabel} a tap puts ${source.kind === 'look' ? source.look.name : source.template.name} on as a layer`)
+            if (source.kind === 'look' || source.palette.kind === 'fx') {
+              toast.error(`In ${cue.cueLabel} a tap puts ${source.kind === 'look' ? source.look.name : source.palette.name} on as a layer`)
               return null
             }
-            const answer = await applyTemplate({ projectId, templateId: source.template.id, targets, families, write: false }).unwrap()
+            const answer = await applyPalette({ projectId, paletteId: source.palette.id, targets, families, write: false }).unwrap()
             const values = answer.values ?? []
             const landed = cue.landValues(values)
             const missed = values.length - landed + answer.skipped.length
@@ -199,12 +199,11 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
             return landed > 0 ? 'into' : null
           }
           const answer = await cue.pressLayer(
-            source.kind === 'template' ? { templateId: source.template.id } : { lookId: source.look.id },
-            targets,
-            families ?? null,
+            source.kind === 'palette'
+              ? { paletteId: source.palette.id, targets, families: families ?? null }
+              : { lookId: source.look.id },
           )
           if (answer == null) return null
-          reportSkipped(answer.skippedFamilies, pair.families)
           return answer.action === 'removed' ? 'off' : 'on'
         }
         if (look != null) {
@@ -213,44 +212,32 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
             toast.error(`Looks don’t nest — ${lookName} is focused. Focus Local to press ${source.look.name}.`)
             return null
           }
-          const template = source.template
-          if (template.kind === 'effect') {
-            // Only the heads the layer targets, as the value arm's draft guard lands only those.
-            const onLayer = targets.filter((target) =>
-              look.targetedKeys == null
-                ? true
-                : target.type === 'group'
-                  ? look.targets.some((t) => t.type === 'group' && t.key === target.key)
-                  : look.targetedKeys.has(target.key),
-            )
-            if (onLayer.length === 0) {
-              toast.warning(`No selected head is on ${lookName}’s layer`)
-              return null
-            }
-            const started = await applyTemplate({
+          const template = source.palette
+          if (template.kind === 'fx') {
+            const started = await applyPalette({
               projectId,
-              templateId: template.id,
-              targets: onLayer,
+              paletteId: template.id,
+              targets,
               families,
             }).unwrap()
-            const effectIds = started.effectIds ?? []
-            if (effectIds.length === 0) {
-              toast.warning('Nothing started — no selected head could take this effect')
+            const fxIds = started.fxIds ?? []
+            if (fxIds.length === 0) {
+              toast.warning('Nothing started — no selected head could take this FX')
               return null
             }
             try {
-              await absorb({ projectId: look.projectId, lookId: look.lookId, effectIds }).unwrap()
+              await absorb({ projectId: look.projectId, lookId: look.lookId, fxIds }).unwrap()
             } catch (refused) {
               // The absorb keeps its effects on a refusal; a press into a Look must leave the stage
               // as it was, so the copies started for it come off again.
-              for (const id of effectIds) void removeFx({ id, fixtureKey: onLayer[0]?.key ?? '' })
+              for (const id of fxIds) void removeFx({ id, fixtureKey: targets[0]?.key ?? '' })
               throw refused
             }
             return 'into'
           }
-          const answer = await applyTemplate({
+          const answer = await applyPalette({
             projectId,
-            templateId: template.id,
+            paletteId: template.id,
             targets,
             families,
             write: false,
@@ -266,32 +253,31 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
           return landed > 0 ? 'into' : null
         }
 
-        if (source.kind === 'template') {
-          const template = source.template
+        if (source.kind === 'palette') {
+          const template = source.palette
           if (gesture === 'asValues') {
-            const result = await applyTemplate({ projectId, templateId: template.id, targets, families }).unwrap()
-            reportApplied(template, result.written, result.skipped.length, result.effectIds)
+            const result = await applyPalette({ projectId, paletteId: template.id, targets, families }).unwrap()
+            reportApplied(template, result.written, result.skipped.length, result.fxIds)
             return 'on'
           }
-          const result = await toggleTemplate({
+          const result = await togglePalette({
             projectId,
-            templateId: template.id,
+            paletteId: template.id,
             targets,
             // What this client believes the layer's mask is; the desk derives the real one from the
             // palette and answers it, so a disagreement surfaces in the response.
-            propertyMask: template.family ?? undefined,
+            attributeMask: template.family ?? undefined,
             families,
           }).unwrap()
           return result.action === 'removed' ? 'off' : 'on'
         }
 
+        // A Look lands whole (absolute-looks plan D1): neither press names the pair.
         if (gesture === 'asValues') {
-          const result = await applyLook({ projectId, lookId: source.look.id, targets, families }).unwrap()
-          reportSkipped(result.skippedFamilies, pair.families)
+          await applyLook({ projectId, lookId: source.look.id }).unwrap()
           return 'on'
         }
-        const result = await toggleLook({ projectId, lookId: source.look.id, targets, families }).unwrap()
-        reportSkipped(result.skippedFamilies, pair.families)
+        const result = await toggleLook({ projectId, lookId: source.look.id }).unwrap()
         return result.action === 'removed' ? 'off' : 'on'
       } catch {
         // Already on screen: `errorToastMiddleware` toasts every rejected mutation with the desk's
@@ -300,7 +286,7 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
         return null
       }
     },
-    [pair, cue, look, projectId, applyTemplate, toggleTemplate, applyLook, toggleLook, absorb, removeFx],
+    [pair, cue, look, projectId, applyPalette, togglePalette, applyLook, toggleLook, absorb, removeFx],
   )
 
   return useMemo(() => ({ press, into }), [press, into])
@@ -311,22 +297,16 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
  * a head with no dimmer takes no level, and saying nothing would look like a press that did nothing.
  * An effect palette writes no literals, so its effect ids are the whole answer, gated on the
  * palette's **kind** and not on the field's presence: the desk answers a value press with
- * `effectIds: []` as well.
+ * `fxIds: []` as well.
  */
-function reportApplied(template: TemplateSummary, written: number, skipped: number, effectIds?: number[]) {
+function reportApplied(template: PaletteSummary, written: number, skipped: number, fxIds?: number[]) {
   if (skipped > 0) {
     toast.warning(`${written} head${written === 1 ? '' : 's'} set · ${skipped} could not take it`)
     return
   }
-  if (template.kind === 'effect' && effectIds != null) {
-    const count = effectIds.length
-    if (count === 0) toast.warning('Nothing started — no selected head could take this effect')
-    else toast.success(`${count} effect${count === 1 ? '' : 's'} started`)
+  if (template.kind === 'fx' && fxIds != null) {
+    const count = fxIds.length
+    if (count === 0) toast.warning('Nothing started — no selected head could take this FX')
+    else toast.success(`${count} FX started`)
   }
-}
-
-/** A Look's skipped families, toasted on the pressing window (multi-screen plan D6). */
-function reportSkipped(skipped: readonly string[] | undefined, mask: readonly AttributeFamily[] | null) {
-  const message = skippedRowsMessage(skipped ?? [], mask)
-  if (message != null) toast.warning(message)
 }

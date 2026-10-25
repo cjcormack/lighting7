@@ -24,10 +24,10 @@ vi.mock('sonner', () => ({ toast }))
 const apply = vi.fn(() => ({ unwrap: () => Promise.resolve({ written: 1, skipped: [] }) }))
 const toggle = vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))
 let templates: unknown[] = []
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: templates }),
-  useApplyTemplateMutation: () => [apply],
-  useToggleTemplateMutation: () => [toggle],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: templates }),
+  useApplyPaletteMutation: () => [apply],
+  useTogglePaletteMutation: () => [toggle],
 }))
 // A band chip is a press (`usePress`): its other routes and the ring's applied state.
 // A refused absorb into a focused Look takes the effects it started off again.
@@ -35,7 +35,7 @@ vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
-  useAbsorbLookEffectsMutation: () => [vi.fn()],
+  useAbsorbLookFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/programmer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/programmer')>()),
@@ -71,11 +71,11 @@ const rgbw = colourProp('rgbColour', chan(1), chan(2), chan(3), { whiteChannel: 
 const rgba = colourProp('rgbColour', chan(1), chan(2), chan(3), { amberChannel: chan(5) })
 const dimmer = sliderProp('dimmer', 'dimmer', chan(20))
 
-const par1: WriteTarget = { key: 'par-1', properties: [rgb] }
-const par2: WriteTarget = { key: 'par-2', properties: [rgbw] }
-const dim: WriteTarget = { key: 'dim', properties: [dimmer] }
+const par1: WriteTarget = { key: 'par-1', attributes: [rgb] }
+const par2: WriteTarget = { key: 'par-2', attributes: [rgbw] }
+const dim: WriteTarget = { key: 'dim', attributes: [dimmer] }
 /** One cell of a bar, named the way `rowWriteTargets` and `writeTargetsOf` stamp it. */
-const cell: WriteTarget = { key: 'bar.c2', properties: [rgba], fixtureKey: 'bar', cellIndex: 1 }
+const cell: WriteTarget = { key: 'bar.c2', attributes: [rgba], fixtureKey: 'bar', cellIndex: 1 }
 const FOUR = [par1, par2, dim, cell]
 
 function stubMatchMedia({ narrow = false, short = false, cramped = false } = {}) {
@@ -172,7 +172,7 @@ describe('the pieces, and which host draws which', () => {
     expect(band()).not.toBeNull()
     expect(band()!.compareDocumentPosition(field('R')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const verbs = [...footer()!.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim())
-    expect(verbs).toEqual(['Save as palette…', 'Pick', 'Spread to a second colour…'])
+    expect(verbs).toEqual(['Save as palette…', 'Pick', 'Fan to a second colour…'])
     expect(screen.getByRole('button', { name: /Save as palette/ })).toBeEnabled()
   })
 
@@ -497,14 +497,14 @@ describe('the picker', () => {
   })
 
   it('folds every colour descriptor of a target into the emitter counts, and counts a head once', () => {
-    expect(emitterHeadCounts([{ key: 'bar', properties: [], elements: [{ index: 1, key: 'bar.c2', displayName: 'Cell 2', properties: [rgba] }] }])).toEqual({
+    expect(emitterHeadCounts([{ key: 'bar', attributes: [], elements: [{ index: 1, key: 'bar.c2', displayName: 'Cell 2', attributes: [rgba] }] }])).toEqual({
       white: 0,
       amber: 1,
       uv: 0,
       any: 1,
     })
     const both = colourProp('rgbColour', chan(1), chan(2), chan(3), { whiteChannel: chan(4), amberChannel: chan(5) })
-    expect(emitterHeadCounts([{ key: 'x', properties: [both] }])).toEqual({ white: 1, amber: 1, uv: 0, any: 1 })
+    expect(emitterHeadCounts([{ key: 'x', attributes: [both] }])).toEqual({ white: 1, amber: 1, uv: 0, any: 1 })
   })
 })
 
@@ -515,13 +515,13 @@ describe('the footer', () => {
     expect(screen.getByRole('button', { name: /Save as palette/ })).toBeDisabled()
     expect(screen.queryByRole('switch')).toBeNull()
     fireEvent.change(field('B'), { target: { value: '7' } })
-    fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Fan to a second colour/ }))
     expect(onSpread).toHaveBeenCalledWith({ r: 10, g: 20, b: 7, w: 0, a: 0, uv: 0 })
     unmount()
     const onSave = vi.fn()
     draw({ targets: [], onSave })
     expect(screen.getByRole('button', { name: /Save as palette/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeDisabled()
   })
 
   it('the band draws the colour palettes that fit, recent first then by name, and a chip is a press', () => {
@@ -542,14 +542,14 @@ describe('the footer', () => {
     fireEvent.click(within(chips[0] as HTMLElement).getByText('Warm Amber'))
     expect(toggle).toHaveBeenCalledWith({
       projectId: 1,
-      templateId: 2,
+      paletteId: 2,
       targets: [{ type: 'fixture', key: 'par-1' }],
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
       families: ['COLOUR'],
     })
     expect(apply).not.toHaveBeenCalled()
     fireEvent.click(within(chips[0] as HTMLElement).getByText('Warm Amber'), { altKey: true })
-    expect(apply).toHaveBeenCalledWith({ projectId: 1, templateId: 2, targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] })
+    expect(apply).toHaveBeenCalledWith({ projectId: 1, paletteId: 2, targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] })
   })
 })
 
@@ -567,7 +567,7 @@ describe('read-only — the programmer rail’s tab in Output or on a palette la
     expect(inertRegion!.contains(pick)).toBe(false)
     expect(pick).toBeEnabled()
     // Spread… hands a value on to be written, so read-only disables it here, not in each host.
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeDisabled()
     // The docked frame draws the host's label line, above the controls.
     expect(screen.getByText('Output · read-only')).toBeInTheDocument()
   })
@@ -624,8 +624,8 @@ function template(id: number, name: string, extra: Record<string, unknown> = {})
     family: 'COLOUR',
     isGeneric: true,
     kind: 'value',
-    rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
-    effect: null,
+    rows: [{ attribute: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
+    fx: null,
     requiredEmitters: [],
     lastPressedAt: '2026-09-18T10:00:00Z',
     layerCount: 0,

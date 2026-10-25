@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.TargetRef
@@ -9,7 +9,7 @@ import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.models.AssignmentHealth
 
 /**
- * Shared validator for persisted `(target, propertyName)` references.
+ * Shared validator for persisted `(target, attribute)` references.
  *
  * Used by cue Phase 6 property-assignment diagnostics today; control-surface Phase 7 will
  * wrap the same functions for binding validation. Stateless — callers supply the current
@@ -19,7 +19,7 @@ object PersistedFixtureReferenceValidator {
 
     /**
      * Validate a cue or binding reference against the currently-loaded patch. Returns
-     * [AssignmentHealth.Ok] iff the target exists and exposes [propertyName] as a known
+     * [AssignmentHealth.Ok] iff the target exists and exposes [attribute] as a known
      * annotated property (including the synthetic `"position"` compound and
      * `"colour"` / `"color"` → `rgbColour` aliases).
      *
@@ -32,10 +32,10 @@ object PersistedFixtureReferenceValidator {
     fun validateTargetedReference(
         fixtures: Fixtures,
         target: TargetRef,
-        propertyName: String,
+        attribute: String,
         allowElements: Boolean = false,
     ): AssignmentHealth {
-        val canonical = canonicalPropertyName(propertyName)
+        val canonical = canonicalAttributeName(attribute)
         val referenceFixture: GroupableFixture = when (target) {
             is TargetRef.Group -> {
                 val group = try {
@@ -52,15 +52,15 @@ object PersistedFixtureReferenceValidator {
                 return AssignmentHealth.MissingFixture(target.key)
             }
         }
-        if (!fixtureSupportsProperty(referenceFixture, canonical)) {
-            return AssignmentHealth.MissingProperty(target.key, propertyName)
+        if (!fixtureSupportsAttribute(referenceFixture, canonical)) {
+            return AssignmentHealth.MissingAttribute(target.key, attribute)
         }
         return AssignmentHealth.Ok
     }
 
     /**
      * Validate a preset property assignment. Preset assignments are target-less — they're
-     * keyed by `propertyName` only — so the check is against the preset's declared
+     * keyed by `attribute` only — so the check is against the preset's declared
      * [fixtureTypeKey]. An unknown type key is treated as valid rather than producing a
      * false positive — the preset will fail at apply time with its own warn log.
      *
@@ -69,32 +69,32 @@ object PersistedFixtureReferenceValidator {
      * fixture-level properties. These descriptors only include properties common to all
      * elements, which matches the "apply to one head" semantics.
      */
-    fun validatePresetPropertyReference(
+    fun validatePresetAttributeReference(
         fixtureTypeKey: String,
-        propertyName: String,
+        attribute: String,
         elementKey: String? = null,
     ): AssignmentHealth {
-        val canonical = canonicalPropertyName(propertyName)
+        val canonical = canonicalAttributeName(attribute)
         val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
             ?: return AssignmentHealth.Ok
         val matches = if (elementKey != null) {
-            val elementProps = typeInfo.elementGroupProperties
-                ?: return AssignmentHealth.MissingProperty(fixtureTypeKey, propertyName)
+            val elementProps = typeInfo.elementGroupAttributes
+                ?: return AssignmentHealth.MissingAttribute(fixtureTypeKey, attribute)
             if (canonical.equals("position", ignoreCase = true)) {
                 elementProps.any { it.name == "pan" } && elementProps.any { it.name == "tilt" }
             } else {
                 elementProps.any { it.name == canonical }
             }
         } else {
-            typeInfo.properties.any { it.name == canonical }
+            typeInfo.attributes.any { it.name == canonical }
         }
         return if (matches) AssignmentHealth.Ok
-        else AssignmentHealth.MissingProperty(fixtureTypeKey, propertyName)
+        else AssignmentHealth.MissingAttribute(fixtureTypeKey, attribute)
     }
 
-    /** Against the class catalogue, so a head answers from its own `@FixtureProperty` members. */
-    private fun fixtureSupportsProperty(fixture: GroupableFixture, canonical: String): Boolean {
-        val byName = FixturePropertyCatalogue.of(fixture::class).byName
+    /** Against the class catalogue, so a head answers from its own `@FixtureAttribute` members. */
+    private fun fixtureSupportsAttribute(fixture: GroupableFixture, canonical: String): Boolean {
+        val byName = FixtureAttributeCatalogue.of(fixture::class).byName
         if (canonical.equals("position", ignoreCase = true)) {
             return byName["pan"] != null && byName["tilt"] != null
         }
@@ -107,8 +107,8 @@ object PersistedFixtureReferenceValidator {
  * aliases collapse to `rgbColour`, everything else passes through unchanged. Shared so
  * route handlers and the validator don't drift apart on the aliasing rule.
  */
-fun canonicalPropertyName(propertyName: String): String =
-    when (propertyName.lowercase()) {
+fun canonicalAttributeName(attribute: String): String =
+    when (attribute.lowercase()) {
         "colour", "color", "rgbcolour" -> "rgbColour"
-        else -> propertyName
+        else -> attribute
     }

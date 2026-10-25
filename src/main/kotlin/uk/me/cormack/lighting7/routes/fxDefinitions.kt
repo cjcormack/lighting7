@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.models.timingOf
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.mcp.requireScriptAccess
 import io.ktor.http.*
 import io.ktor.resources.*
@@ -65,32 +67,36 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         call.requireScriptAccess(state)
         val request = call.receive<CreateFxDefinitionRequest>()
         val currentProject = state.show.project
+        (retiredIdProblem(request.fxId) ?: LegacyNames.familyProblem(request.family))?.let {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+            return@post
+        }
 
         val requestOutputType = FxOutputType.valueOf(request.outputType)
-        val requestCompatible = normaliseCompatibleProperties(requestOutputType, request.compatibleProperties)
-        validateCompatibleProperties(requestOutputType, requestCompatible)?.let {
+        val requestCompatible = normaliseCompatibleAttributes(requestOutputType, request.compatibleAttributes)
+        validateCompatibleAttributes(requestOutputType, requestCompatible)?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@post
         }
 
         val definition = transaction(state.database) {
             DaoFxDefinition.new {
-                effectId = request.effectId
+                fxId = request.fxId
                 name = request.name
-                category = request.category
+                family = request.family
                 outputType = requestOutputType
-                effectMode = EffectMode.valueOf(request.effectMode)
+                fxMode = FxMode.valueOf(request.fxMode)
                 parameters = request.parameters
-                compatibleProperties = requestCompatible
+                compatibleAttributes = requestCompatible
                 script = request.script
                 project = currentProject
-                defaultStepTiming = request.defaultStepTiming
+                defaultTiming = request.defaultTiming.name
                 timingSource = try { TimingSource.valueOf(request.timingSource) } catch (_: Exception) { TimingSource.BEAT }
             }
         }
 
         // Compile and register the effect
-        val regResult = registerUserEffect(state, definition)
+        val regResult = registerUserFx(state, definition)
         if (!regResult.success) {
             call.respond(HttpStatusCode.UnprocessableEntity, FxCompileResponse(
                 success = false,
@@ -122,7 +128,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         val request = call.receive<UpdateFxDefinitionRequest>()
 
         // Validate the *merged* declaration in its own read, before the mutating transaction
-        // below. Every request field is optional, so a bad `compatibleProperties` may only
+        // below. Every request field is optional, so a bad `compatibleAttributes` may only
         // conflict with the *stored* outputType (or the reverse) — and the mutations happen
         // inside that transaction, so validating there would have already written the row this
         // rejects.
@@ -134,7 +140,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         if (request.script != null && request.script != storedScript) call.requireScriptAccess(state)
         val stored = transaction(state.database) {
             state.fxDefinitionInCurrentProject(resource.definitionId)
-                ?.let { it.outputType to it.compatibleProperties }
+                ?.let { it.outputType to it.compatibleAttributes }
         }
         if (stored == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found"))
@@ -143,11 +149,15 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         val mergedOutputType = request.outputType?.let { FxOutputType.valueOf(it) } ?: stored.first
         // Normalised, and then written back below even when the request didn't supply the field:
         // an edit sends only `{id, name, script}`, so this is the only chance a definition stored
-        // with the old `[pan, tilt]` has to heal. See [normaliseCompatibleProperties].
-        val mergedCompatible = normaliseCompatibleProperties(
-            mergedOutputType, request.compatibleProperties ?: stored.second,
+        // with the old `[pan, tilt]` has to heal. See [normaliseCompatibleAttributes].
+        val mergedCompatible = normaliseCompatibleAttributes(
+            mergedOutputType, request.compatibleAttributes ?: stored.second,
         )
-        validateCompatibleProperties(mergedOutputType, mergedCompatible)?.let {
+        validateCompatibleAttributes(mergedOutputType, mergedCompatible)?.let {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+            return@put
+        }
+        (request.fxId?.let { retiredIdProblem(it) } ?: LegacyNames.familyProblem(request.family))?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
@@ -156,15 +166,15 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             val def = state.fxDefinitionInCurrentProject(resource.definitionId)
                 ?: return@transaction null
 
-            request.effectId?.let { def.effectId = it }
+            request.fxId?.let { def.fxId = it }
             request.name?.let { def.name = it }
-            request.category?.let { def.category = it }
+            request.family?.let { def.family = it }
             def.outputType = mergedOutputType
-            request.effectMode?.let { def.effectMode = EffectMode.valueOf(it) }
+            request.fxMode?.let { def.fxMode = FxMode.valueOf(it) }
             request.parameters?.let { def.parameters = it }
-            def.compatibleProperties = mergedCompatible
+            def.compatibleAttributes = mergedCompatible
             request.script?.let { def.script = it }
-            request.defaultStepTiming?.let { def.defaultStepTiming = it }
+            request.defaultTiming?.let { def.defaultTiming = it.name }
             request.timingSource?.let { def.timingSource = try { TimingSource.valueOf(it) } catch (_: Exception) { TimingSource.BEAT } }
 
             def
@@ -176,7 +186,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         }
 
         // Re-compile and re-register
-        val regResult = registerUserEffect(state, definition)
+        val regResult = registerUserFx(state, definition)
         if (!regResult.success) {
             call.respond(HttpStatusCode.UnprocessableEntity, FxCompileResponse(
                 success = false,
@@ -197,11 +207,11 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             val def = state.fxDefinitionInCurrentProject(resource.definitionId)
                 ?: return@transaction false
 
-            val effectId = def.effectId
+            val fxId = def.fxId
             def.delete()
 
             // Unregister from FxRegistry
-            state.show.fxRegistry.unregister(effectId)
+            state.show.fxRegistry.unregister(fxId)
             true
         }
 
@@ -217,9 +227,9 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
     post<FxDefinitionCompileCheckResource> {
         call.requireScriptAccess(state)
         val request = call.receive<CompileFxDefinitionRequest>()
-        val effectMode = EffectMode.valueOf(request.effectMode)
+        val fxMode = FxMode.valueOf(request.fxMode)
 
-        val result = state.show.fxScriptCompiler.compileCheck(request.script, effectMode)
+        val result = state.show.fxScriptCompiler.compileCheck(request.script, fxMode)
         call.respond(FxCompileResponse(
             success = result.success,
             messages = result.messages.map { FxCompileMessage(it.severity, it.message, it.location) },
@@ -230,9 +240,9 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
     post<FxDefinitionCompileResource> { resource ->
         call.requireScriptAccess(state)
         val request = call.receive<CompileFxDefinitionRequest>()
-        val effectMode = EffectMode.valueOf(request.effectMode)
+        val fxMode = FxMode.valueOf(request.fxMode)
 
-        val result = state.show.fxScriptCompiler.compileCheck(request.script, effectMode)
+        val result = state.show.fxScriptCompiler.compileCheck(request.script, fxMode)
         call.respond(FxCompileResponse(
             success = result.success,
             messages = result.messages.map { FxCompileMessage(it.severity, it.message, it.location) },
@@ -251,7 +261,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             return@post
         }
 
-        val regResult = registerUserEffect(state, definition)
+        val regResult = registerUserFx(state, definition)
         call.respond(FxCompileResponse(
             success = regResult.success,
             messages = regResult.diagnostics.map { FxCompileMessage(it.severity, it.message, it.location) },
@@ -274,7 +284,7 @@ private fun State.fxDefinitionInCurrentProject(definitionId: Int): DaoFxDefiniti
     }.singleOrNull()
 
 /**
- * Reject `compatibleProperties` an effect of this [outputType] cannot actually drive.
+ * Reject `compatibleAttributes` an effect of this [outputType] cannot actually drive.
  *
  * The authoring-time half of [uk.me.cormack.lighting7.fx.FxTarget.acceptedOutputType]: a property
  * whose target takes a different [FxOutputType] discards the effect's output, so advertising it
@@ -287,7 +297,7 @@ private fun State.fxDefinitionInCurrentProject(definitionId: Int): DaoFxDefiniti
  * a name alone can prove wrong — which is every mismatch [uk.me.cormack.lighting7.fx.FxTargetFactory]
  * can produce from the fixed vocabulary. COLOUR can afford to be strict because every `DmxColour`
  * property in the fixture tree is named `rgbColour`, which is also why
- * [uk.me.cormack.lighting7.fx.ColourTarget] defaults its `propertyName` to it.
+ * [uk.me.cormack.lighting7.fx.ColourTarget] defaults its `attribute` to it.
  *
  * The built-in loader gets no equivalent check on purpose: a misdeclared built-in should fail the
  * build (`FxRegistrationTargetCompatibilityTest`), not quietly shrink the library at boot. Nor
@@ -295,33 +305,33 @@ private fun State.fxDefinitionInCurrentProject(definitionId: Int): DaoFxDefiniti
  *
  * @return an error message naming the offending property, or null when the declaration is sound
  */
-internal fun validateCompatibleProperties(
+internal fun validateCompatibleAttributes(
     outputType: FxOutputType,
-    compatibleProperties: List<String>,
+    compatibleAttributes: List<String>,
 ): String? {
     fun bad(prop: String, expected: String) =
-        "compatibleProperties entry '$prop' cannot take a $outputType output — it would be " +
-            "discarded, leaving the effect with no visible result. Expected $expected."
+        "compatibleAttributes entry '$prop' cannot take a $outputType output — it would be " +
+            "discarded, leaving the FX with no visible result. Expected $expected."
 
     // A step effect is not a custom effect's to be (effects plan §3.6): its lists name the desk's
     // palettes and settings, resolved per head by the targets, and a definition syncs to desks
     // that predate the output type. So neither built-in can be forked, and no definition says it.
     if (outputType == FxOutputType.STEPS) {
-        return "A custom effect cannot have a STEPS output — Palette Steps and Slot Steps are the " +
+        return "A custom FX cannot have a STEPS output — Palette Steps and Slot Steps are the " +
             "desk's own and cannot be forked"
     }
 
-    for (prop in compatibleProperties) {
+    for (prop in compatibleAttributes) {
         when (outputType) {
             FxOutputType.POSITION ->
                 if (!prop.equals("position", ignoreCase = true)) return bad(prop, "'position'")
             FxOutputType.COLOUR ->
-                if (canonicalPropertyName(prop) != "rgbColour") return bad(prop, "'rgbColour'")
+                if (canonicalAttributeName(prop) != "rgbColour") return bad(prop, "'rgbColour'")
             FxOutputType.SLIDER -> {
                 if (prop.equals("position", ignoreCase = true))
-                    return bad(prop, "a slider or setting property, not the pan/tilt pair")
-                if (canonicalPropertyName(prop) == "rgbColour")
-                    return bad(prop, "a slider or setting property, not the colour bundle")
+                    return bad(prop, "a slider or setting attribute, not the pan/tilt pair")
+                if (canonicalAttributeName(prop) == "rgbColour")
+                    return bad(prop, "a slider or setting attribute, not the colour bundle")
             }
             // Refused above: no definition has a STEPS output.
             FxOutputType.STEPS -> Unit
@@ -331,28 +341,28 @@ internal fun validateCompatibleProperties(
 }
 
 /**
- * Repair a `compatibleProperties` list that can only be a mistake, before validating the rest.
+ * Repair a `compatibleAttributes` list that can only be a mistake, before validating the rest.
  *
  * A POSITION effect naming `pan` or `tilt` is the exact shape of sweep item A11 — both axes emitted
  * at once, addressed by one of them — and it is what the desk's own UI used to write: `FxLibrary`'s
  * new-definition form derived the list from the *category*, so every position definition ever saved
  * carries `[pan, tilt]`.
  *
- * Without this the validation added above would be a trap rather than a guard. `compatibleProperties`
+ * Without this the validation added above would be a trap rather than a guard. `compatibleAttributes`
  * is not an editable field on any surface, and the edit sheet sends only `{id, name, script}`, so
  * validating the merged declaration would reject a **script-only** edit of an existing definition
  * on the strength of a stored list the operator cannot reach — permanently, with no in-app remedy.
  * Normalising on write instead means the first save of such a definition heals it.
  *
  * Only this one rewrite is safe to do silently: `pan`/`tilt` under POSITION has no reading under
- * which the operator meant it. Everything else [validateCompatibleProperties] rejects out loud.
+ * which the operator meant it. Everything else [validateCompatibleAttributes] rejects out loud.
  */
-internal fun normaliseCompatibleProperties(
+internal fun normaliseCompatibleAttributes(
     outputType: FxOutputType,
-    compatibleProperties: List<String>,
+    compatibleAttributes: List<String>,
 ): List<String> {
-    if (outputType != FxOutputType.POSITION) return compatibleProperties
-    return compatibleProperties
+    if (outputType != FxOutputType.POSITION) return compatibleAttributes
+    return compatibleAttributes
         .map { if (it.equals("pan", ignoreCase = true) || it.equals("tilt", ignoreCase = true)) "position" else it }
         .distinct()
 }
@@ -360,7 +370,7 @@ internal fun normaliseCompatibleProperties(
 /**
  * Result of attempting to compile and register a user-created FX definition.
  */
-data class RegisterEffectResult(
+data class RegisterFxResult(
     val success: Boolean,
     val diagnostics: List<FxCompileDiagnostic> = emptyList(),
 )
@@ -368,71 +378,72 @@ data class RegisterEffectResult(
 /**
  * Compile and register a user-created FX definition in the FxRegistry.
  */
-internal fun registerUserEffect(state: State, definition: DaoFxDefinition): RegisterEffectResult {
+internal fun registerUserFx(state: State, definition: DaoFxDefinition): RegisterFxResult {
     // Read all fields in a single transaction
     data class DefSnapshot(
-        val effectMode: EffectMode,
+        val fxMode: FxMode,
         val script: String,
-        val effectId: String,
+        val fxId: String,
         val name: String,
         val outputType: FxOutputType,
         val parameters: List<ParameterInfo>,
-        val compatibleProperties: List<String>,
-        val category: String,
-        val defaultStepTiming: Boolean,
+        val compatibleAttributes: List<String>,
+        val family: String,
+        val defaultTiming: Timing,
         val timingSource: TimingSource,
         val dbId: Int,
     )
 
     val snap = transaction(state.database) {
         DefSnapshot(
-            effectMode = definition.effectMode,
+            fxMode = definition.fxMode,
             script = definition.script,
-            effectId = definition.effectId,
+            fxId = definition.fxId,
             name = definition.name,
             outputType = definition.outputType,
             parameters = definition.parameters,
-            compatibleProperties = definition.compatibleProperties,
-            category = definition.category,
-            defaultStepTiming = definition.defaultStepTiming,
+            compatibleAttributes = definition.compatibleAttributes,
+            family = definition.family,
+            defaultTiming = timingOf(definition.defaultTiming) ?: Timing.CYCLE,
             timingSource = definition.timingSource,
             dbId = definition.id.value,
         )
     }
 
-    val compiled = state.show.fxScriptCompiler.compile(snap.script, snap.effectMode)
+    val compiled = state.show.fxScriptCompiler.compile(snap.script, snap.fxMode)
     if (!compiled.isSuccess) {
-        return RegisterEffectResult(
+        return RegisterFxResult(
             success = false,
             diagnostics = compiled.diagnostics.map { FxCompileDiagnostic(it.severity, it.message, it.location) },
         )
     }
 
-    val factory = ScriptEffectAdapter.createFactory(
+    val factory = ScriptFxAdapter.createFactory(
         compiled = compiled,
         schema = snap.parameters,
-        effectName = snap.name,
+        fxName = snap.name,
         outputType = snap.outputType,
-        defaultStepTiming = snap.defaultStepTiming,
+        defaultTiming = snap.defaultTiming,
+        registrationId = snap.fxId,
     )
 
-    state.show.fxRegistry.register(EffectRegistration(
-        id = snap.effectId,
+    state.show.fxRegistry.register(FxRegistration(
+        id = snap.fxId,
         name = snap.name,
-        category = snap.category,
+        family = snap.family,
         outputType = snap.outputType,
-        effectMode = snap.effectMode,
+        fxMode = snap.fxMode,
         parameters = snap.parameters,
-        compatibleProperties = snap.compatibleProperties,
-        source = EffectSource.USER,
+        compatibleAttributes = snap.compatibleAttributes,
+        source = FxSource.USER,
         sourceDefinitionId = snap.dbId,
         script = snap.script,
-        defaultStepTiming = snap.defaultStepTiming,
+        defaultTiming = snap.defaultTiming,
         timingSource = snap.timingSource,
         factory = factory,
     ))
 
-    return RegisterEffectResult(success = true)
+    return RegisterFxResult(success = true)
 }
 
 // --- DTOs ---
@@ -440,50 +451,50 @@ internal fun registerUserEffect(state: State, definition: DaoFxDefinition): Regi
 @Serializable
 data class FxDefinitionDto(
     val id: Int,
-    val effectId: String,
+    val fxId: String,
     val name: String,
-    val category: String,
+    val family: String,
     val outputType: String,
-    val effectMode: String,
+    val fxMode: String,
     val parameters: List<ParameterInfo>,
-    val compatibleProperties: List<String>,
+    val compatibleAttributes: List<String>,
     val script: String,
-    val defaultStepTiming: Boolean,
+    val defaultTiming: Timing,
     val timingSource: String = "BEAT",
 )
 
 @Serializable
 data class CreateFxDefinitionRequest(
-    val effectId: String,
+    val fxId: String,
     val name: String,
-    val category: String,
+    val family: String,
     val outputType: String = "SLIDER",
-    val effectMode: String = "STANDARD",
+    val fxMode: String = "STANDARD",
     val parameters: List<ParameterInfo> = emptyList(),
-    val compatibleProperties: List<String> = emptyList(),
+    val compatibleAttributes: List<String> = emptyList(),
     val script: String,
-    val defaultStepTiming: Boolean = false,
+    val defaultTiming: Timing = Timing.CYCLE,
     val timingSource: String = "BEAT",
 )
 
 @Serializable
 data class UpdateFxDefinitionRequest(
-    val effectId: String? = null,
+    val fxId: String? = null,
     val name: String? = null,
-    val category: String? = null,
+    val family: String? = null,
     val outputType: String? = null,
-    val effectMode: String? = null,
+    val fxMode: String? = null,
     val parameters: List<ParameterInfo>? = null,
-    val compatibleProperties: List<String>? = null,
+    val compatibleAttributes: List<String>? = null,
     val script: String? = null,
-    val defaultStepTiming: Boolean? = null,
+    val defaultTiming: Timing? = null,
     val timingSource: String? = null,
 )
 
 @Serializable
 data class CompileFxDefinitionRequest(
     val script: String,
-    val effectMode: String = "STANDARD",
+    val fxMode: String = "STANDARD",
 )
 
 @Serializable
@@ -502,14 +513,26 @@ data class FxCompileMessage(
 // Extension to convert DAO to DTO
 internal fun DaoFxDefinition.toDto(): FxDefinitionDto = FxDefinitionDto(
     id = this.id.value,
-    effectId = this.effectId,
+    fxId = this.fxId,
     name = this.name,
-    category = this.category,
+    family = this.family,
     outputType = this.outputType.name,
-    effectMode = this.effectMode.name,
+    fxMode = this.fxMode.name,
     parameters = this.parameters,
-    compatibleProperties = this.compatibleProperties,
+    compatibleAttributes = this.compatibleAttributes,
     script = this.script,
-    defaultStepTiming = this.defaultStepTiming,
+    defaultTiming = timingOf(this.defaultTiming) ?: Timing.CYCLE,
     timingSource = this.timingSource.name,
 )
+
+/**
+ * Why [fxId] may not name a script FX definition, or null: a retired built-in id would return
+ * with a new meaning in the field an archive's old FX use it in (terminology plan P3), and the
+ * importer renames it to today's built-in.
+ */
+internal fun retiredIdProblem(fxId: String): String? =
+    if (LegacyNames.isRetiredFxId(fxId)) {
+        "'$fxId' was a built-in FX's id and is retired; give the FX another id"
+    } else {
+        null
+    }

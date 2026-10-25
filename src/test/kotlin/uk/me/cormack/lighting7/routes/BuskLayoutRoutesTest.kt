@@ -16,7 +16,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoBuskBank
 import uk.me.cormack.lighting7.models.DaoBuskColumn
@@ -24,7 +24,7 @@ import uk.me.cormack.lighting7.models.DaoBuskPad
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.plugins.BuskLayoutChangedOutMessage
 import uk.me.cormack.lighting7.plugins.ChannelMappingStateOutMessage
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -78,13 +78,13 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
 
     private suspend fun HttpClient.page(pageId: Int): BuskPageDto = get("${pages()}/$pageId").body()
 
-    private suspend fun HttpClient.createTemplate(name: String): Int {
+    private suspend fun HttpClient.createPalette(name: String): Int {
         val resp = post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "#ff8800"))))
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "#ff8800"))))
         }
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
-        return resp.body<TemplateDto>().id
+        return resp.body<PaletteDto>().id
     }
 
     private suspend fun HttpClient.createLook(name: String): Int {
@@ -108,7 +108,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
             setBody(
                 NewCue(
                     name = name, cueStackId = stackId,
-                    propertyAssignments = listOf(CuePropertyAssignmentDto(TargetRef.Fixture.TYPE, "hex-1", "dimmer", "128")),
+                    attributeAssignments = listOf(CueAttributeAssignmentDto(TargetRef.Fixture.TYPE, "hex-1", "dimmer", "128")),
                 ),
             )
         }
@@ -126,7 +126,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
 
     private fun layout(vararg rows: BuskLayoutRow) = BuskLayoutRequest(rows.toList())
 
-    private fun tpl(id: Int, padId: Int? = null) = BuskLayoutPad(padId = padId, templateId = id)
+    private fun tpl(id: Int, padId: Int? = null) = BuskLayoutPad(padId = padId, paletteId = id)
     private fun look(id: Int, padId: Int? = null) = BuskLayoutPad(padId = padId, lookId = id)
     private fun cue(id: Int, padId: Int? = null) = BuskLayoutPad(padId = padId, cueId = id)
 
@@ -184,7 +184,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val page = client.createPage("Act 1")
         val other = client.createPage("Act 2")
 
@@ -252,7 +252,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val warm = client.createLook("warm")
         val page = client.createPage("Act 1")
 
@@ -265,7 +265,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         refused(layout(row(column(5, bank("keys", tpl(amber))))), "width 5 is not a share")
         refused(layout(row(column(6, bank("keys", tpl(amber), flow = "GRID")))), "flow GRID is not one of the two")
         refused(layout(row(column(6, bank("  ", tpl(amber))))), "a blank bank name")
-        refused(layout(row(column(6, bank("keys", BuskLayoutPad(templateId = amber, lookId = warm))))), "a pad naming two records")
+        refused(layout(row(column(6, bank("keys", BuskLayoutPad(paletteId = amber, lookId = warm))))), "a pad naming two records")
         refused(layout(row(column(6, bank("keys", BuskLayoutPad())))), "a pad naming none")
         refused(layout(row()), "an empty row")
         refused(layout(row(column(6))), "an empty column")
@@ -280,7 +280,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val page = client.createPage("Act 1")
         val other = client.createPage("Act 2")
         val written = client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
@@ -323,8 +323,8 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
-        val blue = client.createTemplate("blue")
+        val amber = client.createPalette("amber")
+        val blue = client.createPalette("blue")
         val warm = client.createLook("warm")
         val stackId = client.createStack("Main")
         val opening = client.createCue("opening", stackId)
@@ -342,7 +342,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         val keys = written.rows[0].columns[0].banks.single()
         assertEquals("keys", keys.name)
         assertTrue(keys.solo)
-        assertEquals(listOf("TEMPLATE", "LOOK", "CUE"), keys.pads.map { it.kind })
+        assertEquals(listOf("PALETTE", "LOOK", "CUE"), keys.pads.map { it.kind })
         assertEquals(listOf("moves", "cues"), written.rows[0].columns[1].banks.map { it.name })
         assertEquals("COLUMN", written.rows[0].columns[1].banks[0].flow)
         assertTrue(written.rows[0].columns[1].banks[1].pads.isEmpty(), "an empty bank is legal")
@@ -360,8 +360,8 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
-        val blue = client.createTemplate("blue")
+        val amber = client.createPalette("amber")
+        val blue = client.createPalette("blue")
         val page = client.createPage("Act 1")
 
         val first = client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber), tpl(blue))))))
@@ -396,8 +396,8 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
-        val blue = client.createTemplate("blue")
+        val amber = client.createPalette("amber")
+        val blue = client.createPalette("blue")
         val page = client.createPage("Act 1")
 
         val first = client.writeLayout(page.id, layout(row(column(6, bank("keys", tpl(amber), tpl(blue))), column(6, bank("moves")))))
@@ -438,7 +438,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val warm = client.createLook("warm")
         val stackId = client.createStack("Main")
         val opening = client.createCue("opening", stackId)
@@ -446,10 +446,10 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber), look(warm), cue(opening))))))
 
         val listed = client.get(pages()).body<List<BuskPageDto>>().single()
-        val (templatePad, lookPad, cuePad) = listed.pads
-        assertEquals("amber", templatePad.template?.name)
-        assertEquals("COLOUR", templatePad.template?.family)
-        assertNull(templatePad.look)
+        val (palettePad, lookPad, cuePad) = listed.pads
+        assertEquals("amber", palettePad.palette?.name)
+        assertEquals("COLOUR", palettePad.palette?.family)
+        assertNull(palettePad.look)
         assertEquals("warm", lookPad.look?.name)
         assertEquals(1, lookPad.look?.rowCount)
         val cue = assertNotNull(cuePad.cue)
@@ -465,7 +465,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val one = client.createPage("One")
         val two = client.createPage("Two")
         client.writeLayout(one.id, layout(row(column(12, bank("keys", tpl(amber), tpl(amber))))))
@@ -473,7 +473,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
 
         val listed = client.get(pages()).body<List<BuskPageDto>>()
         assertEquals(listOf(2, 1), listed.map { it.pads.size })
-        assertTrue(listed.flatMap { it.pads }.all { it.template?.id == amber })
+        assertTrue(listed.flatMap { it.pads }.all { it.palette?.id == amber })
     }
 
     // ─── Cascades ───────────────────────────────────────────────────────
@@ -483,8 +483,8 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
-        val blue = client.createTemplate("blue")
+        val amber = client.createPalette("amber")
+        val blue = client.createPalette("blue")
         val warm = client.createLook("warm")
         val stackId = client.createStack("Main")
         val opening = client.createCue("opening", stackId)
@@ -493,15 +493,15 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         assertEquals(5, padCount())
 
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/palettes/$amber").status)
-        assertEquals(listOf("LOOK", "CUE", "TEMPLATE"), client.page(page.id).pads.map { it.kind })
+        assertEquals(listOf("LOOK", "CUE", "PALETTE"), client.page(page.id).pads.map { it.kind })
 
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/looks/$warm").status)
-        assertEquals(listOf("CUE", "TEMPLATE"), client.page(page.id).pads.map { it.kind })
+        assertEquals(listOf("CUE", "PALETTE"), client.page(page.id).pads.map { it.kind })
 
         // A cue on a pad is in use (cue model plan D8): only a forced delete takes it, pads and all.
         assertEquals(HttpStatusCode.Conflict, client.delete("/api/rest/projects/$projectId/cues/$opening").status)
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/cues/$opening?force=true").status)
-        assertEquals(listOf(blue), client.page(page.id).pads.map { it.template?.id })
+        assertEquals(listOf(blue), client.page(page.id).pads.map { it.palette?.id })
         assertEquals(1, padCount())
         assertEquals(1, bankCount(), "the bank survives its pads")
     }
@@ -622,7 +622,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = createWsClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
 
         client.webSocket("/api") {
             // Drain the connect burst first: the broadcast subscription is wired as part of it,
@@ -654,7 +654,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val warm = client.createLook("warm")
         val stackId = client.createStack("Main")
         val opening = client.createCue("opening", stackId)
@@ -663,9 +663,9 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         val bankId = assertNotNull(client.page(page.id).firstBank.id)
 
         val afterLook = client.appendPad(bankId, AddBuskPadRequest(lookId = warm))
-        assertEquals(listOf("TEMPLATE", "LOOK"), afterLook.pads.map { it.kind })
+        assertEquals(listOf("PALETTE", "LOOK"), afterLook.pads.map { it.kind })
         val afterCue = client.appendPad(bankId, AddBuskPadRequest(cueId = opening))
-        assertEquals(listOf("TEMPLATE", "LOOK", "CUE"), afterCue.pads.map { it.kind })
+        assertEquals(listOf("PALETTE", "LOOK", "CUE"), afterCue.pads.map { it.kind })
 
         // The response is the page, minted ids and embedded summaries and all — the same contract
         // the layout write has, because the caller's next gesture must be able to name these pads.
@@ -679,16 +679,16 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
     fun `appending the same record twice gives it two pads`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val page = client.createPage("Act 1")
         client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
         val bankId = assertNotNull(client.page(page.id).firstBank.id)
 
-        client.appendPad(bankId, AddBuskPadRequest(templateId = amber))
-        val twice = client.appendPad(bankId, AddBuskPadRequest(templateId = amber))
+        client.appendPad(bankId, AddBuskPadRequest(paletteId = amber))
+        val twice = client.appendPad(bankId, AddBuskPadRequest(paletteId = amber))
         // D3: one record, several pads. A pad is a reference, never a copy, so nothing dedupes.
         assertEquals(3, twice.pads.size)
-        assertTrue(twice.pads.all { it.template?.id == amber })
+        assertTrue(twice.pads.all { it.palette?.id == amber })
         assertEquals(3, twice.pads.map { it.id }.distinct().size)
     }
 
@@ -696,23 +696,23 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
     fun `appending refuses an unknown bank, a bad arity and a record from another project`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val page = client.createPage("Act 1")
         client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
         val bankId = assertNotNull(client.page(page.id).firstBank.id)
 
-        assertEquals(HttpStatusCode.NotFound, client.addPad(999_999, AddBuskPadRequest(templateId = amber)).status)
+        assertEquals(HttpStatusCode.NotFound, client.addPad(999_999, AddBuskPadRequest(paletteId = amber)).status)
 
         for ((pad, because) in listOf(
             AddBuskPadRequest() to "names no record",
-            AddBuskPadRequest(templateId = amber, cueId = 1) to "names two",
+            AddBuskPadRequest(paletteId = amber, cueId = 1) to "names two",
         )) {
             val resp = client.addPad(bankId, pad)
             assertEquals(HttpStatusCode.BadRequest, resp.status, because)
             assertEquals(CODE_BUSK_LAYOUT_INVALID, resp.body<ErrorResponse>().code, because)
         }
 
-        val ref = client.addPad(bankId, AddBuskPadRequest(templateId = 999_999))
+        val ref = client.addPad(bankId, AddBuskPadRequest(paletteId = 999_999))
         assertEquals(HttpStatusCode.BadRequest, ref.status)
         assertEquals(CODE_BUSK_LAYOUT_REF, ref.body<ErrorResponse>().code)
 
@@ -723,21 +723,21 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
     fun `appending is gated on the current project and broadcasts busk layoutChanged`() = testApplication {
         mountTestApp(state)
         val client = createWsClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val page = client.createPage("Act 1")
         client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
         val bankId = assertNotNull(client.page(page.id).firstBank.id)
 
         client.webSocket("/api") {
             awaitOfType<ChannelMappingStateOutMessage>()
-            client.appendPad(bankId, AddBuskPadRequest(templateId = amber))
+            client.appendPad(bankId, AddBuskPadRequest(paletteId = amber))
             assertEquals(listOf(page.id), awaitOfType<BuskLayoutChangedOutMessage>().pageIds)
         }
 
         val otherId = transaction(state.database) { DaoProject.new { name = "other"; isCurrent = false }.id.value }
         val gated = client.post("/api/rest/projects/$otherId/busk/banks/$bankId/pads") {
             contentType(ContentType.Application.Json)
-            setBody(AddBuskPadRequest(templateId = amber))
+            setBody(AddBuskPadRequest(paletteId = amber))
         }
         assertEquals(HttpStatusCode.Conflict, gated.status)
     }
@@ -749,42 +749,42 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val warm = client.createLook("warm")
         val one = client.createPage("One")
         val two = client.createPage("Two")
 
-        suspend fun templateCount() = client.get("/api/rest/projects/$projectId/palettes")
-            .body<List<TemplateDto>>().single { it.id == amber }.buskPageCount
+        suspend fun paletteCount() = client.get("/api/rest/projects/$projectId/palettes")
+            .body<List<PaletteDto>>().single { it.id == amber }.buskPageCount
         suspend fun lookCount() = client.get("/api/rest/projects/$projectId/looks")
             .body<List<LookDto>>().single { it.id == warm }.buskPageCount
 
-        assertEquals(0, templateCount(), "a record on no page is on no page")
+        assertEquals(0, paletteCount(), "a record on no page is on no page")
         assertEquals(0, lookCount())
 
         // Two pads for one record on one page is *one* page — the hint counts places to look.
         client.writeLayout(one.id, layout(row(column(12, bank("keys", tpl(amber), tpl(amber), look(warm))))))
-        assertEquals(1, templateCount())
+        assertEquals(1, paletteCount())
         assertEquals(1, lookCount())
 
         client.writeLayout(two.id, layout(row(column(12, bank("more", tpl(amber))))))
-        assertEquals(2, templateCount())
+        assertEquals(2, paletteCount())
         assertEquals(1, lookCount(), "the Look is still only on the first page")
 
         // Deleting the page takes its pads, so the count falls back.
         assertEquals(HttpStatusCode.NoContent, client.delete("${pages()}/${two.id}").status)
-        assertEquals(1, templateCount())
+        assertEquals(1, paletteCount())
     }
 
     @Test
     fun `the page count rides on an embedded pad summary too, and never gates a delete`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val amber = client.createTemplate("amber")
+        val amber = client.createPalette("amber")
         val page = client.createPage("Act 1")
         client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
 
-        assertEquals(1, client.page(page.id).pads.single().template?.buskPageCount)
+        assertEquals(1, client.page(page.id).pads.single().palette?.buskPageCount)
 
         // D3: a pad is an enrichment, never a guard. Three pads do not stand between a template and
         // its delete — they go with it, and the count is only ever something to *say* beforehand.

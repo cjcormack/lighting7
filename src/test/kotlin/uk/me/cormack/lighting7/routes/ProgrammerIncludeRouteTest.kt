@@ -16,16 +16,16 @@ import org.junit.Test
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
-import uk.me.cormack.lighting7.models.TemplateRowDto
-import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
+import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.programmerChannel
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -61,7 +61,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val slot = state.show.programmerStore.get("hex-1", "dimmer")!!
         assertEquals(ProgrammerOwner.INCLUDE, slot.owner)
         assertTrue(slot.touched, "included content must be recordable")
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(200u), slot.value.resolved)
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(200u), slot.value.resolved)
 
         val target = state.show.programmerStore.lastIncludedTarget
         assertNotNull(target)
@@ -98,7 +98,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                 )
             }.body()
 
-            val row = rerecorded.cue.propertyAssignments.single()
+            val row = rerecorded.cue.attributeAssignments.single()
             assertEquals("group", row.targetType)
             assertEquals("front-wash", row.targetKey)
             assertEquals("150", row.value)
@@ -125,11 +125,11 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         client.include(cueId)
 
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(150u),
+            CueAssignmentResolver.AttributeValue.Slider(150u),
             programmerValue(state, "hex-1", "dimmer"),
         )
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(40u),
+            CueAssignmentResolver.AttributeValue.Slider(40u),
             programmerValue(state, "hex-2", "dimmer"),
             "the direct fixture row is the more specific statement",
         )
@@ -143,9 +143,9 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val cueId = createCue(
             client, "chase",
             adHoc = listOf(
-                CueAdHocEffectSpec(
+                CueAdHocFxSpec(
                     targetType = "fixture", targetKey = "hex-1",
-                    effectType = "SineWave", propertyName = "dimmer",
+                    fxType = "SineWave", attribute = "dimmer",
                 ),
             ),
         )
@@ -153,15 +153,15 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val response: ProgrammerIncludeResponse = client.include(cueId).body()
         assertEquals(1, response.fxSpawned)
 
-        val instance = state.show.fxEngine.getActiveEffects().single()
+        val instance = state.show.fxEngine.getActiveFx().single()
         assertTrue(FxEngine.isProgrammerFxPriority(instance.priority))
-        // Untagged on purpose: a cue tag would let removeCueEffects sweep the operator's
+        // Untagged on purpose: a cue tag would let removeCueFx sweep the operator's
         // programmer contents out from under them when the cue stops.
         assertNull(instance.cueId)
         assertEquals(cueId, instance.programmerOrigin?.cueId)
 
-        assertEquals(0, state.show.fxEngine.removeCueEffects(cueId), "not swept with the cue")
-        assertEquals(1, state.show.fxEngine.getActiveEffects().size)
+        assertEquals(0, state.show.fxEngine.removeCueFx(cueId), "not swept with the cue")
+        assertEquals(1, state.show.fxEngine.getActiveFx().size)
     }
 
     @Test
@@ -172,14 +172,14 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val cueId = createCue(
             client, "chase",
             adHoc = listOf(
-                CueAdHocEffectSpec(
+                CueAdHocFxSpec(
                     targetType = "fixture", targetKey = "hex-1",
-                    effectType = "SineWave", propertyName = "dimmer",
+                    fxType = "SineWave", attribute = "dimmer",
                 ),
             ),
         )
         client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
-        assertEquals(1, state.show.fxEngine.getActiveEffects().size)
+        assertEquals(1, state.show.fxEngine.getActiveFx().size)
 
         val response: ProgrammerIncludeResponse = client.include(cueId).body()
 
@@ -187,11 +187,11 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         // visibly double the effect under any non-OVERRIDE blend.
         assertEquals(0, response.fxSpawned)
         assertEquals(1, response.fxAlreadyRunning)
-        assertEquals(1, state.show.fxEngine.getActiveEffects().size)
+        assertEquals(1, state.show.fxEngine.getActiveFx().size)
     }
 
     @Test
-    fun `a layer's running effect does not mask a different ad-hoc child on the same property`() =
+    fun `a layer's running effect does not mask a different ad-hoc child on the same attribute`() =
         testApplication {
             // The guard used to match on `(target, property)` alone: it compared a preset id that
             // nothing had stamped since Looks replaced presets, so `null == null` made every effect
@@ -207,24 +207,23 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             val pulsing = ProgrammerRouteTestSupport.createLookBoundTo(
                 client, projectId, "Pulsing", rows = emptyMap(),
                 effects = listOf(
-                    LookEffectDto(
+                    LookFxDto(
                         targetType = "fixture", targetKey = "hex-1",
-                        effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                        fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                        cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                     ),
                 ),
             )
             val layers = listOf(
                 CueLayerDto(
                     lookId = pulsing.id, sortOrder = 0,
-                    targets = listOf(CueTargetDto("fixture", "hex-1")),
                 ),
             )
             val cueId = createCue(client, "layered", layers = layers)
             client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
             assertEquals(
                 listOf("Pulse"),
-                state.show.fxEngine.getActiveEffects().map { it.registrationId },
+                state.show.fxEngine.getActiveFx().map { it.registrationId },
                 "only the layer's effect is on stage",
             )
 
@@ -234,12 +233,12 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                     NewCue(
                         name = "layered",
                         layers = layers,
-                        adHocEffects = listOf(
-                            CueAdHocEffectDto(
+                        adHocFx = listOf(
+                            CueAdHocFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                effectType = "SineWave", category = "dimmer",
-                                propertyName = "dimmer", beatDivision = 1.0,
-                                blendMode = "OVERRIDE", distribution = "LINEAR",
+                                fxType = "SineWave", family = "intensity",
+                                attribute = "dimmer", cycle = 1.0,
+                                blendMode = "OVERRIDE", order = "NORMAL",
                             ),
                         ),
                     )
@@ -248,7 +247,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
 
             client.include(cueId)
 
-            val band = state.show.fxEngine.getActiveEffects()
+            val band = state.show.fxEngine.getActiveFx()
                 .filter { FxEngine.isProgrammerFxPriority(it.priority) }
             assertTrue(
                 band.any { it.registrationId == "SineWave" },
@@ -323,7 +322,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val cueId = createCue(
             client, "layered",
             layers = listOf(
-                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                CueLayerDto(lookId = warm.id, sortOrder = 0),
             ),
         )
 
@@ -347,7 +346,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             val cueId = createCue(
                 client, "layered",
                 layers = listOf(
-                    CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                    CueLayerDto(lookId = warm.id, sortOrder = 0),
                 ),
             )
             // A row the write boundary now refuses, as an older build or a hand edit left it. The
@@ -393,7 +392,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             val cueId = createCue(
                 client, "layered",
                 layers = listOf(
-                    CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                    CueLayerDto(lookId = warm.id, sortOrder = 0),
                 ),
             )
 
@@ -416,12 +415,11 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val dim = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Dim", mapOf("dimmer" to "40"),
         )
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
         val cueId = createCue(
             client, "layered",
             layers = listOf(
-                CueLayerDto(lookId = bright.id, sortOrder = 0, targets = targets),
-                CueLayerDto(lookId = dim.id, sortOrder = 1, targets = targets),
+                CueLayerDto(lookId = bright.id, sortOrder = 0),
+                CueLayerDto(lookId = dim.id, sortOrder = 1),
             ),
         )
 
@@ -453,7 +451,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             client, "layered",
             rows = listOf(assignment("fixture", "hex-1", "dimmer", "90")),
             layers = listOf(
-                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                CueLayerDto(lookId = warm.id, sortOrder = 0),
             ),
         )
 
@@ -482,7 +480,6 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             layers = listOf(
                 CueLayerDto(
                     lookId = warm.id, sortOrder = 0,
-                    targets = listOf(CueTargetDto("fixture", "hex-1")),
                     delayMs = 2_000L,
                 ),
             ),
@@ -507,13 +504,13 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
         val half = client.post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = "Half", rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "dimmer", "pct:50"))))
-        }.body<TemplateDto>()
+            setBody(PaletteInput(name = "Half", rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", "dimmer", "pct:50"))))
+        }.body<PaletteDto>()
         val warm = ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "Warm", mapOf("rgbColour" to "#ff8800"))
         val cueId = createCue(
             client, "layered",
             layers = listOf(
-                CueLayerDto(templateId = half.id, sortOrder = 0, targets = listOf(CueTargetDto("group", "front-wash"))),
+                CueLayerDto(paletteId = half.id, sortOrder = 0, targets = listOf(CueTargetDto("group", "front-wash"))),
                 CueLayerDto(lookId = warm.id, sortOrder = 1),
             ),
         )
@@ -534,16 +531,16 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             setBody(ProgrammerIncludeRequest(projectId = projectId.toString(), cueId = cueId))
         }
 
-    private fun assignment(type: String, key: String, property: String, value: String) =
-        CuePropertyAssignmentDto(
-            targetType = type, targetKey = key, propertyName = property, value = value,
+    private fun assignment(type: String, key: String, attribute: String, value: String) =
+        CueAttributeAssignmentDto(
+            targetType = type, targetKey = key, attribute = attribute, value = value,
         )
 
     private suspend fun createCue(
         client: HttpClient,
         name: String,
-        rows: List<CuePropertyAssignmentDto> = emptyList(),
-        adHoc: List<CueAdHocEffectSpec> = emptyList(),
+        rows: List<CueAttributeAssignmentDto> = emptyList(),
+        adHoc: List<CueAdHocFxSpec> = emptyList(),
         layers: List<CueLayerDto> = emptyList(),
     ): Int = ProgrammerRouteTestSupport.createCue(
         client, projectId, name, rows, adHoc, layers = layers,

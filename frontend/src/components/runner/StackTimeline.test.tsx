@@ -22,8 +22,8 @@ vi.mock('@/store/fixtures', () => ({
   useVisibleFixtureListQuery: () => ({ data: [{ key: 'hex-1', name: 'Hex 1' }, { key: 'bar', name: 'Bar', elements: [{ key: 'bar.1' }, { key: 'bar.2' }] }] }),
 }))
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [{ name: 'wash', memberKeys: ['hex-1', 'hex-2'] }] }) }))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: [{ id: 7, isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#8f7bff' }] }] }),
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: [{ id: 7, isGeneric: true, rows: [{ attribute: 'rgbColour', value: '#8f7bff' }] }] }),
 }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [{ uuid: 'tabs', name: 'House tabs', kind: 'DRAPE' }] }) }))
 let DESK_SELECTION: { type: 'fixture' | 'group'; key: string }[] = []
@@ -68,14 +68,14 @@ const STACK: CueStack = {
 function lavender(over: Partial<TimelineLayer> = {}): TimelineLayer {
   return {
     id: 1,
-    source: { kind: 'TEMPLATE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
+    source: { kind: 'PALETTE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
     targets: [{ type: 'fixture', key: 'hex-1' }],
     heads: ['hex-1'],
     sortOrder: 0,
     enabled: true,
     amount: 1,
     blendMode: 'OVERRIDE',
-    propertyMask: null,
+    attributeMask: null,
     stomp: false,
     timed: false,
     speedMasterUuid: null,
@@ -85,7 +85,7 @@ function lavender(over: Partial<TimelineLayer> = {}): TimelineLayer {
 }
 
 function entry(entryId: number, over: Partial<TimelineEntry> = {}): TimelineEntry {
-  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], effects: [], scenery: [], trackedScenery: [], ...over }
+  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], fx: [], scenery: [], trackedScenery: [], ...over }
 }
 
 beforeEach(() => {
@@ -99,7 +99,7 @@ beforeEach(() => {
     entries: [
       entry(101, { layers: [lavender()], scenery: [{ elementUuid: 'tabs', state: { open: 1 }, transitionMs: 4000 }] }),
       entry(102, { layers: [lavender({ id: 2, amount: 0.5 })], trackedScenery: [{ elementUuid: 'tabs', state: { open: 1 }, fromCueId: 1 }] }),
-      { entryId: 150, kind: 'MARKER', label: 'Scene 2', layers: [], effects: [], scenery: [], trackedScenery: [] },
+      { entryId: 150, kind: 'MARKER', label: 'Scene 2', layers: [], fx: [], scenery: [], trackedScenery: [] },
       entry(103, { layers: [lavender({ id: 3 })], trackedScenery: [{ elementUuid: 'tabs', state: { open: 1 }, fromCueId: 1 }] }),
     ],
   }
@@ -194,18 +194,18 @@ describe('StackTimeline', () => {
 
   it('meets a selected cell with a layer on its parent, and a selected parent with a layer on its cell', () => {
     TIMELINE!.entries[0].layers.push(lavender({ id: 9, targets: [{ type: 'fixture', key: 'bar' }], heads: ['bar'] }))
-    TIMELINE!.entries[1].layers.push(lavender({ id: 10, source: { kind: 'LOOK', id: 4, uuid: 'l4', name: 'Pixels', families: [] }, targets: [{ type: 'fixture', key: 'bar.2' }], heads: ['bar.2'] }))
+    TIMELINE!.entries[1].layers.push(lavender({ id: 10, source: { kind: 'PALETTE', id: 4, uuid: 'p4', name: 'Pixels', families: [] }, targets: [{ type: 'fixture', key: 'bar.2' }], heads: ['bar.2'] }))
     DESK_SELECTION = [{ type: 'fixture', key: 'bar.1' }]
     const { unmount } = render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
     fireEvent.click(screen.getByRole('button', { name: /Selection only/ }))
     expect(cell(101, 'palette:7:fixture:bar')).not.toBeNull()
     expect(cell(101, PALETTE)).toBeNull()
     // bar.2 is not bar.1, and the cell selected is no parent of it.
-    expect(cell(101, 'look:4:fixture:bar.2')).toBeNull()
+    expect(cell(101, 'palette:4:fixture:bar.2')).toBeNull()
     unmount()
     DESK_SELECTION = [{ type: 'fixture', key: 'bar' }]
     render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
-    expect(cell(101, 'look:4:fixture:bar.2')).not.toBeNull()
+    expect(cell(101, 'palette:4:fixture:bar.2')).not.toBeNull()
   })
 
   it('filters by kind and by the desk selection', () => {

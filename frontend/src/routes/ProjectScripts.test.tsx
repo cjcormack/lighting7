@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectScriptDetail } from '../api/projectApi'
 import type { CompileResult } from '../store/scripts'
-import type { EffectLibraryEntry } from '../store/fixtureFx'
+import type { FxLibraryEntry } from '../store/fixtureFx'
 
 /** Each compile hangs until the test answers it, so the rows can be read between answers. */
 const pendingCompiles: { body: unknown; resolve: (r: CompileResult) => void }[] = []
@@ -54,14 +54,14 @@ vi.mock('../store/projects', () => ({
   useDeleteProjectScriptMutation: () => [(body: unknown) => ({ unwrap: () => deleteScript(body) })],
 }))
 
-function libraryEntry(name: string, sourceDefinitionId: number): EffectLibraryEntry {
+function libraryEntry(name: string, sourceDefinitionId: number): FxLibraryEntry {
   return {
     name,
-    category: 'colour',
+    family: 'colour',
     outputType: 'COLOUR',
-    effectMode: 'STANDARD',
+    fxMode: 'STANDARD',
     parameters: [],
-    compatibleProperties: ['rgbColour'],
+    compatibleAttributes: ['rgbColour'],
     source: 'USER',
     sourceDefinitionId,
   }
@@ -69,12 +69,12 @@ function libraryEntry(name: string, sourceDefinitionId: number): EffectLibraryEn
 
 // Script 3 registers Warm Flicker; custom definition 3's effect carries a 3 as well, and is not its.
 vi.mock('../store/fixtureFx', () => ({
-  useEffectLibraryQuery: () => ({
+  useFxLibraryQuery: () => ({
     data: [libraryEntry('WarmFlicker', 3), libraryEntry('RandomFlicker', 3)],
   }),
 }))
 vi.mock('../store/fxDefinitions', () => ({
-  useFxDefinitionListQuery: () => ({ data: [{ id: 3, effectId: 'RandomFlicker', name: 'Random Flicker' }] }),
+  useFxDefinitionListQuery: () => ({ data: [{ id: 3, fxId: 'RandomFlicker', name: 'Random Flicker' }] }),
 }))
 
 import ProjectScripts from './ProjectScripts'

@@ -31,7 +31,7 @@ vi.mock('@/store/surfaces', async (importOriginal) => {
     ...actual,
     useSurfaceDevices: () => devices,
     useActiveBanks: () => activeBanks,
-    useEncoderBanks: () => ({ xtc: { propertyName: 'colour' } }),
+    useEncoderBanks: () => ({ xtc: { attribute: 'colour' } }),
     useSurfaceControls: () => controls,
     usePickupStates: () => ({}),
     useControlSurfaceTypeListQuery: () => ({ data: [profile] }),
@@ -51,7 +51,7 @@ vi.mock('@/store/selection', () => ({
 // this file takes.
 vi.mock('@/store/groups', () => ({
   useGroupListQuery: () => ({ data: [] }),
-  useGroupPropertiesQuery: () => ({ data: [] }),
+  useGroupAttributesQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/fixtures', () => ({
   useFixtureListQuery: () => ({ data: [] }),
@@ -60,7 +60,7 @@ vi.mock('@/store/fixtures', () => ({
 // The inspector resolves a record binding's uuid to a name through these three; empty is the arm
 // every case in this file takes, since none of them binds a record.
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/busk', () => ({ useBuskPagesQuery: () => ({ data: [] }) }))
 // The narrow fallback and the inspector's two editing surfaces are stubbed: each drags in the
 // binding-target picker and, behind it, the speed-master bank, and none of them is what this file
@@ -358,7 +358,7 @@ describe('Surfaces', () => {
         ...binding(8, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } }),
         bank: 'layer-b',
       },
-      binding(9, 'fader-1', { type: 'groupProperty', groupName: 'Hexes', propertyName: 'dimmer' }),
+      binding(9, 'fader-1', { type: 'groupAttribute', groupName: 'Hexes', attribute: 'dimmer' }),
     ]
     activeBanks = { xtc: 'layer-a' }
     renderPage()

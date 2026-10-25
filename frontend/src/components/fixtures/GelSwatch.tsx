@@ -1,5 +1,5 @@
-import type { SliderPropertyDescriptor } from '../../store/fixtures'
-import { useSliderValue } from '../../hooks/usePropertyValues'
+import type { SliderAttributeDescriptor } from '../../store/fixtures'
+import { useSliderValue } from '../../hooks/useAttributeValues'
 import { perceptualBrightness, SWATCH_FLOOR } from '@/lib/colourMath'
 import { cn } from '@/lib/utils'
 
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
  * 0.15 floor keeps the swatch faintly visible at zero so the colour stays
  * recognisable when the fixture is dark.
  */
-export function useDimmerBrightness(dimmerProp?: SliderPropertyDescriptor): number {
+export function useDimmerBrightness(dimmerProp?: SliderAttributeDescriptor): number {
   const value = useSliderValue(
     dimmerProp ?? {
       type: 'slider',
@@ -33,7 +33,7 @@ export function GelSwatch({
   className,
 }: {
   gelHex: string
-  dimmerProp?: SliderPropertyDescriptor
+  dimmerProp?: SliderAttributeDescriptor
   className?: string
 }) {
   const dimmerValue = useDimmerBrightness(dimmerProp)

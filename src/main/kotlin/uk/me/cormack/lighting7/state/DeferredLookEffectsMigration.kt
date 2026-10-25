@@ -27,24 +27,24 @@ internal fun JdbcTransaction.dropDeferredLookEffects() {
 
     // Left joins, so an effect whose Look or project has gone (foreign keys are off) is logged and
     // deleted too.
-    data class Dropped(val lookId: Int, val project: String?, val look: String?, val effectType: String)
+    data class Dropped(val lookId: Int, val project: String?, val look: String?, val fxType: String)
     val dropped = ArrayList<Dropped>()
     exec(
         """
-        SELECT e.look_id AS look_id, p.name AS project, l.name AS look, e.effect_type AS effect
-          FROM look_effects e LEFT JOIN looks l ON l.id = e.look_id LEFT JOIN projects p ON p.id = l.project_id
+        SELECT e.look_id AS look_id, p.name AS project, l.name AS look, e.fx_type AS effect
+          FROM look_fx e LEFT JOIN looks l ON l.id = e.look_id LEFT JOIN projects p ON p.id = l.project_id
          WHERE e.target_type = '$DEFERRED_TARGET_TYPE'
          ORDER BY p.name, l.name, e.sort_order, e.id
         """.trimIndent(),
     ) { rs ->
         while (rs.next()) dropped += Dropped(rs.getInt("look_id"), rs.getString("project"), rs.getString("look"), rs.getString("effect"))
     }
-    exec("DELETE FROM look_effects WHERE target_type = '$DEFERRED_TARGET_TYPE'")
+    exec("DELETE FROM look_fx WHERE target_type = '$DEFERRED_TARGET_TYPE'")
     dropped.groupBy { it.lookId }.forEach { (lookId, effects) ->
         logger.warn(
             "Look '{}' in '{}': dropped {} that named no target of its own ({})",
             effects.first().look ?: "#$lookId, deleted", effects.first().project ?: "no project",
-            if (effects.size == 1) "an effect" else "${effects.size} effects", effects.joinToString { it.effectType },
+            if (effects.size == 1) "an effect" else "${effects.size} effects", effects.joinToString { it.fxType },
         )
     }
     exec("PRAGMA user_version = $DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION", explicitStatementType = StatementType.OTHER)

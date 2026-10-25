@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.routes
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -22,13 +22,13 @@ import uk.me.cormack.lighting7.state.State
  *  - **exactly one** of the two ids must be set. Accepting both and preferring one would silently
  *    ignore half of a malformed request.
  */
-internal fun resolveLayerSource(state: State, lookId: Int?, templateId: Int?): LayerSource? {
-    if ((lookId == null) == (templateId == null)) return null
+internal fun resolveLayerSource(state: State, lookId: Int?, paletteId: Int?): LayerSource? {
+    if ((lookId == null) == (paletteId == null)) return null
     return transaction(state.database) {
         if (lookId != null) {
             DaoLook.findById(lookId)?.let { LayerSource.look(it.id.value, it.uuid, it.name) }
         } else {
-            DaoTemplate.findById(templateId!!)?.let { LayerSource.template(it.id.value, it.uuid, it.name) }
+            DaoPalette.findById(paletteId!!)?.let { LayerSource.palette(it.id.value, it.uuid, it.name) }
         }
     }
 }

@@ -38,7 +38,8 @@ import { RecordSceneryRow } from './RecordSceneryRow'
 import { announceWrite, recordLookNote } from './writeToasts'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 import { Badge } from '@/components/ui/badge'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useActiveFxQuery } from '@/store/fixtureFx'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 
 export interface RecordLookSheetProps {
   open: boolean
@@ -52,6 +53,10 @@ export interface RecordLookSheetProps {
    * the sheet reads the programmer scope's row selection as it always has.
    */
   targets?: CueTarget[]
+  /** The mask to open on, in place of the window's — the FX editor's lanes' families. */
+  initialMask?: AttributeFamily[] | null
+  /** FX to open ticked — the FX editor's list. Only the programmer's own are offered. */
+  initialFxIds?: readonly number[]
 }
 
 const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
@@ -68,7 +73,7 @@ const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
   {
     value: 'STAGE_SNAPSHOT',
     label: 'Whole stage',
-    hint: 'Everything on stage, including values from other cues and running effects.',
+    hint: 'Everything on stage, including values from other cues and running FX.',
   },
 ]
 
@@ -107,6 +112,8 @@ export function RecordLookSheet({
   projectId,
   targetLookId,
   targets,
+  initialMask,
+  initialFxIds,
 }: RecordLookSheetProps) {
   const { data: looks } = useLookListQuery({ projectId }, { skip: !projectId })
   const [record, { isLoading, error, reset }] = useRecordLookMutation()
@@ -132,7 +139,7 @@ export function RecordLookSheet({
   // (the busk Spread tab, `/looks`). A change here is the sheet's own.
   const readSelectionMask = useWindowMaskReader()
   const [selectedOnly, setSelectedOnly] = useState(true)
-  const [effectIds, setEffectIds] = useState<number[]>([])
+  const [fxIds, setFxIds] = useState<number[]>([])
   const [includeScenery, setIncludeScenery] = useState(true)
   const [lookId, setLookId] = useState<string>('')
   const [name, setName] = useState('')
@@ -145,6 +152,9 @@ export function RecordLookSheet({
   // effect depending on it *and* calling it re-fires — here that would wipe the operator's form
   // the instant a Record failed.
   const openedRef = useRef(false)
+  // Read once per open, as the window's mask is: a host re-rendering meanwhile changes nothing.
+  const initialRef = useRef({ initialMask, initialFxIds })
+  initialRef.current = { initialMask, initialFxIds }
   useEffect(() => {
     if (!open) {
       openedRef.current = false
@@ -154,14 +164,15 @@ export function RecordLookSheet({
     openedRef.current = true
     setMode(targetLookId ? 'MERGE' : 'CREATE')
     setSource('TOUCHED')
-    setMask(readSelectionMask())
+    const initial = initialRef.current
+    setMask(initial.initialMask !== undefined ? initial.initialMask : readSelectionMask())
     // On by default here, unlike `RecordSheet`: see the class doc. Still guarded by `scoped`, so
     // an empty selection falls back to the whole programmer rather than sending a 400.
     setSelectedOnly(true)
     // Effects default **off**, unlike the fixture selection. A value the operator busked is almost
     // certainly part of the look; a chase they started to see what it looked like very often is not,
-    // and folding one in moves a running effect out of their hands.
-    setEffectIds([])
+    // and folding one in moves a running effect out of their hands — unless the opener named them.
+    setFxIds(initial.initialFxIds != null ? [...initial.initialFxIds] : [])
     // On whenever anything is held (the row is absent otherwise): a look recorded with only the moon
     // held is a scenery look, the busk pad that flies it (D9, D10).
     setIncludeScenery(true)
@@ -190,7 +201,7 @@ export function RecordLookSheet({
         name: creating ? name.trim() : undefined,
         notes: creating && notes.trim() !== '' ? notes.trim() : undefined,
         targets: scoped ? selection : undefined,
-        effectIds: effectIds.length > 0 ? effectIds : undefined,
+        fxIds: fxIds.length > 0 ? fxIds : undefined,
         scenery: includeScenery,
       }).unwrap()
       setDone(true)
@@ -321,7 +332,7 @@ export function RecordLookSheet({
 
           <MaskedAttributes value={mask} onChange={setMask} />
 
-          <RecordableEffects value={effectIds} onChange={setEffectIds} />
+          <RecordableFx value={fxIds} onChange={setFxIds} />
 
           <RecordSceneryRow
             projectId={projectId}
@@ -383,7 +394,7 @@ function MaskedAttributes({
  *
  * - an **unticked effect keeps running**. Leaving one out of a look is not the same as stopping it,
  *   which is exactly why these are checkboxes and not a "take everything" toggle;
- * - **the tempo travels, the timing does not**. `LookEffect` has speed-master fields and no
+ * - **the tempo travels, the timing does not**. `LookFx` has speed-master fields and no
  *   delay/interval, so a busked "fire after 3s" becomes the *layer's* delay — per-use rather than
  *   baked in;
  * - a ticked effect is **moved**, not copied: the server takes it out of the band, because the
@@ -392,14 +403,14 @@ function MaskedAttributes({
  * Only loose band effects are offered. One already owned by a layer belongs to that Look already,
  * and recording it into a second would duplicate a running instance rather than move it.
  */
-function RecordableEffects({
+function RecordableFx({
   value,
   onChange,
 }: {
   value: number[]
   onChange: (next: number[]) => void
 }) {
-  const { data: effects } = useActiveEffectsQuery()
+  const { data: effects } = useActiveFxQuery()
   const candidates = (effects ?? []).filter(
     (e) => e.programmerOwned && e.programmerLayerId == null && !e.leaving,
   )
@@ -408,7 +419,7 @@ function RecordableEffects({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Effects</span>
+        <span className="text-sm font-medium">FX</span>
         <Badge variant="secondary" className="px-1.5 text-[10px] tabular-nums">
           {candidates.length}
         </Badge>
@@ -428,14 +439,14 @@ function RecordableEffects({
               )
             }
           />
-          <span className="truncate">{effect.effectType}</span>
+          <span className="truncate">{effect.fxType}</span>
           <span className="shrink-0 font-mono text-xs text-muted-foreground">
-            → {effect.propertyName}
+            → {effect.attribute}
           </span>
         </label>
       ))}
       <p className="text-xs text-muted-foreground">
-        An effect you leave out keeps running in the programmer — leaving it out is not stopping it.
+        An FX you leave out keeps running in the programmer — leaving it out is not stopping it.
       </p>
     </div>
   )

@@ -55,9 +55,9 @@ function m(n: number, over: Partial<SpeedMaster> = {}): SpeedMaster {
  */
 const BANK: SpeedMaster[] = [
   m(1, { referenceCount: 14, notes: 'The desk tempo' }),
-  m(2, { followNum: 1, followDen: 2, usage: 'colour', referenceCount: 6 }),
-  m(3, { bpm: 96, usage: 'position' }),
-  m(4, { followNum: 1, followDen: 1, usage: 'dimmer' }),
+  m(2, { followNum: 1, followDen: 2, family: 'colour', referenceCount: 6 }),
+  m(3, { bpm: 96, family: 'position' }),
+  m(4, { followNum: 1, followDen: 1, family: 'intensity' }),
   m(5, { bpm: 60 }),
   m(6, { followNum: 1, followDen: 2, followTargetUuid: U(3) }),
 ]
@@ -68,7 +68,7 @@ const BANDS: Record<string, [number, number]> = {
   start: [416, 496],
   follows: [496, 624],
   ratio: [624, 696],
-  usage: [696, 800],
+  family: [696, 800],
   notes: [872, 1032],
 }
 const CENTRE = (col: string) => (BANDS[col][0] + BANDS[col][1]) / 2
@@ -251,27 +251,27 @@ describe('SpeedMasterSheet', () => {
     expect(saveMaster.mock.calls).toEqual([[{ projectId: 1, masterId: 2, followNum: 1, followDen: 3 }]])
   })
 
-  it('Usage over two rows is refused before anything is sent; over one, the desk’s refusal is toasted by code', async () => {
+  it('Family over two rows is refused before anything is sent; over one, the desk’s refusal is toasted by code', async () => {
     draw()
-    drag('usage', 3, 5)
+    drag('family', 3, 5)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Colour' }))
     expect(saveMaster).not.toHaveBeenCalled()
-    expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/^A usage belongs to one master/), {
-      id: 'sheet-write:speed-masters:usage',
+    expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/^A family belongs to one master/), {
+      id: 'sheet-write:speed-masters:family',
     })
     cleanup()
 
     saveMaster.mockImplementationOnce(() =>
-      Promise.reject({ status: 409, data: { error: 'Colour is already M2’s', code: 'SPEED_MASTER_USAGE_TAKEN' } }),
+      Promise.reject({ status: 409, data: { error: 'Colour is already M2’s', code: 'SPEED_MASTER_FAMILY_TAKEN' } }),
     )
     draw()
-    drag('usage', 5, 5)
+    drag('family', 5, 5)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Colour' }))
-    expect(saveMaster).toHaveBeenCalledWith({ projectId: 1, masterId: 5, usage: 'colour' })
+    expect(saveMaster).toHaveBeenCalledWith({ projectId: 1, masterId: 5, family: 'colour' })
     await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith('Colour is already M2’s', { id: 'sheet-write:speed-masters:usage' }),
+      expect(toastError).toHaveBeenCalledWith('Colour is already M2’s', { id: 'sheet-write:speed-masters:family' }),
     )
   })
 

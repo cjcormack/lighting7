@@ -1,15 +1,15 @@
 /*---
 id: ColourCycle
 name: Colour Cycle
-category: colour
+family: colour
 outputType: COLOUR
-effectMode: STANDARD
-compatibleProperties: [rgbColour]
+fxMode: STANDARD
+compatibleAttributes: [rgbColour]
 parameters:
   - name: colours
     type: colourList
     default: "#ff0000,#00ff00,#0000ff"
-    description: Comma-separated colours. Each entry is a literal (hex, name or extended) or a colour-template reference, tmpl:{uuid}
+    description: Comma-separated literal colours, each a hex, a name or an extended colour
   - name: fadeRatio
     type: double
     default: "0.5"

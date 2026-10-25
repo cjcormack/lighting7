@@ -5,8 +5,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
-import uk.me.cormack.lighting7.fx.SpreadOver
+import uk.me.cormack.lighting7.fx.AttributeFamily
+import uk.me.cormack.lighting7.fx.FanOver
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -45,12 +45,12 @@ data class SelectionSource(
 
 /**
  * The desk's selection: the groups and fixtures a selection-relative surface control (a
- * `SelectionProperty` fader, a `LocateSelection` button) and a busk-page press act on, the
+ * `SelectionAttribute` fader, a `LocateSelection` button) and a busk-page press act on, the
  * attribute families that press is masked to, and who moved it last.
  *
  * **One desk, one selection, server-owned.** The composition model's "exactly one programmer,
  * shared by every client" argument applies verbatim (`docs/lighting-composition-model.md`
- * §"Layer 2"): DMX is one byte per channel, so two selections would force a "whose press wins?"
+ * §"Tier 2 — Programmer"): DMX is one byte per channel, so two selections would force a "whose press wins?"
  * policy nothing expresses. Every client — the busk view, the programmer page, the X-Touch's
  * select buttons — reads and writes this one fact, and the `selection.state` frame keeps them
  * honest. It is transient: cleared on project switch, never persisted, and outside the sync
@@ -132,7 +132,7 @@ class DeskSelection(
      */
     data class Snapshot(
         val targets: List<CueTargetDto> = emptyList(),
-        val families: Set<PropertyMaskGroup>? = null,
+        val families: Set<AttributeFamily>? = null,
         val source: SelectionSource? = null,
     )
 
@@ -144,7 +144,7 @@ class DeskSelection(
      * An absent [families] is every attribute — a replace that kept the standing mask would let a
      * surface's `REPLACE` carry a stale Colour mask onto heads picked with no column in mind.
      */
-    fun set(targets: List<CueTargetDto>, families: Set<PropertyMaskGroup>? = null, source: SelectionSource? = null) {
+    fun set(targets: List<CueTargetDto>, families: Set<AttributeFamily>? = null, source: SelectionSource? = null) {
         val next = Snapshot(targets.distinct(), normalise(families), source)
         _state.update { current -> if (current == next) current else next }
     }
@@ -156,7 +156,7 @@ class DeskSelection(
      * by them. [source] becomes the mover; an empty or complete [families] is every attribute; a
      * write that changes nothing emits nothing.
      */
-    fun setFamilies(families: Set<PropertyMaskGroup>?, source: SelectionSource? = null) {
+    fun setFamilies(families: Set<AttributeFamily>?, source: SelectionSource? = null) {
         _state.update { current ->
             val next = current.copy(families = normalise(families), source = source)
             if (current == next) current else next
@@ -242,7 +242,7 @@ class DeskSelection(
             SubselectMode.INVERT -> {
                 val cellular = isCellular(targets)
                 val universe = if (order != null) {
-                    order.steps(if (cellular) SpreadOver.CELLS else SpreadOver.HEADS).flatten()
+                    order.steps(if (cellular) FanOver.CELLS else FanOver.HEADS).flatten()
                 } else {
                     // The rig order's own fallback, without it: never infrastructure (`BuskRigOrder`).
                     fixturesProvider()?.operatorFixtures?.map { CueTargetDto(TargetRef.Fixture.TYPE, it.key) }.orEmpty()
@@ -253,7 +253,7 @@ class DeskSelection(
             SubselectMode.NEXT, SubselectMode.PREV -> {
                 if (order == null) return null
                 val cellular = targets.isNotEmpty() && targets.all { coverageRule.parentOf(it) != null }
-                val steps = order.steps(if (cellular) SpreadOver.CELLS else SpreadOver.HEADS)
+                val steps = order.steps(if (cellular) FanOver.CELLS else FanOver.HEADS)
                 if (steps.isEmpty()) return null
                 // A step is occupied when the selection covers every target on it — and not when a
                 // *larger* occupied step already covers it: with a group selected, its member's own
@@ -340,7 +340,7 @@ class DeskSelection(
             null -> false
         }
 
-    /** One spelling of "no mask": empty and complete both collapse to null, as `parseMaskGroups` does. */
-    private fun normalise(families: Set<PropertyMaskGroup>?): Set<PropertyMaskGroup>? =
-        families?.takeUnless { it.isEmpty() || it.size == PropertyMaskGroup.entries.size }
+    /** One spelling of "no mask": empty and complete both collapse to null, as `parseFamilies` does. */
+    private fun normalise(families: Set<AttributeFamily>?): Set<AttributeFamily>? =
+        families?.takeUnless { it.isEmpty() || it.size == AttributeFamily.entries.size }
 }

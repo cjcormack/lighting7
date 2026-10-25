@@ -15,17 +15,20 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
-import uk.me.cormack.lighting7.fx.EffectSpecCoercion
+import uk.me.cormack.lighting7.fixture.AttributeCategory
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.models.LayerSourceDto
+import uk.me.cormack.lighting7.models.LayerSourceKind
+import uk.me.cormack.lighting7.models.LookLayerTargetedException
+import uk.me.cormack.lighting7.models.lookLayerTargetedMessage
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProvenanceEntry
 import uk.me.cormack.lighting7.fx.LocateValueResolver
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.AppliedSource
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
@@ -49,10 +52,10 @@ sealed class ProgrammerInMessage : InMessage()
 /**
  * Set a programmer value on a fixture or group property. [value] uses the same canonical
  * string form as cue assignments ([CueAssignmentResolver.parseAssignmentValue] /
- * [CueAssignmentResolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
+ * [CueAssignmentResolver.AttributeValue.serialize]): `"0".."255"` for sliders and settings,
  * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position`. A programmer
- * value is always a **literal**: a `tmpl:{uuid}` template reference is legal only in an effect
- * parameter, and a dependency on a template is a layer (see [templateColourSource]).
+ * value is always a **literal**: a `pal:{uuid}` template reference is legal only in an effect
+ * parameter, and a dependency on a template is a layer (see [paletteColourSource]).
  *
  * [sourceGroup] is for clients that fan a group-scoped gesture out to member fixtures rather
  * than sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a
@@ -65,7 +68,7 @@ sealed class ProgrammerInMessage : InMessage()
 data class ProgrammerSetInMessage(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val value: String,
     val fadeMs: Long? = null,
     val sourceGroup: String? = null,
@@ -77,7 +80,7 @@ data class ProgrammerSetInMessage(
 data class ProgrammerSetColourInMessage(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String = "rgbColour",
+    val attribute: String = "rgbColour",
     val r: UByte,
     val g: UByte,
     val b: UByte,
@@ -108,7 +111,7 @@ data class ProgrammerSetPositionInMessage(
 data class ProgrammerClearEntryInMessage(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val fadeMs: Long? = null,
 ) : ProgrammerInMessage()
 
@@ -172,7 +175,7 @@ data class ProgrammerClearSceneryInMessage(
 data class ProgrammerKeyStackInMessage(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val requestId: String? = null,
 ) : ProgrammerInMessage()
 
@@ -202,7 +205,7 @@ sealed class ProgrammerOutMessage : OutMessage()
 data class ProgrammerEntryChangedOutMessage(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val value: String,
 ) : ProgrammerOutMessage()
 
@@ -211,7 +214,7 @@ data class ProgrammerEntryChangedOutMessage(
 data class ProgrammerEntryClearedOutMessage(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
 ) : ProgrammerOutMessage()
 
 @Serializable
@@ -221,7 +224,7 @@ data class ProgrammerClearedOutMessage(
      * message is now the sole survivor of (that route is gone; see D5 of the backend sweep). */
     val cleared: Int,
     /** Programmer-band FX instances swept alongside the values. */
-    val effectsCleared: Int = 0,
+    val fxCleared: Int = 0,
 ) : ProgrammerOutMessage()
 
 @Serializable
@@ -234,7 +237,7 @@ data class ProgrammerBlindStateOutMessage(
 @Serializable
 data class ProgrammerEntryDto(
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     /**
      * The canonical literal — the same grammar a stored cue assignment uses, so one client-side
      * parser covers both.
@@ -242,7 +245,7 @@ data class ProgrammerEntryDto(
      * Until session 4 this could instead be `ref:{paletteUuid}`, with five sibling fields
      * (`resolvedValue`, `paletteUuid`, `paletteId`, `paletteName`, `paletteResolved`) describing
      * what it pointed at and whether that still covered this target. The `ref:` value grammar
-     * retired with them; a layer with a `propertyMask` is what expresses "this property comes from
+     * retired with them; a layer with an `attributeMask` is what expresses "this property comes from
      * that Look" now, and the programmer reports its layer stack separately.
      */
     val value: String,
@@ -299,12 +302,12 @@ data class IncludedTargetDto(
 @Serializable
 @SerialName("programmer.addLayer")
 data class ProgrammerAddLayerInMessage(
-    /** Exactly one of [lookId] / [templateId]. */
+    /** Exactly one of [lookId] / [paletteId]. */
     val lookId: Int? = null,
-    val templateId: Int? = null,
-    /** A palette layer's targets; a Look's layer names none, so any given for one are dropped. */
+    val paletteId: Int? = null,
+    /** A palette layer's targets; a Look's layer names none, so any given for one are refused (`LOOK_LAYER_TARGETED`). */
     val targets: List<CueTargetDto> = emptyList(),
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     val blendMode: String? = null,
     val amount: Double? = null,
     val speedMasterUuid: String? = null,
@@ -345,9 +348,9 @@ data class ProgrammerPatchLayerInMessage(
     val layerId: Int,
     val enabled: Boolean? = null,
     val amount: Double? = null,
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     val blendMode: String? = null,
-    /** A palette layer's targets; a Look's layer keeps naming none. */
+    /** A palette layer's targets; a Look's layer names none, so any given for one are refused (`LOOK_LAYER_TARGETED`). */
     val targets: List<CueTargetDto>? = null,
     val stomp: Boolean? = null,
     val fadeMs: Long? = null,
@@ -362,7 +365,7 @@ data class ProgrammerLayerDto(
     val sortOrder: Int,
     val enabled: Boolean,
     val targets: List<CueTargetDto>,
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     val blendMode: String,
     val amount: Double,
     val stomp: Boolean,
@@ -512,7 +515,7 @@ data class KeyStackParkedChannelDto(val universe: Int, val channel: Int, val val
 
 /**
  * One layer of a property's stack — see `ProvenanceService.keyStack`. [kind] is `PARK`,
- * `PROGRAMMER_EFFECT`, `PROGRAMMER`, `EFFECT`, `CUE` or `BASE`, and decides which of the optional
+ * `PROGRAMMER_FX`, `PROGRAMMER`, `FX`, `CUE` or `BASE`, and decides which of the optional
  * fields are present; every layer carries [onStage]. Absent fields are null (the socket's Json
  * encodes no default), so a client reads absent as "not this kind's".
  */
@@ -532,17 +535,17 @@ data class KeyStackLayerDto(
     val universe: Int? = null,
     val channel: Int? = null,
     /** The two effect kinds: the instance, its type and display name, its timing and its masters. */
-    val effectId: Long? = null,
-    val effectType: String? = null,
-    val effectName: String? = null,
-    val beatDivision: Double? = null,
+    val fxId: Long? = null,
+    val fxType: String? = null,
+    val fxName: String? = null,
+    val cycle: Double? = null,
     val blendMode: String? = null,
     val running: Boolean? = null,
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
     /**
      * The two effect kinds: the loop the effect runs on (`BEAT` | `WALL_CLOCK`) and whether it is on
-     * *Seconds* (venue-visit plan D7) — so [beatDivision] reads as seconds rather than beats.
+     * *Seconds* (venue-visit plan D7) — so [cycle] reads as seconds rather than beats.
      */
     val timingSource: String? = null,
     val seconds: Boolean? = null,
@@ -550,7 +553,7 @@ data class KeyStackLayerDto(
      * The two effect kinds: Size (effects plan D2, 0–1) and Direction (D5) — what [onStage] already
      * weighs, so the sheet can say *why* a 0 % effect is not on stage.
      */
-    val size: Double? = null,
+    val amount: Double? = null,
     val direction: String? = null,
     /** The two effect kinds: running, but not painting this key — `FxEngine`'s own suppression answer. */
     val heldBack: Boolean? = null,
@@ -588,7 +591,7 @@ data class ProgrammerKeyStackOutMessage(
     val requestId: String?,
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     /** The programmer is blind: its slots are listed, none is on stage, and it holds nothing back. */
     val blind: Boolean,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
@@ -599,17 +602,17 @@ data class ProgrammerKeyStackOutMessage(
 /** A local effect `programmer.clearTarget` left running because it drives heads outside the target. */
 @Serializable
 data class TargetClearedPartialDto(
-    val effectId: Long,
-    val effectType: String,
+    val fxId: Long,
+    val fxType: String,
     /** The effect's own target — a group, or a fixture the released target only part-covers. */
     val targetKey: String,
     val isGroupTarget: Boolean,
-    val propertyName: String,
+    val attribute: String,
 )
 
 /**
  * The answer to `programmer.clearTarget`, to the asking socket only: [values] property entries and
- * sideband channels released, [effects] local effects stopped, and [partial] the local effects that
+ * sideband channels released, [fx] local effects stopped, and [partial] the local effects that
  * overlap the target but drive heads outside it, left running and named so the operator can be told.
  */
 @OptIn(ExperimentalSerializationApi::class)
@@ -620,7 +623,7 @@ data class ProgrammerTargetClearedOutMessage(
     val targetType: String,
     val targetKey: String,
     val values: Int,
-    val effects: Int,
+    val fx: Int,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val partial: List<TargetClearedPartialDto> = emptyList(),
     val error: String? = null,
@@ -630,21 +633,23 @@ data class ProgrammerTargetClearedOutMessage(
 @SerialName("programmer.error")
 data class ProgrammerErrorOutMessage(
     val message: String,
+    /** A refusal a client may branch on, by name — `LOOK_LAYER_TARGETED`; null for the rest. */
+    val code: String? = null,
 ) : ProgrammerOutMessage()
 
 /**
  * One provenance entry: which layer produced the current winning value for
- * (targetKey, propertyName). Keys nothing covers are omitted (baseline).
+ * (targetKey, attribute). Keys nothing covers are omitted (baseline).
  */
 @Serializable
 data class ProvenanceEntryDto(
     val targetKey: String,
-    val propertyName: String,
-    /** `PARKED` | `PROGRAMMER` | `EFFECT` | `CUE`. */
+    val attribute: String,
+    /** `PARKED` | `PROGRAMMER` | `FX` | `CUE`. */
     val source: String,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
-    val effectId: Long? = null,
+    val fxId: Long? = null,
     /**
      * The Look layer that won this key, when one did — so the desk can answer "why is this fixture
      * this colour?" by naming *Warm Wash* rather than *a cue*.
@@ -671,7 +676,7 @@ data class ProvenanceEntryDto(
 /** One entry of [ProvenanceEntryDto.bundled]. */
 @Serializable
 data class BundledProvenanceDto(
-    val propertyName: String,
+    val attribute: String,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
     val layerId: Int? = null,
@@ -841,16 +846,16 @@ private fun buildProvenanceStateMessage(entries: List<ProvenanceEntry>, programm
         entries = entries.map {
             ProvenanceEntryDto(
                 targetKey = it.targetKey,
-                propertyName = it.propertyName,
+                attribute = it.attribute,
                 source = it.source.name,
                 cueId = it.cueId,
                 cueStackId = it.cueStackId,
-                effectId = it.effectId,
+                fxId = it.fxId,
                 layerId = it.layerId,
                 layerSource = it.layerSource?.toDto(),
                 bundled = it.bundled.map { b ->
                     BundledProvenanceDto(
-                        propertyName = b.propertyName,
+                        attribute = b.attribute,
                         cueId = b.cueId,
                         cueStackId = b.cueStackId,
                         layerId = b.layerId,
@@ -867,7 +872,7 @@ private fun ProgrammerLayer.toDto() = ProgrammerLayerDto(
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
-    propertyMask = propertyMask,
+    attributeMask = attributeMask,
     blendMode = blendMode,
     amount = amount,
     stomp = stomp,
@@ -890,7 +895,7 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
     val reply: OutMessage = when (message) {
         is ProgrammerSetInMessage -> withTarget(message.targetType, message.targetKey) { target ->
             ProgrammerHandler.set(
-                state, target, message.propertyName, message.value, message.fadeMs ?: 0,
+                state, target, message.attribute, message.value, message.fadeMs ?: 0,
                 message.sourceGroup,
             )
         }
@@ -902,26 +907,26 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
                 message.uv ?: 0u,
             )
             ProgrammerHandler.setTyped(
-                state, target, message.propertyName,
-                CueAssignmentResolver.PropertyValue.Colour(colour), message.fadeMs ?: 0,
+                state, target, message.attribute,
+                CueAssignmentResolver.AttributeValue.Colour(colour), message.fadeMs ?: 0,
                 message.sourceGroup,
             )
         }
         is ProgrammerSetPositionInMessage -> withTarget(message.targetType, message.targetKey) { target ->
             ProgrammerHandler.setTyped(
                 state, target, "position",
-                CueAssignmentResolver.PropertyValue.Position(message.pan, message.tilt), message.fadeMs ?: 0,
+                CueAssignmentResolver.AttributeValue.Position(message.pan, message.tilt), message.fadeMs ?: 0,
                 message.sourceGroup,
             )
         }
         is ProgrammerClearEntryInMessage -> withTarget(message.targetType, message.targetKey) { target ->
-            ProgrammerHandler.clearEntry(state, target, message.propertyName, message.fadeMs ?: 0)
+            ProgrammerHandler.clearEntry(state, target, message.attribute, message.fadeMs ?: 0)
         }
         is ProgrammerKeyStackInMessage -> ProgrammerHandler.keyStack(state, message)
         is ProgrammerClearTargetInMessage -> ProgrammerHandler.clearTarget(state, message)
         is ProgrammerClearAllInMessage -> {
             val cleared = clearProgrammerCompletely(state, message.fadeMs ?: 0)
-            ProgrammerClearedOutMessage(cleared.entryCount, cleared.effectsCleared)
+            ProgrammerClearedOutMessage(cleared.entryCount, cleared.fxCleared)
         }
         is ProgrammerSetBlindInMessage -> {
             state.show.fxEngine.programmer.setBlind(message.blind, message.fadeMs ?: 0)
@@ -966,15 +971,19 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
         is ProgrammerPatchLayerInMessage -> {
             // Same rejection as `programmer.addLayer`: a patched blend reaches `cue_layers` through
             // Record just as an added one does, so it is checked where it enters.
-            val problem = EffectSpecCoercion.Strict.problem(blendMode = message.blendMode)
+            val problem = FxSpecCoercion.Strict.problem(blendMode = message.blendMode)
+            val look = message.targets.orEmpty().isNotEmpty() &&
+                state.show.programmerStore.layers.any { it.layerId == message.layerId && it.source.kind == LayerSourceKind.LOOK }
             if (problem != null) {
                 ProgrammerErrorOutMessage(problem)
+            } else if (look) {
+                ProgrammerHandler.lookLayerTargeted("programmer.patchLayer")
             } else {
                 state.show.programmerLayerStack.patch(
                     layerId = message.layerId,
                     enabled = message.enabled,
                     amount = message.amount,
-                    propertyMask = message.propertyMask,
+                    attributeMask = message.attributeMask,
                     blendMode = message.blendMode,
                     targets = message.targets,
                     stomp = message.stomp,
@@ -1007,38 +1016,38 @@ object ProgrammerHandler {
      * anyway — a trigger is not a property, so the write would resolve no channels — but this names
      * the reason rather than reporting "resolves to no DMX channels".
      */
-    private fun triggerRefusal(state: State, target: TargetRef, propertyName: String): String? =
-        TriggerIndex.refusalLive(state.show.fixtures, target.discriminator, target.key, propertyName, "programmer")
+    private fun triggerRefusal(state: State, target: TargetRef, attribute: String): String? =
+        TriggerIndex.refusalLive(state.show.fixtures, target.discriminator, target.key, attribute, "programmer")
             // Nor a fixture command (fixture optics plan session 7).
-            ?: CommandIndex.refusalLive(state.show.fixtures, target.discriminator, target.key, propertyName, "programmer")
+            ?: CommandIndex.refusalLive(state.show.fixtures, target.discriminator, target.key, attribute, "programmer")
 
     /** Parse [value] against the property's category, then delegate to [setTyped]. */
     fun set(
         state: State,
         target: TargetRef,
-        propertyName: String,
+        attribute: String,
         value: String,
         fadeMs: Long,
         sourceGroup: String? = null,
     ): OutMessage {
-        triggerRefusal(state, target, propertyName)?.let { return ProgrammerErrorOutMessage(it) }
-        val typed = parseValue(state, target, propertyName, value)
+        triggerRefusal(state, target, attribute)?.let { return ProgrammerErrorOutMessage(it) }
+        val typed = parseValue(state, target, attribute, value)
             ?: return ProgrammerErrorOutMessage(
-                "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' property '$propertyName'"
+                "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' attribute '$attribute'"
             )
-        return setTyped(state, target, propertyName, typed, fadeMs, sourceGroup)
+        return setTyped(state, target, attribute, typed, fadeMs, sourceGroup)
     }
 
     /** Write a typed value as a WEB programmer entry and report the stored form. */
     fun setTyped(
         state: State,
         target: TargetRef,
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
+        attribute: String,
+        value: CueAssignmentResolver.AttributeValue,
         fadeMs: Long,
         sourceGroup: String? = null,
     ): OutMessage {
-        triggerRefusal(state, target, propertyName)?.let { return ProgrammerErrorOutMessage(it) }
+        triggerRefusal(state, target, attribute)?.let { return ProgrammerErrorOutMessage(it) }
         val engine = state.show.fxEngine
         val landed = when (target) {
             is TargetRef.Fixture -> {
@@ -1047,8 +1056,8 @@ object ProgrammerHandler {
                 } catch (_: Exception) {
                     return ProgrammerErrorOutMessage("Unknown fixture '${target.key}'")
                 }
-                engine.programmer.writeProperty(
-                    ProgrammerOwner.WEB, fixture, propertyName, value,
+                engine.programmer.writeAttribute(
+                    ProgrammerOwner.WEB, fixture, attribute, value,
                     sourceGroup = validateSourceGroup(state, sourceGroup, target.key),
                     fadeMs = fadeMs,
                 ).isNotEmpty()
@@ -1059,18 +1068,18 @@ object ProgrammerHandler {
                 } catch (_: Exception) {
                     return ProgrammerErrorOutMessage("Unknown group '${target.key}'")
                 }
-                engine.programmer.writeGroupProperty(
-                    ProgrammerOwner.WEB, group, propertyName, value, fadeMs = fadeMs,
+                engine.programmer.writeGroupAttribute(
+                    ProgrammerOwner.WEB, group, attribute, value, fadeMs = fadeMs,
                 ).isNotEmpty()
             }
         }
         if (!landed) {
             return ProgrammerErrorOutMessage(
-                "Property '$propertyName' on ${target.discriminator} '${target.key}' resolves to no DMX channels"
+                "Attribute '$attribute' on ${target.discriminator} '${target.key}' resolves to no DMX channels"
             )
         }
         return ProgrammerEntryChangedOutMessage(
-            target.discriminator, target.key, propertyName, value.serialize(),
+            target.discriminator, target.key, attribute, value.serialize(),
         )
     }
 
@@ -1083,7 +1092,7 @@ object ProgrammerHandler {
     fun clearEntry(
         state: State,
         target: TargetRef,
-        propertyName: String,
+        attribute: String,
         fadeMs: Long,
     ): OutMessage {
         val engine = state.show.fxEngine
@@ -1111,9 +1120,9 @@ object ProgrammerHandler {
         // bookkeeping must be pruned for the LOCATE / preset slots this clear removes,
         // or their state would keep claiming writes that are gone (a "located" fixture
         // that is no longer located).
-        val keys = fixtures.flatMap { f -> (listOf(propertyName) + fineHalvesOf(f, propertyName)).map { f to it } }
-        val released = keys.flatMap { (f, property) ->
-            store.slotsFor(f.targetKey, property).map { Triple(f.targetKey, property, it.owner) }
+        val keys = fixtures.flatMap { f -> (listOf(attribute) + fineHalvesOf(f, attribute)).map { f to it } }
+        val released = keys.flatMap { (f, key) ->
+            store.slotsFor(f.targetKey, key).map { Triple(f.targetKey, key, it.owner) }
         }
 
         engine.programmer.clearEntries(keys, fadeMs)
@@ -1122,30 +1131,30 @@ object ProgrammerHandler {
         // with the toggle machinery: a Look now reaches the programmer as a layer, and
         // `clearProgrammerEntries` deliberately leaves LAYERS slots alone — its contribution is
         // derived state that the next recook rebuilds, so there is nothing here to keep in step.
-        for ((fixtureKey, property, owner) in released) {
+        for ((fixtureKey, key, owner) in released) {
             if (owner == ProgrammerOwner.LOCATE) {
-                state.show.locateManager.pruneWrite(fixtureKey, property)
+                state.show.locateManager.pruneWrite(fixtureKey, key)
             }
         }
-        return ProgrammerEntryClearedOutMessage(target.discriminator, target.key, propertyName)
+        return ProgrammerEntryClearedOutMessage(target.discriminator, target.key, attribute)
     }
 
     /**
-     * The fine channels that are part of [propertyName]'s value on [fixture] — both for a position,
+     * The fine channels that are part of [attribute]'s value on [fixture] — both for a position,
      * an axis's own for a pan or a tilt — so clearing the value takes them too. No surface shows a
      * fine half on its own, so one left held would keep the position's family in a Look or a cue
      * after Update.
      */
-    private fun fineHalvesOf(fixture: GroupableFixture, propertyName: String): List<String> {
+    private fun fineHalvesOf(fixture: GroupableFixture, attribute: String): List<String> {
         val axes = LocateValueResolver.axesOf(fixture) ?: return emptyList()
-        val category = if (canonicalPropertyName(propertyName) == "position") {
+        val category = if (canonicalAttributeName(attribute) == "position") {
             null
         } else {
-            PropertyChannelWriter.resolveProperty(fixture, propertyName)?.category ?: return emptyList()
+            AttributeChannelWriter.resolveAttribute(fixture, attribute)?.category ?: return emptyList()
         }
         return listOfNotNull(
-            axes.panFine?.first?.takeIf { category == null || category == PropertyCategory.PAN },
-            axes.tiltFine?.first?.takeIf { category == null || category == PropertyCategory.TILT },
+            axes.panFine?.first?.takeIf { category == null || category == AttributeCategory.PAN },
+            axes.tiltFine?.first?.takeIf { category == null || category == AttributeCategory.TILT },
         )
     }
 
@@ -1159,7 +1168,7 @@ object ProgrammerHandler {
             requestId = message.requestId,
             targetType = message.targetType,
             targetKey = message.targetKey,
-            propertyName = message.propertyName,
+            attribute = message.attribute,
             blind = state.show.programmerStore.blind,
             stacks = stacks,
             error = error,
@@ -1181,17 +1190,17 @@ object ProgrammerHandler {
                 return answer(emptyList(), "Unknown group '${target.key}'")
             }
         }
-        val property = canonicalPropertyName(message.propertyName)
+        val attribute = canonicalAttributeName(message.attribute)
         val engine = state.show.fxEngine
-        return answer(provenance.keyStacks(keys, property).map { it.toDto(engine) })
+        return answer(provenance.keyStacks(keys, attribute).map { it.toDto(engine) })
     }
 
     /**
      * `programmer.clearTarget`: release everything the programmer holds on a fixture (and its
      * heads) or a group (every member, and theirs), plus the local effects on it, in one pass.
      *
-     * The effect half is the grid ⌫'s rule moved to the desk ([FxInstance.isLocalEffect], and
-     * `cellEffects.effectsToStop`'s *every head, or none*): a local effect is stopped when it
+     * The effect half is the grid ⌫'s rule moved to the desk ([FxInstance.isLocalFx], and
+     * `cellFx.fxToStop`'s *every head, or none*): a local effect is stopped when it
      * targets exactly what is being released or every head it paints is among the released heads,
      * and is **left running and named** in `partial` when it paints some of them and some others —
      * a group effect on one member's release. There is no "stop it on these heads only".
@@ -1207,7 +1216,7 @@ object ProgrammerHandler {
                 targetType = message.targetType,
                 targetKey = message.targetKey,
                 values = values,
-                effects = effects,
+                fx = effects,
                 partial = partial,
                 error = error,
             )
@@ -1244,20 +1253,20 @@ object ProgrammerHandler {
         val engine = state.show.fxEngine
         val stop = ArrayList<FxInstance>()
         val partial = ArrayList<TargetClearedPartialDto>()
-        for (effect in engine.getActiveEffects()) {
-            if (!effect.isLocalEffect) continue
+        for (effect in engine.getActiveFx()) {
+            if (!effect.isLocalFx) continue
             val exact = effect.target.targetKey == target.key &&
-                effect.isGroupEffect == (target is TargetRef.Group)
+                effect.isGroupFx == (target is TargetRef.Group)
             val painted = engine.fixtureKeysCoveredBy(effect)
             val overlap = painted.count { it in headKeys }
             when {
                 exact || (painted.isNotEmpty() && overlap == painted.size) -> stop += effect
                 overlap > 0 -> partial += TargetClearedPartialDto(
-                    effectId = effect.id,
-                    effectType = effect.effectTypeId,
+                    fxId = effect.id,
+                    fxType = effect.fxTypeId,
                     targetKey = effect.target.targetKey,
-                    isGroupTarget = effect.isGroupEffect,
-                    propertyName = effect.target.propertyName,
+                    isGroupTarget = effect.isGroupFx,
+                    attribute = effect.target.attribute,
                 )
             }
         }
@@ -1268,12 +1277,12 @@ object ProgrammerHandler {
         // first and that value ramps; the rest shrink over the fade (effects plan D13).
         val fadeMs = message.fadeMs ?: 0
         val store = state.show.programmerStore
-        val stopped = engine.releaseEffects(stop, fadeMs) { key, property ->
-            store.slotsFor(key, property).any { it.owner != ProgrammerOwner.LAYERS }
+        val stopped = engine.releaseFx(stop, fadeMs) { key, attribute ->
+            store.slotsFor(key, attribute).any { it.owner != ProgrammerOwner.LAYERS }
         }
         val release = engine.programmer.releaseFixtures(heads, footprint, fadeMs)
-        for ((fixtureKey, propertyName, owner) in release.releasedSlots) {
-            if (owner == ProgrammerOwner.LOCATE) state.show.locateManager.pruneWrite(fixtureKey, propertyName)
+        for ((fixtureKey, attribute, owner) in release.releasedSlots) {
+            if (owner == ProgrammerOwner.LOCATE) state.show.locateManager.pruneWrite(fixtureKey, attribute)
         }
         return answer(release.values, stopped, partial)
     }
@@ -1296,21 +1305,22 @@ object ProgrammerHandler {
      * everywhere else, and letting a client supply both invites the two disagreeing.
      */
     fun addLayer(state: State, message: ProgrammerAddLayerInMessage): OutMessage {
-        val source = resolveLayerSource(state, message.lookId, message.templateId)
+        val source = resolveLayerSource(state, message.lookId, message.paletteId)
             ?: return ProgrammerErrorOutMessage(
-                "programmer.addLayer needs exactly one of lookId / templateId, naming a record that exists",
+                "programmer.addLayer needs exactly one of lookId / paletteId, naming a record that exists",
             )
         // A frame has no 400 to be given, so the strict policy's message becomes the error frame.
         // Left unchecked, a bad blend survives Record into `cue_layers` and the operator then sees
         // a blend the desk does not play — the whole point of rejecting it where it enters.
-        EffectSpecCoercion.Strict.problem(blendMode = message.blendMode)?.let {
+        FxSpecCoercion.Strict.problem(blendMode = message.blendMode)?.let {
             return ProgrammerErrorOutMessage(it)
         }
+        if (source.kind == LayerSourceKind.LOOK && message.targets.isNotEmpty()) return lookLayerTargeted("programmer.addLayer")
 
         state.show.programmerLayerStack.add(
             source = source,
             targets = message.targets,
-            propertyMask = message.propertyMask,
+            attributeMask = message.attributeMask,
             blendMode = message.blendMode ?: "OVERRIDE",
             amount = message.amount ?: 1.0,
             speedMasterUuid = speedMasterUuidOrNull(message.speedMasterUuid),
@@ -1320,26 +1330,30 @@ object ProgrammerHandler {
         return layerState(state)
     }
 
+    /** A Look's layer given targets, refused by name (absolute-looks plan P2). */
+    fun lookLayerTargeted(where: String) =
+        ProgrammerErrorOutMessage(lookLayerTargetedMessage(where), LookLayerTargetedException.CODE)
+
     fun stateSnapshot(state: State): ProgrammerStateOutMessage {
         val store = state.show.programmerStore
         val entries = store.entries().map { entry ->
             val top = entry.slots.first()
             ProgrammerEntryDto(
                 targetKey = entry.fixtureKey,
-                propertyName = entry.propertyName,
+                attribute = entry.attribute,
                 value = top.value.resolved.serialize(),
                 owner = top.owner.id,
                 touched = top.touched,
                 sourceGroup = top.sourceGroup,
                 owners = entry.slots.map { it.owner.id },
             )
-        }.sortedWith(compareBy({ it.targetKey }, { it.propertyName }))
+        }.sortedWith(compareBy({ it.targetKey }, { it.attribute }))
         val channels = store.channelEntries().map { entry ->
             val top = entry.slots.first()
             ProgrammerChannelDto(
                 universe = entry.universe,
                 channel = entry.channel,
-                value = (top.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value ?: 0u,
+                value = (top.value.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value ?: 0u,
                 owner = top.owner.id,
                 touched = top.touched,
             )
@@ -1384,18 +1398,18 @@ object ProgrammerHandler {
      * Parse a canonical value string for (target, property): `position` is the synthetic
      * pan/tilt pair; everything else resolves its category from the fixture's property
      * catalogue (via the first member for groups). A programmer value is always a literal — a
-     * `tmpl:` template reference is refused by [CueAssignmentResolver.parseAssignmentValue] rather
+     * `pal:` template reference is refused by [CueAssignmentResolver.parseAssignmentValue] rather
      * than read as white.
      */
     private fun parseValue(
         state: State,
         target: TargetRef,
-        propertyName: String,
+        attribute: String,
         value: String,
-    ): CueAssignmentResolver.PropertyValue? {
-        if (propertyName.equals("position", ignoreCase = true)) {
+    ): CueAssignmentResolver.AttributeValue? {
+        if (attribute.equals("position", ignoreCase = true)) {
             return CueAssignmentResolver.parseAssignmentValue(
-                uk.me.cormack.lighting7.fixture.PropertyCategory.OTHER, propertyName, value,
+                uk.me.cormack.lighting7.fixture.AttributeCategory.OTHER, attribute, value,
             )
         }
         val fixture = when (target) {
@@ -1410,9 +1424,9 @@ object ProgrammerHandler {
                 return null
             } ?: return null
         }
-        val resolved = PropertyChannelWriter.resolveProperty(fixture, propertyName) ?: return null
+        val resolved = AttributeChannelWriter.resolveAttribute(fixture, attribute) ?: return null
         return CueAssignmentResolver.parseAssignmentValue(
-            resolved.category, propertyName, value,
+            resolved.category, attribute, value,
             settingBacked = resolved.value is uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting<*>,
         )
     }
@@ -1422,7 +1436,7 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
     targetKey = targetKey,
     layers = layers.map { layer ->
         val effect = layer.effect
-        val dto = effect?.let { engine.effectDto(it) }
+        val dto = effect?.let { engine.fxDto(it) }
         KeyStackLayerDto(
             kind = layer.kind.name,
             onStage = layer.onStage,
@@ -1433,17 +1447,17 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
             ageMs = layer.ageMs,
             universe = layer.channel?.first,
             channel = layer.channel?.second,
-            effectId = effect?.id,
-            effectType = dto?.effectType,
-            effectName = effect?.effect?.name,
-            beatDivision = dto?.beatDivision,
+            fxId = effect?.id,
+            fxType = dto?.fxType,
+            fxName = effect?.effect?.name,
+            cycle = dto?.cycle,
             blendMode = dto?.blendMode,
             running = dto?.isRunning,
             speedMasterUuid = dto?.speedMasterUuid,
             rateSpeedMasterUuid = dto?.rateSpeedMasterUuid,
             timingSource = dto?.timingSource,
             seconds = dto?.seconds,
-            size = dto?.size,
+            amount = dto?.amount,
             direction = dto?.direction,
             heldBack = if (effect != null) layer.heldBack else null,
             heldBackReason = layer.heldBackReason?.name,
