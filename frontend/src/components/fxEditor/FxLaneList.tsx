@@ -8,7 +8,7 @@ import { findFxEntry } from '@/components/busking/buskingTypes'
 import { HeldBlindMark } from '@/components/fx/HeldBlindMark'
 import { isHeldByBlind } from '@/lib/heldBack'
 import { newFxDirection } from '@/lib/fxTiming'
-import { palettePropertyFor } from '@/lib/paletteIntent'
+import { paletteAttributeFor } from '@/lib/paletteIntent'
 import { LANE_ATTRIBUTE, coverageLabel, localMovesFor, type FxCard, type FxLane } from './fxEditorList'
 import { underneathLabel, useUnderneath } from './useUnderneath'
 
@@ -199,7 +199,7 @@ function CardView({
   const cueName = effect.cueId != null ? (cueLabel(effect.cueId) ?? 'its cue') : null
   // Named where the lane's family has several, in words — *UV*, *Zoom*.
   const attribute =
-    LANE_ATTRIBUTE[family] !== effect.propertyName ? (palettePropertyFor(effect.propertyName)?.label ?? effect.propertyName) : null
+    LANE_ATTRIBUTE[family] !== effect.attribute ? (paletteAttributeFor(effect.attribute)?.label ?? effect.attribute) : null
   const amount = Math.round((effect.amount ?? 1) * 100)
   // Only where it is not the FX type's own: the sweeps bounce by default.
   const ownDirection = effect.direction ?? 'FORWARD'

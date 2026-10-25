@@ -5260,7 +5260,7 @@ a placeholder until session 5 draws the preview's answer. Things that will bite:
   whose `fx` is the apply order bottom first; one the answer has not reached goes on top of its tier,
   where a new Local FX lands. A card's family is the answer's, else its attribute's category on a
   head that carries it. A card names its attribute in words where the lane's family has several
-  (`palettePropertyFor`'s label — *UV*, *Zoom*), and its Direction only where it is not the FX
+  (`paletteAttributeFor`'s label — *UV*, *Zoom*), and its Direction only where it is not the FX
   type's own (`newFxDirection`; the sweeps bounce by default). A layer's card has pause and no ×,
   as the busk Effects tab's pad FX has none: stopping the instance alone, the layer respawns it on
   its next recook, so the layer is what lets it go.

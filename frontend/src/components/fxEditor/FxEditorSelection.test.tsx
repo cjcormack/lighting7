@@ -123,7 +123,7 @@ beforeEach(() => {
     fx(2, { programmerLayerId: 40, paletteId: 3 }),
     fx(3),
     fx(4),
-    fx(5, { propertyName: 'rgbColour', programmerOwned: false, cueId: 12 }),
+    fx(5, { attribute: 'rgbColour', programmerOwned: false, cueId: 12 }),
   ]
   for (const spy of [mocks.moveFx, mocks.selectHeads, mocks.stop, mocks.pause]) spy.mockClear()
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ width: mocks.width, height: 600 }) as DOMRect)
@@ -197,7 +197,7 @@ describe('the list', () => {
     mocks.effects = [
       fx(1, { fxType: 'Sweep', direction: 'BOUNCE' }),
       fx(2, { fxType: 'Sweep', direction: 'FORWARD' }),
-      fx(3, { fxType: 'Pulse', direction: 'BACKWARD', propertyName: 'uv' }),
+      fx(3, { fxType: 'Pulse', direction: 'BACKWARD', attribute: 'uv' }),
     ]
     draw()
     expect(within(card(1)).queryByTitle('Bounce')).toBeNull()

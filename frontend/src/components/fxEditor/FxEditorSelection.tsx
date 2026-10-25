@@ -31,7 +31,7 @@ import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useIsDeskConnected } from '@/store/status'
 import { FAMILY_LABELS, familyForCategory, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { selectionUnits } from '@/lib/fxTargets'
-import { carriesFxProperty } from '@/components/fx/fxEditorModel'
+import { carriesFxAttribute } from '@/components/fx/fxEditorModel'
 import {
   setPickedFx,
   setSoloFx,
@@ -262,15 +262,15 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
 /** The first selected head carrying the lane's attribute — the lane's first FX's, else its family's own. */
 function underneathAt(lane: FxLane, units: ReturnType<typeof selectionUnits>): { head: string; attribute: string } | null {
   const attribute =
-    lane.cards[0]?.effect.propertyName ??
+    lane.cards[0]?.effect.attribute ??
     LANE_ATTRIBUTE[lane.family] ??
     units
-      .flatMap((u) => [...u.properties, ...(u.elements ?? []).flatMap((e) => e.properties)])
+      .flatMap((u) => [...u.attributes, ...(u.elements ?? []).flatMap((e) => e.attributes)])
       .find((p) => (p.type === 'slider' || p.type === 'setting') && familyForCategory(p.category) === 'BEAM')?.name
   if (attribute == null) return null
   for (const unit of units) {
-    if (carriesFxProperty(unit.properties, attribute)) return { head: unit.key, attribute }
-    const cell = unit.elements?.find((e) => carriesFxProperty(e.properties, attribute))
+    if (carriesFxAttribute(unit.attributes, attribute)) return { head: unit.key, attribute }
+    const cell = unit.elements?.find((e) => carriesFxAttribute(e.attributes, attribute))
     if (cell != null) return { head: cell.key, attribute }
   }
   return null
@@ -342,7 +342,7 @@ function NothingSelected({
               }}
             >
               {findFxEntry(library, effect.fxType)?.name ?? effect.fxType}
-              <span className="ml-auto pl-3 font-mono text-[10px] text-muted-foreground">{effect.propertyName}</span>
+              <span className="ml-auto pl-3 font-mono text-[10px] text-muted-foreground">{effect.attribute}</span>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

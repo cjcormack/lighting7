@@ -69,7 +69,7 @@ describe('fxLanes', () => {
   })
 
   it('files FX by family into Intensity · Colour · Position · Beam, a lane for each family the selection can take', () => {
-    const effects = [fx(1, { propertyName: 'rgbColour' }), fx(2)]
+    const effects = [fx(1, { attribute: 'rgbColour' }), fx(2)]
     const lanes = fxLanes({ effects, targets: ALL, fixtures: HEX, layerPosition: new Map(), answer: null })
     expect(lanes.map((l) => l.family)).toEqual(['INTENSITY', 'COLOUR'])
     expect(cardIds(lanes, 'COLOUR')).toEqual([1])
