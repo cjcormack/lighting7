@@ -16,6 +16,8 @@ When I do give a shipping verb, the authorization covers only the changes in sco
 
 **`/verified-ship` is a shipping verb for its own run.** Invoking it authorizes, on a PASS gate only, the commit, pushing its branch, and opening one PR. It never authorizes merging or auto-merge, and a BLOCKED gate ships nothing.
 
+**`/next-session` is `/verified-ship` for one plan session**, and authorizes exactly the same: on a PASS gate, one commit on that session's branch, its push, and one PR stacked on the previous session's. Nothing else.
+
 **Auto mode does not relax this.** Auto mode authorizes you to *execute work* without asking; it does not authorize you to *publish work*.
 
 Before running `git commit`, `git push`, `gh pr create`, `gh pr comment`, `gh pr review` or any equivalent: scan my most recent message for one of the shipping verbs above. Absence is a hard stop, regardless of how ready the work seems.

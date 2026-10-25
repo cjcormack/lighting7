@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Programmer toolbar — interactive</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 760px; display: flex; flex-direction: column; background: #060608; color: #fafafa; font-family: Inter, system-ui, sans-serif; font-size: 12px">
+  <div style="height: 64px; flex-shrink: 0; display: flex; align-items: center; gap: 20px; padding: 0 24px; border-bottom: 1px solid #1f1f24; background: #0b0b0e">
+    <span style="font-size: 15px; font-weight: 600">Try it</span>
+    <div style="display: flex; align-items: center; gap: 8px">
+      <span style="color: #a1a1aa">Width</span>
+      <div role="radiogroup" aria-label="Width" style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden">
+        <sc-for list="{{widths}}" as="o" hint-placeholder-count="6">
+          <button type="button" role="radio" aria-checked="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px">
+      <span style="color: #a1a1aa">Selection</span>
+      <div role="radiogroup" aria-label="Selection" style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden">
+        <sc-for list="{{sels}}" as="o" hint-placeholder-count="3">
+          <button type="button" role="radio" aria-checked="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button>
+        </sc-for>
+      </div>
+    </div>
+    <span style="flex: 1"></span>
+    <span style="color: #a1a1aa">Click Look, Record ▾, the heads chip, Set, FX and Release ▾</span>
+  </div>
+  <div style="flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 16px; overflow: hidden">
+    <div style="border: 1px solid #27272a; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5)">
+      <dc-import name="Toolbar" width="{{tw}}" height="{{th}}" sel="{{sel}}" short="{{short}}" hint-size="1400px,660px"></dc-import>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":760}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { width: 1400, sel: 'cells' };
+  }
+  renderVals() {
+    const seg = (on, first) => 'padding: 0 12px; border: 0; ' + (first ? '' : 'border-left: 1px solid #34343a; ') + 'background: ' + (on ? '#3f3f46' : 'transparent') + '; color: ' + (on ? '#fafafa' : '#a1a1aa') + '; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer';
+    const wDefs = [[1400, '1400'], [1100, '1100'], [900, '900'], [700, '700'], [390, '390 phone'], [852, '852 × 393 short']];
+    const widths = wDefs.map(([v, label], i) => ({
+      label, on: this.state.width === v,
+      pick: () => this.setState({ width: v }),
+      style: seg(this.state.width === v, i === 0)
+    }));
+    const sDefs = [['cells', 'Cells'], ['rows', 'Rows'], ['none', 'None']];
+    const sels = sDefs.map(([v, label], i) => ({
+      label, on: this.state.sel === v,
+      pick: () => this.setState({ sel: v }),
+      style: seg(this.state.sel === v, i === 0)
+    }));
+    const short = this.state.width === 852;
+    return {
+      widths, sels,
+      tw: this.state.width,
+      th: short ? 393 : 660,
+      sel: this.state.sel,
+      short
+    };
+  }
+}
+</script>
+</body>
+</html>

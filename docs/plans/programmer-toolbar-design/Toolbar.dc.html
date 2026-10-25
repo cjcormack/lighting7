@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Programmer toolbar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: {{w}}px; height: {{h}}px; position: relative; overflow: hidden; display: flex; flex-direction: column; background: #0f0f12; color: #fafafa; font-family: Inter, system-ui, sans-serif; font-size: 12px; line-height: 1.3">
+
+  <!-- App header (unchanged) -->
+  <div style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid #27272a; background: #141418">
+    <span style="width: 22px; height: 22px; border-radius: 6px; background: #27272a; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #a1a1aa; flex-shrink: 0">L7</span>
+    <sc-if value="{{tab}}" hint-placeholder-val="{{ true }}"><span style="font-weight: 600; white-space: nowrap">Spring Revue</span></sc-if>
+    <button type="button" aria-label="Switch view" style="height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #34343a; border-radius: 999px; background: #18181b; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer">Programmer
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <span style="flex: 1"></span>
+    <button type="button" aria-label="Command palette" style="height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #a1a1aa; font: inherit; font-size: 11px; cursor: pointer">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">⌘K</span>
+    </button>
+  </div>
+
+  <!-- ROW A: the noun and the verbs -->
+  <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid #27272a; background: rgba(28,28,33,0.5)">
+
+    <div style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 10px; border: 1px solid #34343a; border-radius: 6px; background: #18181b; min-width: 0; flex: 0 1 auto; overflow: hidden">
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; flex-shrink: 0">Q4</span>
+      <sc-if value="{{srcName}}" hint-placeholder-val="{{ true }}"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0">Warm wash</span></sc-if>
+      <span title="Edited since Include" style="width: 6px; height: 6px; border-radius: 3px; background: #f59e0b; flex-shrink: 0"></span>
+      <button type="button" aria-label="Update Q4" style="height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border: 0; border-radius: 4px; background: #27272a; color: #fafafa; font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; flex-shrink: 0">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        <sc-if value="{{srcWords}}" hint-placeholder-val="{{ true }}"><span>Update</span></sc-if>
+      </button>
+      <button type="button" aria-label="Revert to Q4" style="height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border: 0; border-radius: 4px; background: transparent; color: #a1a1aa; font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; flex-shrink: 0">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        <sc-if value="{{srcWords}}" hint-placeholder-val="{{ true }}"><span>Revert</span></sc-if>
+      </button>
+    </div>
+
+    <span style="width: 1px; height: 22px; background: #34343a; flex-shrink: 0; margin-left: {{seamMargin}}"></span>
+
+    <!-- Stage: Clear + fade, Blind -->
+    <div style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden; flex-shrink: 0">
+      <button type="button" aria-label="Clear the programmer" title="Stage — Release 6 programmer values, 3 programmer FX and 2 layers over 1s" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+        <sc-if value="{{minorWords}}" hint-placeholder-val="{{ true }}"><span>Clear</span></sc-if>
+      </button>
+      <button type="button" aria-label="Fade time" style="width: {{fadeW}}px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-left: 1px solid #34343a; background: rgba(39,39,42,0.45); color: #fafafa; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; cursor: pointer">1s
+        <sc-if value="{{tab}}" hint-placeholder-val="{{ true }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></sc-if>
+      </button>
+    </div>
+    <button type="button" aria-label="Blind" aria-pressed="false" style="height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0; cursor: pointer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+      <sc-if value="{{minorWords}}" hint-placeholder-val="{{ true }}"><span>Blind</span></sc-if>
+    </button>
+
+    <span style="width: 1px; height: 22px; background: #34343a; flex-shrink: 0"></span>
+
+    <!-- In: + Look, Include (one + on a phone) -->
+    <span style="position: {{anchorPos}}; display: inline-flex; flex-shrink: 0">
+      <sc-if value="{{notPhone}}" hint-placeholder-val="{{ true }}">
+        <button type="button" aria-label="Add a Look" aria-expanded="{{lookOpen}}" onClick="{{toggleLook}}" style="{{lookBtnStyle}}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+          <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Look</span></sc-if>
+        </button>
+      </sc-if>
+      <sc-if value="{{phone}}" hint-placeholder-val="{{ false }}">
+        <button type="button" aria-label="Include, or add a Look" aria-expanded="{{lookOpen}}" onClick="{{toggleLook}}" style="{{lookBtnStyle}}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        </button>
+      </sc-if>
+      <sc-if value="{{lookOpen}}" hint-placeholder-val="{{ false }}">
+        <div role="dialog" aria-label="Add a Look" style="{{lookPopStyle}}">
+          <sc-if value="{{phone}}" hint-placeholder-val="{{ false }}">
+            <div style="width: 36px; height: 4px; border-radius: 2px; background: #3f3f46; margin: 8px auto 6px"></div>
+            <button type="button" style="margin: 0 12px 10px; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border: 1px solid #34343a; border-radius: 8px; background: #18181b; color: #fafafa; font: inherit; font-size: 13px; text-align: left">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              <span style="flex: 1">Include a cue or Look…</span>
+              <span style="font-size: 11px; color: #a1a1aa">replaces the source</span>
+            </button>
+          </sc-if>
+          <div style="display: flex; align-items: baseline; gap: 8px; padding: 10px 12px 6px">
+            <span style="font-weight: 600; font-size: 13px">Looks</span>
+            <span style="font-size: 11px; color: #a1a1aa">land whole — no selection, no mask</span>
+          </div>
+          <div style="padding: 0 10px 8px">
+            <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; border: 1px solid #34343a; border-radius: 6px; background: #141418; color: #a1a1aa">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" aria-label="Search Looks" placeholder="Search Looks" style="flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: #fafafa; font: inherit; font-size: 12px">
+            </label>
+          </div>
+          <div style="display: flex; flex-direction: column; padding: 0 6px 6px">
+            <sc-for list="{{looks}}" as="l" hint-placeholder-count="5">
+              <button type="button" aria-pressed="{{l.on}}" onClick="{{l.press}}" style="{{l.rowStyle}}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+                <span style="flex: 1; text-align: left">{{l.name}}</span>
+                <span style="color: #a1a1aa; font-size: 11px">{{l.meta}}</span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid #2a2a30; font-size: 11px; color: #a1a1aa">
+            <span>Click: layer · ⌥-click: as values · stays open</span>
+          </div>
+        </div>
+      </sc-if>
+    </span>
+    <sc-if value="{{notPhone}}" hint-placeholder-val="{{ true }}">
+      <button type="button" aria-label="Include a cue or Look" title="Load" style="height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0; cursor: pointer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        <sc-if value="{{minorWords}}" hint-placeholder-val="{{ true }}"><span>Include…</span></sc-if>
+      </button>
+    </sc-if>
+
+    <span style="width: 1px; height: 22px; background: #34343a; flex-shrink: 0"></span>
+
+    <!-- Out: Record -->
+    <span style="position: relative; display: inline-flex; flex-shrink: 0">
+      <div style="display: inline-flex; height: 32px; border-radius: 6px; overflow: hidden">
+        <button type="button" aria-label="Record" title="Save" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; border: 0; background: #3b82f6; color: #0f0f12; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>
+          <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Record</span></sc-if>
+        </button>
+        <button type="button" aria-label="Record destination" aria-expanded="{{recordOpen}}" onClick="{{toggleRecord}}" style="display: inline-flex; align-items: center; padding: 0 6px; border: 0; border-left: 1px solid rgba(15,15,18,0.3); background: #3b82f6; color: #0f0f12; cursor: pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+      <sc-if value="{{recordOpen}}" hint-placeholder-val="{{ false }}">
+        <div role="menu" style="position: absolute; top: 38px; right: 0; z-index: 50; width: 262px; background: #1c1c21; border: 1px solid #34343a; border-radius: 8px; box-shadow: 0 16px 40px rgba(0,0,0,0.55); padding: 6px; display: flex; flex-direction: column; gap: 1px">
+          <div style="padding: 6px 8px 4px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a1a1aa">Write 6 values and 2 layers into</div>
+          <sc-for list="{{recordItems}}" as="r" hint-placeholder-count="5">
+            <sc-if value="{{r.sep}}" hint-placeholder-val="{{ false }}"><div style="height: 1px; background: #2a2a30; margin: 4px 2px"></div></sc-if>
+            <button type="button" role="menuitem" style="display: flex; align-items: flex-start; gap: 9px; padding: 7px 8px; border: 0; border-radius: 5px; background: {{r.bg}}; color: #fafafa; font: inherit; text-align: left; cursor: pointer">
+              <span style="margin-top: 1px; width: 14px; height: 14px; border-radius: 7px; border: 1.5px solid #a1a1aa; flex-shrink: 0"></span>
+              <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+                <span style="font-size: 12px; font-weight: 500">{{r.title}}</span>
+                <span style="font-size: 10.5px; color: #a1a1aa">{{r.sub}}</span>
+              </span>
+              <sc-if value="{{r.isNew}}" hint-placeholder-val="{{ false }}"><span style="font-size: 9px; font-weight: 700; letter-spacing: 0.06em; color: #0f0f12; background: #fbbf24; border-radius: 3px; padding: 1px 4px; margin-top: 1px">NEW</span></sc-if>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+    </span>
+
+    <!-- Short viewport: row B folds onto this line -->
+    <sc-if value="{{short}}" hint-placeholder-val="{{ false }}">
+      <span style="width: 1px; height: 22px; background: #34343a; flex-shrink: 0"></span>
+      <div style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden; flex-shrink: 0">
+        <button type="button" aria-label="Values" style="width: 32px; border: 0; background: #27272a; color: #fafafa; display: inline-flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg></button>
+        <button type="button" aria-label="Stack, 2 layers" style="width: 32px; border: 0; border-left: 1px solid #34343a; background: transparent; color: #a1a1aa; display: inline-flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg></button>
+        <button type="button" aria-label="FX, 3 running" style="width: 32px; border: 0; border-left: 1px solid #34343a; background: transparent; color: #a1a1aa; display: inline-flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg></button>
+      </div>
+      <div style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden; flex-shrink: 0">
+        <button type="button" aria-label="Output" style="padding: 0 8px; border: 0; background: transparent; color: #a1a1aa; font: inherit; font-size: 12px">Out</button>
+        <button type="button" aria-label="Local" style="padding: 0 8px; border: 0; border-left: 1px solid #34343a; background: rgba(59,130,246,0.16); color: #93c5fd; font: inherit; font-size: 12px; font-weight: 600">Local</button>
+      </div>
+      <span style="flex: 1"></span>
+      <button type="button" aria-label="Filter fixtures" style="width: 32px; height: 32px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button type="button" aria-label="Groups" style="width: 32px; height: 32px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg></button>
+      <button type="button" aria-label="Columns" style="width: 32px; height: 32px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg></button>
+    </sc-if>
+  </div>
+
+  <!-- ROW B: what the grid shows (unchanged) -->
+  <sc-if value="{{notShort}}" hint-placeholder-val="{{ true }}">
+    <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid #27272a">
+      <div role="tablist" style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden; flex-shrink: 0">
+        <button type="button" role="tab" aria-selected="true" aria-label="Values" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 0; background: #27272a; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+          <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Values</span></sc-if>
+        </button>
+        <button type="button" role="tab" aria-selected="false" aria-label="Stack, 2 layers" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 0; border-left: 1px solid #34343a; background: transparent; color: #a1a1aa; font: inherit; font-size: 12px; font-weight: 500">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+          <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Stack</span></sc-if>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px; color: #a1a1aa">2</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" aria-label="FX, 3 running" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 0; border-left: 1px solid #34343a; background: transparent; color: #a1a1aa; font: inherit; font-size: 12px; font-weight: 500">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>
+          <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>FX</span></sc-if>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px; color: #a1a1aa">3</span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" aria-label="Scenery" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 0; border-left: 1px solid #34343a; background: transparent; color: #a1a1aa; font: inherit; font-size: 12px; font-weight: 500">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h18"/><path d="M20 7H8"/><path d="M20 11H8"/><path d="M10 19h10"/><path d="M8 15h12"/><path d="M4 3v14"/><circle cx="4" cy="19" r="2"/></svg>
+          <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Scenery</span></sc-if>
+        </button>
+      </div>
+      <div style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden; flex-shrink: 0">
+        <button type="button" aria-label="Show the composed output" style="padding: 0 9px; border: 0; background: transparent; color: #a1a1aa; font: inherit; font-size: 12px; font-weight: 500">{{outLabel}}</button>
+        <button type="button" aria-label="Show only the values you set" style="padding: 0 9px; border: 0; border-left: 1px solid #34343a; background: rgba(59,130,246,0.16); color: #93c5fd; font: inherit; font-size: 12px; font-weight: 600">Local</button>
+      </div>
+      <sc-if value="{{tab}}" hint-placeholder-val="{{ true }}">
+        <label style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border: 1px solid #34343a; border-radius: 6px; background: #141418; color: #a1a1aa; flex: 0 1 260px; min-width: 120px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" aria-label="Filter fixtures" placeholder="Filter fixtures" style="flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: #fafafa; font: inherit; font-size: 12px">
+        </label>
+      </sc-if>
+      <span style="flex: 1"></span>
+      <sc-if value="{{phone}}" hint-placeholder-val="{{ false }}">
+        <button type="button" aria-label="Filter fixtures" style="width: 32px; height: 32px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
+      </sc-if>
+      <button type="button" aria-label="Lit only" style="height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; flex-shrink: 0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+        <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Lit</span></sc-if>
+      </button>
+      <button type="button" aria-label="Groups" style="height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; flex-shrink: 0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+        <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Groups</span></sc-if>
+      </button>
+      <button type="button" aria-label="Columns" style="height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; flex-shrink: 0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+        <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Columns</span></sc-if>
+      </button>
+    </div>
+  </sc-if>
+
+  <!-- ROW C: the selection — WHICH · WHAT · WHERE -->
+  <sc-if value="{{rowCShown}}" hint-placeholder-val="{{ true }}">
+    <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid #27272a; background: {{rowCBg}}">
+
+      <!-- WHICH: the heads chip -->
+      <span style="position: relative; display: inline-flex; flex-shrink: 0">
+        <div style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden; background: #18181b">
+          <button type="button" aria-label="{{chipAria}}" aria-expanded="{{selOpen}}" onClick="{{toggleSel}}" style="display: inline-flex; align-items: center; gap: 7px; padding: 0 8px 0 9px; border: 0; background: {{chipBg}}; color: {{chipFg}}; font: inherit; font-size: 12px; cursor: pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <span style="font-weight: {{countWeight}}; white-space: nowrap; font-variant-numeric: tabular-nums">{{countLabel}}</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <sc-if value="{{chipX}}" hint-placeholder-val="{{ true }}">
+            <button type="button" aria-label="Deselect" title="Deselect" style="width: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-left: 1px solid #34343a; background: transparent; color: #a1a1aa; cursor: pointer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </sc-if>
+        </div>
+        <sc-if value="{{selOpen}}" hint-placeholder-val="{{ false }}">
+          <div role="menu" style="position: absolute; top: 38px; left: 0; z-index: 50; width: 292px; background: #1c1c21; border: 1px solid #34343a; border-radius: 8px; box-shadow: 0 16px 40px rgba(0,0,0,0.55); padding: 6px; display: flex; flex-direction: column; gap: 2px">
+            <div style="padding: 6px 8px 4px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a1a1aa">Narrow · in rig order</div>
+            <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 0 4px">
+              <sc-for list="{{subsets}}" as="s" hint-placeholder-count="6">
+                <button type="button" style="height: 28px; border: 1px solid #34343a; border-radius: 5px; background: #18181b; color: #fafafa; font: inherit; font-size: 11.5px; cursor: pointer">{{s}}</button>
+              </sc-for>
+            </div>
+            <div style="display: flex; gap: 4px; padding: 4px 4px 2px">
+              <button type="button" style="flex: 1; height: 28px; border: 1px solid #34343a; border-radius: 5px; background: #18181b; color: #fafafa; font: inherit; font-size: 11.5px; cursor: pointer">‹ Previous</button>
+              <button type="button" style="flex: 1; height: 28px; border: 1px solid #34343a; border-radius: 5px; background: #18181b; color: #fafafa; font: inherit; font-size: 11.5px; cursor: pointer">Next ›</button>
+            </div>
+            <button type="button" role="menuitem" style="display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; text-align: left; cursor: pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/></svg>
+              <span style="flex: 1">Select by colour</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <div style="height: 1px; background: #2a2a30; margin: 3px 2px"></div>
+            <button type="button" role="menuitemcheckbox" aria-checked="true" style="display: flex; align-items: flex-start; gap: 9px; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; color: #fafafa; font: inherit; text-align: left; cursor: pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top: 1px"><path d="M20 6 9 17l-5-5"/></svg>
+              <span style="display: flex; flex-direction: column">
+                <span style="font-size: 12px">Follow the desk selection</span>
+                <span style="font-size: 10.5px; color: #a1a1aa">Off: this window keeps its own</span>
+              </span>
+            </button>
+            <sc-if value="{{phone}}" hint-placeholder-val="{{ false }}">
+              <div style="height: 1px; background: #2a2a30; margin: 3px 2px"></div>
+              <div style="padding: 4px 8px 2px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a1a1aa">On the rig</div>
+              <button type="button" role="menuitem" style="display: flex; align-items: center; height: 32px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; text-align: left">Locate</button>
+              <button type="button" role="menuitem" style="display: flex; align-items: center; height: 32px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; text-align: left">Set locate from current</button>
+              <button type="button" role="menuitem" style="display: flex; align-items: center; height: 32px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; text-align: left">Highlight</button>
+            </sc-if>
+            <sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+              <div style="height: 1px; background: #2a2a30; margin: 3px 2px"></div>
+              <button type="button" role="menuitem" style="display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; text-align: left; cursor: pointer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                <span>Deselect</span>
+              </button>
+            </sc-if>
+          </div>
+        </sc-if>
+      </span>
+
+      <sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+        <!-- the mask the next press carries -->
+        <button type="button" aria-label="{{maskAria}}" style="{{maskStyle}}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+          <sc-if value="{{tab}}" hint-placeholder-val="{{ true }}"><span>{{maskLabel}}</span></sc-if>
+          <sc-if value="{{tab}}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="opacity: 0.7"><path d="m6 9 6 6 6-6"/></svg></sc-if>
+        </button>
+
+        <span style="width: 1px; height: 22px; background: #34343a; flex-shrink: 0"></span>
+
+        <!-- WHAT: Set (values and palettes) · Fan · + FX · Release -->
+        <span style="position: {{anchorPos}}; display: inline-flex; flex-shrink: 0">
+          <button type="button" aria-label="{{setAria}}" aria-expanded="{{setOpen}}" onClick="{{toggleSet}}" title="{{setTitle}}" style="{{setBtnStyle}}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/></svg>
+            <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Set</span></sc-if>
+            <sc-if value="{{deskCells}}" hint-placeholder-val="{{ true }}"><kbd style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; border: 1px solid #3f3f46; border-radius: 4px; padding: 0 4px; color: #a1a1aa; background: rgba(39,39,42,0.6)">⏎</kbd></sc-if>
+          </button>
+          <sc-if value="{{setOpen}}" hint-placeholder-val="{{ false }}">
+            <div role="dialog" aria-label="Set" style="{{setPopStyle}}">
+              <sc-if value="{{phone}}" hint-placeholder-val="{{ false }}"><div style="width: 36px; height: 4px; border-radius: 2px; background: #3f3f46; margin: 8px auto 2px"></div></sc-if>
+              <sc-if value="{{isRows}}" hint-placeholder-val="{{ false }}">
+                <div style="padding: 10px 10px 2px">
+                  <div style="font-size: 11px; color: #a1a1aa; padding: 0 2px 6px">4 heads, no cells picked — which attribute?</div>
+                  <div role="radiogroup" aria-label="Attribute" style="display: flex; height: 30px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden">
+                    <sc-for list="{{setFams}}" as="f" hint-placeholder-count="4">
+                      <button type="button" role="radio" aria-checked="{{f.on}}" onClick="{{f.pick}}" style="{{f.style}}">{{f.label}}</button>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+              <div style="display: flex; align-items: baseline; gap: 8px; padding: 10px 12px 6px">
+                <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa">{{setFamily}} palettes</span>
+                <span style="font-size: 11px; color: #8b8b94">on {{headsLabel}}</span>
+                <span style="flex: 1"></span>
+                <button type="button" style="border: 0; background: transparent; color: #60a5fa; font: inherit; font-size: 11.5px; cursor: pointer; padding: 0">All 12 ›</button>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 10px">
+                <sc-for list="{{setPalettes}}" as="p" hint-placeholder-count="6">
+                  <button type="button" aria-pressed="{{p.on}}" onClick="{{p.press}}" style="{{p.chipStyle}}">
+                    <span style="width: 12px; height: 12px; border-radius: 6px; background: {{p.color}}; border: 1px solid rgba(255,255,255,0.25); flex-shrink: 0"></span>
+                    <span>{{p.name}}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="margin: 0 10px; padding: 10px; border: 1px solid #2a2a30; border-radius: 8px; background: #17171b">
+                <sc-if value="{{famColour}}" hint-placeholder-val="{{ true }}">
+                  <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+                    <sc-for list="{{swatches}}" as="c" hint-placeholder-count="8">
+                      <span style="width: 22px; height: 22px; border-radius: 4px; background: {{c}}; border: 1px solid rgba(255,255,255,0.15)"></span>
+                    </sc-for>
+                    <span style="flex: 1"></span>
+                    <span style="height: 26px; display: inline-flex; align-items: center; padding: 0 8px; border: 1px solid #34343a; border-radius: 5px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px">#F59E0B</span>
+                  </div>
+                  <div style="margin-top: 8px; font-size: 11px; color: #a1a1aa">W 0 · A 128 · a drag or a typed value is a Local value</div>
+                </sc-if>
+                <sc-if value="{{famIntensity}}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; align-items: center; gap: 10px">
+                    <div style="flex: 1; height: 8px; border-radius: 4px; background: #27272a; position: relative"><div style="position: absolute; left: 0; top: 0; bottom: 0; width: 80%; border-radius: 4px; background: #3b82f6"></div></div>
+                    <span style="height: 26px; display: inline-flex; align-items: center; padding: 0 8px; border: 1px solid #34343a; border-radius: 5px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px">80 %</span>
+                  </div>
+                </sc-if>
+                <sc-if value="{{famPosition}}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; align-items: center; gap: 12px">
+                    <div style="width: 88px; height: 88px; border: 1px solid #34343a; border-radius: 6px; background: #141418; position: relative; flex-shrink: 0">
+                      <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #27272a"></div>
+                      <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: #27272a"></div>
+                      <div style="position: absolute; left: 52px; top: 30px; width: 10px; height: 10px; border-radius: 5px; background: #3b82f6"></div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px">
+                      <span>Pan &#160;10</span><span>Tilt −32</span>
+                      <span style="font-family: Inter, system-ui, sans-serif; color: #60a5fa">Aim…</span>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{famBeam}}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11.5px">
+                    <div style="display: flex; align-items: center; gap: 10px"><span style="width: 40px; color: #a1a1aa">Zoom</span><div style="flex: 1; height: 8px; border-radius: 4px; background: #27272a; position: relative"><div style="position: absolute; left: 0; top: 0; bottom: 0; width: 35%; border-radius: 4px; background: #3b82f6"></div></div></div>
+                    <div style="display: flex; align-items: center; gap: 10px"><span style="width: 40px; color: #a1a1aa">Gobo</span><span>Gobo 3</span></div>
+                  </div>
+                </sc-if>
+              </div>
+              <div style="display: flex; align-items: baseline; gap: 8px; padding: 12px 12px 6px">
+                <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa">{{setFamily}} FX</span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 10px">
+                <sc-if value="{{setRunningShown}}" hint-placeholder-val="{{ true }}">
+                  <span style="height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #3b82f6; border-radius: 999px; background: rgba(59,130,246,0.14); font-size: 12px">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>
+                    {{setRunning}}
+                  </span>
+                </sc-if>
+                <sc-for list="{{setFxPalettes}}" as="p" hint-placeholder-count="2">
+                  <span style="height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #34343a; border-radius: 999px; background: #18181b; font-size: 12px">{{p}}</span>
+                </sc-for>
+                <button type="button" onClick="{{openFx}}" style="height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 1px dashed #52525b; border-radius: 999px; background: transparent; color: #d4d4d8; font: inherit; font-size: 12px; cursor: pointer">+ FX…</button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid #2a2a30; font-size: 11px; color: #a1a1aa">
+                <span>Click a palette: layer · ⌥-click: as values</span>
+                <span style="flex: 1"></span>
+                <button type="button" style="border: 0; background: transparent; color: #60a5fa; font: inherit; font-size: 11.5px; cursor: pointer; padding: 0">Save as palette…</button>
+              </div>
+            </div>
+          </sc-if>
+        </span>
+
+        <button type="button" aria-label="Fan across the selection" style="height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0; cursor: pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V8"/><path d="M12 21 5 6"/><path d="M12 21 19 6"/><circle cx="5" cy="5" r="1.5"/><circle cx="12" cy="7" r="1.5"/><circle cx="19" cy="5" r="1.5"/></svg>
+          <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Fan</span></sc-if>
+        </button>
+
+        <span style="position: {{anchorPos}}; display: inline-flex; flex-shrink: 0">
+          <button type="button" aria-label="Add FX on the selection" aria-expanded="{{fxOpen}}" onClick="{{toggleFx}}" style="{{fxBtnStyle}}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>
+            <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>FX</span></sc-if>
+          </button>
+          <sc-if value="{{fxOpen}}" hint-placeholder-val="{{ false }}">
+            <div role="dialog" aria-label="Add FX on the selection" style="{{fxPopStyle}}">
+              <sc-if value="{{phone}}" hint-placeholder-val="{{ false }}"><div style="width: 36px; height: 4px; border-radius: 2px; background: #3f3f46; margin: 8px auto 2px"></div></sc-if>
+
+              <sc-if value="{{fxListing}}" hint-placeholder-val="{{ true }}">
+                <div style="padding: 10px 10px 6px">
+                  <div role="radiogroup" aria-label="Family" style="display: flex; height: 30px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden">
+                    <sc-for list="{{fxFams}}" as="f" hint-placeholder-count="4">
+                      <button type="button" role="radio" aria-checked="{{f.on}}" onClick="{{f.pick}}" style="{{f.style}}">{{f.label}}</button>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="padding: 0 12px 8px; font-size: 11.5px; color: #d4d4d8">One Local FX over {{headsLabel}}, in rig order</div>
+                <sc-if value="{{fxHolds}}" hint-placeholder-val="{{ true }}">
+                  <div style="margin: 0 10px 10px; padding: 8px; border: 1px solid #3f3f46; border-radius: 8px; background: rgba(251,191,36,0.06)">
+                    <div style="font-size: 11.5px; color: #fcd34d; padding: 0 2px 6px">{{fxHoldsLine}}</div>
+                    <div role="radiogroup" aria-label="Replace or stack" style="display: flex; height: 30px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden">
+                      <button type="button" role="radio" aria-checked="{{fxReplace}}" onClick="{{pickReplace}}" title="Take these heads off it" style="{{replaceStyle}}">Replace</button>
+                      <button type="button" role="radio" aria-checked="{{fxStackOn}}" onClick="{{pickStack}}" title="Add it on top, taking nothing off" style="{{stackStyle}}">Stack</button>
+                    </div>
+                    <div style="font-size: 10.5px; color: #a1a1aa; padding: 6px 2px 0">{{stackNote}}</div>
+                  </div>
+                </sc-if>
+                <div style="display: grid; grid-template-columns: repeat({{fxCols}}, minmax(0, 1fr)); gap: 6px; padding: 0 10px 10px">
+                  <sc-for list="{{fxList}}" as="f" hint-placeholder-count="6">
+                    <button type="button" onClick="{{f.start}}" style="height: {{fxRowH}}px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid #34343a; border-radius: 6px; background: #18181b; color: #fafafa; font: inherit; font-size: 12px; cursor: pointer; text-align: left">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>
+                      <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.name}}</span>
+                    </button>
+                  </sc-for>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid #2a2a30; font-size: 11px; color: #a1a1aa">
+                  <span>A tap starts it · another tap swaps it</span>
+                  <span style="flex: 1"></span>
+                  <span>{{fxPalettesHint}}</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{fxRunning}}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; align-items: center; gap: 8px; padding: 12px 12px 4px">
+                  <span style="width: 8px; height: 8px; border-radius: 4px; background: #22c55e; flex-shrink: 0"></span>
+                  <span style="font-weight: 600; font-size: 13px">{{fxStarted}}</span>
+                  <span style="font-size: 11.5px; color: #a1a1aa">running on {{headsLabel}}</span>
+                </div>
+                <div style="padding: 0 12px 10px; font-size: 11.5px; color: #d4d4d8">{{fxResultLine}}</div>
+                <div style="margin: 0 10px; padding: 10px; border: 1px solid #2a2a30; border-radius: 8px; background: #17171b; display: flex; flex-direction: column; gap: 10px">
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <span style="width: 64px; font-size: 11px; color: #a1a1aa">Cycle</span>
+                    <div style="display: inline-flex; height: 26px; border: 1px solid #34343a; border-radius: 5px; overflow: hidden; font-size: 11.5px">
+                      <span style="padding: 0 8px; display: inline-flex; align-items: center">½ beat</span>
+                      <span style="padding: 0 8px; display: inline-flex; align-items: center; border-left: 1px solid #34343a">1 beat</span>
+                      <span style="padding: 0 8px; display: inline-flex; align-items: center; border-left: 1px solid #34343a; background: #3f3f46">1 bar</span>
+                      <span style="padding: 0 8px; display: inline-flex; align-items: center; border-left: 1px solid #34343a">2 bars</span>
+                    </div>
+                    <span style="font-size: 11px; color: #a1a1aa">M2</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <span style="width: 64px; font-size: 11px; color: #a1a1aa">Amount</span>
+                    <div style="flex: 1; height: 8px; border-radius: 4px; background: #27272a; position: relative"><div style="position: absolute; left: 0; top: 0; bottom: 0; width: {{fxAmountPct}}; border-radius: 4px; background: #3b82f6"></div></div>
+                    <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; width: 40px; text-align: right">{{fxAmountPct}}</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <span style="width: 64px; font-size: 11px; color: #a1a1aa">Direction</span>
+                    <span style="font-size: 13px; letter-spacing: 10px">→ ← ↔</span>
+                    <span style="flex: 1"></span>
+                    <span style="font-size: 11px; color: #a1a1aa">Spread, Shape, Advanced ›</span>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px">
+                  <button type="button" onClick="{{backToList}}" style="height: 30px; padding: 0 10px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; cursor: pointer">‹ Swap</button>
+                  <span style="flex: 1"></span>
+                  <button type="button" title="The FX tab's Selection view, these heads, this FX picked" style="height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #3b82f6; border-radius: 6px; background: rgba(59,130,246,0.12); color: #93c5fd; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+                    Open in FX editor
+                  </button>
+                  <button type="button" onClick="{{closeAll}}" style="height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: #3f3f46; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer">Done</button>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </span>
+
+        <span style="position: {{anchorPos}}; display: inline-flex; flex-shrink: 0">
+          <div style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden">
+            <button type="button" aria-label="{{releaseAria}}" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 0; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+              <sc-if value="{{lap}}" hint-placeholder-val="{{ true }}"><span>Release</span></sc-if>
+              <sc-if value="{{deskCells}}" hint-placeholder-val="{{ true }}"><kbd style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; border: 1px solid #3f3f46; border-radius: 4px; padding: 0 4px; color: #a1a1aa; background: rgba(39,39,42,0.6)">⌫</kbd></sc-if>
+            </button>
+            <button type="button" aria-label="Release options" aria-expanded="{{releaseOpen}}" onClick="{{toggleRelease}}" style="display: inline-flex; align-items: center; padding: 0 5px; border: 0; border-left: 1px solid #34343a; background: {{releaseChevBg}}; color: #a1a1aa; cursor: pointer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+          </div>
+          <sc-if value="{{releaseOpen}}" hint-placeholder-val="{{ false }}">
+            <div role="menu" style="{{releasePopStyle}}">
+              <sc-for list="{{releaseItems}}" as="r" hint-placeholder-count="2">
+                <button type="button" role="menuitem" disabled="{{r.disabled}}" style="display: flex; align-items: flex-start; gap: 9px; padding: 7px 8px; border: 0; border-radius: 5px; background: {{r.bg}}; color: {{r.fg}}; font: inherit; text-align: left; cursor: pointer">
+                  <span style="display: flex; flex-direction: column; flex: 1; min-width: 0">
+                    <span style="font-size: 12px; font-weight: 500">{{r.title}}</span>
+                    <span style="font-size: 10.5px; color: #a1a1aa">{{r.sub}}</span>
+                  </span>
+                  <sc-if value="{{r.key}}" hint-placeholder-val="{{ false }}"><kbd style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; border: 1px solid #3f3f46; border-radius: 4px; padding: 0 4px; color: #a1a1aa; margin-top: 1px">⌫</kbd></sc-if>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </span>
+
+        <!-- WHERE: on the rig (into the heads chip's menu on a phone) -->
+        <sc-if value="{{notPhone}}" hint-placeholder-val="{{ true }}">
+          <span style="flex: 1; min-width: 8px"></span>
+          <div style="display: inline-flex; height: 32px; border: 1px solid #34343a; border-radius: 6px; overflow: hidden; flex-shrink: 0">
+            <button type="button" aria-label="Locate the selection" style="display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 0; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>
+              <sc-if value="{{desk}}" hint-placeholder-val="{{ true }}"><span>Locate</span></sc-if>
+            </button>
+            <button type="button" aria-label="Locate options" style="display: inline-flex; align-items: center; padding: 0 5px; border: 0; border-left: 1px solid #34343a; background: transparent; color: #a1a1aa; cursor: pointer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+          </div>
+          <button type="button" aria-label="Highlight the selection" style="height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0; cursor: pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/><path d="m4.9 4.9 2.1 2.1"/><path d="m17 17 2.1 2.1"/><path d="m4.9 19.1 2.1-2.1"/><path d="m17 7 2.1-2.1"/></svg>
+            <sc-if value="{{desk}}" hint-placeholder-val="{{ true }}"><span>Highlight</span></sc-if>
+          </button>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{noneHint}}" hint-placeholder-val="{{ false }}">
+        <span style="font-size: 11.5px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Drag across cells, or narrow from the heads menu. A Look needs no selection.</span>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- The grid (abridged) -->
+  <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column">
+    <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid #27272a; font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #a1a1aa">
+      <span style="width: {{nameW}}px; flex-shrink: 0">Fixture</span>
+      <span style="width: 90px; flex-shrink: 0">Dimmer</span>
+      <span style="width: {{colW}}px; flex-shrink: 0">Colour</span>
+      <sc-if value="{{showPos}}" hint-placeholder-val="{{ true }}"><span style="width: 150px; flex-shrink: 0">Position</span></sc-if>
+      <sc-if value="{{showBeam}}" hint-placeholder-val="{{ true }}"><span style="width: 130px; flex-shrink: 0">Beam</span></sc-if>
+    </div>
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+      <div style="height: 34px; flex-shrink: 0; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid #1f1f24; background: {{r.rowBg}}">
+        <span style="width: {{nameW}}px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500">{{r.name}}</span>
+        <span style="width: 90px; flex-shrink: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; color: {{r.dimFg}}">{{r.dim}}</span>
+        <span style="width: {{colW}}px; flex-shrink: 0; height: 26px; display: flex; align-items: center; gap: 7px; padding: 0 6px; margin-left: -6px; border-radius: 4px; box-sizing: border-box; {{r.colRing}}">
+          <span style="width: 12px; height: 12px; border-radius: 3px; background: {{r.col}}; flex-shrink: 0"></span>
+          <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #d4d4d8">{{r.colName}}</span>
+          <sc-if value="{{r.fxMark}}" hint-placeholder-val="{{ false }}"><span title="An FX runs here" style="margin-left: auto; width: 6px; height: 6px; border-radius: 3px; background: #a78bfa; flex-shrink: 0"></span></sc-if>
+        </span>
+        <sc-if value="{{showPos}}" hint-placeholder-val="{{ true }}"><span style="width: 150px; flex-shrink: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; color: #a1a1aa">{{r.pos}}</span></sc-if>
+        <sc-if value="{{showBeam}}" hint-placeholder-val="{{ true }}"><span style="width: 130px; flex-shrink: 0; color: #a1a1aa">{{r.beam}}</span></sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- Phone: a scrim under the bottom sheets -->
+  <sc-if value="{{sheetScrim}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 39; background: rgba(0,0,0,0.5)"></div>
+  </sc-if>
+  <!-- Click-away layer for the popovers -->
+  <sc-if value="{{popoverOpen}}" hint-placeholder-val="{{ false }}">
+    <button type="button" aria-label="Close" onClick="{{closeAll}}" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 40; border: 0; background: transparent; cursor: default"></button>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"width":{"editor":"int","default":1280,"min":360,"max":1440},"height":{"editor":"int","default":460},"sel":{"editor":"enum","options":["cells","rows","none"],"default":"cells"},"short":{"editor":"boolean","default":false},"open":{"editor":"enum","options":["none","look","set","fx","sel","record","release"],"default":"none"},"fxStarted":{"editor":"text","default":""},"fxStack":{"editor":"boolean","default":false},"setFamily":{"editor":"enum","options":["Intensity","Colour","Position","Beam"],"default":"Colour"},"$preview":{"width":1280,"height":460}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const rows = props.sel === 'rows';
+    this.state = {
+      open: props.open || 'none',
+      lookOn: { 'Front warm': true },
+      palOn: { 'Amber wash': true },
+      fxFamily: rows ? 'Intensity' : 'Colour',
+      fxStack: props.fxStack === true || props.fxStack === 'true',
+      fxStarted: props.fxStarted || '',
+      setFamily: props.setFamily || (rows ? 'Intensity' : 'Colour')
+    };
+  }
+  renderVals() {
+    const w = Number(this.props.width ?? 1280);
+    const h = Number(this.props.height ?? 460);
+    const sel = this.props.sel ?? 'cells';
+    const short = this.props.short === true || this.props.short === 'true';
+    const desk = w >= 1100, lap = w >= 800, tab = w >= 600, phone = w < 600;
+    const isCells = sel === 'cells', isRows = sel === 'rows', hasSel = sel !== 'none';
+    const st = this.state;
+    const open = st.open;
+    const toggle = (k) => () => this.setState({ open: st.open === k ? 'none' : k, fxStarted: k === 'fx' ? '' : st.fxStarted });
+    const heads = isCells ? 6 : isRows ? 4 : 0;
+    const headsLabel = heads + ' heads';
+
+    const btn = 'height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid #34343a; border-radius: 6px; color: #fafafa; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0; cursor: pointer; ';
+    const seg = (on, first) => 'flex: 1; border: 0; ' + (first ? '' : 'border-left: 1px solid #34343a; ') + 'background: ' + (on ? '#3f3f46' : 'transparent') + '; color: ' + (on ? '#fafafa' : '#a1a1aa') + '; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer';
+    const pop = (wpx, side) => phone
+      ? 'position: absolute; left: 0; right: 0; bottom: 0; z-index: 50; max-height: 78%; overflow-y: auto; background: #1c1c21; border-top: 1px solid #34343a; border-radius: 14px 14px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,0.5); display: flex; flex-direction: column; padding-bottom: 8px'
+      : 'position: absolute; top: 38px; ' + side + ': 0; z-index: 50; width: ' + wpx + 'px; background: #1c1c21; border: 1px solid #34343a; border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,0.55); display: flex; flex-direction: column';
+    const chip = (on, big) => 'height: ' + (big ? 40 : 30) + 'px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px 0 8px; border-radius: 999px; ' +
+      (on ? 'border: 1px solid #3b82f6; box-shadow: 0 0 0 1px #3b82f6; background: rgba(59,130,246,0.14); ' : 'border: 1px solid #34343a; background: #18181b; ') +
+      'color: #fafafa; font: inherit; font-size: 12px; cursor: pointer';
+
+    // Looks
+    const lookDefs = [['Front warm', '12 fixtures'], ['Cold side', '8 fixtures'], ['Ballyhoo', '4 movers · FX'], ['Night', '18 fixtures · scenery'], ['Finale', '24 fixtures']];
+    const looks = lookDefs.map(([name, meta]) => {
+      const on = !!st.lookOn[name];
+      return {
+        name, meta, on,
+        press: () => this.setState({ lookOn: { ...st.lookOn, [name]: !st.lookOn[name] } }),
+        rowStyle: 'display: flex; align-items: center; gap: 9px; height: ' + (phone ? 44 : 34) + 'px; padding: 0 8px; border: 0; border-radius: 6px; background: ' + (on ? 'rgba(59,130,246,0.14)' : 'transparent') + '; color: #fafafa; font: inherit; font-size: 12px; cursor: pointer; ' + (on ? 'box-shadow: inset 0 0 0 1px #3b82f6; ' : '')
+      };
+    });
+
+    // Set: the cell popup, palettes round the editor
+    const famNames = ['Intensity', 'Colour', 'Position', 'Beam'];
+    const setFamily = st.setFamily;
+    const setFams = famNames.map((f, i) => ({ label: f, on: f === setFamily, pick: () => this.setState({ setFamily: f }), style: seg(f === setFamily, i === 0) }));
+    const palByFam = {
+      Intensity: [['Full', '#fafafa'], ['Half', '#a1a1aa'], ['Glow 20 %', '#52525b'], ['Out', '#18181b']],
+      Colour: [['Amber wash', '#f59e0b'], ['CT blue', '#5b8def'], ['Congo', '#4b2a9e'], ['Lavender', '#b4a0e5'], ['Deep red', '#b91c1c'], ['Open white', '#f5f5f4'], ['Moss', '#4d7c0f']],
+      Position: [['Centre stage', '#71717a'], ['DS centre', '#71717a'], ['Audience', '#71717a'], ['Cyc', '#71717a']],
+      Beam: [['Tight', '#71717a'], ['Wide', '#71717a'], ['Gobo 3 + prism', '#71717a'], ['Frost', '#71717a']]
+    };
+    const setPalettes = palByFam[setFamily].map(([name, color]) => ({
+      name, color, on: !!st.palOn[name],
+      press: () => this.setState({ palOn: { ...st.palOn, [name]: !st.palOn[name] } }),
+      chipStyle: chip(!!st.palOn[name], phone)
+    }));
+    const fxPalByFam = { Intensity: ['Slow pulse', 'Chase · 1 beat'], Colour: ['Slow rainbow', 'Amber flicker'], Position: ['Slow circle', 'Ballyhoo sweep'], Beam: ['Zoom wave slow'] };
+
+    // FX: the bare press, Replace · Stack where the family is already running
+    const fxByFam = {
+      Intensity: ['Sine Wave', 'Pulse', 'Ramp', 'Square Wave', 'Flicker', 'Candle Flicker'],
+      Colour: ['Colour Cycle', 'Rainbow Cycle', 'Colour Wave', 'Colour Fade', 'Colour Strobe', 'Colour Flicker'],
+      Position: ['Circle', 'Figure 8', 'Sweep', 'Pan Sweep', 'Tilt Sweep', 'Random Position'],
+      Beam: ['Zoom Wave', 'Iris Pulse', 'Frost Pulse', 'Focus Pull', 'Slot Steps']
+    };
+    const runningOn = isCells ? { Colour: 'Rainbow Cycle on all 6 heads' } : { Intensity: 'Pulse on 4 heads' };
+    const runningName = isCells ? { Colour: 'Rainbow Cycle' } : { Intensity: 'Pulse' };
+    const stackRule = { Intensity: 'Stack starts Within, at 100 %', Colour: 'Stack starts Replace, at 50 %', Position: 'Stack starts Around, at 100 %', Beam: 'Stack starts Replace, at 50 %' };
+    const stackAmount = { Intensity: '100%', Colour: '50%', Position: '100%', Beam: '50%' };
+    const fxFamily = st.fxFamily;
+    const fxFams = famNames.map((f, i) => ({ label: f, on: f === fxFamily, pick: () => this.setState({ fxFamily: f }), style: seg(f === fxFamily, i === 0) }));
+    const holds = runningOn[fxFamily] != null;
+    const fxList = fxByFam[fxFamily].map((name) => ({ name, start: () => this.setState({ fxStarted: name }) }));
+    const started = st.fxStarted;
+    const stacking = holds && st.fxStack;
+    const fxResultLine = !holds ? 'A new Local FX — nothing else of ' + fxFamily + ' ran on these heads'
+      : stacking ? 'Stacked over ' + runningName[fxFamily] + ' · ' + stackRule[fxFamily].replace('Stack starts ', '')
+      : 'Replaced ' + runningName[fxFamily] + ' on these heads';
+
+    const recordItems = [
+      { title: 'Q4 Warm wash', sub: 'Update the cue you are editing', bg: 'transparent', sep: false, isNew: false },
+      { title: 'A new cue after Q4', sub: 'Main stack · appended', bg: 'transparent', sep: false, isNew: false },
+      { title: 'A new Look', sub: 'Names its own fixtures', bg: 'transparent', sep: false, isNew: false },
+      { title: 'A new palette', sub: hasSel ? 'From the selection’s ' + (isCells ? '6 cells' : '4 heads') : 'Select heads first', bg: 'rgba(251,191,36,0.08)', sep: false, isNew: true },
+      { title: 'An existing cue…', sub: 'Pick any cue by name', bg: 'transparent', sep: true, isNew: false }
+    ];
+    const releaseItems = [
+      { title: 'These 6 cells', sub: isCells ? 'Their values leave Local' : 'Pick cells first', key: true, disabled: !isCells, bg: isCells ? 'rgba(250,250,250,0.05)' : 'transparent', fg: isCells ? '#fafafa' : '#71717a' },
+      { title: 'The whole ' + headsLabel, sub: 'Every value and Local FX on them', key: false, disabled: false, bg: isCells ? 'transparent' : 'rgba(250,250,250,0.05)', fg: '#fafafa' }
+    ];
+
+    const rowDefs = [
+      ['Front wash 1', '80%', '#f59e0b', 'Amber wash', '—', '—'],
+      ['Front wash 2', '80%', '#f59e0b', 'Amber wash', '—', '—'],
+      ['Front wash 3', '80%', '#f59e0b', 'Amber wash', '—', '—'],
+      ['Front wash 4', '80%', '#f59e0b', 'Amber wash', '—', '—'],
+      ['MAC 250 1', '65%', '#5b8def', 'CT blue', 'pan 10 · tilt −32', 'Gobo 3 · Prism'],
+      ['MAC 250 2', '65%', '#5b8def', 'CT blue', 'pan 22 · tilt −32', 'Gobo 3 · Prism'],
+      ['Hex 1', '—', '#3f3f46', '—', '—', '—'],
+      ['Hex 2', '—', '#3f3f46', '—', '—', '—'],
+      ['Shehds bar 1', '—', '#3f3f46', '—', '—', '—'],
+      ['Shehds bar 2', '—', '#3f3f46', '—', '—', '—'],
+      ['Slender beam 1', '—', '#3f3f46', '—', '—', '—'],
+      ['Slender beam 2', '—', '#3f3f46', '—', '—', '—'],
+      ['Twin Shot', '—', '#3f3f46', '—', '—', '—']
+    ];
+    const rows = rowDefs.map(([name, dim, col, colName, pos, beam], i) => ({
+      name, dim, col, colName, pos, beam,
+      fxMark: isCells && i < 6,
+      dimFg: dim === '—' ? '#52525b' : '#93c5fd',
+      rowBg: isRows && i < 4 ? 'rgba(250,250,250,0.06)' : 'transparent',
+      colRing: isCells && i < 6 ? 'background: rgba(250,250,250,0.08); box-shadow: inset 0 0 0 1.5px #a1a1aa' : ''
+    }));
+
+    const maskOn = isCells;
+    const sheetOpen = phone && (open === 'look' || open === 'set' || open === 'fx' || open === 'release');
+    const popoverOpen = open !== 'none';
+
+    return {
+      w, h, desk, lap, tab, phone, notPhone: !phone, short, notShort: !short,
+      anchorPos: phone ? 'static' : 'relative',
+      seamMargin: short ? '0' : 'auto',
+      srcName: w >= 700, srcWords: desk,
+      minorWords: desk, fadeW: tab ? 86 : 48,
+      lookOpen: open === 'look', recordOpen: open === 'record', selOpen: open === 'sel', releaseOpen: open === 'release',
+      setOpen: open === 'set', fxOpen: open === 'fx',
+      sheetScrim: sheetOpen, popoverOpen,
+      toggleLook: toggle('look'), toggleRecord: toggle('record'), toggleSel: toggle('sel'), toggleRelease: toggle('release'),
+      toggleSet: toggle('set'), toggleFx: toggle('fx'),
+      openFx: () => this.setState({ open: 'fx', fxFamily: setFamily, fxStarted: '' }),
+      closeAll: () => this.setState({ open: 'none' }),
+      lookBtnStyle: btn + 'background: ' + (open === 'look' ? '#27272a' : 'transparent') + ';',
+      lookPopStyle: pop(360, 'right'),
+      looks, recordItems, releaseItems,
+      releasePopStyle: phone ? pop(0, 'left') + '; padding: 6px 6px 12px' : 'position: absolute; top: 38px; left: 0; z-index: 50; width: 286px; background: #1c1c21; border: 1px solid #34343a; border-radius: 8px; box-shadow: 0 16px 40px rgba(0,0,0,0.55); padding: 6px; display: flex; flex-direction: column; gap: 1px',
+
+      isRows, setFams, setFamily, setPalettes, headsLabel,
+      setPopStyle: pop(400, 'left'),
+      setBtnStyle: btn + 'background: ' + (open === 'set' ? '#27272a' : 'transparent') + ';',
+      setAria: isCells ? 'Set the 6 selected cells' : 'Set an attribute on the 4 heads',
+      setTitle: isCells ? 'Set the 6 cells — palettes, the value, its FX (⏎)' : 'Set an attribute on the 4 heads — pick which first',
+      famColour: setFamily === 'Colour', famIntensity: setFamily === 'Intensity', famPosition: setFamily === 'Position', famBeam: setFamily === 'Beam',
+      swatches: ['#f59e0b', '#ef4444', '#ec4899', '#a855f7', '#3b82f6', '#06b6d4', '#22c55e', '#fafafa'],
+      setRunningShown: runningName[setFamily] != null,
+      setRunning: (runningName[setFamily] || '') + ' · 1 bar',
+      setFxPalettes: fxPalByFam[setFamily],
+
+      fxBtnStyle: btn + 'background: ' + (open === 'fx' ? '#27272a' : 'transparent') + ';',
+      fxPopStyle: pop(440, 'left'),
+      fxFams, fxList, fxCols: phone ? 2 : 3, fxRowH: phone ? 44 : 30,
+      fxListing: started === '', fxRunning: started !== '', fxStarted: started,
+      fxHolds: holds,
+      fxHoldsLine: holds ? (runningOn[fxFamily] + ' already') : '',
+      fxReplace: !st.fxStack, fxStackOn: st.fxStack,
+      pickReplace: () => this.setState({ fxStack: false }), pickStack: () => this.setState({ fxStack: true }),
+      replaceStyle: seg(!st.fxStack, true), stackStyle: seg(st.fxStack, false),
+      stackNote: st.fxStack ? stackRule[fxFamily] + ' — takes nothing off' : 'Takes these heads off it, as a press does today',
+      fxPalettesHint: fxFamily + ' FX palettes are in Set',
+      fxResultLine,
+      fxAmountPct: stacking ? stackAmount[fxFamily] : '100%',
+      backToList: () => this.setState({ fxStarted: '' }),
+
+      outLabel: w >= 520 ? 'Output' : 'Out',
+      rowCShown: !(short && !hasSel),
+      rowCBg: hasSel ? 'rgba(250,250,250,0.05)' : 'transparent',
+      hasSel, deskCells: desk && isCells,
+      chipX: hasSel && !phone,
+      noneHint: !hasSel && lap,
+      chipAria: hasSel ? 'Selection: ' + headsLabel + (isCells ? ', 6 cells' : '') + ' — following the desk. Open to narrow, follow or deselect' : 'Nothing selected — following the desk. Open to select',
+      chipBg: open === 'sel' ? '#27272a' : 'transparent',
+      chipFg: hasSel ? '#fafafa' : '#a1a1aa',
+      countWeight: hasSel ? 600 : 400,
+      countLabel: !hasSel ? 'Nothing selected' : isRows ? '4 heads' : tab ? '6 heads · 6 cells' : '6 cells',
+      maskLabel: !maskOn ? 'All' : lap ? 'Colour' : 'Col',
+      maskAria: 'Mask: ' + (maskOn ? 'Colour' : 'every attribute') + ' — what the next press carries',
+      maskStyle: btn + (maskOn ? 'border-color: rgba(59,130,246,0.55); background: rgba(59,130,246,0.12); color: #93c5fd;' : 'background: transparent; color: #d4d4d8;'),
+      releaseAria: isCells ? 'Release the 6 selected cells' : 'Release the 4 heads',
+      releaseChevBg: open === 'release' ? '#27272a' : 'transparent',
+      subsets: ['All', 'Odd', 'Even', '1st half', '2nd half', 'Invert'],
+      nameW: phone ? 130 : 200, colW: phone ? 150 : 170,
+      showPos: w >= 768, showBeam: w >= 1024,
+      rows
+    };
+  }
+}
+</script>
+</body>
+</html>
