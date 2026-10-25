@@ -1,6 +1,6 @@
 # Terminology: one vocabulary across the desk, the code and the archive, in MagicQ's words where they fit
 
-> **Document status: AGREED 2026-10-23; session 6 of 7 done.** The questions asked and their answers are in
+> **Document status: AGREED 2026-10-23; all 7 sessions done.** The questions asked and their answers are in
 > §11. The survey behind them is a one-page artifact for human readers,
 > <https://claude.ai/artifact/8Nu94UPNfSvrBmyQcdpd9V>, private to Chris and a convenience; this plan
 > is the authority.
@@ -292,7 +292,7 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
 - An FX's `panCenter` / `tiltCenter` parameters → `panCentre` / `tiltCentre`, moved from session 5
   for the same reason: they are stored in every Look, cue and palette FX's parameters.
 
-### Session 7: the docs sweep (docs)
+### Session 7: the docs sweep (docs) — done, `e85b98e`
 
 - Every engineering doc on the glossary's words: tiers in `lighting-composition-model.md`; *project*
   where docs say show; `fx-engineering.md`'s FX tables regenerated from the frontmatter, which adds
