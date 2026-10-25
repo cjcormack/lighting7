@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils'
  * say *Desk* would draw them, and the parts' folds below are written for both.
  *
  * `subject` is a word like *Targets* or *Page*, drawn muted before the value, where the pair is on
- * screen together and omitted where a chip is alone (the programmer's row C). `from` is the mover's
+ * screen together and omitted where a chip is alone. `from` is the mover's
  * name, drawn muted after it. **Each part takes a class of its own** (D19): a chip gives up the
  * suffix first, then its subject, then the value truncates — each at a rung the *host* measures
  * for the row the chip sits on, which is why the classes come in rather than being chosen here.

@@ -51,9 +51,8 @@ export interface ScrollEdgesOptions {
  * State is written only when one of the three flags actually flips, so a scroll listener at frame
  * rate costs no renders.
  *
- * It replaced three near-identical hand-rolled copies — `PaletteStrip`'s `useScrollerOverflows`,
- * `StackTabStrip`'s inline `{left, right}` and `FixturesTable`'s own — which shared all of that
- * mechanism and differed only in which of the three answers they wanted. Hence three fields rather
+ * Its callers — `StackTabStrip` and `FixturesTable` among them — share all of that mechanism and
+ * differ only in which of the three answers they want. Hence three fields rather
  * than a derivation: `overflows` is **not** `left || right` at the edges (a scroller overflowing by
  * two pixels and sitting one pixel in reports neither), and one of the three callers is drawing a
  * mask that must stay up at the end of the travel while another is drawing a chevron that must not.
@@ -91,7 +90,7 @@ export function useScrollEdges<T extends HTMLElement>(
    * puts `ref={attach}` on the scroller instead of its own ref.
    *
    * A `RefObject` gives no signal when it is filled, and two of these scrollers are rendered
-   * **conditionally** — the template strip appears with the selection, the fixtures table with a
+   * **conditionally** — a strip that appears with the selection, the fixtures table with a
    * non-empty list — so the element mounts *after* an effect reading `ref.current` has already
    * run and returned early. Nothing in that effect's dependencies then changes, so it never runs
    * again and the observers are never attached at all: the value then moves only on the

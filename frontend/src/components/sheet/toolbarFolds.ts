@@ -26,24 +26,20 @@
 export const WORD_CLASS = 'hidden sm:inline group-data-[strip]/bar:@max-[1100px]:hidden'
 
 /**
- * Where Locate, Highlight and Spread go on a phone-width programmer bar, and Deselect does not.
- * Set and Clear stay too — see `CellSelectionActions`.
+ * Where the bar's phone arm folds a control, and Deselect does not. Set and Clear stay too — see
+ * `CellSelectionActions`.
  *
- * `PD-SELECTION-BAR-DENSITY` and `PD-CLEAR-SELECTION-TOUCH`, decided together because they pull
- * against each other: the chips are the only thing on that row an operator presses, so the width
- * goes to them, and the one control the row keeps at every width is the one a phone has no other
- * way to do — Escape is a key, and "click off" needs empty grid space a full list has none of.
- * This is what the `Phone` artboard draws: glyph · count · chips · New · X. The three folded here
- * are not lost — Locate and Highlight are on the busk target band, and Spread comes back with the
- * width.
+ * `PD-CLEAR-SELECTION-TOUCH`: the one control the row keeps at every width is the one a phone has
+ * no other way to do — Escape is a key, and "click off" needs empty grid space a full list has none
+ * of.
  *
  * Same container rule as `WORD_CLASS`: the bar's wrapper is the container on every list, the two
  * plain routes included. `@[600px]` is the bar's phone arm — the threshold row B's key button
  * already uses for "this grid column is a phone's".
  *
- * Exported because the programmer's `SelectionBar` folds its own counts and badge at the same
- * width: one constant, so the two halves of one row cannot fold at different thresholds. The
- * import runs this way round — the bar already depends on this toolbar, never the reverse.
+ * Exported because the kit's `SelectionBar` folds its counts and badge at the same width: one
+ * constant, so the two halves of one row cannot fold at different thresholds. (The programmer's
+ * row C has a ladder of its own, `programmer/rowCFolds.ts`.)
  */
 export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
 
@@ -51,9 +47,8 @@ export const PHONE_FOLDED_CLASS = '@max-[600px]:hidden'
  * Where **Locate and Highlight** go on a bar with a strip, which is earlier than everything else
  * on the row — the same `data-strip` gate as [WORD_CLASS], and for the same reason.
  *
- * The template row needs the width. `All · n` and `New` are fixed, the chips are what an operator
- * presses, and an iPad portrait's row C is ~800px — enough for two recent chips once these two
- * buttons and the fixture count have gone, and enough for none while they are there.
+ * Whatever rides the strip needs the width; on a bar with nothing riding it these two keep
+ * their place.
  *
  * They are the right two to lose first because neither is lost: both are on the busk view's target
  * band, and both are momentary aids rather than gestures the grid depends on — unlike Set, Clear

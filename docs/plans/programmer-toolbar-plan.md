@@ -113,7 +113,7 @@ each session deletes or rewrites a test file another suite imports from. A sessi
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Row C: three clusters, the heads chip, Set on rows, Release, no strip | planned | | | |
+| 1 | Row C: three clusters, the heads chip, Set on rows, Release, no strip | in review | claude/amazing-wozniak-7r87f8 | | |
 | 2 | + Look in row A, and FX on row C with Replace · Stack | planned | | | |
 | 3 | ⌘K's Programmer and Selection groups | planned | | | |
 
@@ -157,6 +157,22 @@ the next; whoever merges the last fills its own.
   desk-follow paragraph's line about the programmer's chip (D5), and every other mention of
   `PaletteStrip` (`grep -rn PaletteStrip frontend docs`); `docs/plans/followups.md` line 2526's
   reference to the strip.
+- **What the code said, recorded at the session** (where this section was wrong or silent):
+  - *Set is still refused by the scope.* D6's "never drawn disabled" is about the selection's
+    shape; in Output and on a focused palette layer Set stays disabled with `cellActionCopy`'s
+    reason, since the keyboard refuses ⏎ there and a button must not promise what the key refuses.
+  - *The unlinked subset* runs `cellsSubSelection.ts` over the list's own rows, read as targets with
+    the bridge's `selectedRowTargets` and back with its `rowIdsForTargets` (`useListSelectionWrites`),
+    not over the busk view's `sessionStorage` copy, which the programmer does not use.
+  - *The phone arm is measured, not a class.* Below 600 the row changes components (bottom sheets,
+    the chip's count and menu), which a container query cannot do, so the bar measures itself
+    (`useContainerBand`) and hands the answer down (`ToolbarPhoneContext`); every other rung is a
+    container class (`rowCFolds.ts`).
+  - *Fan's word* is `SpreadPanel`'s `WORD_CLASS`, which folds with the strip's 1100 rung; it gained
+    an optional `wordClass` so row C can keep it to 800 (P3: no other host passes it).
+  - *The heads chip counts cells alone under 640 of the row*, not only on a phone (§9's band).
+  - *Record ▾ opens on an empty programmer* (off only in a venue), so *A new palette* is reachable
+    with a selection and nothing recorded; its Record destinations are disabled there instead.
 
 ### Session 2 — + Look in row A, and FX on row C with Replace · Stack
 
@@ -223,7 +239,22 @@ change might fire, per CLAUDE.md.
   and a phone; row C reads in its three clusters at each width with nothing clipped; each subset
   narrows the selection on the rig as the busk band does; Set on rows lands the chosen family's
   popup; Release's face and arms release what they say; a second window following the desk sees
-  each change. Measured widths: *to fill in*.
+  each change. Measured widths (2026-10-25, Chromium, a desk with 4 hexes, 2 MAC 250s, a Shehds bar
+  and a par; a marquee over 4 heads' Dimmer and Colour, so the mask reads *Intensity · Colour*):
+
+  | Window | Row C | Arm | Content needs | Overflow |
+  |---|---|---|---|---|
+  | 1440 × 900 | 1200 | every word, ⏎ ⌫ | 942 (chip 183, what 316, where 233) | none |
+  | 1100 × 800 | 860 | Locate, Highlight iconic | 782 | none |
+  | 900 × 800 | 660 | iconic, mask *Int · Col* | 610 → 554 with the 640 fold | none |
+  | 700 × 800 | 700 | iconic | 610 | none |
+  | 605 × 800 | 605 | iconic, cells only | 554 | none |
+  | 852 × 393 | 612 | iconic, cells only (short) | 561 | none |
+  | 390 × 844 | 390 | phone: chip, mask glyph, Set · Fan · Release ▾ | 342 | none |
+
+  The boards' ladder held but for one band: the 600–799 arm needed 610px, so a row of 600–609
+  overflowed and the 852 × 393 phone's 612 had 2px to spare. Under 640 of the row the heads chip
+  now counts cells alone, as on a phone, which brings that arm to 554.
 - **Session 2:** + Look lights the Look and lands it whole; FX on heads already running a Colour FX
   asks Replace · Stack, and Stack leaves both running at the family's starting blend; ⤢ opens the
   FX editor with the FX picked and its graph drawing.

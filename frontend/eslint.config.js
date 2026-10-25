@@ -124,6 +124,7 @@ export default [
       "src/components/editor/ColourEditor.tsx",
       "src/components/fixtureSheet/HeadStrip.tsx",
       "src/components/fixtures-list/useClearCellFx.ts",
+      "src/components/fixtures-list/useListSelectionWrites.ts",
       "src/components/groups/CompactFixtureCard.tsx",
       "src/components/groups/FixtureDetailModal.tsx",
       "src/components/groups/GroupMembersSection.tsx",

@@ -33,17 +33,17 @@ import {
 } from '../sheet/cellEntry'
 import { focusedByPointer, usePointerFocusTracking } from '../sheet/pointerFocus'
 import { editorIsOpen } from '../editor/EditorSurface'
-import { cellFamilies, resolutionAttributeNames } from './columns'
+import { cellFamilies, columnFamily, columnLabel, resolutionAttributeNames } from './columns'
 import { familiesKey } from '../../lib/selectionMask'
 import { headName } from '../../lib/headName'
 import { cellFxKey } from './cellFx'
 import { useClearCellFx } from './useClearCellFx'
-import { arrowOfKey, type CellArrow, type CellRef } from '../sheet/cellSelectionModel'
+import { arrowOfKey, describeCellScope, type CellArrow, type CellRef } from '../sheet/cellSelectionModel'
 
 /** This list's cell, over its closed column vocabulary. */
 type FixtureCellRef = CellRef<ColumnKey>
 import { arrowStepTarget, type ListSelectIntent } from '../sheet/listSelectionModel'
-import type { AttributeFamily } from '../../lib/attributeFamily'
+import { FAMILY_LABELS, PALETTE_FAMILY_ORDER, type AttributeFamily } from '../../lib/attributeFamily'
 import {
   ColumnsMenu,
   useColumnVisibility,
@@ -86,7 +86,17 @@ import { FixturesTable } from './FixturesTable'
 import { SelectionToolbar } from './SelectionToolbar'
 import { SelectionBar as ListSelectionBar } from '../programmer/SelectionBar'
 import { SheetPage } from '../sheet/SheetPage'
-import { PHONE_FOLDED_CLASS, WORD_CLASS } from '../sheet/toolbarFolds'
+import { PHONE_FOLDED_CLASS } from '../sheet/toolbarFolds'
+import { HighlightButton, LocateControl, useRigVerbs } from './RigVerbs'
+import { useListSelectionWrites } from './useListSelectionWrites'
+import { SetButton, type SetFamilyChoice } from '../programmer/SetButton'
+import type { HeadsChipParts } from '../programmer/SelectionBar'
+import {
+  ROW_C_KBD_CLASS,
+  ROW_C_RIG_CLASS,
+  ROW_C_RIG_WORD_CLASS,
+  ROW_C_VERB_WORD_CLASS,
+} from '../programmer/rowCFolds'
 import { ReleaseTargetsButton } from '../fixtureSheet/ReleaseTargetsButton'
 import type { ReleaseTarget } from '../fixtureSheet/useRelease'
 import { CellSelectionActions } from '../sheet/CellSelectionActions'
@@ -176,7 +186,7 @@ export interface FixturesListContainerProps {
    * caller can re-arrange them without re-implementing their state.
    *
    * Exists because the programmer view scatters them: the scope band and Groups join the filter on
-   * row B, and the template strip rides the selection bar. Absent — the two plain list routes —
+   * row B, and row C is the programmer's three clusters. Absent — the two plain list routes —
    * draws the shell's own two rows (CLAUDE.md §List shell), which are the same rows on the same
    * classes, so a plain list and the programmer cannot differ by a pixel above the grid.
    */
@@ -186,10 +196,14 @@ export interface FixturesListContainerProps {
     columns: React.ReactNode
     /**
      * Null when nothing *visible* is selected; the caller should render nothing rather than a
-     * shell. Rows or cells — the two are one selection, and this toolbar serves both, with the
-     * cell verbs (Set · Clear · Spread) drawn first when it is cells.
+     * shell. Rows or cells — the two are one selection. On the programmer it is row C's right-hand
+     * cluster, Locate ▾ · Highlight (programmer-toolbar plan D3); elsewhere the whole toolbar.
      */
     selection: React.ReactNode | null
+    /** The programmer's *what to do to them* — Set · Fan · Release ▾ — or null; null on the plain lists. */
+    actions: React.ReactNode | null
+    /** The programmer's heads chip, less what the bar supplies; null on the plain lists. */
+    heads: HeadsChipParts | null
     /** The marquee's cells, for a scope label beside the fixture count. Empty when none. */
     cells: readonly FixtureCellRef[]
     /**
@@ -202,19 +216,10 @@ export interface FixturesListContainerProps {
     /** True when Backspace / Delete — or the toolbar's Clear — would take the selected cells out of Local. */
     cellClearKey: boolean
     /**
-     * Where a template press lands: the cells' fixtures when there is a marquee, otherwise the
-     * selected rows'. Already `{type: 'fixture', key}`, so the strip sends it as it is.
+     * Where a palette press lands: the cells' heads when there is a marquee, otherwise the selected
+     * rows'. Already `{type: 'fixture', key}` — what the bar counts as heads.
      */
     paletteTargets: readonly LocateTarget[]
-    /** The families those targets can take at all — the capability half of the strip's filter. */
-    targetFamilies: readonly AttributeFamily[]
-    /**
-     * The bundled colour emitters those targets have — `white` / `amber` / `uv`.
-     *
-     * The rest of that filter. A template naming an emitter refuses on a head without it *whole*,
-     * and the family cannot say which: every emitter is COLOUR.
-     */
-    targetEmitters: readonly string[]
     /**
      * A marquee drag is in flight.
      *
@@ -360,7 +365,7 @@ export function FixturesListContainer({
   // cells clears the rows, selecting rows clears the cells, and every consumer below reads
   // `selectedRowIds`, which is the cells' rows when there is a marquee and the row selection
   // otherwise. So a marquee *is* the fixture selection, narrowed to some of their attributes —
-  // Record, Locate, the desk's select LEDs and the template strip all see the same heads.
+  // Record, Locate, the desk's select LEDs and a palette press all see the same heads.
   //
   // Enforced at the two doors rather than by an effect reconciling after the fact, because an
   // effect would have to guess which of two non-empty states was the newer one. The cell door
@@ -972,6 +977,92 @@ export function FixturesListContainer({
   }, [])
   const routeProjectId = Number.isFinite(projectId) ? projectId : undefined
 
+  // ── The programmer's row C (programmer-toolbar plan D3–D7) ───────────────────────────────────
+  //
+  // Its own verbs rather than the plain lists' `SelectionToolbar`, which keeps drawing those two
+  // routes exactly as before. The heads chip's subset and colour writes land on whichever selection
+  // this window is on (`useListSelectionWrites`); the rig verbs are one hook, so the buttons and the
+  // phone menu's items cannot act on different heads.
+  const isProgrammer = selectionScope === 'programmer'
+  // A ⌥ *Select by colour* over an unlinked marquee widens it to the added rows in its own columns.
+  const addRowsToMarquee = useCallback(
+    (ids: readonly RowId[]) => {
+      const cols = [...new Set(cellSelection.cells.map((cell) => cell.col))]
+      const hits = ids.flatMap((id) => {
+        const row = rowById.get(id)
+        if (row == null || row.kind === 'divider') return []
+        return buildRowCells(row, cols).map((cell) => ({ rowId: row.id, col: cell.col }))
+      })
+      if (hits.length > 0) selectCells([...cellSelection.cells, ...hits], 'replace')
+    },
+    [cellSelection.cells, rowById, selectCells],
+  )
+  const listWrites = useListSelectionWrites({
+    enabled: isProgrammer,
+    following: followingDesk,
+    projectId: routeProjectId,
+    rows,
+    selectedRowIds,
+    cells: cellSelection.cells,
+    setRows,
+    addRowsToMarquee,
+  })
+  const rigVerbs = useRigVerbs(locateTargets, selectedTargets)
+  // The verbs' owner outlives the buttons: a selection emptied mid-hold — Escape, the chip's
+  // Deselect, a write from another screen — unmounts Highlight before its release, so let go here.
+  const releaseHighlight = rigVerbs.highlight.release
+  const nothingSelected = locateTargets.length === 0
+  useEffect(() => {
+    if (nothingSelected) releaseHighlight()
+  }, [nothingSelected, releaseHighlight])
+  const colourKeys = useMemo(() => new Set(fixtures.map((fixture) => fixture.key)), [fixtures])
+
+  // **Set on whole rows** (D6): which families the selected rows have a shown column for, and the
+  // pick that selects those rows' cells in that family's columns — a marquee, so the mask becomes
+  // the family — then opens the popup as Set does, once the cells have landed.
+  const selectedRows = useMemo(
+    () => (isProgrammer && cellCount === 0 ? rows.filter((row) => row.kind !== 'divider' && selectedRowIds.has(row.id)) : []),
+    [isProgrammer, cellCount, rows, selectedRowIds],
+  )
+  const setFamilyCells = useCallback(
+    (family: AttributeFamily): FixtureCellRef[] => {
+      const cols = visibleColumns.filter((col) => columnFamily(col) === family)
+      if (cols.length === 0) return []
+      return selectedRows.flatMap((row) => buildRowCells(row, cols).map((cell) => ({ rowId: row.id, col: cell.col })))
+    },
+    [selectedRows, visibleColumns],
+  )
+  const setFamilies = useMemo<SetFamilyChoice[]>(
+    () =>
+      selectedRows.length === 0
+        ? []
+        : PALETTE_FAMILY_ORDER.map((family) => {
+            const label = FAMILY_LABELS[family].singular
+            const refused = !visibleColumns.some((col) => columnFamily(col) === family)
+              ? `No ${label} column is shown — turn one on in Columns`
+              : setFamilyCells(family).length === 0
+                ? `None of these heads has a ${label} column shown`
+                : null
+            return { family, refused }
+          }),
+    [selectedRows, visibleColumns, setFamilyCells],
+  )
+  const [setPending, setSetPending] = useState(false)
+  const pickSetFamily = useCallback(
+    (family: AttributeFamily) => {
+      const hits = setFamilyCells(family)
+      if (hits.length === 0) return
+      selectCells(hits, 'replace')
+      setSetPending(true)
+    },
+    [setFamilyCells, selectCells],
+  )
+  useEffect(() => {
+    if (!setPending || cellSelection.cells.length === 0) return
+    setSetPending(false)
+    toggleCellEditor()
+  }, [setPending, cellSelection.cells, toggleCellEditor])
+
   // The marquee has to be counted, or the editor's label line says "1 head" while the commit
   // writes six hundred. **One batch per marquee column**, keyed by column: a commit from a cell in
   // column X lands on column X's targets alone (`commitToCells` shape-filters the rest), so what an
@@ -1362,33 +1453,15 @@ export function FixturesListContainer({
     />
   )
 
-  // The cell verbs — Set, Clear, Spread — with the container's own gate and words behind them, so
-  // a button cannot promise a gesture the keyboard refuses. Set *is* Enter: the same request, the
-  // same first cell, the same commit to every selected cell.
+  // The two plain lists' verbs. The cell verbs — Set, Clear, Fan — with the container's own gate
+  // and words behind them, so a button cannot promise a gesture the keyboard refuses. Set *is*
+  // Enter: the same request, the same first cell, the same commit to every selected cell.
   //
-  // A rows-only selection gets the *row* Spread instead — over the whole selection, column chosen
-  // in the panel: a row selection is made by dragging the name column, by ⌘A or from another
-  // surface, and spreading a colour across eight whole heads without first drawing a rectangle over
-  // one of their columns is a real gesture. On the programmer Release follows it.
-  // *Release n* (fixture-fx-sheets plan D18): on the programmer, over the rows the selection covers —
-  // a marquee's rows or a row selection — one `clearTarget` per target, after Spread. The targets
-  // are Locate's (`selectedRowTargets`): a group row stays the group, an element row is that head,
-  // by its own key (the desk resolves it). Live in Local and Output — it is a programmer verb, like
-  // the action bar's Clear, and Output is a view — and refused with the reason while a Look or
-  // template layer is focused, where the band says writes go to the layer and a Local wipe would
-  // surprise (Chris's call, session 5 review).
-  const releaseControl =
-    showOwnership && locateTargets.length > 0 ? (
-      <ReleaseTargetsButton
-        targets={releaseTargets}
-        wordClass={WORD_CLASS}
-        className={PHONE_FOLDED_CLASS}
-        disabledReason={
-          scope?.kind === 'layer' ? `Release clears Local — focus Local first; edits here go to ${scopeLabel}` : undefined
-        }
-      />
-    ) : null
-  const selectionActions =
+  // A rows-only selection gets the *row* Fan instead — over the whole selection, column chosen in
+  // the panel: a row selection is made by dragging the name column, by ⌘A or from another surface,
+  // and fanning a colour across eight whole heads without first drawing a rectangle over one of
+  // their columns is a real gesture.
+  const plainActions =
     cellCount > 0 ? (
       <CellSelectionActions
         copy={cellActionCopy(scope, focusedPalette != null, cellCount)}
@@ -1400,41 +1473,93 @@ export function FixturesListContainer({
           <SpreadPopover
             columns={columnTargets}
             projectId={routeProjectId}
-            desk={selectionScope === 'programmer'}
             scopeLabel={scopeLabel}
             seed={spreadSeed}
             onSeedConsumed={consumeSpreadSeed}
             className={PHONE_FOLDED_CLASS}
           />
         }
-        release={releaseControl}
       />
     ) : selectedTargets.length > 0 ? (
-      <>
-        <SpreadPopover
-          columns={rowSpreadColumns}
-          projectId={routeProjectId}
-          desk={selectionScope === 'programmer'}
-          scopeLabel={scopeLabel}
-          className={showOwnership ? PHONE_FOLDED_CLASS : undefined}
-        />
-        {releaseControl}
-      </>
-    ) : (
-      releaseControl
-    )
+      <SpreadPopover columns={rowSpreadColumns} projectId={routeProjectId} scopeLabel={scopeLabel} />
+    ) : null
 
   // Gate on VISIBLE selected rows, not the raw selection count — filtering away every selected row
   // must not leave a live toolbar acting on an empty set.
-  const selectionControl =
+  const plainControl =
     locateTargets.length > 0 ? (
-      <SelectionToolbar
-        locateTargets={locateTargets}
-        targets={selectedTargets}
-        onClear={clearByLadder}
-        actions={selectionActions}
-      />
+      <SelectionToolbar verbs={rigVerbs} onClear={clearByLadder} actions={plainActions} />
     ) : null
+
+  // The programmer's row C, in its two right-hand clusters (D3): *what to do to them* — Set ⏎ ·
+  // Fan · Release ⌫ ▾ — and *where they are on the rig*, Locate ▾ · Highlight, which the bar pushes
+  // to the right edge. Its left cluster, the heads chip and the mask, is the bar's (`heads` below).
+  // There is no cell Clear any more (D7): Release's cell arm is the same gesture as ⌫. Its heads
+  // arm (fixture-fx-sheets plan D18) is one `clearTarget` per target — Locate's targets, a group row
+  // the group and an element row that head — live in Local and Output, and refused with the reason
+  // while a Look or palette layer is focused, where writes go to the layer and a Local wipe would
+  // surprise.
+  const cellCopy = cellActionCopy(scope, focusedPalette != null, cellCount)
+  const programmerActions =
+    locateTargets.length > 0 ? (
+      <>
+        <SetButton
+          cells={cellCount}
+          heads={paletteTargets.length}
+          setRef={setButtonRef}
+          onSet={toggleCellEditor}
+          families={setFamilies}
+          onPickFamily={pickSetFamily}
+          refused={keys.entry ? null : cellCopy.setTitle}
+          wordClass={ROW_C_VERB_WORD_CLASS}
+          kbdClass={ROW_C_KBD_CLASS}
+        />
+        <SpreadPopover
+          columns={cellCount > 0 ? columnTargets : rowSpreadColumns}
+          projectId={routeProjectId}
+          desk
+          scopeLabel={scopeLabel}
+          seed={cellCount > 0 ? spreadSeed : undefined}
+          onSeedConsumed={cellCount > 0 ? consumeSpreadSeed : undefined}
+          wordClass={ROW_C_VERB_WORD_CLASS}
+        />
+        <ReleaseTargetsButton
+          targets={releaseTargets}
+          wordClass={ROW_C_VERB_WORD_CLASS}
+          disabledReason={
+            scope?.kind === 'layer' ? `Release clears Local — focus Local first; edits here go to ${scopeLabel}` : undefined
+          }
+          cells={{
+            count: cellCount,
+            heads: paletteTargets.length,
+            onRelease: clearSelectedCells,
+            refused: keys.clear ? null : cellCopy.clearTitle,
+            kbdClass: ROW_C_KBD_CLASS,
+          }}
+        />
+      </>
+    ) : null
+  const programmerRigVerbs =
+    locateTargets.length > 0 ? (
+      <div className="flex shrink-0 items-center gap-1.5">
+        <LocateControl verbs={rigVerbs} wordClass={ROW_C_RIG_WORD_CLASS} className={ROW_C_RIG_CLASS} />
+        <HighlightButton verbs={rigVerbs} wordClass={ROW_C_RIG_WORD_CLASS} className={ROW_C_RIG_CLASS} />
+      </div>
+    ) : null
+  const heads: HeadsChipParts | null = isProgrammer
+    ? {
+        selected: locateTargets.length > 0,
+        heads: paletteTargets.length,
+        cells: cellCount,
+        onSubselect: listWrites.subselect,
+        onPickColour: listWrites.pickColour,
+        scope: cellCount > 0 ? describeCellScope(cellSelection.cells, columnLabel) : null,
+        colourKeys,
+        onDeselect: clearByLadder,
+        rigVerbs,
+      }
+    : null
+  const selectionControl = isProgrammer ? programmerRigVerbs : plainControl
 
   return (
     // One arm: a flex column the grid fills, under a row or two of chrome and over a footer that
@@ -1457,12 +1582,12 @@ export function FixturesListContainer({
           lit: litControl,
           columns: columnsControl,
           selection: selectionControl,
+          actions: isProgrammer ? programmerActions : null,
+          heads,
           cells: cellSelection.cells,
           cellEntryKey: cellCount > 0 && keys.entry,
           cellClearKey: cellCount > 0 && keys.clear,
           paletteTargets,
-          targetFamilies: paletteFamilies,
-          targetEmitters: paletteEmitters,
           marqueeDragging,
           remask: remaskDesk,
         })
@@ -1478,8 +1603,8 @@ export function FixturesListContainer({
             {litControl}
             {columnsControl}
           </SheetPage.Row>
-          {/* Row C, reserved when nothing is selected — the programmer's bar with no template strip
-              (no `projectId`), so the two cannot disagree about what a marquee names. Its own
+          {/* Row C, reserved when nothing is selected — the programmer's bar as the kit's (no
+              `projectId`), so the two cannot disagree about what a marquee names. Its own
               `@container`, with the queries on the child: a query container is the nearest
               ancestor, never the element itself. */}
           <div className="@container">
@@ -1523,8 +1648,8 @@ export function FixturesListContainer({
           scopeLabel={scopeLabel}
           // The route's, as a number, for the **programmer alone** — what the popup's Palettes band
           // and Save, and the colour editor's leaves, need. All three routes are under
-          // `/projects/:projectId`, but the two plain lists deliberately draw no palette strip
-          // (§List shell) and Save records from the programmer, so their cells get none, like the strip.
+          // `/projects/:projectId`, but Save records from the programmer, so the two plain lists'
+          // cells get none.
           projectId={selectionScope === 'programmer' ? routeProjectId : undefined}
           onSpread={onSpreadFromColour}
           onShowInfo={handleShowInfo}

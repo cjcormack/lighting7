@@ -151,12 +151,12 @@ function ProgrammerGridBody({
           lit,
           columns,
           selection,
+          actions,
+          heads,
           cells,
           cellEntryKey,
           cellClearKey,
           paletteTargets,
-          targetFamilies,
-          targetEmitters,
           marqueeDragging,
           remask,
         }) => (
@@ -490,18 +490,18 @@ function ProgrammerGridBody({
             <div className="flex flex-col gap-2 px-3 py-2 empty:hidden">
               <LayerRowNotices projectId={projectId} />
             </div>
-            {/* Row C: the selection bar, and the templates ride it. Its own `@container`, with
-                the queries on the child — the wrapper trap again. See `SelectionBar` below. */}
+            {/* Row C: the selection bar in its three clusters. Its own `@container`, with the
+                queries on the child — the wrapper trap again. See `SelectionBar` below. */}
             <div className="@container">
               <SelectionBar
                 projectId={projectId}
                 selection={selection}
+                actions={actions}
+                heads={heads}
                 cells={cells}
                 cellEntryKey={cellEntryKey}
                 cellClearKey={cellClearKey}
                 paletteTargets={paletteTargets}
-                targetFamilies={targetFamilies}
-                targetEmitters={targetEmitters}
                 marqueeDragging={marqueeDragging}
                 onRemask={remask}
               />

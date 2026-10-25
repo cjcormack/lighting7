@@ -32,8 +32,8 @@ interface ColourCellOwnProps {
   /**
    * The project the marquee's heads belong to — what the editor's leaves read the patch list of,
    * what the Palettes band lists and presses into and what *Save as palette…* records into. The
-   * container passes it for the **programmer alone**: the two plain lists deliberately draw no
-   * palette strip (§List shell), and Save records from the programmer, so their cells get a disabled
+   * container passes it for the **programmer alone**: Save records from the programmer, so the two
+   * plain lists' cells get a disabled
    * Save, no band and no leaves — as does a read-only mount or a test, which pass none. The cue
    * editor passes none either; its cells draw the bands through `PressCue` (`useCueBandProject`).
    */

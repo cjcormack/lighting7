@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import { Command } from 'cmdk'
+import { Palette } from 'lucide-react'
+import { ToolbarMenuItem, ToolbarMenuSub } from '@/components/sheet/ToolbarMenu'
 import { colourCounts, useFixtureColourIndex } from '@/hooks/useFixtureColourIndex'
 import { FIXTURE_COLOUR_LABELS } from '@/lib/fixtureColours'
 import { selectionForColour } from '@/lib/colourSelection'
@@ -25,10 +27,8 @@ export function SelectByColourItems({
   groupClassName: string
   onRun: (run: () => void) => void
 }) {
-  const index = useFixtureColourIndex(projectId)
   const { data: desk } = useDeskSelectionQuery()
-  const { held: altHeld } = useModifierHeld('altKey')
-  const colours = useMemo(() => colourCounts(index, visibleKeys), [index, visibleKeys])
+  const { colours, altHeld } = useColourChoices(projectId, visibleKeys)
   if (colours.length === 0) return null
 
   const select = (keys: readonly string[]) => {
@@ -65,5 +65,46 @@ export function SelectByColourItems({
         )
       })}
     </Command.Group>
+  )
+}
+
+/** The colours some fixture in [visibleKeys] carries, each with its keys, and whether ⌥ is held. */
+function useColourChoices(projectId: number, visibleKeys: ReadonlySet<string>) {
+  const index = useFixtureColourIndex(projectId)
+  const { held: altHeld } = useModifierHeld('altKey')
+  const colours = useMemo(() => colourCounts(index, visibleKeys), [index, visibleKeys])
+  return { colours, altHeld }
+}
+
+/**
+ * The same choice as a toolbar submenu — the programmer's heads chip, *Select by colour ▸*
+ * (programmer-toolbar plan D4). Whose selection a pick lands on is the caller's: it is handed the
+ * colour's fixture keys and whether ⌥ was held, and applies `selectionForColour` to the desk's
+ * selection or the list's own.
+ */
+export function SelectByColourMenu({
+  projectId,
+  visibleKeys,
+  onPick,
+}: {
+  projectId: number
+  visibleKeys: ReadonlySet<string>
+  onPick: (keys: readonly string[], add: boolean) => void
+}) {
+  const { colours, altHeld } = useColourChoices(projectId, visibleKeys)
+  if (colours.length === 0) return null
+  return (
+    <ToolbarMenuSub label="Select by colour" icon={<Palette className="size-4" />}>
+      {colours.map(({ colour, keys }) => (
+        <ToolbarMenuItem key={colour} onSelect={() => onPick(keys, altHeld)}>
+          <ColourSwatch colour={colour} className="size-3 rounded-[3px]" />
+          <span className="flex-1 truncate">
+            {altHeld ? 'Add ' : ''}
+            {FIXTURE_COLOUR_LABELS[colour]}
+          </span>
+          <span className="text-xs text-muted-foreground">{keys.length}</span>
+        </ToolbarMenuItem>
+      ))}
+    </ToolbarMenuSub>
   )
 }

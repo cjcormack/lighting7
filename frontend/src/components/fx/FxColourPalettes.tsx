@@ -146,7 +146,7 @@ export function useColourPalettes(): ColourPalettes {
  * The Templates row inside a colour picker's popover: pick one, or mint one from the colour you have
  * just dialled in.
  *
- * The save affordance mirrors `PaletteStrip`'s new-from-selection chip, and for the same reason —
+ * The save affordance mirrors Record ▾'s *A new palette*, and for the same reason —
  * it is how the library fills up without anyone visiting `/palettes`. It saves **what the picker is
  * showing**: the hex, plus a row per emitter the operator has dialled up. That means `policy=rgbonly`
  * rather than the `extract` it used to hard-code — an explicit white row and a policy that derives

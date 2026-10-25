@@ -30,7 +30,7 @@ import type { ActiveFx } from '@/store/fixtureFx'
 import type { PaletteFx } from '@/api/palettesApi'
 
 /**
- * *Save as template…* — the effect twin of the strip's *New from selection*.
+ * *Save as template…* — the effect twin of Record ▾'s *A new palette*.
  *
  * Both take something the operator has already made on the rig and give it a name in the library,
  * and both are why the library fills up without anyone opening the New template sheet. The

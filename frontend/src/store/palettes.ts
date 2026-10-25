@@ -20,7 +20,7 @@ import type {
  * Bridge `paletteListChanged` into cache invalidation.
  *
  * Called from `main.tsx`, **not** on import — the same trap `startLooksBridge` documents: this slice
- * is imported from the earliest render path (the nav registry, and the programmer's template strip),
+ * is imported from the earliest render path (the nav registry, and the programmer's row C),
  * so touching `lightingApi` in the module body is a runtime import cycle that throws a TDZ
  * `ReferenceError` and takes every export with it, while `tsc`, `vite build` and the unit tests all
  * pass.
