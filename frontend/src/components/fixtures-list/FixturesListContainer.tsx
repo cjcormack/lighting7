@@ -70,6 +70,7 @@ import {
   targetEmitters,
   paletteTargetsFor,
   treeKeyAction,
+  rowIdsForTargets,
 } from './rowModel'
 import { buildRowCells } from './useRowValues'
 import { useIncludeSelectionRequest } from '../../store/includeSelection'
@@ -119,6 +120,7 @@ import type {
 } from './rowModel'
 import type { LocateTarget } from '../../store/locate'
 import type { Fixture } from '../../store/fixtures'
+import type { CueTarget } from '../../api/cuesApi'
 import { useStableCallback } from '@/hooks/useStableCallback'
 import type { GroupSummary } from '../../api/groupsApi'
 
@@ -804,7 +806,7 @@ export function FixturesListContainer({
   // bar's Set (`toggleCellEditor`, at the button, or closing what it opened). The rule is the sheet
   // kit's, shared with the patch list, the DMX sheet and the cue sheet; see the hook for why a
   // request is a one-shot and why an off-screen cell is scrolled to rather than opened.
-  const { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor, closeCellEditor } =
+  const { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor, openCellEditorAtButton, closeCellEditor } =
     useCellEditorRequests<ColumnKey>({
       firstEditableCell: firstEditableSelectedCell,
       onScrollTo: setScrollToRowId,
@@ -997,6 +999,38 @@ export function FixturesListContainer({
     },
     [cellSelection.cells, rowById, selectCells],
   )
+  // Select targets as rows on the commit after opening what they are folded under — a cell's
+  // fixture, and in the grouped view the group a fixture is listed under (the Include request's
+  // rule) — once those rows exist. A set none of whose rows is shown, a filter hiding them all,
+  // leaves the selection be rather than emptying it.
+  const [landing, setLanding] = useState<readonly CueTarget[] | null>(null)
+  const landTargets = useCallback(
+    (targets: readonly CueTarget[]) => {
+      const openFixtures = new Set<string>()
+      const openGroups = new Set<string>()
+      for (const target of targets) {
+        if (target.type !== 'fixture') continue
+        const fixture = fixtures.find((f) => f.key === target.key)
+        const parent = fixture ?? fixtures.find((f) => (f.elements ?? []).some((e) => e.key === target.key))
+        if (parent == null) continue
+        if (fixture == null) openFixtures.add(parent.key)
+        const group = grouped ? parent.groups.find((name) => groups.some((g) => g.name === name)) : undefined
+        if (group != null) openGroups.add(group)
+      }
+      const opened = (prev: ReadonlySet<string>, keys: ReadonlySet<string>) =>
+        [...keys].every((key) => prev.has(key)) ? prev : new Set([...prev, ...keys])
+      if (openFixtures.size > 0) setExpandedFixtures((prev) => opened(prev, openFixtures))
+      if (openGroups.size > 0) setExpandedGroups((prev) => opened(prev, openGroups))
+      setLanding(targets)
+    },
+    [fixtures, groups, grouped],
+  )
+  useEffect(() => {
+    if (landing == null) return
+    setLanding(null)
+    const ids = rowIdsForTargets(rows, landing)
+    if (ids.length > 0 || landing.length === 0) setRows(ids)
+  }, [landing, rows, setRows])
   const listWrites = useListSelectionWrites({
     enabled: isProgrammer,
     following: followingDesk,
@@ -1004,7 +1038,7 @@ export function FixturesListContainer({
     rows,
     selectedRowIds,
     cells: cellSelection.cells,
-    setRows,
+    land: landTargets,
     addRowsToMarquee,
   })
   const rigVerbs = useRigVerbs(locateTargets, selectedTargets)
@@ -1018,8 +1052,10 @@ export function FixturesListContainer({
   const colourKeys = useMemo(() => new Set(fixtures.map((fixture) => fixture.key)), [fixtures])
 
   // **Set on whole rows** (D6): which families the selected rows have a shown column for, and the
-  // pick that selects those rows' cells in that family's columns — a marquee, so the mask becomes
-  // the family — then opens the popup as Set does, once the cells have landed.
+  // pick that selects those rows' cells in that family's **one** column, the first shown one they
+  // have — a marquee, so the mask becomes the family — then opens the popup as Set does, once the
+  // cells have landed. One column, because one editor writes its value to every slider cell under
+  // it: Intensity over Dimmer and Strobe would strobe the rig at the dimmer's level.
   const selectedRows = useMemo(
     () => (isProgrammer && cellCount === 0 ? rows.filter((row) => row.kind !== 'divider' && selectedRowIds.has(row.id)) : []),
     [isProgrammer, cellCount, rows, selectedRowIds],
@@ -1027,8 +1063,9 @@ export function FixturesListContainer({
   const setFamilyCells = useCallback(
     (family: AttributeFamily): FixtureCellRef[] => {
       const cols = visibleColumns.filter((col) => columnFamily(col) === family)
-      if (cols.length === 0) return []
-      return selectedRows.flatMap((row) => buildRowCells(row, cols).map((cell) => ({ rowId: row.id, col: cell.col })))
+      const hits = selectedRows.flatMap((row) => buildRowCells(row, cols).map((cell) => ({ rowId: row.id, col: cell.col })))
+      const column = cols.find((col) => hits.some((hit) => hit.col === col))
+      return column == null ? [] : hits.filter((hit) => hit.col === column)
     },
     [selectedRows, visibleColumns],
   )
@@ -1057,11 +1094,21 @@ export function FixturesListContainer({
     },
     [setFamilyCells, selectCells],
   )
+  // The first selected row may be outside the virtualised window, where the request only scrolls
+  // it into view; it is asked again each frame until the row has mounted and the editor opens.
+  const setRetryRef = useRef(0)
+  useEffect(() => () => cancelAnimationFrame(setRetryRef.current), [])
   useEffect(() => {
     if (!setPending || cellSelection.cells.length === 0) return
     setSetPending(false)
-    toggleCellEditor()
-  }, [setPending, cellSelection.cells, toggleCellEditor])
+    if (openCellEditorAtButton()) return
+    let frames = 0
+    const retry = () => {
+      if (openCellEditorAtButton() || ++frames > 60) return
+      setRetryRef.current = requestAnimationFrame(retry)
+    }
+    setRetryRef.current = requestAnimationFrame(retry)
+  }, [setPending, cellSelection.cells, openCellEditorAtButton])
 
   // The marquee has to be counted, or the editor's label line says "1 head" while the commit
   // writes six hundred. **One batch per marquee column**, keyed by column: a commit from a cell in
@@ -1531,7 +1578,11 @@ export function FixturesListContainer({
           }
           cells={{
             count: cellCount,
-            heads: paletteTargets.length,
+            // What the whole-heads arm releases: a group row is every member, shown or not.
+            heads: releaseTargets.reduce(
+              (n, t) => n + (t.type === 'group' ? (groups.find((g) => g.name === t.key)?.memberCount ?? 0) : 1),
+              0,
+            ),
             onRelease: clearSelectedCells,
             refused: keys.clear ? null : cellCopy.clearTitle,
             kbdClass: ROW_C_KBD_CLASS,

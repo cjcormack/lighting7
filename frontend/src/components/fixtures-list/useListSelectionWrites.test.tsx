@@ -28,7 +28,7 @@ vi.mock('@/store/selection', () => ({
 }))
 
 import { useListSelectionWrites } from './useListSelectionWrites'
-import { buildRows } from './rowModel'
+import { buildRows, rowIdsForTargets } from './rowModel'
 
 const ROWS = buildRows({ fixtures: FIXTURES, groups: [], expandedGroups: new Set(), textFilter: '', groupByGroups: false })
 const id = (key: string) => ROWS.find((row) => row.kind === 'fixture' && row.fixture.key === key)!.id
@@ -40,6 +40,8 @@ afterEach(() => {
 
 function writes(following: boolean, selected: string[], cells: { rowId: string; col: 'colour' }[] = []) {
   const setRows = vi.fn()
+  // The container's landing, minus the opening: every row here is already shown.
+  const land = vi.fn((targets: readonly { type: 'fixture' | 'group'; key: string }[]) => setRows(rowIdsForTargets(ROWS, targets)))
   const addRowsToMarquee = vi.fn()
   const { result } = renderHook(() =>
     useListSelectionWrites({
@@ -49,7 +51,7 @@ function writes(following: boolean, selected: string[], cells: { rowId: string; 
       rows: ROWS,
       selectedRowIds: new Set(selected.map(id)),
       cells,
-      setRows,
+      land,
       addRowsToMarquee,
     }),
   )
