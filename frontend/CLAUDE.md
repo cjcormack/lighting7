@@ -2193,9 +2193,9 @@ head in rig order wins* true there and *the first row of the marquee* true on th
 **the release is read from the window**, as the tempo fader's is, since the picker binds its own
 release to the document; the host keeps its own copy of the channels for that flush and for the
 Fan hand-over, told through the editor's `onPick` when Pick moves them. **The knob's seed is a
-constant** (`NEUTRAL_CSS`): the editor re-seeds its knob from `combinedCss` whenever it changes,
-and here it is always open, so routing every write back into that prop was the ping-pong the
-editor's own docblock records — the knob moves only when the editor means it to, on Pick. The
+constant** (`NEUTRAL_CSS`): the editor's knob follows `combinedCss` while open, and here it is
+always open, so routing every write back into that prop is the ping-pong the editor's own docblock
+describes — the knob moves only when the editor means it to, on Pick. The
 *Fan…* button — a plain button with a verb, since it opens a tab and holds no state a
 `role="switch"` could ever read as checked — hands the current channels to `onSpread`, which both
 sheet hosts wire (`SideSheet.tsx`'s `useSpreadSeed`): it opens the Fan tab with *From* set to
