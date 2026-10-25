@@ -208,7 +208,7 @@ working, because it strips targets where session 3 refuses them (P2). Session 3 
   and §"Applied state is resolved by the desk"; `midi-control-surface-engineering.md`;
   `cue-stacks-engineering.md` §"`timeline`"; CLAUDE.md's Palette, Busk and Cue Stack endpoint lines.
 
-### Session 3: the client follows (frontend + backend)
+### Session 3: the client follows (frontend + backend) — done, `dc6d0ee1`
 
 - §4, P2's refusal, and `hasDeferredFx` off the wire.
 - **Tests:** every sender sends no targets for a Look; the ring reads a layer, not coverage; the
