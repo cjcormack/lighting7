@@ -827,8 +827,8 @@ Colour, Beam (one with a zoom row, one with a frost row) and Position palettes, 
 5. **Outside the mask.** Pick *Position* on row C's pill, open `All · n` on a rows selection: the
    colour palettes sit under *Outside the mask*, dimmed, *Colour — the selection is Position*.
 6. **The Stack table.** With Hex 1–2 selected, press *+ Look or palette* → *Palette…* on the Stack table: the picker opens as a side sheet
-   and a press lands on Hex 1–2. *+ Look* lists the Looks; press one on the selection, then switch to
-   *On its own fixtures* and press another: it lands on its own fixtures.
+   and a press lands on Hex 1–2. *+ Look* lists the Looks, one list with no *On its own fixtures*
+   switch; press one and it lands whole, whatever is selected (absolute-looks plan D1).
 7. **The iPad.** Repeat 1 and 4 on the iPad: the editor is a bottom sheet with the band above the
    slider, the chips take a finger, a hold opens the menu and never presses, and *All* opens the
    picker as a bottom sheet that stays open across presses.

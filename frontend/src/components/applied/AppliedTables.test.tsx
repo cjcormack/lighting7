@@ -214,7 +214,6 @@ function look(id: number, name: string): LookSummary {
     rowCount: 1,
     fxCount: 0,
     targetCount: 1,
-    hasDeferredFx: false,
     preview: [],
     layerCount: 0,
     buskPageCount: 0,

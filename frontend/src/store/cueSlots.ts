@@ -14,10 +14,7 @@ export interface CueSlot {
   itemName: string
 }
 
-/**
- * Exactly one of [cueId] / [lookId] — the server refuses two, and refuses a Look with a deferred
- * effect (409 `CUE_SLOT_LOOK_NEEDS_SELECTION`), because a slot has no selection to give it.
- */
+/** Exactly one of [cueId] / [lookId] — the server refuses two. Any Look may sit in a slot: it lands whole. */
 export interface AssignCueSlotRequest {
   page: number
   slotIndex: number

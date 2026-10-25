@@ -1197,7 +1197,7 @@ class SurfaceFeedbackPublisher(
             val selected = deskSelection?.state?.value?.targets.orEmpty()
             if (uuid == null || selected.isEmpty()) false else {
                 val entry = applied.firstOrNull { it.source.uuid == uuid }
-                // "Covers every selected target" — the same fold `lookLayerPresence` makes in the
+                // "Covers every selected target" — the same fold `paletteLayerPresence` makes in the
                 // client, and the same `all`/`some` vocabulary, so a pad and its button agree.
                 entry != null && selected.all { target ->
                     entry.targets.any {

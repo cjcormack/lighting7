@@ -516,19 +516,6 @@ export type Fixture = {
   mode?: ModeInfo
   capabilities: string[]
   groups: string[]
-  /**
-   * Ids of the Looks the backend reports as compatible with this fixture.
-   *
-   * **Capability-only**: "does this head have colour/position at all", never "was this Look
-   * authored against that model", and no Look is excluded on any other ground — the "deferred
-   * Looks only" this used to claim describes nothing now that every Look row is bound. It
-   * answers for a Look's *deferred effects*, which are what the layer's targets supply.
-   *
-   * Known hole, and it is the backend's to close: a rows-only Look has an empty capability set,
-   * so it is reported compatible with everything. Do not filter here — compatibility is one
-   * answer, given server-side, or it drifts.
-   */
-  compatibleLookIds: number[]
   gelCode?: string | null
   /**
    * Patched as **infrastructure** — a dimmer channel on hard power, a relay, a hazer's fan — not

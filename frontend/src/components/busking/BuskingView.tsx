@@ -49,11 +49,10 @@ import { toast } from 'sonner'
 import { lastPadOfBank, libraryStarterLayout, recordsOnPage, removePad, toLayoutRequest } from '@/lib/buskLayout'
 import { recordsOnRig } from '@/lib/buskRig'
 import { buskAddBody } from '@/lib/buskAdd'
-import { skippedRowsMessage } from '@/lib/selectionMask'
 import { followIsForced, relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
 import { windowName } from '@/lib/windowIdentity'
 import type { BuskPad } from '@/api/buskApi'
-import { lookLayerPresence, paletteLayerPresence } from './lookPresence'
+import { lookPresence, paletteLayerPresence } from './lookPresence'
 import { COMPACT_FOCUS_WORD_CLASS, EDIT_WORD_CLASS, FOCUS_WORD_CLASS, RigBand, VERB_WORD_CLASS } from './RigBand'
 import { RigStrip, RigStripContent } from './RigStrip'
 import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
@@ -140,11 +139,10 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * programmer's palette strip's now, and the AI's.
  *
  * **There is no empty-selection dim.** The pools used to grey themselves out with nothing selected,
- * which is now wrong in three ways: a per-fixture template names its own heads, a Look with no
- * deferred effect names its own fixtures, and a cue has no targets at all — so all three are
- * legitimately pressable with an empty selection. The two that genuinely need one are refused *by
- * name* server-side (`PALETTE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`), and a sentence saying so
- * is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim has
+ * which is now wrong in three ways: a per-fixture palette names its own heads, a Look lands whole,
+ * and a cue has no targets at all — so all three are legitimately pressable with an empty
+ * selection. The one that genuinely needs one, a generic palette, is refused *by name* server-side
+ * (`PALETTE_NEEDS_SELECTION`), and a sentence saying so is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim has
  * nothing left to be per.
  *
  * **No transport of its own.** The stack cards and the pinned-cue grid went with the layout; GO and
@@ -380,7 +378,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
         return paletteLayerPresence(applied, selectedLayerTargets, pad.palette.id)
       }
       if (pad.kind === 'LOOK' && pad.look != null) {
-        return lookLayerPresence(applied, selectedLayerTargets, pad.look.id)
+        return lookPresence(applied, pad.look.id)
       }
       return 'none'
     },
@@ -399,9 +397,9 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
         // The pair a press acts on — the desk's while following, this tab's own when unlinked
         // (multi-screen plan D4) — and never pre-refused from the mask held here: the mask is
         // tested on the on arm only, so a lit pad still comes off under a mask that excludes it,
-        // and only the desk knows which arm this is. A refusal (`PALETTE_OUTSIDE_MASK`,
-        // `LOOK_OUTSIDE_MASK`) arrives as a 400 whose message names both families, and
-        // `errorToastMiddleware` toasts it as it toasts every rejected mutation.
+        // and only the desk knows which arm this is. A refusal (`PALETTE_OUTSIDE_MASK`) arrives as
+        // a 400 whose message names both families, and `errorToastMiddleware` toasts it as it
+        // toasts every rejected mutation. A Look pad's press ignores the pair: a Look lands whole.
         void pressPad({
           projectId,
           padId: pad.id,
@@ -409,14 +407,6 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
           families: families ?? undefined,
         })
           .unwrap()
-          .then((result) => {
-            // The skip is reported on the pressing window (D6) — this one. The marquee's window
-            // learns the way it learns every layer: `programmer.layerState` carries the mask, and
-            // `LookStack` draws the badge. *Rows*, not the family: the cook masks a layer's rows
-            // and not its effects, so a Look's effect in a skipped family still runs.
-            const message = skippedRowsMessage(result.skippedFamilies ?? [], families)
-            if (message != null) toast.warning(message)
-          })
           .catch(ignoreReportedError)
       },
       onApplyValues: (pad) => {

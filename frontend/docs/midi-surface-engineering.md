@@ -150,9 +150,8 @@ All are buttons. Five things about them on this side:
   **Desk** (which already holds the encoder bank), rather than widening a 360px segmented control to
   seven. *Next page* / *Prev page* sit on the Desk row **once**: they are page-agnostic, and a chip
   repeated per page reads as page-specific.
-- **A Look whose `hasDeferredFx` is set is offered with no chip**, and the picker disables
-  it. The desk now answers that flag false for every Look — `applyLook` puts a Look on whole, and
-  the write boundary refuses no Look binding — so every Look is offered.
+- **Every Look is offered, with an *Apply* chip.** `applyLook` puts a Look on whole, whatever is
+  selected (absolute-looks plan D1), and the write boundary refuses no Look binding.
 - **A palette's *Press* chip carries its family; a Look's *Apply* does not.** A palette is in
   exactly one family, so the palette's family filter can hide it honestly; a Look spans families by
   nature, so its chip is built by `actionChip` with `family: null` and survives every filter.

@@ -8,8 +8,6 @@ import { TimingBadge } from '@/components/cues/TimingBadge'
 import { TimingFields } from '@/components/cues/TimingEditor'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { EditorReadout } from '@/components/editor/EditorReadout'
-import { FxSummary } from '@/components/fx/FxSummary'
-import { fromLookFx } from '@/components/fx/fxSummaryTypes'
 import { FxFields } from '@/components/fx/FxFields'
 import { FxPicker, type DraftFxPick } from '@/components/fx/FxPicker'
 import { selectionKeyOf, storedFxOf } from '@/components/fx/draftFx'
@@ -29,10 +27,8 @@ import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { usePaletteListQuery } from '@/store/palettes'
 import { useFxLibraryQuery, type FxLibraryEntry } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
-import { useLookQuery } from '@/store/looks'
 import { useSpeedMasterDisplay } from '@/store/speedMasters'
-import { DEFERRED_TARGET_TYPE } from '@/api/looksApi'
-import type { Cue, CueAdHocFx, CueLayerDetail, CueTarget } from '@/api/cuesApi'
+import type { Cue, CueAdHocFx, CueTarget } from '@/api/cuesApi'
 import { useCueRowStore } from './CueRowStore'
 import { useCueValuesView } from './CueValuesView'
 import { CueEditorIsolation, useRefusedEditKeys } from './editorIsolation'
@@ -50,8 +46,7 @@ const NO_SELECTION: readonly CueTarget[] = []
  * (FX editor plan §4.6) — the FX alone, since what is underneath at its GO is not known here.
  * *+ Effect* opens `FxPicker` **in draft** over the
  * Values selection: a tap adds the effect to the cue with its defaults and runs nothing, a second tap
- * swaps it. Each Look layer's deferred effects are listed under the Look, read-only — they are the
- * Look's, changed in the Looks library.
+ * swaps it.
  *
  * Every write is the cue's whole `adHocFx` list through the editor's `CueRowStore`, every
  * `sortOrder` restated: a stored write, sending nothing to the stage (P2) — a live cue picks it up
@@ -74,7 +69,6 @@ export function CueFxTab(props: {
 
 function FxBody({
   cue,
-  projectId,
   readOnlyReason,
   region,
   onRequestUnlock,
@@ -259,8 +253,6 @@ function FxBody({
           </SortableContext>
         </DndContext>
       )}
-
-      <LookFxList layers={cue.layers} projectId={projectId} library={library} />
     </div>
   )
 }
@@ -460,51 +452,6 @@ function CueFxEditor({
         </fieldset>
       </div>
       <EditorReadout>Stored in the cue — nothing runs until it next comes on.</EditorReadout>
-    </div>
-  )
-}
-
-/** Each Look layer's deferred effects, under its Look, read-only — the Look's, edited in its library. */
-function LookFxList({
-  layers,
-  projectId,
-  library,
-}: {
-  layers: readonly CueLayerDetail[]
-  projectId: number
-  library: FxLibraryEntry[] | undefined
-}) {
-  const looks = layers.filter((l) => l.source?.kind === 'LOOK' && l.enabled !== false)
-  if (looks.length === 0) return null
-  return (
-    <div className="space-y-1.5 pt-1" data-cue-look-effects>
-      {looks.map((layer, i) => (
-        <LookLayerFx key={`${layer.source!.id}-${i}`} lookId={layer.source!.id} name={layer.source!.name} projectId={projectId} library={library} />
-      ))}
-    </div>
-  )
-}
-
-function LookLayerFx({
-  lookId,
-  name,
-  projectId,
-  library,
-}: {
-  lookId: number
-  name: string
-  projectId: number
-  library: FxLibraryEntry[] | undefined
-}) {
-  const { data: look } = useLookQuery({ projectId, lookId })
-  const deferred = (look?.fx ?? []).filter((e) => e.targetType === DEFERRED_TARGET_TYPE)
-  if (deferred.length === 0) return null
-  return (
-    <div className="space-y-1">
-      <EditorLabel>From {name} · on the layer’s targets</EditorLabel>
-      {deferred.map((effect, i) => (
-        <FxSummary key={i} effect={fromLookFx(effect, library)} className="opacity-80" />
-      ))}
     </div>
   )
 }

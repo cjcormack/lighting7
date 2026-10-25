@@ -22,7 +22,6 @@ import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import { FxEditor } from '../fx/FxEditor'
 import { FxPicker, type AuditionedFx, type FxTarget } from '../fx/FxPicker'
-import { LookTogglePicker } from '../fx/LookTogglePicker'
 import { HELD_BLIND_WORDS, HeldBlindMark } from '../fx/HeldBlindMark'
 import { isCueFx, type PickerFamily } from '../fx/fxEditorModel'
 import { getElementFilterLabel, getElementModeLabel } from '../fx/fxConstants'
@@ -191,24 +190,6 @@ export function FxTray({
     if (editingId === e.id) setEditingId(null)
   }
 
-  // The Look picker follows the pick by + Effect's rule (Chris's call, session 4): the whole target
-  // on *All*, the one head or member when one is picked — a Look press takes a head's key as a target
-  // — and absent for any other pick, where a press would land on more than the rows below edit. A
-  // filtered start (*first half*) has no one target for a Look either.
-  const lookFrom: FxTarget | null =
-    start == null
-      ? target.type === 'fixture'
-        ? { type: 'fixture', fixture: target.fixture }
-        : { type: 'group', group: target.group }
-      : 'reason' in start || start.elementFilter != null
-        ? null
-        : start.target
-  const lookTarget =
-    lookFrom == null || lookFrom.type === 'selection'
-      ? null
-      : lookFrom.type === 'fixture'
-        ? { targetType: 'fixture' as const, targetKey: lookFrom.fixture.key, compatibleLookIds: lookFrom.fixture.compatibleLookIds }
-        : { targetType: 'group' as const, targetKey: lookFrom.group.name, compatibleLookIds: lookFrom.group.compatibleLookIds }
   const addTarget: FxTarget | null =
     start == null
       ? target.type === 'fixture'
@@ -295,7 +276,6 @@ export function FxTray({
         {open && !adding && <span className="flex-1" />}
         {!(open && adding) && (
           <>
-            {lookTarget != null && <LookTogglePicker key={lookTarget.targetKey} {...lookTarget} />}
             <Button
               variant="outline"
               size="sm"

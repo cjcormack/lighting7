@@ -194,18 +194,18 @@ describe('StackTimeline', () => {
 
   it('meets a selected cell with a layer on its parent, and a selected parent with a layer on its cell', () => {
     TIMELINE!.entries[0].layers.push(lavender({ id: 9, targets: [{ type: 'fixture', key: 'bar' }], heads: ['bar'] }))
-    TIMELINE!.entries[1].layers.push(lavender({ id: 10, source: { kind: 'LOOK', id: 4, uuid: 'l4', name: 'Pixels', families: [] }, targets: [{ type: 'fixture', key: 'bar.2' }], heads: ['bar.2'] }))
+    TIMELINE!.entries[1].layers.push(lavender({ id: 10, source: { kind: 'PALETTE', id: 4, uuid: 'p4', name: 'Pixels', families: [] }, targets: [{ type: 'fixture', key: 'bar.2' }], heads: ['bar.2'] }))
     DESK_SELECTION = [{ type: 'fixture', key: 'bar.1' }]
     const { unmount } = render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
     fireEvent.click(screen.getByRole('button', { name: /Selection only/ }))
     expect(cell(101, 'palette:7:fixture:bar')).not.toBeNull()
     expect(cell(101, PALETTE)).toBeNull()
     // bar.2 is not bar.1, and the cell selected is no parent of it.
-    expect(cell(101, 'look:4:fixture:bar.2')).toBeNull()
+    expect(cell(101, 'palette:4:fixture:bar.2')).toBeNull()
     unmount()
     DESK_SELECTION = [{ type: 'fixture', key: 'bar' }]
     render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
-    expect(cell(101, 'look:4:fixture:bar.2')).not.toBeNull()
+    expect(cell(101, 'palette:4:fixture:bar.2')).not.toBeNull()
   })
 
   it('filters by kind and by the desk selection', () => {

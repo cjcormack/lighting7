@@ -90,7 +90,7 @@ vi.mock('@/components/programmer/ProgrammerScope', () => ({
 }))
 vi.mock('@/components/programmer/LookRowStore', () => ({
   useLookRowStore: () =>
-    look.focused ? { lookName: 'Warm wash', projectId: 1, lookId: 9, targets: [], targetedKeys: null, setValue: vi.fn() } : null,
+    look.focused ? { lookName: 'Warm wash', projectId: 1, lookId: 9, setValue: vi.fn() } : null,
 }))
 vi.mock('@/components/programmer/NewPaletteFromSelectionSheet', () => ({
   NewPaletteFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
@@ -503,14 +503,14 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
     await act(async () => {
       fireEvent.click(screen.getByText('Full'))
     })
-    expect(cue.pressLayer).toHaveBeenCalledWith(
-      { paletteId: 1 },
-      [
+    expect(cue.pressLayer).toHaveBeenCalledWith({
+      paletteId: 1,
+      targets: [
         { type: 'fixture', key: 'hex-1' },
         { type: 'fixture', key: 'hex-2' },
       ],
-      ['INTENSITY'],
-    )
+      families: ['INTENSITY'],
+    })
     expect(toggle).not.toHaveBeenCalled()
   })
 

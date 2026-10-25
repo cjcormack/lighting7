@@ -26,7 +26,7 @@ import { useSpeedMasterListQuery } from '@/store/speedMasters'
 import { parseAttributeMask, serializeAttributeMask } from '@/lib/attributeFamily'
 import { MaskToggles, maskIsEmpty, maskToWire, useMaskDraft, type MaskValue } from '@/components/programmer/maskPicker'
 import { shownSceneryState } from '@/lib/scenery'
-import { fxCycleWords, replacePlan, settingsChangeLabel, sharedValue, type FxRunCell, type FxRunVerb, type TimelineColumn } from '@/lib/stackTimeline'
+import { cellTargetOf, fxCycleWords, replacePlan, settingsChangeLabel, sharedValue, type FxRunCell, type FxRunVerb, type TimelineColumn } from '@/lib/stackTimeline'
 import { fxDynamicsParts } from '@/lib/fxDynamics'
 import { runsWord } from '@/components/fx/fxEditorModel'
 import type { FxDirection } from '@/api/fxApi'
@@ -291,8 +291,12 @@ export function TimelineReplacePopover({
   const defaultTarget = deskTargets[0] ?? column.target
   const keyed = targetKey ?? (defaultTarget ? `${defaultTarget.type}:${defaultTarget.key}` : '*')
   const chosenTargetKey = needsTarget && keyed === '*' ? ([...targets.keys()].find((k) => k !== '*') ?? '*') : keyed
-  const from: TimelineCellRef = { source: { kind: column.kind === 'look' ? 'LOOK' : 'PALETTE', id: column.sourceId! }, target: column.target }
-  const to: TimelineCellRef | null = chosen ? { source: { kind: chosen.kind, id: chosen.id }, target: targets.get(chosenTargetKey) ?? null } : null
+  const from: TimelineCellRef = { source: { kind: column.kind === 'look' ? 'LOOK' : 'PALETTE', id: column.sourceId! }, target: cellTargetOf(column) }
+  // A Look names no target: it lands whole (absolute-looks plan D1).
+  const toLook = chosen?.kind === 'LOOK'
+  const to: TimelineCellRef | null = chosen
+    ? { source: { kind: chosen.kind, id: chosen.id }, target: toLook ? null : (targets.get(chosenTargetKey) ?? null) }
+    : null
   const plan = to ? replacePlan(timeline.entries, cueIds, from, to) : null
   const same = to != null && to.source.kind === from.source.kind && to.source.id === from.source.id && (to.target?.key ?? null) === (from.target?.key ?? null)
   const count = plan == null ? 0 : plan.swaps.length + plan.holds.length
@@ -326,16 +330,18 @@ export function TimelineReplacePopover({
               ))}
             </optgroup>
           </select>
-          <select
-            aria-label="Target"
-            className="h-8 w-28 rounded-md border bg-background px-2 text-sm"
-            value={chosenTargetKey}
-            onChange={(e) => setTargetKey(e.target.value)}
-          >
-            {[...targets].filter(([key]) => !(needsTarget && key === '*')).map(([key, t]) => (
-              <option key={key} value={key}>{t == null ? 'Own heads' : targetName(t)}</option>
-            ))}
-          </select>
+          {!toLook && (
+            <select
+              aria-label="Target"
+              className="h-8 w-28 rounded-md border bg-background px-2 text-sm"
+              value={chosenTargetKey}
+              onChange={(e) => setTargetKey(e.target.value)}
+            >
+              {[...targets].filter(([key]) => !(needsTarget && key === '*')).map(([key, t]) => (
+                <option key={key} value={key}>{t == null ? 'Own heads' : targetName(t)}</option>
+              ))}
+            </select>
+          )}
         </div>
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" checked={keepSettings} onChange={(e) => setKeepSettings(e.target.checked)} />
@@ -860,8 +866,8 @@ export function TimelineFxRunPopover({
 
 /**
  * *+ Column* (D11): searches the Looks and palettes; a palette takes the desk selection's first
- * target unless another is picked, a Look its own fixtures. The column is this window's until one
- * of its cells is filled, after which it is derived like any other.
+ * target unless another is picked, and a Look none — it lands whole (absolute-looks plan D1). The
+ * column is this window's until one of its cells is filled, after which it is derived like any other.
  */
 export function TimelineAddColumn({
   projectId,
@@ -905,7 +911,7 @@ export function TimelineAddColumn({
           value={targetKey ?? (deskTargets[0] ? `${deskTargets[0].type}:${deskTargets[0].key}` : '*')}
           onChange={(e) => setTargetKey(e.target.value)}
         >
-          <option value="*">Own fixtures / heads</option>
+          <option value="*">Own heads</option>
           {deskTargets.map((t) => (
             <option key={`${t.type}:${t.key}`} value={`${t.type}:${t.key}`}>{targetName(t)}, the selection</option>
           ))}
@@ -916,8 +922,8 @@ export function TimelineAddColumn({
               <ListItem
                 key={`look-${l.id}`}
                 label={l.name}
-                sub={picked == null ? 'own fixtures' : targetName(picked)}
-                onPick={() => add({ kind: 'look', sourceId: l.id, name: l.name, target: picked ?? null, families: l.families })}
+                sub="Look"
+                onPick={() => add({ kind: 'look', sourceId: l.id, name: l.name, target: null, families: l.families })}
               />
             ))}
           </ListGroup>

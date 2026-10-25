@@ -980,7 +980,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         // A *value* template holds no effect, so its count is zero. Still not what drives the pads'
         // active ring, and that is the point of asserting it: an effect template reports non-zero
         // (see below), so a ring driven off this number would light for one kind of template and not
-        // the other. `lookLayerPresence` reads the layer stack for exactly that reason.
+        // the other. `paletteLayerPresence` reads the layer stack for exactly that reason.
         assertEquals(0, on.fxCount)
         assertEquals(1, state.show.programmerStore.layers.size)
         assertTrue(state.show.programmerStore.layers.single().source.isPalette)

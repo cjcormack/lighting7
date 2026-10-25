@@ -389,11 +389,11 @@ describe('the first-open generator', () => {
     { id: 3, name: 'Half Up', family: 'INTENSITY' },
   ] as PaletteSummary[]
   const looks = [
-    { id: 9, name: 'Ballyhoo', hasDeferredFx: true },
-    { id: 10, name: 'Verse Base', hasDeferredFx: false },
+    { id: 9, name: 'Ballyhoo' },
+    { id: 10, name: 'Verse Base' },
   ] as LookSummary[]
 
-  it('builds a family bank per family, the buskable Looks and an empty Cues bank', () => {
+  it('builds a family bank per family, every Look and an empty Cues bank', () => {
     const layout = libraryStarterLayout(templates, looks)
     expect(layout.rows).toHaveLength(2)
     const families = layout.rows[0].columns.map((c) => c.banks[0].name)
@@ -401,7 +401,7 @@ describe('the first-open generator', () => {
     expect(layout.rows[0].columns[0].banks[0].pads).toEqual([{ paletteId: 1 }])
     // Beam has no templates and still gets its bank — that is where the operator puts the first one.
     expect(layout.rows[0].columns[2].banks[0].pads).toEqual([])
-    expect(layout.rows[1].columns[0].banks[0].pads).toEqual([{ lookId: 9 }])
+    expect(layout.rows[1].columns[0].banks[0].pads).toEqual([{ lookId: 9 }, { lookId: 10 }])
     expect(layout.rows[1].columns[1].banks[0]).toMatchObject({ name: 'Cues', pads: [], flow: 'COLUMN' })
   })
 

@@ -4,6 +4,7 @@ import { lightingApi } from '../api/lightingApi'
 import { Status } from '../api/statusApi'
 import type { CueTarget } from '../api/cuesApi'
 import type {
+  AddLayerInput,
   IncludedTarget,
   ProgrammerAppliedSource,
   ProgrammerLayer,
@@ -340,18 +341,7 @@ export function programmerClearScenery(elementUuid?: string, fadeMs?: number) {
 // answers every one of these with the whole `programmer.layerState` broadcast, so there is no
 // per-call reply for a mutation to await. `patchLayer` is also on a drag/typing path.
 
-export function programmerAddLayer(input: {
-  /** Exactly one of these — a layer applies a Look or a template. */
-  lookId?: number
-  paletteId?: number
-  targets?: CueTarget[]
-  attributeMask?: string
-  blendMode?: string
-  amount?: number
-  speedMasterUuid?: string
-  rateSpeedMasterUuid?: string
-  fadeMs?: number
-}): boolean {
+export function programmerAddLayer(input: AddLayerInput): boolean {
   // The verdict is the **send's**, not the desk's: true means the frame went out, never that a
   // layer exists. That is all a caller can know here — the op is answered by a broadcast — but it
   // is enough to tell "the socket was closed and `sendGesture` already said so" from "it landed",

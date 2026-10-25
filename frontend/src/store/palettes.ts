@@ -25,11 +25,8 @@ import type {
  * `ReferenceError` and takes every export with it, while `tsc`, `vite build` and the unit tests all
  * pass.
  *
- * Note what is **absent** compared to the looks bridge: no `Fixture` / `GroupList`. Those two are
- * invalidated there because `compatibleLookIds` rides on the fixture and group summaries — and a
- * template has no compatibility list at all. Compatibility is capability-only now (D6), and a
- * client can answer it from a fixture's own `capabilities`, so creating a template moves nothing on
- * those two lists.
+ * No `Fixture` / `GroupList`: compatibility is capability-only (D6), and a client answers it from a
+ * fixture's own `capabilities`, so creating a palette moves nothing on those two lists.
  */
 export function startPalettesBridge() {
   // `palettePressed` — a press somewhere on this desk. Patched, never invalidated: the frame

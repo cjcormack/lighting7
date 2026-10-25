@@ -573,16 +573,11 @@ export function SurfaceLibrary({
       out.push({
         key: `look:${look.uuid}`,
         name: look.name,
-        detail: look.hasDeferredFx ? "needs a selection" : "bound",
+        detail: "its own fixtures",
         badge: "Look",
         kind: "look",
         strip: null,
-        // A Look with a deferred effect presses onto targets it does not have, and the write
-        // boundary refuses it by name — so it is offered with no chip at all rather than with one
-        // that 400s. The detail line above is what says why.
-        chips: look.hasDeferredFx
-          ? []
-          : [actionChip("apply", "Apply", { type: "applyLook", lookUuid: look.uuid })],
+        chips: [actionChip("apply", "Apply", { type: "applyLook", lookUuid: look.uuid })],
       })
     }
 

@@ -519,10 +519,9 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         seedHex("hex-1", 1)
         val looks = (1..4).map { ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "L$it", mapOf("dimmer" to "${it * 10}")) }
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
         val cueId = createCue(
             client, "c",
-            layers = looks.mapIndexed { i, look -> CueLayerDto(lookId = look.id, sortOrder = i, targets = targets) },
+            layers = looks.mapIndexed { i, look -> CueLayerDto(lookId = look.id, sortOrder = i) },
         )
         client.include(cueId)
         val store = state.show.programmerStore
@@ -668,7 +667,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         )
         val cueId = createCue(
             client, "c",
-            layers = listOf(CueLayerDto(lookId = warm.id, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+            layers = listOf(CueLayerDto(lookId = warm.id)),
         )
 
         client.include(cueId)
@@ -686,12 +685,11 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         seedHex("hex-1", 1)
         val a = ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "A", mapOf("dimmer" to "200"))
         val b = ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "B", mapOf("dimmer" to "40"))
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
         val cueId = createCue(
             client, "c",
             layers = listOf(
-                CueLayerDto(lookId = a.id, sortOrder = 0, targets = targets),
-                CueLayerDto(lookId = b.id, sortOrder = 1, targets = targets),
+                CueLayerDto(lookId = a.id, sortOrder = 0),
+                CueLayerDto(lookId = b.id, sortOrder = 1),
             ),
         )
 
@@ -717,7 +715,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         )
         val cueId = createCue(
             client, "c",
-            layers = listOf(CueLayerDto(lookId = warm.id, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+            layers = listOf(CueLayerDto(lookId = warm.id)),
         )
 
         client.include(cueId)
@@ -741,12 +739,11 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         val warm = ProgrammerRouteTestSupport.createLookBoundTo(
             client, projectId, "Warm", mapOf("dimmer" to "200"),
         )
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
         val cueId = createCue(
             client, "c",
             layers = listOf(
-                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = targets),
-                CueLayerDto(lookId = warm.id, sortOrder = 1, targets = targets, delayMs = 2_000L),
+                CueLayerDto(lookId = warm.id, sortOrder = 0),
+                CueLayerDto(lookId = warm.id, sortOrder = 1, delayMs = 2_000L),
             ),
         )
 
@@ -772,7 +769,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         )
         val cueId = createCue(
             client, "c",
-            layers = listOf(CueLayerDto(lookId = warm.id, targets = listOf(CueTargetDto("fixture", "hex-1")))),
+            layers = listOf(CueLayerDto(lookId = warm.id)),
         )
         client.include(cueId)
         assertEquals(1, state.show.programmerStore.includedLayerSnapshot.size)

@@ -1179,7 +1179,7 @@ class AiTools(private val state: State) {
 
         val project = state.projectManager.currentProject
         val layers = parseCueLayers(input["layers"]?.jsonArray)
-        (layerSourceProblems(project, layers) + untargetedFxLayerProblems(layers))
+        (lookLayerTargetedProblems(layers) + layerSourceProblems(project, layers) + untargetedFxLayerProblems(layers))
             .takeIf { it.isNotEmpty() }?.let { return errorResult(it.joinToString("; ")) }
         val adHocFx = adHocArray?.mapIndexed { index, effect -> parseAdHocFxFromJson(effect.jsonObject, "adHocFx[$index]") }
             ?: emptyList()

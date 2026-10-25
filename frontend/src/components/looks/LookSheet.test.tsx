@@ -66,7 +66,6 @@ function look(id: number, over: Partial<LookSummary> = {}): LookSummary {
     rowCount: 8,
     fxCount: 0,
     targetCount: 8,
-    hasDeferredFx: false,
     preview: ['#ff9d4a'],
     layerCount: 0,
     buskPageCount: 0,
@@ -76,7 +75,7 @@ function look(id: number, over: Partial<LookSummary> = {}): LookSummary {
 
 /** The board's first three rows, and one more. */
 const LOOKS = [
-  look(1, { name: 'Ballyhoo', families: ['POSITION'], preview: [], fxCount: 1, rowCount: 0, targetCount: 0, hasDeferredFx: true, buskPageCount: 3 }),
+  look(1, { name: 'Ballyhoo', families: ['POSITION'], preview: [], fxCount: 1, rowCount: 0, targetCount: 0, buskPageCount: 3 }),
   look(2, { name: 'Band Spots', families: ['INTENSITY', 'POSITION'], notes: 'Front line', layerCount: 2 }),
   look(3, { name: 'Blackout Front', families: ['INTENSITY'] }),
   look(4, { name: 'Warm Wash', families: ['COLOUR', 'INTENSITY'], notes: 'Act 1 base', layerCount: 5 }),
@@ -159,7 +158,8 @@ describe('LookSheet', () => {
     draw()
     expect(row(2)).toHaveTextContent('Intensity')
     expect(row(2)).toHaveTextContent('Position')
-    expect(row(1)).toHaveTextContent('1 FX · FX follow the layer')
+    expect(row(1)).toHaveTextContent('1 FX')
+    expect(row(1)).not.toHaveTextContent('follow the layer')
     // Notes is the one value cell; every other column is a read-out and takes no selection.
     expect(row(2).querySelector('[data-cell="notes"] button')).not.toBeNull()
     expect(row(2).querySelector('[data-cell="families"]')).toBeNull()

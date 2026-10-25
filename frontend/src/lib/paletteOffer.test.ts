@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PaletteSummary } from '@/api/palettesApi'
-import { lookOutsideMaskReason, outsideMaskReason, paletteFits } from './paletteOffer'
+import { outsideMaskReason, paletteFits } from './paletteOffer'
 import { recentFirst } from './paletteRecents'
 
 /**
@@ -75,13 +75,6 @@ describe('the mask', () => {
     expect(outsideMaskReason('COLOUR', ['POSITION'])).toBe('Colour — the selection is Position')
     expect(outsideMaskReason('COLOUR', ['COLOUR'])).toBeNull()
     expect(outsideMaskReason('COLOUR', null)).toBeNull()
-  })
-
-  it('puts a Look outside only when none of its families is inside', () => {
-    expect(lookOutsideMaskReason(['COLOUR', 'INTENSITY'], ['COLOUR'])).toBeNull()
-    expect(lookOutsideMaskReason(['POSITION'], ['COLOUR'])).toBe('Position — the selection is Colour')
-    // Scenery alone lights nothing for a mask to cut, so the desk lands it whatever the mask.
-    expect(lookOutsideMaskReason([], ['COLOUR'])).toBeNull()
   })
 })
 

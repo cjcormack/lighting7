@@ -517,7 +517,7 @@ describe('createProgrammerApi', () => {
     const { conn, sent } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
-    api.addLayer({ lookId: 7, targets: [{ type: 'group', key: 'front-wash' }], amount: 0.5 })
+    api.addLayer({ paletteId: 7, targets: [{ type: 'group', key: 'front-wash' }], amount: 0.5 })
     api.addLayer({ lookId: 8 })
     api.removeLayer(3, 500)
     api.moveLayer(3, 0)
@@ -526,12 +526,11 @@ describe('createProgrammerApi', () => {
     expect(sent).toEqual([
       {
         type: 'programmer.addLayer',
-        lookId: 7,
+        paletteId: 7,
         targets: [{ type: 'group', key: 'front-wash' }],
         amount: 0.5,
       },
-      // Targets default to `[]` rather than being omitted: an absent list and an empty one mean
-      // the same thing to the server, and always sending the field keeps the shape one shape.
+      // Targets default to `[]` rather than being omitted — a Look's layer names none.
       { type: 'programmer.addLayer', lookId: 8, targets: [] },
       { type: 'programmer.removeLayer', layerId: 3, fadeMs: 500 },
       { type: 'programmer.moveLayer', layerId: 3, toIndex: 0 },

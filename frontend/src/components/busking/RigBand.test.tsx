@@ -121,7 +121,7 @@ import { RigBand } from './RigBand'
 import { RigStrip } from './RigStrip'
 
 function group(name: string, memberCount: number): GroupSummary {
-  return { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE', compatibleLookIds: [] }
+  return { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE' }
 }
 
 const barCells = [0, 1, 2, 3].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, attributes: [] }))

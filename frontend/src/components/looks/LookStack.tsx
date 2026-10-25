@@ -124,9 +124,10 @@ export interface LayerHandlers {
    */
   onDetach?: (index: number) => void
   /**
-   * Point this layer at the host's selection — the cue editor's Values selection
+   * Point a palette layer at the host's selection — the cue editor's Values selection
    * (show-cue-editing plan §4.1). Optional: only a host with a selection of its own passes it, and
-   * only the wide row draws it. The host says why it is refused through `targetsRefusal`.
+   * only the wide row draws it, never on a Look's layer, which names no targets. The host says why
+   * it is refused through `targetsRefusal`.
    */
   onSetTargets?: (index: number) => void
   /** Open the layer's Look or palette in its library. Optional, the cue editor's *Open Look*. */
@@ -473,14 +474,16 @@ export function LayerRow({
                 />
               )}
 
-          {showTargets && (
+          {/* A Look's layer names no targets — it lands whole (absolute-looks plan D1) — so only a
+              palette's draws them. */}
+          {showTargets && isPalette && (
             <span className="flex min-w-0 flex-wrap items-center gap-1">
               {layer.targets.length === 0 ? (
                 <span
                   className="text-[10px] text-muted-foreground"
-                  title="No targets on the layer, so the look's own rows decide where it lands"
+                  title="No targets on the layer, so the palette's own rows decide where it lands"
                 >
-                  look&rsquo;s own targets
+                  its own heads
                 </span>
               ) : (
                 layer.targets.map((t) => (
@@ -498,7 +501,7 @@ export function LayerRow({
 
           <span className="flex-1" />
 
-          {!readOnly && handlers?.onSetTargets && (
+          {!readOnly && isPalette && handlers?.onSetTargets && (
             <Button
               type="button"
               variant="ghost"

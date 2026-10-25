@@ -73,7 +73,7 @@ const FIXTURES = [
 function rowsOf(textFilter = '', expandedFixtures = new Set<string>()): Row[] {
   return buildRows({
     fixtures: FIXTURES,
-    groups: [{ name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] }],
+    groups: [{ name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' }],
     expandedGroups: new Set(['Front wash']),
     expandedFixtures,
     textFilter,

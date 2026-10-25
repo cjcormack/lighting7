@@ -103,9 +103,9 @@ export function MakeLayerSheet({
       }).unwrap()
 
       try {
+        // A Look's layer names no targets — it lands whole — and keeps the promotion's mask.
         programmerAddLayer({
           lookId: response.look.id,
-          targets,
           // The layer asserts exactly what was promoted, so the families left behind in Local
           // still win — they are above every layer.
           attributeMask: serializeAttributeMask(maskToWire(mask) ?? []) ?? undefined,

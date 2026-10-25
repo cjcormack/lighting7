@@ -51,7 +51,7 @@ vi.mock('react-router', async (importOriginal) => ({
 // The programmer grid is pointed at a focused Look layer: the busk tabs must write Local anyway.
 vi.mock('@/components/programmer/ProgrammerScope', () => ({ useProgrammerScope: () => ({ kind: 'layer', layerId: 'l1' }) }))
 vi.mock('@/components/programmer/LookRowStore', () => ({
-  useLookRowStore: () => ({ lookName: 'Warm wash', projectId: 1, lookId: 9, targets: [], targetedKeys: null, setValue: vi.fn() }),
+  useLookRowStore: () => ({ lookName: 'Warm wash', projectId: 1, lookId: 9, setValue: vi.fn() }),
 }))
 vi.mock('@/components/programmer/NewPaletteFromSelectionSheet', () => ({
   NewPaletteFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>

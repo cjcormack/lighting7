@@ -689,10 +689,10 @@ internal data class PaletteDto(
      * — so `PaletteStrip` and the busk palette need to know before offering it, and the family
      * alone cannot say: white, amber, UV and the hex are all `COLOUR`.
      *
-     * Not on the fixture the way `compatibleLookIds` is. The requirement belongs to the template and
-     * is three tokens long; the *capability* half is already on the wire as a colour descriptor's
-     * `whiteChannel` / `amberChannel` / `uvChannel`, so pairing them client-side costs one memo and
-     * no round trip per patch change.
+     * Not on the fixture: the requirement belongs to the template and is three tokens long, and the
+     * *capability* half is already on the wire as a colour descriptor's `whiteChannel` /
+     * `amberChannel` / `uvChannel`, so pairing them client-side costs one memo and no round trip per
+     * patch change.
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val requiredEmitters: List<String> = emptyList(),

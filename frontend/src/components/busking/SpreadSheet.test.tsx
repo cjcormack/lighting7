@@ -78,7 +78,7 @@ import { lookLayerTarget } from './buskingTypes'
 const group: BuskingTarget = {
   type: 'group',
   name: 'Front wash',
-  group: { name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] },
+  group: { name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' },
 }
 const moverTarget: BuskingTarget = { type: 'fixture', key: 'mh-1', fixture: mover }
 const barTarget: BuskingTarget = { type: 'fixture', key: 'bar', fixture: bar }

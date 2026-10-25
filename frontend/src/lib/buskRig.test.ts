@@ -58,7 +58,6 @@ const frontWash: GroupSummary = {
   capabilities: [],
   symmetricMode: 'NONE',
   defaultOrder: 'NORMAL',
-  compatibleLookIds: [],
 }
 
 /** The 12-pixel bar's cells, as the fixture type names them — test data, not a parse. */

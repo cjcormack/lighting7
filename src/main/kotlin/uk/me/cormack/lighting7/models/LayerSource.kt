@@ -64,12 +64,36 @@ data class LayerSourceDto(
 )
 
 /**
- * The targets a layer of [source] holds: a Look's none, whatever a write carried (absolute-looks plan
- * D1, P2 — a Look lands whole), a palette's as given.
+ * The targets a layer of [source] holds: a Look's none (absolute-looks plan D1 — a Look lands whole),
+ * a palette's as given. Every boundary that takes a layer from outside refuses a Look's targets
+ * ([LookLayerTargetedException]); this keeps the programmer's own stack to the same rule.
  */
 internal fun layerTargets(source: LayerSource, targets: List<CueTargetDto>): List<CueTargetDto> =
     if (source.kind == LayerSourceKind.LOOK) emptyList() else targets
 
-/** This cue layer as it is stored: a Look layer's targets dropped ([layerTargets]). */
-internal fun CueLayerDto.withStoredTargets(): CueLayerDto =
-    if (lookId != null && targets.isNotEmpty()) copy(targets = emptyList()) else this
+/**
+ * A stored write that would give a Look's layer targets, refused by name (absolute-looks plan P2): a
+ * Look lands whole, and a selection is a palette's. An [IllegalArgumentException], so every route and
+ * tool that already answers one with a 400 keeps doing so; `plugins/ErrorHandling.kt` adds the code.
+ */
+class LookLayerTargetedException(message: String) : IllegalArgumentException(message) {
+    companion object {
+        const val CODE = "LOOK_LAYER_TARGETED"
+    }
+}
+
+/** Why a Look's layer at [where] may not name targets — the message [LookLayerTargetedException] carries. */
+internal fun lookLayerTargetedMessage(where: String): String =
+    "$where: a Look lands whole, so its layer names no targets (${LookLayerTargetedException.CODE}) — to apply to a selection, use a palette"
+
+/** Every Look layer in [layers] that names targets, each as [lookLayerTargetedMessage]. */
+internal fun lookLayerTargetedProblems(layers: List<CueLayerDto>, where: (Int) -> String = { "layers[$it]" }): List<String> =
+    layers.withIndex()
+        .filter { (_, layer) -> layer.lookId != null && layer.targets.isNotEmpty() }
+        .map { (index, _) -> lookLayerTargetedMessage(where(index)) }
+
+/** Throws [LookLayerTargetedException] naming every Look layer in [layers] that names targets, or returns. */
+internal fun checkLookLayersUntargeted(layers: List<CueLayerDto>) {
+    val problems = lookLayerTargetedProblems(layers)
+    if (problems.isNotEmpty()) throw LookLayerTargetedException(problems.joinToString("; "))
+}

@@ -168,8 +168,6 @@ data class GroupSummaryDto(
     val capabilities: List<String>,
     val symmetricMode: String,
     val defaultOrder: String,
-    /** Always empty: a Look lands whole (absolute-looks plan P7). Kept on the wire until the client stops reading it. */
-    val compatibleLookIds: List<Int> = emptyList(),
     /**
      * Every member's key in the group's order (`sort_order`, venue-visit plan S7) — the order its
      * effects and a spread over it run in, which the Groups list draws its member rows in.
@@ -203,8 +201,6 @@ data class GroupDetailDto(
     val symmetricMode: String,
     val defaultOrder: String,
     val members: List<GroupMemberDto>,
-    /** Always empty: a Look lands whole (absolute-looks plan P7). Kept on the wire until the client stops reading it. */
-    val compatibleLookIds: List<Int> = emptyList(),
     /**
      * Each strategy's step per member, by `index` (`SpreadOrder.stepsBySize`): the order
      * the group sheet shows effects and a spread running in under that strategy (venue-visit plan S7)

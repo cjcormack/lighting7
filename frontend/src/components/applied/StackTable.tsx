@@ -328,9 +328,10 @@ function handlersFor(layer: ProgrammerLayer): LayerHandlers {
   }
 }
 
-/** The dense row's own targets wording. */
+/** The dense row's own targets wording; none for a Look, which lands whole (absolute-looks plan D1). */
 function targetsLabelOf(layer: ProgrammerLayer): string {
-  if (layer.targets.length === 0) return 'own targets'
+  if (layer.source.kind === 'LOOK') return ''
+  if (layer.targets.length === 0) return 'own heads'
   if (layer.targets.length === 1) return layer.targets[0].key
   return `${layer.targets.length} targets`
 }
@@ -405,10 +406,11 @@ function stackColumns(band: AppliedBand, onMakeLayer: () => void): { columns: Sh
     display: (row) => {
       const layer = asLayer(row)
       if (layer == null) return <LocalValueCount />
+      if (layer.kind === 'LOOK') return null
       return text(layer.targetsLabel, {
         title:
           layer.entry.layer.targets.length === 0
-            ? "No targets on the layer, so the look's own rows decide where it lands"
+            ? "No targets on the layer, so the palette's own rows decide where it lands"
             : `On ${layer.entry.layer.targets.map((t) => t.key).join(', ')}`,
       })
     },

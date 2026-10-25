@@ -165,8 +165,8 @@ export function DeskDndProvider({ children }: DeskDndProviderProps) {
       const targetPage = overData.page
       const targetIndex = overData.slotIndex
 
-      // A library palette row → slot assignment. Null for anything a slot cannot hold (a template,
-      // a Look that needs a selection), and the drop is then a no-op — the tile drew a refusal ring
+      // A library palette row → slot assignment. Null for anything a slot cannot hold (a palette),
+      // and the drop is then a no-op — the tile drew a refusal ring
       // on the way in, so the operator has already been told why.
       const assignment = slotAssignmentFor(activeData)
       if (assignment) {

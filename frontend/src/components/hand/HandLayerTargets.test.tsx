@@ -31,7 +31,7 @@ function route(name: string) {
       return {
         unwrap: () =>
           verdict.ok
-            ? Promise.resolve({ action: toggleAction.current, fxCount: 0, skippedFamilies: [] })
+            ? Promise.resolve({ action: toggleAction.current, fxCount: 0 })
             : Promise.reject(new Error('refused')),
       }
     },
@@ -200,15 +200,25 @@ describe('the programmer’s layer stack', () => {
     selection.following = false
     selection.targets = [{ type: 'fixture', key: 'par-1' }]
     selection.local = [{ type: 'group', key: 'wash' }]
+    await withHold(<HandProgrammerLayerStrip />, hold('PALETTE'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    await waitFor(() => expect(pressed).toHaveLength(1))
+    expect(pressed[0]).toMatchObject({
+      route: 'togglePalette',
+      args: { projectId: 1, paletteId: 8, targets: [{ type: 'group', key: 'wash' }] },
+    })
+  })
+
+  it('presses a Look naming no targets, whatever is selected', async () => {
+    selection.targets = [{ type: 'fixture', key: 'par-1' }]
     await withHold(<HandProgrammerLayerStrip />, hold('LOOK'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
     await waitFor(() => expect(pressed).toHaveLength(1))
-    expect(pressed[0]).toEqual({
-      route: 'toggleLook',
-      args: { projectId: 1, lookId: 8, targets: [{ type: 'group', key: 'wash' }], families: undefined },
-    })
+    expect(pressed[0]).toEqual({ route: 'toggleLook', args: { projectId: 1, lookId: 8 } })
   })
 
   it('says so when the place took the record off heads it already covered', async () => {
@@ -276,10 +286,10 @@ describe('a cue’s stack', () => {
     expect(undone.layers[0]!.lookId).toBe(3)
   })
 
-  it('appends onto an unlinked window’s own selection', async () => {
+  it('appends a palette onto an unlinked window’s own selection', async () => {
     selection.following = false
     selection.local = [{ type: 'fixture', key: 'par-4' }]
-    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('LOOK'), true)
+    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('PALETTE'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
@@ -288,10 +298,19 @@ describe('a cue’s stack', () => {
     expect(sent.layers[1]!.targets).toEqual([{ type: 'fixture', key: 'par-4' }])
   })
 
-  it('with a host — the cue editor’s Looks tab — presses into the cue on its targets, never its own PATCH', async () => {
-    const pressLayer = vi.fn((_source: unknown, _targets: unknown, _families: unknown) =>
-      Promise.resolve({ action: 'applied' as const, cue: {} as never }),
-    )
+  it('appends a Look naming no targets, whatever is selected', async () => {
+    selection.targets = [{ type: 'fixture', key: 'par-4' }]
+    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('LOOK'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    await waitFor(() => expect(patches).toHaveLength(1))
+    const sent = patches[0] as { layers: { targets: unknown[] }[] }
+    expect(sent.layers[1]!.targets).toEqual([])
+  })
+
+  it('with a host — the cue editor’s Looks tab — presses into the cue, never its own PATCH', async () => {
+    const pressLayer = vi.fn((_source: unknown) => Promise.resolve({ action: 'applied' as const, cue: {} as never }))
     const pressCue = {
       projectId: 1,
       cueId: 5,
@@ -315,7 +334,8 @@ describe('a cue’s stack', () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
     await waitFor(() => expect(pressLayer).toHaveBeenCalledTimes(1))
-    expect(pressLayer).toHaveBeenCalledWith({ lookId: 8 }, [{ type: 'group', key: 'Front' }], null)
+    // A Look names none of the host's targets: it lands whole.
+    expect(pressLayer).toHaveBeenCalledWith({ lookId: 8 })
     expect(patches).toHaveLength(0)
     expect(pressed).toHaveLength(0)
   })

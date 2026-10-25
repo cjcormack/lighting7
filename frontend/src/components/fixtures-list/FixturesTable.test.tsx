@@ -110,7 +110,6 @@ function layerStore(over: Record<string, unknown>) {
     draft: { get: () => undefined, subscribe: () => () => {} },
     setValue: () => {},
     serverRows: new Map(),
-    targetedKeys: null,
     attributeMask: null,
     deferredRows: [],
     elementRows: [],
@@ -914,20 +913,16 @@ describe('FixturesTable scopes', () => {
     expect(jumpButton()).toBeUndefined()
   })
 
-  it('dashes a fixture outside the layer targets, and refuses the edit rather than widening them', () => {
+  it('leaves every fixture editable in a focused Look layer, which names no targets', () => {
+    // A Look lands whole (absolute-looks plan D1): no row is outside its layer.
     scopeState.current = { kind: 'layer', layerId: 7 }
-    // The Look has a value for `a`; this layer's targets exclude it.
     lookStore.current = layerStore({
       serverRows: new Map([[lookRowKey('a', 'dimmer'), { kind: 'level', value: 128 }]]),
-      targetedKeys: new Set(['somewhere-else']),
     })
     render(<Harness />)
-    // The value still shows — "this Look has a value for it, this layer filters it out" is the
-    // useful reading, and hiding it would make the layer look empty.
     expect(screen.getAllByText('50%').length).toBe(ROWS.length)
-    expect(cellWrapper().className).toContain('border-dashed')
-    // A marquee dragged across the grid must never quietly widen a layer to the whole rig.
-    expect(cellWrapper().className).toContain('pointer-events-none')
+    expect(cellWrapper().className).not.toContain('border-dashed')
+    expect(cellWrapper().className).not.toContain('pointer-events-none')
   })
 })
 

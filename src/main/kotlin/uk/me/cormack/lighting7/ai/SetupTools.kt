@@ -1683,7 +1683,11 @@ class SetupTools(
             }
             val layers = try {
                 aiTools.parseCueLayers(row["layers"] as? JsonArray).also { parsed ->
-                    validateCueChildren(emptyList(), parsed, registry = state.show.fxRegistry)?.let { rowProblems += it }
+                    // Named here and validated without the Look targets, which the validator would throw on,
+                    // so the row's other problems are named in the same answer.
+                    rowProblems += lookLayerTargetedProblems(parsed)
+                    val untargeted = parsed.map { if (it.lookId != null) it.copy(targets = emptyList()) else it }
+                    validateCueChildren(emptyList(), untargeted, registry = state.show.fxRegistry)?.let { rowProblems += it }
                     rowProblems += aiTools.layerSourceProblems(project, parsed)
                     rowProblems += aiTools.untargetedFxLayerProblems(parsed)
                 }

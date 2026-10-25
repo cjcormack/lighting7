@@ -6,7 +6,7 @@ import { cueNumbersLabel, cueStacksLabel, describeLookContents, describePalette,
 function look(over: Partial<LookSummary>): LookSummary {
   return {
     id: 1, uuid: 'l1', name: 'L', notes: null, families: [], rowCount: 0, fxCount: 0, targetCount: 0,
-    hasDeferredFx: false, preview: [], layerCount: 0, buskPageCount: 0, ...over,
+    preview: [], layerCount: 0, buskPageCount: 0, ...over,
   }
 }
 

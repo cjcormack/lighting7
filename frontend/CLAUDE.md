@@ -725,7 +725,7 @@ Release folds to its glyph and the scope line drops the fade.
   that key. The tray, the badges, Release's count, the grid's ⌫ and its FX lens, the programmer's FX
   table and the busk FX tab all read it there; it reaches a fixture as *via <its items>*, and its stop asks first.
 - **The tray** (`FxTray`, D9): four states (Fx board) — empty and **folded**, one 40px row (the
-  count, a chip per FX dimmed while paused, *+n* past three, the Look picker and **+ FX**);
+  count, a chip per FX dimmed while paused, *+n* past three, and **+ FX**);
   **open**, two-line rows with pause and stop, up to half the sheet, scrolling itself; and
   **adding**, `FxPicker` in the open tray. While the programmer is blind a programmer FX's chip
   takes Blind's amber dot (its hover adds *held · Blind*) and its row the `HeldBlindMark`: the desk
@@ -932,9 +932,8 @@ Release folds to its glyph and the scope line drops the fade.
   head's key as an FX target), on the fixture with the **element filter** that names a pick of
   exactly the odd, even or a half of the heads (`elementFilterFor`, the desk's `ElementFilter` clause
   for clause), and otherwise says why it cannot — one FX has no target for heads 1, 2 and 7. A
-  pick that moves under an open picker re-keys it. The tray's **Look picker** follows the same rule
-  (Chris's call): the whole target on *All*, the one head or member when one is picked, and absent for
-  any other pick, a filtered one included.
+  pick that moves under an open picker re-keys it. The tray has **no Look picker** (absolute-looks
+  plan P7): a Look lands whole, so none is put on one fixture — an FX palette does that job.
 - **The group sheet**: *Values · Members* (`GroupMembersSection`, a member opening its own sheet, where
   a group's FX reads *via <group>*), Locate, **Park** over the members' channels (a member that is
   one head brings that head's channels, not the bar's — `ParkButton`, unpark confirmed) and **Release**
@@ -1003,7 +1002,7 @@ own fixtures, its own FX, added to a cue's stack at a declared position. A **Pal
 selection — either a value, *or* one FX, never both (`fx-templates-plan.md` D1). Which of the
 two it holds is `kind`, and it is fixed at creation the way the family is; three rules keep the
 FX half narrow, and each removes a way for it to complicate the cook: **a value or an FX**,
-**one FX** (several together is what a Look with deferred FX already is), and **always
+**one FX** (several together is what a Look is for), and **always
 generic** (an FX fans over whatever the layer names, so `isGeneric` is true for every one).
 Every family may hold an FX — a **Beam** one a beam built-in (Zoom Wave, Iris Pulse, Frost
 Pulse, Focus Pull; effects plan D6) or Slot Steps naming its setting, and any family Palette Steps
@@ -1026,9 +1025,20 @@ value grid, `LookDraftContext`, `LookLivePreview`, `syntheticFixture.ts`, `Edito
 button and one editor (`LookDetailSheet`, read-only about values on purpose; read its doc comment
 before adding a value grid; it lists the Look's FX read-only too, and Include runs them in the
 programmer, each on its own target, for Update to write an edit back onto). A Look **FX**
-names its own target too (absolute-looks plan D2), so `LookSummary.hasDeferredFx` is always
-false, and what reads it — the busk starter's Looks pool, the needs-a-selection labels — does
-nothing until those readers go.
+names its own target too (absolute-looks plan D2), so a Look needs no selection anywhere it is
+pressed — a busk pad, a cue slot, a surface button, the hand — and `LookSummary` carries no
+`hasDeferredFx`.
+
+**A Look is an absolute state** (absolute-looks plan D1): pressed, it lands its own rows, FX and
+scenery, never narrower and never wider, and its layer names no targets. To apply something to the
+selection, use a palette. So no sender puts a Look's press on the selection — `usePress`,
+`ApplyPicker`, `CueRowStore.pressLayer`, `MakeLayerSheet` and the hand send no targets and no mask
+for one — and the desk refuses a stored write that would give a Look's layer targets by name,
+`LOOK_LAYER_TARGETED` (P2; a cue's layers, `programmer.addLayer` / `patchLayer`, the Timeline's ops,
+MCP's cue layers). A Look layer draws no target chips (`LookStack`, the Stack table's Targets
+column) and has no *Targets* button, and a focused Look layer has **no write guard**: every write in
+the grid lands in the Look (`LookRowStore`). Its mask is still a layer setting (D3) — the layer
+popover, the cue editor's Looks tab, the Timeline's *Settings…* and *Make layer*'s promotion mask.
 
 **A palette stores an intent, not a literal**, resolved per head at cook: a colour plus a
 white/amber policy, a level or beam role as a percentage of each head's own range, a position
@@ -1372,19 +1382,16 @@ for the operator's own hand.
 server-side — it adds or removes a layer, matching a Look on its source alone, since it lands
 whole, and a palette per head by coverage — the source by uuid and kind, never an id alone, which
 would let a Look and a palette that share an int PK cancel each other.
-Keeping one owner for that match rule is why they weren't moved to the explicit ops. What did change
-is the ring: `lookLayerPresence` reads the desk's **resolved applied state** (`programmer.applied`,
-from `useProgrammerAppliedQuery`), not the FX list. The old match was
-`FxInstance.presetId === lookId`, which worked by accident (the Look id in a field naming a
-`DaoFxPreset`) and could never see a rows-only Look at all. It then read the layer stack directly,
-expanding groups client-side; the desk resolves that now — `ProgrammerLayerStack.appliedState` sends
-one entry per record naming every target it covers, each group marked `all` or `some` — so all
-these functions do is fold the selection into one ring. Two copies of a coverage rule drift, and the
-copy in the browser is the one no test against the rig can reach. `paletteLayerPresence` is its
-twin for palettes, and it is the *only* way a palette pad can light. That used to be because a palette
-held no FX; it holds one now, and the rule is *more* load-bearing rather than less — an
-FX-palette pad's ring would look matchable against the running instance, and matching there
-would light for an FX palette while leaving every value palette's pad dark.
+Keeping one owner for that match rule is why they weren't moved to the explicit ops. The rings read
+the desk's **resolved applied state** (`programmer.applied`, from `useProgrammerAppliedQuery`),
+never the FX list: `ProgrammerLayerStack.appliedState` sends one entry per record on the stack. **A
+Look's ring is on or off** (absolute-looks plan P4): `lookPresence` / `lookIsApplied`
+(`busking/lookPresence.ts`) light it while a layer of it is on, whatever is selected, and its entry
+names no targets. A palette's names every target it covers, each group marked `all` or `some`, and
+`paletteLayerPresence` folds the selection into one ring — two copies of a coverage rule drift, and
+the copy in the browser is the one no test against the rig can reach. It is the *only* way a palette
+pad can light: an FX-palette pad's ring would look matchable against the running instance, and
+matching there would light for an FX palette while leaving every value palette's pad dark.
 
 The **busk view**'s pad grid takes both, and takes **cues** besides — but it no longer decides where
 any of them go. A pad sits where the operator put it, in a bank on a page they built (see §The busk
@@ -1476,8 +1483,8 @@ siblings off — a palette sibling narrowed on the pressed heads, a Look sibling
 sibling stopped, and a cue or a Look press taking its layer siblings off whole, because neither has
 targets to narrow by. An **off** press releases nothing, and a stacking bank has no siblings at all. The request carries the
 selection's **`families`** beside its targets — the desk's pair while this tab follows the desk,
-the tab's own when unlinked — and the response answers `skippedFamilies`; see §The desk selection
-has a mask for what lands under it and why a press is never pre-refused here. The band's one row
+the tab's own when unlinked — which a palette pad's press reads and a Look's or a cue's ignores; see
+§The desk selection has a mask for what lands under it and why a press is never pre-refused here. The band's one row
 carries the family pill and the desk chip for the same pair.
 
 **`src/lib/buskLayout.ts` is the document model**: no React, no store, every gesture a plain call a
@@ -2257,8 +2264,8 @@ Under an empty selection nothing is sent and the panel's own sentence is toasted
 answer `FAN_NEEDS_SELECTION` otherwise, and `errorToastMiddleware` renders every 400 (the
 mutation is **not** in `SILENT_ENDPOINTS`, keyed so a failing Live burst replaces one toast), so the
 tab must not say it twice. **The mask is honoured by the desk, not pre-refused here**: an attribute
-outside the selection's families writes nothing and answers `skippedFamilies` — a 200, the Look
-press's shape — toasted in `skippedRowsMessage`'s vocabulary; the tab opens on the first family the
+outside the selection's families writes nothing and answers `skippedFamilies` — a 200, never a
+refusal — toasted in `skippedRowsMessage`'s vocabulary; the tab opens on the first family the
 mask names that the selection can take. The colour endpoints share one `ColourEditor` (compact,
 footer and read-out off — the busk tab's shipped measurement, which every host of the panel now
 takes) for whichever end is being edited, and its `combinedCss` is a **seed** that moves only when
@@ -2671,22 +2678,17 @@ two silently stops working. The overlay half is a **document-wide** query, never
 for the same reason the rule is stated the way it is.
 
 **`lib/handTargets.ts` is the one eligibility table.** A bank takes all three kinds (a pad *is* a
-reference to one of them); a slot takes a cue or a Look with no deferred FX (it has no
-selection, D7); both layer stacks take a Look or a palette. So a cue lands only on a bank or a
+reference to one of them); a slot takes a cue or a Look, which lands whole (it has no selection,
+D7; absolute-looks plan D1); both layer stacks take a Look or a palette. So a cue lands only on a bank or a
 slot, which falls out of the table rather than being stated a fifth time. It is eligibility and
 never permission: every place still runs its own mutation.
 
 **`canHandLand(…, 'slot')` is also what `LibraryPalette` sets each row's `slotEligible` from**, and
-that sharing is the fix for a real hole rather than tidiness. The rule used to be written out four
-times — three per-kind literals in the library, `canHandLand`, and the test's own fixture — and
-`slotAssignmentFor` re-checks only the *palette* refusal, so the deferred-FX-Look half rested
-on the flag alone. A test that built the flag from its own copy of the formula and then asserted the
-two agreed was comparing two hardcoded copies of one rule: genuine drift in the library would have
-stayed green. With one statement of it that drift is gone by construction, so `handTargets.test.ts`
-pins what is *still* two independent pieces of code — `slotAssignmentFor`'s kind re-check, fed a
-deliberately wrong `slotEligible`, asserting both that it catches a palette and that it does **not**
-catch a deferred Look. `slotDrop.ts`'s docblock states that asymmetry; the sentence that stood there
-before implied it covered both.
+that sharing is the fix for a real hole rather than tidiness: the rule used to be written out four
+times, and a test that built the flag from its own copy of the formula compared two hardcoded copies
+of one rule. With one statement of it that drift is gone by construction, so `handTargets.test.ts`
+pins what is *still* independent code — `slotAssignmentFor`'s kind re-check, fed a deliberately
+wrong `slotEligible`, catching a palette.
 
 **The rings are buttons, not `useDroppable` sites**, which is a deliberate departure from the plan's
 sketch. A hand place is a **tap** — the whole point of the hand is that no drag is in flight — so a
@@ -2741,9 +2743,9 @@ the layers array read *before* the place. The **programmer's layer stack** is th
 Look as the strip's tap does — and has **no Undo**, which is a decision: a press returns no layer id, the only way
 to find the new layer would be to diff a stack that is *shared*, and a wrong inverse removing another
 window's layer on a live rig is worse than none — the row it just added is one click from its own
-remove. Both layer places send the **window's selection** as `targets` (`useWindowPressPair`: an
-unlinked window's own), which *supplies* them for a palette and *filters* them for a Look, and the
-family mask is the server's.
+remove. Both layer places send a palette the **window's selection** as `targets`
+(`useWindowPressPair`: an unlinked window's own), which *supplies* them, and a Look none — it lands
+whole; the family mask is the server's.
 
 **Five doors pick something up.** A busk pad's hold opens a **menu** — on a palette or Look pad the
 tap's verb and *Apply as values* first (§"Applying to a selection"), then *Pick up* and *View* —
@@ -2941,9 +2943,8 @@ targets. Four things follow on this side. Their library rows are **not** `Target
 component exists to mount `useTargetAttributes` per target — so they are built in `SurfaceLibrary`'s
 `rows` memo from `actionChip`. The **kind row stays at six**: a palette files under *Looks*, a busk
 page under *Desk*, and *Next page* / *Prev page* sit on the Desk row once, because a chip repeated
-per page reads as page-specific. A Look whose `hasDeferredFx` is set is still offered with no
-chip, but the desk now answers it false for every Look and refuses no Look binding, so every Look
-gets one. And `describeTarget` **will not
+per page reads as page-specific. Every Look gets an *Apply* chip, since a Look lands whole whatever
+is selected. And `describeTarget` **will not
 resolve a uuid to a name** — `components/surfaces/recordOptions.ts` is the one owner of that, shared
 by the picker and the inspector, the same split `useSpeedMasterDisplay` makes for a speed master.
 
@@ -2964,8 +2965,8 @@ that turns that into a route, and every door calls it: the palette strip, the on
 (`ApplyPicker`, from `All · n`, a band's *All …* and the Stack table's *+ Look or palette*), the popup's
 Palettes bands (the programmer's colour, level and position editors, and the busk Colour, Level,
 Position and Beam tabs), a busk
-pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
-(`LookTogglePicker`) and a cue slot's Look. A busk pad's own press stays `POST /busk/pads/{id}/press`,
+pad's *Apply as values*, the hand's place on the programmer's stack and a cue slot's Look. A busk
+pad's own press stays `POST /busk/pads/{id}/press`,
 which carries its bank's solo siblings. The **bare FX** is the one source `usePress` does not
 take: ⌘K *Apply FX*, the FX table's *+ FX*, a band's *+ FX …*, the busk FX tab's
 *+ FX…* and the picker's FX section
@@ -2980,7 +2981,8 @@ paragraphs.
   (`/palettes/{id}/apply`, `/looks/{id}/apply`): literals and Local FX with no layer, which
   retuning the record never moves; **hold or right-click** opens the menu — the tap's verb named
   (*Put on* / *Take off these heads*, from the chip's ring; *Put on or take off its own heads* with
-  nothing selected, where the ring cannot say), *Apply as values*, *Pick up*, *Edit palette…*
+  nothing selected, where the ring cannot say; a Look's *Put on* / *Take off*, since it lands whole),
+  *Apply as values*, *Pick up*, *Edit palette…*
   (`/palettes?edit=<id>` opens that palette's editor, once the current project has loaded) — and
   **never presses**. Since a hold changes nothing on the rig it is armed for every pointer, a mouse's
   too, as a busk pad's always was; the click its release generates is swallowed. Only the primary
@@ -3002,12 +3004,14 @@ paragraphs.
   store as `MarqueeSnapshot.press` (held by content, so a rows refetch republishes nothing), an
   unlinked window's own selection included; elsewhere `useSelectionPair`, the desk's while following
   and the tab's copy when not. The split is a cost one: a door that brings its own pair — the strip,
-  a cell batch, a fixture sheet's one target, a cue slot's none (the Look's own fixtures) — then
-  subscribes to no marquee frame.
+  a cell batch, a fixture sheet's one target, a cue slot's none — then subscribes to no marquee
+  frame. **A Look's press names neither half** (absolute-looks plan D1, D3): it lands whole, so
+  `/looks/{id}/toggle`, `/looks/{id}/apply` and the cue's layer press go out with no targets and no
+  mask, whatever the pair.
 - **The scope** (D7): with a Look layer focused (`LookRowStore`), a palette press goes **into the
   Look** — a value palette through `/palettes/{id}/apply` with `write: false`, each head's literal
   landing in the layer's draft through `setValue`, no `programmer.*` frame sent; an FX palette
-  started on the heads the layer targets and then absorbed (`absorb-fx`, *+ FX*'s path),
+  started on the selected heads and then absorbed (`absorb-fx`, *+ FX*'s path),
   and stopped again if the absorb is refused, since a press into a Look must leave the stage as it
   was; a Look refused, since Looks don't nest. `landValuesInLook` is the draft's one landing, shared
   with Fan's `write: false` arm. A door that writes Local whatever the grid is pointed at passes `scope: 'programmer'` (the
@@ -3025,17 +3029,17 @@ paragraphs.
   are server-side. The hook pre-refuses one thing: a **palette with no targets that would land
   nowhere** — a generic one on either gesture, a per-fixture one applied as values — which the toggle
   and apply routes take without refusing (only the busk pad's route refuses it,
-  `PALETTE_NEEDS_SELECTION`). A per-fixture palette's tap names its own heads and a Look with none
-  lands on its own fixtures, so both go out (the menu says so, *Put on or take off its own heads*;
-  a generic palette's reads *Put on — select fixtures first*), and nothing is refused from the mask. A palette's tap sends
+  `PALETTE_NEEDS_SELECTION`). A per-fixture palette's tap names its own heads, so it goes out (the
+  menu says so, *Put on or take off its own heads*; a generic palette's reads *Put on — select
+  fixtures first*), and nothing is refused from the mask. A palette's tap sends
   `attributeMask` (its family) as the belief it acts on, though the desk derives a palette layer's mask
   from its own rows; the response reports the mask applied, so a disagreement shows there rather
   than on the rig. A refusal is the
   desk's sentence, toasted by `errorToastMiddleware`. The hook reports the rest one way: *Apply as
   values*' per-head skips, *n FX started* for an FX palette (gated on the palette's
   **kind** — the desk answers a value apply with `fxIds: []` too, and reading that as "nothing
-  started" toasted red on every value press), a Look's `skippedFamilies` in `skippedRowsMessage`'s
-  rows vocabulary, and in a focused Look the values that could not reach its draft. It answers what
+  started" toasted red on every value press), and in a focused Look the values that could not reach
+  its draft. It answers what
   happened — `on`, `off`, `into`, or `null` for a refusal — which is how the hand's place says *taken
   off it* when the record was already on every selected head (`HandPlacement.describe`).
 - **The Stack table** (§4.6): a layer's settings popover has **Detach** on a row of its own
@@ -3115,18 +3119,17 @@ under the operator's hand on the second press.
 one picker every library door opens: on every family the selection fits from `All · n` and the Stack
 table's *Palette…*, on one family from a popup band's *All …*, on the Looks from its *Look…*. It is
 the offerable library as a searchable pad grid, sections Recent · All A–Z · Per fixture · FX
-(the FX palettes, and *FX…*, the way to the bare FX) · **Outside the mask** — what the heads could take but
-the selection's mask leaves out, dimmed with the reason (*Colour — the selection is Position*) and
-**still pressable**, since the mask is tested on the on arm only and a lit one must come off. Built
-from the busk pad's own face (`padFace.ts`'s `PAD_SHELL` / `paletteSwatch` / `padPresenceClass`, and
-`paletteLayerPresence` / `lookLayerPresence` against the desk's resolved applied state). It presses
+(the FX palettes, and *FX…*, the way to the bare FX) · **Outside the mask** — the palettes the heads
+could take but the selection's mask leaves out, dimmed with the reason (*Colour — the selection is
+Position*) and **still pressable**, since the mask is tested on the on arm only and a lit one must
+come off. Its Looks are **one list**, A–Z: a Look lands whole, so neither the selection nor its mask
+says anything about one, and its ring is whether a layer of it is on (absolute-looks plan D1, P4).
+Built from the busk pad's own face (`padFace.ts`'s `PAD_SHELL` / `paletteSwatch` / `padPresenceClass`,
+and `paletteLayerPresence` / `lookPresence` against the desk's resolved applied state). It presses
 the pair its door hands it through `usePress`, and **never asks for targets**: it replaced the
 add-layer sheet's source and target steps — on the programmer in session 5, in the cue editor in
 session 8 — whose `CueTargetPicker` step landed one
-fixture or group whatever was selected. A Look can land **on its own fixtures** — a toggle beside
-*On n selected*, chosen by default with nothing selected — which is that sheet's *Use the look's own
-fixtures* kept; a Look whose FX take the layer's targets has none to land on and sits outside
-with that reason. Four things about it: it takes **`useEditorForm`'s three forms** and neither of
+fixture or group whatever was selected. Four things about it: it takes **`useEditorForm`'s three forms** and neither of
 its own media queries, so the picker and a cell editor never disagree about which shape a screen
 gets, and a door with no anchor (the Stack table's create verb) takes the right-hand sheet on a
 desk — `ApplyLayerPicker` is mounted only while open, since its pair is a marquee subscription; **a press does not close it**, because auditioning three colours in a row is the normal case;
@@ -3141,8 +3144,8 @@ the **FX palettes** that fit, pressed through `usePress`. It retired `FxAddSheet
 Look the FX starts on `/fx/add` and the arm absorbs it when the panel closes or unmounts, once —
 unless the editor's × stopped it. It sizes to its list (up to the same 540px), where the palettes and
 Looks hold their height so a search never moves the panel under the pointer.
-`ApplyPicker.test.tsx` pins the sections, the offer, the mask arm, the Look's own fixtures and the
-FX arm's press and absorb.
+`ApplyPicker.test.tsx` pins the sections, the offer, the mask arm, the Looks' one list and ring, and
+the FX arm's press and absorb.
 
 **Row C sheds twice on the way down.** Below `@[800px]` the fixture count, its separator and Locate
 / Highlight fold (`MID_FOLDED_CLASS` in `SelectionToolbar.tsx`) — the count is already on the cell
@@ -3206,7 +3209,7 @@ open on this one (§Looks, palettes and layers, *Every mask a sheet takes*).
 
 What the desk does under a mask, per kind: a **palette** is one family, so it lands whole or is
 400 `PALETTE_OUTSIDE_MASK` on every door, apply and layer alike; a **Look** and a **cue** ignore it
-— a Look lands whole, its layer's mask a setting of the layer, and `skippedFamilies` answers empty.
+— a Look lands whole, its layer's mask a setting of the layer, so a Look's press sends none.
 The refusal carries a message naming both families and reaches the screen through
 `errorToastMiddleware`, which toasts every rejected mutation — which is why `usePress` toasts no
 failure of its own: it would say the same sentence twice.
@@ -3216,11 +3219,10 @@ A press that turns a lit record off answers `removed` under any mask (`routes/pr
 the arm before the press), and only the desk knows which arm a press is on — a lit Intensity pad
 must still release while a Colour marquee stands. Send it, and render the desk's answer.
 
-**The skip toast is dormant** (D6): `<Family> rows skipped — the selection is <Family>` from
-`skippedRowsMessage` (`lib/selectionMask.ts`) reads `skippedFamilies` off the busk press and Look
-toggle responses, and the desk now answers it empty, since a Look press ignores the selection's
-mask (absolute-looks plan D3). A Look layer's mask is set on the layer itself, and it filters the
-layer's rows, not its FX.
+**No press skips a family** (absolute-looks plan D3): the busk press, the Look routes and the cue's
+layer press answer no `skippedFamilies` any more, since a Look's press ignores the selection's mask
+and a palette's is one family. `skippedRowsMessage` (`lib/selectionMask.ts`) is Fan's alone now. A
+Look layer's mask is set on the layer itself, and it filters the layer's rows, not its FX.
 
 ### Sheet kit
 
@@ -6325,16 +6327,16 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   been read again — so a refetch between two writes never draws a removed layer back. *+ Look* and
   *+ Palette* open the one picker (`ApplyPicker`, apply-model plan session 8) on the Values selection,
   no mask, offering what its heads can take (`cueWriteTargets`, the strip's `targetFamilies` and
-  `targetEmitters`), and its presses write the cue through the desk's press route (`PressCue`) — the
-  Look's *On its own fixtures* is a layer naming no targets; `AddLayerSheet` and `LayerPicker` are deleted
+  `targetEmitters`), and its presses write the cue through the desk's press route (`PressCue`) — a
+  Look's is a layer naming no targets, since it lands whole; `AddLayerSheet` and `LayerPicker` are deleted
   (`addLayerSheetRetired.test.ts`). **A layer's timing and masters are its settings popover's**
   (§11, 12): the wide row's popover draws `LayerTimingFields` — delay, interval, random window, and
   the opt-in speed and rate master overrides that were the add sheet's last step — when the host passes
   `LayerHandlers.onSetTiming`, which only this tab does, for a layer the picker just put on and an
   existing one alike; typed timing coalesces on the store's flush, a master pick saves at once. A
-  row's **Targets** is
+  palette layer's **Targets** is
   `LayerHandlers.onSetTargets`, a new optional member only this host passes, refused with the reason
-  while nothing is selected (`targetsRefusal`); **Open** (`onOpenSource`) leaves for
+  while nothing is selected (`targetsRefusal`) — a Look's layer has none, and no target chips; **Open** (`onOpenSource`) leaves for
   `/looks?edit={id}` — the Looks route opens that Look's sheet, the palettes route's rule — or
   `/palettes?edit=` for a palette layer (`hooks/useEditParam.ts`, both routes'). The hand's *Place
   here* strip stays under it, unlocked, and its place is a press on the Values selection
@@ -6356,8 +6358,8 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   opens `FxPicker` **in draft** (`draft={{current, onPick}}`) over `fxTargetOf(selection)` — one
   row as itself, several as one `selection` FX keyed by the list's canonical JSON
   (`selectionKeyOf`): a tap appends the FX with the picker's starting spec and D16's master and
-  runs nothing (no `fx.add`, no active-FX read); a second tap swaps it in place. Each enabled
-  Look layer's **deferred** FX are listed under *From <Look>*, read-only.
+  runs nothing (no `fx.add`, no active-FX read); a second tap swaps it in place. A Look layer's FX
+  are not listed: they name their own targets and are the Look's, edited in its library.
 - **Locked, both tabs read** (§4.6): `LookStack`'s `readOnly` draws the rows' badges with no drag,
   the FX rows have no grip, × or editor writes, and the add buttons are disabled with the reason.
   `useRefusedEditKeys` (`editorIsolation.tsx`) claims a ⌫ or Enter pressed while the editor holds
@@ -6760,8 +6762,9 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
 - **The read is `GET …/cue-stacks/{sid}/timeline`** (`useCueStackTimelineQuery`, tag
   `CueStackTimeline`), which rides the stack list's, the cue list's, each cue's, the Looks', the
   palettes' and the scene's tags rather than a frame of its own. **The grid is derived on the client**
-  (P6) by `lib/stackTimeline/`, pure and tested on its own: `columns` (a column per Look or palette
-  and target — none is the record's own fixtures — per FX by type, attribute and target, per
+  (P6) by `lib/stackTimeline/`, pure and tested on its own: `columns` (a column per Look, sub *Look*,
+  since a Look lands whole; per palette and target — none is its own heads — per FX by type,
+  attribute and target, per
   scenery element; grouped Looks · Palettes · FX · Scenery, each in first use down the stack),
   `cells` (rank, glyphs), `runs` (start, end, ↺ where two run keys meet, ◆ where a run's settings
   change, the scenery tracked line, and what passes a marker) and `filter`. Layer cells join
@@ -6841,7 +6844,8 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
     layer; a number commits on Enter or blur, never
     per keystroke; it names a layer covering several targets and offers *Open Look* / *Open palette*.
   - **+ Column** (`TimelineAddColumn`) searches the Looks and palettes; a palette takes the desk
-    selection's first target unless another is picked, a Look its own fixtures — a generic palette is
+    selection's first target unless another is picked, and a Look none (`edits.ts`' `cellTargetOf`
+    sends none for a Look's cell whatever a stored column names) — a generic palette is
     offered no *own heads*, here or in *Replace with…*, since the desk refuses it on none. The column
     lives in this window (`sessionStorage timeline.extra.<stackId>`, `withExtraColumns`, which gives it
     its target's heads and the window's column order) until a cell is filled, when the derived one
@@ -7232,7 +7236,7 @@ path may quietly change where it lands.
     anonymous FX instances with their own timing model was a different gesture wearing the same
     clothes. Three things follow, and none is a bug:
     - **Nothing on this page mints an FX instance.** An ad-hoc FX reaches the stage through a
-      Look with deferred FX, a cue, or the Programmer's `+ FX`; a raw level through an
+      Look, a cue, or the Programmer's `+ FX`; a raw level through an
       intensity palette or the Programmer.
     - **`useSpeedMasterForFamily` lost its caller here.** The FX pads were the only surface
       doing the busking plan's D1 stamping, and it is client-side — the backend serves `family` but

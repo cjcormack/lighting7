@@ -23,7 +23,6 @@ import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.withStoredTargets
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
@@ -357,7 +356,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording, regist
             this.palette = resolved.palette
             this.sortOrder = layer.sortOrder
             this.enabled = layer.enabled
-            this.targets = layer.withStoredTargets().targets
+            this.targets = layer.targets
             this.attributeMask = layer.attributeMask
             this.blendMode = layer.blendMode
             this.amount = layer.amount

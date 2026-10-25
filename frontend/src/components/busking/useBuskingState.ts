@@ -12,8 +12,8 @@ import { useBuskingSelection } from './useBuskingSelection'
  * knows its bank and the bank is what decides the siblings; so what is left here is the selection
  * and the one query the rings read.
  *
- * **Everything here addresses a target by `{type, key}`** — `CueTarget`, `ToggleLookTarget` and the
- * layer stack's own target shape are the same three fields, and `lookLayerTarget` is the single
+ * **Everything here addresses a target by `{type, key}`** — `CueTarget` and the layer stack's own
+ * target shape are the same three fields, and `lookLayerTarget` is the single
  * place the group-name convention is applied. The ring and the tap have to agree about which layer a
  * pad is talking about; a group answering to its name in one and its key in the other would light a
  * pad that a tap then failed to clear.
