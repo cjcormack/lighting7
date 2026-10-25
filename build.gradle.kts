@@ -1036,10 +1036,15 @@ tasks.test {
     // eight lines of WARNING that bury anything real.
     jvmArgs(application.applicationDefaultJvmArgs)
 
-    // GlossaryVocabularyTest reads docs/glossary.md, which is on no classpath: without this input a
-    // glossary-only edit is restored from the build cache and never checked.
-    inputs.file(layout.projectDirectory.file("docs/glossary.md"))
-        .withPropertyName("glossary")
+    // GlossaryVocabularyTest and FxTablesDocTest read these docs, which are on no classpath: without
+    // them as inputs a docs-only edit is restored from the build cache and never checked. A new
+    // `doc:` locator in the glossary adds its file here.
+    inputs.files(
+        layout.projectDirectory.file("docs/glossary.md"),
+        layout.projectDirectory.file("docs/lighting-composition-model.md"),
+        layout.projectDirectory.file("docs/fx-engineering.md"),
+    )
+        .withPropertyName("glossaryDocs")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
     // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the

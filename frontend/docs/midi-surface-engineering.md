@@ -3,10 +3,10 @@
 `/projects/:id/settings/surfaces` (`routes/Surfaces.tsx`). A picture of the attached MIDI desk, an
 inspector for whichever control you click, and — under *Edit bindings* — a library you drag onto it.
 
-The plan and the decisions are `lighting7/docs/plans/completed/midi-surface-plan.md`; the layout authority is
-`lighting7/docs/plans/completed/midi-surface-design/` (`Main.dc.html` run mode, `Edit.dc.html` edit mode,
+The plan and the decisions are `docs/plans/completed/midi-surface-plan.md`; the layout authority is
+`docs/plans/completed/midi-surface-design/` (`Main.dc.html` run mode, `Edit.dc.html` edit mode,
 `Legend.dc.html` the control-state vocabulary). The backend contract is
-`lighting7/docs/midi-control-surface-engineering.md`. This file is the client half: the things that
+`docs/midi-control-surface-engineering.md`. This file is the client half: the things that
 will bite.
 
 ## The picture is data, and the state is what the hardware was told
@@ -37,8 +37,8 @@ copy. `surfaceResolve.test.ts` replays the Kotlin cases; keep it in step with
 The order is **the control's own row across both bank levels, then its strip's** — direct before
 strip at *both* levels, which an "obvious" bank-first reading gets backwards.
 
-The encoder bank it derives against is an `EncoderBankSelection` — a property and, for a colour, a
-`colourAxis` — and the axis goes on the strip's **encoder** and nowhere else. `propertyTarget`
+The encoder bank it derives against is an `EncoderBankSelection` — an attribute and, for a colour, a
+`colourAxis` — and the axis goes on the strip's **encoder** and nowhere else. `attributeTarget`
 leaves the field *absent* for hue (`withAxis`): that is what every pre-axis row has and what the
 server writes, and `toEqual` in the tests tells absent from `null`.
 
@@ -88,7 +88,7 @@ surprises:
 
 - An **encoder with a push note reaches both halves** — its CC is a `Continuous` and its note a
   `ButtonPress`, on one control id. The X-Touch declares a push on all sixteen, so an encoder
-  legitimately takes a cue chip as well as a property one.
+  legitimately takes a cue chip as well as an attribute one.
 - A **bank button takes nothing at all**: `route` answers `ResolvedInput.BankButton` and switches
   the bank *before* resolving a binding. A row there can never fire, so the library will not offer
   one and `BankButtonCell` draws its own label whatever row sits on its id — but it draws itself
@@ -96,9 +96,9 @@ surprises:
   row only the inspector mentions is one nobody scanning the surface would find.
 
 A colour axis does not change which half a target reaches — `targetControlKind` switches on the kind
-alone — but it is refused on a property that is not a colour, by name, at the same door
+alone — but it is refused on an attribute that is not a colour, by name, at the same door
 (`BINDING_AXIS_NEEDS_COLOUR`, `refuseAxisOnNonColour`). The picker shows its *Colour axis* field only
-where the named property is a colour, and **drops the axis whenever the property changes**, so a
+where the named attribute is a colour, and **drops the axis whenever the attribute changes**, so a
 colour → dimmer edit cannot save a 400.
 
 `controlKinds` and `targetControlKind` are now the **mirror** of `midi/BindingControlKind.kt`
@@ -142,8 +142,8 @@ Session 4 added six targets: `applyLook`, `pressPalette`, `pressPad`, and the th
 All are buttons. Five things about them on this side:
 
 - **The library rows are not `TargetRowItem`s.** That component exists to mount
-  `useTargetProperties` per group or fixture and is memoized on primitive target props for exactly
-  that reason; a palette, Look or busk page has no per-target property lookup, so its row is built
+  `useTargetAttributes` per group or fixture and is memoized on primitive target props for exactly
+  that reason; a palette, Look or busk page has no per-target attribute lookup, so its row is built
   in `SurfaceLibrary`'s `rows` memo from `actionChip` beside Selection and Desk.
 - **The kind row stays at the artboard's six.** *All · Groups · Fixtures · Looks · Cues · Desk* — a
   palette files under **Looks** (the row of named recallable records) and a busk page under
@@ -168,7 +168,7 @@ All are buttons. Five things about them on this side:
 
 Venue-visit plan S12 added one continuous target, `selectionFan {axis}` (`PAN` | `TILT`, and the stage
 axes `ACROSS` | `DEPTH`, which fan the beams' landing points a tenth of a metre a step): an encoder
-or fader that fans the desk selection's positions about their own, through the Spread panel's own
+or fader that fans the desk selection's positions about their own, through the Fan panel's own
 desk resolve. `lib/surfaceDrop.ts` answers `continuous`, `describeTarget` names it *Sel · fan pan*,
 the picker's *Selection — fan* carries one *Axis* select (default Pan), and the library's Desk row
 offers *Fan pan*, *Fan tilt*, *Fan across* and *Fan depth* once — it names no target of its own. The inspector's live card
@@ -182,7 +182,7 @@ an empty selection drops the turn.
 Session 7 of the busk-further plan mirrored the five BUTTON targets its session 2 added to
 `BindingTarget` (D14): `buskFocusSet {windowName, focus}`, `buskSheetToggle {windowName}`,
 `selectionNext`, `selectionPrev`, `selectionCells {mode}`. `lib/surfaceDrop.ts` answers `button` for
-all five, `describeTarget` names them (*Busk focus · Pads · Screen 2*, *Cells · Odd*),
+all five, `describeTarget` names them (*Busk focus · Pads · Screen 2*, *Elements · Odd*),
 `BindingHealth` gains `missingWindow` and `describeHealth` its line, and the picker offers them. Four
 things about them on this side:
 
@@ -203,7 +203,7 @@ things about them on this side:
   stays at six.
 - **`selectionCells` has no LED** (`FU-SURFACE-SUBSELECT-LED`): a sub-selection is not a state the
   desk keeps. The mode's label is `SUBSELECT_MODE_LABELS` in `lib/cellsSubSelection.ts`, shared with
-  the busk band's Cells chip, so a button and the chip name one rule the same way.
+  the busk band's Elements chip, so a button and the chip name one rule the same way.
 
 ## The showing busk page
 
@@ -233,19 +233,19 @@ no layout.
 
 ## `hooks/useTargetAttributes.ts`
 
-Closes `FU-FE-USE-TARGET-PROPERTIES`: `useTargetProperties` / `useRigProperties` (flat) for the
-surfaces that *bind* properties and need names plus "can a fader drive this". It landed beside a
-second export, `categoriseProperties`, for the surfaces that *rendered* group properties; its last
+Closes `FU-FE-USE-TARGET-PROPERTIES`: `useTargetAttributes` / `useRigAttributes` (flat) for the
+surfaces that *bind* attributes and need names plus "can a fader drive this". It landed beside a
+second export, `categoriseProperties`, for the surfaces that *rendered* group attributes; its last
 consumer, `GroupCard`'s group visualisers, became the fixture sheet's rows (fixture-fx-sheets plan
 session 4), and it went with them.
 
-`continuous` mirrors `PropertyChannelResolver`: sliders and colours only. A position pair or a
+`continuous` mirrors `AttributeChannelResolver`: sliders and colours only. A position pair or a
 setting on a fader would be a control that does nothing, so the library does not offer one.
 
 **A colour descriptor expands to the colour plus its bundled emitters.** The fixture descriptor
 list omits a `bundleWithColour` slider — `white`, `amber`, `uv` — and folds its channel into the
 colour's `whiteChannel` / `amberChannel` / `uvChannel`; the desk drives each as a slider by that
-name, so the hook mints one `AvailableProperty` per present emitter (a group has one if any member
+name, so the hook mints one `AvailableAttribute` per present emitter (a group has one if any member
 does). The name is the category, which lighting7's `BundledEmitterNamesTest` pins across every
 fixture type. `SurfaceInspector`'s stage line mints the same descriptor off the colour's channel ref
 for those three names.
@@ -258,11 +258,11 @@ brightness — and `lib/colourAxis.ts` is this side's whole vocabulary: the four
 and the one rule everything compares through: **null is hue, and so is `'hue'`**. A binding never
 carries the field for hue; `withAxis` is how the picker, the library and the resolver keep it
 absent. This module labels and draws and never resolves — what a trim or a saturation position does
-to a head is `PropertyChannelResolver`'s in both directions, and the *Position* line on the
+to a head is `AttributeChannelResolver`'s in both directions, and the *Position* line on the
 inspector's live card is already that reading.
 
 The library offers a colour as **four chips**, one per axis with its own swatch, labelled by the
-axis alone when the target has one colour property; the Selection and Encoder bank rows get the
+axis alone when the target has one colour attribute; the Selection and Encoder bank rows get the
 same four from the rig vocabulary. `describeTarget` appends ` · sat` and the like for every axis but
 hue, so a hue binding reads exactly as it always did.
 

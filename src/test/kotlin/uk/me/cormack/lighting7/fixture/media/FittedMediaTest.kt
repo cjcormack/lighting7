@@ -77,7 +77,7 @@ class FittedMediaTest {
             "media.slots.fbWheelPos.SLOT_1: unknown gobo 'lasers'",
             "media.slots.fbWheelPos.SLOT_2: a slot holds a gel or a gobo, not both",
             "media.slots.fbWheelFunc: fbWheelFunc is not loadable",
-            "media.slots.noSuchAttribute: '$rev' has no property noSuchAttribute",
+            "media.slots.noSuchAttribute: '$rev' has no attribute noSuchAttribute",
         )) {
             assertTrue(problems.contains(expected), "expected '$expected' in:\n$problems")
         }

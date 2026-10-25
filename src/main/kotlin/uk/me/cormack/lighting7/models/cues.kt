@@ -114,7 +114,7 @@ data class CueLayerDto(
 
 /**
  * Layer 4 property assignment — operator-authored "this cue asserts property X = value" record.
- * See `docs/lighting-composition-model.md` §"Layer 4" for semantics (specificity, composition,
+ * See `docs/lighting-composition-model.md` §"Tier 4 — Cue attribute assignments" for semantics (specificity, composition,
  * crossfade) and `uk.me.cormack.lighting7.fx.CueAssignmentResolver` for the canonical value parser.
  */
 @Serializable

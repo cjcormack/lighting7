@@ -57,7 +57,7 @@ data class FormatVersionJson(
     // the sharp-edge rule: a v29 reader would run a 40 % breathe at full size, a backward cycle
     // forward and a one-shot forever, and its next wipe-then-export push would write all three away.
     // `minReader` stays at **5** — every field defaults to what an older row meant. See
-    // `docs/sync-engineering.md` §"Version 30 — Size, direction and N-shot".
+    // `docs/sync-engineering.md` §"Version 30 — Amount, direction and runs".
     // v31: stored locate. `FixturePatchJson` gains `locate` (default empty, omitted): the pan and tilt
     // bytes Locate points each of a patch's units at (venue-visit plan D6, D17). A patch with none
     // exports byte-for-byte as at v30. The writer's number moves by the sharp-edge rule: a v30 reader
@@ -86,7 +86,7 @@ data class FormatVersionJson(
     // or `CueAdHocFxJson` may say `targetType: "selection"` with `targetKey` the list's canonical
     // JSON. The writer's number moves by the sharp-edge rule: a v33 reader would store a target it
     // cannot spawn, so every cue and Look holding one would skip that effect. `minReader`
-    // stays at **5** — no field changed. See `docs/sync-engineering.md` §"Version 34 — one effect over a
+    // stays at **5** — no field changed. See `docs/sync-engineering.md` §"Version 34 — one FX over a
     // selection".
     // v35: speed masters on a cue (venue-visit plan S16). `CueJson` gains `speedMasters` (default
     // empty, omitted): the masters the cue sets on GO, each a master's uuid and a BPM
@@ -106,7 +106,7 @@ data class FormatVersionJson(
     // effect on (stack-timeline plan session 2). A show with no runs exports byte-for-byte as at v36. The writer's number moves by the
     // sharp-edge rule: a v36 reader would import every effect out of its run and its next
     // wipe-then-export push would write the keys away for every peer. `minReader` stays at **5** — a
-    // missing key is no run. See `docs/sync-engineering.md` §"Version 37 — effect runs".
+    // missing key is no run. See `docs/sync-engineering.md` §"Version 37 — FX runs".
     //
     // v29: Seconds. `LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`

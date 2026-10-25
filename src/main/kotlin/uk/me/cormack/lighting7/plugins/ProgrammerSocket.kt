@@ -1024,7 +1024,7 @@ object ProgrammerHandler {
         triggerRefusal(state, target, attribute)?.let { return ProgrammerErrorOutMessage(it) }
         val typed = parseValue(state, target, attribute, value)
             ?: return ProgrammerErrorOutMessage(
-                "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' property '$attribute'"
+                "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' attribute '$attribute'"
             )
         return setTyped(state, target, attribute, typed, fadeMs, sourceGroup)
     }
@@ -1066,7 +1066,7 @@ object ProgrammerHandler {
         }
         if (!landed) {
             return ProgrammerErrorOutMessage(
-                "Property '$attribute' on ${target.discriminator} '${target.key}' resolves to no DMX channels"
+                "Attribute '$attribute' on ${target.discriminator} '${target.key}' resolves to no DMX channels"
             )
         }
         return ProgrammerEntryChangedOutMessage(

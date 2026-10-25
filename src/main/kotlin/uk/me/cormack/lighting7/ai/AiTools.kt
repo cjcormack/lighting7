@@ -190,7 +190,7 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Created look '$name' (id=$lookId, ${values.rows.size} values, ${effects.size} effects)" +
+            description = "Created look '$name' (id=$lookId, ${values.rows.size} values, ${effects.size} FX)" +
                 (pressed?.let { ", ${it.action} it" } ?: ""),
             result = buildJsonObject {
                 put("lookId", lookId)
@@ -346,7 +346,7 @@ class AiTools(private val state: State) {
         val outcome = pressLook(lookId, cycle) ?: return errorResult("Look not found: $lookId")
         return ToolExecutionResult(
             success = true,
-            description = "${outcome.action} look $lookId (${outcome.fxCount} effects)",
+            description = "${outcome.action} look $lookId (${outcome.fxCount} FX)",
             result = buildJsonObject {
                 put("action", outcome.action)
                 put("fxCount", outcome.fxCount)
@@ -360,7 +360,7 @@ class AiTools(private val state: State) {
         val response = applyLookAsValues(state, look, fadeMs = null, cycle)
         return ToolExecutionResult(
             success = true,
-            description = "Applied look $lookId as values: ${response.written} value(s), ${response.fxIds.size} effect(s)",
+            description = "Applied look $lookId as values: ${response.written} value(s), ${response.fxIds.size} FX",
             result = buildJsonObject {
                 put("written", response.written)
                 put("fxIds", buildJsonArray { response.fxIds.forEach { add(JsonPrimitive(it)) } })
@@ -466,7 +466,7 @@ class AiTools(private val state: State) {
             state.show.fxEngine.clearAllFx()
             return ToolExecutionResult(
                 success = true,
-                description = "Cleared all effects",
+                description = "Cleared all FX",
                 result = """{"cleared": "all"}"""
             )
         }
@@ -486,7 +486,7 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Cleared $totalRemoved effects",
+            description = "Cleared $totalRemoved FX",
             result = """{"removedCount": $totalRemoved}"""
         )
     }
@@ -1244,7 +1244,7 @@ class AiTools(private val state: State) {
         return ToolExecutionResult(
             success = true,
             description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${assignments.size} values, " +
-                "${adHocFx.size} ad-hoc effects, ${scenery.size} scenery changes, ${events.size} events, " +
+                "${adHocFx.size} ad-hoc FX, ${scenery.size} scenery changes, ${events.size} events, " +
                 "${speedMasters.size} speed masters)" +
                 (entry?.let { e -> " in stack $stackId" + (e["number"]?.jsonPrimitive?.content?.let { " as Q$it" } ?: "") } ?: ", loose"),
             result = buildJsonObject {
@@ -1308,7 +1308,7 @@ class AiTools(private val state: State) {
         }
         return layers.mapIndexedNotNull { index, layer ->
             if (layer.targets.isEmpty() && layer.paletteId in paletteNeeding) {
-                "layers[$index]: palette ${layer.paletteId} is generic — its effect or values land on the layer's targets, so give targets"
+                "layers[$index]: palette ${layer.paletteId} is generic — its FX or values land on the layer's targets, so give targets"
             } else {
                 null
             }
@@ -1352,7 +1352,7 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Applied cue '${press.cueName}' (${press.acquired.fxCount} effects)" +
+            description = "Applied cue '${press.cueName}' (${press.acquired.fxCount} FX)" +
                 (if (replaceAll) " [let go of every other applied cue]" else "") +
                 (if (press.acquired.first) "" else " — it was already live, and now composes on top"),
             result = buildJsonObject {
@@ -1550,7 +1550,7 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Stopped cue $cueId ($removedCount effects removed)",
+            description = "Stopped cue $cueId ($removedCount FX removed)",
             result = buildJsonObject {
                 put("cueId", cueId)
                 put("removedCount", removedCount)
@@ -1610,7 +1610,7 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Activated stack $stackId at cue '${result.cueName}' (${result.fxCount} effects)",
+            description = "Activated stack $stackId at cue '${result.cueName}' (${result.fxCount} FX)",
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("entryId", result.entryId)
@@ -1629,7 +1629,7 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Deactivated stack $stackId ($removedCount effects removed)",
+            description = "Deactivated stack $stackId ($removedCount FX removed)",
             result = buildJsonObject {
                 put("stackId", stackId)
                 put("removedCount", removedCount)
@@ -1655,7 +1655,7 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.fxCount} effects)",
+            description = "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.fxCount} FX)",
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("cueId", result.cueId)
@@ -1752,7 +1752,7 @@ class AiTools(private val state: State) {
             success = true,
             description = "GO on stack $stackId — " +
                 (if (wasActive) "fired" else "started at") +
-                " cue '${result.cueName}' (${result.fxCount} effects)",
+                " cue '${result.cueName}' (${result.fxCount} FX)",
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("cueId", result.cueId)
@@ -1933,7 +1933,7 @@ class AiTools(private val state: State) {
                 success = true,
                 description = (if (result.outcome.created) "Recorded new cue" else "Recorded into cue") +
                     " '${result.details.name}' (id=${result.outcome.cueId}) — " +
-                    "${result.outcome.assignmentsWritten} value(s), ${result.outcome.fxWritten} effect(s)" +
+                    "${result.outcome.assignmentsWritten} value(s), ${result.outcome.fxWritten} FX" +
                     (if (result.outcome.scenery.written > 0) ", ${result.outcome.scenery.written} scenery change(s)" else ""),
                 result = buildJsonObject {
                     put("cueId", result.outcome.cueId)
@@ -1985,7 +1985,7 @@ class AiTools(private val state: State) {
             is IncludeCoreResult.Cue -> ToolExecutionResult(
                 success = true,
                 description = "Included cue '${result.cueData.cueName}' — ${result.outcome.entriesWritten} " +
-                    "value(s), ${result.outcome.fxSpawned} effect(s) and ${result.sceneryIncluded} scenery change(s) staged in the programmer",
+                    "value(s), ${result.outcome.fxSpawned} FX and ${result.sceneryIncluded} scenery change(s) staged in the programmer",
                 result = buildJsonObject {
                     put("kind", "CUE")
                     put("cueId", result.cueData.cueId)
@@ -2002,7 +2002,7 @@ class AiTools(private val state: State) {
             is IncludeCoreResult.Look -> ToolExecutionResult(
                 success = true,
                 description = "Included look '${result.lookName}' — ${result.outcome.entriesWritten} " +
-                    "value(s), ${result.outcome.fxSpawned} effect(s) and ${result.sceneryIncluded} scenery change(s) staged in the programmer",
+                    "value(s), ${result.outcome.fxSpawned} FX and ${result.sceneryIncluded} scenery change(s) staged in the programmer",
                 result = buildJsonObject {
                     put("kind", "LOOK")
                     put("lookId", result.lookId)
@@ -2063,7 +2063,7 @@ class AiTools(private val state: State) {
             is UpdateCoreResult.LookUpdated -> ToolExecutionResult(
                 success = true,
                 description = "Updated look '${result.result.lookName}' — ${result.result.rowsWritten} row(s), " +
-                    "${result.result.fxWritten} effect(s) and ${result.result.sceneryWritten} scenery change(s) written, " +
+                    "${result.result.fxWritten} FX and ${result.result.sceneryWritten} scenery change(s) written, " +
                     "${result.result.rowsRemoved} row(s) removed",
                 result = buildJsonObject {
                     put("mode", "A")
@@ -2181,7 +2181,7 @@ class AiTools(private val state: State) {
                 success = true,
                 description = "Created palette '${result.palette.name}' " +
                     (result.palette.fx
-                        ?.let { "(effect: ${it.fxType})" }
+                        ?.let { "(FX: ${it.fxType})" }
                         ?: "(${result.palette.rows.size} row(s))") +
                     " — reference it as pal:${result.palette.uuid}",
                 result = buildJsonObject {

@@ -138,6 +138,6 @@ class TriggerIndex private constructor(
         private fun message(where: String, name: String, on: String) =
             "$where: '$name' on $on is a one-shot trigger or its arm — it fires as an event (a cue's Events, " +
                 "the cannon's panel, a MIDI FireTrigger) while the desk is armed, and no Look, palette, cue, " +
-                "effect or programmer value can hold it"
+                "FX or programmer value can hold it"
     }
 }

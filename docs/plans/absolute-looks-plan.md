@@ -8,7 +8,7 @@
 Sleeping Beauty's Pre-show holds one layer of *Act 1, Scene 1 — Set*, a Look holding only scenery,
 and the Timeline draws it as three columns: House 1, House 2 and House 3. The layer names those
 fixtures because they were selected when the Look was pressed. They change nothing on stage, since the
-Look has no rows and no effects, but everything that reads a layer's targets reads them.
+Look has no rows and no FX, but everything that reads a layer's targets reads them.
 
 What the code says, read on 2026-10-21 at `b776bad6`. `K/` is `src/main/kotlin/uk/me/cormack/lighting7`,
 `F/` is `frontend/src`.
@@ -18,9 +18,9 @@ What the code says, read on 2026-10-21 at `b776bad6`. `K/` is `src/main/kotlin/u
   fixtures; a scenery-only Look pressed with none gets a layer naming none (`:627`). The apply picker
   sends the selection unless nothing is selected (`F/components/press/ApplyPicker.tsx:146`), and the
   busk pad, the cue editor and `apply_look` send it too.
-- **A Look layer's targets do three jobs in the cook.** They fan out a deferred effect, one instance
+- **A Look layer's targets do three jobs in the cook.** They fan out a deferred FX, one instance
   per target (`K/fx/CueComposer.kt:529`); they are the allowed set for the Look's bound rows
-  (`:715-760`, `LayerTargets.covers`); and they drop a bound effect they do not cover (`:539-544`).
+  (`:715-760`, `LayerTargets.covers`); and they drop a bound FX they do not cover (`:539-544`).
 - **And more outside it.** The press works per head: an off press narrows a Look layer to the heads
   not pressed, and an on press widens the top one (`K/fx/LayerPress.kt`). In a cue an untargeted Look
   layer is read as its own fixtures so that a press can subtract from it (`K/routes/cueLayerPress.kt:235`,
@@ -32,17 +32,17 @@ What the code says, read on 2026-10-21 at `b776bad6`. `K/` is `src/main/kotlin/u
   (`F/components/programmer/LookRowStore.tsx:180`, `AddToTargetsButton`). Detach and Apply as values
   take group hints from the targets. The Timeline makes a column per Look and target
   (`F/lib/stackTimeline/columns.ts:96`).
-- **A deferred Look effect** is a `look_effects` row with `target_type = 'deferred'`. MCP's
-  `create_look` and `update_look` write every effect that way (`parseLookEffects`,
+- **A deferred Look FX** is a `look_effects` row with `target_type = 'deferred'`. MCP's
+  `create_look` and `update_look` write every FX that way (`parseLookFx`,
   `K/ai/AiTools.kt:2444`). A Look holding one needs a selection wherever it is pressed: cue slots, the
-  hand, surface buttons and the busk auto-layout all branch on `hasDeferredEffects`, and Include runs
+  hand, surface buttons and the busk auto-layout all branch on `hasDeferredFx`, and Include runs
   it on the request's targets or the desk selection (`K/routes/programmerLookInclude.kt`).
 - **A press also carries the selection's mask.** A Look lands masked to `mask ∩ its families`
   (`resolveLookMask`, `K/routes/projectLooks.kt:660`), or is refused when nothing is inside
   (`LOOK_OUTSIDE_MASK`). A layer's mask is also an operator setting after the press: the programmer's
   layer popover (`F/components/looks/LookStack.tsx:920`), the cue editor's Looks tab, the Timeline's
   `layerSettings`, the promotion mask `MakeLayerSheet` gives a new layer, and MCP's cue layers.
-- **On this desk**, one Look has a deferred effect: a ColourCycle on Experiment's *S5 Deferred FX*, a
+- **On this desk**, one Look has a deferred FX: a ColourCycle on Experiment's *S5 Deferred FX*, a
   test. Two cue layers press a Look, Pre-show's and 43!'s *Haze*. Both have targets, but both Looks
   have no rows, so neither target list changes what lands. Programmer layers are runtime only
   (`K/fx/ProgrammerStore.kt:324`).
@@ -51,8 +51,8 @@ What the code says, read on 2026-10-21 at `b776bad6`. `K/` is `src/main/kotlin/u
 
 | # | Decision |
 |---|---|
-| D1 | **A Look is an absolute state**, a sub-cue: pressed, it lands its own bound rows, bound effects and scenery, never narrower and never wider. A Look layer names no targets. To apply something to the selection, use a palette. |
-| D2 | **Deferred Look effects go.** Every Look effect names its target: a fixture, a group or a selection. The ones stored are dropped, with a warning, once from this database and on every import. |
+| D1 | **A Look is an absolute state**, a sub-cue: pressed, it lands its own bound rows, bound FX and scenery, never narrower and never wider. A Look layer names no targets. To apply something to the selection, use a palette. |
+| D2 | **Deferred Look FX go.** Every Look FX names its target: a fixture, a group or a selection. The ones stored are dropped, with a warning, once from this database and on every import. |
 | D3 | **A Look layer's mask is a layer setting, not the press's.** A Look press ignores the selection's targets and mask alike. The layer popover, the cue editor, the Timeline's *Settings…*, the promotion mask and MCP still set one, as they set amount or blend. |
 
 The plan adds its own:
@@ -65,27 +65,27 @@ The plan adds its own:
 | P4 | **A Look's ring is on or off**: lit while a layer of it is on the programmer's stack, whatever is selected. `appliedState` keeps coverage for palettes only. A surface's `LOOK_APPLIED` and a Look pad's `COVERS_SELECTION` both mean "a layer of it is on". |
 | P5 | **Record keys a Look layer on its source.** A scoped Record (*Selection only*) replaces a cue's Look layer only when every fixture the Look lands on is in scope, and otherwise keeps it. Today it replaces an untargeted layer under any scope (`K/routes/programmerRecord.kt:486`). |
 | P6 | **Include and Apply as values take no targets for a Look**, and Detach takes its group hints from the rows' own targets. |
-| P7 | **The fixture sheet's Look picker goes** (`F/components/fx/LookTogglePicker.tsx` and the routes' `compatibleLookIds`): a Look cannot be put on one fixture. An effect palette does that job. |
-| P8 | **No sync bump.** Nothing new is written, and a v37 reader imports what this desk writes correctly: an untargeted Look layer and a bound Look effect are both v37 states. The importer drops deferred Look effects and Look-layer targets from any archive and logs each, as `loadLookSnapshot` already drops a deferred Look row. |
+| P7 | **The fixture sheet's Look picker goes** (`F/components/fx/LookTogglePicker.tsx` and the routes' `compatibleLookIds`): a Look cannot be put on one fixture. An FX palette does that job. |
+| P8 | **No sync bump.** Nothing new is written, and a v37 reader imports what this desk writes correctly: an untargeted Look layer and a bound Look FX are both v37 states. The importer drops deferred Look FX and Look-layer targets from any archive and logs each, as `loadLookSnapshot` already drops a deferred Look row. |
 | P9 | **Two one-shot steps**, `PRAGMA user_version` 2 and 3 after `CueEntryUuidMigration`'s 1, one per backend session: step 2 deletes deferred `look_effects` rows, step 3 clears `cue_layers.targets` where `look_id` is set. Each logs what it changed. |
 
 ## 3. What changes on the desk
 
-### 3.1 Deferred effects (D2)
+### 3.1 Deferred FX (D2)
 
-- `validateLookEffects` (`K/routes/projectLooks.kt:1033`) refuses `deferred`. `LookEffectDto.isDeferred`
-  goes and `EffectEntry.target` becomes non-null (`K/fx/LookRegistry.kt:51, 323`). `loadLookSnapshot`
-  drops a deferred effect an older database wrote, as it already drops a deferred row.
+- `validateLookFx` (`K/routes/projectLooks.kt:1033`) refuses `deferred`. `LookEffectDto.isDeferred`
+  goes and `FxEntry.target` becomes non-null (`K/fx/LookRegistry.kt:51, 323`). `loadLookSnapshot`
+  drops a deferred FX an older database wrote, as it already drops a deferred row.
 - The cook's deferred arm goes (`K/fx/CueComposer.kt:529-536`).
 - Include loses `deferredTargets` and its desk-selection fallback (`K/routes/programmerLookInclude.kt`,
   `K/routes/programmerSurface.kt:253-272`), and `IncludedLookEffect.deferred` goes
-  (`K/fx/FxInstance.kt:196`). So do Update stage's head-by-head pairing of a deferred effect
+  (`K/fx/FxInstance.kt:196`). So do Update stage's head-by-head pairing of a deferred FX
   (`K/routes/cueUpdateStage.kt:169`) and Record's Update keeping one deferred
   (`K/routes/lookRecord.kt:665-690`).
-- MCP: `create_look` and `update_look` effects require a `target` or `targets`, as an ad-hoc effect
+- MCP: `create_look` and `update_look` FX require a `target` or `targets`, as an ad-hoc FX
   does (`K/ai/AiToolSchemas.kt:216-290`). `include_into_programmer`'s targets are for palettes only.
   `RigBriefing` and `SetupTools` lose their deferred prose.
-- `LookSummary.hasDeferredEffects` stays on the wire, always false, until session 3 removes it along
+- `LookSummary.hasDeferredFx` stays on the wire, always false, until session 3 removes it along
   with its readers.
 
 ### 3.2 The press (D1, D3, P1–P4)
@@ -111,7 +111,7 @@ The plan adds its own:
 
 ### 3.3 The cook (D1)
 
-A Look layer's rows and bound effects land whole. `LayerTargets` keeps filtering palette layers only
+A Look layer's rows and bound FX land whole. `LayerTargets` keeps filtering palette layers only
 (`K/fx/CueComposer.kt:539-544, 715-760, 940-985`). The mask still filters rows (`:679-684`).
 
 ### 3.4 Record, Detach and Update (P5, P6)
@@ -130,9 +130,9 @@ A Look layer's rows and bound effects land whole. `LayerTargets` keeps filtering
 
 ### 3.6 Sync and the database (P8, P9)
 
-- The importer drops a deferred Look effect and a Look layer's targets, logging each, beside the
+- The importer drops a deferred Look FX and a Look layer's targets, logging each, beside the
   cue-layer import (`K/sync/ProjectImporter.kt:1691`). The exporter is unchanged.
-- `RichProjectFixture` keeps a Look layer and a bound Look effect, its Look layers naming no targets.
+- `RichProjectFixture` keeps a Look layer and a bound Look FX, its Look layers naming no targets.
 - `docs/sync-engineering.md` gets a paragraph beside "A detached show's origin … took no bump", for
   the same reason.
 - Steps 2 and 3 sit in `K/state/` beside `CueEntryUuidMigration.kt`, each tested over a database that
@@ -145,12 +145,12 @@ A Look layer's rows and bound effects land whole. `LayerTargets` keeps filtering
   `CueRowStore.pressLayer`; `MakeLayerSheet`, which keeps its promotion mask (`:106-114`, D3); and the
   hand (`F/lib/handTargets.ts`, `HandLayerTargets.tsx`, `slotDrop.ts`).
 - Rings follow P4: `lookPresence.ts`, `BuskingView.tsx:383-417`, `CueSlotOverviewPanel.tsx`. Until
-  they do, `appliedState` answers a Look's entry as every fixture, cell and group of the rig at `ALL`
+  they do, `appliedState` answers a Look's entry as every fixture, element and group of the rig at `ALL`
   (session 2), so today's coverage fold lights it whatever is selected; once the client reads
   presence alone the entry can name no targets.
-- `hasDeferredEffects` goes, with its readers: `LibraryPalette.tsx:268-275`, `buskLayout.ts:642`'s pool,
+- `hasDeferredFx` goes, with its readers: `LibraryPalette.tsx:268-275`, `buskLayout.ts:642`'s pool,
   `SurfaceLibrary.tsx:576-583`, `recordOptions.ts:76`, `LookSheet.tsx:398`, `LookDetailSheet.tsx:288`
-  and `CueEffectsTab.tsx:466`.
+  and `CueFxTab.tsx:466`.
 - A Look layer shows no target chips: `LookStack.tsx:478-510`, `AddToTargetsButton` for a Look,
   `StackTable.tsx:330`'s `targetsLabelOf`, and `CueLooksTab.tsx:119`'s `onSetTargets`. A focused Look
   layer loses its write guard (`LookRowStore.tsx:180`): every write lands in the Look, as it does
@@ -164,27 +164,27 @@ A Look layer's rows and bound effects land whole. `LayerTargets` keeps filtering
 
 - Palettes, generic and per-fixture: their targets, family replacement, per-head press and coverage
   rings.
-- A Look's content (bound rows, bound effects, scenery), and Record and Update into a Look.
+- A Look's content (bound rows, bound FX, scenery), and Record and Update into a Look.
 - A layer's other settings (amount, blend, stomp, timing, masters) and its mask (D3).
-- A cue's own rows and ad-hoc effects.
-- The stack-timeline plan's session 5, which edits effect columns only.
+- A cue's own rows and ad-hoc FX.
+- The stack-timeline plan's session 5, which edits FX columns only.
 
 ## 6. Implementation: three sessions
 
 Session 1 is backend only and lands alone. Session 2 is backend only and leaves the current client
 working, because it strips targets where session 3 refuses them (P2). Session 3 needs session 2.
 
-### Session 1: deferred effects go (backend) — done, `a717cbdc`
+### Session 1: deferred FX go (backend) — done, `a717cbdc`
 
-- §3.1, step 2, the importer's effect half.
-- **Tests:** `validateLookEffects` refuses `deferred`; `create_look` and `update_look` refuse an
-  effect with no target and write one with a target; step 2 drops the row and changes nothing when
-  run again; a v37 archive with a deferred effect imports without it and logs it; a deferred row
-  written straight to the database is dropped at load; Include of a Look runs its bound effects only.
-  The tests pinning the deferred arm (`CueComposerTest`, `ProgrammerLayerStackEffectsTest`,
-  `McpLookEffectIncludeTest`, `ProgrammerIncludeRouteTest`) move to bound effects.
+- §3.1, step 2, the importer's FX half.
+- **Tests:** `validateLookFx` refuses `deferred`; `create_look` and `update_look` refuse an
+  FX with no target and write one with a target; step 2 drops the row and changes nothing when
+  run again; a v37 archive with a deferred FX imports without it and logs it; a deferred row
+  written straight to the database is dropped at load; Include of a Look runs its bound FX only.
+  The tests pinning the deferred arm (`CueComposerTest`, `ProgrammerLayerStackFxTest`,
+  `McpLookFxIncludeTest`, `ProgrammerIncludeRouteTest`) move to bound FX.
 - **Docs:** the composition model's §"Record / Include / Update" and §"Looks, palettes and layers";
-  `mcp-engineering.md` §"Tools"; CLAUDE.md where it names deferred effects.
+  `mcp-engineering.md` §"Tools"; CLAUDE.md where it names deferred FX.
 
 ### Session 2: a Look is whole on the desk (backend) — done
 
@@ -210,7 +210,7 @@ working, because it strips targets where session 3 refuses them (P2). Session 3 
 
 ### Session 3: the client follows (frontend + backend)
 
-- §4, P2's refusal, and `hasDeferredEffects` off the wire.
+- §4, P2's refusal, and `hasDeferredFx` off the wire.
 - **Tests:** every sender sends no targets for a Look; the ring reads a layer, not coverage; the
   Timeline gives one column per Look; each stored boundary refuses `LOOK_LAYER_TARGETED`.
 - **Docs:** `frontend/CLAUDE.md`'s sections on Looks, palettes and layers, the busk layout, the hand,
@@ -221,7 +221,7 @@ working, because it strips targets where session 3 refuses them (P2). Session 3 
 
 At the desk:
 
-- **Session 1.** Experiment's *S5 Deferred FX* loads with no effect, and the log names it.
+- **Session 1.** Experiment's *S5 Deferred FX* loads with no FX, and the log names it.
 - **Session 2.** Sleeping Beauty's Pre-show layer names no targets. With House 2 selected, a busk
   pad's press of the Set Look lands it whole and lights the ring; a second press with nothing
   selected takes it off.

@@ -1470,7 +1470,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
                 )
             }
             assertEquals(HttpStatusCode.BadRequest, resp.status, "category '$category' should be refused")
-            assertTrue(resp.bodyAsText().contains("has none"), resp.bodyAsText())
+            assertTrue(resp.bodyAsText().contains("maps to none"), resp.bodyAsText())
         }
     }
 
@@ -1536,7 +1536,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
                     )
                 }
                 assertEquals(HttpStatusCode.BadRequest, resp.status, "$id should be refused")
-                assertTrue(resp.bodyAsText().contains("one named property"), resp.bodyAsText())
+                assertTrue(resp.bodyAsText().contains("one named attribute"), resp.bodyAsText())
             }
         } finally {
             registry.unregister("TwoBeams")
@@ -1575,7 +1575,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         for ((category, problem) in listOf(
             "colour" to "is in the position family",
-            "steps" to "has none",
+            "steps" to "maps to none",
         )) {
             val resp = client.post(base()) {
                 contentType(ContentType.Application.Json)
@@ -1657,7 +1657,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
                 )
             }
             assertEquals(HttpStatusCode.BadRequest, unknown.status)
-            assertTrue(unknown.bodyAsText().contains("not an effect this desk knows"), unknown.bodyAsText())
+            assertTrue(unknown.bodyAsText().contains("not an FX this desk knows"), unknown.bodyAsText())
 
             // A real dimmer effect declared as colour: the template would bank under Colour and
             // run as Intensity, so the library is the authority and the two must agree.
@@ -1730,7 +1730,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             setBody(PaletteInput(name = "renamed", rows = listOf(colourRow())))
         }
         assertEquals(HttpStatusCode.BadRequest, rowsOnFx.status)
-        assertTrue(rowsOnFx.bodyAsText().contains("holds an effect"), rowsOnFx.bodyAsText())
+        assertTrue(rowsOnFx.bodyAsText().contains("holds an FX"), rowsOnFx.bodyAsText())
 
         // Exposed commits a transaction that returns normally, so a rename applied before the
         // rejection would have survived it. The validation runs first for exactly this reason.
@@ -2280,7 +2280,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         }.body<PaletteResolveResponse>().entries
 
         assertEquals(zones("shehds-1"), entries.map { it.fixtureKey })
-        assertEquals("shehds-1 · Cell 2", entries[1].fixtureName)
+        assertEquals("shehds-1 · Element 2", entries[1].fixtureName)
         assertEquals("shehds-led19-rgbw-24ch", entries[1].typeKey)
         assertTrue(entries.all { it.value != null }, entries.toString())
     }

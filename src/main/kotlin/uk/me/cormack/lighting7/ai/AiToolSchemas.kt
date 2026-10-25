@@ -47,8 +47,8 @@ private val valueTargetSchema = buildJsonObject {
             put("type", "string")
             put(
                 "description",
-                "A fixture's or group's key — or, with type 'fixture', one cell (head) of a multi-head fixture by its own key, " +
-                    "as describe_rig lists its cells (e.g. 'shehds-1.zone-2').",
+                "A fixture's or group's key — or, with type 'fixture', one element (head) of a multi-head fixture by its own key, " +
+                    "as describe_rig lists its elements (e.g. 'shehds-1.zone-2').",
             )
         })
     })
@@ -57,7 +57,7 @@ private val valueTargetSchema = buildJsonObject {
 
 /** An effect's cycle, where the tools describe one. One bar is venue-visit plan D16's default. */
 private const val CYCLE_DESCRIPTION =
-    "Effect cycle length in beats: 0.25=16th, 0.5=8th, 1.0=one beat, 2.0=half a bar, 4.0=one bar, 8.0=two bars. " +
+    "FX cycle length in beats: 0.25=16th, 0.5=8th, 1.0=one beat, 2.0=half a bar, 4.0=one bar, 8.0=two bars. " +
         "With seconds: true, the cycle in seconds instead. Omit for one bar (4.0)."
 
 /** Timing (terminology plan D22), the same on every FX schema. */
@@ -73,12 +73,12 @@ private val timingSchema = buildJsonObject {
 
 /** The speed-master field's words, shared by every effect schema. */
 private const val SPEED_MASTER_DESCRIPTION =
-    "Speed master whose tempo this effect follows, by uuid (describe_rig lists them). Omit for the master whose family " +
-        "matches the effect's family (intensity, colour, position or beam), else master 1, the global tempo. Leave it out with seconds."
+    "Speed master whose tempo this FX follows, by uuid (describe_rig lists them). Omit for the master whose family " +
+        "matches the FX's family (intensity, colour, position or beam), else master 1, the global tempo. Leave it out with seconds."
 
 /** D7's Seconds, in the tools' words. */
 private const val SECONDS_DESCRIPTION =
-    "Run on Seconds: cycle is the cycle in seconds and the effect follows no speed master (for a slow breathe " +
+    "Run on Seconds: cycle is the cycle in seconds and the FX follows no speed master (for a slow breathe " +
         "that must not move with the tempo). Not with speedMasterUuid or rateSpeedMasterUuid."
 
 /**
@@ -90,9 +90,9 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putFxDynamics() {
         put("type", "number")
         put(
             "description",
-            "Amount, 0.0–1.0: how much of the effect reaches the stage over what is underneath (0.5 = halfway between " +
-                "the level underneath and the effect; a movement effect's radius halves about the position underneath). " +
-                "Omit for 1.0, the whole effect.",
+            "Amount, 0.0–1.0: how much of the FX reaches the stage over what is underneath (0.5 = halfway between " +
+                "the level underneath and the FX; a movement FX's radius halves about the position underneath). " +
+                "Omit for 1.0, the whole FX.",
         )
     })
     put("direction", buildJsonObject {
@@ -161,7 +161,7 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putFxTarget() {
         put("items", targetSchema)
         put(
             "description",
-            "Instead of targetType and targetKey: one effect over these fixtures and groups, spread across them in this " +
+            "Instead of targetType and targetKey: one FX over these fixtures and groups, spread across them in this " +
                 "order as a group's members are (a group contributes its members in its own order; a fixture named twice " +
                 "counts once).",
         )
@@ -179,7 +179,7 @@ private val lookFxSchema = buildJsonObject {
         })
         put("attribute", buildJsonObject {
             put("type", "string")
-            put("description", "Target property. Usually inferred from family: intensity→dimmer, colour→colour, position→position, beam→the one property the beam effect drives. Required for the controls family.")
+            put("description", "Target attribute. Usually inferred from family: intensity→dimmer, colour→colour, position→position, beam→the one attribute the beam FX drives. Required for the controls family.")
         })
         put("cycle", buildJsonObject {
             put("type", "number")
@@ -212,7 +212,7 @@ private val lookFxSchema = buildJsonObject {
         })
         put("rateSpeedMasterUuid", buildJsonObject {
             put("type", "string")
-            put("description", "Speed master scaling this effect's wall-clock rate, named by uuid. Only wall-clock effects read it. Omit to leave the effect unscaled.")
+            put("description", "Speed master scaling this FX's wall-clock rate, named by uuid. Only wall-clock FX read it. Omit to leave the FX unscaled.")
         })
         put("seconds", buildJsonObject {
             put("type", "boolean")
@@ -222,7 +222,7 @@ private val lookFxSchema = buildJsonObject {
         put("parameters", buildJsonObject {
             put("type", "object")
             put("additionalProperties", buildJsonObject { put("type", "string") })
-            put("description", "Effect-specific parameters as string key-value pairs")
+            put("description", "FX-specific parameters as string key-value pairs")
         })
     })
     put("required", buildJsonArray {
@@ -237,7 +237,7 @@ internal val lookValueSchema = buildJsonObject {
         put("target", valueTargetSchema)
         put("attribute", buildJsonObject {
             put("type", "string")
-            put("description", "The property, as list_fixture_types (attributes: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
+            put("description", "The attribute, as list_fixture_types (attributes: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
         })
         put("value", buildJsonObject {
             put("type", "string")
@@ -249,16 +249,16 @@ internal val lookValueSchema = buildJsonObject {
 
 internal val createLookTool = ToolDef(
     name = "create_look",
-    description = "Create a look — a named, reusable bundle of static values, beat-synced effects and scenery — and optionally apply it now. " +
+    description = "Create a look — a named, reusable bundle of static values, beat-synced FX and scenery — and optionally apply it now. " +
             "'values' are the plain states (front wash at 70%, the cyc deep blue, the hazer's fan at 20%): each names its own fixture or group, " +
             "and is resolved per head the way a palette is, so 'pct:70' is 70% of each head's own range and a colour lands on a wheel head's nearest slot. " +
             "A value a head cannot take skips that head and is reported; a value no head of its target can take refuses the call. " +
-            "A fixture's own value beats its group's, so 'the wash at 70%, hex-1 at 20%' is two values; the same target and property twice is refused. " +
-            "A multi-head fixture's cells (heads) are targets too, each by its own key as describe_rig lists them; a property only the cells have " +
-            "(the colour of a fixture whose colour is per zone — list_fixture_types' cellAttributes) set on the fixture or a group of them lands on every cell, " +
-            "and a cell's own value beats it. " +
-            "'fx' each name their own target too, as create_cue's ad-hoc effects do: targetType and targetKey, or targets for one effect over several fixtures and groups. " +
-            "A look always lands whole — its own values, effects and scenery, never narrower and never wider — whether pressed (apply_look) or layered in a cue; " +
+            "A fixture's own value beats its group's, so 'the wash at 70%, hex-1 at 20%' is two values; the same target and attribute twice is refused. " +
+            "A multi-head fixture's elements (heads) are targets too, each by its own key as describe_rig lists them; an attribute only the elements have " +
+            "(the colour of a fixture whose colour is per zone — list_fixture_types' cellAttributes) set on the fixture or a group of them lands on every element, " +
+            "and an element's own value beats it. " +
+            "'fx' each name their own target too, as create_cue's ad-hoc FX do: targetType and targetKey, or targets for one FX over several fixtures and groups. " +
+            "A look always lands whole — its own values, FX and scenery, never narrower and never wider — whether pressed (apply_look) or layered in a cue; " +
             "to point something at a selection, use a palette. Returns the look ID and the values as stored.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -290,7 +290,7 @@ internal val createLookTool = ToolDef(
 
 internal val updateLookTool = ToolDef(
     name = "update_look",
-    description = "Change an existing look: rename it, rewrite its notes, or replace its values, effects or scenery. " +
+    description = "Change an existing look: rename it, rewrite its notes, or replace its values, FX or scenery. " +
             "Each list given replaces that whole part of the look, in create_look's shape ([] empties it); a part left out is kept as it is. " +
             "Every cue layering the look moves with it, live ones included, without being re-fired. Everything is checked before anything is written.",
     inputSchema = buildJsonObject {
@@ -342,19 +342,19 @@ internal val deleteLookTool = ToolDef(
 internal val applyLookTool = ToolDef(
     name = "apply_look",
     description = "Apply an existing look in the programmer as a layer, or take it off again (a toggle: already on, every layer of it is removed). " +
-            "A look lands whole, on the fixtures its own values and effects name, whatever is selected. " +
-            "asValues true instead writes its values into the programmer and starts its effects as the programmer's own, with no layer — not a toggle.",
+            "A look lands whole, on the fixtures its own values and FX name, whatever is selected. " +
+            "asValues true instead writes its values into the programmer and starts its FX as the programmer's own, with no layer — not a toggle.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
             put("lookId", buildJsonObject { put("type", "integer") })
             put("cycle", buildJsonObject {
                 put("type", "number")
-                put("description", "Optional cycle override for the Look's FX that follow a speed master; an effect on Seconds keeps its own cycle")
+                put("description", "Optional cycle override for the Look's FX that follow a speed master; an FX on Seconds keeps its own cycle")
             })
             put("asValues", buildJsonObject {
                 put("type", "boolean")
-                put("description", "Write the look's values and start its effects with no layer. Default false.")
+                put("description", "Write the look's values and start its FX with no layer. Default false.")
             })
         })
         put("required", buildJsonArray { add("lookId") })
@@ -363,7 +363,7 @@ internal val applyLookTool = ToolDef(
 
 internal val setBpmTool = ToolDef(
     name = "set_bpm",
-    description = "Set a speed master's BPM. Omitting speedMasterUuid retunes master 1 — the global tempo every unassigned effect follows.",
+    description = "Set a speed master's BPM. Omitting speedMasterUuid retunes master 1 — the global tempo every unassigned FX follows.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -379,7 +379,7 @@ internal val setBpmTool = ToolDef(
 
 internal val createSpeedMasterTool = ToolDef(
     name = "create_speed_master",
-    description = "Add a speed master — an independent tempo clock effects can follow instead of the global one. Use it when part of the rig should run at its own speed. Returns the new master's uuid, which effects and cue layers reference.",
+    description = "Add a speed master — an independent tempo clock FX can follow instead of the global one. Use it when part of the rig should run at its own speed. Returns the new master's uuid, which FX and cue layers reference.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -399,7 +399,7 @@ internal val createSpeedMasterTool = ToolDef(
 internal val clearFxTool = ToolDef(
     name = "clear_fx",
     description = "Clear active FX. Omit targets to clear ALL FX globally. Naming targets clears " +
-        "their own effects, and an effect over a selection only when every item it names is among them.",
+        "their own FX, and an FX over a selection only when every item it names is among them.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -428,7 +428,7 @@ private fun parkAddressProperties(extra: JsonObjectBuilder.() -> Unit = {}) = bu
 
 internal val parkChannelTool = ToolDef(
     name = "park_channel",
-    description = "Park a DMX channel: lock its output at a fixed value above everything else — cues, looks, effects, " +
+    description = "Park a DMX channel: lock its output at a fixed value above everything else — cues, looks, FX, " +
             "the programmer and manual channel writes all stop reaching it until it is unparked. For holding a light " +
             "that must not move whatever the show does (a work light, a hazer's level, a channel with a faulty lamp " +
             "parked at 0). Parking an already parked channel changes its value. Park persists with the project, " +
@@ -451,7 +451,7 @@ internal val parkChannelTool = ToolDef(
 internal val unparkChannelTool = ToolDef(
     name = "unpark_channel",
     description = "Unpark a parked DMX channel, handing it back to the show. The output does not jump: the parked " +
-            "value is handed down as the channel's value underneath, where the next cue, effect or programmer " +
+            "value is handed down as the channel's value underneath, where the next cue, FX or programmer " +
             "write takes over from it. get_current_state's `parked` (and describe_rig) list what is parked and whose " +
             "each park is. On a show on a venue, unparking a venue park releases it for this show only (the venue keeps " +
             "it, and the answer's outcome is RELEASED); unparking this show's park over a venue park brings the venue's " +
@@ -537,7 +537,7 @@ internal val aimFixturesTool = ToolDef(
 internal val getCurrentStateTool = ToolDef(
     name = "get_current_state",
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
-            "`speed_masters` lists the tempo clocks and the uuids every effect-authoring tool names them by; " +
+            "`speed_masters` lists the tempo clocks and the uuids every FX-authoring tool names them by; " +
             "`cues` lists each cue's entries — its places in stacks, each with its entryId and number (a cue may be in several, or none: loose); " +
             "`cue_run` says what each running stack's next GO will fire, by entry and by cue; " +
             "`cue_holds` lists every live cue and what holds it — a stack's entry, or a loose hold (apply_cue, a pad); " +
@@ -608,7 +608,7 @@ private val adHocFxSchema = buildJsonObject {
         })
         put("rateSpeedMasterUuid", buildJsonObject {
             put("type", "string")
-            put("description", "Speed master scaling this effect's wall-clock rate, by uuid. Omit to leave it unscaled.")
+            put("description", "Speed master scaling this FX's wall-clock rate, by uuid. Omit to leave it unscaled.")
         })
         put("seconds", buildJsonObject {
             put("type", "boolean")
@@ -640,20 +640,20 @@ internal val cueLayerSchema = buildJsonObject {
         })
         put("paletteId", buildJsonObject {
             put("type", "integer")
-            put("description", "The palette this layer applies instead of a look (create_palette's id). A generic palette — an effect, or values for whatever it is pointed at — needs targets; one naming its own fixtures does not.")
+            put("description", "The palette this layer applies instead of a look (create_palette's id). A generic palette — an FX, or values for whatever it is pointed at — needs targets; one naming its own fixtures does not.")
         })
         put("targets", buildJsonObject {
             put("type", "array")
             put("items", targetSchema)
-            put("description", "What the layer applies a palette to: a generic palette's effect or values land on these, so it needs them. A look's layer names none — a look always lands whole — so targets given for one are dropped.")
+            put("description", "What the layer applies a palette to: a generic palette's FX or values land on these, so it needs them. A look's layer names none — a look always lands whole — so targets given for one are dropped.")
         })
         put("sortOrder", buildJsonObject {
             put("type", "integer")
-            put("description", "Position in the cue's layer stack. Later layers override earlier ones for the same fixture and property, whatever the attribute.")
+            put("description", "Position in the cue's layer stack. Later layers override earlier ones for the same fixture and attribute, whatever the attribute is.")
         })
         put("attributeMask", buildJsonObject {
             put("type", "string")
-            put("description", "Optional comma-separated attribute families to include: INTENSITY, POSITION, COLOUR, BEAM. Omit for every property.")
+            put("description", "Optional comma-separated attribute families to include: INTENSITY, POSITION, COLOUR, BEAM. Omit for every attribute.")
         })
         put("blendMode", buildJsonObject {
             put("type", "string")
@@ -661,11 +661,11 @@ internal val cueLayerSchema = buildJsonObject {
         })
         put("speedMasterUuid", buildJsonObject {
             put("type", "string")
-            put("description", "Speed master override for every effect this layer brings in, by uuid. Omit to let each effect keep its own master.")
+            put("description", "Speed master override for every FX this layer brings in, by uuid. Omit to let each FX keep its own master.")
         })
         put("rateSpeedMasterUuid", buildJsonObject {
             put("type", "string")
-            put("description", "Wall-clock rate-master override for this layer's effects, by uuid. Omit to let each effect keep its own.")
+            put("description", "Wall-clock rate-master override for this layer's FX, by uuid. Omit to let each FX keep its own.")
         })
         put("amount", buildJsonObject {
             put("type", "number")
@@ -722,7 +722,7 @@ private fun stackEntryInput(stackDescription: String, what: String, required: Bo
 
 internal val createCueTool = ToolDef(
     name = "create_cue",
-    description = "Create a named cue as an ordered stack of look and palette layers, its own values, and ad-hoc effects. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. The new cue is loose — in no stack — unless stackId places it in one; add_cue_to_stack places it later, apply_cue holds it live.",
+    description = "Create a named cue as an ordered stack of look and palette layers, its own values, and ad-hoc FX. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. The new cue is loose — in no stack — unless stackId places it in one; add_cue_to_stack places it later, apply_cue holds it live.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -740,7 +740,7 @@ internal val createCueTool = ToolDef(
             put("adHocFx", buildJsonObject {
                 put("type", "array")
                 put("items", adHocFxSchema)
-                put("description", "Ad-hoc effects not from a Look layer, stored as full effect definitions")
+                put("description", "Ad-hoc FX not from a Look layer, stored as full FX definitions")
             })
             put("scenery", buildJsonObject {
                 put("type", "array")
@@ -767,7 +767,7 @@ internal val createCueTool = ToolDef(
 
 internal val applyCueTool = ToolDef(
     name = "apply_cue",
-    description = "Hold a saved cue live by ID, outside any stack (a loose hold): it composes above every running stack, the newest applied cue on top, and starts its timed effects, triggers and events as a GO does. A cue already applied moves back to the top. A stack that also holds it is unaffected. Set replaceAll=true to let go of every other applied cue first (running stacks are never touched).",
+    description = "Hold a saved cue live by ID, outside any stack (a loose hold): it composes above every running stack, the newest applied cue on top, and starts its timed FX, triggers and events as a GO does. A cue already applied moves back to the top. A stack that also holds it is unaffected. Set replaceAll=true to let go of every other applied cue first (running stacks are never touched).",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -811,13 +811,13 @@ internal val createCueStackTool = ToolDef(
 
 internal val activateCueStackTool = ToolDef(
     name = "activate_cue_stack",
-    description = "Activate a cue stack, starting playback from the first cue (or the armed standby), or GO to one entry of it: name the entry by entryId or by its number in the stack. The cue's effects are started. If the entry has auto-advance configured, the stack will automatically advance to the next cue after the delay.",
+    description = "Activate a cue stack, starting playback from the first cue (or the armed standby), or GO to one entry of it: name the entry by entryId or by its number in the stack. The cue's FX are started. If the entry has auto-advance configured, the stack will automatically advance to the next cue after the delay.",
     inputSchema = stackEntryInput("The cue stack ID to activate", "Optional: the entry to start at instead of the first"),
 )
 
 internal val deactivateCueStackTool = ToolDef(
     name = "deactivate_cue_stack",
-    description = "Deactivate a cue stack, stopping all its effects and cancelling auto-advance.",
+    description = "Deactivate a cue stack, stopping all its FX and cancelling auto-advance.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -937,14 +937,14 @@ internal val recordCueTool = ToolDef(
             put("source", buildJsonObject {
                 put("type", "string")
                 put("enum", buildJsonArray { add("TOUCHED"); add("ALL"); add("STAGE_SNAPSHOT") })
-                put("description", "TOUCHED (default) records what was edited this session; STAGE_SNAPSHOT records everything on stage, running effects included.")
+                put("description", "TOUCHED (default) records what was edited this session; STAGE_SNAPSHOT records everything on stage, running FX included.")
             })
             put("cueStackId", buildJsonObject { put("type", "integer"); put("description", "CREATE's stack. Omit to record a cue in no stack (add_cue_to_stack places it later).") })
             put("cueId", buildJsonObject { put("type", "integer"); put("description", "Required for every mode but CREATE.") })
             put("mask", maskSchema)
             put("includeFx", buildJsonObject {
                 put("type", "boolean")
-                put("description", "Record the running effects as well as the static values. Default true.")
+                put("description", "Record the running FX as well as the static values. Default true.")
             })
             put("name", buildJsonObject { put("type", "string"); put("description", "New cue's name (CREATE). Defaults to the next 'Cue N'.") })
             put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number in cueStackId (CREATE). Omit to let the stack number it.") })
@@ -974,9 +974,9 @@ internal val includeIntoProgrammerTool = ToolDef(
             "target), leaving everything else alone. The source's own scenery rows are held " +
             "in the programmer too (a cue row keeps its own transition time), replacing what the programmer held on " +
             "those pieces — never the scenery the cue only tracks from earlier cues. The mask does not apply to scenery. " +
-            "A look's effects run in the programmer too, each on its own target, where the operator can change them in the desk's " +
-            "effect editor, and update_from_programmer writes those changes back onto the look's effects (to change them yourself, " +
-            "update_look's effects).",
+            "A look's FX run in the programmer too, each on its own target, where the operator can change them in the desk's " +
+            "FX editor, and update_from_programmer writes those changes back onto the look's FX (to change them yourself, " +
+            "update_look's fx).",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -987,7 +987,7 @@ internal val includeIntoProgrammerTool = ToolDef(
             put("mask", maskSchema)
             put("includeFx", buildJsonObject {
                 put("type", "boolean")
-                put("description", "Run a look's effects in the programmer too. Default true.")
+                put("description", "Run a look's FX in the programmer too. Default true.")
             })
             put("fadeMs", buildJsonObject {
                 put("type", "integer")
@@ -1023,7 +1023,7 @@ internal val updateFromProgrammerTool = ToolDef(
             })
             put("includeFx", buildJsonObject {
                 put("type", "boolean")
-                put("description", "Write the running effects as well as the static values. Default true.")
+                put("description", "Write the running FX as well as the static values. Default true.")
             })
         })
     }
@@ -1038,7 +1038,7 @@ internal val updateFromProgrammerTool = ToolDef(
  */
 private val paletteFxSchema = buildJsonObject {
     put("type", "object")
-    put("description", "One effect. It has no target — an effect palette runs on whatever the layer names.")
+    put("description", "One FX. It has no target — an FX palette runs on whatever the layer names.")
     put("properties", buildJsonObject {
         adHocFxSchema["properties"]!!.jsonObject.forEach { (key, value) ->
             if (key !in setOf("targetType", "targetKey", "targets", "family")) put(key, value)
@@ -1056,9 +1056,9 @@ private val paletteFxSchema = buildJsonObject {
 internal val createPaletteTool = ToolDef(
     name = "create_palette",
     description = "Create a palette — a named, referenceable value (a colour, a position, an intensity) " +
-            "or a named effect, that effects and cue layers point at instead of restating it: retuning the palette moves " +
+            "or a named FX, that FX and cue layers point at instead of restating it: retuning the palette moves " +
             "everything referencing it. Returns the uuid, which a colour parameter names as 'pal:{uuid}'. A palette holds one " +
-            "attribute family, and holds values OR one effect, never both — for both together, record a " +
+            "attribute family, and holds values OR one FX, never both — for both together, record a " +
             "look. Pass 'rows' for a value palette (leave every row deferred, the default, to make a " +
             "generic one that can be aimed at any fixture) or 'fx' for an FX palette, which always " +
             "runs on whatever the applying layer or selection names. An FX palette's family must be " +
@@ -1080,7 +1080,7 @@ internal val createPaletteTool = ToolDef(
                     put("properties", buildJsonObject {
                         put("attribute", buildJsonObject {
                             put("type", "string")
-                            put("description", "e.g. colour, dimmer, pan, tilt. Slotted properties (gobo, colour wheel, macros) belong in a look, not a palette.")
+                            put("description", "e.g. colour, dimmer, pan, tilt. Slotted attributes (gobo, colour wheel, macros) belong in a look, not a palette.")
                         })
                         put("value", buildJsonObject {
                             put("type", "string")
@@ -1088,7 +1088,7 @@ internal val createPaletteTool = ToolDef(
                         })
                         put("targetKey", buildJsonObject {
                             put("type", "string")
-                            put("description", "Fixture key to bind this row to. Omit for a deferred row — the usual case, and the only kind an effect can reference by uuid.")
+                            put("description", "Fixture key to bind this row to. Omit for a deferred row — the usual case, and the only kind an FX can reference by uuid.")
                         })
                     })
                     put("required", buildJsonArray { add("attribute"); add("value") })
@@ -1256,8 +1256,8 @@ private val fadeSecondsSchema = buildJsonObject {
 internal val setProgrammerTool = ToolDef(
     name = "set_programmer",
     description = "Set plain values in the programmer — the manual overlay above whatever is running, as the desk's " +
-            "faders and pickers set it: a level, a colour, a position, a gobo or any other property a fixture has. " +
-            "This is how a fixed state is set; there is no static effect. " +
+            "faders and pickers set it: a level, a colour, a position, a gobo or any other attribute a fixture has. " +
+            "This is how a fixed state is set; there is no static FX. " +
             "A colour sets a head's white, amber and UV with it (none unless the value names them or asks for " +
             "';policy=extract' / ';policy=additive'), so give those in the colour ('#ff8000;w120') or as their own " +
             "values in the same call, where they win over the colour's. " +
@@ -1281,7 +1281,7 @@ internal val setProgrammerTool = ToolDef(
                     put("properties", buildJsonObject {
                         put("attribute", buildJsonObject {
                             put("type", "string")
-                            put("description", "The property, as list_fixture_types (attributes: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
+                            put("description", "The attribute, as list_fixture_types (attributes: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
                         })
                         put("value", buildJsonObject {
                             put("type", "string")
@@ -1300,9 +1300,9 @@ internal val setProgrammerTool = ToolDef(
 internal val clearProgrammerTool = ToolDef(
     name = "clear_programmer",
     description = "Clear the programmer, as the desk's Clear does. With no targets: every value, every Look and " +
-            "palette layer, every programmer effect and the scenery it holds, so the stage falls back to what " +
+            "palette layer, every programmer FX and the scenery it holds, so the stage falls back to what " +
             "is running. With targets: everything the programmer holds on those fixtures (their heads included) " +
-            "and groups, and the effects on just them — an effect that also drives heads outside them is left " +
+            "and groups, and the FX on just them — an FX that also drives heads outside them is left " +
             "running and named in `partial`. Layers are not taken off by targets; apply_look or apply_palette " +
             "pressed again takes one off.",
     inputSchema = buildJsonObject {
@@ -1322,7 +1322,7 @@ internal val setBlindTool = ToolDef(
     name = "set_blind",
     description = "Turn Blind on or off. In Blind the programmer keeps everything it holds and every tool that " +
             "writes it still works, but none of it reaches the stage — build a state, record it, then clear. " +
-            "Its effects are held too: they keep running unseen and paint, in phase, when Blind goes off. " +
+            "Its FX are held too: they keep running unseen and paint, in phase, when Blind goes off. " +
             "Its scenery is staged rather than moved, and a cue's one-shot events are rehearsed, not fired. " +
             "Turning Blind off puts the programmer back on stage. `programmer.blind` in get_current_state reads it.",
     inputSchema = buildJsonObject {
@@ -1340,10 +1340,10 @@ internal val applyPaletteTool = ToolDef(
     description = "Press a palette (by paletteId or paletteName) onto targets, as the desk's palette chips and pads do. " +
             "By default it puts on a programmer layer that tracks the palette, and toggles: pressing again on targets it " +
             "already covers takes it off them (get_current_state's `programmer.layers`). A palette pressed on heads " +
-            "that hold another palette of its family and kind (value or effect) takes them off that one; pressed on " +
+            "that hold another palette of its family and kind (value or FX) takes them off that one; pressed on " +
             "more heads straight after, its layer widens rather than stacking. asValues true instead writes the values " +
-            "it resolves to into the programmer — later edits to the palette do not move them — or, for an effect " +
-            "palette, starts a copy of its effect per target. A generic palette takes its heads from targets and " +
+            "it resolves to into the programmer — later edits to the palette do not move them — or, for an FX " +
+            "palette, starts a copy of its FX per target. A generic palette takes its heads from targets and " +
             "refuses with none (PALETTE_NEEDS_SELECTION); a per-fixture one lands on its own heads when targets are " +
             "omitted. A mask refuses a palette outside it (PALETTE_OUTSIDE_MASK).",
     inputSchema = buildJsonObject {
@@ -1357,7 +1357,7 @@ internal val applyPaletteTool = ToolDef(
             })
             put("asValues", buildJsonObject {
                 put("type", "boolean")
-                put("description", "Write the palette's values (or a copy of its effect) instead of a tracking layer. Default false.")
+                put("description", "Write the palette's values (or a copy of its FX) instead of a tracking layer. Default false.")
             })
             put("mask", maskSchema)
             put("fadeSeconds", buildJsonObject {
@@ -1375,7 +1375,7 @@ internal val recordLookTool = ToolDef(
             "in-mask rows for the recorded heads; REMOVE deletes the rows the recording names. A group's heads " +
             "that agree are recorded as one group row. Name targets — a Look recorded from the whole programmer " +
             "takes every head it holds. Scenery the programmer holds is recorded too unless scenery is false. " +
-            "Effects are moved into the Look only by fxIds (get_current_state's `activeFx`). The Look then " +
+            "FX are moved into the Look only by fxIds (get_current_state's `activeFx`). The Look then " +
             "becomes what a bare update_from_programmer writes back to, as after record_cue. Returns the Look's rows.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -1402,7 +1402,7 @@ internal val recordLookTool = ToolDef(
             put("fxIds", buildJsonObject {
                 put("type", "array")
                 put("items", buildJsonObject { put("type", "integer") })
-                put("description", "Programmer effects to move into the Look; they stop running in the programmer and run through the Look instead.")
+                put("description", "Programmer FX to move into the Look; they stop running in the programmer and run through the Look instead.")
             })
             put("scenery", buildJsonObject {
                 put("type", "boolean")

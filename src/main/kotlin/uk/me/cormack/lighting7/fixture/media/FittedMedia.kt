@@ -84,7 +84,7 @@ data class FittedMedia(
                         if (attribute in attributes) {
                             "$at: $attribute is not loadable (the type's loadable settings are ${loadable.keys.sorted().joinToString()})"
                         } else {
-                            "$at: '$typeKey' has no property $attribute"
+                            "$at: '$typeKey' has no attribute $attribute"
                         },
                     )
                     continue
@@ -141,14 +141,14 @@ data class FittedMedia(
             if (element == null || element is JsonNull) return Result.success(null)
             val problems = mutableListOf<String>()
             val obj = element as? JsonObject
-                ?: return failure(listOf("$where must be an object {slots: {<property>: {<option>: {gel?, gobo?}}}} or null"))
+                ?: return failure(listOf("$where must be an object {slots: {<attribute>: {<option>: {gel?, gobo?}}}} or null"))
             (obj.keys - "slots").takeIf { it.isNotEmpty() }?.let { problems += "$where has unknown field(s) ${it.sorted().joinToString()}" }
             val slotsElement = obj["slots"]
             val slots = sortedMapOf<String, Map<String, FittedSlot>>()
             if (slotsElement != null && slotsElement !is JsonNull) {
                 val byAttribute = slotsElement as? JsonObject
                 if (byAttribute == null) {
-                    problems += "$where.slots must be an object keyed by property name"
+                    problems += "$where.slots must be an object keyed by attribute name"
                 } else {
                     for ((attribute, optionsElement) in byAttribute) {
                         val at = "$where.slots.$attribute"

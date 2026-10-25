@@ -346,7 +346,7 @@ fun paletteStepsShape(steps: List<PaletteStep>): Result<PaletteStepsShape> {
     val attribute = PaletteAttribute.forFamily(family).firstOrNull { attribute ->
         steps.all { step -> step.rows.any { PaletteAttribute.ofOrNull(it.first) == attribute } }
     } ?: return Result.failure(
-        IllegalArgumentException("These palettes name no ${family.name.lowercase()} property in common, so the steps have nothing to step"),
+        IllegalArgumentException("These palettes name no ${family.name.lowercase()} attribute in common, so the steps have nothing to step"),
     )
     return Result.success(PaletteStepsShape(family, fxFamilyForAttributeFamily(family), attribute.attribute))
 }

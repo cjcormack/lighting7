@@ -48,8 +48,8 @@ They each handle search, hierarchy, keyboard nav, and click-to-select differentl
 
 ## 5. Information density, especially in the Cue editor
 
-- **[CueEditor.tsx](../src/components/cues/editor/CueEditor.tsx) (473 lines of layout)** has no collapsible sections — Targets, Properties, Effects, Triggers all stacked. On narrow widths it's a scroll marathon. Add chevron-collapsible sections with collapse state in localStorage.
-- **[FxLibrary.tsx:165](../src/routes/FxLibrary.tsx) categories don't persist** their expansion state and reset on each visit. Either remember the last view or auto-expand on search.
+- **[CueEditor.tsx](../src/components/cues/editor/CueEditor.tsx) (473 lines of layout)** has no collapsible sections — Targets, Attributes, FX, Triggers all stacked. On narrow widths it's a scroll marathon. Add chevron-collapsible sections with collapse state in localStorage.
+- **[FxLibrary.tsx:165](../src/routes/FxLibrary.tsx) families don't persist** their expansion state and reset on each visit. Either remember the last view or auto-expand on search.
 - **[CueDetailContent](../src/components/cues/CueDetailContent.tsx) and [CueDetailSheet](../src/components/cues/CueDetailSheet.tsx)** have overlapping read-only rendering logic; one should fully delegate to the other.
 
 ## 6. Empty / loading / error states are not standardised
@@ -113,7 +113,7 @@ The rule should be: destructive ⇒ confirm or undo; non-destructive ⇒ just do
 | [src/components/presets/FixtureTypePicker.tsx](../src/components/presets/FixtureTypePicker.tsx) | #3 no breadcrumb, no keyboard nav |
 | [src/components/cues/InlineEditCell.tsx](../src/components/cues/InlineEditCell.tsx), [src/components/cues/InlineTextCell.tsx](../src/components/cues/InlineTextCell.tsx) | #4 missing affordance |
 | [src/components/runner/EditorPanel.tsx](../src/components/runner/EditorPanel.tsx) | #4 silent debounce |
-| [src/routes/FxLibrary.tsx](../src/routes/FxLibrary.tsx) | #5 category state |
+| [src/routes/FxLibrary.tsx](../src/routes/FxLibrary.tsx) | #5 family state |
 | [src/components/cues/CueDetailContent.tsx](../src/components/cues/CueDetailContent.tsx) + [src/components/cues/CueDetailSheet.tsx](../src/components/cues/CueDetailSheet.tsx) | #5 duplication |
 | [src/routes/Fixtures.tsx](../src/routes/Fixtures.tsx), [src/routes/Diagnostics.tsx](../src/routes/Diagnostics.tsx), [src/routes/Patches.tsx](../src/routes/Patches.tsx) | #6 inconsistent empty/loading |
 | [src/routes/Channels.tsx](../src/routes/Channels.tsx) | #8 park vs lock |

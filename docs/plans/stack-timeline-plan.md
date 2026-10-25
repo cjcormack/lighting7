@@ -1,4 +1,4 @@
-# A stack's timeline: cues against the Looks, palettes, effects and scenery they apply
+# A stack's timeline: cues against the Looks, palettes, FX and scenery they apply
 
 > **Document status: agreed 2026-10-20; session 4 of 5 done.** The design is the record in
 > [`stack-timeline-design/`](stack-timeline-design/INDEX.md): four boards, the desk survey, and the
@@ -23,19 +23,19 @@ What the code says, read on 2026-10-20 at `487557e2`. `K/` is
   (`K/show/SceneryResolver.kt`, `trackedSceneryAt` at `K/routes/projectScenery.kt:170`). So
   *Lavender in Q2 to Q4* is three layers, one per cue.
 - **The stack list carries counts only.** `CueStackCueEntry` (`K/routes/projectCueStacks.kt:735`)
-  has `layerCount` and `adHocEffectCount`. The full layers are only on `CueDetails`, one cue at a
+  has `layerCount` and `adHocFxCount`. The full layers are only on `CueDetails`, one cue at a
   time.
-- **A GO adopts layer effects only.** `CueHolds.bringOn` (`K/fx/CueHolds.kt:529-649`) adopts a
-  live instance when `continues` holds (`:717`): same `layerEffectUuid`, target, property and
-  `comparableEffectSettings`. Adoption is tried only for a layer's effect (`:573`,
-  `layer?.let { … }`). An ad-hoc effect is stamped with its own row uuid (`:696`), so an effect
+- **A GO adopts layer FX only.** `CueHolds.bringOn` (`K/fx/CueHolds.kt:529-649`) adopts a
+  live instance when `continues` holds (`:717`): same `layerFxUuid`, target, attribute and
+  `comparableFxSettings`. Adoption is tried only for a layer's FX (`:573`,
+  `layer?.let { … }`). An ad-hoc FX is stamped with its own row uuid (`:696`), so an FX
   copied into the next cue is a different row and restarts at every GO.
 - **The press already writes a stored cue.** `pressCueLayer` (`K/routes/cueLayerPress.kt:99`) runs
   the pure `LayerPress.press` (`K/fx/LayerPress.kt:61`) over a cue's layers and writes them through
   `writeCueChildren`, retrying while other writes move the layers. It marks a held cue edited
   when `stageContent` changed and fires `cueListChanged` and `cueStackListChanged`.
 - **A cue write keeps its children's uuids.** `writeCueChildren` (`K/routes/projectCuesHelpers.kt:645`)
-  pairs ad-hoc effects by `CueEffectKey(targetType, targetKey, propertyName, effectType)` and a
+  pairs ad-hoc FX by `CueFxKey(targetType, targetKey, attribute, fxType)` and a
   survivor takes the new fields through `take()` (`:763-791`). The client strips `uuid` on write
   (`F/lib/cueUtils.ts:123`).
 - **Copies are made field by field.** `CueCopier.copyCue` (`K/routes/cueCopier.kt:77`, ad-hoc rows at
@@ -54,11 +54,11 @@ From the design record, agreed with Chris on 2026-10-20:
 |---|---|
 | D1 | **Cues as rows.** Cue, name, fade and follow at the left; the grid to the right. |
 | D2 | **A third mode of the stack view**, *Cards · Table · Timeline*, keeping the Table's rows, row drag, edit lock and bottom pane. |
-| D3 | **A column per record and target**: a Look (its own fixtures, or one target it is filtered to), a palette on one target, an effect by type, property and targets, a scenery element. One layer over two targets is two cells. |
+| D3 | **A column per record and target**: a Look (its own fixtures, or one target it is filtered to), a palette on one target, an FX by type, attribute and targets, a scenery element. One layer over two targets is two cells. |
 | D4 | **Cells stay per cue.** A filled cell is that cue's own layer; neighbouring cells draw as one bar; drag, fill and range on/off edit them. Layers do not start tracking. |
 | D5 | **A palette cell follows the press rule**: other palettes of its family come off the same heads in that cue. |
 | D6 | **A new cell copies its settings** from the nearest filled cell above in its column, else below, else the press defaults. A new layer goes on top; every cell shows its layer's rank. |
-| D7 | **Effects are columns, with a run key.** Ad-hoc effect rows that share a key draw as one run, and a GO between them hands the running effect on, phase kept. |
+| D7 | **FX are columns, with a run key.** Ad-hoc FX rows that share a key draw as one run, and a GO between them hands the running FX on, phase kept. |
 | D8 | **A parameter change inside a run is an edit in place** at that GO, phase kept, marked ◆. |
 | D9 | **Scenery is a column per element**: a change is a cell, the tracked state a line, both editable. |
 | D10 | **Timing and live state show**: fade, follow, the live cue framed with its fade running, the next cue, *Edited since GO*. |
@@ -66,8 +66,8 @@ From the design record, agreed with Chris on 2026-10-20:
 | C1 | **It is called Timeline.** |
 | C2 | **One selected cell opens the bottom pane** on its cue at the column's tab; a range over several cues folds it. |
 | C3 | **Every gesture is one request on one stack route**, one transaction, all or nothing, one Undo. |
-| C4 | **A copied cue's effects get fresh run keys.** |
-| C5 | **No migration.** Effects stored before the key draw as broken runs; *Join run* fixes them. |
+| C4 | **A copied cue's FX get fresh run keys.** |
+| C5 | **No migration.** FX stored before the key draw as broken runs; *Join run* fixes them. |
 | C6 | **Timeline is offered from 1100 px wide.** Below that the switcher hides it. |
 | C7 | **Column order is first use, grouped by kind**, reordered per window and never stored. |
 
@@ -77,15 +77,15 @@ The plan adds its own:
   §"Git workflow"). Locally, each session runs the packages it touches (CLAUDE.md §"Pre-commit
   checks"); session 1 runs the full suites, because it bumps `formatVersion`. Each session writes
   its engineering-doc paragraphs and puts its change commit's SHA in its heading when it lands.
-- **P2. The run key is the timeline's to write.** `runUuid` is read-only on `CueAdHocEffectDto`, as
+- **P2. The run key is the timeline's to write.** `runUuid` is read-only on `CueAdHocFxDto`, as
   `uuid` is: a cue PATCH, Record, Update and MCP's `create_cue` keep a matched row's key and give a
   new row none. Only the timeline route, the copier and the importer set it. The cue editor needs no
   change, and no other door can break a run by accident.
-- **P3. A run key is unique within a cue.** Two effect rows of one cue never share a key, so the key
+- **P3. A run key is unique within a cue.** Two FX rows of one cue never share a key, so the key
   can name one instance after adoption. The route refuses a write that would break this.
 - **P4. A run key is not stage content.** `stageContent` leaves `runUuid` out, so *Break run* and
   *Join run* on a live cue do not mark it edited since GO: neither changes what is on stage now.
-- **P5. Undo restores, it does not invert.** Every edit answers each touched cue's layers, effects
+- **P5. Undo restores, it does not invert.** Every edit answers each touched cue's layers, FX
   and scenery as they were, and Undo writes them back with a `restore` op. Inverting a press would
   have to undo the siblings it released, which a snapshot restores for free.
 - **P6. The grid is derived on the client.** Nothing stores a column. The read answers stored rows
@@ -99,9 +99,9 @@ The plan adds its own:
 - **Column**: a key the client derives from stored rows (§3.2). Nothing stores it.
 - **Cell**: one column in one cue. *Filled* when that cue holds what the column names.
 - **Run**: vertically adjacent filled cells that draw as one bar. Layer and palette cells join
-  whenever both are filled; effect cells join only when they share a run key; scenery cells never
+  whenever both are filled; FX cells join only when they share a run key; scenery cells never
   join (each change is its own chip, and the tracked state is a line between them).
-- **Run key**: `cue_ad_hoc_effects.run_uuid`, nullable. Cells with the same key are one run.
+- **Run key**: `cue_ad_hoc_fx.run_uuid`, nullable. Cells with the same key are one run.
 - **Rank**: a layer's 1-based position in its cue's layer order, 1 at the bottom. Two cells of one
   layer (two targets) show the same rank.
 
@@ -110,43 +110,43 @@ The plan adds its own:
 | Kind | Column key | Filled when the cue has | Turning a cell on | Turning it off |
 |---|---|---|---|---|
 | Look | `lookId` + a target, or none for the Look's own fixtures | a layer of that Look whose targets include the target (or, for none, are empty) | the press with `targets: [target]`, or none | the off press on that target |
-| Palette | `templateId` + a target, or none for a per-fixture palette's own heads | a layer of that palette covering the target | the press; same-family palettes come off those heads (D5) | the off press |
-| Effect | `effectType` + `propertyName` + the canonical target (`CueAdHocEffectDto.canonicalTarget()`) | an ad-hoc row with that signature | a copy of the nearest filled cell's row (D6), joining its run | the row is deleted |
+| Palette | `paletteId` + a target, or none for a per-fixture palette's own heads | a layer of that palette covering the target | the press; same-family palettes come off those heads (D5) | the off press |
+| FX | `fxType` + `attribute` + the canonical target (`CueAdHocFxDto.canonicalTarget()`) | an ad-hoc row with that signature | a copy of the nearest filled cell's row (D6), joining its run | the row is deleted |
 | Scenery | `elementUuid` | a `cue_scenery` row | the state and transition are written | the row is deleted; tracking resumes |
 
-A Look's own effects stay inside its column: they already continue across cues that layer it. A
-palette holding an effect is a palette column. Groups and fixtures are both targets; a cell is one
+A Look's own FX stay inside its column: they already continue across cues that layer it. A
+palette holding an FX is a palette column. Groups and fixtures are both targets; a cell is one
 target exactly as stored, never expanded.
 
 ### 3.3 The run key at a GO (D7, D8)
 
-`CueHolds.bringOn` gains an arm for ad-hoc effects. With the outgoing cue named by `adoptFrom` (a
+`CueHolds.bringOn` gains an arm for ad-hoc FX. With the outgoing cue named by `adoptFrom` (a
 stack GO, GO TO or GO BACK whose outgoing cue's only hold is that stack's live entry), an incoming
 ad-hoc instance with a run key looks for a live instance of the outgoing cue with the same key,
-target and property, running and not an N-shot (`mayContinue`):
+target and attribute, running and with no Runs count (`mayContinue`):
 
-- **Same settings** (`comparableEffectSettings` equal): adopted as a Look's effect is today, id and
+- **Same settings** (`comparableFxSettings` equal): adopted as a Look's FX is today, id and
   phase kept, retagged to the incoming cue and restamped with the incoming row's uuid.
-- **Different settings**: adopted the same way, then edited in place with `applyEffectUpdate`
+- **Different settings**: adopted the same way, then edited in place with `applyFxUpdate`
   (`K/routes/lightFx.kt:365`) on the request `alignmentRequest` builds
   (`K/routes/cueUpdateStage.kt:205`, made shared). The edit lands at the GO, not over the fade. A
   move between *Seconds* and a master restarts the phase, as it does for Update stage. A refused
-  update gives the instance back and the incoming effect starts fresh.
-- **No match**: today's behaviour. The outgoing effect shrinks out over the fade and the incoming
+  update gives the instance back and the incoming FX starts fresh.
+- **No match**: today's behaviour. The outgoing FX shrinks out over the fade and the incoming
   one grows from phase 0.
 
-`FxInstance` gains `runUuid`, stamped in `cueEffectInstances` beside `layerEffectUuid` (which stays
-the row uuid, so Update stage's `CueEffectKey` reconcile is untouched). `Adoption` records the
-instance's old `layerEffectUuid`, settings and cue so `giveBack` restores all three. A loose press
+`FxInstance` gains `runUuid`, stamped in `cueFxInstances` beside `layerFxUuid` (which stays
+the row uuid, so Update stage's `CueFxKey` reconcile is untouched). `Adoption` records the
+instance's old `layerFxUuid`, settings and cue so `giveBack` restores all three. A loose press
 (`adoptFrom` null) adopts nothing, as today.
 
 ### 3.4 Storage and sync (P2, C4, C5)
 
-- `cue_ad_hoc_effects.run_uuid` (`javaUUID`, nullable), added by `createMissingTablesAndColumns`.
+- `cue_ad_hoc_fx.run_uuid` (`javaUUID`, nullable), added by `createMissingTablesAndColumns`.
   No backfill (C5).
-- `CueAdHocEffectDto.runUuid`, read-only. `DaoCueAdHocEffect.take()` leaves it alone, so a matched
+- `CueAdHocFxDto.runUuid`, read-only. `DaoCueAdHocFx.take()` leaves it alone, so a matched
   row keeps its key through any cue write; a new row has none.
-- `CueAdHocEffectJson.runUuid`, omitted at null. Sync `formatVersion` 36 → 37, `minReader` stays 5,
+- `CueAdHocFxJson.runUuid`, omitted at null. Sync `formatVersion` 36 → 37, `minReader` stays 5,
   following the v29 pattern: the `FormatVersionJson` paragraph (`K/sync/dto/SyncDtos.kt:36-93`), the
   importer's (`K/sync/ProjectImporter.kt:~182-213`), both constants, and a §"v37" section in
   `docs/sync-engineering.md`. `RichProjectFixture` sets a key on two rows of adjacent cues.
@@ -163,19 +163,19 @@ per row of the stack in `ENTRY_ORDER`, markers included:
 ```
 { stackId, entries: [{ entryId, kind: CUE | MARKER, label?, cueId?,
     layers: [{ id, source: {kind, id, uuid, name, families}, targets, heads,
-      sortOrder, enabled, amount, blendMode, propertyMask, stomp, timed,
+      sortOrder, enabled, amount, blendMode, attributeMask, stomp, timed,
       speedMasterUuid, rateSpeedMasterUuid }],
-    effects: [{ id, uuid, runUuid, effectType, propertyName, targetType, targetKey,
+    fx: [{ id, uuid, runUuid, fxType, attribute, targetType, targetKey,
       family, heads, settings }],
     scenery: [{ elementUuid, state, transitionMs }],
     trackedScenery: [{ elementUuid, state, fromCueId }] }] }
 ```
 
-- `families` is the source's families (a Look's from its rows' properties, a palette's from its
-  family) and `family` an effect property's group, so the family filter needs no client lookup.
-- `heads` are the fixture keys a layer or effect reaches, so *Selection only* intersects them with
+- `families` is the source's families (a Look's from its rows' attributes, a palette's from its
+  family) and `family` an FX attribute's family, so the family filter needs no client lookup.
+- `heads` are the fixture keys a layer or FX reaches, so *Selection only* intersects them with
   the desk selection's heads (expanded through the group list the client already caches).
-- `settings` is what `comparableEffectSettings` compares, so the client marks ◆ where a run's
+- `settings` is what `comparableFxSettings` compares, so the client marks ◆ where a run's
   settings change. `trackedScenery` reuses `trackedSceneryAt`.
 - Everything else (names, fade, follow, numbers, live state) the client already has from the stack
   list, `cueRunStateChanged` and `cueHolds.state`.
@@ -195,15 +195,15 @@ the previous left. Every named cue must have an entry in the stack.
 | `layerOff {cueId, source, target?}` | The off press. |
 | `layerSettings {cueId, layerId, fields}` | The cue editor's layer fields: enabled, amount, blend, mask, stomp, delay, interval, random, masters. |
 | `replace {cueIds, from, to, keepSettings}` | In each cue: where the cue lacks `to`, `from`'s layer takes `to`'s source in place (rank and settings kept when `keepSettings`); where it has `to`, `from` comes off. |
-| `effectOn {cueId, fromEffectUuid}` | Copies that row into the cue. Its key is the source's, or a new key given to both when the source has none. |
-| `effectOff {cueId, effectUuid}` | Deletes the row. |
-| `breakRun {cueId, effectUuid}` | A fresh key for this cell and the cells of its run below it in this stack. |
-| `joinRun {cueId, effectUuid}` | Takes the key of the nearest filled cell above in the same column, for this cell and the rest of its run below. Refused when there is none. |
+| `fxOn {cueId, fromFxUuid}` | Copies that row into the cue. Its key is the source's, or a new key given to both when the source has none. |
+| `fxOff {cueId, fxUuid}` | Deletes the row. |
+| `breakRun {cueId, fxUuid}` | A fresh key for this cell and the cells of its run below it in this stack. |
+| `joinRun {cueId, fxUuid}` | Takes the key of the nearest filled cell above in the same column, for this cell and the rest of its run below. Refused when there is none. |
 | `scenerySet {cueId, elementUuid, state, transitionMs?}` / `sceneryClear {cueId, elementUuid}` | Checked by `parseSceneryList`, written by `replaceCueScenery`. |
-| `restore {cueId, layers, adHocEffects, scenery}` | Undo (P5): writes the lists back through `writeCueChildren` and `replaceCueScenery`, run keys included. |
+| `restore {cueId, layers, adHocFx, scenery}` | Undo (P5): writes the lists back through `writeCueChildren` and `replaceCueScenery`, run keys included. |
 
 It answers `{changed: [cueId], released: [{cueId, source, targets}], before: [{cueId, layers,
-adHocEffects, scenery}], edited: [cueId]}`. A cue held live whose `stageContent` changed is marked
+adHocFx, scenery}], edited: [cueId]}`. A cue held live whose `stageContent` changed is marked
 edited since GO (`CueHolds.markEdited`) and is listed in `edited`; nothing is sent to the stage.
 `dryRun` runs the batch and rolls it back. Problems are named all at once: 400
 `TIMELINE_EDIT_INVALID {problems: [{op, message}]}` (an unknown source, a cue not in the stack, a
@@ -214,16 +214,16 @@ It fires `cueListChanged` and `cueStackListChanged` once per batch.
 
 `F/lib/stackTimeline/` holds the pure derivation, tested on its own:
 
-- `columns(timeline, names)`: the columns, grouped Looks, Palettes, Effects, Scenery, each group in
+- `columns(timeline, names)`: the columns, grouped Looks, Palettes, FX, Scenery, each group in
   order of first use down the stack (C7), with a per-window order applied over it from
   sessionStorage (`timeline.columns.<stackId>`).
 - `cells(timeline, columns)`: per entry and column, the cell: filled or not, rank, glyphs
-  (non-default amount, blend, mask, stomp, timed, a master, disabled), and for effects the key and
+  (non-default amount, blend, mask, stomp, timed, a master, disabled), and for FX the key and
   whether settings changed from the cell above.
 - `runs(cells)`: per cell, whether it starts or ends a run, joins across a marker, restarts (↺,
   two keys meet) or changes in place (◆); for scenery, whether the cell carries a tracked line.
 - `filter(columns, {kinds, family, selectionHeads})`: the kind chips; the family filter keeps a Look,
-  palette or effect column whose families include the family and always keeps scenery; *Selection
+  palette or FX column whose families include the family and always keeps scenery; *Selection
   only* keeps columns whose heads meet the desk selection.
 
 ## 4. UX
@@ -240,10 +240,10 @@ It fires `cueListChanged` and `cueStackListChanged` once per batch.
 
 - Built on `useSheet` and `SheetTable`. The sticky first column holds the grip, the pip, the number,
   the name and its chips (shared, *Edited*); Fade and Follow follow it; then one column per derived
-  column, 84 px (92 for effects and scenery), under a group band naming the kind and its count.
+  column, 84 px (92 for FX and scenery), under a group band naming the kind and its count.
 - A cell draws its run segment from `runs()`: rounded where it starts or ends, square and bleeding
   over the row border where it continues, its kind's colour as a straight left strip. Layer cells
-  show the rank and glyphs, palette cells a swatch, effect cells ∿, ◆ with the new setting or ↺,
+  show the rank and glyphs, palette cells a swatch, FX cells ∿, ◆ with the new setting or ↺,
   scenery cells the change's text, and a 2 px line where the state is only tracked.
 - Markers are divider rows that let runs and tracking lines pass through.
 - The live row has a green edge and a fade bar under the first columns, driven by
@@ -262,7 +262,7 @@ Kit changes, in `F/components/sheet/`, kept generic:
 
 ### 4.3 Filters (D11)
 
-Row B under the stack header: kind chips (Looks, Palettes, Effects, Scenery, each with its count),
+Row B under the stack header: kind chips (Looks, Palettes, FX, Scenery, each with its count),
 a family segment (All, Intensity, Colour, Position, Beam), *Selection only* naming the desk
 selection, and *+ Column*. Filters are per window (sessionStorage).
 
@@ -286,11 +286,11 @@ All writes go through §3.6's route, one request per gesture; nothing is sent to
 - **Settings…** The layer's fields in a popover, as the cue editor's Looks tab draws them; over a
   range a field the cells disagree on reads *mixed* until set. A palette layer covering several
   targets says so. *Open Look* opens the Looks library.
-- **An effect cell.** Its popover lists the run cue by cue with each cue's settings, ◆ where they
-  change, and *Break run at Qn*, *Join run above* and *Edit Qn's effect…* (the pane's FX tab).
+- **An FX cell.** Its popover lists the run cue by cue with each cue's settings, ◆ where they
+  change, and *Break run at Qn*, *Join run above* and *Edit Qn's FX…* (the pane's FX tab).
 - **A scenery cell.** The element's states for its kind and the transition; *Clear change* hands the
   cue back to tracking.
-- **+ Column.** Searches Looks, palettes and effects; a palette or effect takes the desk selection's
+- **+ Column.** Searches Looks, palettes and FX; a palette or FX takes the desk selection's
   target unless one is picked. The new column is empty and lives in this window until a cell is
   filled, after which it is derived like any other.
 - **Undo.** The toast's *Undo* and ⌘Z send a `restore` op with the answer's `before` (P5), one step
@@ -305,15 +305,15 @@ All writes go through §3.6's route, one request per gesture; nothing is sent to
 
 - **No tracking for lighting** (D4). A layer in Q2 says nothing about Q3.
 - **The cue editor** writes as it does. P2 keeps it from touching run keys.
-- **Look and palette effect adoption** keeps its rule (same uuid and settings).
+- **Look and palette FX adoption** keeps its rule (same uuid and settings).
 - **Update stage** keeps its reconcile by row uuid; run keys are a GO's business.
-- **MCP** gets no tool. `create_cue` and Record make effects with no key; the run key reaches MCP
+- **MCP** gets no tool. `create_cue` and Record make FX with no key; the run key reaches MCP
   when a use for it does (§9).
 
 ## 6. Implementation: five sessions
 
 Sessions 1 and 2 are backend only and can land before any UI. Session 3 needs neither. Sessions 4
-and 5 need 3, and 5 needs 1 and 2 for effect runs.
+and 5 need 3, and 5 needs 1 and 2 for FX runs.
 
 ### Session 1: the run key, stored and synced (backend) — done, `a54ffa27`
 
@@ -330,9 +330,9 @@ and 5 need 3, and 5 needs 1 and 2 for effect runs.
 
 - §3.3: `FxInstance.runUuid`, the ad-hoc arm of `bringOn`, settings-differ adoption through a shared
   `alignmentRequest`, `Adoption` and `giveBack` restoring the uuid and settings.
-- **Tests**, beside `EffectFadeTest`'s P4 cases: same key and settings keeps id and phase; a new
-  speed keeps id and phase and runs at the new speed after the GO; a Seconds/master move restarts;
-  different keys fade one out and one in; no key behaves as today; a paused or N-shot effect is not
+- **Tests**, beside `FxFadeTest`'s P4 cases: same key and settings keeps id and phase; a new
+  cycle keeps id and phase and runs at the new cycle after the GO; a Seconds/master move restarts;
+  different keys fade one out and one in; no key behaves as today; a paused FX or one with a Runs count is not
   handed on; GO BACK hands it back; a press between the two holds gives the adoption back; Update
   stage on the incoming cue still reconciles by row uuid.
 - **Docs:** `fx-engineering.md` §"FxInstance.cueId" and the P4 paragraph,
@@ -345,7 +345,7 @@ and 5 need 3, and 5 needs 1 and 2 for effect runs.
   with runs, ranks, glyphs, markers, live and next rows, the legend, filters, per-window column
   order, the kit's three changes, the pane on one selected cell (C2).
 - **Tests:** the route over a stack with markers, a shared cue, a two-target layer, keyed and
-  unkeyed effects and tracked scenery; the derivation's columns, cells, runs (across a marker, a
+  unkeyed FX and tracked scenery; the derivation's columns, cells, runs (across a marker, a
   restart, a change) and filters; the kit's joined ring and passing divider; the switcher hiding
   Timeline below 1100 px.
 - **Docs:** `cue-stacks-engineering.md` §"REST API", CLAUDE.md's Cue Stack Run Endpoints,
@@ -365,12 +365,12 @@ and 5 need 3, and 5 needs 1 and 2 for effect runs.
 - **Docs:** `cue-stacks-engineering.md` §"REST API" and a new §"Timeline", CLAUDE.md's endpoint
   list.
 
-### Session 5: editing effects and runs (backend + frontend)
+### Session 5: editing FX and runs (backend + frontend)
 
-- §3.6's `effectOn`, `effectOff`, `breakRun`, `joinRun`, and P3's refusal.
-- §4.4 for effect cells: toggles, drag and fill joining runs, the run popover, *Break run* and *Join
+- §3.6's `fxOn`, `fxOff`, `breakRun`, `joinRun`, and P3's refusal.
+- §4.4 for FX cells: toggles, drag and fill joining runs, the run popover, *Break run* and *Join
   run*, ↺ and ◆ live in the grid.
-- **Tests:** `effectOn` from an unkeyed source keys both; break and join over a run with a marker in
+- **Tests:** `fxOn` from an unkeyed source keys both; break and join over a run with a marker in
   it; a key collision refused; a live cue's break not marking it edited (P4); end to end, a run made
   in the timeline continues across a GO with its phase kept.
 - **Docs:** `cue-stacks-engineering.md` §"Timeline", `fx-engineering.md`'s run-key paragraph.
@@ -389,14 +389,14 @@ desk writes ("newer than this install supports", `ProjectImporter.kt:630`), as e
 - The cue's own values, events and speed masters as columns (D10).
 - A picker of unused records with use counts (D11).
 - An MCP tool for the timeline or for run keys.
-- Run keys on Look and palette effects, which already continue.
+- Run keys on Look and palette FX, which already continue.
 
 ## 9. Follow-ups to record
 
 In [`followups.md`](followups.md), when the session that creates them lands:
 
 - `FU-TIMELINE-MCP` (session 5): an MCP tool to read a stack's timeline and write runs. Trigger: an
-  operator asks Claude to make an effect continue across cues.
+  operator asks Claude to make an FX continue across cues.
 - `FU-TIMELINE-VALUES` (session 3): the cue's own values as columns, per family. Trigger: the
   timeline is used to find where a hand-set value changes.
 
@@ -404,9 +404,9 @@ In [`followups.md`](followups.md), when the session that creates them lands:
 
 Beyond the suites, at the desk on Sleeping Beauty:
 
-- **Session 1.** Duplicate a cue with a keyed effect and read both cues' keys through the API.
+- **Session 1.** Duplicate a cue with a keyed FX and read both cues' keys through the API.
 - **Session 2.** Key the Pulse in Q2 and Q3 through the API, GO from Q2 to Q3 and watch it not
-  restart; change Q3's speed and watch it slow at the GO without a jump.
+  restart; change Q3's cycle and watch it slow at the GO without a jump.
 - **Session 3.** Open Act 1 in Timeline and check its Looks against the cue editor for three cues;
   narrow the window below 1100 px and land in Table.
 - **Session 4.** Drag Shehds colour from Q3 to Q6 and undo it; turn Amber on in Q5 and see Lavender
@@ -423,11 +423,11 @@ Answered by Chris on 2026-10-20 while designing; the record's INDEX lists the de
 3. What is a column? One per record, a palette per target (D3).
 4. A Look across cues? Per-cue cells with range gestures (D4).
 5. A palette cell? The press rule (D5).
-6. Effects? Columns (D7), with a run key (D7).
+6. FX? Columns (D7), with a run key (D7).
 7. A change mid-run? In place (D8).
 8. Scenery? A column per element (D9).
-9. What else shows? Timing, live state, effects, scenery (D10).
+9. What else shows? Timing, live state, FX, scenery (D10).
 10. The first version? Filters, Replace, the settings popover (D11).
 11. The name? Timeline (C1). 12. The pane? On one cell (C2). 13. Writes? One route, one Undo (C3).
-14. Copies? A fresh key (C4). 15. Old effects? No migration (C5). 16. Narrow? From 1100 px (C6).
+14. Copies? A fresh key (C4). 15. Old FX? No migration (C5). 16. Narrow? From 1100 px (C6).
 17. Column order? Per window (C7).

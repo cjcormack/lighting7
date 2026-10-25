@@ -498,7 +498,7 @@ bottom sheet on an upright phone; never in a `render_view` capture. See the stag
 **One-shot effects — the cannons** (session 9; lighting7 `docs/fixtures-engineering.md`
 §"@FixtureTrigger", `docs/cues-engineering.md` §"Cue events"). A confetti cannon's tubes are
 **triggers**, never values: a `TriggerAttributeDescriptor` (`type: 'trigger'`, `triggersOf` in
-`store/fixtures.ts`) at the end of a fixture's properties, which every control-drawing switch skips
+`store/fixtures.ts`) at the end of a fixture's attributes, which every control-drawing switch skips
 (the fixture sheet's `buildSheetRows`, the programmer's channel map). `api/effectsApi.ts` reads
 the three outbound frames — `effects.armed` (form 3 in `store/effects.ts`, its countdown anchored to
 this browser's clock from the frame's `remainingMs`), `effects.fired`, `effects.skipped` — and the
@@ -521,7 +521,7 @@ instanced mesh pooled per canvas, unlit, invalidating each frame only while a fl
 **Fixture commands — resets and lamp control** (fixture-optics session 7; lighting7
 `docs/fixtures-engineering.md` §"@FixtureCommand") take the trigger's shape: a
 `CommandAttributeDescriptor` (`type: 'command'`, `commandsOf` in `store/fixtures.ts`) at the very end of
-a fixture's properties, skipped by every control-drawing switch and by `useTargetAttributes`' `expand`
+a fixture's attributes, skipped by every control-drawing switch and by `useTargetAttributes`' `expand`
 (which now drops triggers too — a picker offering either offered only a 400). The fixture sheet draws
 **`FixtureCommandsMenu`** (`components/fixtures/`) above the controls: a *Commands* dropdown, each item
 its hold, each behind an `AlertDialog` naming the unit and the command with its description, its hold
@@ -624,14 +624,14 @@ table's texel 0 beside the focal distance. See `docs/stage-vis-engineering.md` �
 (`FixtureDetailModal`, the 512px Radix sheet the list, the grid's Info, the overview panel and Channels
 open; and `GroupDetailModal`, the **group sheet**), `stage` (`StageFixtureControlPanel`, 380px, with
 the **Focus** tab and the *Aim…* popover), `card` (the cards page: no header, unscrolled, the page's
-Properties / Channels toggle kept; and `GroupCard`, under the card's own header) and `phone` (the
+Attributes / Channels toggle kept; and `GroupCard`, under the card's own header) and `phone` (the
 Stage view and the busk view's *Fixture sheet…* on a phone, in `PhoneSheet` — below). The context a
 row reads (`sheetContext.ts`) carries the target and a `reachOf(head)` — `fxReaching`'s
 arguments for one head — rather than a fixture.
 
 **The phone host** (session 6, D14; Hosts board) is the sheet in `useEditorForm`'s two touch forms,
 `components/fixtureSheet/PhoneSheet.tsx`: held upright a **bottom sheet with three heights** — *peek*
-(the header, the scope line and the tray; the properties fold away, `[data-sheet-body]` hidden), half
+(the header, the scope line and the tray; the attributes fold away, `[data-sheet-body]` hidden), half
 (where every open starts), full (88svh, `EditorSurface`'s cap) — with a **grabber**: a drag follows
 the finger and settles on the nearest (`settleHeight`), a drag well below the peek closes it, a tap
 or Enter steps it taller, round from full to the peek, the arrow keys step it either way. Held
@@ -650,24 +650,24 @@ modal, opened from a menu. `StageFixtureControls` picks the docked panel or the 
 
 **The cards page's corner** (session 6, Hosts board): each card's header actions end in
 `OpenSheetButton` (⤢), which opens the fixture's 512px pop-up — the one `FixtureDetailModal` the page
-holds — for what the card host leaves out (the views, Release, the scope line); the page's Properties
+holds — for what the card host leaves out (the views, Release, the scope line); the page's Attributes
 / Channels toggle stays. A **group card** has the same corner, opening the group sheet
 (`GroupDetailModal`, now mounted by the Groups route): D1's one sheet for a group, and the only place a
 group has Park, Release and the scope line.
 
-**It is a programmer surface, and it says so.** Every value lands in Local; every effect it starts is
-a programmer effect. `FixtureContent`'s properties view, `PropertyVisualizers`, `FxSection`,
+**It is a programmer surface, and it says so.** Every value lands in Local; every FX it starts is
+a programmer FX. `FixtureContent`'s properties view, `PropertyVisualizers`, `FxSection`,
 `FixtureDetailView` and `EditModeContext` are deleted, and with them **every Edit / Done toggle on
 the fixture sheet, the cards page and the Channels cards** (D2): a surface is live while the desk is
-connected and read-only only offline, or per row on a parked property. Unpark keeps its confirm in
+connected and read-only only offline, or per row on a parked attribute. Unpark keeps its confirm in
 both places that offer it. Don't bring a mode back — the confirm is the guard.
 
 The column (Main board): `SheetHeader` — name, the model line (heads, mode, footprint, address),
 then a 40px row of **Values · Channels** (· **Focus**), Locate, Park and **Release n** — then
 `ScopeLine` (*Writes to Local · fade 2.0 s*, the programmer fade read from `lib/programmerFade.ts` and
 never set here; amber *BLIND* while blind; *Offline* when it is; the held count on the right), then
-the properties — **the only scroller** — then `FxTray`, **outside** the scroller at the foot, so the
-effects never scroll away after the last property (issue 6). The root is a size container named `sheet`: the
+the attributes — **the only scroller** — then `FxTray`, **outside** the scroller at the foot, so the
+FX never scroll away after the last attribute (issue 6). The root is a size container named `sheet`: the
 width ladder is a container query on the sheet, never the viewport (§4) — below 400px of sheet
 Release folds to its glyph and the scope line drops the fade.
 
@@ -690,19 +690,19 @@ Release folds to its glyph and the scope line drops the fade.
 - **Position writes `programmer.setPosition`, never raw channels** (D8; `sheetWrites.ts`): the commit
   goes through `clampCommitToResolution`'s centre rule, so `-20` lands where the programmer's position
   cell would land it, and a one-axis commit takes the other axis from the held `position` entry, else
-  the wire. A raw pan landed in the sideband, held nothing back and read *Programmer* while an effect
+  the wire. A raw pan landed in the sideband, held nothing back and read *Programmer* while an FX
   was on stage — the bug that started the plan.
 - **Source marks** (D4): `useRowSource` subscribes per key (`subscribeToKey`) and joins `getKeyState`
-  with the active-effect list through `rowSourceOf` (pure) — a 3px edge and a `SourceChip` in the
-  grid's colours: *Programmer* (filled once touched), *Night · pressed* for a pressed layer, the effect
+  with the active-FX list through `rowSourceOf` (pure) — a 3px edge and a `SourceChip` in the
+  grid's colours: *Programmer* (filled once touched), *Night · pressed* for a pressed layer, the FX
   as *Pulse · 1 beat · M2*, the cue as *Q12 · Night*, *Parked*, dashed *Base*. An **amber dot** while
   something under the winner is held back, by `lib/heldBack.ts` — the desk's
   `FxSuppression.heldBackByProgrammer` copied clause for clause (blind holds nothing back, a
-  programmer-band effect is never held back, otherwise an entry on the effect's **own** key on that
+  programmer-band FX is never held back, otherwise an entry on the FX's **own** key on that
   head). The programmer grid's FX lens strikes a chip through by the same function (§The programmer's
-  tables). A dashed amber *Staged* sits beside the chip while blind and held. **Blind holds the programmer's own effects instead** (show-cue-editing
+  tables). A dashed amber *Staged* sits beside the chip while blind and held. **Blind holds the programmer's own FX instead** (show-cue-editing
   plan D7): `isHeldByBlind` beside it (the desk's `fx/BlindHold.kt` — blind and in the band, which
-  `programmerOwned` is), never true of an effect `isHeldBack` holds, read by the tray and the
+  `programmerOwned` is), never true of an FX `isHeldBack` holds, read by the tray and the
   programmer's FX table for their *held · Blind* mark (`fx/HeldBlindMark.tsx`), and by the grid's
   lens.
 - **The stack** (D5): the chip opens `LayerStack` through `EditorSurface` — `programmer.keyStack`
@@ -714,73 +714,73 @@ Release folds to its glyph and the scope line drops the fade.
 - **Clearing** (D6): a row's × is drawn only while the programmer holds the row by an owner
   `clearEntry` releases (a slot only a pressed layer holds is not the operator's to clear), and sends
   `programmer.clearEntry` per held key at the programmer fade. **Release n** (`useRelease`) is one
-  `programmer.clearTarget` at the programmer fade, toasted in the desk's count, with the group effects
+  `programmer.clearTarget` at the programmer fade, toasted in the desk's count, with the group FX
   it left running in `partialSweepMessage`'s vocabulary (`outside: 'this fixture'`); no confirm, like
   Clear (call 3). Its count (`heldOnFixture`) is the entries on the fixture and its heads whatever the
-  owner but a layer's, the sideband inside its footprint, and its local effects.
-- **An effect over a selection** (effects plan D3) reports `targetType: 'selection'` and its ordered
+  owner but a layer's, the sideband inside its footprint, and its local FX.
+- **An FX over a selection** (effects plan D3) reports `targetType: 'selection'` and its ordered
   `targets`, and its `targetKey` — the list's canonical JSON — names no fixture or group: every read
-  of which heads an effect reaches goes through `lib/fxTargets.ts` (`fxNames`,
+  of which heads an FX reaches goes through `lib/fxTargets.ts` (`fxNames`,
   `fxAimKeys`, `fxTargetLabel`, the stored-row `storedFxTargets`), never a comparison of
   that key. The tray, the badges, Release's count, the grid's ⌫ and its FX lens, the programmer's FX
   table and the busk FX tab all read it there; it reaches a fixture as *via <its items>*, and its stop asks first.
 - **The tray** (`FxTray`, D9): four states (Fx board) — empty and **folded**, one 40px row (the
-  count, a chip per effect dimmed while paused, *+n* past three, the Look picker and **+ FX**);
+  count, a chip per FX dimmed while paused, *+n* past three, the Look picker and **+ FX**);
   **open**, two-line rows with pause and stop, up to half the sheet, scrolling itself; and
-  **adding**, `FxPicker` in the open tray. While the programmer is blind a programmer effect's chip
+  **adding**, `FxPicker` in the open tray. While the programmer is blind a programmer FX's chip
   takes Blind's amber dot (its hover adds *held · Blind*) and its row the `HeldBlindMark`: the desk
-  is holding it, phase kept, until Blind goes off (show-cue-editing plan D7). A group's effect on the fixture reads *via <group>* (with
-  its element mode), and its stop **asks first** — the editor's × too — since it stops the effect on
-  every member. A fixture's head row sees an effect on the fixture, which the desk paints onto the
+  is holding it, phase kept, until Blind goes off (show-cue-editing plan D7). A group's FX on the fixture reads *via <group>* (with
+  its element mode), and its stop **asks first** — the editor's × too — since it stops the FX on
+  every member. A fixture's head row sees an FX on the fixture, which the desk paints onto the
   heads (`fxReaching`, the one filter the rows and the tray share).
 - **The picker** (`components/fx/FxPicker.tsx`, D9, D10): a family segment (Intensity · Colour ·
   Position · Beam · Controls, a family the target cannot take disabled; Beam lists the beam
-  built-ins, each only where a head has its one property, and Slot Steps on a setting; Palette Steps
-  sits in every family with two generic value palettes or more naming a property the target has,
+  built-ins, each only where a head has its one attribute, and Slot Steps on a setting; Palette Steps
+  sits in every family with two generic value palettes or more naming an attribute the target has,
   effects plan §4.4) opening on the family of the row
-  open on the sheet, and the effect rows. **The step effects start stepping** (session 7,
+  open on the sheet, and the FX rows. **The step FX start stepping** (session 7,
   `lib/stepFx.ts`, which never resolves — the desk does, per head): Palette Steps on that
-  family's palettes, in name order, its master by the family's usage; Slot Steps on the row's
+  family's palettes, in name order, its master by the family; Slot Steps on the row's
   setting — from any other row the gobo wheel where the head has one, else its first setting — on
   its first two slots past its open one. Neither can be forked (the FX Library says why), and *Save
   as palette…* banks one by its palettes' family or as Beam on its setting (`stepFxPaletteShape`). The editor edits their lists with
   `FxStepListPickers.tsx` — `paletteList` (palettes by reference, one family once one is chosen)
-  and `slotList` (the setting's options, a name the head lacks dashed; on an effect palette every
-  patched head's options of the setting it names, `rigSettingUnion`, with typed names besides). **A tap is the start**: the effect runs at once with its
-  defaults, on that row's property where the effect can take it, as a **programmer effect**
+  and `slotList` (the setting's options, a name the head lacks dashed; on an FX palette every
+  patched head's options of the setting it names, `rigSettingUnion`, with typed names besides). **A tap is the start**: the FX runs at once with its
+  defaults, on that row's attribute where the FX can take it, as a **programmer FX**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
-  it), a movement effect starting *Around*, every effect starting on its type's own cycle and Direction
+  it), a movement FX starting *Around*, every FX starting on its type's own cycle and Direction
   — **one bar**, Forward, but half a bar and Bounce for Colour Fade, Focus Pull and the sweeps
-  (`newFxDivision`, `newFxDirection`) — on the master tagged for its family's usage
-  (venue-visit plan D16; a wall-clock effect on four seconds). **Another tap swaps it** through `updateFx` — the new
+  (`newFxDivision`, `newFxDirection`) — on the master tagged for its family
+  (venue-visit plan D16; a wall-clock FX on four seconds). **Another tap swaps it** through `updateFx` — the new
   type with its own defaults and starting blend, id and phase kept — so the operator auditions by
-  tapping down the list; a tap that lands on another *property* cannot be a swap (an instance keeps
-  its target), so it stops the auditioned effect and starts afresh. An effect offered through a
-  sentinel (`setting`, `slider`) draws an *On* row where the target has several properties it could
+  tapping down the list; a tap that lands on another *attribute* cannot be a swap (an instance keeps
+  its target), so it stops the auditioned FX and starts afresh. An FX offered through a
+  sentinel (`setting`, `slider`) draws an *On* row where the target has several attributes it could
   land on. *Edit <name>* opens the editor.
 - **The live editor** (`components/fx/FxEditor.tsx`, D11, D12, D12a, D15): the old
   `EffectParameterForm`'s inputs rebuilt on the editor kit (its fields are `FxFields`, which
   `PaletteEditor` mounts too, over a draft — §Looks, palettes and layers), **inline under its row** in the tray (Main board B). **No
   Apply**: every control writes the draft through `useLivePush` (50 ms floor, deduplicated, the
-  release always lands) into `lightingApi.fx.updateFx` — parameters, speed, blend and phase every
-  time, a distribution, element field or master only once the operator has set it, since the DTO
+  release always lands) into `lightingApi.fx.updateFx` — parameters, cycle, blend and phase every
+  time, an Order, element field or master only once the operator has set it, since the DTO
   leaves those out where they do not apply and the draft's default would be a guess; a typed field commits on Enter
   (`SheetField`, shared with the rows). **Revert** sends the snapshot taken at open in one write
-  (a never-assigned master as master 1's uuid — the frame cannot say null; an effect that opened
-  on *Seconds* gets `seconds: true` back, which is also how a wall-clock effect returns to
+  (a never-assigned master as master 1's uuid — the frame cannot say null; an FX that opened
+  on *Seconds* gets `seconds: true` back, which is also how a wall-clock FX returns to
   unscaled, `FU-FX-RATE-MASTER-CLEAR`'s close); **Done** comes back
-  to the list, landing any move the floor still held; **×** stops the effect, and pause / resume sit
+  to the list, landing any move the floor still held; **×** stops the FX, and pause / resume sit
   beside it. A write the closed socket dropped is forgotten as sent, so the release resends it. The draft is the editor's own while it is open, so a
-  refetch never pulls a slider back under a finger; hosts key it on the effect's id *and* type, so
+  refetch never pulls a slider back under a finger; hosts key it on the FX's id *and* type, so
   the picker's swap opens a fresh one. Cycle is a segment in **beats a cycle** — `⅛ beat` … `4 bars`,
   `SPEED_STEPS` in `fxConstants.ts`, the one table every chip reads too (`FU-FE-FX-SPEED-SPELLING`,
   settled by venue-visit plan S15) — any other division typed beside it, with the **timing** as a
   chip: *Seconds* or a master (venue-visit plan D7; `TimingChip`, `timingChoicePatch`). On Seconds the
-  effect types its cycle in seconds and follows no master; a wall-clock effect types seconds either
-  way, its master being its rate master. Moving a beat effect between the two converts the division
+  FX types its cycle in seconds and follows no master; a wall-clock FX types seconds either
+  way, its master being its rate master. Moving a beat FX between the two converts the division
   at the master's live tempo, so its cycle holds (`lib/fxTiming.ts`). **Under Cycle sit Amount,
   Direction and Order** (effects plan D11, §4.1; terminology plan D3; `AmountSection`): Amount a slider and a percent field — how
-  much of the effect reaches the stage over what is underneath, which the desk weighs after the
+  much of the FX reaches the stage over what is underneath, which the desk weighs after the
   blend (a Replace at 50 % sits halfway over the level underneath) — and Direction a segment of
   three glyphs, → ← ↔, the word on the hover, with *Order* beside it on a group or a fixture with
   heads (the Order, worded *Normal · Reverse · Centre out…* by `lib/orderLabels.ts` — the one
@@ -789,14 +789,14 @@ Release folds to its glyph and the scope line drops the fade.
   stored names `NORMAL`, `CENTRE_OUT`, `CENTRE_IN` and the rest). Amount and Direction are dynamics fields on the desk, so a write keeps
   the phase, and both ride the `updateFx` frame only once touched (`OPTIONAL_FIELDS`). The client
   computes none of it (P2). A movement
-  effect asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
+  FX asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
   pinned at 128 and **hidden**, Absolute `OVERRIDE` with it shown, and a stored `ADDITIVE` + 128
-  reads back as Around; a level effect asks *Over the level underneath: Replace it | Within it*
+  reads back as Around; a level FX asks *Over the level underneath: Replace it | Within it*
   (`OVERRIDE` / `MULTIPLY`, default Replace). Levels are percents; a size (`…Radius`, `…Range`) is a
   distance in **DMX steps**, and a centre or a sweep's end a position on its axis, **centre-relative**
   (`-128..127`, venue-visit plan D3) on every head — the value is raw DMX, so no head is consulted. Curves, switches and ratios beside levels sit
   behind **Shape**, its summary line saying what is in it; **Advanced** holds the phase, the raw
-  blend (every effect, so nothing is out of reach), **Runs** — *Forever* or a count of cycles, after
+  blend (every FX, so nothing is out of reach), **Runs** — *Forever* or a count of cycles, after
   which each head hands back to what is underneath (effects plan D9; a null count is sent as
   `runForever: true`, since the frame's absent `runs` means keep) — and — on a group or a fixture with
   heads — *Timing: Per cycle | Per head* (over `timing`, `CYCLE` | `HEAD`), Element mode and the head filter. **The
@@ -804,9 +804,9 @@ Release folds to its glyph and the scope line drops the fade.
   fixture with heads, and always on an FX palette: *Spread* %,
   *Wings* (hidden under a mirrored Order — Centre out, Centre in — and set back to 1 in the same
   write when one is chosen, `orderPatch`, since the desk refuses wings there), *Segments* and *Parts*
-  (0 off), and a row of **phase dials** — eight notional heads on a palette, the effect's own live
+  (0 off), and a row of **phase dials** — eight notional heads on a palette, the FX's own live
   (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion` counted: one per fixture
-  where the first fixture carries the effect's property itself (`carriesFxAttribute`: a slider or
+  where the first fixture carries the FX's attribute itself (`carriesFxAttribute`: a slider or
   setting by name, a colour or position by type, the desk's traits), else its heads, a `FLAT` group's
   head filter across the whole strip on its global index, a `PER_FIXTURE` one's within each fixture;
   sixteen dials, then *+n*). Under Segments, Wings or Parts Position's continuous rank snaps to its
@@ -816,67 +816,67 @@ Release folds to its glyph and the scope line drops the fade.
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
   `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
-  The Values grid's lens chips and a cell popup's Effects band open the same editor in
+  The Values grid's lens chips and a cell popup's FX band open the same editor in
   `EditorSurface` (`FxEditorPopover`), the FX editor draws it in its inspector, and the busk FX tab
   draws it inline under a row — `SplitFxEditor` (`components/fx/SplitFxEditor.tsx`), which the
   popover hosts, so the two cannot split two ways; the copies a split follows (`SplitSession`) are
   the host's to hold, since the tab's editor moves to the first copy's row. It **follows the
-  selection** (apply-model plan D5, §4.5): with every head the effect paints selected, or none, a
-  move edits it in place; with **some** of a Local effect's heads selected it says *Hex 1–2 of Hex
+  selection** (apply-model plan D5, §4.5): with every head the FX paints selected, or none, a
+  move edits it in place; with **some** of a Local FX's heads selected it says *Hex 1–2 of Hex
   1–4*, **holds** the edit (`FxEditor`'s `hold`), and *Apply to Hex 1–2* sends it once over REST —
   `PUT /fx/{id}` with those heads as `targets` (`useUpdateFxMutation`) — and the desk splits them off,
   each where it was, answering the copies (`FxSplitResponse`, put into the running list at once).
   The editor then follows the edited copies: the host reads the first by id (`onFollow`) and every
   later move goes to each (`alsoIds`), and pause and × act on each too. *Edit all 4* sends what is held
-  to the whole effect in place. A held edit is never the live floor's: if the selection moves off the
-  subset it is dropped and the editor redrawn from the effect, rather than landing on every head. A
+  to the whole FX in place. A held edit is never the live floor's: if the selection moves off the
+  subset it is dropped and the editor redrawn from the FX, rather than landing on every head. A
   close ends the session, so a copy opened again later is edited alone; the editor stays where its row
   was though the split took that row away (a remembered anchor); and while the split is on its way the
   editor is inert and a close keeps it closed.
   The split goes over REST because the `updateFx` frame answers one only as `fxChanged` REMOVED and
-  ADDED, which names no copy to follow. A palette layer's effect (plan P5), a cue's and a manual one
+  ADDED, which names no copy to follow. A palette layer's FX (plan P5), a cue's and a manual one
   never offer a split. Which heads the selection covers is the client's reading, for the words alone
   (`components/fx/fxSplit.ts`, over the cell batch, the busk pair or the window's pair); the
   split is the desk's, from the heads named. ⌘K *Apply FX*, the FX table's `+ FX` and the busk
   FX tab's *+ FX…* open the one picker's
-  **effects arm** (`ApplyPicker`, `library="fx"`): `FxPicker` on the **bare effect press**
-  (its `press` prop — a tap is `POST /programmer/fx` with the door's pair, one Local effect over
-  it, the desk first taking those heads off every other Local effect of its family), above the
-  effect palettes that fit, the editor opening in the panel and its Done coming back to the list.
+  **FX arm** (`ApplyPicker`, `library="fx"`): `FxPicker` on the **bare FX press**
+  (its `press` prop — a tap is `POST /programmer/fx` with the door's pair, one Local FX over
+  it, the desk first taking those heads off every other Local FX of its family), above the
+  FX palettes that fit, the editor opening in the panel and its Done coming back to the list.
   The two doors read one pair, `useWindowFxPair` (`components/fx/selectionFxTarget.ts`):
   the targets `useWindowSelectionTargets` gives — the programmer's rows in grid order, a group row
-  kept a group so its effect is one group effect with its distribution, the desk's while following,
+  kept a group so its FX is one group FX with its Order, the desk's while following,
   else the busk view's copy — and the mask a press from this window carries. **On the programmer
   ⌘K's *On the selection* opens the programmer's `+ FX`** (`programmer/addFxDoor.ts`,
   `ProgrammerAddFxDoor` registering it while the tables are mounted): the palette lives in `Layout`, outside the programmer's
   marquee store and scope, so a picker of its own there could read neither the marquee's mask nor a
   focused Look layer. Elsewhere it opens its own picker on the window's pair, and its per-fixture
-  and per-group items press that one target with no mask. In a focused Look layer the bare effect starts
+  and per-group items press that one target with no mask. In a focused Look layer the bare FX starts
   on `/fx/add` alone and is absorbed into the Look once the panel's session ends — closed or
   unmounted — by the id the create answered, after the editor lands its held move: the press's
-  replacement would take heads off other Local effects, which a press into a Look must not do. The
+  replacement would take heads off other Local FX, which a press into a Look must not do. The
   popover is bounded by the room Radix measures beside its anchor and scrolls inside it. `ActiveEffectSheet`,
   `AddEditFxSheet` and (session 5) `EffectParameterForm` are deleted. A refused write comes back as
-  `fxError`, toasted keyed per effect (`store/fixtureFx.ts`).
-- **A pad's running effect** (§3.3, D20; session 5): an instance a **programmer** palette layer
+  `fxError`, toasted keyed per FX (`store/fixtureFx.ts`).
+- **A pad's running FX** (§3.3, D20; session 5): an instance a **programmer** palette layer
   spawned (`isPaletteLayerInstance` — `paletteId` and `programmerLayerId`, no `cueId`) is edited as
   that running instance only. The editor finds its palette in the current project's list
   (`useSpawningPalette`), marks itself ***edited*** while the draft differs from the palette's
-  effect (`differsFromPalette`: a null master is master 1, an omitted parameter the library's
+  FX (`differsFromPalette`: a null master is master 1, an omitted parameter the library's
   default, a number however spelled), and its footer is **Update palette** and **Reset to
   palette** in place of Revert. Update is the palette's `PUT {fx}` from the draft **then** W5
   on this instance — the PUT alone would respawn it at the stack's next recook, phase restarted —
   so it re-keys rather than restarts; Reset is W5 alone (`useResetFxToPaletteMutation`), dropping
   any move the floor still holds first. Every *other* running instance of that palette keeps the
   old settings and reads *edited* until reset by hand (`FU-TMPL-FX-EDIT-NO-RETIME`). The editor's ×
-  is optional: the busk FX tab leaves it off a pad's effect, which its pad releases.
-- **A cue's effect is read-only in the tray** (Fx board, *Open*; session 5, `isCueFx`): it names
+  is optional: the busk FX tab leaves it off a pad's FX, which its pad releases.
+- **A cue's FX is read-only in the tray** (Fx board, *Open*; session 5, `isCueFx`): it names
   its cue (*on Q12*) and draws no editor, pause or stop — its home is the cue, whose next GO would
   put back anything changed here. Session 3 had left it editable. **Its cue opens it** (the board's
   *opens it*, built after the plan): the open row's *on Q12* is a button onto that cue's **cue
   editor** (`CueEditor` in a right-hand sheet), in place, through `stage/OwnerEditor` — the Stage
   view's *Moves with* path, not a second one — over whichever host the sheet is in, Escape or Close returning to the sheet. The
-  project is the current one (a cue effect is always its), and the row is a button only once the cue
+  project is the current one (a cue FX is always its), and the row is a button only once the cue
   is named from that project's stack list, so a press never lands before the project has. Its name
   is its visible text, never an `aria-label`. The editor is mounted by the tray on first use and
   kept, so a card page's trays mount nothing until pressed. A folded chip for one still
@@ -892,7 +892,7 @@ Release folds to its glyph and the scope line drops the fade.
   added — and **⌘ or ⇧ toggles** one in or out; the release's click is swallowed. *All* lights every
   pip, since it holds every head, so a pick that covers every head (and folds to *All*) never reads as
   lost. Beside the pips, the busk band's vocabulary: an **Elements** menu — *All · Odd · Even · 1st half ·
-  2nd half* over every head (exactly the element filters an effect starts with) and *Invert* of the
+  2nd half* over every head (exactly the element filters an FX starts with) and *Invert* of the
   pick — and *Prev* / *Next*, stepping the pick one head along and wrapping (from *All*, the first or
   last head). The menu's face names the filter last chosen, kept beside the pick, and any other
   gesture clears it. **The pick is the
@@ -916,7 +916,7 @@ Release folds to its glyph and the scope line drops the fade.
 - **Writes over a pick** (`PickWrite`, `sheetWrites.ts`): a group's *All* is **one group entry**
   (`programmer.set('group', …)`, which the desk fans to the members with `sourceGroup` — Record turns
   it back into a group row); a subset of members is each member's own entry carrying the group as
-  `sourceGroup`; a fixture's heads — *All* included, since the desk has no all-heads property to write
+  `sourceGroup`; a fixture's heads — *All* included, since the desk has no all-heads attribute to write
   — are each head's own entry. **Never a raw channel**: the group visualisers' sliders sent one per
   member, and `useGroupAttributeValues`' update hooks went with their raw-channel fallback. A position
   is resolved per head; a group's *All* stays one entry only where every member lands on the same
@@ -924,30 +924,30 @@ Release folds to its glyph and the scope line drops the fade.
   head's own channel (the desk reads a missing one as 0), and is one group entry only over members
   with the same emitters. A dimmerless colour's *Dimmer* (a group member's, never a fixture's head)
   scales each head's colour, so it is never one group entry. The row's × over a group's *All* is one group `clearEntry`.
-- **Effects follow the pick** (`TrayPick`): the tray lists what reaches the picked heads or members
-  (`fxReaching`, still the one filter), an effect on one head reading *on Head 3*. **+ FX**
-  starts on the fixture or the group for *All* (a group's with its distribution, Element mode in the
+- **FX follow the pick** (`TrayPick`): the tray lists what reaches the picked heads or members
+  (`fxReaching`, still the one filter), an FX on one head reading *on Head 3*. **+ FX**
+  starts on the fixture or the group for *All* (a group's with its Order, Element mode in the
   editor's Advanced), on that head or member alone for one (`headAsFixture` — the desk resolves a
-  head's key as an effect target), on the fixture with the **element filter** that names a pick of
+  head's key as an FX target), on the fixture with the **element filter** that names a pick of
   exactly the odd, even or a half of the heads (`elementFilterFor`, the desk's `ElementFilter` clause
-  for clause), and otherwise says why it cannot — one effect has no target for heads 1, 2 and 7. A
+  for clause), and otherwise says why it cannot — one FX has no target for heads 1, 2 and 7. A
   pick that moves under an open picker re-keys it. The tray's **Look picker** follows the same rule
   (Chris's call): the whole target on *All*, the one head or member when one is picked, and absent for
   any other pick, a filtered one included.
 - **The group sheet**: *Values · Members* (`GroupMembersSection`, a member opening its own sheet, where
-  a group's effect reads *via <group>*), Locate, **Park** over the members' channels (a member that is
+  a group's FX reads *via <group>*), Locate, **Park** over the members' channels (a member that is
   one head brings that head's channels, not the bar's — `ParkButton`, unpark confirmed) and **Release**
   (`clearTarget('group', …)`), the model line `Group · 6 × <model>`, the scope line *Writes the group
   to Local* or *Writes 2 members to Local*, and the group's surface-binding badges
   (`GroupBoundControlsRow`). `GroupPropertyVisualizers`, `HeadsSection`, the "Virtual" badges and the
   group visualisers' Edit toggle are deleted. A group's rows come from its members' own fixture
-  properties; a group of multi-head fixtures shows its members' fixture-level rows, and each member's
+  attributes; a group of multi-head fixtures shows its members' fixture-level rows, and each member's
   heads are that member's own sheet.
 - **A group's member order** (venue-visit plan S7; lighting7 `docs/groups-engineering.md` §"Member
   order"): the sheet's *Members* view lists the members **numbered in the group's order**, the order
-  its effects and a spread over it run in. It is dragged to reorder, and each member's **step** under
-  the strategy *Runs as* picks is shown (the desk's `orderSteps`, never a client formula; the
-  group's own distribution first). A drop writes at once through `useReorderGroupMembersMutation`,
+  its FX and a fan over it run in. It is dragged to reorder, and each member's **step** under
+  the Order *Runs as* picks is shown (the desk's `orderSteps`, never a client formula; the
+  group's own Order first). A drop writes at once through `useReorderGroupMembersMutation`,
   sending only the members shown. The desk keeps every other member in its place, and so does the
   optimistic move (`lib/memberOrder.ts`'s `placeInOrder`), rolled back on a refusal.
   `useGroupMemberReorder` joins the runtime group to its patch group by name, for the id, the owner and
@@ -972,11 +972,11 @@ outside the scroller at the bottom sheet's foot.
 dot, × drawn only while held and its words, Release's frame and toast, Enter with the unit,
 `setPosition` and never `channels.update`, the tray outside the scroller, no Edit toggle, read-only
 offline and on a parked row, the picker and the inline editor in the tray — and `hosts.test.tsx`
-the two hosts. Session 3's list is `FxPicker.test.tsx` (a tap starts a programmer-owned effect; a
+the two hosts. Session 3's list is `FxPicker.test.tsx` (a tap starts a programmer-owned FX; a
 second tap is one `updateFx` and no add), `FxEditor.test.tsx` (a drag at most one frame per 50 ms
 with the release landing, Revert's snapshot, Around as `ADDITIVE` + 128 with the centre hidden and
-read back, Within as `MULTIPLY`) and `store/fixtureFxErrors.test.ts` (`fxError` keyed per effect);
-the layer absorb, once, is `ApplyPicker.test.tsx`'s effects arm.
+read back, Within as `MULTIPLY`) and `store/fixtureFxErrors.test.ts` (`fxError` keyed per FX);
+the layer absorb, once, is `ApplyPicker.test.tsx`'s FX arm.
 
 Session 4's list is `HeadsGroups.test.tsx` — the pick resets when the target changes, a run selects,
 *All* on a group sends one group write, a subset sends member writes carrying the group, no raw channel
@@ -991,20 +991,20 @@ and Reset calls W5, and Update palette PUTs the instance's settings then re-keys
 (`FxEditor.test.tsx`, `FxSheet.test.tsx`); the FX tab is in every place `LIVE_SHEET_TABS`
 reaches (`SideSheet.test.tsx`, `buskWindow.test.ts`, `ScreensSheet.test.tsx`); Release on row C
 sends one frame per selected row (`FixturesListContainer.test.tsx`), and on the rig row folds with
-the verbs (`RigBand.test.tsx`); the grid dot appears for a held-back cue effect
+the verbs (`RigBand.test.tsx`); the grid dot appears for a held-back cue FX
 (`FixturesTable.test.tsx`, `heldBack.test.ts`); the tile menu opens the sheet (`RigBand.test.tsx`).
 
 ### Looks, palettes and layers
 
 **Two library entities, and a Layer applies either.** A **Look** composes cues: any families, its
-own fixtures, its own effects, added to a cue's stack at a declared position. A **Palette** is
+own fixtures, its own FX, added to a cue's stack at a declared position. A **Palette** is
 **one named thing** of exactly one attribute family, with no targets of its own, applied to a
-selection — either a value, *or* one effect, never both (`fx-templates-plan.md` D1). Which of the
+selection — either a value, *or* one FX, never both (`fx-templates-plan.md` D1). Which of the
 two it holds is `kind`, and it is fixed at creation the way the family is; three rules keep the
-effect half narrow, and each removes a way for it to complicate the cook: **a value or an effect**,
-**one effect** (several together is what a Look with deferred effects already is), and **always
-generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
-Every family may hold an effect — a **Beam** one a beam built-in (Zoom Wave, Iris Pulse, Frost
+FX half narrow, and each removes a way for it to complicate the cook: **a value or an FX**,
+**one FX** (several together is what a Look with deferred FX already is), and **always
+generic** (an FX fans over whatever the layer names, so `isGeneric` is true for every one).
+Every family may hold an FX — a **Beam** one a beam built-in (Zoom Wave, Iris Pulse, Frost
 Pulse, Focus Pull; effects plan D6) or Slot Steps naming its setting, and any family Palette Steps
 over that family's palettes (session 7, `lib/stepFx.ts`'s `stepFxPaletteShape`) — and the
 backend refuses `controls` **by name**, since it names no family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
@@ -1023,8 +1023,8 @@ value grid, `LookDraftContext`, `LookLivePreview`, `syntheticFixture.ts`, `Edito
 **A Look row is always bound** — `validateLookRows` refuses `deferred` — and a Look is always
 *recorded*, from the programmer or by promoting a selection, which is why `/looks` has no New
 button and one editor (`LookDetailSheet`, read-only about values on purpose; read its doc comment
-before adding a value grid; it lists the Look's effects read-only too, and Include runs them in the
-programmer, each on its own target, for Update to write an edit back onto). A Look **effect**
+before adding a value grid; it lists the Look's FX read-only too, and Include runs them in the
+programmer, each on its own target, for Update to write an edit back onto). A Look **FX**
 names its own target too (absolute-looks plan D2), so `LookSummary.hasDeferredFx` is always
 false, and what reads it — the busk starter's Looks pool, the needs-a-selection labels — does
 nothing until those readers go.
@@ -1071,7 +1071,7 @@ take it reports a skip. `targetEmitters` must read the **colour descriptor's** `
 `amberChannel` / `uvChannel`: bundled emitters are omitted from the flat descriptor list, so
 scanning categories the way `targetFamilies` does finds no emitter on any head.
 
-**A palette's property vocabulary is closed** (`PaletteAttribute`), and that is where "a palette
+**A palette's attribute vocabulary is closed** (`PaletteAttribute`), and that is where "a palette
 cannot carry a gobo" actually lives: gobo, colour-wheel and macro slots are per-model, so they are
 refused by name at the write boundary and shown *disabled with the reason* in the beam editor
 rather than omitted. The three emitters are *in* the vocabulary — not slotted, and the only
@@ -1103,10 +1103,10 @@ takes the order back; the cue editor's Looks tab reorders client-side and so res
 `sortOrder`, not just the two it moved (`components/cues/editor/cueListEdits.ts`'s `restated`, the
 rule the deleted `reorderCueLayers` / `densifyCueLayerOrder` stated).
 
-**Layer order does not govern the value/effect boundary**, and per-layer `stomp` is the escape
-hatch. Effects are Layer 3 and values Layer 4, so a lower layer's colour *effect* beats a higher
-layer's static colour whatever the order says; `stomp` on the higher layer switches off the effects
-of every layer below it, on every property it asserts. It is **suppression, not removal** — the
+**Layer order does not govern the value/FX boundary**, and per-layer `stomp` is the escape
+hatch. FX are Tier 3 and values Tier 4, so a lower layer's colour *FX* beats a higher
+layer's static colour whatever the order says; `stomp` on the higher layer switches off the FX
+of every layer below it, on every attribute it asserts. It is **suppression, not removal** — the
 instance keeps running, so clearing the stomp brings it back mid-phase — and it applies to the
 programmer stack as well as to a cue. `LookStack`'s `onSetStomp` is the toggle, and a read-only row
 draws a badge instead; the Stack table's Settings column and its settings popover carry it for the
@@ -1118,14 +1118,14 @@ conflate them.
 field missing from that rebuild is dropped on every inline cue edit; `cueUtils.test.ts` pins every
 field of both individually rather than by deep-equal — a deep-equal against a fixture built in the
 test file would pass just as happily with the same field missing from both sides. `adHocFx`
-is spread rather than rebuilt, so a read-only field on it has to be stripped by name: the effect's
-`uuid`, which the desk answers so a client can name one effect across writes and ignores on write,
+is spread rather than rebuilt, so a read-only field on it has to be stripped by name: the FX's
+`uuid`, which the desk answers so a client can name one FX across writes and ignores on write,
 is, and `cueUtils.test.ts` pins that too.
 
 **The `ref:{uuid}` value grammar is gone** — retired in session 4, on both sides at once,
 because a client cannot render rows a server still produces. A cue or the programmer depends on
 a Look through a **layer**, which names it by FK, and a layer's `attributeMask` is what expresses
-"this property comes from that Look". What went with it: `parsePaletteRefUuid` /
+"this attribute comes from that Look". What went with it: `parsePaletteRefUuid` /
 `isPaletteRefValue` / `serializePaletteRef`, `ProgrammerEntry`'s five `palette*` fields,
 `CellPaletteRef` and `describePaletteRef`, `PaletteRefNotice` and the four cell editors' notices,
 the `FixturesTable` reference rail and its `Link2` corner glyph (the `Layers` glyph beside it
@@ -1146,7 +1146,7 @@ shape, because the two sit in the same list at the same rank and a louder chip w
 more important. **Never mint a `P<n>` short code for either**; display the name.
 
 **"Palette" is what this codebase calls the record `models/palettes.kt` stores** — a named value or
-one named effect, one attribute family, applied to a selection (venue-visit plan D2). Everything a
+one named FX, one attribute family, applied to a selection (venue-visit plan D2). Everything a
 person or Claude reads says palette: the copy, the `/palettes` route (`/templates` redirects, search
 kept), the REST paths, the `paletteListChanged` / `palettePressed` frames, the `PALETTE_*` error
 codes and the `create_palette` / `apply_palette` MCP tools. So does storage since terminology plan
@@ -1172,14 +1172,14 @@ colour picker's swatches and a 3D material list are unrelated.
 
 - **This half serialises and parses only, and never resolves.** Same rule as `paletteIntent.ts`,
   for the same reason: `PaletteResolver` must be the single answer to what the rig will do. The
-  backend's `resolveColourGeneric` resolves a colour intent *without a head*, because an effect's
+  backend's `resolveColourGeneric` resolves a colour intent *without a head*, because an FX's
   output is one colour applied to every head it targets — so it resolves as though the head were
   RGBW, which makes an FX-referenced palette identical to the same palette applied as a layer on
   any RGBW/RGBWA head. **A head with no white emitter pays for that**, and by more than a stop:
   the neutral is already out of RGB and its white byte is dropped, so `#FF9D4A` arrives as
   `#B55300` — dimmer *and* more saturated, which is worse than the RGB-only reading rather than
   equal to it. Accepted trade, documented at `resolveColourGeneric`, one line to invert.
-- **A reference is legal only in an effect parameter.** A cue row, a Look row and a programmer entry
+- **A reference is legal only in an FX parameter.** A cue row, a Look row and a programmer entry
   are literals; the dependency mechanism for a *value* is a layer. `validateLookRows` refuses a
   `pal:`-shaped value beside its `ref:` refusal, and `parseAssignmentValue` returns null for one
   rather than letting `parseExtendedColour` answer white.
@@ -1187,7 +1187,7 @@ colour picker's swatches and a 3D material list are unrelated.
   holds on both sides — a per-fixture palette holds no single colour, so there is nothing for a
   fixture-agnostic output to take. The third clause was `rows.length === 1` and is now
   `kind === 'value'`, which is exactly the swap that clause's own docblock said to make if it were
-  ever relaxed: it excluded an effect palette only by the accident of holding no rows. The count
+  ever relaxed: it excluded an FX palette only by the accident of holding no rows. The count
   went because a colour palette may hold a hex *and* explicit emitters, and both sides now fold the
   whole colour-family row set into one colour — `paletteRowsSwatch` here, `resolveColourGeneric`
   there. **Never read `rows[0]` for a palette's swatch**: row order is authoring order, so a
@@ -1216,7 +1216,7 @@ editor's Looks tab — PATCHes the whole `layers` array, built from the cue as t
 Adding there is *+ Look or palette*, which presses onto the selection through `ApplyPicker`
 (§"Applying to a selection"). It must not renumber
 `sortOrder` client-side the way the cue path does — the server renumbers the stack and re-ranks
-the running effects **in place**, so a drag doesn't restart any effect's phase.
+the running FX **in place**, so a drag doesn't restart any FX's phase.
 
 `programmer.layerState` is the **third broadcast** frame (after `provenanceState` and
 `programmer.includeTarget`), because the programmer is shared and a second tab's reorder must
@@ -1242,8 +1242,8 @@ and the `INCLUDE_TARGET_READ_ONLY` conflict arm are gone with them.
 
 **Record, Include and Update carry the programmer's scenery** (scenery-programmer plan session 3,
 D7, D8; the rules are lighting7 `docs/lighting-composition-model.md` §"Record / Include / Update").
-Both Record sheets draw a ***Record scenery too*** row — `RecordSceneryRow`, beside *Record effects
-too* on `RecordSheet` and after the effects on `RecordLookSheet` — **absent while the programmer holds
+Both Record sheets draw a ***Record scenery too*** row — `RecordSceneryRow`, beside *Record FX
+too* on `RecordSheet` and after the FX on `RecordLookSheet` — **absent while the programmer holds
 no scenery and ticked on every open while it holds some**, its hint naming the held pieces in the
 order first held (`useHeldSceneryNames`, *a piece* for one the element list has not loaded) and saying
 what the destination does with them: a cue gets a row for each piece it would not already show, a
@@ -1373,7 +1373,7 @@ whole, and a palette per head by coverage — the source by uuid and kind, never
 would let a Look and a palette that share an int PK cancel each other.
 Keeping one owner for that match rule is why they weren't moved to the explicit ops. What did change
 is the ring: `lookLayerPresence` reads the desk's **resolved applied state** (`programmer.applied`,
-from `useProgrammerAppliedQuery`), not the effect list. The old match was
+from `useProgrammerAppliedQuery`), not the FX list. The old match was
 `FxInstance.presetId === lookId`, which worked by accident (the Look id in a field naming a
 `DaoFxPreset`) and could never see a rows-only Look at all. It then read the layer stack directly,
 expanding groups client-side; the desk resolves that now — `ProgrammerLayerStack.appliedState` sends
@@ -1381,14 +1381,14 @@ one entry per record naming every target it covers, each group marked `all` or `
 these functions do is fold the selection into one ring. Two copies of a coverage rule drift, and the
 copy in the browser is the one no test against the rig can reach. `paletteLayerPresence` is its
 twin for palettes, and it is the *only* way a palette pad can light. That used to be because a palette
-held no effects; it holds one now, and the rule is *more* load-bearing rather than less — an
-effect-palette pad's ring would look matchable against the running instance, and matching there
-would light for an effect palette while leaving every value palette's pad dark.
+held no FX; it holds one now, and the rule is *more* load-bearing rather than less — an
+FX-palette pad's ring would look matchable against the running instance, and matching there
+would light for an FX palette while leaving every value palette's pad dark.
 
 The **busk view**'s pad grid takes both, and takes **cues** besides — but it no longer decides where
 any of them go. A pad sits where the operator put it, in a bank on a page they built (see §The busk
 layout); the library's family says nothing about the arrangement. What survives from
-the old automatic layout is the pad *face*: an effect pad is a pad like any other — same component,
+the old automatic layout is the pad *face*: an FX pad is a pad like any other — same component,
 same presence ladder, same long-press — and only its wave glyph says what it holds. The paragraphs
 below describe the pad face only.
 
@@ -1416,33 +1416,33 @@ the whole library the sheet is showing.
 A colour pad carries a **swatch**, but only when the
 palette is generic and single-row — `paletteSwatch` in `components/busking/padFace.ts` makes
 the same two exclusions `isOfferable` makes in `FxColourPalettes.tsx`, and for the same reason:
-`rows[0]` under a name covering several rows states one of them as the whole thing. An effect
+`rows[0]` under a name covering several rows states one of them as the whole thing. An FX
 palette has no rows, so it draws the wave in the swatch's place and an `FxPadDetail` line
-(`Colour Pulse · ½ beat · M2`). That detail is a **component** and not a string built by the caller:
+(`Colour Wave · ½ beat · M2`). That detail is a **component** and not a string built by the caller:
 the master's label is a live value, hooks cannot be conditional, and a hook in the loop would make
 every value pad in the library subscribe to the master bank. (The palette sheet's Master column
 answers the same question the other way — it names masters from the project's *stored* bank,
 fetched once by the route, so no row subscribes to anything.)
 
-**A movement effect palette asks *Centre: Around current position | Absolute*** (fixture-fx-sheets
+**A movement FX palette asks *Centre: Around current position | Absolute*** (fixture-fx-sheets
 plan D16, session 5) — D12's question, through the live editor's own rules (`fx/centreMode.ts`,
-re-exported by `fxEditorModel.ts`) rather than a second copy. `PaletteEditor`'s effect branch
+re-exported by `fxEditorModel.ts`) rather than a second copy. `PaletteEditor`'s FX branch
 mounts **`FxFields`** — the live editor's fields over the palette's draft (`paletteDraftOf`
 / `withPaletteDraft`), with no target: the Order beside Direction, no *Timing* segment, element mode,
 head filter, and the same timing chip — *Seconds* or a master — as the live editor.
 **`EffectParameterForm` is
 retired**, not rebuilt: it had been that branch's form and nothing else's since session 3. Choosing
-an effect starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement effect
+an FX starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement FX
 starts **Around** — `ADDITIVE` with both centres pinned at 128 and the centre hidden — and anything
 else on Override; the hard-coded `blendMode: 'OVERRIDE'` that made every Circle pad circle 128/128 is
 gone. **Stored palettes are not migrated** (call 6): one still on Override reads as **Absolute**,
 centre shown, until the operator presses Around. The palette sheet's **Value** cell is an
-`OptionCell` over the same two answers on a movement effect palette (`centreValue`; `''` presses
+`OptionCell` over the same two answers on a movement FX palette (`centreValue`; `''` presses
 neither for a blend that is neither), landing `withCentreMode` on every movement palette in the
-batch, a value palette in it named and skipped; any other effect palette still reads out. The
-effect library comes from the route, as the masters do. A pad's face says ***around*** for a
+batch, a value palette in it named and skipped; any other FX palette still reads out. The
+FX library comes from the route, as the masters do. A pad's face says ***around*** for a
 palette spelled that way (`isAroundSpelling`, in `FxPadDetail` and `padFace`'s static line). It adds ← or ↔ for a
-backward or bouncing palette and the size where it is under 100 % — *Colour Cycle · 1 bar · M2 · ← ·
+backward or bouncing palette and the amount where it is under 100 % — *Colour Cycle · 1 bar · M2 · ← ·
 60 %* (effects plan §4.1, `lib/fxDynamics.ts`'s `fxDynamicsParts`, both lines).
 
 ### The busk layout
@@ -1540,7 +1540,7 @@ load-bearing:
 - **One `DragOverlay`, content dispatched** through `dnd/dragOverlayRegistry.ts`. A second overlay is
   not an option — it registers itself on the context and two would fight over one ref. A surface
   registers a renderer at **module scope**, so the app shell draws a busk pad without its import
-  graph ever reaching one. The ghost face is a **frozen snapshot**: an effect palette's detail line
+  graph ever reaching one. The ghost face is a **frozen snapshot**: an FX palette's detail line
   reads a live speed-master label through a hook, and the overlay must be hookless.
 
 **The FX cue-slot overlay is filled from the busk view's library, and edited only while the busk
@@ -1815,8 +1815,8 @@ verbs**, the gap, and the host's `controls` — `BuskFocusControl` and `EditLayo
 `BuskingView` — right-anchored, in Split and Rig. The blind pill (`busking/BlindMarks.tsx`) is a
 **reporter, never a toggle** — Blind is switched on the programmer's action bar and nowhere else —
 drawn in the indicator's amber only while `ProgrammerSummary.blind` holds, on the terms the family
-pill had until it became the mask's picker (absent means nothing to say), its hover saying *values and effects held* — Blind holds the
-programmer's effects as well as its values (show-cue-editing plan D7), read through `hooks/useProgrammerBlind.ts`'s narrowed
+pill had until it became the mask's picker (absent means nothing to say), its hover saying *values and FX held* — Blind holds the
+programmer's FX as well as its values (show-cue-editing plan D7), read through `hooks/useProgrammerBlind.ts`'s narrowed
 subscription so the band does not re-render on the programmer's entry churn; in Pads the pad row
 carries it in the same place, and off the desk board `RigStripContent` — the compact strip and the
 short board's merged row — does, since Pads is the resting focus there and the sheet is an overlay
@@ -1915,7 +1915,7 @@ dispatch, the head count) otherwise. What *is* kept beside it is the last tab th
 so a MIDI `{sheet: 'toggle'}` **and the fold's chevron** unfold onto the tab the operator had —
 both through `toggleBuskSheet`, the one reader of that memory (a glyph on the fold names its own tab). **Speed is `BuskSpeedRail`**
 inside the sheet — filling the width the sheet is dragged to since 2026-09-21, where it was a fixed
-288px column, and drawing no heading or caption (the usage badge's sentence is on the badge's own
+288px column, and drawing no heading or caption (the family badge's sentence is on the badge's own
 title) — **Colour is `ColourSheet`**, **Fan is `SpreadSheet`** and **Level, Position and Beam are
 `FamilySheets.tsx`'s** (all below). **None of them draws a heading**: the tab strip names the tab, the rig band's row carries the mask (the family
 pill and the desk chip), and what is selected is the lit tiles — or, in Pads, the summary in the
@@ -1928,53 +1928,53 @@ since *Save as Look… · Live · Apply* fits the floor — and while Live is on
 and stays pressable, the un-deduped resend. Their pickers are fluid (`ColourEditor`), taking the sheet's
 width, and their picker rows are padded to the knob's half-width — a tab body scrolls, a scroller
 clips at its edge, and a knob at 0% hung 14px past the square and was cut off at the 12px gutter. All eight have landed, and `LIVE_SHEET_TABS` stays the one list rather than
-collapsing into the sheet vocabulary: Show landed exactly the way Colour and Fan did, Effects the
-way Show did, Level, Position and Beam the way Effects did, and a ninth tab would too — **hidden**
+collapsing into the sheet vocabulary: Show landed exactly the way Colour and Fan did, FX the
+way Show did, Level, Position and Beam the way FX did, and a ninth tab would too — **hidden**
 there until its session — adding a tab to that
 list lights it in the strip, the fold's glyph row, the Screens sheet's Sheet segment and the
 toggle's memory at once — because a tab with an empty state is a promise the desk cannot keep, and
 a fact naming a hidden tab draws the fold.
 
 **Level, Position and Beam are the family tabs beside Colour** (apply-model plan §4.5, D10, session
-7; `components/busking/FamilySheets.tsx`): each is the per-property popup's body over the busk
-selection pair — the family's Palettes band, the editor, the Effects band, and *Save as palette…* in
+7; `components/busking/FamilySheets.tsx`): each is the per-attribute popup's body over the busk
+selection pair — the family's Palettes band, the editor, the FX band, and *Save as palette…* in
 the static footer — the same `PaletteBand`, `FxBand` and `PaletteFooter` a cell's popup draws
-(§The editor kit). **A tab is not one cell, so each names its property**: Level is the dimmer;
+(§The editor kit). **A tab is not one cell, so each names its attribute**: Level is the dimmer;
 Position is pan and tilt as one; Beam is one Beam level — zoom, focus, iris or frost — picked from
-those the selection carries (a *Beam property* row, drawn when there are two or more, zoom first),
-and its band, its level and its Effects band all mean that property, as a Beam cell's popup does.
+those the selection carries (a *Beam attribute* row, drawn when there are two or more, zoom first),
+and its band, its level and its FX band all mean that attribute, as a Beam cell's popup does.
 **The editors are the fixture sheet's pick controls** (`LevelControl` from
 `fixtureSheet/AttributeRow.tsx`; `PickPositionControls`, the pick row's pad, hollow dots and axes,
 from `PickAttributeRow.tsx`; and `writePickPosition`), not a third copy of the level slider or the XY
 pad, and they **write Local and only that**: a drag at once, a typed value at the programmer
 fade. `familyHeads.ts` plans the writes — a group as one group entry where every member carries the
-property itself, else each member's own entry (or its cells', for a bar whose dimmer lives on its
-cells) carrying the group; a fixture its own head, else its cells; a cell itself; a head reached twice
+attribute itself, else each member's own entry (or its elements', for a bar whose dimmer lives on its
+elements) carrying the group; a fixture its own head, else its elements; an element itself; a head reached twice
 written once, a group entry falling back to member entries over a member already reached — and a
-head without the property is left out, the tab saying how many (`headsWithout`). **A band chip is a press** through `usePress` with the busk pair under its mask and
+head without the attribute is left out, the tab saying how many (`headsWithout`). **A band chip is a press** through `usePress` with the busk pair under its mask and
 `scope: 'programmer'`, so a programmer pointed at a focused Look layer elsewhere does not redirect it;
-*+ FX …* is the picker's effects arm on the tab's property over the same pair.
-`FamilySheets.test.tsx` pins the press per tab, the XY pad's `setPosition` and the Beam property row.
+*+ FX …* is the picker's FX arm on the tab's attribute over the same pair.
+`FamilySheets.test.tsx` pins the press per tab, the XY pad's `setPosition` and the Beam attribute row.
 
 **FX is between Fan and Speed** (fixture-fx-sheets plan D20, session 5; apply-model plan
 §4.5, session 7; `components/busking/FxSheet.tsx`, `BuskProgrammer.dc.html`). It lists what runs
-on the busk selection — a pad's effect and the operator's own, and a cue's drawn **read-only** (no
+on the busk selection — a pad's FX and the operator's own, and a cue's drawn **read-only** (no
 editor, pause or stop; its home is the cue), never a script's (`fxOnSelection`: on a selected
-fixture or its heads, a cell or its fixture, a group or its members, and any group those fixtures are
-in) — under *Running on 4 heads · 2 effects*, in the tray's two-line rows, and a row's name opens the
+fixture or its heads, an element or its fixture, a group or its members, and any group those fixtures are
+in) — under *Running on 4 heads · 2 FX*, in the tray's two-line rows, and a row's name opens the
 live editor under it: **`SplitFxEditor`, the FX popover's own**, over the busk pair's targets, so with
-part of a Local effect selected it says *Spot 1 of Spot 1–4*, holds the edit and offers *Apply to
+part of a Local FX selected it says *Spot 1 of Spot 1–4*, holds the edit and offers *Apply to
 Spot 1* (`PUT /fx/{id}` with those heads as `targets`, the row following the edited copy) and *Edit
-all 4* (§The fixture sheet's FX paragraph). **+ FX…** in the header opens the one picker's effects
+all 4* (§The fixture sheet's FX paragraph). **+ FX…** in the header opens the one picker's FX
 arm (`ApplyPicker`, `library="fx"`, `scope: 'programmer'`) on the busk pair — a group kept one
-group effect, its distribution intact — so a bare library effect lands Local, taking those heads off
-the effects of its family they run; there is no second effect picker. **A pad's effect is edited as
+group FX, its distribution intact — so a bare library FX lands Local, taking those heads off
+the FX of its family they run; there is no second FX picker. **A pad's FX is edited as
 the running instance only**: the row and the editor say ***edited*** while the instance differs from
 the palette list's summary DTO, read once for every row, and the editor's footer is **Update palette**
-and **Reset to palette** (§The fixture sheet's *A pad's running effect*); it offers no split
+and **Reset to palette** (§The fixture sheet's *A pad's running FX*); it offers no split
 (apply-model plan P5). A pad's row has pause and no stop — the pad releases it; stopping the instance
 alone would leave the layer to respawn it — and the operator's own keeps both. It is in the docked
-sheet and the overlay form, its glyph the effect wave. `FxSheet.test.tsx` pins the reach, the
+sheet and the overlay form, its glyph the FX wave. `FxSheet.test.tsx` pins the reach, the
 mark, the read-only cue row, *+ FX…*'s pair and a subset edit sending `targets`;
 `SideSheet.test.tsx` and `buskWindow.test.ts` that each of the four tabs is in every place
 `LIVE_SHEET_TABS` reaches — the docked strip, the overlay strip, the fold, the Screens sheet's Sheet
@@ -2019,7 +2019,7 @@ subscribes to nothing for it. **The Show glyph also carries an amber dot while t
 blind** (`BlindDot` in `busking/BlindMarks.tsx`), in the tab strip — docked and overlay — and on
 the fold: the sheet's one programmer report is the Show tab's strip, so the glyph says there is
 something to open it for. A mark only, `aria-hidden`, never a control — the word rides the tab's
-and the fold button's accessible names (*Show — programmer blind, values and effects held*,
+and the fold button's accessible names (*Show — programmer blind, values and FX held*,
 `BLIND_NAME_SUFFIX`), because an `sr-only` span inside
 those buttons was silent on the fold, whose `aria-label` wins the name, and *became* the name in the
 strip wherever the tab's word is `display: none`; the pill on the band
@@ -2090,7 +2090,7 @@ docks — the rail's narrow push arm is a fixed 300px overlay a drag would not m
 load-bearing.** The width changes at pointer rate, so whatever holds it re-renders at pointer
 rate; `RailBodyFrame` and `DockedSideSheet` both take `children`, so the element references are
 unchanged between their renders and React skips those subtrees — otherwise a drag would rebuild
-a colour picker or a spread panel mid-drag sixty times a second.
+a colour picker or a fan panel mid-drag sixty times a second.
 
 **Never give either panel a bare `duration-*` or `ease-*` class.** `tailwindcss-animate`
 re-declares `duration-*` as `animation-duration` while Tailwind's own still sets
@@ -2148,16 +2148,16 @@ reload. It must be computed in a component that *outlives* the panel: `Programme
 `SideSheet` both render the strip or the body and stay mounted across the swap, so a hook inside
 either subtree would see every appearance as a first render. There is no exit animation because an
 exiting panel has to stay mounted for its duration, which here means holding a colour picker
-mid-drag, a spread's plans and their subscriptions alive after the operator asked for
+mid-drag, a fan's plans and their subscriptions alive after the operator asked for
 them to go.
 
 **The Colour tab is the docked host of `ColourEditor`, and it writes literals to Local, and only
 that** (D8, `components/busking/ColourSheet.tsx`; editor-kit plan D10). What is the host's: the
-selection → write-targets planning (`planColourWrites` — a group as a group write, a cell by its
-element key, a whole fixture as one write or one per cell for a pixel bar whose colour lives on its
-cells; it is about the busk selection, not the editor), the rig order Pick reads in, the Fan
+selection → write-targets planning (`planColourWrites` — a group as a group write, an element by its
+element key, a whole fixture as one write or one per element for a pixel bar whose colour lives on its
+elements; it is about the busk selection, not the editor), the rig order Pick reads in, the Fan
 hand-over, the live push and its release, and the save sheet. Everything else — the picker, the
-typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, the Palettes and Effects
+typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, the Palettes and FX
 bands (at the foot of the scroller, under the picker, where Recent sat), the footer — is
 `components/editor/ColourEditor.tsx`'s, docked (§The editor kit). Every drag is
 `programmer.setColour` per selected target, which is what a palette's *Apply as values* does and what the
@@ -2199,21 +2199,21 @@ open leaves `onSpread` out and the editor draws the button inert.
 **The Fan tab is the docked host of `SpreadPanel`, and the client never lerps** (D9;
 `components/busking/SpreadSheet.tsx`, `lib/spreadIntent.ts`; editor-kit plan D2, session 3).
 What is the host's: the busk selection → the request's targets (`lookLayerTarget` — a group as a
-group, a cell by its element key) and the families the heads can take (`targetFamilies` over the
+group, an element by its element key) and the families the heads can take (`targetFamilies` over the
 selection's write targets), the selection's mask, the mutation with the programmer fade read at
 send time (`useSpreadMutation` in `store/programmerOps.ts` — REST for that file's own reason, the
 structured reply), the colour palettes an endpoint may name (`isSpreadColourPalette` in
 `fx/FxColourPalettes.tsx`), the *Over: Elements* count (`selectedCells` in `lib/cellsSubSelection.ts`,
-the Elements chip's own expansion, so the chip and the tab cannot count cells two ways), the Colour
+the Elements chip's own expansion, so the chip and the tab cannot count elements two ways), the Colour
 tab's seed hand-over, and *Save as Look…* in the footer's `save` slot. Everything else — the form,
 the endpoint editors, Curve · Order · Runs · Over, Live and Apply / Send again, the keyboard, the
 answer read for `skippedFamilies` (and in *About each position* for `base` and `clamped` too) — is the panel's, shared with the programmer's row C (§Sheet
-kit), and nothing changed to the eye when it moved. The tab sends two intents of one property's
+kit), and nothing changed to the eye when it moved. The tab sends two intents of one attribute's
 shape (in *About each position*, an amount per axis instead), a curve, an order, runs and an over-switch to `POST /programmer/fan`; the desk
 interpolates in the intent's own space, resolves one literal per head through the same
 `PaletteResolver` a palette's *Apply as values* uses, writes each into Local as an ordinary entry (so it rides
 `programmer.entryChanged`, Record captures it, Blind previews it, Clear releases it), and answers
-what it wrote. Only the desk knows a group's member order, each head's range, which cells a fixture
+what it wrote. Only the desk knows a group's member order, each head's range, which elements a fixture
 has and what a colour means on a head with amber — the same rule that keeps `paletteIntent.ts` a
 serialiser, and `spreadIntent.ts` keeps it: it serialises `from` / `to` per family over
 `paletteIntent.ts`'s own serialisers (a colour + policy, or a `pal:{uuid}` reference through
@@ -2224,10 +2224,10 @@ popover's reach no lerp but `rawValues`, from the raw arm alone. **There is no p
 order — and it went because it cost the tab its height and the rig itself is the preview. The rule
 it embodied stands and is why nothing replaced it client-side: the tab never shows what it thinks
 the desk *would* do. Only the **latest** request's answer is read: Live keeps several in flight and
-their answers can land out of order, so a property or selection change disowns whatever is in
+their answers can land out of order, so an attribute or selection change disowns whatever is in
 flight (`requestSeq`). The family segment is **Intensity · Colour · Position · Beam** with a
 **Attribute** row beneath it where a family holds more than one (zoom and frost under Beam): the
-board drew *Zoom* as a fourth segment, conflating the family with the property. Curves are Titan's
+board drew *Zoom* as a fourth segment, conflating the family with the attribute. Curves are Titan's
 four (`LINE` · `MIRROR` · `ARROW` · `MIRROR_OUT`, each drawn as a picture — *Mirror out* as **two strokes
 meeting at a marked centre**, since its eight fractions are Mirror's and one polyline through them
 *was* Mirror's V); order is a `SpreadOrder` name, worded by `lib/orderLabels.ts` — Normal ·
@@ -2239,9 +2239,9 @@ an option: the desk has no stage order today (`FanPlan` feeds `POSITIONAL` a hea
 is Normal again), offering it as something it is not would be worse than withholding it, and a
 disabled item in the row wrapped at 288px and read as a control that was merely off. A position
 spread's defaults are **±16 about the centre of travel**, centre-relative (`pos:`, venue-visit plan
-D3), so they never sit against a hard stop. *Over: Elements* carries the cell count where a selected fixture has elements, and stays pressable
+D3), so they never sit against a hard stop. *Over: Elements* carries the element count where a selected fixture has elements, and stays pressable
 where none does — the choice survives a change of selection, an empty one included (it is the
-window's, `lib/spreadOver.ts`), and over heads with no cells the request says Heads
+window's, `lib/spreadOver.ts`), and over heads with no elements the request says Heads
 (`effectiveSpreadOver` — the desk would make the same substitution, each fixture without elements
 being its own unit).
 **Live** sends every adjustment through `useLivePush` with an equality over the whole request, the
@@ -2255,7 +2255,7 @@ keyed like the endpoint's error toast, since a Live drag under a mask answers it
 Under an empty selection nothing is sent and the panel's own sentence is toasted — the desk would
 answer `FAN_NEEDS_SELECTION` otherwise, and `errorToastMiddleware` renders every 400 (the
 mutation is **not** in `SILENT_ENDPOINTS`, keyed so a failing Live burst replaces one toast), so the
-tab must not say it twice. **The mask is honoured by the desk, not pre-refused here**: a property
+tab must not say it twice. **The mask is honoured by the desk, not pre-refused here**: an attribute
 outside the selection's families writes nothing and answers `skippedFamilies` — a 200, the Look
 press's shape — toasted in `skippedRowsMessage`'s vocabulary; the tab opens on the first family the
 mask names that the selection can take. The colour endpoints share one `ColourEditor` (compact,
@@ -2264,10 +2264,10 @@ takes) for whichever end is being edited, and its `combinedCss` is a **seed** th
 the panel means the knob to move (switching ends, Swap, the Colour tab's hand-over) — never the
 picker's own writes, for the ping-pong reason documented on that prop.
 
-**A spread is a result, not a palette** (D10). *Save as Look…* opens `RecordLookSheet` over the
+**A fan is a result, not a palette** (D10). *Save as Look…* opens `RecordLookSheet` over the
 selection — `record-look`, the same gesture every busked state is kept by; the sheet gained an
 optional `targets` prop for an opener whose selection is the desk's rather than the programmer
-list's — and nothing on the tab mints a palette. A "spread palette" would need a second grammar
+list's — and nothing on the tab mints a palette. A "fan palette" would need a second grammar
 (two intents plus a curve) and a resolver that knows the selection's order at cook time, which no
 palette does. The band's *Fan…* verb and its compact menu item open the tab, writing
 `busk.sheet` and nothing else.
@@ -2304,7 +2304,7 @@ narrow widths get play mode only, and an edit mode with nothing to drag from is 
 
 **The target band is a document the operator builds, and an empty one is the band as it was.** The
 busk view's top region draws the **rig** (`lighting7/models/buskRig.kt`, busk-further plan D1–D3):
-rows of tiles, each tile a group, a fixture, or one **cell** of a multi-head fixture; one rig per
+rows of tiles, each tile a group, a fixture, or one **element** of a multi-head fixture; one rig per
 project, `GET` / `PUT /busk/rig` whole-document with the page write's three refusals
 (`BUSK_RIG_INVALID` / `_IDENTITY` / `_REF`), tiles renumbered dense and answered with the ids the
 write minted. `api/buskRigApi.ts` is the wire, `lib/buskRig.ts` the document model (addresses
@@ -2331,37 +2331,37 @@ while the two were separate repos). The fallback has **one render path** with th
 built rig: its rows are rows like any other, only their tiles carry no address, take no drop and
 are drawn dimmed behind the new-row zone while editing an empty rig.
 
-**A multi-head tile decides how it shows its cells** (D3), on the tile rather than in a mode:
-`cellMode` is `PIPS` (the whole fixture, cells as read-only pips — the default), `WHOLE`, `PER_CELL`
-(one tile per cell) or `HALVES` with `cellSplit` (2 up to the cell count, contiguous runs cut the
-desk's way — twelve cells in five are 3 · 3 · 2 · 2 · 2, `runsOf`); a tile dragged in as one cell
+**A multi-head tile decides how it shows its elements** (D3), on the tile rather than in a mode:
+`cellMode` is `PIPS` (the whole fixture, elements as read-only pips — the default), `WHOLE`, `PER_CELL`
+(one tile per element) or `HALVES` with `cellSplit` (2 up to the element count, contiguous runs cut the
+desk's way — twelve elements in five are 3 · 3 · 2 · 2 · 2, `runsOf`); a tile dragged in as one element
 carries its `elementKey` and is `WHOLE`. `expandTile` is the one place a stored tile becomes what is
-drawn and pressed, and **a cell is `{type: 'fixture', key: element.key}`**, the shape
+drawn and pressed, and **an element is `{type: 'fixture', key: element.key}`**, the shape
 `rowLocateTarget` publishes — element keys come from `patch.elements[].key` and are never parsed.
-`useBuskingSelection` rehydrates a cell target by looking the key up in its parent's own
-`elements`, so a fixture tile reads `some` with a `1 of 4` count when a cell is selected anywhere,
-and `all` when every cell is — with the badge still `4 of 4`, because a cells-all tile and a
-parent-selected tile are two different selections (the desk's `TargetCoverage` covers a cell by its
-parent and never a parent by its cells) and the press differs: **from `all` a tile goes dark** — the
-parent toggled off, or every cell toggled off when only the cells were selected — and from anything
-else it is the whole fixture, the run tile's rule. A run tile toggles each of its cells, and
+`useBuskingSelection` rehydrates an element target by looking the key up in its parent's own
+`elements`, so a fixture tile reads `some` with a `1 of 4` count when an element is selected anywhere,
+and `all` when every element is — with the badge still `4 of 4`, because an elements-all tile and a
+parent-selected tile are two different selections (the desk's `TargetCoverage` covers an element by its
+parent and never a parent by its elements) and the press differs: **from `all` a tile goes dark** — the
+parent toggled off, or every element toggled off when only the elements were selected — and from anything
+else it is the whole fixture, the run tile's rule. A run tile toggles each of its elements, and
 *Fan…* opens the side sheet's Fan tab (§Focus and the side sheet).
 
-**A pip is a press of its own, and a cell is not a new target kind** (busk-further plan D11,
-session 7). A `PIPS` tile's cells are checkbox-role buttons in a row **beside** the tile's button —
+**A pip is a press of its own, and an element is not a new target kind** (busk-further plan D11,
+session 7). A `PIPS` tile's elements are checkbox-role buttons in a row **beside** the tile's button —
 a button cannot hold buttons — and a tap toggles `{type: 'fixture', key: element.key}` through the
 one `toggleTarget`, the shape `rowLocateTarget` publishes; a drag across them is a **run**, each pip
 crossed toggled once, with the marquee's arm rule: a mouse runs from `pointerdown` under pointer
 capture, a `touch` or `pen` runs only after a 500ms hold (a finger pans; a held one runs, and a
 non-passive `touchmove` guard stops the pan for as long as the run lasts), a pip rests at the
 board's 8px and the one under a held finger grows to 44px, and the click a run's release generates
-is swallowed so it is not a second toggle. **A pip reads checked while its parent is selected**, and the band folds the parent's cells
+is swallowed so it is not a second toggle. **A pip reads checked while its parent is selected**, and the band folds the parent's elements
 into `selectedCells` for exactly that: the desk narrows the parent on such a press, and a dark pip
-whose press deselects is the reading `presenceOf`'s comment already refuses for a cell tile.
-**The desk owns the parent↔cell coverage rule** (`fx/TargetCoverage.kt`): a layer on the
-whole bar covers a press on its cells, a layer on four cells does not cover the bar, and
+whose press deselects is the reading `presenceOf`'s comment already refuses for an element tile.
+**The desk owns the parent↔element coverage rule** (`fx/TargetCoverage.kt`): a layer on the
+whole bar covers a press on its elements, a layer on four elements does not cover the bar, and
 `lookPresence.ts` keeps reading the desk's resolved `applied` extents with no browser copy of that
-rule — `lookPresence.test.ts`'s cells block pins that a cell selection lights from what `applied`
+rule — `lookPresence.test.ts`'s cells block pins that an element selection lights from what `applied`
 names and from nothing here.
 
 **The Elements menu is one desk op, and an unlinked window mirrors it** (D12, revised 2026-09-21). The
@@ -2384,7 +2384,7 @@ order where a desk sends none — a session 7 amendment to D12's "member lists i
 pure, no React, and **pinned against the server's own fixture**: `cellsSubSelection.test.ts` imports the backend's
 `../src/test/resources/busk/subselect.fixture.json`, as `buskRig.test.ts` does the rig order's, and
 runs every case. The Fan tab's *Over: Elements* counts through the same
-module (`selectedCells`), so the chip and the tab cannot count cells two ways. Below `md` the nine
+module (`selectedCells`), so the chip and the tab cannot count elements two ways. Below `md` the nine
 modes sit under an *Elements* heading in the band's verbs menu.
 
 **The live bar reads the stage's colour dispatch.** `RigTile` mounts one `FixtureAppearanceSource`
@@ -2393,8 +2393,8 @@ beside the Positions panel's chips, the side sheet's fold (one leaf for the sele
 and the colour editor's **hidden leaf per parent fixture of the heads it is editing**
 (`components/editor/ColourEditor.tsx`, the busk Colour tab's and the programmer's colour cell's
 alike since the editor kit's session 2), which reports into `lib/liveAppearance.ts` for *Pick*
-(§Focus and the side sheet, §The editor kit) — and a cell or run tile draws its own cells' colours off
-the parent's per-element `segments` by the element's **position in the patch's cell list**, an
+(§Focus and the side sheet, §The editor kit) — and an element or run tile draws its own elements' colours off
+the parent's per-element `segments` by the element's **position in the patch's element list**, an
 index into a list the desk ordered. A group tile has no channels of its own and draws no bar.
 **A tile's colour is a 4px band inside its top border** (§Fixture colours): a group tile's is the
 group's own, every other tile's its fixture's, resolved by the band (`tileColour`) and handed down as
@@ -2431,8 +2431,8 @@ tile…* swaps the tile's face for that field, seeded with the name shown, writi
 the record's own name clears the label rather than storing a copy of it (`relabelTile`, which
 takes either kind; `setTile` is the cell-mode mutator and leaves a group alone). The seed is
 `tileOwnName`, which follows how `expandTile` applies a label: the name shown where the label
-*replaces* it (a group, a whole fixture, a single-cell tile — `Bar L · Cell 3`), the fixture's own
-name where the cell names *compose on* it (per cell, halves), and every drawn sibling of one stored
+*replaces* it (a group, a whole fixture, a single-element tile — `Bar L · Cell 3`), the fixture's own
+name where the element names *compose on* it (per element, halves), and every drawn sibling of one stored
 tile takes the one label. `tileInput` sets the label **before** the GROUP arm's early return — a
 label set only on the patch path silently reverted every group rename on the drained response. **A row is laid
 out the way a bank is** (2026-09-21): it carries a `width` share in twelfths and a `flow` — the
@@ -2468,8 +2468,8 @@ which a size-contained `@container` would otherwise paint over the sheet. The de
 `min-w-0 shrink` on this row — both words, because `FollowPill`'s base is `shrink-0` — so its value
 truncates before any control moves; the link badge it draws while following is `shrink-0` and
 never gives. The rungs are **1100 / 790 / 660 / 615** (780 until terminology plan session 2's longer *Elements:* prefix) since fixture-fx-sheets session 5 put
-***Release n*** after the verbs (D18: the selection's values and local effects out of the
-programmer, one `programmer.clearTarget` per target — a cell by its own head key — at the programmer
+***Release n*** after the verbs (D18: the selection's values and local FX out of the
+programmer, one `programmer.clearTarget` per target — an element by its own head key — at the programmer
 fade, pad layers left lit; it folds with the verbs at `VERB_WORD_CLASS` and sits in the compact
 verbs menu above Clear; `ReleaseTargetsButton`, `useReleaseTargets`), re-measured in the app with a
 60px mask-pill stand-in (`RigBand.tsx`'s docblock has the measurements). They were **990 / 730 /
@@ -2619,7 +2619,7 @@ this window silently changing the desk's hand.
 
 **The ghost is frozen and hookless.** The frame carries the record's **own summary DTOs**, exactly
 as `BuskPadDto` does, so `HandChip` builds its face through `padFaceOf` and subscribes to *nothing
-about the held item* — `dragOverlayRegistry`'s rule, for its reason: an effect palette's detail line
+about the held item* — `dragOverlayRegistry`'s rule, for its reason: an FX palette's detail line
 reads a live speed-master label through a hook, and a chip that can sit on screen for five minutes
 across every route must not mount one per hold. The cost is `FU-DTO-RECORD-SUMMARY` in lighting7:
 the embedded `usage` and `buskPageCount` were computed at pick-up, so a long hold can read "on 3
@@ -2631,7 +2631,7 @@ an empty list is what found it.** lighting7's **WebSocket and sync converters** 
 `encodeDefaults = false` (the REST `json()` is Ktor's `DefaultJson` and *does* encode defaults — a
 fact the rig row's `flow` / `width` test pins, and which four docblocks had backwards until
 2026-09-21), so on a socket frame a defaulted **empty** collection is not serialised as `[]` — it
-vanishes, and a client that declares the field required reads `undefined`. An *effect* palette holds no rows, so
+vanishes, and a client that declares the field required reads `undefined`. An *FX* palette holds no rows, so
 `PaletteDto.rows` did exactly that, and `paletteRowsSwatch` threw on `rows.find`. Because this
 chip is mounted in `Layout.tsx` and draws through `padFaceOf`, **every route** sat behind the error
 boundary for as long as the desk held one.
@@ -2643,8 +2643,8 @@ is declared `rows?:` on this side**, and that is not belt-and-braces about the a
 mid-upgrade serves handler bodies without new response fields, which `lastPressedAt`'s own comment
 already records, so the client must not crash on a server that predates the fix. Declaring it
 required was what hid the other unguarded reads from `strict` — the retired add-layer picker's `.length`,
-`seedValues`' `for…of` (then `PaletteEditor`'s, now `familyControls/paletteRows.ts`; its `isGeneric` guard lets an effect palette through,
-since every effect palette is generic), and four more. Making the type honest is what found them;
+`seedValues`' `for…of` (then `PaletteEditor`'s, now `familyControls/paletteRows.ts`; its `isGeneric` guard lets an FX palette through,
+since every FX palette is generic), and four more. Making the type honest is what found them;
 each now reads `?? []`, and `paletteRowsSwatch` takes an absent list as an empty one.
 
 The rule to carry forward: **a defaulted list or zero on a DTO needs `@EncodeDefault(ALWAYS)` on the
@@ -2670,7 +2670,7 @@ two silently stops working. The overlay half is a **document-wide** query, never
 for the same reason the rule is stated the way it is.
 
 **`lib/handTargets.ts` is the one eligibility table.** A bank takes all three kinds (a pad *is* a
-reference to one of them); a slot takes a cue or a Look with no deferred effect (it has no
+reference to one of them); a slot takes a cue or a Look with no deferred FX (it has no
 selection, D7); both layer stacks take a Look or a palette. So a cue lands only on a bank or a
 slot, which falls out of the table rather than being stated a fifth time. It is eligibility and
 never permission: every place still runs its own mutation.
@@ -2678,7 +2678,7 @@ never permission: every place still runs its own mutation.
 **`canHandLand(…, 'slot')` is also what `LibraryPalette` sets each row's `slotEligible` from**, and
 that sharing is the fix for a real hole rather than tidiness. The rule used to be written out four
 times — three per-kind literals in the library, `canHandLand`, and the test's own fixture — and
-`slotAssignmentFor` re-checks only the *palette* refusal, so the deferred-effect-Look half rested
+`slotAssignmentFor` re-checks only the *palette* refusal, so the deferred-FX-Look half rested
 on the flag alone. A test that built the flag from its own copy of the formula and then asserted the
 two agreed was comparing two hardcoded copies of one rule: genuine drift in the library would have
 stayed green. With one statement of it that drift is gone by construction, so `handTargets.test.ts`
@@ -2909,13 +2909,13 @@ whichever door it comes through, and `controlKinds` / `targetControlKind` in `li
 are the client copy of `midi/BindingControlKind.kt`.
 
 **A label under a control carries its target's colour** as a 3px band (§Fixture colours):
-`components/surfaces/targetColour.ts` names the fixture or group a binding drives — a property, a
+`components/surfaces/targetColour.ts` names the fixture or group a binding drives — an attribute, a
 flash, a select, a strip, a trigger — and `ControlCell` resolves it beside the label, from the route's
 `useTargetColours`, whose identity holds across frames, so the memo still skips.
 
 **A colour on a continuous control is one of four HSV axes** — hue (the default, and the only one
 a pre-axis row can mean), a fine hue trim, saturation, brightness — carried as an optional
-`colourAxis` on the four property targets and on the encoder bank; the bundled emitters (white,
+`colourAxis` on the four attribute targets and on the encoder bank; the bundled emitters (white,
 amber, UV) are offered as faders of their own, expanded off the colour descriptor's channels in
 `hooks/useTargetAttributes.ts`. `lib/colourAxis.ts` mirrors `midi/ColourAxis.kt` and owns the
 null-is-hue rule; nothing on this side resolves an axis. The library is sectioned by kind with
@@ -2965,18 +2965,18 @@ Palettes bands (the programmer's colour, level and position editors, and the bus
 Position and Beam tabs), a busk
 pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
 (`LookTogglePicker`) and a cue slot's Look. A busk pad's own press stays `POST /busk/pads/{id}/press`,
-which carries its bank's solo siblings. The **bare effect** is the one source `usePress` does not
+which carries its bank's solo siblings. The **bare FX** is the one source `usePress` does not
 take: ⌘K *Apply FX*, the FX table's *+ FX*, a band's *+ FX …*, the busk FX tab's
 *+ FX…* and the picker's FX section
 press it through `FxPicker`'s `press` arm, `POST /programmer/fx` with the door's pair (one Local
-effect over the selection; the desk takes those heads off the family's other Local effects), or, in a
+FX over the selection; the desk takes those heads off the family's other Local FX), or, in a
 focused Look, `/fx/add` then `absorb-fx` (§3.2 rule 6) — see §FX in the fixture sheet's
 paragraphs.
 
 - **The gestures**, the same on every chip and pad (D1, D8): **tap** is the press — a layer that
   *tracks* the record (`/palettes/{id}/toggle`, `/looks/{id}/toggle`), or off the pressed heads when
   it already covers them all, the desk deciding which; **⌥click** is *Apply as values*
-  (`/palettes/{id}/apply`, `/looks/{id}/apply`): literals and Local effects with no layer, which
+  (`/palettes/{id}/apply`, `/looks/{id}/apply`): literals and Local FX with no layer, which
   retuning the record never moves; **hold or right-click** opens the menu — the tap's verb named
   (*Put on* / *Take off these heads*, from the chip's ring; *Put on or take off its own heads* with
   nothing selected, where the ring cannot say), *Apply as values*, *Pick up*, *Edit palette…*
@@ -3005,7 +3005,7 @@ paragraphs.
   subscribes to no marquee frame.
 - **The scope** (D7): with a Look layer focused (`LookRowStore`), a palette press goes **into the
   Look** — a value palette through `/palettes/{id}/apply` with `write: false`, each head's literal
-  landing in the layer's draft through `setValue`, no `programmer.*` frame sent; an effect palette
+  landing in the layer's draft through `setValue`, no `programmer.*` frame sent; an FX palette
   started on the heads the layer targets and then absorbed (`absorb-fx`, *+ FX*'s path),
   and stopped again if the absorb is refused, since a press into a Look must leave the stage as it
   was; a Look refused, since Looks don't nest. `landValuesInLook` is the draft's one landing, shared
@@ -3018,7 +3018,7 @@ paragraphs.
   cell's bands, the Looks tab's picker) is in the cue and none outside is, and a door passing
   `scope: 'programmer'` still writes Local. A palette or a Look is `POST /cues/{id}/layers/press`, the
   desk's rule over the stored layers; *Apply as values* lands a value palette's literals as the cue's
-  own rows (a Look or an effect palette is refused, a tap being its layer); the effects arm is
+  own rows (a Look or an FX palette is refused, a tap being its layer); the FX arm is
   `FxPicker`'s draft arm. Nothing reaches the stage.
 - **The desk owns every rule** (plan P2): coverage, family replacement, widening and the mask test
   are server-side. The hook pre-refuses one thing: a **palette with no targets that would land
@@ -3031,7 +3031,7 @@ paragraphs.
   from its own rows; the response reports the mask applied, so a disagreement shows there rather
   than on the rig. A refusal is the
   desk's sentence, toasted by `errorToastMiddleware`. The hook reports the rest one way: *Apply as
-  values*' per-head skips, *n effects started* for an effect palette (gated on the palette's
+  values*' per-head skips, *n FX started* for an FX palette (gated on the palette's
   **kind** — the desk answers a value apply with `fxIds: []` too, and reading that as "nothing
   started" toasted red on every value press), a Look's `skippedFamilies` in `skippedRowsMessage`'s
   rows vocabulary, and in a focused Look the values that could not reach its draft. It answers what
@@ -3041,7 +3041,7 @@ paragraphs.
   (`programmer.detachLayer`, the layer becoming Local with nothing on stage moving), and a row's second
   line names a replacement while it stands — *lost Hex 3–4 to Amber* — `lib/replacementNotes.ts`'s
   reading of the last two applied-state frames (heads by the desk's own resolved targets, never a
-  client expansion; a bar lost whole named once, not with every cell; names by `lib/headName.ts`,
+  client expansion; a bar lost whole named once, not with every element; names by `lib/headName.ts`,
   numbers kept as written), held until a frame that changes anything. It is never stored, and the first frame a window sees says
   nothing.
 
@@ -3080,19 +3080,19 @@ for why it is a union and why the probe reads the colour descriptor rather than 
 
 `paletteTargetsFor` in `rowModel.ts` is the target rule — since venue-visit plan S1 it *is*
 `spreadTargetsFor`'s walk, and not `selectedRowTargets`: a group row lands on its *visible* members
-(the filter rule every group-row action keeps), and an element row lands on its **cell**, `{type: 'fixture', key: element.key}` — dropped under a selected parent, which
+(the filter rule every group-row action keeps), and an element row lands on its **element**, `{type: 'fixture', key: element.key}` — dropped under a selected parent, which
 covers it. It folded an element row onto its fixture until venue-visit plan S1, on the belief that the
 palette route would drop an element key; it never did, and the fold put a colour pressed on one zone
-of a Shehds onto a parent with no colour. A whole fixture whose property lives only on its cells is
+of a Shehds onto a parent with no colour. A whole fixture whose attribute lives only on its elements is
 fanned to them **by the desk** (lighting7 `docs/lighting-composition-model.md` §"A press is per
 target"), so the client never expands one; `paletteTargetsOf` in `rowModel.ts` is the same rule
 over a batch's write targets. The strip's families and emitters are read off the **same** targets,
-each resolved to what it is — a fixture whole, a cell as that cell — so a cell selection is offered
-what the cell can take (`FixturesListContainer`'s `writeTargetByKey`, which holds every element), and
+each resolved to what it is — a fixture whole, an element as that element — so an element selection is offered
+what the element can take (`FixturesListContainer`'s `writeTargetByKey`, which holds every element), and
 row C counts them as *heads*. The strip reads nothing from Redux; `NewPaletteFromSelectionSheet` takes the
 same targets so a press and its "new from selection" cannot name different heads.
 `PaletteStrip.test.tsx` pins the filter, the target and the tap/⌥click split. The offer itself —
-the family, the emitters, a Beam property — is `paletteFits` (`lib/paletteOffer.ts`), which the
+the family, the emitters, a Beam attribute — is `paletteFits` (`lib/paletteOffer.ts`), which the
 strip, the picker and the popup bands all filter by, so the three offer one set.
 
 **The row is the eight most recently *pressed*, not the library**, and recency is a **desk** fact
@@ -3114,7 +3114,7 @@ under the operator's hand on the second press.
 one picker every library door opens: on every family the selection fits from `All · n` and the Stack
 table's *Palette…*, on one family from a popup band's *All …*, on the Looks from its *Look…*. It is
 the offerable library as a searchable pad grid, sections Recent · All A–Z · Per fixture · FX
-(the FX palettes, and *FX…*, the way to the bare effects) · **Outside the mask** — what the heads could take but
+(the FX palettes, and *FX…*, the way to the bare FX) · **Outside the mask** — what the heads could take but
 the selection's mask leaves out, dimmed with the reason (*Colour — the selection is Position*) and
 **still pressable**, since the mask is tested on the on arm only and a lit one must come off. Built
 from the busk pad's own face (`padFace.ts`'s `PAD_SHELL` / `paletteSwatch` / `padPresenceClass`, and
@@ -3124,7 +3124,7 @@ add-layer sheet's source and target steps — on the programmer in session 5, in
 session 8 — whose `CueTargetPicker` step landed one
 fixture or group whatever was selected. A Look can land **on its own fixtures** — a toggle beside
 *On n selected*, chosen by default with nothing selected — which is that sheet's *Use the look's own
-fixtures* kept; a Look whose effects take the layer's targets has none to land on and sits outside
+fixtures* kept; a Look whose FX take the layer's targets has none to land on and sits outside
 with that reason. Four things about it: it takes **`useEditorForm`'s three forms** and neither of
 its own media queries, so the picker and a cell editor never disagree about which shape a screen
 gets, and a door with no anchor (the Stack table's create verb) takes the right-hand sheet on a
@@ -3132,16 +3132,16 @@ desk — `ApplyLayerPicker` is mounted only while open, since its pair is a marq
 it computes nothing while shut, since its host re-renders at marquee rate; and its popover width is
 a **media** query rather than a container one — `PopoverContent` is portalled to `body`, so row C's
 `@container` is not an ancestor and a container class there would match nothing, silently.
-**The effects arm** (`library="fx"`, apply-model plan §5, session 6) is what ⌘K *Apply FX*, the
+**The FX arm** (`library="fx"`, apply-model plan §5, session 6) is what ⌘K *Apply FX*, the
 FX table's *+ FX* and a band's *+ FX …* open, and the palettes' *FX…* switches to (with a way
-back): `FxPicker` over the pair on the bare effect press, opening on the door's family and preferring
-its property (`property`, a cell's), *Edit <name>* putting the live editor in the panel, and below it
-the **effect palettes** that fit, pressed through `usePress`. It retired `FxAddSheet`. Under a focused
-Look the effect starts on `/fx/add` and the arm absorbs it when the panel closes or unmounts, once —
+back): `FxPicker` over the pair on the bare FX press, opening on the door's family and preferring
+its attribute (`attribute`, a cell's), *Edit <name>* putting the live editor in the panel, and below it
+the **FX palettes** that fit, pressed through `usePress`. It retired `FxAddSheet`. Under a focused
+Look the FX starts on `/fx/add` and the arm absorbs it when the panel closes or unmounts, once —
 unless the editor's × stopped it. It sizes to its list (up to the same 540px), where the palettes and
 Looks hold their height so a search never moves the panel under the pointer.
 `ApplyPicker.test.tsx` pins the sections, the offer, the mask arm, the Look's own fixtures and the
-effects arm's press and absorb.
+FX arm's press and absorb.
 
 **Row C sheds twice on the way down.** Below `@[800px]` the fixture count, its separator and Locate
 / Highlight fold (`MID_FOLDED_CLASS` in `SelectionToolbar.tsx`) — the count is already on the cell
@@ -3152,7 +3152,7 @@ is `../docs/plans/programmer-chrome-design/`, page *Palettes*.
 
 **New from selection** is server-side (`POST /palettes/from-programmer`), for the same reason apply
 is: converting a recorded *literal* back into an **intent** is per-head arithmetic that has to agree
-with the resolver. It also decides **generic vs per fixture from the data** — one row per property
+with the resolver. It also decides **generic vs per fixture from the data** — one row per attribute
 where every selected head agrees, one row per head where they do not — rather than from a toggle,
 because the operator already said which they meant by putting the heads where they are. The
 colour inverse is a documented heuristic (fold the emitters back into RGB, policy `extract` when
@@ -3219,7 +3219,7 @@ must still release while a Colour marquee stands. Send it, and render the desk's
 `skippedRowsMessage` (`lib/selectionMask.ts`) reads `skippedFamilies` off the busk press and Look
 toggle responses, and the desk now answers it empty, since a Look press ignores the selection's
 mask (absolute-looks plan D3). A Look layer's mask is set on the layer itself, and it filters the
-layer's rows, not its effects.
+layer's rows, not its FX.
 
 ### Sheet kit
 
@@ -3289,11 +3289,11 @@ chooser and keyboard, hosted by the programmer's row C as a popover in the cell 
 (`fixtures-list/SpreadPopover.tsx` builds its plans from the marquee), by the busk view as the
 docked tab (`busking/SpreadSheet.tsx`, §Focus and the side sheet), and by the patch list, the cue
 sheet and the DMX sheet with plans of their own. The kinds: **`intent`** — desk-resolved, the
-palette vocabulary: two intents of one property's shape, a curve, an order, parts and an
+palette vocabulary: two intents of one attribute's shape, a curve, an order, runs and an
 over-switch go to `POST /programmer/fan`, and one literal per head lands in Local (D3: the
 programmer's rows are heads the desk knows better than the browser does — a group's member order,
-each head's range, which cells a fixture has, what a colour means on a head with amber). The ends
-are intents — a percent, a colour + policy or a `pal:` reference, a centre-relative position — so a spread from 0 to
+each head's range, which elements a fixture has, what a colour means on a head with amber). The ends
+are intents — a percent, a colour + policy or a `pal:` reference, a centre-relative position — so a fan from 0 to
 full is *0% → 100%* on every head whatever its range, which the byte form never was, and the old
 position exclusion went with the byte lerp it objected to. **`raw`** — bytes on a column outside
 the vocabulary, Speed alone (D15; `rawValues` in `editor/spreadPlans.ts` is `fanValues` renamed and
@@ -3312,7 +3312,7 @@ Palettes band reach the store.
 **The marquee answers the panel's first two questions** (D4). Targets are the marquee's heads —
 `spreadTargetsFor` in `rowModel.ts`, which `paletteTargetsFor` now delegates to: a
 group row expanded to its **visible** members, an element row as `{type: 'fixture', key:
-element.key}` (the cells contract the desk already takes), a fixture row as itself — the palette
+element.key}` (the element contract the desk already takes), a fixture row as itself — the palette
 rule's answer too since venue-visit plan S1, so `paletteTargetsFor` is this walk. It is `expandSelectionToTargets`'s walk read as cue targets (`spreadTargetsOf`), so the
 container's per-column targets and the request cannot name different heads. `families` is the pair
 the press sends (`usePressFamilies`) — on the programmer, the one surface that bridges; the two
@@ -3320,17 +3320,17 @@ plain lists send the marquee's own families, as their pill shows (`desk` on `Spr
 family segment is drawn **answered and checked, never
 hidden** — a row that appears only in some hosts is how two hosts drift — with the marquee's
 families live and the rest the heads can take disabled with the reason, and both live when the
-marquee spans two (Dimmer + Colour), which is the chooser Fan drew for the same case. The
-**Attribute** row appears wherever the family holds more than one property the heads can take
+marquee spans two (Intensity + Colour), which is the chooser Fan drew for the same case. The
+**Attribute** row appears wherever the family holds more than one attribute the heads can take
 (`spreadAttributesOffered`, from the column → `PaletteAttribute` map `spreadAttributeForColumn`):
 a Colour marquee over RGBW heads offers Colour · White, a Dimmer marquee over heads with a strobe
 Level · Strobe. **Over: Heads is the default on both sides** (D5) — the old fan popover expanded a bar into its
-cells always; Fan treats a fixture row as one head unless the switch says Elements, offered with
-the count where a selected fixture has cells (`spreadCellCount`, the busk `selectedCells` reading)
+elements always; Fan treats a fixture row as one head unless the switch says Elements, offered with
+the count where a selected fixture has elements (`spreadCellCount`, the busk `selectedCells` reading)
 and **pressable without it**: the operator's Over survives a marquee moving onto heads with no
-cells, which spread as Heads (`effectiveSpreadOver`, one rule for both kinds: the desk request and
-the raw arm both say `HEADS` where the plan counts no cells), so moving from a pixel bar to a par
-and back keeps Cells. It survives an **empty**
+elements, which spread as Heads (`effectiveSpreadOver`, one rule for both kinds: the desk request and
+the raw arm both say `HEADS` where the plan counts no elements), so moving from a pixel bar to a par
+and back keeps Elements. It survives an **empty**
 selection too, which unmounts the popover and blanks the dock's tab: Over is not the form's but a
 per-tab store, `lib/spreadOver.ts`, one fact for every host of the panel (`sidePanelMode.ts`'s
 reasoning) that `commit` writes through and a mounting panel reads. A panel mounted *beside* the
@@ -3351,7 +3351,7 @@ padding and its border, or the box hangs 2px below the viewport (measured).
 
 **The focused-Look-layer arm is one flag on the route** (D6): `SpreadRequest.write`, default true.
 Local sends **no `write` key at all** — the REST Json refuses an unknown key, so a desk mid-upgrade
-would 400 every Local spread that carried `write: true`; `spreadRequestOf` in `SpreadPanel` is the
+would 400 every Local fan that carried `write: true`; `spreadRequestOf` in `SpreadPanel` is the
 one builder and adds the key only when false. A focused Look layer sends `write: false`: the desk
 resolves exactly as it does for Local and answers without writing, and `SpreadPopover` lands each
 `written[].value` — the head's **literal** in the Look row grammar (`"0".."255"`, `"#rrggbb;w128"`,
@@ -3365,7 +3365,7 @@ rather than landing an intent in a Look row; in practice such a desk 400s the re
 Json refusing the unknown key. Two things the desk does for this arm: a **colour-wheel** head's
 resolution is a wheel *slot*, answered as the slot's level under the head's own `colourWheel`,
 which a Look row holds and the cook reads back as that slot; and the curve is spread over the heads
-that can take the property, found in a first pass, so a par swept up by a geometric Colour marquee
+that can take the attribute, found in a first pass, so a par swept up by a geometric Colour marquee
 is skipped and consumes no position on it — two RGB heads among eight rows land at *from* and
 *to*, not at 0 and ⅐. Output and a focused palette layer
 refuse as they always did, with the same words, disabled rather than hidden. The response is read
@@ -3395,7 +3395,7 @@ answer lands its anchor and sends the send that waited, so the amount a drag was
 after the popover closes, and one that waited on a failed first send is tried in its place. An answer
 with no `base` (the mask kept Position out) is no anchor. A fan of 0 is not sent before one is set,
 so turning Fan on under Live writes nothing. The anchor and the amounts go when the selection or the
-plan's `fanScope` (a focused layer's or a cue's id) changes, the popover closes, the mode or property
+plan's `fanScope` (a focused layer's or a cue's id) changes, the popover closes, the mode or attribute
 changes, or *Re-read* (on the read-out) is pressed. A `write: false` host starts from the row being
 edited: `useMarqueeSpreadPlans` gives the plan `fanBases` — the layer's draft-else-committed position
 (`lookPositionOf`) or the cue's `composedValue` per head — sent with the first request, and the
@@ -3409,11 +3409,11 @@ does not dock; see `PaletteBands` below.
 position pad's own mode (`lib/positionPadMode.ts`), one fact for the pads and the fan, and a change is
 a new gesture. In Stage the amounts are metres — *Across* (SR ↔ SL, `fan.x`) and *Depth* (`fan.y`) in
 place of Pan and Tilt, the strip ±10 m, the arrows 0.1 m and ⇧ 1 m — and the desk moves each head's
-landing point by its share and aims it (lighting7 `docs/lighting-composition-model.md` §"A fan is a
-spread about each head's own position"). The answer's `base` then carries fine bytes and its `near`
+landing point by its share and aims it (lighting7 `docs/lighting-composition-model.md` §"A fan about
+each head's own position"). The answer's `base` then carries fine bytes and its `near`
 each head's degrees, and the gesture sends both back, `near` each head's latest (an older answer
 landing late is not newer), as the jog does. The read-out counts the heads the fan took *out of
-reach*. Over is Heads: *Elements* is disabled and shown unpressed, a cell having no placement of its own.
+reach*. Over is Heads: *Elements* is disabled and shown unpressed, an element having no placement of its own.
 
 **The row keys are every sheet's, and they are the one half that listens in the bubble phase.**
 Where a sheet selects rows — every kit sheet but the DMX sheet, whose surface passes `useSheet`
@@ -3586,13 +3586,13 @@ Three surface rules, each pinned by its test:
   address; done in an effect it left one painted frame where `selectedChannels` named an address
   nothing showed as selected.
 
-  **A cell's ring asks the desk which properties drive its address, and never works it out.**
-  `channelMappingState` carries `properties` on every entry — every `(target, property)` key whose
+  **A cell's ring asks the desk which attributes drive its address, and never works it out.**
+  `channelMappingState` carries `attributes` on every entry — every `(target, attribute)` key whose
   channels include the address, from `AttributeChannelWriter.attributeKeysByChannel`, which is
   `channelsFor` inverted — and the cell aggregates the programmer's state over all of them, plus the
   programmer's channel **sideband** at that address (`ProgrammerState.channels`, one subscription
   for the sheet) — a sideband slot promotes the address over a cue or baseline, never over park or
-  an `effect` verdict, because a programmer-band effect outranks the programmer and the desk's
+  an `fx` verdict, because a programmer-band FX outranks the programmer and the desk's
   per-key answer has already weighed any slot it can attribute. The desk builds the frame once per
   `Fixtures.structureVersion`, from one read of the register, and shares it across sockets. The sheet used to build that map itself from the fixture descriptors and drifted
   from the desk three ways at once: a bundled white/amber/UV was filed under `rgbColour` while
@@ -3604,10 +3604,10 @@ Three surface rules, each pinned by its test:
   nothing for reads **baseline** (dimmed) like any idle one; it used to read *nothing* and drew
   brighter than its patched neighbours. A multi-head fixture's heads ring through their own
   element keys: the desk's covering lookup (`resolveChannelCoveringKey`) reaches elements, so a
-  write on a head lifts to that head's property (a red to its `rgbColour`, its white to its own
-  `white`) and records into a cue as a cell-target row. The sheet still reads the sideband for the
+  write on a head lifts to that head's attribute (a red to its `rgbColour`, its white to its own
+  `white`) and records into a cue as an element-target row. The sheet still reads the sideband for the
   addresses the desk *cannot* lift — nothing covers them — which ring through no key. A desk that predates
-  the field sends no `properties` and the sheet reads every patched address as baseline until it
+  the field sends no `attributes` and the sheet reads every patched address as baseline until it
   restarts.
 
   Its cells set **`SheetColumn.gutter: false`**: they draw no corner glyph, and the kit's 18px marks
@@ -3783,8 +3783,8 @@ cue action set — §"The Cues table"):
 - **The whole list shell** (D2): the 48px header with the breadcrumbs, the **library row**, the
   `SelectionBar`, the sheet, the footer. The library row is row B for a library — filter ·
   partition chips · spacer · the create verb, which leaves the page header for it.
-- **Chips filter, dividers group** (D3). Where a library partitions exactly (script type, effect
-  category, palette family) the partition is a chip set with counts, and under *All* the sheet is
+- **Chips filter, dividers group** (D3). Where a library partitions exactly (script type, FX
+  family, palette family) the partition is a chip set with counts, and under *All* the sheet is
   grouped by divider rows in the partition's declared order. Looks and Speed Masters partition
   nothing and draw no chips. The partition is a **view, never a route**: a `?param=` plus a
   remembered value, both the route's.
@@ -3793,7 +3793,7 @@ cue action set — §"The Cues table"):
   construction — and the pencil opens the record, as does **⏎ with exactly one row selected and no
   cells**. That ⏎ is the kit's, so the patch list has it too.
 - **What a cell edits** (D5): name and notes everywhere, plus the few values a library holds — a
-  palette's Value, Fade and effect Master; a master's live BPM, Start, Follows, Ratio and Usage.
+  palette's Value, Fade and FX Master; a master's live BPM, Start, Follows, Ratio and Family.
   What a Look holds stays recorded and changed by Include. Every other column is a read-out.
 - **Row verbs on the bar** (D11): after Set · Clear · Fan come Include, Pick up, Duplicate,
   Copy to…, Fork, Compile, Run, Delete, then Deselect. A verb over one record is disabled over
@@ -3812,7 +3812,7 @@ cue action set — §"The Cues table"):
   master 1 tapped the live one.
 - **One delete for a batch** (D13). Each record is sent plain, the in-use refusals are gathered and
   asked about **once**; *Delete anyway* forces only those, *Keep them* leaves them selected.
-  Records that may never be deleted (master 1, built-in effects) are skipped by name before
+  Records that may never be deleted (master 1, built-in FX) are skipped by name before
   anything is sent.
 - **The sheets report their own failures** (D14). Their write endpoints stay in
   `SILENT_ENDPOINTS` (the dialogs they replaced rendered refusals inline), so a refused cell write is
@@ -3843,8 +3843,8 @@ cue action set — §"The Cues table"):
   **Measured folds, chosen per chip set**: **400**, the default — the palette family's five
   chips with counts are 361–367px, and the first cut's 600 folded them on the 1180×820 frame where
   the row leaves them ~430 — **560** for Scripts (all six types in their short labels, 542), and
-  **640** for the FX Library (seven categories since Palette Steps added *Palette*, effects plan
-  session 7: 619px with *All · 30*; at 560, which its six took, they ran under *New effect* in
+  **640** for the FX Library (seven families since Palette Steps added *Steps*, effects plan
+  session 7: 619px with *All · 30*; at 560, which its six took, they ran under *New FX* in
   1300–1349px windows). Session 2 wrote "one number for every library, re-measured"; measured in
   session 4, one number moved to 560 would fold the palettes on an iPad where they fit, so the fold
   became a choice of literal class pairs (`FOLD_CLASSES` — Tailwind never emits a class built from
@@ -3887,7 +3887,7 @@ cue action set — §"The Cues table"):
   since the list has not refetched between two copies of one batch.
 
 **The Speed Masters sheet** (`components/speedMasters/SpeedMasterSheet.tsx`, on
-`routes/SpeedMasters.tsx`) is beat · BPM · Tap · Start · Follows · Ratio · Usage · Used by · Notes.
+`routes/SpeedMasters.tsx`) is beat · BPM · Tap · Start · Follows · Ratio · Family · Used by · Notes.
 Four things about it are easy to get wrong:
 
 - **BPM is the live tempo** (`speedMasters.setBpm`, the null uuid for master 1), **Start the stored
@@ -3901,7 +3901,7 @@ Four things about it are easy to get wrong:
   `DEFAULT_FOLLOW_RATIO`, a re-pointed one keeps its ratio, and master 1's two spellings (its uuid,
   and the null that means it) are normalised before comparing, as the detail sheet's
   `canonicalTarget` does.
-- **Usage over more than one row is refused before anything is sent** (unless None): a usage is
+- **Family over more than one row is refused before anything is sent** (unless None): a family is
   one master's per project, and the desk would accept the first and 409 the rest.
 - **Off the current project the live bank is not read at all** — no beat, the stored tempo shown —
   because a cloned project's masters can share uuids with the running ones.
@@ -3913,7 +3913,7 @@ Notes · Cue layers · Busk pages — **Scenery** a read-out since the scenery-p
 from the scene's element list, metres until it loads), blank for a Look with none, and *Scenery only*
 in Contents for a Look that lights nothing. **Preview is one line that never wraps**
 (`LookPreviewStrip` in `lookValueChips.tsx`): the chips that fit, `+N` for the rest (every value on
-the cell's hover), then the effects glyph; a Look of effects alone names them off
+the cell's hover), then the FX glyph; a Look of FX alone names them off
 `LookSummary.fxTypes` rather than showing a bare glyph. What fits is measured off an invisible copy
 of every chip (`previewChipsThatFit`, pure in `previewFit.ts`) and re-measured on resize — the
 `flex-wrap` it replaced put a Look's second and third lines of chips over the rows around it. The Scenery column's 120px floor puts the sheet past the 1180×820 iPad
@@ -3929,14 +3929,14 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
   `inUse` for one on the plain pass **without sending**, and the dialog lists it beside the desk's
   refusals, as the Kit board draws *Ballyhoo · on 3 busk pages*. **Its *Delete anyway* is sent
   plain, never forced** — pads were the only use the dialog could name, and the desk skips its
-  usage check on `force`, so forcing would take a cue layer, an effect reference or a running layer
+  usage check on `force`, so forcing would take a cue layer, an FX reference or a running layer
   with it unsaid. If the desk then answers in use, the dialog reopens with its answer
   (`useBatchDelete`'s force pass reopens on an in-use outcome, handing `remove` the record's earlier
   answer as `previous`), and only that answer's *Delete anyway* forces.
   Both hooks are also the detail sheets' deletes — `LookDetailSheet` and `PaletteEditor`'s
   Delete — so a single delete asks the same question in the same dialog.
 - **The palette in-use line names all three uses the desk counts**, because each fails
-  differently under force: cue layers go with it, effect parameters naming it (`fxReferenceCount`)
+  differently under force: cue layers go with it, FX parameters naming it (`fxReferenceCount`)
   are not rewritten and an unresolved colour runs **white**, and programmer layers applying it now
   (`runningCount`) stop at once.
 - **Another project's library is read-only on the server too.** Both libraries' PUT and DELETE are
@@ -3949,21 +3949,21 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
   applies at 0 — draws the em-dash and opens its editor at 0; Clear writes null with
   `fadeDurationMsPresent: true`; Fan is the kit's `duration` plan. Set and Fan compare a null
   fade **as 0**, so Enter on an untouched editor does not turn *default* into an explicit 0s.
-  An effect palette's Fade is `undefined`: blank, and named when a marquee sweeps it up.
-- **Master is the effect's timing in `PUT {fx}`: *Seconds* or a master** (venue-visit plan D7),
-  offered first on every effect. A master is `speedMasterUuid` on a `BEAT` effect,
+  An FX palette's Fade is `undefined`: blank, and named when a marquee sweeps it up.
+- **Master is the FX's timing in `PUT {fx}`: *Seconds* or a master** (venue-visit plan D7),
+  offered first on every FX. A master is `speedMasterUuid` on a `BEAT` FX,
   `rateSpeedMasterUuid` on a `WALL_CLOCK` one; Seconds is `seconds: true` with no master on a beat
-  effect (its division converted at the master's **stored** tempo, so its speed holds) and a null rate
-  master on a wall-clock one. The body is the whole effect with the timing changed — the flag only
-  where it moves — since the PUT replaces the effect half, and it **recreates the effect**, so a
-  running instance restarts (the cell's title says so). A beat effect's null is master 1, compared
+  FX (its division converted at the master's **stored** tempo, so its cycle holds) and a null rate
+  master on a wall-clock one. The body is the whole FX with the timing changed — the flag only
+  where it moves — since the PUT replaces the FX half, and it **recreates the FX**, so a
+  running instance restarts (the cell's title says so). A beat FX's null is master 1, compared
   canonically and written back as null — and it reads as master 1 even before the bank has loaded (a
   `master-1` stand-in, never on the wire), or a marquee over it would skip a row that takes a master.
-  Clear is each kind's default: master 1 on a beat effect, Seconds on a wall-clock one. An effect
+  Clear is each kind's default: master 1 on a beat FX, Seconds on a wall-clock one. An FX
   whose type no longer resolves has no `timingSource`, so which field to write is unknown: its Master
   is blank and skipped.
 - **Value reads `rows ?? []`** and never resolves (`paletteIntent.ts`'s rule): the swatch and
-  `describePaletteRows` for a generic value, *n heads · per fixture*, or the effect and its speed.
+  `describePaletteRows` for a generic value, *n heads · per fixture*, or the FX and its cycle.
 
 **Session 3 put a generic value palette's Value in the cell** (D6) — `PaletteValueCell`, on the
 Palettes sheet's Value column. What it is and what it learned:
@@ -3980,10 +3980,10 @@ Palettes sheet's Value column. What it is and what it learned:
   `type="text"` and an `aria-label` (*Hex colour*) in the move — `useEditorKeyboard`'s selector
   names the type, so without it Enter in the field did nothing in the cell.
 - **Generic value palettes only.** A per-fixture palette's values were recorded per head and an
-  effect palette holds no value, so both keep the read-out — `value: undefined`, blank of any
-  editor, named when a marquee sweeps them up (*Pulse runs an effect — open to change · skipped*) —
+  FX palette holds no value, so both keep the read-out — `value: undefined`, blank of any
+  editor, named when a marquee sweeps them up (*Pulse runs an FX — open to change · skipped*) —
   and change through the pencil. So does a palette whose `family` is null (rows naming no known
-  property): there is no control to mount.
+  attribute): there is no control to mount.
 - **The family rule lives in `write`, not in `kind`.** The column has no `kind`, so it takes commits
   from its own editor alone; the commit is `{family, values}` — the origin's family travels with it
   — and `write` drops every row of another family. The **editor names them**, since the kit's skip
@@ -3999,8 +3999,8 @@ Palettes sheet's Value column. What it is and what it learned:
   whole, so the first cut — the origin's rows written to every same-family palette in the marquee —
   deleted a sibling's strobe, white or other beam role on an Enter that changed nothing (found in
   review, the colour editor's unstated-emitter bug again). The cell commits `valueChanges(seed,
-  draft)` — each property set or removed — and `write` applies it over **each palette's own**
-  `seedValues` (`applyValueChanges`) before the builder, so a property the operator did not touch
+  draft)` — each attribute set or removed — and `write` applies it over **each palette's own**
+  `seedValues` (`applyValueChanges`) before the builder, so an attribute the operator did not touch
   stays as each palette has it. A removal that would leave a sibling with no rows is skipped and
   toasted by name. `PaletteSheet.test.tsx` pins it with a dimmer + strobe sibling.
 - **A no-op writes nothing, compared through the builder on both sides.** No change is no change
@@ -4017,7 +4017,7 @@ Palettes sheet's Value column. What it is and what it learned:
   footer's copy is the board's: *Value edits the intent — the desk resolves it per head*.
 
 **The FX Library sheet** (`components/fxLibrary/FxLibrarySheet.tsx`, on `routes/FxLibrary.tsx`) is
-Output · Mode · Timing · Params · Drives · Source under category chips and dividers; **every column
+Output · Mode · Timing · Params · Drives · Source under family chips and dividers; **every column
 is a read-out**, so nothing is in the marquee and there are no cell verbs. The route was 930 lines
 of one file; the sheet and the three sheets it opens — `FxDetailSheet`, `EditFxDefinitionSheet`,
 `NewFxDefinitionSheet` — are `components/fxLibrary/` now, with the rules in `fxLibraryModel.ts`.
@@ -4029,8 +4029,8 @@ of one file; the sheet and the three sheets it opens — `FxDetailSheet`, `EditF
   **script**-registered, and the rest are built-ins. The library entry alone cannot tell the two
   `USER` kinds apart — both carry a `sourceDefinitionId`, which is a definition's row id for one and
   the **script's** id for the other — and that was the plan's §1 bug: the old page fetched
-  `fx/definitions/<scriptId>` for a script's effect. **What a row opens follows the source**: a
-  custom row its definition's editor, a script's effect **its script** (`/scripts/:scriptId`, the
+  `fx/definitions/<scriptId>` for a script's FX. **What a row opens follows the source**: a
+  custom row its definition's editor, a script's FX **its script** (`/scripts/:scriptId`, the
   Scripts route's deep link), a built-in its read-only detail. A custom row is named by its
   definition (`entryName`); everything else by its registry id as words.
 - **The library is the running show's, whatever the URL's project.** `GET fx/library` and
@@ -4040,12 +4040,12 @@ of one file; the sheet and the three sheets it opens — `FxDetailSheet`, `EditF
   show's record. Its reason is its own (`libraryPermission`'s third argument): the default
   *…library — copy it here to edit* would promise a verb this sheet does not have.
 - **Rename is `PUT fx/definitions/{id} {name}`, on custom rows alone** — a built-in's name is the
-  desk's and a script's effect's is its script's, so `renameDisabled` refuses both, and the name
+  desk's and a script's FX's is its script's, so `renameDisabled` refuses both, and the name
   column's *Double-click to rename* hint is drawn only where the rename is (`LibraryNameColumn` asks
   once, for both; the hint stood on refused rows until this session).
 - **Fork (D9) takes one built-in** and is refused over several, over a custom or script row, or on a
   built-in that publishes no script, each with the reason; the detail sheet's footer carries the
-  same press. `forkRequest` copies the script, category, output type, mode, parameters,
+  same press. `forkRequest` copies the script, family, output type, mode, parameters,
   `compatibleAttributes` and `timingSource` into `POST /fx/definitions`, named *<name> (Custom)*,
   and the route opens the new definition's editor. **The `fxId` is what must be unique**:
   `FxRegistry.register` overwrites by id and deleting a definition unregisters its id, so a fork
@@ -4053,13 +4053,13 @@ of one file; the sheet and the three sheets it opens — `FxDetailSheet`, `EditF
   a restart. `uniqueFxId` mints `<id>Custom`, `<id>Custom2`… against every library id **and**
   every definition's (one whose script failed to compile is not registered but holds its id), under
   the registry's own normalisation (case, spaces, underscores), and the name takes the same ordinal
-  — *Pulse (Custom 2)*. **New effect** mints through the same rule: it took `name` without spaces
-  as its id, so a new effect called *Pulse* replaced the built-in.
+  — *Pulse (Custom 2)*. **New FX** mints through the same rule: it took `name` without spaces
+  as its id, so a new FX called *Pulse* replaced the built-in.
 - **A fork starts with `defaultTiming` `CYCLE`, and the editor says so.** The library entry does
   not publish a built-in's default, so the fork cannot copy it; `EditFxDefinitionSheet` draws the
   toggle (a PUT field it never exposed) with a note naming the built-in when Fork opened it.
 - **Delete takes custom rows only**, through `useFxDefinitionDelete` — the sheet's batch and the
-  editor's Delete — which skips built-ins and script-registered effects **by name** before anything
+  editor's Delete — which skips built-ins and script-registered FX **by name** before anything
   is sent, and is refused with the reason when the selection holds no custom row. The desk keeps no
   record of what uses a definition, so there is no in-use dialog; `deleteFxDefinition` joined
   `SILENT_ENDPOINTS`, because `useBatchDelete` toasts every refusal itself.
@@ -4079,7 +4079,7 @@ deleted, and with them `scriptUtils`' usage-glyph helpers, which only ever read 
 - **A rename is `PUT {name, script, scriptType}` from the list's own copy of the row**: the route
   replaces the whole row and `NewScript.scriptType` defaults to `GENERAL`, so a rename that left the
   type out would silently turn a definition script into a general one.
-- **Used by** is the effects an `FX_DEFINITION` script registers — `fxRegisteredBy`, the FX
+- **Used by** is the FX an `FX_DEFINITION` script registers — `fxRegisteredBy`, the FX
   Library's discriminator from the other side, so a custom definition whose row id happens to equal
   a script's id is never credited to it. Anything else reads *—* until `FU-SCRIPT-USED-BY`: cue
   hooks are only on full cue details. Off the running project it is *—* throughout, since another
@@ -4090,7 +4090,7 @@ deleted, and with them `scriptUtils`' usage-glyph helpers, which only ever read 
   verb, and a row still opens: `ScriptForm` has a read-only arm.
 - **Delete** is `useScriptDelete` — the sheet's batch and `ScriptForm`'s Delete, which lost its
   `confirm()` for it. The desk has no in-use refusal for a script, so the one use this side can name
-  is held back unsent, a Look's busk pads' way: an `FX_DEFINITION` script whose effects are in the
+  is held back unsent, a Look's busk pads' way: an `FX_DEFINITION` script whose FX are in the
   library, listed with what it registers. Deleting it does not unregister them — they stay until the
   desk restarts — so *Delete anyway* is the question; it sends plain (there is no `force`). Every
   other script deletes on the plain pass. `deleteProjectScript` joined `SILENT_ENDPOINTS`.
@@ -4147,12 +4147,12 @@ each was:
   under it), `pickOnTargets` (the busk tab's seed from the rig), `onPick`, `onSave`, `onSpread` (absent
   draws the button inert — session 3 wires the programmer's). The cell hands it the batch's targets
   **as a colour commit lands on them** (`colourTargetsOf`: one per RGB colour cell or warm/cold
-  white pair, a bar whose colour lives on its cells expanded, a head with neither dropped — a
+  white pair, a bar whose colour lives on its elements expanded, a head with neither dropped — a
   colour-wheel head resolves a `colour-setting` cell the batch counts and a colour commit refuses,
   so the label line counts this list rather than `batch.count`, and the two lines say one number),
   and the container passes `projectId` for the **programmer alone**, since the plain lists draw no
   palette strip and Save records from the programmer. A batch of warm/cold white pairs alone (the
-  blinder's cells, venue-visit plan D8) opens `WarmthCell` instead — a warmth between the pair's
+  blinder's elements, venue-visit plan D8) opens `WarmthCell` instead — a warmth between the pair's
   declared temperatures and a level, committing the colour that mix makes (`lib/whiteMix.ts`;
   `docs/fixtures-engineering.md` §"DmxWhiteMixColour"), with Save and Fan in its footer — and
   `ColourCell` dispatches between the two. Its controls are `editor/WarmthEditor`, which the fixture
@@ -4176,7 +4176,7 @@ each was:
   RGBW head in the marquee to white 0 on a byte typed from an RGB row's cell (found in review;
   the picker gesture and Pick zero only what the editor holds) — (`targetHeads` in `liveAppearance.ts` is the fold,
   over `WriteTarget`'s new `fixtureKey` / `cellIndex`, which `rowWriteTargets` stamps on an element
-  row and `writeTargetsOf` on a busk cell — element keys are never parsed). **The Palettes band is
+  row and `writeTargetsOf` on a busk element — element keys are never parsed). **The Palettes band is
   drawn in every form** (apply-model plan §4.3), above the picker, and in the busk tab's scroller
   where Recent was: D11's *drawn once on a screen* held for Recent, a recents row like row C's
   strip, and the band is the family's offer instead. Its store hooks run in the band, mounted only
@@ -4204,19 +4204,19 @@ each was:
   never reach the rig while the field showed it. `useSheet.test.ts` pins the cadence as the
   literal 33, the trailing call, and that a repeat is sent.
 
-- **`PaletteBands`** — `components/editor/PaletteBands.tsx`, the per-property popup (apply-model
+- **`PaletteBands`** — `components/editor/PaletteBands.tsx`, the per-attribute popup (apply-model
   plan §4.3, D4; session 5): the family's palettes **round** a value cell's editor, in every form it
   has. `SliderCell` and `PositionCell` wrap their controls in it; `ColourEditor` draws its
   `PaletteBand` itself; and the busk side sheet's family tabs dock the bands round their editors
   (`busking/FamilySheets.tsx`, §Focus and the side sheet), passing the busk pair and
   `scope: 'programmer'`, which both bands and `PaletteFooter`'s `className` take for a docked host. **Above**, the Palettes band: a header — *Palettes*, the cell's family as a
-  badge (the mask a press carries, §3.2 rule 5), the heads it lands on (a fixture by name, a cell
+  badge (the mask a press carries, §3.2 rule 5), the heads it lands on (a fixture by name, an element
   by its element key, which is what the press sends), *All · n* — then the family's **value**
   palettes that fit the heads, recent first and then by name (`recentFirst` in
   `lib/paletteRecents.ts`), two rows of chips clipped by height, never a scroller. The offer is the
   strip's (`paletteFits` in `lib/paletteOffer.ts`): the family, every emitter a palette names
   somewhere in the heads (so a Shehds zone is offered what its zone takes), and **for a Beam cell
-  the palettes with a row for its property** — a zoom cell is offered *Wide*, not *Soft edge*.
+  the palettes with a row for its attribute** — a zoom cell is offered *Wide*, not *Soft edge*.
   A chip is `PalettePressButton` through `usePress` over the cell batch
   (`paletteTargetsOf(batch.targets)`) with the mask `[family]`, so the gestures and the ring are
   the strip's; under a focused Look a teal *Into <Look>* line shows and the rings go. *All* mounts
@@ -4240,29 +4240,29 @@ each was:
   `projectId` on the programmer alone, so the plain lists draw the editor bare; the cue editor's
   Values grid passes none either but its presses land in the cue (`PressCue`, below), so its cells
   draw both bands and no footer — *Save as palette…* records from the programmer, and *Aim…* writes
-  Local. A slider cell whose property no value palette can carry (`paletteCarries`,
+  Local. A slider cell whose attribute no value palette can carry (`paletteCarries`,
   the closed `PALETTE_ATTRIBUTES` vocabulary) has no Palettes band and no footer. A setting cell
   (gobo, prism) passes `palettes={false}` — prism is in that vocabulary, and a value palette cannot
-  carry a slotted role — so its popup is the Effects band alone (§11, 11). **Below the editor, the
-  Effects band** (`FxBand`, session 6; `ColourEditor` draws it itself, under the cell's editor
-  and docked under the Palettes band in the busk Colour tab): the effects on this property that
+  carry a slotted role — so its popup is the FX band alone (§11, 11). **Below the editor, the
+  FX band** (`FxBand`, session 6; `ColourEditor` draws it itself, under the cell's editor
+  and docked under the Palettes band in the busk Colour tab): the FX on this attribute that
   paint one of the heads, **lit** — a tap
-  opens `FxEditorPopover` beside the chip over the cell batch, so a Local effect on more heads than
-  these offers the split; a cue's is drawn but not opened — then the family's **effect palettes**
+  opens `FxEditorPopover` beside the chip over the cell batch, so a Local FX on more heads than
+  these offers the split; a cue's is drawn but not opened — then the family's **FX palettes**
   that fit, pressed through `usePress` as the Palettes band's are, and *+ FX …*, the picker's
-  effects arm on this property under the cell's family. Its family is the property's group as the
-  press reads it (a Pulse on a uv cell is Colour). `paletteFits` narrows a Beam cell's effect
-  palettes by the property the effect drives — a beam built-in's library property, Slot Steps' named
+  FX arm on this attribute under the cell's family. Its family is the attribute's group as the
+  press reads it (a Pulse on a uv cell is Colour). `paletteFits` narrows a Beam cell's FX
+  palettes by the attribute the FX drives — a beam built-in's library attribute, Slot Steps' named
   setting, Palette Steps' palettes' rows (`fxPaletteDrives`, given the library and palette list
   through its `FxFitContext`) — so a zoom cell is offered the Zoom Wave palettes and a gobo cell
   the Slot Steps of its gobo. **In the cue editor** (apply-model plan session 8) the bands carry the
   cue arm without a prop: `usePress` reads `PressCue` (`components/press/pressCue.ts`), which
   `CueRowStoreProvider` provides, so a band press there is the cue's layer press and the line reads
   *Into Q1 · as a layer*; a chip is ringed partly where the cue layers its record (`cuePresence` — by
-  record, never by head, since the desk owns coverage); the Effects band lists the cue's **stored**
-  effects on the property that reach the heads (`storedFxReaches`), drawn and not opened — the FX
+  record, never by head, since the desk owns coverage); the FX band lists the cue's **stored**
+  FX on the attribute that reach the heads (`storedFxReaches`), drawn and not opened — the FX
   tab edits them, and no live editor or `SplitFxEditor` is offered — and *+ FX …* stores a draft.
-  `PaletteBands.test.tsx` pins the offer per cell, the press, the bare arm, the Effects band's offer,
+  `PaletteBands.test.tsx` pins the offer per cell, the press, the bare arm, the FX band's offer,
   lit chips and setting-cell popup, and the cue arm.
 
 - **`SceneryControl`** — `components/scenery/SceneryControl.tsx` (scenery-programmer plan D5, D17;
@@ -4484,7 +4484,7 @@ Three consequences worth knowing before touching any of it:
   one of their columns is a gesture those views already offered; the programmer trades it away
   because there the marquee is what a selection is *for*. They also now mount `useClearCellFx`
   — a subscription of their own, which the programmer shares with its tables' counts — because
-  ⌫ clearing the values while the effect driving them kept running is, on the rig,
+  ⌫ clearing the values while the FX driving them kept running is, on the rig,
   indistinguishable from the key having done nothing.
 - **A click on a column the row resolves nothing for clears the selection** — a dimmer-only par's
   Colour cell. It is blank rather than an em-dash, and it is *not* background in the DOM (the row
@@ -4670,20 +4670,20 @@ anchor row (its name); another row's clicked chevron or Info button keeps its ow
 
 **Backspace / Delete takes the selected cells out of Local** (`CellWriters.clearValue` →
 `programmer.clearEntry`, by the programmer fade — the same store the action bar's Clear fades by)
-— **and stops the local effects on them**. That second half is not a new gesture: the programmer's
+— **and stops the local FX on them**. That second half is not a new gesture: the programmer's
 whole-desk Clear has always swept values and programmer-band FX together
-(`clearProgrammerCompletely` in lighting7), and three cells under an effect palette's press are
+(`clearProgrammerCompletely` in lighting7), and three cells under an FX palette's press are
 three instances that were otherwise removable only one at a time on the FX table.
 `components/fixtures-list/cellFx.ts` owns the rule and `useClearCellFx.ts` the wiring;
 two clauses keep the key inside the rectangle. **Local means unowned** — `programmerOwned` *and*
-no `lookId` / `paletteId` / `programmerLayerId` / `cueId`, since an effect that came out of a
+no `lookId` / `paletteId` / `programmerLayerId` / `cueId`, since an FX that came out of a
 Look, a palette layer or a cue is that thing's, and stopping it here would be undone by the next
-recook or would quietly edit a library record. And **every head, or none**: an effect drives
+recook or would quietly edit a library record. And **every head, or none**: an FX drives
 whatever its target names (for a group, every member) and there is no "stop it on these heads
 only", so a partly-covered one is left running and toasts that it was, rather than half vanishing
 from the rig. Matching is on `fixtureKey|attribute` (`cellFxKey`), the same pairing the
-grid's FX lens places an effect on a cell by, and the pairs are **collected by the clear loop itself** rather than
-re-derived, so the values half and the effects half cannot reach different heads.
+grid's FX lens places an FX on a cell by, and the pairs are **collected by the clear loop itself** rather than
+re-derived, so the values half and the FX half cannot reach different heads.
 
 The request itself is a **one-shot** on both halves: the container drops it on the commit after it
 is set, and `FixturesTable` folds it into `autoOpenCell`, so there is one mechanism for "open that
@@ -4932,7 +4932,7 @@ Things that will bite:
   which has no channel. `scopedCellValue.ts` instead feeds the *same* `aggregateCellValue` a lookup
   built from entries or rows, so the maths behind a cell is identical in every scope.
 - **The Local predicate is `entry.owner !== 'layers'`**, not provenance: under blind, provenance
-  reports what is *underneath* the programmer, and a parked property reports `PARKED` while still
+  reports what is *underneath* the programmer, and a parked attribute reports `PARKED` while still
   holding the operator's entry that Record would take.
 - **An un-busked Local cell shows an em-dash but its editor opens at the live value** (`placeholder`
   on the four cells, `UnsetCellMark`). Local has to answer "what will Record take?" by itself, and a
@@ -4951,10 +4951,10 @@ Things that will bite:
 - **A focused palette layer is a read, never an edit**, and the two kinds read differently. A
   **value** palette shows no rows at all: projecting its generic row onto every targeted row would
   silently convert it to a per-fixture one on the first edit, which is a change to what the palette
-  *is* made by someone adjusting a value. An **effect** palette shows the **live** value on the
+  *is* made by someone adjusting a value. An **FX** palette shows the **live** value on the
   cells it drives — ringed by `layerCellClass`, with the wave and the division in `FixturesTable`'s
   bottom-right corner slot (free there, because ownership is switched off in layer scope) — since an
-  effect is one rule for every head and what is worth watching is what it is producing now. Per-element
+  FX is one rule for every head and what is worth watching is what it is producing now. Per-element
   Look rows stay out too; all three cases are named in `LayerRowNotices` (`FU-LOOK-ELEMENT-ROWS` for
   the last).
 
@@ -4968,7 +4968,7 @@ Things that will bite:
 
   **"Read-only" has to be said in four places, not one.** `CellState.editable` reaches only the
   pointer (`pointer-events-none` on the wrapper); the cell trigger stays tabbable, so `AttributeCell`
-  takes `disabled` from it too; `SpreadPopover` — which writes through the desk's spread route or
+  takes `disabled` from it too; `SpreadPopover` — which writes through the desk's fan route or
   `useCellWriters` from the toolbar, nowhere near a cell — gates on the focused palette as well; and the marquee's
   **keyboard** (the Enter/character arm of the grid's window handler, §The programmer's keyboard)
   gates on `cellKeyboardPermission`,
@@ -4976,7 +4976,7 @@ Things that will bite:
   read-only cell's `pointer-events-none` only retargets the press there. A commit through any hole
   is not dropped: `useCellWriters` has no arm for a palette layer, so it falls through to a **live**
   write and puts literals in Local. The Fan gate is on the *palette* case only, not on layer
-  scope generally: a focused Look layer has a row draft and the spread lands in it through the
+  scope generally: a focused Look layer has a row draft and the fan lands in it through the
   route's `write: false` arm (§Sheet kit) — and the
   keyboard makes the same split, taking a typed value into a Look layer's draft and refusing it on
   a palette layer and in Output.
@@ -4986,24 +4986,24 @@ Things that will bite:
   out of it is worse than no tone.
 
   `+ FX` is disabled on a focused palette — not D7 any more, but because a palette holds
-  **one** thing, chosen when it was made: there is no second effect to add, and adding a first
+  **one** thing, chosen when it was made: there is no second FX to add, and adding a first
   to a value palette would flip its identity.
 - **In Output scope every tint is a destination**: clicking a cell jumps the scope to whatever won
   it. Three guards, and the middle one bites — `ProvenanceEntry.layerId` is present for a **cue's**
   layers too, so `focusLayer` checks membership in the programmer's own stack and reports failure.
 
 **The grid says *held back*** (fixture-fx-sheets plan D19, session 5), and since tables-colours
-session 2 it says it with the **FX lens** (§The programmer's tables): a cell an effect paints carries
-a chip with the division, struck through with the reason where the effect is held back. The chip
+session 2 it says it with the **FX lens** (§The programmer's tables): a cell an FX paints carries
+a chip with the division, struck through with the reason where the FX is held back. The chip
 takes the top-right corner's two older marks over — the **amber corner dot** (`lib/heldBack.ts`'s
-rule, `heldBackReach` from the effect list through `useHeldBackReach`, `cellHoldsBack` per cell) and
-the **effect badge** (provenance naming an effect) — which stay as the lens's fallback only where no
-indexed effect paints the cell (an effect under a sibling key, which provenance can still name). Both
+rule, `heldBackReach` from the FX list through `useHeldBackReach`, `cellHoldsBack` per cell) and
+the **FX badge** (provenance naming an FX) — which stay as the lens's fallback only where no
+indexed FX paints the cell (an FX under a sibling key, which provenance can still name). Both
 are absolutely placed inside the ownership ring, so they never move the value; the cell's hover adds
-*holds an effect back*. **The cell editor's label line carries the source chip** (`CellSourceChip`,
+*holds an FX back*. **The cell editor's label line carries the source chip** (`CellSourceChip`,
 the sheet's `SourceChip` over the cell's keys, `EditorLabelLine`'s `chip`): on the right, after the
 column, in the popover form, and as a row of its own under the title in both sheet forms. It names
-what drives the cell — *2 of 4* where the heads differ — carries the dot, and opens the property's
+what drives the cell — *2 of 4* where the heads differ — carries the dot, and opens the attribute's
 stack (`LayerStack`, which takes the cue names and the connection as props outside a sheet), whose
 `programmer.keyStack` answer is the desk's own word on a stomp. It is mounted inside the editor, so
 it subscribes only while one is open, and only where ownership is drawn — Local; Output's cells
@@ -5012,14 +5012,14 @@ follow-up). **Release n** joins row C's verbs after Fan (D18, `CellSelectionActi
 slot): over the rows the selection covers — a marquee's rows or a row selection, Locate's targets,
 so a group row is the group and an element row that head, by its own key, which the desk resolves —
 one `programmer.clearTarget` per target at the programmer fade, one toast in the desk's summed
-count, a group effect left running named once; on the programmer only, folded on the phone arm with
+count, a group FX left running named once; on the programmer only, folded on the phone arm with
 Fan, live in Local and Output (a programmer verb, like the action bar's Clear) and refused with
 its reason while a Look or palette layer is focused, where writes go to the layer (Chris's call).
 
 `+ FX` follows the same rule as a value edit, from the FX table's library row or ⌘K's *Apply FX
 → On the selection*: focused layer → into that Look (started on `/fx/add`, then
-`POST /looks/{id}/absorb-fx`, which *moves* the running instance); Local → the bare effect
-press (`POST /programmer/fx`), one Local effect over the selection under its mask, which Record
+`POST /looks/{id}/absorb-fx`, which *moves* the running instance); Local → the bare FX
+press (`POST /programmer/fx`), one Local FX over the selection under its mask, which Record
 writes onto the cue; Output → disabled, naming the two places that can take one.
 **Make layer** promotes a Local selection into a named Look applied here — record-look, then
 `addLayer`, then `clearEntry` per row taken, so what you promoted leaves Local and the rest stays
@@ -5030,7 +5030,7 @@ yours. It is a sequence, so a failure part-way leaves the Look and says so.
 **The right side of the programmer is a dock** (tables-colours plan D4, session 2): **Colour ·
 Fan**, the busk sheet's two docked editors hosted over the marquee (`programmer/RailColourTab.tsx`,
 `RailSpreadTab.tsx`), collapsible, at the rail's 260 floor and 300 default (260–480, stored in
-`programmer.rail.width` / `.collapsed`). **It lists nothing**: the layers, the effects and the
+`programmer.rail.width` / `.collapsed`). **It lists nothing**: the layers, the FX and the
 scenery are the Stack, FX and Scenery tables on row B (§The programmer's tables), so nothing on it
 competes with the tables for a programmer event. `programmer/ProgrammerRail.tsx` draws it and
 `ProgrammerWorkspace` owns its arms, its state and its geometry; the names stayed `Rail*` in code.
@@ -5042,7 +5042,7 @@ What went where, so none of it reads as dropped: a layer's settings popover, ena
 *Pick up*, *Remove*, reorder and focus, the replacement notes, *Make layer* and *+ Look or palette*
 are the Stack table's; *Edit…*, *Save as palette…*, *Stop*, *held · Blind* and *+ FX* the FX
 table's; the band's held pieces and *All scenery…* the Scenery table's; the *Values above beat
-effects below* rule rides both the FX and the Stack table (the Stack's with a press to FX). The
+FX below* rule rides both the FX and the Stack table (the Stack's with a press to FX). The
 hand's *Place “X” here* on the programmer's stack (`HandProgrammerLayerStrip`) sits under the tables
 whichever shows, and ⌘K's *Apply FX → On the selection* (`addFxDoor.ts`) is registered by
 `ProgrammerAddFxDoor`, which the tables' frame mounts and which subscribes to nothing until it is
@@ -5107,7 +5107,7 @@ Two tabs with their words fit the 260 floor whole, so the dock's strip folds not
 
 **Clear counts held scenery** (`ProgrammerActionBar`): it is enabled for a programmer holding only
 scenery, and its tooltip (`clearSentence`) says *Release … and 2 pieces of held scenery over 2s* —
-the desk's `programmer.cleared` reply counts values and effects only, so the count is
+the desk's `programmer.cleared` reply counts values and FX only, so the count is
 `programmer.sceneryState`'s (`useHeldSceneryCount`, an RTK Query read of its own that no band or
 table has to be mounted for).
 
@@ -5117,7 +5117,7 @@ table has to be mounted for).
 `../docs/plans/tables-colours-design/`, whose `Programmer.dc.html` strips A–D are this session's
 layout). Row B starts with a tab segment, **Values · Stack · FX · Scenery**
 (`programmer/ProgrammerTableTabs.tsx`), Stack, FX and Scenery each with its live count — layers,
-running effects, held scenery. The tables were the applied tables (venue-visit plan S14) at
+running FX, held scenery. The tables were the applied tables (venue-visit plan S14) at
 `/programmer/applied`, a route of their own beside the programmer; that route now redirects
 (`LegacyAppliedRedirect`: `?table=fx` keeps its view, `looks` and `palettes` land on `stack`
 filtered to that kind), and `/programmer/fx` lands on the FX tab. **They are the programmer's only
@@ -5181,20 +5181,20 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
   *Save as palette…* (`applied/fxRows.ts`' `saveAsPaletteOffer`), *Stop*. *Edit…*, ⏎ and the
   name's double click are the row's press: it selects that FX's heads and opens it in *Selection*,
   picked (the host's `onOpenFx`). Its library
-  row's create verb is **+ FX** (`useProgrammerAddFx`: the bare effect press over the
+  row's create verb is **+ FX** (`useProgrammerAddFx`: the bare FX press over the
   selection in Local, into the Look a focused Look layer applies, refused with the reason in Output
   and over a palette), in its own component so only the button hears the selection; under the
-  selection bar the rule row ***Values above beat effects below*** (`applied/FxBelowRule.tsx`).
+  selection bar the rule row ***Values above beat FX below*** (`applied/FxBelowRule.tsx`).
   **Its selection is published** for the Values grid's rings (below).
 - **Stack** (`applied/StackTable.tsx`, D5): *Your values* pinned on top — its value count, its Local
-  effects, *Make layer* in its Note — then every layer top first (`stackLayers`), Looks and palettes
+  FX, *Make layer* in its Note — then every layer top first (`stackLayers`), Looks and palettes
   in one table, numbered from the bottom (*layer 3* is the third from the weakest), with
-  `useReplacementNotes`' *lost Hex 3–4 to Amber* as the Note and a palette whose effect is spent
+  `useReplacementNotes`' *lost Hex 3–4 to Amber* as the Note and a palette whose FX is spent
   marked. Kind chips **All · Looks ·
   Palettes** filter, *Your values* staying pinned. **Reorder by `SheetTable`'s `rowDrag`**, positioned
   with `top`, calling `programmerMoveLayer` — the drop read back from top-first ids to the desk's
   bottom-first index by `layerMoveOf`; no client renumbering, since the desk renumbers the stack and
-  re-ranks the running effects in place. *Your values* is pinned
+  re-ranks the running FX in place. *Your values* is pinned
   (`rowDrag.canDrag`: no grip and no drop onto it, so the top layer is as high as a drag goes).
   **The drag is refused while the rows are not the stack as it is** — a kind chip, a filter or a
   sort — and the footer says which. The shell's own *No layers match the filter* would never draw,
@@ -5204,7 +5204,7 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
   (`LayerSettingsPopover` — amount, blend, mask, stomp, *Detach*, remove), and its menu adds *Edit
   look…* (`LookDetailSheet`) / *Edit palette…*, *Pick up* and *Remove*. *+ Look or palette* is the two
   pickers behind one menu (`programmer/ApplyLayerPicker.tsx`). The rule row is the FX table's, with
-  the effects' count and a press to the FX tab after it.
+  the FX count and a press to the FX tab after it.
 - **Scenery** (`applied/SceneryTable.tsx`, D6): every element, **Venue then Set** by name under
   divider rows, with the scenery filters as chips — *All* (their unfiltered state) · *Set* · *Venue*
   · *Moving only* · *Changed* (the Values grid's *Lit* for scenery: only what something on stage holds
@@ -5224,8 +5224,8 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
   one at a time from a focused Look.
 - **Folds are by the sheet's own width** (`useContainerBand`, `APPLIED_BAND_FLOORS` 1100 / 860 / 480,
   memo rows, overscan 8, all unchanged): band 0 draws every column; band 1 merges FX's Timing with
-  Speed and Size · Dir · Runs into Dynamics, and a layer's Blend · Mask · Stomp into Settings; bands 2
-  and 3 put the property, or the stack position, in the name column and let the rest scroll sideways
+  Cycle and Amount · Dir · Runs into Dynamics, and a layer's Blend · Mask · Stomp into Settings; bands 2
+  and 3 put the attribute, or the stack position, in the name column and let the rest scroll sideways
   under it. **The sheet is the programmer's column, beside the dock**, so a 1440 desk with the
   sidebar open and the dock docked gives it ~900 — band 1, where FX's 914px floor scrolls 14px — and
   the 1180×820 iPad, the dock a strip, ~900 too. On a programmer table the partition chips carry
@@ -5246,7 +5246,7 @@ draws the preview's answer. Things that will bite:
   `fixtures-list/programmerSelectRequest.ts`: `setDeskSelection` while following, the desk's mask
   kept, else Include's request (`store/includeSelection.ts`), which opens the group or fixture a head
   sits in and clears the filter — a group sent as its row and its members, since a flat list has no
-  group row, and a cell as its row under its fixture's. The Values grid never unmounts, so the list
+  group row, and an element as its row under its fixture's. The Values grid never unmounts, so the list
   is always there to hear it. The picked FX is drawn only while it is on the selection: the id
   outlives a selection and a desk restart.
 - **The list is the desk's apply order, read, never computed** (`fxEditorList.ts`' `fxLanes`):
@@ -5257,13 +5257,13 @@ draws the preview's answer. Things that will bite:
   programmer's slot, the cue's, the base, passing over the programmer's slot while it is blind, as
   `LayerResolver.fallbackFor` does — for the lane's first FX's attribute on the first selected head
   carrying it, re-asked on that key's provenance), then *+ FX*. `fx/active` carries no priority,
-  so the tiers are read from each FX's home and the order within a tier from the preview's answer,
-  whose `fx` is the apply order bottom first; one the answer has not reached goes on top of its tier,
-  where a new Local FX lands. A card's family is the answer's, else its attribute's category on a
+  so the bands are read from each FX's home and the order within a band from the preview's answer,
+  whose `fx` is the apply order bottom first; one the answer has not reached goes on top of its band,
+  where a new Local FX lands. A card's family is the answer's, else its attribute's family on a
   head that carries it. A card names its attribute in words where the lane's family has several
   (`paletteAttributeFor`'s label — *UV*, *Zoom*), and its Direction only where it is not the FX
   type's own (`newFxDirection`; the sweeps bounce by default). A layer's card has pause and no ×,
-  as the busk Effects tab's pad FX has none: stopping the instance alone, the layer respawns it on
+  as the busk FX tab's pad FX has none: stopping the instance alone, the layer respawns it on
   its next recook, so the layer is what lets it go.
 - **The subject line is row C's**: the family pill (`SelectionMaskPill`) writes through the
   programmer list's desk bridge, which the grid's toolbar publishes in `fixtures-list/remaskStore.ts`
@@ -5322,8 +5322,8 @@ draws the preview's answer. Things that will bite:
   *Underneath*, the picked FX's own output a violet line under *Result*; Colour a strip (*As seen*:
   times the Intensity lane's `dimmer` result); Position pan and tilt traces scaled to the widest
   swing, and a path panel beside the lanes; a Steps FX's blocks labelled in a band over its rows; a
-  held-back FX hatched under *This FX*; *representative* and `truncated` in words. *As seen* takes a
-  cell's Intensity from its fixture's row where the cell has none. The path panel sits beside the
+  held-back FX hatched under *This FX*; *representative* and `truncated` in words. *As seen* takes an
+  element's Intensity from its fixture's row where the element has none. The path panel sits beside the
   lanes while that leaves them a plot, else under them. Below the 760 arm it draws the picked FX's
   lane alone, six rows at most, and says so; the column's rows size to their content there
   (`auto-rows-max`), since the graph under the list is tall.
@@ -5340,50 +5340,50 @@ draws the preview's answer. Things that will bite:
   for no frames; let go, it asks for a beat, since it runs on from where it was held. The hover
   holds a row by its key, so a re-ask that reorders the rows keeps naming the same head.
 
-**The FX lens** (D3, session 2) answers *side by side* without a split: a Values cell an effect
+**The FX lens** (D3, session 2) answers *side by side* without a split: a Values cell an FX
 drives carries a violet chip — the wave and the division (`lensDivision`: `½` for a fraction of a
 beat, else the label, `1 bar`, `4 s`), `+n` where several paint it — in the cell's top-right corner,
-**struck through when the effect is held back there**, the reason on its tooltip in the desk's
+**struck through when the FX is held back there**, the reason on its tooltip in the desk's
 `heldBackReason` words: *your value holds it back* (`isHeldBack`), *held · Blind* (`isHeldByBlind`),
 *a layer above stomps it*. A stomp the client cannot see directly, so it is read off provenance: the
-desk names no effect on a key whose every painter it skipped, so a running, weighted effect under a
+desk names no FX on a key whose every painter it skipped, so a running, weighted FX under a
 key provenance gives to a cue is stomped there — `lensHeldReason` checks the weight's other factors
-first (paused, spent, leaving, size 0, envelope 0, its stack at FX amount 0), so none of those is ever
-called a stomp. A click opens `FxEditorPopover` on that effect, its split edit for the cell's batch;
+first (paused, spent, leaving, amount 0, envelope 0, its stack at FX amount 0), so none of those is ever
+called a stomp. A click opens `FxEditorPopover` on that FX, its split edit for the cell's batch;
 with several, a menu names them first. Things that will bite:
 
 - **One index, read per cell, never a subscription per row.** `fixtures-list/cellFx.ts`'s
-  `buildCellFxIndex` keys every effect by the `(head, property)` keys it paints —
+  `buildCellFxIndex` keys every FX by the `(head, attribute)` keys it paints —
   `fxPaintedHeads`, the split editor's reading of the desk's expansion, head filter and element
   mode included — over the whole rig (`useFixtureLookup`, the rows' own fixtures until it loads), since
   a group's first member and a head filter's halves are read over members a filter may hide, in the
   desk's order. `CellFxLensHost`
   (`fixtures-list/CellFxLens.tsx`) holds the store and the one editor; `LensIndexer`, a *sibling*
   of the rows mounted only while the lens is on, subscribes to `fx/active` once and rebuilds the
-  index per `fxChanged` into the store before paint. Each cell reads its own effects through
+  index per `fxChanged` into the store before paint. Each cell reads its own FX through
   `useCellFx`, a selector that keeps a cell's array while nothing the chip draws has changed
   (an instance's phase moves on every refetch, so it compares the fields the chip reads, and a
-  reader matching an effect against the index goes by id), so an `fxChanged` re-renders the
+  reader matching an FX against the index goes by id), so an `fxChanged` re-renders the
   indexer and the cells whose chips moved.
 - **The chip takes the corner, and the value never moves.** It is absolutely placed where the
-  effect badge was, 12px tall at the cell's top edge — clear of a value drawn on the middle line —
+  FX badge was, 12px tall at the cell's top edge — clear of a value drawn on the middle line —
   and opaque where it widens past the 18px gutter; the board drew it at the end of the cell's line,
   which in a 107px dimmer cell pushed the value. It takes the corner's badge and amber dot over
-  (§The programmer's scoped grid), which stay as the fallback where no indexed effect paints the
+  (§The programmer's scoped grid), which stay as the fallback where no indexed FX paints the
   cell. It is `pointer-events-auto` and above Output's jump overlay, and stops the pointerdown, so a
   press on it is neither a marquee nor a cell selection. The grid's footer and the phone's key teach
   it as the board's footer does, whole beside *FX* and struck through beside *Held back*, from
   the cell's own classes (`lensChip.ts`).
 - **Where it draws**: under `ProgrammerPage`'s FX selection store (the plain lists and the cue grid
-  have none) and where ownership is drawn — Local and Output, not a focused layer, whose effect
+  have none) and where ownership is drawn — Local and Output, not a focused layer, whose FX
   palette marks its own cells bottom-right. The host's tree is the same either way, so a scope
   switch re-renders the cells and never remounts a row.
 - **Held-back state is read at render**, from `getKeyState` and `isBlind`: the row's ownership
   subscription already re-renders it on its keys' entries, provenance and Blind.
 
-**FX selection rings.** The FX table publishes its selected rows' effect ids into
+**FX selection rings.** The FX table publishes its selected rows' FX ids into
 `fixtures-list/fxSelection.ts`, a store on the `marqueeContext.ts` pattern that `ProgrammerPage`
-provides; on the Values tab the cells those effects paint are ringed violet (`data-fx-ring`). A cell
+provides; on the Values tab the cells those FX paint are ringed violet (`data-fx-ring`). A cell
 reads a boolean through `useFxRinged`, so a selection change re-renders only the cells whose ring
 moves — and the hidden grid, whose rows are not drawn, none. The store outlives the FX table, which
 mounts on demand: the rings show after a switch to Values, and the table takes its selection back
@@ -5455,9 +5455,9 @@ who owns a value, and a red name must not look like a red value.
 
 ### Speed Masters
 
-Named tempo buses. Effects subscribe to one by uuid rather than owning a speed, so
+Named tempo buses. FX subscribe to one by uuid rather than owning a speed, so
 retuning a master moves every look that follows it. **Master 1 is the global tempo**:
-every legacy surface means it, every unassigned effect resolves to it, and it cannot
+every legacy surface means it, every unassigned FX resolves to it, and it cannot
 be deleted.
 
 Two different BPMs live on a master and the UI must not conflate them. The **stored**
@@ -5515,21 +5515,21 @@ four relocated, never a fifth.
 
 **A master can also declare a `family` and follow another master.** Both landed with the busking
 view's speed-master work, and both are edited in `SpeedMasterDetailSheet` and in the Speed Masters
-sheet's Usage, Follows and Ratio columns (§Library sheets):
+sheet's Family, Follows and Ratio columns (§Library sheets):
 
-- **Usage** (`intensity` / `colour` / `position` / `beam`) is the **apply-time routing default**. An effect
-  created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
+- **Family** (`intensity` / `colour` / `position` / `beam`) is the **apply-time routing default**. An FX
+  created with no explicit master is *stamped* with the family-matching master's uuid at the moment
   it is created — `useSpeedMasterForFamily` in `store/speedMasters.ts`, the rule itself in
-  `lib/speedMasterModel.ts`. Nothing resolves usage later, and `null` still means master 1
-  everywhere; that invariant does not move. **Its caller is `PaletteEditor`**: an effect palette's
-  master is stamped when the effect is chosen, so a Colour effect palette picks up the master whose
-  usage is `colour` without the operator being asked. The hook spent a while with no caller at all —
-  the busk view's ad-hoc effect pads were the original one, and they went when that view was brought
+  `lib/speedMasterModel.ts`. Nothing resolves the family later, and `null` still means master 1
+  everywhere; that invariant does not move. **Its caller is `PaletteEditor`**: an FX palette's
+  master is stamped when the FX is chosen, so a Colour FX palette picks up the master whose
+  family is `colour` without the operator being asked. The hook spent a while with no caller at all —
+  the busk view's ad-hoc FX pads were the original one, and they went when that view was brought
   back onto its design — and was kept for exactly this. Every other half of the rule stands: a master
-  declares a usage, the detail sheet sets it, `BuskSpeedRail` badges it.
-  Usage is unique per project (the server 409s `SPEED_MASTER_FAMILY_TAKEN`), and `controls` is
+  declares a family, the detail sheet sets it, `BuskSpeedRail` badges it.
+  A family is unique per project (the server 409s `SPEED_MASTER_FAMILY_TAKEN`), and `controls` is
   deliberately not routable — its FX land on master 1, which is what an unmatched
-  category is defined to do. `speedMasterModel.test.ts` pins the vocabulary against
+  family is defined to do. `speedMasterModel.test.ts` pins the vocabulary against
   `FX_FAMILY_INFO` the way `maskPicker.test.ts` pins the family lists.
 - **Follow** (`followNum` / `followDen`, both null = manual, plus `followTargetUuid`) makes a
   master run at `leader.bpm × num/den`. The server owns that arithmetic *and the timing*: a
@@ -5587,33 +5587,33 @@ Two traps in that area:
 
 - **`speedMasterLive`'s field-wise merge must copy every new field.** It writes named fields into
   the Immer draft rather than replacing the array (so a bpm push doesn't churn tile identity), so
-  a field it forgets is written once from the first frame and never again — a usage retagged in
+  a field it forgets is written once from the first frame and never again — a family retagged in
   another tab would leave this one routing to the old master for the life of the page.
-- **Usage and follow ride `speedMasters.state`, not `.changed`.** The change frame is the tempo
+- **Family and follow ride `speedMasters.state`, not `.changed`.** The change frame is the tempo
   push and says nothing about routing.
 - **Never render a link PUT's response `bpm`** — it is the pre-link stored value beside the ratio
   it just accepted (`FU-SPEED-LINK-PUT-STALE-BPM` in lighting7). The state frame corrects it.
 
-Two independent per-effect references, both uuid-addressed:
+Two independent per-FX references, both uuid-addressed:
 
-- `speedMasterUuid` — which tempo an effect's beats come from. BEAT effects only.
-- `rateSpeedMasterUuid` — scales a **WALL_CLOCK** effect's cycle (`bpm / 120`). Beat
-  effects never read it.
+- `speedMasterUuid` — which tempo an FX's beats come from. BEAT FX only.
+- `rateSpeedMasterUuid` — scales a **WALL_CLOCK** FX's cycle (`bpm / 120`). Beat
+  FX never read it.
 
-The effect editor gates on the library entry's `timingSource` (as `EffectParameterForm`, retired in
-fixture-fx-sheets session 5, did): a wall-clock effect gets its cycle in seconds and the rate
-master, a beat effect beats a cycle and the speed master. Showing both to both was the pre-existing
-bug — a wall-clock effect's "Speed Master" did nothing at all. **The live effect editor keeps that
+The FX editor gates on the library entry's `timingSource` (as `EffectParameterForm`, retired in
+fixture-fx-sheets session 5, did): a wall-clock FX gets its cycle in seconds and the rate
+master, a beat FX beats a cycle and the speed master. Showing both to both was the pre-existing
+bug — a wall-clock FX's "Speed Master" did nothing at all. **The live FX editor keeps that
 gate and draws the timing as a chip** (`FxFields`' `TimingChip`, fixture-fx-sheets D11 and
-venue-visit plan D7): *Seconds* first, then every master — on a beat effect the speed master (`M2 ·
+venue-visit plan D7): *Seconds* first, then every master — on a beat FX the speed master (`M2 ·
 96`, master 1 when none is stored), on a wall-clock one the **rate** master (*Rate M2 · 96*) —
-beside the Speed label rather than as a select under it. *Seconds* is an effect's own cycle with no
-master (`seconds` on the wire; a wall-clock effect's Seconds is no rate master). It lists the live
+beside the Cycle label rather than as a select under it. *Seconds* is an FX's own cycle with no
+master (`seconds` on the wire; a wall-clock FX's Seconds is no rate master). It lists the live
 bank and always sends a concrete uuid — choosing M1 sends master 1's uuid, `SpeedMasterSelect`'s rule,
 because `updateFx`'s absent field means "keep" — and it reads the live BPM, never the stored one.
-**A new effect is its type's own cycle (one bar but where the library says otherwise) on the master
-tagged for its family's usage, else master 1** (venue-visit plan D16): `FxPicker` and `PaletteEditor` stamp it through `useSpeedMasterForFamily` at creation,
-so `null` still means master 1 everywhere; a wall-clock effect starts on its own Seconds (4 s).
+**A new FX is its type's own cycle (one bar but where the library says otherwise) on the master
+tagged for its family, else master 1** (venue-visit plan D16): `FxPicker` and `PaletteEditor` stamp it through `useSpeedMasterForFamily` at creation,
+so `null` still means master 1 everywhere; a wall-clock FX starts on its own Seconds (4 s).
 
 `BeatIndicator` pulses from the keyed `speedMasters.beat` stream, always — the unkeyed
 legacy `beatSync` it used to fall back to is gone from both sides (backend D2). Omitting the
@@ -5958,7 +5958,7 @@ recovery. Frontend shape:
   events, which is why `changePassword` and `revokeOtherSessions` invalidate
   `AuthConnectedApps` too.
 - **Account changes self-heal across clients**, via two frames from one backend flow rather
-  than the show-scoped `FixturesChangeListener` bus every other list rides (users belong to the
+  than the project-scoped `FixturesChangeListener` bus every other list rides (users belong to the
   machine; see `../docs/desk-accounts.md` → "Account edits reach other clients").
   `usersWsApi` → `store/users.ts` invalidates `UserList` / `User` on every socket;
   `authWsApi.subscribeOwnAccountChanged` → `store/auth.ts` invalidates `Auth` on **only** the
@@ -6053,14 +6053,14 @@ master leaves it.
 ### A stack's FX amount
 
 **Each cue stack has a runtime FX amount, 0–100 %, and the desk owns it** (lighting7 effects plan
-D10; `docs/fx-engineering.md` §"Size, direction and N-shot" there): a weight on the effects that
-stack's cues run, applied after the blend as an effect's own size is. `api/stackFxAmountApi.ts`
+D10; `docs/fx-engineering.md` §"Amount, direction and runs" there): a weight on the FX that
+stack's cues run, applied after the blend as an FX's own amount is. `api/stackFxAmountApi.ts`
 reads `stackFxAmount.state` (every stack below full; absent is 100 %) and sends
 `stackFxAmount.set`; `store/stackFxAmount.ts` is form 3, `useStackFxAmount(stackId)`
 narrowed to one stack. `components/runner/StackFxAmountControl.tsx` is the *FX amount* slider, 0–1
 on the wire and a percent on screen, amber below full: on the Show view's stack row (from
 `@[480px]` of the overview) and, as `MobileStackFxAmount`, a row under the phone runner's top
-strip — drawn below full, and at full only while an effect runs whose cue this stack weighs
+strip — drawn below full, and at full only while an FX runs whose cue this stack weighs
 (`cueHolds.state`'s `stackId`, the cue's highest hold's stack, read only at full). A runtime gesture, so it works while the show is
 locked, as GO does; it greys only offline, and a press inside it never drills the row. It writes
 through `useLiveFader` (`components/editor/`), the grand master fader's drag-and-settle lifted out
@@ -6108,7 +6108,7 @@ the descriptor) inside its restrike time says *Still cooling — restrike in 5:5
 confirm, and is still offered.
 
 ### Cues, Stacks & Triggers
-Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). *Remove from stack* deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, and *Move to stack…* moves the entry whole — number, follow and anchor with it — through its own route (§"The cue action set" below); a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in the cue editor's Scenery tab, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own attribute assignments, ad-hoc FX, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). *Remove from stack* deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, and *Move to stack…* moves the entry whole — number, follow and anchor with it — through its own route (§"The cue action set" below); a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in the cue editor's Scenery tab, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
 
 #### The cue editor
 
@@ -6120,7 +6120,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
 
 - **`CueRowStore`** (`CueRowStore.tsx`, `cueRowDraft.ts`; `LookRowStore`'s shape over one cue): the
   server state is the cue's details and its `GET /cues/{id}/cooked`; the **draft** holds own values
-  set and own rows removed, keyed by target type, key and canonical property (`colour` and
+  set and own rows removed, keyed by target type, key and canonical attribute (`colour` and
   `rgbColour` are one row), notifying per key. A write schedules a flush — 400 ms quiet, 2 s ceiling
   — that rebuilds the **whole** `attributeAssignments` list from the cue as it stands then
   (`applyCueRowEntries`: every kept row's `fadeDurationMs`, `moveInDark` and `sortOrder` kept, a new
@@ -6168,7 +6168,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   drawn on the group's row** and its members read it through the group unless a fixture row of their
   own beats it; cells a row cannot take are blank, as on the programmer.
 - **The rows** (D14): every head an own row or a layer reaches, in rig order (the raw fixture list's
-  order, through `useFixtureLookup`), a multi-head fixture opened onto its cells where the cue holds
+  order, through `useFixtureLookup`), a multi-head fixture opened onto its elements where the cue holds
   them (the operator's toggle flips it), and above them a group row per group the cue holds an own
   row on. The selection bar is the kit's `SelectionBar` with **Own only** (only the rows the cue holds
   itself), **+ Fixtures…** (`CueTargetPicker` in a popover — a fixture or a group, so a group own
@@ -6178,12 +6178,12 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   hover's Info, Locate and Add-to-targets are withheld in the cue context), no palette strip, no
   `useClearCellFx`, no live writer, no `projectId` on the table (so no appearance leaves and no
   *Save as palette…*); the source chip is never drawn (its stack is a `programmer.keyStack` request).
-  A cell's popup **does** draw the Palettes and Effects bands (apply-model plan session 8): they press
+  A cell's popup **does** draw the Palettes and FX bands (apply-model plan session 8): they press
   into the cue through `PressCue`, never the programmer — a palette or a Look goes on as a cue layer
   through `POST /cues/{id}/layers/press`, the desk's press rule over the stored layers (Blue replaces
   Red on the heads, a second press takes it off), sent in the store's save chain as one Undo with its
   answer's layers landed in the cache; ⌥click (*Apply as values*) lands a value palette's literals as
-  own rows; a bare effect is stored in draft, a second pick on the same selection swapping the one it
+  own rows; a bare FX is stored in draft, a second pick on the same selection swapping the one it
   stored. A read-only cue's cells draw neither band (`useCueBandProject`), and a press that reaches
   it anyway is refused with a toast.
   Its selection is `useLocalListSelection` and `useCellSelection`, held by the editor (below), never
@@ -6216,8 +6216,8 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
 - **The Values selection is the editor's** (`CueValuesView.tsx`, mounted under `CueRowStoreProvider`):
   the grid's rows, *Own only* / *Whole rig* / *+ Fixtures…* and its row and cell selection live
   there, so a tab switch keeps them and the Looks and FX tabs act on `selectionTargets` — the rows a
-  marquee covers, else the selected rows, through `selectedRowTargets` (a group row as its group, a
-  cell by its element key). Local state, never the desk's selection (P2).
+  marquee covers, else the selected rows, through `selectedRowTargets` (a group row as its group, an
+  element by its element key). Local state, never the desk's selection (P2).
 - **The Looks tab** (`CueLooksTab.tsx`, session 6, §4.1, D3): `LookStack` at its wide density over
   the cue's layers, a layer edited as a layer and never as a Look. Each gesture — reorder, remove,
   enable, amount, blend, mask, stomp, targets — is one `CueRowStore.editLayers` write: the edit
@@ -6244,25 +6244,25 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   `/palettes?edit=` for a palette layer (`hooks/useEditParam.ts`, both routes'). The hand's *Place
   here* strip stays under it, unlocked, and its place is a press on the Values selection
   (`HandCueLayerStrip`'s `host`, through `usePress`'s cue arm), its Undo the store's save toast's.
-- **The FX tab** (`CueFxTab.tsx`, session 6, §4.1, D17): one row per stored effect — target
-  (`fxTargetLabel`, a selection by its items), effect, property, speed (*Seconds* and its cycle,
-  or the cycle on its master, S15), size, direction and runs (`fxDynamicsParts`, `runsWord`) and
-  its fire timing — reorderable by its grip. A row opens `FxFields` over the stored effect
+- **The FX tab** (`CueFxTab.tsx`, session 6, §4.1, D17): one row per stored FX — target
+  (`fxTargetLabel`, a selection by its items), FX, attribute, cycle (*Seconds* and its cycle,
+  or the cycle on its master, S15), amount, direction and runs (`fxDynamicsParts`, `runsWord`) and
+  its fire timing — reorderable by its grip. A row opens `FxFields` over the stored FX
   through `cueFxDraftOf` / `withCueFxDraft` (`fxEditorModel.ts`: `paletteDraftOf`'s reading,
-  so Seconds, size, direction, runs and the spread's shape carry, plus step timing, element mode and
-  the head filter), its `FxScope` from the effect's target through `useFxScope` — `FxEditor`'s
+  so Seconds, amount, direction, runs and the spread's shape carry, plus timing, element mode and
+  the head filter), its `FxScope` from the FX's target through `useFxScope` — `FxEditor`'s
   derivation, lifted to be shared — with the cue's *Delay · Interval · Random* (`TimingFields`)
-  under it. The editor opens once the effect library has (a wall-clock effect's Seconds is read from
+  under it. The editor opens once the FX library has (a wall-clock FX's Seconds is read from
   it), and its draft is its own, seeded on open and again after an Undo (`CueRowStore.undoSeq`). A
   drag's moves coalesce on the store's flush (400 ms, 2 s), a release, reorder or add saves at once,
-  and every gesture finds its effect in the desk's list by `uuid` (`indexOfDrawn`), which the store
+  and every gesture finds its FX in the desk's list by `uuid` (`indexOfDrawn`), which the store
   strips before the PATCH. The sortable's attributes sit on the grip, never the row, so a click in
   a locked row leaves the key guards (below) to answer ⌫. **+ FX**
   opens `FxPicker` **in draft** (`draft={{current, onPick}}`) over `fxTargetOf(selection)` — one
-  row as itself, several as one `selection` effect keyed by the list's canonical JSON
-  (`selectionKeyOf`): a tap appends the effect with the picker's starting spec and D16's master and
-  runs nothing (no `fx.add`, no active-effects read); a second tap swaps it in place. Each enabled
-  Look layer's **deferred** effects are listed under *From <Look>*, read-only.
+  row as itself, several as one `selection` FX keyed by the list's canonical JSON
+  (`selectionKeyOf`): a tap appends the FX with the picker's starting spec and D16's master and
+  runs nothing (no `fx.add`, no active-FX read); a second tap swaps it in place. Each enabled
+  Look layer's **deferred** FX are listed under *From <Look>*, read-only.
 - **Locked, both tabs read** (§4.6): `LookStack`'s `readOnly` draws the rows' badges with no drag,
   the FX rows have no grip, × or editor writes, and the add buttons are disabled with the reason.
   `useRefusedEditKeys` (`editorIsolation.tsx`) claims a ⌫ or Enter pressed while the editor holds
@@ -6271,8 +6271,8 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   above both tabs, for the grid's reason.
 - **Edited since GO and Update stage** (session 7, D4, D11, §3.5): these tabs' writes send nothing
   to the stage, so the desk marks a held cue they changed in what Update stage sends — a row's
-  value, an untimed layer or effect, not a row's own fade or a timed one — and a live cue whose Look
-  or palette had its effects edited; a Record leaves the mark. It is `cueHolds.state`'s `edited`, read by
+  value, an untimed layer or FX, not a row's own fade or a timed one — and a live cue whose Look
+  or palette had its FX edited; a Record leaves the mark. It is `cueHolds.state`'s `edited`, read by
   `useCueEdited` (`store/cueHolds.ts`, narrowed to the one answer). `EditedSinceGoChip`
   (`components/cues/EditedSinceGo.tsx`) draws *Edited since GO* on the editor's header, the cue
   sheet's Name cell and the phone card under its identity (`CueCardBody`), and nothing otherwise;
@@ -6281,7 +6281,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   `CueActionDialogsProvider` beside Record and Delete since a GO can collapse the card that opened
   it, and mounted only while open: it reads `POST /cues/{id}/update-stage {dryRun: true}` for the
   counts and the cue's fade (`lib/updateStage.ts`'s `updateStageLines`: *3 values change, over its
-  2.0s fade · 1 effect edited in place · 1 stopped*), names the cue and what is not re-fired, and its *Update stage* sends
+  2.0s fade · 1 FX edited in place · 1 stopped*), names the cue and what is not re-fired, and its *Update stage* sends
   the one real request. Locked, both ask to unlock (§4.6), or are disabled with the reason where the
   lock is not the operator's. It is REST, so the P2 no-frame tests are unchanged. The header reaches
   the provider through `runner/cueActionDialogsContext.ts`, the openers alone, so the editor does not
@@ -6321,7 +6321,7 @@ provider (a test drawing the set alone) the set draws them itself.
   (`store/programmer.ts`) sends `programmer.setBlind` at the programmer fade and resolves when the
   desk reports Blind on, and only then is the cue Included — Blind is a WS gesture and Include a
   REST call, which the desk does not order, so sending both at once could put the cue on stage. No
-  confirmation within 3 s loads nothing and says so. Blind holds the Include's effects too (D7).
+  confirmation within 3 s loads nothing and says so. Blind holds the Include's FX too (D7).
 - **Load into programmer** Includes and stays; its title says live or blind. **Record…** opens the
   Record sheet on the cue. **Duplicate** is the desk's route, each row in row order, the one copy
   opened by its entry. **Remove from stack** deletes the entry. **Delete…** is `CueDeleteDialog`
@@ -6436,7 +6436,7 @@ do not know it is a decision:
   any host**, so no bar draws a tile; Show and the Prompt Book *report* it through the
   `ProgrammerIndicator` their bar mounts, and Busk — which has no bar — through the band's `BLIND`
   pill, the Show glyph's dot and the Show tab's own `ProgrammerIndicator` (§The rig, §Focus and the
-  side sheet). All three say *values and effects held*: Blind holds the programmer's effects as it
+  side sheet). All three say *values and FX held*: Blind holds the programmer's FX as it
   holds its values (show-cue-editing plan D7, the desk's `fx/BlindHold.kt`), so a blind busk is not
   a working one either. That is session 2b's arrangement exactly inverted,
   and the rule it was written for still holds: one control, one place. The drift to refuse now is
@@ -6452,7 +6452,7 @@ do not know it is a decision:
 - **The speed masters are not *resident* on the programmer**, and `PD-SPEED-OVERLAY` did not put
   them there: the bank is summoned from the app header's **Speed Masters overview panel**, which
   hangs over every route and is nobody's view chrome — the programmer gained nothing of its own.
-  The FX table's Timing column still names each effect's master, and `/speed-masters` still manages
+  The FX table's Timing column still names each FX's master, and `/speed-masters` still manages
   the bank.
 
 `ProgrammerPage.test.tsx` pins the absence; `ProgrammerPage.tsx`'s note beside the header is the
@@ -6550,7 +6550,7 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   values a GO lands (`/cooked`'s rows). The tab is the window's, `sessionStorage cueEditor.tab`
   (`cueEditorTab.ts`): an open editor keeps its own, a new one opens on the window's last choice, and
   a host may ask for a tab (`tabRequest`, the sheet's Layers and FX read-outs).
-- **Values is the cue's own rows, Looks its layers and FX its own effects, each edited in place**
+- **Values is the cue's own rows, Looks its layers and FX its own FX, each edited in place**
   (§The cue editor). The hand's *Place here* strip (`HandCueLayerStrip`) is in the Looks tab,
   unlocked. **Scenery** is
   `CueSceneryEditor`'s body (`CueSceneryEditorBody`), **Events** `CueEventsEditor`, and **Cue** the
@@ -6574,7 +6574,7 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   has the keys, and its Values grid hears them only then (§The cue editor).
 - **`CueDetailContent` stays the read-out** the phone card and the Prompt Book draw (`CueCardBody`),
   its values through `CueValueGrid`, which reads a group-derived cooked row onto the member it names,
-  its layers and effects as rows read-only (D9).
+  its layers and FX as rows read-only (D9).
 
 *Edit in programmer*, which Includes the cue, is the cue action set's (§"The cue action set"), on
 the strip under the collapsed row. The card draws **no stage map**: the 2D
@@ -6588,7 +6588,7 @@ tab and the Prompt Book rail all open their cards collapsed. Consequences worth 
   in the programmer's source box (§"The cue action set").
 - **Duplicate appends the copy to the end of the stack** and opens it by its entry (venue-visit plan
   S3; show-cue-editing plan D12), on the desk's `POST /cues/{id}/duplicate {stackId}` since that
-  plan's session 3: a full copy — rows, layers, effects, hooks, notes, scenery and events — unnumbered,
+  plan's session 3: a full copy — rows, layers, FX, hooks, notes, scenery and events — unnumbered,
   so it takes the next auto number with nothing else in the stack moving. The client-side
   `buildCueInput` copy it replaced carried neither scenery nor events.
 
@@ -6666,16 +6666,16 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   `CueStackTimeline`), which rides the stack list's, the cue list's, each cue's, the Looks', the
   palettes' and the scene's tags rather than a frame of its own. **The grid is derived on the client**
   (P6) by `lib/stackTimeline/`, pure and tested on its own: `columns` (a column per Look or palette
-  and target — none is the record's own fixtures — per effect by type, property and target, per
-  scenery element; grouped Looks · Palettes · Effects · Scenery, each in first use down the stack),
+  and target — none is the record's own fixtures — per FX by type, attribute and target, per
+  scenery element; grouped Looks · Palettes · FX · Scenery, each in first use down the stack),
   `cells` (rank, glyphs), `runs` (start, end, ↺ where two run keys meet, ◆ where a run's settings
   change, the scenery tracked line, and what passes a marker) and `filter`. Layer cells join
-  whenever both are filled; effect cells only on one shared `runUuid`, and never where either is an
-  N-shot, which a GO fires afresh; scenery never.
+  whenever both are filled; FX cells only on one shared `runUuid`, and never where either has a
+  Runs count, which a GO fires afresh; scenery never.
 - **`StackTimeline`** (`components/runner/`) is the grid on `useSheet` / `SheetTable`, with the
   Table's rows, row drag, lock, arming click and `CueEditorPane`: the sticky cue column (pip, number,
   name, shared and *Edited* chips, the live row's fade bar), Fade and Follow, then 84 px columns (92
-  for effects and scenery) under the kit's header bands; a palette's cells and header carry its
+  for FX and scenery) under the kit's header bands; a palette's cells and header carry its
   colour where it has one (`paletteRowsSwatch` over a generic palette's rows, the busk pad's rule). Markers are divider rows whose cells a run
   and a tracked line pass through. A cell selects through its `onBeginEdit`; editing is the next
   bullet. One selected cell opens the pane on its cue at the column's tab (Looks for Look and palette
@@ -6684,8 +6684,8 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
 - **Row B** is the filters, per window (`sessionStorage timeline.filters`): the kind chips with
   their counts under the other two filters (`kindCounts`), the family segment (scenery always
   kept), and *Selection only*, the columns whose `heads` meet the desk selection expanded through the
-  cached group list and met by the desk's parent↔cell rule both ways, a selected fixture reaching its
-  cells and a selected cell a layer on its parent (scenery kept too). **Column order** is per window and never stored on the desk
+  cached group list and met by the desk's parent↔element rule both ways, a selected fixture reaching its
+  elements and a selected element a layer on its parent (scenery kept too). **Column order** is per window and never stored on the desk
   (C7): `sessionStorage timeline.columns.<stackId>`, moved within its kind by the header's ‹ ›,
   which trades places with the neighbour on screen, so a column the filters hide stays put.
   A Timeline is drawn only once the stack is measured, so a narrow desk never mounts it.
@@ -6716,7 +6716,7 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
     (a surface-owned ⏎ and ⌫ — one request over every column rather than each column's `clear`; a
     typed character is then left unclaimed, so the transport's `L` still works). ⌘D and ⌘Z are
     `useTimelineCommandKeys`, standing aside for a key region (the pane), a guarded target or an open
-    editor. Effect cells select and read only — their edits are session 5's.
+    editor. FX cells select and read only — their edits are session 5's.
   - **A run's end** carries a handle (on hover, never while locked). Dragging it down fills the cells
     it crosses with the dragged cell's settings, up empties them, the one under the pointer kept
     (`dragPlan`); ghost cells and a scope chip by the pointer show the result before the release,
@@ -6802,14 +6802,14 @@ Scenery-programmer plan session 5 (D13, D14); the mechanism is `docs/show-mode-e
   while the book is mounted — the Stage view's Next GO source alone does not (stage-vis doc).
   `FU-SCENERY-FLY-DEPT` is a fly department of its own (FQ markers, its own lane), not built.
 
-**Timed effects**: Layers and ad-hoc effects can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default. A timed layer re-cooks the whole cue when it fires rather than appending its rows, so an in-flight crossfade weight survives.
+**Timed FX**: Layers and ad-hoc FX can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default. A timed layer re-cooks the whole cue when it fires rather than appending its rows, so an in-flight crossfade weight survives.
 
 **Script hooks** (triggers) automate FX_APPLICATION script execution on cue lifecycle events:
 - **ACTIVATION** / **DEACTIVATION** — fire when the cue starts/stops
 - **DELAYED** — fire after a configurable delay
 - **RECURRING** — fire at an interval with optional randomisation for organic timing
 
-FX definitions have a `timingSource` field (`BEAT` or `WALL_CLOCK`) controlling whether effects sync to BPM or run on a fixed 50Hz wall-clock timer.
+FX definitions have a `timingSource` field (`BEAT` or `WALL_CLOCK`) controlling whether FX sync to BPM or run on a fixed 50Hz wall-clock timer.
 
 ### Cloud sync — the GitHub identity
 
@@ -6861,7 +6861,7 @@ mechanics live in `../docs/windows-updates.md`.
   modal an available update**: an operator mid-show must not be nagged.
 - Release notes render as **plain text**. They are untrusted text fetched from the internet, and
   per §Dependencies a sanitising markdown renderer isn't worth adding for this.
-- `ApplyUpdateDialog` requires **type-to-confirm only when the rig is live** (effects running or
+- `ApplyUpdateDialog` requires **type-to-confirm only when the rig is live** (FX running or
   a stack active). The asymmetry is the point: making every routine update a typing chore trains
   people to type without reading, destroying the friction exactly when it matters. It also sends
   `confirmVersion`, so a tab left open across a newer check can't apply something its owner never
@@ -7062,14 +7062,14 @@ path may quietly change where it lands.
   `commandLabelOf(item)`: `commandLabel` names the rows whose label leans on its heading (*Project
   sync*, *Desk sync*, *Project Settings*), and cmdk keys selection on that value, so it must be
   unique — `navigation.test.ts` pins it. `keywords` are extra words ⌘K matches a row on, each
-  scored whole (*fx library* finds Effects). The Actions group's *Project Settings* and the Projects
+  scored whole (*fx library* finds FX). The Actions group's *Project Settings* and the Projects
   group's *View All Projects* went, being the Settings and Projects rows a second time.
 - **The Programmer's tables are three ⌘K items and no sidebar row** (tables-colours plan D1,
   §The programmer's tables). ⌘K lists `programmerTableNavItems` beside the Programmer row —
   *Programmer › FX*, *Programmer › Stack*, *Programmer › Scenery* — as `?table=` on the one route,
   `pathMatch` the route's, the way the palette families are `?family=` on `/palettes`; the Programmer
   row itself lands on the window's own table. The *Applied* row that was the Programmer's child is
-  gone with its route; a row's `parent` (drawn indented, `data-nav-child`, left off a show's home)
+  gone with its route; a row's `parent` (drawn indented, `data-nav-child`, left off a project's home)
   is still honoured, and no row uses it now.
 - **The ⌘K window commands are actions, not `NavItem`s.** `useWindowCommands()` in
   `src/navigation.ts` builds ⌘K's *Screens* group from the windows registry the way
@@ -7119,20 +7119,20 @@ path may quietly change where it lands.
 
   - **The pads are the *library*, and nothing else.** A busk pad presses a **named thing from the
     library** — a palette, a Look or a cue — and nothing on this page mints one. The view used to
-    draw three pools of ad-hoc effect pads besides, a Controls pool of hold-to-slide property pads
+    draw three pools of ad-hoc FX pads besides, a Controls pool of hold-to-slide property pads
     writing straight to the programmer, and a beat-division toggle to parameterise whatever those
     minted; all of it went when the view was brought back onto its design, because a grid minting
     anonymous FX instances with their own timing model was a different gesture wearing the same
     clothes. Three things follow, and none is a bug:
-    - **Nothing on this page mints an FX instance.** An ad-hoc effect reaches the stage through a
-      Look with deferred effects, a cue, or the Programmer's `+ FX`; a raw level through an
+    - **Nothing on this page mints an FX instance.** An ad-hoc FX reaches the stage through a
+      Look with deferred FX, a cue, or the Programmer's `+ FX`; a raw level through an
       intensity palette or the Programmer.
-    - **`useSpeedMasterForFamily` lost its caller here.** The effect pads were the only surface
+    - **`useSpeedMasterForFamily` lost its caller here.** The FX pads were the only surface
       doing the busking plan's D1 stamping, and it is client-side — the backend serves `family` but
       does not resolve it. The rail's caption was reworded off the promise it could no longer keep,
       and should stay reworded: nothing on *this* page stamps a master. The hook itself was kept
       rather than deleted, and `PaletteEditor` is its caller now (see §Speed Masters).
-    - **`BuskingView` reads no target's running effects.** The eight fixed RTK Query slots that once
+    - **`BuskingView` reads no target's running FX.** The eight fixed RTK Query slots that once
       fanned the selection out (and capped it at eight targets — `FU-BUSK-TARGET-CAP`, now retired)
       went with the pads. A palette or Look pad reads the programmer's **resolved applied state**
       (`useProgrammerAppliedQuery`; the view does not subscribe to the layer stack at all), which
@@ -7263,14 +7263,14 @@ path may quietly change where it lands.
 
   **The Effects Overview panel is gone, and there are five overview panels now** — Stage,
   Fixture, Speed Masters, Cue Slots. Effects Overview held a beat dot, master 1's bpm, a TAP, a
-  running-effect count and a
+  running-FX count and a
   Kill All, and `/fx` used to force it open and its toggle inert for as long as that route was
   mounted, because the busk view had no tempo readout and no view of what was running. Both
   halves of that reason expired: the ShowBar carries the whole speed-master bank on every live
   view, each tile with its own beat dot and TAP, so the panel was a second and narrower answer
   to "what tempo is the desk at" — narrower because it only ever spoke for master 1 — and the
   busk view has a speed rail and pad presence rings besides. **The count and Kill All were not
-  moved anywhere.** What is running is listed, effect by effect and removable by name, on the
+  moved anywhere.** What is running is listed, FX by FX and removable by name, on the
   programmer's FX table and in its live editor; a "stop everything" gesture, if it is wanted
   again, belongs in the ShowBar rather than in a panel the operator has to open
   first. `store/fx.ts` (the `fxState` RTK Query wrapper) went with it — `api/fxApi` stays, since
@@ -7313,7 +7313,7 @@ path may quietly change where it lands.
   `"/programmer"` collision. The tabs premise held; the *pane* did not. Three readings
   of one object is an argument for showing them **together**, not for a switcher, and
   a collapsed pane could never do that. So: a page with room, its tables tabs of one column, and
-  the FX lens and rings draw an effect on the Values grid, where the readings meet — §The
+  the FX lens and rings draw an FX on the Values grid, where the readings meet — §The
   programmer's tables. Renaming
   Program to Show removes the near-collision outright.
 
@@ -7431,13 +7431,13 @@ path may quietly change where it lands.
 
 ### The app bar and the switcher
 
-**The app bar names the show on the rig, as a switcher** (navigation plan D1, D5, §4;
+**The app bar names the project on the rig, as a switcher** (navigation plan D1, D5, §4;
 `components/appBar/`). Left to right: the desk's friendly name (`install.friendlyName`, else
 *Lighting desk*, `lib/projectSwitch.ts`'s `deskNameOf`) small and muted with a divider, the switcher
 button, and the pin chip; the chips on the right are unchanged and never shrink. It replaced the
 hard-coded title. **On the rig is the server's `isCurrent` (P4)**: the switcher always names the
 project the list says is current, whatever the URL is viewing — the sidebar header and the
-breadcrumb name the viewed one. `document.title` is *Show · Desk name* from the same answer
+breadcrumb name the viewed one. `document.title` is *Project · Desk name* from the same answer
 (`useDocumentTitle`, mounted in `Layout`).
 
 - **The dot** (`rigDotOf`): green while sending; amber while `venue.hold` holds the current show;
@@ -7452,7 +7452,7 @@ breadcrumb name the viewed one. `document.title` is *Show · Desk name* from the
   the chevron, the name on its label and the menu's first row, because at 375 the chips leave it
   65px (246 of chips; 282 held, when *Blind · venue* joins them) and the name drew one letter; the
   pin chip from **920**, because the chips grow from 366 to 541 at 760 (`ConnectionStatus`'s label,
-  the programmer chip's) and below 920 it truncated beside a show's name. Below 620
+  the programmer chip's) and below 920 it truncated beside a project's name. Below 620
   `ConnectionStatus` already hides itself while Connected, as before.
 
 **The menu** (`SwitcherMenu`, cmdk inside a popover): *Find a show or venue*, then **On the rig**,
@@ -7477,11 +7477,11 @@ the rig and owns the switch — the switcher, ⌘K, `NotOnRig` and the Projects 
 `project` / `onClose`. Its body is mounted only while open, so a closed one subscribes to nothing,
 and it refetches the project list as it opens. Its words are **frozen at the press**: the switch's
 `projectChanged` refetches the list before `set-current` answers, and the live read would then
-describe the incoming show replacing itself while *Switching…* and the close draw. `switchConfirmOf` is the copy: *Put TCH Test on the
-rig?* — *Sleeping Beauty's cues, programmer and effects stop, and every channel goes dark except
+describe the incoming project replacing itself while *Switching…* and the close draw. `switchConfirmOf` is the copy: *Put TCH Test on the
+rig?* — *Sleeping Beauty's cues, programmer and FX stop, and every channel goes dark except
 those TCH Test parks (4).* — and a line for each consequence that applies: the incoming show is
-behind its venue on output, so it **opens held**; a **bulk lamp run** on the outgoing show is cut
-off where it is; the incoming show is **still blacked out** by *Make rig safe*, so it opens dark
+behind its venue on output, so it **opens held**; a **bulk lamp run** on the outgoing project is cut
+off where it is; the incoming project is **still blacked out** by *Make rig safe*, so it opens dark
 with *Undo* on its banner. The park count and the blackout come from the project list's `parks` and
 `safeBlackout`, two read-only fields added for this (Chris's call; nothing else the frontend read
 knew another project's parks or blackout). A desk without them says the rule with no count.

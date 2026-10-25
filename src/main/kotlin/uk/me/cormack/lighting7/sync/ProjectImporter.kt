@@ -1584,7 +1584,7 @@ class ProjectImporter(private val state: State) {
             val a = canonicalDecode(CueAttributeAssignmentJson.serializer(), json)
             val cueUuid = UUID.fromString(a.cueUuid)
             val cue = cueMap[cueUuid]
-                ?: throw ImportError.invalidArchive("Property assignment ${a.uuid} references unknown cue $cueUuid")
+                ?: throw ImportError.invalidArchive("Attribute assignment ${a.uuid} references unknown cue $cueUuid")
             val uuid = UUID.fromString(a.uuid)
             DaoCueAttributeAssignment.new {
                 this.cue = cue
@@ -1700,7 +1700,7 @@ class ProjectImporter(private val state: State) {
                 val paletteUuid = UUID.fromString(paletteUuidRaw)
                 template = paletteMap[paletteUuid]
                     ?: throw ImportError.invalidArchive(
-                        "Cue layer ${l.uuid} references unknown template $paletteUuid",
+                        "Cue layer ${l.uuid} references unknown palette $paletteUuid",
                     )
             }
             // A Look lands whole (absolute-looks plan D1): a Look layer an older desk wrote with
@@ -1739,7 +1739,7 @@ class ProjectImporter(private val state: State) {
             val stored = canonicalDecode(CueAdHocFxJson.serializer(), json)
             val cueUuid = UUID.fromString(stored.cueUuid)
             val cue = cueMap[cueUuid]
-                ?: throw ImportError.invalidArchive("Ad-hoc effect ${stored.uuid} references unknown cue $cueUuid")
+                ?: throw ImportError.invalidArchive("Ad-hoc FX ${stored.uuid} references unknown cue $cueUuid")
             val e = legacyFx("Cue '${cue.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
             val uuid = UUID.fromString(e.uuid)
             DaoCueAdHocFxEntity.new {

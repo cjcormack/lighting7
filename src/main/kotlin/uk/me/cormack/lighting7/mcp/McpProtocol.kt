@@ -55,8 +55,8 @@ class McpProtocol(private val state: State) {
 
     private val describeRigTool = ToolDef(
         name = DESCRIBE_RIG,
-        description = "Describe the rig and the show as they are now: every fixture and group, the effect " +
-            "library, running effects, parked channels, speed masters (with the uuids other tools take), looks, colour " +
+        description = "Describe the rig and the show as they are now: every fixture and group, the FX " +
+            "library, running FX, parked channels, speed masters (with the uuids other tools take), looks, colour " +
             "palettes, cues and cue stacks. Call this first in a conversation, and again after the " +
             "show changes, because every other tool refers to things by the keys and ids listed here.",
         inputSchema = buildJsonObject {

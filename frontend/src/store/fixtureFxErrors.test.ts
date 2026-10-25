@@ -39,7 +39,7 @@ describe('the fxError bridge', () => {
 
   it('collapses a burst on one effect and keeps two effects apart', () => {
     for (let i = 0; i < 10; i++) errorSubscribers[0]({ fxId: 21, code: 'FX_UPDATE_REFUSED', message: 'refused' })
-    errorSubscribers[0]({ fxId: 22, code: 'FX_NOT_FOUND', message: 'Effect 22 is not running' })
+    errorSubscribers[0]({ fxId: 22, code: 'FX_NOT_FOUND', message: 'FX 22 is not running' })
     const ids = vi.mocked(toast.error).mock.calls.map((call) => (call[1] as { id: string }).id)
     expect(new Set(ids)).toEqual(new Set([fxErrorToastId(21), fxErrorToastId(22)]))
     expect(fxErrorToastId(21)).not.toBe(fxErrorToastId(22))

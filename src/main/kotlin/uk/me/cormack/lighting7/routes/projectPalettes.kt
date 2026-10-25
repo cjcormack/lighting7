@@ -210,13 +210,13 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                 val holdsFx = template.effect != null
                 if (request.rows?.isNotEmpty() == true && holdsFx) {
                     return@transaction PaletteWriteOutcome.Invalid(
-                        "'${template.name}' holds an effect — a palette cannot hold values as " +
+                        "'${template.name}' holds an FX — a palette cannot hold values as " +
                             "well, and what it holds is fixed when it is created",
                     )
                 }
                 if (request.fx != null && !holdsFx && !template.rows.empty()) {
                     return@transaction PaletteWriteOutcome.Invalid(
-                        "'${template.name}' holds values — a palette cannot hold an effect as " +
+                        "'${template.name}' holds values — a palette cannot hold an FX as " +
                             "well, and what it holds is fixed when it is created",
                     )
                 }
@@ -1100,7 +1100,7 @@ internal fun validatePaletteContents(
     // Rule 1 (D1): a template holds a value *or* an effect. A colour *and* a chase is a Look,
     // which already holds rows plus effects and has its own busk pool.
     if (rows.isNotEmpty() && effect != null) {
-        return "A palette holds a value or an effect, never both — for both together, record a look"
+        return "A palette holds a value or an FX, never both — for both together, record a look"
     }
     if (rows.isEmpty() && effect == null) return "A palette must hold at least one value"
     if (effect != null) return validatePaletteFx(effect, registry, ownUuid, templates)
@@ -1117,7 +1117,7 @@ internal fun validatePaletteContents(
             ?: triggerPaletteRefusal(row.attribute)?.let { throw TriggerNotStorableException(it) }
             ?: commandPaletteRefusal(row.attribute)?.let { throw CommandNotStorableException(it) }
             ?: return "A palette cannot hold '${row.attribute}' — " +
-                "slotted properties (gobo, colour wheel, macros) are per-model, so they live in a " +
+                "slotted attributes (gobo, colour wheel, macros) are per-model, so they live in a " +
                 "recorded look. Palettes hold: " +
                 PaletteAttribute.entries.joinToString { it.attribute }
         val intent = parsePaletteIntent(row.value)
@@ -1156,7 +1156,7 @@ private fun duplicateRow(rows: List<PaletteRowDto>): String? {
         if (!seen.add(attribute.attribute to target)) {
             return "This palette sets ${attribute.attribute} twice" +
                 (if (target.isEmpty()) "" else " on '$target'") +
-                " — a palette holds one value per property, and the second would silently lose."
+                " — a palette holds one value per attribute, and the second would silently lose."
         }
     }
     return null
@@ -1227,15 +1227,15 @@ private fun validatePaletteFx(
     // derived families use. `controls` has no tempo, so names none; a beam effect (effects plan
     // D6) is a Beam palette.
     val family = attributeFamilyForFxFamily(effect.family)
-        ?: return "A palette cannot hold a '${effect.family}' effect — an effect palette is " +
-            "banked by family, and that category has none. Effect palettes are: " +
+        ?: return "A palette cannot hold a '${effect.family}' FX — an FX palette is " +
+            "banked by attribute family, and that FX family maps to none. FX palettes are: " +
             PALETTE_FX_FAMILIES.joinToString { it.name }
 
     // Rule 3: the library is the authority on what an effect *is*; the stored `category` is a
     // denormalisation for the family derivation and the list DTO, so it must agree or the two
     // disagree silently — the template banks under one family and runs as another.
     val registration = registry.getRegistration(effect.fxType)
-        ?: return "'${effect.fxType}' is not an effect this desk knows"
+        ?: return "'${effect.fxType}' is not an FX this desk knows"
     // Palette Steps sits in the family of the palettes it is given (effects plan §3.6, §4.4), so
     // what its category must agree with is that family's, read off the palettes themselves.
     val category = if (registration.id == PALETTE_STEPS_ID) {
@@ -1257,7 +1257,7 @@ private fun validatePaletteFx(
             return if (registration.id == SLOT_STEPS_ID) {
                 "Slot Steps in a palette must name the setting it steps — a gobo or colour wheel"
             } else {
-                "A Beam palette's effect must drive one named property — '${effect.fxType}' " +
+                "A Beam palette's FX must drive one named attribute — '${effect.fxType}' " +
                     "declares ${registration.compatibleAttributes.joinToString().ifEmpty { "none" }}"
             }
         }
@@ -1297,7 +1297,7 @@ private fun validatePaletteFx(
         val namesSelf = effect.parameters.values.any { value ->
             value.split(",").any { it.trim().equals(selfRef, ignoreCase = true) }
         }
-        if (namesSelf) return "A palette's effect cannot reference the palette itself"
+        if (namesSelf) return "A palette's FX cannot reference the palette itself"
     }
     return null
 }
@@ -1367,8 +1367,8 @@ private fun createPaletteRows(template: DaoPalette, rows: List<PaletteRowDto>) {
  */
 private fun createPaletteFx(template: DaoPalette, effect: PaletteFxDto, uuid: java.util.UUID? = null) {
     // A template's effect has no target of its own: it lands on the selection.
-    TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "effect")))
-    CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "effect")))
+    TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "FX")))
+    CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "FX")))
     DaoPaletteFxEntity.new {
         if (uuid != null) this.uuid = uuid
         this.palette = template
@@ -1465,7 +1465,7 @@ private fun describePaletteUse(
     val parts = buildList {
         if (usage.layerCount > 0) add(usage.describe())
         if (fxReferenceCount > 0) {
-            add(if (fxReferenceCount == 1) "1 effect parameter" else "$fxReferenceCount effect parameters")
+            add(if (fxReferenceCount == 1) "1 FX parameter" else "$fxReferenceCount FX parameters")
         }
         // Phrased as a state rather than a count: an operator does not think of the programmer as
         // holding "2 layers", they think of the template as being up right now.
@@ -1715,7 +1715,7 @@ private fun resolvePaletteAgainstPatch(
             } else {
                 describeNote(resolution.note)
             }
-            // A cell names itself by its parent and position (`Shehds 1 · Cell 2`) and carries its
+            // A cell names itself by its parent and position (`Shehds 1 · Element 2`) and carries its
             // parent's type, so the panel's two lines read as they do for a whole head.
             val element = head as? FixtureElement<*>
             val fixture = element?.parentFixture ?: head as? Fixture
@@ -1726,7 +1726,7 @@ private fun resolvePaletteAgainstPatch(
                 PaletteResolutionDto(
                     fixtureKey = head.targetKey,
                     fixtureName = if (element != null) {
-                        "${element.parentFixture.fixtureName} · Cell ${element.elementIndex + 1}"
+                        "${element.parentFixture.fixtureName} · Element ${element.elementIndex + 1}"
                     } else {
                         fixture?.fixtureName ?: head.displayName
                     },

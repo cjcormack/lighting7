@@ -370,7 +370,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
     fun `describe_rig names a multi-head fixture's cells by key`() {
         patchShehds()
         val rig = RigBriefing(state).describeRig()
-        assertTrue("cells=3 (`shehds-1.zone-1` … `shehds-1.zone-3`)" in rig, rig)
+        assertTrue("elements=3 (`shehds-1.zone-1` … `shehds-1.zone-3`)" in rig, rig)
     }
 
     @Test

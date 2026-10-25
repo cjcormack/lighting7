@@ -82,7 +82,7 @@ internal fun Route.routeApiRestFx(state: State) {
                     ),
                 )
                 FxUpdateOutcome.NotFound ->
-                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found", CODE_FX_NOT_FOUND))
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("FX not found", CODE_FX_NOT_FOUND))
                 is FxUpdateOutcome.Refused ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, CODE_FX_UPDATE_REFUSED))
                 is FxUpdateOutcome.Conflict ->
@@ -95,7 +95,7 @@ internal fun Route.routeApiRestFx(state: State) {
             when (val outcome = state.show.programmerLayerStack.resetFxToPalette(resource.parent.id)) {
                 is ResetToPaletteOutcome.Reset -> call.respond(state.show.fxEngine.fxDto(outcome.instance))
                 ResetToPaletteOutcome.NotFound ->
-                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Effect not found", CODE_FX_NOT_FOUND))
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("FX not found", CODE_FX_NOT_FOUND))
                 is ResetToPaletteOutcome.Refused ->
                     call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.message, outcome.code))
             }
@@ -384,7 +384,7 @@ internal fun applyFxUpdate(state: State, fxId: Long, request: UpdateFxRequest): 
             FxUpdateOutcome.Split(edited = named.mapNotNull { engine.updateFx(it.id, edit) }, rest = rest)
         }
     } catch (e: Exception) {
-        FxUpdateOutcome.Refused(e.message ?: "Failed to update effect")
+        FxUpdateOutcome.Refused(e.message ?: "Failed to update FX")
     }
 }
 
@@ -477,7 +477,7 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
         if (newSeconds == false && kind == TimingSource.WALL_CLOCK && newRateSpeedMaster == null &&
             existing.rateSpeedMasterUuid == null
         ) {
-            return refused("seconds: false on a wall-clock effect names its master — send rateSpeedMasterUuid")
+            return refused("seconds: false on a wall-clock FX names its master — send rateSpeedMasterUuid")
         }
 
         // A split cannot spread the shape over some heads: each split-off head runs alone. Refused
@@ -495,8 +495,8 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
             }
             if (shapeMoved.isNotEmpty()) {
                 return refused(
-                    "${shapeMoved.joinToString(", ")} spread the effect over all its heads, and the heads " +
-                        "split off here would each run alone — select every head the effect runs on to change it",
+                    "${shapeMoved.joinToString(", ")} spread the FX over all its heads, and the heads " +
+                        "split off here would each run alone — select every head the FX runs on to change it",
                 )
             }
         }
@@ -528,7 +528,7 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
             splitHeads,
         )
     } catch (e: Exception) {
-        refused(e.message ?: "Failed to update effect")
+        refused(e.message ?: "Failed to update FX")
     }
 }
 
@@ -667,7 +667,7 @@ private fun createTargetFromRequest(
     outputType: FxOutputType?,
 ): FxTarget {
     request.targets?.let { return createTargetFromList(it, request.attribute, state, outputType) }
-    require(request.fixtureKey.isNotBlank()) { "Name the effect's fixtureKey, or its targets" }
+    require(request.fixtureKey.isNotBlank()) { "Name the FX's fixtureKey, or its targets" }
     // `untypedGroupableFixture`, as `FxSpawner.createFixtureTargetForCue` does: the two doors
     // must build the same target for the same cell, and the factory's fallback reads its catalogue.
     val fixture = try {
@@ -703,9 +703,9 @@ private fun createTargetFromList(
     require(problems.isEmpty()) { problems.joinToString("; ") }
     val target = FxTargetsRef.of(refs)
     // No effect may drive a one-shot trigger or a fixture command on anything the list names.
-    TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "effect")
+    TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "FX")
         ?.let { throw TriggerNotStorableException(it) }
-    CommandIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "effect")
+    CommandIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "FX")
         ?.let { throw CommandNotStorableException(it) }
     val fxTarget = when (target) {
         is FxTargetsRef.Selection -> FxSpawner.createSelectionTarget(state, target, attribute, outputType)

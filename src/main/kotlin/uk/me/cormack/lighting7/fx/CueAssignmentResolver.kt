@@ -9,7 +9,7 @@ import java.awt.Color
  * Cue-layer composition resolver — merges [CueAttributeAssignment] rows from active cues
  * into a per-(target, property) value stream that [LayerResolver] consumes.
  *
- * See `docs/lighting-composition-model.md` §"Layer 4 — Cue Property Assignments".
+ * See `docs/lighting-composition-model.md` §"Tier 4 — Cue attribute assignments".
  */
 class CueAssignmentResolver {
 

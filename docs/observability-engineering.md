@@ -144,7 +144,7 @@ in-process Sentry whose transport sends nothing (`withTestSentry`).
 |---|---|---|---|
 | A call under `/api/`, `/mcp`, `/oauth/`, `/.well-known/` | `http.server` | `plugins/SentryTracing.kt` | DB, outbound HTTP, the operations below |
 | A gesture WS frame | `websocket.message` | `traceMessage` in the socket loop | the same |
-| Boot | `app.boot` | `module()` | `boot.phase` `starting` (with `db.init`, recorded before Sentry started), `show_init` (with `fx.compile`, a child per effect whose `cache` is `memory`, `disk` or `compiled`: the
+| Boot | `app.boot` | `module()` | `boot.phase` `starting` (with `db.init`, recorded before Sentry started), `show_init` (with `fx.compile`, a child per FX whose `cache` is `memory`, `disk` or `compiled`: the
 parallel workers' threads hold no scope, so the cache lookup is this attribute rather than a
 `cache.get` span), `fixtures` (`show.fixtures`, `show.prewarm`), `mdns` |
 | Cue GO | `cue.go` | `CueStackManager.activateEntry` | `cue.compose`, `cue.spawn`, `scenery.resolve`, `cue.events` |
@@ -376,7 +376,7 @@ those do nothing until a client exists.
 | What | From |
 |---|---|
 | Issues | uncaught errors and rejections; `FeatureErrorBoundary`, through `captureReactException` with the tag `feature` (`This page`, `The script editor`) and the component stack; the root `ErrorBoundary` in `App` for what no feature boundary contains |
-| Transactions | a page load and each navigation, named by route pattern (`/projects/:projectId/busk`); fetch spans under them; a `websocket.request` span per `programmer.keyStack` or `programmer.clearTarget` round trip, only under an open page transaction (`onlyIfParent`), since the key-stack view asks once per property |
+| Transactions | a page load and each navigation, named by route pattern (`/projects/:projectId/busk`); fetch spans under them; a `websocket.request` span per `programmer.keyStack` or `programmer.clearTarget` round trip, only under an open page transaction (`onlyIfParent`), since the key-stack view asks once per attribute |
 | Sessions | one per page load (the SDK's `page` lifecycle), so browser release health counts page loads |
 | Breadcrumbs | the SDK's (clicks, console, fetch, history); the socket's open, close with its code, and reconnects; and one per Redux action, carrying its type and RTK Query endpoint but never a payload — a query's is its whole response — and not RTK Query's per-frame bookkeeping (`queryResultPatched`, subscriptions, config) |
 | Replays | a page load that errors, from up to a minute before the error; a tenth of page loads whole outside `release` (§"Replay") |
@@ -515,7 +515,7 @@ Replay, feedback and metrics, measured on a test desk with 11.7.0 (2026-10-13):
   room, but a much larger rig drawing more DOM than the busk view's tiles scales that segment with it.
 - **Replay, recording** (the rest of a session that has errored, or a sampled whole session): a
   segment every ~5.5 s while anything changes. Idle, 0.3–1.7 kB; on the busk view with six heads
-  under two effects, ~7 kB a segment (~205 rrweb events, ~120 kB raw), about 1.3 kB/s or 4.6 MB an
+  under two FX, ~7 kB a segment (~205 rrweb events, ~120 kB raw), about 1.3 kB/s or 4.6 MB an
   hour, almost all of it live tiles. A replay session lasts at most an hour and lapses after
   15 minutes idle; each new one is sampled again, and it is kept per tab across reloads.
 - **How many replays.** In `release`, one per replay session that errors. In `development`, a tenth

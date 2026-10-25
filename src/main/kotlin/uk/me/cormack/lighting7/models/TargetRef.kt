@@ -106,7 +106,7 @@ sealed class FxTargetsRef {
             targets.singleOrNull()?.let { Single(it) } ?: Selection(targets)
 
         fun of(type: String, key: String): FxTargetsRef =
-            ofOrNull(type, key) ?: throw IllegalArgumentException("Unknown effect target '$type' (key='$key')")
+            ofOrNull(type, key) ?: throw IllegalArgumentException("Unknown FX target '$type' (key='$key')")
 
         /** A one-item selection is read as its one target, so the two never differ in what they mean. */
         fun ofOrNull(type: String, key: String): FxTargetsRef? =

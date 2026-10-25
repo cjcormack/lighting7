@@ -127,7 +127,7 @@ internal class ProgrammerTools(private val state: State) {
             val cleared = clearProgrammerCompletely(state, fadeMs)
             return ToolExecutionResult(
                 success = true,
-                description = "Cleared the programmer — ${cleared.entryCount} value(s), ${cleared.fxCleared} effect(s)",
+                description = "Cleared the programmer — ${cleared.entryCount} value(s), ${cleared.fxCleared} FX",
                 result = buildJsonObject {
                     put("valuesCleared", cleared.entryCount)
                     put("fxCleared", cleared.fxCleared)
@@ -155,7 +155,7 @@ internal class ProgrammerTools(private val state: State) {
         return ToolExecutionResult(
             success = failed.isEmpty(),
             description = if (failed.isEmpty()) {
-                "Cleared ${answers.sumOf { it.values }} value(s) and ${answers.sumOf { it.fx }} effect(s) " +
+                "Cleared ${answers.sumOf { it.values }} value(s) and ${answers.sumOf { it.fx }} FX " +
                     "on ${targets.joinToString { it.key }}"
             } else {
                 failed.joinToString("; ")
@@ -304,7 +304,7 @@ internal class ProgrammerTools(private val state: State) {
                 ToolExecutionResult(
                     success = true,
                     description = if (response.fxIds.isNotEmpty()) {
-                        "Started ${response.fxIds.size} copy(ies) of '${found.source.name}''s effect"
+                        "Started ${response.fxIds.size} copy(ies) of '${found.source.name}''s FX"
                     } else {
                         "Applied '${found.source.name}': ${response.written} value(s)" +
                             (if (response.skipped.isNotEmpty()) ", ${response.skipped.size} skipped" else "")

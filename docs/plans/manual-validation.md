@@ -18,21 +18,21 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-TABLES-COLOURS-S5`](#fu-manual-tables-colours-s5) | colour everywhere else at the desk: the busk rig's tile bands and the Stage view's labels and *Bodies · By colour* in a blacked-out room, a second screen set to *By colour* from the Screens sheet, the DMX footprints and a surface's labels, and whether cyan reads as a cue on the rig | Tables and colours S5, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S4`](#fu-manual-tables-colours-s4) | colour in the tables at the desk: the Colour column's keymap and popover on the desk and the iPad, the name mark readable on the desk's two screens and the iPad in a dark room and in light, *Colour from group*, and a venue patch recoloured from a show and taken back | Tables and colours S4, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S3`](#fu-manual-tables-colours-s3) | a colour set on a venue patch and group from a show is the show's recolour, survives a publish of the venue's own recolour, and is taken back; a venue colour change holds no show | Tables and colours S3, 2026-10-19 |
-| [`FU-MANUAL-TABLES-COLOURS-S2`](#fu-manual-tables-colours-s2) | the programmer's FX lens and dock at the desk: a held-back effect's chip struck through with the right reason (your value, Blind, a stomp), the chip opening the live editor, an FX row's cells ringed on Values, the Colour · Spread dock in every arm with the grid's selection kept, the tables carrying everything the rail's lists did, and the phone's tab segment | Tables and colours S2, 2026-10-19 |
+| [`FU-MANUAL-TABLES-COLOURS-S2`](#fu-manual-tables-colours-s2) | the programmer's FX lens and dock at the desk: a held-back FX's chip struck through with the right reason (your value, Blind, a stomp), the chip opening the live editor, an FX row's cells ringed on Values, the Colour · Spread dock in every arm with the grid's selection kept, the tables carrying everything the rail's lists did, and the phone's tab segment | Tables and colours S2, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S1`](#fu-manual-tables-colours-s1) | the programmer's Values · Stack · FX · Scenery tabs on the desk, the iPad frame and a second screen: the grid keeps its selection across a switch, the Stack table reorders the rig's layers and points the grid at one, and the Screens sheet and ⌘K set the tab | Tables and colours S1, 2026-10-18 |
 | [`FU-MANUAL-SHOWSOUND-BEAMRING`](#fu-manual-showsound-beamring) | the Show-Sound LEDBEAMRING's channels do what its hand-written ChamSys head file says — the colour wheel, gobos, prism, strobe bands, reset and pan front — and the Stage view's ring matches the unit's: colour band, chases, speed, and whether the dimmer reaches it | Show-Sound LEDBEAMRING type, 2026-10-18 |
 | [`FU-MANUAL-VENUE-VISIT-R3-8`](#fu-manual-venue-visit-r3-8) | into the cue editor at the desk — a palette and a Look pressed into Q4's cells and Looks tab while the show runs locked-then-unlocked move nothing on stage, Blue takes Red's heads in the stored cue, the next GO lands them, and a layer's delay and master set from its settings popover take effect on that GO | Venue-visit R3.8, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-3`](#fu-manual-venue-visit-att-3) | *Attach to venue…* reads and works on the desk's two screens and the iPad: its pick, its review's groups and answers at each width, and a real attach of a running show end to end that closes on its home with the pin | Venue visit Att.3, 2026-10-17 |
-| [`FU-MANUAL-VENUE-VISIT-S12`](#fu-manual-venue-visit-s12) | real movers fan out and back in about their own positions from the programmer's Spread, the busk Spread tab and an X-Touch encoder — the middle head still, a group in its member order, Live never fanning a fan, a typed Look's rows the start of a fan into it | Venue visit S12, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-S12`](#fu-manual-venue-visit-s12) | real movers fan out and back in about their own positions from the programmer's Fan, the busk Fan tab and an X-Touch encoder — the middle head still, a group in its member order, Live never fanning a fan, a typed Look's rows the start of a fan into it | Venue visit S12, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S13`](#fu-manual-venue-visit-s13) | on the Plan the movers land where the operator clicks — downstage at head height and in the house above the seats — and *Aim…* in a position cell's popup aims the cell's heads at a typed point | Venue visit S13, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-7`](#fu-manual-venue-visit-r1-7) | Claude, over MCP on a real show, builds a stack that shares a cue with another stack — one cue, two numbered places, an edit showing in both — moves an entry with its number and anchor, and deletes a cue only after naming its pad and asking | Venue visit R1.7, 2026-10-17 |
-| [`FU-MANUAL-VENUE-VISIT-R3-7`](#fu-manual-venue-visit-r3-7) | the busk side sheets at the desk — each family tab (Level, Colour, Position, Beam) presses its palettes and starts its effects over the busk selection on the busk screen and the iPad, the Position tab's pad moves the selected heads, the strip's eight tabs fit the sheet's floor, and a split from the Effects tab on a running chase leaves no head jumping | Venue-visit R3.7, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-R3-7`](#fu-manual-venue-visit-r3-7) | the busk side sheets at the desk — each family tab (Level, Colour, Position, Beam) presses its palettes and starts its FX over the busk selection on the busk screen and the iPad, the Position tab's pad moves the selected heads, the strip's eight tabs fit the sheet's floor, and a split from the FX tab on a running chase leaves no head jumping | Venue-visit R3.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-2`](#fu-manual-venue-visit-att-2) | a running show detached from a trial venue and attached back at the same version moves no channel, its Patch list, hides and parks as before the detach, and one attached at an older version runs against it rather than going dark | Venue visit Att.2, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-6`](#fu-manual-venue-visit-r1-6) | a cue with a cannon event and a scenery change copied from Panto 2027 into Christmas Concert 2026 on the Commemoration Hall, one version apart, fires the hall's cannon and moves the hall's tabs | Venue visit R1.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-5`](#fu-manual-venue-visit-r1-5) | the Cues table on a real show lists every cue once, its live dot follows a GO and a busk press, it honours the show-editing lock while the show runs, a loose cue's pad opens it filtered, and a two-cue delete names the real pad and binding | Venue visit R1.5 (filed at K4), 2026-10-17 |
-| [`FU-MANUAL-VENUE-VISIT-R4-5`](#fu-manual-venue-visit-r4-5) | a stack's FX size on the rig — at 50 % a cue's chase runs at half its weight over what is underneath while another stack's effects and the programmer's run whole, the X-Touch fader and the phone runner move it with the Show view, a reload keeps it and a project switch puts it back to full | Venue visit R4.5 (filed at K4), 2026-10-17 |
-| [`FU-MANUAL-VENUE-VISIT-R4-4`](#fu-manual-venue-visit-r4-4) | effects fade with their cue on the rig — over a 3 s GO the outgoing chase shrinks to nothing as the incoming grows, an effect both cues run carries on untouched, an effect-only cue fades, and a pad pressed at a programmer fade grows its effect | Venue visit R4.4 (filed at K4), 2026-10-16 |
-| [`FU-MANUAL-VENUE-VISIT-R3-6`](#fu-manual-venue-visit-r3-6) | effects in the popup at the desk — a cell's Effects band lights what runs on its heads on the desk and on the iPad's bottom sheet, *+ Effect* over four hexes starts one chase and takes them off the colour effect they ran, and an edit for two heads of a running chase splits them off with no head jumping | Venue-visit R3.6, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-R4-5`](#fu-manual-venue-visit-r4-5) | a stack's FX amount on the rig — at 50 % a cue's chase runs at half its weight over what is underneath while another stack's FX and the programmer's run whole, the X-Touch fader and the phone runner move it with the Show view, a reload keeps it and a project switch puts it back to full | Venue visit R4.5 (filed at K4), 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-R4-4`](#fu-manual-venue-visit-r4-4) | FX fade with their cue on the rig — over a 3 s GO the outgoing chase shrinks to nothing as the incoming grows, an FX both cues run carries on untouched, an FX-only cue fades, and a pad pressed at a programmer fade grows its FX | Venue visit R4.4 (filed at K4), 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R3-6`](#fu-manual-venue-visit-r3-6) | FX in the popup at the desk — a cell's FX band lights what runs on its heads on the desk and on the iPad's bottom sheet, *+ FX…* over four hexes starts one chase and takes them off the colour FX they ran, and an edit for two heads of a running chase splits them off with no head jumping | Venue-visit R3.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S16`](#fu-manual-venue-visit-s16) | a cue's speed masters set the rig's tempo on every GO, GO TO and GO BACK into it, from either stack it sits in and from a busk pad, a tap afterwards wins until the next cue, and a sync pull mid-show keeps the tap | Venue visit S16, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R3-5`](#fu-manual-venue-visit-r3-5) | the palette popup and the one picker at the desk — a dimmer, zoom and colour cell each offer their family's palettes round the editor on the desk and in the iPad's bottom sheet, a band press lands on the cells under the cell's family, a press from the picker leaves it open, and the Stack table's *+ Look or palette* presses onto the selection | Venue-visit R3.5, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | *superseded by `FU-MANUAL-TABLES-COLOURS-S1`, which runs its checks on the programmer's tabs* — the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
@@ -40,26 +40,26 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-8`](#fu-manual-venue-visit-r2-8) | the Stage view pointed at Q7 by its editor's *Show on stage* while Q1 is live draws Q7's state, levels and scenery, follows an edit to Q7 within a moment, moves to Q9 on Q9's toggle and back to Output on a second press, and nothing on the rig moves throughout | Venue visit R2.8, 2026-10-17 |
-| [`FU-MANUAL-VENUE-VISIT-R2-7`](#fu-manual-venue-visit-r2-7) | a dimmer edited in Q4's Values grid while Q4 is live marks it *Edited since GO* and moves nothing, and *Update stage* fades the rig to the edit over Q4's own fade — an edited effect running on in phase — and clears the mark | Venue visit R2.7, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-R2-7`](#fu-manual-venue-visit-r2-7) | a dimmer edited in Q4's Values grid while Q4 is live marks it *Edited since GO* and moves nothing, and *Update stage* fades the rig to the edit over Q4's own fade — an edited FX running on in phase — and clears the mark | Venue visit R2.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-6`](#fu-manual-venue-visit-r2-6) | Q1's Looks reordered and one switched off, and a Pulse added in draft on its FX tab, move nothing on the rig — the next GO into Q1 lands the new order, leaves the disabled Look off and runs the Pulse — while a locked ⌫ on either tab asks to unlock and never goes back a cue | Venue visit R2.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-5`](#fu-manual-venue-visit-r2-5) | an edit in Q1's Values grid over the Scrim Look moves nothing on the rig, and the next GO into Q1 lands it — the Orbits at 80 % — while ⌫ gives the cell back to the Look (locked, it asks to unlock and never goes back a cue) and Undo puts the list back | Venue visit R2.5, 2026-10-16 |
-| [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local FX follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour FX on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a per-head-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-3`](#fu-manual-venue-visit-nav-3) | the app bar's switcher names the show on the rig and reads its state — amber while held, a hollow ring under *Make rig safe*'s blackout — and its confirmation counts the incoming show's parks, which hold their levels through the switch | Venue visit Nav.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-3`](#fu-manual-venue-visit-r3-3) | one press on every door at the desk — a chip's tap puts a layer on and Blue then takes Red's heads, ⌥click sets values, a hold on the iPad opens the menu and never presses, Detach leaves the stage still, and a focused Look takes a palette's values | Venue-visit R3.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-3`](#fu-manual-venue-visit-r2-3) | *Blind edit* on a locked, running show puts nothing on stage, *← Show* lands back on the cue that was opened, *Duplicate* puts the copy at the end of its stack, and a cue's *Delete…* lists its busk pad before it goes | Venue visit R2.3, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4) | a cue shared between two stacks on the rig changes in both from one edit, a stack deleted leaves its cues, removing the live cue from its stack changes nothing until the next GO fires the one after it, and deleting a cue in use lists everything that names it | Venue visit R1.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-3`](#fu-manual-venue-visit-r1-3) | a show syncs across the cue-entries bump on one desk and pulls whole on a second — every stack, number, follow, marker and anchor where it was — and a cue inserted into one gap on both desks lands in the same order on both after they sync | Venue visit R1.3, 2026-10-16 |
-| [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other property still locates open white | Venue visit S8, 2026-10-15 |
-| [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an effect's Size, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
-| [`FU-MANUAL-VENUE-VISIT-R4-3`](#fu-manual-venue-visit-r4-3) | one effect over a hand selection on the rig — eight loose pars and a group of four ripple as one chase in the order picked, a head named twice runs once, and the chase records into a cue and a Look and comes back as one | Venue visit R4.3, 2026-10-16 |
-| [`FU-MANUAL-VENUE-VISIT-R4-2`](#fu-manual-venue-visit-r4-2) | the spread's shape on the rig — Spread 50 % tightens a chase into half a cycle, two wings ripple from both ends, blocks of three move as threes, groups of two alternate odd and even, and the editor's dials match what the heads do | Venue visit R4.2, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-S8`](#fu-manual-venue-visit-s8) | a mover's stored locate — set from where it is focused, coarse and fine — is where Locate lands it, each head of a bar at its own, a show's override leaves the venue's alone, and every other attribute still locates open white | Venue visit S8, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R4-1`](#fu-manual-venue-visit-r4-1) | an FX's Amount, Direction and Runs on the rig — a Replace dimmer at 50 % sits halfway over the level underneath, an Around circle at 50 % has half its radius, Colour Cycle runs backward and bounces, and a one-shot chase ripples once and hands every head back | Venue visit R4.1, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R4-3`](#fu-manual-venue-visit-r4-3) | one FX over a hand selection on the rig — eight loose pars and a group of four ripple as one chase in the order picked, a head named twice runs once, and the chase records into a cue and a Look and comes back as one | Venue visit R4.3, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R4-2`](#fu-manual-venue-visit-r4-2) | the spread's shape on the rig — Spread 50 % tightens a chase into half a cycle, two wings ripple from both ends, segments of three move as threes, parts of two alternate odd and even, and the editor's dials match what the heads do | Venue visit R4.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R1-2`](#fu-manual-venue-visit-r1-2) | one cue held by two stacks stays on stage as one of them steps on, a busk cue pad pressed over a running stack wins on the rig and reads solid, and the same cue live only in the stack reads as an outline | Venue visit R1.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
-| [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say effects are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
-| [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the cells as the Stage view draws them | Venue visit S9, 2026-10-15 |
-| [`FU-MANUAL-VENUE-VISIT-S7`](#fu-manual-venue-visit-s7) | a group dragged into a new order in its sheet runs its chases and its spreads in that order on the rig, and a venue's group in a show cannot be reordered from there | Venue visit S7, 2026-10-15 |
-| [`FU-MANUAL-VENUE-VISIT-S15`](#fu-manual-venue-visit-s15) | an effect on *Seconds* holds its speed through a tempo change on the rig, keeps its speed as it moves on and off a master, records and replays as it ran, and a new effect starts one bar on its family's master | Venue visit S15, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say FX are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
+| [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the elements as the Stage view draws them | Venue visit S9, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-S7`](#fu-manual-venue-visit-s7) | a group dragged into a new order in its sheet runs its chases and its fans in that order on the rig, and a venue's group in a show cannot be reordered from there | Venue visit S7, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-S15`](#fu-manual-venue-visit-s15) | an FX on *Seconds* holds its speed through a tempo change on the rig, keeps its speed as it moves on and off a master, records and replays as it ran, and a new FX starts one bar on its family's master | Venue visit S15, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11) | position reads and types centre-relative everywhere on the rig — 0 is the centre of travel on every mover, a generic `pos:` palette lands two models at the same share of travel, and an old degree palette still lands where it did until it is edited | Venue visit S11, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-2`](#fu-manual-venue-visit-r2-2) | a one-value edit to a real show's cue reaches its repo as one changed record — the sync status, the working tree's diff and the history all naming the one row | Venue visit R2.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S6`](#fu-manual-venue-visit-s6) | the end of the night on the rig — *Make rig safe* douses every lamp and blacks out, *Undo* strikes them one at a time once each can restrike, the Robe's estimated 5-minute restrike holds, and the Windows desk quits cleanly with its launcher and tray icon gone | Venue visit S6, 2026-10-15 |
@@ -75,7 +75,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3) | Extract on a clone of project 9 outputs the same channels on the same nodes as project 9, and a show's hide and key rules hold on the hall's rig | Venue S3, 2026-10-11 |
 | [`FU-MANUAL-VENUE-S1`](#fu-manual-venue-s1) | project 9 loads, patches, focuses and syncs as it did before the rig scope — the check to run before anything is extracted | Venue S1, 2026-10-11 |
 | [`FU-MANUAL-SCRIM-ESTIMATES`](#fu-manual-scrim-estimates) | the scrim plan's estimates read right on the desk's own GPU — the nets' thread share, the threads' wrap and glow and muslin's τ, judged by eye on SwiftShader and kept — and a far-side seat flags a gauze where the centre seat does not | Scrim S6, 2026-10-10 |
-| [`FU-MANUAL-FIXTURE-FX-SHEETS`](#fu-manual-fixture-fx-sheets) | the fixture sheet says who drives each value, clears it, and edits effects live on the rig — a hand-set position over an orbiting Circle, a cue Pulse held back and let go in phase, four heads of a bar, a group row, the busk Effects tab's *edited* and Update palette, and the phone's bottom sheet on an iPhone | Fixture and FX sheets S2–S6, 2026-10-08 |
+| [`FU-MANUAL-FIXTURE-FX-SHEETS`](#fu-manual-fixture-fx-sheets) | the fixture sheet says who drives each value, clears it, and edits FX live on the rig — a hand-set position over an orbiting Circle, a cue Pulse held back and let go in phase, four heads of a bar, a group row, the busk FX tab's *edited* and Update palette, and the phone's bottom sheet on an iPhone | Fixture and FX sheets S2–S6, 2026-10-08 |
 | [`FU-MANUAL-SCENERY-DEVICES`](#fu-manual-scenery-devices) | scenery's whole round trip — held, recorded, edited in the cue table and the book, called on GO — works on an iPhone, an iPad and the desk, by touch where touch is all there is | Scenery programmer S5, 2026-10-07 |
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched and the haze split at up to eight cloths | Stage view S3 · S6, 2026-09-30; scrim S5, 2026-10-10 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
@@ -92,10 +92,10 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-MULTI-SCREEN-S2`](#fu-manual-multi-screen-s2) | windows have names, and one screen moves another — the two-tab browser half of steps 1, 2, 4 and 6 and the close-a-window extra were run in review; the tray launch, the iPad, Keyboard Lock, *Open on Display N*, Safari and the duplicated tab are the desk's | Multi-screen S2, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S1`](#fu-manual-multi-screen-s1) | a marquee on one screen is a masked press on the other — the X-Touch and iPad steps; the browser steps were run in review | Multi-screen S1, 2026-09-16 |
 | [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
-| [`FU-MANUAL-DESK-S2A`](#fu-manual-desk-s2a) | the programmer stack composes on a rig — live retune, a layer dragged under a running effect, second-tab agreement | Desk simplification S2a, 2026-08-23 |
+| [`FU-MANUAL-DESK-S2A`](#fu-manual-desk-s2a) | the programmer stack composes on a rig — live retune, a layer dragged under a running FX, second-tab agreement | Desk simplification S2a, 2026-08-23 |
 | [`FU-MANUAL-DESK-S2B`](#fu-manual-desk-s2b) | the Run/Show merge's edit lock protects a running show, and off-playhead browsing is safe | Desk simplification S2b, 2026-08-23 |
-| [`FU-MANUAL-DESK-S3`](#fu-manual-desk-s3) | one template resolves per head across three colour types, two tilt ranges and a white/amber policy | Desk simplification S3, 2026-08-23 |
-| [`FU-MANUAL-FX-TEMPLATE-COLOUR`](#fu-manual-fx-template-colour) | a running effect follows the template its parameter names | Palette removal, 2026-08-24 |
+| [`FU-MANUAL-DESK-S3`](#fu-manual-desk-s3) | one palette resolves per head across three colour types, two tilt ranges and a white/amber policy | Desk simplification S3, 2026-08-23 |
+| [`FU-MANUAL-FX-TEMPLATE-COLOUR`](#fu-manual-fx-template-colour) | a running FX follows the palette its parameter names | Palette removal, 2026-08-24 |
 | [`FU-MANUAL-PALETTE-TOURING`](#fu-manual-palette-touring) | a Look edit moves a live cue — **core case closed 2026-08-22**, three extensions still unseen | Programmer S4, 2026-08-14; re-scoped Looks S1, 2026-08-21 |
 | [`FU-MANUAL-LAYER-PRECEDENCE`](#fu-manual-layer-precedence) | layered intensity is later-wins, not HTP — **core case closed 2026-08-22**, the cross-cue, amount and blend-mode extensions still unseen | Looks S1, 2026-08-21 |
 | [`FU-MANUAL-EDITOR-INPROCESS`](#fu-manual-editor-inprocess) | in-process editor compiles don't stutter live output | KCS retire, 2026-08-18 |
@@ -107,7 +107,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-DEAD-ASSIGNMENTS`](#fu-manual-dead-assignments) | dead markers render after a fixture rename | Cue-authoring P6 |
 | [`FU-MANUAL-RUN-STATE-TWO-SESSIONS`](#fu-manual-run-state-two-sessions) | desk, tablet and MIDI surface agree on what GO fires | Server-owned Next, 2026-08-20 |
 | [`FU-MANUAL-CROSSFADE-C3`](#fu-manual-crossfade-c3) | crossfades stay smooth and provenance names the right cue after the C3 republish rework | Sweep C3, 2026-08-26 |
-| [`FU-MANUAL-WALLCLOCK-RATE`](#fu-manual-wallclock-rate) | an unassigned wall-clock effect no longer follows master 1's tempo | Sweep C6, 2026-08-26 |
+| [`FU-MANUAL-WALLCLOCK-RATE`](#fu-manual-wallclock-rate) | an unassigned wall-clock FX no longer follows master 1's tempo | Sweep C6, 2026-08-26 |
 | [`FU-MANUAL-RECONNECT-RESYNC`](#fu-manual-reconnect-resync) | a widened reconnect resync heals a slept tab without a refetch storm | Frontend sweep, 2026-08-29 |
 | [`FU-MANUAL-WS-SINGLE-PARSE`](#fu-manual-ws-single-parse) | the single-parse WS seam loses no frame on any bridge | Frontend sweep, 2026-08-29 |
 | [`FU-MANUAL-SAVELOOK-INVALIDATION`](#fu-manual-savelook-invalidation) | a layer-scope drag stays smooth, and a Look rename or delete still refreshes the library | Frontend sweep, 2026-08-30 |
@@ -127,16 +127,16 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-CHANNEL-THROTTLE`](#fu-manual-channel-throttle) | the channel stream still settles on its final value once the idle interval stops ticking | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-PALETTE-COLD-OPEN`](#fu-manual-palette-cold-open) | the first ⌘K of a session opens fully populated, not empty | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-RENDER-IDENTITY`](#fu-manual-render-identity) | the newly-stabilised render inputs still track the desk — GO, a mid-fade reorder, the phone runner, the pads' layer ring | Frontend sweep, 2026-08-31 |
-| [`FU-MANUAL-FX-BADGE-COUNTS`](#fu-manual-fx-badge-counts) | the "N FX" badges still count what the per-target endpoints counted, indirect group effects included | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-FX-BADGE-COUNTS`](#fu-manual-fx-badge-counts) | the "N FX" badges still count what the per-target endpoints counted, indirect group FX included | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-STAGE-BUFFER-UPLOADS`](#fu-manual-stage-buffer-uploads) | the 3D stage still draws every beam, pool and pixel wash now that only written buffers upload | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-SIGNATURE-CACHE`](#fu-manual-signature-cache) | programmer cells still repaint when a value moves, now that the diff trusts a cached signature | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-CHANNEL-VALUE-HOOK`](#fu-manual-channel-value-hook) | raw channel sliders still track the rig and still write, with the per-channel RTK cache gone | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-BEAT-PRUNE`](#fu-manual-beat-prune) | beat indicators and the stage's derived sources survive the shared keyed-subscription pool | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-PROMPTBOOK-RELOCK`](#fu-manual-promptbook-relock) | the prompt book's idle re-lock still catches every edit, and the rail still opens the right cards | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-BUSK-VIEW`](#fu-manual-busk-view) | the Busk view is a place an operator can run a show from, and a follower tracks its leader | Busking view, 2026-09-01 |
-| [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
+| [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
-| [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+| [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
 
 ---
 
@@ -201,14 +201,14 @@ master 1:
    off. Undo from the toast puts the layers back as they were before that press.
 3. **A Look from the picker.** In the Looks tab press *+ Look*, then *Warm* in the picker: a *Warm*
    layer is added and the picker stays open. Nothing on stage moves.
-4. **A bare effect.** In a hex dimmer cell's popup press *+ Effect…* and tap *Pulse*: Q4's FX tab
-   lists a stored Pulse, and nothing on stage pulses. The cell's Effects band then lists it, without
+4. **A bare FX.** In a hex dimmer cell's popup press *+ FX…* and tap *Pulse*: Q4's FX tab
+   lists a stored Pulse, and nothing on stage pulses. The cell's FX band then lists it, without
    opening it.
 5. **Timing.** In the Looks tab open *Warm*'s settings (the *Mix* button on its row): set a delay of
    2000 ms and override its speed master to the second master; the row's timing badge reads the
    2 s delay, and reopening the popover shows the second master.
 6. **GO.** Lock the show and GO into Q4: Blue on Hex 1–2, Red on Hex 3–4, the Pulse running — and
-   *Warm* lands two seconds after the GO, its effects at the second master's tempo.
+   *Warm* lands two seconds after the GO, its FX at the second master's tempo.
 
 ---
 
@@ -236,7 +236,7 @@ with no rig attached; a desk screen, the iPad's touch targets and a show running
 
 ## `FU-MANUAL-VENUE-VISIT-S12`
 
-**What it proves**: *fan in and fan out* — venue-visit S12: Spread's Fan mode moves each head from
+**What it proves**: *fan in and fan out* — venue-visit S12: the Fan's *About each position* moves each head from
 its own position by its share of an amount, symmetric about the middle of the order, from every door
 it has.
 
@@ -246,7 +246,7 @@ it.
 
 **Test**, at the Commemoration Hall, with five movers focused on one spot downstage and lit:
 
-1. **The programmer.** Select the five movers' Position cells, open row C's *Spread*, choose *Fan*
+1. **The programmer.** Select the five movers' Position cells, open row C's *Fan*, choose *About each position*
    and *Pan*, switch *Live* on and drag the strip right: the beams fan out about the spot, the middle
    mover still, the outer two moving furthest. Drag back to the middle: they meet on the spot again.
    Drag past the middle: the fan crosses. Close the popover and open it again: the amount reads 0, and
@@ -258,9 +258,9 @@ it.
 3. **Anchor.** With Live on, drag fast back and forth for several seconds, then let go at 0: every
    mover is back on the spot, none walked off it. Move one mover from its Position cell, then press
    *Re-read* and fan: the fan starts from the moved mover's new position.
-4. **The busk tab and the cell.** On the busk view's Spread tab fan the selection's tilt; then on the
-   programmer select the five movers' Position cells, open one and press *Spread…* (the waves icon after
-   *Aim…*'s crosshair): on a desk screen the rail's Spread tab opens on Position, in Fan, at 0; where
+4. **The busk tab and the cell.** On the busk view's Fan tab fan the selection's tilt; then on the
+   programmer select the five movers' Position cells, open one and press *Fan…* (the waves icon after
+   *Aim…*'s crosshair): on a desk screen the rail's Fan tab opens on Position, in About each position, at 0; where
    the rail draws no tabs, row C's popover opens instead.
 5. **A Look layer.** Focus a Look layer holding positions for three of the movers and fan all five: the
    read-out says the fan starts from the layer's rows, two heads from the stage, the layer's draft takes the fanned values, and the
@@ -321,9 +321,9 @@ a model reading `in:` lines, choosing the entry by number, and stopping at `CUE_
 ## `FU-MANUAL-VENUE-VISIT-R3-7`
 
 **What it proves**: *the busk side sheets* — venue-visit R3.7, apply-model plan session 7 (§4.5,
-D10): the busk sheet's tabs are Level · Colour · Position · Beam · Spread · Effects · Speed · Show,
-each family tab the per-property popup's body over the busk selection, and the Effects tab starts a
-library effect on the selection and splits off the selected heads of a running one.
+D10): the busk sheet's tabs are Level · Colour · Position · Beam · Fan · FX · Speed · Show,
+each family tab the per-attribute popup's body over the busk selection, and the FX tab starts a
+library FX on the selection and splits off the selected heads of a running one.
 
 **Why it is here**: the tests pin each tab's requests, the strip's classes and the split's wiring
 against mocks, and the strip's widths were measured in headless Chromium with a Linux font; nobody
@@ -340,16 +340,16 @@ another window, an Intensity palette *Full*, a Beam palette *Wide* and a running
 2. **Level.** Select the hex group on the rig band, open Level: *Full* in the Palettes band lights the
    group's dimmers at full as a layer (the programmer's Stack table shows it, **not** the focused Look), the slider
    moves all four live, and *Save as palette…* opens on Intensity.
-3. **Colour.** The picker at the top, then the Palettes band and the Effects band at the foot; *+
-   Effect…* there starts a colour effect on the selection.
+3. **Colour.** The picker at the top, then the Palettes band and the FX band at the foot; *+
+   FX…* there starts a colour FX on the selection.
 4. **Position.** Select the two movers, open Position: a drag on the pad moves both, each on its own
    range, the hollow dot marking the second; Pan and Tilt typed land at the programmer fade.
 5. **Beam.** With the movers selected, a *Zoom · Iris* row: *Wide* is offered under Zoom and not
-   under Iris; the level moves the property picked.
-6. **The Effects tab.** Select Hex 1–2 of the hexes the chase runs on, open Effects: the chase's row,
-   and a cue's effect on those heads drawn with no controls. Open the chase: *Hex 1–2 of Hex 1–4*.
+   under Iris; the level moves the attribute picked.
+6. **The FX tab.** Select Hex 1–2 of the hexes the chase runs on, open FX: the chase's row,
+   and a cue's FX on those heads drawn with no controls. Open the chase: *Hex 1–2 of Hex 1–4*.
    Drag Max — nothing moves — then *Apply to Hex 1–2*: they take it **at the phase they had**, Hex 3–4
-   run on, no head jumps, and a second drag moves both Hex 1 and Hex 2. *+ Effect…* with Hex 1–4
+   run on, no head jumps, and a second drag moves both Hex 1 and Hex 2. *+ FX…* with Hex 1–4
    selected starts one Pulse over them and takes them off the chase.
 7. **The iPad.** Repeat 2, 4 and 6 in the overlay — the bottom sheet upright and the right-hand sheet
    in landscape: the overlay's *Sheet* button opens onto Colour, its strip carries every tab but Speed
@@ -417,19 +417,19 @@ dot following real holds, the lock while the show runs, and *Used by* naming rea
 
 ## `FU-MANUAL-VENUE-VISIT-R4-5`
 
-**What it proves**: *a stack's effect size* — venue-visit R4.5, effects plan session 5 (D10): a
-runtime weight on the effects a stack's cues run, applied after the blend, moved from the Show view,
+**What it proves**: *a stack's FX amount* — venue-visit R4.5, effects plan session 5 (D10): a
+runtime weight on the FX a stack's cues run, applied after the blend, moved from the Show view,
 the phone runner and a MIDI fader.
 
-**Why it is here**: the tests read weights off synthetic ticks; nothing has watched a half-size stack
+**Why it is here**: the tests read weights off synthetic ticks; nothing has watched a half-amount stack
 chase over a held level on real heads, or the X-Touch fader and its motor beside the slider.
 
 **Test**, on Sleeping Beauty, a cue in Act 1 running a dimmer chase over a wash the cue itself holds
 at 40 %:
 
-1. **The slider.** GO the cue: Act 1's row on the Show view shows *FX size* at 100 %. Drag it to 50 %:
+1. **The slider.** GO the cue: Act 1's row on the Show view shows *FX amount* at 100 %. Drag it to 50 %:
    the chase runs halfway between 40 % and its own output. At 0 % the wash sits at 40 %.
-2. **Only this stack.** Run an effect from a second stack's cue and busk one from a pad: both run whole
+2. **Only this stack.** Run an FX from a second stack's cue and busk one from a pad: both run whole
    while Act 1 sits at 50 %. Press Act 1's cue on a busk pad as well: under the loose hold its chase
    runs whole.
 3. **Other doors.** Bind Act 1's *FX amount* target (`stackFxAmount`) to an X-Touch fader: the motor follows the slider
@@ -441,12 +441,12 @@ at 40 %:
 
 ## `FU-MANUAL-VENUE-VISIT-R4-4`
 
-**What it proves**: *fading effects by size* — venue-visit R4.4, effects plan session 4 (D13, P4): a
-cue's effects grow and shrink over its GO, an effect two cues share runs through, and the
-programmer's press and release fade effects at the programmer fade.
+**What it proves**: *fading FX by amount* — venue-visit R4.4, effects plan session 4 (D13, P4): a
+cue's FX grow and shrink over its GO, an FX two cues share runs through, and the
+programmer's press and release fade FX at the programmer fade.
 
-**Why it is here**: the tests read envelopes off a test clock; only real heads show whether a
-size fade reads as a fade, and whether a continuing effect really never jumps.
+**Why it is here**: the tests read envelopes off a test clock; only real heads show whether an
+amount fade reads as a fade, and whether a continuing FX really never jumps.
 
 **Test**, on Sleeping Beauty:
 
@@ -454,13 +454,13 @@ size fade reads as a fade, and whether a continuing effect really never jumps.
    shrinks to nothing over 3 s while the cycle grows from nothing, and the chase leaves the FX list
    once it is gone.
 2. **Continuing.** Layer one Look holding a Pulse on the group into both Q3 and Q4. GO from Q3: the
-   Pulse runs on in phase, with no dip. (Two cues' own Pulses are two effects: one shrinks as the
+   Pulse runs on in phase, with no dip. (Two cues' own Pulses are two FX: one shrinks as the
    other grows.)
-3. **Effect-only and snaps.** GO from Q4 into a cue holding only an effect: it fades in over its
+3. **FX-only and snaps.** GO from Q4 into a cue holding only an FX: it fades in over its
    time. A stack's first GO, a 0 s cue, a press of a cue pad and a stack stop snap.
 4. **Back mid-fade.** GO from Q3 to Q4 and GO BACK halfway: Q3's chase grows back from where it stood.
 5. **The programmer.** The press routes take a fade the client does not send yet
-   (`FU-FX-PRESS-FADE-CLIENT`), so drive this one through the REST call: press an effect palette with
+   (`FU-FX-PRESS-FADE-CLIENT`), so drive this one through the REST call: press an FX palette with
    `fadeMs: 2000` and watch it grow. Set the programmer fade to 2 s and Clear: it shrinks over 2 s.
 
 ---
@@ -472,15 +472,15 @@ masters' tempo on every GO into it and every press of it, a tap wins until the n
 reload sets none.
 
 **Why it is here**: the tests drive the GO paths against a test bank; only a desk shows the strip,
-the beat dots and the running effects move with the tempo, the X-Touch's tempo encoder agreeing, and
+the beat dots and the running FX move with the tempo, the X-Touch's tempo encoder agreeing, and
 a real sync pull leaving a tapped tempo alone mid-show.
 
-**Test**, on Sleeping Beauty, with an effect running on M2 and one on M1:
+**Test**, on Sleeping Beauty, with an FX running on M2 and one on M1:
 
 1. **Authoring.** In a cue's Cue tab — on its card, in the cue sheet's pane, from the fixture
    sheet's *on Q12* and from a loose cue's sheet in the Cues table — add M2 at 96 and M1 at 140. Give the next cue M2 at 128. Lock the show: the tab
    reads both rows and offers nothing.
-2. **GO, GO BACK, GO TO.** GO into the first cue: the strip reads M2 96 and M1 140 and the effects
+2. **GO, GO BACK, GO TO.** GO into the first cue: the strip reads M2 96 and M1 140 and the FX
    slow and speed to match. GO: M2 reads 128, M1 stays 140. GO BACK: M2 is 96 again. GO TO the second
    cue from a third: 128.
 3. **A tap wins.** Tap M2 to about 110 on the strip and on the X-Touch: it holds through a GO into a
@@ -597,38 +597,38 @@ recolours.
 ## `FU-MANUAL-TABLES-COLOURS-S2`
 
 **What it proves**: *the FX lens and the dock at the desk* — tables-colours S2: a Values cell an
-effect drives carries a violet chip with the division, struck through with the reason where the
-effect is held back, opening the live editor; an FX row selected rings its cells on Values; the
-rail's Stack body, strip counts and doors are gone and the right side is the Colour · Spread dock;
+FX drives carries a violet chip with the division, struck through with the reason where the
+FX is held back, opening the live editor; an FX row selected rings its cells on Values; the
+rail's Stack body, strip counts and doors are gone and the right side is the Colour · Fan dock;
 everything the rail's lists offered is on the Stack and FX tables.
 
-**Why it is here**: the tests run the lens over stubbed effects and provenance, and the dock's arms
+**Why it is here**: the tests run the lens over stubbed FX and provenance, and the dock's arms
 under jsdom, which lays nothing out. Only a desk shows the chip agreeing with what the rig does —
 above all the stomp, which the lens reads off provenance rather than being told — the chip clear of
 the value in its corner on real cells, the rings, which are this window's FX selection and no other
 screen's, and the dock's three arms on real screens.
 
 **Test**, on Sleeping Beauty, the programmer holding a few palettes and Looks, a cue running an
-effect on the front wash, and a busked Local effect:
+FX on the front wash, and a busked Local FX:
 
-1. **The lens.** On Values (Local), the wash's dimmer cells carry the cue effect's chip with its
-   division; the busked effect's cells carry its own. Set the wash's dimmer in the programmer: the
-   cue effect's chip is struck through, its tooltip *your value holds it back*, and the rig shows your
-   value. Release it: the chip is whole and the effect paints again. Go Blind: the busked effect's
+1. **The lens.** On Values (Local), the wash's dimmer cells carry the cue FX's chip with its
+   division; the busked FX's cells carry its own. Set the wash's dimmer in the programmer: the
+   cue FX's chip is struck through, its tooltip *your value holds it back*, and the rig shows your
+   value. Release it: the chip is whole and the FX paints again. Go Blind: the busked FX's
    chip reads *held · Blind*; leave Blind. Apply a Look layer with **stomp** over the wash's colour,
-   above a palette layer running a colour effect: that effect's chip is struck through, *a layer
-   above stomps it*. Set the cue's stack to FX size 0: the chip is *not* struck through.
-2. **The editor.** Click a chip: the live editor opens beside it on that effect; edit its size — the
-   rig follows. On a group row whose members run one effect over a selection, change one head only:
-   the split edit splits it. On a cell two effects paint, the chip says `+1` and a click offers both.
+   above a palette layer running a colour FX: that FX's chip is struck through, *a layer
+   above stomps it*. Set the cue's stack to FX amount 0: the chip is *not* struck through.
+2. **The editor.** Click a chip: the live editor opens beside it on that FX; edit its amount — the
+   rig follows. On a group row whose members run one FX over a selection, change one head only:
+   the split edit splits it. On a cell two FX paint, the chip says `+1` and a click offers both.
    The click selects no cell and starts no marquee.
-3. **Rings.** On FX select the cue's effect, switch to Values: the cells it paints are ringed violet,
+3. **Rings.** On FX select the cue's FX, switch to Values: the cells it paints are ringed violet,
    no others. Select another row and come back: the rings follow. Back on FX the row is still
    selected. Deselect: the rings go.
-4. **The dock.** At 1440 the right side is Colour · Spread, on Colour, at the width you left it, and
+4. **The dock.** At 1440 the right side is Colour · Fan, on Colour, at the width you left it, and
    lists nothing. Marquee four colour cells, pick a colour in the dock: the four take it, and a
    double click on a colour cell lands in the dock. Collapse it: a strip of a chevron and two doors;
-   the Spread door opens it on Spread. On the iPad (1180×820) the strip opens the dock over the grid,
+   the Fan door opens it on Fan. On the iPad (1180×820) the strip opens the dock over the grid,
    a press on the grid shuts it, and a colour cell's double click opens the cell's own popover. On a
    phone the handle's *Colour* opens it in a bottom sheet. Across all of it the grid keeps its
    selection.
@@ -637,9 +637,9 @@ effect on the front wash, and a busked Local effect:
    press that takes heads off another layer showing *lost … to …* in its Note — pressed on Values,
    then read on Stack. ⏎ on a layer and back to Stack: that layer's row is marked. Filter Stack to
    nothing: *No layers match the filter*, with *Your values* still listed. On FX: *Edit…*, *Pause*,
-   *Save as palette…*, *Stop*, *+ Effect*, *held · Blind*. Pick a Look up on Screen 2 and place it
+   *Save as palette…*, *Stop*, *+ FX*, *held · Blind*. Pick a Look up on Screen 2 and place it
    with *Place “…” here* under the programmer's tables, on Values. ⌘K *Apply FX → On the selection*
-   opens *+ Effect* on any table. Clear's tooltip still counts held scenery.
+   opens *+ FX* on any table. Clear's tooltip still counts held scenery.
 6. **Folds.** On a phone (393) the four tabs are glyphs with their counts on the corners, with
    two-digit counts too, and row B fits on every table; on the landscape phone (852×393) too.
 
@@ -649,14 +649,14 @@ effect on the front wash, and a busked Local effect:
 
 **What it proves**: *the programmer's tables at the desk* — tables-colours S1: the applied tables
 became the programmer's tabs, Values · Stack · FX · Scenery on row B. (Since S2 the rail is the
-Colour · Spread dock, so where a step below says *the rail*, read *the tables*; S2's own checks are
+Colour · Fan dock, so where a step below says *the rail*, read *the tables*; S2's own checks are
 `FU-MANUAL-TABLES-COLOURS-S2`.)
 
 **Why it is here**: the tests mount one grid across a stubbed switch over stubbed state; only a desk
 shows the selection surviving a real switch, a drag reordering the rig's layers, the folds on real
 screens and the tables keeping up while another screen busks.
 
-**Test**, on Sleeping Beauty, the programmer holding a few palettes, Looks, effects and a held piece
+**Test**, on Sleeping Beauty, the programmer holding a few palettes, Looks, FX and a held piece
 of scenery:
 
 1. **The grid keeps its selection.** Select four hexes on Values, switch to Stack, FX and Scenery and
@@ -666,7 +666,7 @@ of scenery:
    bottom layer to the top: the rig changes as if dragged on the rail, and the rail follows. Pick the
    *Looks* chip: the grips go and the footer says why. ⏎ on a layer: Values, focused on that layer.
    *Make layer* on *Your values* makes one.
-3. **FX and Scenery.** *+ Effect* over the selection starts a Local effect, listed at once. Pause,
+3. **FX and Scenery.** *+ FX* over the selection starts a Local FX, listed at once. Pause,
    *Edit…* and *Stop* act on it. On Scenery, move a held drape from its row's sliders and release it
    with its ×; the Stage view follows.
 4. **Address and screens.** Sort FX by Home, filter *wash*, reload: the same tab and view. Put Screen 2
@@ -692,19 +692,19 @@ and Applied Palettes read the live programmer as the rail does, their rows act t
 actions, and the Screens sheet puts them on another window.
 
 **Why it is here**: the tests compare the tables with the rail over stubbed state; only a desk shows
-them keeping up while the programmer is busked from another screen, a spent N-shot on a real palette
+them keeping up while the programmer is busked from another screen, a spent Runs FX on a real palette
 layer, and the folds on the iPad and a phone.
 
-**Test**, on Sleeping Beauty, the programmer holding a few palettes, Looks and effects:
+**Test**, on Sleeping Beauty, the programmer holding a few palettes, Looks and FX:
 
 1. **Rows.** Open *Applied* under Programmer on Screen 2 with the programmer on Screen 1. Each table
    lists what the rail lists, in the rail's order and numbering. Press a busk pad and release one on
    Screen 1: the tables follow without a reload.
-2. **What the desk reports.** An effect on a master reads *M2 · 96*; one on Seconds reads *Seconds*.
-   Turn Blind on: the programmer's effects read *held · Blind* and the others do not. Press an effect
+2. **What the desk reports.** An FX on a master reads *M2 · 96*; one on Seconds reads *Seconds*.
+   Turn Blind on: the programmer's FX read *held · Blind* and the others do not. Press an FX
    palette with *Runs* set to 3. When it has run its count, its Applied FX row and its Applied
    Palettes row both read *spent*.
-3. **Actions.** From the tables: pause and resume an effect, *Edit…* it, *Stop* two at once; disable a
+3. **Actions.** From the tables: pause and resume an FX, *Edit…* it, *Stop* two at once; disable a
    Look layer, *Detach* it and nothing on stage moves; *Pick up* a palette and place it on Screen 1;
    ⏎ on a layer opens its settings. Each shows on the rail as if done there.
 4. **Address.** Sort by Home, filter *wash*, pick the *Layers* chip, then reload: the same view.
@@ -753,23 +753,23 @@ and a phone.
 
 ## `FU-MANUAL-VENUE-VISIT-R3-6`
 
-**What it proves**: *effects in the popup* — venue-visit R3.6, apply-model plan session 6 (§3.4,
-§4.3, §4.5's split editor, §4.6, D5): a cell's popup carries its Effects band below the editor, every
-door that starts a library effect presses it as one Local effect over the selection, and the live
-editor splits off the selected heads of a running effect without a head jumping.
+**What it proves**: *FX in the popup* — venue-visit R3.6, apply-model plan session 6 (§3.4,
+§4.3, §4.5's split editor, §4.6, D5): a cell's popup carries its FX band below the editor, every
+door that starts a library FX presses it as one Local FX over the selection, and the live
+editor splits off the selected heads of a running FX without a head jumping.
 
 **Why it is here**: the tests pin the requests, the offer and the split editor's arms against mocks;
-nothing watched a split land on a running chase on the rig, or read the band's lit effects on the
+nothing watched a split land on a running chase on the rig, or read the band's lit FX on the
 iPad's bottom sheet.
 
 **Test**, on the dev rig with the programmer on a desk screen and on the iPad (portrait), four hexes
-in a group, two movers with zoom and a gobo wheel, an Amber Breathe effect palette and a Gobo walk
+in a group, two movers with zoom and a gobo wheel, an Amber Breathe FX palette and a Gobo walk
 (Slot Steps) palette:
 
-1. **The band.** Select Hex 1–4's Dimmer cells and open one: below the slider, *Effects* with *+
-   Effect…*. Press *+ Effect…*, tap Pulse: the four hexes pulse as **one** chase (one row on the
+1. **The band.** Select Hex 1–4's Dimmer cells and open one: below the slider, *FX* with *+
+   FX…*. Press *+ FX…*, tap Pulse: the four hexes pulse as **one** chase (one row on the
    FX tab's *All*), and the band lists Pulse, lit.
-2. **Replacement.** Start Colour Cycle on Hex 1–4 from a colour cell's *+ Effect…*, then select Hex 3–4
+2. **Replacement.** Start Colour Cycle on Hex 1–4 from a colour cell's *+ FX…*, then select Hex 3–4
    only and start Rainbow Cycle from their colour cell: Hex 3–4 run the rainbow, Hex 1–2 keep cycling,
    and nothing else on the rig moves.
 3. **The split.** With the Pulse from step 1 running, select Hex 1–2 and pick the Pulse's card on
@@ -777,24 +777,24 @@ in a group, two movers with zoom and a gobo wheel, an Amber Breathe effect palet
    1–2 of Hex 1–4*. (*All*'s *Edit…* selects all four heads first, and opens it with no *Apply to …*
    line.) Drag Max down — nothing on the rig moves — then
    press *Apply to Hex 1–2*: Hex 1–2 take the new Max **at the phase they had**, Hex 3–4 run on
-   untouched, and no head jumps. Drag Max again: both Hex 1 and Hex 2 follow. Repeat on a step-timed
+   untouched, and no head jumps. Drag Max again: both Hex 1 and Hex 2 follow. Repeat on a per-head-timed
    chase and on a ping-pong one.
 4. **Edit all.** Start a fresh Pulse on Hex 1–4, select Hex 1–2 and pick it on *Selection*: drag Max, then press
    *Edit all 4*: all four take the held change at once, and every later drag moves all four live.
-5. **No split for a layer.** Press Amber Breathe on Hex 1–4, select Hex 1–2 and pick its effect on *Selection*: no
+5. **No split for a layer.** Press Amber Breathe on Hex 1–4, select Hex 1–2 and pick its FX on *Selection*: no
    *Apply to …* line; a change moves all four.
-6. **Beam and settings.** Open a mover's Zoom cell: the band offers Zoom Breathe (*+ Effect…* opens
-   on Beam with Zoom Breathe in it) and no frost palette. Open its Gobo cell: an Effects band with
+6. **Beam and settings.** Open a mover's Zoom cell: the band offers Zoom Wave (*+ FX…* opens
+   on Beam with Zoom Wave in it) and no frost palette. Open its Gobo cell: an FX band with
    Gobo walk and no Palettes band; press it and the gobo steps.
 7. **⌘K.** *Apply FX → On the selection* with Hex 1–2 selected and the pill on *Intensity*: the
-   picker opens on the effects, a tap starts one effect over Hex 1–2, and a Colour effect tapped is
+   picker opens on the FX, a tap starts one FX over Hex 1–2, and a Colour FX tapped is
    refused in the desk's words (*… outside the selection's mask*).
-8. **The iPad.** Repeat 1 and 3 on the iPad: the cell's bottom sheet shows the Effects band's lit
-   chip, a tap opens the editor as a bottom sheet with the split line, and *+ Effect…* opens the
-   effects as a bottom sheet.
+8. **The iPad.** Repeat 1 and 3 on the iPad: the cell's bottom sheet shows the FX band's lit
+   chip, a tap opens the editor as a bottom sheet with the split line, and *+ FX…* opens the
+   FX as a bottom sheet.
 9. **A focused Look.** Focus a Look layer, select two of its heads and start a Pulse from a Dimmer
-   cell's *+ Effect…*: close the picker and the Pulse is in the Look's effects, and no other running
-   effect lost a head.
+   cell's *+ FX…*: close the picker and the Pulse is in the Look's FX, and no other running
+   FX lost a head.
 
 ---
 
@@ -818,7 +818,7 @@ Colour, Beam (one with a zoom row, one with a frost row) and Position palettes, 
    at most, with *All n*. Tap one: the four hexes take it as a layer and the chip lights; ⌥click
    another: values, no layer. *Save as palette…* in the footer opens the sheet on Intensity.
 2. **Zoom.** Open a Zoom cell's editor on the movers: only the zoom palette is offered, not the frost
-   one. A Gobo cell's editor has no Palettes band (R3.6 gives it an Effects band).
+   one. A Gobo cell's editor has no Palettes band (R3.6 gives it an FX band).
 3. **Colour.** Open a colour cell's popover on the desk: the band is above the picker (it was the
    phone's *Recent* alone). Select two Shehds zones' colour cells: the heads line names the zones by
    key, and a press colours those two zones only.
@@ -935,10 +935,10 @@ moment, and that the beams on stage never move.
 
 **What it proves**: *Update stage is the one way a cue edit reaches a live stage* — venue-visit
 R2.7, show-cue-editing plan session 7 (D4, D11, §3.5, §10): an edit to a live cue is marked and sends
-nothing, and *Update stage* sends its rows over the cue's own fade and brings its effects in line.
+nothing, and *Update stage* sends its rows over the cue's own fade and brings its FX in line.
 
 **Why it is here**: the tests read the controller's fade and the engine's instances; only the rig
-shows the fade on the cue's curve, an edited effect carrying on without a jump, and the chip on every
+shows the fade on the cue's curve, an edited FX carrying on without a jump, and the chip on every
 window clearing together.
 
 **Test**, on Sleeping Beauty (or a scratch copy), the show running:
@@ -951,8 +951,8 @@ window clearing together.
 3. **Update stage.** Press *Update stage…*: the confirm names Q4 and says *1 value change, over its
    3.0s fade*. Press *Update stage*: **the dimmer fades to the new level over three seconds**, on the
    cue's curve, and the chip goes on every window.
-4. **An effect.** On Q4's FX tab change a running effect's size, and remove another (or add one).
-   *Update stage*: the edited effect carries on **in phase**, the removed one fades out, an added one
+4. **An FX.** On Q4's FX tab change a running FX's amount, and remove another (or add one).
+   *Update stage*: the edited FX carries on **in phase**, the removed one fades out, an added one
    fades in. No cannon fires and no scenery moves.
 5. **Locked.** Edit Q4 again, lock the show, and press *Update stage…*: it asks to unlock and sends
    nothing.
@@ -965,11 +965,11 @@ window clearing together.
 
 **What it proves**: *the Looks and FX tables write the stored cue and nothing else* — venue-visit
 R2.6, show-cue-editing plan session 6 (D3, D17, P2, §10): a layer reordered or switched off and an
-effect added in draft are stored, the rig does not move, and the cue's next GO lands them.
+FX added in draft are stored, the rig does not move, and the cue's next GO lands them.
 
 **Why it is here**: the tests read the wire for a pass over both tabs and pin each PATCH; only the
 rig shows that a live cue edited this way leaves the stage alone until its next first hold, and that
-GO then composes the new order and runs the new effect.
+GO then composes the new order and runs the new FX.
 
 **Test**, on Sleeping Beauty (or a scratch copy), the show unlocked, Q1 live:
 
@@ -977,7 +977,7 @@ GO then composes the new order and runs the new effect.
    one over it, and press the eye on another to switch it off. Each saves (*Q1 · looks saved* with
    Undo). **Nothing moves on the rig.**
 2. **A Pulse in draft.** On the Values tab select the Orbits' rows, then on the FX tab press *+
-   Effect* and tap Pulse: a Pulse row on the Orbits appears, at one bar. Tap Sine Wave: the row
+   FX* and tap Pulse: a Pulse row on the Orbits appears, at one bar. Tap Sine Wave: the row
    swaps. Tap Pulse again and press Done. **Nothing pulses on the rig.**
 3. **GO.** GO out of Q1 and back into it (or GO from the cue before it): the Looks compose in the new
    order, the switched-off Look adds nothing, and the Orbits pulse.
@@ -985,7 +985,7 @@ GO then composes the new order and runs the new effect.
    Look's sheet.
 5. **Locked ⌫.** With the show locked, click in Q1's Looks tab and press ⌫, then the same on its FX
    tab: the *Unlock the show to edit?* question opens each time and the show does **not** go back a
-   cue. The rows draw read-only and *+ Look*, *+ Palette* and *+ Effect* are disabled.
+   cue. The rows draw read-only and *+ Look*, *+ Palette* and *+ FX* are disabled.
 
 ---
 
@@ -1019,34 +1019,34 @@ value GO lands is the one the grid drew.
 
 ## `FU-MANUAL-VENUE-VISIT-R3-2`
 
-**What it proves**: *Local effects follow the selection* — venue-visit R3.2, apply-model plan
-session 2 (§3.4, D5): a bare library effect is one Local effect over the selection, a second effect
-of its family takes the pressed heads off the first, and an edit for some of an effect's heads splits
+**What it proves**: *Local FX follow the selection* — venue-visit R3.2, apply-model plan
+session 2 (§3.4, D5): a bare library FX is one Local FX over the selection, a second FX
+of its family takes the pressed heads off the first, and an edit for some of an FX's heads splits
 them off at the phase they had.
 
-**Why it is here**: `EffectSplitTest` compares every channel tick for tick against a mock controller
+**Why it is here**: `FxSplitTest` compares every channel tick for tick against a mock controller
 on synthetic ticks, and the route tests read the instances. Nothing watched a split on real heads at
 a real tempo, where a jump of one head out of a chase is what an operator would see.
 
-**Test**, on Sleeping Beauty. Drive them from the doors R3.6 built — a cell's Effects band or the
-FX table's *+ Effect* for the press, the live editor's *Apply to …* for the split — or with `curl` against
+**Test**, on Sleeping Beauty. Drive them from the doors R3.6 built — a cell's FX band or the
+FX table's *+ FX* for the press, the live editor's *Apply to …* for the split — or with `curl` against
 `http://localhost:8413/api/rest` (signed in; the bodies are in CLAUDE.md's FX REST endpoints), and
 watch the stage and the programmer's FX list:
 
-1. **The press.** `POST /projects/{id}/programmer/effects` with `Pulse` on `dimmer` over four hexes
-   by fixture: one effect in the FX list, a four-step chase in the order sent, on the master tagged
-   *dimmer* if there is one. With `families: ["COLOUR"]` it is refused and nothing starts.
+1. **The press.** `POST /projects/{id}/programmer/fx` with `Pulse` on `dimmer` over four hexes
+   by fixture: one FX in the FX list, a four-step chase in the order sent, on the master tagged
+   *intensity* if there is one. With `families: ["COLOUR"]` it is refused and nothing starts.
 2. **Replacement.** Press `ColourCycle` on `rgbColour` over the four, then again over two of them:
    those two change to the new cycle, the other two carry on exactly where they were (no step back to
    the start), and the Pulse is untouched. Press it over all four: the first is gone.
-3. **The split.** With the Pulse running, `PUT /fx/{id}` with `beatDivision` doubled and `targets`
+3. **The split.** With the Pulse running, `PUT /fx/{id}` with `cycle` doubled and `targets`
    naming two of the hexes: those two slow down from where they were, the other two do not hitch,
-   and the FX list shows four effects. The same `PUT` with every hex keeps the one effect.
-4. **Step and ping-pong.** Start a Pulse with `stepTiming: true` and `distributionStrategy:
-   "PING_PONG"` over four, then split one head off with a `size` edit: it keeps its place in the
+   and the FX list shows four FX. The same `PUT` with every hex keeps the one FX.
+4. **Per head and ping-pong.** Start a Pulse with `timing: "HEAD"` and `order:
+   "PING_PONG"` over four, then split one head off with an `amount` edit: it keeps its place in the
    bounce and its step length, beside the three still running together.
-5. **Refusals.** The split with `distributionStrategy` changed is refused, nothing moved; a split of a
-   palette layer's effect is 409 `FX_SPLIT_LAYER_EFFECT`.
+5. **Refusals.** The split with `order` changed is refused, nothing moved; a split of a
+   palette layer's FX is 409 `FX_SPLIT_LAYER_FX`.
 6. **Clear and Record.** Record a cue with the split chase up: GO it after Clear and each head keeps its
    place in the chase. Clear takes every copy; a fixture's *Release* takes its own.
 
@@ -1079,7 +1079,7 @@ stack landing where the cards say before the desk answers.
 4. **A cue twice.** *Add to stack…* Q2 into Act 1 so Act 1 holds it twice. Start the show and GO
    through both places: each GO lights the right row the instant it is pressed, and the second Q2's
    GO goes on to the cue after *it*.
-5. **On Q12.** With a cue's effect running on a fixture, open the fixture's sheet, the tray, and press
+5. **On Q12.** With a cue's FX running on a fixture, open the fixture's sheet, the tray, and press
    *on Q…*: that cue's editor opens over the sheet; Escape returns to the sheet.
 
 ---
@@ -1126,7 +1126,7 @@ screens, watched a finger's hold on the iPad, or looked at the stage while a lay
    chip: the menu opens (*Put on* or *Take off these heads*, *Apply as values*, *Pick up*, *Edit
    palette…*) and nothing changes on stage; *Edit palette…* opens that palette's editor.
 3. **Detach.** On the Stack table, a layer's settings → *Detach*: the row goes, nothing on stage moves, the
-   values read as Local and its effect keeps running in phase.
+   values read as Local and its FX keeps running in phase.
 4. **Into a Look.** Focus a Look layer, tap Red: the Look's rows take Red on the selected heads and
    save; no programmer layer appears. Place a held Look on the programmer's stack from the hand there:
    refused, *Looks don't nest*.
@@ -1141,13 +1141,13 @@ session 3 (§5, §10): the split button's Blind edit sends nothing to the stage 
 names everything a delete takes.
 
 **Why it is here**: the tests prove Blind goes on before the Include and that the desk holds an
-included effect under Blind; only the rig shows that nothing on stage moved, and only a real show's
+included FX under Blind; only the rig shows that nothing on stage moved, and only a real show's
 pads and stacks show the confirm reads right.
 
 **Test**, on Sleeping Beauty (or a scratch copy), the show running and locked:
 
 1. **Blind edit.** On Act 1, open Q4's card. The split button reads *Blind edit in programmer*, amber.
-   Press it: the programmer opens, Blind is on, and nothing on stage moves — values or effects.
+   Press it: the programmer opens, Blind is on, and nothing on stage moves — values or FX.
 2. **← Show.** In the programmer's source box press *← Show*: Act 1 opens with Q4's card open.
 3. **Duplicate.** Unlock, and *Duplicate* Q3: the copy, named for Q3's name with *(copy)* after it, is the last cue of Act 1, its
    card open, and every other cue keeps its number.
@@ -1243,8 +1243,8 @@ If a stored locate lands visibly off the spot it was set on, promote it to a `FU
 
 ## `FU-MANUAL-VENUE-VISIT-R4-3`
 
-**What it proves**: *one effect over a selection* — venue-visit R4.3, effects plan session 3 (D3):
-an effect started on a hand selection is one instance spread over it in the order picked, as a
+**What it proves**: *one FX over a selection* — venue-visit R4.3, effects plan session 3 (D3):
+an FX started on a hand selection is one instance spread over it in the order picked, as a
 group's is, rather than heads running in unison.
 
 **Why it is here**: the tests read the expansion's member order and phases off synthetic ticks
@@ -1253,18 +1253,18 @@ walk across loose fixtures in the order they were marqueed, or a recorded one co
 
 **Test**, on Sleeping Beauty, from the programmer:
 
-1. **Loose fixtures.** Marquee eight loose pars' Dimmer cells and *+ Effect* → Pulse: the FX tab's
-   *All* shows one effect, its target *Par 1, Par 2 +6*, and the chase runs down the grid's order. Open it:
+1. **Loose fixtures.** Marquee eight loose pars' Dimmer cells and *+ FX* → Pulse: the FX tab's
+   *All* shows one FX, its target *Par 1, Par 2 +6*, and the chase runs down the grid's order. Open it:
    *Spread* shows eight dials.
 2. **With a group.** Select those eight rows and a group of four below them: one chase, twelve
    steps, the group's members in the group's own order after the pars. Set Order to *Reverse*: it
    runs back from the group's last member.
 3. **A head twice.** Add one of the group's members as its own row too: it runs once, at the group's
    place.
-4. **Record and Include.** Record a cue: its card lists one effect *over* the twelve. Clear, GO the
-   cue: the same chase. Include it into the programmer: one effect again, editable, and Update keeps
-   an edit. Record a Look with the effect ticked: the Look sheet lists it over the selection.
-5. **⌘K.** With the selection standing, ⌘K → *Apply FX* → *On the selection*: one effect over it.
+4. **Record and Include.** Record a cue: its card lists one FX *over* the twelve. Clear, GO the
+   cue: the same chase. Include it into the programmer: one FX again, editable, and Update keeps
+   an edit. Record a Look with the FX ticked: the Look sheet lists it over the selection.
+5. **⌘K.** With the selection standing, ⌘K → *Apply FX* → *On the selection*: one FX over it.
 
 **Time**: 10 minutes.
 
@@ -1273,7 +1273,7 @@ walk across loose fixtures in the order they were marqueed, or a recorded one co
 ## `FU-MANUAL-VENUE-VISIT-R4-2`
 
 **What it proves**: *the spread's shape* — venue-visit R4.2, effects plan session 2 (D4, D11, P2):
-Spread, Wings, Blocks and Groups shape what the Order gives, a step chase stays gap-free under them,
+Spread, Wings, Segments and Parts shape what the Order gives, a step chase stays gap-free under them,
 and the editor's phase dials preview what the heads do.
 
 **Why it is here**: the tests read offsets and bytes off synthetic ticks against a mock controller,
@@ -1283,51 +1283,51 @@ row reads as the stage does.
 
 **Test**, on Sleeping Beauty, from the programmer and the busk view:
 
-1. **Spread.** Busk a Pulse chase over a group of eight (*+ Effect*), open *Spread*: the summary
-   reads *Rig*, the dials sit an eighth apart. Drag Spread to 50 %: the chase packs into half a cycle —
+1. **Spread.** Busk a Pulse chase over a group of eight (*+ FX*), open *Spread*: the summary
+   reads *Normal*, the dials sit an eighth apart. Drag Spread to 50 %: the chase packs into half a cycle —
    a tighter ripple with a gap behind it — and the dials close up to match; at 200 % it runs over two
    cycles; at 0 % every head pulses together.
 2. **Wings.** Set Wings to 2: the chase runs from both ends to the middle and the dials mirror. Choose
-   *Centre out*: the Wings field is replaced by *two already*, and the effect runs centre out with no
+   *Centre out*: the Wings field is replaced by *two already*, and the FX runs centre out with no
    refusal.
-3. **Blocks and Groups.** On a pixel bar (twelve cells), Blocks 3: the cells chase in threes, four
-   steps. Groups 2 instead: odd and even cells alternate. With *Step timing* on, neither leaves a dark
+3. **Segments and Parts.** On a pixel bar (twelve elements), Segments 3: the elements chase in threes, four
+   steps. Parts 2 instead: odd and even elements alternate. With *Timing* on *Per head*, neither leaves a dark
    step.
 4. **Runs.** Under Advanced, *Runs* 1 on the Spread 50 % chase: it ripples once and hands every head
    back, ending as the last head finishes rather than a cycle later.
 5. **A palette and a cue.** *Save as palette…*: the palette's editor shows the same shape over eight
    notional dials. Record the busk into a cue and GO it: it runs with the same shape. Include it and
-   change Groups in the editor, then Update: the cue keeps the change.
+   change Parts in the editor, then Update: the cue keeps the change.
 
 ---
 
 ## `FU-MANUAL-VENUE-VISIT-R4-1`
 
-**What it proves**: *Size, Direction and Runs* — venue-visit R4.1, effects plan session 1 (D2, D5,
-D9, P3): Size weighs an effect over what is underneath after the blend, Direction runs each head's
-cycle backward or bouncing, and an N-shot runs its count and hands each head back.
+**What it proves**: *Amount, Direction and Runs* — venue-visit R4.1, effects plan session 1 (D2, D5,
+D9, P3): Amount weighs an FX over what is underneath after the blend, Direction runs each head's
+cycle backward or bouncing, and an FX with Runs runs its count and hands each head back.
 
 **Why it is here**: the tests drive synthetic ticks against a mock controller and read bytes. Nothing
-in review watched a half-size breathe, a backward cycle or a one-shot ripple on real heads, or judged
+in review watched a half-amount breathe, a backward cycle or a one-shot ripple on real heads, or judged
 whether a weight that is linear in DMX reads as "half" to the eye.
 
 **Test**, on Sleeping Beauty, from the busk view and the programmer:
 
-1. **Size over a level.** Hold a wash group at 40 % in the programmer and busk a Pulse on it (*+
-   Effect*, Replace). At Size 100 % it runs between its low and high; drag Size to 50 %: it runs
+1. **Amount over a level.** Hold a wash group at 40 % in the programmer and busk a Pulse on it (*+
+   FX*, Replace). At Amount 100 % it runs between its low and high; drag Amount to 50 %: it runs
    halfway between 40 % and the pulse, and never drops below the level the way it would at half its
    own output. At 0 % the group sits at 40 %, and the fixture sheet's stack reads the Pulse as not on
    stage.
-2. **An Around circle.** Hold a mover's position, busk a Circle (*Around*). Drag Size to 50 %: the
+2. **An Around circle.** Hold a mover's position, busk a Circle (*Around*). Drag Amount to 50 %: the
    circle halves its radius about the held position, centred where it was.
 3. **Direction.** Busk Colour Cycle (red · green · blue) on a group: Forward reads red → green →
    blue; press ← (Backward): blue → green → red; press ↔ (Bounce): it runs there and back. A chase
    over the group keeps its spread whichever way it runs.
 4. **Runs.** Under Advanced, set *Runs* to 1 on a Pulse chase over a group of four: it ripples once,
-   each head handing back to its level after its own pulse, and the effect leaves the FX list.
+   each head handing back to its level after its own pulse, and the FX leaves the FX list.
    Busk it again with Blind on and wait one cycle before Blind off: it is gone, not restarted.
-5. **A palette and a cue.** Save the 50 % backward effect as a palette (*Save as palette…*): the pad's
-   face reads *· ← · 50 %*. Record it into a cue, GO the cue: it runs at the same size and direction.
+5. **A palette and a cue.** Save the 50 % backward FX as a palette (*Save as palette…*): the pad's
+   face reads *· ← · 50 %*. Record it into a cue, GO the cue: it runs at the same amount and direction.
 
 ---
 
@@ -1405,26 +1405,26 @@ pointing at the copy, the desk itself stopped or on another port):
 
 ## `FU-MANUAL-VENUE-VISIT-R2-1`
 
-**What it proves**: *Blind holds the programmer's effects* — venue-visit R2.1, show-cue-editing plan
-session 1 (D7, §3.6): while the programmer is blind every programmer effect is held, phase kept, and
-paints in step when Blind goes off; a cue's effects keep painting.
+**What it proves**: *Blind holds the programmer's FX* — venue-visit R2.1, show-cue-editing plan
+session 1 (D7, §3.6): while the programmer is blind every programmer FX is held, phase kept, and
+paints in step when Blind goes off; a cue's FX keep painting.
 
 **Why it is here**: the tests drive synthetic ticks against a mock controller and read the stack and
 provenance from the desk. Nothing in review watched a held pulse land back in step on real heads.
 
 **Test**, on Sleeping Beauty, from the busk view and the programmer (session 1 of §10):
 
-1. **Two pulses.** Select two heads apart (a pair of wash fixtures). Busk a Pulse on one — an effect
-   palette pad, or the fixture sheet's *+ Effect* — and GO a cue that runs a Pulse on the other, both
+1. **Two pulses.** Select two heads apart (a pair of wash fixtures). Busk a Pulse on one — an FX
+   palette pad, or the fixture sheet's *+ FX* — and GO a cue that runs a Pulse on the other, both
    on master 1. They pulse together.
 2. **Blind on.** Turn Blind on from the programmer's action bar. The busked pulse stops on the rig;
    the cue's keeps pulsing. The busk band's `BLIND` pill, the Show glyph's dot and the app header's
-   programmer chip say *values and effects held* on hover; the fixture sheet's FX tray and the
+   programmer chip say *values and FX held* on hover; the fixture sheet's FX tray and the
    programmer's FX table mark the busked Pulse *held · Blind*; its row's stack says *Blind holds
    it*.
 3. **Blind off.** Turn Blind off. The busked pulse comes back in step with the cue's, not from the top
    of its cycle, growing from nothing over the programmer fade (R4.4); at a 0 s fade it paints at once.
-4. **A Blind edit.** With Blind on, Include a cue that holds an effect (*Edit in programmer* after
+4. **A Blind edit.** With Blind on, Include a cue that holds an FX (*Edit in programmer* after
    switching Blind on). Nothing moves on stage until Blind goes off.
 
 ---
@@ -1432,10 +1432,10 @@ provenance from the desk. Nothing in review watched a held pulse land back in st
 ## `FU-MANUAL-VENUE-VISIT-S7`
 
 **What it proves**: *a group runs in the order its sheet shows*. In venue-visit plan S7, a drag in the
-group sheet's *Members* view reorders the group's members, and the group's effects and a spread over
+group sheet's *Members* view reorders the group's members, and the group's FX and a fan over
 the group follow the new order.
 
-**Why it is here**: the tests check the stored order, the steps the desk answers and the spread's
+**Why it is here**: the tests check the stored order, the steps the desk answers and the fan's
 order. The drag itself was checked by hand in a browser against a seeded desk with no rig attached;
 no committed test drags. Nobody has yet watched a chase on real heads change its direction after a
 drag.
@@ -1445,48 +1445,47 @@ drag.
 1. **Reorder.** Open a group of four or more heads (Groups → its row's details → *Members*) and drag
    the last member to the top. The numbers, the Groups list's member rows and Patches' *Edit Group*
    sheet all read the new order.
-2. **A chase.** Start a Pulse on the group at *Rig*. It runs from the member you dragged to the
+2. **A chase.** Start a Pulse on the group at *Normal*. It runs from the member you dragged to the
    top. *Runs as* Centre out reads the step each head fires on, and a Centre out Pulse fires those
    steps in that order.
-3. **A spread.** Select the group alone, Spread Dimmer 0 → 100 % at *Rig*. The dragged member gets
-   0 %. Add a fixture from outside the group to the selection: the spread follows the busk rig's order
+3. **A fan.** Select the group alone, Fan Dimmer 0 → 100 % at *Normal*. The dragged member gets
+   0 %. Add a fixture from outside the group to the selection: the fan follows the busk rig's order
    again.
 4. **A venue's group.** In a show on the hall, a venue group's *Members* view has no drag handles and
    says its order is set in the venue. Patches' *Edit Group* sheet is read-only with the same reason.
 
-If an effect runs in an order the sheet does not show, promote it to a `FU-` item in `followups.md`.
+If an FX runs in an order the sheet does not show, promote it to a `FU-` item in `followups.md`.
 
 ---
 
 ## `FU-MANUAL-VENUE-VISIT-S15`
 
-**What it proves**: *an effect can run on its own cycle* — venue-visit plan S15 (D7, D16): an effect
-on *Seconds* follows no master, and a new effect is one bar on the master tagged for its family's
-usage.
+**What it proves**: *an FX can run on its own cycle* — venue-visit plan S15 (D7, D16): an FX
+on *Seconds* follows no master, and a new FX is one bar on the master tagged for its family.
 
 **Why it is here**: the tests drive the engine's two loops by hand and render the editor in jsdom.
 Nothing in review watched a breathe on a real rig hold its speed while the operator tapped the tempo,
-or a desk's own masters stamp a new effect.
+or a desk's own masters stamp a new FX.
 
 **Test**, on the hall's rig:
 
-1. **Tag a master.** On Speed Masters give M2 the usage *Dimmer* at 90 BPM.
-2. **A new effect.** On a fixture sheet press *+ Effect* → Pulse: its chip reads `M2 · 90` and its
-   speed `1 bar`. A Colour Cycle on a colour head starts on M1 (none is tagged colour), also one bar.
-3. **Onto Seconds.** Open the Pulse, pick *Seconds* on the chip: the speed reads about `2.67 s` and
+1. **Tag a master.** On Speed Masters give M2 the family *Intensity* at 90 BPM.
+2. **A new FX.** On a fixture sheet press *+ FX* → Pulse: its chip reads `M2 · 90` and its
+   cycle `1 bar`. A Colour Cycle on a colour head starts on M1 (none is tagged colour), also one bar.
+3. **Onto Seconds.** Open the Pulse, pick *Seconds* on the chip: the cycle reads about `2.67 s` and
    the light does not jump. Tap M2 up to 150: the Seconds Pulse keeps its speed, a second Pulse on M2
    speeds up.
-4. **Back.** Pick M2 again: the speed reads in beats and does not jump. *Revert* puts it back as it
+4. **Back.** Pick M2 again: the cycle reads in beats and does not jump. *Revert* puts it back as it
    opened.
 5. **Fluorescent Flicker.** Start one, give its chip M2, then pick *Seconds*: it is unscaled. Revert
    from M2 lands *Seconds* again (the old `FU-FX-RATE-MASTER-CLEAR`).
 6. **Record and run.** Record the Seconds Pulse into a cue, clear, GO the cue: it runs on Seconds at
-   the same cycle. Include the cue: the editor reads *Seconds*. Make an effect palette from it: the
+   the same cycle. Include the cue: the editor reads *Seconds*. Make an FX palette from it: the
    pad reads `Pulse · 2.67 s`.
 7. **The words.** Every chip on the busk pads, the fixture sheet and the programmer's FX table says the
-   speed as the editor's segment does (`½ beat`, `1 bar`), never `1/4`.
+   cycle as the editor's segment does (`½ beat`, `1 bar`), never `1/4`.
 
-If a Seconds effect drifts with the tempo anywhere (a cue layer over it, a busk press), promote it to
+If a Seconds FX drifts with the tempo anywhere (a cue layer over it, a busk press), promote it to
 a `FU-` item in `followups.md`.
 
 15 minutes.
@@ -1517,7 +1516,7 @@ rig's to say.
 4. **An old palette.** Press a position palette saved before this session (a `deg:` row): it lands
    where it always did. Open it: the editor shows it on the new scale with *Saved in degrees*. Rename
    it and save: it still lands in the same place. Move its pan and save: it now reads centre-relative.
-5. **Spread and FX.** A Position spread from `-16` to `+16` fans the selection about the centre; a
+5. **Spread and FX.** A Position fan from `-16` to `+16` fans the selection about the centre; a
    Circle in *Absolute* shows its centre as `0` at DMX 128 and its radius in steps.
 6. **Aim.** *Aim…* still appears on a mover and lands on the point; `aim_fixtures` with
    `saveAsPalette` makes a palette whose press puts the heads back on the aim.
@@ -1532,7 +1531,7 @@ value, promote it to a `FU-` item in `followups.md`.
 ## `FU-MANUAL-VENUE-VISIT-R2-2`
 
 **What it proves**: *a cue's children keep their uuids* — venue-visit R2.2, show-cue-editing plan
-session 2 (P3, §3.4): every cue write reconciles its layers, effects, rows and hooks by natural key
+session 2 (P3, §3.4): every cue write reconciles its layers, FX, rows and hooks by natural key
 and keeps the uuid of each one it keeps, so a one-value edit is one changed record in sync.
 
 **Why it is here**: the tests export a seeded project before and after a `PATCH` and compare the
@@ -1542,9 +1541,9 @@ two trees. Nothing in review ran an edit through a real show's working tree and 
 
 1. **Clean.** *Sync now* until the Sync tab says there is nothing to push.
 2. **One value.** Change one value of Act 1 Q1 through the API — `PATCH
-   /api/rest/projects/{id}/cues/{cueId}` with its `propertyAssignments`, one value changed.
+   /api/rest/projects/{id}/cues/{cueId}` with its `attributeAssignments`, one value changed.
 3. **One record.** The sync status lists **one** changed record, the
-   `cuePropertyAssignments/{uuid}.json` of that row, and the working tree's diff touches that one file.
+   `cueAttributeAssignments/{uuid}.json` of that row, and the working tree's diff touches that one file.
 4. **The inline editor too.** Change Q1's fade from its card or the cue table: one changed record,
    `cues/{uuid}.json`, and no child file.
 
@@ -1593,7 +1592,7 @@ it to a `FU-` item in `followups.md`.
 
 ## `FU-MANUAL-S9-WHITES`
 
-**What it proves**: *the blinder is a colour head* — venue-visit plan S9 (D8): each cell takes any
+**What it proves**: *the blinder is a colour head* — venue-visit plan S9 (D8): each element takes any
 colour as the nearest mix of its warm and cold whites, its level folded in, and reads back as the
 colour the two whites make; the whites' temperatures are estimates, 3000 K and 6500 K, because no
 manual for the unit gives them.
@@ -1604,15 +1603,15 @@ like the colour asked for has been seen.
 
 **Test**, on the hall's rig with the blinder up:
 
-1. **The whites.** Put cell 1 on warm white alone and cell 2 on cold white alone, at full, beside a
+1. **The whites.** Put element 1 on warm white alone and element 2 on cold white alone, at full, beside a
    tungsten profile at full and a daylight source if there is one. If the warm reads clearly warmer or
    cooler than about 3000 K, or the cold than about 6500 K, note the values that would match and set
    them on `China2CellLedBlinderFixture.WHITE_MIX`.
-2. **A palette.** Press a red palette on the whole blinder: both cells go to warm white at full. A
+2. **A palette.** Press a red palette on the whole blinder: both elements go to warm white at full. A
    white palette: both whites on, the cold one at full. A blue one: cold alone.
-3. **The cell.** In the programmer, open a cell's Colour: it offers Warmth and Level, not an RGB
-   picker. Drag Warmth from end to end; the cell moves warm to cold and the Stage view follows.
-4. **The sliders.** Set a cell's warm and cold sliders by hand: its Colour cell shows that mix's
+3. **The element.** In the programmer, open an element's Colour: it offers Warmth and Level, not an RGB
+   picker. Drag Warmth from end to end; the element moves warm to cold and the Stage view follows.
+4. **The sliders.** Set an element's warm and cold sliders by hand: its Colour cell shows that mix's
    temperature, and the grand master still dims the blinder through its master dimmer alone.
 
 ## `FU-MANUAL-VENUE-VISIT-S5`
@@ -2044,9 +2043,9 @@ Where something reads wrong, change the value with its GLSL twin and test (`scri
 ## `FU-MANUAL-FIXTURE-FX-SHEETS`
 
 **What it proves**: *the fixture sheet answers Chris's six problems on the rig* — a row says who
-drives it and what is held back underneath, × lets the value go, a typed value lands, an effect added
+drives it and what is held back underneath, × lets the value go, a typed value lands, an FX added
 over a set position orbits it and is edited live, a head pick and a group's *All* write what they
-say, the busk view's pad effects carry *edited* and Update palette, and a phone gets the sheet.
+say, the busk view's pad FX carry *edited* and Update palette, and a phone gets the sheet.
 
 **Why it is here**: the fixture-fx-sheets plan's six sessions were driven in a browser
 (`docs/plans/completed/fixture-fx-sheets-plan.md` §9 lists these five checks, one per session that changed
@@ -2058,7 +2057,7 @@ the tray's place, the landscape side form and the keyboard's bite against an emu
 `visualViewport`; the inset itself is 0 in an emulator.
 
 **Test**, on the rig with Spot 3 (a mover), the 12-pixel bar, *Front wash*, a cue with a Pulse on a
-dimmer, a position palette pad and a Circle effect-palette pad:
+dimmer, a position palette pad and a Circle FX-palette pad:
 
 1. **Session 2 — the sheet.** Set Spot 3's position on the sheet: the row reads *Programmer*. Fire the
    cue with the Pulse and set that dimmer by hand: the row carries the amber dot, the chip's stack
@@ -2069,7 +2068,7 @@ dimmer, a position palette pad and a Circle effect-palette pad:
 3. **Session 4 — heads and groups.** Pick heads 1–4 of the 12-pixel bar and set a colour: only those
    four change. On *Front wash*'s *All*, Record writes a group row.
 4. **Session 5 — the Busk and Programmer views.** Press the Circle pad after the position pad: it
-   orbits. In the busk Effects tab, widen it: *edited*. Press the pad off and on: the palette's size
+   orbits. In the busk FX tab, widen it: *edited*. Press the pad off and on: the palette's size
    returns. Widen again and choose Update palette: the next press keeps it.
 5. **Session 6 — the phone.** On an iPhone, tap a fixture in the Stage view: the bottom sheet opens at
    half with the tray above the home indicator. Drag the grabber to full and down to the peek (header
@@ -2302,7 +2301,7 @@ which made three things visible:
 2. Raise the **Stage house** (or lower LX1–LX3) so the bars sit below its ceiling, then check in the
    Stage view that an LX3 unit's beam reaches the deck and its pool lands there.
 3. Aim a Revolution at a point on the stage with *Aim at point* and check its beam goes through it.
-4. Before session 9: no Look, cue or template stores `output1` / `output2` on either Twin Shot.
+4. Before session 9: no Look, cue or palette stores `output1` / `output2` on either Twin Shot.
 5. Open each other show's Stage view and check its static lanterns point where its plot says; set
    `basePitchDeg` on any that were left at 0 to look hung.
 
@@ -2413,7 +2412,7 @@ Where an answer disagrees, correct the value and its comment, and drop the `Esti
 closed shutter, a strobe and its rate read on the Stage view as they do on the rig.
 
 **Why it is here**: the fixture optics plan's session 6 declares every STROBE channel's bands
-(`@FixtureProperty(strobe = […])`, `docs/fixtures-engineering.md` §"Beam vocabulary"), and of the
+(`@FixtureAttribute(strobe = […])`, `docs/fixtures-engineering.md` §"Beam vocabulary"), and of the
 library's manuals only the Robe's states a rate ("strobe effect (1 - 10 flashes per second)"). Each
 guess is marked `// Estimate:` at its source (D15); this lists them. The plan's §9 desk check — a MAC
 250 at strobe 0 dark in the view, as on the rig, and a 20 Hz strobe drawn as a shimmer, not 20
@@ -2554,8 +2553,8 @@ channel's curve is measured, record the numbers in `FU-STAGE-VECTOR-SPEED`.
 **What it proves**: *a focus channel's DMX runs the same way on the rig as in the Stage view*, so a
 cue's recorded focus means the same distance on both.
 
-**Why it is here**: each FOCUS slider declares a focus range (`@FixtureProperty(focusNearM =,
-focusFarM =)`, `docs/fixtures-engineering.md` §"@FixtureProperty"), and `inverted` says DMX 0 is
+**Why it is here**: each FOCUS slider declares a focus range (`@FixtureAttribute(focusNearM =,
+focusFarM =)`, `docs/fixtures-engineering.md` §"@FixtureAttribute"), and `inverted` says DMX 0 is
 far focus. Only the MAC 250's direction is published ("Infinity → 2 meters"). The Robe ColorSpot
 575's `inverted = true` is inferred from Robe's later charts; the Source Four Revolution and the
 Fusion 100 Spot MKII keep the default (DMX 0 near) because nothing says otherwise. A wrong one draws
@@ -2601,12 +2600,12 @@ one in Chrome for step 6, and a stack you can GO without harm.
    programmer: the band shows an amber `BLIND` pill, and the Show glyph an amber dot, on the tab
    strip and on the fold.
 2. **A — the band.** The band is one row in Split and Rig. Narrow the window: the verbs lose their
-   words first, then the *Cells:* prefix and the Focus words, and the Cells control keeps its mode
+   words first, then the *Elements:* prefix and the Focus words, and the Elements control keeps its mode
    word (*All*, *Odd*…) throughout. The `RIG` label goes last, and below about 540px of band the
    row breaks into two at the one place, the verbs on the first line. On a phone the overlay sheet
-   offers Colour · Spread · Show.
+   offers Colour · Fan · Show.
 3. **A.5 — the two-screen pair.** Screen 1 in **Pads**, Screen 2 in **Split**. Screen 1 draws the
-   pad row (`PADS`, the tabs, Spread · Locate · Highlight, the summary) and **no rig row**. Select
+   pad row (`PADS`, the tabs, Fan… · Locate · Highlight, the summary) and **no rig row**. Select
    heads on Screen 2's tiles: Screen 1's summary names them, and its Locate and Highlight act on
    them. Neither screen draws a chip while both follow.
 4. **A.5 — the chips.** Unlink Screen 2's page (its Screens row's Page picker, or ⌘K). Its
@@ -2634,7 +2633,7 @@ one in Chrome for step 6, and a stack you can GO without harm.
 desk still holds one showing page (`state/BuskPageState.kt`, unchanged by this work), but a window
 may decline to be on it — `lib/buskPageFollow.ts` in the client, a per-tab flag beside the
 selection's, with a chip of its own in the page strip. The flow it exists for is one sentence:
-select the heads once, tap a colour template on Screen 1's page, tap a position template on Screen
+select the heads once, tap a colour palette on Screen 1's page, tap a position palette on Screen
 2's page, and both land on the same heads.
 
 **Why it is here**: everything observable in *one* window was verified in review — both chips, the
@@ -2655,7 +2654,7 @@ the X-Touch for step 4.
    Screen 2 does not move.
 3. **The headline.** With Screen 2 still local, make a fixture selection on either screen. Neither
    screen draws a `Targets:` chip, so both still follow the desk selection and it is shared. Put a
-   colour template on Screen 1's page and a position template on Screen 2's page, and press one on
+   colour palette on Screen 1's page and a position palette on Screen 2's page, and press one on
    each. Both land on the same heads. This is the whole feature; if only this step is run, run this one.
 4. Press the X-Touch's *next page* button. Screen 1 (following) moves; Screen 2 (local) does not.
    Both are correct.
@@ -2716,7 +2715,7 @@ release.
    vanish. The synthetic Escape that cancels dnd-kit is marked default-prevented precisely so it is
    not read as the operator letting go, and this is the only place that can be seen.
 4. **The other three targets.** Drag a **cue** row off the edge onto Screen 2's empty **cue slot**
-   in the FX overlay; drag a **Look** or a **template** onto the programmer's layer stack band with
+   in the FX overlay; drag a **Look** or a **palette** onto the programmer's layer stack band with
    a selection standing there; and onto a cue's stack in `StackDetail`. The eligibility table is
    `lib/handTargets.ts`'s and is unchanged, so a cue lighting a layer stack is a defect in that
    table rather than in this gesture.
@@ -2748,7 +2747,7 @@ check `FU-MANUAL-MULTI-SCREEN-S3` first, since that is the hand's own affordance
 ## `FU-MANUAL-MULTI-SCREEN-S3`
 
 **What it proves**: *a record picked up on one screen lands on the other* — multi-screen plan §5 S3
-/ §3.5 / §9. The desk holds **one** record at a time: a template, a Look or a cue, picked up on any
+/ §3.5 / §9. The desk holds **one** record at a time: a palette, a Look or a cue, picked up on any
 window and placed on any other. It is the cross-window move, chosen over a pointer drag because the
 window that saw the press keeps the pointer for the whole gesture (D12). There is no `hand.place`
 frame — a place is the placing window's own existing mutation followed by `hand.drop` — so what this
@@ -2765,11 +2764,11 @@ desk's.
 **What one window already proved** (2026-09-16, against the restarted desk on 5e261d1b): the wire
 arrives and the chip draws its frozen face from the frame alone; *Pick up* from a library row's menu
 and from a busk pad's hold menu, whose items are *Pick up* then *View*; the bank rings lighting for a
-template, a Look and a cue; a **bank place with Undo**, which removed the *appended* pad and left an
+palette, a Look and a cue; a **bank place with Undo**, which removed the *appended* pad and left an
 identically-named one already at the front of that bank alone; **Escape's ladder** — claimed by a
 closing context menu, dropping only on a second press with nothing open; and the chip's ×. The
 eligibility table was confirmed live in both directions: a cue lit six banks and neither layer
-stack, a template lit the programmer's. What remains below is the genuinely two-window half, the
+stack, a palette lit the programmer's. What remains below is the genuinely two-window half, the
 MIDI half, the timeout, and the two gestures in step 6.
 
 1. **Pick up and place on a bank.** On Screen 1, hold a busk pad and choose *Pick up*; the chip
@@ -2782,11 +2781,11 @@ MIDI half, the timeout, and the two gestures in step 6.
    a **cue slot** — an **empty** one, which is a deliberate narrowing (a filled tile's press is
    live), so a lit ring on a filled tile is a defect rather than a pass. Both busk targets **do**
    offer themselves during *Edit layout*, drawn solid rather than dashed so they cannot be mistaken
-   for a drop slot; a band that fails to appear there is the gate having crept back. A template must
+   for a drop slot; a band that fails to appear there is the gate having crept back. A palette must
    be refused at a slot, exactly as dragging one is refused today; any Look is accepted. Then
    the
    **programmer's layer stack** with a selection standing on Screen 2,
-   which lands on the desk selection and masks a template to its own family; and a **cue's stack**
+   which lands on the desk selection and masks a palette to its own family; and a **cue's stack**
    from `StackDetail`. A cue in the hand may land only on a bank or a slot — the layer stack and a
    cue's stack must not light for one.
 3. **Every way of letting go.** The chip's ×; Escape with nothing else claiming it (and Escape while
@@ -2800,7 +2799,7 @@ MIDI half, the timeout, and the two gestures in step 6.
    that is the failure this step exists to catch.
 4. **A record deleted while held.** Pick up a Look on Screen 1, delete that Look from the library on
    Screen 2: the chip must clear on **both** screens rather than sit there naming a row that has
-   gone. Repeat once with a template and once with a cue — three different list-changed listeners
+   gone. Repeat once with a palette and once with a cue — three different list-changed listeners
    carry the reconcile, and only a real delete fires them. Then **edit** a held record's contents
    instead: the chip stays, with its face frozen as it was picked up.
 5. **The MIDI pad pick-up.** Bind a button to *Pick up pad* naming a pad, and another to *Place in
@@ -2824,7 +2823,7 @@ MIDI half, the timeout, and the two gestures in step 6.
 7. **The timeout.** Pick something up and leave it for five minutes without placing it: the chip
    clears itself on both screens. Worth pairing with a watch rather than guessing — the point is
    that nobody has to remember they are holding something.
-8. **A project switch while held.** Pick up a template, then switch project from either screen: the
+8. **A project switch while held.** Pick up a palette, then switch project from either screen: the
    chip clears on both. The contrast is the Screens sheet beside it, which must **not** clear — a
    window outlives a project switch and the hand does not, and seeing the two behave differently in
    one gesture is the cheapest proof the scoping is right.
@@ -2916,8 +2915,8 @@ the two screens (review of 2026-09-16 — project Experiment, tabs named `Window
 1. Marquee three Colour cells on Screen 1. Screen 2's band lights the three heads and shows a
    Colour pill; the iPad's too; both chips read *Desk · from Screen 1*; Screen 1's reads *Desk*.
    *Browser-checked*, both windows; the iPad half open.
-2. Press a colour template pad on Screen 2. The three cells on Screen 1 ring *You* and the colour
-   lands; nothing else moves. Press a position template pad: Screen 2 toasts the refusal by name
+2. Press a colour palette pad on Screen 2. The three cells on Screen 1 ring *You* and the colour
+   lands; nothing else moves. Press a position palette pad: Screen 2 toasts the refusal by name
    and the rig does not move. *Browser-checked* (Green landed on the three heads only; Fig 8 refused: *'Fig 8' is a Position template, and the selection is masked to Colour*).
 3. Press a Look holding colour and position rows: both land on its own fixtures, with no toast and
    no mask badge on its layer in `LookStack` on Screen 1, since a Look press ignores the selection's
@@ -2988,9 +2987,9 @@ working. The looks-and-layers arc before it found two more on a desk that no tes
 provenance branch that never named the winning layer, and a layer frame that reached only the
 acting tab. Both are in exactly this area, so assume the pattern holds.
 
-**The composing pass.** Build three Looks and an effect inside one session. Retune a Look mid-scene
-and watch the stage. Drag a layer while its effect is running and confirm the phase survives the
-reorder. Record values *and* effects into one Look, then confirm a second tab sees the stack change
+**The composing pass.** Build three Looks and an FX inside one session. Retune a Look mid-scene
+and watch the stage. Drag a layer while its FX is running and confirm the phase survives the
+reorder. Record values *and* FX into one Look, then confirm a second tab sees the stack change
 — and that the scope falls back when the focused layer goes away.
 
 **The two only a rig can answer.**
@@ -3038,32 +3037,32 @@ are deleted.
 
 ## `FU-MANUAL-DESK-S3`
 
-**Templates resolving per head** · from desk simplification Session 3, 2026-08-23
+**Palettes resolving per head** · from desk simplification Session 3, 2026-08-23
 
-Session 3 removed the fixture type from a template and made resolution per head. That is the
+Session 3 removed the fixture type from a palette and made resolution per head. That is the
 conceptually interesting part of the desk-simplification arc and also where its cost is: the
 resolution has to be right in the engine *and* visible in the editor, or it is worse than the
 constraint it replaced. Almost all of that is only answerable on a rig, which is why this session
 has more checks than the others.
 
-1. **One colour template across three colour types at once** — an RGBWA hex, a white-only head and
+1. **One colour palette across three colour types at once** — an RGBWA hex, a white-only head and
    the MAC 250's colour *wheel* — and each should read as the same colour. The wheel is the one to
    judge by eye: the editor's ΔE says how close the desk believes it got, and only the rig says
    whether that belief is right. A bad annotation lands as
    [`FU-TMPL-WHEEL-PREVIEWS`](followups.md#fu-tmpl-wheel-previews).
 2. **Retune it and watch every tracking layer move**, in a cue and in the programmer's own stack.
-   That is `republishForTemplateEdit`, and it is the touring feature.
+   That is `republishForPaletteEdit`, and it is the touring feature.
 3. **The two gestures are visibly different.** ⌥click (*Apply as values*), then retune — the
    busked values must *not* move. Tap, then retune — they must.
-4. **A position template in degrees across two ranges.** The Shehds tilts 0–270°, the MAC 250
+4. **A position palette in degrees across two ranges.** The Shehds tilts 0–270°, the MAC 250
    0–257°: the same degrees must land on different DMX, and a clamp must be reported in the panel
    *and* true on stage. (Since venue-visit S11 this is a palette **stored** in degrees, `deg:`, which
    still resolves this way; a new palette is centre-relative and lands the same DMX on both —
    [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11).)
 5. **The white/amber policy on a head that has both.** Extract should look brighter and cleaner
    than RGB-only at the same hue, which is the whole claim.
-6. **A beam template says out loud that it cannot carry a gobo** — the disabled rows with their
-   reasons, rather than the property simply being absent.
+6. **A beam palette says out loud that it cannot carry a gobo** — the disabled rows with their
+   reasons, rather than the attribute simply being absent.
 7. **New from selection**, first on heads that agree, then on heads that differ: the first must come
    out *Generic*, the second *Per fixture*, and the toast says which.
 
@@ -3110,7 +3109,7 @@ dropped rather than queued, a 10 s response cap — but that caps *concurrency*,
 is 0.2–0.6 s of real work now competing for heap and CPU with the output loop, and no unit test can
 speak to that.
 
-**Test**: with a cue stack running and effects live on real fixtures, open the script editor and
+**Test**: with a cue stack running and FX live on real fixtures, open the script editor and
 type continuously for a minute in a GENERAL script — enough for many highlight and completion
 round-trips. Watch for output stutter, dropped frames, or audible hesitation in moving-head motion.
 Repeat with an FX_CALC script, whose template differs.
@@ -3127,44 +3126,44 @@ last resort — it's what this change removed.
 
 ## `FU-MANUAL-FX-TEMPLATE-COLOUR`
 
-**A template retune moves a running effect** · from the positional-palette removal, 2026-08-24
+**A palette retune moves a running FX** · from the positional-palette removal, 2026-08-24
 
-The positional colour list is gone and an effect's colour parameter names a **colour template**
-instead (`tmpl:{uuid}`). `TemplateColourSourceTest` covers the grammar, the fixture-free resolution
+The positional colour list is gone and an FX's colour parameter names a **colour palette**
+instead (`pal:{uuid}`). `PaletteColourSourceTest` covers the grammar, the fixture-free resolution
 and the cache invalidation, but the payoff is a rig behaviour and the path is long: registry
-invalidation → `TemplateRegistry.versionFor(refs)` → `TypedParams`'s colour caches → the next
+invalidation → `PaletteRegistry.versionFor(refs)` → `TypedParams`'s colour caches → the next
 tick's `calculate`. A stale cache looks exactly like "nothing happened".
 
-**The check.** Create a generic colour palette on `/palettes`. Add a `ColourCycle` ad-hoc effect
+**The check.** Create a generic colour palette on `/palettes`. Add a `ColourCycle` ad-hoc FX
 whose `colours` mixes it with a literal, and confirm the chase runs those colours. Then **retune the
-template** and watch the running chase follow within a tick without re-firing anything.
+palette** and watch the running chase follow within a tick without re-firing anything.
 
-Three things worth checking in the same sitting, each of which a single-effect retune cannot show:
+Three things worth checking in the same sitting, each of which a single-FX retune cannot show:
 
-1. **A programmer layer's effect follows too.** That path deliberately froze its colour source at
+1. **A programmer layer's FX follows too.** That path deliberately froze its colour source at
    include time (version pinned to `0L`) when the source was a palette; it is live now, and that is
    a behaviour change rather than a port.
 2. **A mixed group degrades as documented, and this is the one to look hardest at.**
    `resolveColourGeneric` resolves as though the head were RGBW, so an RGBW/RGBWA head should match
-   the same template applied as a **layer**. An RGB-only head does *not* get the plain hex: the
+   the same palette applied as a **layer**. An RGB-only head does *not* get the plain hex: the
    neutral has already been taken out of RGB and its white byte is dropped, so `#FF9D4A` arrives as
    `#B55300` — dimmer and more saturated. Confirm that is tolerable on the real rig. If it is not,
    the fix is one line (resolve `RGB_ONLY` in `resolveColourGeneric`) and it inverts which class of
    head is exact — worth deciding with lamps in front of you rather than from the arithmetic.
-3. **The delete guard sees the reference.** Deleting a template an effect parameter names should 409
+3. **The delete guard sees the reference.** Deleting a palette an FX parameter names should 409
    with an `fxReferenceCount`, not succeed and leave the chase running white. This is the one arm
    with no unit coverage of its JSON scan.
-4. **A template *list* change still reaches the chase** (sweep item C4, 2026-08-26). The colour
-   version is now per template uuid, so editing an *unrelated* template must leave the chase
+4. **A palette *list* change still reaches the chase** (sweep item C4, 2026-08-26). The colour
+   version is now per palette uuid, so editing an *unrelated* palette must leave the chase
    running (that is the point), while creating, renaming or deleting one — which drops the whole
    cache — must still move it. The sharpest case: point a `colours` entry at a uuid that has no
-   template, confirm it runs white, then create a template *with that uuid* (import or clone) and
+   palette, confirm it runs white, then create a palette *with that uuid* (import or clone) and
    confirm the chase picks it up. Watch for a stutter in the same sitting: `invalidateAll` now
-   re-reads every requested template on the route thread *before* publishing the bump, so a list
-   change on a template-heavy show costs N transactions at once against a size-1 pool
+   re-reads every requested palette on the route thread *before* publishing the bump, so a list
+   change on a palette-heavy show costs N transactions at once against a size-1 pool
    (`FU-TMPL-REWARM-BOUND` holds the bound if it bites).
 
-**If it fails at step 1**, suspect the pre-warm: `prewarmTemplateColours` runs on the request thread
+**If it fails at step 1**, suspect the pre-warm: `prewarmPaletteColours` runs on the request thread
 at every spawn site, and a missed one means the first resolve happens on the 50 Hz loop.
 
 ## `FU-MANUAL-PALETTE-TOURING`
@@ -3225,17 +3224,17 @@ that fixture — with both cues live the fixture must go to 255, because cross-c
 set layer 2's amount to 0.5 and confirm 120 (mixing halfway from layer 1's 255... 127), and its
 blend mode to MAX and confirm 255.
 
-Also worth confirming on the rig: a layer whose Look runs a colour *effect* beats a later layer
-setting colour statically, because effects sit above static values regardless of layer order. That
+Also worth confirming on the rig: a layer whose Look runs a colour *FX* beats a later layer
+setting colour statically, because FX sit above static values regardless of layer order. That
 is the one place layer order does not govern, and the only cure is the layer's `stomp`.
 
 **And now the cure itself**, since `FU-LOOK-STOMP-WITHIN-CUE` landed: set `stomp` on the later
-(static) layer and confirm the effect below goes quiet while the static colour holds. Then clear it
-and confirm the effect comes back **without restarting its phase** — that is the whole reason it
+(static) layer and confirm the FX below goes quiet while the static colour holds. Then clear it
+and confirm the FX comes back **without restarting its phase** — that is the whole reason it
 suppresses rather than removes, and a respawn would be visible as a hitch on a slow chase. Worth
 doing on the rig rather than trusting `FxEnginePipelineTest`: the test asserts the instance survives
 and paints again, not that the eye sees no step. Then repeat it on the **programmer** stack, where
-the effect being suppressed sits in the priority band that is otherwise exempt from suppression.
+the FX being suppressed sits in the priority band that is otherwise exempt from suppression.
 
 ## `FU-MANUAL-SPEED-MASTERS-RIG`
 
@@ -3255,12 +3254,12 @@ been exercised by tests.
 master 1. Then put a position wave on master 2 at half master 1's BPM and a dimmer chase on
 master 1, both on the same fixtures → confirm a visibly 2:1 ratio held over several minutes
 (drift is what the deadline timer fixes and only shows up over time). Tap master 2 → only its
-effect changes rate. Check the surviving master-1 entry points still land on master 1: script
+FX changes rate. Check the surviving master-1 entry points still land on master 1: script
 `setBpm`/`tapTempo`, the AI `set_bpm` tool, and `PUT /project/{id}/speed-masters/{mid}` with a
 `bpm` (which must retune the *live* clock, not just the stored default).
 
 While there, check the per-master beat dots — every `BeatIndicator` pulses from the keyed
-`speedMasters.beat` stream now, so the dot beside a master-2 effect should track master 2. Watch
+`speedMasters.beat` stream now, so the dot beside a master-2 FX should track master 2. Watch
 the **master 1** dots in particular (the strip's M1 tile *and* the FX panel's): sweep item D2
 moved them off `beatSync` onto the keyed stream, which needed master 1's real uuid resolved
 client-side — a dot that stays an empty ring forever is that resolution failing. The local
@@ -3317,8 +3316,8 @@ survive one.
 
 **Suspend-path sanity check** · Control-surface Phase 8
 
-Run a script adding and removing 100 effects/sec while a MIDI fader runs at full 60 Hz on the same
-property. Confirm no stage stutter, no WebSocket `channelState` lag, no coroutine leak on a thread
+Run a script adding and removing 100 FX/sec while a MIDI fader runs at full 60 Hz on the same
+attribute. Confirm no stage stutter, no WebSocket `channelState` lag, no coroutine leak on a thread
 dump. No functional change expected — the suspend path delivers the same per-channel acks as the old
 blocking path. Regression sanity check, not new validation.
 
@@ -3347,13 +3346,13 @@ affected rows and Remove clears them. 10 minutes.
 **Crossfade smoothness and provenance after the republish rework** · Sweep item C3, 2026-08-26
 
 C3 rebuilt what a crossfade frame recomputes: weight ticks now reuse the previous winner maps and
-a cached effect-coverage set, and the composed state is published index-first. Unit tests cover
+a cached FX-coverage set, and the composed state is published index-first. Unit tests cover
 the composition values and the cache-invalidation edges; what they can't judge is the *feel* of a
 long fade on real fixtures, or attribution in the live UI.
 
 **Test**: run a 10 s+ crossfade between two full cues (dimmer + colour rows on every fixture) with
-a handful of effects running. Confirm the fade reads as smooth (no stepping, no flicker on
-effect-covered keys), pause/resume an effect mid-fade and confirm its keys hand over cleanly, and
+a handful of FX running. Confirm the fade reads as smooth (no stepping, no flicker on
+FX-covered keys), pause/resume an FX mid-fade and confirm its keys hand over cleanly, and
 at fade end check the provenance/Update views name the incoming cue — not the outgoing one — as
 the owner of shared keys. 10 minutes.
 
@@ -3361,16 +3360,16 @@ the owner of shared keys. 10 minutes.
 
 ## `FU-MANUAL-WALLCLOCK-RATE`
 
-**Wall-clock effects with no rate master run unscaled** · Sweep item C6, 2026-08-26
+**Wall-clock FX with no rate master run unscaled** · Sweep item C6, 2026-08-26
 
-`slotFor(null)` is slot 0 — master 1 — so a wall-clock effect with no rate master was being
+`slotFor(null)` is slot 0 — master 1 — so a wall-clock FX with no rate master was being
 scaled by master 1's `bpm / 120`. C6 gave `rateMasterSlot` a `NO_RATE_MASTER` sentinel, so it is
-now genuinely unscaled. Both shipped wall-clock effects (`CandleFlicker`, `FluorescentFlicker`)
+now genuinely unscaled. Both shipped wall-clock FX (`CandleFlicker`, `FluorescentFlicker`)
 are STATEFUL and never read a phase, so nothing in-tree exercised the old behaviour — which is
-also why this can only be judged on the rig, with an effect written for it.
+also why this can only be judged on the rig, with an FX written for it.
 
 **Test**: author a STANDARD + WALL_CLOCK `.fx.kts` definition (a slow colour fade over, say, 8 s)
-and run it with no rate master assigned. Move master 1 from 120 to 200 BPM and back. The effect's
+and run it with no rate master assigned. Move master 1 from 120 to 200 BPM and back. The FX's
 speed must not change. Then assign master 1 as its *rate* master and repeat: now it must speed up
 and slow down with the fader. 10 minutes.
 
@@ -3413,7 +3412,7 @@ one that throws can no longer starve the ones registered after it. Two of the br
 change: the parse count is arithmetic, not a measurement, and nothing in-tree exercises all
 twenty-eight bridges against a real server.
 
-**Test**: with the desk running and DMX moving (an effect on a group is enough), open the client and
+**Test**: with the desk running and DMX moving (an FX on a group is enough), open the client and
 work each WS-fed surface in turn, confirming each still updates live from a *second* browser rather
 than only from its own actions — the fixtures grid and channel values, the universes list, the
 Programmer (set a value, go Blind, watch provenance), the cue list and the show bar's live/next
@@ -3433,7 +3432,7 @@ firing and means a real bug to file, and no frame should ever be reported as unp
 rows-only body every 400 ms for the length of a layer-scope drag, so each tick refetched the
 fixture list — 48 consumers client-side, a capability read per fixture server-side — and handed
 every consumer a new array identity mid-drag. Those two tags are now sent only when the body writes
-`effects`. The Look compatibility they once refreshed is gone (absolute-looks plan P7).
+`fx`. The Look compatibility they once refreshed is gone (absolute-looks plan P7).
 This is a **code-read** change: the saving is arithmetic over a request that is no longer sent, not
 a measurement, and nothing in-tree drags a real grid against a real server.
 
@@ -3531,7 +3530,7 @@ programmer socket — during the fade there should be at most a couple of `progr
 requests (fade start/end), not a steady ~10/s stream. Then, mid-fade, write a programmer value
 from an off-connection source (a MIDI CC twist, or a second tab): the first tab's grid must show
 the new value within ~a quarter second, both mid-fade and after the fade completes. Locate and a
-template apply mid-fade should behave the same. 10 minutes.
+palette apply mid-fade should behave the same. 10 minutes.
 
 ---
 
@@ -3616,7 +3615,7 @@ chunks actually load from the packaged installer's static resources, and that th
 
 **Test**: from a packaged install (not the Vite dev server), hard-reload the desk and confirm the
 login screen paints noticeably sooner than before, then visit `/stage`, `/prompt-book`, a script in
-`/scripts`, an effect editor in `/fx-library`, and a cue's trigger editor inside Show. Each
+`/scripts`, an FX editor in `/fx-library`, and a cue's trigger editor inside Show. Each
 should show a brief spinner and then the real surface — never a blank pane, a console 404 on a
 `/assets/*.js` chunk, or a stuck spinner. Repeat the Stage and Prompt Book visits with the desk's
 network cable pulled, since these are the first assets the desk fetches *after* boot and a desk
@@ -3631,7 +3630,7 @@ still arrive. 10 minutes.
 2026-08-30 (`FS-PERF-COLLAPSED-PANELS`, lighting-react `52660a6`)
 
 Layout rendered all four overview panels on every route, with visibility switching only the CSS
-grid rows — so on a live rig the mini-stage kept re-rendering its markers, the effects panel kept a
+grid rows — so on a live rig the mini-stage kept re-rendering its markers, the FX panel kept a
 beat interval running and the cue-slot panel kept its queries and listeners alive behind a
 zero-height container while the operator was on some unrelated page. Each panel is now a wrapper
 plus a body, and the body unmounts once the collapse animation finishes. This is a code-read win,
@@ -3642,7 +3641,7 @@ the drag.
 panels, then close each one and watch it *animate* shut rather than snap — the body is held for
 200 ms precisely so it can. Reopen each immediately and confirm it comes back populated with no
 spinner and no "No fixtures placed yet": the mini-stage should show live marker colours at once,
-the effects panel a BPM and a beating dot rather than a dash. Then leave a panel closed for two
+the FX panel a BPM and a beating dot rather than a dash. Then leave a panel closed for two
 minutes and reopen it — past RTK Query's cache retention this one *may* show a brief spinner, which
 is correct; what must not happen is an empty state where data exists. Navigate to `/users` with all
 four closed and confirm the desk is quiet. Finally, with the cue-slot panel open and the Busk
@@ -3675,7 +3674,7 @@ composed value. In B, retune that Look (change a colour and save). A's grid must
 within a beat, with no reload — and the network panel should show one `GET /cues/{id}/cooked`, not
 a refetch of the whole cue list. Repeat with the cue **dark** (never fired), which is the case the
 frame is deliberately wider than the REST field of the same name to cover. Then repeat both with a
-template instead of a Look. Finally check the storm guard: with a Look library open in A, do a
+palette instead of a Look. Finally check the storm guard: with a Look library open in A, do a
 handful of rapid saves in B and confirm A issues one cooked read per save, not a cue-cache-wide
 refetch. 15 minutes.
 
@@ -3702,7 +3701,7 @@ the app) and watch the connection pill go red. Then, without reconnecting:
 3. On `/channels`, in Edit mode: the level sliders, the park/unpark affordances, Unpark All, and
    both "…at Value" buttons are refused, and the park tooltip and its context-menu item say the
    same thing.
-4. TAP and the BPM readout in the show bar are disabled; a fixture-detail sheet's property sliders
+4. TAP and the BPM readout in the show bar are disabled; a fixture-detail sheet's attribute sliders
    are read-only; a busking property pad takes no press.
 5. Start MIDI Learn while offline — the dialog must show a reason rather than spinning forever.
 
@@ -3739,7 +3738,7 @@ still change on the same frame it always did.
 2. Expand the same bar and confirm the element rows and the parent agree.
 3. Drag a group colour on a group card and confirm the swatch follows the drag at input rate, then
    settles on the value the sheet shows.
-4. On the 3D stage, run a colour effect on an RGBW/A/UV fixture with a separate dimmer and watch
+4. On the 3D stage, run a colour FX on an RGBW/A/UV fixture with a separate dimmer and watch
    the beam: hue and brightness must follow beat for beat, with no visible step or hold. Then pull
    the dimmer down and confirm the beam darkens without the hue shifting.
 5. Open a stage view in Blind, change a colour in the programmer, and confirm the stage repaints —
@@ -3864,7 +3863,7 @@ on the reset gate that owns a mid-fade cue reorder — the one place this hook h
 `FxBadge` used to hold a `fx/fixture/{key}` or `groups/{name}/fx/active` subscription per card, so
 one `fxChanged` broadcast fanned out to one GET per badge on screen. It now derives its count from
 the rig-wide `fx/active` list every badge already shares. The count has to come out identical: for
-a group, the effects targeting it; for a fixture, its own effects **plus** the group effects that
+a group, the FX targeting it; for a fixture, its own FX **plus** the group FX that
 reach it through membership — the endpoint's `indirect` half, which the client now reconstructs
 from the fixture DTO's `groups`. A hierarchical group is the interesting case, since a fixture can
 be reached through a parent group it was never listed in directly. Freshness also moves: the badge
@@ -3873,15 +3872,15 @@ invalidation. **Code-read** change; nothing here was measured.
 
 **Test**: with the desk running, on `/fixtures` and the groups view:
 
-1. Apply an effect directly to a fixture and confirm its card's badge appears and reads `1 FX`,
+1. Apply an FX directly to a fixture and confirm its card's badge appears and reads `1 FX`,
    promptly, on the tab that applied it *and* on a second tab.
-2. Apply an effect to a group containing that fixture and confirm the fixture's badge goes to
+2. Apply an FX to a group containing that fixture and confirm the fixture's badge goes to
    `2 FX` and the group card's badge reads `1 FX`.
-3. If the rig has a group-of-groups, apply an effect to the *parent* group and confirm a member
+3. If the rig has a group-of-groups, apply an FX to the *parent* group and confirm a member
    fixture of a child group counts it.
-4. Pause the effect and confirm the badge drops to the muted variant without changing its count;
+4. Pause the FX and confirm the badge drops to the muted variant without changing its count;
    resume and confirm it lights again.
-5. Remove the effects and confirm both badges disappear rather than sticking at a stale count.
+5. Remove the FX and confirm both badges disappear rather than sticking at a stale count.
 
 10 minutes.
 
@@ -3943,14 +3942,14 @@ writes with off-connection ones.
 
 1. Drag a dimmer and a colour on the sheet and confirm both cells track the drag at input rate, then
    settle on the server's value ~100 ms later rather than sticking at the drag's last frame.
-2. Drive the *same* property from the second tab (or a MIDI surface) and confirm the first tab's cell
+2. Drive the *same* attribute from the second tab (or a MIDI surface) and confirm the first tab's cell
    follows within a beat — this is the echo-then-disagreeing-snapshot case.
 3. Clear one cell, then re-record it from the other tab, and confirm the cleared tab shows the value
    again rather than staying blank.
-4. Press Clear All, then set the same property again, and confirm the cell repopulates.
+4. Press Clear All, then set the same attribute again, and confirm the cell repopulates.
 5. Run a crossfade with the programmer active and confirm cells do **not** flicker or repaint during
    the fade — the revision gate and the content diff both still have to hold.
-6. Change a cue's layer so a key's provenance moves between a Look layer and a template layer, and
+6. Change a cue's layer so a key's provenance moves between a Look layer and a palette layer, and
    confirm the cell's provenance badge renames rather than keeping the old layer.
 
 10 minutes.
@@ -3966,7 +3965,7 @@ Every mounted raw-channel slider used to hold a `{universe, channelNo}`-keyed RT
 whose `onCacheEntryAdded` called `updateCachedData` on each `channelState` frame — a Redux dispatch,
 reducer pass and subscriber scan per changed channel per frame, at up to 30 Hz, for a value nothing
 outside the slider consumes. They now read `lightingApi.channels.subscribeToChannel` through
-`useChannelValue`, a `useSyncExternalStore` hook beside the fixture-property readers. The per-channel
+`useChannelValue`, a `useSyncExternalStore` hook beside the fixture-attribute readers. The per-channel
 split, `channelsApi`'s 33 ms batching and the write path are all unchanged. **Code-read** change —
 nothing was measured on a desk, and no frame time is claimed.
 
@@ -3977,7 +3976,7 @@ which is now a `null` channel reading 0.
 **Test**: with the desk running and DMX flowing:
 
 1. On `/channels` for a live universe, scroll the grid and confirm every visible row's level tracks
-   a running effect continuously, with no row frozen at an old value. Scroll away and back — the
+   a running FX continuously, with no row frozen at an old value. Scroll away and back — the
    returning rows must be live, not stale (this is the virtualizer remounting subscriptions).
 2. Drag a channel slider there and confirm the rig follows at input rate and the row settles on the
    value the desk reports, not on the drag's last frame.
@@ -4012,10 +4011,10 @@ The pooling, the pruning and the identity check now live once in `createKeyedWsS
 moved onto it in the same change. Its behaviour is meant to be identical (it had the same logic,
 hand-rolled), but that puts the stage views in scope for this check as well as the beat indicators.
 
-**Test**: with the desk running, a bank of at least two speed masters, and an effect on each:
+**Test**: with the desk running, a bank of at least two speed masters, and an FX on each:
 
 1. Open a surface showing beat indicators for two masters (the speed-master panel, or an FX list
-   with effects on different masters) and confirm both pulse at their own tempo.
+   with FX on different masters) and confirm both pulse at their own tempo.
 2. Navigate away so one master's indicator unmounts, then back, and confirm it re-locks phase
    promptly rather than free-running — that is the re-pooled subscription re-requesting a beat.
 3. Pull the network for a few seconds and reconnect. Every *mounted* indicator must re-lock within a
@@ -4089,9 +4088,9 @@ from a busk stack card and GO from `/show` move one cursor rather than two.
 1. Set M2 to follow M1 at ½ with a movement chase running on M2. TAP a new tempo on M1: the chase
    rate must halve in step, with no visible phase restart. Both tabs' speed rails and ShowBar tiles
    must show the follower move (two browsers).
-2. Busk a movement effect onto a selection with no explicit master. It must land on the
-   `position`-usage master; the configure sheet must show that master selected; retagging the
-   effect's master afterwards must work.
+2. Busk a movement FX onto a selection with no explicit master. It must land on the
+   `position`-family master; the configure sheet must show that master selected; retagging the
+   FX's master afterwards must work.
 3. TAP on a follower from a stale client → a structured refusal (`SPEED_MASTER_FOLLOWER`), tempo
    unmoved.
 4. Interleave GO from a busk stack card and GO from `/show` → one cursor, both surfaces agreeing
@@ -4100,7 +4099,7 @@ from a busk stack card and GO from `/show` move one cursor rather than two.
    → the cue fires and the pad ring goes live **without** the playhead moving; the Show view's
    cursor and its `OffPlayheadBanner` state must agree throughout, and GO on the ShowBar must be
    unaffected.
-6. Export → import a project holding a follower and a usage: the ratio, the usage and the M1
+6. Export → import a project holding a follower and a family: the ratio, the family and the M1
    relationship must all survive the uuid remap.
 
 20 minutes, 30 with the two-browser items.
@@ -4109,38 +4108,41 @@ from a busk stack card and GO from `/show` move one cursor rather than two.
 
 ## `FU-MANUAL-FX-TEMPLATE-PADS`
 
-**A template that holds an effect, end to end** · from the FX templates plan, 2026-09-02
+**A palette that holds an FX, end to end** · from the FX templates plan, 2026-09-02
 
-All four sessions landed green, but an effect template touches the busk pads, the programmer strip,
+All four sessions landed green, but an FX palette touches the busk pads, the programmer strip,
 the cue editor, the delete guard and the sync round-trip, and the two apply gestures differ in a way
 only a rig shows: **⌥click** (*Apply as values*) mints a detached programmer-band copy that never follows
-the template again, while a **tap** adds a template layer that does. Nothing automated distinguishes "it ran"
+the palette again, while a **tap** adds a palette layer that does. Nothing automated distinguishes "it ran"
 from "it ran and stayed attached to the right thing".
 
 **Test**: with the desk running and a Front Wash group of four heads:
 
-1. Create *Amber Breathe* (Colour, Effect, master by usage). It must appear in the Colour tab of
-   Templates with the wave tile, and in the busk view's edit-mode library palette — the busk view
-   no longer lays templates out by family, so put its pad on a page by hand.
-2. Select Front Wash on Busk and press that pad → the effect runs on the four heads on M2's tempo.
-   Press again → it stops. The presence dot must follow the layer stack, not the effect list.
-3. Retune M2 → the running effect retimes. Then edit the template's beat division: the *live*
-   instance keeps its old division until the pad is re-pressed **or the programmer's stack next
+1. Create *Amber Breathe* in *New palette*: family Colour, *Holds* · FX, a colour FX on the master
+   tagged for Colour. It must appear under the Colour family chip on Palettes with the wave tile, and
+   in the busk view's edit-mode library — the busk view does not lay palettes out by family, so put
+   its pad on a page by hand.
+2. Select Front Wash on Busk and press that pad → the FX runs on the four heads on M2's tempo.
+   Press again → it stops. The presence dot must follow the layer stack, not the FX list.
+3. Retune M2 → the running FX retimes. Then edit the palette's cycle: the *live*
+   instance keeps its old cycle until the pad is re-pressed **or the programmer's stack next
    recooks for any reason** (a layer patch, a move, another pad) — which respawns it at the new
-   division with its phase restarted (`FU-TMPL-FX-EDIT-NO-RETIME`, inherited from deferred Look
-   effects; `completed/fixture-fx-sheets-plan.md` session 1 amendment), and a programmer-band copy minted by a strip ⌥click never
-   follows the template at all.
+   cycle with its phase restarted (`FU-TMPL-FX-EDIT-NO-RETIME`, inherited from deferred Look
+   FX; `completed/fixture-fx-sheets-plan.md` session 1 amendment), and a programmer-band copy minted by a strip ⌥click never
+   follows the palette at all.
 4. In the programmer, tap the chip with two heads selected, then Record → the cue holds a
-   template *layer*; GO on that cue runs the effect; the cue editor's layer panel shows tempo and
+   palette *layer*; GO on that cue runs the FX; the cue editor's layer panel shows tempo and
    amount overrides that work.
-5. ⌥click the chip → *FX running* shows a `programmer band` row; *Save as template…* on it creates a
-   second template with the same settings; Clear releases the copy.
-6. Delete a template that is both tracked by a cue and running on the programmer → the guard must
+5. ⌥click the chip → *FX running* shows a `programmer band` row; *Save as palette…* on it creates a
+   second palette with the same settings; Clear releases the copy.
+6. Delete a palette that is both tracked by a cue and running on the programmer → the guard must
    name both, and *Delete anyway* must stop it everywhere.
-7. Export → import a project holding an effect template with a `tmpl:` colour parameter and a
-   stamped master → the effect, the reference and the master survive the uuid remap. Clone the
+7. Export → import a project holding an FX palette with a `pal:` colour parameter and a
+   stamped master → the FX, the reference and the master survive the uuid remap. Clone the
    project → the same.
-8. Under Beam in the New template sheet, the Effect choice must be disabled with its reason visible.
+8. In *New palette*, choose Beam and *Holds* · FX: the FX list offers the beam built-ins (Zoom Wave,
+   Iris Pulse, Frost Pulse, Focus Pull) and Slot Steps, and nothing that drives a level or a colour.
+   A Beam FX palette saves and presses like any other.
 
 20 minutes.
 
@@ -4170,28 +4172,28 @@ session 5. Checks 1 and 7 need a re-run on the fixed build; 2–6 and 8 have not
 
 1. **Build a page from empty.** Two rows, a column with one bank stacked under another, and one
    bank set to `COLUMN` flow. Reload the browser: the same page, the same shape, the same order.
-2. **Solo across kinds.** One solo bank holding a position template and a movement Look. Press the
-   template on the movers, then the Look with any selection → the Look lands whole on its own
-   fixtures, the template goes dark everywhere, and the Look's ring is full. Press the template on
+2. **Solo across kinds.** One solo bank holding a position palette and a movement Look. Press the
+   palette on the movers, then the Look with any selection → the Look lands whole on its own
+   fixtures, the palette goes dark everywhere, and the Look's ring is full. Press the palette on
    the movers → the Look comes off whole. Nothing else on stage moves (absolute-looks plan P3).
 3. **A cue in the same solo bank.** Pressing it turns both of the above off and lights the cue;
    pressing it again stops the cue and lights nothing. GO on the ShowBar must be unaffected
    throughout, and the Show view's cursor must not move — a cue pad is live without being the
    playhead.
-4. **One record, two pads, two pages.** The same template on a pad on each page: lit on both, and
+4. **One record, two pads, two pages.** The same palette on a pad on each page: lit on both, and
    either one turns it off.
 5. **A Look on a cue slot.** Drag it from the busk view's edit-mode palette into a slot; tap it on
    the Show view with *nothing selected* → it comes on whole, on its own fixtures, and lights the
    tile.
-6. **A delete takes its pads.** Put one template on three pads, check the library row says *on n
+6. **A delete takes its pads.** Put one palette on three pads, check the library row says *on n
    pages* and the delete confirm names them, then delete it: the pads go, the pages still render,
    no 500.
 7. **A narrow window.** Columns stack, nothing overlaps, nothing is unreachable.
 8. **Placing a pad from elsewhere** (session 4). From a cue editor's Cue tab in the Show view, *Add to
    busk page* → a bank; the pad is at the **end** of that bank when you next open the page, without
-   having entered edit mode. Repeat from the template editor and the Look sheet. Then *Save as
-   template* on a running effect with *Also add to* left as offered: the template is created **and**
-   the pad appears. Delete the offered bank first and repeat → the template is still created and
+   having entered edit mode. Repeat from the palette editor and the Look sheet. Then *Save as
+   palette…* on a running FX with *Also add to* left as offered: the palette is created **and**
+   the pad appears. Delete the offered bank first and repeat → the palette is still created and
    the failure is reported, not swallowed.
 
 30 minutes, 40 with two browsers for the solo items.
@@ -4202,14 +4204,14 @@ session 5. Checks 1 and 7 need a re-run on the fixed build; 2–6 and 8 have not
 
 **An emitter set outright, on stage** · from the template-emitter work, 2026-09-09
 
-White, amber and UV became template rows of their own carrying a DMX byte, and a colour template
+White, amber and UV became palette rows of their own carrying a DMX byte, and a colour palette
 that names one now refuses **as a whole** on a head that lacks it. Shipped as lighting7 `8919c29` /
 lighting-react `cc6490e`.
 
 **Most of this was already verified against the running desk, and is not worth repeating.** The
-strip's emitter filter (a white-only bar is offered every other colour template and not the UV one),
-the resolves-to panel's three-way split, the whole-template refusal's skip payload, the policy lock
-and its restore, and the guarantee that a plain `extract` template still reaches every colour head
+strip's emitter filter (a white-only bar is offered every other colour palette and not the UV one),
+the resolves-to panel's three-way split, the whole-palette refusal's skip payload, the policy lock
+and its restore, and the guarantee that a plain `extract` palette still reaches every colour head
 including a wheel — all confirmed on 2026-09-09 through the UI and the apply/resolve routes. What no
 part of that could reach is **light**: there is no DMX from the sandbox, so every check below was
 verified only as far as the value the desk holds.
@@ -4220,11 +4222,11 @@ the difference between a UV wash *over* an amber one and a UV wash that replaced
 
 **Test**: with an RGBWA-UV hex, a white-only head (a 12-pixel bar) and a colour-wheel head patched:
 
-1. **UV over a colour, not instead of it.** Busk an amber on the hex. Press a UV-only template
+1. **UV over a colour, not instead of it.** Busk an amber on the hex. Press a UV-only palette
    (one `uv` row). The amber must still be there, with UV added — *not* a dark violet head. This is
    the single check the feature exists for; if it fails, the row/field decision was wrong and that
    is a design finding, not a bug.
-2. **The bytes are the emitters.** A template with `white` 180, `amber` 200 and `uv` 255 on the hex
+2. **The bytes are the emitters.** A palette with `white` 180, `amber` 200 and `uv` 255 on the hex
    should look like those three emitters at those levels — warm and bright, with UV — rather than an
    RGB approximation of them. Confirms the byte reaches the bundled slider rather than being folded
    into the mix.
@@ -4234,21 +4236,21 @@ the difference between a UV wash *over* an amber one and a UV wash that replaced
    visible difference means the explicit path and the derived path disagree about the same channel,
    which is exactly what the `rgbonly` refusal assumes they cannot do. Distinct from
    [`FU-MANUAL-DESK-S3`](#fu-manual-desk-s3) check 5, which compares Extract against RGB-only.
-4. **A refusal is stillness.** Apply a template holding RGB + white + UV to the hex *and* the
+4. **A refusal is stillness.** Apply a palette holding RGB + white + UV to the hex *and* the
    white-only bar together. The hex changes; the bar must **not move at all**. A bar that takes the
    hex and drops the UV would look like an ordinary colour change, which is the failure mode the
-   whole-template rule exists to prevent and the one an operator would never think to report.
+   whole-palette rule exists to prevent and the one an operator would never think to report.
 5. **Record and re-apply.** Busk a white and an amber on the hex — one through the colour picker,
    one on its own fader — then *New from selection*, then apply the result back to the same head. It
    should look the same. That exercises the per-emitter record heuristic, where a single flag once
    discarded the emitter that lived only inside the colour.
-6. **A pixel bar.** Put a `white` row on a template and apply it to the 48-channel bar, whose colour
+6. **A pixel bar.** Put a `white` row on a palette and apply it to the 48-channel bar, whose colour
    lives on its elements. It is omitted from the resolves-to panel entirely today, so the honest
    expectation is "nothing happens" — confirm that, and if the bar *does* light unevenly promote it
    to [`FU-FX-ELEMENT-BUNDLED-COLOUR`](followups.md#fu-fx-element-bundled-colour), which already
    covers elements dropping their bundled component.
-7. **An effect follows it.** Point a colour effect's parameter at a template holding a hex *and* an
-   amber row (`tmpl:`), and watch the running effect on the hex. The amber must be in its output —
+7. **An FX follows it.** Point a colour FX's parameter at a palette holding a hex *and* an
+   amber row (`pal:`), and watch the running FX on the hex. The amber must be in its output —
    the reference folds every colour-family row into one colour. Then retune the amber and watch it
    follow, which is [`FU-MANUAL-FX-TEMPLATE-COLOUR`](#fu-manual-fx-template-colour)'s mechanism over
    the new row type.

@@ -2,7 +2,7 @@
 
 How the stage surfaces decide **what a fixture looks like**. Two independent seams:
 
-- a **channel source** — which layer of the lighting cascade the numbers come from;
+- a **channel source** — which tier of the lighting cascade the numbers come from;
 - a **fixture appearance** — how a fixture's colour source turns those numbers into a colour and a
   level.
 
@@ -37,11 +37,11 @@ stage did not.
 `programmer` is literal on purpose: an empty programmer shows an empty stage, and a fixture given
 intensity but no position sits at pan/tilt 0 rather than borrowing a position from the wire.
 
-**What the two programmer sources do not draw is the programmer's effects.** Blind holds them as it
+**What the two programmer sources do not draw is the programmer's FX.** Blind holds them as it
 holds its values (show-cue-editing plan D7): a busk, Include's children and a programmer layer's
-effects keep running, phase kept, and paint nothing until Blind goes off. These sources lay the
-programmer's *entries* over the wire, and an effect exists only as output, so in Blind they draw a
-held effect's key as the rig has it — the Pulse a Blind edit included is not drawn moving.
+FX keep running, phase kept, and paint nothing until Blind goes off. These sources lay the
+programmer's *entries* over the wire, and an FX exists only as output, so in Blind they draw a
+held FX's key as the rig has it — the Pulse a Blind edit included is not drawn moving.
 `FU-BLIND-FX-DRAWN` (lighting7 `docs/plans/followups.md`) is the desk-side fix if it is wanted.
 
 It is a **module store read through `useSyncExternalStore`**, not `usePersistentState`. Two surfaces
@@ -121,7 +121,7 @@ one cue's look under another cue's identity. Being a query also puts it outside
 Four limits shape what the source can promise. The first two the View menu states outright,
 because an operator would otherwise read them as bugs; the last two it does not:
 
-* **Layer 4 only.** A cue whose look is carried by a cue-band effect or a timed preset previews as
+* **Tier 4 only.** A cue whose look is carried by a cue-band FX or a timed preset previews as
   little or nothing. The menu hint says "cue values only".
 * **No show running, no preview.** With no active stack — or at the end of a non-looping stack,
   where the backend answers **400** — the source empties and the stage shows plain output. That is
@@ -182,7 +182,7 @@ into a `PushChannelSource` and overlaid on the wire:
   stored edit, which is the point of it.
 
 The scenery is the preview's too, moving from where the stage is when the answer lands. The three
-limits are Next GO's: Layer 4 only (effects are not drawn), assertions only, no programmer. A target
+limits are Next GO's: Tier 4 only (FX are not drawn), assertions only, no programmer. A target
 the show on the rig does not hold empties the source and the stage shows output. The View menu's
 status line says which case it is (`useEditCueStatus`).
 
@@ -198,10 +198,10 @@ naming it, since it would read this window's target.
 `hooks/useChannelSource.tsx` supplies one by context, defaulting to the wire. Every reader takes a
 source; nothing but the source knows about layers.
 
-Channel level rather than property level, because `FixtureModel`'s per-frame beam director reads 17
+Channel level rather than attribute level, because `FixtureModel`'s per-frame beam director reads 17
 channels by key (pan, tilt, their fine axes, zoom, focus, iris, frost, two gobo wheels, gobo
 rotation with its fine byte and its wheel's function channel, prism, prism rotation, and two
-macros), and a head with framing shutters eight more (each blade's insertion and rotation). Substituting at property level would mean touching each of those
+macros), and a head with framing shutters eight more (each blade's insertion and rotation). Substituting at attribute level would mean touching each of those
 reads and knowing which descriptor backs each; substituting at channel level means they all work
 unchanged.
 
@@ -225,24 +225,24 @@ depends on that, so it is worth a smoke test after any R3F upgrade.
 `lib/programmerChannels.ts` turns `programmer.state` into a channel map. Two things to know:
 
 **`ProgrammerState.channels` is the sideband, not the programmer's output.** It carries only what
-the property model can't lift: raw `updateChannel` writes on unbacked channels, raw pan/tilt axis
+the attribute model can't lift: raw `updateChannel` writes on unbacked channels, raw pan/tilt axis
 writes, and unpark hand-downs. A dimmer or colour written through `programmer.set` lands in a
-*property* entry and never appears there. Reading the picture off `channels` alone yields an almost
+*attribute* entry and never appears there. Reading the picture off `channels` alone yields an almost
 empty stage.
 
-So the real work is `resolveEntryChannels`, which mirrors lighting7's `PropertyChannelWriter`:
+So the real work is `resolveEntryChannels`, which mirrors lighting7's `AttributeChannelWriter`:
 level → one channel; colour → r/g/b plus white/amber/uv **only where the descriptor has that
 channel** (the client-side stand-in for the backend's `WithWhite` / `WithAmber` / `WithUv` trait
 gate); position → coarse pan/tilt only, because the backend writes no fine channels for a position
 assignment either. A shape mismatch resolves to nothing rather than a guess.
 
 The descriptor index covers **element keys as well as fixture keys**: a multi-head fixture's entries
-are keyed by element key, so an index built from `Fixture.properties` alone would drop every
+are keyed by element key, so an index built from `Fixture.attributes` alone would drop every
 per-head write.
 
-**Sideband-last is a documented approximation.** The backend arbitrates a property entry against a
+**Sideband-last is a documented approximation.** The backend arbitrates an attribute entry against a
 sideband slot on the same channel by write sequence (`ProgrammerStore.Slot.seq`), which never
-reaches the client. A deliberate property write already absorbs the sideband beneath it, so a slot
+reaches the client. A deliberate attribute write already absorbs the sideband beneath it, so a slot
 surviving under one is not a state the backend normally holds; where the two could differ, favouring
 the sideband keeps raw writes visible, which is what the sideband is for.
 
@@ -263,7 +263,7 @@ operator's fader drag previews at input rate.
 ## Fixture appearance
 
 `components/fixtures/fixtureAppearance.tsx` answers "what colour is this fixture, and how lit", for
-any of five colour sources: an RGB colour property, a colour wheel, a gel, a bare dimmer, or a
+any of five colour sources: an RGB colour attribute, a colour wheel, a gel, a bare dimmer, or a
 multi-element pixel bar (plus a placeholder for a patch with no fixture).
 
 `FixtureAppearance` carries the hue at **full** brightness and the **linear** 0..1 level. Both raw,
@@ -279,7 +279,7 @@ drops the level. It stays as it is for the swatch callers that only want the str
 ### Why a render prop
 
 Each colour source needs a *different* set of value hooks — `useColourValue` wants a
-`ColourPropertyDescriptor`, `useGroupColourValues` subscribes to a variable-length channel list, a
+`ColourAttributeDescriptor`, `useGroupColourValues` subscribes to a variable-length channel list, a
 gel fixture needs neither — so they cannot collapse behind one hook without breaking hook order.
 `FixtureAppearanceSource` dispatches to a leaf component per source, each with a fixed hook set, and
 hands the result to `children`. That constraint is why the SVG plot (retired in session 5) went
@@ -289,8 +289,8 @@ Consumers — **four mounting readers**: the Positions panel's `UnitChip` (DOM �
 the swatch and the level off one subscription; it replaced `StageMarker` with the overview it
 drew);
 since the busk view's rig band, `RigTile`'s live bar and pips (`components/busking/RigTile.tsx`),
-one leaf per fixture tile, which reads a cell's colour off `segments` by the element's position in
-the patch's cell list; since the side sheet, `SideSheetFold`'s selection colour dot
+one leaf per fixture tile, which reads an element's colour off `segments` by its position in
+the patch's element list; since the side sheet, `SideSheetFold`'s selection colour dot
 (`components/busking/SideSheetFold.tsx`), one leaf for the first selected head; and the Colour
 tab's **hidden leaf per selected head** (`components/busking/ColourSheet.tsx`), which renders
 nothing and only reports into `lib/liveAppearance.ts` so *Pick* can answer in Pads focus with the
@@ -333,16 +333,16 @@ untouched: its gel or `DEFAULT_FIXTURE_COLOUR`.
 
 Since the fixture optics plan's session 3 a beam's colour and gobo are the **unit's**, not the
 type's. The type's descriptor carries the stock — each option's `colourPreview` or `gobo` — and a
-loadable setting (`SettingPropertyDescriptor.media`, `GEL` · `GOBO` · `GOBO_OR_GEL`) can be loaded
+loadable setting (`SettingAttributeDescriptor.media`, `GEL` · `GOBO` · `GOBO_OR_GEL`) can be loaded
 differently per unit: `FixturePatch.media` and each `PatchPlacement.media`, `{slots: {<setting>:
 {<option>: {gel?, gobo?}}}}`. Backend contract in lighting7 `docs/fixtures-engineering.md` §"Fitted
 media".
 
 **The overlay is the client's, per unit, and every surface that draws a unit goes through it.** `lib/fittedMedia.ts`'s
-`fittedProperties(properties, media, gels)` lays a unit's slots over the type's options — a fitted
+`fittedAttributes(attributes, media, gels)` lays a unit's slots over the type's options — a fitted
 gel becomes its library colour (`GET /gels`, read through `useGelIndex`), a fitted gobo the pattern
 and no colour, an empty slot open white and no pattern, a slot not fitted the stock — and every
-finder below it (`findColourSource`, `findGoboProperties`, …) reads the result, so the dispatch
+finder below it (`findColourSource`, `findGoboAttributes`, …) reads the result, so the dispatch
 itself did not change. `FixtureModel` and `FixtureAppearanceSource` both overlay **before** they
 dispatch, and for a placement `patchAtPlacement` has already laid its own over the patch's, option by
 option (`mediaOver`): *the placement's slot, else the patch's, else the stock*. It is the client's
@@ -354,7 +354,7 @@ when nothing is fitted, so a memo keyed on it does not churn for the common rig.
 view, the 2D appearance leaf (the Positions chips, the busk tiles, the side sheet's fold, the colour
 editor's Pick) and the patch sheet's Media box and the Focus tab's list. The surfaces that *set* a
 value do not: the programmer's setting cell and its column, the fixture sheet's setting rows, the
-fixture card and the effect editor's setting list (`FxFields`, once `EffectParameterForm`) list a setting's options with the type's stock `colourPreview`,
+fixture card and the FX editor's setting list (`FxFields`, once `EffectParameterForm`) list a setting's options with the type's stock `colourPreview`,
 because they write a DMX slot and a slot is the type's, whichever gel a unit has in it — and on a
 fixture with extra placements one cell drives several units with different strings, so there is no
 one fitted colour for its swatch to show. Teaching them the patch's own is
@@ -381,7 +381,7 @@ gel: glass in series whose current slot's colour multiplies the beam's, subtract
 with none — open white, a scroll band — passes it. Joining keeps one multiply, one per-filter
 subscription on each dispatch and one parity test; a separate path would have been a second copy of
 all three on both sides. Only where the colour source is itself a **wheel**: beside an RGB colour
-property a COLOUR setting is a preset or macro on the same emitters (the Hex's, the Orbit's), not
+attribute a COLOUR setting is a preset or macro on the same emitters (the Hex's, the Orbit's), not
 glass, and is left out. `colourDispatchParity.test.tsx` holds the 2D and 3D answers to one result for
 a two-wheel head (yellow through cyan is green), a scroll band on wheel 2 (below), and an RGB head
 with a preset setting. A **palette** still cannot address the second wheel
@@ -443,7 +443,7 @@ on the rig — drew lit: a MAC 250 at strobe 0 drew at full. The rules are one p
 `lib/strobeBands.ts`, which both colour dispatches call:
 
 - **A strobe is a level factor**, multiplied into the dimmer's: `strobeFactor(props, read, timeS)` is
-  the product over every strobe channel the fixture has (`findStrobeProperties` — a slider declaring
+  the product over every strobe channel the fixture has (`findStrobeAttributes` — a slider declaring
   `strobeBands`, or a setting whose options carry `strobeKind`; the LED Lightbar has two). Because it
   is the level, the lens, the beam, the pool and the 2D markers all follow it, and a closed band culls
   the beam exactly as a dimmer at 0 does (`LIGHT_OFF_OPACITY`).
@@ -482,7 +482,7 @@ A head does not snap to a new pan, and a scroller does not jump a frame: they tr
 plan D14; lighting7 `docs/fixtures-engineering.md` §"Travel and timing channels"). Until session 8
 the view drew every value the moment it arrived. Now it keeps a **displayed value per channel** and
 moves it toward the DMX value at the type's speed (`FixtureTypeInfo.travel`), or over the fixture's
-own timing channel's duration (`SliderPropertyDescriptor.timing`). **Drawn, never output**: nothing on
+own timing channel's duration (`SliderAttributeDescriptor.timing`). **Drawn, never output**: nothing on
 this path writes a channel, a programmer value or a gesture, and `travel.test.ts` reads the three
 files that draw it and fails on any writer.
 
@@ -558,7 +558,7 @@ nothing; `beamTravel.test.ts` that a settled head reports nothing moving.
 
 A paired dimmer is one patch drawn more than once: one circuit, an SL and an SR lantern on the same
 bar. The patch carries its other lanterns as `FixturePatch.extraPlacements` (backend contract in
-`lighting7/docs/fixtures-engineering.md` §"Extra placements (paired dimmers)"), and every stage
+`docs/fixtures-engineering.md` §"Extra placements (paired dimmers)"), and every stage
 surface draws each one **lit from the patch's own channels** — a lantern is the fixture in a
 second place, never a second fixture. Four rules keep that true:
 
@@ -588,7 +588,7 @@ fixture (additive on the backend if a venue ever needs it).
 
 A lightstrip's length is a fact of the install, not of the model: the type says so with
 `FixtureTypeInfo.acceptsLength`, and a patch then carries its own `lengthM` (backend contract in
-`lighting7/docs/fixtures-engineering.md` §"Variable-length fixtures"). A run laid round several
+`docs/fixtures-engineering.md` §"Variable-length fixtures"). A run laid round several
 sides — a ring round the stage edge on one controller — is one patch whose **extra placements are
 the other sides**, each with a `lengthM` of its own (null takes the patch's). Everything above about
 paired lanterns holds for a side: lit from the patch, selects the patch, never dragged.
@@ -976,7 +976,7 @@ without a room — the back wall and the catch floor:
     16 × 10 grid of cell means, 156 are within 0.1 of a level; the four that moved are Legs 3 SL's
     face, which Legs 2 SL now shadows from the advance bar.
 - **A focus channel focuses at a distance.** Where the type declares a focus range
-  (`@FixtureProperty(focusNearM =, focusFarM =)`, `docs/fixtures-engineering.md` §"@FixtureProperty"),
+  (`@FixtureAttribute(focusNearM =, focusFarM =)`, `docs/fixtures-engineering.md` §"@FixtureAttribute"),
   the channel sets one focal distance from the aperture wherever the head points, so a spot focused
   on a downstage mark goes soft on an upstage one, and a cue's focus means the same distance on every
   mark (`resolveDeclaredFocusDistance`). DMX runs **linearly in 1 / distance** between the ends: a
@@ -1820,8 +1820,8 @@ the selection's sphere fills the lens (grandMA3's *Auto*), the eye turns its hea
 within its plane and zooms to fit. What it frames is the Stage view's own selection
 (`framingPoints.ts`: every lantern of a fixture, a region's middle, a rigging's position), and **the
 desk selection when that is empty** — so a chip pressed in Positions, the busk band or the
-programmer is framed by the Stage window that pressed nothing. A group target frames its members; a
-cell's key is opaque on this side and frames nothing, and so does a patch the view does not draw
+programmer is framed by the Stage window that pressed nothing. A group target frames its members; an
+element's key is opaque on this side and frames nothing, and so does a patch the view does not draw
 (`stageHidden`, infrastructure). The orbit's pull-in takes the narrower half of the lens — on a
 portrait canvas the horizontal field is the tighter. O goes back to Orbit.
 
@@ -2112,7 +2112,7 @@ Fusion 100's 10°, the Scantastic's 11°), then the **family's** (`FIELD_DEG`: a
 zoom** — a ZOOM setting whose band carries `zoomDeg` (the Robe ColorSpot 575's 15°, 18° and 22°,
 each again with focus correction), every DMX value in a band drawing that band's angle and never one
 between two steps (D2). A zoom that declares neither answers nothing and falls through.
-`findZoomProperty` finds either form. Which bodies emit: a batten and a blinder always (their
+`findZoomAttribute` finds either form. Which bodies emit: a batten and a blinder always (their
 types have no beam angle to set, so `acceptsBeamAngle` could not say), tape and the cannon never,
 everything else as `acceptsBeamAngle` said before.
 
@@ -2184,7 +2184,7 @@ says.
 
 A body's **cells** (item 9) are its apertures, in the head's frame: one lens for a lantern or a
 mover, and for a batten, a blinder or a bar of heads one per element that has a colour or a level of
-its own — a colour property, a colour-wheel setting, a white or amber slider, or a dimmer (the
+its own — a colour attribute, a colour-wheel setting, a white or amber slider, or a dimmer (the
 2-cell blinder's cells are warm and cold white sliders). The Kam Liteobar 252 is three segments, as
 its type declares (`KamLiteobar252Fixture.kt:117`), not twelve. Cells without elements share the
 fixture's colour. At most `MAX_CELLS` (16).
@@ -2320,7 +2320,7 @@ Fixture-optics plan session 1 ("focus that reads"; D9, D11). The symptom was a S
 Revolution on the Commemoration Hall's balcony whose focus reached the back wall, 24 m away, but
 could not be seen to: every focal distance past about 4 m drew the same edge on the wall.
 
-- **The focal distance.** A FOCUS slider that declares a range (`@FixtureProperty(focusNearM =,
+- **The focal distance.** A FOCUS slider that declares a range (`@FixtureAttribute(focusNearM =,
   focusFarM =)`) focuses at one distance from the aperture wherever the head points, DMX linear in
   1 / distance between the ends (`resolveDeclaredFocusDistance`; the derivation is in §"Light lands
   through one surface shader"). On 2–40 m, 10–40 m is the top 16 % of the fader and one DMX step is
@@ -2437,7 +2437,7 @@ wall and the deck.
 - **Two layers, multiplied** — stacked wheels. The Robe ColorSpot 575's static wheel and its rotating
   one are both drawn, in the air and on every surface; until session 4 the view drew whichever wheel
   selected a pattern and the other only while the first was open. The rule is one, in
-  `store/fixtures.ts`: `findGoboProperties` orders the wheels by **DMX channel** (layer A, then B;
+  `store/fixtures.ts`: `findGoboAttributes` orders the wheels by **DMX channel** (layer A, then B;
   descriptor order is Kotlin reflection's and guarantees nothing), and `goboRotationWheel` gives the
   rotation channel to the wheel it **follows** — the nearest at or below its channel, which is how
   every type in the library lays them out (the Patch List's gobo column reads the same first wheel,
@@ -2518,7 +2518,7 @@ nearest 1.5°, and the Focus card's preview (`bladeLine`, which reads the packin
 `MAX_PACKED_BLADE_ANGLE_DEG`) rounds the same way so the picture and the pool agree.
 
 **A DMX head's framing shutters take the same path** (session 2; `docs/fixtures-engineering.md`
-§"Framing shutters"). `findShutterProperties` files a fixture's SHUTTER and SHUTTER_ROTATION
+§"Framing shutters"). `findShutterAttributes` files a fixture's SHUTTER and SHUTTER_ROTATION
 sliders by blade, in the wire's order, and the beam director reads their eight channels every
 frame — depth over `0..depthMax`, angle over `degMin..degMax`, each honouring `inverted`
 (`resolveDmxBlades` in `beamOptics.ts`) — and packs them with `packBlades` into its own scratch, in
@@ -2552,7 +2552,7 @@ PAR's long axis turns with `lampRotationDeg`.
 same body as the fixture list's pop-up — rows grouped by family, each with its source mark, the FX
 tray pinned at the foot — at 380px, with two Stage-only extras. **Focus** is a tab beside Values and
 Channels (it needs a scene to land a beam on). **Aim at point moved onto the Position row**: it was
-a block pinned under the panel, below every property, and is now an *Aim…* popover on the sheet's
+a block pinned under the panel, below every attribute, and is now an *Aim…* popover on the sheet's
 Position row (D14's half), holding the same `StageAimControls` body — so the panel's foot is the FX
 tray's alone. `StageFixtureControlPanel` passes that body as the sheet's `aim` prop only on the live
 project and for a head whose pan and tilt annotate degrees (`isAimable`), and the row draws the
@@ -2567,7 +2567,7 @@ popover, and `fixtureSheet/PhoneSheet` otherwise. Held upright that is a **botto
 heights** — the header and tray (*peek*), half (where it opens), full (88svh, `EditorSurface`'s own
 cap) — and a grabber: a drag follows the finger and settles on the nearest height, a drag well below
 the peek closes it, a tap or Enter steps it taller (round from full to the peek), the arrow keys step
-it either way. At the peek the properties fold away, so the stage stays in view. Held landscape (a
+it either way. At the peek the attributes fold away, so the stage stays in view. Held landscape (a
 short viewport, which beats narrow) it is the **right-hand sheet**, 380px plus the safe-area inset,
 full height. Both put the safe-area inset under the tray, which is always the column's foot, so the
 tray sits above the home indicator, and both give back the keyboard's bite from `visualViewport`
@@ -2659,7 +2659,7 @@ camera, a click on a drawn drape, a flown piece or anything on the Set layer (`i
 opens `stage3d/SceneryPopover.tsx`: the piece's `SceneryControl` writing `programmer.setScenery` at
 the window's programmer fade — the overlay the programmer's Scenery table writes, through the table's own
 `useSceneryScope` (the Stage view has no programmer scope, so it is always the Local arm) — saying
-what holds the piece (`source`, the top tier) and, in Blind, showing the staged state; *Release*
+what holds the piece (`source`, the top rank) and, in Blind, showing the staged state; *Release*
 while the programmer holds it; *Edit element…* where the window has Edit (tablet width and up),
 which turns Edit on with the piece selected; and *Moves with*. On another project's stage it is
 read-only with the reason. Four rules:

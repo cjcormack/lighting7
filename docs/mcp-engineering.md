@@ -261,7 +261,7 @@ below. There is **no script tool** (§"No script tool"): a script runs arbitrary
 desk's JVM, so reaching it through a tunnel would make a leaked token a shell on the desk machine;
 every tool here is a bounded operation on the show.
 
-`describe_rig` returns the live rig in prose (`ai/RigBriefing.kt`): fixtures, groups, the effect
+`describe_rig` returns the live rig in prose (`ai/RigBriefing.kt`): fixtures, groups, the FX
 library, what is running and parked, speed masters, Looks, colour palettes, cues and stacks. An MCP
 client gets nothing it does not ask for, so the `instructions` sent at `initialize` tell the model
 to call it first, along with the composition rules (`RigBriefing.keyConcepts()`).
@@ -297,7 +297,7 @@ each live cue. The stack tools are in `docs/cue-stacks-engineering.md` §"MCP to
 `describe_rig` and `get_current_state` both report **parked channels** — address, held value,
 and the fixture channel it drives (`ai/ParkReport.kt`, from `Fixtures.getChannelMappings`) — and
 `park_channel` / `unpark_channel` park and release one. Park
-sits above every layer the other tools write, so a model that cannot see it applies a look to a
+sits above every tier the other tools write, so a model that cannot see it applies a look to a
 parked head, sees nothing change and cannot say why. The two tools make exactly the WebSocket's
 `parkChannel` / `unparkChannel` write (`ParkManager` plus the provenance refresh), so unpark keeps
 its hand-down; `park_channel` refuses a universe the show does not output, the silent miss a model
@@ -313,8 +313,8 @@ park released for this show, the venue keeping it) or `VENUE_RESTORED` (the show
 venue's at `venueValue` standing again). In a venue both are admin-only, as every stored write there is
 (`VENUE_STORED_WRITE_TOOLS`).
 
-`create_look` authors a Look's **values** as well as its effects and scenery (`ai/LookValues.kt`):
-`values: [{target, propertyName, value}]`, each bound to its own fixture or group, as a Look row
+`create_look` authors a Look's **values** as well as its FX and scenery (`ai/LookValues.kt`):
+`values: [{target, attribute, value}]`, each bound to its own fixture or group, as a Look row
 always is. The model states an intent — the palette grammar (`pct:`, `#rrggbb`, `pos:` — a
 centre-relative position, `-128..127` with 0 the centre of travel — or a stored `deg:`, `dmx:`,
 `on`/`off`), or a setting's option name for a gobo or a wheel slot — and each is resolved per head
@@ -322,30 +322,30 @@ through `PaletteResolver`, the resolver a palette press uses, into the literal a
 `pct:` and `dmx:` reach any single channel (a hazer's `fanSpeed`), not only the palette vocabulary. A
 group stays one group row while its members agree on the literal, and becomes a row per head when they
 do not (a wheel head and an RGB head given one colour). A head that cannot take a value is reported
-under `skipped`; a value no head of its target can take, or the same target and property twice,
+under `skipped`; a value no head of its target can take, or the same target and attribute twice,
 refuses the call. A fixture's own value beats its group's in the cook, so a split group leaves a
-member the call names on its own alone. **A multi-head fixture's cells are targets too**, each by its
-own key (`shehds-1.zone-2`), stored as a cell row (the parent as the target, the cell as
-`elementKey`); a value the fixture cannot take itself but its cells can — the 24-channel Shehds' colour,
-which lives only on its three zones — lands on **every cell**, one cell row each (the cook never fans
-a fixture or group row out to cells), and a cell named on its own keeps its own value
+member the call names on its own alone. **A multi-head fixture's elements are targets too**, each by its
+own key (`shehds-1.zone-2`), stored as an element row (the parent as the target, the element as
+`elementKey`); a value the fixture cannot take itself but its elements can — the 24-channel Shehds' colour,
+which lives only on its three zones — lands on **every element**, one element row each (the cook never fans
+a fixture or group row out to elements), and an element named on its own keeps its own value
 (`resolveOnHeadOrCells` in `ai/LookValues.kt`; `set_programmer` resolves the same way). That was the
-gap a model hit: the Shehds' fixture-level colour was refused and nothing said a cell had a key, so
-`describe_rig` now lists each multi-head fixture's cells (`cells=3 (…zone-1 … …zone-3)`) and the
+gap a model hit: the Shehds' fixture-level colour was refused and nothing said an element had a key, so
+`describe_rig` now lists each multi-head fixture's elements (`elements=3 (…zone-1 … …zone-3)`) and the
 target and `create_look` descriptions say how to name one. The rows then go through the
 REST write path (`validateLookRows`, `writeLookChildren`), so a trigger or command name is refused as
-it is there. **A Look's effects name their own targets** (absolute-looks plan D2), taken as
-`create_cue`'s ad-hoc effects take one (`parseAdHocFxTarget`): `targetType` and `targetKey`, or
-`targets` for one effect over a selection; `update_look` takes them the same way, and one naming no
+it is there. **A Look's FX name their own targets** (absolute-looks plan D2), taken as
+`create_cue`'s ad-hoc FX take one (`parseAdHocFxTarget`): `targetType` and `targetKey`, or
+`targets` for one FX over a selection; `update_look` takes them the same way, and one naming no
 target is refused before anything is written. `apply_look` puts a Look on whole, wherever its own
-values and effects land, and a cue layer of a Look names no targets — any given are dropped; its
-`asValues: true` is `POST /looks/{id}/apply` instead, the Look's values and effects as the programmer's
+values and FX land, and a cue layer of a Look names no targets — any given are dropped; its
+`asValues: true` is `POST /looks/{id}/apply` instead, the Look's values and FX as the programmer's
 own. `list_fixture_types` with `attributes: true` is where the model learns the names. A layer with no
 targets on a generic palette is refused by `create_cue` and `build_cue_stack`, as the busk pad refuses
 the same press. There is no static
-effect: `StaticValue` was removed once a Look could hold a value, and `StaticSetting`, `StaticColour` and
-`StaticPosition` once `set_programmer` could set any property, so a fixed state is always a value on the
-fixture's own property. A stored effect naming a type the registry no longer has is skipped with a warn
+FX: `StaticValue` was removed once a Look could hold a value, and `StaticSetting`, `StaticColour` and
+`StaticPosition` once `set_programmer` could set any attribute, so a fixed state is always a value on the
+fixture's own attribute. A stored FX naming a type the registry no longer has is skipped with a warn
 wherever a cue or Include spawns it (`FxSpawner.createFxInstanceOrNull`), not left to abort the GO.
 A colour value may carry the head's own emitter levels as the desk's colour literal does —
 `#ff0000;w128;a64;uv32`, each token at most once, any other token refused rather than dropped — laid over
@@ -358,37 +358,37 @@ annotated or not, and pan and tilt also take `pct:` / `dmx:` each on its own.
 `update_look` edits a Look as the REST `PUT /looks/{id}` does: a new name (refused when another
 Look holds it) and notes, and each of `values`, `fx` and `scenery` given replaces that part
 whole while one left out is kept — the same resolve and checks as `create_look`, every part checked
-before anything is written. A values or effects change goes through `republishForLookEdit`, so every
+before anything is written. A values or FX change goes through `republishForLookEdit`, so every
 live cue layering the Look moves without a re-fire; a rename, notes or scenery fire
 `lookListChanged`, which the library and the live scenery read. `delete_look` is the REST delete
 itself (`performLookDelete`): refused with `LOOK_IN_USE` and the cues that layer it unless `force`,
 which deletes those layers — rebuilding a live cue that held one, so the Look's values leave the
-stage without a re-fire (effects the cue spawned from it run until the cue stops) — and the Look's busk pads, cue slots, scenery, programmer layers and include
+stage without a re-fire (FX the cue spawned from it run until the cue stops) — and the Look's busk pads, cue slots, scenery, programmer layers and include
 target go with it.
 
 A cue's **own values** — `create_cue`'s and each `build_cue_stack` cue's `values` — take
-`create_look`'s grammar and resolve the same way, stored as the cue's property assignments (a cell by
+`create_look`'s grammar and resolve the same way, stored as the cue's attribute assignments (an element by
 its own key, as Record stores one). They beat every layer of the cue whatever its order. They are
 resolved against the loaded rig, so `build_cue_stack` refuses them in a project that is not current,
 as it refuses `at`. A cue **layer** names a Look or, with `paletteId`, a palette — exactly one. A
 layer naming a record the project lacks is refused by both tools (`layerSourceProblems`), where
-`writeCueChildren` would drop it silently; a generic palette (an effect palette, or rows for
+`writeCueChildren` would drop it silently; a generic palette (an FX palette, or rows for
 whatever it is pointed at) with no layer targets is refused as the busk pad refuses it with nothing
-selected. An effect missing a required field is refused by the field's name.
+selected. An FX missing a required field is refused by the field's name.
 
 **The programmer** (`ai/ProgrammerTools.kt`). Five tools write it the way the desk does, each through
 the code the desk's own gesture goes through, on the current project:
 
-- `set_programmer` `{targets, values: [{propertyName, value}], fadeSeconds?}` — plain values in
+- `set_programmer` `{targets, values: [{attribute, value}], fadeSeconds?}` — plain values in
   `create_look`'s grammar, resolved per head by `resolveProgrammerValues` (the same parse and
-  `PaletteResolver` per-head resolution as a Look's values, answering each head's `PropertyValue`
-  rather than Look rows), written as `ProgrammerOwner.WEB` in one `writeProperties` batch with each
+  `PaletteResolver` per-head resolution as a Look's values, answering each head's `AttributeValue`
+  rather than Look rows), written as `ProgrammerOwner.WEB` in one `writeAttributes` batch with each
   head's `sourceGroup` from `groupHintsForTargets` — *Apply as values*' value arm — so Record
   collapses a group's agreeing heads back to one group row. A head that cannot take a value, or whose
   write resolves to no channel, is in `skipped`; a value no selected head can take, an unknown target,
   or a trigger or command name refuses the call before anything is written. A colour write carries the
   head's bundled W/A/UV with it, so a later colour call resets an emitter an earlier call set — the
-  desk's colour picker does the same; within one call `writeProperties` stores emitter rows last, so a
+  desk's colour picker does the same; within one call `writeAttributes` stores emitter rows last, so a
   `white` value beside an `rgbColour` one wins.
 - `clear_programmer` `{targets?, fadeSeconds?}` — none is `clearProgrammerCompletely` (the WS
   `programmer.clearAll`); targets are each `ProgrammerHandler.clearTarget` (the WS
@@ -404,7 +404,7 @@ the code the desk's own gesture goes through, on the current project:
   as the desk's doors do.
 - `record_look` — `performProgrammerRecordLook`, which `POST …/programmer/record-look` now calls too
   (extracted from the route as Record into a cue's `performProgrammerRecord` was), with record_cue's
-  modes, source and mask, `fxIds` to move programmer effects into the Look, and the Look's rows in
+  modes, source and mask, `fxIds` to move programmer FX into the Look, and the Look's rows in
   the answer.
 
 Every fade on these is `fadeSeconds`, 0–600.
@@ -459,8 +459,8 @@ fixture's commands beside its triggers (`commands=reset (Reset, 5.0 s, RESET),�
 for its hold). Over MCP it answers `isError` unless an admin has allowed fixture commands (§"Remote
 hardening"), and the schema says to run one only when the operator asked for that command on that
 fixture: a model cannot see the head swing or the stage go dark. Its refusals carry the route's codes
-(`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`, `VENUE_HOLD`, `COMMAND_UNKNOWN`). A row naming a command as a
-property is refused by name (`COMMAND_NOT_STORABLE`) by every tool that writes rows.
+(`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`, `VENUE_HOLD`, `COMMAND_UNKNOWN`). A row naming a command as an
+attribute is refused by name (`COMMAND_NOT_STORABLE`) by every tool that writes rows.
 
 Tools act on the desk's **current** project, except where they take a `projectId` (§"Another
 project than the live one" below). Before the show is warm a call
@@ -493,7 +493,7 @@ prompt-book markup from a script and lighting notes.
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` and the lantern and focus included, and `media`, `locate` and `colour` the same way; a re-patch to another type drops stored media the new type cannot hold, on the fixture and each of its placements, and keeps only the stored locate of units the new type pans and tilts |
 | `delete_groups` | Delete groups by name; the fixtures stay patched. A group that still has members is refused unless `force`, so a typo cannot take apart a group looks and cues address. Shares `deleteFixtureGroupRows` with the REST delete (memberships and busk rig tiles go with it) |
 | `unpatch_fixtures` | Remove fixtures by key, and whole universes (`{universe, subnet?}`) with every patch on them, `dryRun` (`ai/PatchEditTools.kt`). Shares `deleteOwnPatch` / `deleteOwnUniverse` with the REST deletes, so memberships, busk rig tiles, extra placements, cue events and the universe's machine overrides go as there; the groups stay. Never refused for a reference: `namedBy` lists every cue, Look, palette, surface binding and script still naming a removed key (`ai/RigKeyReferences.kt`), whose rows stay and show as a missing fixture |
-| `rename_fixtures` | Change keys, `{key, newKey}` rows, `dryRun`. `patch_fixtures` cannot, since the key is its identity. Unlike the REST `PUT`, which sweeps a renamed patch's busk cell tiles and leaves every other reference dangling, it **rewrites** the project's own references — cue rows, ad-hoc effects and layer targets, Look rows (their cell `elementKey` too) and effects, palette rows, surface bindings and busk cell tiles — a cell's `<key>.<cell>` by its prefix, so `foh-1` never matches `foh-10`, and a stored key that is itself a patched fixture's is never read as another's cell; scripts are only named (`scriptsNotRewritten`). Keys go through a temporary value first, so a swap passes the unique index. A new key may not hold a `.` |
+| `rename_fixtures` | Change keys, `{key, newKey}` rows, `dryRun`. `patch_fixtures` cannot, since the key is its identity. Unlike the REST `PUT`, which sweeps a renamed patch's busk element tiles and leaves every other reference dangling, it **rewrites** the project's own references — cue rows, ad-hoc FX and layer targets, Look rows (their `elementKey` too) and FX, palette rows, surface bindings and busk element tiles — an element's `<key>.<element>` by its prefix, so `foh-1` never matches `foh-10`, and a stored key that is itself a patched fixture's is never read as another's element; scripts are only named (`scriptsNotRewritten`). Keys go through a temporary value first, so a swap passes the unique index. A new key may not hold a `.` |
 | `edit_groups` | A group's membership (`members`, the whole ordered list; or `add` / `remove`), name (`newName`, references rewritten as `rename_fixtures` does, scripts named in `scriptsNotRewritten`) or a new group, `dryRun`. A venue fixture the show hides stays in a show group whose members are replaced. `colour` sets the group's colour (`null` clears it); on a show on a venue a row of only `colour` naming a venue group is the show's recolour of it |
 | `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals. A field it does not know (`width` for `widthM`) is refused rather than skipped, and the answer carries the stage box as stored. `get_patch` re-reads the project row rather than trusting `ProjectManager.currentProject`, whose columns are the values loaded at the last switch — reading those made every stage-box correction look unsaved. The write fires `projectDetailsChanged` so the Stage view redraws the box |
 | `set_scene` | The scene document (stage-view plan session 2, D2): **elements and viewpoints upserted by name**, with `removeElements` / `removeViewpoints` and a `dryRun`. An element row is `set_stage`'s shape — `name`, `kind`, `layer`, `x`/`y`/`z`, `yawDeg`, the three sizes, `finish {colour, pattern, emissive}`, `params` (replaced whole: what it may hold depends on the kind) and `hidden`; a platform's `params.region` names a region, stored as its uuid. A viewpoint row is `name`, `kind`, `eye`/`target` as `{x, y, z}`, `fovDeg`, and for a seat `seating` (omissible when the scene has one) and `seat` (`F6`). `template: "proscenium-hall"` with `templateParams` (hall, stage and opening sizes required; deck height, apron, rows, pitches, first-row distance and a balcony optional) expands server-side into named elements — `Hall`, `Stage house`, `Main stage`, `Proscenium`, `Stalls`, `Balcony` — before the explicit rows, and an explicit row of the same name lays its fields over the template's (`finish` one level down). A change that would leave a stored seat view without its seat is refused unless that view is changed or removed in the same call. In a show on a venue a row of exactly `{name, hidden}` naming a venue element is a **hide** (`ShowHides.setHiddenByUuid`, `HideKind.ELEMENT`) — `true` hides it for the show's run, `false` brings back one the show hides — checked first with `ShowHides.hideRefusal`, so `VENUE_HIDE_IN_USE`'s holders are listed with every other problem; any other row naming a venue element is `VENUE_OWNED`, with a hint naming the hide row, a stack set for a part-show move, and the venue's draft for a change for every show. Shares `validateStageElement` / `validateStageViewpoint` with the REST routes, so the two refuse the same things. **Models** (`docs/fixtures-engineering.md` §"Model objects"): an `OBJECT` with `shape: MODEL` and `params.parts` is how another Claude session makes a set piece no primitive draws — the schema's `MODEL_PARTS_NOTE` is the whole vocabulary — and a row that sends parts but leaves a size out is sized to the parts' bounds; `modelFrom` copies a model (its parts, and its size and finish unless the row states them) from a stored element or an earlier row of the same call |
@@ -521,7 +521,7 @@ changes — and that a Look's scenery shows while it is live, above every cue; p
 **Moving scenery now** (scenery-programmer plan D15). `move_scenery` is the live counterpart: `{element,
 visible?, open?, trimM?, fadeSeconds?, release?}` holds one element's states in the **programmer's
 scenery** (`state/ProgrammerScenery.kt`) — the same overlay the programmer's Scenery table and the Stage view write,
-the resolver's top tier, above every cue, set and Look — or, with `release: true`, lets it go back to
+the resolver's top rank, above every cue, set and Look — or, with `release: true`, lets it go back to
 what the show holds. The element is named as `set_scenery` names one, and checked against its kind by
 the same `parseSceneryState`. It moves at the element's `travelS` scaled by how far it goes, or over
 `fadeSeconds` when given; with neither it snaps. Blind stages it, Clear releases it, and it writes
@@ -533,7 +533,7 @@ piece the cue would not show anyway, a row the cue already has replaced — answ
 `sceneryRemoved` and `sceneryAlreadyTracked`; `include_into_programmer` holds a cue's or Look's own
 scenery rows in the programmer (`sceneryIncluded`), a cue row's transition kept, and
 `update_from_programmer` with no targets writes them back (`sceneryWritten`). It runs a Look's
-**effects** in the programmer as well (`fxSpawned`, each on its own target), and `update_from_programmer` writes an operator's edit back onto the effect it came from
+**FX** in the programmer as well (`fxSpawned`, each on its own target), and `update_from_programmer` writes an operator's edit back onto the FX it came from
 (`fxWritten`) — `docs/lighting-composition-model.md` §"Record / Include / Update". Their descriptions say
 so, and that neither the mask nor `targets` narrows scenery. **It needs no remote-access gate**, unlike arming, firing and fixture
 commands: scenery is drawn and never output, so moving it reaches nothing physical — no channel, no
@@ -549,7 +549,7 @@ trigger, offsetSeconds?}`: a fixture with one-shot triggers by key or name (`des
 twice refused, every problem at once and nothing written. The schema text says what an event is —
 fired on GO into the cue only, never tracked or previewed, and only while the operator has armed the
 desk — and that arming and firing are the operator's: **no tool arms or fires**, and a row naming a
-trigger as a property is refused by name (`TRIGGER_NOT_STORABLE`) by every tool that writes rows.
+trigger as an attribute is refused by name (`TRIGGER_NOT_STORABLE`) by every tool that writes rows.
 
 Three decisions shape them:
 
@@ -581,7 +581,7 @@ Three decisions shape them:
   rewrote, `cuesRecomposed` for the cues, and invalidates the surface bindings; on the current project
   it republishes each rewritten Look and palette (`republishForLookEdit` / `republishForPaletteEdit`)
   and each live cue (`republishCueIfLive`) after the reload, so what is on stage keeps its fixtures.
-  The programmer's own slots and effects already running are runtime state keyed by the old key, and
+  The programmer's own slots and FX already running are runtime state keyed by the old key, and
   are left to the operator.
 - **A malformed value is refused, never read as a clear.** An explicit `null` clears a field; a
   number field holding a string is a problem like any other. A cue layer naming a Look that is
@@ -619,7 +619,7 @@ The setup tools that read or store data take an optional **`projectId`** — `ge
 `override_venue_fixtures`, `set_scene`, `get_scene`,
 `upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `delete_cue_stacks`, `delete_cues`,
 `copy_cues` (its target), and the
-show-running `set_scenery` — so a show can be prepared while another runs, as the REST routes'
+show-running `set_scenery` — so a project can be prepared while another runs, as the REST routes'
 `withProject` writes allow. `ai/ToolProject.kt`'s `State.toolProject` resolves it (absent is the
 current project; a venue version, or an id that names nothing, answers *Project not found*) and
 says whether the project is current, which each tool asks before touching the running show: the
@@ -639,7 +639,7 @@ with every clash at once. A stack's cues are copied through the one cue copier
 (`docs/cues-engineering.md` §"Copying"), which `POST /cues/copy-from` shares: a scenery change finds
 the target's element — by uuid between two projects on one venue, else one copied in the same call,
 else by name — a cue event its patch by uuid on one venue, else by key and type, a script trigger its
-script by name, a speed master by index; a cue layer's Look or palette, and one a `pal:` effect
+script by name, a speed master by index; a cue layer's Look or palette, and one a `pal:` FX
 parameter names, is the target's of that name (`looksLinked`) or is copied along. A platform's
 region is found by name. What cannot resolve is listed in `unresolved` rather
 than guessed: rows naming a fixture or group the target lacks are kept, reading as missing, as a

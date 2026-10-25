@@ -196,7 +196,7 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
             }
             is FxUpdateOutcome.Conflict -> scope.send(FxErrorOutMessage(message.fxId, outcome.code, outcome.message))
             FxUpdateOutcome.NotFound -> scope.send(
-                FxErrorOutMessage(message.fxId, CODE_FX_NOT_FOUND, "Effect ${message.fxId} is not running"),
+                FxErrorOutMessage(message.fxId, CODE_FX_NOT_FOUND, "FX ${message.fxId} is not running"),
             )
             is FxUpdateOutcome.Refused -> scope.send(
                 FxErrorOutMessage(message.fxId, CODE_FX_UPDATE_REFUSED, outcome.message),
@@ -206,12 +206,12 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
             is FxEngine.LocalMoveOutcome.Moved ->
                 for (id in outcome.changed) scope.send(FxChangedOutMessage(FxChangeType.UPDATED, id))
             is FxEngine.LocalMoveOutcome.NotFound -> scope.send(
-                FxErrorOutMessage(message.fxId, CODE_FX_NOT_FOUND, "Effect ${outcome.fxId} is not running"),
+                FxErrorOutMessage(message.fxId, CODE_FX_NOT_FOUND, "FX ${outcome.fxId} is not running"),
             )
             is FxEngine.LocalMoveOutcome.NotLocal -> scope.send(
                 FxErrorOutMessage(
                     message.fxId, CODE_FX_MOVE_NOT_LOCAL,
-                    "Effect ${outcome.fxId} is not a Local FX — only Local FX are re-ranked",
+                    "FX ${outcome.fxId} is not a Local FX — only Local FX are re-ranked",
                 ),
             )
         }
