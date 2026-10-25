@@ -106,8 +106,8 @@ interface LegendCountProps {
  * Both legends use it so they cannot drift into two different footers — they occupy the same slot
  * and swap only on the scope.
  *
- * The footer is the `@container` and every width query is on a descendant — the shape
- * `ProgrammerWorkspace`'s doc comment records the bug for. It measures **the footer's own column**
+ * The footer is the `@container` and every width query is on a descendant, since a query container
+ * is the nearest ancestor and never the element itself. It measures **the footer's own column**
  * rather than the page, because fitting inside the grid column is the actual question: measuring
  * the page would show the long glosses at 1180 of viewport, where the column is 712 and they clip
  * mid-word. So at 1440 and at 1180 this draws `LEGEND_SHORT`, which is exactly what the `Main` and

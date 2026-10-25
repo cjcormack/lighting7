@@ -8,7 +8,6 @@ import type { ColumnKey } from './columns'
 import type { Row, RowId } from './rowModel'
 import type { ProgrammerScope } from '../programmer/ProgrammerScope'
 import { chan, colourProp, makeFixture, makePixelBar, sliderProp } from '../../test/fixtureFactories'
-import { RailTabClaimContext, type RailTabClaim } from '../programmer/railTab'
 import type { CellOpenRequest } from '../sheet/useCellEditorRequests'
 
 /**
@@ -297,16 +296,17 @@ describe('FixturesListContainer on the plain list routes', () => {
     expect(screen.getByTestId('cell-verbs')).toBeInTheDocument()
   })
 
-  it('keeps the whole-selection row Spread these two routes have always had', () => {
-    // The one gesture not folded into the marquee. A row selection here is made by dragging the
-    // name column or by ⌘A, and fanning across eight whole heads without first drawing a
-    // rectangle over one of their columns is worth keeping; the programmer trades it away, because
-    // there the marquee *is* what a selection is for.
+  it('offers the whole-selection row Spread over a rows-only selection, on the programmer beside Release', () => {
+    // A row selection is made by dragging the name column, by ⌘A or from another surface, and
+    // fanning across eight whole heads without first drawing a rectangle over one of their columns
+    // is worth keeping.
     rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
     const { rerender } = render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     expect(screen.getByTestId('row-spread')).toBeInTheDocument()
-    rerender(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" showOwnership />)
-    expect(screen.queryByTestId('row-spread')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Release/ })).toBeNull()
+    rerender(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+    expect(screen.getByTestId('row-spread')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Release 2' })).toBeInTheDocument()
   })
 
   it('clears a rows-only selection when a blank cell is clicked — the programmer\'s answer, now theirs', () => {
@@ -689,53 +689,14 @@ describe('FixturesListContainer closes an open cell editor on a scope switch', (
   })
 })
 
-/**
- * **A dock tab claims its own column's open gesture** (editor-kit plan session 4, call 9). With the
- * programmer dock's Colour tab open and docked it is the Colour column's editor: Enter, a typed character and
- * Set over a marquee whose first editable cell is a Colour cell land in the tab, and no popover is
- * asked for. Every other column opens its popover as before — the tab claims its column only.
- */
-describe('FixturesListContainer with the dock’s Colour tab open', () => {
-  function claim(tab: RailTabClaim['tab']): RailTabClaim {
-    return { tab, focusColour: vi.fn(), focusSpread: vi.fn(), spreadFrom: vi.fn(), spreadFan: vi.fn() }
-  }
-  function drawWith(rail: RailTabClaim) {
+describe('FixturesListContainer — a Colour cell on the programmer', () => {
+  it('opens its own popover on Enter', () => {
     programmerScope.value = { kind: 'local' }
     // The row the request names must be on screen, or the container scrolls rather than opens.
     table.editorOpen = true
-    return render(
-      <RailTabClaimContext.Provider value={rail}>
-        <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />
-      </RailTabClaimContext.Provider>,
-    )
-  }
-
-  it('lands Enter and a typed digit over a Colour cell in the tab, and opens no popover', () => {
-    const rail = claim('colour')
-    drawWith(rail)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     fireEvent.click(screen.getByTestId('colour-cell'))
     fireEvent.keyDown(window, { key: 'Enter' })
-    expect(rail.focusColour).toHaveBeenLastCalledWith('')
-    fireEvent.keyDown(window, { key: '5' })
-    expect(rail.focusColour).toHaveBeenLastCalledWith('5')
-    expect(table.keyboardOpens).toEqual([])
-  })
-
-  it('opens the popover as always over a Dimmer cell — the tab claims its own column only', () => {
-    const rail = claim('colour')
-    drawWith(rail)
-    fireEvent.click(screen.getByTestId('cell'))
-    fireEvent.keyDown(window, { key: 'Enter' })
-    expect(rail.focusColour).not.toHaveBeenCalled()
-    expect(table.keyboardOpens.map((open) => open.col)).toEqual(['dimmer'])
-  })
-
-  it('claims nothing where the dock is not docked — collapsed, an overlay or the phone sheet', () => {
-    const rail = claim(null)
-    drawWith(rail)
-    fireEvent.click(screen.getByTestId('colour-cell'))
-    fireEvent.keyDown(window, { key: 'Enter' })
-    expect(rail.focusColour).not.toHaveBeenCalled()
     expect(table.keyboardOpens.map((open) => open.col)).toEqual(['colour'])
   })
 })

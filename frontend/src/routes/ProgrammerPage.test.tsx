@@ -10,9 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * and `useListSelection` clears its Redux scope on unmount — so glancing at the layer stack silently
  * discarded the fixture selection Record scopes on. The pane needed a `forceMount` escape hatch for
  * exactly that. Here there is nothing to force, and these assertions are what keeps it that way: the
- * grid mounted exactly once — across a table tab switch, a scope switch, the dock's tab change, its
- * collapse, a drag on its handle, its overlay open/close, the phone's bottom sheet, and the
- * short-height fold that moves row A into row B.
+ * grid mounted exactly once — across a table tab switch, a scope switch and the short-height fold
+ * that moves row A into row B.
  */
 const gridMounts = vi.fn()
 vi.mock('@/components/programmer/ProgrammerGrid', async () => {
@@ -59,15 +58,6 @@ vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip:
 // ⌘K's `+ Effect` door reads the Redux selection once asked; here it only has to be mounted.
 vi.mock('@/components/programmer/ProgrammerAddFx', () => ({
   ProgrammerAddFxDoor: () => null,
-}))
-// The dock's two editors have their own tests (`RailColourTab.test.tsx`); here they only have to
-// mount and unmount around one grid. The dock itself is real — its header, strip and handle are
-// what the collapse, overlay and sheet cases below press.
-vi.mock('@/components/programmer/RailColourTab', () => ({
-  RailColourTab: () => <div data-testid="rail-colour" />,
-}))
-vi.mock('@/components/programmer/RailSpreadTab', () => ({
-  RailSpreadTab: () => <div data-testid="rail-spread" />,
 }))
 vi.mock('@/components/programmer/ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
 // The three tables have their suite (`AppliedTables.test.tsx`); here each is its own row B's tabs
@@ -232,14 +222,13 @@ function tableTab(name: RegExp) {
 }
 
 describe('ProgrammerPage', () => {
-  it('draws the grid beside the dock, the dock resting on Colour', () => {
-    // Tables-colours plan D4: the right side is a dock — Colour · Fan — and lists nothing. The
-    // layers, effects and scenery are the Stack, FX and Scenery tables on row B.
+  it('draws the grid with no side panel beside it', () => {
+    // Colour and Fan are the grid's own editors — a Colour cell's popover and row C's Fan — so
+    // nothing docks on the right.
     draw()
     expect(screen.getByTestId('grid')).toBeTruthy()
-    expect(screen.getByRole('complementary', { name: 'Colour and fan' })).toBeTruthy()
-    expect(screen.getByTestId('rail-colour')).toBeTruthy()
-    expect(screen.queryByTestId('rail-spread')).toBeNull()
+    expect(screen.queryByRole('complementary')).toBeNull()
+    expect(screen.queryByRole('separator')).toBeNull()
   })
 
   it('draws no show bar — the one live view without one', () => {
@@ -263,14 +252,10 @@ describe('ProgrammerPage', () => {
     expect(screen.getByTestId('header')).toBeTruthy()
   })
 
-  it('rests on Values, with the dock’s Colour · Fan beside it and nothing that lists', () => {
+  it('rests on Values, with nothing that lists beside it', () => {
     draw()
-    expect(screen.getAllByRole('tablist').map((list) => list.getAttribute('aria-label'))).toEqual(['Programmer tables', 'Dock'])
+    expect(screen.getAllByRole('tablist').map((list) => list.getAttribute('aria-label'))).toEqual(['Programmer tables'])
     expect(tableTab(/^Values/).getAttribute('aria-selected')).toBe('true')
-    const dock = screen.getByRole('tablist', { name: 'Dock' })
-    expect(within(dock).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Colour', 'Fan'])
-    expect(within(dock).getByRole('tab', { name: 'Colour' }).getAttribute('aria-selected')).toBe('true')
-    // The rail's lists, doors and counts are gone with its Stack body.
     expect(screen.queryByLabelText('Add a look layer')).toBeNull()
     expect(screen.queryByLabelText('Add a layer or an effect')).toBeNull()
     expect(screen.queryByText('Per-fixture FX')).toBeNull()
@@ -333,21 +318,6 @@ describe('ProgrammerPage', () => {
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
-  it('mounts the value grid exactly once across the dock’s tab change', () => {
-    // The dock's editors read the marquee, which lives in the grid, and so does the fixture
-    // selection Record scopes on: switching them re-renders the page around one grid.
-    draw()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Fan' }))
-    expect(screen.getByRole('tab', { name: 'Fan' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByTestId('rail-spread')).toBeTruthy()
-    expect(screen.queryByTestId('rail-colour')).toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: 'Colour' }))
-    expect(screen.getByTestId('rail-colour')).toBeTruthy()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-  })
-
   it('always names what is loaded, above the verbs that act on it', () => {
     draw()
     expect(screen.getByTestId('source-strip')).toBeTruthy()
@@ -380,92 +350,8 @@ describe('ProgrammerPage', () => {
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
-  it('mounts the value grid exactly once across a dock collapse and expand, onto either tab', () => {
-    // The dock's contents may unmount freely — nothing in it owns a selection — but the grid
-    // beside it must only re-render as the dock comes and goes.
-    draw()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-
-    fireEvent.click(screen.getByLabelText('Collapse the dock'))
-    expect(screen.queryByTestId('rail-colour')).toBeNull()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-
-    fireEvent.click(screen.getByLabelText('Expand the dock'))
-    expect(screen.getByTestId('rail-colour')).toBeTruthy()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-
-    // The strip's doors expand it onto their tab.
-    fireEvent.click(screen.getByLabelText('Collapse the dock'))
-    fireEvent.click(screen.getByLabelText('Expand the dock on Fan'))
-    expect(screen.getByTestId('rail-spread')).toBeTruthy()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-  })
-
-  it('mounts the value grid exactly once across a drag on the dock’s handle', () => {
-    // The width is state held below the memo barrier and reaches the dock as a CSS variable;
-    // every pointer move re-renders the workspace frame and must reach the grid as nothing.
-    draw()
-    fireEvent.pointerDown(screen.getByRole('separator', { name: 'Resize the rail' }), {
-      button: 0,
-      clientX: 1000,
-    })
-    fireEvent.pointerMove(window, { clientX: 900 })
-    fireEvent.pointerMove(window, { clientX: 850 })
-    fireEvent.pointerUp(window)
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-    expect(window.localStorage.getItem('programmer.rail.width')).toBe('450')
-  })
-
-  it('mounts the value grid exactly once across an overlay open and close', () => {
-    // The narrow arm: the strip opens the dock *over* the grid, and Escape, its own chevron or a
-    // press on the grid close it. Both arms are in the DOM under jsdom (they are container queries),
-    // so this drives the narrow arm's controls directly.
-    draw()
-    fireEvent.click(screen.getByLabelText('Collapse the dock'))
-    const stripToggle = () => screen.getByRole('button', { name: 'Open the dock' })
-    fireEvent.click(stripToggle())
-    expect(screen.getByTestId('rail-colour')).toBeTruthy()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-
-    fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByTestId('rail-colour')).toBeNull()
-
-    fireEvent.click(stripToggle())
-    fireEvent.pointerDown(screen.getByTestId('grid'))
-    expect(screen.queryByTestId('rail-colour')).toBeNull()
-
-    // A door opens the overlay on its own tab.
-    fireEvent.click(screen.getByRole('button', { name: 'Open the dock on Fan' }))
-    expect(screen.getByTestId('rail-spread')).toBeTruthy()
-    fireEvent.click(screen.getByLabelText('Close the dock'))
-    expect(screen.queryByTestId('rail-spread')).toBeNull()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-  })
-
-  it('mounts the value grid exactly once across the bottom sheet opening and closing', () => {
-    // Below 704px of workspace the dock is a 44px handle across the bottom and the panel moves into
-    // a `Sheet side="bottom"` — a change of *place* for the dock, which must still be no change at
-    // all for the grid. Both arms are in the DOM under jsdom, so this drives the handle directly.
-    draw()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-
-    const opener = screen.getByRole('button', { name: 'Open Colour and Fan' })
-    expect(opener).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(screen.getByRole('button', { name: 'Show Fan' }))
-    expect(screen.getByTestId('rail-spread')).toBeTruthy()
-    // One panel, not two: the docked frame is not rendered while the sheet holds it.
-    expect(screen.getAllByTestId('rail-spread')).toHaveLength(1)
-    expect(screen.queryByRole('complementary', { name: 'Colour and fan' })).toBeNull()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-
-    fireEvent.keyDown(document.body, { key: 'Escape' })
-    expect(screen.getAllByTestId('rail-spread')).toHaveLength(1)
-    expect(screen.getByRole('complementary', { name: 'Colour and fan' })).toBeTruthy()
-    expect(gridMounts).toHaveBeenCalledTimes(1)
-  })
-
   it('mounts the value grid exactly once across the short-height fold, both ways', () => {
-    // Row A stops being drawn above the workspace and its two halves are handed to the grid's
+    // Row A stops being drawn above the tables and its two halves are handed to the grid's
     // toolbar as `leading`. The components move; the grid element does not, and that is the whole
     // of the rule. Driven as a live media change so the transition is what is asserted.
     draw()
@@ -476,7 +362,7 @@ describe('ProgrammerPage', () => {
     // Still exactly one of each — folded means moved, never duplicated.
     expect(screen.getAllByTestId('source-strip')).toHaveLength(1)
     expect(screen.getAllByTestId('action-bar')).toHaveLength(1)
-    // And now inside the grid's own toolbar rather than above the workspace.
+    // And now inside the grid's own toolbar rather than above the tables.
     expect(screen.getByTestId('grid').contains(screen.getByTestId('source-strip'))).toBe(true)
     expect(gridMounts).toHaveBeenCalledTimes(1)
 

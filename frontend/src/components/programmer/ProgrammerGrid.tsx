@@ -44,9 +44,8 @@ const PHONE_ROW_B = '@max-[600px]:gap-1.5 @max-[600px]:[&_button:not([role=tab])
  * silently discards the fixture selection that Record and Record-look scope on. The pane this
  * replaced needed a `forceMount` escape hatch for exactly that; here there is nothing to force.
  *
- * **Row B is the toolbar's first line**, and it is here rather than above the workspace because
- * everything on it — the scope, the filter, Lit, Groups, Columns — is a fact about *this grid*,
- * and a band spanning the page reached across the rail to say it. The scope band was a
+ * **Row B is the toolbar's first line**, and it is here rather than above the tables because
+ * everything on it — the scope, the filter, Lit, Groups, Columns — is a fact about *this grid*. The scope band was a
  * full-width sibling of the action bar until session 1 of the space plan; `sheetControls` on the
  * action bar (which hosted Groups and Columns) went at the same time and for the same reason.
  *
@@ -96,7 +95,7 @@ export function ProgrammerGrid({
   // Derived from the scope, and provided **unconditionally** — only the value varies, so the tree
   // shape never changes and the container below never unmounts. Rendering a different provider
   // (or a different grid) per scope is the exact hazard the doc comment above describes. The
-  // derivation is `ScopedEditorContextProvider`'s, shared with the rail's Colour and Spread tabs.
+  // derivation is `ScopedEditorContextProvider`'s.
   return (
     <ScopedEditorContextProvider>
       <ProgrammerGridBody
@@ -163,7 +162,7 @@ function ProgrammerGridBody({
         }) => (
           <div className="flex flex-col">
             {/* Row B. Its own `@container`, with every query on the child — the wrapper can never
-                be measured by the classes it hosts (`ProgrammerWorkspace`'s doc comment). */}
+                be measured by the classes it hosts: a query container is the nearest ancestor. */}
             <div className="@container">
               {/* The folded row **wraps rather than overlaps**, and only the folded row can:
                   unfolded, row B's tools have a hard minimum of ~290px and there is no width this
@@ -287,8 +286,7 @@ function ProgrammerGridBody({
                     anywhere but in a literal like this one.
 
                     Both ends of that range are measured, and both are measured against **row B's
-                    container**, which is this row plus its own `px-3` — not the workspace's, which
-                    is 40px wider again wherever the rail's collapsed strip is docked. Reading the
+                    container**, which is this row plus its own `px-3` — not the workspace's. Reading the
                     wrong one is how the first cut of this put the upper bound 33px low and left
                     the words off at exactly the width the user reported.
 

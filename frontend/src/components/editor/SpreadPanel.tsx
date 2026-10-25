@@ -283,12 +283,6 @@ interface SpreadPanelProps {
   noSelection?: boolean
   /** Popover: a way past [disabledReason] — the trigger stays live and a press calls this instead of opening. */
   onRefused?: () => void
-  /**
-   * Popover: another host has this verb while it is open — the programmer rail's Spread tab. The
-   * trigger stays live and a press calls this instead of opening, so one marquee never has two
-   * Spread panels (editor-kit plan session 4).
-   */
-  onClaimed?: () => void
   /** Popover: on the trigger — the selection bar folds it away at phone widths. */
   className?: string
   /**
@@ -302,36 +296,10 @@ interface SpreadPanelProps {
 }
 
 const EMPTY_SELECTION_TOAST = 'spread-panel-empty-selection'
-/**
- * The compact curve row's fold — below 300px of programmer rail (call 12; the docked panel is the
- * rail's width less its 1px edge, and Tailwind's `@max-[…]` is a strict `<`). Only the docked host
- * declares the container, so in the popover and the kit sheets the class never matches. The busk
- * Spread tab is docked too and carries the container, but its sheet's floor is 320, so it never
- * crosses the fold there either: the programmer rail is the one host that reaches it.
- */
-export const SPREAD_COMPACT_WORD_CLASS = '@max-[299px]:sr-only'
-const COMPACT_WRAP_CLASS = '@max-[299px]:flex-wrap'
 /** Keyed like the endpoint's error toast: a Live drag under a mask answers `skippedFamilies` on every write. */
 const SKIPPED_FAMILIES_TOAST = 'spread-panel-skipped-families'
 
 /** Where a fresh panel lands: the first family the mask names that the heads can take, else the first they can take. */
-/**
- * An Order's words on the order row: the first word always, the rest folded under the compact rung
- * (`SPREAD_COMPACT_WORD_CLASS`, `sr-only`), so *Centre out* reads *Centre* on a panel below 300px.
- * Its item carries the whole word as `aria-label`, so its name is the effect editor's word at every
- * width (`lib/orderLabels.ts`, one vocabulary) — the name computation drops the folded span's space.
- */
-function OrderWord({ label }: { label: string }) {
-  const space = label.indexOf(' ')
-  if (space < 0) return <>{label}</>
-  return (
-    <>
-      {label.slice(0, space)}
-      <span className={SPREAD_COMPACT_WORD_CLASS}>{label.slice(space)}</span>
-    </>
-  )
-}
-
 function initialFamily(available: readonly AttributeFamily[], mask: readonly AttributeFamily[] | null): AttributeFamily {
   return mask?.find((family) => available.includes(family)) ?? available[0] ?? 'INTENSITY'
 }
@@ -468,7 +436,6 @@ export function SpreadPanel({
   drivableHint = 'a value',
   noSelection,
   onRefused,
-  onClaimed,
   className,
   colourEditor: ColourEndpointEditor,
 }: SpreadPanelProps) {
@@ -795,9 +762,8 @@ export function SpreadPanel({
   // not refused or reset, it spreads as Heads (`effectiveSpreadOver`), so a marquee moved from a
   // pixel bar to a par and back keeps Cells.
   //
-  // A panel mounted beside the one that moved it (row C's popover and the rail's Spread tab are
-  // both mounted on the programmer) follows the store here — the form only, **never a push**: that
-  // panel's Live may still be on over a selection the operator is not touching.
+  // A panel mounted beside the one that moved it follows the store here — the form only, **never a
+  // push**: that panel's Live may still be on over a selection the operator is not touching.
   const storedOver = useSpreadOver()
   useEffect(() => {
     if (formRef.current.over === storedOver) return
@@ -994,10 +960,6 @@ export function SpreadPanel({
   // A surface's own refusal is the one the operator can answer; "no two cells to spread" is not, so
   // the offer is made only where [disabledReason] is what closed the button.
   const refusable = disabledReason != null && onRefused != null
-  // The docked host has no trigger to disable, so a surface's refusal — the programmer rail's tab
-  // in Output or on a focused template layer — is drawn on the panel itself: the reason above a body
-  // that takes no input, and no Live or Apply. The busk tab never passes one.
-  const dockedRefusal = host === 'docked' ? (disabledReason ?? null) : null
   const title =
     disabledReason ??
     ((noSelection ?? plans.length === 0)
@@ -1035,11 +997,7 @@ export function SpreadPanel({
             className="h-auto flex-1 flex-col gap-0.5 px-1 py-1 text-[10px]"
           >
             <CurvePicture curve={curve.id} fan={fanForm} />
-            {/* The compact curve row: below 300px of rail the pictures stand alone and the word is
-                the item's name (editor-kit plan session 4, call 12). A container query on the
-                docked panel — the popover and the kit sheets have no container above them, and the
-                busk sheet never goes under its 320 floor, so only the programmer rail reaches it. */}
-            <span className={SPREAD_COMPACT_WORD_CLASS}>{curve.label}</span>
+            <span>{curve.label}</span>
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
@@ -1073,7 +1031,7 @@ export function SpreadPanel({
               aria-label={order.label}
               className="flex-1 text-xs"
             >
-              <OrderWord label={order.label} />
+              {order.label}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
@@ -1086,9 +1044,7 @@ export function SpreadPanel({
         ))}
       </div>
 
-      {/* Runs beside Over is ~280px of row; under the compact width Over wraps beneath rather than
-          running past the scroller's edge. */}
-      <div className={cn('flex items-end gap-3', COMPACT_WRAP_CLASS)}>
+      <div className="flex items-end gap-3">
         <div className="min-w-0 flex-1">
           <EditorLabel>Runs</EditorLabel>
           <div className="mt-1 flex items-center gap-1">
@@ -1439,7 +1395,6 @@ export function SpreadPanel({
           aria-label="Live — apply as I adjust"
           variant={live ? 'default' : 'outline'}
           size="sm"
-          disabled={dockedRefusal != null}
           className="h-7 gap-1.5 text-xs"
           title="Send every adjustment to the desk as it is made; off, only Apply writes"
           onClick={() => {
@@ -1457,7 +1412,7 @@ export function SpreadPanel({
         size="sm"
         variant={live && showsLive ? 'outline' : 'default'}
         className="h-7 text-xs"
-        disabled={!canApply || dockedRefusal != null}
+        disabled={!canApply}
         onClick={() => {
           apply()
           if (host === 'popover' && !(live && showsLive)) {
@@ -1474,25 +1429,14 @@ export function SpreadPanel({
 
   if (host === 'docked') {
     return (
-      // `@container`: the compact curve row's query (`SPREAD_COMPACT_WORD_CLASS`) measures this panel.
-      <div data-spread-sheet={compact ? 'compact' : 'full'} className="@container flex min-h-0 flex-1 flex-col border-l">
-        {dockedRefusal != null && (
-          <p data-spread-refusal className="shrink-0 border-b px-3.5 py-2 text-[11px] text-muted-foreground">
-            {dockedRefusal}
-          </p>
-        )}
+      <div data-spread-sheet={compact ? 'compact' : 'full'} className="flex min-h-0 flex-1 flex-col border-l">
         {/* The tab's one scroller. `px-3.5`, the knob's half-width, so a picker knob at 0% is not
             clipped at the scroller's edge — the Colour tab's reason. */}
         <div
           ref={contentRef}
           onKeyDown={onKeyDown}
           data-spread-sheet-body
-          inert={dockedRefusal != null}
-          className={cn(
-            'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3.5 pt-3',
-            compact ? 'pb-2' : 'pb-3',
-            dockedRefusal != null && 'opacity-50',
-          )}
+          className={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3.5 pt-3', compact ? 'pb-2' : 'pb-3')}
         >
           {body}
         </div>
@@ -1522,21 +1466,16 @@ export function SpreadPanel({
           variant="outline"
           size="sm"
           className={className}
-          disabled={!canSpread && !refusable && onClaimed == null}
+          disabled={!canSpread && !refusable}
           onClick={
-            onClaimed != null
+            refusable
               ? (e) => {
                   e.preventDefault()
-                  onClaimed()
+                  onRefused?.()
                 }
-              : refusable
-                ? (e) => {
-                    e.preventDefault()
-                    onRefused?.()
-                  }
-                : undefined
+              : undefined
           }
-          title={onClaimed != null ? 'Fan is open in the rail — press to go to it' : title}
+          title={title}
           aria-label="Fan"
         >
           <Waves className="size-3.5" />

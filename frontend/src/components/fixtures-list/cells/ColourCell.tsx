@@ -1,6 +1,5 @@
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
-import { useRailTabClaim } from '@/components/programmer/railTab'
 import { ColourPickerPopover } from '../../fixtures/ColourPickerPopover'
 import type { CellResolution } from '../columns'
 import { paletteTargetsOf, type CellBatch, type CellCommit, type WriteTarget } from '../rowModel'
@@ -197,26 +196,6 @@ const RgbColourCell = memo(function RgbColourCell({
   // `EditorSurface` uses, so this is a Set entry and not a second `matchMedia`.
   const compact = useEditorCramped()
 
-  // **The rail's Colour tab claims this column's double click** (editor-kit plan session 4, call
-  // 9), as it claims Enter, Set and a typed character in the container: while it is open it is this
-  // column's editor, so the gesture lands there — R focused — rather than opening a second colour
-  // editor over the same marquee. Only where a click selects: that is the programmer's grid, the one
-  // surface with a rail; `CueValueGrid` opens on a click and has none.
-  const railClaim = useRailTabClaim()
-  const claimOpen = clickSelects && railClaim?.tab === 'colour' ? railClaim.focusColour : null
-  // Stable while the claim and the opener are: the picker threads it into its keyboard hook's
-  // `onDone`, which would otherwise be rebuilt on every render of this memoised cell.
-  const onOpenChange = useCallback(
-    (next: boolean) => {
-      if (next && claimOpen != null) {
-        claimOpen('')
-        return
-      }
-      setOpen(next)
-    },
-    [claimOpen, setOpen],
-  )
-
   // The batch's union: a head in the marquee "has" an emitter when any of its colour descriptors
   // does — the picker then offers the row, and heads without the channel skip it at write time.
   // With no batch (a read-only mount) the row's own resolutions stand in.
@@ -254,7 +233,7 @@ const RgbColourCell = memo(function RgbColourCell({
     <>
       <ColourPickerPopover
         open={isOpen}
-        onOpenChange={onOpenChange}
+        onOpenChange={setOpen}
         r={value.r}
         g={value.g}
         b={value.b}

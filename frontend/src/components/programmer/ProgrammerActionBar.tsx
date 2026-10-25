@@ -96,7 +96,7 @@ const FADE_OPTIONS = [
  * `Q4 · Update · Revert` on a portrait phone (`ProgrammerSourceStrip` has the row's arithmetic).
  *
  * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage`; this
- * component must not declare one of its own, for the reason `ProgrammerWorkspace` documents. In
+ * component must not declare one of its own: a query container is the nearest ancestor. In
  * the short-height arm there is no row A and this pair leads row B instead, inside an `@container`
  * `ProgrammerGrid` puts around the two of them — so the queries here measure the ~420px the folded
  * row gives the pair rather than the row's own ~750px, and these four stay icons on an 852×393

@@ -286,7 +286,7 @@ describe('usePress — a focused Look layer', () => {
   })
 })
 
-describe('useWindowPaletteFit — what the rail’s picker offers', () => {
+describe('useWindowPaletteFit — what the Stack table’s picker offers', () => {
   const fit = () => renderHook(() => useWindowPaletteFit()).result.current
 
   it('is the strip’s offer on the programmer: the marquee’s families, else what the heads can take', () => {

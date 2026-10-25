@@ -107,7 +107,7 @@ describe('sorting and filtering', () => {
   })
 })
 
-describe('the rows the rail shows', () => {
+describe('the rows the tables show', () => {
   const layer = (layerId: number, kind: 'LOOK' | 'PALETTE'): ProgrammerLayer => ({
     layerId,
     source: { kind, id: layerId, uuid: `u${layerId}`, name: `L${layerId}` },
@@ -151,7 +151,7 @@ describe('the rows the rail shows', () => {
     expect(layerFxState(4, [{ programmerLayerId: 5, spent: true }])).toBeNull()
   })
 
-  it('files an effect where the rail’s home badge does', () => {
+  it('files an effect where its home badge does', () => {
     expect(fxHomeOf({ programmerLayerId: 3, cueId: null, programmerOwned: false })).toBe('layer')
     expect(fxHomeOf({ programmerLayerId: null, cueId: 9, programmerOwned: false })).toBe('cue')
     expect(fxHomeOf({ programmerLayerId: null, cueId: null, programmerOwned: true })).toBe('yours')

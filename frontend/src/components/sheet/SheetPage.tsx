@@ -69,8 +69,8 @@ function Row({
 /**
  * The 22px footer. The same shape as the header — an unpadded `@container` wrapper around the
  * padded row — so a legend can fold its own glosses by the footer's *own* column at its full width
- * (the programmer's footer sits beside the rail, and measuring the page would show the long
- * glosses at a width the column cannot hold; `OwnershipLegend`'s note). `className` goes on the
+ * (measuring the page would show the long glosses at a width the column cannot hold;
+ * `OwnershipLegend`'s note). `className` goes on the
  * **wrapper** here, unlike the header's: what a caller passes is how the footer folds away
  * (`@max-[600px]:hidden`), and that has to hide the whole thing, line included.
  */

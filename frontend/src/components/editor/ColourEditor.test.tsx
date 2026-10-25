@@ -553,11 +553,11 @@ describe('the footer', () => {
   })
 })
 
-describe('read-only — the programmer rail’s tab in Output or on a palette layer', () => {
-  it('takes no input on the picker, the fields or the emitters, and leaves Pick and the label line live', () => {
-    // A scope that takes no value must not be written by any control of the editor, and Pick is a
-    // read: it moves the fields and writes nothing, so it stays live (editor-kit plan session 4).
-    draw({ targets: FOUR, docked: true, readOnly: true, hasWhiteChannel: true, onSpread: vi.fn(), labelLine: <span>Output · read-only</span> })
+describe('read-only', () => {
+  it('takes no input on the picker, the fields or the emitters, and leaves Pick live', () => {
+    // A read-only editor — the fixture sheet's parked or offline row — must not be written by any
+    // control, and Pick is a read: it moves the fields and writes nothing, so it stays live.
+    draw({ targets: FOUR, readOnly: true, hasWhiteChannel: true, onSpread: vi.fn() })
     const inertRegion = document.querySelector('[data-colour-editor-readonly]')
     expect(inertRegion).not.toBeNull()
     expect(inertRegion!.hasAttribute('inert')).toBe(true)
@@ -568,8 +568,6 @@ describe('read-only — the programmer rail’s tab in Output or on a palette la
     expect(pick).toBeEnabled()
     // Spread… hands a value on to be written, so read-only disables it here, not in each host.
     expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeDisabled()
-    // The docked frame draws the host's label line, above the controls.
-    expect(screen.getByText('Output · read-only')).toBeInTheDocument()
   })
 
   it('draws the controls live by default', () => {

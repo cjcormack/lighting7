@@ -2038,69 +2038,50 @@ the page strip's *Sheet* button onto Colour, carrying **every tab but Speed** (D
 tab's strip carries that chip now, so the reason is met by the tab that replaced the bar. The
 library still replaces the whole region while editing.
 
-**Its chrome is the programmer rail's, and both live in `components/sheet/sidePanel.ts`.** The two
-are one instrument in two views — a column against the right edge of a live view, folded to a strip
-of glyphs, a 40px header over a scroller — and they had drifted in exactly the measurements the
-chrome system exists to settle: the sheet was a transparent column on a 36px header with a 44px
-strip, whose chevron was `p-1` and whose tab glyphs were `p-1.5`, against the rail's opaque fill,
-40px header and 40px strip cells. The module states each once (`SIDE_PANEL_BODY_CLASS`,
-`_HEADER_BUTTON_CLASS`, `_STRIP_CLASS`, `_STRIP_CELL_CLASS`, `_ENTER_CLASS`), `sheetFrame.ts`'s
-model — a surface that wants to differ says so at its own import. **Both headers are tab strips
-since the editor kit's session 4**, and the busk sheet's fold is the module's too
-(`buskTabWordClass`), so the strip does not state it itself; the programmer's dock folds nothing,
-its two tabs fitting its 260 floor whole (§The dock). **There is no
-`SIDE_PANEL_HEADER_CLASS`**: a panel's header is a 40px chrome row like any other, so both
-surfaces take `CHROME_ROW_CLASS` from `sheetFrame.ts` and a panel-specific name for it would have
-been the one measurement stated twice — the drift both modules exist to close. The overlay form's
-tab row takes it too, at `h-11`, so its inset went from 8px to 12: a tab row is a chrome row off
-the desk board as much as on it, and that one carries two tabs and no chevron. Three things carried across with it. The **fill is
-opaque** (`color-mix`, not `bg-card/40`), because both panels have an overlay arm over live
-content. The **chevron vocabulary is the rail's** — `ChevronLeft` opens, `ChevronRight` folds —
-where the sheet drew `PanelRightOpen` / `PanelRightClose`; the fold's chevron is the strip's own
-40px cell now, so the two strips start at the same line. And the fold is **40px, not 44**: 44 is
-the programmer's *phone handle*, a target for a finger, and both of these strips are drawn only on
-a board wide enough to dock. `Sheets.dc.html` §Folded, still cited above as the layout authority,
-draws that strip at 44 — **the commit wins**, as elsewhere in this doc.
+**Its chrome lives in `components/sheet/sidePanel.ts`** — a column against the right edge of a live
+view, folded to a strip of glyphs, a 40px header over a scroller — stated once
+(`SIDE_PANEL_BODY_CLASS`, `_HEADER_BUTTON_CLASS`, `_STRIP_CLASS`, `_STRIP_CELL_CLASS`,
+`_ENTER_CLASS`), `sheetFrame.ts`'s model: a surface that wants to differ says so at its own import.
+The header is a tab strip and the fold is the module's too (`buskTabWordClass`). **There is no
+`SIDE_PANEL_HEADER_CLASS`**: a panel's header is a 40px chrome row like any other, so it takes
+`CHROME_ROW_CLASS` from `sheetFrame.ts`, and a panel-specific name for it would have been one
+measurement stated twice. The overlay form's tab row takes it too, at `h-11`, so its inset is 12:
+a tab row is a chrome row off the desk board as much as on it. The **fill is opaque** (`color-mix`,
+not `bg-card/40`), because the panel has an overlay arm over live content. The **chevrons** are
+`ChevronLeft` opens, `ChevronRight` folds, and the fold's chevron is the strip's own 40px cell. The
+fold is **40px, not 44**: 44 is a touch handle's, and this strip is drawn only on a board wide
+enough to dock. `Sheets.dc.html` §Folded, still cited above as the layout authority, draws that
+strip at 44 — **the commit wins**, as elsewhere in this doc.
 
-**What is deliberately not shared is the state.** The rail's `collapsed` is a persisted desk
-preference in `ProgrammerWorkspace`; this sheet's fold is `busk.sheet === 'none'`, a per-tab fact
-the announce, ⌘K, the Screens sheet and MIDI all write. Nor is Escape: a *docked* panel takes it on
-neither view, and only the overlay arms do — the rail's through its own window listener, this one's
-through Radix. (The sheet had no resize handle and a fixed 288px until both panels took the one
-drag below.)
+**The fold is a fact, not chrome**: `busk.sheet === 'none'`, a per-tab fact the announce, ⌘K, the
+Screens sheet and MIDI all write. A *docked* panel takes no Escape; the overlay arm takes it through
+Radix.
 
-**Both panels are dragged to width by one piece of code** — `useSidePanelResize` and
-`SidePanelResizeHandle`, the rail's drag lifted out so the busk sheet is resized by it rather than
-by a second copy. One ceiling for both (`SIDE_PANEL_MAX_WIDTH` 480) and a shared floor
-(`SIDE_PANEL_MIN_WIDTH` 260; `RAIL_MIN_WIDTH` / `RAIL_MAX_WIDTH` are aliases the rail's tests are
-written in) that a panel may raise for itself, each with its own key and default in
-**`localStorage`** — `programmer.rail.width` at 300, `busk.sheet.width` at 320.
+**The panel is dragged to width** by `useSidePanelResize` and `SidePanelResizeHandle`: a ceiling of
+`SIDE_PANEL_MAX_WIDTH` 480 and a shared floor (`SIDE_PANEL_MIN_WIDTH` 260) that a panel may raise
+for itself, with its own key and default in **`localStorage`** — `busk.sheet.width` at 320.
 
 **A panel's floor is set by its header, and the sheet's is 320.** Three labelled tabs, the mode
 toggle and the fold chevron inside the chrome row's 12px gutters measured 304px when the floor was
 set, so at the shared 260 that row overflowed by 38 and put *both buttons outside the panel* —
 reported from an iPad. The strip holds eight tabs now, and 320 still holds only because each is a
-26px glyph with no word below 380px of sheet (§Focus and the side sheet).
-The rail's header — the dock's two tabs today — fits at 240, which is why the floor is
-per-panel rather than one number raised for everyone. 320 and not 304 because a minimum sitting on
-the exact fit clips again the moment anything joins the row, which is how this broke: the row
-fitted until the mode toggle was added to it. A width stored below a panel's floor is lifted on
-read. And the row **degrades instead of clipping** now — the tab strip is a `min-w-0 flex-1
-overflow-hidden` group and the two buttons are `shrink-0`, so a row with no space loses the end of
-the last tab rather than pushing a control off the edge.
+26px glyph with no word below 380px of sheet (§Focus and the side sheet). 320 and not 304 because a
+minimum sitting on the exact fit clips again the moment anything joins the row, which is how this
+broke: the row fitted until the mode toggle was added to it. A width stored below a panel's floor
+is lifted on read. And the row **degrades instead of clipping** now — the tab strip is a `min-w-0
+flex-1 overflow-hidden` group and the two buttons are `shrink-0`, so a row with no space loses the
+end of the last tab rather than pushing a control off the edge.
 `localStorage` and not the per-tab `sessionStorage` the other `busk.*` keys use, because a width is
 a fact about this desk's screen rather than about which of two windows you are looking at. The
-handle is drawn wherever the width on screen *is* the stored one: in overlay mode always (the
-operator chose to float it, so their drag still applies), and in push mode only where the panel
-docks — the rail's narrow push arm is a fixed 300px overlay a drag would not move.
+handle is drawn wherever the width on screen *is* the stored one.
 
 **The frame that holds the width takes the panel's contents as `children`, and that is
 load-bearing.** The width changes at pointer rate, so whatever holds it re-renders at pointer
-rate; `RailBodyFrame` and `DockedSideSheet` both take `children`, so the element references are
-unchanged between their renders and React skips those subtrees — otherwise a drag would rebuild
-a colour picker or a fan panel mid-drag sixty times a second.
+rate; `DockedSideSheet` takes `children`, so the element references are unchanged between its
+renders and React skips those subtrees — otherwise a drag would rebuild a colour picker or a fan
+panel mid-drag sixty times a second.
 
-**Never give either panel a bare `duration-*` or `ease-*` class.** `tailwindcss-animate`
+**Never give the panel a bare `duration-*` or `ease-*` class.** `tailwindcss-animate`
 re-declares `duration-*` as `animation-duration` while Tailwind's own still sets
 `transition-duration`, and CSS's initial `transition-property` is `all` — so a panel carrying one
 transitions **every** property, for as long as `usePanelEnter` latches the class, which is the
@@ -2109,55 +2090,38 @@ to, so the panel eased toward the pointer instead of following it. Reported from
 drag feeling like an animation. `SIDE_PANEL_ENTER_CLASS` says `[animation-duration:300ms]` and
 `[animation-timing-function:…]` instead, which cannot leak.
 
-**Beside the content, or over it** — `lib/sidePanelMode.ts`, one `push` | `overlay` fact shared by
-both panels, per tab in `sessionStorage` like every other fact about how *this window* is arranged,
-toggled from `SidePanelModeToggle` in either header. It rests at `push`, which is what both panels
-already did, and it can only ever make a panel **float where it would have docked** — never dock
-where there is no room, because each surface keeps its own floor (the rail below 1200px of
-workspace, the sheet off the desk board). One fact and not one each: the two are deliberately one
-instrument, and a desk where the rail floats while the sheet pushes is two answers to one question.
-In overlay mode the rail has **one arm at every width**, so `collapsed` says nothing there — its
-header and strip each draw a single chevron instead of the docked/overlay pair, the resize handle
-is not drawn, and the body is mounted on `overlayOpen` alone (reading `!collapsed` there would hold
-a colour editor and every subscription under it alive behind a shut panel).
+**Beside the content, or over it** — `lib/sidePanelMode.ts`, one `push` | `overlay` fact, per tab
+in `sessionStorage` like every other fact about how *this window* is arranged, toggled from
+`SidePanelModeToggle` in the header. It rests at `push`, and it can only ever make the panel
+**float where it would have docked** — never dock where there is no room, because the sheet keeps
+its own floor (off the desk board it never docks).
 
-**Neither panel ever draws its strip and its body at once.** The fold *is* the closed state of the
-panel — one control in two shapes — which is what the busk sheet always did and what the rail did
-not: it stood its 40px strip beside the open overlay at 704–1200. Reported from the desk, and the
-sheet's reading is the one kept, so the overlay is flush `right-0` rather than inset past a strip
-and the strip's chevron is open-only (its `aria-expanded` went with the state it distinguished).
-**But a floating panel keeps the strip's 40px in the row.** The overlay is absolute and takes no
-room, so a strip that left the flow as it opened handed its width to the view behind, which
-reflowed on every open and close — the thing floating is meant to avoid. The rail's strip goes
-`invisible` under an open overlay (push mode's narrow arm too), and the busk sheet draws an empty
-`w-10` spacer before its floating panel; the overlay covers either. **And both panels stand beside
-their view's menus, under nothing but the `ShowHeader`**: the programmer's row A is
-`ProgrammerWorkspace`'s `header`, drawn in the grid's column, as the rig band is in the busk
-view's — it was drawn above the workspace, which put the rail a row lower than the sheet.
+**The panel never draws its strip and its body at once.** The fold *is* the closed state of the
+panel — one control in two shapes — so the overlay is flush `right-0` rather than inset past a strip
+and the strip's chevron is open-only. **But a floating panel keeps the strip's 40px in the row.** The
+overlay is absolute and takes no room, so a strip that left the flow as it opened handed its width
+to the view behind, which reflowed on every open and close — the thing floating is meant to avoid.
+The busk sheet draws an empty `w-10` spacer before its floating panel, which the overlay covers.
+**And the panel stands beside the view's menus, under nothing but the `ShowHeader`**, as the rig
+band does.
 
-**Both panels animate their opening, and neither animates its closing** (`SIDE_PANEL_ENTER_CLASS`,
+**The panel animates its opening, and not its closing** (`SIDE_PANEL_ENTER_CLASS`,
 `usePanelEnter`). The slide is the panel's **whole width**, bare `slide-in-from-right` as the
 `Sheet` primitive uses. It shipped as `slide-in-from-right-4` — 16px — and read as no animation at
 all, correctly: the content reflows by the panel's full width in one frame, so the eye takes the
 jump and never registers a slide a fifth of its size. **The reflow itself stays instant in push
-mode**, deliberately: animating it means animating `width`, which relayouts a virtualised grid every
-frame, needs `overflow: hidden` (which clips the rail's resize handle, drawn 3px outside its own
-left edge) and needs an inner fixed-width wrapper or the header's tabs reflow the whole way in.
-The rail takes **one latch per arm** — `!collapsed` for the docked arm,
-`overlayOpen` for the overlay one — because in the overlay arm the body is mounted the whole time
-and the container query alone draws it: a single `!collapsed || overlayOpen` rests at true, so
-opening the overlay transitions nothing and that arm never animated. The two results are OR-ed as
-separate statements, never `usePanelEnter(a) || usePanelEnter(b)`, which short-circuits past the
-second hook. The flag is **latched** while the panel is open — `animate-in` is a class, so a
-re-render that dropped it mid-flight would cut the animation off part-way, and both panels
-re-render freely while open — and it is **false on the first render** whatever the state says, or a
-panel whose stored preference is "open" would slide in on every arrival at the route and every
-reload. It must be computed in a component that *outlives* the panel: `ProgrammerRail` and
-`SideSheet` both render the strip or the body and stay mounted across the swap, so a hook inside
-either subtree would see every appearance as a first render. There is no exit animation because an
-exiting panel has to stay mounted for its duration, which here means holding a colour picker
-mid-drag, a fan's plans and their subscriptions alive after the operator asked for
-them to go.
+mode**, deliberately: animating it means animating `width`, which relayouts the page every frame,
+needs `overflow: hidden` (which clips the resize handle, drawn 3px outside its own left edge) and
+needs an inner fixed-width wrapper or the header's tabs reflow the whole way in. The flag is
+**latched** while the panel is open — `animate-in` is a class, so a re-render that dropped it
+mid-flight would cut the animation off part-way, and the panel re-renders freely while open — and
+it is **false on the first render** whatever the state says, or a panel whose stored tab is open
+would slide in on every arrival at the route and every reload. It must be computed in a component
+that *outlives* the panel: `SideSheet` renders the strip or the body and stays mounted across the
+swap, so a hook inside either subtree would see every appearance as a first render. There is no
+exit animation because an exiting panel has to stay mounted for its duration, which here means
+holding a colour picker mid-drag, a fan's plans and their subscriptions alive after the operator
+asked for them to go.
 
 **The Colour tab is the docked host of `ColourEditor`, and it writes literals to Local, and only
 that** (D8, `components/busking/ColourSheet.tsx`; editor-kit plan D10). What is the host's: the
@@ -2240,8 +2204,7 @@ four (`LINE` · `MIRROR` · `ARROW` · `MIRROR_OUT`, each drawn as a picture —
 meeting at a marked centre**, since its eight fractions are Mirror's and one polyline through them
 *was* Mirror's V); order is a `SpreadOrder` name, worded by `lib/orderLabels.ts` — Normal ·
 Reverse · Centre out · Random are
-`NORMAL` · `REVERSE` · `CENTRE_OUT` · `RANDOM` (*Centre out* reading *Centre* below 300px of panel, on
-`SPREAD_COMPACT_WORD_CLASS`, its `aria-label` the whole word), and pressing Random again bumps the request's `seed`
+`NORMAL` · `REVERSE` · `CENTRE_OUT` · `RANDOM`, and pressing Random again bumps the request's `seed`
 for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row with the reason**, not
 an option: the desk has no stage order today (`FanPlan` feeds `POSITIONAL` a head's index, which
 is Normal again), offering it as something it is not would be worse than withholding it, and a
@@ -3334,9 +3297,8 @@ and **pressable without it**: the operator's Over survives a marquee moving onto
 elements, which spread as Heads (`effectiveSpreadOver`, one rule for both kinds: the desk request and
 the raw arm both say `HEADS` where the plan counts no elements), so moving from a pixel bar to a par
 and back keeps Elements. It survives an **empty**
-selection too, which unmounts the popover and blanks the dock's tab: Over is not the form's but a
-per-tab store, `lib/spreadOver.ts`, one fact for every host of the panel (`sidePanelMode.ts`'s
-reasoning) that `commit` writes through and a mounting panel reads. A panel mounted *beside* the
+selection too, which unmounts the popover: Over is not the form's but a
+per-tab store, `lib/spreadOver.ts`, one fact for every host of the panel that `commit` writes through and a mounting panel reads. A panel mounted *beside* the
 one that moved it follows the store into its form and **never pushes**, since its own Live may be
 on over a selection nobody is touching. The popover host applies the **chosen** plan only where it
 has two points (one point is a set), where the docked tab keeps the busk rule and applies one head
@@ -3404,9 +3366,8 @@ edited: `useMarqueeSpreadPlans` gives the plan `fanBases` — the layer's draft-
 (`lookPositionOf`) or the cue's `composedValue` per head — sent with the first request, and the
 read-out says *From the layer’s rows · 2 heads from the stage* for the heads the row lacked, and
 names any the desk held at the end of travel (`clamped`); the desk reads those heads from the stage,
-never from Local, which is another context's. The position cell's ***Fan…*** opens the dock's
-Fan tab in *About each position* at 0 (`FanSpreadSeed`, the claim's `spreadFan`), or row C's popover where the dock
-does not dock; see `PaletteBands` below.
+never from Local, which is another context's. The position cell's ***Fan…*** opens row C's
+popover in *About each position* at 0 (`FanSpreadSeed`); see `PaletteBands` below.
 
 **A fan can be across the stage** (*Fan in: Pan/Tilt · Stage* under the mode row). The switch is the
 position pad's own mode (`lib/positionPadMode.ts`), one fact for the pads and the fan, and a change is
@@ -4234,9 +4195,8 @@ each was:
   layer (aim writes Local) and where no head annotates its pan and tilt in degrees; then its
   ***Fan…*** (venue-visit plan S12, `cells/PositionSpreadTool.tsx`), which opens Fan on Position
   in *About each position* at 0 and closes the cell's editor — no seed, since a fan starts where the heads are. The
-  opener is the list container's (`PositionFanContext`): the dock's Fan tab through the claim's
-  `spreadFan`, which answers false where the dock does not dock (overlay mode, push mode's narrow
-  arm), and then row C's popover, the colour hand-over's fallback. It is drawn only in the programmer,
+  opener is the list container's (`PositionFanContext`): row C's popover, as the colour hand-over's
+  is. It is drawn only in the programmer,
   the one list whose popup draws its footer, refused under two heads (a fan of one moves nothing), in Output and on a
   focused palette layer, and live in a focused Look layer, where the fan lands in the layer's draft. At the popup's 288px both fold to their icons, their words the buttons'
   names, and *Save as palette…* keeps its word: the colour footer's fold. **Drawn only where a press has a door**: the container passes
@@ -4856,10 +4816,9 @@ selected column, targets in visible row order, from the same `columnTargets` exp
 chooser is drawn only when the selection spans a desk-resolved plan and the raw Speed one. Focus
 follows: with one column the first question is From and it is focused on open; with several it is
 still *which*, so nothing is. Enter still *applies*, since Fan is the one panel here that does
-not write as it is edited until Live is on. The two plain list routes select cells like the
-programmer, but they *also* keep the whole-selection row Fan they always had
+not write as it is edited until Live is on. Every list *also* offers the whole-selection row Fan
 (`spreadColumnsForTargets`), drawn in the toolbar's `actions` slot with nothing selected but rows —
-the cell verbs replace it the moment a cell is. The colour editor's **Fan…** is wired here too
+on the programmer beside Release — and the cell verbs replace it the moment a cell is. The colour editor's **Fan…** is wired here too
 (editor-kit session 3): `ColourCell` hands its RGB to the container as a one-shot the shape
 `keyboardOpen` uses (`SpreadSeed` — RGB only, no emitter travels, the busk hand-over's rule), the
 container threads it to row C's `SpreadPopover` as `seed`, and the panel opens on Colour with
@@ -4882,8 +4841,7 @@ whose `INDEX.md` has the reasoning). A 12px gutter on every row, the `ShowHeader
 that header is shared, so Show, the Prompt Book and Busk take it too, and on those three it differs
 from the `ShowBar`'s own `@[440px]:px-4` by 4px, deliberately. Every chrome row is 40px and holds
 32px controls, so the inset is 4px everywhere: row A, row B (`h-10`, `min-h-10` when folded), row
-C (`SelectionBar`), the dock's header — a tab strip, §The dock — and the strip's chevrons, all
-level. Three control tiers by
+C (`SelectionBar`), all level. Three control tiers by
 nesting, and nothing else: 32 for a control on a row (`h-8` / `size="sm"`), 28 for a control inside
 a control (`h-7`: Update and Revert in the source box, a palette chip, `New`), 24 for a toggle
 item, 20 for a pill. The header is 40px (`CHROME_ROW_CLASS`, `h-10 px-3`) at every height, not only
@@ -5028,86 +4986,6 @@ writes onto the cue; Output → disabled, naming the two places that can take on
 `addLayer`, then `clearEntry` per row taken, so what you promoted leaves Local and the rest stays
 yours. It is a sequence, so a failure part-way leaves the Look and says so.
 
-### The dock
-
-**The right side of the programmer is a dock** (tables-colours plan D4, session 2): **Colour ·
-Fan**, the busk sheet's two docked editors hosted over the marquee (`programmer/RailColourTab.tsx`,
-`RailSpreadTab.tsx`), collapsible, at the rail's 260 floor and 300 default (260–480, stored in
-`programmer.rail.width` / `.collapsed`). **It lists nothing**: the layers, the FX and the
-scenery are the Stack, FX and Scenery tables on row B (§The programmer's tables), so nothing on it
-competes with the tables for a programmer event. `programmer/ProgrammerRail.tsx` draws it and
-`ProgrammerWorkspace` owns its arms, its state and its geometry; the names stayed `Rail*` in code.
-The rail's Stack body (`ProgrammerLookStack`, `ProgrammerFxList`, `RailSceneryBand`), its strip
-counts, its footer's doors and the phone handle's doors are gone, and so is `FxSheet`'s *Per-fixture
-FX* — the grid's FX lens says per cell what it said.
-
-What went where, so none of it reads as dropped: a layer's settings popover, enable, *Detach*,
-*Pick up*, *Remove*, reorder and focus, the replacement notes, *Make layer* and *+ Look or palette*
-are the Stack table's; *Edit…*, *Save as palette…*, *Stop*, *held · Blind* and *+ FX* the FX
-table's; the band's held pieces and *All scenery…* the Scenery table's; the *Values above beat
-FX below* rule rides both the FX and the Stack table (the Stack's with a press to FX). The
-hand's *Place “X” here* on the programmer's stack (`HandProgrammerLayerStrip`) sits under the tables
-whichever shows, and ⌘K's *Apply FX → On the selection* (`addFxDoor.ts`) is registered by
-`ProgrammerAddFxDoor`, which the tables' frame mounts and which subscribes to nothing until it is
-asked. `AppliedTables.test.tsx` pins each.
-
-**Every arm the rail had, the dock has.** Docked at ≥1200px of workspace, with a 40px header of
-tabs, the side-panel mode toggle and the collapse chevron, level with row B; collapsed, a 40px strip
-of the chevron and a door per tab. At 704–1200, and in overlay mode, the strip opens a 300px overlay
-(overlay mode: the stored width) over the grid's right edge, which shuts on Escape, its chevron or a
-press on the grid. Below 704 a 44px handle across the bottom — *Colour*, *Fan* and a chevron —
-opens the same panel in a `Sheet side="bottom"` at 80%, its tab strip the sheet's header. The strip
-and the handle carry **no counts and no `+`**: row B's tab segment carries the counts on every
-table. Each strip door is two buttons in push mode, one per arm and hidden by the arms' container
-queries as the chevrons are, so the docked arm's door writes `collapsed` and the narrow arm's only
-opens the overlay. One panel is ever mounted: the sheet and the docked frame are exclusive by
-construction (`sheetOpen` is the handle's alone), and the render states it as a ternary.
-
-Five rules, each with a reason:
-
-- **The tab fact rests on Colour and is not persisted.** `railTab` is plain state beside `collapsed`
-  in `RailArm`, kept across a collapse; there is no Stack to rest on any more, and a dock that
-  opened on Fan for a marquee that does not exist yet would be a panel saying nothing useful.
-- **Only the docked, expanded dock claims a grid gesture** (`RailTabClaim.tab`, null otherwise). The
-  overlay and the sheet shut on a press on the grid, so there a cell's own popover is the form.
-  Which push-mode arm is drawn is CSS's choice, read off a 1px probe the workspace draws with
-  `@max-[1200px]:hidden` (a zero box is the narrow arm — `RailHandleFrame`'s trick); overlay mode is
-  JS's to know. A position cell's *Fan…* opens the Fan tab in *About each position* only where the dock docks
-  (`spreadFan`), else row C's popover.
-- **The marquee is published, not moved.** The cells stay local state in `FixturesListContainer`
-  (`useCellSelection`'s reason); the container publishes what its own editors are handed —
-  `marqueeBatches`, `columnTargets`, the rows' heads for a rows-only selection, the scope's
-  `cellKeyboardPermission` and `scopeLabel`, and a throttled `commit(col, …)` — into
-  `fixtures-list/marqueeContext.ts`, a **store** `ProgrammerPage` provides above the grid and the
-  dock. A store and not a context value: the marquee moves at pointer rate and only a mounted tab
-  should hear it. The plain lists mount no store, so they publish into nothing.
-- **A tab claims its own column's open gesture** (editor-kit call 9). With Colour drawn, Enter, Set,
-  a typed character and a double click on a Colour cell land in the tab — R focused, the character
-  seeded — and no popover opens; with Fan drawn, row C's Fan focuses the tab's first field
-  (From, or a fan's first amount), a colour cell's *Fan…* seeds the tab rather than the popover,
-  and a position cell's opens it in *About each position*. Every other column opens its popover. The claim is
-  `programmer/railTab.ts`'s `RailTabClaim`, which `ProgrammerWorkspace` provides around *both* its
-  children, keyed on the claiming tab alone; the keyboard's branch is `useCellEditorRequests`'
-  `intercept`, the double click's is `ColourCell`'s `onOpenChange`.
-- **The tabs write where the grid is pointed.** The page keeps an outer `live` `EditorContext` for
-  the tables beside the grid, so the dock mounts `ScopedEditorContextProvider` — the grid's own
-  derivation, extracted — and a value lands in a focused Look layer's draft, not in Local. The
-  Colour tab writes through the published commit, which is the container's column commit on its
-  ~30 Hz throttle; the Fan tab's plans come from `useMarqueeSpreadPlans`, lifted out of
-  `SpreadPopover` so the two build one plan list. Output and a focused palette layer are read-only
-  in both, with the cell's and the popover's own words (`ColourEditor`'s `readOnly`,
-  `SpreadPanel`'s docked refusal); Pick stays live.
-
-**The Colour tab's emitters start unstated.** Its buffer is its own and seeded by Pick, as the busk
-tab's is, but an emitter stays `undefined` — which the writer samples from the wire — until the
-operator states it, and a new set of heads unstates it again: the appearance store has no
-per-emitter reading, and a 0 would drive every white LED in the marquee dark on the first byte.
-Each tab draws the label line (*4 heads · Local* — `EditorLabelLine`'s `docked`) and no Palettes
-band (row C's strip is on screen, and the cell's popup draws the band). The Fan panel takes its
-compact curve row below 300 of dock (`SPREAD_COMPACT_WORD_CLASS`, a query on the docked panel's
-root), which the busk sheet's Fan tab shares and never matches, that sheet's floor being 320.
-Two tabs with their words fit the 260 floor whole, so the dock's strip folds nothing.
-
 **Clear counts held scenery** (`ProgrammerActionBar`): it is enabled for a programmer holding only
 scenery, and its tooltip (`clearSentence`) says *Release … and 2 pieces of held scenery over 2s* —
 the desk's `programmer.cleared` reply counts values and FX only, so the count is
@@ -5124,8 +5002,8 @@ running FX, held scenery. The tables were the applied tables (venue-visit plan S
 `/programmer/applied`, a route of their own beside the programmer; that route now redirects
 (`LegacyAppliedRedirect`: `?table=fx` keeps its view, `looks` and `palettes` land on `stack`
 filtered to that kind), and `/programmer/fx` lands on the FX tab. **They are the programmer's only
-lists** since session 2: the right side is the Colour · Fan dock (§The dock), and
-`AppliedTables.test.tsx` pins what the tables carry alone.
+lists**, and nothing docks beside them: Colour and Fan are the grid's own editors — a Colour cell's
+popover and row C's Fan — and `AppliedTables.test.tsx` pins what the tables carry alone.
 
 - **The Values grid never unmounts.** `components/programmer/ProgrammerTables.tsx` is the frame: the
   grid, created above it by `ProgrammerBody`, stays mounted under the other three, `hidden` and
@@ -5139,13 +5017,12 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
   sort all replace the URL, and every `useParams`, `useSearchParams` and `useNavigate` below the route
   re-renders on any location change (React Router's route context is a fresh object per location).
   So `FixturesListContainer` takes `projectId` as a prop and keeps the `?select=` deep link in a child
-  (`DeepLinkSelect`) that only the two plain lists mount, and the dock takes `projectId` from
-  `ProgrammerBody`: measured on a profiling build (session 1), those subscriptions were 11 ms of every
+  (`DeepLinkSelect`) that only the two plain lists mount: measured on a profiling build (session 1), those subscriptions were 11 ms of every
   tab switch. `ProgrammerPage` is a
   route wrapper round a memoised `ProgrammerView`, the frame's `select` is a stable callback, and the
   tabs' counts are read once by the frame (`useProgrammerTableCounts`) and handed down in its
   context, so a table's own tab segment mounts subscribing to nothing. Keep it that way — a router
-  hook in the grid or the dock is paid on every keystroke in a table's filter.
+  hook in the grid is paid on every keystroke in a table's filter.
 - **The table is a per-window fact; a table's view is the address.** `lib/programmerTables.ts`'s
   `programmer.table` (`sessionStorage`; it was `applied.table`, renamed, one store) is what the
   Screens sheet's *Table* segment sets (`windows.viewOptions {table}` under the Programmer view, now
@@ -5229,9 +5106,8 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
   memo rows, overscan 8, all unchanged): band 0 draws every column; band 1 merges FX's Timing with
   Cycle and Amount · Dir · Runs into Dynamics, and a layer's Blend · Mask · Stomp into Settings; bands 2
   and 3 put the attribute, or the stack position, in the name column and let the rest scroll sideways
-  under it. **The sheet is the programmer's column, beside the dock**, so a 1440 desk with the
-  sidebar open and the dock docked gives it ~900 — band 1, where FX's 914px floor scrolls 14px — and
-  the 1180×820 iPad, the dock a strip, ~900 too. On a programmer table the partition chips carry
+  under it. **The sheet is the programmer's width less the sidebar**, so a 1440 desk with the
+  sidebar open gives it ~1200 — band 0 — and the 1180×820 iPad ~940, band 1. On a programmer table the partition chips carry
   `PROGRAMMER_CHIPS_CLASS` (`min-w-32`): with the tabs leading the row, the filter would otherwise
   take the slack and the chips' folded select would run under the create verb.
 
@@ -5867,9 +5743,8 @@ it, the sidebar comes back exactly as open or collapsed as it went. A desk upgra
 starts from its old `layout.sidebarOpen.other`, read once; `.live` is not consulted, because
 `Layout` wrote both keys with their defaults on every route, chosen or not. `isLiveViewPath` now
 answers only where immersive applies, and the mobile drawer is untouched — its open state was never
-persisted. Open costs the live views width: at a 768–943px window the Programmer's workspace is
-under 704px and takes its phone arm, where the rail left it the overlay; an operator on a tablet
-collapses the sidebar once and it stays collapsed everywhere (`FU-MANUAL-VENUE-VISIT-S2`).
+persisted. Open costs the live views width: at a 768–943px window the Programmer's grid has under 704px;
+an operator on a tablet collapses the sidebar once and it stays collapsed everywhere (`FU-MANUAL-VENUE-VISIT-S2`).
 
 **The `ShowHeader` is the row immersive leaves standing, and it carries the way back** (D11, D12).
 It is a 40px chrome row on all four live views now — it takes `CHROME_ROW_CLASS` itself, `h-10
@@ -6296,7 +6171,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   claimed too, so the right-hand sheet the editor opens in stays open.
 - **The programmer's contexts stop at the grid**: it can open over the programmer (the FX table's
   *on Q12*), and context flows through the sheet's portal, so it clears the programmer scope, the
-  focused Look and palette layers and the dock-tab claim (`NoProgrammerScope`, `NoLookRowStore`,
+  focused Look and palette layers (`NoProgrammerScope`, `NoLookRowStore`,
   `NoFocusedPaletteLayer`). A group row draws only the columns its own row can take
   (`buildCueRowCells`), a colour with white folds into RGB on a head without a white channel, and a
   drag's commits are throttled at 33 ms as the programmer's are.
@@ -6364,7 +6239,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   the FX rows have no grip, × or editor writes, and the add buttons are disabled with the reason.
   `useRefusedEditKeys` (`editorIsolation.tsx`) claims a ⌫ or Enter pressed while the editor holds
   the keys — not on a focused control or field — and asks to unlock, as the Values grid's refused
-  keys do. `CueEditorIsolation` clears the programmer's scope, focused layers and rail-tab claim
+  keys do. `CueEditorIsolation` clears the programmer's scope and focused layers
   above both tabs, for the grid's reason.
 - **Edited since GO and Update stage** (session 7, D4, D11, §3.5): these tabs' writes send nothing
   to the stage, so the desk marks a held cue they changed in what Update stage sends — a row's

@@ -6,15 +6,11 @@ import { SIDE_PANEL_HEADER_BUTTON_CLASS } from './sidePanel'
 
 /**
  * **Beside the content, or over it** — the one control for `lib/sidePanelMode.ts`, mounted in the
- * header of both docked side panels (the programmer's rail and the busk view's side sheet).
- *
- * One component rather than one per surface, because the two panels are deliberately one
- * instrument and this is the setting most likely to drift into two near-identical buttons that
- * disagree about their glyph, their wording or which way round the modes read.
+ * busk view's side sheet's header.
  *
  * `Columns2` for push and `SquareStack` for overlay: the glyph shows **what the panel is now**,
  * and the title says what pressing it will do. A glyph showing the *destination* is the other
- * convention and either is defensible, but this one matches the rail's own chevrons, which point
+ * convention and either is defensible, but this one matches the panel's own chevrons, which point
  * where the panel will go while naming the state they leave.
  *
  * It sits only in the header, never on the folded strip: the mode is about how the panel occupies

@@ -90,13 +90,10 @@ import type { BuskingTarget } from './buskingTypes'
  *
  * The palette still replaces this whole region while editing; that swap is `BuskingView`'s.
  *
- * **Its chrome is the programmer rail's, through `components/sheet/sidePanel.ts`.** The two are
- * the same instrument — a column against the right edge of a live view, folded to a strip of
- * glyphs — and they had drifted in every measurement the chrome system is supposed to settle. The
- * body fill, the 40px header, the 40px strip cell, the chevron vocabulary (◀ opens, ▶ folds) and
- * the enter animation all come from that module now; what stays this view's own is the *fact*
- * behind the fold, because `busk.sheet` is a per-window value the announce, ⌘K, the Screens sheet
- * and MIDI all write, where the rail's `collapsed` is a stored desk preference.
+ * **Its chrome is `components/sheet/sidePanel.ts`'s**: the body fill, the 40px header, the 40px
+ * strip cell, the chevron vocabulary (◀ opens, ▶ folds) and the enter animation. What stays this
+ * view's own is the *fact* behind the fold, because `busk.sheet` is a per-window value the
+ * announce, ⌘K, the Screens sheet and MIDI all write.
  */
 
 interface TabSpec {
@@ -277,7 +274,7 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
   // it reflowed on each open and close, which is the one thing floating the sheet is meant to
   // avoid. The spacer holds the room the fold held; the panel, flush `right-0` and wider than 40,
   // covers it. It draws nothing, so the rule that the fold and the panel are never both on screen
-  // stands. The programmer rail does the same with its strip made `invisible` (`RailStripFrame`).
+  // stands.
   //
   // One fragment in both modes, the spacer a conditional slot before the panel: returning the
   // panel bare in push mode would move it between two parent shapes as the mode toggle in its own
@@ -290,7 +287,7 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
   )
 }
 
-/** The busk sheet's docked width, in px. `localStorage`, like the rail's: a width is a fact
+/** The busk sheet's docked width, in px. `localStorage`: a width is a fact
  *  about this desk's screen, not about which of two windows you are looking at — which is what
  *  every other `busk.*` key in `sessionStorage` is. */
 const SHEET_WIDTH_KEY = 'busk.sheet.width'
@@ -317,14 +314,14 @@ const SHEET_DEFAULT_WIDTH = 320
 
 /**
  * The panel around the sheet's header and tab: the width, the drag that sets it, and which of the
- * two modes it is drawn in — `RailBodyFrame`'s counterpart, and the same `children` contract.
+ * two modes it is drawn in.
  *
  * **The contents arrive as `children` and that is load-bearing, not tidiness.** The width changes
  * at pointer rate during a drag, so whatever holds it re-renders at pointer rate; holding it in
  * `SideSheet` itself would re-render `BuskSpeedRail`, `ColourSheet` or `SpreadSheet` sixty times
  * a second, and a colour picker being dragged is not a thing to rebuild per frame. As `children`
  * the element reference is unchanged between the frame's renders, so React skips those subtrees
- * entirely — exactly how `RailBodyFrame` keeps the dock's editors out of its own drag.
+ * entirely.
  */
 function DockedSideSheet({
   openId,
@@ -355,9 +352,8 @@ function DockedSideSheet({
         // `relative` is the handle's containing block in push mode; in overlay mode the shared
         // overlay class positions the panel itself and this is already satisfied.
         'relative hidden w-[var(--sheet-w)] md:flex',
-        // Over the page, or beside it — `lib/sidePanelMode.ts`, one fact shared with the rail.
-        // Either way the fold is not drawn behind it: `SideSheet` renders the fold or the panel,
-        // never both, which is the reading the rail's strip was brought onto.
+        // Over the page, or beside it — `lib/sidePanelMode.ts`. Either way the fold is not drawn
+        // behind it: `SideSheet` renders the fold or the panel, never both.
         overlay ? SIDE_PANEL_OVERLAY_CLASS : 'shrink-0',
         // `select-none` while the drag runs, so it does not paint a text selection across the
         // page it crosses. The cursor is the handle's own.

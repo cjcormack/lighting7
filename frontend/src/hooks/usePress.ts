@@ -72,7 +72,7 @@ export function useWindowPressPair(): PressPair {
 
 /**
  * What the window's heads can take, for a door that offers palettes over [useWindowPressPair] — the
- * rail's *+ Palette*: on the programmer the strip's own offer (the marquee's families, else what
+ * Stack table's *+ Look or palette*: on the programmer the strip's own offer (the marquee's families, else what
  * the heads can take, and their emitters); elsewhere nothing is known, so nothing is filtered.
  */
 export function useWindowPaletteFit(): PaletteFit {

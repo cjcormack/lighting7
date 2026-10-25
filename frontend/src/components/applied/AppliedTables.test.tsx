@@ -12,9 +12,8 @@ import type { LiveScenery, ProgrammerScenery } from '@/api/sceneryApi'
 
 /**
  * The programmer's Stack, FX and Scenery tables (tables-colours plan D1, the applied tables of
- * venue-visit plan S14 moved onto the programmer's tabs). Since session 2 they are the only place
- * the programmer's layers, effects and scenery are listed — the rail is the Colour · Spread dock
- * (D4) — so this suite pins everything the rail used to offer that the tables now carry alone: a
+ * venue-visit plan S14 moved onto the programmer's tabs). They are the only place the
+ * programmer's layers, effects and scenery are listed, so this suite pins everything they carry: a
  * layer's settings, Detach, the replacement notes, + Look / + Palette, + Effect, *held · Blind*,
  * *Edit…* on an effect, the values-beat-effects rule, the hand's place on the stack and ⌘K's
  * *+ Effect* door. Sort, filter and chip ride the query string beside `?table=`.

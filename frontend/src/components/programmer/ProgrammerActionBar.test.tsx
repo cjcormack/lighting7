@@ -132,9 +132,8 @@ describe('ProgrammerActionBar', () => {
   })
 
   it('hosts no grid tools — Groups and Columns are row B\'s', () => {
-    // `sheetControls` went with the zones. Groups and Columns describe what the *grid* shows, and
-    // a band spanning the whole page reached across the rail to say it; they render in the grid's
-    // own toolbar now, beside the filter and the scope.
+    // Groups and Columns describe what the *grid* shows, so they render in the grid's own toolbar,
+    // beside the filter and the scope.
     render(<ProgrammerActionBar projectId={1} />)
     expect(screen.queryByTitle('Show group rows with their members')).toBeNull()
     expect(screen.queryByTitle('Choose visible columns')).toBeNull()

@@ -16,7 +16,6 @@ import { useCellEditorRequests } from '../sheet/useCellEditorRequests'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useLookRowStore } from '../programmer/LookRowStore'
 import { useFocusedPaletteLayer } from '../programmer/FocusedPaletteLayer'
-import { useRailTabClaim } from '../programmer/railTab'
 import { PositionFanContext } from './cells/PositionSpreadTool'
 import { usePublishMarquee, type MarqueeSnapshot } from './marqueeContext'
 import {
@@ -93,7 +92,6 @@ import type { ReleaseTarget } from '../fixtureSheet/useRelease'
 import { CellSelectionActions } from '../sheet/CellSelectionActions'
 import { SpreadPopover, spreadColumnsForTargets, type SpreadColumn } from './SpreadPopover'
 import type { SpreadSeed } from '../editor/SpreadPanel'
-import type { CellOpenRequest } from '../sheet/useCellEditorRequests'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { GroupDetailModal } from '../fixtures/GroupDetailModal'
 import type { ColumnKey } from './columns'
@@ -116,7 +114,6 @@ import type { GroupSummary } from '../../api/groupsApi'
 
 const EMPTY_FIXTURES: Fixture[] = []
 const EMPTY_GROUPS: GroupSummary[] = []
-const EMPTY_TARGETS: readonly WriteTarget[] = []
 
 /** One pending throttled commit: the key it is deduped under, and how to land it when it is due. */
 interface PendingCommit {
@@ -664,7 +661,7 @@ export function FixturesListContainer({
   // **Held by content, not by identity.** `rows` is rebuilt on every filter keystroke and every
   // group or fixture expand, and `cellSelection` on every marquee frame, so the memo below mints a
   // fresh list far more often than the heads change — and everything keyed on it (the per-column
-  // batches, the snapshot the rail's tabs subscribe to) would follow. `useContentStable` keeps the
+  // batches and Spread's plans) would follow. `useContentStable` keeps the
   // held list while the columns and their heads are the same.
   const nextColumnTargets = useMemo<SpreadColumn[]>(
     () =>
@@ -802,26 +799,10 @@ export function FixturesListContainer({
   // bar's Set (`toggleCellEditor`, at the button, or closing what it opened). The rule is the sheet
   // kit's, shared with the patch list, the DMX sheet and the cue sheet; see the hook for why a
   // request is a one-shot and why an off-screen cell is scrolled to rather than opened.
-  // **A rail tab claims its own column's open gesture** (editor-kit plan session 4, call 9): with
-  // the programmer rail's Colour tab open, Enter, a typed character and Set over a marquee whose
-  // first editable cell is a Colour cell land in the tab — R focused, the character seeded — and
-  // no popover opens, since two colour editors over one marquee is the double the kit refuses.
-  // Every other column opens its popover as before. Null on the plain lists, which have no rail.
-  // The double click is the Colour cell's own door, and it asks the same claim (`ColourCell`).
-  const railClaim = useRailTabClaim()
-  const interceptOpen = useCallback(
-    (request: CellOpenRequest<ColumnKey>) => {
-      if (railClaim?.tab !== 'colour' || request.col !== 'colour') return false
-      railClaim.focusColour(request.seed)
-      return true
-    },
-    [railClaim],
-  )
   const { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor, closeCellEditor } =
     useCellEditorRequests<ColumnKey>({
       firstEditableCell: firstEditableSelectedCell,
       onScrollTo: setScrollToRowId,
-      intercept: interceptOpen,
     })
 
   // ── A scope switch closes an open cell editor ────────────────────────────────────────────────
@@ -907,10 +888,9 @@ export function FixturesListContainer({
   // A commit for a different cell flushes the pending one first so nothing is
   // ever dropped, and the timer flushes on unmount.
   //
-  // Two callers share the one throttle: a cell's editor (keyed by its row and column) and the
-  // programmer rail's tabs (keyed by the column alone — `commitColumn` below). Each pending commit
-  // carries how to land it, reading the *current* writer through a ref at landing time, so a
-  // commit held across a re-render still lands through this render's targets and scope.
+  // Each pending commit carries how to land it, reading the *current* writer through a ref at
+  // landing time, so a commit held across a re-render still lands through this render's targets
+  // and scope.
   const commitNowRef = useRef(commitNow)
   commitNowRef.current = commitNow
   const pendingCommitRef = useRef<PendingCommit | null>(null)
@@ -970,31 +950,6 @@ export function FixturesListContainer({
     [scheduleCommit],
   )
 
-  /**
-   * A commit to one column of the selection, from outside the grid — the programmer rail's Colour
-   * tab. The marquee's cells in that column when there are some, the selected rows' heads when
-   * there are no cells, and nothing otherwise; planned the way a cell's commit is
-   * (`planBatchWrites`, per-target clamping and shape filtering) through this container's writers,
-   * which are the grid's scope-aware ones — Local, or the focused Look layer's draft.
-   */
-  const commitColumn = useCallback(
-    (col: ColumnKey, commit: CellCommit) => {
-      const column = columnTargets.find((c) => c.col === col)
-      const targets = column?.targets ?? (cellCount === 0 ? selectedTargets : EMPTY_TARGETS)
-      writeBatch(writers, targets, col, commit)
-    },
-    [columnTargets, cellCount, selectedTargets, writers],
-  )
-  const commitColumnRef = useRef(commitColumn)
-  commitColumnRef.current = commitColumn
-  // Stable for the mount, so the published snapshot's `commit` never moves: through the throttle,
-  // keyed by column, landing through whatever `commitColumn` is current when it lands.
-  const publishedCommit = useCallback(
-    (col: ColumnKey, commit: CellCommit) =>
-      scheduleCommit(`rail\u0000${col}`, commit, (c) => commitColumnRef.current(col, c)),
-    [scheduleCommit],
-  )
-
   // The plain routes' whole-selection spread, memoised so `SpreadPopover`'s per-column plans are
   // not re-probed on every render of the container.
   const rowSpreadGroup = useMemo(() => wholeGroupOf(rows, selectedRowIds), [rows, selectedRowIds])
@@ -1006,28 +961,15 @@ export function FixturesListContainer({
   // The colour editor's *Spread…*: a one-shot the way `keyboardOpen` is one — the seed opens the
   // row C panel on Colour with *From* set to the editor's RGB (`SpreadSeed`), and the panel asks
   // for it to be dropped once read, so a later open by any other door is not re-seeded.
-  //
-  // With the rail's Spread tab open the hand-over goes there instead: the tab is row C's Spread
-  // while it is open (the same claim as the Colour tab's), so seeding the popover behind it would
-  // hand the colour to a panel the operator is not looking at.
   const [spreadSeed, setSpreadSeed] = useState<SpreadSeed | null>(null)
-  const onSpreadFromColour = useCallback(
-    (from: { r: number; g: number; b: number }) => {
-      if (railClaim?.tab === 'spread') {
-        railClaim.spreadFrom(from)
-        return
-      }
-      setSpreadSeed((prev) => ({ from: { r: from.r, g: from.g, b: from.b }, key: (prev?.key ?? 0) + 1 }))
-    },
-    [railClaim],
-  )
+  const onSpreadFromColour = useCallback((from: { r: number; g: number; b: number }) => {
+    setSpreadSeed((prev) => ({ from: { r: from.r, g: from.g, b: from.b }, key: (prev?.key ?? 0) + 1 }))
+  }, [])
   const consumeSpreadSeed = useCallback(() => setSpreadSeed(null), [])
-  // A position cell's *Spread…*: the rail's Spread tab in Fan where the rail docks its tabs, else
-  // row C's popover in Fan — the colour hand-over's fallback (venue-visit plan S12).
+  // A position cell's *Spread…*: row C's popover in Fan (venue-visit plan S12).
   const onFanFromPosition = useCallback(() => {
-    if (railClaim?.spreadFan()) return
     setSpreadSeed((prev) => ({ fan: true, key: (prev?.key ?? 0) + 1 }))
-  }, [railClaim])
+  }, [])
   const routeProjectId = Number.isFinite(projectId) ? projectId : undefined
 
   // The marquee has to be counted, or the editor's label line says "1 head" while the commit
@@ -1058,16 +1000,11 @@ export function FixturesListContainer({
     [cellSelection, marqueeBatches, selection, selectedTargets],
   )
 
-  // ── The marquee, published for the programmer rail's tabs ─────────────────────────────────────
+  // ── The marquee's press, published for the doors outside the grid ─────────────────────────────
   //
-  // What the cells' own editors are handed — the per-column batches, the columns' heads, the
-  // scope's gate and word — plus the rows' heads for a rows-only selection and the throttled
-  // column commit (editor-kit plan session 4). Into `ProgrammerPage`'s store; the plain lists
-  // mount none and this publishes into nothing. Memoised on what it holds, so a render that moved
-  // none of them publishes nothing: the permission is rebuilt from its two booleans because
-  // `cellKeyboardPermission` answers a fresh object per call.
-  // Held by content for `columnTargets`' reason: `selectedTargets` follows `rows`' identity.
-  const railRows = useContentStable(cellCount > 0 ? EMPTY_TARGETS : selectedTargets, sameTargets)
+  // Where a press from this window lands and the families it asks for, into `ProgrammerPage`'s
+  // store; the plain lists mount none and this publishes into nothing. Memoised on what it holds,
+  // so a render that moved none of it publishes nothing.
   const pressAsked = useContentStable(
     cellCount > 0 ? cellFamilies(cellSelection.cells) : null,
     (a, b) => familiesKey(a) === familiesKey(b),
@@ -1080,20 +1017,7 @@ export function FixturesListContainer({
     () => ({ targets: pressTargets, askedFamilies: pressAsked, targetFamilies: pressFamilies, targetEmitters: pressEmitters }),
     [pressTargets, pressAsked, pressFamilies, pressEmitters],
   )
-  const permissionEntry = keys.entry
-  const permissionClear = keys.clear
-  const marqueeSnapshot = useMemo<MarqueeSnapshot>(
-    () => ({
-      batches: marqueeBatches,
-      columns: columnTargets,
-      rows: railRows,
-      permission: { entry: permissionEntry, clear: permissionClear },
-      scopeLabel,
-      commit: publishedCommit,
-      press,
-    }),
-    [marqueeBatches, columnTargets, railRows, permissionEntry, permissionClear, scopeLabel, publishedCommit, press],
-  )
+  const marqueeSnapshot = useMemo<MarqueeSnapshot>(() => ({ press }), [press])
   usePublishMarquee(marqueeSnapshot)
 
   // A Cmd+K `?select=` link landing on this list: shown, selected and scrolled to — see
@@ -1442,13 +1366,10 @@ export function FixturesListContainer({
   // a button cannot promise a gesture the keyboard refuses. Set *is* Enter: the same request, the
   // same first cell, the same commit to every selected cell.
   //
-  // On the programmer a rows-only selection gets none of them: Spread reads the marquee there,
-  // which is what the selection is for. The two plain list routes keep the *row* Spread they
-  // always had beside the marquee's — over the whole selection, column chosen in the panel. That
-  // is the one gesture this session did not fold into the marquee: a row selection there is made
-  // by dragging the name column or by ⌘A, and spreading a colour across eight whole heads without
-  // first drawing a rectangle over one of their columns is a real gesture those two views already
-  // offered.
+  // A rows-only selection gets the *row* Spread instead — over the whole selection, column chosen
+  // in the panel: a row selection is made by dragging the name column, by ⌘A or from another
+  // surface, and spreading a colour across eight whole heads without first drawing a rectangle over
+  // one of their columns is a real gesture. On the programmer Release follows it.
   // *Release n* (fixture-fx-sheets plan D18): on the programmer, over the rows the selection covers —
   // a marquee's rows or a row selection — one `clearTarget` per target, after Spread. The targets
   // are Locate's (`selectedRowTargets`): a group row stays the group, an element row is that head,
@@ -1483,19 +1404,25 @@ export function FixturesListContainer({
             scopeLabel={scopeLabel}
             seed={spreadSeed}
             onSeedConsumed={consumeSpreadSeed}
-            // The rail's Spread tab, when it is open, is this verb's panel: the press focuses its
-            // From rather than opening a second Spread over the same marquee.
-            onClaimed={railClaim?.tab === 'spread' ? railClaim.focusSpread : undefined}
             className={PHONE_FOLDED_CLASS}
           />
         }
         release={releaseControl}
       />
-    ) : showOwnership ? (
-      releaseControl
     ) : selectedTargets.length > 0 ? (
-      <SpreadPopover columns={rowSpreadColumns} projectId={routeProjectId} desk={selectionScope === 'programmer'} scopeLabel={scopeLabel} />
-    ) : null
+      <>
+        <SpreadPopover
+          columns={rowSpreadColumns}
+          projectId={routeProjectId}
+          desk={selectionScope === 'programmer'}
+          scopeLabel={scopeLabel}
+          className={showOwnership ? PHONE_FOLDED_CLASS : undefined}
+        />
+        {releaseControl}
+      </>
+    ) : (
+      releaseControl
+    )
 
   // Gate on VISIBLE selected rows, not the raw selection count — filtering away every selected row
   // must not leave a live toolbar acting on an empty set.
@@ -1553,8 +1480,8 @@ export function FixturesListContainer({
           </SheetPage.Row>
           {/* Row C, reserved when nothing is selected — the programmer's bar with no template strip
               (no `projectId`), so the two cannot disagree about what a marquee names. Its own
-              `@container`, with the queries on the child — the wrapper trap `ProgrammerWorkspace`
-              documents. */}
+              `@container`, with the queries on the child: a query container is the nearest
+              ancestor, never the element itself. */}
           <div className="@container">
             <ListSelectionBar
               selection={selectionControl}
@@ -1636,9 +1563,8 @@ export function FixturesListContainer({
 
 /**
  * One column's commit over some targets: planned (`planBatchWrites` — per-target clamping and the
- * commit's shape filter) and applied through the writers. Answers how many writes it planned. The
- * three commits here — a marquee's, a row selection's and the rail's column commit — all land
- * through it.
+ * commit's shape filter) and applied through the writers. Answers how many writes it planned. Both
+ * commits here — a marquee's and a row selection's — land through it.
  */
 function writeBatch(writers: CellWriters, targets: readonly WriteTarget[], col: ColumnKey, commit: CellCommit): number {
   let written = 0

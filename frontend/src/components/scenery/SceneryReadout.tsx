@@ -7,7 +7,7 @@ import { TRACKED_HATCH_CLASS } from './trackedHatch'
 import type { SceneryChange, TrackedScenery } from '@/api/sceneryApi'
 import type { StageElementDto } from '@/api/stageElementApi'
 
-/** A row's icon: a flown piece flies, a drawn drape draws, anything else is a piece. Shared with the programmer rail's scenery rows. */
+/** A row's icon: a flown piece flies, a drawn drape draws, anything else is a piece. Shared with the programmer's Scenery table. */
 export function ElementIcon({ element }: { element: StageElementDto | undefined }) {
   const keys = element ? sceneryKeysOf(element) : []
   const Icon = keys.includes('trimM') ? ArrowUpDown : keys.includes('open') ? Blinds : Box

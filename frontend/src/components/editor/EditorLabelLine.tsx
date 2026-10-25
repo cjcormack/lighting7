@@ -20,7 +20,6 @@ export function EditorLabelLine({
   subject,
   column,
   className,
-  docked = false,
   title,
   chip,
 }: {
@@ -29,13 +28,6 @@ export function EditorLabelLine({
   /** The line's own inset where the host's content is not padded — the two list editors. It goes
    *  with the line, so a sheet form draws no empty band where the line is not drawn. */
   className?: string
-  /**
-   * A docked host — the programmer rail's Colour and Spread tabs (editor-kit plan session 4, call
-   * 11) — draws the line whatever form the viewport would give a cell editor: the tab is a column
-   * away from row C and the scope band, where a popover sits on the cell it edits. The busk tabs
-   * draw none, since their band is one row up.
-   */
-  docked?: boolean
   /** The subject's hover — the refusal's full sentence where the subject is a scope's short word. */
   title?: string
   /**
@@ -46,7 +38,7 @@ export function EditorLabelLine({
   chip?: ReactNode
 }) {
   const form = useEditorForm()
-  if (!docked && form !== 'popover') {
+  if (form !== 'popover') {
     return chip == null ? null : (
       <div data-editor-source-row className={cn('flex min-w-0 items-center gap-2', className)}>
         {chip}
