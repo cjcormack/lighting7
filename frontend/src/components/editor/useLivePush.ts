@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 /**
  * The floor between two live writes, in ms. 20 a second is far below what any drag can perceive
@@ -129,5 +129,6 @@ export function useLivePush<T>(send: (value: T) => void, options: LivePushOption
     [],
   )
 
-  return { push, flush, reset }
+  // One object for the life of the component, as its three calls are: a caller may depend on it.
+  return useMemo(() => ({ push, flush, reset }), [push, flush, reset])
 }

@@ -21,6 +21,7 @@ import {
   defaultParameters,
   differsFromPalette,
   draftOf,
+  isLevelFx,
   withPaletteDraft,
   OPTIONAL_FIELDS,
   sameRequest,
@@ -29,6 +30,7 @@ import {
   type OptionalField,
 } from './fxEditorModel'
 import { useFxScope } from './useFxScope'
+import { useFxGraphLink } from './fxGraphLink'
 
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
@@ -101,6 +103,14 @@ export function FxEditor({
 
   const [snapshot] = useState(() => draftOf(effect))
   const [draft, setDraft] = useState<FxDraft>(snapshot)
+  // The draft as the last write left it, for the graph's handles, which may write twice between renders.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const link = useFxGraphLink()
+  const linkRef = useRef(link)
+  linkRef.current = link
+  // A gesture is running: moves pushed, the release not yet sent.
+  const gesture = useRef(false)
   // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
   // mode the draft now says narrow them.
   const { scope: spreadScope, extendedChannels, settingAttribute } = useFxScope({
@@ -138,6 +148,7 @@ export function FxEditor({
   const write = useCallback(
     (next: FxDraft, release: boolean, fields: readonly OptionalField[] = []) => {
       setDraft(next)
+      draftRef.current = next
       touched.current = true
       for (const field of fields) setFields.current.add(field)
       const request = updateRequestOf(next, setFields.current)
@@ -149,11 +160,20 @@ export function FxEditor({
         return
       }
       latest.current = request
+      gesture.current = !release
+      linkRef.current?.preview(effect.id, request)
       if (release) live.flush(request)
       else live.push(request)
     },
-    [live],
+    [effect.id, live],
   )
+
+  // The running list refetched (the desk answered a write, or something else moved the FX): the
+  // preview reads the FX as it runs again — unless a gesture is still running, whose move is newer
+  // than any push the desk has answered.
+  useEffect(() => {
+    if (!gesture.current) linkRef.current?.preview(effect.id, null)
+  }, [effect])
 
   // A move still held by the floor when the editor goes — a Done mid-drag, the host unmounting it —
   // lands rather than being dropped with `useLivePush`'s timer. Declared after the hook, so its
@@ -189,8 +209,38 @@ export function FxEditor({
       rateSpeedMasterUuid: keepsDrawn('rateSpeedMasterUuid') ? draft.rateSpeedMasterUuid : snapshot.rateSpeedMasterUuid,
     })
     latest.current = request
+    gesture.current = false
+    linkRef.current?.preview(effect.id, request)
     live.flush(request)
   }
+
+  // Lent to the graph's handles while this editor is open, through the same write its fields use —
+  // but not while a split edit is held, which the graph cannot draw.
+  const levels = entry != null && isLevelFx(entry) && ['min', 'max'].every((p) => entry.parameters.some((d) => d.name === p))
+  const libraryDefaults = useMemo(() => (entry ? defaultParameters(entry) : {}), [entry])
+  const holding = hold != null
+  useEffect(() => {
+    const target = linkRef.current
+    if (target == null) return
+    target.attach({
+      fxId: effect.id,
+      // An FX carries only the parameters it was given: the rest are the library's.
+      draft: { ...draft, parameters: { ...libraryDefaults, ...draft.parameters } },
+      levels,
+      wallClock: (entry?.timingSource ?? effect.timingSource) === 'WALL_CLOCK',
+      readOnly: !connected || holding,
+      set: (patch, release) => write({ ...draftRef.current, ...patch }, release, OPTIONAL_FIELDS.filter((field) => field in patch)),
+      setParam: (name, value, release) =>
+        write({ ...draftRef.current, parameters: { ...draftRef.current.parameters, [name]: value } }, release),
+    })
+  }, [connected, draft, effect.id, effect.timingSource, entry?.timingSource, holding, levels, libraryDefaults, write])
+  useEffect(
+    () => () => {
+      linkRef.current?.detach(effect.id)
+      linkRef.current?.preview(effect.id, null)
+    },
+    [effect.id],
+  )
 
   const togglePauseFx = useToggleFxPause()
   // Pause and resume what the edit is for: after a split, every copy it follows.
@@ -214,13 +264,12 @@ export function FxEditor({
   // A pad's effect (§3.3, D20): edited against its template rather than against the open, and its
   // footer is the template's two verbs in place of Revert.
   const spawning = useSpawningPalette(effect)
-  const defaults = useMemo(() => (entry ? defaultParameters(entry) : {}), [entry])
   // The instance says its distribution only where it has one (a group, or heads); the operator
   // setting one here says it too.
   const hasOrder = effect.order != null || setFields.current.has('order')
   const edited =
     spawning?.palette.fx != null &&
-    differsFromPalette(draft, spawning.palette.fx, master1Uuid, defaults, { order: hasOrder })
+    differsFromPalette(draft, spawning.palette.fx, master1Uuid, libraryDefaults, { order: hasOrder })
   /** The desk put the instance back (or re-keyed it): the draft is what it now runs. */
   const reseed = useCallback(
     (next: ActiveFx) => {

@@ -1336,9 +1336,12 @@ The project write guard counts it a runtime gesture, so an operator previews on 
   `white`, `amber`, `uv`; `pan`, `tilt` — and a Steps FX's output adds `steps` beside `stepLabels`.
 - **The offset ladder** is each row's rank and rank count after Order, Segments, Wings and Parts, then
   its offset (Spread): `SpreadShaping.shape` fills it as it shapes (`SpreadShaping.Ladder`), from the
-  ranks `DistributionPlan` gives it, so it is the plan's own steps. A cycle's start is where the
-  member's own clock with its Phase (`FxPhase.beatOwnCyclesAt` / `wallClockOwnCyclesAt`, the clock
-  Bounce counts on; Runs counts it less Phase) crosses a whole number: where its own cycle begins.
+  ranks `DistributionPlan` gives it, so it is the plan's own steps. A row's offset is Spread × its
+  Parts rank over the Parts count, which is how the editor's Spread handle keeps a start under the
+  finger. A cycle's start is where the member's own clock with its Phase
+  (`FxPhase.beatOwnCyclesAt` / `wallClockOwnCyclesAt`, the clock Bounce counts on; Runs counts it less
+  Phase) crosses a whole number: where its own cycle begins. That clock is the FX's less the offset
+  plus the Phase, so a larger offset starts later and a larger Phase sooner.
   Under Ping-pong, whose triangle sweep is shaped from that cycle, the turnarounds fall elsewhere.
 - **One snapshot.** The rows, the samples and solo read each FX once (`FxSampler.snapshot()`), so an
   edit landing mid-request cannot order the rows by one read and sample them by another.
@@ -1777,11 +1780,13 @@ to the same offsets, Random's shuffle included.
   off). `FxDto` and the group and indirect DTOs report them. The MCP FX schemas take the four
   (`AiToolSchemas.putFxDynamics`), and `describe_rig` and `get_current_state` say them where they
   are not the default.
-- **The editor** (D11, §4.1): a *Spread* disclosure in `FxFields` — Order (the Order
-  select, moved out of Advanced), Spread %, Wings (hidden under a mirrored Order, and set back to 1
-  when one is chosen), Segments, Parts, and a row of phase dials over eight notional heads on an FX
-  palette and the FX's own heads live (up to sixteen, then *+n*). Its summary says the
-  non-defaults: *Normal · 50 % · 2 wings*.
+- **The editor** (D11, §4.1): a *Spread* disclosure in `FxFields` — the Shapes (FX editor plan
+  D11: nine chips, each setting Order, Spread, Wings, Segments and Parts at once), Spread %, Wings
+  (hidden under a mirrored Order, and set back to 1 when one is chosen), Segments, Parts, and a row of
+  phase dials over eight notional heads on an FX palette and the FX's own heads live (up to sixteen,
+  then *+n*) — the FX editor's inspector draws the offset ladder from the preview in their place. The
+  Order select sits above it, beside Direction. Its summary says the Shape, else *Custom*, then the
+  non-defaults: *Custom · 50 % · 2 wings*.
 
 **Order interface properties:**
 

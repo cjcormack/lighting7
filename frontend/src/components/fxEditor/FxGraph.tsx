@@ -8,6 +8,8 @@ import { dmxToCentre, formatCentre } from '@/lib/positionScale'
 import { setFxGraphOption, useFxGraphOptions, type FxGraphOptions } from '@/lib/fxEditorView'
 import { useIsDarkMode } from '@/hooks/useIsDarkMode'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
+import { useCoarsePointer } from '@/hooks/useCoarsePointer'
+import type { GraphMark, LinkedEditor } from '@/components/fx/fxGraphLink'
 import type { FxPreviewAnswer, FxPreviewFx } from '@/store/fxPreview'
 import {
   requestSpeedMasterBeat,
@@ -38,12 +40,15 @@ import {
   type LaneLayout,
   type PlayheadClock,
 } from './fxGraphModel'
+import { GraphHandles, beginDrag, useDragCancel } from './GraphHandles'
+import { phaseFromDrag } from './fxGraphHandles'
 import {
   DARK_PALETTE,
   LIGHT_PALETTE,
   drawLane,
   drawPathDots,
   drawPaths,
+  paintsSection,
   positionScaleOf,
   type GraphCtx,
   type GraphPalette,
@@ -73,6 +78,14 @@ export interface FxGraphProps {
   onUnsolo: () => void
   /** The picked FX runs under Bounce, so its shape repeats every two cycles: where the playhead wraps. */
   bounce?: boolean
+  /** The mark a hovered control in the inspector changes, lit (FX editor plan §4.5). */
+  highlight?: GraphMark | null
+  /** A row a ladder dot links to, by key, marked in the gutter. */
+  linkedRow?: string | null
+  /** The row the pointer rests on, by key, as it moves: the ladder lights its dots. */
+  onHoverRow?: (key: string | null) => void
+  /** The inspector's editor, while it edits the picked FX: the handles write through it (D12). */
+  editor?: LinkedEditor | null
   contextOf?: GraphContextOf
 }
 
@@ -86,9 +99,26 @@ export interface FxGraphProps {
  * resyncs on the master's beat. Drawn from the answer alone (P2); the toolbar's choices are the
  * window's (P6).
  */
-export function FxGraph({ answer, error, empty, narrow, fxName, fixtureName, solo, onUnsolo, bounce = false, contextOf = canvasContext }: FxGraphProps) {
+export function FxGraph({
+  answer,
+  error,
+  empty,
+  narrow,
+  fxName,
+  fixtureName,
+  solo,
+  onUnsolo,
+  bounce = false,
+  highlight = null,
+  linkedRow = null,
+  onHoverRow,
+  editor = null,
+  contextOf = canvasContext,
+}: FxGraphProps) {
   const options = useFxGraphOptions()
   const reducedMotion = useReducedMotion()
+  // Handles are pointer-only: under a finger the inspector's fields are the way in.
+  const coarse = useCoarsePointer()
   const dark = useIsDarkMode()
   const palette = dark ? DARK_PALETTE : LIGHT_PALETTE
 
@@ -109,6 +139,10 @@ export function FxGraph({ answer, error, empty, narrow, fxName, fixtureName, sol
       solo={solo}
       onUnsolo={onUnsolo}
       bounce={bounce}
+      highlight={highlight}
+      linkedRow={linkedRow}
+      onHoverRow={onHoverRow}
+      editor={coarse || editor?.readOnly === true ? null : editor}
       contextOf={contextOf}
       options={options}
       frozen={options.paused || reducedMotion}
@@ -133,6 +167,10 @@ function GraphBody({
   solo,
   onUnsolo,
   bounce,
+  highlight,
+  linkedRow,
+  onHoverRow,
+  editor,
   contextOf,
   options,
   frozen,
@@ -177,6 +215,7 @@ function GraphBody({
       ),
     [answer.rows, fixtureName, lanes, lanesWidth, narrow, order],
   )
+  const linkedIndex = linkedRow == null ? -1 : answer.rows.findIndex((r) => r.key === linkedRow)
   const drawOptions = useMemo(
     (): LaneDrawOptions => ({
       samples: answer.window.samples,
@@ -188,9 +227,13 @@ function GraphBody({
       asSeen,
       positionScale,
       palette,
+      highlight,
+      linkedRow: linkedIndex < 0 ? null : linkedIndex,
     }),
-    [answer.window.beats, answer.window.samples, asSeen, clock, options.view, palette, picked, pickedFx, positionScale],
+    [answer.window.beats, answer.window.samples, asSeen, clock, highlight, linkedIndex, options.view, palette, picked, pickedFx, positionScale],
   )
+  // The handles are the picked FX's, and only while the inspector edits that FX.
+  const handles = editor != null && pickedFx != null && pickedFx.fxId === editor.fxId ? editor : null
 
   const playhead = useGraphPlayhead(answer, frozen, bounce ? 2 * SAMPLES_PER_CYCLE : SAMPLES_PER_CYCLE)
   const playheadRef = useRef<HTMLDivElement>(null)
@@ -213,6 +256,14 @@ function GraphBody({
   const onHover = useCallback((next: Hover | null) => setHover(next), [])
   const hoverRow = hover == null ? -1 : answer.rows.findIndex((r) => r.key === hover.key)
   const hovered = hover != null && hoverRow >= 0 && hover.sample < answer.window.samples ? { ...hover, row: hoverRow } : null
+  const hoveredKey = hovered?.key ?? null
+  const onHoverRowRef = useRef(onHoverRow)
+  onHoverRowRef.current = onHoverRow
+  useEffect(() => {
+    onHoverRowRef.current?.(hoveredKey)
+  }, [hoveredKey])
+  // Gone under the pointer, the graph lets go of the row it was resting on.
+  useEffect(() => () => onHoverRowRef.current?.(null), [])
 
   const truncated = truncatedWords(answer.truncated)
   const hiddenRows = narrow ? Math.max(0, ...layouts.flatMap((l) => l.sections.map((s) => countRows(lanes, s.attribute) - s.rows.length))) : 0
@@ -251,6 +302,7 @@ function GraphBody({
               pickedFx={pickedFx}
               fxName={fxName}
               asSeen={options.asSeen}
+              editor={handles}
               contextOf={contextOf}
               onHover={onHover}
             />
@@ -395,6 +447,7 @@ const GraphLane = memo(function GraphLane({
   pickedFx,
   fxName,
   asSeen,
+  editor,
   contextOf,
   onHover,
 }: {
@@ -405,10 +458,44 @@ const GraphLane = memo(function GraphLane({
   pickedFx: FxPreviewFx | null
   fxName: (fxType: string) => string
   asSeen: boolean
+  editor: LinkedEditor | null
   contextOf: GraphContextOf
   onHover: (hover: Hover | null) => void
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const cancel = useDragCancel()
+  // The picked FX's own section of its own lane, where its handles go.
+  const handleSection =
+    editor == null || pickedFx == null || pickedFx.family !== lane.family
+      ? null
+      : (layout.sections.find((s) => {
+          const attribute = lane.attributes.find((a) => a.attribute === s.attribute)
+          return s.attribute === pickedFx.attribute && attribute != null && paintsSection(s, attribute.byRow, options.picked)
+        }) ?? null)
+  /** A row of the picked FX's section under the pointer, whose block a drag moves sideways: Phase. */
+  const phaseRowAt = (x: number, y: number) => {
+    if (handleSection == null || sampleAt(layout, options.samples, x) == null) return null
+    const at = rowAt(layout, y)
+    return at != null && at.section === handleSection ? at : null
+  }
+  const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
+    const box = e.currentTarget.getBoundingClientRect()
+    if (editor == null || phaseRowAt(e.clientX - box.left, e.clientY - box.top) == null) return
+    const start = editor.draft.phaseOffset
+    let last = start
+    const perSample = layout.plotWidth / Math.max(1, options.samples)
+    beginDrag(
+      e,
+      cancel,
+      (dx) => {
+        last = phaseFromDrag(start, dx / perSample)
+        editor.set({ phaseOffset: last }, false)
+      },
+      (moved) => {
+        if (moved && last !== start) editor.set({ phaseOffset: last }, true)
+      },
+    )
+  }
   useLayoutEffect(() => {
     const canvas = ref.current
     if (canvas == null || layout.width <= 0) return
@@ -423,6 +510,7 @@ const GraphLane = memo(function GraphLane({
     const at = rowAt(layout, e.clientY - box.top)
     const key = at == null ? undefined : answer.rows[at.row.row]?.key
     onHover(s == null || key == null ? null : { sample: s, key, x })
+    e.currentTarget.style.cursor = phaseRowAt(x, e.clientY - box.top) != null ? 'ew-resize' : ''
   }
 
   const family = lane.family
@@ -461,14 +549,21 @@ const GraphLane = memo(function GraphLane({
           </span>
         ))}
       </div>
-      <canvas
-        ref={ref}
-        aria-label={`${word} graph`}
-        data-fx-graph-canvas={family ?? 'OTHER'}
-        style={{ width: layout.width, height: layout.height, display: 'block' }}
-        onPointerMove={onPointerMove}
-        onPointerLeave={() => onHover(null)}
-      />
+      <div className="relative" style={{ width: layout.width }}>
+        <canvas
+          ref={ref}
+          aria-label={`${word} graph`}
+          data-fx-graph-canvas={family ?? 'OTHER'}
+          title={handleSection != null ? 'Drag a row sideways to set Phase' : undefined}
+          style={{ width: layout.width, height: layout.height, display: 'block' }}
+          onPointerMove={onPointerMove}
+          onPointerDown={onPointerDown}
+          onPointerLeave={() => onHover(null)}
+        />
+        {editor != null && handleSection != null && pickedFx != null && (
+          <GraphHandles layout={layout} section={handleSection} samples={options.samples} fx={pickedFx} rows={answer.rows} editor={editor} />
+        )}
+      </div>
     </div>
   )
 })

@@ -210,9 +210,9 @@ describe('FxFields', () => {
     expect(screen.queryByRole('combobox', { name: 'Order' })).toBeNull()
     cleanup()
     fields(PULSE, draft({ order: 'NORMAL', spread: 0.5, wings: 2 }), HEADS)
-    // Folded, the summary says the non-defaults. The label and the summary are two spans with only
-    // a CSS gap between them, so the accessible name has no space after "Spread".
-    expect(screen.getByRole('button', { name: /^Spread\s*· 50 % · 2 wings$/ })).toBeTruthy()
+    // Folded, the summary says the Shape and the non-defaults. The label and the summary are two
+    // spans with only a CSS gap between them, so the accessible name has no space after "Spread".
+    expect(screen.getByRole('button', { name: /^Spread\s*· Custom · 50 % · 2 wings$/ })).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Order' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
     expect(screen.queryByRole('combobox', { name: 'Distribution' })).toBeNull()

@@ -283,3 +283,113 @@ describe('the heat map', () => {
     expect(ctx.texts).toHaveLength(0)
   })
 })
+
+describe('the hover lights (FX editor plan §4.5)', () => {
+  /** Whether any pixel in the box holds [colour]. */
+  const anyPixel = (ctx: PixelCanvas, colour: string, x0: number, x1: number, y0: number, y1: number) => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (ctx.pixel(x, y) === colour) return true
+    return false
+  }
+  const ROWS = [row('hex-1', 0), row('hex-2', 1)]
+  const picked = (over: Parameters<typeof previewFx>[1] = {}) =>
+    previewAnswer({
+      rows: ROWS,
+      lanes: [
+        {
+          family: 'INTENSITY',
+          attributes: [
+            {
+              attribute: 'dimmer',
+              kind: 'SLIDER',
+              rows: [0, 1].map((r) => attributeRow(r, levelSeries([0, 0, 0, 0]), { fx: [{ fx: 0, output: levelSeries([255, 255, 0, 0]) }] })),
+            },
+          ],
+        },
+      ],
+      fx: [previewFx(2, over)],
+    })
+
+  it('Cycle shades the first cycle under the picked FX’s rows', () => {
+    expect(draw(picked()).ctx.pixel(at(0), 15)).toBeNull()
+    expect(draw(picked(), { highlight: 'cycle' }).ctx.pixel(at(0), 15)).toBe(P.highlightArea)
+  })
+
+  it('Cycle’s shade is not hidden under a colour strip', () => {
+    const colour = previewAnswer({
+      rows: ROWS,
+      lanes: [
+        {
+          family: 'COLOUR',
+          attributes: [
+            {
+              attribute: 'rgbColour',
+              kind: 'COLOUR',
+              rows: [0, 1].map((r) => {
+                const red = colourSeries([[255, 0, 0], [255, 0, 0], [255, 0, 0], [255, 0, 0]])
+                return attributeRow(r, red, { fx: [{ fx: 0, output: red }] })
+              }),
+            },
+          ],
+        },
+      ],
+      fx: [previewFx(2, { family: 'COLOUR', attribute: 'rgbColour' })],
+    })
+    expect(draw(colour).ctx.pixel(at(0), 7)).toBe('rgb(255,0,0)')
+    expect(draw(colour, { highlight: 'cycle' }).ctx.pixel(at(0), 7)).toBe(P.highlightArea)
+  })
+
+  it('Spread and Order light the start ticks', () => {
+    expect(draw(picked()).ctx.pixel(72, 1)).toBe(P.start)
+    expect(draw(picked(), { highlight: 'starts' }).ctx.pixel(72, 1)).toBe(P.highlight)
+  })
+
+  it('Amount fills the gap between This FX and Result', () => {
+    expect(draw(picked()).ctx.pixel(at(0), 15)).toBeNull()
+    const { ctx } = draw(picked(), { highlight: 'amount' })
+    expect(ctx.pixel(at(0), 15)).toBe(P.highlightArea)
+    // Where the two agree there is no gap to light.
+    expect(ctx.pixel(at(2), 15)).toBeNull()
+  })
+
+  it('Runs lights the hatching where an element holds', () => {
+    const holding = picked({ holding: [[[0, 1]], null] })
+    expect(anyPixel(draw(holding).ctx, P.highlight, 72, 112, 0, 28)).toBe(false)
+    expect(anyPixel(draw(holding).ctx, P.holding, 72, 112, 0, 28)).toBe(true)
+    expect(anyPixel(draw(holding, { highlight: 'holding' }).ctx, P.highlight, 72, 112, 0, 28)).toBe(true)
+  })
+
+  it('Segments and Parts light the brackets', () => {
+    const segmented = picked({
+      ladder: {
+        order: { ranks: [0, 1], counts: [2, 2] },
+        segments: { ranks: [0, 0], counts: [1, 1] },
+        wings: { ranks: [0, 0], counts: [1, 1] },
+        parts: { ranks: [0, 0], counts: [1, 1] },
+        spread: [0, 0],
+      },
+    })
+    expect(anyPixel(draw(segmented).ctx, P.bracket, 60, 72, 0, 56)).toBe(true)
+    expect(anyPixel(draw(segmented, { highlight: 'brackets' }).ctx, P.highlight, 60, 72, 0, 56)).toBe(true)
+  })
+
+  it('Wings light the mirror', () => {
+    const winged = picked({
+      ladder: {
+        order: { ranks: [0, 1], counts: [2, 2] },
+        segments: { ranks: [0, 1], counts: [2, 2] },
+        wings: { ranks: [0, 0], counts: [1, 1] },
+        parts: { ranks: [0, 0], counts: [1, 1] },
+        spread: [0, 0],
+      },
+    })
+    expect(anyPixel(draw(winged).ctx, P.bracket, 72, 152, 28, 29)).toBe(true)
+    expect(anyPixel(draw(winged, { highlight: 'mirror' }).ctx, P.highlight, 72, 152, 27, 30)).toBe(true)
+  })
+
+  it('marks the row a ladder dot links to, in the gutter', () => {
+    expect(draw(picked()).ctx.pixel(1, 33)).toBeNull()
+    const { ctx } = draw(picked(), { linkedRow: 1 })
+    expect(ctx.pixel(1, 33)).toBe(P.highlight)
+    expect(ctx.pixel(1, 5)).toBeNull()
+  })
+})

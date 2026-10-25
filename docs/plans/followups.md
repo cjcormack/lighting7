@@ -42,6 +42,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-PREVIEW-SHARED-CHANNELS`](#fu-fx-preview-shared-channels) | Trigger | FX | an FX graph disagrees with the rig where two attributes share a channel |
 | [`FU-FX-STAGE-SCRUB`](#fu-fx-stage-scrub) | Trigger | FX | an operator scrubs the FX graph and looks at the stage |
 | [`FU-FX-PREVIEW-FADES`](#fu-fx-preview-fades) | Trigger | FX | an operator reads the FX graph across a GO |
+| [`FU-FX-LINKED-TIMING`](#fu-fx-linked-timing) | Trigger | FX | an operator matches the same pair again after changing one |
 | [`FU-FX-STEP-WIDTH`](#fu-fx-step-width) | Trigger | FX | an operator asks for an uneven step |
 | [`FU-FX-LIBRARY-GAPS`](#fu-fx-library-gaps) | Trigger | FX | an operator reaches for a square, diamond or TiltDim |
 | [`FU-FX-FLICKER-REPEATS`](#fu-fx-flicker-repeats) | Trigger | FX | someone sees a flicker repeat on a long cycle |
@@ -551,6 +552,24 @@ The shape: sample `LayerResolver.fallbackFor` along the running fade, and the en
 rather than one sample, and the graph draws it as a line.
 
 **Trigger**: an operator reads the FX graph across a GO.
+
+---
+
+### `FU-FX-LINKED-TIMING`
+
+**Match as a stored link** · Trigger · FX editor plan session 6, 2026-10-25
+
+The FX editor's *Same as…* menus (FX editor plan D13; `frontend/src/components/fx/FxFields.tsx`'s
+`SameAs`) copy another FX's cycle, or its Order, Spread, Wings, Segments and Parts, once through
+`updateFx`. Nothing records that the two were matched, so changing the source afterwards leaves the
+copy where it was, and lining them up again is a second Match (plan §8, Q12).
+
+The shape: a link stored on the FX homes that carry timing and spread — the copy naming its source by
+uuid and which fields it follows — applied by the desk on every write to the source, so a cue's FX,
+a Look's and a Local FX follow the same way; a sync `formatVersion` for the new field, and a mark on
+the inspector's fields saying what follows what.
+
+**Trigger**: an operator matches the same pair again after changing one.
 
 ---
 

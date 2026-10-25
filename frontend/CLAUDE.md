@@ -801,16 +801,17 @@ Release folds to its glyph and the scope line drops the fade.
   `runForever: true`, since the frame's absent `runs` means keep) — and — on a group or a fixture with
   heads — *Timing: Per cycle | Per head* (over `timing`, `CYCLE` | `HEAD`), Element mode and the head filter. **The
   spread's shape is the *Spread* section's** (effects plan D11, §4.1; `SpreadSection`), a disclosure above Shape on a group or a
-  fixture with heads, and always on an FX palette: *Spread* %,
+  fixture with heads, and always on an FX palette: the **Shapes** (FX editor plan D11, below), *Spread* %,
   *Wings* (hidden under a mirrored Order — Centre out, Centre in — and set back to 1 in the same
   write when one is chosen, `orderPatch`, since the desk refuses wings there), *Segments* and *Parts*
-  (0 off), and a row of **phase dials** — eight notional heads on a palette, the FX's own live
+  (0 off), and — in every host but the FX editor's inspector, which draws the offset ladder in their
+  place — a row of **phase dials**: eight notional heads on a palette, the FX's own live
   (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion` counted: one per fixture
   where the first fixture carries the FX's attribute itself (`carriesFxAttribute`: a slider or
   setting by name, a colour or position by type, the desk's traits), else its heads, a `FLAT` group's
   head filter across the whole strip on its global index, a `PER_FIXTURE` one's within each fixture;
   sixteen dials, then *+n*). Under Segments, Wings or Parts Position's continuous rank snaps to its
-  nearest slot first, as the desk's `wholeRanks` does. Its summary says the non-defaults: *50 % · 2 wings*.
+  nearest slot first, as the desk's `wholeRanks` does. Its summary says the Shape, else *Custom*, then the non-defaults: *Custom · 50 % · 2 wings*.
   The four ride `updateFx` once touched (`OPTIONAL_FIELDS`), `parts: 0` turning them off. **The
   dials are the one client copy of the desk's rule** (P2): `lib/spreadShape.ts` mirrors
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
@@ -5235,7 +5236,8 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
 **The FX editor** (FX editor plan D1–D6, session 4) is the FX tab's *Selection* view
 (`components/fxEditor/`): list · graph · inspector over the window's pair (`useWindowFxPair` — the
 desk's selection while the window follows it, else the programmer list's rows). The graph (session 5)
-draws the preview's answer. Things that will bite:
+draws the preview's answer; Shapes, the offset ladder, Match, hover lights and the graph's handles
+(session 6) tie the inspector to it. Things that will bite:
 
 - **The view is a per-window fact** (`lib/fxEditorView.ts`, `sessionStorage`, P6): *Selection ·
   All* (`programmer.fx.view`, Selection the default), the picked FX, the one Solo marks, the
@@ -5284,9 +5286,9 @@ draws the preview's answer. Things that will bite:
 - **The inspector is the live editor** (`SplitFxEditor`, so the split, the 50 ms floor, Revert,
   *Update palette* and *Reset to palette* are unchanged) with `layout="inspector"`, which orders
   `FxFields` as §4.5 does: Cycle · Amount · Direction · Order, **Shape** (every parameter), Spread
-  (the phase dials stay until the ladder replaces them), **Over what's underneath** (the family's
-  question and the raw blend), **Advanced** (Phase, Timing, Runs, element mode and filter). Every
-  other host keeps the old order.
+  (the Shapes, the fields and the offset ladder), **Over what's underneath** (the family's question
+  and the raw blend), **Advanced** (Phase, Timing, Runs, element mode and filter). Every other host
+  keeps the old order, and the phase dials in place of the ladder.
 - **Widths are the editor's own** (`useContainerBand`, `FX_EDITOR_BAND_FLOORS`): from 1100 three
   columns, list 248 · graph · inspector 340; from 760 list · graph, the inspector over the graph's
   right half while something is picked or the picker is open; below 760 one column, the inspector
@@ -5327,6 +5329,57 @@ draws the preview's answer. Things that will bite:
   lanes while that leaves them a plot, else under them. Below the 760 arm it draws the picked FX's
   lane alone, six rows at most, and says so; the column's rows size to their content there
   (`auto-rows-max`), since the graph under the list is tall.
+- **The inspector and the graph meet through one context** (`components/fx/fxGraphLink.ts`'s
+  `FxGraphLink`), which `FxEditorSelection` provides around its three columns only — never the sheets
+  it opens (a cue's editor, *+ FX*'s sheet), whose editors have no graph — and only the live editor and
+  `FxFields` read, so every other host draws none of what follows and keeps its dials. The live editor
+  **lends the graph its draft and its write** (`attach`; `detach` takes back only the editor it names,
+  so one editor going never takes another's handles), its parameters filled from the library where
+  the FX carries none, and tells it every move before the floor (`preview`): the editor holds it as
+  the ask's `draft`, sent as `{fxId, draft}` (`useFxPreview`'s `draft`, on the first FX asked for), so
+  the graph follows a finger, and drops it on a refetch of the running list once the gesture's
+  release is sent — the desk has the move — never mid-gesture, when the move is newer than any push
+  the desk answered. An answer to an earlier move of the same drag is still drawn (the stale check
+  ignores the draft), the ask behind it bringing the latest. A held split edit is never previewed, and
+  lends no handles. The trigger subscriptions key on whether there is an ask, not its content, so a
+  drag does not resubscribe them each move. The graph's hovered row is a store
+  (`HoveredRowStore`), read by the ladder alone, so a pointer crossing the rows redraws only its dots.
+- **Shapes** (D11, `fx/fxShapes.ts`) are chips at the head of Spread, in every host: one tap writes
+  Order, Spread, Wings, Segments and Parts in one `updateFx`; a chip is lit only while all five
+  match, else a lit *Custom* follows them, and the Spread summary leads with the name. A chip's 40 ×
+  16 drawing is `lib/spreadShape.ts` over eight notional heads — the one client rule, allowed where
+  the desk has not answered (P2), since a Shape is drawn before it runs.
+- **The offset ladder** (D9, `fx/OffsetLadder.tsx`) replaces the dials in the inspector: five dot rows
+  — Order, Segments, Wings, Parts, Spread — read from the answer's `ladder`, never computed: a rung's
+  dot at rank over that step's count, Spread's at its offset over the largest offset or one cycle. A
+  split-off copy has no rungs, so only its Spread row draws. Hovering a dot marks its graph row in the
+  gutter (`linkedRow`); hovering a graph row rings its dots (`onHoverRow`).
+- **Match** (D13) is *Same as…* on Cycle and on Spread, over the list's other FX: one write of the
+  source's cycle and what it follows (master 1 named by its uuid, since an absent master keeps), or
+  its five spread fields. A source on a master of the other clock — read from its library entry,
+  since a beat FX on *Seconds* reports the wall clock — is offered disabled (one on *Seconds* copies
+  onto either), and so is a spread source on one head, which says no Order. Nothing links them
+  afterwards (`FU-FX-LINKED-TIMING`).
+- **Hover lights** (§4.5): `FxFields` wraps each control in `Lights`, which sets the link's `highlight`
+  while the pointer rests there, and `drawLane` lights that mark (`LaneDrawOptions.highlight`,
+  `palette.highlight` / `highlightArea`): Cycle shades the first cycle (over the rows, so a colour
+  strip does not hide it), Spread, Order, the Shapes and Phase the start ticks, Wings the mirror,
+  Segments and Parts the brackets, Runs the hatching, Amount the gap between *This FX* and *Result*.
+  A light whose control unmounts under the pointer puts itself out.
+- **The handles** (D12, `GraphHandles.tsx`, `fxGraphHandles.ts`) sit over the picked FX's own section
+  of its lane, only while the inspector edits that FX, never under a coarse pointer
+  (`hooks/useCoarsePointer.ts`) or read-only: the first cycle's right edge (always sample 48, the
+  desk's rate) for Cycle, snapped to `SPEED_STEPS` by ratio — the cycle the drag began on counting as
+  a step, so a triplet or 32 beats is kept until the drag leaves it — or, in seconds (a wall-clock FX,
+  or one on *Seconds*), moved to the nearest 0.05 s; the line through each row's first start
+  for Spread; a row block dragged sideways (the canvas's own pointer-down) for Phase; an Intensity
+  FX's `max` and `min` lines, each row on its own scale (`levelScale`, the drawing's). Each is measured
+  from where the drag began, since the answer redraws under the finger, starts only once its own
+  pointer has moved 3 px (`DRAG_SLOP_PX`, so a click edits nothing), writes `set(patch, false)` per
+  move and lands `set(patch, true)` on release — nothing for a drag that changed nothing — through the
+  live editor's `write`, so the floor, Revert, the split and the palette arm are the editor's. A
+  member's own clock is the FX's less its offset plus its Phase, so dragging the chase line right
+  widens Spread and dragging a row right lowers Phase: the starts follow the finger.
 - **The playhead is the client's, the clock the desk's** (`GraphPlayhead`, `useGraphPlayhead`): it
   runs from sample 0 when an answer lands, at the wall clock's rate, wrapping at the window's last
   whole cycle of the picked FX (two under Bounce), since *2 bars* of a 3-beat FX is not whole; a

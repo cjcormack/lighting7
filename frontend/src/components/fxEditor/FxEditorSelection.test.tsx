@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
   stop: vi.fn(),
   pause: vi.fn(),
   scope: { kind: 'local' } as { kind: string },
-  asks: [] as { fxIds: number[]; solo?: number; window?: unknown }[],
+  asks: [] as { fxIds: number[]; solo?: number; window?: unknown; draft?: unknown }[],
   library: [] as { name: string; defaultDirection?: string }[],
 }))
 
@@ -73,15 +73,31 @@ vi.mock('@/components/fx/FxPicker', () => ({
     <div data-testid="picker" data-family={initialFamily} data-stack={String(press.stack === true)} />
   ),
 }))
-vi.mock('@/components/fx/SplitFxEditor', () => ({
-  SplitFxEditor: ({ effect, layout }: { effect: ActiveFx; layout: string }) => (
-    <div data-testid="inspector-editor" data-layout={layout}>
-      {effect.id}
-    </div>
-  ),
-}))
+vi.mock('@/components/fx/SplitFxEditor', async () => {
+  const { useFxGraphLink } = await import('@/components/fx/fxGraphLink')
+  return {
+    SplitFxEditor: ({ effect, layout }: { effect: ActiveFx; layout: string }) => {
+      // The live editor's side of the link: an unsent move, and the FX Match offers.
+      const link = useFxGraphLink()
+      return (
+        <>
+          <div data-testid="inspector-editor" data-layout={layout}>
+            {effect.id}
+          </div>
+          <button type="button" onClick={() => link?.preview(effect.id, { cycle: 8, parameters: {}, blendMode: 'OVERRIDE', phaseOffset: 0 })}>
+            Move
+          </button>
+          <button type="button" onClick={() => link?.preview(effect.id, null)}>
+            Landed
+          </button>
+          <span data-testid="match-others">{link?.others.map((o) => o.effect.id).join(',')}</span>
+        </>
+      )
+    },
+  }
+})
 vi.mock('./useFxPreview', () => ({
-  useFxPreview: (ask: { fxIds: number[]; solo?: number; window?: unknown } | null) => {
+  useFxPreview: (ask: { fxIds: number[]; solo?: number; window?: unknown; draft?: unknown } | null) => {
     if (ask != null) mocks.asks.push(ask)
     return { answer: null, error: null }
   },
@@ -252,6 +268,17 @@ describe('the list', () => {
     expect(mocks.asks.at(-1)?.fxIds).toEqual([4])
     act(() => setPickedFx(2))
     expect(mocks.asks.at(-1)?.fxIds).toEqual([2])
+  })
+
+  it('asks with the inspector’s unsent move on the picked FX until the desk has it, and offers Match the list’s other FX', () => {
+    draw()
+    fireEvent.click(within(card(3)).getByRole('button', { name: 'Edit FX 3' }))
+    expect(mocks.asks.at(-1)?.draft).toBeUndefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Move' }))
+    expect(mocks.asks.at(-1)).toMatchObject({ fxIds: [3], draft: { cycle: 8 } })
+    fireEvent.click(screen.getByRole('button', { name: 'Landed' }))
+    expect(mocks.asks.at(-1)?.draft).toBeUndefined()
+    expect(screen.getByTestId('match-others').textContent!.split(',').map(Number).sort()).toEqual([1, 2, 4, 5])
   })
 
   it('asks for a solo’d FX beside the picked one, solo naming it, and sends the graph’s window', () => {

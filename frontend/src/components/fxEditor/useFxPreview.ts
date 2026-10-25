@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CueTarget } from '@/api/cuesApi'
+import type { UpdateFxRequest } from '@/api/fxApi'
 import { lightingApi } from '@/api/lightingApi'
 import { formatError } from '@/lib/formatError'
 import {
@@ -22,6 +23,11 @@ export interface FxPreviewAsk {
    * and one named past the eighth is left out of the fold.
    */
   fxIds: readonly number[]
+  /**
+   * The inspector's unsent move on the first of [fxIds] — `{fxId, draft}`, the running FX with the
+   * edit applied to a copy — so the graph follows a gesture before the 50 ms floor sends it.
+   */
+  draft?: UpdateFxRequest
   /** Every FX in the list: an `fxChanged` for any of them asks again. Absent, [fxIds]. */
   listed?: readonly number[]
   window?: FxPreviewWindowRequest
@@ -41,7 +47,7 @@ export interface FxPreviewState {
  * the window and solo the graph chose, asked again — the latest ask wins, an answer to an older one
  * dropped — whenever what it drew may have moved:
  *
- * - the ask itself changes: the selection, or the FX in the list;
+ * - the ask itself changes: the selection, the FX in the list, or the inspector's unsent move;
  * - `fxChanged` for an FX in the list — which is also how an `updateFx` this window sent is
  *   answered, and how a `programmer.moveFx` re-rank arrives;
  * - a tempo move on a master the answer's `clock` names;
@@ -59,13 +65,16 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
   previewRef.current = preview
   const [state, setState] = useState<FxPreviewState>({ answer: null, error: null })
   const key = askKey(ask)
+  // What an answer must still match to be drawn: everything but the unsent move, whose answer is
+  // newer than the one drawn even after the finger has moved on.
+  const baseKey = askKey(ask == null ? null : { ...ask, draft: undefined })
 
   const request = useMemo((): (FxPreviewRequest & { projectId: number }) | null => {
     if (ask == null || ask.fxIds.length === 0 || ask.targets.length === 0) return null
     return {
       projectId: ask.projectId,
       targets: ask.targets.map((t) => ({ type: t.type, key: t.key })),
-      fx: ask.fxIds.slice(0, PREVIEW_MAX_FX).map((fxId) => ({ fxId })),
+      fx: ask.fxIds.slice(0, PREVIEW_MAX_FX).map((fxId, i) => (i === 0 && ask.draft != null ? { fxId, draft: ask.draft } : { fxId })),
       include: 'STACK',
       ...(ask.window != null ? { window: ask.window } : {}),
       ...(ask.solo != null && ask.solo >= 0 && ask.solo < Math.min(ask.fxIds.length, PREVIEW_MAX_FX) ? { solo: ask.solo } : {}),
@@ -78,9 +87,10 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
   // One ask in flight and at most one waiting behind it, which goes with whatever is asked by
   // then: a fader dragged under a drawn row moves its key on every frame, and the desk samples
   // the whole stack each time.
-  const live = useRef({ request, key, inFlight: false, trailing: false, alive: true })
+  const live = useRef({ request, key, baseKey, inFlight: false, trailing: false, alive: true })
   live.current.request = request
   live.current.key = key
+  live.current.baseKey = baseKey
 
   const askNow = useCallback(() => {
     const now = live.current
@@ -93,11 +103,13 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
       return
     }
     now.inFlight = true
-    const sentKey = now.key
+    const sentKey = now.baseKey
     const done = (apply: () => void) => {
       now.inFlight = false
-      // An answer to anything but what is asked now is an older ask's: dropped.
-      if (now.alive && sentKey === now.key) apply()
+      // An answer to another selection, list, window or solo is an older ask's: dropped. One to an
+      // earlier move of the same drag is drawn — it is newer than what is — and the ask behind it
+      // brings the latest.
+      if (now.alive && sentKey === now.baseKey) apply()
       if (now.alive && now.trailing) {
         now.trailing = false
         askNow()
@@ -131,8 +143,9 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
   const rowKeys = useMemo(() => (answer == null ? [] : previewKeys(answer)), [answer])
   const rowKeysKey = rowKeys.map(([k, a]) => `${k}|${a}`).join('\u0000')
 
+  const asking = request != null
   useEffect(() => {
-    if (request == null) return
+    if (!asking) return
     let queued = false
     let live = true
     const askSoon = () => {
@@ -173,7 +186,7 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
       tempo.unsubscribe()
       keys.forEach((s) => s.unsubscribe())
     }
-  }, [askNow, clockKey, fxKey, request, rowKeysKey])
+  }, [askNow, asking, clockKey, fxKey, rowKeysKey])
 
   return request == null ? { answer: null, error: null } : state
 }
@@ -181,7 +194,7 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
 function askKey(ask: FxPreviewAsk | null): string {
   if (ask == null) return ''
   const listed = [...(ask.listed ?? [])].sort((a, b) => a - b)
-  return JSON.stringify([ask.projectId, ask.targets.map((t) => [t.type, t.key]), ask.fxIds, listed, ask.window ?? null, ask.solo ?? null])
+  return JSON.stringify([ask.projectId, ask.targets.map((t) => [t.type, t.key]), ask.fxIds, listed, ask.window ?? null, ask.solo ?? null, ask.draft ?? null])
 }
 
 /** Every (row key, attribute) the answer drew: what is underneath each of them is a reason to ask again. */
