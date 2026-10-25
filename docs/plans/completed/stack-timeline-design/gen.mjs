@@ -1,6 +1,6 @@
 // Generates the stack-timeline boards. Each board is one dark artboard that renders standalone;
 // `node gen.mjs` rewrites all four and canvas.json. The vocabulary is show-cue-editing-design's
-// (../completed/show-cue-editing-design/), restated here so a change there cannot move these.
+// (../show-cue-editing-design/), restated here so a change there cannot move these.
 import { writeFileSync } from 'node:fs'
 
 const OUT = new URL('.', import.meta.url).pathname

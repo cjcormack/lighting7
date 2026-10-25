@@ -26,7 +26,10 @@ import { useSpeedMasterListQuery } from '@/store/speedMasters'
 import { parseAttributeMask, serializeAttributeMask } from '@/lib/attributeFamily'
 import { MaskToggles, maskIsEmpty, maskToWire, useMaskDraft, type MaskValue } from '@/components/programmer/maskPicker'
 import { shownSceneryState } from '@/lib/scenery'
-import { replacePlan, sharedValue, type TimelineColumn } from '@/lib/stackTimeline'
+import { fxCycleWords, replacePlan, settingsChangeLabel, sharedValue, type FxRunCell, type FxRunVerb, type TimelineColumn } from '@/lib/stackTimeline'
+import { fxDynamicsParts } from '@/lib/fxDynamics'
+import { runsWord } from '@/components/fx/fxEditorModel'
+import type { FxDirection } from '@/api/fxApi'
 import type { StoredExtraColumn } from '@/lib/stackTimeline/columnOrder'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { SceneryControl } from '@/components/scenery/SceneryControl'
@@ -115,13 +118,17 @@ export function describeEdit(
   for (const op of ops) {
     if (op.op === 'restore' || op.op === 'replace' || op.op === 'layerSettings') continue
     const column = columnOf(op)
-    const verb = op.op === 'layerOn' ? 'on' : op.op === 'layerOff' ? 'off' : op.op === 'scenerySet' ? 'set' : 'cleared'
+    const verb = VERB[op.op]
     const key = `${column?.id ?? '?'}|${verb}`
     const group = groups.get(key) ?? { column, verb, cueIds: [] }
     group.cueIds.push(op.cueId)
     groups.set(key, group)
   }
   const sentences = [...groups.values()].map(({ column, verb, cueIds }) => {
+    if (verb === 'break' || verb === 'join') {
+      const name = column == null ? 'The FX' : `${column.name} · ${column.sub}`
+      return verb === 'break' ? `${name}'s run broken at ${cues(cueIds)}.` : `${name} joined to the run above at ${cues(cueIds)}.`
+    }
     const name = column == null ? 'Cell' : column.kind === 'scenery' ? column.name : `${column.name} ${verb === 'on' ? 'on' : 'off'} ${column.sub}`
     const action = column?.kind === 'scenery' ? ` ${verb}` : ''
     return `${name}${action} in ${cues(cueIds)}.`
@@ -134,6 +141,18 @@ export function describeEdit(
   }
   if (answer.changed.length === 0) return 'Nothing changed'
   return sentences.join(' ')
+}
+
+/** Each op's verb as the toast groups it. */
+const VERB: Record<Exclude<TimelineEditOp['op'], 'restore' | 'replace' | 'layerSettings'>, string> = {
+  layerOn: 'on',
+  layerOff: 'off',
+  fxOn: 'on',
+  fxOff: 'off',
+  breakRun: 'break',
+  joinRun: 'join',
+  scenerySet: 'set',
+  sceneryClear: 'cleared',
 }
 
 // ── The selection bar's verbs ─────────────────────────────────────────────────────────────────────
@@ -690,6 +709,146 @@ export function TimelineSceneryPopover({
           <Button variant="outline" size="sm" disabled={state == null} onClick={onClear}>
             <Trash2 className="size-3.5" />
             Clear change
+          </Button>
+        </div>
+      </div>
+    </EditorSurface>
+  )
+}
+
+// ── An FX cell ────────────────────────────────────────────────────────────────────────────────────
+
+/** One cue's FX settings as the run popover lists them, in the pad face's words: `½ beat · ↔ · 60 % · ADDITIVE`. */
+export function fxSettingsWords(settings: Record<string, unknown>): string {
+  const parts: string[] = []
+  const cycle = fxCycleWords(settings)
+  if (cycle != null) parts.push(cycle)
+  parts.push(
+    ...fxDynamicsParts({
+      amount: typeof settings.amount === 'number' ? settings.amount : undefined,
+      direction: typeof settings.direction === 'string' ? (settings.direction as FxDirection) : undefined,
+    }),
+  )
+  if (typeof settings.blendMode === 'string' && settings.blendMode !== 'OVERRIDE') parts.push(settings.blendMode)
+  if (typeof settings.runs === 'number') parts.push(runsWord(settings.runs))
+  return parts.join(' · ')
+}
+
+/**
+ * An FX cell's popover (§4.4, D7, D8): its run cue by cue with each cue's settings, ◆ where they
+ * change, and *Break run at Qn*, *Join run above* and *Edit Qn's FX…* — each verb one request, and
+ * one disabled with its reason where it would do nothing.
+ */
+export function TimelineFxRunPopover({
+  anchor,
+  column,
+  run,
+  entryId,
+  cueLabel,
+  cues,
+  breakRun,
+  joinRun,
+  locked,
+  onRefused,
+  onClose,
+  onSend,
+  onEdit,
+}: {
+  anchor: () => Element | null
+  column: TimelineColumn
+  run: readonly FxRunCell[]
+  entryId: number
+  cueLabel: (cueId: number) => string
+  cues: (cueIds: readonly number[]) => string
+  breakRun: FxRunVerb
+  joinRun: FxRunVerb
+  locked: boolean
+  onRefused?: () => void
+  onClose: () => void
+  onSend: (op: TimelineEditOp, label: string) => void
+  onEdit: () => void
+}) {
+  const anchorRef = useRef<{ getBoundingClientRect(): DOMRect } | null>(null)
+  anchorRef.current = { getBoundingClientRect: () => anchor()?.getBoundingClientRect() ?? new DOMRect() }
+  const here = run.find((cell) => cell.entryId === entryId)
+  const at = here == null ? '' : cueLabel(here.cueId)
+  const keyed = here?.effect.runUuid != null
+  const verb = (label: string, state: FxRunVerb, words: string) => (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={state.op == null || (locked && onRefused == null)}
+      title={state.reason ?? (locked ? 'The show is locked — unlock to edit' : undefined)}
+      data-timeline-run-verb={words}
+      onClick={() => {
+        if (state.op == null) return
+        if (locked) return onRefused?.()
+        onSend(state.op, words)
+        onClose()
+      }}
+    >
+      {label}
+    </Button>
+  )
+  return (
+    <EditorSurface
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={`${column.name} in ${at}`}
+      align="center"
+      anchorRef={anchorRef}
+      contentClassName="w-80 space-y-3 p-3"
+    >
+      <div className="space-y-3" data-timeline-fx-run>
+        <div className="flex items-baseline gap-2">
+          <span aria-hidden className="text-violet-300">∿</span>
+          <b className="min-w-0 truncate text-sm">
+            {column.name} · {column.sub}
+          </b>
+          <span className="ml-auto shrink-0 rounded border px-1.5 text-[10.5px] text-muted-foreground">
+            {run.length > 1 ? `run ${cues(run.map((c) => c.cueId))}` : keyed ? 'a run of one' : 'in no run'}
+          </span>
+        </div>
+        <ol className="space-y-0.5 text-xs" data-timeline-run-list>
+          {run.map((cell, i) => (
+            <li
+              key={cell.entryId}
+              className={cn('grid grid-cols-[44px_1fr_auto] items-baseline gap-2 rounded px-1 py-0.5', cell.entryId === entryId && 'bg-muted')}
+            >
+              <span className="font-mono">{cueLabel(cell.cueId)}</span>
+              <span className="min-w-0 truncate">
+                {i === 0 ? (
+                  fxSettingsWords(cell.effect.settings)
+                ) : cell.changed ? (
+                  <b className="font-semibold text-violet-300">◆ {settingsChangeLabel(run[i - 1].effect.settings, cell.effect.settings) ?? fxSettingsWords(cell.effect.settings)}</b>
+                ) : (
+                  <span className="text-muted-foreground">same</span>
+                )}
+              </span>
+              <span className="text-[10.5px] text-muted-foreground">{i === 0 ? 'starts' : cell.changed ? 'edited in place' : 'continues'}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          {run.length > 1
+            ? 'Each GO inside the run hands the running FX to the next cue with its phase kept; a ◆ is an edit in place at that GO.'
+            : keyed
+              ? 'A GO into the cue below hands it on only where that cue shares its run.'
+              : 'In no run: its GO starts it afresh. Join run above to continue it from the cue above.'}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {verb(`Break run at ${at}`, breakRun, 'Run broken')}
+          {verb('Join run above', joinRun, 'Run joined')}
+          <span className="flex-1" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onEdit()
+              onClose()
+            }}
+          >
+            Edit {at}&apos;s FX…
           </Button>
         </div>
       </div>

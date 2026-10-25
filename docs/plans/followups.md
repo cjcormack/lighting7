@@ -166,6 +166,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running FX jump on *Update stage* rather than fade |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 | [`FU-TIMELINE-VALUES`](#fu-timeline-values) | Trigger | Cues | the Timeline is used to find where a hand-set value changes |
+| [`FU-TIMELINE-MCP`](#fu-timeline-mcp) | Trigger | AI | an operator asks Claude to make an FX continue across cues |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -3159,6 +3160,21 @@ to find where a hand-set value changes. **Then**: a column per family of a cue's
 Colour, Position, Beam), filled where the cue holds a row of that family, each cell naming its
 fixtures; the read gains each cue's own rows' families and heads beside `layers`, and the family and
 *Selection only* filters apply to them as to the rest.
+
+### `FU-TIMELINE-MCP`
+
+**Claude cannot read a stack's Timeline or write an FX run** · Trigger · Stack-timeline plan
+session 5, 2026-10-25
+
+A run key (`cue_ad_hoc_fx.run_uuid`) is written only by the Timeline's `timeline/edit` route
+(`fxOn`, `breakRun`, `joinRun` in `routes/cueStackTimelineEdit.kt`), the cue copier and the
+importer (plan P2, §8). MCP's `create_cue`, `record_cue` and `build_cue_stack` make ad-hoc FX with no
+key, so an FX Claude puts in neighbouring cues restarts at every GO, and Claude cannot see which
+cues share a run. **Trigger**: an operator asks Claude to make an FX continue across cues. **Then**:
+a `get_timeline` tool answering `GET …/cue-stacks/{sid}/timeline` (entries by cue number, each FX
+with its `runUuid`), and an `edit_timeline` tool taking the same op batch as `timeline/edit` with
+cues named by stack number (`ai/CueEntryRefs.kt`), a `dryRun` first, through `editTimeline` — not a
+second writer of run keys.
 
 ## Completed
 

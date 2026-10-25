@@ -6,8 +6,8 @@ import type { TimelineColumn, TimelineFilled } from './model'
 /**
  * The Timeline's gestures as op lists (stack-timeline plan §3.6, §4.4): pure, one list per gesture,
  * which the grid sends as **one** request. A Look or palette cell turned on is the press with the
- * settings of the nearest filled cell in its column (D6); a scenery cell set copies the nearest
- * change. Effect columns are left alone here — their edits are a later session's.
+ * settings of the nearest filled cell in its column (D6); an FX cell turned on copies the nearest
+ * filled cell's row, joining its run (D7); a scenery cell set copies the nearest change.
  */
 
 /** A cue's place in the stack, in list order: the rows a column runs down. */
@@ -30,15 +30,17 @@ export function sourceOf(column: TimelineColumn): TimelineSourceRef | null {
   return null
 }
 
-/** A column this session's gestures edit: Looks, palettes and scenery. */
+/** A column the gestures edit: every kind. */
 export function editsColumn(column: TimelineColumn): boolean {
-  return column.kind === 'look' || column.kind === 'palette' || column.kind === 'scenery'
+  return column.kind === 'look' || column.kind === 'palette' || column.kind === 'fx' || column.kind === 'scenery'
 }
 
-function filledOf(cells: TimelineCells, entryId: number, column: TimelineColumn): TimelineFilled | null {
+/** What fills [column] at [entryId], of the column's own kind, or null. */
+export function filledOf(cells: TimelineCells, entryId: number, column: TimelineColumn): TimelineFilled | null {
   const filled = cellAt(cells, entryId, column.id).filled
   if (filled == null) return null
   if (column.kind === 'scenery') return filled.kind === 'scenery' ? filled : null
+  if (column.kind === 'fx') return filled.kind === 'fx' ? filled : null
   return filled.kind === 'layer' ? filled : null
 }
 
@@ -64,22 +66,27 @@ export function nearestFilled(
   return null
 }
 
-/** Turn [cue]'s cell in [column] on, copying [from] — null for a scenery cell with nothing to copy. */
+/** Turn [cue]'s cell in [column] on, copying [from] — null for an FX or scenery cell with nothing to copy. */
 export function onOp(column: TimelineColumn, cueId: number, from: TimelineFilled | null): TimelineEditOp | null {
   const source = sourceOf(column)
   if (source != null) {
     return { op: 'layerOn', cueId, source, target: column.target, settingsFrom: from?.kind === 'layer' ? from.layer.id : null }
   }
+  if (column.kind === 'fx') return from?.kind === 'fx' ? { op: 'fxOn', cueId, fromFxUuid: from.effect.uuid } : null
   if (column.kind === 'scenery' && column.elementUuid && from?.kind === 'scenery') {
     return { op: 'scenerySet', cueId, elementUuid: column.elementUuid, state: from.state, transitionMs: from.transitionMs }
   }
   return null
 }
 
-/** Turn [cue]'s cell in [column] off — the off press, or a scenery change cleared back to tracking. */
-export function offOp(column: TimelineColumn, cueId: number): TimelineEditOp | null {
+/**
+ * Turn [cue]'s cell in [column] off — the off press, the FX row [here] deleted, or a scenery change
+ * cleared back to tracking.
+ */
+export function offOp(column: TimelineColumn, cueId: number, here: TimelineFilled | null = null): TimelineEditOp | null {
   const source = sourceOf(column)
   if (source != null) return { op: 'layerOff', cueId, source, target: column.target }
+  if (column.kind === 'fx') return here?.kind === 'fx' ? { op: 'fxOff', cueId, fxUuid: here.effect.uuid } : null
   if (column.kind === 'scenery' && column.elementUuid) return { op: 'sceneryClear', cueId, elementUuid: column.elementUuid }
   return null
 }
@@ -109,7 +116,8 @@ export function toggleOps(
 ): TimelineEditOp[] {
   const cue = cueOf(order, entryId)
   if (cue == null || !editsColumn(column)) return []
-  if (filledOf(cells, entryId, column)) return [offOp(column, cue.cueId)].filter((op): op is TimelineEditOp => op != null)
+  const here = filledOf(cells, entryId, column)
+  if (here) return [offOp(column, cue.cueId, here)].filter((op): op is TimelineEditOp => op != null)
   const op = onOp(column, cue.cueId, nearestFilled(order, cells, column, entryId))
   return op ? [op] : []
 }
@@ -142,8 +150,9 @@ export function offOps(
   for (const { entryId, columnId } of inOrder(order, selected)) {
     const column = columns.get(columnId)
     const cue = cueOf(order, entryId)
-    if (column == null || cue == null || !editsColumn(column) || !filledOf(cells, entryId, column)) continue
-    list.add(columnId, cue.cueId, offOp(column, cue.cueId))
+    const here = column == null ? null : filledOf(cells, entryId, column)
+    if (column == null || cue == null || !editsColumn(column) || here == null) continue
+    list.add(columnId, cue.cueId, offOp(column, cue.cueId, here))
   }
   return list.ops
 }
@@ -175,7 +184,7 @@ export function fillDownOps(
       if (cue == null || cue.cueId === topCue?.cueId) continue
       const here = filledOf(cells, entryId, column)
       if (top != null && here == null) list.add(columnId, cue.cueId, onOp(column, cue.cueId, top))
-      else if (top == null && here != null) list.add(columnId, cue.cueId, offOp(column, cue.cueId))
+      else if (top == null && here != null) list.add(columnId, cue.cueId, offOp(column, cue.cueId, here))
     }
   }
   return list.ops
@@ -217,7 +226,11 @@ export function dragOps(
   for (const [entryId, fate] of dragPlan(order, cells, column, fromEntryId, toEntryId)) {
     const cue = cueOf(order, entryId)
     if (cue == null) continue
-    list.add(column.id, cue.cueId, fate === 'fill' ? onOp(column, cue.cueId, dragged) : offOp(column, cue.cueId))
+    list.add(
+      column.id,
+      cue.cueId,
+      fate === 'fill' ? onOp(column, cue.cueId, dragged) : offOp(column, cue.cueId, filledOf(cells, entryId, column)),
+    )
   }
   return list.ops
 }

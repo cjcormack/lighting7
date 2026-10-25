@@ -6706,7 +6706,7 @@ is found — Record's *No stack* makes one.
 
 #### The Timeline
 
-**A stack's third view** (lighting7 `docs/plans/stack-timeline-plan.md`, D1–D11, C1–C7):
+**A stack's third view** (lighting7 `docs/plans/completed/stack-timeline-plan.md`, D1–D11, C1–C7):
 `/projects/:id/show/stacks/:stackId/timeline`, `ShowPage stackView="timeline"`, the third segment
 of `ShowStackViewSwitcher` — *Cards · Table · Timeline*. `CardsListView` gained `'timeline'`; it is
 stored under `show.view` alone (`getStoredCardsListView` reads it for no other key), and the cards
@@ -6750,8 +6750,8 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   consecutive columns, its rule down the first. The programmer's `FixturesTable` keeps whole rings:
   whether its neighbour is blank depends on the neighbour's live values.
   `SheetColumn.header` replaces the uppercase label where a column needs two lines.
-- **Editing Looks, palettes and scenery** (§4.4, session 4; `TimelineEditing.tsx`, the pure op
-  builders in `lib/stackTimeline/edits.ts`). **Every gesture is one request** to `POST
+- **Editing** (§4.4, sessions 4 and 5; `TimelineEditing.tsx`, the pure op builders in
+  `lib/stackTimeline/edits.ts` and `fxRuns.ts`). **Every gesture is one request** to `POST
   …/timeline/edit` (`useEditCueStackTimelineMutation`), sent through `useTimelineEdits`: nothing
   reaches the stage, and the answer's `before` is pushed as one Undo step — per stack, kept while the
   window lives (module-level, so a view switch keeps it), last first — which ⌘Z and the toast's
@@ -6769,7 +6769,19 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
     (a surface-owned ⏎ and ⌫ — one request over every column rather than each column's `clear`; a
     typed character is then left unclaimed, so the transport's `L` still works). ⌘D and ⌘Z are
     `useTimelineCommandKeys`, standing aside for a key region (the pane), a guarded target or an open
-    editor. FX cells select and read only — their edits are session 5's.
+    editor.
+  - **An FX cell** (session 5, D7, D8). On is `fxOn`, a copy of the nearest filled cell's row (above,
+    else below) that takes its run key, so a cell filled from a neighbour — a second click, *On*,
+    *Fill ↓*, a drag of the run's end — **joins its run**; off is `fxOff`, naming the row by uuid
+    (`offOp` takes the cell for it). A filled cell's second click opens **`TimelineFxRunPopover`**
+    instead of taking it off (⌫ does that): the run cue by cue (`fxRunAt`, through the grid's own
+    run marks, so across markers), each cue's settings or *same* in the pad face's words
+    (`fxCycleWords`, `fxDynamicsParts`), ◆ with what changed, then *Break run at Qn* (`breakRunVerb`,
+    offered on a cell joined above), *Join run above* (`joinRunVerb`, offered on a cell not joined
+    above whose cue entry directly above fills the column, neither with a Runs count, which a GO fires
+    afresh) — each disabled with its reason otherwise, both sending the cell's `entryId` — and *Edit
+    Qn's FX…*, which turns the pane to its FX tab. The popover closes when its cell empties or its
+    column is filtered away. The ↺ and ◆ are `runs()`'s, so they move with the refetch an edit brings.
   - **A run's end** carries a handle (on hover, never while locked). Dragging it down fills the cells
     it crosses with the dragged cell's settings, up empties them, the one under the pointer kept
     (`dragPlan`); ghost cells and a scope chip by the pointer show the result before the release,

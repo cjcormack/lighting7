@@ -120,6 +120,10 @@ export type TimelineEditOp =
   | { op: 'layerOff'; cueId: number; source: TimelineSourceRef; target?: CueTarget | null }
   | { op: 'layerSettings'; cueId: number; layerId: number; fields: TimelineLayerFields }
   | { op: 'replace'; cueIds: number[]; from: TimelineCellRef; to: TimelineCellRef; keepSettings: boolean }
+  | { op: 'fxOn'; cueId: number; fromFxUuid: string }
+  | { op: 'fxOff'; cueId: number; fxUuid: string }
+  | { op: 'breakRun'; cueId: number; fxUuid: string; entryId?: number | null }
+  | { op: 'joinRun'; cueId: number; fxUuid: string; entryId?: number | null }
   | { op: 'scenerySet'; cueId: number; elementUuid: string; state: SceneryState; transitionMs?: number | null }
   | { op: 'sceneryClear'; cueId: number; elementUuid: string }
   | ({ op: 'restore' } & TimelineCueSnapshot)
