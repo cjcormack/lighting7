@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { recentPalettes } from './paletteRecents'
+import { recentFirst, recentPalettes } from './paletteRecents'
 import type { PaletteSummary } from '@/api/palettesApi'
 
 /**
- * The row's ordering rule, which is not obvious in two places.
- *
- * The stamps are ISO strings from the server, and `Instant.toString()` drops the fractional part on
- * an exact second — so a lexicographic sort puts a press half a second *older* first about once in
- * a thousand. And the fallback is all-or-nothing: one recent draws one chip rather than one recent
- * padded out by name, because a padded row moves its own contents under the operator's hand.
+ * The recency rule, which is not obvious: the stamps are ISO strings from the server, and
+ * `Instant.toString()` drops the fractional part on an exact second — so a lexicographic sort puts a
+ * press half a second *older* first about once in a thousand.
  */
 function template(over: Partial<PaletteSummary> = {}): PaletteSummary {
   return {
@@ -79,6 +76,7 @@ describe('recentPalettes', () => {
       template({ id: 3, name: 'Rubbish', lastPressedAt: 'not a date' }),
     ]
     expect(recentPalettes(rows)).toEqual([])
+    expect(names(recentFirst(rows))).toEqual(['Null', 'Absent', 'Rubbish'])
   })
 
   it('caps at the limit', () => {
@@ -101,5 +99,21 @@ describe('recentPalettes', () => {
     ]
     recentPalettes(rows)
     expect(names(rows)).toEqual(['Older', 'Newer'])
+  })
+})
+
+describe('recentFirst', () => {
+  it('puts the pressed first, most recent first, then the rest in the order given', () => {
+    const rows = [
+      template({ id: 1, name: 'Never pressed' }),
+      template({ id: 2, name: 'Older', lastPressedAt: '2026-09-14T10:00:00.000Z' }),
+      template({ id: 3, name: 'Also never' }),
+      template({ id: 4, name: 'Newer', lastPressedAt: '2026-09-14T10:00:01.000Z' }),
+    ]
+    expect(names(recentFirst(rows))).toEqual(['Newer', 'Older', 'Never pressed', 'Also never'])
+  })
+
+  it('is empty for an empty library', () => {
+    expect(recentFirst([])).toEqual([])
   })
 })

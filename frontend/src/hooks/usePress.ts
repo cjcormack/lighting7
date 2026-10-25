@@ -54,9 +54,9 @@ export interface Press {
 const PROGRAMMER: PressInto = { kind: 'programmer' }
 
 /**
- * The window's selection pair. On the programmer, what its own list presses — the heads a press
- * lands on and the marquee's families, published through the marquee store — so a door outside the
- * list presses what the grid would, an unlinked window's own selection included; elsewhere the
+ * The window's selection pair. On the programmer, what its own list presses — the selection's heads
+ * and the marquee's families, published through the marquee store — so a door outside the list
+ * presses what the grid would, an unlinked window's own selection included; elsewhere the
  * desk's pair while this tab follows the desk and the tab's own copy when it does not.
  */
 export function useWindowPressPair(): PressPair {
@@ -72,7 +72,7 @@ export function useWindowPressPair(): PressPair {
 
 /**
  * What the window's heads can take, for a door that offers palettes over [useWindowPressPair] — the
- * Stack table's *+ Look or palette*: on the programmer the grid's offer (the marquee's families, else what
+ * Stack table's *+ Look or palette*: on the programmer Set's Palettes band's offer (the marquee's families, else what
  * the heads can take, and their emitters); elsewhere nothing is known, so nothing is filtered.
  */
 export function useWindowPaletteFit(): PaletteFit {

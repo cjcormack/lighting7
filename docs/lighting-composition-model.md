@@ -871,7 +871,7 @@ any reshuffle of the page that keeps the bank alive.
 bank is **solo** — the records on its sibling pads in one transaction, then calls the same
 `ProgrammerLayerStack.toggle`
 the `/palettes/{id}/toggle` and `/looks/{id}/toggle` routes call, handing it the siblings as
-`releaseSiblings`. Those two routes stay for the programmer's doors (Set's Palettes band, the picker) and the AI, with no
+`releaseSiblings`. Those two routes stay for the programmer's palette doors and the AI, with no
 solo siblings — a palette's family replacement is `toggle`'s own, so it runs on them too. A **cue** pad takes or lets go of a **loose hold** (§"Holds and the loose band"),
 exactly as a cue slot presses: a toggle, live above every stack without being any stack's playhead,
 drawn solid while the press holds it and as an outline while only a stack does.

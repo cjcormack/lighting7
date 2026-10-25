@@ -113,7 +113,7 @@ each session deletes or rewrites a test file another suite imports from. A sessi
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Row C: three clusters, the heads chip, Set on rows, Release, no strip | in review | `claude/kind-meitner-rf6jd8` | | |
+| 1 | Row C: three clusters, the heads chip, Set on rows, Release, no strip | in review | claude/amazing-wozniak-7r87f8 | | |
 | 2 | + Look in row A, and FX on row C with Replace · Stack | planned | | | |
 | 3 | ⌘K's Programmer and Selection groups | planned | | | |
 
@@ -157,33 +157,22 @@ the next; whoever merges the last fills its own.
   desk-follow paragraph's line about the programmer's chip (D5), and every other mention of
   `PaletteStrip` (`grep -rn PaletteStrip frontend docs`); `docs/plans/followups.md` line 2526's
   reference to the strip.
-- **Where the code differed (session 1):**
-  - The busk band's `CellsMenu` and `StepButtons` were lifted into `components/selection/Subselect.tsx`
-    with a third piece, `SubselectMenuItems`: the heads chip draws the subsets as items of its own
-    menu, not as a menu face, so what the band and the chip share is the items, the titles and the
-    face. The band's compact verbs menu draws the same items.
-  - The list's selection takes the mirror's answer as rows, through `rowIdsForTargets` and the
-    container's `setRows` (`fixtures-list/useListSubselect.ts`). An answer naming cells of a
-    collapsed fixture, or members of a collapsed group, would have selected nothing, so on **both**
-    arms the fixtures and groups the answer's heads are folded under are opened first
-    (`revealTargets`, Include's rule) — following too, ahead of the desk's frame, by running the
-    mirror only to know which. *Select by colour* lands the same way.
-  - "That family's column" is one column: Set on rows marquees the family's first visible column the
-    rows have. Every visible column of the family would have put Dimmer and Strobe under one
-    Intensity editor, which writes its value to both.
-  - The marquee store is a published, read-only snapshot, so Set on rows selects its cells through
-    the container's cell selection, and opens the editor with a new non-toggling
-    `openCellEditorAtButton` (`toggleCellEditor` would close an editor already open instead).
-  - D6's "never drawn disabled": Set over rows is refused, with the reason, exactly where Set over
-    cells is — Output and a focused palette layer (`rowSetTitle`) — and when the selected rows have
-    no visible column at all (*These heads have no column to set*). It is never disabled for want
-    of cells.
-  - Record ▾'s chevron was disabled on an empty programmer, which would have hidden *A new
-    palette*; it is now live whenever there is a selection, its record destinations disabled one
-    by one.
-  - `targetFamilies` / `targetEmitters` left `renderToolbar`'s parts, which only the strip read;
-    the marquee snapshot still publishes them for the picker's offer. `CellSelectionActions`' `release`
-    slot went with the programmer's use of it.
+- **What the code said, recorded at the session** (where this section was wrong or silent):
+  - *Set is still refused by the scope.* D6's "never drawn disabled" is about the selection's
+    shape; in Output and on a focused palette layer Set stays disabled with `cellActionCopy`'s
+    reason, since the keyboard refuses ⏎ there and a button must not promise what the key refuses.
+  - *The unlinked subset* runs `cellsSubSelection.ts` over the list's own rows, read as targets with
+    the bridge's `selectedRowTargets` and back with its `rowIdsForTargets` (`useListSelectionWrites`),
+    not over the busk view's `sessionStorage` copy, which the programmer does not use.
+  - *The phone arm is measured, not a class.* Below 600 the row changes components (bottom sheets,
+    the chip's count and menu), which a container query cannot do, so the bar measures itself
+    (`useContainerBand`) and hands the answer down (`ToolbarPhoneContext`); every other rung is a
+    container class (`rowCFolds.ts`).
+  - *Fan's word* is `SpreadPanel`'s `WORD_CLASS`, which folds with the strip's 1100 rung; it gained
+    an optional `wordClass` so row C can keep it to 800 (P3: no other host passes it).
+  - *The heads chip counts cells alone under 640 of the row*, not only on a phone (§9's band).
+  - *Record ▾ opens on an empty programmer* (off only in a venue), so *A new palette* is reachable
+    with a selection and nothing recorded; its Record destinations are disabled there instead.
 
 ### Session 2 — + Look in row A, and FX on row C with Replace · Stack
 
@@ -250,29 +239,22 @@ change might fire, per CLAUDE.md.
   and a phone; row C reads in its three clusters at each width with nothing clipped; each subset
   narrows the selection on the rig as the busk band does; Set on rows lands the chosen family's
   popup; Release's face and arms release what they say; a second window following the desk sees
-  each change. Measured widths (session 1, Chromium, a patch of six Hexes and four 12-channel beam
-  bars; *needs* is row C's own `max-content` width, padding included):
+  each change. Measured widths (2026-10-25, Chromium, a desk with 4 hexes, 2 MAC 250s, a Shehds bar
+  and a par; a marquee over 4 heads' Dimmer and Colour, so the mask reads *Intensity · Colour*):
 
-  | Window | Row C | Rung | Rows selected needs | Cells selected needs |
+  | Window | Row C | Arm | Content needs | Overflow |
   |---|---|---|---|---|
-  | 1440 × 900 | 1200 | desk | 722 | 820 |
-  | 1100 × 900 | 860 | lap | 604 | 659 |
-  | 900 × 900 | 660 | tab | 495 | 533 |
-  | 700 × 900 (no sidebar) | 700 | tab | 495 | 533 |
-  | 390 × 844 | 390 | phone | 331 | 315 |
-  | 852 × 393 (short) | 612 | tab | 495 | 533 |
+  | 1440 × 900 | 1200 | every word, ⏎ ⌫ | 942 (chip 183, what 316, where 233) | none |
+  | 1100 × 800 | 860 | Locate, Highlight iconic | 782 | none |
+  | 900 × 800 | 660 | iconic, mask *Int · Col* | 610 → 554 with the 640 fold | none |
+  | 700 × 800 | 700 | iconic | 610 | none |
+  | 605 × 800 | 605 | iconic, cells only | 554 | none |
+  | 852 × 393 | 612 | iconic, cells only (short) | 561 | none |
+  | 390 × 844 | 390 | phone: chip, mask glyph, Set · Fan · Release ▾ | 342 | none |
 
-  Every rung of row C fits its floor with room to spare — the narrowest each fits: desk ~820, lap
-  ~660, tab ~535, phone ~331, against the boards' 350 of 366 on a phone — so the ladder stands as D12
-  has it; the desk rung keeps the boards' 1100 though its words would fit down to ~820. Nothing
-  clipped at any width, and on the short viewport row C is absent until something is selected.
-
-  Rows A and B, which session 1 changes only by Record ▾'s menu, overflow at no width. Row A's verbs
-  (Clear · fade, Blind, Include…, Record ▾) are 483 px worded (1440, 1100), 285 iconic (900, 700),
-  **247 on the phone** — the boards' estimate exactly — and 227 folded into row B on the short
-  viewport (852 × 393, where the folded row is 612 wide and needs 625, so it wraps as designed). Row
-  B's filter is elastic, so it takes what the row leaves: it fits at every width measured, down to
-  the phone's 390, where its fixed controls need 382.
+  The boards' ladder held but for one band: the 600–799 arm needed 610px, so a row of 600–609
+  overflowed and the 852 × 393 phone's 612 had 2px to spare. Under 640 of the row the heads chip
+  now counts cells alone, as on a phone, which brings that arm to 554.
 - **Session 2:** + Look lights the Look and lands it whole; FX on heads already running a Colour FX
   asks Replace · Stack, and Stack leaves both running at the family's starting blend; ⤢ opens the
   FX editor with the FX picked and its graph drawing.

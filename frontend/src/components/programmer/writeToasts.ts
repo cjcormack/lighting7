@@ -7,7 +7,6 @@ import type {
 } from '@/store/programmerOps'
 import { describeSkips } from './maskPicker'
 import { describeSceneryWrite } from './RecordSceneryRow'
-import { plural } from '@/lib/plural'
 
 /**
  * What a programmer write landed, said as a toast once its sheet has closed: Record, Record look,
@@ -27,6 +26,10 @@ const WARNING_DURATION_MS = 10_000
 export function announceWrite(note: WriteNote) {
   if (note.warn) toast.warning(note.title, { description: note.description, duration: WARNING_DURATION_MS })
   else toast.success(note.title, { description: note.description })
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`
 }
 
 function joined(parts: readonly (string | null | undefined)[], separator: string): string | undefined {

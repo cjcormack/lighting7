@@ -23,9 +23,9 @@ function pressedAt(template: PaletteSummary): number | null {
  * The offerable templates this desk has actually pressed, most recent first.
  *
  * "For the selected family" is not a parameter, and does not need to be: the caller hands in the
- * list it is already offering, which the caller has filtered by family, emitters and
- * generic-vs-per-fixture. So the per-family scoping the design asks for falls out of the filter
- * that was there anyway, and no second history has to be kept per family.
+ * list it is already offering, filtered by family, emitters and generic-vs-per-fixture. So the
+ * per-family scoping falls out of the filter that was there anyway, and no second history has to be
+ * kept per family.
  *
  * **Ties keep the input's order**, which is the library's own name order: `Array.sort` is stable,
  * and two templates pressed inside the same millisecond have no more meaningful order than that.
@@ -43,8 +43,8 @@ export function recentPalettes(
 
 /**
  * Every palette given, the pressed ones most recent first and then the rest in the order given (the
- * library's, which is by name) — a popup band's order. The band shows its family whole, and recency only says
- * which come first.
+ * library's, which is by name) — a popup band's order: the band shows its family whole, and recency
+ * only says which come first.
  */
 export function recentFirst(offerable: readonly PaletteSummary[]): PaletteSummary[] {
   return [...recentPalettes(offerable, offerable.length), ...offerable.filter((template) => pressedAt(template) == null)]

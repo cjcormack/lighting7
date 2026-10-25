@@ -3,9 +3,12 @@ import { MousePointerSquareDashed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { KBD_CLASS, MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from './toolbarFolds'
+import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from './toolbarFolds'
 import { CHROME_ROW_CLASS } from './sheetFrame'
 import { selectionBandState } from './selectionBand'
+
+/** The ShowBar's key-cap styling, so the two hints read as one vocabulary. */
+const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'
 
 /**
  * The short-viewport fold, spelled for `matchMedia` — one of the copies `shortViewport.test.ts`
@@ -33,7 +36,7 @@ export interface SelectionBarProps {
    */
   cellTitle?: string
   /**
-   * The family pill: the attribute family the marquee named on the programmer, the column's own
+   * The family pill: the attribute family the marquee named on the plain lists, the column's own
    * name elsewhere (`Address`, `Value`, `Fade`). Null draws none. Folded on the phone arm.
    */
   family: string | null
@@ -42,15 +45,21 @@ export interface SelectionBarProps {
   /** What the two keys do here, where it is not *edit* and *clear* — the Timeline's *toggle* and *off*. */
   hintWords?: { entry: string; clear: string }
   /**
-   * A chip after the family pill and the hints, before the strip, drawn in the reserved arm too —
-   * with one limit it shares with the whole bar: on a short viewport with nothing selected the bar
-   * is out of the flow altogether (`selectionBandState`'s `absent`). The cue editor's grid puts its
-   * view verbs here while nothing is selected.
+   * Something after the family pill and the hints, before the strip — the cue grid's view verbs,
+   * the surface library's chip. Drawn in the reserved arm too, with the bar's one limit: on a short
+   * viewport with nothing selected the bar is out of the flow altogether (`selectionBandState`'s
+   * `absent`).
    */
   chip?: ReactNode
   /**
-   * What rides the bar between the counts and the verbs — the cue sheet's action rows, a library
-   * sheet's read-only note. Absent leaves the slack to `ml-auto` below.
+   * The programmer's left end, drawn in place of the glyph and the counts — its heads chip and mask
+   * (programmer-toolbar plan D3, D4), which say the count themselves — in the reserved arm as well
+   * as the selected one. Absent on every other sheet.
+   */
+  leading?: ReactNode
+  /**
+   * What rides the bar between the counts and the verbs — the programmer's Set · Fan · Release, the
+   * cue sheet's lock note. Absent leaves the slack to `ml-auto` below.
    */
   strip?: ReactNode
   /**
@@ -66,26 +75,14 @@ export interface SelectionBarProps {
    * short label rather than a scroller — the cue sheet's lock note — says false.
    */
   foldForStrip?: boolean
-  /**
-   * Drawn in place of the glyph, the counts, the family pill, the hints and the chip — in the
-   * reserved arm too. The programmer's heads chip and mask pill, which carry all of that themselves.
-   * Absent on every other sheet.
-   */
-  lead?: ReactNode
-  /**
-   * The verbs take the row's slack instead of sitting right-aligned, so the surface can lay them out
-   * in clusters and push the last to the right edge; their words then fold at 800 rather than at a
-   * strip's 1100 (`WORD_CLASS`). The programmer's row only.
-   */
-  clusters?: boolean
 }
 
 /**
  * Row C — the selection bar, one 40px line that never wraps, shared by every sheet.
  *
  * The left half is the kit's — the glyph, the counts, the family pill, the ⏎/⌫ hints — and the
- * verbs are the surface's (CLAUDE.md §Sheet kit): the programmer draws its own row in the [lead] slot and
- * clusters, the patch list Locate · Highlight · Unpatch, the DMX sheet Park · Unpark, the
+ * verbs are the surface's (CLAUDE.md §Sheet kit): the programmer its three clusters (its heads chip
+ * in [leading]), the patch list Locate · Highlight · Unpatch, the DMX sheet Park · Unpark, the
  * cue sheet Arm as next. Deselect is always last and always ghost, and it is the toolbar's
  * (`SelectionToolbar` or the surface's own) rather than this bar's: since rows and cells became
  * one selection there is exactly one way out, whichever shape the selection is in.
@@ -125,12 +122,11 @@ export function SelectionBar({
   hints,
   hintWords = { entry: 'edit', clear: 'clear' },
   chip,
+  leading,
   strip,
   verbs,
   marqueeDragging,
   foldForStrip = strip != null,
-  lead,
-  clusters = false,
 }: SelectionBarProps) {
   const shortViewport = useMediaQuery(SHORT_VIEWPORT)
   const hasSelection = !!verbs || cellLabel != null
@@ -159,13 +155,13 @@ export function SelectionBar({
   if (band === 'reserved') {
     return (
       <div className={cn(CHROME_ROW_CLASS, 'min-w-0 text-muted-foreground')}>
-        {lead ?? (
+        {leading ?? (
           <>
             <MousePointerSquareDashed className="size-3.5 shrink-0 opacity-60" />
             <span className="text-xs">Nothing selected</span>
-            {chip}
           </>
         )}
+        {chip}
       </div>
     )
   }
@@ -176,49 +172,9 @@ export function SelectionBar({
     <div
       className={cn(CHROME_ROW_CLASS, 'group/bar min-w-0 bg-foreground/5')}
       data-strip={foldForStrip ? '' : undefined}
-      data-clusters={clusters ? '' : undefined}
     >
-      {lead ?? (
-        <SelectionBarCounts
-          rowLabel={rowLabel}
-          cellLabel={cellLabel}
-          cellTitle={cellTitle}
-          family={family}
-          hints={hints}
-          hintWords={hintWords}
-          chip={chip}
-        />
-      )}
-      {strip}
-      {/* `ml-auto`, not a `flex-1` spacer. A strip's chip scroller is itself `flex-1`, and two
-          `flex: 1 1 0%` siblings *split* the row's free space rather than one of them taking it
-          all — so a spacer here silently stole roughly half the scroller's width and opened a
-          blank gap before these buttons. An auto margin is resolved after flex growth, so it
-          takes the whole slack when the strip is absent and exactly nothing when it is there. */}
-      {verbs && (
-        <div className={clusters ? 'flex min-w-0 flex-1 items-center gap-1.5' : 'ml-auto flex shrink-0 items-center'}>
-          {verbs}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** The kit's left half: the counts, the family pill, the hints and the chip. */
-function SelectionBarCounts({
-  rowLabel,
-  cellLabel,
-  cellTitle,
-  family,
-  hints,
-  hintWords,
-  chip,
-}: Pick<SelectionBarProps, 'rowLabel' | 'cellLabel' | 'cellTitle' | 'family' | 'hints' | 'chip'> & {
-  hintWords: { entry: string; clear: string }
-}) {
-  return (
-    <>
-      <MousePointerSquareDashed className="size-3.5 shrink-0" />
+      {leading}
+      {leading == null && <MousePointerSquareDashed className="size-3.5 shrink-0" />}
       {/* One selection, counted two ways under a marquee: the rows it reaches, and the cells it
           names on them. With cells in play the row count and its separator fold into the cell
           count's hover, and the width goes to the strip. With rows only it is the one count there
@@ -274,6 +230,13 @@ function SelectionBarCounts({
         </>
       )}
       {chip}
-    </>
+      {strip}
+      {/* `ml-auto`, not a `flex-1` spacer. A strip's chip scroller is itself `flex-1`, and two
+          `flex: 1 1 0%` siblings *split* the row's free space rather than one of them taking it
+          all — so a spacer here silently stole roughly half the scroller's width and opened a
+          blank gap before these buttons. An auto margin is resolved after flex growth, so it
+          takes the whole slack when the strip is absent and exactly nothing when it is there. */}
+      {verbs && <div className="ml-auto flex shrink-0 items-center">{verbs}</div>}
+    </div>
   )
 }

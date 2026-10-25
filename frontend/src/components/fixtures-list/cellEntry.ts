@@ -75,21 +75,6 @@ export function cellKeyboardPermission(
 }
 
 /**
- * Set's hover on the programmer's row C with **rows** selected and no cells (plan D6): it asks
- * which attribute before opening an editor, in the scope's words — or the scope's refusal, which is
- * the cells' one said of heads.
- */
-export function rowSetTitle(scope: ProgrammerScope | null, focusedPalette: boolean, heads: number): string {
-  const these = `${heads} head${heads === 1 ? '' : 's'}`
-  if (scope?.kind === 'output') return 'Output is a read of the cook — switch to Local to set these heads'
-  if (scope?.kind === 'layer') {
-    if (focusedPalette) return 'This layer applies a palette — switch to Local to set these heads'
-    return `Set an attribute on the ${these} in the focused layer's rows — pick which first`
-  }
-  return `Set an attribute on the ${these} in Local — pick which first`
-}
-
-/**
  * What the selection bar's Set and Clear say, given where the grid is pointed.
  *
  * Set is one gesture — open the first selected cell's editor over the whole selection, which is

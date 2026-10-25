@@ -21,7 +21,7 @@ import { HandPlaceStrip, useHandOffer } from './HandTarget'
  * Both send the window's selection pair (`useWindowPressPair`: the desk's while this window follows
  * it, its own when unlinked — apply-model plan §4.1). The programmer's place **is a press**
  * (`usePress`), so it toggles, replaces the palette's family and lands in a focused Look exactly as
- * a palette chip's tap does; so is the cue editor's, which lands in the stored cue through the editor's
+ * the strip's tap does; so is the cue editor's, which lands in the stored cue through the editor's
  * `PressCue`, and a cue strip with no editor host appends a layer to the cue. Only a **palette**
  * takes the targets: its rows are generic, so with nothing selected its layer contributes nothing,
  * which is why the strip says so rather than placing silently. A **Look** names none, whatever is

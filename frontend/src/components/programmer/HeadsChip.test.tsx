@@ -1,180 +1,164 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * The heads chip (programmer-toolbar plan D4, D5): the count, whose selection it is, and its menu —
- * the subsets over rig order, *Select by colour*, *Follow the desk selection*, Deselect, and on a
- * phone Locate, *Set locate from current* and Highlight.
+ * The heads chip's menu (programmer-toolbar plan D4, D5): the busk band's subsets, *Select by
+ * colour*, the follow toggle, the rig verbs on a phone, and Deselect. Which selection a subset
+ * rewrites is the caller's (`useListSelectionWrites`); this pins that each item sends its mode.
  */
-const desk = vi.hoisted(() => ({ targets: [{ type: 'fixture', key: 'par-1' }] }))
+const desk = vi.hoisted(() => ({ targets: [{ type: 'fixture' as const, key: 'a' }] }))
 vi.mock('@/store/selection', async () => {
   const { unlinkFromDesk } = await import('@/lib/deskFollow')
-  return { unlinkFromDeskNow: () => unlinkFromDesk({ targets: desk.targets as never, families: null }) }
+  return { unlinkFromDeskNow: () => unlinkFromDesk({ targets: desk.targets, families: null }) }
 })
-vi.mock('@/components/fixtureColours/SelectByColour', () => ({ SelectByColourSub: () => <span data-testid="by-colour" /> }))
-const located = vi.hoisted(() => ({ presses: 0 }))
-vi.mock('@/components/fixtures-list/SelectionToolbar', () => ({
-  useLocateSelection: () => ({ allLocated: false, locateSelection: () => located.presses++ }),
-}))
-const stored = vi.hoisted(() => ({ from: [] as unknown[] }))
-vi.mock('@/hooks/useStoredLocateActions', () => ({
-  useStoredLocateActions: () => ({ busy: false, projectId: 1, storeFromCurrent: (t: unknown[]) => stored.from.push(t) }),
-}))
-const highlight = vi.hoisted(() => ({ press: vi.fn(), release: vi.fn() }))
-vi.mock('@/components/fixtures-list/useHighlight', () => ({
-  useHighlight: () => ({ press: highlight.press, release: highlight.release, isActive: false }),
+vi.mock('@/hooks/useFixtureColourIndex', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useFixtureColourIndex')>()),
+  useFixtureColourIndex: () => new Map([['a', 'red'], ['b', 'red'], ['c', 'blue']]),
 }))
 
-import { HeadsChip, type HeadsChipProps } from './HeadsChip'
-import { RowCBandContext, type RowCBand } from './rowCBand'
-import { isFollowingDesk, resetDeskFollowStores, unlinkFromDesk } from '@/lib/deskFollow'
+const { HeadsChip } = await import('./HeadsChip')
+import { ToolbarPhoneContext } from '@/components/sheet/ToolbarMenu'
+import { isFollowingDesk, resetDeskFollowStores } from '@/lib/deskFollow'
+import type { RigVerbs } from '@/components/fixtures-list/RigVerbs'
 
-const TWO = [
-  { type: 'fixture' as const, key: 'a' },
-  { type: 'fixture' as const, key: 'b' },
-]
-
-const props = {
-  onSubselect: vi.fn(),
-  onSelectTargets: vi.fn(),
-  onDeselect: vi.fn(),
-}
-
-function chip(over: Partial<HeadsChipProps> = {}, band: RowCBand = 'desk') {
-  return (
-    <RowCBandContext.Provider value={band}>
-      <HeadsChip
-        projectId={1}
-        heads={2}
-        cells={0}
-        targets={TWO}
-        locateTargets={TWO}
-        writeTargets={[]}
-        {...props}
-        {...over}
-      />
-    </RowCBandContext.Provider>
-  )
-}
-
-/** Radix opens a menu on `pointerdown`, not `click`. */
-function openMenu() {
-  fireEvent.pointerDown(screen.getByRole('button', { name: /^(Selection|Nothing selected)/ }), {
-    button: 0,
-    ctrlKey: false,
-    pointerType: 'mouse',
-  })
-}
-
-beforeEach(() => {
-  located.presses = 0
-  stored.from = []
-})
 afterEach(() => {
   cleanup()
-  vi.clearAllMocks()
   window.sessionStorage.clear()
   resetDeskFollowStores()
 })
 
+function chip(over: Partial<React.ComponentProps<typeof HeadsChip>> = {}, phone = false) {
+  const props: React.ComponentProps<typeof HeadsChip> = {
+    projectId: 1,
+    selected: true,
+    heads: 4,
+    cells: 0,
+    onSubselect: vi.fn(),
+    onPickColour: vi.fn(),
+    scope: null,
+    colourKeys: new Set(['a', 'b', 'c']),
+    onDeselect: vi.fn(),
+    rigVerbs: null,
+    ...over,
+  }
+  render(
+    <ToolbarPhoneContext.Provider value={phone}>
+      <HeadsChip {...props} />
+    </ToolbarPhoneContext.Provider>,
+  )
+  return props
+}
+
+/** Radix opens a dropdown on a pointer press; a phone's sheet on a click. */
+function open(phone = false) {
+  const trigger = screen.getByRole('button', { name: /^Selection|^Nothing selected/ })
+  if (phone) fireEvent.click(trigger)
+  else fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' })
+}
+
 describe('HeadsChip', () => {
-  it('counts heads and cells, and says whose selection it is', () => {
-    render(chip({ cells: 6, heads: 6 }))
-    expect(screen.getByText('6 heads · 6 cells')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /following the desk/ })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
+  it('sends each subset’s mode — the seven filters and the two steps, the busk band’s words', () => {
+    const props = chip()
+    const modes = [
+      ['All', 'ALL'],
+      ['Odd', 'ODD'],
+      ['Even', 'EVEN'],
+      ['1st half', 'FIRST_HALF'],
+      ['2nd half', 'SECOND_HALF'],
+      ['Invert', 'INVERT'],
+      ['Masters only', 'MASTERS'],
+      ['‹ Previous', 'PREV'],
+      ['Next ›', 'NEXT'],
+    ] as const
+    for (const [label, mode] of modes) {
+      open()
+      fireEvent.click(screen.getByRole('menuitem', { name: label }))
+      expect(props.onSubselect).toHaveBeenLastCalledWith(mode)
+    }
+    expect(props.onSubselect).toHaveBeenCalledTimes(modes.length)
   })
 
-  it('draws the dashed mark once unlinked, and a press on the count does not relink', () => {
-    unlinkFromDesk({ targets: [], families: null })
-    render(chip())
-    expect(screen.getByRole('img', { name: 'This window’s own selection' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /this window’s own/ }))
-    expect(isFollowingDesk()).toBe(false)
-  })
-
-  it('sends each subset’s mode, Previous and Next among them', () => {
-    render(chip())
-    openMenu()
+  it('heads the subsets In rig order', () => {
+    chip()
+    open()
     expect(screen.getByText('In rig order')).toBeInTheDocument()
-    const modes = [...document.querySelectorAll('[data-subselect]')].map((item) => item.getAttribute('data-subselect'))
-    expect(modes).toEqual(['ALL', 'ODD', 'EVEN', 'FIRST_HALF', 'SECOND_HALF', 'INVERT', 'MASTERS', 'PREV', 'NEXT'])
-    fireEvent.click(document.querySelector('[data-subselect="ODD"]')!)
-    expect(props.onSubselect).toHaveBeenCalledWith('ODD')
-    openMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Next along the rig' }))
-    expect(props.onSubselect).toHaveBeenLastCalledWith('NEXT')
   })
 
-  it('offers Select by colour', () => {
-    render(chip())
-    openMenu()
-    expect(screen.getByTestId('by-colour')).toBeInTheDocument()
-  })
-
-  it('unlinks and relinks through Follow the desk selection', () => {
-    render(chip())
-    openMenu()
-    const follow = screen.getByRole('menuitemcheckbox', { name: /Follow the desk selection/ })
-    expect(follow).toHaveAttribute('aria-checked', 'true')
-    fireEvent.click(follow)
-    expect(isFollowingDesk()).toBe(false)
-    expect(screen.getByRole('menuitemcheckbox', { name: /Follow the desk selection/ })).toHaveAttribute('aria-checked', 'false')
-    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Follow the desk selection/ }))
-    expect(isFollowingDesk()).toBe(true)
-  })
-
-  it('deselects from the × and from the menu', () => {
-    render(chip())
-    fireEvent.click(screen.getByRole('button', { name: 'Deselect' }))
-    expect(props.onDeselect).toHaveBeenCalledTimes(1)
-    openMenu()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Deselect' }))
-    expect(props.onDeselect).toHaveBeenCalledTimes(2)
-  })
-
-  it('has no × and no Deselect with nothing selected', () => {
-    render(chip({ heads: 0, targets: [], locateTargets: [] }))
-    expect(screen.getByText('Nothing selected')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Deselect' })).not.toBeInTheDocument()
-    openMenu()
+  it('offers no subset with nothing selected', () => {
+    chip({ selected: false, heads: 0, cells: 0 })
+    open()
+    expect(screen.getByRole('menuitem', { name: 'Odd' })).toHaveAttribute('data-disabled')
     expect(screen.queryByRole('menuitem', { name: 'Deselect' })).not.toBeInTheDocument()
   })
 
-  it('offers × and Deselect for a selected group that shows no member', () => {
-    render(chip({ heads: 0, targets: [{ type: 'group', key: 'Empty' }], locateTargets: [{ type: 'group', key: 'Empty' }] }))
-    fireEvent.click(screen.getByRole('button', { name: 'Deselect' }))
-    expect(props.onDeselect).toHaveBeenCalledTimes(1)
+  it('toggles following the desk from its menu item, both ways', () => {
+    chip()
+    open()
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Follow the desk selection/ }))
+    expect(isFollowingDesk()).toBe(false)
+    expect(screen.getByRole('img', { name: 'This window’s own selection' })).toBeInTheDocument()
+    open()
+    const item = screen.getByRole('menuitemcheckbox', { name: /Follow the desk selection/ })
+    expect(item).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(item)
+    expect(isFollowingDesk()).toBe(true)
   })
 
-  describe('on a phone', () => {
-    it('counts the cells alone and drops the ×', () => {
-      render(chip({ cells: 6, heads: 6 }, 'phone'))
-      expect(screen.getByText('6 cells')).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Deselect' })).not.toBeInTheDocument()
-    })
+  it('deselects from its menu and from its ×', () => {
+    const props = chip()
+    open()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Deselect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deselect' }))
+    expect(props.onDeselect).toHaveBeenCalledTimes(2)
+  })
 
-    it('carries Locate, Set locate from current and a held Highlight in its menu', () => {
-      render(chip({}, 'phone'))
-      openMenu()
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Locate' }))
-      expect(located.presses).toBe(1)
-      openMenu()
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Set locate from current' }))
-      expect(stored.from).toEqual([TWO])
-      openMenu()
-      const hold = screen.getByRole('menuitem', { name: 'Highlight' })
-      fireEvent.pointerDown(hold)
-      expect(highlight.press).toHaveBeenCalled()
-      fireEvent.pointerUp(hold)
-      expect(highlight.release).toHaveBeenCalled()
-    })
+  it('passes a colour’s fixtures to the caller, which lands them on whichever selection is the window’s', async () => {
+    const props = chip()
+    open()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Select by colour/ }))
+    fireEvent.keyDown(screen.getByRole('menuitem', { name: /Select by colour/ }), { key: 'ArrowRight' })
+    const red = await screen.findByRole('menuitem', { name: /Red/ })
+    fireEvent.click(red)
+    expect(props.onPickColour).toHaveBeenCalledWith(['a', 'b'], false)
+  })
 
-    it('leaves them off the menu on a wider row, where they are buttons', () => {
-      render(chip())
-      openMenu()
-      expect(screen.queryByRole('menuitem', { name: 'Set locate from current' })).not.toBeInTheDocument()
-    })
+  it('stays a selection — × and Deselect — for a row that stands for no head shown, an empty group', () => {
+    const props = chip({ selected: true, heads: 0, cells: 0 })
+    expect(screen.getByText('0 heads')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Deselect' }))
+    expect(props.onDeselect).toHaveBeenCalled()
+  })
+
+  it('says the marquee’s columns on its hover', () => {
+    chip({ cells: 4, scope: '4 × Colour' })
+    expect(screen.getByRole('button', { name: /^Selection:/ })).toHaveAttribute(
+      'title',
+      '4 heads · 4 × Colour — edit once, applies to all',
+    )
+  })
+
+  it('is a bottom sheet on a phone, with the rig verbs and no ×', () => {
+    const locate = vi.fn()
+    const highlight = { isActive: false, press: vi.fn(), release: vi.fn() }
+    const rigVerbs = {
+      locateTargets: [],
+      allLocated: false,
+      locate,
+      storedLocate: { busy: false, storeFromCurrent: vi.fn(), clearLocate: vi.fn(), projectId: 1 },
+      highlight,
+      canStoreLocate: true,
+    } as unknown as RigVerbs
+    chip({ cells: 3, rigVerbs }, true)
+    expect(screen.getByText('3 cells')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Deselect' })).not.toBeInTheDocument()
+    open(true)
+    const sheet = screen.getByRole('menu', { name: 'The selection' })
+    expect(within(sheet).getByText('On the rig')).toBeInTheDocument()
+    fireEvent.click(within(sheet).getByRole('menuitem', { name: 'Locate' }))
+    expect(locate).toHaveBeenCalled()
+    open(true)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Highlight' }))
+    expect(highlight.press).toHaveBeenCalled()
   })
 })

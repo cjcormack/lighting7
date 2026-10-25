@@ -1,7 +1,7 @@
-import { Filter } from 'lucide-react'
+import { ChevronDown, Filter } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import { formatFamilyList, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { cn } from '@/lib/utils'
 import { EMPTY_MASK_REASON, MaskToggles, maskIsEmpty, useMaskDraft } from './maskPicker'
 
@@ -15,31 +15,14 @@ export interface SelectionMaskPillProps {
   onChange: (families: AttributeFamily[] | null) => void
   /**
    * `bar` is the sheet kit's plain outline badge (row C); `busk` the rig band's primary tint, worn
-   * only while a mask is set — unmasked it is as quiet as the summary beside it.
+   * only while a mask is set — unmasked it is as quiet as the summary beside it. `row` is the
+   * programmer's row C (programmer-toolbar plan D3, D12): a 32px button with the filter glyph, its
+   * words abbreviated under 800 of the row and gone under 600.
    */
-  tone: 'bar' | 'busk'
+  tone: 'bar' | 'busk' | 'row'
   className?: string
   /** A test handle the host's pill has always carried — `data-rig-family`, `data-pad-family`. */
   marker?: string
-  /**
-   * The face's words: whole (`Colour`), abbreviated (`Col`) or the glyph alone — the programmer's
-   * row C at its narrower rungs. Default whole.
-   */
-  display?: 'full' | 'short' | 'icon'
-}
-
-const SHORT_FAMILY: Record<AttributeFamily, string> = {
-  INTENSITY: 'Int',
-  COLOUR: 'Col',
-  POSITION: 'Pos',
-  BEAM: 'Beam',
-}
-
-/** A mask's words at a rung: `Colour · Beam`, `Col · Beam`. */
-export function maskWords(families: readonly AttributeFamily[], display: 'full' | 'short'): string {
-  return display === 'full'
-    ? formatFamilyList(families, ' · ')
-    : families.map((family) => SHORT_FAMILY[family]).join(' · ')
 }
 
 /**
@@ -60,12 +43,29 @@ export function maskWords(families: readonly AttributeFamily[], display: 'full' 
  * rows-only click still move the mask from the grid, and the draft follows them as a write from
  * elsewhere.
  */
-export function SelectionMaskPill({ families, onChange, tone, className, marker, display = 'full' }: SelectionMaskPillProps) {
+export function SelectionMaskPill({ families, onChange, tone, className, marker }: SelectionMaskPillProps) {
   const masked = families != null && families.length > 0
-  const label = masked ? maskWords(families, display === 'short' ? 'short' : 'full') : 'All'
+  const label = masked ? formatFamilyList(families, ' · ') : 'All'
+  const title = masked
+    ? `Attributes: ${formatFamilyList(families, ', ')} — every press on this selection is masked to them. Click to change.`
+    : 'All attributes — click to mask the selection to some of them.'
   return (
     <Popover>
       <PopoverTrigger asChild>
+        {tone === 'row' ? (
+          <button
+            type="button"
+            title={title}
+            aria-label={`Mask: ${masked ? formatFamilyList(families, ', ') : 'every attribute'} — what the next press carries`}
+            className={cn(
+              'inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors hover:bg-accent',
+              masked ? 'border-primary/50 bg-primary/10 text-primary' : 'text-muted-foreground',
+              className,
+            )}
+          >
+            <MaskRowFace families={masked ? families : null} />
+          </button>
+        ) : (
         <Badge
           asChild
           variant="outline"
@@ -80,15 +80,12 @@ export function SelectionMaskPill({ families, onChange, tone, className, marker,
           <button
             type="button"
             {...(marker != null ? { [marker]: '' } : {})}
-            title={
-              masked
-                ? `Attributes: ${formatFamilyList(families, ', ')} — every press on this selection is masked to them. Click to change.`
-                : 'All attributes — click to mask the selection to some of them.'
-            }
+            title={title}
           >
-            {display === 'icon' ? <Filter className="size-3" aria-label={`Mask: ${label}`} /> : label}
+            {label}
           </button>
         </Badge>
+        )}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 space-y-2">
         <MaskDraft families={families} onChange={onChange} />
@@ -121,4 +118,37 @@ function MaskDraft({ families, onChange }: Pick<SelectionMaskPillProps, 'familie
 function listWithAnd(families: readonly AttributeFamily[]): string {
   if (families.length <= 1) return formatFamilyList(families)
   return `${formatFamilyList(families.slice(0, -1), ', ')} and ${formatFamilyList(families.slice(-1))}`
+}
+
+/** Each family's word where the row has no room for it whole (600–799 of the row). */
+const FAMILY_SHORT: Record<AttributeFamily, string> = {
+  INTENSITY: 'Int',
+  COLOUR: 'Col',
+  POSITION: 'Pos',
+  BEAM: 'Beam',
+}
+
+/**
+ * The `row` tone's face — the glyph, the mask in words (whole from 800 of the row, abbreviated
+ * from 600, none below) and a chevron. Exported for the unlinked programmer, which draws the same
+ * face read-only: its mask is the marquee's columns, with no fact for a picker to write.
+ */
+export function MaskRowFace({
+  families,
+  readOnly = false,
+}: {
+  families: readonly AttributeFamily[] | null
+  /** No picker behind it — the unlinked programmer's reading — so no chevron. */
+  readOnly?: boolean
+}) {
+  const whole = families == null ? 'All' : families.map((f) => FAMILY_LABELS[f].singular).join(' · ')
+  const short = families == null ? 'All' : families.map((f) => FAMILY_SHORT[f]).join(' · ')
+  return (
+    <>
+      <Filter className="size-3.5" />
+      <span className="hidden max-w-48 truncate align-bottom @[800px]:inline-block">{whole}</span>
+      <span className="hidden @[600px]:inline @[800px]:hidden">{short}</span>
+      {!readOnly && <ChevronDown className="hidden size-3 opacity-70 @[600px]:inline" />}
+    </>
+  )
 }

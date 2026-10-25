@@ -1,20 +1,11 @@
 import { useMemo } from 'react'
 import { Command } from 'cmdk'
+import { Palette } from 'lucide-react'
+import { ToolbarMenuItem, ToolbarMenuSub } from '@/components/sheet/ToolbarMenu'
 import { colourCounts, useFixtureColourIndex } from '@/hooks/useFixtureColourIndex'
 import { FIXTURE_COLOUR_LABELS } from '@/lib/fixtureColours'
 import { selectionForColour } from '@/lib/colourSelection'
 import { setDeskSelection, useDeskSelectionQuery } from '@/store/selection'
-import { useVisibleFixtureListQuery } from '@/store/fixtures'
-import type { CueTarget } from '@/api/cuesApi'
-import type { AttributeFamily } from '@/lib/attributeFamily'
-import { useDeskFollow } from '@/lib/deskFollow'
-import {
-  DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Palette } from 'lucide-react'
 import { useModifierHeld } from '@/components/stage3d/useShiftHeld'
 import { ColourSwatch } from './ColourSwatches'
 
@@ -36,10 +27,8 @@ export function SelectByColourItems({
   groupClassName: string
   onRun: (run: () => void) => void
 }) {
-  const index = useFixtureColourIndex(projectId)
   const { data: desk } = useDeskSelectionQuery()
-  const { held: altHeld } = useModifierHeld('altKey')
-  const colours = useMemo(() => colourCounts(index, visibleKeys), [index, visibleKeys])
+  const { colours, altHeld } = useColourChoices(projectId, visibleKeys)
   if (colours.length === 0) return null
 
   const select = (keys: readonly string[]) => {
@@ -79,58 +68,43 @@ export function SelectByColourItems({
   )
 }
 
+/** The colours some fixture in [visibleKeys] carries, each with its keys, and whether ⌥ is held. */
+function useColourChoices(projectId: number, visibleKeys: ReadonlySet<string>) {
+  const index = useFixtureColourIndex(projectId)
+  const { held: altHeld } = useModifierHeld('altKey')
+  const colours = useMemo(() => colourCounts(index, visibleKeys), [index, visibleKeys])
+  return { colours, altHeld }
+}
+
 /**
- * The programmer heads chip's *Select by colour ▸*: the same colours as ⌘K's, as a submenu, each
- * replacing the selection with that colour's fixtures, or adding them with ⌥. The host writes the
- * answer — the desk's selection while the window follows it, the list's own when it does not. The
- * ⌥ arm adds to the desk's heads and keeps its mask while following, as ⌘K's does; unlinked it adds
- * to [current], the list's own selection, which has no mask to keep.
+ * The same choice as a toolbar submenu — the programmer's heads chip, *Select by colour ▸*
+ * (programmer-toolbar plan D4). Whose selection a pick lands on is the caller's: it is handed the
+ * colour's fixture keys and whether ⌥ was held, and applies `selectionForColour` to the desk's
+ * selection or the list's own.
  */
-export function SelectByColourSub({
+export function SelectByColourMenu({
   projectId,
-  current,
-  onSelect,
+  visibleKeys,
+  onPick,
 }: {
   projectId: number
-  current: readonly CueTarget[]
-  onSelect: (targets: CueTarget[], families: readonly AttributeFamily[] | null) => void
+  visibleKeys: ReadonlySet<string>
+  onPick: (keys: readonly string[], add: boolean) => void
 }) {
-  const following = useDeskFollow()
-  const { data: desk } = useDeskSelectionQuery()
-  const base = following ? { targets: desk?.targets ?? [], families: desk?.families ?? null } : { targets: current, families: null }
-  const index = useFixtureColourIndex(projectId)
-  const { data: fixtures } = useVisibleFixtureListQuery()
-  const { held: altHeld } = useModifierHeld('altKey')
-  const colours = useMemo(
-    () => colourCounts(index, new Set((fixtures ?? []).map((f) => f.key))),
-    [index, fixtures],
-  )
+  const { colours, altHeld } = useColourChoices(projectId, visibleKeys)
+  if (colours.length === 0) return null
   return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger disabled={colours.length === 0} className="gap-2 text-xs">
-        <Palette className="size-3.5 text-muted-foreground" />
-        Select by colour
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
-        {colours.map(({ colour, keys }) => (
-          <DropdownMenuItem
-            key={colour}
-            data-select-colour={colour}
-            className="gap-2 text-xs"
-            onSelect={() => {
-              const next = selectionForColour(keys, base, altHeld)
-              onSelect(next.targets, next.families)
-            }}
-          >
-            <ColourSwatch colour={colour} className="size-3 rounded-[3px]" />
-            <span className="flex-1">
-              {altHeld ? 'Add ' : ''}
-              {FIXTURE_COLOUR_LABELS[colour]}
-            </span>
-            <span className="text-[10.5px] text-muted-foreground">{keys.length}</span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
+    <ToolbarMenuSub label="Select by colour" icon={<Palette className="size-4" />}>
+      {colours.map(({ colour, keys }) => (
+        <ToolbarMenuItem key={colour} onSelect={() => onPick(keys, altHeld)}>
+          <ColourSwatch colour={colour} className="size-3 rounded-[3px]" />
+          <span className="flex-1 truncate">
+            {altHeld ? 'Add ' : ''}
+            {FIXTURE_COLOUR_LABELS[colour]}
+          </span>
+          <span className="text-xs text-muted-foreground">{keys.length}</span>
+        </ToolbarMenuItem>
+      ))}
+    </ToolbarMenuSub>
   )
 }

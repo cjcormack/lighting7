@@ -154,12 +154,15 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // desk refuses one with `VENUE_RECORD_OFF` whatever this shows.
   const { isVenue } = useVenueMode(projectId)
   const canRecord = hasContent && !isVenue
-  // *A new palette* (programmer-toolbar plan D2): from the selection the grid publishes, which this
-  // row sits outside — the pair `useWindowPressPair` reads, with the families the marquee named, so
-  // rows alone leave the sheet to ask rather than pre-pick one of several.
+
+  // *A new palette* (programmer-toolbar plan D2): the selection's heads recorded as a palette. Read
+  // through the marquee store, as `useWindowPressPair` reads it, since this row sits outside the
+  // grid: the heads a press would land on, and the families the marquee named (null for rows, so
+  // the sheet asks). It needs a selection rather than a full programmer, so it keeps the menu open
+  // when Record itself has nothing to write; off in a venue, as Record is.
   const press = useMarquee()?.press
   const paletteTargets = press?.targets ?? []
-  const hasSelection = paletteTargets.length > 0
+  const canNewPalette = !isVenue && paletteTargets.length > 0
   const [newPaletteOpen, setNewPaletteOpen] = useState(false)
 
   const cueId = includedCueId(target)
@@ -284,7 +287,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
-              disabled={isVenue || (!canRecord && !hasSelection)}
+              disabled={isVenue}
               aria-label="Record destination"
               className="rounded-none border-l border-primary-foreground/25 px-1.5"
             >
@@ -293,14 +296,14 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[238px]">
             <DropdownMenuLabel className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-              {recordMenuLabel(entryCount, sceneryCount, layerCount)}
+              {canRecord ? recordMenuLabel(entryCount, sceneryCount, layerCount) : 'The programmer is empty'}
             </DropdownMenuLabel>
             {cueId != null && (
               <MenuItem
+                disabled={!canRecord}
                 icon={<Upload className="size-3.5" />}
                 title={[includedCue?.number, includedCue?.name].filter(Boolean).join(' ')}
                 sub="Update the cue you are editing"
-                disabled={!canRecord}
                 onSelect={() =>
                   sheets.openRecord({ targetCueId: cueId, targetCueName: includedCue?.name })
                 }
@@ -308,40 +311,40 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
             )}
             {includedStack && (
               <MenuItem
+                disabled={!canRecord}
                 icon={<Plus className="size-3.5" />}
                 title={`A new cue after ${includedCue?.number ?? includedCue?.name ?? 'this one'}`}
                 // NOT "becomes Q4.5": the server assigns the number, and `lib/cueNumber.ts` has
                 // no between-two-numbers arithmetic. Predicting one the server then ignores is
                 // worse than not predicting.
                 sub={`${includedStack.name} · appended`}
-                disabled={!canRecord}
                 onSelect={() => sheets.openRecord({ defaultCueStackId: includedStack.id })}
               />
             )}
             <MenuItem
+              disabled={!canRecord}
               icon={<Layers className="size-3.5" />}
               title="A new Look"
               sub="Names its own fixtures"
-              disabled={!canRecord}
               onSelect={sheets.openRecordLook}
             />
             <MenuItem
+              disabled={!canNewPalette}
               icon={<Palette className="size-3.5" />}
               title="A new palette"
               sub={
-                hasSelection
+                canNewPalette
                   ? `From the selection’s ${paletteTargets.length} head${paletteTargets.length === 1 ? '' : 's'}`
                   : 'Select heads first'
               }
-              disabled={!hasSelection}
               onSelect={() => setNewPaletteOpen(true)}
             />
             <DropdownMenuSeparator />
             <MenuItem
+              disabled={!canRecord}
               icon={<Circle className="size-3.5" />}
               title="An existing cue…"
               sub="Pick any cue by name"
-              disabled={!canRecord}
               onSelect={() => sheets.openRecord({ existingCue: true })}
             />
           </DropdownMenuContent>
@@ -381,14 +384,14 @@ function MenuItem({
   icon,
   title,
   sub,
-  disabled,
   onSelect,
+  disabled,
 }: {
   icon: ReactNode
   title: string
   sub: string
-  disabled?: boolean
   onSelect: () => void
+  disabled?: boolean
 }) {
   return (
     <DropdownMenuItem onSelect={onSelect} disabled={disabled} className="flex items-start gap-2">

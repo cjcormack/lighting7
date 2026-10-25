@@ -28,7 +28,7 @@ export interface FxFitContext {
 }
 
 /**
- * Does this palette fit the heads? The bands' filter and the picker's, written once so
+ * Does this palette fit the heads? The strip's filter, the bands' and the picker's, written once so
  * they offer one set: the family, every emitter the palette names somewhere in the selection (a
  * **union**, as `targetEmitters` is built — the desk reports a head without it as a skip), and for a
  * Beam property the property the palette sets — a value palette's own rows, an effect palette's

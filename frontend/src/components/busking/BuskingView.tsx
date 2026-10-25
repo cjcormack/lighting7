@@ -136,7 +136,7 @@ export type BuskBoard = 'desk' | 'short' | 'narrow'
  * **Every press goes through one route.** A pad is pressed by `POST /busk/pads/{id}/press`,
  * whatever it holds, because the pad is what knows its bank and the bank is what decides which
  * siblings a press releases (D4). The three kind-specific mutations this view used to call are the
- * programmer's doors' now, and the AI's.
+ * programmer's doors' now (through `usePress`), and the AI's.
  *
  * **There is no empty-selection dim.** The pools used to grey themselves out with nothing selected,
  * which is now wrong in three ways: a per-fixture palette names its own heads, a Look lands whole,

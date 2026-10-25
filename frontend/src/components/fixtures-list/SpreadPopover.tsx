@@ -111,6 +111,8 @@ interface SpreadPopoverProps {
   onSeedConsumed?: () => void
   /** For the trigger button — the programmer's selection bar folds it away at phone widths. */
   className?: string
+  /** The trigger word's fold, where the host's row has its own ladder. */
+  wordClass?: string
 }
 
 /** What `useMarqueeSpreadPlans` is asked, and answers. */
@@ -345,7 +347,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
  * cells are editable and `useCellWriters` has no arm for either, so both refuse with the words Set
  * and Clear use, disabled with the reason rather than hidden.
  */
-export function SpreadPopover({ columns, projectId, desk = false, scopeLabel = 'Local', seed, onSeedConsumed, className }: SpreadPopoverProps) {
+export function SpreadPopover({ columns, projectId, desk = false, scopeLabel = 'Local', seed, onSeedConsumed, className, wordClass }: SpreadPopoverProps) {
   const { plans, disabledReason, labelLine, footerNote } = useMarqueeSpreadPlans({ columns, projectId, desk, scopeLabel })
 
   return (
@@ -363,6 +365,7 @@ export function SpreadPopover({ columns, projectId, desk = false, scopeLabel = '
       // hands in none — and must still read as "cells in a column it cannot drive", not as no selection.
       noSelection={columns.length === 0}
       className={className}
+      wordClass={wordClass}
     />
   )
 }

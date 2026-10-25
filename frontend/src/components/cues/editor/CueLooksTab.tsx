@@ -143,7 +143,7 @@ function LooksBody({
   )
 
   const pickerPair = useMemo<PressPair>(() => ({ targets: selection, families: null }), [selection])
-  // What the selected heads can take, as the programmer's picker reads its marquee: an offer, never a
+  // What the selected heads can take, as the programmer's strip reads its marquee: an offer, never a
   // refusal — the desk still answers the press.
   const pickerFit = useMemo<PaletteFit>(() => {
     const heads = cueWriteTargets(selection, fixtures ?? [])

@@ -57,7 +57,7 @@ function LookFace({
     <>
       <span className="flex items-center gap-1.5">
         {/* An effect template has no value to preview, so the FX glyph stands where a swatch would
-            — the same substitution the palette sheet's Value column makes. */}
+            — the same substitution the palette sheet's Value column and the picker make. */}
         {face.isFx && <AudioWaveform className={FX_GLYPH_CLASS} />}
         {face.swatch && (
           <span

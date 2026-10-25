@@ -686,7 +686,7 @@ internal data class PaletteDto(
      *
      * The client's offer filter. A template that names an emitter cannot be served by a head without
      * it — the whole template refuses, not just the row (`PaletteResolver.unmetColourRequirement`)
-     * — so the programmer's picker and the busk palette need to know before offering it, and the family
+     * — so `PaletteStrip` and the busk palette need to know before offering it, and the family
      * alone cannot say: white, amber, UV and the hex are all `COLOUR`.
      *
      * Not on the fixture: the requirement belongs to the template and is three tokens long, and the
@@ -700,9 +700,9 @@ internal data class PaletteDto(
      * When this template was last **pressed** on this desk, as an ISO-8601 instant; null until it
      * has been.
      *
-     * The picker's Recent section is "the offerable templates that have one, newest first", which
-     * is why this rides the list rather than having a route of its own: the family filter and the
-     * emitter filter the picker already applies *are* the per-family scoping, and a deleted
+     * The programmer's recent-chip row is "the offerable templates that have one, newest first",
+     * which is why this rides the list rather than having a route of its own: the family filter and
+     * the emitter filter the strip already applies *are* the per-family scoping, and a deleted
      * template takes its history with it.
      *
      * A string rather than a number so it reads in a log and in a diff, and — since it comes from

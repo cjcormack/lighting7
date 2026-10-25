@@ -1,84 +1,85 @@
 import { useMemo } from 'react'
-import { Filter } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
-import { plural } from '@/lib/plural'
 import { describeCellScope, type CellRef } from '@/components/sheet/cellSelectionModel'
 import { cellFamilies, columnLabel, type ColumnKey } from '@/components/fixtures-list/columns'
 import { SelectionBar as SheetSelectionBar } from '@/components/sheet/SelectionBar'
+import { ToolbarPhoneContext } from '@/components/sheet/ToolbarMenu'
 import { useContainerBand } from '@/hooks/useContainerBand'
-import { useDeskFollow } from '@/lib/deskFollow'
 import { usePressFamilies } from '@/store/selection'
-import type { LocateTarget } from '@/store/locate'
 import { HeadsChip, type HeadsChipProps } from './HeadsChip'
-import { SelectionMaskPill, maskWords } from './SelectionMaskPill'
-import { ROW_C_BANDS, ROW_C_FLOORS, RowCBandContext, type RowCBand } from './rowCBand'
+import { MaskRowFace, SelectionMaskPill } from './SelectionMaskPill'
+import { ROW_C_PHONE_FLOORS } from './rowCFolds'
+import type { LocateTarget } from '@/store/locate'
 
-/** What the heads chip acts through, which the list owns. */
-export type HeadsControls = Pick<
-  HeadsChipProps,
-  'targets' | 'onSubselect' | 'onSelectTargets' | 'onDeselect' | 'locateTargets' | 'writeTargets'
->
+/** What the list container hands the heads chip; the bar adds the project. */
+export type HeadsChipParts = Omit<HeadsChipProps, 'projectId'>
 
 /**
- * Row C on the programmer — the heads chip, the mask, and the selection's verbs in clusters (plan
- * D3) — and, with no `projectId`, row C on the two plain lists, the kit's bar with its counts. One
- * component for both so the counts and the hints cannot be computed two ways.
+ * Row C on the programmer, and — with no `projectId` — row C on the two plain lists. One component
+ * for both so the counts and the family reading cannot be computed two ways.
  *
  * The bar itself — the 40px line, the hold-its-place rule on a short viewport — is
- * `sheet/SelectionBar.tsx`, which every sheet shares. What is the programmer's is what this file
- * draws into the kit's `lead` slot, and the rung it measures the row at (`rowCBand.ts`), which the
- * chip and the verbs read.
+ * `sheet/SelectionBar.tsx`'s (CLAUDE.md §Sheet kit), and the plain lists draw it exactly as they
+ * always have: the glyph, the counts, the family badge, the ⏎/⌫ hints and their toolbar.
  *
- * **The mask is the one the next press carries**, not only the one the marquee named:
- * `usePressFamilies` — the desk's while following, the marquee's own when unlinked. The two are the
- * same whenever this tab made the marquee; they differ when another window moved the mask under
- * it, which the bridge lands here as a *row* selection — and then the pill is the only thing on this
- * bar saying that a Colour press will be refused.
+ * **The programmer's row is three clusters** (programmer-toolbar plan D3), left to right: *which
+ * heads* — the heads chip (`HeadsChip`, which counts them and narrows them) and the mask; *what to
+ * do to them* — Set ⏎ · Fan · Release ⌫ ▾ (the container's [actions]); and *where they are on the
+ * rig* — Locate ▾ · Highlight ([selection]), at the right edge. The kit's slots carry them:
+ * `leading` for the first, `strip` for the second, the verbs for the third. Its width ladder is
+ * `rowCFolds.ts`; the phone arm, which turns its menus into bottom sheets, is measured here and
+ * handed down through `ToolbarPhoneContext`.
  *
- * **While this window follows the desk the pill is the mask's picker** (apply-model plan D3,
- * `SelectionMaskPill`), drawn over every selection — `All` when unmasked — and a change goes
- * through the list's desk bridge as [onRemask]. An **unlinked** programmer keeps a badge: its own
- * selection is the list's, whose only mask is the marquee's columns, so there is no fact for a
- * picker to write.
+ * **The mask is what the next press carries**, not only what the marquee named: `usePressFamilies`
+ * — the desk's while following, the marquee's own when unlinked. While the window follows the desk
+ * it is the mask's picker (`SelectionMaskPill`, apply-model plan D3), its writes going through the
+ * list's desk bridge as [onRemask]; unlinked it is read-only, since the list's own selection has no
+ * mask but the marquee's columns. The plain lists keep the marquee's own reading: they never bridge.
  */
 export function SelectionBar({
   projectId,
   selection,
+  actions = null,
+  heads = null,
   cells,
   cellEntryKey,
   cellClearKey,
   paletteTargets,
   marqueeDragging,
   onRemask = null,
-  heads,
 }: {
-  /** The programmer's project. Absent — the plain lists — draws the kit's own counts. */
+  /** The programmer's project. Absent — the plain lists — draws the kit's own left end. */
   projectId?: number
   selection: React.ReactNode | null
+  /** The programmer's *what to do to them*. */
+  actions?: React.ReactNode | null
+  /** The programmer's heads chip. */
+  heads?: HeadsChipParts | null
   cells: readonly CellRef<ColumnKey>[]
   cellEntryKey: boolean
   cellClearKey: boolean
   paletteTargets: readonly LocateTarget[]
   marqueeDragging: boolean
-  /** The desk bridge's mask write, which makes the pill its picker; null when the list does not bridge. */
+  /** The desk bridge's mask write, which makes the mask its picker; null when the list does not bridge. */
   onRemask?: ((families: readonly AttributeFamily[] | null) => void) | null
-  /** The programmer's heads chip controls; absent on the plain lists. */
-  heads?: HeadsControls
 }) {
   const askedFamilies = useMemo(() => (cells.length > 0 ? cellFamilies(cells) : null), [cells])
-
-  // The head count is `paletteTargets` — the heads a press actually lands on, which is the
-  // cells' heads under a marquee and the selected rows' otherwise — and deliberately not the
-  // footer's `selectedCount`, which counts visible *rows* with a group as one. *Heads*, not
-  // fixtures: a selected cell is its own target, so three zones of one Shehds are three heads.
-  const fixtures = plural(paletteTargets.length, 'head')
+  const pressFamilies = usePressFamilies(askedFamilies)
+  const [measure, band] = useContainerBand(ROW_C_PHONE_FLOORS)
 
   if (projectId == null || heads == null) {
+    // The head count is `paletteTargets` — the heads a press lands on, which is the cells' heads
+    // under a marquee and the selected rows' otherwise — and not the footer's count of visible
+    // *rows*. *Heads*, not fixtures: a selected cell is its own target, so three zones of one
+    // Shehds are three heads.
+    const fixtures = `${paletteTargets.length} head${paletteTargets.length === 1 ? '' : 's'}`
     return (
       <SheetSelectionBar
         rowLabel={paletteTargets.length > 0 ? fixtures : null}
-        cellLabel={cells.length > 0 ? plural(cells.length, 'cell') : null}
+        cellLabel={cells.length > 0 ? `${cells.length} cell${cells.length === 1 ? '' : 's'}` : null}
+        // The sentence becomes the hover. `describeCellScope` is the same string the drag chip
+        // shows, so the two agree by construction; the head count rides it, since on a phone the
+        // hover is the only place that count is said.
         cellTitle={`${fixtures} · ${describeCellScope(cells, columnLabel)} — edit once, applies to all`}
         family={askedFamilies != null && askedFamilies.length > 0 ? formatFamilyList(askedFamilies, ' · ') : null}
         hints={{ entry: cellEntryKey, clear: cellClearKey }}
@@ -88,110 +89,52 @@ export function SelectionBar({
     )
   }
 
-  return (
-    <ProgrammerRowC
-      projectId={projectId}
-      selection={selection}
-      cells={cells}
-      askedFamilies={askedFamilies}
-      paletteTargets={paletteTargets}
-      marqueeDragging={marqueeDragging}
-      onRemask={onRemask}
-      heads={heads}
-    />
-  )
-}
-
-function ProgrammerRowC({
-  projectId,
-  selection,
-  cells,
-  askedFamilies,
-  paletteTargets,
-  marqueeDragging,
-  onRemask,
-  heads,
-}: {
-  projectId: number
-  selection: React.ReactNode | null
-  cells: readonly CellRef<ColumnKey>[]
-  askedFamilies: AttributeFamily[] | null
-  paletteTargets: readonly LocateTarget[]
-  marqueeDragging: boolean
-  onRemask: ((families: readonly AttributeFamily[] | null) => void) | null
-  heads: HeadsControls
-}) {
-  const [measure, bandIndex] = useContainerBand(ROW_C_FLOORS)
-  const band = ROW_C_BANDS[bandIndex]
-  const following = useDeskFollow()
-  const pressFamilies = usePressFamilies(askedFamilies)
   const hasSelection = selection != null
-  const scope = `${describeCellScope(cells, columnLabel)} — edit once, applies to all`
-
-  const lead = (
-    <>
-      <HeadsChip projectId={projectId} heads={paletteTargets.length} cells={cells.length} {...heads} />
-      {hasSelection && (
-        <span className="inline-flex shrink-0" title={cells.length > 0 ? scope : undefined}>
-          {following && onRemask != null ? (
-            <SelectionMaskPill
-              families={pressFamilies}
-              onChange={onRemask}
-              tone="bar"
-              display={maskDisplay(band)}
-            />
-          ) : (
-            pressFamilies != null &&
-            pressFamilies.length > 0 && <MaskBadge families={pressFamilies} band={band} />
-          )}
-        </span>
-      )}
-      {!hasSelection && (
-        <span className="min-w-0 truncate text-xs text-muted-foreground">
-          Drag across cells, or narrow from the heads menu. A Look needs no selection.
-        </span>
-      )}
-    </>
+  const masked = pressFamilies != null && pressFamilies.length > 0 ? pressFamilies : null
+  const mask = !hasSelection ? null : onRemask != null ? (
+    <SelectionMaskPill families={pressFamilies} onChange={onRemask} tone="row" />
+  ) : (
+    <span
+      role="img"
+      aria-label={`Mask: ${masked != null ? formatFamilyList(masked, ', ') : 'every attribute'} — this window’s own, the marquee’s columns`}
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-xs font-medium text-muted-foreground"
+    >
+      <MaskRowFace families={masked} readOnly />
+    </span>
   )
 
   return (
-    <RowCBandContext.Provider value={band}>
+    <ToolbarPhoneContext.Provider value={band === 1}>
       <div ref={measure}>
         <SheetSelectionBar
-          lead={lead}
-          clusters
           rowLabel={null}
-          // Drawn by the chip, not the kit; given so a marquee keeps the bar in the flow as it does
-          // on every sheet.
-          cellLabel={cells.length > 0 ? `${cells.length}` : null}
+          cellLabel={null}
           family={null}
           hints={{ entry: false, clear: false }}
+          leading={
+            <>
+              <HeadsChip projectId={projectId} {...heads} />
+              {mask}
+              {!hasSelection && (
+                <span className="hidden truncate text-xs text-muted-foreground @[800px]:inline">
+                  Drag across cells, or narrow from the heads menu.
+                </span>
+              )}
+            </>
+          }
+          strip={
+            actions != null ? (
+              <>
+                <span className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />
+                <div className="flex shrink-0 items-center gap-1.5">{actions}</div>
+              </>
+            ) : undefined
+          }
+          foldForStrip={false}
           verbs={selection}
           marqueeDragging={marqueeDragging}
         />
       </div>
-    </RowCBandContext.Provider>
+    </ToolbarPhoneContext.Provider>
   )
 }
-
-/** The mask's face by the row's rung: its words, abbreviated, or the glyph alone (plan D12). */
-function maskDisplay(band: RowCBand): 'full' | 'short' | 'icon' {
-  return band === 'phone' ? 'icon' : band === 'tab' ? 'short' : 'full'
-}
-
-/** An unlinked window's mask: the marquee's columns, said and not edited. */
-function MaskBadge({ families, band }: { families: readonly AttributeFamily[]; band: RowCBand }) {
-  const display = maskDisplay(band)
-  const title = `Attributes: ${formatFamilyList(families, ', ')} — what the next press carries`
-  return (
-    <Badge
-      variant="outline"
-      title={title}
-      aria-label={title}
-      className="shrink-0 gap-1 whitespace-nowrap px-1.5 py-0 text-[10px]"
-    >
-      {display === 'icon' ? <Filter className="size-3" /> : maskWords(families, display)}
-    </Badge>
-  )
-}
-

@@ -6,7 +6,7 @@ import type { CellActionCopy, CellKeyboardPermission } from './cellEntry'
 
 /**
  * The selection bar's verbs for a **cell** selection: Set, Clear, Spread. The programmer's row C
- * draws its own (`ProgrammerSelectionVerbs`), where Clear and Release are one split button.
+ * draws its own (`programmer/SetButton.tsx`, Release's cell arm in place of Clear).
  *
  * Set and Clear are the marquee's two keys with a button on them — Enter and Backspace — and they
  * exist because a phone has neither, and because a released drag no longer opens an editor by

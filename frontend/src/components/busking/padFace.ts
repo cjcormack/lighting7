@@ -183,8 +183,7 @@ export const PAD_FACE_SHELL = 'flex-col items-center justify-center text-center'
  *
  * An effect template holds no rows, so there is no value to preview — the glyph the whole desk uses
  * for FX stands in its place. The surfaces that draw it (`BuskPad`, `LibraryPalette` and
- * `ApplyPicker`'s pad) had hand-written copies of this class
- * string, which is the drift this module exists to prevent; the icon is `AudioWaveform` at every one
+ * `ApplyPicker`'s pad) share this class string rather than each keeping a copy to drift; the icon is `AudioWaveform` at every one
  * of them, and that half is stated here rather than enforced, because a lucide import cannot live in
  * a `.ts` file. Other sizes elsewhere (`size-3.5` in a menu, `size-3 text-white` on a coloured tile)
  * are deliberately not this — they are not a pad's swatch slot.

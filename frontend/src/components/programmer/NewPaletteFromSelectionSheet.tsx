@@ -22,7 +22,7 @@ import { formatError } from '@/lib/formatError'
 import type { PaletteTarget } from '@/api/palettesApi'
 
 /**
- * Record the selection as a new template — the strip's *New from selection* chip.
+ * Record the selection as a new palette — Record ▾'s *A new palette* (programmer-toolbar plan D2).
  *
  * Deliberately a small sheet, not the editor. Everything the editor asks is either already decided
  * (the family comes from the selection, the values come from the rig) or does not apply yet, so all
@@ -46,9 +46,9 @@ export function NewPaletteFromSelectionSheet({
   /** The families the selection is asking about, or null when the gesture named none. */
   families: readonly AttributeFamily[] | null
   /**
-   * The heads to record from — the strip's own targets, so a marquee over three colour cells
-   * records those three and not every checked row. The strip and the sheet must agree on this or
-   * a press and its "new from selection" would name different heads.
+   * The heads to record from — a press's own targets (the marquee store's), so a marquee over three
+   * colour cells records those three and not every selected row. A press and *A new palette* must
+   * agree on this or they would name different heads.
    */
   targets: readonly PaletteTarget[]
 }) {
@@ -66,8 +66,7 @@ export function NewPaletteFromSelectionSheet({
     if (!open) return
     setName('')
     setBuskTarget(null)
-    // Pre-chosen when the selection names exactly one — the common case, and the one the strip's
-    // whole "the selection is the filter" idea rests on.
+    // Pre-chosen when the selection names exactly one — the common case.
     setFamily(offered.length === 1 ? offered[0] : null)
     reset()
   }, [open, offered, reset])

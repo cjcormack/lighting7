@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { RefCallback, RefObject } from 'react'
 
 /** Which way a horizontal scroller has more content, and whether it has any. */
@@ -14,6 +14,16 @@ export interface ScrollEdges {
 const NONE: ScrollEdges = { left: false, right: false, overflows: false }
 
 export interface ScrollEdgesOptions {
+  /**
+   * Re-measure after **every render**, in a layout effect.
+   *
+   * For a scroller whose *content* changes without the scroller resizing and where the answer has
+   * to be right in the frame the new content lands in — a row of chips that gains one, say. The
+   * content `ResizeObserver` below catches the same change, but it fires *after* paint, so the
+   * fade would arrive a frame late. Off by default: it costs a forced layout per render, which on
+   * a grid that re-renders at 30 Hz under a fader drag is not worth a mask.
+   */
+  measureOnRender?: boolean
   /**
    * This element scrolls **vertically as well** — skip the measure when `scrollLeft` has not moved.
    *
@@ -37,22 +47,24 @@ export interface ScrollEdgesOptions {
  * with either width. So the measure runs on three triggers, and each is a way the answer changes on
  * its own: the element's own `scroll`, a `ResizeObserver` on the element (the window, the rail, a
  * sibling taking room) **and on its first element child** (the content growing or shrinking inside
- * an unchanged box — a column switched off, a chip list refilled).
+ * an unchanged box — a column switched off, a chip list refilled), and optionally every render.
  * State is written only when one of the three flags actually flips, so a scroll listener at frame
  * rate costs no renders.
  *
- * Callers want different answers from one mechanism, hence three fields rather than a derivation:
- * `overflows` is **not** `left || right` at the edges (a scroller overflowing by two pixels and
- * sitting one pixel in reports neither), and one caller draws a mask that must stay up at the end of
- * the travel while another draws a chevron that must not.
+ * Its callers — `StackTabStrip` and `FixturesTable` among them — share all of that mechanism and
+ * differ only in which of the three answers they want. Hence three fields rather
+ * than a derivation: `overflows` is **not** `left || right` at the edges (a scroller overflowing by
+ * two pixels and sitting one pixel in reports neither), and one of the three callers is drawing a
+ * mask that must stay up at the end of the travel while another is drawing a chevron that must not.
  *
  * `ResizeObserver` is guarded rather than assumed — jsdom has none unless a suite stubs one, and
- * these components render in suites that do not. Without it the scroll trigger and the first
- * measure still answer; only a width change is missed, which in a test is every width change.
+ * these components render in suites that do not. Without it the scroll trigger and the render
+ * trigger still answer; only a width change nothing else notices is missed, which in a test is
+ * every width change.
  */
 export function useScrollEdges<T extends HTMLElement>(
   ref: RefObject<T | null>,
-  { horizontalOnly = false }: ScrollEdgesOptions = {},
+  { measureOnRender = false, horizontalOnly = false }: ScrollEdgesOptions = {},
 ): ScrollEdges & { attach: RefCallback<T> } {
   const [edges, setEdges] = useState<ScrollEdges>(NONE)
 
@@ -77,12 +89,15 @@ export function useScrollEdges<T extends HTMLElement>(
    * The node, as state — and `attach` is how it gets here, which is the whole reason the caller
    * puts `ref={attach}` on the scroller instead of its own ref.
    *
-   * A `RefObject` gives no signal when it is filled, and a scroller can be rendered
-   * **conditionally** — the fixtures table appears with a non-empty list — so the element mounts
-   * *after* an effect reading `ref.current` has already run and returned early. Nothing in that
-   * effect's dependencies then changes, so it would never run again and the observers would never
-   * be attached. It is invisible in a test — jsdom has no `ResizeObserver` — so it is stated here
-   * rather than pinned.
+   * A `RefObject` gives no signal when it is filled, and two of these scrollers are rendered
+   * **conditionally** — a strip that appears with the selection, the fixtures table with a
+   * non-empty list — so the element mounts *after* an effect reading `ref.current` has already
+   * run and returned early. Nothing in that effect's dependencies then changes, so it never runs
+   * again and the observers are never attached at all: the value then moves only on the
+   * `measureOnRender` pass, which is to say only when something else happens to re-render the
+   * component, and a scroller without that option would never update after its first frame.
+   * Both of the hand-rolled copies this replaced had it, and it is invisible in a test — jsdom
+   * has no `ResizeObserver` — so it is stated here rather than pinned.
    *
    * `attach` fills the caller's own ref as well, because these components read `.current` all
    * over for things that are not this hook's business (a virtualizer's scroll element, a
@@ -128,6 +143,13 @@ export function useScrollEdges<T extends HTMLElement>(
       observer?.disconnect()
     }
   }, [el, measure, horizontalOnly])
+
+  // No deps array, and the flag is read inside rather than gating the hook: a conditional
+  // `useLayoutEffect` would be a conditional hook, and a deps array whose length depends on an
+  // option is a React error waiting for the day an option is made dynamic.
+  useLayoutEffect(() => {
+    if (measureOnRender && ref.current) measure(ref.current)
+  })
 
   return { ...edges, attach }
 }

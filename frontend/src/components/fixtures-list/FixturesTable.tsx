@@ -91,8 +91,8 @@ export interface FixturesTableProps {
   /**
    * The project the rows belong to: the popup's Palettes band and *Save as palette…* on the colour,
    * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
-   * leaves. The container passes it for the programmer scope only — the two plain lists press no
-   * palette and get none of it — and every test mounts this table bare; a cell with none draws
+   * leaves. The container passes it for the programmer scope only — the two plain lists get none of
+   * it, since Save records from the programmer — and every test mounts this table bare; a cell with none draws
    * its editor bare rather than reaching for a store it has no project in, except under the cue
    * editor, whose `PressCue` gives the bands their project (no footer, no leaves).
    */
@@ -610,8 +610,8 @@ interface RowViewProps {
   /**
    * The project the rows belong to: the popup's Palettes band and *Save as palette…* on the colour,
    * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
-   * leaves. The container passes it for the programmer scope only — the two plain lists press no
-   * palette and get none of it — and every test mounts this table bare; a cell with none draws
+   * leaves. The container passes it for the programmer scope only — the two plain lists get none of
+   * it, since Save records from the programmer — and every test mounts this table bare; a cell with none draws
    * its editor bare rather than reaching for a store it has no project in, except under the cue
    * editor, whose `PressCue` gives the bands their project (no footer, no leaves).
    */
@@ -1248,8 +1248,8 @@ function AttributeCell({
   /**
    * The project the rows belong to: the popup's Palettes band and *Save as palette…* on the colour,
    * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
-   * leaves. The container passes it for the programmer scope only — the two plain lists press no
-   * palette and get none of it — and every test mounts this table bare; a cell with none draws
+   * leaves. The container passes it for the programmer scope only — the two plain lists get none of
+   * it, since Save records from the programmer — and every test mounts this table bare; a cell with none draws
    * its editor bare rather than reaching for a store it has no project in, except under the cue
    * editor, whose `PressCue` gives the bands their project (no footer, no leaves).
    */

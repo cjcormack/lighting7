@@ -33,16 +33,9 @@ vi.mock('@/components/fixtures-list/FixturesListContainer', () => ({
           cellEntryKey: false,
           cellClearKey: false,
           paletteTargets: [],
-          heads: {
-            targets: [],
-            onSubselect: null,
-            onSelectTargets: () => {},
-            onDeselect: () => {},
-            locateTargets: [],
-            writeTargets: [],
-          },
+          targetFamilies: [],
+          targetEmitters: [],
           marqueeDragging: false,
-          remask: null,
         })}
       </div>
     )

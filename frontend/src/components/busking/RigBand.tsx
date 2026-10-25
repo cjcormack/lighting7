@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { DeskChip } from '@/components/desk/DeskChip'
+import { CellsMenu, StepButtons, SUBSET_MODE_TITLES, SUBSET_STEP_LABELS } from '@/components/desk/SubsetControls'
 import { BlindPill } from './BlindMarks'
 import { HandPlaceStrip } from '@/components/hand/HandTarget'
 import { registerDragOverlay } from '@/components/dnd/dragOverlayRegistry'
@@ -40,7 +41,7 @@ import { useBuskRigQuery } from '@/store/busk'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useHandPlace } from '@/store/hand'
 import { useBuskRigHeight, useDefaultBuskRigRows } from '@/lib/buskWindow'
-import { SubselectMenu, SubselectMenuItems, SubselectStepItems, SubselectSteps } from '@/components/selection/Subselect'
+import { SUBSELECT_FILTER_MODES, SUBSELECT_MODE_LABELS, SUBSELECT_STEP_MODES } from '@/lib/cellsSubSelection'
 import {
   applyDrop,
   effectiveRig,
@@ -660,13 +661,13 @@ function RigBandBody({
             <EditorLabel className={RIG_LABEL_CLASS}>Rig</EditorLabel>
             {!editing && (
               <>
-                <SubselectMenu
+                <CellsMenu
                   onSubselect={onSubselect}
-                  className={VERB_CLASS}
-                  prefixClass={CELLS_PREFIX_CLASS}
-                  shortClass={CELLS_SHORT_CLASS}
+                  triggerClassName={VERB_CLASS}
+                  prefixClassName={CELLS_PREFIX_CLASS}
+                  shortClassName={CELLS_SHORT_CLASS}
                 />
-                <SubselectSteps onSubselect={onSubselect} />
+                <StepButtons onSubselect={onSubselect} />
               </>
             )}
             {editing ? (
@@ -843,6 +844,8 @@ function rigRecordOf(held: HeldRecord): RigPaletteRecord | null {
   return null
 }
 
+// ─── The compact row's verbs ────────────────────────────────────────────
+
 /**
  * Below `md` the compact row has no room for a second control: the filters, the steps and the
  * verbs sit in one menu. **Module-level, not a closure inside the band**: a component declared during a
@@ -874,9 +877,17 @@ function CompactVerbs({
               {/* Below `md` the menu's filters and the two steps sit here: the compact row has no
                   room for a second control. */}
               <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Elements</DropdownMenuLabel>
-              <SubselectMenuItems onSubselect={onSubselect} layout="list" />
+              {SUBSELECT_FILTER_MODES.map((mode) => (
+                <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)}>
+                  {SUBSELECT_MODE_LABELS[mode]}
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuSeparator />
-              <SubselectStepItems onSubselect={onSubselect} />
+              {SUBSELECT_STEP_MODES.map((mode) => (
+                <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)} title={SUBSET_MODE_TITLES[mode]}>
+                  {SUBSET_STEP_LABELS[mode] ?? SUBSELECT_MODE_LABELS[mode]}
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={verbs.spread} title="Fan a value across the selection">
                 Fan…

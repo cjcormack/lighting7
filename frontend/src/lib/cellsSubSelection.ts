@@ -6,7 +6,7 @@ import { inGroupOrder } from './memberOrder'
 
 /**
  * The client mirror of `DeskSelection.subselect` (lighting7 `state/DeskSelection.kt`, busk-further
- * plan D12) — for an **unlinked** window.
+ * plan D12) — for an **unlinked** window only.
  *
  * The sub-selection is the desk's rule: the Cells chip on a following window sends
  * `selection.subselect {mode}` and renders the desk's answer, and a MIDI `SelectionCells` button
@@ -15,9 +15,6 @@ import { inGroupOrder } from './memberOrder'
  * copy by the same rule, over the rig document the busk view already fetches
  * (`useBuskRigQuery`, `effectiveRig` for an empty one) and the two lists it already holds. It is
  * the split `deskFollow.ts` already makes, applied to the one write that needs a rule.
- *
- * The programmer's heads chip also runs it while following (`useListSubselect`), only to learn which
- * collapsed fixtures the desk's answer will name cells of, so their rows exist when the frame lands.
  *
  * **Pinned against the server's own fixture.** `cellsSubSelection.test.ts` imports the backend's
  * `src/test/resources/busk/subselect.fixture.json`, which `DeskSelectionSubselectTest` pins

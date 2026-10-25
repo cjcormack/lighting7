@@ -51,11 +51,6 @@ export function useCellEditorRequests<C extends string>({
   /** The bar's Set: open the selection's editor at the button, or close the one it opened. */
   toggleCellEditor: () => void
   /**
-   * Set's open without its toggle — for a gesture that has just made the cells it opens on. False
-   * when it only scrolled the first cell's row into view, so the caller can ask again.
-   */
-  openCellEditorAtButton: () => boolean
-  /**
    * Close whatever cell editor is open, if any, and say whether there was one.
    *
    * For a surface that changes *under* an open editor rather than deselecting — the programmer's
@@ -75,9 +70,9 @@ export function useCellEditorRequests<C extends string>({
   }, [closeEditorCell])
 
   const request = useCallback(
-    (seed: string, atButton: boolean): boolean => {
+    (seed: string, atButton: boolean) => {
       const first = firstEditableCell()
-      if (!first) return true
+      if (!first) return
       // The DOM is the only thing that knows what the virtualiser rendered, and `data-row-id` is
       // the sheet's own addressing contract — the same attribute `marqueeOwnsKeyTarget` reads,
       // walked the other way. Asked rather than always scrolling, because recentring the list
@@ -85,10 +80,9 @@ export function useCellEditorRequests<C extends string>({
       // the problem.
       if (document.querySelector(`[data-row-id="${CSS.escape(first.rowId)}"]`) == null) {
         onScrollTo(first.rowId)
-        return false
+        return
       }
       setKeyboardOpen({ rowId: first.rowId, col: first.col, seed, atButton })
-      return true
     },
     [firstEditableCell, onScrollTo],
   )
@@ -109,7 +103,5 @@ export function useCellEditorRequests<C extends string>({
     request('', true)
   }, [closeCellEditor, request])
 
-  const openCellEditorAtButton = useCallback(() => request('', true), [request])
-
-  return { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor, openCellEditorAtButton, closeCellEditor }
+  return { keyboardOpen, closeEditorCell, openCellEditor, toggleCellEditor, closeCellEditor }
 }
