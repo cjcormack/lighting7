@@ -113,7 +113,7 @@ sealed class ShehdsLed19RgbwFixture(
      * - Ch 3: Tilt (coarse, 0–270°).
      * - Ch 4: Tilt (fine).
      * - Ch 5: Pan/tilt speed.
-     * - Ch 6: Zoom (15° narrow → 60° wide).
+     * - Ch 6: Zoom (60° wide → 10° narrow).
      * - Ch 7: Master dimmer (0–100% linear).
      * - Ch 8: Strobe.
      * - Ch 9–12: Zone 1 RGBW.
@@ -168,8 +168,8 @@ sealed class ShehdsLed19RgbwFixture(
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
         @FixtureAttribute(
-            "Zoom (narrow → wide)", category = AttributeCategory.ZOOM,
-            degMin = 15.0, degMax = 60.0,
+            "Zoom (wide → narrow)", category = AttributeCategory.ZOOM,
+            degMin = 60.0, degMax = 10.0,
         )
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
@@ -247,7 +247,7 @@ sealed class ShehdsLed19RgbwFixture(
      * - Ch 9: Green.
      * - Ch 10: Blue.
      * - Ch 11: White.
-     * - Ch 12: Zoom.
+     * - Ch 12: Zoom (60° wide → 10° narrow).
      * - Ch 13: Built-in program.
      * - Ch 14: Program speed.
      * - Ch 15: Control mode (10–99 activates programs, 100–179 self-propelled,
@@ -324,8 +324,8 @@ sealed class ShehdsLed19RgbwFixture(
         override val white: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
         @FixtureAttribute(
-            "Zoom (narrow → wide)", category = AttributeCategory.ZOOM,
-            degMin = 15.0, degMax = 60.0,
+            "Zoom (wide → narrow)", category = AttributeCategory.ZOOM,
+            degMin = 60.0, degMax = 10.0,
         )
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 11)
 
