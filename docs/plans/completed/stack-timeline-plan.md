@@ -365,7 +365,7 @@ and 5 need 3, and 5 needs 1 and 2 for FX runs.
 - **Docs:** `cue-stacks-engineering.md` §"REST API" and a new §"Timeline", CLAUDE.md's endpoint
   list.
 
-### Session 5: editing FX and runs (backend + frontend)
+### Session 5: editing FX and runs (backend + frontend) — done, `91316b0d`
 
 - §3.6's `fxOn`, `fxOff`, `breakRun`, `joinRun`, and P3's refusal.
 - §4.4 for FX cells: toggles, drag and fill joining runs, the run popover, *Break run* and *Join
