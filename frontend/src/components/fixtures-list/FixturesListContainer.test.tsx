@@ -74,13 +74,17 @@ const FIXTURES = [
   // Infrastructure: the raw list carries it and the visible one does not, so the list must read
   // the visible one to leave it out.
   makeFixture('hazer-power', [sliderProp('dimmer', 'dimmer', chan(40))], { name: 'Hazer power', infrastructure: true }),
+  // Two Intensity columns, Dimmer and Strobe: what Set on rows must not put under one editor.
+  makeFixture('d', [sliderProp('dimmer', 'dimmer', chan(50)), sliderProp('strobe', 'strobe', chan(51))], { name: 'Strobe wash', groups: ['Front'] }),
 ]
 vi.mock('../../store/fixtures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../store/fixtures')>()),
   useFixtureListQuery: () => ({ data: FIXTURES, isLoading: false }),
   useVisibleFixtureListQuery: () => ({ data: FIXTURES.filter((f) => !f.infrastructure), isLoading: false }),
 }))
-vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: [], isLoading: false }) }))
+/** The groups a test patches in; none by default. */
+const groupList = vi.hoisted(() => ({ value: [] as unknown[] }))
+vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: groupList.value, isLoading: false }) }))
 // Release stops a selection effect it released whole through the REST delete; nothing here runs one.
 vi.mock('@/store/fixtureFx', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/fixtureFx')>()),
@@ -153,7 +157,14 @@ vi.mock('./RigVerbs', () => ({
   LocateControl: () => <span data-testid="locate" />,
   HighlightButton: () => <span data-testid="highlight" />,
 }))
-vi.mock('./useListSelectionWrites', () => ({ useListSelectionWrites: () => ({ subselect: vi.fn(), pickColour: vi.fn() }) }))
+/** The landing the container hands the heads chip's writes, which a test calls as they would. */
+const listWrites = vi.hoisted(() => ({ land: null as ((targets: { type: 'fixture' | 'group'; key: string }[]) => void) | null }))
+vi.mock('./useListSelectionWrites', () => ({
+  useListSelectionWrites: (args: { land: (targets: { type: 'fixture' | 'group'; key: string }[]) => void }) => {
+    listWrites.land = args.land
+    return { subselect: vi.fn(), pickColour: vi.fn() }
+  },
+}))
 vi.mock('../groups/FixtureDetailModal', () => ({ FixtureDetailModal: () => null }))
 vi.mock('../fixtures/GroupDetailModal', () => ({ GroupDetailModal: () => null }))
 const router = vi.hoisted(() => ({ search: '', setSearchParams: vi.fn(), searchParamReads: 0 }))
@@ -234,6 +245,7 @@ const programmerToolbar = (parts: { actions: ReactNode; selection: ReactNode }) 
 )
 
 beforeEach(() => {
+  groupList.value = []
   router.search = ''
   router.setSearchParams.mockClear()
   router.searchParamReads = 0
@@ -800,6 +812,51 @@ describe('row C on the programmer (programmer-toolbar plan D3, D6, D7)', () => {
     const set = screen.getByRole('button', { name: 'Set an attribute on the 1 head' })
     expect(set).toBeDisabled()
     expect(set.getAttribute('title')).toMatch(/Output is a read/)
+  })
+})
+
+describe('row C’s writes, as session 1’s review found them', () => {
+  const FRONT = { name: 'Front', memberCount: 8, memberKeys: ['d'], capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' }
+
+  it('sets Intensity on whole rows in Dimmer alone, never Strobe beside it', () => {
+    rowSelection.ids = new Set(['fixture:d'])
+    render(
+      <>
+        <div data-row-id="fixture:d" />
+        <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />
+      </>,
+    )
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Set an attribute on the 1 head' }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: 'mouse',
+    })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Intensity' }))
+    expect(table.cellSelection!.cells).toEqual([{ rowId: 'fixture:d', col: 'dimmer' }])
+  })
+
+  it('counts a group row’s every member on Release, shown or not, since that is what it releases', () => {
+    groupList.value = [FRONT]
+    rowSelection.ids = new Set(['group:Front'])
+    render(<FixturesListContainer projectId={1} grouped selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />)
+    expect(screen.getByRole('button', { name: 'Release the 8 heads' })).toBeInTheDocument()
+  })
+
+  it('opens the collapsed group a landed fixture is listed under, then selects its row', () => {
+    groupList.value = [FRONT]
+    render(<FixturesListContainer projectId={1} grouped selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />)
+    expect(table.rows.some((row) => row.kind === 'fixture' && row.fixture.key === 'd')).toBe(false)
+    act(() => listWrites.land!([{ type: 'fixture', key: 'd' }]))
+    expect(table.rows.some((row) => row.kind === 'fixture' && row.fixture.key === 'd')).toBe(true)
+    expect(rowSelection.setSelection).toHaveBeenLastCalledWith([expect.stringContaining('d')])
+  })
+
+  it('leaves the selection be when none of the landed targets has a row', () => {
+    rowSelection.ids = new Set(['fixture:a'])
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />)
+    rowSelection.setSelection.mockClear()
+    act(() => listWrites.land!([{ type: 'fixture', key: 'nowhere' }]))
+    expect(rowSelection.setSelection).not.toHaveBeenCalled()
   })
 })
 

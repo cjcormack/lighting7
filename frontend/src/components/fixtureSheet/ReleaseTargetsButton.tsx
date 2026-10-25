@@ -14,7 +14,7 @@ const KBD_CLASS = 'rounded border bg-muted/50 px-1 py-px font-mono text-[9.5px] 
 export interface ReleaseCellsArm {
   /** The marquee's cells; 0 with rows alone. */
   count: number
-  /** The heads the whole-heads arm releases, as the heads chip counts them (a group row is its members). */
+  /** The heads the whole-heads arm releases: a group row is every member, shown or not. */
   heads: number
   /** Take them out of Local — the grid's ⌫. */
   onRelease: () => void

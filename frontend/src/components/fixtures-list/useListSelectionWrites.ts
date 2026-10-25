@@ -24,9 +24,9 @@ import { rowIdsForTargets, selectedRowTargets, type Row, type RowId } from './ro
  * busk view's copy in `sessionStorage`, so the busk hook's local arm does not fit. The rows are read
  * as targets with [selectedRowTargets] — the bridge's own publish — rewritten by
  * `lib/cellsSubSelection.ts`'s mirror of the desk's rule over the rig document, and read back with
- * [rowIdsForTargets], the bridge's apply. So an unlinked subset lands on the list exactly as the
- * same subset would arrive from the desk, with the same limit: a target with no visible row (a cell
- * of a collapsed fixture, a head the filter hides) has nowhere to land. Until the rig has answered
+ * [land], which opens the fixtures and groups the answer's heads are folded under before selecting
+ * their rows: *Odd* over multi-head fixtures answers with their cells, and a cell of a collapsed
+ * fixture has no row, so applying it as the bridge does would empty the selection. Until the rig has answered
  * the local arm does nothing, as the busk hook's does, rather than walk the fallback for a rig that
  * may be built.
  *
@@ -43,7 +43,7 @@ export function useListSelectionWrites({
   rows,
   selectedRowIds,
   cells,
-  setRows,
+  land,
   addRowsToMarquee,
 }: {
   /** The programmer scope; off on the plain lists, which never bridge and have no heads chip. */
@@ -54,7 +54,8 @@ export function useListSelectionWrites({
   selectedRowIds: ReadonlySet<RowId>
   /** The marquee's cells — the unlinked selection's mask. */
   cells: readonly CellRef<ColumnKey>[]
-  setRows: (ids: readonly RowId[]) => void
+  /** Select these targets as rows, opening whatever they are folded under first. */
+  land: (targets: readonly CueTarget[]) => void
   /** Widen the marquee to these rows, in its own columns. */
   addRowsToMarquee: (ids: readonly RowId[]) => void
 }) {
@@ -79,9 +80,9 @@ export function useListSelectionWrites({
         fixtures: fixtures ?? [],
       })
       if (next === current) return
-      setRows(rowIdsForTargets(rows, next))
+      land(next)
     },
-    [following, rigLoaded, rig, groups, fixtures, rows, selectedRowIds, setRows],
+    [following, rigLoaded, rig, groups, fixtures, rows, selectedRowIds, land],
   )
 
   const pickColour = useCallback(
@@ -93,11 +94,11 @@ export function useListSelectionWrites({
       }
       const current = { targets: selectedRowTargets(rows, selectedRowIds), families: cells.length > 0 ? cellFamilies(cells) : null }
       const next = selectionForColour(keys, current, add)
-      const ids = rowIdsForTargets(rows, next.targets)
-      if (add && cells.length > 0) addRowsToMarquee(ids.filter((id) => !selectedRowIds.has(id)))
-      else setRows(ids)
+      if (add && cells.length > 0) {
+        addRowsToMarquee(rowIdsForTargets(rows, next.targets).filter((id) => !selectedRowIds.has(id)))
+      } else land(next.targets)
     },
-    [following, desk.targets, desk.families, rows, selectedRowIds, cells, setRows, addRowsToMarquee],
+    [following, desk.targets, desk.families, rows, selectedRowIds, cells, land, addRowsToMarquee],
   )
 
   return { subselect, pickColour }
