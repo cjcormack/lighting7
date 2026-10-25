@@ -435,6 +435,13 @@ browser sets no user (D11) — and a screenshot button. The screenshot is the SD
 to share the tab (`getDisplayMedia`), and an iPad has none. Opening the form flushes the replay
 buffer and the feedback names that replay, so a report carries the minute before it.
 
+The form is in a shadow root on `<body>` (`#sentry-feedback`), so a key typed in it reaches the
+desk's window and document listeners retargeted to that host, which no shortcut's field or dialog
+guard recognises. `lib/sentryFeedbackKeys.ts` stops its keydown and keypress at a window capture
+listener that `startSentry` installs before the first render, ahead of every shortcut; a window
+key listener that must hear the form's keys (`pointerFocus.ts`'s tracker) is installed before it.
+Keyups go through, so a modifier released in the form reads as released.
+
 The screenshot is a PNG at the device's pixel ratio and travels in the feedback's envelope, so one
 over the tunnel's cap would lose the feedback with it. `lib/sentryScreenshot.ts` fits it in
 `Lighting7Scrub`: over 700 kB it is redrawn as a JPEG no wider than 1920 px, at quality 0.85, 0.7 or
