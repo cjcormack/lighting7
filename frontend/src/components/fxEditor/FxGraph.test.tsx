@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SpeedMasterBeat } from '@/api/speedMastersWsApi'
 import type { FxPreviewAnswer } from '@/store/fxPreview'
@@ -29,11 +29,14 @@ vi.mock('@/store/speedMasters', () => ({
 }))
 
 const { FxGraph } = await import('./FxGraph')
+const { draftOf } = await import('@/components/fx/fxEditorModel')
+const { makeActiveFx } = await import('@/test/fixtureFactories')
 const { resetFxEditorViewStores, setFxGraphOption, useFxGraphOptions } = await import('@/lib/fxEditorView')
 
 let now = 0
 let frames: FrameRequestCallback[] = []
 let reduced = false
+let coarse = false
 let canvases: Map<string, PixelCanvas>
 
 const contextOf = (canvas: HTMLCanvasElement) => {
@@ -52,12 +55,13 @@ beforeEach(() => {
   now = 0
   frames = []
   reduced = false
+  coarse = false
   vi.spyOn(performance, 'now').mockImplementation(() => now)
   vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => frames.push(fn))
   vi.stubGlobal('cancelAnimationFrame', () => {})
   vi.stubGlobal('devicePixelRatio', 1)
   window.matchMedia = ((query: string) => ({
-    matches: reduced && query.includes('reduced-motion'),
+    matches: (reduced && query.includes('reduced-motion')) || (coarse && query.includes('coarse')),
     addEventListener: () => {},
     removeEventListener: () => {},
   })) as unknown as typeof window.matchMedia
@@ -342,5 +346,148 @@ describe('the playhead', () => {
     now = 1150
     runFrames()
     expect(playheadX()).toBe('translateX(40px)')
+  })
+})
+
+describe('the handles (FX editor plan D12, §4.4)', () => {
+  // Two cycles of 48 samples over the 80px plot: the first cycle ends at x 112, a sample is ⅚ px.
+  const SAMPLES = 96
+  const flat = (v: number) => levelSeries(Array.from({ length: SAMPLES }, () => v))
+  const handleAnswer = (over: Partial<FxPreviewAnswer> = {}) =>
+    answerOf({
+      window: { beats: 8, seconds: 4, samples: SAMPLES, sampleMs: 41.7 },
+      lanes: [
+        {
+          family: 'INTENSITY',
+          attributes: [{ attribute: 'dimmer', kind: 'SLIDER', rows: [0, 1].map((r) => attributeRow(r, flat(0), { fx: [{ fx: 0, output: flat(255) }] })) }],
+        },
+      ],
+      fx: [previewFx(2, { starts: [[0, 48], [24, 72]] })],
+      ...over,
+    })
+  const editorOf = (over: Partial<Parameters<typeof draftOf>[0]> = {}) => ({
+    fxId: 7,
+    draft: draftOf(makeActiveFx({ id: 7, fxType: 'Pulse', cycle: 4, order: 'NORMAL', parameters: { min: '0', max: '255' }, ...over })),
+    levels: true,
+    wallClock: false,
+    readOnly: false,
+    set: vi.fn(),
+    setParam: vi.fn(),
+  })
+  const handle = (name: string) => document.querySelector<HTMLElement>(`[data-fx-handle="${name}"]`)
+  const drag = (el: Element, from: { x: number; y: number }, to: { x: number; y: number }) => {
+    fireEvent.pointerDown(el, { button: 0, clientX: from.x, clientY: from.y })
+    fireEvent.pointerMove(window, { clientX: to.x, clientY: to.y })
+    fireEvent.pointerUp(window, { clientX: to.x, clientY: to.y })
+  }
+
+  it('drags the first cycle’s edge for Cycle, snapping to a step, the release landing', () => {
+    const editor = editorOf()
+    draw(handleAnswer(), { editor })
+    const edge = handle('cycle')!
+    expect(edge.style.left).toBe('108px')
+    fireEvent.pointerDown(edge, { button: 0, clientX: 112, clientY: 10 })
+    // 40px further is twice the cycle; 44px is still twice it, on the step.
+    fireEvent.pointerMove(window, { clientX: 152, clientY: 10 })
+    fireEvent.pointerMove(window, { clientX: 156, clientY: 10 })
+    expect(editor.set.mock.calls).toEqual([[{ cycle: 8 }, false]])
+    expect(document.querySelector('[data-fx-handle-label]')).toHaveTextContent('2 bars')
+    fireEvent.pointerUp(window, { clientX: 156, clientY: 10 })
+    expect(editor.set).toHaveBeenLastCalledWith({ cycle: 8 }, true)
+    expect(document.querySelector('[data-fx-handle-label]')).toBeNull()
+  })
+
+  it('lands nothing for a drag that never leaves its step', () => {
+    const editor = editorOf()
+    draw(handleAnswer(), { editor })
+    drag(handle('cycle')!, { x: 112, y: 10 }, { x: 114, y: 10 })
+    expect(editor.set).not.toHaveBeenCalled()
+  })
+
+  it('takes a press that moves less than the slop, or another pointer’s moves, for no drag', () => {
+    const editor = editorOf()
+    draw(handleAnswer(), { editor })
+    const canvas = screen.getByLabelText('Intensity graph')
+    fireEvent.pointerDown(canvas, { button: 0, clientX: 100, clientY: 15, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientX: 102, clientY: 15, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientX: 140, clientY: 15, pointerId: 2 })
+    fireEvent.pointerUp(window, { clientX: 140, clientY: 15, pointerId: 2 })
+    fireEvent.pointerUp(window, { clientX: 102, clientY: 15, pointerId: 1 })
+    expect(editor.set).not.toHaveBeenCalled()
+  })
+
+  it('drags the first cycle’s edge of a Seconds FX in seconds, not onto the beat steps', () => {
+    const editor = editorOf({ seconds: true, cycle: 30, timingSource: 'WALL_CLOCK' })
+    draw(handleAnswer(), { editor })
+    drag(handle('cycle')!, { x: 112, y: 10 }, { x: 116, y: 10 })
+    expect(editor.set).toHaveBeenLastCalledWith({ cycle: 33 }, true)
+  })
+
+  it('drags the chase line for Spread, the grabbed row’s start following the finger', () => {
+    const editor = editorOf()
+    draw(handleAnswer(), { editor })
+    // Hex 2 is rank 1 of 2: half a cycle of offset for each unit of Spread. 20px is 24 samples, a
+    // half-cycle, so Spread rises by one.
+    drag(handle('spread')!, { x: 92, y: 30 }, { x: 112, y: 30 })
+    expect(editor.set).toHaveBeenLastCalledWith({ spread: 2 }, true)
+  })
+
+  it('drags a row block sideways for Phase', () => {
+    const editor = editorOf()
+    draw(handleAnswer(), { editor })
+    drag(screen.getByLabelText('Intensity graph'), { x: 100, y: 15 }, { x: 120, y: 15 })
+    // 24 samples right is half a cycle less Phase, wrapped.
+    expect(editor.set).toHaveBeenLastCalledWith({ phaseOffset: 0.5 }, true)
+  })
+
+  it('drags an Intensity FX’s max and min lines, each row on its own scale', () => {
+    const editor = editorOf()
+    draw(handleAnswer(), { editor })
+    const max = document.querySelector('[data-fx-handle="max"][data-row="hex-1"]')!
+    // Hex 1's full is y 2 and its baseline y 27: 12.5px down is half way.
+    drag(max, { x: 100, y: 2 }, { x: 100, y: 14.5 })
+    expect(editor.setParam).toHaveBeenLastCalledWith('max', '128', true)
+    const min = document.querySelector('[data-fx-handle="min"][data-row="hex-2"]')!
+    drag(min, { x: 100, y: 55 }, { x: 100, y: 42.5 })
+    expect(editor.setParam).toHaveBeenLastCalledWith('min', '128', true)
+  })
+
+  it('draws no max and min lines on an FX without them', () => {
+    draw(handleAnswer(), { editor: { ...editorOf(), levels: false } })
+    expect(handle('max')).toBeNull()
+    expect(handle('cycle')).not.toBeNull()
+  })
+
+  it('draws no handle under a coarse pointer, read-only, or for an FX the inspector is not editing', () => {
+    coarse = true
+    const editor = editorOf()
+    const { unmount } = draw(handleAnswer(), { editor })
+    expect(document.querySelector('[data-fx-handle]')).toBeNull()
+    fireEvent.pointerDown(screen.getByLabelText('Intensity graph'), { button: 0, clientX: 100, clientY: 15 })
+    fireEvent.pointerMove(window, { clientX: 120, clientY: 15 })
+    expect(editor.set).not.toHaveBeenCalled()
+    unmount()
+    coarse = false
+    draw(handleAnswer(), { editor: { ...editor, readOnly: true } })
+    expect(document.querySelector('[data-fx-handle]')).toBeNull()
+    cleanup()
+    draw(handleAnswer(), { editor: { ...editor, fxId: 99 } })
+    expect(document.querySelector('[data-fx-handle]')).toBeNull()
+  })
+
+  it('tells the ladder the row the pointer rests on, and marks the row a dot links to', () => {
+    const onHoverRow = vi.fn()
+    draw(handleAnswer(), { onHoverRow, linkedRow: 'hex-2' })
+    fireEvent.pointerMove(screen.getByLabelText('Intensity graph'), { clientX: 100, clientY: 40 })
+    expect(onHoverRow).toHaveBeenLastCalledWith('hex-2')
+    fireEvent.pointerLeave(screen.getByLabelText('Intensity graph'))
+    expect(onHoverRow).toHaveBeenLastCalledWith(null)
+    expect(canvases.get('Intensity graph')!.pixel(1, 33)).toBe('#c026d3')
+    expect(canvases.get('Intensity graph')!.pixel(1, 5)).toBeNull()
+  })
+
+  it('lights the mark the inspector’s hovered control changes', () => {
+    draw(handleAnswer(), { highlight: 'starts' })
+    expect(canvases.get('Intensity graph')!.pixel(72, 1)).toBe('#c026d3')
   })
 })

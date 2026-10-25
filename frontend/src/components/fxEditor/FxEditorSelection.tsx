@@ -16,6 +16,14 @@ import { OwnerEditor } from '@/components/stage/OwnerEditor'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { FxPicker, type AuditionedFx } from '@/components/fx/FxPicker'
 import { SplitFxEditor, type SplitSession } from '@/components/fx/SplitFxEditor'
+import {
+  FxGraphLinkContext,
+  createHoveredRowStore,
+  type FxGraphLink,
+  type GraphMark,
+  type LinkedEditor,
+} from '@/components/fx/fxGraphLink'
+import type { UpdateFxRequest } from '@/api/fxApi'
 import { fxTargetOf, useWindowFxPair } from '@/components/fx/selectionFxTarget'
 import { useStopFx, useToggleFxPause } from '@/components/fx/useFxControls'
 import { useCueLabel, useFxDetail } from '@/components/fixtureSheet/fxLabels'
@@ -44,7 +52,7 @@ import {
 import { LANE_ATTRIBUTE, fxLanes, fxTargetsOf, heldBackReasons, type FxLane } from './fxEditorList'
 import { FxLaneList } from './FxLaneList'
 import { FxGraph } from './FxGraph'
-import { windowRequest } from './fxGraphModel'
+import { pickedIndex, windowRequest } from './fxGraphModel'
 import { useFxPreview } from './useFxPreview'
 
 /**
@@ -99,6 +107,8 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
   const graphOptions = useFxGraphOptions()
   const soloListed = soloId != null && listed.includes(soloId) ? soloId : null
   const fxIds = anchor == null ? [] : soloListed != null && soloListed !== anchor ? [anchor, soloListed] : [anchor]
+  // The inspector's unsent move on the picked FX, so the graph follows a gesture (§3.3's `{fxId, draft}`).
+  const [unsent, setUnsent] = useState<{ fxId: number; request: UpdateFxRequest } | null>(null)
   const preview = useFxPreview(
     anchor == null
       ? null
@@ -106,6 +116,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
           projectId,
           targets,
           fxIds,
+          draft: unsent != null && unsent.fxId === anchor ? unsent.request : undefined,
           listed,
           window: windowRequest(graphOptions.window),
           solo: soloListed == null ? undefined : fxIds.indexOf(soloListed),
@@ -135,7 +146,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
   const lookFocused = scope?.kind === 'layer'
   const inspectorOpen = picked != null || (adding != null && !lookFocused)
 
-  const cards = lanes.flatMap((l) => l.cards)
+  const cards = useMemo(() => lanes.flatMap((l) => l.cards), [lanes])
   const recordFamilies = lanes.filter((l) => l.cards.length > 0).map((l) => l.family)
   const recordable = cards.filter((c) => c.effect.programmerOwned && c.effect.programmerLayerId == null).map((c) => c.effect.id)
 
@@ -207,6 +218,46 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
   const fixtureName = useCallback((key: string) => fixtureNames.get(key), [fixtureNames])
   const unsolo = useCallback(() => setSoloFx(null), [])
   const soloEffect = soloListed == null ? null : running.find((e) => e.id === soloListed)
+
+  // What ties the inspector to the graph (D9, D12, D13): the lights, the ladder, Match and the handles.
+  const [highlight, setHighlight] = useState<GraphMark | null>(null)
+  const [ladderRow, setLadderRow] = useState<string | null>(null)
+  const [graphRow] = useState(createHoveredRowStore)
+  const [editor, setEditor] = useState<LinkedEditor | null>(null)
+  const detach = useCallback((fxId: number) => setEditor((prev) => (prev?.fxId === fxId ? null : prev)), [])
+  const answer = preview.answer
+  const ladder = useMemo(() => {
+    const index = answer == null ? null : pickedIndex(answer)
+    const fx = index == null || answer == null ? null : answer.fx[index]
+    return fx == null || picked == null || fx.fxId !== picked.id || answer == null ? null : { fx, rows: answer.rows }
+  }, [answer, picked])
+  const others = useMemo(
+    () =>
+      cards
+        .filter((c) => c.effect.id !== picked?.id)
+        .map((c) => {
+          const entry = findFxEntry(library, c.effect.fxType)
+          return { effect: c.effect, name: entry?.name ?? c.effect.fxType, wallClock: (entry?.timingSource ?? c.effect.timingSource) === 'WALL_CLOCK' }
+        }),
+    [cards, library, picked?.id],
+  )
+  const previewUnsent = useCallback((fxId: number, request: UpdateFxRequest | null) => {
+    setUnsent((prev) => (request == null ? (prev?.fxId === fxId ? null : prev) : { fxId, request }))
+  }, [])
+  const link = useMemo(
+    (): FxGraphLink => ({
+      ladder,
+      hoveredRow: graphRow,
+      setLadderRow,
+      setHighlight,
+      others,
+      attach: setEditor,
+      detach,
+      preview: previewUnsent,
+    }),
+    [detach, graphRow, ladder, others, previewUnsent],
+  )
+
   const graph = (
     <FxGraph
       answer={anchor == null ? null : preview.answer}
@@ -218,6 +269,10 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
       solo={soloEffect == null ? null : { name: fxName(soloEffect.fxType) }}
       onUnsolo={unsolo}
       bounce={running.find((e) => e.id === anchor)?.direction === 'BOUNCE'}
+      highlight={highlight}
+      linkedRow={ladderRow}
+      onHoverRow={graphRow.set}
+      editor={editor != null && editor.fxId === picked?.id ? editor : null}
     />
   )
 
@@ -230,44 +285,48 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
           <div className="flex-1" />
         </SheetPage.Row>
       </div>
-      <div ref={measure} data-fx-editor data-fx-editor-band={band} className="flex min-h-0 flex-1 flex-col">
-        <div
-          className={cn(
-            'grid min-h-0 flex-1',
-            form === 'column' && 'grid-cols-[248px_minmax(0,1fr)_340px]',
-            form === 'side' && 'grid-cols-[248px_minmax(0,1fr)]',
-            // Each row its content's height, so the tall graph never draws over the list and the column scrolls.
-            form === 'stacked' && 'grid-cols-1 auto-rows-max content-start overflow-y-auto',
-          )}
-        >
-          <div data-fx-list className={cn('flex min-h-0 flex-col gap-2 p-2', form !== 'stacked' && 'overflow-y-auto border-r')}>
-            <Subject target={fxTarget} units={units} families={pair.families} />
-            {list}
-          </div>
-          {form === 'side' ? (
-            <div className="flex min-h-0 min-w-0">
-              <div className="min-w-0 flex-1">{graph}</div>
-              {inspectorOpen && (
-                <aside data-fx-inspector="side" aria-label="Inspector" className="w-1/2 min-w-[300px] overflow-y-auto border-l bg-background p-3 shadow-lg">
-                  {inspector}
-                </aside>
-              )}
+      {/* The link reaches the list, the graph and the inspector only: the sheets opened from here
+          (a cue's editor, + FX's sheet) host editors of their own, with no graph. */}
+      <FxGraphLinkContext.Provider value={link}>
+        <div ref={measure} data-fx-editor data-fx-editor-band={band} className="flex min-h-0 flex-1 flex-col">
+          <div
+            className={cn(
+              'grid min-h-0 flex-1',
+              form === 'column' && 'grid-cols-[248px_minmax(0,1fr)_340px]',
+              form === 'side' && 'grid-cols-[248px_minmax(0,1fr)]',
+              // Each row its content's height, so the tall graph never draws over the list and the column scrolls.
+              form === 'stacked' && 'grid-cols-1 auto-rows-max content-start overflow-y-auto',
+            )}
+          >
+            <div data-fx-list className={cn('flex min-h-0 flex-col gap-2 p-2', form !== 'stacked' && 'overflow-y-auto border-r')}>
+              <Subject target={fxTarget} units={units} families={pair.families} />
+              {list}
             </div>
-          ) : (
-            graph
-          )}
-          {form === 'column' && (
-            <aside data-fx-inspector="column" aria-label="Inspector" className="overflow-y-auto border-l p-3">
-              {inspector}
-            </aside>
-          )}
-          {form === 'stacked' && (
-            <aside data-fx-inspector="stacked" aria-label="Inspector" className="border-t p-3">
-              {inspector}
-            </aside>
-          )}
+            {form === 'side' ? (
+              <div className="flex min-h-0 min-w-0">
+                <div className="min-w-0 flex-1">{graph}</div>
+                {inspectorOpen && (
+                  <aside data-fx-inspector="side" aria-label="Inspector" className="w-1/2 min-w-[300px] overflow-y-auto border-l bg-background p-3 shadow-lg">
+                    {inspector}
+                  </aside>
+                )}
+              </div>
+            ) : (
+              graph
+            )}
+            {form === 'column' && (
+              <aside data-fx-inspector="column" aria-label="Inspector" className="overflow-y-auto border-l p-3">
+                {inspector}
+              </aside>
+            )}
+            {form === 'stacked' && (
+              <aside data-fx-inspector="stacked" aria-label="Inspector" className="border-t p-3">
+                {inspector}
+              </aside>
+            )}
+          </div>
         </div>
-      </div>
+      </FxGraphLinkContext.Provider>
       <SheetPage.Footer>
         <span className="flex items-center gap-3">
           <Button variant="outline" size="sm" className="h-7" disabled={targets.length === 0} onClick={() => setRecording(true)}>

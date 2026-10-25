@@ -1,12 +1,15 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
+import { cn } from '@/lib/utils'
 import type { FxDirection } from '@/api/fxApi'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -22,6 +25,9 @@ import { fromPct, toPct } from '../editor/cellPercent'
 import { FxColourPicker } from './FxColourPicker'
 import { FxColourListPicker } from './FxColourListPicker'
 import { FxPaletteListPicker, FxSlotListPicker } from './FxStepListPickers'
+import { OffsetLadder } from './OffsetLadder'
+import { FX_SHAPES, matchesShape, shapeOf, spreadFieldsOf, type FxShape } from './fxShapes'
+import { useFxGraphLink, type GraphMark, type MatchSource } from './fxGraphLink'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { detectExtendedChannels } from './colourUtils'
 import {
@@ -46,6 +52,7 @@ import {
   centreModeOf,
   clampByte,
   defaultParameters,
+  draftOf,
   hasCentre,
   isLevelFx,
   isRatioParam,
@@ -189,7 +196,11 @@ export function FxFields({
 
   // Where the raw blend is drawn, for a question whose answer is neither of its two.
   const blendHome = layout === 'inspector' ? 'Blend' : 'Advanced'
-  const speed = <SpeedSection timingSource={timingSource} entry={entry} draft={draft} readOnly={readOnly} set={set} />
+  const speed = (
+    <Lights mark="cycle">
+      <SpeedSection timingSource={timingSource} entry={entry} draft={draft} readOnly={readOnly} set={set} />
+    </Lights>
+  )
   const amount = <AmountSection draft={draft} ordered={scope.heads} readOnly={readOnly} set={set} />
   const centreQuestion = centred && (
     <Question
@@ -229,24 +240,32 @@ export function FxFields({
       }
     />
   )
-  const spread = scope.heads && <SpreadSection draft={draft} headCount={scope.headCount} readOnly={readOnly} set={set} />
+  const spread = scope.heads && (
+    <SpreadSection draft={draft} headCount={scope.headCount} readOnly={readOnly} set={set} ladder={layout === 'inspector'} />
+  )
   const shapeSummaries = shape.map(({ param }) => shapeSummary(param, draft.parameters[param.name] ?? param.defaultValue))
   const phase = (
-    <SliderRow
-      label="Phase"
-      unit="°"
-      value={draft.phaseOffset - phaseCycles}
-      min={0}
-      max={1}
-      step={0.01}
-      display={(v) => Math.round(v * 360)}
-      fromDisplay={(d) => Math.max(0, Math.min(1, d / 360))}
-      displayMax={360}
-      readOnly={readOnly}
-      onChange={(v, release) => set({ phaseOffset: phaseCycles + v }, release)}
-    />
+    <Lights mark="starts">
+      <SliderRow
+        label="Phase"
+        unit="°"
+        value={draft.phaseOffset - phaseCycles}
+        min={0}
+        max={1}
+        step={0.01}
+        display={(v) => Math.round(v * 360)}
+        fromDisplay={(d) => Math.max(0, Math.min(1, d / 360))}
+        displayMax={360}
+        readOnly={readOnly}
+        onChange={(v, release) => set({ phaseOffset: phaseCycles + v }, release)}
+      />
+    </Lights>
   )
-  const runs = <RunsRow draft={draft} readOnly={readOnly} set={set} />
+  const runs = (
+    <Lights mark="holding">
+      <RunsRow draft={draft} readOnly={readOnly} set={set} />
+    </Lights>
+  )
   const blend = (
     <SelectRow
       label="Blend"
@@ -399,20 +418,22 @@ function AmountSection({
   if (!ORDER_OPTIONS.includes(order)) options.push({ value: order, label: orderLabel(order) })
   return (
     <div className="flex flex-col gap-2.5">
-      <SliderRow
-        label="Amount"
-        unit="%"
-        value={draft.amount}
-        min={0}
-        max={1}
-        step={0.01}
-        display={(v) => Math.round(v * 100)}
-        fromDisplay={(d) => d / 100}
-        displayMin={0}
-        displayMax={100}
-        readOnly={readOnly}
-        onChange={(amount, release) => set({ amount }, release)}
-      />
+      <Lights mark="amount">
+        <SliderRow
+          label="Amount"
+          unit="%"
+          value={draft.amount}
+          min={0}
+          max={1}
+          step={0.01}
+          display={(v) => Math.round(v * 100)}
+          fromDisplay={(d) => d / 100}
+          displayMin={0}
+          displayMax={100}
+          readOnly={readOnly}
+          onChange={(amount, release) => set({ amount }, release)}
+        />
+      </Lights>
       <div className="flex items-end gap-2">
         <div className="flex shrink-0 flex-col gap-1">
           <EditorLabel>Direction</EditorLabel>
@@ -432,7 +453,7 @@ function AmountSection({
           </ToggleGroup>
         </div>
         {ordered && (
-          <div className="min-w-0 flex-1">
+          <Lights mark="starts" className="min-w-0 flex-1">
             <SelectRow
               label="Order"
               value={order}
@@ -440,7 +461,7 @@ function AmountSection({
               options={options}
               onChange={(next) => set(orderPatch(draft, next))}
             />
-          </div>
+          </Lights>
         )}
       </div>
     </div>
@@ -456,50 +477,72 @@ const MAX_DIALS = 16
 const NOTIONAL_HEADS = 8
 
 /**
- * The Spread section (effects plan D11, §4.1), on a group, a selection or a fixture with heads, and
- * always on an FX palette: *Spread* %, *Wings*, *Segments* and *Parts*, and a row of phase dials
- * previewing them under the Order chosen above. Its summary line says the non-defaults:
- * *50 % · 2 wings*.
+ * The Spread section (effects plan D11, §4.1; FX editor plan D11, §4.5), on a group, a selection or
+ * a fixture with heads, and always on an FX palette: the **Shapes**, *Spread* %, *Wings*, *Segments*
+ * and *Parts*, and what they do to the heads under the Order chosen above. Its summary line says the
+ * Shape and the non-defaults: *Custom · 50 % · 2 wings*.
  *
- * The desk shapes the heads (P2): this writes the four fields and draws the dials from
- * `lib/spreadShape.ts`, the one client copy of the rule, pinned to the desk's by a shared vector.
- * Wings are hidden under a mirrored Order (Centre out, Centre in — two wings already).
+ * The desk shapes the heads (P2): this writes the four fields and the Order. What it draws of them
+ * is the **offset ladder** in the FX editor's inspector ([ladder]), read from the desk's preview, and
+ * elsewhere the phase dials, drawn by `lib/spreadShape.ts`, the one client copy of the rule, pinned to
+ * the desk's by a shared vector. Wings are hidden under a mirrored Order (Centre out, Centre in — two
+ * wings already).
  */
 function SpreadSection({
   draft,
   headCount,
   readOnly,
   set,
+  ladder,
 }: {
   draft: FxDraft
   headCount: number | undefined
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
+  /** The FX editor's inspector: the offset ladder in place of the dials. */
+  ladder: boolean
 }) {
+  const link = useFxGraphLink()
   const order = draft.order
   const shape: SpreadShape = { spread: draft.spread, wings: draft.wings, segments: draft.segments, parts: draft.parts }
   const mirrored = isMirroredOrder(order)
   const unison = order === 'UNIFIED'
+  const named = shapeOf(draft)
   return (
-    <Disclosure label="Spread" summary={spreadSummary(order, shape)}>
+    <Disclosure label="Spread" summary={[named?.name ?? 'Custom', ...spreadSummary(order, shape)]}>
+      <Lights mark="starts">
+        <ShapeChips draft={draft} readOnly={readOnly} onPick={(picked) => set({ ...picked.fields })} />
+      </Lights>
+      {link != null && (
+        <SameAs
+          label="Same spread as"
+          others={link.others}
+          readOnly={readOnly}
+          // An FX on one head says no Order, so its spread is the defaults and copying it would say Chase.
+          refuse={({ effect }) => (effect.order == null ? 'That FX runs on one head, so it has no spread to copy' : null)}
+          onPick={(effect) => set(spreadFieldsOf(draftOf(effect)))}
+        />
+      )}
       {unison ? (
         <EditorReadout>Every head runs in step, so there is no spread to shape.</EditorReadout>
       ) : (
         <>
-          <SliderRow
-            label="Spread"
-            unit="%"
-            value={draft.spread}
-            min={0}
-            max={MAX_SPREAD}
-            step={0.01}
-            display={(v) => Math.round(v * 100)}
-            fromDisplay={(d) => d / 100}
-            displayMin={0}
-            displayMax={MAX_SPREAD * 100}
-            readOnly={readOnly}
-            onChange={(spread, release) => set({ spread }, release)}
-          />
+          <Lights mark="starts">
+            <SliderRow
+              label="Spread"
+              unit="%"
+              value={draft.spread}
+              min={0}
+              max={MAX_SPREAD}
+              step={0.01}
+              display={(v) => Math.round(v * 100)}
+              fromDisplay={(d) => d / 100}
+              displayMin={0}
+              displayMax={MAX_SPREAD * 100}
+              readOnly={readOnly}
+              onChange={(spread, release) => set({ spread }, release)}
+            />
+          </Lights>
           <div className="grid grid-cols-3 gap-2">
             {mirrored ? (
               <div className="flex flex-col gap-1">
@@ -509,18 +552,88 @@ function SpreadSection({
                 </span>
               </div>
             ) : (
-              <CountRow label="Wings" value={draft.wings} min={1} readOnly={readOnly} onChange={(wings) => set({ wings })} />
+              <Lights mark="mirror">
+                <CountRow label="Wings" value={draft.wings} min={1} readOnly={readOnly} onChange={(wings) => set({ wings })} />
+              </Lights>
             )}
-            <CountRow label="Segments" value={draft.segments} min={1} readOnly={readOnly} onChange={(segments) => set({ segments })} />
-            <CountRow label="Parts" value={draft.parts} min={0} readOnly={readOnly} onChange={(parts) => set({ parts })} />
+            <Lights mark="brackets">
+              <CountRow label="Segments" value={draft.segments} min={1} readOnly={readOnly} onChange={(segments) => set({ segments })} />
+            </Lights>
+            <Lights mark="brackets">
+              <CountRow label="Parts" value={draft.parts} min={0} readOnly={readOnly} onChange={(parts) => set({ parts })} />
+            </Lights>
           </div>
           <EditorReadout>
             {mirrored ? '' : 'Wings mirror alternate runs · '}Segments move neighbours as one · Parts repeat the spread (0 is off)
           </EditorReadout>
         </>
       )}
-      <SpreadDials order={order} shape={shape} headCount={headCount} />
+      {ladder && link != null ? (
+        <OffsetLadder ladder={link.ladder} spread={draft.spread} hoveredRow={link.hoveredRow} onHoverRow={link.setLadderRow} />
+      ) : (
+        <SpreadDials order={order} shape={shape} headCount={headCount} />
+      )}
     </Disclosure>
+  )
+}
+
+/** The heads a Shape's drawing spreads — notional, since the Shape is not running yet. */
+const SHAPE_HEADS = 8
+
+/**
+ * The nine Shapes (FX editor plan D11) as chips, each with a 40 × 16 drawing of its offsets over
+ * eight notional heads, lit while every field matches it — else a lit *Custom* after them. A tap
+ * writes all five fields at once.
+ *
+ * The drawings are `lib/spreadShape.ts`'s, the client's one copy of the desk's rule, used where the
+ * desk has not answered (P2): a Shape is drawn before it is picked, so no preview of it exists.
+ */
+function ShapeChips({ draft, readOnly, onPick }: { draft: FxDraft; readOnly: boolean; onPick: (shape: FxShape) => void }) {
+  const custom = shapeOf(draft) == null
+  return (
+    <div role="group" aria-label="Shapes" className="grid grid-cols-3 gap-1">
+      {FX_SHAPES.map((shape) => {
+        const lit = matchesShape(draft, shape)
+        return (
+          <button
+            key={shape.name}
+            type="button"
+            aria-pressed={lit}
+            disabled={readOnly}
+            title={`${shape.name}: sets Order, Spread, Wings, Segments and Parts`}
+            onClick={() => onPick(shape)}
+            className={cn(
+              'flex min-w-0 items-center gap-1 rounded-md border px-1 py-0.5 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50',
+              lit && 'border-primary/60 bg-primary/10 font-medium text-foreground',
+            )}
+          >
+            <ShapeDrawing shape={shape} />
+            <span className="truncate">{shape.name}</span>
+          </button>
+        )
+      })}
+      {custom && (
+        <span
+          data-shape-custom
+          title="The fields match no Shape"
+          className="flex items-center justify-center rounded-md border border-primary/60 bg-primary/10 px-1 py-0.5 text-[10.5px] font-medium"
+        >
+          Custom
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** A Shape's offsets over eight notional heads: a dot a head, left to right, higher the later in the cycle. */
+function ShapeDrawing({ shape }: { shape: FxShape }) {
+  const { offsets } = spreadOffsets(shape.fields.order, SHAPE_HEADS, shape.fields)
+  return (
+    <svg viewBox="0 0 40 16" width={40} height={16} aria-hidden data-shape-drawing className="shrink-0 text-primary">
+      {offsets.map((o, i) => (
+        <rect key={i} x={2 + i * 4.75} y={12.5 - (((o % 1) + 1) % 1) * 11} width={2.5} height={2.5} rx={0.5} fill="currentColor" />
+      ))}
+    </svg>
   )
 }
 
@@ -706,12 +819,28 @@ function SpeedSection({
     />
   )
   const pressed = SPEED_STEPS.find((o) => Math.abs(o.value - draft.cycle) < 0.001)
+  const link = useFxGraphLink()
+  const master1 = listable.find((m) => m.index === 1)?.uuid ?? null
 
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
         <EditorLabel>Cycle</EditorLabel>
         <span className="flex-1" />
+        {link != null && (
+          <SameAs
+            label="Same cycle as"
+            others={link.others}
+            readOnly={readOnly}
+            // A cycle in seconds copies onto either clock; one on a master only onto the same clock.
+            refuse={(source) =>
+              !draftOf(source.effect).seconds && source.wallClock !== wallClock
+                ? `${wallClock ? 'This FX runs on the wall clock' : 'This FX runs on the beat'}, and that one does not`
+                : null
+            }
+            onPick={(effect) => set(cyclePatchFrom(draftOf(effect), wallClock, master1), true)}
+          />
+        )}
         {chip}
       </div>
       {seconds || wallClock ? (
@@ -774,6 +903,18 @@ function SpeedSection({
 }
 
 /**
+ * *Same cycle as…* (FX editor plan D13): [from]'s cycle and what it follows — Seconds, or its master
+ * — written once. Each patch names the timing and the master fields, as the timing chip's does, so
+ * Revert can put them back; master 1 is named by its uuid, since the frame's absent field keeps.
+ */
+function cyclePatchFrom(from: FxDraft, wallClock: boolean, master1: string | null): Partial<FxDraft> {
+  if (from.seconds) return { cycle: from.cycle, seconds: true, speedMasterUuid: null, rateSpeedMasterUuid: null }
+  return wallClock
+    ? { cycle: from.cycle, seconds: false, rateSpeedMasterUuid: from.rateSpeedMasterUuid }
+    : { cycle: from.cycle, seconds: false, speedMasterUuid: from.speedMasterUuid ?? master1 }
+}
+
+/**
  * The timing as a chip — `M2 · 96`, `Rate M2 · 96` on a wall-clock effect, or `Seconds` (D7). Its
  * menu is *Seconds* and then every master: one question for every effect, where a wall-clock
  * effect's master is its rate master.
@@ -832,6 +973,88 @@ function TimingChip({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+// ─── The graph's links ────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lights [mark] on the FX editor's graph while the pointer rests on what it wraps (FX editor plan
+ * §4.5) — what that control changes. Outside the FX editor there is no graph, and it only wraps.
+ */
+function Lights({ mark, className, children }: { mark: GraphMark; className?: string; children: ReactNode }) {
+  const link = useFxGraphLink()
+  const linkRef = useRef(link)
+  linkRef.current = link
+  const lit = useRef(false)
+  // Gone under the pointer — the FX stopped, the inspector closed — it puts the light out itself.
+  useEffect(
+    () => () => {
+      if (lit.current) linkRef.current?.setHighlight(null)
+    },
+    [],
+  )
+  const light = (on: boolean) => {
+    lit.current = on
+    link?.setHighlight(on ? mark : null)
+  }
+  return (
+    <div
+      data-lights={mark}
+      className={className}
+      onPointerEnter={link == null ? undefined : () => light(true)}
+      onPointerLeave={link == null ? undefined : () => light(false)}
+    >
+      {children}
+    </div>
+  )
+}
+
+/**
+ * *Same as…* (FX editor plan D13): the other FX in the list, a pick copying their fields once.
+ * Nothing links the two afterwards (`FU-FX-LINKED-TIMING`). [refuse] names why one cannot be copied.
+ */
+function SameAs({
+  label,
+  others,
+  readOnly,
+  refuse,
+  onPick,
+}: {
+  label: string
+  others: readonly MatchSource[]
+  readOnly: boolean
+  refuse?: (source: MatchSource) => string | null
+  onPick: (effect: MatchSource['effect']) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={readOnly || others.length === 0}
+          aria-label={`${label}…`}
+          title={others.length === 0 ? 'No other FX in the list' : `${label} another FX in the list, copied once`}
+          className="inline-flex h-5 shrink-0 items-center gap-0.5 self-start rounded-full border px-2 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+        >
+          Same as…
+          <ChevronDown className="size-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">{label}</DropdownMenuLabel>
+        {others.map((source) => {
+          const { effect, name } = source
+          const reason = refuse?.(source) ?? null
+          return (
+            <DropdownMenuItem key={effect.id} disabled={reason != null} title={reason ?? undefined} className="text-xs" onClick={() => onPick(effect)}>
+              {name}
+              <span className="ml-auto pl-3 font-mono text-[10px] text-muted-foreground">{effect.attribute}</span>
+            </DropdownMenuItem>
+          )
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   )

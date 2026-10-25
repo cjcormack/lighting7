@@ -146,6 +146,19 @@ function elementLabel(label: string, fixture: string, element: number): string {
   return label === fixture ? `${element + 1}` : label
 }
 
+/**
+ * A slider row's level scale, from the row's top: byte [v]'s y, and the byte at a y — what the
+ * drawing places a level by and what the max and min handles read back.
+ */
+export function levelScale(section: Pick<LaidSection, 'rowH' | 'stepsBand'>, top: number): { yOf: (v: number) => number; byteAt: (y: number) => number } {
+  const y0 = top + (section.stepsBand ? STEPS_BAND_PX : 0)
+  const h = section.rowH - (section.stepsBand ? STEPS_BAND_PX : 0)
+  return {
+    yOf: (v) => y0 + h - 1 - (v / 255) * (h - 3),
+    byteAt: (y) => Math.max(0, Math.min(255, Math.round(((y0 + h - 1 - y) / (h - 3)) * 255))),
+  }
+}
+
 /** The x of sample [s] (its left edge) in a plot [plotWidth] wide of [samples] samples. */
 export const sampleX = (layout: Pick<LaneLayout, 'plotLeft' | 'plotWidth'>, samples: number, s: number): number =>
   layout.plotLeft + (s / Math.max(1, samples)) * layout.plotWidth

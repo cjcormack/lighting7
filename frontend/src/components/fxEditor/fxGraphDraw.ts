@@ -1,10 +1,13 @@
 import type { FxPreviewFx } from '@/store/fxPreview'
 import type { GraphViewChoice } from '@/lib/fxEditorView'
+import type { GraphMark } from '@/components/fx/fxGraphLink'
 import type { DecodedAttributeRow, DecodedLane, DecodedSeries } from './fxPreviewDecode'
 import {
   GUTTER_PX,
+  SAMPLES_PER_CYCLE,
   colourAt,
   ladderBrackets,
+  levelScale,
   planeAt,
   sampleX,
   wingBreaks,
@@ -63,6 +66,9 @@ export interface GraphPalette {
   stepA: string
   stepB: string
   stepText: string
+  /** A mark a hovered control changes, and a shade over what it covers (§4.5). */
+  highlight: string
+  highlightArea: string
 }
 
 export const LIGHT_PALETTE: GraphPalette = {
@@ -84,6 +90,8 @@ export const LIGHT_PALETTE: GraphPalette = {
   stepA: 'rgba(124,58,237,0.16)',
   stepB: 'rgba(124,58,237,0.32)',
   stepText: '#4c1d95',
+  highlight: '#c026d3',
+  highlightArea: 'rgba(192,38,211,0.14)',
 }
 
 export const DARK_PALETTE: GraphPalette = {
@@ -105,6 +113,8 @@ export const DARK_PALETTE: GraphPalette = {
   stepA: 'rgba(167,139,250,0.18)',
   stepB: 'rgba(167,139,250,0.34)',
   stepText: '#ede9fe',
+  highlight: '#f0abfc',
+  highlightArea: 'rgba(240,171,252,0.16)',
 }
 
 export type GraphView = GraphViewChoice
@@ -125,6 +135,15 @@ export interface LaneDrawOptions {
   /** The steps either side of 128 a position row spans. */
   positionScale: number
   palette: GraphPalette
+  /** The mark a hovered control in the inspector changes, lit (§4.5). */
+  highlight?: GraphMark | null
+  /** A row a ladder dot links to, by its index in the answer's `rows`, marked in the gutter. */
+  linkedRow?: number | null
+}
+
+/** Whether [section] holds rows the picked FX paints: where its marks, lights and handles go. */
+export function paintsSection(section: LaidSection, byRow: ReadonlyMap<number, DecodedAttributeRow>, picked: number | null): boolean {
+  return picked != null && section.rows.some((r) => byRow.get(r.row)?.fx.some((o) => o.fx === picked))
 }
 
 const rgb = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r},${g},${b})`
@@ -152,7 +171,18 @@ export function drawLane(ctx: GraphCtx, layout: LaneLayout, lane: DecodedLane, o
       }
       if (!section.heat) drawRowLabel(ctx, laid, section, palette)
       drawRow(ctx, layout, section, laid, row, attribute.kind, options)
+      if (options.linkedRow === laid.row) {
+        ctx.fillStyle = palette.highlight
+        ctx.fillRect(0, laid.y, 3, section.rowH)
+      }
     })
+    // Cycle's light: the picked FX's first cycle, shaded over its rows, so an opaque colour strip or
+    // heat row does not hide it.
+    if (options.highlight === 'cycle' && options.samples > 0 && paintsSection(section, attribute.byRow, options.picked)) {
+      const end = sampleX(layout, options.samples, Math.min(options.samples, SAMPLES_PER_CYCLE))
+      ctx.fillStyle = palette.highlightArea
+      ctx.fillRect(layout.plotLeft, section.top, end - layout.plotLeft, section.rows.length * section.rowH)
+    }
     drawSectionMarks(ctx, layout, section, attribute.byRow, options)
   }
 }
@@ -239,7 +269,7 @@ function drawRow(
     }
   } else {
     const level = series.planes.level
-    const yOf = (v: number) => y0 + h - 1 - (v / 255) * (h - 3)
+    const { yOf } = levelScale(section, top)
     if (level != null) {
       ctx.beginPath()
       ctx.moveTo(x(0), y0 + h - 1)
@@ -252,6 +282,17 @@ function drawRow(
       ctx.closePath()
       ctx.fillStyle = own ? palette.pickedArea : palette.area
       ctx.fill()
+      // Amount's light: the gap Amount leaves between the picked FX's own output and the lane's.
+      const ownLevel = pickedOutput?.output.planes.level
+      const resultLevel = row.result.planes.level
+      if (options.highlight === 'amount' && ownLevel != null && resultLevel != null) {
+        ctx.fillStyle = palette.highlightArea
+        for (let s = 0; s < samples; s++) {
+          const a = yOf(ownLevel[Math.min(s, ownLevel.length - 1)])
+          const b = yOf(resultLevel[Math.min(s, resultLevel.length - 1)])
+          if (Math.abs(a - b) >= 0.5) ctx.fillRect(x(s), Math.min(a, b), x(s + 1) - x(s), Math.abs(a - b))
+        }
+      }
       trace(ctx, level, samples, x, yOf, own ? palette.picked : palette.resultLine, 1, true)
     }
     const under = planeAt(row.underneath, 'level', 0)
@@ -281,20 +322,23 @@ function drawRow(
     const rowH = section.rowH
     const holding = fx.holding[laid.row]
     if (holding != null && holding.length > 0) {
-      for (const [from, to] of holding) hatch(ctx, x(from), top, x(to + 1) - x(from), rowH, palette.holding)
+      const colour = options.highlight === 'holding' ? palette.highlight : palette.holding
+      for (const [from, to] of holding) hatch(ctx, x(from), top, x(to + 1) - x(from), rowH, colour)
     }
     if (own && pickedOutput.heldBackReason != null) hatch(ctx, layout.plotLeft, top, layout.plotWidth, rowH, palette.heldBack)
-    ctx.fillStyle = palette.start
+    const lit = options.highlight === 'starts'
+    const half = lit ? 4 : 3
+    ctx.fillStyle = lit ? palette.highlight : palette.start
     for (const s of fx.starts[laid.row] ?? []) {
       const sx = x(s)
       if (section.heat) {
-        ctx.fillRect(Math.round(sx), top, 1, rowH)
+        ctx.fillRect(Math.round(sx), top, lit ? 2 : 1, rowH)
         continue
       }
       ctx.beginPath()
-      ctx.moveTo(sx - 3, top)
-      ctx.lineTo(sx + 3, top)
-      ctx.lineTo(sx, top + 4)
+      ctx.moveTo(sx - half, top)
+      ctx.lineTo(sx + half, top)
+      ctx.lineTo(sx, top + half + 1)
       ctx.closePath()
       ctx.fill()
     }
@@ -381,19 +425,20 @@ function drawSectionMarks(
   const fx = options.pickedFx
   if (fx == null || options.picked == null) return
   const rows = section.rows.map((r) => r.row)
-  const paints = section.rows.some((r) => byRow.get(r.row)?.fx.some((o) => o.fx === options.picked))
-  if (!paints) return
+  if (!paintsSection(section, byRow, options.picked)) return
   const { palette } = options
   const { segments, parts } = ladderBrackets(fx, rows)
   const yOf = (index: number) => section.top + index * section.rowH
   const edge = layout.plotLeft - 3
-  ctx.strokeStyle = palette.bracket
-  ctx.lineWidth = 1
+  const bracketsLit = options.highlight === 'brackets'
+  const bracketColour = bracketsLit ? palette.highlight : palette.bracket
+  ctx.strokeStyle = bracketColour
+  ctx.lineWidth = bracketsLit ? 2 : 1
   for (const b of segments) bracket(ctx, edge, yOf(b.from) + 2, yOf(b.to + 1) - 2)
   for (const b of parts) {
     bracket(ctx, edge - 6, yOf(b.from) + 1, yOf(b.to + 1) - 1)
     if (!section.heat) {
-      ctx.fillStyle = palette.bracket
+      ctx.fillStyle = bracketColour
       ctx.font = '8.5px ui-monospace, Menlo, monospace'
       ctx.textBaseline = 'middle'
       ctx.textAlign = 'right'
@@ -401,7 +446,11 @@ function drawSectionMarks(
       ctx.textAlign = 'left'
     }
   }
-  for (const at of wingBreaks(fx, rows)) dashed(ctx, layout.plotLeft, layout.plotLeft + layout.plotWidth, yOf(at), palette.bracket, [2, 3])
+  ctx.lineWidth = 1
+  const mirrorLit = options.highlight === 'mirror'
+  for (const at of wingBreaks(fx, rows)) {
+    dashed(ctx, layout.plotLeft, layout.plotLeft + layout.plotWidth, yOf(at), mirrorLit ? palette.highlight : palette.bracket, [2, 3], mirrorLit ? 2 : 1)
+  }
 }
 
 function bracket(ctx: GraphCtx, x: number, from: number, to: number) {
@@ -413,11 +462,11 @@ function bracket(ctx: GraphCtx, x: number, from: number, to: number) {
   ctx.stroke()
 }
 
-function dashed(ctx: GraphCtx, from: number, to: number, y: number, colour: string, dash: number[] = [3, 3]) {
+function dashed(ctx: GraphCtx, from: number, to: number, y: number, colour: string, dash: number[] = [3, 3], width = 1) {
   ctx.save()
   ctx.setLineDash(dash)
   ctx.strokeStyle = colour
-  ctx.lineWidth = 1
+  ctx.lineWidth = width
   ctx.beginPath()
   ctx.moveTo(from, Math.round(y) + 0.5)
   ctx.lineTo(to, Math.round(y) + 0.5)

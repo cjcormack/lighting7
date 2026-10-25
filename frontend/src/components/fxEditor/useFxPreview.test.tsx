@@ -116,6 +116,55 @@ describe('useFxPreview', () => {
     expect(wire.asks[1].body).toMatchObject({ window: { cycles: 1 }, solo: 1 })
   })
 
+  it('sends the inspector’s unsent move as the picked FX’s draft, the graph following a drag before the floor sends it', async () => {
+    const { rerender } = renderHook(({ draft }) => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [7, 8], draft }), {
+      initialProps: { draft: undefined as { cycle: number; parameters: Record<string, string>; blendMode: string; phaseOffset: number } | undefined },
+    })
+    expect(wire.asks[0].body).toMatchObject({ fx: [{ fxId: 7 }, { fxId: 8 }] })
+    await act(async () => wire.asks[0].resolve(answer('hex-1')))
+    const move = { cycle: 8, parameters: {}, blendMode: 'OVERRIDE', phaseOffset: 0 }
+    rerender({ draft: move })
+    expect(wire.asks).toHaveLength(2)
+    expect(wire.asks[1].body).toMatchObject({ fx: [{ fxId: 7, draft: move }, { fxId: 8 }] })
+    // The desk has it: the ask goes back to the running FX.
+    await act(async () => wire.asks[1].resolve(answer('hex-1')))
+    rerender({ draft: undefined })
+    expect(wire.asks).toHaveLength(3)
+    expect(wire.asks[2].body).toMatchObject({ fx: [{ fxId: 7 }, { fxId: 8 }] })
+    expect((wire.asks[2].body as { fx: object[] }).fx[0]).not.toHaveProperty('draft')
+  })
+
+  it('draws an answer to an earlier move of the drag, the ask behind it bringing the latest', async () => {
+    const move = (cycle: number) => ({ cycle, parameters: {}, blendMode: 'OVERRIDE', phaseOffset: 0 })
+    const { result, rerender } = renderHook(({ draft }) => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [7], draft }), {
+      initialProps: { draft: move(4) },
+    })
+    // The finger moves on before the desk answers the first move.
+    rerender({ draft: move(5) })
+    rerender({ draft: move(6) })
+    expect(wire.asks).toHaveLength(1)
+    await act(async () => wire.asks[0].resolve(answer('hex-1', 'first')))
+    expect(result.current.answer?.fx[0].fxType).toBe('first')
+    expect(wire.asks).toHaveLength(2)
+    expect(wire.asks[1].body).toMatchObject({ fx: [{ fxId: 7, draft: { cycle: 6 } }] })
+    await act(async () => wire.asks[1].resolve(answer('hex-1', 'second')))
+    expect(result.current.answer?.fx[0].fxType).toBe('second')
+  })
+
+  it('keeps hearing its triggers across a drag’s moves', async () => {
+    const { rerender } = renderHook(({ draft }) => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [7], draft }), {
+      initialProps: { draft: { cycle: 4, parameters: {}, blendMode: 'OVERRIDE', phaseOffset: 0 } },
+    })
+    await act(async () => wire.asks[0].resolve(answer('hex-1')))
+    const listeners = wire.changes.size
+    rerender({ draft: { cycle: 8, parameters: {}, blendMode: 'OVERRIDE', phaseOffset: 0 } })
+    await act(async () => wire.asks[1].resolve(answer('hex-1')))
+    expect(wire.changes.size).toBe(listeners)
+    act(() => wire.changes.forEach((fn) => fn({ fxId: 7, changeType: 'updated' } as FxChange)))
+    await flush()
+    expect(wire.asks).toHaveLength(3)
+  })
+
   it('sends no solo past the FX asked for', () => {
     renderHook(() => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [7], solo: 1 }))
     expect(wire.asks[0].body).not.toHaveProperty('solo')
