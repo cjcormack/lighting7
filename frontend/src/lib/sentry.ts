@@ -11,6 +11,7 @@ import * as Sentry from '@sentry/react'
 import { reactRouterBrowserTracingIntegration } from '@sentry/react/react-router'
 import { toast } from 'sonner'
 import { setReportProblem } from './reportProblem'
+import { FEEDBACK_HOST_ID, isolateFeedbackKeys } from './sentryFeedbackKeys'
 import { sendBootReady, settleBootReady } from './sentryMetrics'
 import { markRouterMayStart } from './sentryReady'
 import { fitScreenshots } from './sentryScreenshot'
@@ -132,6 +133,7 @@ async function addLazyIntegrations(telemetry: Telemetry, started: number): Promi
     Sentry.addIntegration(replay)
   }
   const added = lazy.feedbackIntegration({
+    id: FEEDBACK_HOST_ID,
     autoInject: false,
     showBranding: false,
     showName: false,
@@ -183,14 +185,18 @@ function stop(): void {
   feedback?.remove()
   feedback = null
   // 11.7.0's remove() asks the shadow root for its parentElement, which is always null, so the host stays.
-  document.getElementById('sentry-feedback')?.remove()
+  document.getElementById(FEEDBACK_HOST_ID)?.remove()
   // Off withdraws consent, so the buffer is dropped rather than flushed.
   void replay?.stop({ flush: false })
   void Sentry.close(2_000)
 }
 
-/** Starts Sentry if the desk says to, then lets the router start either way. */
+/**
+ * Starts Sentry if the desk says to, then lets the router start either way. Called before the first
+ * render, so the feedback form's key guard is ahead of every shortcut on the window.
+ */
 export function startSentry(): void {
+  isolateFeedbackKeys()
   subscribeWindowName(() => Sentry.setTag('window', windowName()))
   void fetchTelemetry()
     .then((telemetry) => {
