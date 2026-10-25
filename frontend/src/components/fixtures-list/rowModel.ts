@@ -567,7 +567,7 @@ export function spreadCellCount(targets: readonly WriteTarget[]): number {
  * whether a head has a wheel, a zoom, an iris.
  */
 export function targetFamilies(
-  targets: readonly { properties: readonly PropertyDescriptor[]; elements?: readonly { properties: readonly PropertyDescriptor[] }[] }[],
+  targets: readonly { attributes: readonly AttributeDescriptor[]; elements?: readonly { attributes: readonly AttributeDescriptor[] }[] }[],
 ): AttributeFamily[] {
   const out = new Set<AttributeFamily>()
   // A trigger or a command is no attribute a head can take: neither can be held by a template or a

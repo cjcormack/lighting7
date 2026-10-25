@@ -61,17 +61,17 @@ export function cardKindOf(effect: ActiveFx): FxCardKind {
  * pan/tilt pair, whose families are their names'.
  */
 export function familyOfFx(
-  effect: Pick<ActiveFx, 'id' | 'propertyName'>,
+  effect: Pick<ActiveFx, 'id' | 'attribute'>,
   fixtures: readonly Fixture[],
   answered?: ReadonlyMap<number, AttributeFamily>,
 ): AttributeFamily {
   const known = answered?.get(effect.id)
   if (known != null) return known
-  const name = effect.propertyName
+  const name = effect.attribute
   if (name === 'rgbColour' || name === 'colour') return 'COLOUR'
   if (name === 'position' || name === 'pan' || name === 'tilt') return 'POSITION'
   for (const fixture of fixtures) {
-    for (const property of [...fixture.properties, ...(fixture.elements ?? []).flatMap((e) => e.properties)]) {
+    for (const property of [...fixture.attributes, ...(fixture.elements ?? []).flatMap((e) => e.attributes)]) {
       if (property.name === name) return familyForCategory(property.category)
     }
   }
@@ -83,15 +83,15 @@ export function selectionFamilies(targets: readonly CueTarget[], fixtures: reado
   return targetFamilies(selectionUnits(targets, fixtures))
 }
 
-/** The heads the selection holds that carry [propertyName] — what an FX over it on that attribute would paint. */
-function selectedHeadsFor(targets: readonly CueTarget[], fixtures: readonly Fixture[], propertyName: string): string[] {
+/** The heads the selection holds that carry [attribute] — what an FX over it on that attribute would paint. */
+function selectedHeadsFor(targets: readonly CueTarget[], fixtures: readonly Fixture[], attribute: string): string[] {
   return fxPaintedHeads(
     {
       targetKey: '',
       isGroupTarget: false,
       targetType: 'selection',
       targets: [...targets],
-      propertyName,
+      attribute,
       elementFilter: null,
       elementMode: null,
     },
@@ -134,11 +134,11 @@ export function fxLanes({ effects, targets, fixtures, layerPosition, answer }: F
   if (targets.length === 0) return []
   const { rank, family: answeredFamily } = answeredOrder(answer)
   const selected = new Map<string, Set<string>>()
-  const selectedFor = (propertyName: string) => {
-    let heads = selected.get(propertyName)
+  const selectedFor = (attribute: string) => {
+    let heads = selected.get(attribute)
     if (heads == null) {
-      heads = new Set(selectedHeadsFor(targets, fixtures, propertyName))
-      selected.set(propertyName, heads)
+      heads = new Set(selectedHeadsFor(targets, fixtures, attribute))
+      selected.set(attribute, heads)
     }
     return heads
   }
@@ -146,7 +146,7 @@ export function fxLanes({ effects, targets, fixtures, layerPosition, answer }: F
   const cards: FxCard[] = []
   for (const effect of effects) {
     if (effect.leaving === true) continue
-    const heads = selectedFor(effect.propertyName)
+    const heads = selectedFor(effect.attribute)
     if (heads.size === 0) continue
     const reached = fxPaintedHeads(effect, fixtures).filter((head) => heads.has(head)).length
     if (reached === 0) continue

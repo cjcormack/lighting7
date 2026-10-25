@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a, 3b and 4 of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a, 3b, 4 and 5 of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -458,7 +458,7 @@ Why each gate is where it is:
   card opens its cue; *Stack* sends `stack: true` and *Replace* does not; *All*'s row press selects and
   switches; the 760 and 1100 px arms.
 
-### Session 5: the graph (frontend)
+### Session 5: the graph (frontend) — done, `0de1adcc`
 
 **Gate: as session 4.** Needs 4.
 

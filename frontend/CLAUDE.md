@@ -5234,12 +5234,13 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
 
 **The FX editor** (FX editor plan D1–D6, session 4) is the FX tab's *Selection* view
 (`components/fxEditor/`): list · graph · inspector over the window's pair (`useWindowFxPair` — the
-desk's selection while the window follows it, else the programmer list's rows). The graph column is
-a placeholder until session 5 draws the preview's answer. Things that will bite:
+desk's selection while the window follows it, else the programmer list's rows). The graph (session 5)
+draws the preview's answer. Things that will bite:
 
 - **The view is a per-window fact** (`lib/fxEditorView.ts`, `sessionStorage`, P6): *Selection ·
-  All* (`programmer.fx.view`, Selection the default), the picked FX, the one Solo marks and the
-  folded lanes. Solo is a mark on the card: the graph draws it (D14), the stage never changes.
+  All* (`programmer.fx.view`, Selection the default), the picked FX, the one Solo marks, the
+  folded lanes and the graph's toolbar (`programmer.fx.graph`). Solo is a mark on the card: the graph
+  draws it (D14), the stage never changes.
   `ProgrammerFxTab` is the tab's host and draws *Selection · All* after the table tabs on row B.
   *All*'s row press and *Select the heads of a running FX…* select through
   `fixtures-list/programmerSelectRequest.ts`: `setDeskSelection` while following, the desk's mask
@@ -5260,7 +5261,7 @@ a placeholder until session 5 draws the preview's answer. Things that will bite:
   whose `fx` is the apply order bottom first; one the answer has not reached goes on top of its tier,
   where a new Local FX lands. A card's family is the answer's, else its attribute's category on a
   head that carries it. A card names its attribute in words where the lane's family has several
-  (`palettePropertyFor`'s label — *UV*, *Zoom*), and its Direction only where it is not the FX
+  (`paletteAttributeFor`'s label — *UV*, *Zoom*), and its Direction only where it is not the FX
   type's own (`newFxDirection`; the sweeps bounce by default). A layer's card has pause and no ×,
   as the busk Effects tab's pad FX has none: stopping the instance alone, the layer respawns it on
   its next recook, so the layer is what lets it go.
@@ -5302,8 +5303,42 @@ a placeholder until session 5 draws the preview's answer. Things that will bite:
   sent with whatever is asked by then — a fader dragged under a drawn row moves its key every frame,
   and the desk samples the whole stack each time. `previewFx` is a mutation, so it is in
   `NON_SAVE_ENDPOINTS` (it would flash *Saving…*) and `SILENT_ENDPOINTS` (a refused ask is followed
-  by one that answers). Nothing decodes the planes yet; the list reads only the apply order and the
-  held-back reasons.
+  by one that answers). It sends the graph's `window` and, while a card is solo'd, `solo` — an index
+  into the ask, so a solo'd FX that is not the picked one is asked for beside it. The list reads only
+  the apply order and the held-back reasons.
+- **The graph draws the answer and computes nothing** (P2; `FxGraph.tsx`). `fxPreviewDecode.ts`
+  decodes the base64 planes once per answer into `Uint8Array`s per row, attribute and FX (a Steps
+  output's steps as an `Int32Array` beside its labels); `fxGraphModel.ts` lays a lane out —
+  one section per attribute, its rows in the answer's order (the picked FX's Order, a fixture's name
+  once over its elements) or by `rigIndex` under *Rig order*, a heat map at 6px a row from 25 rows —
+  and reads the marks off the answer: the start ticks are `starts`, the hatching `holding`
+  (inclusive), Segments and Parts brackets and the Wings' mirror the ladder's rungs, a row's phase on
+  hover the distance between its starts (a cycle is 48 samples, the desk's rate, cut or not). The
+  desk starts the window at whatever tick the master is on, so the beat grid and the hover's *Beat*
+  are placed from the clock's `tickAtStart` (a beat's phase 0 is a multiple of 24 ticks), never
+  counted from sample 0. `fxGraphDraw.ts` draws a lane onto a `GraphCtx` — a pick of
+  `CanvasRenderingContext2D` — so tests draw onto `test/pixelCanvas.ts` and read pixels; `FxGraph`'s
+  `contextOf` is that seam. One canvas a lane: Intensity and Beam an area per row over a dashed
+  *Underneath*, the picked FX's own output a violet line under *Result*; Colour a strip (*As seen*:
+  times the Intensity lane's `dimmer` result); Position pan and tilt traces scaled to the widest
+  swing, and a path panel beside the lanes; a Steps FX's blocks labelled in a band over its rows; a
+  held-back FX hatched under *This FX*; *representative* and `truncated` in words. *As seen* takes a
+  cell's Intensity from its fixture's row where the cell has none. The path panel sits beside the
+  lanes while that leaves them a plot, else under them. Below the 760 arm it draws the picked FX's
+  lane alone, six rows at most, and says so; the column's rows size to their content there
+  (`auto-rows-max`), since the graph under the list is tall.
+- **The playhead is the client's, the clock the desk's** (`GraphPlayhead`, `useGraphPlayhead`): it
+  runs from sample 0 when an answer lands, at the wall clock's rate, wrapping at the window's last
+  whole cycle of the picked FX (two under Bounce), since *2 bars* of a 3-beat FX is not whole; a
+  `speedMasters.beat` on the picked FX's master resyncs it — beat *n* is the master's tick
+  `24n + 1`, measured from the clock's `tickAtStart` at the answer's tempo — and a later answer on the same master carries
+  the master's tick across, so a re-ask never sends it back to the start (a fresh answer also asks
+  for a beat, since the desk throttles them). A `seconds` clock runs from sample 0 and nothing
+  resyncs it. It is a positioned `div` moved by `requestAnimationFrame`, not a redraw of the lanes,
+  and the path panel's dots are their own canvas for the same reason. Paused (the graph's, never the
+  stage's) or under `prefers-reduced-motion` (`hooks/useReducedMotion.ts`) it holds still and asks
+  for no frames; let go, it asks for a beat, since it runs on from where it was held. The hover
+  holds a row by its key, so a re-ask that reorders the rows keeps naming the same head.
 
 **The FX lens** (D3, session 2) answers *side by side* without a split: a Values cell an effect
 drives carries a violet chip — the wave and the division (`lensDivision`: `½` for a fraction of a

@@ -589,7 +589,7 @@ describe('FxPicker on the bare effect press', () => {
     rerender(<Stacking stack />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
-    wire.active = [makeActiveFx({ id: 99, fxType: 'Pulse', targetKey: '[]', propertyName: 'dimmer', blendMode: 'MULTIPLY' })]
+    wire.active = [makeActiveFx({ id: 99, fxType: 'Pulse', targetKey: '[]', attribute: 'dimmer', blendMode: 'MULTIPLY' })]
     rerender(<Stacking stack />)
     fireEvent.click(screen.getByRole('button', { name: 'Ramp' }))
     expect(updateFx).toHaveBeenCalledWith(99, expect.not.objectContaining({ blendMode: expect.anything() }))
