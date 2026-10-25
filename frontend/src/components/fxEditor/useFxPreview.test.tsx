@@ -104,6 +104,23 @@ describe('useFxPreview', () => {
     ])
   })
 
+  it('sends the window and solo the graph chose, and asks again when either moves', async () => {
+    const { rerender } = renderHook(({ cycles, solo }) => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [7, 8], window: { cycles }, solo }), {
+      initialProps: { cycles: 2, solo: undefined as number | undefined },
+    })
+    expect(wire.asks[0].body).toMatchObject({ fx: [{ fxId: 7 }, { fxId: 8 }], window: { cycles: 2 } })
+    expect(wire.asks[0].body).not.toHaveProperty('solo')
+    await act(async () => wire.asks[0].resolve(answer('hex-1')))
+    rerender({ cycles: 1, solo: 1 })
+    expect(wire.asks).toHaveLength(2)
+    expect(wire.asks[1].body).toMatchObject({ window: { cycles: 1 }, solo: 1 })
+  })
+
+  it('sends no solo past the FX asked for', () => {
+    renderHook(() => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [7], solo: 1 }))
+    expect(wire.asks[0].body).not.toHaveProperty('solo')
+  })
+
   it('asks nothing with no FX or no selection', () => {
     renderHook(() => useFxPreview({ projectId: 1, targets: [], fxIds: [7] }))
     renderHook(() => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [] }))

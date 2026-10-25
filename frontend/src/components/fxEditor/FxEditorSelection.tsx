@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -37,11 +37,14 @@ import {
   setSoloFx,
   toggleLaneFold,
   useFoldedLanes,
+  useFxGraphOptions,
   usePickedFx,
   useSoloFx,
 } from '@/lib/fxEditorView'
 import { LANE_ATTRIBUTE, fxLanes, fxTargetsOf, heldBackReasons, type FxLane } from './fxEditorList'
 import { FxLaneList } from './FxLaneList'
+import { FxGraph } from './FxGraph'
+import { windowRequest } from './fxGraphModel'
 import { useFxPreview } from './useFxPreview'
 
 /**
@@ -57,7 +60,7 @@ export const FX_EDITOR_BAND_FLOORS: readonly number[] = [1100, 760, 0]
  * the programmer list's rows — and the list is every FX reaching those heads, in family lanes in the
  * desk's apply order ([fxLanes]). Picking a card puts it in the inspector, the live editor over
  * `FxFields` in the inspector's order; *+ FX* puts the picker there, on that lane's family. The graph
- * column holds the desk's preview, which the list reads its apply order from.
+ * column draws the desk's preview (`FxGraph`), which the list reads its apply order from.
  */
 export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number; viewSwitch: ReactNode }) {
   const pair = useWindowFxPair(true)
@@ -92,7 +95,22 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
   const listed = useMemo(() => reaching.flatMap((l) => l.cards.map((c) => c.effect.id)).sort((a, b) => a - b), [reaching])
   // The picked FX while it is on the selection, else the list's top card: what the window counts.
   const anchor = pickedId != null && listed.includes(pickedId) ? pickedId : (reaching.flatMap((l) => l.cards)[0]?.effect.id ?? null)
-  const preview = useFxPreview(anchor == null ? null : { projectId, targets, fxIds: [anchor], listed })
+  // Solo is an index into the ask, so a solo'd FX other than the picked one is asked for beside it.
+  const graphOptions = useFxGraphOptions()
+  const soloListed = soloId != null && listed.includes(soloId) ? soloId : null
+  const fxIds = anchor == null ? [] : soloListed != null && soloListed !== anchor ? [anchor, soloListed] : [anchor]
+  const preview = useFxPreview(
+    anchor == null
+      ? null
+      : {
+          projectId,
+          targets,
+          fxIds,
+          listed,
+          window: windowRequest(graphOptions.window),
+          solo: soloListed == null ? undefined : fxIds.indexOf(soloListed),
+        },
+  )
   const lanes = useMemo(
     () => fxLanes({ effects: running, targets, fixtures: rig, layerPosition, answer: preview.answer }),
     [layerPosition, preview.answer, rig, running, targets],
@@ -183,8 +201,25 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
     />
   )
 
-  const graph = <GraphPlaceholder answer={preview.answer} error={preview.error} anchor={anchor} />
   const form = band === 0 ? 'column' : band === 1 ? 'side' : 'stacked'
+  const fxName = useCallback((fxType: string) => findFxEntry(library, fxType)?.name ?? fxType, [library])
+  const fixtureNames = useMemo(() => new Map(rig.map((f) => [f.key, f.name])), [rig])
+  const fixtureName = useCallback((key: string) => fixtureNames.get(key), [fixtureNames])
+  const unsolo = useCallback(() => setSoloFx(null), [])
+  const soloEffect = soloListed == null ? null : running.find((e) => e.id === soloListed)
+  const graph = (
+    <FxGraph
+      answer={anchor == null ? null : preview.answer}
+      error={preview.error}
+      empty={anchor == null}
+      narrow={form === 'stacked'}
+      fxName={fxName}
+      fixtureName={fixtureName}
+      solo={soloEffect == null ? null : { name: fxName(soloEffect.fxType) }}
+      onUnsolo={unsolo}
+      bounce={running.find((e) => e.id === anchor)?.direction === 'BOUNCE'}
+    />
+  )
 
   return (
     <>
@@ -201,7 +236,8 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
             'grid min-h-0 flex-1',
             form === 'column' && 'grid-cols-[248px_minmax(0,1fr)_340px]',
             form === 'side' && 'grid-cols-[248px_minmax(0,1fr)]',
-            form === 'stacked' && 'grid-cols-1 content-start overflow-y-auto',
+            // Each row its content's height, so the tall graph never draws over the list and the column scrolls.
+            form === 'stacked' && 'grid-cols-1 auto-rows-max content-start overflow-y-auto',
           )}
         >
           <div data-fx-list className={cn('flex min-h-0 flex-col gap-2 p-2', form !== 'stacked' && 'overflow-y-auto border-r')}>
@@ -349,35 +385,6 @@ function NothingSelected({
       </DropdownMenu>
     </div>
   )
-}
-
-/** The graph's column (session 5 draws in it): what the desk's preview answered, in words. */
-function GraphPlaceholder({
-  answer,
-  error,
-  anchor,
-}: {
-  answer: ReturnType<typeof useFxPreview>['answer']
-  error: string | null
-  anchor: number | null
-}) {
-  return (
-    <div data-fx-graph className="flex min-h-[120px] min-w-0 flex-col gap-1 p-3">
-      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Graph</span>
-      <EditorReadout error={error ?? undefined}>
-        {anchor == null
-          ? 'No FX reaches the selection.'
-          : answer == null
-            ? 'Asking the desk…'
-            : `The desk's preview: ${answer.rows.length} ${answer.rows.length === 1 ? 'head' : 'heads'} over ${formatBeats(answer.window.beats)}, ${answer.fx.length} FX folded.`}
-      </EditorReadout>
-    </div>
-  )
-}
-
-function formatBeats(beats: number): string {
-  const rounded = Math.round(beats * 100) / 100
-  return `${rounded} ${rounded === 1 ? 'beat' : 'beats'}`
 }
 
 function Inspector({

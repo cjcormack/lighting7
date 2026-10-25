@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
   stop: vi.fn(),
   pause: vi.fn(),
   scope: { kind: 'local' } as { kind: string },
-  asks: [] as { fxIds: number[] }[],
+  asks: [] as { fxIds: number[]; solo?: number; window?: unknown }[],
   library: [] as { name: string; defaultDirection?: string }[],
 }))
 
@@ -81,7 +81,7 @@ vi.mock('@/components/fx/SplitFxEditor', () => ({
   ),
 }))
 vi.mock('./useFxPreview', () => ({
-  useFxPreview: (ask: { fxIds: number[] } | null) => {
+  useFxPreview: (ask: { fxIds: number[]; solo?: number; window?: unknown } | null) => {
     if (ask != null) mocks.asks.push(ask)
     return { answer: null, error: null }
   },
@@ -95,7 +95,7 @@ vi.mock('@/components/fixtures-list/programmerSelectRequest', () => ({
 }))
 
 const { FxEditorSelection } = await import('./FxEditorSelection')
-const { getPickedFx, resetFxEditorViewStores, setPickedFx } = await import('@/lib/fxEditorView')
+const { getPickedFx, resetFxEditorViewStores, setFxGraphOption, setPickedFx } = await import('@/lib/fxEditorView')
 const { RemaskStoreContext, createRemaskStore } = await import('@/components/fixtures-list/remaskStore')
 
 const FRONT = [{ type: 'group' as const, key: 'front' }]
@@ -254,6 +254,19 @@ describe('the list', () => {
     expect(mocks.asks.at(-1)?.fxIds).toEqual([2])
   })
 
+  it('asks for a solo’d FX beside the picked one, solo naming it, and sends the graph’s window', () => {
+    draw()
+    expect(mocks.asks.at(-1)).toMatchObject({ fxIds: [4], window: { cycles: 2 } })
+    expect(mocks.asks.at(-1)?.solo).toBeUndefined()
+    fireEvent.click(within(card(3)).getByRole('button', { name: 'Solo FX 3' }))
+    expect(mocks.asks.at(-1)).toMatchObject({ fxIds: [4, 3], solo: 1 })
+    fireEvent.click(within(card(3)).getByRole('button', { name: 'Unsolo FX 3' }))
+    fireEvent.click(within(card(4)).getByRole('button', { name: 'Solo FX 4' }))
+    expect(mocks.asks.at(-1)).toMatchObject({ fxIds: [4], solo: 0 })
+    act(() => setFxGraphOption('window', '2b'))
+    expect(mocks.asks.at(-1)).toMatchObject({ window: { beats: 8 } })
+  })
+
   it('leaves the inspector empty for a picked FX that is not on the selection', () => {
     mocks.effects = [...mocks.effects, fx(99, { targetKey: 'elsewhere', isGroupTarget: false })]
     setPickedFx(99)
@@ -331,5 +344,7 @@ describe('the widths', () => {
     draw()
     expect(arm()).toBe('2')
     expect(document.querySelector('[data-fx-inspector="stacked"]')).not.toBeNull()
+    // Each row sizes to its content there, so the graph under the list never draws over it.
+    expect(document.querySelector('[data-fx-list]')!.parentElement!.className).toContain('auto-rows-max')
   })
 })

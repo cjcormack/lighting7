@@ -25,6 +25,8 @@ export interface FxPreviewAsk {
   /** Every FX in the list: an `fxChanged` for any of them asks again. Absent, [fxIds]. */
   listed?: readonly number[]
   window?: FxPreviewWindowRequest
+  /** An index into [fxIds]: its family's lane drawn as though it were alone over what is underneath (D14). */
+  solo?: number
 }
 
 export interface FxPreviewState {
@@ -35,8 +37,9 @@ export interface FxPreviewState {
 
 /**
  * **The FX editor's preview** (FX editor plan §3.3): `POST /fx/preview` over the selection with
- * every FX in the list, `include: STACK`, asked again — the latest ask wins, an answer to an older
- * one dropped — whenever what it drew may have moved:
+ * the picked FX, `include: STACK` — the desk folds every FX reaching the selection beside it — and
+ * the window and solo the graph chose, asked again — the latest ask wins, an answer to an older one
+ * dropped — whenever what it drew may have moved:
  *
  * - the ask itself changes: the selection, or the FX in the list;
  * - `fxChanged` for an FX in the list — which is also how an `updateFx` this window sent is
@@ -46,8 +49,8 @@ export interface FxPreviewState {
  *   underneath changed.
  *
  * Moves arriving together coalesce into one ask a microtask later, and one ask is in flight at a
- * time with at most one waiting behind it. Nothing here decodes the
- * samples: the graph (session 5) reads them; the list reads the answer's apply order.
+ * time with at most one waiting behind it. Nothing here decodes the samples: the graph does
+ * (`fxPreviewDecode.ts`); the list reads the answer's apply order.
  */
 export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
   const [preview] = usePreviewFxMutation()
@@ -65,6 +68,7 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
       fx: ask.fxIds.slice(0, PREVIEW_MAX_FX).map((fxId) => ({ fxId })),
       include: 'STACK',
       ...(ask.window != null ? { window: ask.window } : {}),
+      ...(ask.solo != null && ask.solo >= 0 && ask.solo < Math.min(ask.fxIds.length, PREVIEW_MAX_FX) ? { solo: ask.solo } : {}),
     }
     // Keyed by content — the listed FX included, so one joining the list asks again — and a
     // re-render that rebuilt the same arrays asks nothing.
@@ -177,7 +181,7 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
 function askKey(ask: FxPreviewAsk | null): string {
   if (ask == null) return ''
   const listed = [...(ask.listed ?? [])].sort((a, b) => a - b)
-  return JSON.stringify([ask.projectId, ask.targets.map((t) => [t.type, t.key]), ask.fxIds, listed, ask.window ?? null])
+  return JSON.stringify([ask.projectId, ask.targets.map((t) => [t.type, t.key]), ask.fxIds, listed, ask.window ?? null, ask.solo ?? null])
 }
 
 /** Every (row key, attribute) the answer drew: what is underneath each of them is a reason to ask again. */

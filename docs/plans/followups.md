@@ -40,6 +40,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-AMPLITUDE`](#fu-fx-amplitude) | Trigger | FX | an operator wants an FX bigger than it was written (absorbs `FU-FX-SIZE-OVER-100`) |
 | [`FU-FX-PER-STEP-TIMING`](#fu-fx-per-step-timing) | Trigger | FX | an operator expects a longer list to run slower |
 | [`FU-FX-PREVIEW-SHARED-CHANNELS`](#fu-fx-preview-shared-channels) | Trigger | FX | an FX graph disagrees with the rig where two attributes share a channel |
+| [`FU-FX-STAGE-SCRUB`](#fu-fx-stage-scrub) | Trigger | FX | an operator scrubs the FX graph and looks at the stage |
+| [`FU-FX-PREVIEW-FADES`](#fu-fx-preview-fades) | Trigger | FX | an operator reads the FX graph across a GO |
 | [`FU-FX-STEP-WIDTH`](#fu-fx-step-width) | Trigger | FX | an operator asks for an uneven step |
 | [`FU-FX-LIBRARY-GAPS`](#fu-fx-library-gaps) | Trigger | FX | an operator reaches for a square, diamond or TiltDim |
 | [`FU-FX-FLICKER-REPEATS`](#fu-fx-flicker-repeats) | Trigger | FX | someone sees a flicker repeat on a long cycle |
@@ -515,6 +517,41 @@ with the slider rows of those emitters, `position` with `pan` and `tilt` — in 
 add a parity case for each pairing.
 
 **Trigger**: an FX graph disagrees with the rig where two attributes share a channel.
+
+---
+
+### `FU-FX-STAGE-SCRUB`
+
+**The Stage view draws the FX graph's moment** · Trigger · FX editor plan session 5, 2026-10-25
+
+The FX editor's graph (`frontend/src/components/fxEditor/FxGraph.tsx`) draws what each head will do
+over a window and runs a playhead across it, but the Stage view draws only what the desk sends, so
+nothing shows the rig at a moment the operator points at. Hovering or pausing the graph changes
+nothing on stage (plan §8).
+
+The shape: a per-window vis source that lays the preview's samples at the hovered or paused moment
+over the Stage view's channel source, drawn and never sent, the way Next GO is a preview source
+(`frontend/docs/stage-vis-engineering.md` §"The vis source"). The samples are per attribute, so the source maps them
+onto channels through the rig's own descriptors.
+
+**Trigger**: an operator scrubs the FX graph and looks at the stage.
+
+---
+
+### `FU-FX-PREVIEW-FADES`
+
+**Draw a cue's fade under the FX graph** · Trigger · FX editor plan session 5, 2026-10-25
+
+`fx/FxSampler.kt` reads what is underneath once per head and attribute and holds it across the
+window, and it draws every FX's envelope as 1, so a cue's crossfade, a press's grow and Blind's
+release are not in the graph (plan §8; `docs/fx-engineering.md` §"Previewing an FX"). Across a GO
+the graph shows the stage before the GO until the next re-ask.
+
+The shape: sample `LayerResolver.fallbackFor` along the running fade, and the envelope's ramp
+(`fx/FxEnvelope.kt`) per FX, both pure in the clock; the answer's `underneath` becomes a series
+rather than one sample, and the graph draws it as a line.
+
+**Trigger**: an operator reads the FX graph across a GO.
 
 ---
 
