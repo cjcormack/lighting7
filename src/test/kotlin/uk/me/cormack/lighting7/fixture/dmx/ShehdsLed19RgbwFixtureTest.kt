@@ -4,6 +4,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.createTestTransaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class ShehdsLed19RgbwFixtureTest {
 
@@ -145,5 +146,17 @@ class ShehdsLed19RgbwFixtureTest {
         assertEquals(180u.toUByte(), controller.getValue(14))
         assertEquals(50u.toUByte(), controller.getValue(15))
         assertEquals(0u.toUByte(), controller.getValue(16))
+    }
+
+    @Test
+    fun `DMX 0 is the widest zoom in both modes`() {
+        for (fixture in listOf(
+            ShehdsLed19RgbwFixture.Mode24Ch(universe, "shehds-1", "Shehds 1", 1),
+            ShehdsLed19RgbwFixture.Mode16Ch(universe, "shehds-2", "Shehds 2", 1),
+        )) {
+            val zoom = assertNotNull(fixture.fixtureAttribute("zoom"))
+            assertEquals(60.0, zoom.degMin, "${fixture.mode}: DMX 0 is wide")
+            assertEquals(10.0, zoom.degMax, "${fixture.mode}")
+        }
     }
 }
