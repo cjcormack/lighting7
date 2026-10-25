@@ -123,13 +123,31 @@ describe('ProgrammerActionBar', () => {
   })
 
   it('keeps every control reachable by name when its word is hidden', () => {
-    // Below `@[800px]` Clear loses its word and Include and Record become icons. An `aria-label`
+    // Below their rungs Clear, Blind, Include, Look and Record become icons. An `aria-label`
     // on each is what makes that a *visual* shrink rather than an information one — and it is what
     // these tests address the buttons by, since jsdom applies no container query at all.
     render(<ProgrammerActionBar projectId={1} />)
     expect(screen.getByRole('button', { name: 'Clear' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Include…' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Record' })).toBeTruthy()
+  })
+
+  it('puts + Look between Blind and Include, and words the row in two steps (programmer-toolbar plan D12)', () => {
+    render(<ProgrammerActionBar projectId={1} />)
+    const order = ['Blind', 'Add a Look', 'Include…', 'Include, or add a Look', 'Record'].map((name) =>
+      screen.getByRole('button', { name }),
+    )
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    // Clear, Blind and Include give their words up below 1100; Look and Record keep theirs to 800.
+    const word = (name: string, text: string) =>
+      [...screen.getByRole('button', { name }).querySelectorAll('span')].find((s) => s.textContent === text)!.className
+    expect(word('Clear', 'Clear')).toBe('hidden @[1100px]:inline')
+    expect(word('Blind', 'Blind')).toBe('hidden @[1100px]:inline')
+    expect(word('Include…', 'Include…')).toBe('hidden @[1100px]:inline')
+    expect(word('Add a Look', 'Look')).toBe('hidden @[800px]:inline')
+    expect(word('Record', 'Record')).toBe('hidden @[800px]:inline')
   })
 
   it('keeps every control on the surface — no overflow kebab', () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { AudioWaveform, ChevronLeft, Layers, Plus, Search } from 'lucide-react'
+import { AudioWaveform, ChevronLeft, Layers, Maximize2, Plus, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,8 @@ import { selectionKeyOf, storedFxOf } from '@/components/fx/draftFx'
 import { FxEditor } from '@/components/fx/FxEditor'
 import { FxPicker, type AuditionedFx } from '@/components/fx/FxPicker'
 import { pickerFamilyForSheet } from '@/components/fx/fxEditorModel'
+import { ReplaceStack, useLocalFxHolder } from '@/components/fx/ReplaceStack'
+import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import { fxTargetOf } from '@/components/fx/selectionFxTarget'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useActiveFxQuery, useFxLibraryQuery } from '@/store/fixtureFx'
@@ -92,6 +94,9 @@ export function ApplyPicker({
   offerNew = true,
   scope,
   attribute,
+  editOnStart = false,
+  onOpenInEditor,
+  lead,
 }: {
   projectId: number
   open: boolean
@@ -120,6 +125,15 @@ export function ApplyPicker({
   scope?: 'window' | 'programmer'
   /** The effects library's property — a cell's — which `FxPicker` prefers and opens the family of. */
   attribute?: string
+  /**
+   * The FX arm turns into the live editor once a tap has started an FX (D9): *‹ Swap* goes back to the
+   * list, whose taps swap it, and the editor's Done closes the picker.
+   */
+  editOnStart?: boolean
+  /** The editor's *Open in FX editor* ⤢ (D9) — absent, not drawn. Never under a focused Look, which absorbs it. */
+  onOpenInEditor?: (fxId: number) => void
+  /** Drawn above the palettes or Looks — the phone's merged **+**'s *Include a cue or Look…* (D12). */
+  lead?: ReactNode
 }) {
   const form = useEditorForm()
   const { isVenue } = useVenueMode(projectId)
@@ -133,6 +147,9 @@ export function ApplyPicker({
   // selection emptying under it, and its hooks are not worth paying for until it is asked for.
   const [newMounted, setNewMounted] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  // The door the popover opened from, which Escape gives the focus back to.
+  const opener = useRef<HTMLElement | null>(null)
+  const closedOutside = useRef(false)
 
   // A fresh search each time it opens: the last one belonged to the last selection.
   useEffect(() => {
@@ -251,6 +268,7 @@ export function ApplyPicker({
 
   const body = (
     <div className="flex min-h-0 flex-1 flex-col">
+      {lead}
       <div className="flex flex-none flex-wrap items-center gap-2 px-3 pt-3 pb-1">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -406,6 +424,9 @@ export function ApplyPicker({
         attribute={attribute}
         scope={scope}
         onBack={library === 'fx' ? undefined : () => setFxView(false)}
+        editOnStart={editOnStart}
+        onOpenInEditor={onOpenInEditor}
+        onClose={() => onOpenChange(false)}
       />
     ) : (
       body
@@ -433,12 +454,23 @@ export function ApplyPicker({
             // toggle; refusing the dismissal leaves the door's `onClick` the single thing deciding.
             onInteractOutside={(event) => {
               if (anchorRef.current?.contains(event.target as Node)) event.preventDefault()
+              else closedOutside.current = true
             }}
             // Radix's own auto-focus is a parent effect and would take the focus straight back off a
-            // field focused in an effect.
+            // field focused in an effect. The FX arm has no search, so its family segment takes it.
             onOpenAutoFocus={(event) => {
+              opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+              closedOutside.current = false
               event.preventDefault()
-              searchRef.current?.focus()
+              if (searchRef.current != null) searchRef.current.focus()
+              else (event.currentTarget as HTMLElement).querySelector<HTMLElement>('[aria-label="FX family"] [data-state="on"]')?.focus()
+            }}
+            // A popover hung on an anchor has no trigger for Radix to give the focus back to. Closed by
+            // a press elsewhere, the focus stays where the operator put it.
+            onCloseAutoFocus={(event) => {
+              if (closedOutside.current) return
+              event.preventDefault()
+              opener.current?.focus()
             }}
           >
             {content}
@@ -501,6 +533,7 @@ interface PickerSection {
 
 /** The closed panel's answers, as module constants so `=== NO_SECTIONS` can tell "shut" from "empty". */
 const NO_PALETTES: readonly PaletteSummary[] = []
+const NO_TARGETS: PressPair['targets'] = []
 const NO_SECTIONS: readonly PickerSection[] = []
 
 /** The pad's dimmed arm and its reason, under the face. */
@@ -659,6 +692,9 @@ function EffectsArm({
   attribute,
   scope,
   onBack,
+  editOnStart,
+  onOpenInEditor,
+  onClose,
 }: {
   projectId: number
   open: boolean
@@ -669,6 +705,9 @@ function EffectsArm({
   scope?: 'window' | 'programmer'
   /** Back to the palettes — absent where the door opened the effects. */
   onBack?: () => void
+  editOnStart: boolean
+  onOpenInEditor?: (fxId: number) => void
+  onClose: () => void
 }) {
   const options = useMemo(() => (scope == null ? undefined : { scope }), [scope])
   const { press, into } = usePress(projectId, pair, options)
@@ -691,6 +730,33 @@ function EffectsArm({
   const [current, setCurrent] = useState<AuditionedFx | null>(null)
   const [editing, setEditing] = useState(false)
   const live = current != null ? ((active ?? []).find((e) => e.id === current.fxId) ?? null) : null
+
+  // *Replace · Stack*: asked on the programmer page, of the bare press alone — a Look absorbs the FX
+  // and a cue stores it, and neither takes heads off anything — and only before the session's first
+  // start, since every later tap swaps that FX, which keeps how it started.
+  const asks = useProgrammerScope() != null && into.kind === 'programmer'
+  const [landing, setLanding] = useState<readonly string[]>([])
+  const [stack, setStack] = useState(false)
+  const holderOf = useLocalFxHolder(asks ? pair.targets : NO_TARGETS)
+  const holder = asks && current == null ? (landing.map((attribute) => holderOf(attribute)).find((h) => h != null) ?? null) : null
+  const decided = useRef(false)
+  const startedStacked = useRef(false)
+  const stackOn = useCallback(
+    (attribute: string) => {
+      if (current != null) return startedStacked.current
+      decided.current = stack && holderOf(attribute) != null
+      return decided.current
+    },
+    [current, stack, holderOf],
+  )
+  const onCurrent = useCallback(
+    (next: AuditionedFx | null) => {
+      if (next != null && next.fxId !== current?.fxId) startedStacked.current = decided.current
+      setCurrent(next)
+      if (editOnStart && next != null) setEditing(true)
+    },
+    [current, editOnStart],
+  )
 
   /** The open editor's "land what the floor holds" — written before the effect goes into the Look. */
   const flushEditor = useRef<(() => void) | null>(null)
@@ -716,6 +782,9 @@ function EffectsArm({
       setCurrent(null)
       setEditing(false)
       setPicked(null)
+      setStack(false)
+      decided.current = false
+      startedStacked.current = false
       return
     }
     finish()
@@ -741,7 +810,10 @@ function EffectsArm({
     [templates, fxFit, context, mask],
   )
   const heads = pair.targets.length
-  const pressFamilies = useMemo(() => ({ projectId, families: pair.families }), [projectId, pair.families])
+  const pressFamilies = useMemo(
+    () => ({ projectId, families: pair.families, ...(asks ? { stackOn } : {}) }),
+    [projectId, pair.families, asks, stackOn],
+  )
 
   return (
     <div data-picker-effects className="flex min-h-0 flex-1 flex-col">
@@ -781,37 +853,62 @@ function EffectsArm({
               }}
             />
           </div>
-        ) : editing && live != null ? (
-          <div className="flex flex-col gap-2 pt-1">
-            <Button variant="ghost" size="sm" className="h-7 self-start gap-1 px-1.5 text-xs" onClick={() => setEditing(false)}>
-              <ChevronLeft className="size-3.5" />
-              FX
-            </Button>
-            <FxEditor
-              key={`${live.id}:${live.fxType}`}
-              effect={live}
-              onDone={() => setEditing(false)}
-              onStop={() => {
-                // Stopped, so nothing is left to absorb: the session's effect is cleared with it.
-                stopFx(live)
-                setCurrent(null)
-                setEditing(false)
-              }}
-              flushRef={flushEditor}
-            />
-          </div>
         ) : (
-          <div className="pt-1">
-            <FxPicker
-              target={target}
-              initialFamily={pickerFamilyForSheet(family)}
-              preferredAttribute={attribute ?? fit.attribute}
-              current={current}
-              onCurrent={setCurrent}
-              onEdit={() => setEditing(true)}
-              press={into.kind === 'look' ? undefined : pressFamilies}
-            />
-          </div>
+          <>
+            {editing && live != null && (
+              <div className="flex flex-col gap-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 px-1.5 text-xs" onClick={() => setEditing(false)}>
+                    <ChevronLeft className="size-3.5" />
+                    {editOnStart ? 'Swap' : 'FX'}
+                  </Button>
+                  {onOpenInEditor != null && into.kind === 'programmer' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      data-open-fx-editor
+                      className="ml-auto h-7 gap-1 px-2 text-xs"
+                      title="The FX tab’s Selection view, these heads, this FX picked"
+                      onClick={() => {
+                        flushEditor.current?.()
+                        onOpenInEditor(live.id)
+                      }}
+                    >
+                      <Maximize2 className="size-3.5" />
+                      Open in FX editor
+                    </Button>
+                  )}
+                </div>
+                <FxEditor
+                  key={`${live.id}:${live.fxType}`}
+                  effect={live}
+                  onDone={editOnStart ? onClose : () => setEditing(false)}
+                  onStop={() => {
+                    // Stopped, so nothing is left to absorb: the session's effect is cleared with it.
+                    stopFx(live)
+                    setCurrent(null)
+                    setEditing(false)
+                  }}
+                  flushRef={flushEditor}
+                />
+              </div>
+            )}
+            {/* Kept mounted under the editor, so *Swap* comes back to the family the FX was
+                started from and a tap there swaps it rather than starting afresh elsewhere. */}
+            <div className="pt-1" hidden={editing && live != null}>
+              <FxPicker
+                target={target}
+                initialFamily={pickerFamilyForSheet(family)}
+                preferredAttribute={attribute ?? fit.attribute}
+                current={current}
+                onCurrent={onCurrent}
+                onEdit={() => setEditing(true)}
+                press={into.kind === 'look' ? undefined : pressFamilies}
+                onLanding={setLanding}
+                underFamilies={holder != null ? <ReplaceStack stack={stack} onChange={setStack} holder={holder} /> : null}
+              />
+            </div>
+          </>
         )}
         {palettes.length > 0 && !(editing && live != null) && (
           <section data-picker-section="effect-palettes">

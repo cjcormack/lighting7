@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronDown, Circle, Download, Eraser, EyeOff, Layers, Palette, Plus, Upload } from 'lucide-react'
+import { ChevronDown, Circle, Eraser, EyeOff, Layers, Palette, Plus, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useVenueMode } from '@/store/venues'
@@ -34,6 +34,7 @@ import { includedCueEntry, includedCueId, includedTargetParts } from '@/lib/incl
 import { useProgrammerSheets } from './ProgrammerSheets'
 import { useHeldSceneryCount } from './ProgrammerSceneryList'
 import { NewPaletteFromSelectionSheet } from './NewPaletteFromSelectionSheet'
+import { AddLookAndInclude } from './AddLook'
 import { useMarquee } from '@/components/fixtures-list/marqueeContext'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
@@ -44,6 +45,9 @@ const FADE_OPTIONS = [
   { value: '2000', label: '2s' },
   { value: '3000', label: '3s' },
 ]
+
+/** Clear, Blind and Include's words, which go before Look's and Record's (programmer-toolbar plan D12). */
+const MINOR_WORD_CLASS = 'hidden @[1100px]:inline'
 
 
 /**
@@ -74,8 +78,8 @@ const FADE_OPTIONS = [
  *    app**, and `useShowBarProps` deliberately supplies none — it is not a second toggle, and
  *    adding one back to the bar for any host would be the split session 2b ended, from the other
  *    side.
- *  - **Load** — a native `title` on Include, which is not wrapped: the only way in, and the only
- *    control never disabled.
+ *  - **Load** — a native `title` on Include, which is not wrapped: never disabled, since it is how
+ *    the programmer is filled. + Look beside it fills it too, a Look at a time.
  *  - **Save** — the same, on Record: one primary button with a destination menu, unchanged.
  *
  * `Update` is not here at all — it lives inside the source box, beside the thing it writes to.
@@ -83,9 +87,12 @@ const FADE_OPTIONS = [
  * `sheetControls` is gone too: Groups and Columns are the *grid's* tools, not the programmer's
  * verbs, and they moved to row B where the filter already was.
  *
- * Below `@[800px]` Clear keeps its fade segment and loses its word, and Blind, Include and Record
- * become their icons; every one of those carries an `aria-label` so the shrink costs a sighted
- * operator a word and a screen reader nothing. Nothing collapses into an overflow kebab — the old
+ * **+ Look** sits between Blind and Include (programmer-toolbar plan D11; `AddLookAndInclude`). The
+ * words go in two steps (D12): below `@[1100px]` Clear, Blind and Include lose theirs while Look
+ * and Record keep them; below `@[800px]` every control is its icon; below `@[600px]` Look and
+ * Include are one **+**, so the bar keeps its phone width. Clear keeps its fade segment throughout,
+ * and every control carries an `aria-label`, so the shrink costs a sighted operator a word and a
+ * screen reader nothing. Nothing collapses into an overflow kebab — the old
  * bar hid its last four buttons behind a `MoreHorizontal` below `sm`, which put the entire point
  * of the programmer one tap further away on the surface most likely to be used standing up.
  *
@@ -189,7 +196,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
               className="inline-flex items-center gap-1.5 px-2.5 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
             >
               <Eraser className="size-3.5" />
-              <span className="hidden @[800px]:inline">Clear</span>
+              <span className={MINOR_WORD_CLASS}>Clear</span>
             </button>
             <Select value={fadeMs} onValueChange={setProgrammerFade}>
               <SelectTrigger
@@ -257,19 +264,15 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
         )}
       >
         <EyeOff className="size-3.5" />
-        <span className="hidden @[800px]:inline">Blind</span>
+        <span className={MINOR_WORD_CLASS}>Blind</span>
       </Button>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={sheets.openInclude}
-        title="Load"
-        aria-label="Include…"
-      >
-        <Download className="size-3.5" />
-        <span className="hidden @[800px]:inline">Include…</span>
-      </Button>
+      <AddLookAndInclude
+        projectId={projectId}
+        onInclude={sheets.openInclude}
+        lookWordClass="hidden @[800px]:inline"
+        includeWordClass={MINOR_WORD_CLASS}
+      />
 
       <div className="inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-md">
         <Button

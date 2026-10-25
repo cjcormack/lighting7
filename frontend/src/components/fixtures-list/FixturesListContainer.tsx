@@ -91,6 +91,7 @@ import { PHONE_FOLDED_CLASS } from '../sheet/toolbarFolds'
 import { HighlightButton, LocateControl, useRigVerbs } from './RigVerbs'
 import { useListSelectionWrites } from './useListSelectionWrites'
 import { SetButton, type SetFamilyChoice } from '../programmer/SetButton'
+import { ProgrammerAddFxButton } from '../programmer/ProgrammerAddFxButton'
 import type { HeadsChipParts } from '../programmer/SelectionBar'
 import {
   ROW_C_KBD_CLASS,
@@ -1539,7 +1540,7 @@ export function FixturesListContainer({
     ) : null
 
   // The programmer's row C, in its two right-hand clusters (D3): *what to do to them* — Set ⏎ ·
-  // Fan · Release ⌫ ▾ — and *where they are on the rig*, Locate ▾ · Highlight, which the bar pushes
+  // Fan · FX · Release ⌫ ▾ — and *where they are on the rig*, Locate ▾ · Highlight, which the bar pushes
   // to the right edge. Its left cluster, the heads chip and the mask, is the bar's (`heads` below).
   // There is no cell Clear any more (D7): Release's cell arm is the same gesture as ⌫. Its heads
   // arm (fixture-fx-sheets plan D18) is one `clearTarget` per target — Locate's targets, a group row
@@ -1570,6 +1571,7 @@ export function FixturesListContainer({
           onSeedConsumed={cellCount > 0 ? consumeSpreadSeed : undefined}
           wordClass={ROW_C_VERB_WORD_CLASS}
         />
+        {routeProjectId != null && <ProgrammerAddFxButton projectId={routeProjectId} wordClass={ROW_C_VERB_WORD_CLASS} />}
         <ReleaseTargetsButton
           targets={releaseTargets}
           wordClass={ROW_C_VERB_WORD_CLASS}

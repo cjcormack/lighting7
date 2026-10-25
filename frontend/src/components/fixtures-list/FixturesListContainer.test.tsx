@@ -150,6 +150,10 @@ vi.mock('./SpreadPopover', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./SpreadPopover')>()),
   SpreadPopover: () => <span data-testid="row-spread" />,
 }))
+// Row C's FX reads the window's pair and opens the picker; `ProgrammerAddFx.test.tsx` has it.
+vi.mock('../programmer/ProgrammerAddFxButton', () => ({
+  ProgrammerAddFxButton: ({ projectId }: { projectId: number }) => <span data-testid="row-fx" data-project={projectId} />,
+}))
 // Row C's rig verbs and the heads chip's writes are store-connected, with suites of their own.
 const rigRelease = vi.hoisted(() => vi.fn())
 vi.mock('./RigVerbs', () => ({
@@ -768,12 +772,19 @@ describe('row C on the programmer (programmer-toolbar plan D3, D6, D7)', () => {
   const openMenu = (name: string) =>
     fireEvent.pointerDown(screen.getByRole('button', { name }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
 
-  it('draws Set, Fan and Release over a marquee, and no cell Clear — Release’s cell arm is ⌫', () => {
+  it('draws Set, Fan, FX and Release over a marquee, and no cell Clear — Release’s cell arm is ⌫', () => {
     render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />)
     fireEvent.click(screen.getByTestId('cell'))
-    expect(screen.getByRole('button', { name: 'Set the 1 cell' })).toBeInTheDocument()
-    expect(screen.getByTestId('row-spread')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Release the 1 cell' })).toBeInTheDocument()
+    const verbs = [
+      screen.getByRole('button', { name: 'Set the 1 cell' }),
+      screen.getByTestId('row-spread'),
+      screen.getByTestId('row-fx'),
+      screen.getByRole('button', { name: 'Release the 1 cell' }),
+    ]
+    for (let i = 1; i < verbs.length; i++) {
+      expect(verbs[i - 1].compareDocumentPosition(verbs[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    expect(screen.getByTestId('row-fx')).toHaveAttribute('data-project', '1')
     expect(screen.queryByRole('button', { name: 'Clear cells' })).toBeNull()
     expect(screen.queryByTestId('cell-verbs')).toBeNull()
   })

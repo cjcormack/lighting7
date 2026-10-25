@@ -113,8 +113,8 @@ each session deletes or rewrites a test file another suite imports from. A sessi
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Row C: three clusters, the heads chip, Set on rows, Release, no strip | in review | claude/amazing-wozniak-7r87f8 | | |
-| 2 | + Look in row A, and FX on row C with Replace · Stack | planned | | | |
+| 1 | Row C: three clusters, the heads chip, Set on rows, Release, no strip | merged | claude/amazing-wozniak-7r87f8 | [#283](https://github.com/cjcormack/lighting7/pull/283) | f11be5db |
+| 2 | + Look in row A, and FX on row C with Replace · Stack | in review | claude/programmer-toolbar-s2 | | |
 | 3 | ⌘K's Programmer and Selection groups | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -197,6 +197,32 @@ the next; whoever merges the last fills its own.
 - **Docs:** `frontend/CLAUDE.md` §"Applying to a selection" (the bare FX's doors and Replace · Stack),
   the fixture sheet's §"The live editor" paragraph naming the doors, and §"The programmer's tables"
   where it names *+ Look or palette* and *+ FX*.
+- **What the code said, recorded at the session** (where this section was wrong or silent):
+  - *The live editor is the picker's own.* The FX arm (`ApplyPicker`'s `EffectsArm`) already drew
+    `FxEditor` after *Edit <name>*, and absorbs into a focused Look when its session ends; the doors
+    turn it on at the start (`editOnStart`) rather than mounting `FxEditorPopover`'s `SplitFxEditor`.
+    An FX just started on the selection paints exactly the selection, so there is nothing to split.
+  - *Replace · Stack asks by where the FX lands.* The desk replaces in the family of the attribute
+    the FX drives (a Pulse on `uv` is Colour), not the library family `FxPicker`'s segment files it
+    under, so the picker reports the attributes its listed FX would land on (`onLanding`), draws the
+    segment in a slot under its families (`underFamilies`) and takes the choice per landing attribute
+    (`press.stackOn`). The rule is `localHolderIn` over `fxLanes` from the running list alone
+    (`useLocalFxHolder`), as the lane reads it before the preview answers. It is asked only before the
+    session's first start: every later tap swaps that FX, which keeps how it started.
+  - *Every FX door on the programmer page asks, and none elsewhere.* The picker asks wherever the
+    programmer's scope is provided — row C's FX, ⌘K's door, the FX table's *+ FX*, a band's *+ FX …*,
+    the palettes' *FX…* — so the shared `FxBand` asks on the programmer and not in the busk view's
+    family tabs, which §7 leaves as they were. Only row C and ⌘K turn into the editor on a start (the
+    sheet's `editor`), and *‹ Swap* comes back to the list kept mounted under the editor.
+  - *The sheets follow the viewport.* `ApplyPicker` takes `useEditorForm`'s form, so + Look's and
+    FX's bottom sheets are a phone's, not a 600px row's; a narrow row on a desk keeps the popover.
+  - *Row A's word ladder* (D12) was row A's to apply here: Clear, Blind and Include lose their
+    words below 1100 of the row, Look and Record below 800. §9 has the widths.
+  - *FX did not fit D12's row C ladder.* Measured with FX among the verbs, a marquee's row C needed
+    852px worded (so 800–851 overflowed), 656px in the 600–799 arm with the heads (so 640–655
+    overflowed) and 389px on a phone (so 360 and 375 clipped). Set, Fan, FX and Release now keep their
+    words from 860, the heads chip counts cells alone under 660, and the phone arm closes the verbs
+    up — no divider, a 4px gap, 8px padding. §9 has the widths.
 
 ### Session 3 — ⌘K's Programmer and Selection groups
 
@@ -257,5 +283,35 @@ change might fire, per CLAUDE.md.
   now counts cells alone, as on a phone, which brings that arm to 554.
 - **Session 2:** + Look lights the Look and lands it whole; FX on heads already running a Colour FX
   asks Replace · Stack, and Stack leaves both running at the family's starting blend; ⤢ opens the
-  FX editor with the FX picked and its graph drawing.
+  FX editor with the FX picked and its graph drawing. Checked 2026-10-25 in Chromium on a desk with
+  4 hexes, two recorded Looks and a Local Rainbow Cycle on Hex 1–2: + Look's pad lit and the picker
+  stayed open; FX on Hex 1–2's rows, on Colour, said *RainbowCycle on all 2 heads already* (since worded *on both heads*), Stack
+  started Colour Wave beside it and Replace a Colour Fade in place of both; ⤢ landed on
+  `?table=fx`, *Selection*; Done closed the picker; Output disabled FX with its reason. Row A,
+  `main` against this session, no overflow at any width:
+
+  | Window | Row A before | Row A after | Words after |
+  |---|---|---|---|
+  | 1440 × 900 | 483 | 565 | every word |
+  | 1100 × 800 | 483 | 422 | Look, Record |
+  | 900 × 800 | 285 | 329 | none |
+  | 700 × 800 | 285 | 329 | none |
+  | 390 × 844 | 247 | 247 | none (**+**) |
+  | 852 × 393 | 227 | 227 | none (**+**, short) |
+
+  Row C with FX, the same desk, Hex 1–4's rows (*4 heads*) and a marquee over their Dimmer and
+  Colour (*4 heads · 8 cells*, mask *Intensity · Colour*), content needed against the row, after the
+  ladder fix — nothing clipped at any width:
+
+  | Window | Row C | Rows need | Marquee needs | Verbs |
+  |---|---|---|---|---|
+  | 1440 × 900 | 1200 | 838 | 1012 | worded, ⏎ ⌫ |
+  | 1100 × 800 | 860 | 720 | 852 | worded |
+  | 1060 × 800 | 820 | 579 | 710 | iconic, mask whole |
+  | 900 × 800 | 660 | 579 | 656 | iconic |
+  | 880 × 800 | 640 | 579 | 600 | iconic, cells only |
+  | 605 × 800 | 605 | 579 | 600 | iconic, cells only |
+  | 852 × 393 | 612 | 579 | 600 | iconic, cells only (short) |
+  | 390 × 844 | 390 | 358 | 349 | phone |
+  | 360 × 780 | 360 | 358 | 349 | phone |
 - **Session 3:** every command in both groups does what its row says, from ⌘K, on the desk.

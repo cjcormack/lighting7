@@ -583,6 +583,45 @@ describe('FxPicker on the bare effect press', () => {
     expect(pressFx.mock.calls[0][0]).toHaveProperty('blendMode')
   })
 
+  it('asks stackOn with the attribute the tap lands on, and sends stack: true only where it answers yes', async () => {
+    const asked: string[] = []
+    const stackOn = (attribute: string) => {
+      asked.push(attribute)
+      return attribute === 'dimmer'
+    }
+    const { unmount } = render(
+      <FxPicker target={FOUR} initialFamily="INTENSITY" press={{ projectId: 3, families: null, stackOn }} onCurrent={() => {}} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    expect(asked).toEqual(['dimmer'])
+    const sent = JSON.parse(JSON.stringify(pressFx.mock.calls[0][0]))
+    expect(sent).toMatchObject({ stack: true, attribute: 'dimmer' })
+    expect(sent).not.toHaveProperty('blendMode')
+    unmount()
+    pressFx.mockClear()
+    render(<FxPicker target={FOUR} initialFamily="INTENSITY" press={{ projectId: 3, families: null, stackOn: () => false }} onCurrent={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    expect(pressFx.mock.calls[0][0]).not.toHaveProperty('stack')
+    expect(pressFx.mock.calls[0][0]).toHaveProperty('blendMode')
+  })
+
+  it('reports the attributes the listed FX would land on, and again when the family moves', () => {
+    const onLanding = vi.fn()
+    render(<FxPicker target={TARGET} initialFamily="INTENSITY" onLanding={onLanding} onCurrent={() => {}} />)
+    expect(onLanding).toHaveBeenLastCalledWith(['dimmer'])
+    fireEvent.click(screen.getByRole('radio', { name: 'Position' }))
+    expect(onLanding).toHaveBeenLastCalledWith(['position'])
+  })
+
+  it('draws the host’s slot between the families and the rows', () => {
+    render(<FxPicker target={TARGET} initialFamily="INTENSITY" underFamilies={<span data-testid="slot" />} onCurrent={() => {}} />)
+    const slot = screen.getByTestId('slot')
+    expect(screen.getByRole('radio', { name: 'Intensity' }).compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(slot.compareDocumentPosition(screen.getByRole('button', { name: 'Pulse' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('keeps a stacked FX’s blend through a swap', async () => {
     const { rerender } = render(<Stacking stack />)
     wire.library = [PULSE, { ...PULSE, name: 'Ramp' }]
