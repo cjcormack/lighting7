@@ -115,8 +115,8 @@ export function columnFamily(col: ColumnKey): AttributeFamily {
  * have: a marquee across the Colour column means colour and nothing else.
  *
  * Shared because two callers a few pixels apart on one line of the selection bar must not answer
- * differently — `PaletteStrip` filters its chips by it, and the bar badges it beside the counts,
- * and a disagreement between them would read as a bug. What is shared is the **rule**, not one
+ * differently — the desk bridge publishes it as the mask, and the plain lists' bar badges it beside
+ * the counts, and a disagreement between them would read as a bug. What is shared is the **rule**, not one
  * evaluation of it: each call site still runs its own pass. Cheap enough (a `Set` over the
  * marquee's cells) that the bar's own `SelectionBar` memoises it once and hands it down rather
  * than the two deriving it independently.

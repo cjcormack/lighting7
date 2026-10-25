@@ -53,8 +53,8 @@ import type { CueAdHocFx } from '@/api/cuesApi'
 export type ApplyLibrary = 'palettes' | 'looks' | 'fx'
 
 /**
- * The one picker (apply-model plan §4.2): every library door opens it — the palette strip's
- * `All · n` and the Stack table's *Palette…* on every family the selection fits, a popup band's
+ * The one picker (apply-model plan §4.2): every library door opens it — the Stack table's
+ * *Palette…* on every family the selection fits, a popup band's
  * *All …* on the cell's one family, the Stack table's *Look…* on the Looks.
  *
  * Decisions rather than detail:

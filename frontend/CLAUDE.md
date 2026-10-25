@@ -1212,8 +1212,7 @@ colour picker's swatches and a 3D material list are unrelated.
 
 `FxColourPalettes.tsx` owns both halves of the UI: `useColourPalettes()` (the offerable list plus
 the three lookups a picker needs to draw a reference) and `FxColourPaletteRow` (the chips, plus
-**Save `<hex>` as palette…**, which fills the library the way `PaletteStrip`'s
-new-from-selection chip does). Both pickers read `projectId` from the **route**, not a prop — the
+**Save `<hex>` as palette…**, which fills the library the way Record ▾'s *A new palette* does). Both pickers read `projectId` from the **route**, not a prop — the
 FX library page has no project, and there the row simply offers nothing and still edits literals.
 
 **The programmer is a layer stack too**, and `LookStack` (`components/looks/LookStack.tsx`) is
@@ -1410,10 +1409,8 @@ automatic layout, because both were things the busk page does better — order i
 bank, exclusivity is a solo bank's. `TemplateLayoutList`, `TemplateGroupRow` and
 `lib/templateLayout.ts` are deleted, `/templates/reorder` and the `/template-groups` CRUD with them,
 and `PaletteSummary` carries no `sortOrder` and no `groupId`. **Do not reintroduce a stored library
-order**: the only orders a palette has are this page's name order and the programmer row's
-recency, and neither is a field. The programmer's `PaletteStrip` drew this same name-ordered list
-until it became a recents row — see §"Applying to a selection", where the row is the eight most
-recently *pressed* and name order is only the fallback for a library nothing has been pressed from.
+order**: the only orders a palette has are this page's name order and the recency the picker and the
+popup bands read (§"Applying to a selection"), and neither is a field.
 
 The **family filter** stays, and is the page's only partition: a palette is in exactly one family,
 so `?family=colour` is a view of a small library rather than a division of it, and it deep-links
@@ -1472,7 +1469,7 @@ the page, and the library went back to being a flat list.
 
 **A press goes through the pad, and the bank decides the siblings.**
 `POST /busk/pads/{padId}/press` is the *only* press on this surface — the three kind-specific
-mutations (`togglePalette`, `toggleLook`, `goToStack`) are the programmer strip's (through
+mutations (`togglePalette`, `toggleLook`, `goToStack`) are the programmer's doors' (through
 `usePress`) and the AI's now. A pad's ⌥click and its menu's *Apply as values* are not a press: they
 go through `usePress` to the apply routes over the busk pair, and touch no bank. The pad press has a
 second door since the MIDI surface's session 4: a `PressPad` binding runs the
@@ -2535,11 +2532,7 @@ page mark is budgeted at its **wider resting form**, *Own* (57) rather than the 
 own page is an ordinary state, and its names and *Page:* go first, at 1200 — the badge's name is
 capped at 96px so that rung has a ceiling. The merged row (names 820, *Page:* 760), the folded strip
 (440, 400) and Split (410, 360) carry the mark on rungs of their own, in the same docblock. **The
-labels fold last before each floor** (D20): `RIG` at 660 (610 before *Release n*) and `PADS` at 810, to nothing, and neither comes back under it. **Row C gave its `New`
-word for the badge on the phone arm**: at 375 with a cell selected the row was full to the pixel,
-so `PaletteStrip`'s `New` folds to its `+` below `@[600px]` (`PHONE_FOLDED_CLASS`, its title and
-`aria-label` carry it) rather than the badge moving Deselect off the screen; above 600 the chip
-scroller absorbs the badge. Both ladders
+labels fold last before each floor** (D20): `RIG` at 660 (610 before *Release n*) and `PADS` at 810, to nothing, and neither comes back under it. Both ladders
 are pinned as orderings, not numbers, by `RigBand.test.tsx` and `BuskPageStrip.test.tsx`.
 
 ### The hand
@@ -2620,8 +2613,8 @@ each now reads `?? []`, and `paletteRowsSwatch` takes an absent list as an empty
 
 The rule to carry forward: **a defaulted list or zero on a DTO needs `@EncodeDefault(ALWAYS)` on the
 server *and* an optional type on the client**, because those answer different questions — what this
-desk sends, and what any desk might. A lone `?? []` at one call site (which `PaletteStrip` had
-grown for `requiredEmitters`) is the same bug caught one layer later, at one of the places it
+desk sends, and what any desk might. A lone `?? []` at one call site (which the retired palette
+strip had grown for `requiredEmitters`) is the same bug caught one layer later, at one of the places it
 reaches.
 
 **Escape is the last rung, and the question is asked in the capture phase.** `HandChip` drops only
@@ -2703,7 +2696,7 @@ occupied slot is *Clear slot* and then this. A **cue's stack** is `patchProjectC
 through `buildCueInput`, appended at the top (later wins within a cue), and its inverse patches back
 the layers array read *before* the place. The **programmer's layer stack** is the press
 (`usePress`, apply-model plan §5) — it toggles, replaces the palette's family and lands in a focused
-Look as the strip's tap does — and has **no Undo**, which is a decision: a press returns no layer id, the only way
+Look as a palette chip's tap does — and has **no Undo**, which is a decision: a press returns no layer id, the only way
 to find the new layer would be to diff a stack that is *shared*, and a wrong inverse removing another
 window's layer on a live rig is worse than none — the row it just added is one click from its own
 remove. Both layer places send a palette the **window's selection** as `targets`
@@ -2924,8 +2917,8 @@ slice: that one exists only because the cue-slot overlay is a sibling of the rou
 **One press, whatever it is pressed from** (`../docs/plans/completed/apply-model-plan.md` §4.1, session 3).
 A press is *source × selection pair → scope*: a palette or a Look, the targets and attribute mask the
 window is acting on, and where the programmer is pointed. **`hooks/usePress.ts`** is the one place
-that turns that into a route, and every door calls it: the palette strip, the one picker
-(`ApplyPicker`, from `All · n`, a band's *All …* and the Stack table's *+ Look or palette*), the popup's
+that turns that into a route, and every door calls it: the one picker
+(`ApplyPicker`, from a band's *All …* and the Stack table's *+ Look or palette*), the popup's
 Palettes bands (the programmer's colour, level and position editors, and the busk Colour, Level,
 Position and Beam tabs), a busk
 pad's *Apply as values*, the hand's place on the programmer's stack and a cue slot's Look. A busk
@@ -2951,8 +2944,8 @@ paragraphs.
   too, as a busk pad's always was; the click its release generates is swallowed. Only the primary
   button presses or holds (`useLongPress`): on Windows `contextmenu` follows the release, so a
   right-click pressed a busk pad before its menu opened. `components/press/PressGestures.tsx` holds the
-  gesture hook, the shared title, `PalettePressButton`, the chip-with-menu the strip, the picker
-  and the bands all draw, and `LookPressButton`, the picker's Look pad (no *Edit* item: `/looks`
+  gesture hook, the shared title, `PalettePressButton`, the chip-with-menu the picker and the bands
+  draw, and `LookPressButton`, the picker's Look pad (no *Edit* item: `/looks`
   opens no single Look yet). **The menu is a modal `Popover` anchored on the button, never a
   `ContextMenu`**: Radix's `ContextMenuTrigger` arms a ~700ms touch timer of its own that the
   button's hold would race; and modal, so the tap that dismisses it is not also a press on the chip
@@ -2961,14 +2954,14 @@ paragraphs.
   palette or Look pad; a cue pad's menu is unchanged, since a cue is playback.
 - **The pair** is the door's: `usePress(projectId, pair)`. A door with none of its own — the
   programmer's hand place and the Stack table's *+ Look or palette* — takes the window's through
-  `useWindowPress` (`useWindowPressPair`; that picker reads what those heads can take, the strip's offer, from
-  the same snapshot through `useWindowPaletteFit`): on the programmer
-  the list's own, the strip's targets and the marquee's families published through the marquee
-  store as `MarqueeSnapshot.press` (held by content, so a rows refetch republishes nothing), an
-  unlinked window's own selection included; elsewhere `useSelectionPair`, the desk's while following
-  and the tab's copy when not. The split is a cost one: a door that brings its own pair — the strip,
-  a cell batch, a fixture sheet's one target, a cue slot's none — then subscribes to no marquee
-  frame. **A Look's press names neither half** (absolute-looks plan D1, D3): it lands whole, so
+  `useWindowPress` (`useWindowPressPair`; that picker reads what those heads can take from the same
+  snapshot through `useWindowPaletteFit`): on the programmer the list's own, the heads a press lands
+  on (`paletteTargetsFor`) and the marquee's families published through the marquee store as
+  `MarqueeSnapshot.press` (held by content, so a rows refetch republishes nothing), an unlinked
+  window's own selection included; elsewhere `useSelectionPair`, the desk's while following and the
+  tab's copy when not. Row A's *A new palette* (Record ▾) reads the same snapshot, since that row sits
+  outside the grid. The split is a cost one: a door that brings its own pair — a cell batch, a fixture
+  sheet's one target, a cue slot's none — then subscribes to no marquee frame. **A Look's press names neither half** (absolute-looks plan D1, D3): it lands whole, so
   `/looks/{id}/toggle`, `/looks/{id}/apply` and the cue's layer press go out with no targets and no
   mask, whatever the pair.
 - **The scope** (D7): with a Look layer focused (`LookRowStore`), a palette press goes **into the
@@ -3016,35 +3009,27 @@ paragraphs.
 **On the grid a hold is the marquee, not a menu** — as a speed card's hold is its fader. On a touchscreen a finger pans and only a held
 one marquees (`touch-action` cannot say that, so `useCellMarquee` arms by time for `touch`/`pen` and
 refuses `touchmove` only while a marquee is live). A chip and a cell never share a point, so a hold
-never means two things where a finger lands. The other phone rules on that row: below `@[600px]` the
-bar is glyph · cell count · chips · New · Deselect (`SelectionBar.tsx`; the toolbar's Deselect serves
-rows and cells alike since the two became one selection), and a tap on the grid's empty background
+never means two things where a finger lands. The other phone rules on row C: below `@[600px]` it is
+the heads chip counting cells · the mask's glyph · Set · Fan · Release ▾ (`SelectionBar.tsx`, §The
+programmer's scoped grid), Deselect in the chip's menu, and a tap on the grid's empty background
 runs the same cells-then-rows ladder Escape does — only on the grid's own DOM, since React bubbles a
 click inside a portalled cell editor up the same tree.
 
 `useTemplatePress` and `useTemplatePressHandlers` are gone; `usePress.test.tsx` pins the routes, the
-pair and the scope, `PaletteStrip.test.tsx` the strip's gestures, ring and mask filter.
+pair and the scope.
 
-`PaletteStrip` lives in `ProgrammerGrid`'s `renderToolbar`, which hands down the marquee's
-`cells` **and three things the container derives from them** — so **the selection is the filter and
-the target**, and there is no picker to open or family dropdown to get wrong:
+**Palettes reach a selection through Set** (programmer-toolbar plan D1, D2). The palette strip that
+rode row C is gone: Set's popup already draws the family's value palettes above the editor and its FX
+palettes below (`PaletteBands`), with *All …* opening the one picker, and Set opens on whole rows too
+by asking the family first (§The programmer's scoped grid). The busk view's pads are the one-tap door.
 
-- **Cells selected**: only that family is offered, and the press lands on the cells' heads —
-  three colour cells means those three fixtures (which, since the two selections became one, are
-  also the fixture selection; see §One selection, two shapes).
-- **Rows selected, no cells**: the gesture names no attribute, so the filter is what the heads
-  *can take* (`targetFamilies`, from descriptors — capability-only, fx-templates D6): a rig of
-  dimmer-only pars is offered no colour palette, and nothing with a mover on it offers a position
-  one. The press lands on the rows.
-- **Nothing selected**: the strip renders nothing (space plan D3).
-
-**The selection's mask filters it too** (apply-model plan §4.2): a palette outside the families the
-press carries is not offered, since the desk would refuse it. An offer, never a refusal of a press.
-
-**`targetEmitters` narrows it further, in every one of those arms.** A palette naming `white`,
-`amber` or `uv` is withheld unless some selected head has every emitter it names — the family cannot
-draw that line, since the hex and all three emitters are COLOUR. See §Looks, palettes and layers
-for why it is a union and why the probe reads the colour descriptor rather than a category.
+The offer is `paletteFits` (`lib/paletteOffer.ts`), which the picker and the popup bands both filter
+by, so they offer one set: the family, the emitters (a palette naming `white`, `amber` or `uv` is
+withheld unless some selected head has every emitter it names — the family cannot draw that line,
+since the hex and all three emitters are COLOUR; see §Looks, palettes and layers) and a Beam
+attribute. **The selection's mask filters it too** (apply-model plan §4.2): a palette outside the
+families the press carries is not offered, since the desk would refuse it — an offer, never a refusal
+of a press; the picker shows those under *Outside the mask*.
 
 `paletteTargetsFor` in `rowModel.ts` is the target rule — since venue-visit plan S1 it *is*
 `spreadTargetsFor`'s walk, and not `selectedRowTargets`: a group row lands on its *visible* members
@@ -3054,17 +3039,14 @@ palette route would drop an element key; it never did, and the fold put a colour
 of a Shehds onto a parent with no colour. A whole fixture whose attribute lives only on its elements is
 fanned to them **by the desk** (lighting7 `docs/lighting-composition-model.md` §"A press is per
 target"), so the client never expands one; `paletteTargetsOf` in `rowModel.ts` is the same rule
-over a batch's write targets. The strip's families and emitters are read off the **same** targets,
-each resolved to what it is — a fixture whole, an element as that element — so an element selection is offered
-what the element can take (`FixturesListContainer`'s `writeTargetByKey`, which holds every element), and
-row C counts them as *heads*. The strip reads nothing from Redux; `NewPaletteFromSelectionSheet` takes the
-same targets so a press and its "new from selection" cannot name different heads.
-`PaletteStrip.test.tsx` pins the filter, the target and the tap/⌥click split. The offer itself —
-the family, the emitters, a Beam attribute — is `paletteFits` (`lib/paletteOffer.ts`), which the
-strip, the picker and the popup bands all filter by, so the three offer one set.
+over a batch's write targets. The families and emitters a press is offered by are read off the
+**same** targets, each resolved to what it is — a fixture whole, an element as that element — so an
+element selection is offered what the element can take (`FixturesListContainer`'s `writeTargetByKey`,
+which holds every element), and row C counts them as *heads*. `NewPaletteFromSelectionSheet` takes the
+same targets, so a press and *A new palette* cannot name different heads.
 
-**The row is the eight most recently *pressed*, not the library**, and recency is a **desk** fact
-rather than a tab's. lighting7 stamps `last_pressed_at_ms` on every press that *applies* a palette
+**Recency is a desk fact** rather than a tab's: it orders the picker's *Recent* section and puts the
+pressed first in a popup band. lighting7 stamps `last_pressed_at_ms` on every press that *applies* a palette
 — through four doors: the chip's ⌥click (*Apply as values*), its tap, a busk pad press, and a MIDI `pressPalette`
 — so every client and the desk's own hardware agree about what was reached for; a toggle **off** is
 not a press, and neither is an *Apply as values* that reached no head. It arrives as the keyed frame
@@ -3074,13 +3056,10 @@ unfiltered list and `/palettes?family=` are two entries of one endpoint). It mus
 into `paletteListChanged`: that bridge invalidates `PaletteList`, `Cue` and `CueList`, and a press
 happens at busking rate. `lib/paletteRecents.ts` is the one place that orders them, and it orders
 by **parsing** the stamps: `Instant.toString()` omits the fraction on an exact second, so `…:34Z`
-compares *after* `…:34.500Z` as text. With nothing pressed yet the row falls back to the first eight
-by name — all or nothing, never one recent padded out by seven, which would move the row's contents
-under the operator's hand on the second press.
+compares *after* `…:34.500Z` as text.
 
-**`All · n` opens `ApplyPicker`** (`components/press/ApplyPicker.tsx`, apply-model plan §4.2) — the
-one picker every library door opens: on every family the selection fits from `All · n` and the Stack
-table's *Palette…*, on one family from a popup band's *All …*, on the Looks from its *Look…*. It is
+**`ApplyPicker`** (`components/press/ApplyPicker.tsx`, apply-model plan §4.2) is the one picker every
+library door opens: on every family the selection fits from the Stack table's *Palette…*, on one family from a popup band's *All …*, on the Looks from its *Look…*. It is
 the offerable library as a searchable pad grid, sections Recent · All A–Z · Per fixture · FX
 (the FX palettes, and *FX…*, the way to the bare FX) · **Outside the mask** — the palettes the heads
 could take but the selection's mask leaves out, dimmed with the reason (*Colour — the selection is
@@ -3110,14 +3089,8 @@ Looks hold their height so a search never moves the panel under the pointer.
 `ApplyPicker.test.tsx` pins the sections, the offer, the mask arm, the Looks' one list and ring, and
 the FX arm's press and absorb.
 
-**Row C sheds twice on the way down.** Below `@[800px]` the fixture count, its separator and Locate
-/ Highlight fold (`MID_FOLDED_CLASS` in `SelectionToolbar.tsx`) — the count is already on the cell
-count's hover, and both verbs are on the busk target band — which is what gives an iPad portrait two
-recent chips instead of none. Below `@[600px]` the chip scroller is not drawn at all and the library
-is reached through `All · n` alone, with Recent as the sheet's first section. The design authority
-is `../docs/plans/programmer-chrome-design/`, page *Palettes*.
-
-**New from selection** is server-side (`POST /palettes/from-programmer`), for the same reason apply
+**A new palette** — Record ▾'s, from the selection (programmer-toolbar plan D2) — is server-side
+(`POST /palettes/from-programmer`), for the same reason apply
 is: converting a recorded *literal* back into an **intent** is per-head arithmetic that has to agree
 with the resolver. It also decides **generic vs per fixture from the data** — one row per attribute
 where every selected head agrees, one row per head where they do not — rather than from a toggle,
@@ -3132,15 +3105,15 @@ lands** (multi-screen plan D4, D5; lighting7 af3575a). The four press routes tak
 beside `targets`: `POST /busk/pads/{id}/press`, `/palettes/{id}/apply`, `/palettes/{id}/toggle`
 and `/looks/{id}/toggle` (`buskApi.ts`, `palettesApi.ts`, `looksApi.ts`). The pair is the desk's
 while the tab follows the desk and the tab's own when unlinked — `usePressFamilies` in
-`store/selection.ts` answers it for the strip and the picker (the pair they hand `usePress`),
+`store/selection.ts` answers it for the programmer's doors and the picker (the pair they hand `usePress`),
 `useBuskingSelection` for the pads. It is the *desk's* mask when following even in the
 moment another window has moved it under this tab's marquee, because a following tab's press acts
-on the desk's selection and must be masked as the desk is; the strip offers nothing outside it, and
-a press that reaches the desk outside it anyway is refused by name — and **row C's family pill reads that
-same pair** (`shownFamilies` in `programmer/SelectionBar.tsx`), drawn over a row-only selection
-too, so the one state where the two differ (another window's mask landed here as rows) is said on
-the bar rather than discovered from a 400. The kit's bar draws the pill outside its cell block for
-that reason; the plain lists keep the marquee's own reading, never bridging.
+on the desk's selection and must be masked as the desk is; Set's Palettes band and the picker offer
+nothing outside it, and a press that reaches the desk outside it anyway is refused by name — and
+**row C's mask reads that same pair** (`pressFamilies` in `programmer/SelectionBar.tsx`), drawn over
+a row-only selection too, so the one state where the two differ (another window's mask landed here as
+rows) is said on the bar rather than discovered from a 400. The plain lists keep the marquee's own
+reading, never bridging.
 
 **The family pill is the mask's picker** (apply-model plan D3, §4.4; `programmer/SelectionMaskPill.tsx`):
 press it and S10's `MaskToggles` opens in a popover — the *All attributes* switch, and the four
@@ -3240,7 +3213,9 @@ the editor as before. A surface marks a row with `SheetTable`'s `rowClass`, and 
 carries `data-name-cell` for the colour's wash.
 
 **`SelectionBar` is a shell** — counts · family pill · ⏎/⌫ hints · a `strip` slot · a `verbs`
-slot — and the programmer's `SelectionBar` wraps it with the palette strip in the slot.
+slot — and the programmer's `SelectionBar` fills it with its three clusters: the heads chip and the
+mask in `leading` (a slot no other sheet passes, drawn in place of the counts), Set · Fan ·
+Release ▾ in `strip`, Locate ▾ · Highlight as the verbs (§The programmer's scoped grid).
 `CellSelectionActions` takes a `permission` of `CellKeyboardPermission`'s shape and a `spread`
 slot, so a disabled button and a refused key always read one object, and each surface hands in its
 own `SpreadPanel` instance. Surface verbs come after Fan; Deselect is always last and ghost.
@@ -3713,13 +3688,15 @@ Three things the shell changed that read as bugs if you do not know they are dec
 plain lists have row C and a footer now** — reserved (`Nothing selected`) when nothing is, the
 count in the footer — so `SelectionToolbar` draws no count of its own, and `FixturesListContainer`
 has one arm: no `fill`, no `space-y-3` wrapper, and its default toolbar is the shell's row plus
-the programmer's own `SelectionBar` with no `projectId`, which is what draws it without the
-palette strip — one component, so the two bars cannot count a marquee two ways. The bar's own
+the programmer's own `SelectionBar` with no `projectId`, which is what draws it as the kit's bar
+rather than the programmer's three clusters — one component, so the two bars cannot count a marquee
+two ways. The bar's own
 `@container` sits above it on those two routes as everywhere. **The strip folds — the verbs' words
 at 1100 and Locate · Highlight at 800 — apply only on a bar that carries a strip**: the kit's
 `SelectionBar` marks itself `group/bar` + `data-strip` (from `foldForStrip`, defaulting to "there
 is a strip"), and `WORD_CLASS` / `STRIP_MID_FOLDED_CLASS` in `toolbarFolds.ts` are gated on it.
-Those folds exist to give the palette strip room; on the plain lists, the DMX sheet and the patch
+Those folds gave the programmer's retired palette strip room (its row C has its own ladder now,
+`rowCFolds.ts`, and sets no `data-strip`); on the plain lists, the DMX sheet and the patch
 list nothing needs it, and a 1100 fold there emptied every word at once on an ordinary 1160px
 window. The cue sheet folds only while a cue row is selected, when the cue action set fills the
 bar (§"The cue action set").
@@ -4114,8 +4091,8 @@ each was:
   white pair, a bar whose colour lives on its elements expanded, a head with neither dropped — a
   colour-wheel head resolves a `colour-setting` cell the batch counts and a colour commit refuses,
   so the label line counts this list rather than `batch.count`, and the two lines say one number),
-  and the container passes `projectId` for the **programmer alone**, since the plain lists draw no
-  palette strip and Save records from the programmer. A batch of warm/cold white pairs alone (the
+  and the container passes `projectId` for the **programmer alone**, since Save records from the
+  programmer. A batch of warm/cold white pairs alone (the
   blinder's elements, venue-visit plan D8) opens `WarmthCell` instead — a warmth between the pair's
   declared temperatures and a level, committing the colour that mix makes (`lib/whiteMix.ts`;
   `docs/fixtures-engineering.md` §"DmxWhiteMixColour"), with Save and Fan in its footer — and
@@ -4177,13 +4154,13 @@ each was:
   badge (the mask a press carries, §3.2 rule 5), the heads it lands on (a fixture by name, an element
   by its element key, which is what the press sends), *All · n* — then the family's **value**
   palettes that fit the heads, recent first and then by name (`recentFirst` in
-  `lib/paletteRecents.ts`), two rows of chips clipped by height, never a scroller. The offer is the
-  strip's (`paletteFits` in `lib/paletteOffer.ts`): the family, every emitter a palette names
+  `lib/paletteRecents.ts`), two rows of chips clipped by height, never a scroller. The offer is
+  `paletteFits`'s (`lib/paletteOffer.ts`), the picker's too: the family, every emitter a palette names
   somewhere in the heads (so a Shehds zone is offered what its zone takes), and **for a Beam cell
   the palettes with a row for its attribute** — a zoom cell is offered *Wide*, not *Soft edge*.
   A chip is `PalettePressButton` through `usePress` over the cell batch
   (`paletteTargetsOf(batch.targets)`) with the mask `[family]`, so the gestures and the ring are
-  the strip's; under a focused Look a teal *Into <Look>* line shows and the rings go. *All* mounts
+  the picker's; under a focused Look a teal *Into <Look>* line shows and the rings go. *All* mounts
   `ApplyPicker` on the family on its first press and keeps it, with no *New from selection*
   (`offerNew={false}`): the picker lives inside the cell editor, and a sheet there would close with
   it, draft and all — the footer's *Save as palette…* is mounted outside. **The editor**, unchanged. **Below**,
@@ -4661,7 +4638,7 @@ is the kit's copy of the rule for the three surfaces whose row selection is loca
 transient edit scope — and an operator had to hold both in their head to know what the next gesture
 reached. Now `FixturesListContainer` derives one `selectedRowIds` (the cells' rows under a marquee,
 the row selection otherwise) and every consumer reads it: Record's published targets, Locate and
-Highlight, the desk-selection bridge, the palette strip and the footer count. A marquee *is* the
+Highlight, the desk-selection bridge, row C's heads chip and the footer count. A marquee *is* the
 fixture selection, narrowed to some of their attributes. Enforced at the doors, not by an effect:
 the cell door (`selectCells`) clears the rows only when a hit arrives and there are rows to clear,
 and every row door (`selectRow`, `selectAllRows`, `setRows`) clears the cells, whose `clear` bails
@@ -4755,16 +4732,16 @@ instead, reason on the hover, in Rig and Pads, which always follow (D11) — `sh
 the dashed `This window`, whose click follows the desk again. The
 four readings the following chip once carried (`Desk`, `Desk · from <name>`, `Desk · from the
 desk`) stay gone with `deskReading`: an operator at a two-screen desk knows which screen they are
-selecting from. It sits on the programmer's row C between the family pill and the strip (a `chip`
-slot on the kit's `SelectionBar`, filled only with a `projectId`), on the busk rig row beside the
-family pill in Split and Rig, on the pad row in Pads, on the compact rig strip and the short board's
-merged row, and nowhere else — the plain lists never bridge (D1), so a mark there would name a link
-that does not exist. **The badge must never move a control**, so every row it sits on was
-re-measured for it (§The rig): the rig and pad rows' rungs moved by its 29px, and row C gave its
-palette `New` word on the phone arm. **On the busk band the chip takes `showSubject` and reads
-`Targets: This window`**, because there it has a sibling — the page mark (§The busk layout) — and
-two bare chips a row apart would be worse than either alone; on row C it is alone and stays bare,
-that row being budgeted to the pixel. The pill itself is `components/desk/FollowPill.tsx`, shared
+selecting from. It sits on the busk rig row beside the family pill in Split and Rig, on the pad
+row in Pads, on the compact rig strip and the short board's merged row, and nowhere else — the plain
+lists never bridge (D1), so a mark there would name a link that does not exist. **On the
+programmer's row C the link is inside the heads chip** (programmer-toolbar plan D5, revising D11 for
+that row alone): the chip's glyph is the badge while following or a dashed mark while not, it is
+not a press, and the toggle is the chip menu's *Follow the desk selection* item (§The programmer's
+scoped grid). **The badge must never move a control**, so every row it sits on was re-measured for
+it (§The rig): the rig and pad rows' rungs moved by its 29px. **On the busk band the chip takes
+`showSubject` and reads `Targets: This window`**, because there it has a sibling — the page mark
+(§The busk layout) — and two bare chips a row apart would be worse than either alone. The pill itself is `components/desk/FollowPill.tsx`, shared
 by both chips so they cannot drift apart visually while their flags stay entirely separate; its
 parts fold under the host's classes with the whole reading as `aria-label` (§The rig).
 
@@ -4796,8 +4773,9 @@ sheet, which is weaker. Recorded rather than argued: if it turns out to matter, 
 exempt the name cell's own text, not to put the narrow arm back, because that arm leans on `arm()`
 clearing whatever the browser began selecting in the five pixels before the threshold.
 
-**The selection bar's cell verbs are Set · Clear · Fan** (`CellSelectionActions`), drawn before
-Locate and Highlight when the selection is cells. Set and Clear are Enter and Backspace with a
+**The plain lists' cell verbs are Set · Clear · Fan** (`CellSelectionActions`), drawn before
+Locate and Highlight when the selection is cells; the programmer's row C is Set · Fan · Release ▾,
+Release's cell arm doing Clear's job (§"The programmer's scoped grid"). Set and Clear are Enter and Backspace with a
 button on them, and take the container's gate (`cellKeyboardPermission`) and words
 (`cellActionCopy`) so a button cannot promise a gesture the keyboard refuses; Output and a focused
 palette layer show them disabled with the reason, and Fan makes the same two refusals itself
@@ -4817,8 +4795,8 @@ chooser is drawn only when the selection spans a desk-resolved plan and the raw 
 follows: with one column the first question is From and it is focused on open; with several it is
 still *which*, so nothing is. Enter still *applies*, since Fan is the one panel here that does
 not write as it is edited until Live is on. Every list *also* offers the whole-selection row Fan
-(`spreadColumnsForTargets`), drawn in the toolbar's `actions` slot with nothing selected but rows —
-on the programmer beside Release — and the cell verbs replace it the moment a cell is. The colour editor's **Fan…** is wired here too
+(`spreadColumnsForTargets`), drawn in the toolbar's `actions` slot with nothing selected but rows
+(on the programmer the one Fan button takes it), and the cell verbs replace it the moment a cell is. The colour editor's **Fan…** is wired here too
 (editor-kit session 3): `ColourCell` hands its RGB to the container as a one-shot the shape
 `keyboardOpen` uses (`SpreadSeed` — RGB only, no emitter travels, the busk hand-over's rule), the
 container threads it to row C's `SpreadPopover` as `seed`, and the panel opens on Colour with
@@ -4969,13 +4947,44 @@ stack (`LayerStack`, which takes the cue names and the connection as props outsi
 `programmer.keyStack` answer is the desk's own word on a stomp. It is mounted inside the editor, so
 it subscribes only while one is open, and only where ownership is drawn — Local; Output's cells
 take no edit (a click still jumps to the owner) and a focused Look layer's draft has no stack (§8's
-follow-up). **Release n** joins row C's verbs after Fan (D18, `CellSelectionActions`' `release`
-slot): over the rows the selection covers — a marquee's rows or a row selection, Locate's targets,
-so a group row is the group and an element row that head, by its own key, which the desk resolves —
-one `programmer.clearTarget` per target at the programmer fade, one toast in the desk's summed
-count, a group FX left running named once; on the programmer only, folded on the phone arm with
-Fan, live in Local and Output (a programmer verb, like the action bar's Clear) and refused with
-its reason while a Look or palette layer is focused, where writes go to the layer (Chris's call).
+follow-up).
+
+**Row C is three clusters** (programmer-toolbar plan D3, `programmer/SelectionBar.tsx`), left to
+right, over the one selection:
+
+- **Which heads** — the **heads chip** (`HeadsChip.tsx`, D4, D5) and the mask. The chip counts
+  (*6 heads · 6 cells*, *4 heads*, *Nothing selected*), wears the desk link (the link badge while
+  the window follows, a dashed mark while it keeps its own — not a press, unlike the busk band's
+  `DeskChip`), and its **×** deselects. Its menu: the busk band's subsets under *In rig order*
+  (`desk/SubsetControls.tsx`, which the band's Cells menu and steps are too), *Select by colour ▸*,
+  *Follow the desk selection* ✓ (`unlinkFromDeskNow` / `relinkToDesk`) and Deselect. A subset and a
+  colour pick land on whichever selection the window is on (`useListSelectionWrites`): one desk write
+  while following; unlinked, the desk's rule (`lib/cellsSubSelection.ts`) over the **list's own
+  rows**, read as targets by the bridge's `selectedRowTargets` and back by its `rowIdsForTargets` — so
+  a target with no visible row has nowhere to land, as a desk frame would not. The mask is
+  `SelectionMaskPill`'s `row` tone, the picker while following and a reading unlinked.
+- **What to do to them** — **Set ⏎ · Fan · Release ⌫ ▾**. **Set** (`SetButton.tsx`, D6) opens the
+  cell popup on cells; on whole rows it first asks the family, selects those rows' cells in that
+  family's shown columns (a marquee, so the mask becomes it) and opens the popup once they land. It is
+  refused only by the scope, never by the selection's shape. **Release** is one split button
+  (`ReleaseTargetsButton`'s cell arm, D7): the face releases the cells when there are any, else the
+  whole heads; the menu has *These n cells* (⌫, their values out of Local, worded per scope by
+  `cellActionCopy`) and *The whole n heads* (fixture-fx-sheets plan D18: one `programmer.clearTarget`
+  per Locate target at the programmer fade, a group the group and an element that head; live in
+  Local and Output, refused with its reason while a Look or palette layer is focused). There is no
+  cell **Clear** on the programmer any more: *Clear* means row A's whole-programmer Clear.
+- **Where they are on the rig** — **Locate ▾ · Highlight** (`fixtures-list/RigVerbs.tsx`, shared
+  with the plain lists' `SelectionToolbar`), at the right edge.
+
+**Its width ladder is the row's own** (D12, `rowCFolds.ts`, container queries on `ProgrammerGrid`'s
+`@container`): from 1100 every word and ⏎ / ⌫ on Set and Release; 800–1099 Locate and Highlight
+iconic; 600–799 every control iconic and the mask abbreviated (`Col`), the chip counting a
+marquee's cells alone under 640 (the arm measured 610 with the heads, plan §9); below 600 the phone arm —
+measured (`useContainerBand`) and handed down as `ToolbarPhoneContext`, since it changes components,
+not classes: the heads chip counts cells and drops its ×, Locate, *Set locate from current* and
+Highlight (latched, since a menu row cannot be held) move into its menu, and its menu, Set's family
+question and Release ▾ are bottom sheets (`sheet/ToolbarMenu.tsx`, 44px rows). On a short viewport
+the row stays out of the flow until something is selected, as before (`selectionBandState`).
 
 `+ FX` follows the same rule as a value edit, from the FX table's library row or ⌘K's *Apply FX
 → On the selection*: focused layer → into that Look (started on `/fx/add`, then
@@ -6147,7 +6156,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   row can be started on the group's row) and **Whole rig** (every visible fixture) — in its chip slot
   with nothing selected, after Set · Clear · Fan otherwise.
 - **P2 — what it does not mount**: no desk-selection bridge, no Release, Locate or Highlight (the row
-  hover's Info, Locate and Add-to-targets are withheld in the cue context), no palette strip, no
+  hover's Info, Locate and Add-to-targets are withheld in the cue context), no
   `useClearCellFx`, no live writer, no `projectId` on the table (so no appearance leaves and no
   *Save as palette…*); the source chip is never drawn (its stack is a `programmer.keyStack` request).
   A cell's popup **does** draw the Palettes and FX bands (apply-model plan session 8): they press
@@ -6201,7 +6210,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   once and keeps drawing it while any list write waits (`CueRowStore.listsBusy`), until the cue has
   been read again — so a refetch between two writes never draws a removed layer back. *+ Look* and
   *+ Palette* open the one picker (`ApplyPicker`, apply-model plan session 8) on the Values selection,
-  no mask, offering what its heads can take (`cueWriteTargets`, the strip's `targetFamilies` and
+  no mask, offering what its heads can take (`cueWriteTargets`, their `targetFamilies` and
   `targetEmitters`), and its presses write the cue through the desk's press route (`PressCue`) — a
   Look's is a layer naming no targets, since it lands whole; `AddLayerSheet` and `LayerPicker` are deleted
   (`addLayerSheetRetired.test.ts`). **A layer's timing and masters are its settings popover's**

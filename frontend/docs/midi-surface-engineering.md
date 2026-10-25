@@ -271,7 +271,7 @@ The list is one sticky `EditorLabel` per kind that has rows, in kind-row order �
 Fixtures · Looks · Cues**, Desk moved to the front of both because the Selection row is what a
 selection-driven desk reaches for first and it used to sit under every fixture. Under a kind filter
 the one section shows without its heading. Inside a row the chips are grouped by family with a
-hairline between groups (`groupChipsByFamily`, `PaletteStrip`'s split sideways) and the actions
+hairline between groups (`groupChipsByFamily`) and the actions
 last, which is what keeps a fixture row legible with four colour chips and the emitters beside them.
 The search matches chip labels as well as names; a target row's chips are known only inside
 `TargetRowItem`, which finishes the search itself, and a section whose rows all answered null hides

@@ -30,11 +30,11 @@ export const FOLLOWING_DESK_SELECTION = 'Following the desk selection'
  *
  * It is a fact about the one selection rather than about this window's chrome: unlinked, the
  * selection is this tab's own and a press from here lands on it, not on the desk's (D8). Sitting on
- * the programmer's row C, the busk rig row (Split and Rig), the pad row (Pads, on the desk board),
- * the compact boards' rig strip and the short board's merged row, and nowhere else — the plain
- * lists never bridge to the desk (D1), so they have nothing to say — and on the busk view it has a
- * sibling, `BuskPageChip`, the same pill for the *page*, which is why the band's copy says
- * *Targets:* (`showSubject`) and row C's, alone and budgeted to the pixel, stays bare.
+ * the busk rig row (Split and Rig), the pad row (Pads, on the desk board), the compact boards' rig
+ * strip and the short board's merged row, and nowhere else — the plain lists never bridge to the desk
+ * (D1), so they have nothing to say, and the programmer's row C says it inside its heads chip
+ * (programmer-toolbar plan D5) — and on the busk view it has a sibling, `BuskPageChip`, the same pill
+ * for the *page*, which is why the band's copy says *Targets:* (`showSubject`).
  *
  * The pill itself is `FollowPill`'s, shared with the page chip so the two cannot drift apart
  * visually, and the badge `LinkBadge`'s, which the page's link takes too (D7); the flags stay entirely

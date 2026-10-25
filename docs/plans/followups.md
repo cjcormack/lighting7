@@ -2522,9 +2522,10 @@ job is to push `Groups` and `Columns` to the right end of the row. Two `flex: 1 
 `max-w-[340px]` intent at any width: measured at a row B of 664px it is ~122px wide where the row's
 genuine leftover is closer to ~260px.
 
-This is the same bug the file's own comment already names **for the other arm** — the note beside
-`PaletteStrip` in the selection bar explains that `ml-auto` is used there precisely because "a
-spacer here silently stole roughly half the scroller's width". The default arm of row B was never
+This is the same bug the kit's own comment already names **for the other arm** — the note on the
+verbs in `sheet/SelectionBar.tsx` explains that `ml-auto` is used there precisely because "a spacer
+here silently stole roughly half the scroller's width" (the scroller was the programmer's palette
+strip, retired by the programmer-toolbar plan's session 1). The default arm of row B was never
 given the same treatment, and nothing pointed at it because the field simply looked small rather
 than broken.
 

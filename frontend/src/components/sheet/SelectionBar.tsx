@@ -36,32 +36,29 @@ export interface SelectionBarProps {
    */
   cellTitle?: string
   /**
-   * The family pill: the attribute family the marquee named on the programmer, the column's own
+   * The family pill: the attribute family the marquee named on the plain lists, the column's own
    * name elsewhere (`Address`, `Value`, `Fade`). Null draws none. Folded on the phone arm.
    */
   family: string | null
-  /**
-   * The family pill as a control, drawn in its place instead of [family]'s badge — the
-   * programmer's mask picker (`SelectionMaskPill`, apply-model plan D3) while the window follows
-   * the desk. Folded on the phone arm like the badge. Absent on every other sheet.
-   */
-  familyControl?: ReactNode
   /** The two keyboard hints, each drawn only where the surface's permission allows the key. */
   hints: { entry: boolean; clear: boolean }
   /** What the two keys do here, where it is not *edit* and *clear* — the Timeline's *toggle* and *off*. */
   hintWords?: { entry: string; clear: string }
   /**
-   * A chip after the family pill and the hints, before the strip — the programmer's desk chip
-   * (`components/desk/DeskChip.tsx`), which says whose selection this is. Drawn in the reserved
-   * arm too, since a window can unlink with nothing selected — with one limit it shares with the
-   * whole bar: on a short viewport with nothing selected the bar is out of the flow altogether
-   * (`selectionBandState`'s `absent`, the space plan's call that 40px is worth more there), so
-   * the chip is not on screen until something is selected. The busk band's chip has no such
-   * arm. Absent on every other sheet.
+   * Something after the family pill and the hints, before the strip — the cue grid's view verbs,
+   * the surface library's chip. Drawn in the reserved arm too, with the bar's one limit: on a short
+   * viewport with nothing selected the bar is out of the flow altogether (`selectionBandState`'s
+   * `absent`).
    */
   chip?: ReactNode
   /**
-   * What rides the bar between the counts and the verbs — the programmer's template strip, the
+   * The programmer's left end, drawn in place of the glyph and the counts — its heads chip and mask
+   * (programmer-toolbar plan D3, D4), which say the count themselves — in the reserved arm as well
+   * as the selected one. Absent on every other sheet.
+   */
+  leading?: ReactNode
+  /**
+   * What rides the bar between the counts and the verbs — the programmer's Set · Fan · Release, the
    * cue sheet's lock note. Absent leaves the slack to `ml-auto` below.
    */
   strip?: ReactNode
@@ -84,8 +81,8 @@ export interface SelectionBarProps {
  * Row C — the selection bar, one 40px line that never wraps, shared by every sheet.
  *
  * The left half is the kit's — the glyph, the counts, the family pill, the ⏎/⌫ hints — and the
- * verbs are the surface's (CLAUDE.md §Sheet kit): the programmer adds Locate, Highlight and the
- * template strip, the patch list Locate · Highlight · Unpatch, the DMX sheet Park · Unpark, the
+ * verbs are the surface's (CLAUDE.md §Sheet kit): the programmer its three clusters (its heads chip
+ * in [leading]), the patch list Locate · Highlight · Unpatch, the DMX sheet Park · Unpark, the
  * cue sheet Arm as next. Deselect is always last and always ghost, and it is the toolbar's
  * (`SelectionToolbar` or the surface's own) rather than this bar's: since rows and cells became
  * one selection there is exactly one way out, whichever shape the selection is in.
@@ -122,10 +119,10 @@ export function SelectionBar({
   cellLabel,
   cellTitle,
   family,
-  familyControl,
   hints,
   hintWords = { entry: 'edit', clear: 'clear' },
   chip,
+  leading,
   strip,
   verbs,
   marqueeDragging,
@@ -158,8 +155,12 @@ export function SelectionBar({
   if (band === 'reserved') {
     return (
       <div className={cn(CHROME_ROW_CLASS, 'min-w-0 text-muted-foreground')}>
-        <MousePointerSquareDashed className="size-3.5 shrink-0 opacity-60" />
-        <span className="text-xs">Nothing selected</span>
+        {leading ?? (
+          <>
+            <MousePointerSquareDashed className="size-3.5 shrink-0 opacity-60" />
+            <span className="text-xs">Nothing selected</span>
+          </>
+        )}
         {chip}
       </div>
     )
@@ -172,7 +173,8 @@ export function SelectionBar({
       className={cn(CHROME_ROW_CLASS, 'group/bar min-w-0 bg-foreground/5')}
       data-strip={foldForStrip ? '' : undefined}
     >
-      <MousePointerSquareDashed className="size-3.5 shrink-0" />
+      {leading}
+      {leading == null && <MousePointerSquareDashed className="size-3.5 shrink-0" />}
       {/* One selection, counted two ways under a marquee: the rows it reaches, and the cells it
           names on them. With cells in play the row count and its separator fold into the cell
           count's hover, and the width goes to the strip. With rows only it is the one count there
@@ -197,13 +199,7 @@ export function SelectionBar({
           </span>
         </>
       )}
-      {/* The family pill sits outside the cell block: on the programmer it is the mask the next
-          press carries, which while following the desk can stand over a row-only selection (the
-          bridge lands another window's mask as rows) — and is its picker there. Every other sheet
-          passes null with no cells, so nothing changes there. */}
-      {familyControl != null ? (
-        <span className={cn('inline-flex shrink-0', PHONE_FOLDED_CLASS)}>{familyControl}</span>
-      ) : family != null && (
+      {family != null && (
         <Badge
           variant="outline"
           className={cn('shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px]', PHONE_FOLDED_CLASS)}

@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { recentPalettes, stripPalettes } from './paletteRecents'
+import { recentFirst, recentPalettes } from './paletteRecents'
 import type { PaletteSummary } from '@/api/palettesApi'
 
 /**
- * The row's ordering rule, which is not obvious in two places.
- *
- * The stamps are ISO strings from the server, and `Instant.toString()` drops the fractional part on
- * an exact second — so a lexicographic sort puts a press half a second *older* first about once in
- * a thousand. And the fallback is all-or-nothing: one recent draws one chip rather than one recent
- * padded out by name, because a padded row moves its own contents under the operator's hand.
+ * The recency rule, which is not obvious: the stamps are ISO strings from the server, and
+ * `Instant.toString()` drops the fractional part on an exact second — so a lexicographic sort puts a
+ * press half a second *older* first about once in a thousand.
  */
 function template(over: Partial<PaletteSummary> = {}): PaletteSummary {
   return {
@@ -79,7 +76,7 @@ describe('recentPalettes', () => {
       template({ id: 3, name: 'Rubbish', lastPressedAt: 'not a date' }),
     ]
     expect(recentPalettes(rows)).toEqual([])
-    expect(names(stripPalettes(rows))).toEqual(['Null', 'Absent', 'Rubbish'])
+    expect(names(recentFirst(rows))).toEqual(['Null', 'Absent', 'Rubbish'])
   })
 
   it('caps at the limit', () => {
@@ -105,22 +102,18 @@ describe('recentPalettes', () => {
   })
 })
 
-describe('stripPalettes', () => {
-  it('draws the first few by name when nothing has been pressed', () => {
-    const rows = Array.from({ length: 9 }, (_, i) => template({ id: i + 1, name: `T${i + 1}` }))
-    expect(names(stripPalettes(rows))).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8'])
-  })
-
-  it('is all or nothing: one recent draws one chip, not one plus seven by name', () => {
+describe('recentFirst', () => {
+  it('puts the pressed first, most recent first, then the rest in the order given', () => {
     const rows = [
       template({ id: 1, name: 'Never pressed' }),
-      template({ id: 2, name: 'Pressed', lastPressedAt: '2026-09-14T10:00:00.000Z' }),
+      template({ id: 2, name: 'Older', lastPressedAt: '2026-09-14T10:00:00.000Z' }),
       template({ id: 3, name: 'Also never' }),
+      template({ id: 4, name: 'Newer', lastPressedAt: '2026-09-14T10:00:01.000Z' }),
     ]
-    expect(names(stripPalettes(rows))).toEqual(['Pressed'])
+    expect(names(recentFirst(rows))).toEqual(['Newer', 'Older', 'Never pressed', 'Also never'])
   })
 
   it('is empty for an empty library', () => {
-    expect(stripPalettes([])).toEqual([])
+    expect(recentFirst([])).toEqual([])
   })
 })

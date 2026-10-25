@@ -9,8 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  * the whole of the assertion and it is enough: these are two shared constants, and the bug they
  * guard against is one control folding at a different width from the one beside it.
  *
- * Locate and Highlight go **early**, at 800, because the template row needs the width — an iPad
- * portrait's row C sits right on that line. Deselect never folds: Escape is a key, and on a phone
+ * Locate and Highlight go **early**, at 800, on a bar that carries a strip, which needs the width. Deselect never folds: Escape is a key, and on a phone
  * this and a tap on the grid's empty background are the only ways out of a selection.
  */
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
@@ -24,6 +23,13 @@ vi.mock('@/hooks/useStoredLocateActions', () => ({ useStoredLocateActions: () =>
 const { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, SelectionToolbar, WORD_CLASS } = await import(
   './SelectionToolbar'
 )
+const { useRigVerbs } = await import('./RigVerbs')
+
+/** The container owns the rig verbs; the toolbar draws them. */
+function Harness() {
+  const verbs = useRigVerbs([{ type: 'fixture', key: 'hex-1' }], [{ key: 'hex-1', attributes: [] }])
+  return <SelectionToolbar verbs={verbs} onClear={() => {}} actions={<button type="button">Set</button>} />
+}
 
 afterEach(() => {
   cleanup()
@@ -41,20 +47,13 @@ function openLocateMenu() {
 }
 
 function toolbar() {
-  return render(
-    <SelectionToolbar
-      locateTargets={[{ type: 'fixture', key: 'hex-1' }]}
-      targets={[{ key: 'hex-1', attributes: [] }]}
-      onClear={() => {}}
-      actions={<button type="button">Set</button>}
-    />,
-  )
+  return render(<Harness />)
 }
 
 describe('SelectionToolbar', () => {
   it('folds Locate and Highlight at 800 only on a bar with a strip, ahead of the phone arm', () => {
     // The gated form, not the bare one: on the plain lists this toolbar is the only place the two
-    // verbs exist, and the 800 fold exists to give the programmer's template strip room.
+    // verbs exist; the 800 fold applies only on a bar that carries a strip.
     toolbar()
     for (const word of ['Locate', 'Highlight']) {
       const button = screen.getByText(word).closest('button')

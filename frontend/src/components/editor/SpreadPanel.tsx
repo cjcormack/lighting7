@@ -285,6 +285,8 @@ interface SpreadPanelProps {
   onRefused?: () => void
   /** Popover: on the trigger — the selection bar folds it away at phone widths. */
   className?: string
+  /** Popover: the trigger word's fold, where the host's row has its own ladder (the programmer's row C). */
+  wordClass?: string
   /**
    * The colour endpoint's editor — `ColourEditor`, handed in by the two hosts that draw a colour
    * endpoint (the busk tab and the programmer's row C). A component rather than an import because
@@ -437,6 +439,7 @@ export function SpreadPanel({
   noSelection,
   onRefused,
   className,
+  wordClass = WORD_CLASS,
   colourEditor: ColourEndpointEditor,
 }: SpreadPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -1480,7 +1483,7 @@ export function SpreadPanel({
         >
           <Waves className="size-3.5" />
           {/* The same fold as Set and Clear beside it — one rule for the three verbs. */}
-          <span className={WORD_CLASS}>Fan</span>
+          <span className={wordClass}>Fan</span>
         </Button>
       }
     >
