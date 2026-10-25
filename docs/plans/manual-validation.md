@@ -18,7 +18,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-TABLES-COLOURS-S5`](#fu-manual-tables-colours-s5) | colour everywhere else at the desk: the busk rig's tile bands and the Stage view's labels and *Bodies · By colour* in a blacked-out room, a second screen set to *By colour* from the Screens sheet, the DMX footprints and a surface's labels, and whether cyan reads as a cue on the rig | Tables and colours S5, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S4`](#fu-manual-tables-colours-s4) | colour in the tables at the desk: the Colour column's keymap and popover on the desk and the iPad, the name mark readable on the desk's two screens and the iPad in a dark room and in light, *Colour from group*, and a venue patch recoloured from a show and taken back | Tables and colours S4, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S3`](#fu-manual-tables-colours-s3) | a colour set on a venue patch and group from a show is the show's recolour, survives a publish of the venue's own recolour, and is taken back; a venue colour change holds no show | Tables and colours S3, 2026-10-19 |
-| [`FU-MANUAL-TABLES-COLOURS-S2`](#fu-manual-tables-colours-s2) | the programmer's FX lens and dock at the desk: a held-back FX's chip struck through with the right reason (your value, Blind, a stomp), the chip opening the live editor, an FX row's cells ringed on Values, the Colour · Spread dock in every arm with the grid's selection kept, the tables carrying everything the rail's lists did, and the phone's tab segment | Tables and colours S2, 2026-10-19 |
+| [`FU-MANUAL-TABLES-COLOURS-S2`](#fu-manual-tables-colours-s2) | the programmer's FX lens at the desk: a held-back FX's chip struck through with the right reason (your value, Blind, a stomp), the chip opening the live editor, an FX row's cells ringed on Values, colour and Fan from the grid's own editors with its selection kept, the tables carrying everything the rail's lists did, and the phone's tab segment | Tables and colours S2, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S1`](#fu-manual-tables-colours-s1) | the programmer's Values · Stack · FX · Scenery tabs on the desk, the iPad frame and a second screen: the grid keeps its selection across a switch, the Stack table reorders the rig's layers and points the grid at one, and the Screens sheet and ⌘K set the tab | Tables and colours S1, 2026-10-18 |
 | [`FU-MANUAL-SHOWSOUND-BEAMRING`](#fu-manual-showsound-beamring) | the Show-Sound LEDBEAMRING's channels do what its hand-written ChamSys head file says — the colour wheel, gobos, prism, strobe bands, reset and pan front — and the Stage view's ring matches the unit's: colour band, chases, speed, and whether the dimmer reaches it | Show-Sound LEDBEAMRING type, 2026-10-18 |
 | [`FU-MANUAL-VENUE-VISIT-R3-8`](#fu-manual-venue-visit-r3-8) | into the cue editor at the desk — a palette and a Look pressed into Q4's cells and Looks tab while the show runs locked-then-unlocked move nothing on stage, Blue takes Red's heads in the stored cue, the next GO lands them, and a layer's delay and master set from its settings popover take effect on that GO | Venue-visit R3.8, 2026-10-17 |
@@ -64,7 +64,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R2-2`](#fu-manual-venue-visit-r2-2) | a one-value edit to a real show's cue reaches its repo as one changed record — the sync status, the working tree's diff and the history all naming the one row | Venue visit R2.2, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S6`](#fu-manual-venue-visit-s6) | the end of the night on the rig — *Make rig safe* douses every lamp and blacks out, *Undo* strikes them one at a time once each can restrike, the Robe's estimated 5-minute restrike holds, and the Windows desk quits cleanly with its launcher and tray icon gone | Venue visit S6, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S5`](#fu-manual-venue-visit-s5) | the grand master dims the whole rig on the wire — a head with a dimmer through its dimmer, the LED bars with none through their colour, a strobe untouched until 0, a park untouched — and an X-Touch fader drives it with its motor following the app bar | Venue visit S5, 2026-10-15 |
-| [`FU-MANUAL-VENUE-VISIT-S2`](#fu-manual-venue-visit-s2) | one sidebar state reads right on the desk's real screens — a tablet in portrait with it open lands the Programmer on its phone arm, and collapsing it once holds across every view | Venue visit S2, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-S2`](#fu-manual-venue-visit-s2) | one sidebar state reads right on the desk's real screens — a tablet in portrait with it open leaves the Programmer usable, and collapsing it once holds across every view | Venue visit S2, 2026-10-15 |
 | [`FU-MANUAL-SENTRY-RELEASE`](#fu-manual-sentry-release) | the first release build uploads its source maps and commits to Sentry and ships none, and a fresh Windows install sends nothing until an admin turns diagnostics on | Sentry S4, 2026-10-13 |
 | [`FU-MANUAL-SCRIM-S1`](#fu-manual-scrim-s1) | a painted cloth's images travel with its show — through the repo to a second desk, and into a clone | Scrim S1, 2026-10-09 |
 | [`FU-MANUAL-VENUE-PARKS`](#fu-manual-venue-parks) | a park made on a trial venue reaches its shows only when published and taken, holds its level through a switch between two shows on it, and a show re-parks and releases it for itself without the rig dipping — on a trial venue, since it publishes | Venue parks, 2026-10-13 |
@@ -260,8 +260,7 @@ it.
    *Re-read* and fan: the fan starts from the moved mover's new position.
 4. **The busk tab and the cell.** On the busk view's Fan tab fan the selection's tilt; then on the
    programmer select the five movers' Position cells, open one and press *Fan…* (the waves icon after
-   *Aim…*'s crosshair): on a desk screen the rail's Fan tab opens on Position, in About each position, at 0; where
-   the rail draws no tabs, row C's popover opens instead.
+   *Aim…*'s crosshair): row C's Fan popover opens on Position, in About each position, at 0.
 5. **A Look layer.** Focus a Look layer holding positions for three of the movers and fan all five: the
    read-out says the fan starts from the layer's rows, two heads from the stage, the layer's draft takes the fanned values, and the
    stage follows only as the Look does.
@@ -596,17 +595,16 @@ recolours.
 
 ## `FU-MANUAL-TABLES-COLOURS-S2`
 
-**What it proves**: *the FX lens and the dock at the desk* — tables-colours S2: a Values cell an
+**What it proves**: *the FX lens at the desk* — tables-colours S2: a Values cell an
 FX drives carries a violet chip with the division, struck through with the reason where the
-FX is held back, opening the live editor; an FX row selected rings its cells on Values; the
-rail's Stack body, strip counts and doors are gone and the right side is the Colour · Fan dock;
-everything the rail's lists offered is on the Stack and FX tables.
+FX is held back, opening the live editor; an FX row selected rings its cells on Values; nothing
+docks on the right; everything the old rail's lists offered is on the Stack and FX tables.
 
-**Why it is here**: the tests run the lens over stubbed FX and provenance, and the dock's arms
-under jsdom, which lays nothing out. Only a desk shows the chip agreeing with what the rig does —
+**Why it is here**: the tests run the lens over stubbed FX and provenance under jsdom, which lays
+nothing out. Only a desk shows the chip agreeing with what the rig does —
 above all the stomp, which the lens reads off provenance rather than being told — the chip clear of
-the value in its corner on real cells, the rings, which are this window's FX selection and no other
-screen's, and the dock's three arms on real screens.
+the value in its corner on real cells, and the rings, which are this window's FX selection and no other
+screen's.
 
 **Test**, on Sleeping Beauty, the programmer holding a few palettes and Looks, a cue running an
 FX on the front wash, and a busked Local FX:
@@ -625,13 +623,11 @@ FX on the front wash, and a busked Local FX:
 3. **Rings.** On FX select the cue's FX, switch to Values: the cells it paints are ringed violet,
    no others. Select another row and come back: the rings follow. Back on FX the row is still
    selected. Deselect: the rings go.
-4. **The dock.** At 1440 the right side is Colour · Fan, on Colour, at the width you left it, and
-   lists nothing. Marquee four colour cells, pick a colour in the dock: the four take it, and a
-   double click on a colour cell lands in the dock. Collapse it: a strip of a chevron and two doors;
-   the Fan door opens it on Fan. On the iPad (1180×820) the strip opens the dock over the grid,
-   a press on the grid shuts it, and a colour cell's double click opens the cell's own popover. On a
-   phone the handle's *Colour* opens it in a bottom sheet. Across all of it the grid keeps its
-   selection.
+4. **Colour and Fan.** Nothing docks on the right at any width. Marquee four colour cells and
+   press ⏎ (or Set): the cell's own popover opens, and a colour picked there lands on
+   all four. Its *Fan…* opens row C's Fan with *From* set to that colour; a position cell's *Fan…*
+   opens it in *About each position*. Select whole rows instead (⌘A): row C offers Fan beside
+   Release, over every head. Across all of it the grid keeps its selection.
 5. **Nothing was lost.** On Stack: a layer's settings popover (amount, blend, mask, stomp), *Detach*,
    *Pick up*, *Remove*, the enable toggle, a drag, *Make layer*, *+ Look or palette*, and a palette
    press that takes heads off another layer showing *lost … to …* in its Note — pressed on Values,
@@ -648,8 +644,8 @@ FX on the front wash, and a busked Local FX:
 ## `FU-MANUAL-TABLES-COLOURS-S1`
 
 **What it proves**: *the programmer's tables at the desk* — tables-colours S1: the applied tables
-became the programmer's tabs, Values · Stack · FX · Scenery on row B. (Since S2 the rail is the
-Colour · Fan dock, so where a step below says *the rail*, read *the tables*; S2's own checks are
+became the programmer's tabs, Values · Stack · FX · Scenery on row B. (Since S2 the rail is gone,
+so where a step below says *the rail*, read *the tables*; S2's own checks are
 `FU-MANUAL-TABLES-COLOURS-S2`.)
 
 **Why it is here**: the tests mount one grid across a stubbed switch over stubbed state; only a desk
@@ -1652,8 +1648,7 @@ a `FU-` item in `followups.md`.
 **What it proves**: *the sidebar keeps one shape, and that shape suits the screens the desk runs
 on* — venue-visit plan S2 (D4): the live views no longer start on the 64px rail, so the one state
 defaults open everywhere. Chris chose open over the rail on 2026-10-15, knowing that at a 768–943px
-window the Programmer's workspace is under 704px and takes its phone arm (stacked, a bottom handle)
-where the rail left it the overlay.
+window it leaves the Programmer under 704px of width.
 
 **Why it is here**: PR review drove a real Chromium at 1440×900 from the programmer to the lists and
 back, and through immersive; no tablet or narrow desk window was ever in front of it.
@@ -1661,9 +1656,9 @@ back, and through immersive; no tablet or narrow desk window was ever in front o
 **Test**, on the desk's own screens and an iPad in portrait:
 
 1. **Fresh.** In a browser that has never opened the desk, open the Programmer: the sidebar is open.
-   On the iPad the Programmer is stacked with the layers behind the bottom handle — usable, or not?
+   On the iPad the Programmer's grid has under 704px — usable, or not?
 2. **Collapse once.** Collapse the sidebar there, then visit Fixtures, Show, the Prompt Book, Busk
-   and Install Settings: the rail on every one, and the Programmer back on its overlay arm.
+   and Install Settings: the rail on every one.
 3. **Immersive.** On Busk, expand over the app and come back: the sidebar returns collapsed.
 4. **An upgraded desk.** On the desk's own browser (which held the old two preferences), the
    sidebar comes up as the lists had it.
@@ -3491,10 +3486,10 @@ Performance profile during the fade should show the bar's subtree rendering ~10�
 
 ## `FU-MANUAL-PROGRAMMER-MEMO`
 
-**Non-fade `/programmer` traffic no longer re-renders the whole grid/rail subtree** · frontend sweep
+**Non-fade `/programmer` traffic no longer re-renders the whole grid subtree** · frontend sweep
 `FS-PERF-PROGRAMMER-MEMO-BARRIER`, 2026-08-30
 
-`ProgrammerBody` (the grid, rail, action bar and scope band below the page's chrome) had no memo
+`ProgrammerBody` (the grid, action bar and scope band below the page's chrome) had no memo
 barrier, so any re-render of `ProgrammerPage` — a `useProgrammerSummaryQuery` refresh, a project
 refetch, anything upstream of the bar — reconciled the entire subtree even outside a fade. It is now
 wrapped in `React.memo` on its one primitive prop (`projectId`), and (found in the

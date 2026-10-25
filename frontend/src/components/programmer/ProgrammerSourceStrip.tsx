@@ -139,8 +139,8 @@ const BUSK_STATE = 'Busking'
  *
  * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage` — this
  * component must not declare one of its own, or every query here would measure the box rather
- * than the row it has to share (`ProgrammerWorkspace`'s doc comment has the long version of that
- * bug). In the short-height arm row A does not exist and this box leads row B instead, where
+ * than the row it has to share, a query container being the nearest ancestor. In the short-height
+ * arm row A does not exist and this box leads row B instead, where
  * `ProgrammerGrid` wraps the pair in an `@container` of **its own** — so these queries measure the
  * ~380px the folded row's flex gives the pair, not the ~750px grid column around them, and this
  * box is in its icon arm on an 852×393 landscape phone. That is one step narrower than

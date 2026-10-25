@@ -292,7 +292,7 @@ describe('docked, on the desk board', () => {
     expect(screen.getByTestId('colour-sheet')).toBeInTheDocument()
   })
 
-  it('wears the programmer rail’s chrome: the shared body, header and strip, and the enter animation', () => {
+  it('wears the shared side-panel chrome: the body, header and strip, and the enter animation', () => {
     setBuskSheet('speed')
     const { rerender } = render(<SideSheet {...props} />)
     const panel = document.querySelector('[data-side-sheet="speed"]') as HTMLElement
@@ -312,7 +312,7 @@ describe('docked, on the desk board', () => {
     // Already open on the first render is not "opening": no animation on arrival at the route.
     expect(panel.className).not.toContain('animate-in')
 
-    // Folded, the strip is the rail's 40px one — not the phone handle's 44.
+    // Folded, the strip is the shared 40px one — not a touch handle's 44.
     setBuskSheet('none')
     rerender(<SideSheet {...props} />)
     const strip = document.querySelector('[data-side-sheet="none"]') as HTMLElement

@@ -13,14 +13,12 @@ import { createRemaskStore, RemaskStoreContext } from '@/components/fixtures-lis
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
 import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
 import { FocusedPaletteLayerProvider } from '@/components/programmer/FocusedPaletteLayer'
-import { ProgrammerRail } from '@/components/programmer/ProgrammerRail'
 import { ProgrammerScopeProvider } from '@/components/programmer/ProgrammerScope'
 import {
   ProgrammerSheetsProvider,
   useProgrammerSheets,
 } from '@/components/programmer/ProgrammerSheets'
 import { ProgrammerSourceStrip } from '@/components/programmer/ProgrammerSourceStrip'
-import { ProgrammerWorkspace } from '@/components/programmer/ProgrammerWorkspace'
 import { ProgrammerTables } from '@/components/programmer/ProgrammerTables'
 import { useValuesTableShown } from '@/lib/programmerTables'
 import { includeRequestFor, useInclude } from '@/components/programmer/useInclude'
@@ -79,7 +77,7 @@ export function ProgrammerFxRedirect() {
  * `ShowBar` besides. The space plan's session 1 folds the six: **row A** is the noun and the verbs
  * (the source box on the left, Clear / Include / Record on the right, one 40px line), and **row B**
  * is what the grid shows (scope, filter, Lit, Groups, Columns) — which lives *inside*
- * `ProgrammerGrid`'s toolbar, because it describes the grid and has no business spanning the rail.
+ * `ProgrammerGrid`'s toolbar, because it describes the grid.
  * Nothing the labels and sentences said was deleted; every one of them is a `title` or an
  * `aria-label` now, and each component's doc comment says which.
  */
@@ -106,9 +104,9 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
   const { showHeaderProps } = useShowBarProps(projectIdNum, {
     frameRateProgress: false,
   })
-  // The marquee's store (editor-kit plan session 4): the grid publishes into it, and the dock's
-  // Colour and Spread tabs read it. It is provided here, above the sheets as well as the body, so
-  // that a sheet taking a mask opens on an unlinked window's marquee (apply-model plan D3,
+  // The marquee's store (editor-kit plan session 4): the grid publishes its press into it for the
+  // doors outside the grid. It is provided here, above the sheets as well as the body, so that a
+  // sheet taking a mask opens on an unlinked window's marquee (apply-model plan D3,
   // `useWindowMaskReader`). A stable store rather than state: the marquee moves at pointer rate, and
   // the store re-renders only a subscribed reader, never this page or the body's memo barrier.
   const [marqueeStore] = useState(createMarqueeStore)
@@ -206,7 +204,7 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
  *
  * Memoized: its only prop is `projectId`, so this is the barrier that keeps `ProgrammerPage`'s own
  * re-renders (`useShowBarProps`, `useProjectQuery`) from cascading into
- * the whole grid/rail/scope subtree below it.
+ * the whole grid/scope subtree below it.
  */
 const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: number }) {
   const sheets = useProgrammerSheets()
@@ -216,7 +214,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   const [grouped, setGrouped] = usePersistentState<boolean>(GROUPED_KEY, false)
   // Owned here rather than inside the grid, and it must stay here: this component is the memo
   // barrier, and state held above it in `ProgrammerPage` would put every re-render of the chrome
-  // above — `ShowHeader`, and the `useShowBarProps` call feeding it — through the whole grid/rail
+  // above — `ShowHeader`, and the `useShowBarProps` call feeding it — through the whole grid
   // subtree. That used to read "every ShowBar re-render", which was the loudest source of them
   // until this page stopped drawing one; the barrier is no less load-bearing for it, since the
   // hook still runs here and still moves on every cue change. The *controls* render on row B,
@@ -228,8 +226,8 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // query cannot ask it; a hook here rather than CSS because the fold is a change of *place*, not
   // of appearance — and it is safe here specifically because this component is the memo barrier,
   // so the media change re-renders the subtree once and never the chrome above it. The
-  // `ProgrammerWorkspace`/`ProgrammerGrid` elements keep their slots either way, so the grid
-  // re-renders and never remounts — the rule `ProgrammerPage.test.tsx` gates on.
+  // `ProgrammerGrid` element keeps its slot either way, so the grid re-renders and never remounts —
+  // the rule `ProgrammerPage.test.tsx` gates on.
   const shortViewport = useMediaQuery(SHORT_VIEWPORT)
   // Row A folds into row B only while row B is the grid's: the other three tables have a row B of
   // their own and the grid's is hidden under them, so there row A keeps its row. Read only while
@@ -240,7 +238,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // in that order are what the operator means: throw away the busk, load the cue or Look again.
   //
   // The include target is read at click time rather than subscribed via
-  // `useProgrammerSummaryQuery`: this component is the memo barrier for the whole grid/rail
+  // `useProgrammerSummaryQuery`: this component is the memo barrier for the whole grid
   // subtree, and a summary subscription held *here* re-rendered all of it on every Include,
   // Record, blind flip or entry-count move — a wake `memo` cannot block, since it only
   // compares props. Read before `programmerClearAll`, which is about to clear the target.
@@ -292,47 +290,33 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
     <ProgrammerScopeProvider>
       {/* The outer editor context stays `live` for the tables beside the grid — the FX table's
           controls write the programmer whatever the grid is pointed at. `ProgrammerGrid` provides
-          its own inner context derived from the scope, and the dock takes the grid's
-          (`ScopedEditorContextProvider`). */}
-      {/* The dock's width, collapsed flag and overlay flag are `ProgrammerWorkspace`'s, below
-          this barrier — deliberately not state of this component or of `ProgrammerPage`, where a
-          drag on the dock's handle would re-render the grid per pointer move. */}
-      {/* Above the workspace, not inside the grid: the dock's editors read the same store, and one
-          fetch per focused layer is the point of it living here. The **scope band is
-          inside it too**, and must stay there: it reads `useLookSaveState()`, which outside the
-          provider silently answers the context default — so "Unsaved", "Saving…" and, worst of the
-          three, "Save failed" could never appear. */}
+          its own inner context derived from the scope (`ScopedEditorContextProvider`). */}
+      {/* Above the tables, not inside the grid: one fetch per focused layer is the point of it
+          living here. The **scope band is inside it too**, and must stay there: it reads
+          `useLookSaveState()`, which outside the provider silently answers the context default —
+          so "Unsaved", "Saving…" and, worst of the three, "Save failed" could never appear. */}
       {/* Its template sibling, for the same reason and at the same height: a focused *template*
           layer has no `LookRowStore` (that one owns a row draft and engages only for a LOOK), and
           the grid, the notices and the scope band all need to know what it holds. */}
       <LookRowStoreProvider projectId={projectId}>
         <FocusedPaletteLayerProvider projectId={projectId}>
           <EditorContextProvider value={{ kind: 'live' }}>
-            <ProgrammerWorkspace
-              header={
-                // Row A: the noun and the verbs, on one 40px line. It declares the `@container`
-                // both halves query — neither may declare its own, or each would measure itself
-                // instead of the width it has to share (see `ProgrammerWorkspace`'s doc comment
-                // for that bug).
-                //
-                // **It is the workspace's header, in the grid's column**, so the rail stands
-                // beside it and under nothing but the `ShowHeader` — the busk sheet's place
-                // beside the rig band. It was drawn above the workspace, which put the rail a
-                // row lower on this view than the sheet is on that one. Its fold ladder measures
-                // the row it now has, which is the column less the rail, as the band's does.
-                //
-                // Under 500px of viewport height it is not drawn at all: the same two components
-                // go into row B's leading slot, which is `ProgrammerGrid`'s `leading` prop, and
-                // the page's chrome is one line rather than two. `null` in that arm rather than
-                // a hidden div, because the components are mounted in the other place and two
-                // copies would be two of every query behind them.
-                //
-                // The shell's chrome row, with the one ground any row has: row A keeps its
-                // `bg-card/50` wash by decision (list-shell-design, called 2026-09-15) — the
-                // verbs' own band.
-                rowAInRowB ? null : <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>
-              }
-              grid={
+            <div className="flex min-h-0 flex-1 flex-col">
+              {/* Row A: the noun and the verbs, on one 40px line. It declares the `@container` both
+                  halves query — neither may declare its own, or each would measure itself instead
+                  of the width it has to share.
+
+                  Under 500px of viewport height it is not drawn at all: the same two components go
+                  into row B's leading slot, which is `ProgrammerGrid`'s `leading` prop, and the
+                  page's chrome is one line rather than two. `null` in that arm rather than a hidden
+                  div, because the components are mounted in the other place and two copies would be
+                  two of every query behind them.
+
+                  The shell's chrome row, with the one ground any row has: row A keeps its
+                  `bg-card/50` wash by decision (list-shell-design, called 2026-09-15) — the verbs'
+                  own band. */}
+              {rowAInRowB ? null : <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <ProgrammerTables
                   projectId={projectId}
                   values={
@@ -346,9 +330,8 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
                     />
                   }
                 />
-              }
-              rail={<ProgrammerRail projectId={projectId} />}
-            />
+              </div>
+            </div>
           </EditorContextProvider>
         </FocusedPaletteLayerProvider>
       </LookRowStoreProvider>

@@ -263,7 +263,7 @@ mirrors in `store/programmerOps.ts` (`SpreadCurve`, `SpreadOver`, `SpreadRequest
 `SpreadWrite`, `SpreadSkip`, `SpreadResponse`, the `spread` mutation, `useSpreadMutation`),
 `lib/spreadFan.ts`'s `SpreadMode` and `SpreadFanPrefs`, `SpreadPanel`'s `SpreadSeed`,
 `FanSpreadSeed`, `SpreadRequestBody` and `spreadRequestOf`, and the components and files
-`SpreadPanel`, `SpreadPopover`, `SpreadSheet`, `PositionSpreadTool`, `RailSpreadTab`,
+`SpreadPanel`, `SpreadPopover`, `SpreadSheet`, `PositionSpreadTool`,
 `spreadIntent.ts`, `spreadPlans.ts` and `spreadOver.ts`. Session 5 renamed the wire and left these,
 by Chris's call. Rename them to Fan in one change; the glossary's Fan row names
 `src:components/editor/SpreadPanel.tsx` and `src:lib/spreadIntent.ts` as its keys, so those move

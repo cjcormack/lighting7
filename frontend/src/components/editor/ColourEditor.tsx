@@ -107,7 +107,7 @@ export interface ColourEditorProps {
    * write to several heads is answered once per head, so a knob following every answer moves several
    * times per write, and an `onChange` taken as a write then answers itself: a ping-pong that never
    * settles. So the knob waits for the answers to settle, and the editor writes only after a press or
-   * an arrow key on the picker. A host with its own buffer (the busk tab, the rail's tab) passes a
+   * an arrow key on the picker. A host with its own buffer (the busk tab) passes a
    * constant and moves the knob through *Pick*.
    */
   combinedCss: string
@@ -189,12 +189,12 @@ export interface ColourEditorProps {
    */
   counts?: boolean
   /**
-   * The label line (`EditorLabelLine`), drawn first — the popover's, and the programmer rail's
-   * docked tab's (editor-kit plan session 4, call 11). The sheets and the busk tab pass none.
+   * The label line (`EditorLabelLine`), drawn first — the popover's. The sheets and the busk tab
+   * pass none.
    */
   labelLine?: ReactNode
   /**
-   * The scope takes no value — the programmer rail's tab in Output or on a focused template layer.
+   * Nothing may be written here — the fixture sheet's parked or offline row.
    * **A whole guarantee, not a part one**: every control that writes is drawn but takes no input —
    * the picker, the fields and the emitter rows, and the Palettes band (a palette press) — and
    * *Spread…* is disabled, since it hands a value on to be written. Pick stays live, since it reads
@@ -872,7 +872,7 @@ export function ColourEditor({
         className="h-7 text-xs"
         disabled={onSpread == null || readOnly}
         aria-label="Fan to a second colour…"
-        title={onSpread == null ? 'No Fan panel to open from here' : readOnly ? 'This scope takes no value to fan' : 'Open Fan with this colour as From'}
+        title={onSpread == null ? 'No Fan panel to open from here' : readOnly ? 'Nothing may be written here' : 'Open Fan with this colour as From'}
         onClick={() => onSpread?.(toChannels(currentChannels()))}
       >
         <Waves className="size-3.5" /> <span className={wordClass}>Fan…</span>

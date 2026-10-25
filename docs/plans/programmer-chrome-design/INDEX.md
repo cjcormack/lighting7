@@ -108,5 +108,3 @@ open over it. The library drawn is 84 templates of which 71 fit the selection.
   `useTemplatePress.ts` (the two gestures, shared by the chip and the pad), and
   `fixtures-list/SelectionToolbar.tsx`'s `MID_FOLDED_CLASS` for the 800px fold. The stamp itself is
   lighting7's `DaoTemplates.lastPressedAtMs` and `routes/templatePress.kt`.
-- **Rail** — `ProgrammerRail.tsx` (header `h-10 px-3 gap-2`, strip chevrons `h-10`); the phone
-  handle's gap in `ProgrammerWorkspace.tsx`.

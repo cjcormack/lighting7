@@ -2,7 +2,6 @@ import { useEffect, type ReactNode, type RefObject } from 'react'
 import { NoProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import { NoLookRowStore } from '@/components/programmer/LookRowStore'
 import { NoFocusedPaletteLayer } from '@/components/programmer/FocusedPaletteLayer'
-import { RailTabClaimContext } from '@/components/programmer/railTab'
 import { activeKeyRegion, useKeyRegionTracking } from '@/components/sheet/keyRegion'
 import { useCueActionDialogs } from '@/components/runner/cueActionDialogs'
 import { isEditableTarget } from '@/lib/domUtils'
@@ -10,15 +9,15 @@ import { isEditableTarget } from '@/lib/domUtils'
 /**
  * The programmer's contexts stop here. The cue editor can open over the programmer — its FX table's
  * *on Q12* opens it in a sheet portalled from there, and React context flows through a portal — so
- * the programmer's scope, focused layers and rail-tab claim are cleared: none of them is the cue
- * editor's, and each would dim a column, refuse a write or send a gesture to the rail (P2).
+ * the programmer's scope and focused layers are cleared: none of them is the cue editor's, and each
+ * would dim a column or refuse a write (P2).
  */
 export function CueEditorIsolation({ children }: { children: ReactNode }) {
   return (
     <NoProgrammerScope>
       <NoLookRowStore>
         <NoFocusedPaletteLayer>
-          <RailTabClaimContext.Provider value={null}>{children}</RailTabClaimContext.Provider>
+          {children}
         </NoFocusedPaletteLayer>
       </NoLookRowStore>
     </NoProgrammerScope>

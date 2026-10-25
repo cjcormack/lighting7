@@ -134,8 +134,8 @@ export const ShowBar = memo(function ShowBar({
     // `@[440px]:gap-2 @[440px]:px-4 @[440px]:py-2` and has no container ancestor, so for as long as
     // those three classes have existed they have matched nothing: the bar drew at its `gap-1.5
     // px-2 py-1.5` base at every width, measured 8px/6px/6px at 1440 as well as at 393. It is the
-    // trap `ProgrammerWorkspace`'s doc comment records — `@container` is a wrapper, and the queried
-    // classes go on its child — and this was the only element in the repo still making it.
+    // `@container` trap — the container is a wrapper, and the queried classes go on its child —
+    // and this was the only element in the repo still making it.
     //
     // `@container` stays on the bar as well, deliberately. The bar's own three classes now query
     // the wrapper; everything *inside* keeps querying the bar, exactly as before, so not one rung

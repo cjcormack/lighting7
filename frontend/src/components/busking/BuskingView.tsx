@@ -608,11 +608,9 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
     // shrinks the item back to fit, Safari does not, and the page body then overflowed `<main>` by
     // exactly a header (and, while there was one, a bar). Two scrollers: one hiding the
     // breadcrumbs, one for the pads.
-    // `ProgrammerWorkspace` is the same pattern for the same reason.
     <div className="flex min-h-0 flex-1 flex-col">
       {/* `relative` is the side sheet's containing block in overlay mode — it is absolutely
-          positioned against this row, over the page body, exactly as the programmer rail's
-          overlay arm is against the workspace row. */}
+          positioned against this row, over the page body. */}
       <div className="relative flex min-h-0 flex-1">
         {/* `data-busk-column`: the band measures the split's ceiling off this column's own box less
             the fixed chrome in it — never off the page body's remainder (`RigBand`). */}

@@ -26,10 +26,9 @@ import {
 /**
  * The shared docked-panel chrome, and the one piece of it that is code.
  *
- * The class strings are pinned the way `ProgrammerWorkspace.test.tsx` pins the frames': jsdom
- * lays nothing out, so what a test can hold is the contract — the measurements the chrome system
- * settles, so a change to one of them is a change to this file and not a silent drift in one of
- * the two surfaces. `usePanelEnter` is pinned as behaviour, because its two rules (never on the
+ * The class strings are pinned: jsdom lays nothing out, so what a test can hold is the contract —
+ * the measurements the chrome system settles, so a change to one of them is a change to this file
+ * and not a silent drift. `usePanelEnter` is pinned as behaviour, because its two rules (never on the
  * first render, latched while open) are each a real defect if they go.
  */
 
@@ -43,11 +42,11 @@ afterEach(() => {
 })
 
 describe('the side-panel mode', () => {
-  it('defaults to push — the behaviour both panels already had', () => {
+  it('defaults to push — the behaviour the panel already had', () => {
     expect(getSidePanelMode()).toBe('push')
   })
 
-  it('toggles, and is one fact for both panels rather than one each', () => {
+  it('toggles', () => {
     toggleSidePanelMode()
     expect(getSidePanelMode()).toBe('overlay')
     toggleSidePanelMode()
@@ -78,7 +77,7 @@ describe('the shared side-panel chrome', () => {
   it('does not restate the 40px chrome row — a panel header is `sheetFrame.ts`’s', () => {
     // The whole point of the module is one measurement in one place, so a header constant here
     // would be the drift it exists to close: `CHROME_ROW_CLASS` already says 40px on a 12px
-    // gutter, and both panels import it directly.
+    // gutter, and a panel imports it directly.
     expect(CHROME_ROW_CLASS).toBe('flex h-10 shrink-0 items-center gap-2 border-b px-3')
     expect(Object.keys(sidePanel)).not.toContain('SIDE_PANEL_HEADER_CLASS')
     for (const value of Object.values(sidePanel)) {
@@ -86,7 +85,7 @@ describe('the shared side-panel chrome', () => {
     }
   })
 
-  it('fills the body opaquely — both panels have an overlay arm over live content', () => {
+  it('fills the body opaquely — the panel has an overlay arm over live content', () => {
     expect(SIDE_PANEL_BODY_CLASS).toContain('color-mix')
     expect(SIDE_PANEL_BODY_CLASS).toContain('border-l')
     // A translucent fill is the thing the mix exists to avoid; catch a revert to it by name.
@@ -117,9 +116,8 @@ describe('the shared side-panel chrome', () => {
   })
 
   it('floats an overlay panel flush to the edge, with no scrim', () => {
-    // Flush `right-0` and not inset by a strip width, because both surfaces hide their strip
-    // while the panel is up. No scrim: the rail overlays a grid that goes on being clicked and
-    // the sheet overlays pads that go on being pressed.
+    // Flush `right-0` and not inset by a strip width, because the strip is hidden while the panel
+    // is up. No scrim: the sheet overlays pads that go on being pressed.
     expect(SIDE_PANEL_OVERLAY_CLASS).toContain('absolute')
     expect(SIDE_PANEL_OVERLAY_CLASS).toContain('right-0')
     expect(SIDE_PANEL_OVERLAY_CLASS).not.toContain('right-10')
@@ -166,7 +164,7 @@ describe('usePanelEnter', () => {
     render(<Panel initial={false} />)
     fireEvent.click(screen.getByText('toggle'))
     expect(enterState()).toBe('yes')
-    // Both panels re-render freely while open: a layer arrives, a marquee moves, a tempo ticks.
+    // The panel re-renders freely while open: a selection moves, a tempo ticks.
     fireEvent.click(screen.getByText('re-render'))
     fireEvent.click(screen.getByText('re-render'))
     expect(enterState()).toBe('yes')
@@ -215,7 +213,7 @@ function drag(toClientX: number[], { end = 'pointerup' }: { end?: 'pointerup' | 
 }
 
 describe('useSidePanelResize', () => {
-  it('grows as the handle is dragged left — both panels sit against the right edge', () => {
+  it('grows as the handle is dragged left — the panel sits against the right edge', () => {
     render(<Resizable />)
     expect(panelWidth()).toBe(300)
     fireEvent.pointerDown(screen.getByTestId('handle'), { button: 0, clientX: 1000 })

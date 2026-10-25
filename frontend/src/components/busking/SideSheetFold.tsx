@@ -23,11 +23,8 @@ import { selectedHeadCount, type BuskingTarget } from './buskingTypes'
  * the tab glyphs, so a folded rail is still one tap from any tab, the selection's colour as a dot,
  * and its head count.
  *
- * **It is the programmer rail's strip**, through `SIDE_PANEL_STRIP_CLASS` — same width, same fill,
- * same chevron cell at the top. It was 44px and unfilled, which is the phone handle's measurement
- * on a control that is only ever drawn on the desk board; `components/sheet/sidePanel.ts` states
- * why 40 is this one's. `Sheets.dc.html` §Folded, cited above, still draws it at 44: the commit
- * wins.
+ * **It is the shared 40px strip**, through `SIDE_PANEL_STRIP_CLASS`; `components/sheet/sidePanel.ts`
+ * states why 40. `Sheets.dc.html` §Folded, cited above, still draws it at 44: the commit wins.
  *
  * A tap on a glyph unfolds onto that tab; the chevron unfolds onto whichever tab was last open —
  * through `toggleBuskSheet`, the one reader of that memory, so the chevron and a MIDI
@@ -65,8 +62,7 @@ export function SideSheetFold({
 
   return (
     <div data-side-sheet="none" className={cn(SIDE_PANEL_STRIP_CLASS, 'hidden md:flex')}>
-      {/* The strip's own cell, as the rail's expand chevron is: a full-width 40px square with the
-          dividing line under it, so the two strips read as one control at the same height. */}
+      {/* The strip's own cell: a full-width 40px square with the dividing line under it. */}
       <Button
         variant="ghost"
         size="icon"

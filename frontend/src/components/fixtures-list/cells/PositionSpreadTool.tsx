@@ -5,8 +5,8 @@ import { useFocusedPaletteLayer } from '@/components/programmer/FocusedPaletteLa
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 
 /**
- * Where a position cell's *Spread…* opens the fan — the rail's Spread tab where the rail docks its
- * tabs, else row C's popover. Provided by the list container, which holds both. The button sits in
+ * Where a position cell's *Spread…* opens the fan — row C's popover. Provided by the list container,
+ * which holds it. The button sits in
  * the popup's footer, which only the programmer draws, so the plain lists and the cue grid have none.
  */
 export const PositionFanContext = createContext<(() => void) | null>(null)

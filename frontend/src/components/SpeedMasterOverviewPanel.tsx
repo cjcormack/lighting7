@@ -28,9 +28,9 @@ interface SpeedMasterOverviewPanelProps {
  * about whether the tiles fit but about what they cost the live-state block beside them, and this
  * row has nothing beside them — a four-master bank is 464–711px of tiles, and it was being made to
  * clear 1600px. `ARMS.dedicated` is measured against this row instead. The **5+ ceiling is
- * unchanged**, because that one was never a width judgment. Per `ProgrammerWorkspace`'s rule the
- * queried classes must sit on a *descendant* of the element declaring the container, so the row
- * below is a child rather than the container itself.
+ * unchanged**, because that one was never a width judgment. A query container is the nearest
+ * ancestor, so the queried classes must sit on a *descendant* of the element declaring the
+ * container: the row below is a child rather than the container itself.
  *
  * **Visibility persists, per panel and app-wide — a feature and a cost, and both are accepted.**
  * Opened once, this panel stays open on every view and across reloads. On the programmer that is a

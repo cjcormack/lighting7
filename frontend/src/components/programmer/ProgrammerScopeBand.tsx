@@ -20,11 +20,9 @@ const SAVE_LABELS: Record<Exclude<LookSaveState, 'clean'>, string> = {
  * What the grid below is pointed at, and — in layer scope — what that layer asserts. **Row B's
  * left end.**
  *
- * It was a full-width band between the action bar and the workspace, one line of pills followed by
- * a sentence explaining them. Session 1 of the space plan moves it *inside* `ProgrammerGrid`'s
- * `renderToolbar` slot, above the filter, for two reasons: the scope is a fact about the grid and
- * not about the page, so it should span the grid column rather than reach across the rail; and its
- * line was one of six above the first fixture row on a page whose grid is the point.
+ * It sits *inside* `ProgrammerGrid`'s `renderToolbar` slot, above the filter, for two reasons: the
+ * scope is a fact about the grid and not about the page; and a band of its own would be one more
+ * line above the first fixture row on a page whose grid is the point.
  *
  * **The sentences are not deleted — they are the pills' `title`s**, and the layer arm's three
  * separate spans (`asserts …`, `n targets`, the save state) collapse into one muted line that
@@ -69,7 +67,7 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
   if (!scope || !actions) return null
 
   // `lookName` rides on the layer frame, so naming the focused Look costs no second query — and
-  // the stack this reads is the same broadcast the rail draws, so the two cannot disagree.
+  // the stack this reads is the same broadcast the Stack table draws, so the two cannot disagree.
   const layer = scope.kind === 'layer' ? layers?.find((l) => l.layerId === scope.layerId) : undefined
   const mask = parseAttributeMask(layer?.attributeMask)
 
@@ -77,8 +75,8 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
   // order: what does this layer assert, and onto what.
   //
   // **The save state is deliberately not in here.** It was, and that was a regression: this line
-  // is hidden below `@[900px]`, which row B reaches on any ordinary desk once the rail and the
-  // sidebar have taken their share — and a `display:none` element is out of the accessibility tree
+  // is hidden below `@[900px]`, which row B reaches on any ordinary desk once the sidebar has
+  // taken its share — and a `display:none` element is out of the accessibility tree
   // too, so "Save failed" would have been neither shown nor announced, and its `title` could not be
   // hovered either. What a layer asserts is context you can go and look up; a failed write is the
   // one thing on this row that must never be a casualty of width.

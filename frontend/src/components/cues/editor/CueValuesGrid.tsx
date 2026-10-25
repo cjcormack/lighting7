@@ -87,8 +87,8 @@ export function CueValuesGrid({
   const store = useCueRowStore()
   const view = useCueValuesView()
   if (store == null || view == null) return null
-  // The programmer's scope, focused layers and rail-tab claim would dim this grid's columns, refuse
-  // its Spread or send its colour double click to the rail (P2): `CueEditorIsolation` clears them.
+  // The programmer's scope and focused layers would dim this grid's columns or refuse its Spread
+  // (P2): `CueEditorIsolation` clears them.
   return (
     <CueEditorIsolation>
       <EditorContextProvider value={{ kind: 'cue', cueId: store.cueId }}>

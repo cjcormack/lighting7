@@ -36,20 +36,11 @@ export interface CellOpenRequest<C extends string> {
 export function useCellEditorRequests<C extends string>({
   firstEditableCell,
   onScrollTo,
-  intercept,
 }: {
   /** The cell Set, Enter and a typed character all name: first in display order that has an editor. */
   firstEditableCell: () => CellRef<C> | undefined
   /** Bring a row into the virtualiser's window; the next press opens it. */
   onScrollTo: (rowId: RowId) => void
-  /**
-   * **The one branch where an open is claimed** rather than handed to the cell — the programmer
-   * rail's Colour tab, which is that column's editor while it is open (editor-kit plan session 4,
-   * call 9). Asked with the request the cell would have received; answering true means the caller
-   * has taken it and no cell opens. Asked **before** the scroll-to check, because a claimed open
-   * lands in the rail and needs no cell on screen.
-   */
-  intercept?: (request: CellOpenRequest<C>) => boolean
 }): {
   /** Hand to the table's `keyboardOpen`. */
   keyboardOpen: CellOpenRequest<C> | null
@@ -82,7 +73,6 @@ export function useCellEditorRequests<C extends string>({
     (seed: string, atButton: boolean) => {
       const first = firstEditableCell()
       if (!first) return
-      if (intercept?.({ rowId: first.rowId, col: first.col, seed, atButton })) return
       // The DOM is the only thing that knows what the virtualiser rendered, and `data-row-id` is
       // the sheet's own addressing contract — the same attribute `marqueeOwnsKeyTarget` reads,
       // walked the other way. Asked rather than always scrolling, because recentring the list
@@ -94,7 +84,7 @@ export function useCellEditorRequests<C extends string>({
       }
       setKeyboardOpen({ rowId: first.rowId, col: first.col, seed, atButton })
     },
-    [firstEditableCell, onScrollTo, intercept],
+    [firstEditableCell, onScrollTo],
   )
 
   const openCellEditor = useCallback((seed: string) => request(seed, false), [request])

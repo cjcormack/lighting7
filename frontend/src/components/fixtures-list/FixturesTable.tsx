@@ -538,17 +538,12 @@ export function FixturesTable({
             with a ring the way a row wash sitting still under one could.
 
             PORTALLED to `document.body`, which is load-bearing rather than tidiness: its coordinates
-            are the pointer's `clientX/clientY`, i.e. viewport space, and `ProgrammerWorkspace` is a
-            Tailwind `@container`. `container-type: inline-size` applies layout containment, which
-            makes that element the containing block for `fixed` descendants, so an in-tree chip would
-            be offset by the workspace's own top-left (the header, source strip, action bar and
-            `p-4`) and sit well below the cursor.
-
-            All three lists select cells now, so the workspace is no longer the only host — and the
-            other two are why the portal has to stay whatever their markup looks like today. Neither
-            `/fixtures/list` nor `/groups/list` has an `@container` above this table (each route puts
-            one on its *sibling* breadcrumb row, and `Layout`'s is the `<header>`, a sibling of
-            `<main>`), so on those two the chip would land correctly in-tree by luck. One
+            are the pointer's `clientX/clientY`, i.e. viewport space, and a Tailwind `@container`
+            above this table — `container-type: inline-size` applies layout containment — would be
+            the containing block for `fixed` descendants, so an in-tree chip would be offset by that
+            element's own top-left and sit well below the cursor. No list has one above the table
+            today (each route puts its `@container` on a *sibling* row, and `Layout`'s is the
+            `<header>`, a sibling of `<main>`), so the chip would land correctly in-tree by luck: one
             `@container` added to a page wrapper for an unrelated reason would move it, silently and
             only on that route. */}
         {marquee.chip &&

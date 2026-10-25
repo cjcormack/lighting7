@@ -29,8 +29,8 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
  * **The scan is shared between call sites at one revision.** The loop below walks the whole entry
  * map, and `useProgrammerRevision` ticks on every programmer write — so on the live-busking hot
  * path it runs per value set, per cell commit, per fader tick. A `useMemo` is per *instance*, and
- * the page mounts two independent callers — `ProgrammerScopeBand` on row B and the rail's Local
- * values row (`ProgrammerRail`) — which made that scan run twice per tick for one answer. The
+ * the page mounts two independent callers — `ProgrammerScopeBand` on row B and the Stack table's
+ * *Your values* row (`StackTable`) — which made that scan run twice per tick for one answer. The
  * module-level cache collapses them: same revision and same property index, same object. It holds
  * exactly one entry, so it cannot grow, and it is keyed on the revision, so it can never serve a
  * stale count.

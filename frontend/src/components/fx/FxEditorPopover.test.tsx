@@ -87,7 +87,7 @@ const SUBSET = [
   { type: 'fixture' as const, key: 'hex-2' },
 ]
 
-/** A host as the rail is: it reads the effect it edits from the running list by id. */
+/** A host as the FX table is: it reads the effect it edits from the running list by id. */
 const hostStop = vi.fn()
 
 function Host({ running, selection }: { running: ActiveFx[]; selection: typeof SUBSET }) {

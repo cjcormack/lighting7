@@ -222,8 +222,7 @@ function SheetContent({
       >
         {children}
         {/* `top-4` is measured against `SheetHeader`'s own `p-4` and a 14px title — the header
-            almost every sheet here uses. A sheet that deliberately draws a shorter header (the
-            programmer rail's, at `py-2` around a 9px label) can move it with a scoped rule
+            almost every sheet here uses. A sheet that deliberately draws a shorter header can move it with a scoped rule
             against this `data-slot`; the slot is a hook, and the offset above stays the default
             every other sheet is aligned to. See `PD-SHEET-CLOSE-ALIGN`. */}
         <SheetPrimitive.Close
