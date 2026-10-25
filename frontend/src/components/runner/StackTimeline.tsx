@@ -23,6 +23,7 @@ import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import type { CuePlace } from '@/lib/cuePlaces'
 import {
+  breakRunVerb,
   cellAt,
   cells as deriveCells,
   columns as deriveColumns,
@@ -32,6 +33,9 @@ import {
   editsColumn,
   fillDownOps,
   filter as filterColumns,
+  fxColumnId,
+  fxRunAt,
+  joinRunVerb,
   kindCounts,
   markerMarkAt,
   moveColumn,
@@ -42,6 +46,7 @@ import {
   runs as deriveRuns,
   sceneryColumnId,
   selectedLayers,
+  settingsChangeLabel,
   TIMELINE_KINDS,
   toggleOps,
   withExtraColumns,
@@ -75,6 +80,7 @@ import { useSharedCueActionDialogs } from './cueActionDialogsContext'
 import {
   describeEdit,
   TimelineAddColumn,
+  TimelineFxRunPopover,
   TimelineReplacePopover,
   TimelineSceneryPopover,
   TimelineSettingsPopover,
@@ -143,12 +149,13 @@ export interface StackTimelineProps {
  * (`GET …/cue-stacks/{id}/timeline`) by `lib/stackTimeline/`. A filled cell is that cue's own
  * layer, row or change; neighbouring cells draw as one bar, an effect's only on a shared run key.
  *
- * **Editing Looks, palettes and scenery** (§4.4): a click selects a cell and a second click — or ⏎ —
- * toggles it (a scenery cell's second click opens its popover), ⌫ turns the selection off, a run's
- * end drags to fill or empty the cells it crosses, and the bar's *On · Off · Fill ↓ · Replace with…
- * · Settings…* act on a range. **Every gesture is one request** to `timeline/edit`
- * (`useTimelineEdits`), nothing is sent to the stage, and its answer is one Undo (⌘Z, or the toast).
- * Locked, the cells read and every write asks to unlock. Effect cells select and read only.
+ * **Editing** (§4.4): a click selects a cell and a second click — or ⏎ — toggles it (a scenery
+ * cell's second click opens its popover, as a filled FX cell's opens its run's), ⌫ turns the
+ * selection off, a run's end drags to fill or empty the cells it crosses — an FX cell filled from a
+ * neighbour joins its run — and the bar's *On · Off · Fill ↓ · Replace with… · Settings…* act on a
+ * range. **Every gesture is one request** to `timeline/edit` (`useTimelineEdits`), nothing is sent to
+ * the stage, and its answer is one Undo (⌘Z, or the toast). Locked, the cells read and every write
+ * asks to unlock.
  *
  * One selected cell opens `CueEditorPane` on its cue at its column's tab; a range over several cues
  * folds it (C2).
@@ -285,15 +292,22 @@ export function StackTimeline({
   /** Locked, a write asks to unlock — where the lock is the operator's to lift. */
   const refuseVerb = locked && onRequestUnlock ? askToUnlock : undefined
   const edits = useTimelineEdits(projectId, stack.id, { locked, onLocked: refuseVerb })
+  /** Each FX row's column, by its uuid: what an FX op names. */
+  const fxColumnByUuid = useMemo(
+    () => new Map((timeline?.entries ?? []).flatMap((e) => e.fx.map((fx) => [fx.uuid, fxColumnId(fx)] as const))),
+    [timeline],
+  )
   const columnOfOp = useCallback(
     (op: TimelineEditOp) => {
       if (op.op === 'layerOn' || op.op === 'layerOff') {
         return byId.get(recordColumnId(op.source.kind === 'LOOK' ? 'look' : 'palette', op.source.id, op.target ?? null))
       }
       if (op.op === 'scenerySet' || op.op === 'sceneryClear') return byId.get(sceneryColumnId(op.elementUuid))
+      if (op.op === 'fxOn') return byId.get(fxColumnByUuid.get(op.fromFxUuid) ?? '')
+      if (op.op === 'fxOff' || op.op === 'breakRun' || op.op === 'joinRun') return byId.get(fxColumnByUuid.get(op.fxUuid) ?? '')
       return undefined
     },
-    [byId],
+    [byId, fxColumnByUuid],
   )
   const { send } = edits
   const gesture = useCallback(
@@ -302,6 +316,7 @@ export function StackTimeline({
   )
 
   const [sceneryEdit, setSceneryEdit] = useState<{ entryId: number; columnId: string } | null>(null)
+  const [fxEdit, setFxEdit] = useState<{ entryId: number; columnId: string } | null>(null)
   const [drag, setDrag] = useState<{ columnId: string; fromEntryId: number; toEntryId: number; x: number; y: number } | null>(null)
   const dragColumn = drag == null ? null : (byId.get(drag.columnId) ?? null)
   // Keyed on the rows the drag spans, not the pointer, so a move within one row rebuilds no cells.
@@ -390,7 +405,7 @@ export function StackTimeline({
             previous={previousEntry.has(row.entry.entryId) ? cellAt(grid, previousEntry.get(row.entry.entryId)!, column.id) : null}
             ghost={dragging ? (dragGhosts?.get(row.entry.entryId) ?? null) : null}
             onHandle={
-              !locked && (column.kind === 'look' || column.kind === 'palette')
+              !locked && column.kind !== 'scenery'
                 ? (e) => startDragRef.current(column, row.entry.entryId, e)
                 : undefined
             }
@@ -441,7 +456,7 @@ export function StackTimeline({
   })
   const { selectedRows, cellCount, setRows, scrollTo, cellSelection } = sheet
 
-  /** The selected cells this session edits — Look, palette and scenery cells of cue rows. */
+  /** The selected cells the verbs edit — Look, palette, FX and scenery cells of cue rows. */
   const addresses = useMemo<TimelineCellAddress[]>(
     () =>
       cellSelection.cells.flatMap((cell) => {
@@ -509,6 +524,10 @@ export function StackTimeline({
     }
     if (column.kind === 'scenery') {
       setSceneryEdit({ entryId: row.entry.entryId, columnId: column.id })
+      return
+    }
+    if (column.kind === 'fx' && cellAt(grid, row.entry.entryId, column.id).filled != null) {
+      setFxEdit({ entryId: row.entry.entryId, columnId: column.id })
       return
     }
     gesture(toggleOps(cueOrder, grid, column, row.entry.entryId))
@@ -638,6 +657,14 @@ export function StackTimeline({
   const sceneryCue = sceneryEdit == null ? undefined : cueOrder.find((c) => c.entryId === sceneryEdit.entryId)
   const sceneryCell = sceneryEdit == null ? null : cellAt(grid, sceneryEdit.entryId, sceneryEdit.columnId)
   const sceneryChange = sceneryCell?.filled?.kind === 'scenery' ? sceneryCell.filled : null
+
+  const fxColumn = fxEdit == null ? null : (byId.get(fxEdit.columnId) ?? null)
+  const fxRun = fxEdit == null || fxColumn == null ? [] : fxRunAt(cueOrder, grid, marks, fxColumn, fxEdit.entryId)
+  // A cell emptied or a column filtered away under the popover closes it, so a later fill cannot reopen it.
+  const fxRunGone = fxEdit != null && (fxRun.length === 0 || !shown.some((c) => c.id === fxEdit.columnId))
+  useEffect(() => {
+    if (fxRunGone) setFxEdit(null)
+  }, [fxRunGone])
 
   const dragScope =
     drag == null || dragColumn == null || dragGhosts == null || dragGhosts.size === 0
@@ -853,6 +880,28 @@ export function StackTimeline({
           }}
         />
       )}
+      {fxEdit != null && fxColumn != null && fxRun.length > 0 && (
+        <TimelineFxRunPopover
+          key={`${fxEdit.entryId}|${fxEdit.columnId}`}
+          anchor={() =>
+            sheetRef.current?.querySelector(`[data-row-id="${entryRowId(fxEdit.entryId)}"] [data-cell="${CSS.escape(fxEdit.columnId)}"]`) ?? null
+          }
+          column={fxColumn}
+          run={fxRun}
+          entryId={fxEdit.entryId}
+          cueLabel={cueLabel}
+          cues={cuesWords}
+          breakRun={breakRunVerb(cueOrder, grid, marks, fxColumn, fxEdit.entryId)}
+          joinRun={joinRunVerb(cueOrder, grid, marks, fxColumn, fxEdit.entryId)}
+          locked={locked}
+          onRefused={refuseVerb}
+          onClose={() => setFxEdit(null)}
+          onSend={(op) => gesture([op])}
+          onEdit={() =>
+            setTabRequest((prev) => ({ key: `${entryRowId(fxEdit.entryId)}|${fxEdit.columnId}`, tab: 'fx', seq: (prev?.seq ?? 0) + 1 }))
+          }
+        />
+      )}
       {dragScope != null && drag != null && (
         <div
           className="pointer-events-none fixed z-50 rounded-md border bg-popover px-2 py-1 text-xs shadow-md"
@@ -950,22 +999,6 @@ function TimelineHeader({
   )
 }
 
-/** What changed inside an effect's run, as the ◆ says it — the first setting that moved. */
-export function settingsChangeLabel(before: Record<string, unknown>, after: Record<string, unknown>): string | null {
-  for (const key of Object.keys(after)) {
-    const a = JSON.stringify(before[key])
-    const b = JSON.stringify(after[key])
-    if (a === b) continue
-    const value = after[key]
-    if (key === 'cycle' && typeof value === 'number') return `${value} beat${value === 1 ? '' : 's'}`
-    if (key === 'amount' && typeof value === 'number') return `${Math.round(value * 100)}%`
-    if (key === 'parameters') return 'params'
-    if (key.endsWith('Uuid')) return 'master'
-    return typeof value === 'string' || typeof value === 'number' ? `${key} ${value}` : key
-  }
-  return null
-}
-
 function runSegmentClass(kind: TimelineKind, mark: Pick<TimelineRunMark, 'start' | 'end'>, extra?: string): string {
   return cn(
     'absolute inset-x-2 z-[1] flex items-center gap-1 overflow-hidden whitespace-nowrap pl-2 pr-1.5 text-[10px]',
@@ -1001,7 +1034,7 @@ function TimelineCellView({
   onClick: (e: React.MouseEvent) => void
   onHandle?: (e: React.PointerEvent) => void
 }) {
-  const handle = onHandle != null && mark.end && cell.filled?.kind === 'layer'
+  const handle = onHandle != null && mark.end && (cell.filled?.kind === 'layer' || cell.filled?.kind === 'fx')
   return (
     // The whole cell, over the kit's 2px padding, so a run's segments meet across the row line.
     <div className="group/cell absolute inset-0" onClick={onClick}>

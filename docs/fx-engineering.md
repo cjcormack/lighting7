@@ -2212,7 +2212,9 @@ the same key, target and attribute to the incoming row, restamped with that row'
 stage* still reconciles by row. When the two rows' settings differ, the instance is edited in place
 at the GO (`routes.alignFx`, the same edit *Update stage* makes, injected into `CueHolds` as an
 `FxAligner` so `fx/` does not import `routes/`): phase kept, except that a move between Seconds
-and a master restarts it. The `cueId`, `layerFxUuid`, `runUuid` and envelope are preserved across
+and a master restarts it. The key is written by the Show view's Timeline (`timeline/edit`'s `fxOn`,
+`breakRun` and `joinRun`, `docs/cue-stacks-engineering.md` §"Timeline"), the cue copier and the
+importer, and by no cue write. The `cueId`, `layerFxUuid`, `runUuid` and envelope are preserved across
 atomic swaps in `FxEngine.updateFx()`, so updating an FX's parameters doesn't lose its cue
 association, its run or its fade.
 

@@ -486,6 +486,276 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Conflict, offRig.status)
     }
 
+    // ─── Effect cells and runs (session 5) ───────────────────────────────────────────────────────
+
+    private fun pulse(fixture: String = "hex-1", fxType: String = "Pulse") = CueAdHocFxDto(
+        targetType = "fixture", targetKey = fixture, fxType = fxType, family = "intensity", attribute = "dimmer",
+        cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
+    )
+
+    private fun fxOp(op: String, cueId: Int, fxUuid: String, entryId: Int? = null) = buildJsonObject {
+        put("op", op); put("cueId", cueId); put("fxUuid", fxUuid)
+        if (entryId != null) put("entryId", entryId)
+    }
+
+    private fun fxOn(cueId: Int, from: String) = buildJsonObject { put("op", "fxOn"); put("cueId", cueId); put("fromFxUuid", from) }
+
+    private suspend fun HttpClient.fx(cueId: Int): List<CueAdHocFxDto> = details(cueId).adHocFx
+
+    /** The run key of each cue's one effect, in [cues]' order. */
+    private suspend fun HttpClient.keys(vararg cues: Int): List<String?> = cues.map { fx(it).single().runUuid }
+
+    private suspend fun HttpClient.marker(stackId: Int, label: String) {
+        post("$base/cue-stacks/$stackId/markers") {
+            contentType(ContentType.Application.Json)
+            setBody(MarkerEntryRequest(label = label))
+        }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }
+    }
+
+    private fun setKey(cueId: Int, key: UUID?) = transaction(state.database) {
+        DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue eq cueId }.forEach { it.runUuid = key }
+    }
+
+    @Test
+    fun `fxOn from an unkeyed effect copies it into the cue and keys both, and fxOff deletes the row`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1", effects = listOf(pulse().copy(cycle = 0.5, amount = 0.6)))
+        val q2 = client.cue(act, "Q2", effects = listOf(pulse("hex-2", "SineWave")))
+        val source = client.fx(q1).single()
+        assertEquals(null, source.runUuid)
+
+        val answer = client.edit(act, fxOn(q2, source.uuid!!))
+
+        assertEquals(listOf(q2, q1).toSet(), answer.changed.toSet(), "the source took the key too")
+        val copy = client.fx(q2).last()
+        assertEquals(listOf("SineWave", "Pulse"), client.fx(q2).map { it.fxType }, "the copy goes on top")
+        assertEquals(0.5, copy.cycle)
+        assertEquals(0.6, copy.amount)
+        assertTrue(copy.uuid != source.uuid, "a row of its own")
+        val key = client.fx(q1).single().runUuid
+        assertTrue(key != null, "the source was keyed")
+        assertEquals(key, copy.runUuid, "and the copy joins its run")
+        assertEquals(null, client.fx(q2).first().runUuid, "the cue's other effect is untouched")
+        assertEquals(null, answer.before.single { it.cueId == q1 }.adHocFx.single().runUuid, "Undo puts the source back unkeyed")
+
+        // A keyed source lends its key; a cue already filling the column is left alone.
+        val q3 = client.cue(act, "Q3")
+        client.edit(act, fxOn(q3, copy.uuid!!))
+        assertEquals(key, client.fx(q3).single().runUuid)
+        assertEquals(emptyList(), client.edit(act, fxOn(q3, source.uuid)).changed, "already on")
+
+        client.edit(act, fxOp("fxOff", q2, copy.uuid))
+        assertEquals(listOf("SineWave"), client.fx(q2).map { it.fxType })
+
+        val refused = client.editRaw(act, listOf(fxOp("fxOff", q2, UUID.randomUUID().toString()), fxOn(q2, "not-a-uuid")))
+        assertEquals(HttpStatusCode.BadRequest, refused.status)
+        assertEquals(listOf(0, 1), refused.body<TimelineEditRefusal>().problems.map { it.op })
+    }
+
+    @Test
+    fun `breakRun and joinRun walk a run down the stack past a marker`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1", effects = listOf(pulse()))
+        val q2 = client.cue(act, "Q2", effects = listOf(pulse()))
+        client.marker(act, "Scene 2")
+        val q3 = client.cue(act, "Q3", effects = listOf(pulse()))
+        val q4 = client.cue(act, "Q4", effects = listOf(pulse()))
+        val q5 = client.cue(act, "Q5", effects = listOf(pulse()))
+        val run = UUID.randomUUID()
+        listOf(q1, q2, q3, q4).forEach { setKey(it, run) }
+        val other = UUID.randomUUID()
+        setKey(q5, other)
+
+        // Break at Q2: Q2, and Q3 and Q4 past the marker, take one fresh key; Q1 keeps the run's, Q5 its own.
+        client.edit(act, fxOp("breakRun", q2, client.fx(q2).single().uuid!!))
+        val (k1, k2, k3, k4, k5) = client.keys(q1, q2, q3, q4, q5)
+        assertEquals(run.toString(), k1)
+        assertTrue(k2 != null && k2 != k1)
+        assertEquals(listOf(k2, k2), listOf(k3, k4), "the run below, past the marker")
+        assertEquals(other.toString(), k5, "a run that only met this one is not part of it")
+
+        // Join at Q2: the key of Q1, for Q2 and the rest of its run below.
+        client.edit(act, fxOp("joinRun", q2, client.fx(q2).single().uuid!!))
+        assertEquals(List(4) { run.toString() } + other.toString(), client.keys(q1, q2, q3, q4, q5))
+
+        // An unkeyed cell joins too (C5): the cell above it is given a key, and the two share it.
+        setKey(q1, null); setKey(q2, null)
+        client.edit(act, fxOp("joinRun", q2, client.fx(q2).single().uuid!!))
+        val joined = client.keys(q1, q2)
+        assertTrue(joined[0] != null && joined[0] == joined[1], joined.toString())
+        assertEquals(run.toString(), client.keys(q3).single(), "Q2 was in no run, so nothing below it moved")
+
+        val refused = client.editRaw(act, listOf(fxOp("joinRun", q1, client.fx(q1).single().uuid!!)))
+        assertEquals(HttpStatusCode.BadRequest, refused.status, "nothing above Q1 to join")
+
+        // A run joins neighbours only: across an empty cue there is nothing to join.
+        client.cue(act, "Q6")
+        val q7 = client.cue(act, "Q7", effects = listOf(pulse()))
+        val gap = client.editRaw(act, listOf(fxOp("joinRun", q7, client.fx(q7).single().uuid!!)))
+        assertEquals(HttpStatusCode.BadRequest, gap.status, gap.bodyAsText())
+        assertEquals(listOf(null), client.keys(q7))
+    }
+
+    @Test
+    fun `a cue placed twice joins the run above the place an op names`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val act = client.stack("Act 1")
+        val x = client.cue(act, "X", effects = listOf(pulse()))
+        val y = client.cue(act, "Y", effects = listOf(pulse()))
+        client.post("$base/cue-stacks/$act/add-cue") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("cueId", x) })
+        }.also { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
+        val key = UUID.randomUUID()
+        setKey(y, key)
+        val places = client.details(x).entries.map { it.entryId }
+        assertEquals(2, places.size)
+        val row = client.fx(x).single().uuid!!
+
+        assertEquals(HttpStatusCode.BadRequest, client.editRaw(act, listOf(fxOp("joinRun", x, row))).status, "nothing above its first place")
+        client.edit(act, fxOp("joinRun", x, row, entryId = places[1]))
+        assertEquals(listOf(key.toString(), key.toString()), client.keys(x, y))
+
+        val wrong = client.editRaw(act, listOf(fxOp("breakRun", x, row, entryId = client.details(y).entries.single().entryId)))
+        assertEquals(HttpStatusCode.BadRequest, wrong.status, "an entry of another cue")
+    }
+
+    @Test
+    fun `an op that would give a cue one run key on two effects is refused`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1", effects = listOf(pulse()))
+        val q2 = client.cue(act, "Q2", effects = listOf(pulse(fxType = "SineWave")))
+        val key = UUID.randomUUID()
+        setKey(q1, key)
+        setKey(q2, key)
+
+        val refused = client.editRaw(act, listOf(fxOn(q2, client.fx(q1).single().uuid!!)))
+
+        assertEquals(HttpStatusCode.BadRequest, refused.status)
+        val problem = refused.body<TimelineEditRefusal>().problems.single()
+        assertEquals(0, problem.op)
+        assertTrue("run key" in problem.message, problem.message)
+        assertEquals(listOf("SineWave"), client.fx(q2).map { it.fxType }, "nothing written")
+
+        // A key two effects already shared as the batch found the cue is not the op's to refuse.
+        transaction(state.database) {
+            DaoCueAdHocFxEntity.new {
+                cue = uk.me.cormack.lighting7.models.DaoCue[q2]
+                targetType = "fixture"; targetKey = "hex-2"
+                fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
+                sortOrder = 1; runUuid = key
+            }
+        }
+        val q3 = client.cue(act, "Q3", effects = listOf(pulse("hex-1", "SquareWave")))
+        client.edit(act, fxOn(q2, client.fx(q3).single().uuid!!))
+        assertEquals(listOf("SineWave", "Pulse", "SquareWave"), client.fx(q2).map { it.fxType })
+    }
+
+    @Test
+    fun `breaking or joining a live cue's run does not mark it edited, and nothing reaches the stage`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1", effects = listOf(pulse()))
+        val q2 = client.cue(act, "Q2", effects = listOf(pulse()))
+        val run = UUID.randomUUID()
+        setKey(q1, run); setKey(q2, run)
+        state.show.cueStackManager.activateEntry(state, act, client.details(q2).entries.single().entryId)
+        val effectsBefore = state.show.fxEngine.getActiveFx().map { it.id }
+
+        val broken = client.edit(act, fxOp("breakRun", q2, client.fx(q2).single().uuid!!))
+        val joined = client.edit(act, fxOp("joinRun", q2, client.fx(q2).single().uuid!!))
+
+        assertEquals(listOf(q2), broken.changed)
+        assertEquals(emptyList(), broken.edited, "a run key is not stage content (P4)")
+        assertEquals(emptyList(), joined.edited)
+        assertFalse(state.show.cueStackManager.holds.isEdited(q2))
+        assertEquals(effectsBefore, state.show.fxEngine.getActiveFx().map { it.id }, "the running effect runs on")
+        assertEquals(run, state.show.fxEngine.getActiveFx().single { it.cueId == q2 }.runUuid, "and carries the key it has again")
+
+        // Taking the effect off is stage content.
+        val off = client.edit(act, fxOp("fxOff", q2, client.fx(q2).single().uuid!!))
+        assertEquals(listOf(q2), off.edited)
+    }
+
+    @Test
+    fun `a run made in the timeline continues across a GO with its phase kept`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1", effects = listOf(pulse()))
+        val q2 = client.cue(act, "Q2")
+        client.edit(act, fxOn(q2, client.fx(q1).single().uuid!!))
+        val manager = state.show.cueStackManager
+        manager.activateEntry(state, act, client.details(q1).entries.single().entryId)
+        val pulse = state.show.fxEngine.getActiveFx().single { it.cueId == q1 }
+        val (id, started) = pulse.id to pulse.startedAtMs
+
+        manager.advanceStack(state, act, uk.me.cormack.lighting7.fx.CueStackManager.AdvanceDirection.FORWARD)
+
+        val running = state.show.fxEngine.getActiveFx().single { it.cueId == q2 }
+        assertEquals(id, running.id, "the same effect runs on")
+        assertEquals(started, running.startedAtMs, "phase kept")
+        assertEquals(client.fx(q2).single().uuid, running.layerFxUuid.toString(), "stamped with Q2's row")
+    }
+
+    @Test
+    fun `a run key written to a live cue reaches its running effect, so the next GO follows the grid`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1", effects = listOf(pulse()))
+        val q2 = client.cue(act, "Q2", effects = listOf(pulse()))
+        val q3 = client.cue(act, "Q3", effects = listOf(pulse()))
+        val run = UUID.randomUUID()
+        listOf(q1, q2, q3).forEach { setKey(it, run) }
+        val manager = state.show.cueStackManager
+        manager.activateEntry(state, act, client.details(q2).entries.single().entryId)
+
+        // Break at the live Q2: Q2 and Q3 are one run under a new key, which the running Pulse takes.
+        client.edit(act, fxOp("breakRun", q2, client.fx(q2).single().uuid!!))
+        val pulse = state.show.fxEngine.getActiveFx().single { it.cueId == q2 }
+        assertEquals(client.fx(q2).single().runUuid, pulse.runUuid.toString())
+        manager.advanceStack(state, act, uk.me.cormack.lighting7.fx.CueStackManager.AdvanceDirection.FORWARD)
+        assertEquals(pulse.id, state.show.fxEngine.getActiveFx().single { it.cueId == q3 }.id, "handed on at the GO")
+    }
+
+    @Test
+    fun `an effect keyed by fxOn while live is handed on at the next GO`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1", effects = listOf(pulse()))
+        val q2 = client.cue(act, "Q2")
+        val manager = state.show.cueStackManager
+        manager.activateEntry(state, act, client.details(q1).entries.single().entryId)
+        val pulse = state.show.fxEngine.getActiveFx().single { it.cueId == q1 }
+        assertEquals(null, pulse.runUuid)
+
+        client.edit(act, fxOn(q2, client.fx(q1).single().uuid!!))
+        manager.advanceStack(state, act, uk.me.cormack.lighting7.fx.CueStackManager.AdvanceDirection.FORWARD)
+
+        val running = state.show.fxEngine.getActiveFx().single { it.cueId == q2 }
+        assertEquals(pulse.id, running.id, "the same effect runs on")
+        assertEquals(pulse.startedAtMs, running.startedAtMs, "phase kept")
+    }
+
     private fun restoreOf(snapshot: TimelineCueSnapshotDto): JsonObject {
         val encoded = Json.encodeToJsonElement(snapshot).jsonObject
         return JsonObject(encoded + ("op" to JsonPrimitive("restore")))

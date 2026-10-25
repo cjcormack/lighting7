@@ -688,6 +688,10 @@ and every cue an op names must have an entry in this stack. **Nothing is sent to
 | `layerOff {cueId, source, target?}` | The off press; a Look's takes every layer of it off. A cell already off is left alone |
 | `layerSettings {cueId, layerId, fields}` | The Looks tab's fields: `enabled`, `amount` (0–1), `blendMode`, `attributeMask` (a comma list, or null), `stomp`, `delayMs`, `intervalMs`, `randomWindowMs`, `speedMasterUuid`, `rateSpeedMasterUuid` (a project's master, or null). An unknown field is a problem |
 | `replace {cueIds, from, to, keepSettings}` | In each cue holding `from` (a palette's layer naming its target, or none for its own heads; any layer of a Look, whose target is ignored): where the cue lacks `to`, `from` comes off and `to` goes on with `from`'s settings **where `from` was** (`keepSettings`; a palette's mask is its family), else on top with a press's defaults; where the cue already has `to`, `from` comes off. Still the press, so a palette arriving takes its family's others off its heads |
+| `fxOn {cueId, fromFxUuid}` | Copies an ad-hoc FX row of one of this stack's cues into the cue, on top of its FX, with a uuid of its own (D6). The copy takes the source's run key; a source with none is given a fresh one and the copy shares it, so the two are one run (D7). A source an earlier op deleted is copied as the batch found it. Only the copy is checked and written, so a stale FX the cue already holds cannot refuse it. A cue already filling the column — an FX of the same `CueFxKey` — is left alone |
+| `fxOff {cueId, fxUuid}` | Deletes that FX row of the cue |
+| `breakRun {cueId, fxUuid, entryId?}` | A fresh run key for the cell and the cells of its run below it: down the stack's cue entries from the place `entryId` names (else the cue's first), markers passed over, while the column's cell (the cue's first FX of that `CueFxKey`) still carries the old key. A cell in no run has nothing to break |
+| `joinRun {cueId, fxUuid, entryId?}` | The key of the cell directly above in the column — the cue entry above that place, markers passed over — for the cell and the rest of its run below; where that cell has no key it is given a fresh one, which is how an FX stored before run keys joins (C5). Refused when that cell is empty: a run joins neighbours only, so a key taken across a gap would join nothing |
 | `scenerySet {cueId, elementUuid, state, transitionMs?}` / `sceneryClear {cueId, elementUuid}` | One element's change, checked by `parseSceneryList` with the rest of the cue's list and written by `replaceCueScenery`; a clear hands the cue back to tracking |
 | `restore {cueId, layers, adHocFx, scenery}` | Undo (P5): the cue put back exactly as an answer's `before` holds it — `writeCueChildren(restore = true)` pairs layers and FX by uuid rather than key, so a row an edit deleted comes back with its uuid, and an FX with its run key; scenery by `replaceCueScenery`'s uuids. Stored orders are kept where they order the rows on their own, else renumbered by place |
 
@@ -699,13 +703,31 @@ the held cues whose `stageContent` changed, which are marked edited since GO (`C
 `cueListChanged` and `cueStackListChanged` fire once per batch. `dryRun` runs the batch and rolls it
 back, marking and announcing nothing. Every problem is named at once: 400 `TIMELINE_EDIT_INVALID`
 `{error, code, problems: [{op, message}]}`, `op` the op's index — an unknown record or op, a cue
-with no entry in the stack, a refused press (a generic palette with no target), a bad field, a
-scenery state its element refuses — and the batch rolls back.
+with no entry in the stack, a refused press (a generic palette with no target), a bad field, an FX
+row not in the cue, a scenery state its element refuses, a run key two of one cue's FX would share —
+and the batch rolls back.
+
+**A run key names one FX in a cue** (P3): after each op, every cue it wrote is checked, and an op
+that would leave two of a cue's FX sharing a key is a problem, `restore` included. That is what lets
+a GO hand a run's instance to exactly one row. **A run key is not stage content** (P4):
+`stageContent` leaves it out, so `breakRun` and `joinRun` on a held cue change it (`changed`,
+`before`) without marking it edited since GO — neither moves anything on stage now. `fxOn` and
+`fxOff` on a held cue do mark it. A key two of a cue's FX already shared as the batch found it (an
+older archive's; the importer does not check) is not refused: P3 refuses a write that *makes* one.
+
+**A held cue's running FX take the keys written** once the batch commits (`restampRunKeys`): a GO
+hands a run on by the instance's `runUuid` (§3.3 of the plan, `CueHolds.handsRunTo`), which is stamped
+at spawn, so without this a run made, broken or joined on the live cue would play at its next GO as
+it was drawn before. Each live ad-hoc instance of a changed held cue takes the key of the row its
+`layerFxUuid` names; nothing on stage moves.
 
 The press's palette snapshots are read inside the batch's transaction, so `loadPaletteSnapshot`
 queries a palette's rows rather than ordering `template.rows`, which throws on a referrer collection
-the transaction has already loaded. FX ops (`fxOn`, `fxOff`, `breakRun`, `joinRun`) are
-the plan's session 5.
+the transaction has already loaded.
+
+The layer and FX ops name a cue, not an entry. `breakRun` and `joinRun` take an optional `entryId`,
+since a cue placed twice has a cell at each place and the cells above and below them differ; the
+Timeline always sends it. An entry that is not a place of the cue is a problem.
 
 ## Preview compose
 

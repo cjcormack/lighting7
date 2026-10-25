@@ -1,6 +1,6 @@
 # A stack's timeline: cues against the Looks, palettes, FX and scenery they apply
 
-> **Document status: agreed 2026-10-20; session 4 of 5 done.** The design is the record in
+> **Document status: agreed 2026-10-20; all five sessions done.** The design is the record in
 > [`stack-timeline-design/`](stack-timeline-design/INDEX.md): four boards, the desk survey, and the
 > eighteen calls Chris answered (D1–D11 in four rounds, C1–C7 in a fifth, every C as recommended).
 > A one-page copy for human readers is
@@ -197,8 +197,8 @@ the previous left. Every named cue must have an entry in the stack.
 | `replace {cueIds, from, to, keepSettings}` | In each cue: where the cue lacks `to`, `from`'s layer takes `to`'s source in place (rank and settings kept when `keepSettings`); where it has `to`, `from` comes off. |
 | `fxOn {cueId, fromFxUuid}` | Copies that row into the cue. Its key is the source's, or a new key given to both when the source has none. |
 | `fxOff {cueId, fxUuid}` | Deletes the row. |
-| `breakRun {cueId, fxUuid}` | A fresh key for this cell and the cells of its run below it in this stack. |
-| `joinRun {cueId, fxUuid}` | Takes the key of the nearest filled cell above in the same column, for this cell and the rest of its run below. Refused when there is none. |
+| `breakRun {cueId, fxUuid, entryId?}` | A fresh key for this cell and the cells of its run below it in this stack. `entryId` names the place of a cue placed twice. |
+| `joinRun {cueId, fxUuid, entryId?}` | Takes the key of the cell directly above in the same column (the cue entry above, markers passed over), for this cell and the rest of its run below. Refused when that cell is empty, since a run joins neighbours only. |
 | `scenerySet {cueId, elementUuid, state, transitionMs?}` / `sceneryClear {cueId, elementUuid}` | Checked by `parseSceneryList`, written by `replaceCueScenery`. |
 | `restore {cueId, layers, adHocFx, scenery}` | Undo (P5): writes the lists back through `writeCueChildren` and `replaceCueScenery`, run keys included. |
 
@@ -365,7 +365,7 @@ and 5 need 3, and 5 needs 1 and 2 for FX runs.
 - **Docs:** `cue-stacks-engineering.md` §"REST API" and a new §"Timeline", CLAUDE.md's endpoint
   list.
 
-### Session 5: editing FX and runs (backend + frontend)
+### Session 5: editing FX and runs (backend + frontend) — done, `91316b0d`
 
 - §3.6's `fxOn`, `fxOff`, `breakRun`, `joinRun`, and P3's refusal.
 - §4.4 for FX cells: toggles, drag and fill joining runs, the run popover, *Break run* and *Join
@@ -393,7 +393,7 @@ desk writes ("newer than this install supports", `ProjectImporter.kt:630`), as e
 
 ## 9. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - `FU-TIMELINE-MCP` (session 5): an MCP tool to read a stack's timeline and write runs. Trigger: an
   operator asks Claude to make an FX continue across cues.
