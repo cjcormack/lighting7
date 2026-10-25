@@ -30,6 +30,11 @@ export function sourceOf(column: TimelineColumn): TimelineSourceRef | null {
   return null
 }
 
+/** The target a column's ops name: a palette column's, and none for a Look's, which lands whole. */
+export function cellTargetOf(column: TimelineColumn): CueTarget | null {
+  return column.kind === 'look' ? null : column.target
+}
+
 /** A column the gestures edit: every kind. */
 export function editsColumn(column: TimelineColumn): boolean {
   return column.kind === 'look' || column.kind === 'palette' || column.kind === 'fx' || column.kind === 'scenery'
@@ -70,7 +75,7 @@ export function nearestFilled(
 export function onOp(column: TimelineColumn, cueId: number, from: TimelineFilled | null): TimelineEditOp | null {
   const source = sourceOf(column)
   if (source != null) {
-    return { op: 'layerOn', cueId, source, target: column.target, settingsFrom: from?.kind === 'layer' ? from.layer.id : null }
+    return { op: 'layerOn', cueId, source, target: cellTargetOf(column), settingsFrom: from?.kind === 'layer' ? from.layer.id : null }
   }
   if (column.kind === 'fx') return from?.kind === 'fx' ? { op: 'fxOn', cueId, fromFxUuid: from.effect.uuid } : null
   if (column.kind === 'scenery' && column.elementUuid && from?.kind === 'scenery') {
@@ -85,7 +90,7 @@ export function onOp(column: TimelineColumn, cueId: number, from: TimelineFilled
  */
 export function offOp(column: TimelineColumn, cueId: number, here: TimelineFilled | null = null): TimelineEditOp | null {
   const source = sourceOf(column)
-  if (source != null) return { op: 'layerOff', cueId, source, target: column.target }
+  if (source != null) return { op: 'layerOff', cueId, source, target: cellTargetOf(column) }
   if (column.kind === 'fx') return here?.kind === 'fx' ? { op: 'fxOff', cueId, fxUuid: here.effect.uuid } : null
   if (column.kind === 'scenery' && column.elementUuid) return { op: 'sceneryClear', cueId, elementUuid: column.elementUuid }
   return null
@@ -235,9 +240,14 @@ export function dragOps(
   return list.ops
 }
 
-/** Whether [entry] holds [ref]'s cell: a layer of its record naming its target, or naming none for its own heads (§3.2). */
+/**
+ * Whether [entry] holds [ref]'s cell: any layer of a Look, which lands whole; a palette's naming its
+ * target, or naming none for its own heads (§3.2).
+ */
 export function entryHolds(entry: Pick<TimelineEntry, 'layers'>, ref: TimelineCellRef): boolean {
-  return entry.layers.some((layer) => layerIsOf(layer, ref.source) && fillsTarget(layer, ref.target ?? null))
+  return entry.layers.some(
+    (layer) => layerIsOf(layer, ref.source) && (ref.source.kind === 'LOOK' || fillsTarget(layer, ref.target ?? null)),
+  )
 }
 
 function layerIsOf(layer: TimelineLayer, source: TimelineSourceRef): boolean {

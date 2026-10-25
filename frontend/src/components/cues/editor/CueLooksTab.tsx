@@ -118,7 +118,13 @@ function LooksBody({
       onSetBlendMode: (index, blendMode) => set(index, { blendMode }),
       onSetAttributeMask: (index, attributeMask) => set(index, { attributeMask }),
       onSetStomp: (index, stomp) => set(index, { stomp }),
-      onSetTargets: selection.length > 0 ? (index) => set(index, { targets: selection.map((t) => ({ ...t })) }) : undefined,
+      // A palette's layer only: a Look's names no targets, and the desk refuses one that would.
+      onSetTargets:
+        selection.length > 0
+          ? (index) => {
+              if (layers[index]?.source?.kind === 'PALETTE') set(index, { targets: selection.map((t) => ({ ...t })) })
+            }
+          : undefined,
       // Typed timing coalesces on the store's flush; a master pick is one gesture and saves at once.
       onSetTiming: (index, timing) =>
         set(index, timing, !('delayMs' in timing || 'intervalMs' in timing || 'randomWindowMs' in timing)),
@@ -149,10 +155,10 @@ function LooksBody({
 
   const addTitle = (kind: string) =>
     readOnlyReason ??
-    (selection.length > 0
-      ? `Put a ${kind} on as a layer on the Values selection (${selection.length}), or take it off`
-      : kind === 'look'
-        ? 'Put a look on as a layer of its own fixtures — or select in Values first'
+    (kind === 'look'
+      ? 'Put a look on as a layer, whole, or take it off'
+      : selection.length > 0
+        ? `Put a ${kind} on as a layer on the Values selection (${selection.length}), or take it off`
         : 'Put a per-fixture palette on as a layer — select in Values first for the rest')
 
   return (

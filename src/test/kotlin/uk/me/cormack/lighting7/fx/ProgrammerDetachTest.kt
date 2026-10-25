@@ -22,7 +22,10 @@ import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.routes.StageElementDto
 import uk.me.cormack.lighting7.plugins.InMessage
+import uk.me.cormack.lighting7.plugins.ProgrammerAddLayerInMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerDetachLayerInMessage
+import uk.me.cormack.lighting7.plugins.ProgrammerErrorOutMessage
+import uk.me.cormack.lighting7.plugins.ProgrammerPatchLayerInMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerLayerStateOutMessage
 import uk.me.cormack.lighting7.routes.ApplyLookRequest
 import uk.me.cormack.lighting7.routes.ApplyLookResponse
@@ -276,6 +279,29 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `the layer frames refuse a Look layer's targets by name`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val look = jsonClient().createLook("Amber", withEffect = false)
+        val hex1 = listOf(CueTargetDto("fixture", "hex-1"))
+
+        createWsClient().webSocket("/api") {
+            sendSerialized<InMessage>(ProgrammerAddLayerInMessage(lookId = look.id, targets = hex1))
+            val added = awaitOfType<ProgrammerErrorOutMessage> { true }
+            assertEquals("LOOK_LAYER_TARGETED", added.code)
+            assertTrue(store.layers.isEmpty(), "nothing was added")
+
+            sendSerialized<InMessage>(ProgrammerAddLayerInMessage(lookId = look.id))
+            awaitOfType<ProgrammerLayerStateOutMessage> { it.layers.size == 1 }
+            val layerId = store.layers.single().layerId
+            sendSerialized<InMessage>(ProgrammerPatchLayerInMessage(layerId, targets = hex1))
+            val patched = awaitOfType<ProgrammerErrorOutMessage> { true }
+            assertEquals("LOOK_LAYER_TARGETED", patched.code)
+        }
+        assertTrue(store.layers.single().targets.isEmpty(), "the Look's layer still names none")
+    }
+
+    @Test
     fun `a Look applied as values starts its effects above an existing layer's`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
@@ -350,7 +376,6 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
         val body = applied.body<ApplyLookResponse>()
         assertEquals(2, body.written)
-        assertEquals(emptyList(), body.skippedFamilies)
         assertNotNull(store.get("hex-1", "dimmer"))
     }
 }

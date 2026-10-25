@@ -22,13 +22,10 @@ import { HandPlaceStrip, useHandOffer } from './HandTarget'
  * it, its own when unlinked — apply-model plan §4.1). The programmer's place **is a press**
  * (`usePress`), so it toggles, replaces the palette's family and lands in a focused Look exactly as
  * the strip's tap does; so is the cue editor's, which lands in the stored cue through the editor's
- * `PressCue`, and a cue strip with no editor host appends a layer to the cue. The targets mean two
- * things depending on what is held, and
- * both are the layer model's own: for a **template**, whose rows are generic, the targets are
- * *supplied* — with nothing selected a template layer contributes nothing, which is why the strip
- * says so rather than placing silently. For a **Look**, whose rows are bound, the targets *filter* —
- * so an empty selection is the Look's own rows, the ordinary case, and a standing selection narrows
- * it on purpose.
+ * `PressCue`, and a cue strip with no editor host appends a layer to the cue. Only a **palette**
+ * takes the targets: its rows are generic, so with nothing selected its layer contributes nothing,
+ * which is why the strip says so rather than placing silently. A **Look** names none, whatever is
+ * selected — it lands whole (absolute-looks plan D1).
  *
  * The layer's mask is **the server's** for a template layer, derived from the template's own rows:
  * which family a template layer belongs to is a fact about the template, not about the press.
@@ -181,7 +178,7 @@ function CueLayerStripBody({ projectId, cue, host }: { projectId: number; cue: C
               ...before,
               {
                 ...layerSource(held),
-                targets: [...targets],
+                targets: held.kind === 'PALETTE' ? [...targets] : [],
                 enabled: true,
                 sortOrder: highest + 1,
               } satisfies CueLayer,

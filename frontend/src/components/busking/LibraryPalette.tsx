@@ -51,7 +51,7 @@ interface PaletteRow {
   kind: KindFilter
   families: AttributeFamily[]
   /**
-   * A cue slot could take this: a cue, or a Look bound to its own fixtures (D7).
+   * A cue slot could take this: a cue, or a Look, which lands whole (D7).
    *
    * Read by `slotDrop.ts` when this row is dropped on a slot, and here to dim the row while a slot
    * is the target — derived at the palette because this is the surface that knows what each row is.
@@ -265,14 +265,13 @@ function LibraryTab({
         detail: [
           `${look.targetCount} ${look.targetCount === 1 ? 'fixture' : 'fixtures'}`,
           describeLookContents(look),
-          look.hasDeferredFx ? null : 'bound',
         ]
           .filter(Boolean)
           .join(' · '),
         badge: 'Look',
         kind: 'look',
         families: look.families,
-        slotEligible: canHandLand({ kind: 'LOOK', hasDeferredFx: look.hasDeferredFx }, 'slot'),
+        slotEligible: canHandLand({ kind: 'LOOK' }, 'slot'),
         swatch: null,
         isFx: false,
         cueNumber: null,

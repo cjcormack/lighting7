@@ -227,7 +227,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a Look goes on a cue whole, whatever cell an op names, and off takes every layer of it`() = testApplication {
+    fun `a Look goes on a cue whole, and off takes every layer of it`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -236,7 +236,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1")
 
-        client.edit(act, layerOn(q1, "LOOK", warm, "hex-2"))
+        client.edit(act, layerOn(q1, "LOOK", warm, null))
         assertEquals(listOf("Warm: "), client.layers(q1), "a Look layer names no target")
         client.edit(act, layerOn(q1, "PALETTE", lavender, "hex-2"))
         client.edit(act, layerOn(q1, "LOOK", warm, null))
@@ -253,8 +253,44 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         }
         assertEquals(listOf("Warm: ", "Lavender: hex-2", "Warm: "), client.layers(q1))
 
-        client.edit(act, layerOff(q1, "LOOK", warm, "hex-1"))
+        client.edit(act, layerOff(q1, "LOOK", warm, null))
         assertEquals(listOf("Lavender: hex-2"), client.layers(q1))
+    }
+
+    @Test
+    fun `an op giving a Look's cell a target is refused by name`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.look("Warm")
+        val lavender = client.palette("Lavender")
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1", layers = listOf(CueLayerDto(lookId = warm)))
+        val before = client.edit(act, layerOff(q1, "LOOK", warm, null), dryRun = true).before.single()
+        val targeted = before.copy(layers = before.layers.map { it.copy(targets = listOf(CueTargetDto("fixture", "hex-1"))) })
+
+        val refused = client.editRaw(act, listOf(
+            layerOn(q1, "LOOK", warm, "hex-2"),
+            layerOff(q1, "LOOK", warm, "hex-1"),
+            buildJsonObject {
+                put("op", "replace")
+                putJsonArray("cueIds") { add(JsonPrimitive(q1)) }
+                putJsonObject("from") { put("source", source("LOOK", warm)) }
+                putJsonObject("to") { put("source", source("PALETTE", lavender)); put("target", target("hex-1")) }
+            },
+            buildJsonObject {
+                put("op", "replace")
+                putJsonArray("cueIds") { add(JsonPrimitive(q1)) }
+                putJsonObject("from") { put("source", source("LOOK", warm)); put("target", target("hex-1")) }
+                putJsonObject("to") { put("source", source("PALETTE", lavender)); put("target", target("hex-1")) }
+            },
+            restoreOf(targeted),
+        ))
+        assertEquals(HttpStatusCode.BadRequest, refused.status, refused.bodyAsText())
+        val problems = refused.body<TimelineEditRefusal>().problems
+        assertEquals(listOf(0, 1, 3, 4), problems.map { it.op }, "the replace from the Look's own cell is fine")
+        assertTrue(problems.all { "LOOK_LAYER_TARGETED" in it.message }, problems.toString())
+        assertEquals(listOf("Warm: "), client.layers(q1), "nothing was written")
     }
 
     @Test

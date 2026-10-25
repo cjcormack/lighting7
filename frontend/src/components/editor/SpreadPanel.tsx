@@ -83,7 +83,7 @@ import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type Positi
  * otherwise, which `errorToastMiddleware` renders, and the panel must not say it twice.
  *
  * **The mask is honoured by the desk, not pre-refused here.** A property outside the selection's
- * families writes nothing and answers `skippedFamilies` — a 200, the Look press's shape — toasted
+ * families writes nothing and answers `skippedFamilies` — a 200, never a refusal — toasted
  * in `skippedRowsMessage`'s vocabulary, keyed so a Live drag under a mask replaces one toast.
  *
  * **About each position** (venue-visit plan S12) is the intent arm's second mode on Position, beside

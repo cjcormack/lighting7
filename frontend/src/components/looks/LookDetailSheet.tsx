@@ -25,7 +25,7 @@ import { FxSummary } from '@/components/fx/FxSummary'
 import { fromLookFx } from '@/components/fx/fxSummaryTypes'
 import { useInclude } from '@/components/programmer/useInclude'
 import { LookValueChip } from './lookValueChips'
-import { DEFERRED_TARGET_TYPE, type LookSummary } from '@/api/looksApi'
+import type { LookSummary } from '@/api/looksApi'
 import { useLookDelete } from './useLookDelete'
 import { SceneryEditor } from '@/components/scenery/SceneryEditor'
 import { useSetLookSceneryMutation } from '@/store/scenery'
@@ -284,12 +284,7 @@ export function LookDetailSheet({
                   <FxSummary
                     key={`${effect.fxType}-${effect.targetKey}-${index}`}
                     effect={fromLookFx(effect, library)}
-                    target={
-                      effect.targetType === DEFERRED_TARGET_TYPE
-                        ? undefined
-                        : { type: effect.targetType, key: effect.targetKey }
-                    }
-                    badge={effect.targetType === DEFERRED_TARGET_TYPE ? "on the layer's targets" : undefined}
+                    target={{ type: effect.targetType, key: effect.targetKey }}
                   />
                 ))}
               </div>

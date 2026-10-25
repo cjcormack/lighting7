@@ -63,7 +63,6 @@ function look(id: number, over: Partial<LookSummary> = {}): LookSummary {
     rowCount: 1,
     fxCount: 0,
     targetCount: 1,
-    hasDeferredFx: false,
     preview: [],
     layerCount: 0,
     buskPageCount: 0,

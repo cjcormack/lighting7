@@ -577,6 +577,21 @@ interface ProgrammerBlindStateIncoming {
 interface ProgrammerErrorIncoming {
   type: 'programmer.error'
   message: string
+  /** A refusal named for a client to branch on — `LOOK_LAYER_TARGETED`; absent for the rest. */
+  code?: string
+}
+
+/**
+ * `programmer.addLayer`: a Look's layer or a palette's. Only a palette's names targets — a Look's
+ * lands whole, and the desk refuses one naming any (`LOOK_LAYER_TARGETED`, absolute-looks plan P2).
+ */
+export type AddLayerInput = ({ lookId: number; paletteId?: never; targets?: never } | { paletteId: number; lookId?: never; targets?: CueTarget[] }) & {
+  attributeMask?: string
+  blendMode?: string
+  amount?: number
+  speedMasterUuid?: string
+  rateSpeedMasterUuid?: string
+  fadeMs?: number
 }
 
 /** The programmer's scenery, whole: a `StateFlow` on the desk, so a broadcast and the connect snapshot. */
@@ -711,18 +726,7 @@ export interface ProgrammerApi {
    * Its one reader is the hand's place (`HandProgrammerLayerStrip`), which must not let go of the
    * held record for a frame that never left. Every other caller ignores it, as they always did.
    */
-  addLayer(input: {
-    /** Exactly one of these — a layer applies a Look or a template. */
-    lookId?: number
-    paletteId?: number
-    targets?: CueTarget[]
-    attributeMask?: string
-    blendMode?: string
-    amount?: number
-    speedMasterUuid?: string
-    rateSpeedMasterUuid?: string
-    fadeMs?: number
-  }): boolean
+  addLayer(input: AddLayerInput): boolean
   removeLayer(layerId: number, fadeMs?: number): void
   /** Detach: the layer's values and effects become Local, and nothing on stage moves. */
   detachLayer(layerId: number): boolean

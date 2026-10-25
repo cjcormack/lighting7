@@ -219,3 +219,27 @@ describe('FX cells and runs', () => {
     expect(joinRunVerb(o, g, runs(timeline, cols, g), fx, 102).reason).toBe('An FX with a Runs count starts afresh at every GO')
   })
 })
+
+describe('a Look column', () => {
+  // A Look lands whole (absolute-looks plan D1): its column is one per Look, and no op names a target.
+  const WARM = { kind: 'LOOK' as const, id: 1, uuid: 'l1', name: 'Warm', families: ['INTENSITY'] }
+  const looks: StackTimeline = { stackId: 1, entries: [entry(101, { layers: [layer(21, { source: WARM, targets: [] })] }), entry(102)] }
+  const lookOrder = looks.entries.map((e) => ({ entryId: e.entryId, cueId: e.cueId! }))
+  const lookColumns = columns(looks, NAMES)
+  const look = lookColumns[0]!
+
+  it('turns a cell on and off naming no target, even where a stored column names one', () => {
+    const grid = cells(looks, lookColumns)
+    expect(toggleOps(lookOrder, grid, look, 102)).toEqual([
+      { op: 'layerOn', cueId: 2, source: { kind: 'LOOK', id: 1 }, target: null, settingsFrom: 21 },
+    ])
+    const stale = { ...look, target: { type: 'fixture' as const, key: 'hex-1' } }
+    expect(toggleOps(lookOrder, grid, stale, 101)).toEqual([{ op: 'layerOff', cueId: 1, source: { kind: 'LOOK', id: 1 }, target: null }])
+  })
+
+  it('holds a cue with any layer of the Look, whatever an older one of it names', () => {
+    const entries = [entry(101, { layers: [layer(21, { source: WARM, targets: [{ type: 'fixture', key: 'hex-1' }] })] })]
+    const plan = replacePlan(entries, [1], { source: { kind: 'LOOK', id: 1 }, target: null }, { source: { kind: 'PALETTE', id: 7 }, target: null })
+    expect(plan).toEqual({ swaps: [1], holds: [] })
+  })
+})

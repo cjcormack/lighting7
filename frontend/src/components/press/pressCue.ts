@@ -24,13 +24,14 @@ export interface PressCue {
   effects: readonly CueAdHocFx[]
   /**
    * A palette or a Look pressed into the cue's layers, in the editor's save chain: what it had
-   * pending lands first, and the press is one Undo. Null when the desk refused it, which
+   * pending lands first, and the press is one Undo. A palette's press carries the heads and the mask;
+   * a Look's carries neither, since it lands whole. Null when the desk refused it, which
    * `errorToastMiddleware` has already said.
    */
   pressLayer: (
-    source: { paletteId: number } | { lookId: number },
-    targets: readonly CueTarget[],
-    families: readonly AttributeFamily[] | null,
+    source:
+      | { paletteId: number; targets: readonly CueTarget[]; families: readonly AttributeFamily[] | null }
+      | { lookId: number },
   ) => Promise<CueLayerPressResponse | null>
   /** *Apply as values*: the desk's literals as the cue's own rows. Answers how many landed. */
   landValues: (values: readonly { target: CueTarget; attribute: string; value: string }[]) => number

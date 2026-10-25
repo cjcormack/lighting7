@@ -140,12 +140,6 @@ sealed interface FixtureDetails {
     val key: String
     val typeKey: String
     val groups: List<String>
-
-    /**
-     * Always empty: a Look lands whole, so none can be pointed at one fixture (absolute-looks plan
-     * P7). Kept on the wire until the client stops reading it.
-     */
-    val compatibleLookIds: List<Int>
 }
 
 @Serializable
@@ -171,7 +165,6 @@ data class DmxFixtureDetails(
     val elementGroupAttributes: List<GroupAttributeDescriptor>?,
     val mode: ModeInfo?,
     val capabilities: List<String>,
-    override val compatibleLookIds: List<Int> = emptyList(),
     val gelCode: String? = null,
     /**
      * The patch is infrastructure (a power dimmer, a relay), not a lighting fixture. The list still
@@ -187,7 +180,6 @@ data class HueFixtureDetails(
     override val key: String,
     override val typeKey: String,
     override val groups: List<String>,
-    override val compatibleLookIds: List<Int> = emptyList()
 ): FixtureDetails
 
 // Property Descriptor Types

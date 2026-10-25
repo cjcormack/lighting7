@@ -3,7 +3,6 @@ import { parseAttributeMask } from '@/lib/attributeFamily'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { usePaletteListQuery } from '@/store/palettes'
-import { expandTargets } from './LookRowStore'
 import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 import type { ReactNode } from 'react'
 import type { AttributeFamily } from '@/lib/attributeFamily'
@@ -108,4 +107,44 @@ export function FocusedPaletteLayerProvider({
       {children}
     </FocusedPaletteLayerContext.Provider>
   )
+}
+
+/**
+ * The fixture keys a palette layer asserts on, or `null` for a layer naming none — a per-fixture
+ * palette's rows land where they name.
+ *
+ * **A targeted fixture's element keys are in the set too.** `resolveTargetCells` applies
+ * parent-first precedence, so a multi-element fixture whose parent carries no colour attribute
+ * resolves that column *per element* and `RowCell.targetKeys` then holds element keys. Comparing
+ * those against fixture keys alone marked every pixel bar the layer explicitly targets as "outside
+ * the targets" — dashed, non-editable, with a spurious Add-to-targets button beside it.
+ */
+export function expandTargets(
+  targets: readonly CueTarget[],
+  fixtures: readonly TargetableFixture[] | undefined,
+): ReadonlySet<string> | null {
+  if (targets.length === 0) return null
+  const byKey = new Map((fixtures ?? []).map((f) => [f.key, f]))
+  const keys = new Set<string>()
+  const add = (fixture: TargetableFixture | undefined, key: string) => {
+    keys.add(key)
+    for (const element of fixture?.elements ?? []) keys.add(element.key)
+  }
+  for (const target of targets) {
+    if (target.type === 'fixture') {
+      add(byKey.get(target.key), target.key)
+      continue
+    }
+    for (const fixture of fixtures ?? []) {
+      if (fixture.groups.includes(target.key)) add(fixture, fixture.key)
+    }
+  }
+  return keys
+}
+
+/** Only the fields [expandTargets] reads — `Fixture` itself is far wider. */
+interface TargetableFixture {
+  key: string
+  groups: string[]
+  elements?: { key: string }[]
 }

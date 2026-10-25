@@ -54,10 +54,6 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     // desk re-evaluates on every registry change so the row goes green without a rebind.
     case "missingWindow":
       return `“${health.windowName}” is not signed in on any screen`
-    case "lookNeedsSelection":
-      // Not missing — still there, and the fix is different: give the effect its targets, or bind
-      // the button to something a press can land on by itself.
-      return "This Look has a deferred FX, so it needs a selection — a button has none to give"
     case "unknownTarget":
       // The row the backend's tolerant decode kept rather than failing the whole project on. It
       // is dead here and rebindable; on the build that wrote it, it works.

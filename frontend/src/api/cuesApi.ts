@@ -371,12 +371,13 @@ export interface CopyCuesFromResponse {
 
 /**
  * `POST cues/{id}/layers/press` (apply-model plan §3.6): a palette or a Look pressed into the stored
- * cue — exactly one of the two ids — over `targets` under the selection's `families`.
+ * cue — exactly one of the two ids. A palette's press lands on `targets` under the selection's
+ * `families`; a Look's names neither, since it lands whole (absolute-looks plan D1).
  */
 export interface CueLayerPressRequest {
   paletteId?: number
   lookId?: number
-  targets: CueTarget[]
+  targets?: CueTarget[]
   families?: string[]
 }
 
@@ -386,8 +387,6 @@ export interface CueLayerPressResponse {
   /** The other palettes' layers the press narrowed or dropped on its heads. */
   released?: number
   attributeMask?: string | null
-  /** The Look's families the mask left out. */
-  skippedFamilies?: string[]
   cue: Cue
 }
 

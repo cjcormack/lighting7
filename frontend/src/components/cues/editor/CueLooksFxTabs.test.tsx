@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { MemoryRouter } from 'react-router'
 import { useRef, type ReactNode } from 'react'
@@ -122,7 +122,7 @@ vi.mock('@/store/looks', async (importOriginal) => ({
   useLookQuery: () => ({
     data: {
       id: 4,
-      fx: [{ targetType: 'deferred', targetKey: '', fxType: 'Pulse', family: 'intensity', attribute: 'dimmer', cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL', phaseOffset: 0, parameters: {} }],
+      fx: [{ targetType: 'fixture', targetKey: 'hex-1', fxType: 'Pulse', family: 'intensity', attribute: 'dimmer', cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL', phaseOffset: 0, parameters: {} }],
     },
   }),
 }))
@@ -190,8 +190,9 @@ const SINE: FxLibraryEntry = { ...PULSE, name: 'SineWave' }
 
 const WARM = { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Warm' } as const
 const COOL = { kind: 'LOOK', id: 5, uuid: 'u5', name: 'Cool' } as const
-const layer = (source: typeof WARM | typeof COOL, sortOrder: number): CueLayerDetail => ({
-  lookId: source.id,
+const AMBER = { kind: 'PALETTE', id: 6, uuid: 'p6', name: 'Amber' } as const
+const layer = (source: typeof WARM | typeof COOL | typeof AMBER, sortOrder: number): CueLayerDetail => ({
+  ...(source.kind === 'LOOK' ? { lookId: source.id } : { paletteId: source.id }),
   sortOrder,
   enabled: true,
   targets: [],
@@ -378,8 +379,8 @@ describe('the Looks tab', () => {
     ])
   })
 
-  it('Targets takes the Values selection; + Look opens the picker on it, whose press writes the cue', async () => {
-    data.cue = cueOf({ layers: [layer(WARM, 0)] })
+  it('Targets takes the Values selection for a palette; + Look opens the picker, whose press writes the cue', async () => {
+    data.cue = cueOf({ layers: [layer(WARM, 0), layer(AMBER, 1)] })
     const view = render(<Editor tab="looks" />)
     expect(stack.props!.targetsRefusal).toMatch(/Select fixtures or groups in Values/)
     data.selection = [{ type: 'group', key: 'Front' }, { type: 'fixture', key: 'orbit-sr' }]
@@ -391,8 +392,12 @@ describe('the Looks tab', () => {
       </Provider>,
     )
     expect(stack.props!.targetsRefusal).toBeNull()
+    // A Look's layer names no targets: nothing is written for it.
     act(() => stack.handlers!.onSetTargets!(0))
-    expect(((await patched(1)).layers as CueLayer[])[0].targets).toEqual(data.selection)
+    act(() => stack.handlers!.onSetTargets!(1))
+    const written = (await patched(1)).layers as CueLayer[]
+    expect(written[0].targets).toEqual([])
+    expect(written[1].targets).toEqual(data.selection)
 
     fireEvent.click(screen.getByRole('button', { name: 'Look' }))
     expect(picker.props!.library).toBe('looks')
@@ -400,8 +405,9 @@ describe('the Looks tab', () => {
     expect(screen.getByTestId('picker').getAttribute('data-into')).toBe('Q1')
     fireEvent.click(screen.getByRole('button', { name: 'press Cool' }))
     await waitFor(() => expect(data.presses).toHaveLength(1))
-    // The desk applies the rule to the stored layers: the client sends the press, not a list.
-    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, lookId: 5, targets: data.selection })
+    // The desk applies the rule to the stored layers: the client sends the press, not a list, and
+    // a Look's names no targets — it lands whole.
+    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, lookId: 5 })
     expect(data.patches).toHaveLength(1)
   })
 
@@ -564,11 +570,10 @@ describe('the FX tab', () => {
     expect(document.querySelector('[data-cue-effect-editor]')).toBeNull()
   })
 
-  it('lists a Look layer’s deferred effects under the Look, read-only', () => {
+  it('lists no Look layer’s FX: a Look’s FX name their own targets and are the Look’s (absolute-looks plan D2)', () => {
     data.cue = cueOf({ layers: [layer(WARM, 0)] })
     render(<Editor tab="fx" />)
-    const section = screen.getByText(/From Warm/).parentElement!
-    expect(within(section).getByText('Pulse')).toBeTruthy()
+    expect(screen.queryByText(/From Warm/)).toBeNull()
   })
 })
 
@@ -611,7 +616,7 @@ it('a press after a save that failed leaves Save failed standing', async () => {
   )
   data.failNext = true
   void probe.cue!.pickFx(pulse(), null)
-  await act(async () => void (await probe.cue!.pressLayer({ paletteId: 2 }, [{ type: 'fixture', key: 'hex-1' }], null)))
+  await act(async () => void (await probe.cue!.pressLayer({ paletteId: 2, targets: [{ type: 'fixture', key: 'hex-1' }], families: null })))
   expect(data.presses).toHaveLength(1)
   expect(probe.state).toBe('error')
 })

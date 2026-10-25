@@ -496,7 +496,9 @@ set, and `DaoCueLayer.source` is the only reader.
 **A Look is an absolute state** (absolute-looks plan D1): pressed or layered, it lands its own rows,
 FX and scenery, never narrower and never wider. So a Look layer names no targets — the cook
 ignores any an older write left (`CueComposer.LayerTargets` filters palette layers only), every stored
-write drops them (`withStoredTargets`, `layerTargets`), the importer drops them from any archive, and
+write that would give one targets is refused by name, `LOOK_LAYER_TARGETED` (P2: a cue's layers,
+`programmer.addLayer` / `patchLayer`, the Timeline's ops and MCP's cue layers;
+`models/LayerSource.kt`), the importer drops them from any archive, and
 `state/LookLayerTargetsMigration.kt` cleared each database's once (`PRAGMA user_version` 3). A Look
 layer's **mask** is a layer setting like its amount or blend (D3): no press sets one, and the layer
 popover, the cue editor, the Timeline's *Settings…* and MCP do; the cook applies it to the Look's
@@ -799,8 +801,8 @@ kind: a **palette** is one family, so it either lands whole or not at all — fa
 by name, `PALETTE_OUTSIDE_MASK`, on every door, the same dead-pad reading as
 `PALETTE_NEEDS_SELECTION`; inside the mask its layer is masked to its own family exactly as before,
 the intersection being the family itself. A **Look** ignores the mask (absolute-looks plan D3): it
-lands whole, and a Look layer's mask is a setting made on the layer afterwards. The `skippedFamilies`
-a Look press used to answer is always empty, kept on the wire while the client reads it. A **cue**
+lands whole, and a Look layer's mask is a setting made on the layer afterwards; no press answers a
+`skippedFamilies` any more. A **cue**
 ignores the mask too: it has no targets to be masked on. A `Sel · attribute` fader ignores it too: the control names its own
 attribute, as a cell edit is not masked by a marquee elsewhere. **The mask is tested on the on arm
 only**: it is a fact about what a press puts on, so a press that is taking a record off comes off

@@ -190,7 +190,6 @@ export function buildHarness(
     attributes: beamShaping,
     capabilities: [],
     groups: [],
-    compatibleLookIds: [],
   }
   return { patches, regions, riggings, syntheticFixture, syntheticType }
 }
@@ -439,7 +438,6 @@ function buildFocusHarness(stageD: number): HarnessData {
       attributes: [focusAttribute(head.channelNo)],
       capabilities: [],
       groups: [],
-      compatibleLookIds: [],
     })
     return {
       id: i + 1,
@@ -542,7 +540,6 @@ function buildDrapeHarness(): HarnessData {
     attributes,
     capabilities: [],
     groups: [],
-    compatibleLookIds: [],
   }
   const bar: RiggingDto = {
     id: 1,
@@ -779,7 +776,6 @@ function buildMaterialHarness(mode: MaterialHarness): HarnessData {
     attributes: [],
     capabilities: [],
     groups: [],
-    compatibleLookIds: [],
   }
   const patches: FixturePatch[] = spots.map((spot, i) => ({
     id: i + 1,
@@ -1014,7 +1010,6 @@ function buildClothHarness(mode: ClothHarness, images: HarnessImages): HarnessDa
       attributes: [dimmer(channelNo)],
       capabilities: [],
       groups: [],
-      compatibleLookIds: [],
     })
     return {
       id: i + 1,

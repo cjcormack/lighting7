@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { LookFamilyFilter } from '@/components/ViewSwitcher'
 import { PartitionChips } from '@/components/sheet/LibraryRow'
 import { EditorLabel } from '@/components/editor/EditorLabel'
@@ -19,7 +18,6 @@ import {
   padPresenceClass,
   paletteSwatch,
 } from '@/components/busking/padFace'
-import { lookIsApplied } from '@/components/busking/lookPresence'
 import type { FxPresence } from '@/components/busking/buskingTypes'
 import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import { LookPressButton, PalettePressButton, palettePressTitle } from './PressGestures'
@@ -36,7 +34,7 @@ import { useActiveFxQuery, useFxLibraryQuery } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
 import { useStopFx } from '@/components/fx/useFxControls'
 import { FAMILY_LABELS, PALETTE_FAMILY_ORDER, type AttributeFamily } from '@/lib/attributeFamily'
-import { lookOutsideMaskReason, outsideMaskReason, paletteFits, type PaletteFit } from '@/lib/paletteOffer'
+import { outsideMaskReason, paletteFits, type PaletteFit } from '@/lib/paletteOffer'
 import { recentPalettes } from '@/lib/paletteRecents'
 import { cn } from '@/lib/utils'
 import { useAbsorbLookFxMutation, useLookListQuery } from '@/store/looks'
@@ -69,12 +67,11 @@ export type ApplyLibrary = 'palettes' | 'looks' | 'fx'
  *  - **The pad is the busk page's pad**, its ring the desk's resolved applied state, so a record is
  *    one thing whichever surface it is pressed from. None while a Look layer is focused: a press
  *    writes that Look there.
- *  - **Outside the mask is shown, dimmed, with the reason** — what the selection's heads could take
- *    but its attribute mask leaves out. Still pressable: the desk tests the mask on the on arm only,
- *    so a lit one comes off, and an on press is refused there with the desk's own sentence.
- *  - **A Look can land on its own fixtures** — *On its own fixtures*, chosen by default with nothing
- *    selected. A Look whose effects take the layer's targets has none to land on, and is shown
- *    outside with that reason.
+ *  - **Outside the mask is shown, dimmed, with the reason** — the palettes the selection's heads
+ *    could take but its attribute mask leaves out. Still pressable: the desk tests the mask on the on
+ *    arm only, so a lit one comes off, and an on press is refused there with the desk's own sentence.
+ *  - **A Look lands whole** (absolute-looks plan D1): its press names neither the selection nor its
+ *    mask, and its ring is whether a layer of it is on, so the Looks are one list.
  *  - **In the cue editor it writes the cue** (`usePressCue`, apply-model plan §3.6): a palette or a
  *    Look goes on as a cue layer, or comes off, and the effects arm stores a bare effect in draft;
  *    a pad is ringed where the cue layers its record. Nothing reaches the stage.
@@ -128,7 +125,6 @@ export function ApplyPicker({
   const { isVenue } = useVenueMode(projectId)
   const [search, setSearch] = useState('')
   const [chip, setChip] = useState<LookFamilyFilter>('ALL')
-  const [ownFixtures, setOwnFixtures] = useState(pair.targets.length === 0)
   // The palettes' Effects section's *+ Effect …*: the effects arm, until the operator goes back.
   const [fxView, setFxView] = useState(false)
   const shown: ApplyLibrary = library === 'fx' || fxView ? 'fx' : library
@@ -138,24 +134,15 @@ export function ApplyPicker({
   const [newMounted, setNewMounted] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // A fresh search each time it opens: the last one belonged to the last selection. A Look lands
-  // on its own fixtures by default only when there is nothing selected for it to land on.
+  // A fresh search each time it opens: the last one belonged to the last selection.
   useEffect(() => {
     if (!open) return
     setSearch('')
     setChip('ALL')
-    setOwnFixtures(pair.targets.length === 0)
     setFxView(false)
-    // Only on opening — a selection moving under an open picker must not flip the operator's switch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const lookOwn = library === 'looks' && ownFixtures
-  const pressPair = useMemo<PressPair>(
-    () => (lookOwn ? { targets: [], families: pair.families } : pair),
-    [lookOwn, pair],
-  )
-  const { press, into } = usePress(projectId, pressPair, scope == null ? undefined : { scope })
+  const { press, into } = usePress(projectId, pair, scope == null ? undefined : { scope })
   const { data: applied } = useProgrammerAppliedQuery()
   const cue = usePressCue()
 
@@ -211,25 +198,7 @@ export function ApplyPicker({
     if (!open) return NO_SECTIONS
     if (library === 'looks') {
       const all = (looks ?? []).filter((look) => matches(look.name))
-      const inside: LookSummary[] = []
-      const outside: { look: LookSummary; reason: string }[] = []
-      for (const look of all) {
-        const reason =
-          lookOwn && look.hasDeferredFx
-            ? 'its FX take the selection — select fixtures first'
-            : lookOutsideMaskReason(look.families, mask)
-        if (reason == null) inside.push(look)
-        else outside.push({ look, reason })
-      }
-      return [
-        { key: 'all', label: 'All', caption: 'A–Z', items: inside.map((look) => ({ kind: 'look' as const, look })) },
-        {
-          key: 'outside',
-          label: 'Outside the mask',
-          caption: lookOwn ? 'what this press cannot land' : 'nothing of theirs is in the selection’s attributes',
-          items: outside.map(({ look, reason }) => ({ kind: 'look' as const, look, reason })),
-        },
-      ]
+      return [{ key: 'all', label: 'All', caption: 'A–Z', items: all.map((look) => ({ kind: 'look' as const, look })) }]
     }
     const inside = shownPalettes.filter((t) => outsideMaskReason(t.family, mask) == null)
     const outside = shownPalettes.flatMap((t) => {
@@ -253,7 +222,7 @@ export function ApplyPicker({
     ]
     // `matches` reads `term`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, library, looks, lookOwn, mask, shownPalettes, term])
+  }, [open, library, looks, mask, shownPalettes, term])
 
   /**
    * What the panel draws, which is the last real set while it is closing: Radix keeps the content
@@ -267,11 +236,7 @@ export function ApplyPicker({
   const presenceOfPalette = (template: PaletteSummary): FxPresence =>
     pressPresence(into, cue, applied, pair.targets, 'PALETTE', template.id)
   const presenceOfLook = (look: LookSummary): FxPresence =>
-    into.kind === 'programmer' && lookOwn
-      ? lookIsApplied(applied ?? [], look.id)
-        ? 'all'
-        : 'none'
-      : pressPresence(into, cue, applied, pair.targets, 'LOOK', look.id)
+    pressPresence(into, cue, applied, pair.targets, 'LOOK', look.id)
 
   const total = library === 'looks' ? (looks?.length ?? 0) : (templates?.length ?? 0)
   const offered = library === 'looks' ? (looks?.length ?? 0) : fitting.length
@@ -317,21 +282,6 @@ export function ApplyPicker({
             </Badge>
             on {heads} head{heads === 1 ? '' : 's'}
           </span>
-        ) : library === 'looks' ? (
-          <ToggleGroup
-            type="single"
-            aria-label="Where a Look lands"
-            value={ownFixtures ? 'own' : 'selection'}
-            onValueChange={(next) => next && setOwnFixtures(next === 'own')}
-            className="h-8 shrink-0"
-          >
-            <ToggleGroupItem value="selection" disabled={heads === 0} className="h-8 px-2 text-xs">
-              On {heads} selected
-            </ToggleGroupItem>
-            <ToggleGroupItem value="own" className="h-8 px-2 text-xs">
-              On its own fixtures
-            </ToggleGroupItem>
-          </ToggleGroup>
         ) : null}
       </div>
 
@@ -391,8 +341,6 @@ export function ApplyPicker({
                       look={item.look}
                       into={into}
                       presence={presenceOfLook(item.look)}
-                      hasTargets={!lookOwn && heads > 0}
-                      reason={item.reason}
                       onGesture={onLook}
                     />
                   ),
@@ -540,7 +488,7 @@ export function ApplyPicker({
 
 type PickerItem =
   | { kind: 'palette'; palette: PaletteSummary; reason?: string }
-  | { kind: 'look'; look: LookSummary; reason?: string }
+  | { kind: 'look'; look: LookSummary }
   /** The Effects section's way to the bare effects. */
   | { kind: 'bare' }
 
@@ -646,33 +594,28 @@ function LookPad({
   look,
   into,
   presence,
-  hasTargets,
-  reason,
   onGesture,
 }: {
   look: LookSummary
   into: PressInto
   presence: FxPresence
-  hasTargets: boolean
-  reason?: string
   onGesture: (look: Pick<LookSummary, 'id' | 'name'>, gesture: PressGesture) => void
 }) {
   return (
-    <LookPressButton look={look} into={into} presence={presence} hasTargets={hasTargets} onGesture={onGesture}>
+    <LookPressButton look={look} into={into} presence={presence} onGesture={onGesture}>
       {(handlers) => (
         <button
           type="button"
           {...handlers}
           data-picker-look={look.id}
           title={
-            reason ??
-            (into.kind === 'look'
+            into.kind === 'look'
               ? 'Looks don’t nest — focus Local to press one'
               : into.kind === 'cue'
                 ? `Click to put “${look.name}” on in ${into.cueLabel} as a layer, or take it off · hold or right-click for more`
-                : `Click to put “${look.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`)
+                : `Click to put “${look.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`
           }
-          className={padClass(presence, reason)}
+          className={padClass(presence)}
         >
           <span className="flex items-center gap-1.5">
             <Layers className="size-3 shrink-0 text-muted-foreground" />
@@ -682,7 +625,6 @@ function LookPad({
             {look.families.map((f) => FAMILY_LABELS[f].singular).join(' · ')}
             {look.fxCount > 0 && ` · ${look.fxCount} FX`}
           </span>
-          <PadReason reason={reason} />
           <PadDot presence={presence} />
         </button>
       )}

@@ -59,7 +59,6 @@ function fixture(over: Partial<Fixture>): Fixture {
     attributes: [],
     capabilities: [],
     groups: [],
-    compatibleLookIds: [],
     ...over,
   } as Fixture
 }

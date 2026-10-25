@@ -104,9 +104,6 @@ describe('LookRowStoreProvider', () => {
     draw()
     expect(captured?.lookId).toBe(3)
     expect(captured?.lookName).toBe('Warm Wash')
-    // `targets: []` means "the Look's own targets", not "no targets" — reading it as an empty set
-    // would dim every row in the grid on an ordinary bound layer.
-    expect(captured?.targetedKeys).toBeNull()
   })
 
   it('coalesces a burst of commits into one save', () => {
@@ -180,19 +177,12 @@ describe('LookRowStoreProvider', () => {
     })
   })
 
-  it('refuses a write to a fixture outside the layer targets', () => {
-    // The paint guard (`pointer-events-none`) only stops a *click*; the marquee selects by
-    // rectangle off the rows wrapper, so a batch commit can still reach an untargeted row.
-    // Widening a layer has to stay an explicit press.
+  it('lands every write in the Look, whatever the layer once named', () => {
+    // A Look's layer names no targets (absolute-looks plan D1), so there is no head outside it:
+    // layer 9 still carries a target list from an older desk, and the write to `a` lands anyway.
     focused.current = 9
     draw()
-    expect(captured?.targetedKeys).toEqual(new Set(['b']))
     act(() => captured?.setValue('a', 'dimmer', '200'))
-    act(() => void vi.advanceTimersByTime(400))
-    expect(saveLook).not.toHaveBeenCalled()
-
-    // …and the targeted one still writes, so this is a filter and not a lock.
-    act(() => captured?.setValue('b', 'dimmer', '200'))
     act(() => void vi.advanceTimersByTime(400))
     expect(saveLook).toHaveBeenCalledTimes(1)
   })

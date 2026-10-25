@@ -39,7 +39,7 @@ function draw(onRig = new Set<string>()) {
 const rowNames = () => Array.from(document.querySelectorAll('.min-h-10 .truncate:not(.text-\\[11px\\])')).map((el) => el.textContent)
 
 beforeEach(() => {
-  groups = [{ name: 'Front wash', memberCount: 6, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE', compatibleLookIds: [] }]
+  groups = [{ name: 'Front wash', memberCount: 6, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE' }]
   fixtures = [
     { key: 'bar-1', name: 'Bar L', typeKey: 'bar', elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, attributes: [] })), groups: [] } as unknown as Fixture,
     { key: 'smoke', name: 'Smoke', typeKey: 'smoke', groups: [] } as unknown as Fixture,
@@ -107,7 +107,7 @@ describe('the Rig tab', () => {
   })
 
   it('offers a group with no patched member as a row that says why and drags nowhere', () => {
-    groups = [...groups, { name: 'Empty group', memberCount: 0, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE', compatibleLookIds: [] }]
+    groups = [...groups, { name: 'Empty group', memberCount: 0, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE' }]
     draw()
     expect(screen.getByText('no patched member · cannot be placed until it has one')).toBeInTheDocument()
     expect(screen.getByLabelText('Place Empty group')).toBeDisabled()

@@ -188,15 +188,13 @@ function useLayerRowValues(
 
     const states: RowCellStates = {}
     for (const cell of cells) {
-      const tone = cellTone(cell, mask, store.targetedKeys)
+      const tone = cellTone(cell, mask, null)
       const parts: (StagedPart | undefined)[] = cell.resolutions.map((res, i) =>
         stagedPartFor(res, cell.targetKeys[i], lookup),
       )
       const state: CellState = {
         value: cellValueFromParts(cell.resolutions, parts),
-        // A cell an untargeted fixture would receive is shown but not editable, and a masked-out
-        // column is inert. Widening a layer's targets is always the explicit affordance on the
-        // row — never a side effect of dragging a marquee across the grid.
+        // A masked-out column is inert. A Look's layer names no targets, so no row is outside it.
         editable: tone === undefined,
       }
       if (tone) state.tone = tone

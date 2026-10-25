@@ -602,8 +602,8 @@ function clampIndex(index: number, length: number): number {
 const STARTER_FAMILIES: readonly AttributeFamily[] = ['COLOUR', 'POSITION', 'BEAM', 'INTENSITY']
 
 /**
- * *Start from your library* (D11): a stacking bank per family holding that family's templates, a
- * Looks bank of every Look that can be busked, and an empty Cues bank.
+ * *Start from your library* (D11): a stacking bank per family holding that family's palettes, a
+ * Looks bank of every Look, and an empty Cues bank.
  *
  * **Nothing solo, and no template groups or pinned cues are read.** Both are being deleted in
  * session 3, so a generator that carried them would have to be rewritten immediately; and a page
@@ -639,7 +639,7 @@ export function libraryStarterLayout(
                 name: 'Looks',
                 solo: false,
                 flow: 'WRAP',
-                pads: looks.filter((l) => l.hasDeferredFx).map((l) => ({ lookId: l.id })),
+                pads: looks.map((l) => ({ lookId: l.id })),
               },
             ],
           },

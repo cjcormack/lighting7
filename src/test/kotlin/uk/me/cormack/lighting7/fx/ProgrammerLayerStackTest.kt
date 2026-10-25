@@ -825,14 +825,15 @@ class ProgrammerLayerStackTest {
     }
 
     @Test
-    fun `a Look reads applied on the whole rig, whatever its rows reach`() {
-        // A Look's ring is on or off: lit whatever is selected while a layer of it is on.
+    fun `a Look's applied entry names no targets, its presence being the ring`() {
+        // A Look's ring is on or off (absolute-looks plan P4): lit whatever is selected while a
+        // layer of it is on, so coverage is not its question.
         val rig = newRig()
         rig.add("Warm", 200, "hex-1")
 
         val applied = rig.stack.appliedState().single()
         assertEquals("Warm", applied.source.name)
-        assertEquals(wholeRig, applied.described())
+        assertEquals(emptyList(), applied.described())
     }
 
     @Test
@@ -842,7 +843,7 @@ class ProgrammerLayerStackTest {
         rig.stack.add(source = rig.uv("Amber", 150), targets = on("hex-2"))
 
         val bySource = rig.stack.appliedState().associate { it.source.name to it.described() }
-        assertEquals(wholeRig, bySource["Warm"])
+        assertEquals(emptyList(), bySource["Warm"])
         assertEquals(listOf("fixture:hex-2=all", "group:wash=some"), bySource["Amber"])
     }
 
@@ -855,7 +856,7 @@ class ProgrammerLayerStackTest {
         rig.stack.patch(layer.layerId, enabled = false)
 
         assertNull(rig.valueOf("hex-1"), "a disabled layer asserts no value")
-        assertEquals(wholeRig, rig.stack.appliedState().single().described())
+        assertEquals("Warm", rig.stack.appliedState().single().source.name)
     }
 
     @Test

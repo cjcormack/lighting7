@@ -13,6 +13,10 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.put
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
@@ -193,7 +197,6 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val on = client.press(q, lookId = warm, keys = arrayOf("hex-1"), families = listOf("COLOUR"))
         assertEquals("applied", on.action)
         assertEquals(null, on.attributeMask, "the selection's mask is the palette's, never a Look's")
-        assertTrue(on.skippedFamilies.isEmpty())
         assertEquals(listOf("Warm: "), client.layers(q), "one layer, naming no targets")
 
         assertEquals("removed", client.press(q, lookId = warm, keys = arrayOf("hex-2"), families = listOf("Gobo")).action, "a press on any head, under any mask, takes it off")
@@ -267,28 +270,39 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a cue write giving a Look layer targets stores it with none`() = testApplication {
+    fun `every cue write giving a Look layer targets is refused by name`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
         val warm = client.look("Warm", "hex-1", "hex-2")
         val red = client.palette("Red")
         val q = client.cue("Q")
+        val layers = listOf(
+            CueLayerDto(lookId = warm, targets = listOf(CueTargetDto("fixture", "hex-1")), sortOrder = 0),
+            CueLayerDto(paletteId = red, targets = listOf(CueTargetDto("fixture", "hex-2")), sortOrder = 1),
+        )
 
-        val written = client.put("$base/cues/$q") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                NewCue(
-                    name = "Q",
-                    layers = listOf(
-                        CueLayerDto(lookId = warm, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("selection", "[]")), sortOrder = 0),
-                        CueLayerDto(paletteId = red, targets = listOf(CueTargetDto("fixture", "hex-2")), sortOrder = 1),
-                    ),
-                ),
-            )
+        val refusals = listOf(
+            client.post("$base/cues") {
+                contentType(ContentType.Application.Json)
+                setBody(NewCue(name = "New", layers = layers))
+            },
+            client.put("$base/cues/$q") {
+                contentType(ContentType.Application.Json)
+                setBody(NewCue(name = "Q", layers = layers))
+            },
+            client.patch("$base/cues/$q") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("layers", Json.encodeToJsonElement(layers)) })
+            },
+        )
+        for (refused in refusals) {
+            assertEquals(HttpStatusCode.BadRequest, refused.status, refused.bodyAsText())
+            val body = refused.body<ErrorResponse>()
+            assertEquals("LOOK_LAYER_TARGETED", body.code)
+            assertTrue("layers[0]" in body.error, body.error)
         }
-        assertEquals(HttpStatusCode.OK, written.status, written.bodyAsText())
-        assertEquals(listOf("Warm: ", "Red: hex-2"), client.layers(q), "a Look's dropped, unjudged; a palette's kept")
+        assertTrue(client.layers(q).isEmpty(), "nothing was written")
     }
 
     @Test

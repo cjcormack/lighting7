@@ -34,7 +34,6 @@ const LOOKS: LookSummary[] = [
     rowCount: 3,
     fxCount: 0,
     targetCount: 3,
-    hasDeferredFx: false,
     preview: [],
     layerCount: 1,
     buskPageCount: 0,
@@ -112,17 +111,22 @@ afterEach(() => {
  * "four independent read renderers" collapsed to one file.
  */
 describe('CueDetailContent', () => {
-  it('renders each layer in order, named and with its targets', () => {
+  it('renders each layer in order, named, with a palette’s targets and none on a Look’s', () => {
     render(
       <CueDetailContent
-        cue={cue({ layers: [layer(), layer({ source: { kind: 'LOOK', id: 8, uuid: 'u8', name: 'Second' }, sortOrder: 1 })] })}
+        cue={cue({
+          layers: [
+            layer(),
+            layer({ source: { kind: 'PALETTE', id: 8, uuid: 'p8', name: 'Second' }, lookId: undefined, paletteId: 8, sortOrder: 1 }),
+          ],
+        })}
         projectId={1}
       />,
     )
     expect(screen.getByText('Warm Wash')).toBeInTheDocument()
     expect(screen.getByText('Second')).toBeInTheDocument()
-    // Both layers name the same fixture, so this is deliberately getAll — one target chip per row.
-    expect(screen.getAllByText('hex-1')).toHaveLength(2)
+    // A Look lands whole, so only the palette's row draws a target chip.
+    expect(screen.getAllByText('hex-1')).toHaveLength(1)
   })
 
   it('shows a masked layer’s families, so a colour-only layer explains itself', () => {
@@ -153,9 +157,14 @@ describe('CueDetailContent', () => {
     expect(screen.getByText('MAX')).toBeInTheDocument()
   })
 
-  it('says a layer with no targets takes them from the look', () => {
-    render(<CueDetailContent cue={cue({ layers: [layer({ targets: [] })] })} projectId={1} />)
-    expect(screen.getByText(/look’s own targets/)).toBeInTheDocument()
+  it('says a palette layer with no targets lands on its own heads', () => {
+    render(
+      <CueDetailContent
+        cue={cue({ layers: [layer({ source: { kind: 'PALETTE', id: 8, uuid: 'p8', name: 'Throne' }, lookId: undefined, paletteId: 8, targets: [] })] })}
+        projectId={1}
+      />,
+    )
+    expect(screen.getByText('its own heads')).toBeInTheDocument()
   })
 
   it('draws no stage map, however many heads the cue touches (venue-visit S3)', () => {

@@ -455,8 +455,9 @@ object DaoCueLayers : IntIdTable("cue_layers") {
      * targets to the palette's generic rows and to its *effect*, and *filters* its bound rows. Empty
      * means "the palette's own rows' targets"; a generic palette is not complete without targets.
      *
-     * A Look's layer names none (absolute-looks plan D1): a Look lands whole, every stored write
-     * drops targets given for one, and `LookLayerTargetsMigration.kt` cleared those this database held.
+     * A Look's layer names none (absolute-looks plan D1): a Look lands whole, a stored write naming
+     * targets for one is refused (`LOOK_LAYER_TARGETED`), the importer drops them, and
+     * `LookLayerTargetsMigration.kt` cleared those this database held.
      */
     val targets = json<List<CueTargetDto>>("targets", Json)
 

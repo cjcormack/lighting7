@@ -42,6 +42,7 @@ import {
   offOps,
   onOps,
   recordColumnId,
+  extraColumnId,
   runMarkAt,
   runs as deriveRuns,
   sceneryColumnId,
@@ -245,7 +246,7 @@ export function StackTimeline({
   useEffect(() => {
     if (extras.length === 0 || timeline == null || timeline.stackId !== stack.id) return
     const derived = new Set(derivedColumns.map((c) => c.id))
-    const kept = extras.filter((e) => !derived.has(recordColumnId(e.kind, e.sourceId, e.target)))
+    const kept = extras.filter((e) => !derived.has(extraColumnId(e)))
     if (kept.length !== extras.length) extraStore.set(kept)
   }, [derivedColumns, extraStore, extras, stack.id, timeline])
   const facet = useMemo(
@@ -730,7 +731,7 @@ export function StackTimeline({
           projectId={projectId}
           deskTargets={deskSelection}
           targetName={names.target}
-          onAdd={(column) => extraStore.set([...extras.filter((e) => recordColumnId(e.kind, e.sourceId, e.target) !== recordColumnId(column.kind, column.sourceId, column.target)), column])}
+          onAdd={(column) => extraStore.set([...extras.filter((e) => extraColumnId(e) !== extraColumnId(column)), column])}
         />
       </div>
       <div className="@container">

@@ -315,8 +315,6 @@ internal data class CueLayerPressResponse(
     val released: Int = 0,
     /** The arriving layer's mask — a palette's family; none for a Look. */
     val attributeMask: String? = null,
-    /** Always empty: a Look press takes no mask (D3). Kept on the wire until the client stops reading it. */
-    val skippedFamilies: List<String> = emptyList(),
     /** The cue as stored after the press. */
     val cue: CueDetails,
 )

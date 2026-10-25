@@ -13,7 +13,7 @@ import type { AvailableAttribute } from '@/hooks/useTargetAttributes'
  */
 
 const groups = [
-  { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] },
+  { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL' },
 ]
 const fixtures = [{ key: 'par-1', name: 'PAR 1', typeKey: 'par', model: 'LED PAR 64' }]
 const stacks = [
@@ -38,10 +38,8 @@ const targetAttributes: AvailableAttribute[] = [
   { name: 'gobo', displayName: 'gobo', type: 'setting', category: 'gobo', continuous: false },
 ]
 const looks = [
-  { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredFx: false },
-  // A Look with a deferred effect presses onto targets it does not have, so the write boundary
-  // refuses it by name — the row is offered with no Apply chip rather than one that 400s.
-  { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredFx: true },
+  { id: 1, uuid: 'look-warm', name: 'Warm wash' },
+  { id: 2, uuid: 'look-pulse', name: 'Pulse' },
 ]
 const templates = [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR', rows: [], isGeneric: true, kind: 'value' }]
 const pages = [
@@ -149,14 +147,11 @@ describe('SurfaceLibrary', () => {
     }
   })
 
-  it('offers no Apply on a Look that needs a selection', () => {
-    // It presses onto its **own** fixtures, and a Look with a deferred effect has none — the write
-    // boundary refuses it by name (`BINDING_LOOK_NEEDS_SELECTION`). Offering a chip that 400s is a
-    // worse way to learn the rule than the row saying so.
+  it('offers Apply on every Look, which lands whole whatever is selected', () => {
     draw()
     expect(chipsOf('look:look-warm')).toContain('Apply')
-    expect(chipsOf('look:look-pulse')).toEqual([])
-    expect(screen.getByText('needs a selection')).toBeInTheDocument()
+    expect(chipsOf('look:look-pulse')).toContain('Apply')
+    expect(screen.queryByText('needs a selection')).not.toBeInTheDocument()
   })
 
   it('gives a busk page its own chip and one per saved pad', () => {

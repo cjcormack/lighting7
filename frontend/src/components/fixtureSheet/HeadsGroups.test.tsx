@@ -100,9 +100,6 @@ vi.mock('../fixtures/FixtureParkButton', () => ({
   FixtureParkButton: () => <button type="button">Park</button>,
   ParkButton: () => <button type="button">Park</button>,
 }))
-vi.mock('../fx/LookTogglePicker', () => ({
-  LookTogglePicker: (props: { targetType: string; targetKey: string }) => <span data-testid="look-picker" data-target={`${props.targetType}:${props.targetKey}`} />,
-}))
 const picker = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }))
 vi.mock('../fx/FxPicker', () => ({
   FxPicker: (props: Record<string, unknown>) => {
@@ -388,23 +385,10 @@ describe('rows over a pick of heads', () => {
   })
 })
 
-describe('the tray’s Look picker follows the pick', () => {
-  const look = () => document.querySelector('[data-testid="look-picker"]')?.getAttribute('data-target') ?? null
-
-  it('presses onto the fixture on All, one head when one is picked, and is absent for any other pick', () => {
+describe('the tray', () => {
+  it('offers no Look picker: a Look lands whole, so none is put on one fixture (absolute-looks plan P7)', () => {
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
-    expect(look()).toBe('fixture:bar-a')
-    fireEvent.click(pip('Head 1'))
-    expect(look()).toBe('fixture:bar-a.pixel-0')
-    addPip('Head 2')
-    expect(look()).toBeNull()
-  })
-
-  it('presses onto the group on All and one member when one is picked', () => {
-    render(<FixtureSheet group={FRONT} host="popup" />)
-    expect(look()).toBe('group:front')
-    fireEvent.click(pip('Wash 3'))
-    expect(look()).toBe('fixture:wash-3')
+    expect(screen.queryByTitle('Apply look')).toBeNull()
   })
 })
 

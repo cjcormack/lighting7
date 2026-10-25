@@ -448,8 +448,9 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 
 /**
  * Body of `POST /looks/{id}/toggle` — put the Look on as a programmer layer, or take it off. A Look
- * is pressed whole (absolute-looks plan P1), so [targets] and [families] are read and ignored: the
- * fields stay because the client sends them, and the server's Json refuses an unknown key.
+ * is pressed whole (absolute-looks plan P1), so [targets] and [families] are read and ignored. This
+ * desk's client sends neither; they stay so an older tab that still does is not refused, since the
+ * server's Json refuses an unknown key.
  */
 @Serializable
 internal data class ToggleLookRequest(
@@ -479,8 +480,6 @@ internal data class ApplyLookResponse(
     val written: Int,
     /** The Local effects started, one per effect. */
     val fxIds: List<Long> = emptyList(),
-    /** Always empty: a Look lands whole, under no mask (D3). Kept on the wire until the client stops reading it. */
-    val skippedFamilies: List<String> = emptyList(),
 )
 
 /**
@@ -536,8 +535,6 @@ internal data class ToggleLookResponse(
     /** `"applied"` or `"removed"`. */
     val action: String,
     val fxCount: Int,
-    /** Always empty: a Look press takes no mask (D3). Kept on the wire until the client stops reading it. */
-    val skippedFamilies: List<String> = emptyList(),
 )
 
 // ─── Resources ──────────────────────────────────────────────────────────
@@ -577,11 +574,6 @@ internal data class LookDto(
     val rowCount: Int,
     val fxCount: Int,
     val targetCount: Int,
-    /**
-     * Always false: a Look effect names its own target (absolute-looks plan D2). Kept on the wire
-     * until the client stops reading it.
-     */
-    val hasDeferredFx: Boolean,
     val preview: List<String>,
     /**
      * The effects this Look runs, by type, in its own order and each once — the library's Preview
@@ -1140,7 +1132,6 @@ internal fun DaoLook.toSummaryDto(
         rowCount = rowList.size,
         fxCount = fxList.size,
         targetCount = rowList.map { it.targetKey }.distinct().size,
-        hasDeferredFx = false,
         preview = rowList.groupingBy { it.value }
             .eachCount()
             .entries

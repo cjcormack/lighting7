@@ -240,7 +240,7 @@ private class TimelineBatch(
     private fun layerOn(op: LayerOnOp, problem: (String) -> Unit) {
         val cue = cueOf(op.cueId, problem) ?: return
         val record = recordOf(op.source, problem) ?: return
-        val target = cellTargetOf(record, op.target, problem) ?: if (record is PressedRecord.Palette && op.target != null) return else null
+        val target = cellTargetOf(record, op.target, problem) ?: if (op.target != null) return else null
         val settings = op.settingsFrom?.let { id ->
             val from = startLayers[id] ?: return problem("settingsFrom names no layer of this stack")
             if (!from.isOf(record)) return problem("settingsFrom is a layer of another record")
@@ -252,7 +252,7 @@ private class TimelineBatch(
     private fun layerOff(op: LayerOffOp, problem: (String) -> Unit) {
         val cue = cueOf(op.cueId, problem) ?: return
         val record = recordOf(op.source, problem) ?: return
-        val target = cellTargetOf(record, op.target, problem) ?: if (record is PressedRecord.Palette && op.target != null) return else null
+        val target = cellTargetOf(record, op.target, problem) ?: if (op.target != null) return else null
         press(cue, record, listOfNotNull(target), on = false, settings = null, problem)
     }
 
@@ -275,9 +275,7 @@ private class TimelineBatch(
         if (from == null || to == null) return
         val fromTarget = cellTargetOf(from, op.from.target, problem)
         val toTarget = cellTargetOf(to, op.to.target, problem)
-        if ((from is PressedRecord.Palette && op.from.target != null && fromTarget == null) ||
-            (to is PressedRecord.Palette && op.to.target != null && toTarget == null)
-        ) return
+        if ((op.from.target != null && fromTarget == null) || (op.to.target != null && toTarget == null)) return
         if (from.source == to.source && fromTarget == toTarget) return problem("from and to are the same cell")
         val cues = op.cueIds.map { cueOf(it, problem) }
         if (cues.any { it == null }) return
@@ -548,11 +546,12 @@ private class TimelineBatch(
     }
 
     /**
-     * A cell's target: a palette's as named, checked; a Look's none, whatever an op names, since a
-     * Look lands whole (absolute-looks plan D1).
+     * A cell's target: a palette's as named, checked. A Look lands whole (absolute-looks plan D1), so
+     * its cell names none, and one naming a target is refused (`LOOK_LAYER_TARGETED`).
      */
     private fun cellTargetOf(record: PressedRecord.Found, target: CueTargetDto?, problem: (String) -> Unit): CueTargetDto? {
-        if (record is PressedRecord.Look || target == null) return null
+        if (target == null) return null
+        if (record is PressedRecord.Look) return null.also { problem(lookLayerTargetedMessage("target")) }
         if (TargetRef.ofOrNull(target.type, target.key) == null) {
             return null.also { problem("A layer's target must be a fixture or a group: ${target.type}:${target.key}") }
         }

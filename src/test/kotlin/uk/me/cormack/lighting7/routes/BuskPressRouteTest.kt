@@ -573,7 +573,6 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         // Inside the mask the template's own family is the mask: the intersection is itself.
         val on = client.press(pad, "hex-1", families = listOf("COLOUR", "INTENSITY"))
         assertEquals("applied", on.action)
-        assertTrue(on.skippedFamilies.isEmpty(), "a template skips nothing — it is one family")
         assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask)
     }
 
@@ -588,7 +587,6 @@ class BuskPressRouteTest : RouteIntegrationTest() {
 
         val on = client.press(pad, "hex-1", families = listOf("COLOUR", "POSITION"))
         assertEquals("applied", on.action)
-        assertTrue(on.skippedFamilies.isEmpty(), "nothing is skipped: the Look lands whole")
         assertNull(state.show.programmerStore.layers.single().attributeMask)
         assertEquals(setOf("hex-1"), dimmedByLayers(), "its Intensity row lands under a Colour mask")
 
@@ -641,7 +639,6 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertEquals("removed", amberOff.action, "a lit Colour pad releases under a Position mask")
         val warmOff = client.press(warmPad, "hex-1", families = listOf("POSITION"))
         assertEquals("removed", warmOff.action, "a lit Intensity Look releases under a Position mask")
-        assertTrue(warmOff.skippedFamilies.isEmpty(), "an off press skips nothing")
         assertTrue(state.show.programmerStore.layers.isEmpty())
 
         // And now that nothing is lit, the same presses are on presses: the mask refuses the palette,
