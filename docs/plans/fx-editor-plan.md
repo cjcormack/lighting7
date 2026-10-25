@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a, 3b, 4 and 5 of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a, 3b, 4, 5 and 6 of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](completed/terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -468,7 +468,7 @@ Why each gate is where it is:
   sent on each trigger in §3.3 and a stale answer is dropped; the playhead's position from `clock`;
   reduced motion holds it still.
 
-### Session 6: Shapes, the ladder, handles and Match (frontend)
+### Session 6: Shapes, the ladder, handles and Match (frontend) — done, `166c5629`
 
 **Gate: as session 4.** Needs 5.
 
