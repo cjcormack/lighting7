@@ -7,6 +7,7 @@ import {
   drivenCategoryOf,
   isSlotSteps,
   normaliseSlotName,
+  paletteStepsAttribute,
   paletteStepsOffers,
   rigSettingUnion,
   stepFxPaletteShape,
@@ -98,6 +99,22 @@ describe('step effects (effects plan §3.6, §4.4)', () => {
     })
     expect(stepFxPaletteShape({ fxType: 'SlotSteps', attribute: null }, [])).toHaveProperty('reason')
     expect(stepFxPaletteShape({ fxType: 'Pulse' }, [])).toBeNull()
+  })
+
+  it('reads Palette Steps’ attribute off its palettes as the desk does: colour, else the first the palettes all name', () => {
+    const list = (...ps: PaletteSummary[]) => ps.map((p) => `pal:${p.uuid}`).join(',')
+    const wide = palette('Wide', 'BEAM', [['zoom', 'pct:90'], ['frost', 'pct:50']])
+    const soft = palette('Soft', 'BEAM', [['frost', 'pct:80']])
+    const flash = palette('Flash', 'INTENSITY', [['strobe', 'pct:80']])
+    const fast = palette('Fast', 'INTENSITY', [['strobe', 'pct:100']])
+    const red = palette('Red', 'COLOUR', [['rgbColour', '#ff0000']])
+    const blue = palette('Blue', 'COLOUR', [['rgbColour', '#0000ff']])
+    const all = [wide, soft, flash, fast, red, blue]
+    expect(paletteStepsAttribute(list(wide, soft), all)).toBe('frost')
+    expect(paletteStepsAttribute(list(flash, fast), all)).toBe('strobe')
+    expect(paletteStepsAttribute(list(red, blue), all)).toBe('rgbColour')
+    expect(paletteStepsAttribute(list(wide, flash), all)).toBeNull()
+    expect(paletteStepsAttribute(list(wide, soft), undefined)).toBeNull()
   })
 
   it('offers Palette Steps in each family with two palettes on a property the target has, the row’s first', () => {

@@ -18,10 +18,15 @@ import { cueFxDraftOf, runsWord, withCueFxDraft, type FxDraft } from '@/componen
 import { useFxScope } from '@/components/fx/useFxScope'
 import { fxTargetOf } from '@/components/fx/selectionFxTarget'
 import { findFxEntry } from '@/components/busking/buskingTypes'
+import { FxGraphStrip } from '@/components/fxEditor/FxGraphStrip'
+import { previewDraftOf, storedFxAttribute } from '@/components/fxEditor/fxStripDraft'
+import { useFxPreview } from '@/components/fxEditor/useFxPreview'
+import { attributeFamilyForFxFamily } from '@/lib/attributeFamily'
 import { fxDynamicsParts } from '@/lib/fxDynamics'
 import { isOnSeconds } from '@/lib/fxTiming'
 import { fxTargetLabel, storedFxTargets, type FxTargetFields } from '@/lib/fxTargets'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useFxLibraryQuery, type FxLibraryEntry } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
 import { useLookQuery } from '@/store/looks'
@@ -41,7 +46,9 @@ const NO_SELECTION: readonly CueTarget[] = []
  * target, effect and property, its speed (a master, or *Seconds*), size, direction and runs, and its
  * fire timing — reorderable. A row opens `FxFields` over the stored effect
  * (`cueFxDraftOf` / `withCueFxDraft`), its `FxScope` from the effect's target, with the
- * cue's *Delay · Interval · Random* under it. *+ Effect* opens `FxPicker` **in draft** over the
+ * cue's *Delay · Interval · Random* under it, and the graph strip of the open FX on its own targets
+ * (FX editor plan §4.6) — the FX alone, since what is underneath at its GO is not known here.
+ * *+ Effect* opens `FxPicker` **in draft** over the
  * Values selection: a tap adds the effect to the cue with its defaults and runs nothing, a second tap
  * swaps it. Each Look layer's deferred effects are listed under the Look, read-only — they are the
  * Look's, changed in the Looks library.
@@ -357,6 +364,32 @@ function SpeedLabel({ effect, entry }: { effect: CueAdHocFx; entry: FxLibraryEnt
 }
 
 /**
+ * The open FX's graph strip: the stored FX, as edited, asked of the desk as a `{draft}` over its own
+ * targets, `include: ONLY`, and drawn as the FX alone. A cue's FX lands on whatever is there at its
+ * GO, which nothing here can say, so the strip draws nothing underneath and says so. The cue's
+ * project is its row store's.
+ */
+function CueFxStrip({ effect, entry }: { effect: CueAdHocFx; entry: FxLibraryEntry }) {
+  const projectId = useCueRowStore()?.projectId ?? null
+  const { data: templates } = usePaletteListQuery({ projectId: projectId ?? 0 }, { skip: projectId == null })
+  const attribute = storedFxAttribute(effect, attributeFamilyForFxFamily(effect.family), entry, templates)
+  const targets = useMemo(() => storedFxTargets(effect.targetType, effect.targetKey), [effect.targetType, effect.targetKey])
+  const draft = useMemo(() => (attribute == null ? null : previewDraftOf(effect, attribute, { targets })), [attribute, effect, targets])
+  const preview = useFxPreview(draft == null || projectId == null ? null : { projectId, targets, fxIds: [], drafts: [draft], include: 'ONLY' })
+  return (
+    <FxGraphStrip
+      answer={preview.answer}
+      error={preview.error}
+      waiting={attribute == null ? 'This FX names no attribute the graph can draw.' : 'Asking the desk…'}
+      draw="this"
+      caption="This FX on its own targets. What is underneath at its GO is not drawn."
+      fxName={() => entry.name}
+      bounce={effect.direction === 'BOUNCE'}
+    />
+  )
+}
+
+/**
  * One stored effect's fields: `FxFields` over a draft of its own, seeded when it opens — a
  * refetch after each save must not pull a slider back under a finger — written back through
  * [onDraft], and the cue's fire timing under it.
@@ -413,6 +446,7 @@ function CueFxEditor({
           setParam={(name, value, release) => write({ ...draft, parameters: { ...draft.parameters, [name]: value } }, release)}
         />
       )}
+      {entry != null && <CueFxStrip effect={withCueFxDraft(effect, draft)} entry={entry} />}
       <div className="flex flex-col gap-1.5" data-cue-effect-timing>
         <EditorLabel>Delay · Interval · Random</EditorLabel>
         <fieldset disabled={readOnly} className="contents">

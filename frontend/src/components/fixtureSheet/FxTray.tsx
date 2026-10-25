@@ -1,5 +1,6 @@
-import { Fragment, useMemo, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronUp, Pause, Play, Plus, X } from 'lucide-react'
+import { Fragment, useContext, useMemo, useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronUp, Maximize2, Pause, Play, Plus, X } from 'lucide-react'
+import { useInRouterContext, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -11,6 +12,9 @@ import {
 } from '@/store/fixtureFx'
 import { usePauseGroupFxMutation, useRemoveGroupFxMutation, useResumeGroupFxMutation } from '@/store/groups'
 import { useCurrentProjectQuery } from '@/store/projects'
+import { useFixtureLookup } from '@/hooks/useFixtureLookup'
+import { setFxTabView } from '@/lib/fxEditorView'
+import { selectWindowHeads } from '@/components/fixtures-list/programmerSelectRequest'
 import { useIsDeskConnected } from '@/store/status'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { isHeldByBlind } from '@/lib/heldBack'
@@ -27,7 +31,7 @@ import { OwnerEditor } from '../stage/OwnerEditor'
 import { fixtureHeadKeys } from './useRelease'
 import { useCueLabel, useFxDetail } from './fxLabels'
 import { fxReaching } from './rowSource'
-import { FINGER_CHIP_CLASS, useFingerSized } from './sheetContext'
+import { FINGER_CHIP_CLASS, SheetCloseContext, useFingerSized } from './sheetContext'
 import { fxNames, fxTargetLabel, selectionItems, spreadsOverMembers } from '@/lib/fxTargets'
 
 export type FxTrayTarget = { type: 'fixture'; fixture: Fixture } | { type: 'group'; group: GroupSummary }
@@ -91,6 +95,9 @@ export function fxOnTarget(effects: readonly ActiveFx[] | undefined, target: FxT
  * of being held back by them; the picker opens on the family of the row the sheet came from.
  *
  * On the phone host its row is 48px and its chips and **+ Effect** 32px, a finger's size (§4).
+ *
+ * **Open in FX editor** (⤢, FX editor plan §4.6) takes the sheet's fixture or group to the
+ * programmer's FX tab on *Selection*, selected there as *All*'s row press selects.
  */
 export function FxTray({
   target,
@@ -218,6 +225,7 @@ export function FxTray({
 
   const shown = effects.slice(0, FOLDED_CHIPS)
   const more = effects.length - shown.length
+  const inRouter = useInRouterContext()
 
   return (
     <div
@@ -301,6 +309,7 @@ export function FxTray({
             </Button>
           </>
         )}
+        {inRouter && <OpenInFxEditor target={target} finger={finger} />}
         <button
           type="button"
           aria-expanded={open}
@@ -455,6 +464,45 @@ export function FxTray({
       )}
       {cueSheetMounted && <CueSheet cueId={openCueId} onClose={() => setOpenCueId(null)} />}
     </div>
+  )
+}
+
+/**
+ * ⤢: the programmer on [target], its FX tab on *Selection*. The selection goes through what *All*'s
+ * row press uses (`selectWindowHeads`): the desk's while the window follows it, else Include's
+ * request, which the programmer list takes up as it mounts. A modal host is closed first
+ * (`SheetCloseContext`), since one outside the routed page would stay over the FX editor.
+ */
+function OpenInFxEditor({ target, finger }: { target: FxTrayTarget; finger: boolean }) {
+  const navigate = useNavigate()
+  const { data: project } = useCurrentProjectQuery()
+  const { fixtures } = useFixtureLookup()
+  const close = useContext(SheetCloseContext)
+  const name = target.type === 'fixture' ? target.fixture.name : target.group.name
+  return (
+    <button
+      type="button"
+      aria-label={`Open ${name} in the FX editor`}
+      title="Open in FX editor"
+      disabled={project == null}
+      data-open-fx-editor
+      onClick={() => {
+        if (project == null) return
+        selectWindowHeads(
+          [target.type === 'fixture' ? { type: 'fixture', key: target.fixture.key } : { type: 'group', key: target.group.name }],
+          fixtures ?? [],
+        )
+        setFxTabView('selection')
+        close?.()
+        navigate(`/projects/${project.id}/programmer?table=fx`)
+      }}
+      className={cn(
+        'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50',
+        finger && 'size-9',
+      )}
+    >
+      <Maximize2 className="size-3.5" />
+    </button>
   )
 }
 

@@ -491,6 +491,64 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a draft on notional heads draws a head the rig lacks for each, and the rig is untouched`() {
+        val keys = seedHexes(2)
+        val answer = preview(
+            FxPreviewRequest(
+                fx = listOf(FxPreviewEntry(draft = draft("fxType" to "Circle", "attribute" to "position"))),
+                include = "ONLY",
+                notional = 8,
+            ),
+        )
+        assertEquals((1..8).map { "Head $it" }, answer.rows.map { it.label })
+        assertTrue(answer.rows.none { it.key in keys }, "none of the rig's heads")
+        val lane = answer.lanes.single()
+        assertEquals("POSITION", lane.family)
+        assertEquals(8, lane.attributes.single().rows.size)
+        val offsets = answer.fx.single().offsets.map { assertNotNull(it) }
+        assertEquals(8, offsets.distinct().size, "the spread is the engine's over eight members")
+        assertTrue(engine.getActiveFx().isEmpty(), "nothing was added")
+        assertEquals(keys.toSet(), state.show.fixtures.fixtures.map { it.key }.filter { it.startsWith("hex-") }.toSet(), "the rig is as it was")
+    }
+
+    @Test
+    fun `notional heads take every family a palette can drive`() {
+        for ((fxType, attribute, family) in listOf(
+            Triple("SineWave", "dimmer", "INTENSITY"),
+            Triple("RainbowCycle", "rgbColour", "COLOUR"),
+            Triple("ZoomWave", "zoom", "BEAM"),
+        )) {
+            val answer = preview(
+                FxPreviewRequest(fx = listOf(FxPreviewEntry(draft = draft("fxType" to fxType, "attribute" to attribute))), include = "ONLY", notional = 4),
+            )
+            assertEquals(family, answer.lanes.single().family, fxType)
+            assertEquals(4, answer.rows.size, fxType)
+        }
+    }
+
+    @Test
+    fun `notional heads refuse targets, a running FX, STACK and a count past the rows cap, all at once`() {
+        seedHexes(2)
+        val sine = running(sine(group("quad")))
+        val outcome = previewFx(
+            state,
+            FxPreviewRequest(
+                targets = group("quad"),
+                fx = listOf(FxPreviewEntry(fxId = sine.id), FxPreviewEntry(draft = draft("fxType" to "Circle", "attribute" to "position"))),
+                include = "STACK",
+                notional = 200,
+            ),
+            clock,
+        )
+        val problems = assertIs<FxPreviewOutcome.Invalid>(outcome).problems
+        assertEquals(4, problems.size, problems.joinToString("\n"))
+        assertTrue(problems.any { it.startsWith("notional") && "200" in it })
+        assertTrue(problems.any { it.startsWith("notional") && "targets" in it })
+        assertTrue(problems.any { it.startsWith("notional") && "ONLY" in it })
+        assertTrue(problems.any { it.startsWith("fx[0]") && "drafts" in it })
+    }
+
+    @Test
     fun `off the current project it is 409`() = testApplication {
         mountTestApp(state)
         val other = transaction(state.database) { DaoProject.new { name = "other"; isCurrent = false }.id.value }

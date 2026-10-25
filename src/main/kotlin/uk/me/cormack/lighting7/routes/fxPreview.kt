@@ -11,6 +11,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
+import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxLadderRung
 import uk.me.cormack.lighting7.fx.FxOutput
@@ -22,6 +23,7 @@ import uk.me.cormack.lighting7.fx.FxSampledHead
 import uk.me.cormack.lighting7.fx.FxSampler
 import uk.me.cormack.lighting7.fx.FxSamples
 import uk.me.cormack.lighting7.fx.MasterClock
+import uk.me.cormack.lighting7.fx.NotionalRig
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.SpreadShaping
 import uk.me.cormack.lighting7.fx.TargetCoverage
@@ -30,6 +32,7 @@ import uk.me.cormack.lighting7.fx.createFxWithPalettes
 import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.Base64
 
@@ -54,6 +57,8 @@ internal const val CODE_FX_PREVIEW_INVALID = "FX_PREVIEW_INVALID"
  *   [MAX_WINDOW_CYCLES], [MAX_WINDOW_BEATS] or [MAX_WINDOW_SECONDS] is refused.
  * - **`solo`**: an index into the first [FxSampler.MAX_FX] of `fx`; that FX's family lane is drawn as
  *   though it were alone over what is underneath (D14).
+ * - **`notional`**: draw drafts on that many heads the rig does not have ([NotionalRig], D15) — no
+ *   `targets`, drafts only, `include: ONLY`.
  *
  * The rows are the heads `targets` cover that the sampled FX paint — under `STACK`, that any running
  * FX paints too, so every FX reaching the selection is folded; with no targets, the asked-for FX's
@@ -98,6 +103,8 @@ internal data class FxPreviewRequest(
     val window: FxPreviewWindow = FxPreviewWindow(),
     /** An index into [fx]. */
     val solo: Int? = null,
+    /** Draw the drafts on this many notional heads instead of the rig's ([NotionalRig]). */
+    val notional: Int? = null,
 )
 
 /** A running FX ([fxId]), a draft ([draft], an add's body) or a running FX with an unsent edit (both). */
@@ -264,18 +271,24 @@ internal fun previewFx(state: State, request: FxPreviewRequest, clock: FxSampleC
     val include = FxSampleRequest.Include.entries.firstOrNull { it.name == request.include }
     if (include == null) problems += "include: '${request.include}' is not STACK or ONLY"
     val window = windowOf(request.window, problems)
-    targetProblems(state, request.targets, problems)
+    val rig = notionalRig(request, problems)
+    if (request.notional == null) targetProblems(state, request.targets, problems)
     if (request.fx.isEmpty()) problems += "fx: nothing to preview"
     if (request.solo != null) {
         if (request.solo !in request.fx.indices) problems += "solo: ${request.solo} names no fx entry"
         else if (request.solo >= FxSampler.MAX_FX) problems += "solo: fx[${request.solo}] is past the ${FxSampler.MAX_FX} FX a preview samples"
     }
 
-    val asked = request.fx.mapIndexed { i, entry -> instanceFor(state, request, i, entry, problems) }
+    // Notional heads run through an engine of their own over their own register, on the show's clocks.
+    val fixtures = rig?.fixtures ?: state.show.fixtures
+    val sampling = rig?.let { FxEngine(it.fixtures, speedMasters = engine.speedMasters) } ?: engine
+    // A refused `notional` has no heads to build the drafts on; its problems already say why.
+    val asked = if (request.notional != null && rig == null) emptyList()
+    else request.fx.mapIndexed { i, entry -> instanceFor(state, request, i, entry, problems, fixtures, sampling) }
     if (problems.isNotEmpty()) return FxPreviewOutcome.Invalid(problems)
     val fx = asked.map { checkNotNull(it) }
 
-    val sampler = engine.sampler { state.show.fxRegistry.createFxWithPalettes(state.show.paletteRegistry, it.fxTypeId, it.effect.parameters) }
+    val sampler = sampling.sampler { state.show.fxRegistry.createFxWithPalettes(state.show.paletteRegistry, it.fxTypeId, it.effect.parameters) }
     val clock = clock ?: sampler.clock()
     val reads = sampler.snapshot()
     val covered = coveredBy(state, request.targets)
@@ -289,28 +302,41 @@ internal fun previewFx(state: State, request: FxPreviewRequest, clock: FxSampleC
     // Rig order is the order the FX's walks list the heads; graph order the picked FX's Order over it.
     val heads = sampler.heads(painting, reads).filter { covered(it.key) }
     val rigIndex = heads.withIndex().associate { (i, head) -> head.key to i }
-    val (rows, rowsCut) = wholeFixtures(state, graphOrder(state, heads, rigIndex))
+    val (rows, rowsCut) = wholeFixtures(fixtures, graphOrder(fixtures, heads, rigIndex))
     val samples = sampler.sample(FxSampleRequest(fx, checkNotNull(include), rows, checkNotNull(window)), clock, reads)
     val solo = request.solo?.let { soloResults(sampler, reads, fx[it], samples, clock) }
 
-    return FxPreviewOutcome.Done(answer(state, sampler, reads, samples, fx, rigIndex, clock, solo, rowsCut))
+    return FxPreviewOutcome.Done(answer(state, fixtures, sampler, reads, samples, fx, rigIndex, clock, solo, rowsCut))
+}
+
+/** The heads [request] names in `notional`, or null for the rig's; its problems added. */
+private fun notionalRig(request: FxPreviewRequest, problems: MutableList<String>): NotionalRig? {
+    val count = request.notional ?: return null
+    val before = problems.size
+    if (count !in 1..FxSampler.MAX_ROWS) problems += "notional: $count is not between 1 and ${FxSampler.MAX_ROWS}"
+    if (request.targets.isNotEmpty()) problems += "notional: notional heads are drawn instead of targets; send no targets"
+    if (request.include != FxSampleRequest.Include.ONLY.name) problems += "notional: notional heads draw include ONLY"
+    for ((i, entry) in request.fx.withIndex()) {
+        if (entry.fxId != null) problems += "fx[$i]: notional heads draw drafts, not a running FX"
+    }
+    return if (problems.size == before) NotionalRig(count) else null
 }
 
 /** The head's fixture: its parent for a cell, else itself. */
-private fun fixtureOf(state: State, key: String): String =
-    (runCatching { state.show.fixtures.untypedGroupableFixture(key) }.getOrNull() as? FixtureElement<*>)?.parentFixture?.key ?: key
+private fun fixtureOf(fixtures: Fixtures, key: String): String =
+    (runCatching { fixtures.untypedGroupableFixture(key) }.getOrNull() as? FixtureElement<*>)?.parentFixture?.key ?: key
 
 /**
  * [rows] cut to [FxSampler.MAX_ROWS] at a fixture's end, so the cap drops whole fixtures — or at the
  * cap itself when the first fixture alone is longer — and whether anything was cut.
  */
-private fun wholeFixtures(state: State, rows: List<String>): Pair<List<String>, Boolean> {
+private fun wholeFixtures(fixtures: Fixtures, rows: List<String>): Pair<List<String>, Boolean> {
     if (rows.size <= FxSampler.MAX_ROWS) return rows to false
     var end = 0
     while (end < rows.size) {
-        val fixture = fixtureOf(state, rows[end])
+        val fixture = fixtureOf(fixtures, rows[end])
         var next = end
-        while (next < rows.size && fixtureOf(state, rows[next]) == fixture) next++
+        while (next < rows.size && fixtureOf(fixtures, rows[next]) == fixture) next++
         if (next > FxSampler.MAX_ROWS) break
         end = next
     }
@@ -337,9 +363,9 @@ private fun targetProblems(state: State, targets: List<CueTargetDto>, problems: 
  * The rows in graph order (D8): fixtures in the order of their first head under the picked FX's Order,
  * each fixture's heads together beneath it in that Order, ties in rig order.
  */
-private fun graphOrder(state: State, heads: List<FxSampledHead>, rigIndex: Map<String, Int>): List<String> {
+private fun graphOrder(fixtures: Fixtures, heads: List<FxSampledHead>, rigIndex: Map<String, Int>): List<String> {
     val byHead = compareBy<FxSampledHead, Double?>(nullsLast()) { it.orderRank }.thenBy { rigIndex.getValue(it.key) }
-    val fixtureOf = heads.associate { it.key to fixtureOf(state, it.key) }
+    val fixtureOf = heads.associate { it.key to fixtureOf(fixtures, it.key) }
     val leader = heads.groupBy { fixtureOf.getValue(it.key) }.mapValues { (_, own) -> own.minWith(byHead) }
     return heads.sortedWith(
         Comparator<FxSampledHead> { a, b -> byHead.compare(leader.getValue(fixtureOf.getValue(a.key)), leader.getValue(fixtureOf.getValue(b.key))) }
@@ -374,7 +400,15 @@ private fun windowOf(window: FxPreviewWindow, problems: MutableList<String>): Fx
 }
 
 /** The instance [entry] names, or null with its problems added. Nothing is added to the engine. */
-private fun instanceFor(state: State, request: FxPreviewRequest, i: Int, entry: FxPreviewEntry, problems: MutableList<String>): FxInstance? {
+private fun instanceFor(
+    state: State,
+    request: FxPreviewRequest,
+    i: Int,
+    entry: FxPreviewEntry,
+    problems: MutableList<String>,
+    fixtures: Fixtures,
+    engine: FxEngine,
+): FxInstance? {
     val where = "fx[$i]"
     val running = entry.fxId?.let { id ->
         state.show.fxEngine.getFx(id) ?: run {
@@ -406,9 +440,13 @@ private fun instanceFor(state: State, request: FxPreviewRequest, i: Int, entry: 
         }
         else -> {
             val add = decode<AddFxRequest>(draft!!, where, problems) ?: return null
-            val targeted = if (add.targets == null && add.fixtureKey.isEmpty()) add.copy(targets = request.targets) else add
+            val targeted = when {
+                request.notional != null -> add.copy(targets = listOf(CueTargetDto(TargetRef.Group.TYPE, NotionalRig.GROUP)), fixtureKey = "")
+                add.targets == null && add.fixtureKey.isEmpty() -> add.copy(targets = request.targets)
+                else -> add
+            }
             try {
-                buildFxInstance(state, targeted)
+                buildFxInstance(state, targeted, fixtures, engine)
             } catch (e: Exception) {
                 problems += "$where: ${e.message ?: "the draft cannot be built"}"
                 null
@@ -451,6 +489,7 @@ private fun soloResults(sampler: FxSampler, reads: FxSampler.Reads, solo: FxInst
 
 private fun answer(
     state: State,
+    fixtures: Fixtures,
     sampler: FxSampler,
     reads: FxSampler.Reads,
     samples: FxSamples,
@@ -465,7 +504,7 @@ private fun answer(
     val rowIndex = samples.rows.withIndex().associate { (i, key) -> key to i }
     val fxIndex = samples.fx.withIndex().associate { (i, sampled) -> sampled.fx to i }
 
-    fun fixture(key: String) = runCatching { state.show.fixtures.untypedGroupableFixture(key) }.getOrNull()
+    fun fixture(key: String) = runCatching { fixtures.untypedGroupableFixture(key) }.getOrNull()
     fun family(key: String, attribute: String): AttributeFamily? = fixture(key)?.let { familyForAttribute(it, attribute) }
 
     /** The master an FX's clock follows, or null for its own seconds. */
@@ -575,7 +614,7 @@ private fun answer(
             sampleMs = samples.sampleMs,
         ),
         clock = clocks,
-        rows = samples.rows.map { key -> rowOf(state, key, rigIndex[key] ?: -1) },
+        rows = samples.rows.map { key -> rowOf(fixtures, key, rigIndex[key] ?: -1) },
         lanes = lanes,
         fx = fx,
         truncated = (samples.truncated.map { it.name } + listOfNotNull(FxSamples.Truncation.ROWS.name.takeIf { rowsCut })).distinct().sorted(),
@@ -584,8 +623,8 @@ private fun answer(
 
 private val LANE_ORDER = listOf(AttributeFamily.INTENSITY, AttributeFamily.COLOUR, AttributeFamily.POSITION, AttributeFamily.BEAM)
 
-private fun rowOf(state: State, key: String, rigIndex: Int): FxPreviewRow {
-    val head = runCatching { state.show.fixtures.untypedGroupableFixture(key) }.getOrNull()
+private fun rowOf(fixtures: Fixtures, key: String, rigIndex: Int): FxPreviewRow {
+    val head = runCatching { fixtures.untypedGroupableFixture(key) }.getOrNull()
     val element = head as? FixtureElement<*>
     return FxPreviewRow(
         key = key,

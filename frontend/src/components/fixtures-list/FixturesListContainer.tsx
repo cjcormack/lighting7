@@ -1120,6 +1120,14 @@ export function FixturesListContainer({
   // Without this guard that would silently re-apply the old Include's selection over whatever
   // they had since selected, and reset their filter and scroll position with it.
   const appliedIncludeNonceRef = useRef(0)
+  // An unmount clears the selection (`useListSelection`), so the request is forgotten with it: a
+  // remount that keeps this ref — StrictMode's — then applies it again, as a fresh mount would.
+  useEffect(
+    () => () => {
+      appliedIncludeNonceRef.current = 0
+    },
+    [],
+  )
   useEffect(() => {
     if (includeNonce === 0 || appliedIncludeNonceRef.current === includeNonce) return
     const { fixtureKeys, groupKeys } = includeSelection

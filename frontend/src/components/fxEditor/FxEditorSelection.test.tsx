@@ -375,3 +375,42 @@ describe('the widths', () => {
     expect(document.querySelector('[data-fx-list]')!.parentElement!.className).toContain('auto-rows-max')
   })
 })
+
+describe('the phone arm (§4.2)', () => {
+  it('folds the list to a row of lane chips, one lane opened under them, the graph then the inspector below', () => {
+    mocks.width = 390
+    draw()
+    const chips = [...document.querySelectorAll<HTMLElement>('[data-fx-lane-chip]')]
+    expect(chips.map((c) => [c.dataset.fxLaneChip, c.textContent])).toEqual([
+      ['INTENSITY', 'Intensity4'],
+      ['COLOUR', 'Colour1'],
+    ])
+    expect(document.querySelector('[data-fx-lane]')).toBeNull()
+    fireEvent.click(chips[1])
+    expect([...document.querySelectorAll<HTMLElement>('[data-fx-lane]')].map((l) => l.dataset.fxLane)).toEqual(['COLOUR'])
+    expect(laneIds('COLOUR')).toEqual([5])
+    expect(chips[1]).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(chips[1])
+    expect(document.querySelector('[data-fx-lane]')).toBeNull()
+    // List, graph, inspector: one column, in that order.
+    const list = document.querySelector('[data-fx-list]')!
+    const graph = document.querySelector('[data-fx-graph]')!
+    const inspector = document.querySelector('[data-fx-inspector="stacked"]')!
+    expect(list.compareDocumentPosition(graph) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(graph.compareDocumentPosition(inspector) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('lights the chip of the lane holding the picked FX', () => {
+    mocks.width = 390
+    act(() => setPickedFx(5))
+    draw()
+    expect(document.querySelector('[data-fx-lane-chip="COLOUR"]')!.className).toContain('border-violet')
+    expect(document.querySelector('[data-fx-lane-chip="INTENSITY"]')!.className).not.toContain('border-violet')
+  })
+
+  it('draws no lane chips from 760px', () => {
+    mocks.width = 760
+    draw()
+    expect(document.querySelector('[data-fx-lane-chips]')).toBeNull()
+  })
+})

@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useEditorForm } from '@/components/editor/EditorSurface'
 import { FixtureSheet } from '@/components/fixtureSheet/FixtureSheet'
 import { PhoneSheet } from '@/components/fixtureSheet/PhoneSheet'
+import { SheetCloseContext } from '@/components/fixtureSheet/sheetContext'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useGroupListQuery } from '@/store/groups'
 import type { RenderTile } from '@/lib/buskRig'
@@ -58,7 +59,7 @@ export function BuskFixtureSheet({ target, onClose }: { target: BuskSheetTarget 
   const host = form === 'popover' ? 'popup' : 'phone'
   const description = 'The values, FX and layers of what this rig tile holds'
 
-  const body =
+  const sheet =
     fixture != null ? (
       <FixtureSheet key={fixture.key} fixture={fixture} host={host} titleComponent={SheetTitle} />
     ) : group != null ? (
@@ -66,6 +67,7 @@ export function BuskFixtureSheet({ target, onClose }: { target: BuskSheetTarget 
     ) : (
       <SheetTitle className="p-4">{shown?.type === 'group' ? shown.name : 'Fixture'}</SheetTitle>
     )
+  const body = <SheetCloseContext.Provider value={onClose}>{sheet}</SheetCloseContext.Provider>
 
   if (form !== 'popover') {
     return (

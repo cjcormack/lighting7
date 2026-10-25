@@ -1,28 +1,24 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { FX_ATTRIBUTE_SENTINELS } from '@/lib/fxTargetAttributes'
+import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { useMaster1Uuid, useSpeedMasterBpm, useSpeedMasterDisplay } from '@/store/speedMasters'
 import { isOnSeconds } from '@/lib/fxTiming'
-import { fxSpeedLabel } from '@/components/fx/fxConstants'
-import { isPaletteRef, resolveColourToHex } from '@/components/fx/colourUtils'
-import { useColourPalettes } from '@/components/fx/FxColourPalettes'
+import { NOTIONAL_HEADS, NOTIONAL_HEADS_WORD, fxSpeedLabel } from '@/components/fx/fxConstants'
+import { useWindowSelectionTargets } from '@/components/fx/selectionFxTarget'
+import { findFxEntry } from '@/components/busking/buskingTypes'
+import { FxGraphStrip } from '@/components/fxEditor/FxGraphStrip'
+import { previewDraftOf, storedFxAttribute } from '@/components/fxEditor/fxStripDraft'
+import { useFxPreview } from '@/components/fxEditor/useFxPreview'
 import { fixturesSupportingFamily, type AttributeFamily } from '@/lib/attributeFamily'
 import { attributesFor } from '@/lib/fxTargetAttributes'
-import type { FxLibraryEntry } from '@/store/fixtureFx'
+import { useFxLibraryQuery, type FxLibraryEntry } from '@/store/fixtureFx'
+import { usePaletteListQuery } from '@/store/palettes'
 import type { PaletteFx } from '@/api/palettesApi'
 
-/** Beats in a bar. The desk has no time signature; every division label is quoted against 4/4. */
-const BEATS_PER_BAR = 4
-
-/** Family tints for the preview strip, for an effect with no colour of its own to show. */
-const FAMILY_TINT: Record<AttributeFamily, [string, string]> = {
-  INTENSITY: ['#FFFFFF', '#1A1A1A'],
-  COLOUR: ['#A78BFA', '#1E1035'],
-  POSITION: ['#38BDF8', '#0A2233'],
-  BEAM: ['#FBBF24', '#2A1A00'],
-}
+type StripOn = 'selection' | 'notional'
 
 /**
  * The effect branch's answer to `PaletteResolvesTo` — *what will this run on, and how fast?*
@@ -34,17 +30,19 @@ const FAMILY_TINT: Record<AttributeFamily, [string, string]> = {
  * is nothing per-head to list, and the interesting facts are *how many heads could take it* and
  * *how fast it goes*.
  *
- * **It asks the server nothing**, and that is the second difference. `PaletteResolvesTo` posts the
- * draft to `/palettes/resolve` because colour degradation and wheel snapping are arithmetic the
- * resolver must own. Here there is no such arithmetic: the head count is a capability filter over
- * the patch, and the strip is a drawing of the division against the tempo. It is a **preview, not a
- * promise** — the caption says so, and nothing here should grow into a simulation of the effect.
+ * The head count is a capability filter over the patch. Under it is the FX editor's **graph strip**
+ * (FX editor plan D15, §4.6), the desk's own samples of the draft, redrawn as it changes: on the
+ * window's selection when there is one, as the lane would be over what it holds now, or on eight
+ * notional heads — heads the rig does not have — as the FX alone. *On the selection · On eight
+ * heads* switches between them. The client computes none of it (P2).
  */
 export function PaletteRunsOn({
+  projectId,
   family,
   effect,
   entry,
 }: {
+  projectId: number
   family: AttributeFamily
   effect: PaletteFx
   /**
@@ -68,7 +66,6 @@ export function PaletteRunsOn({
   // and a null one means **unscaled** rather than master 1. Naming master 1 there would claim a
   // tempo link the effect does not have.
   const rateDisplay = useSpeedMasterDisplay(effect.rateSpeedMasterUuid)
-  const colours = useColourPalettes()
 
   // A beam effect drives the property the palette names (Slot Steps' setting) or else the one it
   // declares, so it runs on the heads that have that one — never a sentinel, which names none.
@@ -84,45 +81,14 @@ export function PaletteRunsOn({
         : (fixtures ?? []).filter((fixture) => attributesFor([{ type: 'fixture', fixture }]).has(beamAttribute)).length,
     [fixtures, family, beamAttribute],
   )
-  // Timed in seconds: a wall-clock effect, or a beat effect on Seconds (D7) — its cycle is what the
-  // strip is, with no beat ruler under it.
+  // Timed in seconds: a wall-clock effect, or a beat effect on Seconds (D7) — no master's tempo to quote.
   const isWallClock = entry?.timingSource === 'WALL_CLOCK' || effect.seconds === true
   const onSeconds = isOnSeconds(effect, entry?.timingSource)
-
-  /**
-   * Up to two colours off the effect's own `colour` parameters, so a colour effect previews in the
-   * colours it will actually run in. A `pal:` reference resolves through the same lookup the
-   * pickers use; anything else falls back to the family tint rather than to black, which would read
-   * as a real (and wrong) preview.
-   */
-  const [from, to] = useMemo(() => {
-    const tint = FAMILY_TINT[family]
-    const names = (entry?.parameters ?? [])
-      .filter((param) => param.type.toLowerCase() === 'colour')
-      .map((param) => param.name)
-    const swatches = names
-      .map((name) => {
-        const value = effect.parameters[name]
-        if (value == null || value === '') return null
-        return isPaletteRef(value) ? colours.swatchFor(value) : resolveColourToHex(value)
-      })
-      .filter((hex): hex is string => hex != null)
-    if (swatches.length === 0) return tint
-    return [swatches[0], swatches[1] ?? tint[1]]
-  }, [entry, effect.parameters, family, colours])
-
-  // One cycle as a fraction of the strip: a bar for a beat effect (so a 1-bar division fills it
-  // exactly and a 2-bar one shows half a cycle), the whole strip for a wall-clock one, whose cycle
-  // is what the strip *is*.
-  const cyclePct = isWallClock
-    ? 100
-    : Math.max(4, Math.min(200, (effect.cycle / BEATS_PER_BAR) * 100))
 
   // No entry means no timing source, and `fxSpeedLabel` answers null for exactly that — the
   // two readings of `cycle` are a tempo apart, so the number is dropped rather than guessed.
   const division = entry == null ? null : fxSpeedLabel(effect.cycle, entry.timingSource ?? 'BEAT', effect.seconds)
-  const cycleWord = isWallClock ? 'One cycle' : 'One bar'
-  const speedLabel = division == null ? cycleWord : `${cycleWord} · ${division}`
+  const speedLabel = division ?? (isWallClock ? 'One cycle' : 'One bar')
   const masterLabel = isWallClock
     ? onSeconds
       ? 'Seconds — no master'
@@ -156,27 +122,88 @@ export function PaletteRunsOn({
               {isWallClock ? masterLabel : `${masterLabel} · ${bpm == null ? '—' : Math.round(bpm)} bpm`}
             </span>
           </div>
-          <div
-            className="mt-1 h-5 rounded border border-border/60"
-            style={{
-              background: `repeating-linear-gradient(to right, ${from} 0%, ${to} ${cyclePct / 2}%, ${from} ${cyclePct}%)`,
-            }}
-            aria-hidden
-          />
-          {!isWallClock && (
-            <div className="mt-0.5 flex items-center justify-between font-mono text-[9px] text-muted-foreground">
-              {Array.from({ length: BEATS_PER_BAR }, (_, i) => (
-                <span key={i}>{i + 1}</span>
-              ))}
-            </div>
-          )}
         </div>
-
-        <p className="text-[10px] text-muted-foreground">
-          A preview of the shape and the cycle, not of the output — what each head actually shows
-          depends on the emitters it has.
-        </p>
+        <PaletteFxStrip projectId={projectId} family={family} effect={effect} entry={entry} />
       </div>
+    </div>
+  )
+}
+
+/**
+ * The draft's graph strip: asked of the desk as a `{draft}`, `include: ONLY` — on the window's
+ * selection, drawn as the lane over what it holds now, or on [NOTIONAL_HEADS] heads the rig lacks,
+ * drawn as the FX alone, since nothing underneath them is real.
+ */
+function PaletteFxStrip({
+  projectId,
+  family,
+  effect,
+  entry,
+}: {
+  projectId: number
+  family: AttributeFamily
+  effect: PaletteFx
+  entry: FxLibraryEntry | undefined
+}) {
+  // The editor is the Palettes page's, never the programmer's: the desk's selection, or this window's own.
+  const selection = useWindowSelectionTargets(false)
+  const [chosen, setChosen] = useState<StripOn | null>(null)
+  const on: StripOn = selection.length === 0 ? 'notional' : (chosen ?? 'selection')
+  const { data: templates } = usePaletteListQuery({ projectId })
+  const attribute = storedFxAttribute(effect, family, entry, templates)
+  // In the programmer's band, where a pressed palette runs.
+  const draft = useMemo(() => (attribute == null ? null : previewDraftOf(effect, attribute, { programmerOwned: true })), [attribute, effect])
+  const preview = useFxPreview(
+    draft == null
+      ? null
+      : {
+          projectId,
+          targets: on === 'selection' ? selection : [],
+          fxIds: [],
+          drafts: [draft],
+          include: 'ONLY',
+          notional: on === 'notional' ? NOTIONAL_HEADS : undefined,
+        },
+  )
+  const { data: library } = useFxLibraryQuery()
+  const fxName = (fxType: string) => findFxEntry(library, fxType)?.name ?? fxType
+  const choices: readonly { value: StripOn; label: string; disabled: boolean; title: string }[] = [
+    {
+      value: 'selection',
+      label: 'On the selection',
+      disabled: selection.length === 0,
+      title: selection.length === 0 ? 'Nothing is selected' : 'The selected heads, over what they hold now',
+    },
+    { value: 'notional', label: `On ${NOTIONAL_HEADS_WORD} heads`, disabled: false, title: 'Heads the rig does not have: the FX alone' },
+  ]
+  return (
+    <div className="space-y-1.5" data-palette-fx-strip={on}>
+      <div role="group" aria-label="Draw the FX" className="flex h-6 w-fit items-center rounded-md border p-0.5">
+        {choices.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            aria-pressed={on === c.value}
+            disabled={c.disabled}
+            title={c.title}
+            onClick={() => setChosen(c.value)}
+            className={cn(
+              'h-full rounded px-1.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50',
+              on === c.value && 'bg-accent font-medium text-foreground',
+            )}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+      <FxGraphStrip
+        answer={preview.answer}
+        error={preview.error}
+        waiting={attribute == null ? 'The FX names no attribute the graph can draw yet.' : 'Asking the desk…'}
+        draw={on === 'selection' ? 'result' : 'this'}
+        fxName={fxName}
+        bounce={effect.direction === 'BOUNCE'}
+      />
     </div>
   )
 }

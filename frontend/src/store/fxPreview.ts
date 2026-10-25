@@ -10,10 +10,13 @@ import { restApi } from './restApi'
  * no FX is added, no instance moves, no DMX is sent.
  */
 
+/** An FX not yet added: `POST /fx/add`'s body, its targets the request's when it names none. */
+export type FxPreviewDraft = Partial<AddFixtureFxRequest> & Pick<AddFixtureFxRequest, 'fxType' | 'attribute'>
+
 /** A running FX ([fxId]), a draft (`POST /fx/add`'s body) or a running FX with an unsent edit (both). */
 export type FxPreviewEntry =
   | { fxId: number; draft?: undefined }
-  | { fxId?: undefined; draft: Partial<AddFixtureFxRequest> }
+  | { fxId?: undefined; draft: FxPreviewDraft }
   | { fxId: number; draft: UpdateFxRequest }
 
 /** At most one of these; two cycles of the first FX when none. */
@@ -33,6 +36,11 @@ export interface FxPreviewRequest {
   window?: FxPreviewWindowRequest
   /** An index into [fx]: its family's lane drawn as though it were alone over what is underneath. */
   solo?: number
+  /**
+   * Draw the drafts on this many heads the rig does not have (FX editor plan D15) — no [targets],
+   * drafts only, `include: ONLY`. Their rows are `Head 1…n`.
+   */
+  notional?: number
 }
 
 export interface FxPreviewWindow {

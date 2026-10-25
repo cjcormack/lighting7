@@ -41,11 +41,13 @@ import { FAMILY_LABELS, familyForCategory, formatFamilyList, type AttributeFamil
 import { selectionUnits } from '@/lib/fxTargets'
 import { carriesFxAttribute } from '@/components/fx/fxEditorModel'
 import {
+  setPhoneLane,
   setPickedFx,
   setSoloFx,
   toggleLaneFold,
   useFoldedLanes,
   useFxGraphOptions,
+  usePhoneLane,
   usePickedFx,
   useSoloFx,
 } from '@/lib/fxEditorView'
@@ -84,6 +86,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
   const pickedId = usePickedFx()
   const soloId = useSoloFx()
   const folded = useFoldedLanes()
+  const phoneLane = usePhoneLane()
   const scope = useProgrammerScope()
   const offer = useProgrammerAddFx()
   const togglePause = useToggleFxPause()
@@ -155,12 +158,15 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
   const underneathOf = (lane: FxLane) => underneathAt(lane, units)
   const layerName = (layerId: number) => layers?.find((l) => l.layerId === layerId)?.source.name
 
+  const form = band === 0 ? 'column' : band === 1 ? 'side' : 'stacked'
+  // Below 760 the list folds to a row of lane chips, one lane opened under them (§4.2).
+  const listedLanes = form === 'stacked' ? lanes.filter((l) => l.family === phoneLane) : lanes
   const list =
     targets.length === 0 ? (
       <NothingSelected effects={running} library={library} fixtures={rig} />
     ) : (
       <FxLaneList
-        lanes={lanes}
+        lanes={listedLanes}
         library={library}
         pickedId={pickedId}
         soloId={soloId}
@@ -212,7 +218,6 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
     />
   )
 
-  const form = band === 0 ? 'column' : band === 1 ? 'side' : 'stacked'
   const fxName = useCallback((fxType: string) => findFxEntry(library, fxType)?.name ?? fxType, [library])
   const fixtureNames = useMemo(() => new Map(rig.map((f) => [f.key, f.name])), [rig])
   const fixtureName = useCallback((key: string) => fixtureNames.get(key), [fixtureNames])
@@ -264,6 +269,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
       error={preview.error}
       empty={anchor == null}
       narrow={form === 'stacked'}
+      scrollRows
       fxName={fxName}
       fixtureName={fixtureName}
       solo={soloEffect == null ? null : { name: fxName(soloEffect.fxType) }}
@@ -300,6 +306,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
           >
             <div data-fx-list className={cn('flex min-h-0 flex-col gap-2 p-2', form !== 'stacked' && 'overflow-y-auto border-r')}>
               <Subject target={fxTarget} units={units} families={pair.families} />
+              {form === 'stacked' && targets.length > 0 && <LaneChips lanes={lanes} open={phoneLane} pickedId={picked?.id ?? null} />}
               {list}
             </div>
             {form === 'side' ? (
@@ -351,6 +358,37 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
         <OwnerEditor projectId={projectId} entry={{ kind: 'cue', id: openCueId }} onClose={() => setOpenCueId(null)} />
       )}
     </>
+  )
+}
+
+/**
+ * The phone arm's list (§4.2): a chip per lane — its family, its FX count, lit while it holds the
+ * picked FX — that opens that lane alone under the row, or folds it again.
+ */
+function LaneChips({ lanes, open, pickedId }: { lanes: readonly FxLane[]; open: AttributeFamily | null; pickedId: number | null }) {
+  return (
+    <div role="group" aria-label="Lanes" data-fx-lane-chips className="flex flex-wrap gap-1">
+      {lanes.map((lane) => {
+        const picked = pickedId != null && lane.cards.some((c) => c.effect.id === pickedId)
+        return (
+          <button
+            key={lane.family}
+            type="button"
+            data-fx-lane-chip={lane.family}
+            aria-expanded={open === lane.family}
+            onClick={() => setPhoneLane(open === lane.family ? null : lane.family)}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs',
+              open === lane.family && 'bg-accent font-medium',
+              picked && 'border-violet-500/60',
+            )}
+          >
+            {FAMILY_LABELS[lane.family].singular}
+            <span className="text-muted-foreground tabular-nums">{lane.cards.length}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

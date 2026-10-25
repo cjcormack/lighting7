@@ -74,6 +74,13 @@ export interface FixtureSheetContextValue {
 
 export const FixtureSheetContext = createContext<FixtureSheetContextValue | null>(null)
 
+/**
+ * A modal host's close, for a gesture that leaves the sheet for another page (the tray's *Open in FX
+ * editor*): a host mounted outside the routed page — the overview panel's, the busk view's — outlives
+ * the navigation. Null where the sheet is part of the page, which the navigation takes with it.
+ */
+export const SheetCloseContext = createContext<(() => void) | null>(null)
+
 export function useFixtureSheet(): FixtureSheetContextValue {
   const value = useContext(FixtureSheetContext)
   if (!value) throw new Error('useFixtureSheet outside a FixtureSheet')

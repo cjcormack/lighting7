@@ -170,6 +170,19 @@ export function sampleAt(layout: Pick<LaneLayout, 'plotLeft' | 'plotWidth'>, sam
   return Math.min(samples - 1, Math.floor(at * samples))
 }
 
+/**
+ * The height that shows a lane's first [rows] rows, across its sections, or null when every row
+ * fits: where a strip's scroller stops.
+ */
+export function visibleHeight(layout: Pick<LaneLayout, 'sections'>, rows: number): number | null {
+  let seen = 0
+  for (const section of layout.sections) {
+    if (seen + section.rows.length > rows) return section.top + (rows - seen) * section.rowH
+    seen += section.rows.length
+  }
+  return null
+}
+
 /** The row under [y], with its section. */
 export function rowAt(layout: LaneLayout, y: number): { section: LaidSection; row: LaidRow } | null {
   for (const section of layout.sections) {

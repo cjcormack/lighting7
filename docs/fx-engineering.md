@@ -1323,6 +1323,16 @@ The project write guard counts it a runtime gesture, so an operator previews on 
   together in that Order, ties in rig order — the order the FX's own walks list the heads. Each row
   carries its `rigIndex`, so the editor can hold rig order, and the row cap cuts at a fixture's end,
   dropping whole fixtures (a single fixture longer than the cap is cut at it).
+- **Notional heads** (FX editor plan D15): `notional: n` (1–96) draws the drafts on *n* heads the
+  rig does not have — what the FX palette editor's strip shows with nothing selected. Each draft
+  targets the group of a scratch register (`fx/NotionalRig.kt`): `NotionalHead`s, a channel for
+  every attribute an FX palette can drive (dimmer, RGB, UV, pan and tilt, zoom, focus, iris, frost),
+  never patched, on no controller, and of a type `FixtureTypeRegistry` does not list. The route runs
+  the draft through an `FxEngine` of its own over that register, sharing the show's speed-master bank,
+  so the members, the spread, the fold and the clocks are the engine's; what is underneath is each
+  head's base (dimmer 0, black, centre). Rows are `Head 1…n`. It takes no `targets`, drafts only and
+  `include: ONLY` — each named as a problem otherwise — and a draft whose attribute no notional head
+  has (Slot Steps' setting) is the add's own refusal. Nothing on the rig is read or written.
 - **The answer**: `window` (`samples`, `sampleMs`, the length in the first FX's master's `beats` and in
   `seconds`), `clock` (each master the FX run on with its `tickAtStart` and `msPerBeat`, or
   `seconds: true` for FX on their own clock, which carries no start time: its playhead runs from
@@ -2070,6 +2080,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxBlend.kt` | Blend and weight as pure functions, written through by every target and folded by the sampler |
 | `fx/FxPhase.kt` | A member's phase as a pure function of one clock reading, its dynamics and its Runs anchor |
 | `fx/FxSampler.kt` | Evaluates FX off the stage over a window, for the FX editor's graph (§"Previewing an FX") |
+| `fx/NotionalRig.kt` | Heads the rig does not have, for previewing a draft before there is a selection (§"Previewing an FX") |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
 | `fx/FxEngine.kt` | The compose pass and its wake sources, active-FX set, group expansion (post-E1 split) |
 | `fx/CascadePublisher.kt` | Tier-4/cascade → controller transmit, the Tier 4 publish lock, channel-covering-key lookup |

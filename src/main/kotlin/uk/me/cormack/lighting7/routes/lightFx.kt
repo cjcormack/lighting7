@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.referenceFixtureFor
 import uk.me.cormack.lighting7.state.State
 
@@ -610,11 +611,16 @@ private fun FxInstance.toIndirectDto() = IndirectFxDto(
  * §3.4), so the two build the same effect from the same fields. Throws on anything the strict policy
  * refuses; the callers answer 400.
  */
-internal fun buildFxInstance(state: State, request: AddFxRequest): FxInstance {
+internal fun buildFxInstance(
+    state: State,
+    request: AddFxRequest,
+    fixtures: Fixtures = state.show.fixtures,
+    engine: FxEngine = state.show.fxEngine,
+): FxInstance {
     val effect = createFxFromRequest(request, state)
     // The effect first: its output type is what tells FxTargetFactory that a
     // `pan`/`tilt` property name means the position pair (sweep item A11).
-    val target = createTargetFromRequest(request, state, effect.outputType)
+    val target = createTargetFromRequest(request, state, effect.outputType, fixtures)
     requireOutputTypeMatch(effect, target)
     val registration = state.show.fxRegistry.getRegistration(request.fxType)
     val timing = FxTiming(
@@ -654,7 +660,7 @@ internal fun buildFxInstance(state: State, request: AddFxRequest): FxInstance {
 
     markProgrammerOwned(instance, request.programmerOwned)
     if (request.targets != null) {
-        require(state.show.fxEngine.fixtureKeysCoveredBy(instance).isNotEmpty()) {
+        require(engine.fixtureKeysCoveredBy(instance).isNotEmpty()) {
             "No fixture in targets has '${request.attribute}'"
         }
     }
@@ -665,13 +671,14 @@ private fun createTargetFromRequest(
     request: AddFxRequest,
     state: State,
     outputType: FxOutputType?,
+    fixtures: Fixtures,
 ): FxTarget {
-    request.targets?.let { return createTargetFromList(it, request.attribute, state, outputType) }
+    request.targets?.let { return createTargetFromList(it, request.attribute, outputType, fixtures) }
     require(request.fixtureKey.isNotBlank()) { "Name the FX's fixtureKey, or its targets" }
     // `untypedGroupableFixture`, as `FxSpawner.createFixtureTargetForCue` does: the two doors
     // must build the same target for the same cell, and the factory's fallback reads its catalogue.
     val fixture = try {
-        state.show.fixtures.untypedGroupableFixture(request.fixtureKey)
+        fixtures.untypedGroupableFixture(request.fixtureKey)
     } catch (_: Exception) { null }
     return FxTargetFactory.forFixture(request.fixtureKey, request.attribute, outputType, fixture)
 }
@@ -683,11 +690,10 @@ private fun createTargetFromRequest(
 private fun createTargetFromList(
     targets: List<CueTargetDto>,
     attribute: String,
-    state: State,
     outputType: FxOutputType?,
+    fixtures: Fixtures,
 ): FxTarget {
     require(targets.isNotEmpty()) { "targets names no fixture or group" }
-    val fixtures = state.show.fixtures
     val problems = ArrayList<String>()
     val refs = targets.mapIndexedNotNull { i, t ->
         val ref = TargetRef.ofOrNull(t.type, t.key)
@@ -708,7 +714,7 @@ private fun createTargetFromList(
     CommandIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "FX")
         ?.let { throw CommandNotStorableException(it) }
     val fxTarget = when (target) {
-        is FxTargetsRef.Selection -> FxSpawner.createSelectionTarget(state, target, attribute, outputType)
+        is FxTargetsRef.Selection -> FxTargetFactory.forSelection(target, attribute, outputType, fixtures.referenceFixtureFor(target, attribute))
         is FxTargetsRef.Single -> when (val single = target.target) {
             is TargetRef.Fixture -> FxTargetFactory.forFixture(
                 single.key, attribute, outputType, runCatching { fixtures.untypedGroupableFixture(single.key) }.getOrNull(),

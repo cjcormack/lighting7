@@ -116,6 +116,22 @@ export function stepFxPaletteShape(
 }
 
 /**
+ * The attribute a Palette Steps FX drives, read off the palettes its `palettes` parameter names as the
+ * desk's `paletteStepsShape` reads them: colour for colour palettes, else the first attribute of their
+ * family, in the vocabulary's order, that every one of them names. Null while the library is unread,
+ * or where the palettes are not of one family or share no attribute.
+ */
+export function paletteStepsAttribute(parameter: string | undefined, templates: readonly PaletteSummary[] | undefined): string | null {
+  if (templates == null) return null
+  const palettes = namedPalettes(parameter, templates)
+  const families = new Set(palettes.map((p) => p.family))
+  const family = families.size === 1 ? palettes[0].family : null
+  if (family == null) return null
+  if (family === 'COLOUR') return 'rgbColour'
+  return paletteAttributesForFamily(family).find((a) => palettes.every((p) => palettesNames(p, a.attribute)))?.attribute ?? null
+}
+
+/**
  * A family Palette Steps can be offered in on a target (§4.4): two generic value palettes or more
  * naming a property the target has. [preferred] wins where it qualifies — the row the sheet came
  * from — else the family's vocabulary order decides.

@@ -44,6 +44,7 @@ import {
   BLEND_MODE_OPTIONS,
   ELEMENT_FILTER_OPTIONS,
   ELEMENT_MODE_OPTIONS,
+  NOTIONAL_HEADS,
   SPEED_STEPS,
   getCycleLabel,
 } from './fxConstants'
@@ -472,9 +473,6 @@ function AmountSection({
 
 /** The dials a live effect draws before the rest of its heads fold into *+n* (effects plan §4.1). */
 const MAX_DIALS = 16
-
-/** The notional heads an effect palette's dials draw — it has no target to count. */
-const NOTIONAL_HEADS = 8
 
 /**
  * The Spread section (effects plan D11, §4.1; FX editor plan D11, §4.5), on a group, a selection or

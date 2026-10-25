@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { attributeRow, colourSeries, levelSeries, plane, positionSeries, previewAnswer, row } from '@/test/fxPreviewAnswers'
-import { decodePlane, decodePreview, decodeSeries } from './fxPreviewDecode'
+import { decodePlane, decodePreview, decodeSeries, ownOutputOnly } from './fxPreviewDecode'
 
 /** The preview's planes, decoded once into typed arrays (FX editor plan §3.2's sample format). */
 describe('decoding the preview', () => {
@@ -73,5 +73,46 @@ describe('decoding the preview', () => {
     expect([...second.result.planes.level!]).toEqual([1, 2])
     expect(second.fx[0]).toMatchObject({ fx: 0, heldBackReason: 'BLIND' })
     expect([...second.fx[0].output.planes.level!]).toEqual([3, 4])
+  })
+})
+
+/** *This FX*: the picked FX alone, nothing underneath, its holding stretches keeping its own value. */
+describe('ownOutputOnly', () => {
+  const answer = previewAnswer({
+    rows: [row('hex-1', 0), row('hex-2', 1)],
+    lanes: [
+      {
+        family: 'INTENSITY',
+        attributes: [
+          {
+            attribute: 'dimmer',
+            kind: 'SLIDER',
+            rows: [
+              // hex-1: the FX's own output, holding (the stage's 77 filled in) after its Runs at samples 4–5.
+              attributeRow(0, levelSeries([9, 9, 9, 9, 9, 9]), { underneath: levelSeries([77]), parked: true, fx: [{ fx: 0, output: levelSeries([0, 100, 200, 50, 77, 77]), heldBackReason: 'PROGRAMMER' }] }),
+              // hex-2: painted only by another FX.
+              attributeRow(1, levelSeries([9, 9, 9, 9, 9, 9]), { fx: [{ fx: 1, output: levelSeries([1, 1, 1, 1, 1, 1]) }] }),
+            ],
+          },
+        ],
+      },
+    ],
+  })
+
+  it('makes each row’s own output its result, with nothing underneath, never parked or held back, and drops rows it does not paint', () => {
+    const own = ownOutputOnly(decodePreview(answer), 0)
+    const rows = own.lanes[0].attributes[0].rows
+    expect(rows.map((r) => r.row)).toEqual([0])
+    expect([...rows[0].result.planes.level!]).toEqual([0, 100, 200, 50, 77, 77])
+    expect(rows[0].underneath.planes).toEqual({})
+    expect(rows[0].parked).toBe(false)
+    expect(rows[0].fx[0].heldBackReason).toBeNull()
+  })
+
+  it('holds the FX’s own value over a holding stretch rather than the stage’s, from before it or else after it', () => {
+    const after = ownOutputOnly(decodePreview(answer), 0, () => [[4, 5]])
+    expect([...after.lanes[0].attributes[0].rows[0].result.planes.level!]).toEqual([0, 100, 200, 50, 50, 50])
+    const before = ownOutputOnly(decodePreview(answer), 0, () => [[0, 1]])
+    expect([...before.lanes[0].attributes[0].rows[0].result.planes.level!]).toEqual([200, 200, 200, 50, 77, 77])
   })
 })
