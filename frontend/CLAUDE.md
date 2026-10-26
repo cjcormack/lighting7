@@ -3050,15 +3050,19 @@ than the auditioned FX's), the segment is drawn when one of them is
 held by a Local FX other than the session's own (a fresh start removes that one first), and the press
 takes the choice per landing attribute (`press.stackOn`). A **swap** is never asked, nor is the *On*
 row's move of the auditioned FX to another setting of its family: each keeps how its FX started, which `FxPicker` records on the auditioned FX (`AuditionedFx.stacked`). A fresh start —
-another attribute, or after the session's FX stopped elsewhere — is asked of its own landing, and
-every start puts the segment back on *Replace*. So every FX door on the programmer page asks — row C's FX, ⌘K's *On the selection*, the FX
+another attribute, a selection the session has started nothing over, or after the session's FX
+stopped elsewhere — is asked of its own landing, and every start puts the segment back on *Replace*.
+**The auditioned FX is the selection's**: both doors keep one per selection the session started over
+(`useAuditionedFx`, keyed by `selectionKeyOf`, the FX's own target order), so a tap after the
+selection moves starts afresh on the new heads and leaves the old FX running on the old ones, and back
+on those heads a tap swaps that FX again; in a focused Look the absorb takes every one. So every FX door on the programmer page asks — row C's FX, ⌘K's *On the selection*, the FX
 table's *+ FX*, a band's *+ FX …* and the palettes' *FX…* — and no door elsewhere does: the busk
 view's family tabs, its FX tab and ⌘K's own picker off the programmer still press as they always did.
 
 **Once started, row C's FX is the live editor** (D9): ⌘K's door too (`ProgrammerAddFxSheet`'s
 `editor`, the arm's `editOnStart`). A tap starts the FX and the panel turns into `FxEditor` on it,
 with *‹ Swap* back to the list — kept mounted under the editor, so it comes back on the family the FX
-was started from and its taps swap it, phase kept — *Open in FX editor* ⤢ and the editor's Done,
+was started from and, on the selection it was started over, its taps swap it, phase kept — *Open in FX editor* ⤢ and the editor's Done,
 which closes the picker; a selection that leaves under row C's open picker closes it. ⤢ is `useOpenInFxEditor` (`fxEditor/openInFxEditor.ts`, the
 fixture sheet's tray's move lifted out of `FxTray`): the FX picked, the FX tab on *Selection*, the FX
 table shown — `?table=fx`, replacing the address on the programmer. Nothing is reselected: the

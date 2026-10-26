@@ -385,6 +385,43 @@ describe('+ FX', () => {
     expect(mocks.updateFx).toHaveBeenCalledWith(50, expect.objectContaining({ fxType: 'Colour Cycle', blendMode: 'OVERRIDE' }))
     expect(mocks.pressFx).toHaveBeenCalledTimes(1)
   })
+
+  it('starts afresh once the selection moves, asking where it applies and swapping nothing on the old heads', async () => {
+    const colour = (name: string): Partial<FxLibraryEntry> => ({
+      name,
+      family: 'colour',
+      outputType: 'COLOUR',
+      fxMode: 'STANDARD',
+      timingSource: 'BEAT',
+      compatibleAttributes: ['rgbColour'],
+      parameters: [],
+    })
+    mocks.library = [colour('Rainbow Cycle'), colour('Colour Cycle')]
+    mocks.realPicker = true
+    const { rerender } = draw()
+    fireEvent.click(within(lane('COLOUR')).getByRole('button', { name: 'FX' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rainbow Cycle' }))
+    await waitFor(() => expect(mocks.pressFx).toHaveBeenCalledTimes(1))
+    mocks.effects = [...mocks.effects, fx(50, { fxType: 'RainbowCycle', attribute: 'rgbColour' })]
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+
+    // Hex 2 alone, the picker still open: FX 50 reaches it, so the fresh start asks.
+    mocks.targets = [{ type: 'fixture', key: 'hex-2' }]
+    mocks.pressFx.mockImplementationOnce(() => ({ unwrap: () => Promise.resolve({ fxId: 51, stopped: [], narrowed: [] }) }))
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+    expect(screen.getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Colour Cycle' }))
+    await waitFor(() => expect(mocks.pressFx).toHaveBeenCalledTimes(2))
+    expect(mocks.pressFx.mock.calls[1][0]).toEqual(expect.objectContaining({ fxType: 'Colour Cycle', targets: [{ type: 'fixture', key: 'hex-2' }] }))
+    expect(mocks.updateFx).not.toHaveBeenCalled()
+
+    // Back on the heads it was started on, a tap swaps FX 50 again.
+    mocks.targets = FRONT
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Colour Cycle' }))
+    expect(mocks.updateFx).toHaveBeenCalledWith(50, expect.objectContaining({ fxType: 'Colour Cycle' }))
+    expect(mocks.pressFx).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('with nothing selected', () => {
