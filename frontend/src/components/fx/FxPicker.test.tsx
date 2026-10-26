@@ -465,6 +465,80 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'SlotSteps', attribute: 'gobo', parameters: { slots: 'GOBO_1,GOBO_2' } })
   })
+
+  /** A host asking `stackOn` of every fresh start, on [fixture], as the FX arm does. */
+  function Moving({
+    fixture,
+    stackOn,
+    onLanding,
+  }: {
+    fixture: typeof MOVER
+    stackOn: (attribute: string) => boolean
+    onLanding?: (a: readonly string[]) => void
+  }) {
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
+    return (
+      <FxPicker
+        target={{ type: 'fixture', fixture }}
+        initialFamily="BEAM"
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+        press={{ projectId: 3, families: null, stackOn }}
+        onLanding={onLanding}
+      />
+    )
+  }
+  const TWO_GOBOS = makeFixture('mover-3', [
+    sliderProp('dimmer', 'dimmer', chan(1)),
+    settingProp('gobo', 'gobo', chan(4), [
+      { name: 'OPEN', level: 0, displayName: 'Open' },
+      { name: 'GOBO_1', level: 10, displayName: 'Gobo 1' },
+      { name: 'GOBO_2', level: 20, displayName: 'Gobo 2' },
+    ]),
+    settingProp('rotatingGobo', 'gobo', chan(5), [
+      { name: 'OPEN', level: 0, displayName: 'Open' },
+      { name: 'SPIRAL', level: 10, displayName: 'Spiral' },
+      { name: 'STARS', level: 20, displayName: 'Stars' },
+    ]),
+  ])
+
+  /** Starts Slot Steps stacked on the gobo wheel, then has `stackOn` answer [after] and moves it [to]. */
+  async function moveStacked(fixture: typeof MOVER, to: string, after: boolean, onLanding?: (a: readonly string[]) => void) {
+    const answer = { stack: true }
+    const stackOn = vi.fn((_attribute: string) => answer.stack)
+    const { rerender } = render(<Moving fixture={fixture} stackOn={stackOn} onLanding={onLanding} />)
+    fireEvent.click(screen.getByRole('button', { name: 'SlotSteps' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    expect(pressFx.mock.calls[0][0]).toMatchObject({ attribute: 'gobo', stack: true })
+    wire.active = [makeActiveFx({ id: 99, fxType: 'SlotSteps', targetKey: fixture.key, attribute: 'gobo' })]
+    answer.stack = after
+    stackOn.mockClear()
+    rerender(<Moving fixture={fixture} stackOn={stackOn} onLanding={onLanding} />)
+    fireEvent.click(screen.getByRole('combobox', { name: 'Attribute' }))
+    fireEvent.click(screen.getByRole('option', { name: to }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(2))
+    expect(removeFx).toHaveBeenCalledWith(expect.objectContaining({ id: 99 }))
+    return { stackOn, moved: JSON.parse(JSON.stringify(pressFx.mock.calls[1][0])) }
+  }
+
+  it('keeps a stacked Slot Steps stacked when the On row moves it within its family, without asking', async () => {
+    const { stackOn, moved } = await moveStacked(TWO_GOBOS, 'rotatingGobo', false)
+    expect(stackOn).not.toHaveBeenCalled()
+    expect(moved).toMatchObject({ attribute: 'rotatingGobo', stack: true })
+    expect(moved).not.toHaveProperty('blendMode')
+  })
+
+  it('asks of an On move into another family, which it reports as a landing first', async () => {
+    const onLanding = vi.fn()
+    const { stackOn, moved } = await moveStacked(WHEEL_FIRST, 'colourWheel', false, onLanding)
+    // While Slot Steps ran on the gobo wheel, the colour wheel was a fresh start in Colour.
+    expect(onLanding.mock.calls.some(([a]) => a.includes('colourWheel') && !a.includes('gobo'))).toBe(true)
+    expect(stackOn).toHaveBeenCalledWith('colourWheel')
+    expect(moved).toMatchObject({ attribute: 'colourWheel' })
+    expect(moved).not.toHaveProperty('stack')
+    expect(moved).toHaveProperty('blendMode')
+  })
 })
 
 /**
@@ -561,7 +635,7 @@ describe('FxPicker on the bare effect press', () => {
         current={current}
         onCurrent={setCurrent}
         onEdit={() => {}}
-        press={{ projectId: 3, families: null, stack }}
+        press={{ projectId: 3, families: null, stackOn: () => stack }}
       />
     )
   }
@@ -632,5 +706,85 @@ describe('FxPicker on the bare effect press', () => {
     rerender(<Stacking stack />)
     fireEvent.click(screen.getByRole('button', { name: 'Ramp' }))
     expect(updateFx).toHaveBeenCalledWith(99, expect.not.objectContaining({ blendMode: expect.anything() }))
+  })
+
+  /** A host asking `stackOn` of every fresh start, as `useReplaceStack` answers it. */
+  function Asking({ stackOn, onLanding }: { stackOn: (attribute: string) => boolean; onLanding?: (a: readonly string[]) => void }) {
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
+    return (
+      <FxPicker
+        target={TARGET}
+        initialFamily="POSITION"
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+        press={{ projectId: 3, families: null, stackOn }}
+        onLanding={onLanding}
+      />
+    )
+  }
+  const circle = (over: Partial<ActiveFx> = {}) =>
+    makeActiveFx({ id: 99, fxType: 'Circle', targetKey: 'spot-3', attribute: 'position', ...over })
+
+  it('swaps by how the FX started, never asking stackOn: a stacked start stays unblended', async () => {
+    const answer = { stack: true }
+    const stackOn = vi.fn(() => answer.stack)
+    const { rerender } = render(<Asking stackOn={stackOn} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    expect(pressFx.mock.calls[0][0]).toMatchObject({ stack: true })
+    wire.active = [circle()]
+    answer.stack = false
+    stackOn.mockClear()
+    rerender(<Asking stackOn={stackOn} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Figure 8' }))
+    expect(stackOn).not.toHaveBeenCalled()
+    expect(updateFx).toHaveBeenCalledWith(99, expect.not.objectContaining({ blendMode: expect.anything() }))
+  })
+
+  it('swaps a replacing start with the new type’s blend, whatever stackOn would answer now', async () => {
+    const answer = { stack: false }
+    const stackOn = () => answer.stack
+    const { rerender } = render(<Asking stackOn={stackOn} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    wire.active = [circle()]
+    answer.stack = true
+    rerender(<Asking stackOn={stackOn} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Figure 8' }))
+    expect(updateFx).toHaveBeenCalledWith(99, expect.objectContaining({ blendMode: 'ADDITIVE' }))
+  })
+
+  it('asks stackOn afresh of a start on another attribute, which replaces the stacked FX', async () => {
+    const answer = { stack: true }
+    const stackOn = vi.fn((_attribute: string) => answer.stack)
+    const { rerender } = render(<Asking stackOn={stackOn} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    wire.active = [circle()]
+    answer.stack = false
+    rerender(<Asking stackOn={stackOn} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(2))
+    expect(removeFx).toHaveBeenCalledWith(expect.objectContaining({ id: 99 }))
+    expect(stackOn).toHaveBeenLastCalledWith('dimmer')
+    expect(pressFx.mock.calls[1][0]).not.toHaveProperty('stack')
+    expect(pressFx.mock.calls[1][0]).toHaveProperty('blendMode')
+  })
+
+  it('reports no landing a tap would swap on, and the auditioned FX’s again once it has stopped', async () => {
+    const onLanding = vi.fn()
+    const { rerender } = render(<Asking stackOn={() => false} onLanding={onLanding} />)
+    expect(onLanding).toHaveBeenLastCalledWith(['position'])
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    await waitFor(() => expect(onLanding).toHaveBeenLastCalledWith([]))
+    wire.active = [circle()]
+    rerender(<Asking stackOn={() => false} onLanding={onLanding} />)
+    expect(onLanding).toHaveBeenLastCalledWith([])
+    // Released elsewhere: the next tap starts afresh, so it lands, and is asked about, again.
+    wire.active = []
+    rerender(<Asking stackOn={() => false} onLanding={onLanding} />)
+    expect(onLanding).toHaveBeenLastCalledWith(['position'])
   })
 })

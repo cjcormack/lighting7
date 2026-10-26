@@ -209,6 +209,13 @@ the next; whoever merges the last fills its own.
     (`press.stackOn`). The rule is `localHolderIn` over `fxLanes` from the running list alone
     (`useLocalFxHolder`), as the lane reads it before the preview answers. It is asked only before the
     session's first start: every later tap swaps that FX, which keeps how it started.
+  - *Asked of every fresh start, never of a swap* (a fix after the session). "Only before the first
+    start" was wrong twice: a tap on another attribute, or after the session's FX stopped, starts
+    afresh and took the first answer unasked, and the lane, which read its family outside the
+    session, asked about the FX it had just started. `FxPicker` now records how each start went
+    (`AuditionedFx.stacked`, which a swap and an *On* move within the FX's family keep) and reports
+    only the attributes a tap or a move would start afresh on; both doors ask through one hook,
+    `useReplaceStack`, leaving out the session's FX.
   - *Every FX door on the programmer page asks, and none elsewhere.* The picker asks wherever the
     programmer's scope is provided — row C's FX, ⌘K's door, the FX table's *+ FX*, a band's *+ FX …*,
     the palettes' *FX…* — so the shared `FxBand` asks on the programmer and not in the busk view's

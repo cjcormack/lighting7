@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import type { ActiveFx } from '@/store/fixtureFx'
 import { chan, colourProp, makeActiveFx, makeFixture, sliderProp } from '@/test/fixtureFactories'
 import { fxLanes } from '@/components/fxEditor/fxEditorList'
@@ -22,6 +23,7 @@ vi.mock('@/store/fixtureFx', () => ({
 }))
 
 const { ReplaceStack, holderWords, localHolderIn, useLocalFxHolder } = await import('./ReplaceStack')
+const { useReplaceStack } = await import('./useReplaceStack')
 
 const SELECTED = HEX.map((f) => ({ type: 'fixture' as const, key: f.key }))
 const colourFx = (id: number, over: Partial<ActiveFx> = {}) =>
@@ -82,6 +84,61 @@ describe('useLocalFxHolder', () => {
     wire.active = [colourFx(5)]
     const { result } = renderHook(() => useLocalFxHolder([]))
     expect(result.current('rgbColour')).toBeNull()
+  })
+})
+
+describe('useReplaceStack', () => {
+  const useDrawn = (current: { fxId: number } | null, asks = true) => useReplaceStack(SELECTED, asks, current)
+  /** The segment drawn on its own, so its radios can be read and pressed. */
+  const draw = (segment: ReactNode) => render(<>{segment}</>)
+
+  it('asks of a landing a held FX reaches, starting on Replace, and Stack answers yes only there', () => {
+    wire.active = [colourFx(5)]
+    const { result } = renderHook(({ current }) => useDrawn(current), { initialProps: { current: null as { fxId: number } | null } })
+    expect(result.current.segment).toBeNull()
+    act(() => result.current.onLanding(['dimmer']))
+    expect(result.current.segment).toBeNull()
+    act(() => result.current.onLanding(['dimmer', 'rgbColour']))
+    draw(result.current.segment)
+    expect(screen.getByText('Rainbow Cycle on all 4 heads already')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    expect(result.current.stackOn('rgbColour')).toBe(false)
+    fireEvent.click(screen.getByRole('radio', { name: 'Stack' }))
+    expect(result.current.stackOn('rgbColour')).toBe(true)
+    expect(result.current.stackOn('dimmer')).toBe(false)
+  })
+
+  it('never counts the session’s own FX as already here', () => {
+    wire.active = [colourFx(5)]
+    const { result } = renderHook(() => useDrawn({ fxId: 5 }))
+    act(() => result.current.onLanding(['rgbColour']))
+    expect(result.current.segment).toBeNull()
+    expect(result.current.stackOn('rgbColour')).toBe(false)
+  })
+
+  it('puts the question back on Replace at every start, and on reset', () => {
+    wire.active = [colourFx(5)]
+    const { result, rerender } = renderHook(({ current }) => useDrawn(current), { initialProps: { current: null as { fxId: number } | null } })
+    act(() => result.current.onLanding(['rgbColour']))
+    const { unmount } = draw(result.current.segment)
+    fireEvent.click(screen.getByRole('radio', { name: 'Stack' }))
+    expect(result.current.stackOn('rgbColour')).toBe(true)
+    unmount()
+    rerender({ current: { fxId: 8 } })
+    expect(result.current.stackOn('rgbColour')).toBe(false)
+    draw(result.current.segment)
+    expect(screen.getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Stack' }))
+    expect(result.current.stackOn('rgbColour')).toBe(true)
+    act(() => result.current.reset())
+    expect(result.current.stackOn('rgbColour')).toBe(false)
+  })
+
+  it('asks nothing where the host does not ask', () => {
+    wire.active = [colourFx(5)]
+    const { result } = renderHook(() => useDrawn(null, false))
+    act(() => result.current.onLanding(['rgbColour']))
+    expect(result.current.segment).toBeNull()
   })
 })
 
