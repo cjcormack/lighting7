@@ -120,7 +120,7 @@ describe('FxGraphStrip', () => {
 
   it('shows eight rows, the rest a scroll away', () => {
     draw('this')
-    expect(canvases.get('Intensity graph')!.texts.map((t) => t.text)).toHaveLength(10)
+    expect(document.querySelectorAll('[data-fx-graph-lane="INTENSITY"] [data-fx-graph-label]')).toHaveLength(10)
     const scroll = document.querySelector<HTMLElement>('[data-fx-graph-scroll]')!
     expect(scroll).not.toBeNull()
     const canvas = document.querySelector<HTMLElement>('[data-fx-graph-canvas="INTENSITY"]')!

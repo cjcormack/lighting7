@@ -6,7 +6,8 @@ import { useReducedMotion } from '@/hooks/useReducedMotion'
 import type { FxPreviewAnswer } from '@/store/fxPreview'
 import { decodePreview, ownOutputOnly } from './fxPreviewDecode'
 import {
-  GUTTER_PX,
+  MIN_PLOT_PX,
+  NARROW_GUTTER_PX,
   SAMPLES_PER_CYCLE,
   graphRowOrder,
   layoutLane,
@@ -19,7 +20,6 @@ import {
 import { DARK_PALETTE, LIGHT_PALETTE, positionScaleOf, type LaneDrawOptions } from './fxGraphDraw'
 import {
   GraphLane,
-  MIN_PLOT_PX,
   PATH_PX,
   PathPanel,
   RowScroll,
@@ -101,6 +101,9 @@ export function FxGraphStrip({
   )
 }
 
+/** The strip's name column: fixed, never the window's, since its hosts are narrow (follow-ups D6). */
+const STRIP_GUTTER_PX = NARROW_GUTTER_PX
+
 function StripBody({
   answer,
   error,
@@ -128,14 +131,14 @@ function StripBody({
   const own = useMemo(() => ({ ...decoded, lanes: lane == null ? [] : [lane] }), [decoded, lane])
   const [measure, width] = useWidth()
   const position = hasPosition(own)
-  const pathBeside = width - PATH_PX - 12 >= GUTTER_PX + MIN_PLOT_PX
+  const pathBeside = width - PATH_PX - 12 >= STRIP_GUTTER_PX + MIN_PLOT_PX
   const lanesWidth = Math.max(0, width - (position && pathBeside ? PATH_PX + 12 : 0))
   const order = useMemo(() => graphRowOrder(answer, false), [answer])
   const layout = useMemo(
     () =>
       lane == null
         ? null
-        : layoutLane(lane, { width: lanesWidth, order, rows: answer.rows, stepsAttributes: stepsAttributes(lane), fixtureName, attributeLabel }),
+        : layoutLane(lane, { width: lanesWidth, gutter: STRIP_GUTTER_PX, order, rows: answer.rows, stepsAttributes: stepsAttributes(lane), fixtureName, attributeLabel }),
     [answer.rows, fixtureName, lane, lanesWidth, order],
   )
   const clock = useMemo(() => playheadClockOf(answer), [answer])
@@ -215,7 +218,7 @@ function StripBody({
                   data-fx-playhead
                   aria-hidden
                   className="pointer-events-none absolute top-0 bottom-0 w-[1.5px] bg-sky-500/90"
-                  style={{ left: GUTTER_PX }}
+                  style={{ left: STRIP_GUTTER_PX }}
                 />
               )}
             </div>

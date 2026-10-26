@@ -31,7 +31,7 @@ vi.mock('@/store/speedMasters', () => ({
 const { FxGraph } = await import('./FxGraph')
 const { draftOf } = await import('@/components/fx/fxEditorModel')
 const { makeActiveFx } = await import('@/test/fixtureFactories')
-const { resetFxEditorViewStores, setFxGraphOption, useFxGraphOptions } = await import('@/lib/fxEditorView')
+const { GUTTER_DEFAULT_PX, resetFxEditorViewStores, setFxGraphOption, useFxGraphOptions } = await import('@/lib/fxEditorView')
 
 let now = 0
 let frames: FrameRequestCallback[] = []
@@ -65,8 +65,10 @@ beforeEach(() => {
     addEventListener: () => {},
     removeEventListener: () => {},
   })) as unknown as typeof window.matchMedia
-  // The lanes' column measures 180px, so the plot starts at x 72 and is 80px wide: a sample is 20px.
+  // The lanes' column measures 180px and the window's names take 72 of it, so the plot starts at
+  // x 72 and is 80px wide: a sample is 20px.
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ width: 180, height: 400, left: 0, top: 0 }) as DOMRect)
+  setFxGraphOption('gutter', 72)
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -113,7 +115,12 @@ function draw(answer: FxPreviewAnswer | null = answerOf(), props: Partial<Parame
   )
 }
 
-const labels = (lane: string) => canvases.get(`${lane} graph`)!.texts.map((t) => t.text)
+/** The lanes' column measured [width] wide instead. */
+const measuredAt = (width: number) =>
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ width, height: 400, left: 0, top: 0 }) as DOMRect)
+
+const labels = (lane: string) =>
+  [...document.querySelectorAll<HTMLElement>(`[data-fx-graph-lane="${lane.toUpperCase()}"] [data-fx-graph-label]`)].map((l) => l.textContent)
 const playheadX = () => document.querySelector<HTMLElement>('[data-fx-playhead]')!.style.transform
 const runFrames = () =>
   act(() => {
@@ -162,7 +169,7 @@ describe('the graph', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Rig order' }))
     fireEvent.click(screen.getByRole('button', { name: 'As seen' }))
     fireEvent.click(screen.getByRole('button', { name: 'Pause the playhead' }))
-    expect(options).toEqual({ window: '8b', view: 'this', rigOrder: true, asSeen: true, paused: true })
+    expect(options).toEqual({ window: '8b', view: 'this', rigOrder: true, asSeen: true, paused: true, gutter: 72 })
     expect(JSON.parse(sessionStorage.getItem('programmer.fx.graph')!)).toMatchObject({ window: '8b' })
     expect(screen.getByRole('button', { name: 'Run the playhead' })).toBeTruthy()
   })
@@ -400,17 +407,21 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
   it('drags the first cycle’s edge for Cycle, snapping to a step, the release landing', () => {
     const editor = editorOf()
     draw(handleAnswer(), { editor })
-    const edge = handle('cycle')!
-    expect(edge.style.left).toBe('108px')
-    fireEvent.pointerDown(edge, { button: 0, clientX: 112, clientY: 10 })
+    // The Cycle tab sits on the ruler at the first cycle's end, labelled with the cycle.
+    const tab = handle('cycle')!
+    expect(tab.closest('[data-fx-graph-ruler]')).not.toBeNull()
+    expect(tab.style.left).toBe('112px')
+    expect(tab).toHaveTextContent('1 bar')
+    fireEvent.pointerDown(tab, { button: 0, clientX: 112, clientY: 10 })
     // 40px further is twice the cycle; 44px is still twice it, on the step.
     fireEvent.pointerMove(window, { clientX: 152, clientY: 10 })
     fireEvent.pointerMove(window, { clientX: 156, clientY: 10 })
     expect(editor.set.mock.calls).toEqual([[{ cycle: 8 }, false]])
     expect(document.querySelector('[data-fx-handle-label]')).toHaveTextContent('2 bars')
+    expect(tab.style.left).toBe('152px')
     fireEvent.pointerUp(window, { clientX: 156, clientY: 10 })
     expect(editor.set).toHaveBeenLastCalledWith({ cycle: 8 }, true)
-    expect(document.querySelector('[data-fx-handle-label]')).toBeNull()
+    expect(document.querySelector('[data-fx-handle-label]')).toHaveTextContent('1 bar')
   })
 
   it('lands nothing for a drag that never leaves its step', () => {
@@ -439,13 +450,44 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
     expect(editor.set).toHaveBeenLastCalledWith({ cycle: 33 }, true)
   })
 
-  it('drags the chase line for Spread, the grabbed row’s start following the finger', () => {
+  it('drags Spread’s knob, at the last row’s start, the row’s start following the finger', () => {
     const editor = editorOf()
     draw(handleAnswer(), { editor })
+    const knob = handle('spread')!
+    // Hex 2's first start is sample 24, x 92, at the top of its row.
+    expect([knob.style.left, knob.style.top]).toEqual(['92px', '30px'])
     // Hex 2 is rank 1 of 2: half a cycle of offset for each unit of Spread. 20px is 24 samples, a
     // half-cycle, so Spread rises by one.
-    drag(handle('spread')!, { x: 92, y: 30 }, { x: 112, y: 30 })
+    drag(knob, { x: 92, y: 30 }, { x: 112, y: 30 })
     expect(editor.set).toHaveBeenLastCalledWith({ spread: 2 }, true)
+    // The line is a mark: it takes no press.
+    expect(document.querySelector('[data-fx-spread-line]')?.getAttribute('data-fx-handle')).toBeNull()
+  })
+
+  it('puts Spread’s knob on a row Spread moves, so it follows the finger', () => {
+    const editor = editorOf()
+    // Hex 2 is rank 0 of its Part: its start never moves with Spread, so the knob rides Hex 1's.
+    const ladder = { ...previewFx(2).ladder, parts: { ranks: [1, 0], counts: [2, 2] } }
+    draw(handleAnswer({ fx: [previewFx(2, { starts: [[0, 48], [24, 72]], ladder })] }), { editor })
+    const knob = handle('spread')!
+    expect([knob.style.left, knob.style.top]).toEqual(['72px', '2px'])
+    drag(knob, { x: 72, y: 2 }, { x: 92, y: 2 })
+    expect(editor.set).toHaveBeenLastCalledWith({ spread: 2 }, true)
+  })
+
+  it('names a knob on hover and lights what it changes', () => {
+    const onHighlight = vi.fn()
+    draw(handleAnswer(), { editor: editorOf({ spread: 0.5 }), onHighlight })
+    fireEvent.pointerEnter(handle('spread')!)
+    expect(document.querySelector('[data-fx-knob-tip]')).toHaveTextContent('Spread 50%')
+    expect(onHighlight).toHaveBeenLastCalledWith('starts')
+    fireEvent.pointerLeave(handle('spread')!)
+    expect(onHighlight).toHaveBeenLastCalledWith(null)
+    fireEvent.pointerEnter(document.querySelector('[data-fx-handle="max"][data-row="hex-1"]')!)
+    expect(document.querySelector('[data-fx-knob-tip]')).toHaveTextContent('High 100%')
+    expect(onHighlight).toHaveBeenLastCalledWith('levels')
+    fireEvent.pointerEnter(handle('cycle')!)
+    expect(onHighlight).toHaveBeenLastCalledWith('cycle')
   })
 
   it('drags a row block sideways for Phase', () => {
@@ -456,16 +498,28 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
     expect(editor.set).toHaveBeenLastCalledWith({ phaseOffset: 0.5 }, true)
   })
 
-  it('drags an Intensity FX’s max and min lines, each row on its own scale', () => {
+  it('drags an Intensity FX’s max and min by one pair of knobs, on the first row’s scale, every row keeping its lines', () => {
     const editor = editorOf()
     draw(handleAnswer(), { editor })
+    // High and Low are the FX's: one pair of knobs, the lines drawn on every row as marks.
+    expect(document.querySelectorAll('[data-fx-handle="max"], [data-fx-handle="min"]')).toHaveLength(2)
+    expect(document.querySelectorAll('[data-fx-level-line]')).toHaveLength(4)
     const max = document.querySelector('[data-fx-handle="max"][data-row="hex-1"]')!
     // Hex 1's full is y 2 and its baseline y 27: 12.5px down is half way.
     drag(max, { x: 100, y: 2 }, { x: 100, y: 14.5 })
     expect(editor.setParam).toHaveBeenLastCalledWith('max', '128', true)
-    const min = document.querySelector('[data-fx-handle="min"][data-row="hex-2"]')!
-    drag(min, { x: 100, y: 55 }, { x: 100, y: 42.5 })
+    const min = document.querySelector('[data-fx-handle="min"][data-row="hex-1"]')!
+    drag(min, { x: 100, y: 27 }, { x: 100, y: 14.5 })
     expect(editor.setParam).toHaveBeenLastCalledWith('min', '128', true)
+  })
+
+  it('keeps a knob’s light when the pointer moves straight onto another knob', () => {
+    const onHighlight = vi.fn()
+    draw(handleAnswer(), { editor: editorOf(), onHighlight })
+    fireEvent.pointerEnter(document.querySelector('[data-fx-handle="max"]')!)
+    fireEvent.pointerLeave(document.querySelector('[data-fx-handle="max"]')!)
+    fireEvent.pointerEnter(handle('spread')!)
+    expect(onHighlight).toHaveBeenLastCalledWith('starts')
   })
 
   it('draws no max and min lines on an FX without them', () => {
@@ -502,8 +556,172 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
     expect(canvases.get('Intensity graph')!.pixel(1, 5)).toBeNull()
   })
 
+  it('lights the max and min lines while their knob is hovered', () => {
+    draw(handleAnswer(), { editor: editorOf(), highlight: 'levels' })
+    expect(document.querySelector('[data-fx-level-line="max"]')!.className).toContain('fuchsia')
+  })
+
   it('lights the mark the inspector’s hovered control changes', () => {
     draw(handleAnswer(), { highlight: 'starts' })
     expect(canvases.get('Intensity graph')!.pixel(72, 1)).toBe('#c026d3')
+  })
+})
+
+describe('the toolbar and the ruler (follow-ups D4)', () => {
+  it('labels its segments, and puts the window’s length beside Window', () => {
+    draw()
+    const toolbar = document.querySelector('[data-fx-graph-toolbar]')!
+    expect(screen.getByRole('group', { name: 'Window' })).toHaveTextContent('Window')
+    expect(screen.getByRole('group', { name: 'Draw' })).toHaveTextContent('Draw')
+    expect(toolbar.querySelector('[data-fx-graph-length]')).toHaveTextContent('2 beats · 1 s')
+    // The line under the toolbar is the hover's: it no longer reads like a control.
+    expect(document.querySelector('[data-fx-graph-readout]')).not.toHaveTextContent('Window')
+  })
+
+  it('numbers the beats on the ruler from the tick the window started on', () => {
+    // Tick 1000 is beat 41⅔: the window holds beats 42 and 43, the third and fourth of its bar.
+    draw()
+    expect(canvases.get('Beat ruler')!.texts.map((t) => t.text)).toEqual(['1.3', '1.4'])
+  })
+
+  it('reads seconds on an FX’s own clock', () => {
+    draw(answerOf({ clock: [{ seconds: true }], fx: [previewFx(2, { speedMasterUuid: null })] }))
+    expect(canvases.get('Beat ruler')!.texts.map((t) => t.text)).toEqual(['0 s'])
+  })
+})
+
+describe('a fixture’s own row (follow-ups D5)', () => {
+  const BAR = [
+    row('bar.0', 0, { fixtureKey: 'bar', label: 'Bar Element 1', element: 0 }),
+    row('bar.1', 1, { fixtureKey: 'bar', label: 'Bar Element 2', element: 1 }),
+  ]
+  const barAnswer = () =>
+    answerOf({
+      rows: BAR,
+      lanes: [{ family: 'INTENSITY', attributes: [{ attribute: 'dimmer', kind: 'SLIDER', rows: [attributeRow(0, levelSeries([255, 255, 255, 255])), attributeRow(1, levelSeries([0, 0, 0, 0]))] }] }],
+    })
+
+  it('draws a fixture row over its elements, which its chevron folds and unfolds', () => {
+    measuredAt(600)
+    act(() => setFxGraphOption('gutter', GUTTER_DEFAULT_PX))
+    draw(barAnswer(), { fixtureName: (k) => (k === 'bar' ? 'Bar' : undefined) })
+    expect(labels('Intensity')).toEqual(['Bar', 'Element 1', 'Element 2'])
+    const fold = screen.getByRole('button', { name: 'Bar — fold its elements' })
+    expect(fold).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(fold)
+    expect(labels('Intensity')).toEqual(['Bar'])
+    expect(JSON.parse(sessionStorage.getItem('programmer.fx.foldedFixtures')!)).toEqual(['bar'])
+    fireEvent.click(screen.getByRole('button', { name: 'Bar — show its elements' }))
+    expect(labels('Intensity')).toEqual(['Bar', 'Element 1', 'Element 2'])
+  })
+
+  it('reads an element’s number where its own words do not fit the name column', () => {
+    // 180px of column leaves the names their narrowest, 72px.
+    draw(barAnswer(), { fixtureName: (k) => (k === 'bar' ? 'Bar' : undefined) })
+    expect(labels('Intensity')).toEqual(['Bar', '1', '2'])
+  })
+
+  it('reads a mixed row under This FX as the picked FX’s own output, as it is drawn', () => {
+    const answer = answerOf({
+      rows: BAR,
+      lanes: [
+        {
+          family: 'INTENSITY',
+          attributes: [
+            {
+              attribute: 'dimmer',
+              kind: 'SLIDER',
+              rows: [0, 1].map((r) => attributeRow(r, levelSeries([0, 0, 0, 0]), { fx: [{ fx: 0, output: levelSeries([255, 255, 255, 255]) }] })),
+            },
+          ],
+        },
+      ],
+    })
+    act(() => setFxGraphOption('view', 'this'))
+    draw(answer, { fixtureName: (k) => (k === 'bar' ? 'Bar' : undefined) })
+    fireEvent.pointerMove(screen.getByLabelText('Intensity graph'), { clientX: 82, clientY: 10 })
+    expect(document.querySelector('[data-fx-graph-readout]')).toHaveTextContent('Level 100 %')
+  })
+
+  it('folds every fixture from the lane’s header, its way out of a heat map', () => {
+    const many = Array.from({ length: 27 }, (_, i) => row(`b${Math.floor(i / 9)}.${i % 9}`, i, { fixtureKey: `b${Math.floor(i / 9)}`, label: `Cell ${i % 9}`, element: i % 9 }))
+    const answer = answerOf({
+      rows: many,
+      lanes: [{ family: 'INTENSITY', attributes: [{ attribute: 'dimmer', kind: 'SLIDER', rows: many.map((_, r) => attributeRow(r, levelSeries([0, 0, 0, 0]))) }] }],
+      fx: [previewFx(27)],
+    })
+    draw(answer)
+    // 27 elements is a heat map: no names, so no chevrons.
+    expect(labels('Intensity')).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Fold elements' }))
+    expect(labels('Intensity')).toEqual(['b0', 'b1', 'b2'])
+    fireEvent.click(screen.getByRole('button', { name: 'Show elements' }))
+    expect(labels('Intensity')).toEqual([])
+  })
+
+  it('reads a mixed row on hover as the mix of its elements, with no phase', () => {
+    draw(barAnswer(), { fixtureName: (k) => (k === 'bar' ? 'Bar' : undefined) })
+    fireEvent.pointerMove(screen.getByLabelText('Intensity graph'), { clientX: 82, clientY: 10 })
+    const readout = document.querySelector('[data-fx-graph-readout]')!
+    expect(readout).toHaveTextContent('Bar · mix of 2')
+    expect(readout).toHaveTextContent('Level 50 %')
+    expect(readout).not.toHaveTextContent('Phase')
+  })
+
+  it('cuts a long name in its middle, the whole name on hover', () => {
+    measuredAt(600)
+    act(() => setFxGraphOption('gutter', 96))
+    draw(barAnswer(), { fixtureName: (k) => (k === 'bar' ? 'LX2 Shehds 19x15 Stage Right' : undefined) })
+    const label = document.querySelector<HTMLElement>('[data-fx-graph-label^="mix"]')!
+    expect(label.textContent).toContain('…')
+    expect(label.textContent?.startsWith('LX2')).toBe(true)
+    expect(label.title).toBe('LX2 Shehds 19x15 Stage Right · mix of 2')
+  })
+})
+
+describe('the name column (follow-ups D6)', () => {
+  it('starts at 152px, and its grip steps 8px by the arrow keys within 96–280, kept per window', () => {
+    measuredAt(600)
+    act(() => setFxGraphOption('gutter', GUTTER_DEFAULT_PX))
+    draw()
+    const grip = screen.getByRole('separator', { name: 'Name column width' })
+    expect(grip).toHaveAttribute('aria-valuenow', '152')
+    fireEvent.keyDown(grip, { key: 'ArrowRight' })
+    expect(JSON.parse(sessionStorage.getItem('programmer.fx.graph')!)).toMatchObject({ gutter: 160 })
+    fireEvent.pointerDown(grip, { button: 0, clientX: 160, clientY: 10 })
+    fireEvent.pointerMove(window, { clientX: 460, clientY: 10 })
+    expect(grip).toHaveAttribute('aria-valuenow', '280')
+    fireEvent.pointerUp(window, { clientX: 460, clientY: 10 })
+    expect(JSON.parse(sessionStorage.getItem('programmer.fx.graph')!)).toMatchObject({ gutter: 280 })
+  })
+
+  it('gives way down to 72px where the window’s width would leave the plot under 160px', () => {
+    // 180px of column is 156 of lanes: 152 of names would leave no plot.
+    act(() => setFxGraphOption('gutter', GUTTER_DEFAULT_PX))
+    draw()
+    expect(document.querySelector<HTMLElement>('[data-fx-playhead]')!.style.left).toBe('72px')
+    cleanup()
+    // 400px is 376 of lanes: the names take 212 and leave the plot its 160.
+    measuredAt(400)
+    act(() => setFxGraphOption('gutter', 280))
+    draw()
+    expect(document.querySelector<HTMLElement>('[data-fx-playhead]')!.style.left).toBe('212px')
+    // The grip reports and steps the window's width, never the narrowed one, so a key press keeps it.
+    const grip = screen.getByRole('separator', { name: 'Name column width' })
+    expect(grip).toHaveAttribute('aria-valuenow', '280')
+    act(() => setFxGraphOption('gutter', GUTTER_DEFAULT_PX))
+    cleanup()
+    measuredAt(180)
+    draw()
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Name column width' }), { key: 'ArrowRight' })
+    expect(JSON.parse(sessionStorage.getItem('programmer.fx.graph')!)).toMatchObject({ gutter: 160 })
+  })
+
+  it('draws no grip under a coarse pointer, where the width is the default', () => {
+    coarse = true
+    measuredAt(600)
+    draw()
+    expect(screen.queryByRole('separator', { name: 'Name column width' })).toBeNull()
+    expect(document.querySelector<HTMLElement>('[data-fx-playhead]')!.style.left).toBe(`${GUTTER_DEFAULT_PX}px`)
   })
 })

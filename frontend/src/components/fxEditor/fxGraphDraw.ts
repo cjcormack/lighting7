@@ -1,14 +1,15 @@
 import type { FxPreviewFx } from '@/store/fxPreview'
 import type { GraphViewChoice } from '@/lib/fxEditorView'
 import type { GraphMark } from '@/components/fx/fxGraphLink'
-import type { DecodedAttributeRow, DecodedLane, DecodedSeries } from './fxPreviewDecode'
+import { mixSeries, type DecodedAttributeRow, type DecodedLane, type DecodedSeries } from './fxPreviewDecode'
 import {
-  GUTTER_PX,
   SAMPLES_PER_CYCLE,
   colourAt,
   ladderBrackets,
   levelScale,
   planeAt,
+  rowStarts,
+  rungRow,
   sampleX,
   wingBreaks,
   type LaidRow,
@@ -143,7 +144,7 @@ export interface LaneDrawOptions {
 
 /** Whether [section] holds rows the picked FX paints: where its marks, lights and handles go. */
 export function paintsSection(section: LaidSection, byRow: ReadonlyMap<number, DecodedAttributeRow>, picked: number | null): boolean {
-  return picked != null && section.rows.some((r) => byRow.get(r.row)?.fx.some((o) => o.fx === picked))
+  return picked != null && section.rows.some((r) => (r.mix ?? [r.row]).some((i) => byRow.get(i)?.fx.some((o) => o.fx === picked)))
 }
 
 const rgb = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r},${g},${b})`
@@ -163,14 +164,17 @@ export function drawLane(ctx: GraphCtx, layout: LaneLayout, lane: DecodedLane, o
       ctx.fillText(section.header, 4, section.top - 1)
     }
     section.rows.forEach((laid, index) => {
-      const row = attribute.byRow.get(laid.row)
-      if (row == null) return
+      const row = laid.mix == null ? attribute.byRow.get(laid.row) : attribute.mixed.get(laid.fixtureKey)
       if (!section.heat && index % 2 === 1) {
         ctx.fillStyle = palette.stripe
         ctx.fillRect(layout.plotLeft, laid.y, layout.plotWidth, section.rowH)
       }
-      if (!section.heat) drawRowLabel(ctx, laid, section, palette)
-      drawRow(ctx, layout, section, laid, row, attribute.kind, options)
+      if (laid.kind === 'fixture' && !section.heat && index > 0) {
+        ctx.fillStyle = palette.grid
+        ctx.fillRect(layout.plotLeft, laid.y, layout.plotWidth, 1)
+      }
+      // A mixed row is drawn for a level or a colour; a position or a Steps FX has no mix to draw (D5).
+      if (row != null && (laid.mix == null || !section.steps)) drawRow(ctx, layout, section, laid, row, attribute.kind, options)
       if (options.linkedRow === laid.row) {
         ctx.fillStyle = palette.highlight
         ctx.fillRect(0, laid.y, 3, section.rowH)
@@ -198,25 +202,6 @@ function drawBeatGrid(ctx: GraphCtx, layout: LaneLayout, { beats, startBeat, pal
   }
 }
 
-function drawRowLabel(ctx: GraphCtx, laid: LaidRow, section: LaidSection, palette: GraphPalette) {
-  ctx.font = '10.5px ui-sans-serif, system-ui, sans-serif'
-  ctx.textBaseline = 'middle'
-  ctx.textAlign = 'left'
-  const mid = laid.y + section.rowH / 2
-  ctx.fillStyle = laid.element && laid.fixtureLabel == null ? palette.dim : palette.text
-  // A fixture's elements under its name, which only the first of them carries.
-  const text = laid.fixtureLabel != null ? `${laid.fixtureLabel} · ${laid.label}` : laid.element ? `· ${laid.label}` : laid.label
-  // Kept short of the brackets, at the gutter's right edge.
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(0, laid.y, LABEL_CLIP_PX, section.rowH)
-  ctx.clip()
-  ctx.fillText(text, laid.element && laid.fixtureLabel == null ? 14 : 4, mid)
-  ctx.restore()
-}
-
-const LABEL_CLIP_PX = GUTTER_PX - 14
-
 /** The series a row draws under the view, and the picked FX's own output on it. */
 function seriesFor(row: DecodedAttributeRow, options: LaneDrawOptions) {
   const pickedOutput = options.picked == null ? null : (row.fx.find((o) => o.fx === options.picked) ?? null)
@@ -241,10 +226,10 @@ function drawRow(
   const h = section.rowH - bandH
   const x = (s: number) => sampleX(layout, samples, s)
 
+  const seen = asSeenOf(options.asSeen, laid)
   if (section.heat) {
-    drawHeatRow(ctx, layout, series, kind, top, section.rowH, options, laid.row)
+    drawHeatRow(ctx, layout, series, kind, top, section.rowH, options, seen)
   } else if (kind === 'COLOUR') {
-    const seen = options.asSeen?.get(laid.row) ?? null
     for (let s = 0; s < samples; s++) {
       const scale = seen == null ? 1 : (seen[Math.min(s, seen.length - 1)] ?? 0) / 255
       ctx.fillStyle = rgb(colourAt(series, s, scale))
@@ -320,7 +305,7 @@ function drawRow(
   if (pickedOutput != null && options.pickedFx != null) {
     const fx = options.pickedFx
     const rowH = section.rowH
-    const holding = fx.holding[laid.row]
+    const holding = laid.mix == null ? fx.holding[laid.row] : null
     if (holding != null && holding.length > 0) {
       const colour = options.highlight === 'holding' ? palette.highlight : palette.holding
       for (const [from, to] of holding) hatch(ctx, x(from), top, x(to + 1) - x(from), rowH, colour)
@@ -329,7 +314,7 @@ function drawRow(
     const lit = options.highlight === 'starts'
     const half = lit ? 4 : 3
     ctx.fillStyle = lit ? palette.highlight : palette.start
-    for (const s of fx.starts[laid.row] ?? []) {
+    for (const s of rowStarts(fx, laid) ?? []) {
       const sx = x(s)
       if (section.heat) {
         ctx.fillRect(Math.round(sx), top, lit ? 2 : 1, rowH)
@@ -353,11 +338,10 @@ function drawHeatRow(
   top: number,
   rowH: number,
   options: LaneDrawOptions,
-  rowIndex: number,
+  seen: Uint8Array | null,
 ) {
   const { samples, palette } = options
   const x = (s: number) => sampleX(layout, samples, s)
-  const seen = options.asSeen?.get(rowIndex) ?? null
   for (let s = 0; s < samples; s++) {
     const left = x(s)
     const w = x(s + 1) - left + 0.5
@@ -382,6 +366,17 @@ function drawHeatRow(
       ctx.fillRect(left, top, w, rowH)
     }
   }
+}
+
+/** *As seen*'s Intensity for a laid row: its own, or a mixed row's elements' mean. */
+function asSeenOf(asSeen: ReadonlyMap<number, Uint8Array> | null, laid: LaidRow): Uint8Array | null {
+  if (asSeen == null) return null
+  if (laid.mix == null) return asSeen.get(laid.row) ?? null
+  const levels = laid.mix.flatMap((r) => {
+    const level = asSeen.get(r)
+    return level == null ? [] : [{ planes: { level }, steps: null, stepLabels: null }]
+  })
+  return levels.length === 0 ? null : (mixSeries(levels).planes.level ?? null)
 }
 
 /** A `#rrggbb` colour at [alpha], rounded to two places. */
@@ -424,32 +419,41 @@ function drawSectionMarks(
 ) {
   const fx = options.pickedFx
   if (fx == null || options.picked == null) return
-  const rows = section.rows.map((r) => r.row)
   if (!paintsSection(section, byRow, options.picked)) return
+  // The rungs are the answer's rows': a mixed row stands in for its elements only while they are folded.
+  const ranked = section.rows.flatMap((laid, index) => (laid.mix == null || laid.folded ? [{ row: rungRow(laid), index }] : []))
+  const rows = ranked.map((r) => r.row)
   const { palette } = options
   const { segments, parts } = ladderBrackets(fx, rows)
-  const yOf = (index: number) => section.top + index * section.rowH
+  const top = (at: number) => section.top + ranked[at].index * section.rowH
+  const bottom = (at: number) => top(at) + section.rowH
+  /** Where a wing opens at ranked row [at]: over its fixture's row where that row heads it. */
+  const opens = (at: number) => {
+    const index = ranked[at].index
+    const above = section.rows[index - 1]
+    return section.top + (above != null && above.mix != null && above.fixtureKey === section.rows[index].fixtureKey ? index - 1 : index) * section.rowH
+  }
   const edge = layout.plotLeft - 3
   const bracketsLit = options.highlight === 'brackets'
   const bracketColour = bracketsLit ? palette.highlight : palette.bracket
   ctx.strokeStyle = bracketColour
   ctx.lineWidth = bracketsLit ? 2 : 1
-  for (const b of segments) bracket(ctx, edge, yOf(b.from) + 2, yOf(b.to + 1) - 2)
+  for (const b of segments) bracket(ctx, edge, top(b.from) + 2, bottom(b.to) - 2)
   for (const b of parts) {
-    bracket(ctx, edge - 6, yOf(b.from) + 1, yOf(b.to + 1) - 1)
+    bracket(ctx, edge - 6, top(b.from) + 1, bottom(b.to) - 1)
     if (!section.heat) {
       ctx.fillStyle = bracketColour
       ctx.font = '8.5px ui-monospace, Menlo, monospace'
       ctx.textBaseline = 'middle'
       ctx.textAlign = 'right'
-      ctx.fillText(`P${b.part}`, edge - 8, (yOf(b.from) + yOf(b.to + 1)) / 2)
+      ctx.fillText(`P${b.part}`, edge - 8, (top(b.from) + bottom(b.to)) / 2)
       ctx.textAlign = 'left'
     }
   }
   ctx.lineWidth = 1
   const mirrorLit = options.highlight === 'mirror'
   for (const at of wingBreaks(fx, rows)) {
-    dashed(ctx, layout.plotLeft, layout.plotLeft + layout.plotWidth, yOf(at), mirrorLit ? palette.highlight : palette.bracket, [2, 3], mirrorLit ? 2 : 1)
+    dashed(ctx, layout.plotLeft, layout.plotLeft + layout.plotWidth, opens(at), mirrorLit ? palette.highlight : palette.bracket, [2, 3], mirrorLit ? 2 : 1)
   }
 }
 

@@ -51,6 +51,14 @@ const phoneLaneStore = createSyncStore<AttributeFamily | null>({
   storage: sessionStorageArea,
 })
 
+/** The fixtures whose elements the graph folds under their own row, by key. */
+const foldedFixturesStore = createSyncStore<readonly string[]>({
+  key: 'programmer.fx.foldedFixtures',
+  fallback: [],
+  parse: (parsed) => (Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []),
+  storage: sessionStorageArea,
+})
+
 export type GraphWindowChoice = '1c' | '2c' | '2b' | '8b'
 export type GraphViewChoice = 'result' | 'this'
 
@@ -60,9 +68,17 @@ export interface FxGraphOptions {
   rigOrder: boolean
   asSeen: boolean
   paused: boolean
+  /** The graph's name column, in px: [GUTTER_MIN_PX]–[GUTTER_MAX_PX]. */
+  gutter: number
 }
 
-const GRAPH_DEFAULTS: FxGraphOptions = { window: '2c', view: 'result', rigOrder: false, asSeen: false, paused: false }
+export const GUTTER_DEFAULT_PX = 152
+export const GUTTER_MIN_PX = 96
+export const GUTTER_MAX_PX = 280
+
+export const clampGutter = (px: number): number => Math.max(GUTTER_MIN_PX, Math.min(GUTTER_MAX_PX, Math.round(px)))
+
+const GRAPH_DEFAULTS: FxGraphOptions = { window: '2c', view: 'result', rigOrder: false, asSeen: false, paused: false, gutter: GUTTER_DEFAULT_PX }
 const WINDOWS: readonly GraphWindowChoice[] = ['1c', '2c', '2b', '8b']
 
 const graphStore = createSyncStore<FxGraphOptions>({
@@ -76,6 +92,7 @@ const graphStore = createSyncStore<FxGraphOptions>({
       rigOrder: p.rigOrder === true,
       asSeen: p.asSeen === true,
       paused: p.paused === true,
+      gutter: typeof p.gutter === 'number' && Number.isFinite(p.gutter) ? clampGutter(p.gutter) : GUTTER_DEFAULT_PX,
     }
   },
   storage: sessionStorageArea,
@@ -104,6 +121,17 @@ export function toggleLaneFold(family: AttributeFamily): void {
 export const usePhoneLane = (): AttributeFamily | null => useStore(phoneLaneStore)
 export const setPhoneLane = (family: AttributeFamily | null): void => phoneLaneStore.set(family)
 
+export const useFoldedFixtures = (): readonly string[] => useStore(foldedFixturesStore)
+export function toggleFixtureFold(fixtureKey: string): void {
+  const folded = foldedFixturesStore.getSnapshot()
+  foldedFixturesStore.set(folded.includes(fixtureKey) ? folded.filter((k) => k !== fixtureKey) : [...folded, fixtureKey])
+}
+
+export function setFixturesFolded(fixtureKeys: readonly string[], folded: boolean): void {
+  const rest = foldedFixturesStore.getSnapshot().filter((k) => !fixtureKeys.includes(k))
+  foldedFixturesStore.set(folded ? [...rest, ...fixtureKeys] : rest)
+}
+
 export const useFxGraphOptions = (): FxGraphOptions => useStore(graphStore)
 export function setFxGraphOption<K extends keyof FxGraphOptions>(key: K, value: FxGraphOptions[K]): void {
   graphStore.set({ ...graphStore.getSnapshot(), [key]: value })
@@ -117,4 +145,5 @@ export function resetFxEditorViewStores(): void {
   foldedStore.reset()
   phoneLaneStore.reset()
   graphStore.reset()
+  foldedFixturesStore.reset()
 }

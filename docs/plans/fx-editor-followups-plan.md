@@ -116,9 +116,9 @@ follow-ups: session N — title*. Never merge a later session's PR before an ear
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Steps land on their sample | in review | claude/fx-editor-followups-s1 | [#292](https://github.com/cjcormack/lighting7/pull/292) | 1da63241 |
-| 2 | Fixtures: the third element mode, and Over | in review | claude/fx-editor-followups-s2 | | |
-| 3 | The graph: ruler, knobs, fixture rows and room for names | planned | | | |
+| 1 | Steps land on their sample | merged | claude/fx-editor-followups-s1 | [#292](https://github.com/cjcormack/lighting7/pull/292) | 1da63241 |
+| 2 | Fixtures: the third element mode, and Over | merged | claude/fx-editor-followups-s2 | [#293](https://github.com/cjcormack/lighting7/pull/293) | c3b12b23 |
+| 3 | The graph: ruler, knobs, fixture rows and room for names | in review | claude/fx-editor-followups-s3 | | |
 | 4 | The list's head: nothing selected and the subject | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -251,6 +251,20 @@ the next; whoever merges the last fills its own.
   `FxGraph.test.tsx` (the toolbar's segments and length, the ruler's numbers, the Cycle tab and
   Spread knob writing through the editor as the old handles did), `fxGraphHandles.test.ts` updated.
 - **Docs:** `frontend/CLAUDE.md` §"The programmer's tables", the FX editor's graph bullets.
+- **Recorded (session 3):** the strip keeps the old 72px name column rather than the graph's
+  default: its hosts (the busk FX tab's 320px sheet, the palette editor, the cue FX tab) are narrow,
+  and 152 would leave them no plot. Names moved off the canvas into DOM over it, since a fixture row
+  needs a chevron that is a button. A mixed row has no answer row (`row` -1), so it is hovered by a
+  key of its own and reads its ladder rungs off its first element. A max or min knob lights a new
+  mark, `levels`, the level lines; the inspector has no control that lights it. The ruler numbers
+  bars from the bar the window starts in, not from the master's tick 0, which would run into the
+  thousands and move with every re-ask. Three calls the session's review made: the heat map counts
+  the answer's rows, a folded fixture as one — a mixed row over drawn elements adds none, so the strip,
+  which cannot fold, turns to a heat map exactly where it did before — and the lane's header carries
+  *Fold elements*, since a heat map draws no chevrons; High and Low are one pair of knobs on the first
+  row (they are the FX's, and a pair per row overlapped at 28px), the lines still drawn on every row;
+  Spread's knob rides the lowest row Spread moves furthest, the last row when it moves at all. The
+  mixed rows are built once per answer (`DecodedAttribute.mixed`); `LaidRow` keeps `row` -1 for them.
 
 ### Session 4 — The list's head: nothing selected and the subject
 
@@ -296,5 +310,23 @@ reads `followups.md`'s index for a gate on FX tick loops before it starts, per C
   unchanged.
 - **Session 3:** the graph's fixture rows read as the rig looks from the desk; the Cycle tab and the
   Spread knob are found without being told; the names read at the three bands. Widths recorded here.
+  - **Measured (session 3)**, in Chromium on an isolated desk with four Shehds (three zones each)
+    and a 10-channel pixel bar with its own dimmer, Colour Cycle over all five on Elements:
+
+    | Window | Editor (band) | Graph | Names | Plot | Toolbar |
+    |---|---|---|---|---|---|
+    | 1600, sidebar open | 1360 (columns) | 772 | 152 | 592 | 2 rows, clean |
+    | 1180, sidebar open | 940 (side, inspector open) | 346 | 152 | 166 | 3 rows, clean |
+    | 1024, sidebar folded | 960 (side) | 356 | 152 | 176 | 3 rows, clean |
+    | 1024, sidebar open | 784 (side) | 236 | 72 | 136 | segments wrap inside, clean |
+    | 700 (touch) | 700 (stacked) | 700 | 152, no grip | 520 | 2 rows, clean |
+
+    No label overran the name column at any width. 152 failed once: in the side form the inspector
+    sits *beside* the graph (half its width, at least 300px), so near the band's floor the graph is
+    ~236px and 152px of names left 56px of plot. The default stands; the names now give way, down
+    to 72px, wherever they would leave the plot under 160 (`fitGutter`), and an element whose words
+    do not fit reads its number. Below about 236px of graph no name width keeps 160px of plot; that
+    is the side form's layout, not the graph's. The Window segment (295px) overflowed a 212px
+    toolbar, so below 300px of toolbar a segment's label folds and its buttons wrap inside it.
 - **Session 4:** from nothing selected, one press on a card puts its FX in the inspector with its
   heads selected; the subject reads at 248px with four fixtures.

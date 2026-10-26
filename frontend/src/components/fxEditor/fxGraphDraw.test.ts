@@ -18,6 +18,7 @@ function draw(answer: FxPreviewAnswer, over: Partial<LaneDrawOptions> = {}, lane
   const decoded = decodePreview(answer)
   const layout = layoutLane(decoded.lanes[lane], {
     width: WIDTH,
+    gutter: 72,
     order: answer.rows.map((_, i) => i),
     rows: answer.rows,
     stepsAttributes: new Set(decoded.lanes[lane].attributes.filter((a) => a.rows.some((r) => r.fx.some((o) => o.output.steps != null))).map((a) => a.attribute)),
@@ -145,28 +146,79 @@ describe('the beat grid', () => {
   })
 })
 
-describe('the row labels', () => {
-  it('are kept to the gutter, short of the brackets', () => {
-    const answer = oneRow(
-      { family: 'INTENSITY', attributes: [{ attribute: 'dimmer', kind: 'SLIDER', rows: [attributeRow(0, levelSeries([0, 0, 0, 0]))] }] },
-      [row('hex-1', 0, { label: 'A very long fixture name indeed' })],
+describe('a fixture’s mixed row (follow-ups D5)', () => {
+  const bar = [
+    row('bar.0', 0, { fixtureKey: 'bar', label: 'Bar 1', element: 0 }),
+    row('bar.1', 1, { fixtureKey: 'bar', label: 'Bar 2', element: 1 }),
+  ]
+
+  it('draws a colour as the mean of its elements’ RGB, rounded', () => {
+    const { ctx, layout } = draw(
+      oneRow(
+        {
+          family: 'COLOUR',
+          attributes: [
+            {
+              attribute: 'rgbColour',
+              kind: 'COLOUR',
+              rows: [attributeRow(0, colourSeries([[255, 0, 0], [255, 0, 0], [0, 0, 0], [0, 0, 0]])), attributeRow(1, colourSeries([[0, 0, 255], [0, 0, 0], [0, 0, 0], [0, 0, 0]]))],
+            },
+          ],
+        },
+        bar,
+      ),
     )
-    const decoded = decodePreview(answer)
-    const layout = layoutLane(decoded.lanes[0], { width: WIDTH, order: [0], rows: answer.rows, stepsAttributes: new Set(), fixtureName: () => undefined, attributeLabel: (a) => a })
-    const calls: string[] = []
-    const ctx = new PixelCanvas(WIDTH, 30)
-    const clip = ctx.clip.bind(ctx)
-    const rect = ctx.rect.bind(ctx)
-    ctx.rect = (x, y, w, h) => {
-      calls.push(`rect ${x} ${y} ${w} ${h}`)
-      rect(x, y, w, h)
+    expect(layout.sections[0].rows.map((r) => r.kind)).toEqual(['fixture', 'element', 'element'])
+    // The fixture row is rows[0], 14px; its elements follow.
+    expect(ctx.pixel(at(0), 7)).toBe('rgb(128,0,128)')
+    expect(ctx.pixel(at(1), 7)).toBe('rgb(128,0,0)')
+    expect(ctx.pixel(at(0), 21)).toBe('rgb(255,0,0)')
+    expect(ctx.pixel(at(0), 35)).toBe('rgb(0,0,255)')
+  })
+
+  it('draws a level as the mean of its elements’ levels', () => {
+    const { ctx } = draw(
+      oneRow(
+        { family: 'INTENSITY', attributes: [{ attribute: 'dimmer', kind: 'SLIDER', rows: [attributeRow(0, levelSeries([255, 0, 0, 0])), attributeRow(1, levelSeries([0, 0, 0, 0]))] }] },
+        bar,
+      ),
+      { picked: null, pickedFx: null },
+    )
+    // Half of 255 fills the bottom half of the fixture's 28px row; the top stays clear.
+    expect(ctx.pixel(at(0), 24)).toBe(P.area)
+    expect(ctx.pixel(at(0), 4)).toBeNull()
+  })
+
+  it('brackets a Segment from the fixture’s first element, never over the fixture’s own row', () => {
+    const cells = [0, 1, 2, 3].map((e) => row(`bar.${e}`, e, { fixtureKey: 'bar', label: `Bar ${e + 1}`, element: e }))
+    const ladder = {
+      order: { ranks: [0, 1, 2, 3], counts: [4, 4, 4, 4] },
+      segments: { ranks: [0, 0, 1, 1], counts: [2, 2, 2, 2] },
+      wings: { ranks: [0, 0, 1, 1], counts: [2, 2, 2, 2] },
+      parts: { ranks: [0, 0, 1, 1], counts: [2, 2, 2, 2] },
+      spread: [0, 0, 0.5, 0.5],
     }
-    ctx.clip = () => {
-      calls.push('clip')
-      clip()
-    }
-    drawLane(ctx, layout, decoded.lanes[0], { samples: 4, beats: 0, startBeat: null, view: 'result', picked: null, pickedFx: null, asSeen: null, positionScale: 64, palette: P })
-    expect(calls.slice(0, 2)).toEqual(['rect 0 0 58 28', 'clip'])
+    const { ctx } = draw(
+      previewAnswer({
+        rows: cells,
+        lanes: [{ family: 'INTENSITY', attributes: [{ attribute: 'dimmer', kind: 'SLIDER', rows: [0, 1, 2, 3].map((r) => attributeRow(r, levelSeries([0, 0, 0, 0]), { fx: [{ fx: 0, output: levelSeries([0, 0, 0, 0]) }] })) }] }],
+        fx: [previewFx(4, { ladder })],
+      }),
+    )
+    // The bracket's spine is 6px left of the plot: the fixture's row (y 0–28) has none, its first two cells do.
+    expect(ctx.pixel(66, 14)).not.toBe(P.bracket)
+    expect(ctx.pixel(66, 50)).toBe(P.bracket)
+  })
+
+  it('draws a position’s fixture row with no mix', () => {
+    const { ctx } = draw(
+      oneRow(
+        { family: 'POSITION', attributes: [{ attribute: 'position', kind: 'POSITION', rows: [attributeRow(0, positionSeries([255, 255, 255, 255], [0, 0, 0, 0])), attributeRow(1, positionSeries([0, 0, 0, 0], [255, 255, 255, 255]))] }] },
+        bar,
+      ),
+      { picked: null, pickedFx: null },
+    )
+    for (let y = 1; y < 24; y++) expect([P.pan, P.tilt]).not.toContain(ctx.pixel(at(1), y))
   })
 })
 

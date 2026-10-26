@@ -24,13 +24,21 @@ export const GRAPH_WINDOWS: readonly { value: GraphWindow; label: string; reques
 export const windowRequest = (value: GraphWindow): FxPreviewWindowRequest =>
   (GRAPH_WINDOWS.find((w) => w.value === value) ?? GRAPH_WINDOWS[1]).request
 
-/** Over this many rows a section draws as a heat map, [HEAT_ROW_PX] a row. */
+/** Over this many rows a section draws as a heat map, [HEAT_ROW_PX] a row; a folded fixture counts as one. */
 export const HEAT_FROM_ROWS = 25
 export const HEAT_ROW_PX = 6
 /** Below the editor's 760 arm the graph draws the picked FX's lane alone, at most this many rows. */
 export const NARROW_ROWS = 6
 
-export const GUTTER_PX = 72
+/** The beat ruler over the lanes. */
+export const RULER_PX = 24
+/** The least plot the lanes keep beside the names (and the path panel) before either gives way. */
+export const MIN_PLOT_PX = 160
+/** The narrowest the name column gets when the window's width would leave the plot under [MIN_PLOT_PX]; the strip's fixed width. */
+export const NARROW_GUTTER_PX = 72
+
+/** The name column drawn in [lanesWidth]: the window's [chosen] width, narrowed as far as [NARROW_GUTTER_PX] to keep [MIN_PLOT_PX] of plot. */
+export const fitGutter = (chosen: number, lanesWidth: number): number => Math.max(NARROW_GUTTER_PX, Math.min(chosen, lanesWidth - 4 - MIN_PLOT_PX))
 const SECTION_HEADER_PX = 12
 const STEPS_BAND_PX = 10
 
@@ -53,14 +61,32 @@ export function graphRowOrder(answer: Pick<FxPreviewAnswer, 'rows'>, rigOrder: b
   return order.sort((a, b) => answer.rows[a].rigIndex - answer.rows[b].rigIndex || a - b)
 }
 
+const MIX_KEY_PREFIX = 'mix\u0000'
+
+/** The key a fixture's mixed row is hovered by, which no answer row has. */
+export const mixKeyOf = (fixtureKey: string): string => `${MIX_KEY_PREFIX}${fixtureKey}`
+export const mixFixtureOf = (key: string): string | null => (key.startsWith(MIX_KEY_PREFIX) ? key.slice(MIX_KEY_PREFIX.length) : null)
+
 export interface LaidRow {
-  /** An index into the answer's `rows`. */
+  /** An index into the answer's `rows`; -1 for a mixed row, which the answer has no row for. */
   row: number
+  /** The answer row's key, or a mixed row's [mixKeyOf]. */
+  key: string
   y: number
-  /** The fixture's name above an element run's first element; null otherwise. */
-  fixtureLabel: string | null
+  /**
+   * `fixture` heads a multi-element fixture's elements — its own row where the answer has one, else
+   * the mix of them ([mix]); `element` is one of them; `head` is a fixture drawn with no elements.
+   */
+  kind: 'fixture' | 'element' | 'head'
+  /** The element rows a mixed row averages; null for a row the answer has. */
+  mix: readonly number[] | null
+  fixtureKey: string
+  /** A fixture row's name, an element's own words or number, a head's label. */
   label: string
-  element: boolean
+  /** An element row's index in its fixture, which it reads where its words do not fit. */
+  element: number | null
+  /** A fixture row whose elements are folded under it. */
+  folded: boolean
 }
 
 export interface LaidSection {
@@ -71,6 +97,10 @@ export interface LaidSection {
   rowH: number
   heat: boolean
   stepsBand: boolean
+  /** A Steps FX steps this attribute: a mixed row draws its name and no mix. */
+  steps: boolean
+  /** The rows the narrow arm's [LayoutOptions.maxRows] left out. */
+  cut: number
   rows: LaidRow[]
 }
 
@@ -85,11 +115,15 @@ export interface LaneLayout {
 
 export interface LayoutOptions {
   width: number
+  /** The name column's width: where the plot starts. */
+  gutter: number
   /** The answer's rows in draw order. */
   order: readonly number[]
   rows: FxPreviewAnswer['rows']
   /** Draws a Steps band over the rows of these attributes. */
   stepsAttributes: ReadonlySet<string>
+  /** The fixtures whose elements fold under their own row. */
+  folded?: ReadonlySet<string>
   /** At most this many rows a section (the narrow arm's 6). */
   maxRows?: number
   fixtureName: (fixtureKey: string) => string | undefined
@@ -99,51 +133,129 @@ export interface LayoutOptions {
 /**
  * Where each section and row of a lane sits: one section per attribute (headed where the lane has
  * several), its rows in draw order — only the heads that carry it — at the family's row height, or
- * [HEAT_ROW_PX] once there are [HEAT_FROM_ROWS] or more.
+ * [HEAT_ROW_PX] once there are [HEAT_FROM_ROWS] or more. A multi-element fixture's elements sit
+ * under a row of its own (D5): the answer's row for the fixture where it carries the attribute, else
+ * a mixed row of its elements, which the drawing averages; folded, that row is drawn alone.
  */
 export function layoutLane(lane: DecodedLane, options: LayoutOptions): LaneLayout {
-  const { width, order, rows, stepsAttributes, maxRows, fixtureName, attributeLabel } = options
-  const plotLeft = GUTTER_PX
+  const { width, gutter, order, rows, stepsAttributes, folded, maxRows, fixtureName, attributeLabel } = options
+  const plotLeft = gutter
   const plotWidth = Math.max(1, width - plotLeft - 4)
   const headed = lane.attributes.length > 1
   const sections: LaidSection[] = []
   let y = 0
   for (const attribute of lane.attributes) {
-    let drawn = order.filter((r) => attribute.byRow.has(r))
-    if (maxRows != null) drawn = drawn.slice(0, maxRows)
+    const all = fixtureRuns(
+      order.filter((r) => attribute.byRow.has(r)),
+      rows,
+      folded,
+      fixtureName,
+    )
+    const drawn = maxRows != null ? all.slice(0, maxRows) : all
     if (drawn.length === 0) continue
     const header = headed ? attributeLabel(attribute.attribute) : null
     if (header != null) y += SECTION_HEADER_PX
-    const heat = drawn.length >= HEAT_FROM_ROWS
-    const stepsBand = !heat && stepsAttributes.has(attribute.attribute)
+    // The answer's rows decide the heat map, a folded fixture counting as one: a mixed row over
+    // elements still drawn adds none.
+    const heat = drawn.filter((r) => r.mix == null || r.folded).length >= HEAT_FROM_ROWS
+    const steps = stepsAttributes.has(attribute.attribute)
+    const stepsBand = !heat && steps
     const rowH = heat ? HEAT_ROW_PX : ROW_PX[lane.family ?? 'OTHER'] + (stepsBand ? STEPS_BAND_PX : 0)
     const top = y
-    const laid: LaidRow[] = drawn.map((r, i) => {
-      const row = rows[r]
-      const previous = i > 0 ? rows[drawn[i - 1]] : null
-      const opensFixture = row.element != null && previous?.fixtureKey !== row.fixtureKey
-      const name = fixtureName(row.fixtureKey) ?? row.fixtureKey
-      return {
-        row: r,
-        y: top + i * rowH,
-        fixtureLabel: opensFixture ? name : null,
-        label: row.element != null ? elementLabel(row.label, name, row.element) : row.label,
-        element: row.element != null,
-      }
-    })
-    sections.push({ attribute: attribute.attribute, header, top, rowH, heat, stepsBand, rows: laid })
+    const laid: LaidRow[] = drawn.map((r, i) => ({ ...r, y: top + i * rowH }))
+    sections.push({ attribute: attribute.attribute, header, top, rowH, heat, stepsBand, steps, cut: all.length - drawn.length, rows: laid })
     y = top + drawn.length * rowH
   }
   return { family: lane.family, width, plotLeft, plotWidth, height: Math.max(y, 1), sections }
 }
 
+/**
+ * A section's rows grouped by fixture, in the order each fixture first appears: a fixture with
+ * elements is its own row (the answer's, else mixed) then its elements, unless folded.
+ */
+function fixtureRuns(
+  drawn: readonly number[],
+  rows: FxPreviewAnswer['rows'],
+  folded: ReadonlySet<string> | undefined,
+  fixtureName: (fixtureKey: string) => string | undefined,
+): Omit<LaidRow, 'y'>[] {
+  const units: { fixtureKey: string; own: number | null; elements: number[] }[] = []
+  const byFixture = new Map<string, (typeof units)[number]>()
+  for (const r of drawn) {
+    const row = rows[r]
+    let unit = byFixture.get(row.fixtureKey)
+    if (unit == null) {
+      unit = { fixtureKey: row.fixtureKey, own: null, elements: [] }
+      units.push(unit)
+      byFixture.set(row.fixtureKey, unit)
+    }
+    if (row.element == null) unit.own = r
+    else unit.elements.push(r)
+  }
+  const out: Omit<LaidRow, 'y'>[] = []
+  for (const { fixtureKey, own, elements } of units) {
+    if (elements.length === 0) {
+      if (own != null) out.push({ row: own, key: rows[own].key, kind: 'head', mix: null, fixtureKey, label: rows[own].label, element: null, folded: false })
+      continue
+    }
+    const name = fixtureName(fixtureKey) ?? (own != null ? rows[own].label : fixtureKey)
+    const isFolded = folded?.has(fixtureKey) === true
+    out.push(
+      own != null
+        ? { row: own, key: rows[own].key, kind: 'fixture', mix: null, fixtureKey, label: name, element: null, folded: isFolded }
+        : { row: -1, key: mixKeyOf(fixtureKey), kind: 'fixture', mix: elements, fixtureKey, label: name, element: null, folded: isFolded },
+    )
+    if (isFolded) continue
+    for (const r of elements) {
+      const row = rows[r]
+      const element = row.element ?? 0
+      out.push({ row: r, key: row.key, kind: 'element', mix: null, fixtureKey, label: elementLabel(row.label, name, element), element, folded: false })
+    }
+  }
+  return out
+}
+
 /** An element's own words under its fixture's name: what follows the name, else its number. */
-function elementLabel(label: string, fixture: string, element: number): string {
+export function elementLabel(label: string, fixture: string, element: number): string {
   if (label.startsWith(fixture)) {
     const rest = label.slice(fixture.length).replace(/^[\s·:,-]+/, '')
     if (rest !== '') return rest
+    return `${element + 1}`
   }
-  return label === fixture ? `${element + 1}` : label
+  return label === '' ? `${element + 1}` : label
+}
+
+/**
+ * [text] cut in its middle to fit [maxPx] as [measure] reads it — *LX2 Shehds…15 SR* — keeping more
+ * of its start than its end; whole where it fits.
+ */
+export function middleCut(text: string, maxPx: number, measure: (text: string) => number): string {
+  if (measure(text) <= maxPx) return text
+  const cutAt = (keep: number) => {
+    const head = Math.ceil(keep / 2)
+    return `${text.slice(0, head).trimEnd()}…${text.slice(text.length - (keep - head)).trimStart()}`
+  }
+  // The most characters kept that still fit, by halving.
+  let fits = 2
+  let over = text.length
+  while (over - fits > 1) {
+    const keep = Math.floor((fits + over) / 2)
+    if (measure(cutAt(keep)) <= maxPx) fits = keep
+    else over = keep
+  }
+  return fits > 2 ? cutAt(fits) : `${text.slice(0, 2)}…`
+}
+
+/** The answer row a laid row's ladder rungs are read from: its own, or a mixed row's first element's. */
+export const rungRow = (laid: Pick<LaidRow, 'row' | 'mix'>): number => laid.mix?.[0] ?? laid.row
+
+/** The picked FX's cycle starts on a laid row: the answer's, or a mixed row's where its elements share them. */
+export function rowStarts(fx: Pick<FxPreviewFx, 'starts'>, laid: Pick<LaidRow, 'row' | 'mix'>): readonly number[] | null {
+  if (laid.mix == null) return fx.starts[laid.row] ?? null
+  const first = fx.starts[laid.mix[0]]
+  if (first == null) return null
+  const same = (other: readonly number[] | null | undefined) => other != null && other.length === first.length && other.every((s, i) => s === first[i])
+  return laid.mix.every((r) => same(fx.starts[r])) ? first : null
 }
 
 /**
@@ -341,6 +453,54 @@ export const TICKS_PER_BEAT = 24
  */
 export function startBeatOf(clock: PlayheadClock): number | null {
   return clock.kind === 'master' ? clock.tickAtStart / TICKS_PER_BEAT : null
+}
+
+export interface RulerTick {
+  x: number
+  /** A bar's first beat, or a second on a wall clock: drawn taller. */
+  major: boolean
+  label: string | null
+}
+
+const SECOND_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300]
+
+/**
+ * **The beat ruler's ticks** (D4): on a master, one on each of its beats, placed from the tick the
+ * window started on as the beat grid is — a bar's first taller and numbered from the bar the window
+ * starts in, the beats between `bar.beat` where there is room — or each bar alone over 16 beats. On
+ * its own clock, seconds from the window's start.
+ */
+export function rulerTicks(clock: PlayheadClock, window: Pick<FxPreviewAnswer['window'], 'beats' | 'seconds'>, plotLeft: number, plotWidth: number): RulerTick[] {
+  const end = plotLeft + plotWidth
+  const labelled = (x: number) => x <= end - 10
+  const start = startBeatOf(clock)
+  if (start == null) {
+    const seconds = window.seconds
+    if (!(seconds > 0) || plotWidth <= 0) return []
+    const step = SECOND_STEPS.find((s) => (s / seconds) * plotWidth >= 48) ?? SECOND_STEPS[SECOND_STEPS.length - 1]
+    const out: RulerTick[] = []
+    for (let i = 0; i * step <= seconds + 1e-9; i++) {
+      const x = plotLeft + ((i * step) / seconds) * plotWidth
+      out.push({ x, major: true, label: labelled(x) ? `${Number((i * step).toFixed(2))} s` : null })
+    }
+    return out
+  }
+  const beats = window.beats
+  if (!(beats > 0) || plotWidth <= 0) return []
+  const pxPerBeat = plotWidth / beats
+  const step = beats > 16 ? 4 : 1
+  const barEvery = Math.max(1, Math.ceil(20 / (pxPerBeat * 4)))
+  const firstBar = Math.floor(start / 4) * 4
+  const out: RulerTick[] = []
+  for (let b = Math.ceil((start - 1e-9) / step) * step; b <= start + beats + 1e-9; b += step) {
+    const x = plotLeft + (b - start) * pxPerBeat
+    const inBar = (((b % 4) + 4) % 4) + 1
+    const bar = Math.floor((b - firstBar) / 4) + 1
+    const major = inBar === 1
+    const label = !labelled(x) ? null : major ? ((bar - 1) % barEvery === 0 ? `${bar}` : null) : pxPerBeat >= 28 ? `${bar}.${inBar}` : null
+    out.push({ x, major, label })
+  }
+  return out
 }
 
 /** The master's beat within its bar at sample [s], 1 to 4.99: what the hover reads. */
