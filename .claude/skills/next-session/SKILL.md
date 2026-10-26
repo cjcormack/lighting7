@@ -1,11 +1,13 @@
 ---
 name: next-session
 description: Implement the next session of an active plan in docs/plans/ through /verified-ship, on a branch stacked on the previous session's PR, ending with that session's PR opened. Use when asked to run, start or continue the next session of a plan.
+argument-hint: "[plan name, e.g. flaky-tests]"
 ---
 
 # /next-session — the next session of a plan, stacked and verified
 
-Arguments: `$ARGUMENTS`, an optional plan path (`docs/plans/<name>-plan.md`). Empty means find it.
+Arguments: `$ARGUMENTS`, an optional plan: its name (`flaky-tests`), its file name
+(`flaky-tests-plan.md`) or its path (`docs/plans/flaky-tests-plan.md`). Empty means find it.
 
 Invoking this skill **is invoking `/verified-ship`** for one session. On a PASS gate it authorises
 exactly what that run does: one commit on this session's branch, a push of that branch, and one PR.
@@ -18,7 +20,10 @@ A plan this skill can run has a `## Sessions` table with the columns
 `Session | Title | Status | Branch | PR | Head SHA`, and one `### Session N — <title>` section per
 row. *Status* is `planned`, `in progress`, `in review` or `merged`.
 
-1. `git fetch origin main`. With `$ARGUMENTS`, use that file. Otherwise list `docs/plans/*-plan.md`
+1. `git fetch origin main`. With `$ARGUMENTS`, strip any `docs/plans/` prefix and any `-plan.md`,
+   `-plan` or `.md` suffix to get the name, and use `docs/plans/<name>-plan.md` on `origin/main`. If
+   that file does not exist, or its Sessions table has no row that is not `merged`, say so, list the
+   plans that do have one, and stop. Otherwise list `docs/plans/*-plan.md`
    (not `completed/`) on `origin/main` whose Sessions table has a row that is not `merged`. Exactly
    one: use it. None: say so and stop. Several: ask which.
 2. **Find the sessions already in flight.** Main's table is not enough: a session's own row moves to
