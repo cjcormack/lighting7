@@ -14,7 +14,8 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
  * stacking blend, taking nothing off (`stack: true`).
  *
  * It is asked only where it changes something: where a Local FX of the family already reaches a
- * selected head ([localHolderIn]). An FX editor lane and the picker's FX arm read that one rule.
+ * selected head ([localHolderIn]). An FX editor lane and the picker's FX arm ask it through one hook,
+ * [useReplaceStack].
  */
 export function ReplaceStack({
   stack,

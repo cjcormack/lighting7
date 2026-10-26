@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ActiveFx } from '@/store/fixtureFx'
+import type { ActiveFx, FxLibraryEntry } from '@/store/fixtureFx'
 import type { CueTarget } from '@/api/cuesApi'
 import { chan, colourProp, makeActiveFx, makeFixture, sliderProp } from '@/test/fixtureFactories'
 
@@ -27,20 +28,45 @@ const mocks = vi.hoisted(() => ({
   pause: vi.fn(),
   scope: { kind: 'local' } as { kind: string },
   asks: [] as { fxIds: number[]; solo?: number; window?: unknown; draft?: unknown }[],
-  library: [] as { name: string; defaultDirection?: string }[],
+  library: [] as Partial<FxLibraryEntry>[],
+  /** Draw the real `FxPicker`, for a lane's whole session. */
+  realPicker: false,
+  pressFx: vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ fxId: 50, stopped: [], narrowed: [] }) })),
+  updateFx: vi.fn((_id: number, _req: unknown) => true),
 }))
 
 vi.mock('@/components/fx/selectionFxTarget', () => ({
   useWindowFxPair: () => ({ targets: mocks.targets, families: null }),
-  fxTargetOf: (targets: CueTarget[]) => (targets.length === 0 ? null : { type: 'selection', targets, fixtures: [], label: 'Hex 1, Hex 2' }),
+  fxTargetOf: (targets: CueTarget[]) => (targets.length === 0 ? null : { type: 'selection', targets, fixtures: HEX, label: 'Hex 1, Hex 2' }),
 }))
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: HEX }) }))
-vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/groups', () => ({
+  useGroupListQuery: () => ({ data: [] }),
+  useApplyGroupFxMutation: () => [vi.fn()],
+  useRemoveGroupFxMutation: () => [vi.fn()],
+}))
 vi.mock('@/store/fixtureFx', () => ({
   useActiveFxQuery: () => ({ data: mocks.effects }),
   useFxLibraryQuery: () => ({ data: mocks.library }),
   moveLocalFx: (...a: unknown[]) => mocks.moveFx(...a),
+  useAddFixtureFxMutation: () => [vi.fn()],
+  usePressProgrammerFxMutation: () => [mocks.pressFx],
+  useRemoveFxMutation: () => [vi.fn()],
 }))
+vi.mock('@/store/palettes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/palettes')>()),
+  usePaletteListQuery: () => ({ data: [] }),
+}))
+vi.mock('@/store/speedMasters', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/speedMasters')>()),
+  useSpeedMasterForFamily: () => () => null,
+}))
+vi.mock('@/api/lightingApi', async () => {
+  const { lightingApiMock } = await import('@/test/backendMock')
+  const base = lightingApiMock().lightingApi as Record<string, unknown>
+  const fx = { updateFx: mocks.updateFx, subscribe: () => ({ unsubscribe: () => {} }), subscribeToErrors: () => ({ unsubscribe: () => {} }) }
+  return { lightingApi: new Proxy(base, { get: (target, prop: string) => (prop === 'fx' ? fx : target[prop]) }) }
+})
 vi.mock('@/store/programmer', () => ({
   useProgrammerLayersQuery: () => ({ data: [{ layerId: 40, source: { kind: 'PALETTE', id: 3, uuid: 'u3', name: 'Night' } }] }),
 }))
@@ -68,11 +94,18 @@ vi.mock('@/components/programmer/RecordLookSheet', () => ({
 vi.mock('@/components/stage/OwnerEditor', () => ({
   OwnerEditor: ({ entry }: { entry: { kind: string; id: number } }) => <div data-testid="cue-editor">{`${entry.kind}:${entry.id}`}</div>,
 }))
-vi.mock('@/components/fx/FxPicker', () => ({
-  FxPicker: ({ initialFamily, press }: { initialFamily: string; press: { stack?: boolean } }) => (
-    <div data-testid="picker" data-family={initialFamily} data-stack={String(press.stack === true)} />
-  ),
-}))
+/** The attribute a stub picker's taps land on, by the family it opens on. */
+const STUB_LANDS: Record<string, string> = { INTENSITY: 'dimmer', COLOUR: 'rgbColour' }
+vi.mock('@/components/fx/FxPicker', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/components/fx/FxPicker')>()
+  type Props = Parameters<typeof real.FxPicker>[0]
+  function Stub({ initialFamily, press, onLanding }: Props) {
+    const lands = STUB_LANDS[initialFamily ?? ''] ?? 'dimmer'
+    useEffect(() => onLanding?.([lands]), [lands, onLanding])
+    return <div data-testid="picker" data-family={initialFamily} data-stack={String(press?.stackOn?.(lands) === true)} />
+  }
+  return { ...real, FxPicker: (props: Props) => (mocks.realPicker ? <real.FxPicker {...props} /> : <Stub {...props} />) }
+})
 vi.mock('@/components/fx/SplitFxEditor', async () => {
   const { useFxGraphLink } = await import('@/components/fx/fxGraphLink')
   return {
@@ -134,6 +167,9 @@ beforeEach(() => {
   mocks.scope = { kind: 'local' }
   mocks.asks = []
   mocks.library = []
+  mocks.realPicker = false
+  mocks.pressFx.mockClear()
+  mocks.updateFx.mockClear()
   mocks.effects = [
     fx(1, { programmerOwned: false, cueId: 12 }),
     fx(2, { programmerLayerId: 40, paletteId: 3 }),
@@ -320,6 +356,34 @@ describe('+ FX', () => {
     expect(screen.getByTestId('picker')).toHaveAttribute('data-family', 'COLOUR')
     expect(screen.queryByRole('radio', { name: 'Stack' })).toBeNull()
     expect(screen.getByTestId('picker')).toHaveAttribute('data-stack', 'false')
+  })
+
+  it('never asks about the FX its own session started, and a swap keeps its blend', async () => {
+    const colour = (name: string): Partial<FxLibraryEntry> => ({
+      name,
+      family: 'colour',
+      outputType: 'COLOUR',
+      fxMode: 'STANDARD',
+      timingSource: 'BEAT',
+      compatibleAttributes: ['rgbColour'],
+      parameters: [],
+    })
+    mocks.library = [colour('Rainbow Cycle'), colour('Colour Cycle')]
+    mocks.realPicker = true
+    const { rerender } = draw()
+    fireEvent.click(within(lane('COLOUR')).getByRole('button', { name: 'FX' }))
+    expect(screen.queryByRole('radio', { name: 'Stack' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Rainbow Cycle' }))
+    await waitFor(() => expect(mocks.pressFx).toHaveBeenCalledTimes(1))
+    expect(mocks.pressFx.mock.calls[0][0]).not.toHaveProperty('stack')
+    // The lanes refetch and now hold the session's own FX: still nothing to ask.
+    mocks.effects = [...mocks.effects, fx(50, { fxType: 'RainbowCycle', attribute: 'rgbColour' })]
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+    expect(card(50)).not.toBeNull()
+    expect(screen.queryByRole('radio', { name: 'Stack' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Colour Cycle' }))
+    expect(mocks.updateFx).toHaveBeenCalledWith(50, expect.objectContaining({ fxType: 'Colour Cycle', blendMode: 'OVERRIDE' }))
+    expect(mocks.pressFx).toHaveBeenCalledTimes(1)
   })
 })
 

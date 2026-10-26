@@ -15,7 +15,7 @@ import { OwnerEditor } from '@/components/stage/OwnerEditor'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { FxPicker, type AuditionedFx } from '@/components/fx/FxPicker'
 import { SplitFxEditor, type SplitSession } from '@/components/fx/SplitFxEditor'
-import { ReplaceStack, localHolderIn } from '@/components/fx/ReplaceStack'
+import { useReplaceStack } from '@/components/fx/useReplaceStack'
 import {
   FxGraphLinkContext,
   createHoveredRowStore,
@@ -198,7 +198,6 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
       projectId={projectId}
       picked={picked}
       adding={lookFocused ? null : adding}
-      lanes={lanes}
       pair={pair}
       target={fxTarget}
       cueLabel={cueLabel}
@@ -488,7 +487,6 @@ function Inspector({
   projectId,
   picked,
   adding,
-  lanes,
   pair,
   target,
   cueLabel,
@@ -500,7 +498,6 @@ function Inspector({
   projectId: number
   picked: ActiveFx | null
   adding: AttributeFamily | null
-  lanes: readonly FxLane[]
   pair: ReturnType<typeof useWindowFxPair>
   target: ReturnType<typeof fxTargetOf>
   cueLabel: (cueId: number) => string | undefined
@@ -512,13 +509,11 @@ function Inspector({
   const [session, setSession] = useState<SplitSession>(null)
 
   if (adding != null) {
-    const holdsLocal = localHolderIn(lanes, adding) != null
     return (
       <AddFx
         key={adding}
         projectId={projectId}
         family={adding}
-        holdsLocal={holdsLocal}
         pair={pair}
         target={target}
         onPicked={onPicked}
@@ -562,12 +557,11 @@ function Inspector({
 
 /**
  * *+ FX* on a lane (FX editor plan §4.3, D6): the picker's press arm, opening on the lane's family,
- * asking `ReplaceStack` where the lane already holds a Local FX on a selected head.
+ * asking `ReplaceStack` as the picker's FX arm does ([useReplaceStack]).
  */
 function AddFx({
   projectId,
   family,
-  holdsLocal,
   pair,
   target,
   onPicked,
@@ -575,14 +569,13 @@ function AddFx({
 }: {
   projectId: number
   family: AttributeFamily
-  holdsLocal: boolean
   pair: ReturnType<typeof useWindowFxPair>
   target: ReturnType<typeof fxTargetOf>
   onPicked: (fxId: number) => void
   onClose: () => void
 }) {
-  const [stack, setStack] = useState(false)
   const [current, setCurrent] = useState<AuditionedFx | null>(null)
+  const { segment, onLanding, stackOn } = useReplaceStack(pair.targets, true, current)
   return (
     <div data-fx-add={family} className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -596,14 +589,15 @@ function AddFx({
           <X className="size-3.5" />
         </button>
       </div>
-      {holdsLocal && <ReplaceStack stack={stack} onChange={setStack} />}
+      {segment}
       {target == null ? (
         <EditorReadout>Reading the rig…</EditorReadout>
       ) : (
         <FxPicker
           target={target}
           initialFamily={family}
-          press={{ projectId, families: pair.families, stack: holdsLocal && stack }}
+          press={{ projectId, families: pair.families, stackOn }}
+          onLanding={onLanding}
           current={current}
           onCurrent={setCurrent}
           onEdit={current != null ? () => onPicked(current.fxId) : undefined}

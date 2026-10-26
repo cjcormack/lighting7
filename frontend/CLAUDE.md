@@ -3041,13 +3041,17 @@ narrows nothing and starts the FX on its family's stacking blend (lighting7 `fx/
 is asked only where it changes something — a Local FX already reaching a selected head in the family
 **the desk replaces in**, the family of the attribute the FX lands on (a Pulse on `uv` is Colour),
 other than one the session started (`localHolderIn`, over `fxLanes`) — and only of the Local press:
-a focused Look absorbs, a cue stores. An FX editor lane's *+ FX* asks it of its own lanes. The
-picker's FX arm asks it **on the programmer page** (where `useProgrammerScope` answers), through
-`useLocalFxHolder`, which reads the running list before any preview: `FxPicker` reports the
-attributes its listed FX would land on (`onLanding`), the segment is drawn in its `underFamilies`
-slot when one of them is held, and the press takes the choice per landing attribute (`press.stackOn`).
-It asks only before the session's first start: every later tap swaps that FX, which keeps how it
-started. So every FX door on the programmer page asks — row C's FX, ⌘K's *On the selection*, the FX
+a focused Look absorbs, a cue stores. Both doors that ask it — an FX editor lane's *+ FX* and the
+picker's FX arm **on the programmer page** (where `useProgrammerScope` answers) — ask through one
+hook, `useReplaceStack` (`components/fx/useReplaceStack.tsx`), over `useLocalFxHolder`, which reads the running list before any preview:
+`FxPicker` reports the attributes a tap would **start afresh** on (`onLanding` — every one its listed
+FX land on but the auditioned FX's, where a tap swaps it, and the *On* row's options in another family
+than the auditioned FX's), the segment is drawn when one of them is
+held by a Local FX other than the session's own (a fresh start removes that one first), and the press
+takes the choice per landing attribute (`press.stackOn`). A **swap** is never asked, nor is the *On*
+row's move of the auditioned FX to another setting of its family: each keeps how its FX started, which `FxPicker` records on the auditioned FX (`AuditionedFx.stacked`). A fresh start —
+another attribute, or after the session's FX stopped elsewhere — is asked of its own landing, and
+every start puts the segment back on *Replace*. So every FX door on the programmer page asks — row C's FX, ⌘K's *On the selection*, the FX
 table's *+ FX*, a band's *+ FX …* and the palettes' *FX…* — and no door elsewhere does: the busk
 view's family tabs, its FX tab and ⌘K's own picker off the programmer still press as they always did.
 
@@ -5240,11 +5244,12 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   drop that is two frames is to the top of a lane from further down than second — the dragged FX
   below the top one, then the top one below it. Layer and cue cards have no grip. Nothing is
   renumbered here: the desk's `fxChanged` refetches the list and re-asks the preview.
-- **+ FX opens `FxPicker` in the inspector on the lane's family**, the press arm. Where the lane
-  holds a Local FX on a selected head it asks ***Replace · Stack*** (`fx/ReplaceStack.tsx`, the
-  segment and the rule the picker's FX arm reads too), starting on *Replace*; *Stack*
-  is the picker's `press.stack`, which sends `stack: true` and **no blend**, so the desk starts it on
-  the family's stacking blend (`fx/FxStacking.kt`), and a swap keeps that blend. A focused Look layer
+- **+ FX opens `FxPicker` in the inspector on the lane's family**, the press arm. Where a tap would
+  start an FX on a family already holding a Local FX on a selected head — never the one this session
+  started — it asks ***Replace · Stack*** (`fx/ReplaceStack.tsx`, asked through `fx/useReplaceStack.tsx`, the one hook the
+  picker's FX arm asks through too), starting on *Replace*; *Stack* is the picker's `press.stackOn`,
+  which sends `stack: true` and **no blend**, so the desk starts it on the family's stacking blend
+  (`fx/FxStacking.kt`), and a swap keeps that blend. A focused Look layer
   takes `+ FX`'s own sheet instead, which absorbs into the Look; Output and a palette layer refuse
   with the offer's reason, as *+ FX* does everywhere (`useProgrammerAddFx`).
 - **The inspector is the live editor** (`SplitFxEditor`, so the split, the 50 ms floor, Revert,

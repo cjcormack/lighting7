@@ -28,7 +28,7 @@ import { selectionKeyOf, storedFxOf } from '@/components/fx/draftFx'
 import { FxEditor } from '@/components/fx/FxEditor'
 import { FxPicker, type AuditionedFx } from '@/components/fx/FxPicker'
 import { pickerFamilyForSheet } from '@/components/fx/fxEditorModel'
-import { ReplaceStack, useLocalFxHolder } from '@/components/fx/ReplaceStack'
+import { useReplaceStack } from '@/components/fx/useReplaceStack'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import { fxTargetOf } from '@/components/fx/selectionFxTarget'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
@@ -531,7 +531,6 @@ interface PickerSection {
 
 /** The closed panel's answers, as module constants so `=== NO_SECTIONS` can tell "shut" from "empty". */
 const NO_PALETTES: readonly PaletteSummary[] = []
-const NO_TARGETS: PressPair['targets'] = []
 const NO_SECTIONS: readonly PickerSection[] = []
 
 /** The pad's dimmed arm and its reason, under the face. */
@@ -730,30 +729,15 @@ function EffectsArm({
   const live = current != null ? ((active ?? []).find((e) => e.id === current.fxId) ?? null) : null
 
   // *Replace · Stack*: asked on the programmer page, of the bare press alone — a Look absorbs the FX
-  // and a cue stores it, and neither takes heads off anything — and only before the session's first
-  // start, since every later tap swaps that FX, which keeps how it started.
+  // and a cue stores it, and neither takes heads off anything.
   const asks = useProgrammerScope() != null && into.kind === 'programmer'
-  const [landing, setLanding] = useState<readonly string[]>([])
-  const [stack, setStack] = useState(false)
-  const holderOf = useLocalFxHolder(asks ? pair.targets : NO_TARGETS)
-  const holder = asks && current == null ? (landing.map((attribute) => holderOf(attribute)).find((h) => h != null) ?? null) : null
-  const decided = useRef(false)
-  const startedStacked = useRef(false)
-  const stackOn = useCallback(
-    (attribute: string) => {
-      if (current != null) return startedStacked.current
-      decided.current = stack && holderOf(attribute) != null
-      return decided.current
-    },
-    [current, stack, holderOf],
-  )
+  const { segment, onLanding, stackOn, reset: resetStack } = useReplaceStack(pair.targets, asks, current)
   const onCurrent = useCallback(
     (next: AuditionedFx | null) => {
-      if (next != null && next.fxId !== current?.fxId) startedStacked.current = decided.current
       setCurrent(next)
       if (editOnStart && next != null) setEditing(true)
     },
-    [current, editOnStart],
+    [editOnStart],
   )
 
   /** The open editor's "land what the floor holds" — written before the effect goes into the Look. */
@@ -780,13 +764,11 @@ function EffectsArm({
       setCurrent(null)
       setEditing(false)
       setPicked(null)
-      setStack(false)
-      decided.current = false
-      startedStacked.current = false
+      resetStack()
       return
     }
     finish()
-  }, [open, finish])
+  }, [open, finish, resetStack])
   useEffect(() => finish, [finish])
 
   const onPalette = useCallback(
@@ -902,8 +884,8 @@ function EffectsArm({
                 onCurrent={onCurrent}
                 onEdit={() => setEditing(true)}
                 press={into.kind === 'look' ? undefined : pressFamilies}
-                onLanding={setLanding}
-                underFamilies={holder != null ? <ReplaceStack stack={stack} onChange={setStack} holder={holder} /> : null}
+                onLanding={onLanding}
+                underFamilies={segment}
               />
             </div>
           </>

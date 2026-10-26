@@ -67,15 +67,26 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
     fixtureByKey: new Map(),
   }),
 }))
-/** The effects arm's `FxPicker`, by the props it is handed; a press on it starts effect 77, as a tap would. */
+/**
+ * The effects arm's `FxPicker`, by the props it is handed; a press on it starts effect 77 on dimmer,
+ * asking `stackOn` as a fresh start does.
+ */
 const fxPicker = vi.hoisted(() => vi.fn())
 vi.mock('@/components/fx/FxPicker', () => ({
-  FxPicker: (props: { onCurrent: (c: unknown) => void; underFamilies?: React.ReactNode }) => {
+  FxPicker: (props: {
+    onCurrent: (c: unknown) => void
+    underFamilies?: React.ReactNode
+    press?: { stackOn?: (attribute: string) => boolean }
+  }) => {
     fxPicker(props)
+    const start = () => {
+      const stacked = props.press?.stackOn?.('dimmer') === true
+      props.onCurrent({ fxId: 77, fxType: 'Pulse', attribute: 'dimmer', ...(stacked ? { stacked } : {}) })
+    }
     return (
       <>
         {props.underFamilies}
-        <button type="button" data-fx-picker onClick={() => props.onCurrent({ fxId: 77, fxType: 'Pulse', attribute: 'dimmer' })}>
+        <button type="button" data-fx-picker onClick={start}>
           start
         </button>
       </>
@@ -96,11 +107,17 @@ vi.mock('@/components/fx/FxEditor', () => ({
     </>
   ),
 }))
-/** What `useLocalFxHolder` answers: the attributes whose family already runs a Local FX on the selection. */
-const holders = vi.hoisted(() => ({ attributes: new Set<string>() }))
+/**
+ * What `useLocalFxHolder` answers: the attributes whose family already runs a Local FX on the
+ * selection, and each `except` it was asked with — the session's own FX.
+ */
+const holders = vi.hoisted(() => ({ attributes: new Set<string>(), excepts: [] as (number | null | undefined)[] }))
 vi.mock('@/components/fx/ReplaceStack', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/components/fx/ReplaceStack')>()),
-  useLocalFxHolder: () => (attribute: string) => (holders.attributes.has(attribute) ? `${attribute} FX on all 2 heads already` : null),
+  useLocalFxHolder: () => (attribute: string, except?: number | null) => {
+    holders.excepts.push(except)
+    return holders.attributes.has(attribute) ? `${attribute} FX on all 2 heads already` : null
+  },
 }))
 /** The programmer page's scope, where a test says so: there the FX arm asks *Replace · Stack*. */
 const programmerScope = vi.hoisted(() => ({ value: null as object | null }))
@@ -278,6 +295,7 @@ beforeEach(() => {
   stopFx.mockClear()
   fxWire.active = []
   holders.attributes = new Set()
+  holders.excepts = []
   programmerScope.value = null
 })
 afterEach(cleanup)
@@ -646,17 +664,61 @@ describe('ApplyPicker — effects', () => {
     expect(stackOn()('dimmer')).toBe(false)
   })
 
-  it('asks only before the session’s first start, and a swap keeps how the FX started', () => {
+  // `FxPicker` reports only where a tap would start afresh, and keeps a swap as its FX started; the
+  // arm asks each fresh start of its own landing, the session's FX (77, on dimmer) left out.
+  const stackOn = (attribute: string) => (fxPicker.mock.lastCall![0].press.stackOn as (a: string) => boolean)(attribute)
+  const landing = (attributes: string[]) => act(() => fxPicker.mock.lastCall![0].onLanding(attributes))
+  const start = () => fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+
+  it('asks a fresh start of its own landing after a stacked start, and nothing where it holds nothing', () => {
+    programmerScope.value = { kind: 'local' }
+    holders.attributes = new Set(['dimmer', 'uv'])
+    render(picker({ library: 'fx', pair: MASKED }))
+    landing(['dimmer'])
+    fireEvent.click(within(panel()).getByRole('radio', { name: 'Stack' }))
+    start()
+    expect(fxPicker.mock.lastCall![0].current).toMatchObject({ fxId: 77, stacked: true })
+    // Another family whose Local FX the desk would replace: asked afresh, on Replace.
+    landing(['uv'])
+    expect(within(panel()).getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    expect(stackOn('uv')).toBe(false)
+    // Where no Local FX runs: no question, and no stack.
+    landing(['rgbColour'])
+    expect(within(panel()).queryByRole('radio', { name: 'Stack' })).toBeNull()
+    expect(stackOn('rgbColour')).toBe(false)
+  })
+
+  it('asks a fresh start onto a held landing, on Replace, after a replacing start', () => {
     programmerScope.value = { kind: 'local' }
     holders.attributes = new Set(['uv'])
     render(picker({ library: 'fx', pair: MASKED }))
-    act(() => fxPicker.mock.lastCall![0].onLanding(['uv']))
-    fireEvent.click(within(panel()).getByRole('radio', { name: 'Stack' }))
-    expect(fxPicker.mock.lastCall![0].press.stackOn('uv')).toBe(true)
-    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    landing(['dimmer'])
     expect(within(panel()).queryByRole('radio', { name: 'Stack' })).toBeNull()
-    // Every later tap swaps the started FX, so it keeps the stacking start whatever lands where.
-    expect(fxPicker.mock.lastCall![0].press.stackOn('dimmer')).toBe(true)
+    start()
+    landing(['uv'])
+    expect(within(panel()).getByText('uv FX on all 2 heads already')).toBeTruthy()
+    expect(within(panel()).getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    expect(stackOn('uv')).toBe(false)
+    fireEvent.click(within(panel()).getByRole('radio', { name: 'Stack' }))
+    expect(stackOn('uv')).toBe(true)
+  })
+
+  it('asks again, on Replace and without the session’s FX, once that FX has stopped elsewhere', () => {
+    programmerScope.value = { kind: 'local' }
+    holders.attributes = new Set(['dimmer'])
+    render(picker({ library: 'fx', pair: MASKED }))
+    landing(['dimmer'])
+    fireEvent.click(within(panel()).getByRole('radio', { name: 'Stack' }))
+    start()
+    // While 77 runs a dimmer tap swaps it, so nothing lands afresh.
+    landing([])
+    expect(within(panel()).queryByRole('radio', { name: 'Stack' })).toBeNull()
+    // Released elsewhere: the next tap starts afresh on dimmer, asked of the FX that is still there.
+    holders.excepts = []
+    landing(['dimmer'])
+    expect(within(panel()).getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    expect(stackOn('dimmer')).toBe(false)
+    expect(new Set(holders.excepts)).toEqual(new Set([77]))
   })
 
   it('asks from Set’s *+ FX …* band too, a door that passes nothing: the page decides', async () => {

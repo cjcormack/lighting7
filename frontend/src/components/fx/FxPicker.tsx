@@ -52,6 +52,7 @@ import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { normalizeFxName } from '../busking/buskingTypes'
 import { getFxDescription } from './fxConstants'
+import { familyOfFx } from '../fxEditor/fxEditorList'
 import {
   PICKER_FAMILIES,
   PICKER_FAMILY_LABELS,
@@ -93,6 +94,8 @@ export interface AuditionedFx {
   fxId: number
   fxType: string
   attribute: string
+  /** Started with `stack: true` — what every swap of it keeps. */
+  stacked?: boolean
 }
 
 /**
@@ -134,15 +137,14 @@ export function FxPicker({
    * other Local effect of its family. Absent — a focused Look, which a press must leave as the stage
    * was — the effect starts on `/fx/add` alone, for its host to absorb.
    *
-   * [stack] is the FX editor's *Stack* (FX editor plan D6): the press stops and narrows nothing,
-   * and no blend is sent, so the desk starts it on its family's stacking blend and Amount — a swap
-   * then keeps the blend it started on. [stackOn] is the same choice asked of the attribute a tap
-   * lands on, for a host whose answer depends on it (the picker's FX arm).
+   * [stackOn] is *Replace · Stack* (FX editor plan D6), asked of the attribute a fresh start lands
+   * on ([useReplaceStack]): yes, and the press stops and narrows nothing and sends no blend, so the
+   * desk starts it on its family's stacking blend and Amount. A swap, and the *On* row's move within
+   * the auditioned FX's family, are not asked: they keep how it started ([AuditionedFx.stacked]).
    */
   press?: {
     projectId: number
     families: readonly AttributeFamily[] | null
-    stack?: boolean
     stackOn?: (attribute: string) => boolean
   }
   /**
@@ -171,7 +173,10 @@ export function FxPicker({
     current: { fxType: string; attribute: string } | null
     onPick: (pick: DraftFxPick) => void
   }
-  /** Told the attributes the listed FX would land on whenever they change — what a tap would drive. */
+  /**
+   * Told the attributes a tap on the listed FX would **start afresh** on whenever they change — every
+   * one they land on but the auditioned FX's, where a tap swaps it.
+   */
   onLanding?: (attributes: readonly string[]) => void
   /** Drawn between the family segment and the rows — the FX arm's *Replace · Stack*. */
   underFamilies?: ReactNode
@@ -311,7 +316,16 @@ export function FxPicker({
     return offer != null ? categoryForFamily(offer.family) : drivenCategoryOf(entry)
   }
 
-  const start = async (entry: FxLibraryEntry, pick = chosen) => {
+  /** The desk replaces in the family of the attribute an FX drives, so a move within one is no new question. */
+  const targetFixtures = attributeTarget.type === 'fixture' ? [attributeTarget.fixture] : attributeTarget.members
+  const sameFamily = (a: string, b: string) =>
+    familyOfFx({ id: -1, attribute: a }, targetFixtures) === familyOfFx({ id: -1, attribute: b }, targetFixtures)
+
+  /**
+   * [moving] is the *On* row's move of the auditioned FX: within its family it keeps how it started,
+   * as a swap does; into another it is asked, as any fresh start is.
+   */
+  const start = async (entry: FxLibraryEntry, pick = chosen, moving = false) => {
     if (busy.current) return
     const attribute = attributeFor(entry, pick)
     if (attribute == null) return
@@ -341,8 +355,6 @@ export function FxPicker({
       return
     }
 
-    const stacked = press?.stack === true || press?.stackOn?.(attribute) === true
-
     if (running != null && running.attribute === attribute) {
       if (normalizeFxName(running.fxType) === normalizeFxName(entry.name)) return
       // A swap across units (a beat effect for a wall-clock flicker) would carry the number across
@@ -359,13 +371,15 @@ export function FxPicker({
       const speed = timing.cycle === runningFx?.cycle ? {} : { cycle: timing.cycle }
       const direction = timing.direction === (runningFx?.direction ?? 'FORWARD') ? {} : { direction: timing.direction }
       const { blendMode, ...unblended } = spec
-      const swapped = stacked ? unblended : { ...unblended, blendMode }
+      const swapped = running.stacked === true ? unblended : { ...unblended, blendMode }
       if (lightingApi.fx.updateFx(running.fxId, { fxType: entry.name, ...swapped, ...speed, ...direction })) {
         onCurrent?.({ ...running, fxType: entry.name })
       }
       return
     }
 
+    const stacked =
+      moving && running != null && sameFamily(attribute, running.attribute) ? running.stacked === true : press?.stackOn?.(attribute) === true
     busy.current = true
     setPending(true)
     try {
@@ -410,7 +424,7 @@ export function FxPicker({
         // leaves nothing auditioned.
         .catch(() => null)
       if (created) setJustStarted(created.fxId)
-      onCurrent?.(created ? { fxId: created.fxId, fxType: entry.name, attribute } : null)
+      onCurrent?.(created ? { fxId: created.fxId, fxType: entry.name, attribute, ...(stacked ? { stacked } : {}) } : null)
     } finally {
       busy.current = false
       setPending(false)
@@ -422,9 +436,6 @@ export function FxPicker({
     addition.kind === 'group' ? applyGroupFx({ groupName: addition.groupName, ...addition.payload }) : addFixtureFx(addition.payload)
 
   const effects = byFamily.get(family) ?? []
-  // Joined, so the report fires on a change of what the rows would drive and not on every render.
-  const landingKey = [...new Set(effects.flatMap((e) => attributeFor(e) ?? []))].join('\n')
-  useEffect(() => onLanding?.(landingKey === '' ? [] : landingKey.split('\n')), [landingKey, onLanding])
   const currentEntry =
     shown != null
       ? [...compatible, ...(paletteStepsEntry != null ? [paletteStepsEntry] : [])].find(
@@ -442,6 +453,14 @@ export function FxPicker({
         : currentEntry.compatibleAttributes.includes(SLIDER_SENTINEL) && sliderProps.some((p) => p.name === shown.attribute)
           ? { kind: 'slider' as const, options: sliderProps }
           : null
+  // Where a tap or an *On* move would start afresh in a family of its own: the rows' landings but the
+  // auditioned FX's (a swap), and the *On* row's options in another family than it runs in.
+  const moves = running != null && sentinel != null ? sentinel.options.map((p) => p.name).filter((n) => !sameFamily(n, running.attribute)) : []
+  // Joined, so the report fires on a change of what a tap would drive and not on every render.
+  const landingKey = [...new Set([...effects.flatMap((e) => attributeFor(e) ?? []), ...moves])]
+    .filter((a) => a !== running?.attribute)
+    .join('\n')
+  useEffect(() => onLanding?.(landingKey === '' ? [] : landingKey.split('\n')), [landingKey, onLanding])
 
   return (
     <div data-fx-picker className="flex min-h-0 flex-col gap-2">
@@ -511,7 +530,7 @@ export function FxPicker({
             onValueChange={(name) => {
               const pick = sentinel.kind === 'setting' ? { ...chosen, setting: name } : { ...chosen, slider: name }
               setChosen(pick)
-              void start(currentEntry, pick)
+              void start(currentEntry, pick, true)
             }}
           >
             <SelectTrigger aria-label="Attribute" className="h-7 text-xs">
