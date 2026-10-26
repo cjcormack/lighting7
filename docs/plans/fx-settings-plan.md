@@ -146,7 +146,7 @@ is titled *FX settings: session N — title*. Never merge a later session's PR b
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Parameter metadata: the desk declares, the editor reads | in review | `claude/fx-settings-s1` | [#299](https://github.com/cjcormack/lighting7/pull/299) | `dc33373d` |
+| 1 | Parameter metadata: the desk declares, the editor reads | merged | `claude/fx-settings-s1` | [#299](https://github.com/cjcormack/lighting7/pull/299) | `dc33373d` |
 | 2 | Wave: one FX for the level waves | in review | `claude/fx-settings-s2` | | |
 | 3 | Colour Cycle and Path absorb their siblings | planned | | | |
 | 4 | Each head later by: spread in steps, and Width one head | planned | | | |

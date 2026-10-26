@@ -956,7 +956,10 @@ desk-owned, attached to each show as it starts, like the effects service — and
   it; a struck unit is forgotten, one that failed stays for another try. Cancelled, it leaves the
   blackout. *Release* (`POST …/rig-safe/release`) lifts the blackout alone and keeps what Undo would
   strike. While a run is in flight — until its end has been acted on — another run, *Undo* and
-  *Release* are refused (`COMMAND_RUN_BUSY`).
+  *Release* are refused (`COMMAND_RUN_BUSY`). The frame's `run.finished` means the same: it is set
+  only once that end has been acted on — the blackout, *Undo*'s lamps, `notOff` — never as soon as
+  the last hold ends, so no window sees a finished run without them, and a window that sees one
+  finished may send *Undo* or *Release* without meeting `COMMAND_RUN_BUSY`.
 - **Quit desk** (`POST /install/quit` `{force?}`, D13) is separate (D9): admin only, refused on the
   public listener whatever the role (`QUIT_LOCAL_ONLY`), and `RIG_NOT_SAFE` unless the rig is ready,
   made safe and cooling, or the caller sends `force`. It answers 202, writes the scaler writer's pending rows and exits 0

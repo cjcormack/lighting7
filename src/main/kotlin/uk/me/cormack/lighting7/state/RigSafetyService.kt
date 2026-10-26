@@ -70,6 +70,10 @@ class RigSafetyService(private val state: State) {
         val startedAtMs: Long,
         val units: List<BulkCommandRun.UnitState>,
         val withoutCommand: Int,
+        /**
+         * Its end has been acted on — the blackout, *Undo*'s lamps, what is not off — not merely its
+         * last hold ended, so no frame shows a finished run without them.
+         */
         val finished: Boolean,
         val cancelled: Boolean,
     )
@@ -284,10 +288,13 @@ class RigSafetyService(private val state: State) {
         publish()
     }
 
-    /** Stop the run in flight: what has not started is cancelled, a hold running finishes. */
+    /**
+     * Stop the run in flight: what has not started is cancelled, a hold running finishes. A run whose
+     * last hold has ended but whose end is still being acted on has nothing left to stop.
+     */
     fun cancel(): Boolean {
-        val current = synchronized(lock) { run?.takeIf { !it.finished } } ?: return false
-        current.cancel()
+        val current = synchronized(lock) { active } ?: return false
+        if (!current.finished) current.cancel()
         return true
     }
 
@@ -454,20 +461,20 @@ class RigSafetyService(private val state: State) {
                 blackout = blackout,
                 undo = projectId?.let { undoByProject[it]?.units?.map { (k, n) -> k to n } }.orEmpty(),
                 notOff = notOff,
-                run = run?.let(::runSnapshot),
+                run = run?.let { runSnapshot(it, finished = it.finished && active !== it) },
                 lampsOff = lampOffs.filterKeys { it.first == projectId }.values.sortedBy { it.offAtMs },
             )
         }
     }
 
-    private fun runSnapshot(run: BulkCommandRun) = RunSnapshot(
+    private fun runSnapshot(run: BulkCommandRun, finished: Boolean = false) = RunSnapshot(
         id = run.id,
         role = run.role,
         purpose = run.purpose,
         startedAtMs = run.startedAtMs,
         units = run.snapshot(),
         withoutCommand = run.withoutCommand,
-        finished = run.finished,
+        finished = finished,
         cancelled = run.cancelled,
     )
 
