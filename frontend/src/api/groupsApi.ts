@@ -43,7 +43,7 @@ export interface GroupDetail extends GroupSummary {
 
 export type BlendMode = 'OVERRIDE' | 'ADDITIVE' | 'MULTIPLY' | 'MAX' | 'MIN'
 
-export type ElementMode = 'PER_FIXTURE' | 'FLAT'
+export type ElementMode = 'WHOLE' | 'FLAT' | 'PER_FIXTURE'
 
 export type SpreadOrder =
   | 'NORMAL'

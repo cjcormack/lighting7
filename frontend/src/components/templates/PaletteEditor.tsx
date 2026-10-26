@@ -53,6 +53,7 @@ import {
   type PaletteSummary,
 } from '@/api/palettesApi'
 import { formatError } from '@/lib/formatError'
+import { NEW_FX_ELEMENT_MODE } from '@/components/fx/fxConstants'
 import { FxFields } from '@/components/fx/FxFields'
 import { startingSpec, paletteDraftOf, withPaletteDraft, type FxDraft, type FxScope } from '@/components/fx/fxEditorModel'
 import { swappedTiming } from '@/lib/fxTiming'
@@ -264,7 +265,8 @@ export function PaletteEditor({
           blendMode: spec.blendMode,
           order: prev?.order ?? 'NORMAL',
           phaseOffset: prev?.phaseOffset ?? 0,
-          elementMode: null,
+          // A swap keeps the palette's mode; only its first FX starts on Fixtures.
+          elementMode: prev != null ? (prev.elementMode ?? null) : NEW_FX_ELEMENT_MODE,
           elementFilter: null,
           timing: null,
           parameters: { ...spec.parameters, ...extra?.parameters },
@@ -699,9 +701,10 @@ function FxControls({
 
 /**
  * The Spread section (Order, Spread %, Wings, Segments, Parts) over eight notional heads — no
- * `headCount`, since a palette has no target — and nothing else that needs a head.
+ * `headCount`, since a palette has no target — and *Over*, which a pad's press reads on whatever
+ * heads it lands; nothing else that needs a head.
  */
-const PALETTE_SCOPE: FxScope = { heads: true, elementMode: false, elementFilter: false, timing: false }
+const PALETTE_SCOPE: FxScope = { heads: true, elementMode: true, elementFilter: false, timing: false }
 
 /**
  * Where a step effect starts on an effect palette (effects plan §3.6): Palette Steps under this

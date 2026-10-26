@@ -729,8 +729,8 @@ Release folds to its glyph and the scope line drops the fade.
   **open**, two-line rows with pause and stop, up to half the sheet, scrolling itself; and
   **adding**, `FxPicker` in the open tray. While the programmer is blind a programmer FX's chip
   takes Blind's amber dot (its hover adds *held · Blind*) and its row the `HeldBlindMark`: the desk
-  is holding it, phase kept, until Blind goes off (show-cue-editing plan D7). A group's FX on the fixture reads *via <group>* (with
-  its element mode), and its stop **asks first** — the editor's × too — since it stops the FX on
+  is holding it, phase kept, until Blind goes off (show-cue-editing plan D7). A group's FX on the fixture reads *via <group>*, and
+  any FX landing on elements its Over (*over fixtures*, `elementModeSummary`), and its stop **asks first** — the editor's × too — since it stops the FX on
   every member. A fixture's head row sees an FX on the fixture, which the desk paints onto the
   heads (`fxReaching`, the one filter the rows and the tray share).
 - **The picker** (`components/fx/FxPicker.tsx`, D9, D10): a family segment (Intensity · Colour ·
@@ -799,7 +799,12 @@ Release folds to its glyph and the scope line drops the fade.
   blend (every FX, so nothing is out of reach), **Runs** — *Forever* or a count of cycles, after
   which each head hands back to what is underneath (effects plan D9; a null count is sent as
   `runForever: true`, since the frame's absent `runs` means keep) — and — on a group or a fixture with
-  heads — *Timing: Per cycle | Per head* (over `timing`, `CYCLE` | `HEAD`), Element mode and the head filter. **The
+  heads — *Timing: Per cycle | Per head* (over `timing`, `CYCLE` | `HEAD`) and the head filter. **Over** — *Fixtures ·
+  Elements · Each fixture* (`WHOLE`, `FLAT`, `PER_FIXTURE`; FX editor follow-ups plan D7), what the spread counts where
+  the FX lands on fixtures' elements — sits under Direction and Order wherever a target fixture has elements, and every
+  door that starts or creates an FX writes `WHOLE` (D8: the picker, a cue's draft FX, a new FX palette), while a stored
+  FX naming none is Each fixture (`NEW_FX_ELEMENT_MODE` / `STORED_ELEMENT_MODE`, `fxConstants.ts`; a preview's draft says
+  the stored one, since the add route reads an absent one as Fixtures). **The
   spread's shape is the *Spread* section's** (effects plan D11, §4.1; `SpreadSection`), a disclosure above Shape on a group or a
   fixture with heads, and always on an FX palette: the **Shapes** (FX editor plan D11, below), *Spread* %,
   *Wings* (hidden under a mirrored Order — Centre out, Centre in — and set back to 1 in the same
@@ -808,8 +813,9 @@ Release folds to its glyph and the scope line drops the fade.
   place — a row of **phase dials**: eight notional heads on a palette, the FX's own live
   (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion` counted: one per fixture
   where the first fixture carries the FX's attribute itself (`carriesFxAttribute`: a slider or
-  setting by name, a colour or position by type, the desk's traits), else its heads, a `FLAT` group's
-  head filter across the whole strip on its global index, a `PER_FIXTURE` one's within each fixture;
+  setting by name, a colour or position by type, the desk's traits), else its heads: one unit a fixture
+  under `WHOLE`, a `FLAT` group's head filter across the whole strip on its global index, a
+  `PER_FIXTURE` one's within each fixture;
   sixteen dials, then *+n*). Under Segments, Wings or Parts Position's continuous rank snaps to its
   nearest slot first, as the desk's `wholeRanks` does. Its summary says the Shape, else *Custom*, then the non-defaults: *Custom · 50 % · 2 wings*.
   The four ride `updateFx` once touched (`OPTIONAL_FIELDS`), `parts: 0` turning them off. **The
@@ -930,8 +936,8 @@ Release folds to its glyph and the scope line drops the fade.
   scales each head's colour, so it is never one group entry. The row's × over a group's *All* is one group `clearEntry`.
 - **FX follow the pick** (`TrayPick`): the tray lists what reaches the picked heads or members
   (`fxReaching`, still the one filter), an FX on one head reading *on Head 3*. **+ FX**
-  starts on the fixture or the group for *All* (a group's with its Order, Element mode in the
-  editor's Advanced), on that head or member alone for one (`headAsFixture` — the desk resolves a
+  starts on the fixture or the group for *All* (a group's with its Order and Over in the
+  editor), on that head or member alone for one (`headAsFixture` — the desk resolves a
   head's key as an FX target), on the fixture with the **element filter** that names a pick of
   exactly the odd, even or a half of the heads (`elementFilterFor`, the desk's `ElementFilter` clause
   for clause), and otherwise says why it cannot — one FX has no target for heads 1, 2 and 7. A
@@ -1436,8 +1442,9 @@ fetched once by the route, so no row subscribes to anything.)
 plan D16, session 5) — D12's question, through the live editor's own rules (`fx/centreMode.ts`,
 re-exported by `fxEditorModel.ts`) rather than a second copy. `PaletteEditor`'s FX branch
 mounts **`FxFields`** — the live editor's fields over the palette's draft (`paletteDraftOf`
-/ `withPaletteDraft`), with no target: the Order beside Direction, no *Timing* segment, element mode,
-head filter, and the same timing chip — *Seconds* or a master — as the live editor.
+/ `withPaletteDraft`), with no target: the Order beside Direction, *Over* (a palette's own, read and
+saved by both and compared by `differsFromPalette`; a new one starts on `WHOLE`, a type swap keeps
+it, *New palette from FX* takes the running FX's), no *Timing* segment or head filter, and the same timing chip — *Seconds* or a master — as the live editor.
 **`EffectParameterForm` is
 retired**, not rebuilt: it had been that branch's form and nothing else's since session 3. Choosing
 an FX starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement FX
@@ -5258,9 +5265,9 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   with the offer's reason, as *+ FX* does everywhere (`useProgrammerAddFx`).
 - **The inspector is the live editor** (`SplitFxEditor`, so the split, the 50 ms floor, Revert,
   *Update palette* and *Reset to palette* are unchanged) with `layout="inspector"`, which orders
-  `FxFields` as §4.5 does: Cycle · Amount · Direction · Order, **Shape** (every parameter), Spread
+  `FxFields` as §4.5 does: Cycle · Amount · Direction · Order · Over, **Shape** (every parameter), Spread
   (the Shapes, the fields and the offset ladder), **Over what's underneath** (the family's question
-  and the raw blend), **Advanced** (Phase, Timing, Runs, element mode and filter). Every other host
+  and the raw blend), **Advanced** (Phase, Timing, Runs and the head filter). Every other host
   keeps the old order, and the phase dials in place of the ladder.
 - **Widths are the editor's own** (`useContainerBand`, `FX_EDITOR_BAND_FLOORS`): from 1100 three
   columns, list 248 · graph · inspector 340; from 760 list · graph, the inspector over the graph's

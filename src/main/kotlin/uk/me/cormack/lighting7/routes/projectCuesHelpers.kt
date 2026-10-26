@@ -107,7 +107,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 blendMode = effect.blendMode.name,
                 order = dyn.order.javaClass.simpleName,
                 phaseOffset = effect.storedPhaseOffset(dyn),
-                elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
+                elementMode = ElementMode.stored(effect.spreadsOverMembers, dyn.elementMode),
                 elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
                 timing = if (dyn.timing != effect.effect.defaultTiming) dyn.timing else null,
                 parameters = effect.effect.parameters,

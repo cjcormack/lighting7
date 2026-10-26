@@ -76,7 +76,14 @@ describe('NewPaletteFromFxSheet on a step effect', () => {
   it('saves Slot Steps as a Beam palette naming the setting it steps', async () => {
     open(running({ fxType: 'SlotSteps', attribute: 'gobo', parameters: { slots: 'GOBO_3,GOBO_5' } }))
     await waitFor(() => expect(mocks.create).toHaveBeenCalled())
-    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'SlotSteps', family: 'beam', attribute: 'gobo' })
+    // An FX reporting no Over starts the palette on Fixtures.
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'SlotSteps', family: 'beam', attribute: 'gobo', elementMode: 'WHOLE' })
+  })
+
+  it('keeps the running FX\'s own Over', async () => {
+    open(running({ fxType: 'SlotSteps', attribute: 'gobo', parameters: { slots: 'GOBO_3,GOBO_5' }, elementMode: 'FLAT' }))
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled())
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ elementMode: 'FLAT' })
   })
 
   it("saves Palette Steps under its palettes' family, naming no property", async () => {

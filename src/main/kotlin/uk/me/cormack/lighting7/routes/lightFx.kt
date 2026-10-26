@@ -634,9 +634,7 @@ internal fun buildFxInstance(
     request.order?.let {
         instance.order = FxSpecCoercion.Strict.order(it)
     }
-    request.elementMode?.let {
-        instance.elementMode = FxSpecCoercion.Strict.elementMode(it)
-    }
+    instance.elementMode = request.elementMode?.let { FxSpecCoercion.Strict.elementMode(it) } ?: ElementMode.NEW_FX_DEFAULT
     request.elementFilter?.let {
         instance.elementFilter = FxSpecCoercion.Strict.elementFilter(it)
     }

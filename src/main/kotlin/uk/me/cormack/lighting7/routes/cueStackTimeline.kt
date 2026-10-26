@@ -10,6 +10,8 @@ import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.ElementMode
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
@@ -220,7 +222,7 @@ private class TimelineReads(
     /**
      * What [uk.me.cormack.lighting7.fx.comparableFxSettings] compares, read off the stored row
      * rather than a running instance: the canonical effect type, the parameters over the library's
-     * defaults, an element mode only over members, the filter and step timing only where they differ
+     * defaults, an element mode as [ElementMode.stored] keeps it, the filter and step timing only where they differ
      * from the default, and only the master the effect's timing reads, master 1 spelled by its uuid.
      */
     private fun comparableSettingsOf(
@@ -238,7 +240,10 @@ private class TimelineReads(
             blendMode = effect.blendMode.uppercase(),
             order = effect.order.uppercase(),
             phaseOffset = effect.phaseOffset,
-            elementMode = effect.elementMode?.uppercase()?.takeIf { overMembers },
+            elementMode = effect.elementMode?.let { raw ->
+                FxSpecCoercion.Names.elementMode(raw)?.let { ElementMode.stored(overMembers, it) }
+                    ?: raw.uppercase().takeIf { overMembers }
+            },
             elementFilter = effect.elementFilter?.takeUnless { it.equals("ALL", ignoreCase = true) },
             timing = effect.timing?.takeUnless { it == (registration?.defaultTiming ?: Timing.CYCLE) },
             parameters = (defaults + effect.parameters).toSortedMap(),

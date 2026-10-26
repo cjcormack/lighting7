@@ -51,7 +51,7 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { normalizeFxName } from '../busking/buskingTypes'
-import { getFxDescription } from './fxConstants'
+import { getFxDescription, NEW_FX_ELEMENT_MODE } from './fxConstants'
 import { familyOfFx } from '../fxEditor/fxEditorList'
 import {
   PICKER_FAMILIES,
@@ -405,6 +405,7 @@ export function FxPicker({
         blendMode: spec.blendMode as BlendMode,
         phaseOffset: 0,
         parameters: spec.parameters,
+        elementMode: NEW_FX_ELEMENT_MODE,
         ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
       }
       const created = await (

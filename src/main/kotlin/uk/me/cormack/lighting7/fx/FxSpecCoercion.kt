@@ -207,7 +207,7 @@ object FxSpecCoercion {
             resolve(raw, context, "blendMode", BlendMode.OVERRIDE, Names::blendMode)
 
         fun elementMode(raw: String?, context: () -> String): ElementMode =
-            resolve(raw, context, "elementMode", ElementMode.PER_FIXTURE, Names::elementMode)
+            resolve(raw, context, "elementMode", ElementMode.STORED_DEFAULT, Names::elementMode)
 
         fun elementFilter(raw: String?, context: () -> String): ElementFilter =
             resolve(raw, context, "elementFilter", ElementFilter.ALL, Names::elementFilter)

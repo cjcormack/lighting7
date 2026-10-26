@@ -235,6 +235,14 @@ internal class FxSampler(
         }
         fun elements(keys: List<String>, plan: DistributionPlan) =
             spread(keys, plan, DistributionPlan.elementLadder(dyn.order, keys.size, dyn.spreadShape))
+        // Each element a row of its own, at its fixture's place among the fixtures.
+        fun whole(plan: DistributionPlan) {
+            val units = expansion.whole
+            val ladder = DistributionPlan.elementLadder(dyn.order, units.size, dyn.spreadShape)
+            for ((i, keys) in units.withIndex()) {
+                for (key in keys) out[key] = Member(units.size, plan.offsets[i], plan.contexts[i], FxLadderRung(ladder, i))
+            }
+        }
         when (expansion.kind) {
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
                 val carry = effect.splitMember
@@ -242,7 +250,10 @@ internal class FxSampler(
                     if (carry == null) Member(1, 0.0, FxContext.SINGLE, FxLadderRung.SINGLE)
                     else Member(carry.groupSize, carry.offset, carry.context, rung = null)
             }
-            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> elements(expansion.flat, view.plans(effect, expansion, dyn).flat)
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> {
+                val plans = view.plans(effect, expansion, dyn)
+                if (dyn.elementMode == ElementMode.WHOLE) whole(plans.whole) else elements(expansion.flat, plans.flat)
+            }
             FxTargetExpansion.Kind.GROUP_MEMBERS -> spread(
                 expansion.members.map { it.key },
                 view.plans(effect, expansion, dyn).members,
@@ -251,6 +262,7 @@ internal class FxSampler(
             FxTargetExpansion.Kind.GROUP_ELEMENTS -> {
                 val plans = view.plans(effect, expansion, dyn)
                 when (dyn.elementMode) {
+                    ElementMode.WHOLE -> whole(plans.whole)
                     ElementMode.PER_FIXTURE -> expansion.perFixture.forEachIndexed { i, keys -> elements(keys, plans.perFixture[i]) }
                     ElementMode.FLAT -> elements(expansion.flat, plans.flat)
                 }

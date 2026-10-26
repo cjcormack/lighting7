@@ -3,6 +3,7 @@ import type { ActiveFx, FxLibraryEntry, FxParameterDef } from '@/store/fixtureFx
 import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
 import { isMirroredOrder } from '@/lib/spreadShape'
 import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
+import { STORED_ELEMENT_MODE } from './fxConstants'
 
 export {
   CENTRE_BYTE,
@@ -159,7 +160,7 @@ export function draftOf(effect: ActiveFx): FxDraft {
     phaseOffset: effect.phaseOffset,
     timing: effect.timing ?? 'CYCLE',
     order: effect.order ?? 'NORMAL',
-    elementMode: effect.elementMode ?? 'PER_FIXTURE',
+    elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     elementFilter: effect.elementFilter ?? 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
@@ -183,7 +184,7 @@ export function draftOf(effect: ActiveFx): FxDraft {
 export interface FxScope {
   /** A group, or a fixture with heads: Order and Timing. */
   heads: boolean
-  /** A group with multi-element members. */
+  /** A target with a fixture that has elements: *Over*. */
   elementMode: boolean
   /** A fixture with heads, or a group with multi-element members. */
   elementFilter: boolean
@@ -353,10 +354,10 @@ export function carriesFxAttribute(attributes: readonly CarrierAttribute[] | nul
  * `FxEngine.buildExpansion`, counted. The first fixture stands for a group, as on the desk: where it
  * carries the effect's property itself ([carriesFxAttribute]) the effect runs once per fixture —
  * a group's members, unfiltered, or the one fixture — whatever heads it has (a pixel bar's master
- * dimmer). Otherwise it runs over the heads: one fixture's, narrowed by the head filter; a group's
- * under `FLAT` as one strip, the filter across the whole strip on its global index; under
- * `PER_FIXTURE` each member's own, filtered within it — the most any member keeps. A preview's
- * count, never sent.
+ * dimmer). Otherwise it runs over the heads: under `WHOLE` one unit per fixture with heads; one
+ * fixture's, narrowed by the head filter; a group's under `FLAT` as one strip, the filter across the
+ * whole strip on its global index; under `PER_FIXTURE` each member's own, filtered within it — the
+ * most any member keeps. A preview's count, never sent.
  */
 export function spreadHeadCount(
   fixtures: readonly { attributes?: readonly CarrierAttribute[] | null; elements?: readonly unknown[] | null }[],
@@ -370,6 +371,7 @@ export function spreadHeadCount(
   if (!first || carriesFxAttribute(first.attributes, attribute)) return perFixture
   const elementCounts = fixtures.map((f) => f.elements?.length ?? 0)
   if (!elementCounts.some((n) => n > 0)) return perFixture
+  if (elementMode === 'WHOLE') return isGroup ? elementCounts.filter((n) => n > 0).length : 1
   if (isGroup && elementMode === 'FLAT') {
     return filteredElementCount(
       elementCounts.reduce((sum, n) => sum + n, 0),
@@ -391,8 +393,9 @@ export interface SelectionUnit {
  * `buildSelectionExpansion`, counted. Each unit, in selection order, is one member where it carries
  * the property itself, else its heads that carry it; a head reached twice counts once, at its first
  * place, and a unit left with nothing is skipped. With no unit its heads, the members are the count;
- * otherwise a member is a run of one head beside each fixture's run of its heads — one strip under
- * `FLAT`, filtered across it, else the most any run keeps. A preview's count, never sent.
+ * otherwise a member is a run of one head beside each fixture's run of its heads — one unit each under
+ * `WHOLE`, one strip under `FLAT`, filtered across it, else the most any run keeps. A preview's count,
+ * never sent.
  */
 export function selectionHeadCount(
   units: readonly SelectionUnit[],
@@ -418,7 +421,7 @@ export function selectionHeadCount(
       anyHeads = true
     }
   }
-  if (!anyHeads) return runs.length
+  if (!anyHeads || elementMode === 'WHOLE') return runs.length
   if (elementMode === 'FLAT') return filteredElementCount(runs.reduce((sum, n) => sum + n, 0), elementFilter)
   return Math.max(...runs.map((n) => filteredElementCount(n, elementFilter)))
 }
@@ -539,13 +542,15 @@ export interface PaletteFxFields {
   parts?: number
   /** The palette's resolved timing source, where the desk has said it. */
   timingSource?: string | null
+  /** *Over* as stored; absent is Each fixture. */
+  elementMode?: string | null
 }
 
 /**
  * A template's effect as the editor's draft (fixture-fx-sheets plan D16): the same `FxDraft` a live
  * instance opens on, so `PaletteEditor` asks the *Centre* question through the same rules. The
- * fields a template has no answer for — Timing, element mode, the head filter — read as their
- * defaults and are never written back ([withPaletteDraft]).
+ * fields a template has no answer for — Timing and the head filter — read as their defaults and are
+ * never written back ([withPaletteDraft]); its *Over* is its own.
  */
 export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | null): FxDraft {
   return {
@@ -555,7 +560,7 @@ export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | 
     phaseOffset: effect.phaseOffset ?? 0,
     timing: 'CYCLE',
     order: effect.order,
-    elementMode: 'PER_FIXTURE',
+    elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     elementFilter: 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
@@ -574,12 +579,13 @@ export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | 
  * [effect] with the draft's fields written back — only the ones a palette stores. A draft opened
  * on a running instance whose DTO said nothing about its distribution (a single fixture: the desk
  * leaves it out where it does not apply) holds `draftOf`'s `NORMAL` guess, so [order] false
- * keeps the palette's own rather than writing the guess over it.
+ * keeps the palette's own rather than writing the guess over it; [elementMode] false does the same
+ * for an element mode the instance did not report.
  */
 export function withPaletteDraft<E extends PaletteFxFields>(
   effect: E,
   draft: FxDraft,
-  { order = true }: { order?: boolean } = {},
+  { order = true, elementMode = true }: { order?: boolean; elementMode?: boolean } = {},
 ): E {
   return {
     ...effect,
@@ -588,6 +594,10 @@ export function withPaletteDraft<E extends PaletteFxFields>(
     blendMode: draft.blendMode,
     phaseOffset: draft.phaseOffset,
     order: order ? draft.order : effect.order,
+    // Said where it is not the stored default, or where the palette already said one.
+    ...(elementMode && (draft.elementMode !== STORED_ELEMENT_MODE || effect.elementMode != null)
+      ? { elementMode: draft.elementMode }
+      : {}),
     // Seconds follows no master (D7), so a draft on Seconds stores none beside the flag.
     speedMasterUuid: draft.seconds ? null : draft.speedMasterUuid,
     rateSpeedMasterUuid: draft.seconds ? null : draft.rateSpeedMasterUuid,
@@ -628,7 +638,7 @@ export function cueFxDraftOf(effect: CueFxFields, timingSource?: string | null):
   return {
     ...paletteDraftOf(effect, timingSource),
     timing: effect.timing ?? 'CYCLE',
-    elementMode: effect.elementMode ?? 'PER_FIXTURE',
+    elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     elementFilter: effect.elementFilter ?? 'ALL',
   }
 }
@@ -643,7 +653,7 @@ export function withCueFxDraft<E extends CueFxFields>(effect: E, draft: FxDraft)
   return {
     ...withPaletteDraft(effect, draft),
     ...(draft.timing !== 'CYCLE' || effect.timing != null ? { timing: draft.timing } : {}),
-    ...(draft.elementMode !== 'PER_FIXTURE' || effect.elementMode != null ? { elementMode: draft.elementMode } : {}),
+    ...(draft.elementMode !== STORED_ELEMENT_MODE || effect.elementMode != null ? { elementMode: draft.elementMode } : {}),
     ...(draft.elementFilter !== 'ALL' || effect.elementFilter != null ? { elementFilter: draft.elementFilter } : {}),
   }
 }
@@ -693,12 +703,13 @@ export function differsFromPalette(
   effect: PaletteFxFields,
   master1Uuid: string | null,
   defaults: Record<string, string> = {},
-  { order = true }: { order?: boolean } = {},
+  { order = true, elementMode = true }: { order?: boolean; elementMode?: boolean } = {},
 ): boolean {
   if (Math.abs(draft.cycle - effect.cycle) > 1e-6) return true
   if (draft.blendMode.toUpperCase() !== effect.blendMode.toUpperCase()) return true
   if (Math.abs(draft.phaseOffset - (effect.phaseOffset ?? 0)) > 1e-6) return true
   if (order && draft.order !== effect.order) return true
+  if (elementMode && draft.elementMode !== (effect.elementMode ?? STORED_ELEMENT_MODE)) return true
   if ((draft.speedMasterUuid ?? master1Uuid) !== (effect.speedMasterUuid ?? master1Uuid)) return true
   if ((draft.rateSpeedMasterUuid ?? null) !== (effect.rateSpeedMasterUuid ?? null)) return true
   if (draft.seconds !== isOnSeconds(effect, effect.timingSource)) return true

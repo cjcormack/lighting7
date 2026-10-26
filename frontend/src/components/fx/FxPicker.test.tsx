@@ -151,6 +151,8 @@ describe('FxPicker', () => {
       // D16: one bar, on the master tagged with its family.
       cycle: 4,
       speedMasterUuid: 'm-position',
+      // New FX start on Fixtures (FX editor follow-ups D8).
+      elementMode: 'WHOLE',
     })
     expect(updateFx).not.toHaveBeenCalled()
   })

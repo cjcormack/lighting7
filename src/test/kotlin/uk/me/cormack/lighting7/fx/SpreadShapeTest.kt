@@ -37,9 +37,14 @@ class SpreadShapeTest {
         val parts: Int = 0,
         val offsets: List<Double>,
         val slots: Int,
+        val over: Over? = null,
     ) {
         val shape get() = SpreadShape(spread, wings, segments, parts)
     }
+
+    /** One element mode over [fixtures] fixtures of [elementsEach] elements each. */
+    @Serializable
+    private data class Over(val mode: String, val fixtures: Int, val elementsEach: Int)
 
     @Serializable
     private data class Vector(val cases: List<Case>)
@@ -75,6 +80,36 @@ class SpreadShapeTest {
                 spread = case.spread, wings = case.wings, segments = case.segments, parts = case.parts,
             )
             assertEquals(case.slots, dyn.distinctSlots(case.heads), "${case.name}: FxDynamics.distinctSlots")
+        }
+    }
+
+    @Test
+    fun `under each element mode every element takes its unit's offset`() {
+        val cases = vector.cases.filter { it.over != null }
+        assertTrue(cases.map { it.over!!.mode }.toSet() == ElementMode.entries.map { it.name }.toSet(), "every mode has a case")
+        for (case in cases) {
+            val over = case.over!!
+            val strategy = assertNotNull(SpreadOrder.byName(case.order), case.name)
+            val keys = List(over.fixtures) { f -> List(over.elementsEach) { e -> "f$f.e$e" } }
+            val expansion = FxTargetExpansion(
+                structureVersion = 0, elementFilter = ElementFilter.ALL, kind = FxTargetExpansion.Kind.GROUP_ELEMENTS,
+                coverageKeys = keys.flatten(), flat = keys.flatten(), perFixture = keys, members = emptyList(),
+            )
+            val plans = FxDistributionPlans.build(expansion, strategy, case.shape)
+            for (f in 0 until over.fixtures) {
+                for (e in 0 until over.elementsEach) {
+                    val (units, offset, expected) = when (ElementMode.valueOf(over.mode)) {
+                        ElementMode.WHOLE -> Triple(expansion.whole.size, plans.whole.offsets[f], case.offsets[f])
+                        ElementMode.FLAT -> {
+                            val i = f * over.elementsEach + e
+                            Triple(expansion.flat.size, plans.flat.offsets[i], case.offsets[i])
+                        }
+                        ElementMode.PER_FIXTURE -> Triple(expansion.perFixture[f].size, plans.perFixture[f].offsets[e], case.offsets[e])
+                    }
+                    assertEquals(case.heads, units, "${case.name}: the units the spread counts")
+                    assertTrue(abs(offset - expected) < 1e-9, "${case.name}: fixture $f element $e is at $offset, not $expected")
+                }
+            }
         }
     }
 

@@ -116,8 +116,8 @@ follow-ups: session N — title*. Never merge a later session's PR before an ear
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Steps land on their sample | in review | claude/fx-editor-followups-s1 | | |
-| 2 | Fixtures: the third element mode, and Over | planned | | | |
+| 1 | Steps land on their sample | in review | claude/fx-editor-followups-s1 | [#292](https://github.com/cjcormack/lighting7/pull/292) | 1da63241 |
+| 2 | Fixtures: the third element mode, and Over | in review | claude/fx-editor-followups-s2 | | |
 | 3 | The graph: ruler, knobs, fixture rows and room for names | planned | | | |
 | 4 | The list's head: nothing selected and the subject | planned | | | |
 
@@ -197,6 +197,27 @@ the next; whoever merges the last fills its own.
   writes `WHOLE`.
 - **Docs:** `docs/fx-engineering.md` (element modes, the two defaults), `docs/sync-engineering.md`
   (version 40), root and `frontend/CLAUDE.md` where they describe Element mode.
+- **Recorded (session 2):** the plan treated element mode as a group's question, and the code did
+  too: Record, the cue capture, a Look's settings and the Timeline dropped the mode off anything but
+  a group or a selection, and the FX DTO reported it only over members. Under Fixtures a lone
+  multi-element fixture differs (its elements alike, where Elements and Each fixture chase them), so
+  a stored row now keeps the mode over members as before and, on a lone fixture, `WHOLE` alone
+  (`ElementMode.stored`, Record's canonical form beside it), old rows comparing unchanged; the DTO
+  reports it wherever the FX lands on elements, and Over is drawn for a lone fixture with heads too.
+  The preview's draft (`previewDraftOf`) sent no mode for a stored FX naming none, which `/fx/add` now
+  reads as Fixtures, so it says `PER_FIXTURE`. MCP's tools write `WHOLE` into the row rather than
+  reading an absent one as it later. The shared vector's element-mode cases carry `over` (a mode,
+  fixtures and elements each): the desk checks every element takes its unit's offset, the client that
+  `spreadHeadCount` counts the same units. Over is drawn as a segment on its own row under Direction
+  and Order, as the page's board does; three labels do not fit beside Order in the inspector.
+  Chris's calls during the session's review: a palette **owns** its Over (drawn in the palette
+  editor, compared for a pad's *edited*, saved by *Update palette*; a type swap keeps it); *New
+  palette from FX* keeps the running FX's Over, Fixtures where it reports none; summary lines say
+  *over fixtures* · *over elements* · *each fixture*, and the tray shows a lone fixture's. Copies split
+  from one fixture of a stateful FX under Fixtures share one step a tick for each effect object they
+  run (`SplitMember.step`), so a narrow leaves the fixture's elements alike and an edit naming some of
+  them lands on those alone. `startingSpec` names no mode: the doors it serves write `WHOLE` beside
+  it (the picker's start, the draft arm, a new FX palette), since a type swap must keep the mode.
 
 ### Session 3 — The graph: ruler, knobs, fixture rows and room for names
 

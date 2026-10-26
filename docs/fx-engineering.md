@@ -1686,6 +1686,8 @@ When an `FxInstance` targets a group (or a selection, §"Over a selection"), the
 │     └─ NO  → Are members MultiElementFixture?                    │
 │               └─ YES → Do elements have the attribute?           │
 │                         └─ YES → Check elementMode:              │
+│                              ├─ WHOLE: Each parent is one unit, │
+│                              │   its elements take its output    │
 │                              ├─ PER_FIXTURE: For each parent,    │
 │                              │   distribute across its elements  │
 │                              │   (all fixtures look the same)    │
@@ -1696,19 +1698,35 @@ When an `FxInstance` targets a group (or a selection, §"Over a selection"), the
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Element Mode for Multi-Element Groups
+### Element Mode: what *Over* counts
 
-When a group FX targets an attribute only available on elements (not the parent
-fixtures), `ElementMode` determines the distribution dimension:
+When an FX targets an attribute only its fixtures' elements have (not the fixtures themselves) —
+on a group, a selection, or one multi-element fixture — `ElementMode` decides what the spread
+counts. The screen calls it **Over** (FX editor follow-ups plan D7):
 
-| Mode | Description | Example (2×4-head fixtures) |
-|------|-------------|----------------------------|
-| `PER_FIXTURE` | Each fixture gets the FX independently. Distribution runs within each fixture's elements. | All fixtures look the same — head #0 on fixture A matches head #0 on fixture B |
-| `FLAT` | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (indices 0-7), chase sweeps across all heads sequentially |
+| Mode | Over | Description | Example (2×4-head fixtures) | MagicQ |
+|------|------|-------------|----------------------------|--------|
+| `WHOLE` | Fixtures | Each fixture is one unit. Order and the spread's shape count fixtures, and every element a fixture paints takes that unit's output. | 2 units: each fixture's four heads alike, the two fixtures apart | Dup Elements |
+| `FLAT` | Elements | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (indices 0-7), chase sweeps across all heads sequentially | Include Elements |
+| `PER_FIXTURE` | Each fixture | Each fixture gets the FX independently. Distribution runs within each fixture's elements. | All fixtures look the same — head #0 on fixture A matches head #0 on fixture B | Use Elements |
 
-`ElementMode` is stored on `FxInstance` and defaults to `PER_FIXTURE`. It is only
-relevant when group members are multi-element fixtures and the target attribute is
-at the element level. It has no effect when members directly have the target attribute.
+Under `WHOLE`, `FxTargetExpansion.whole` lists the units — `perFixture` for a group or a selection,
+the fixture's own `flat` list for one fixture — and `FxDistributionPlans.whole` spreads over them;
+the engine computes one output a unit (a stateful FX keyed on its first element) and writes it to
+each element. The element filter keeps its meaning: it picks which elements of each fixture are
+painted, filtered within the fixture, and a fixture it empties still counts as a unit, so no other
+fixture's offset moves. Over one fixture, `FLAT` and `PER_FIXTURE` are the same spread; `WHOLE` is
+the one that differs, so the FX DTO reports the mode wherever the FX lands on elements, and a stored
+row records it over members, and on a lone fixture only when it is `WHOLE`
+(`ElementMode.stored`, which Record's canonical form reads too).
+
+**Two defaults, named apart** (D8). A **stored** FX with no mode — a cue's, a Look's, a palette's,
+an archive's, through `FxSpecCoercion.Lenient` — is `ElementMode.STORED_DEFAULT`, `PER_FIXTURE`, so
+no row changes meaning. An FX a door **starts** with none named — `POST /fx/add`,
+`POST /programmer/fx`, `POST /groups/{name}/fx`, and MCP's FX tools, which write it into the row —
+is `ElementMode.NEW_FX_DEFAULT`, `WHOLE`; the client's creation doors (the picker, a cue's draft FX,
+a new FX palette) write `WHOLE` themselves. `FxDynamics`' own default, and so the script API's, is
+the stored one. It has no effect when the target or its members directly have the attribute.
 
 ### Orders
 
@@ -2137,7 +2155,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 ### Target expansion is cached, not re-derived
 
 Everything on this page about how a target expands — group members, `MultiElementFixture`
-elements, the `PER_FIXTURE`/`FLAT` split, `ElementFilter` — is resolved **once per FX per
+elements, the `WHOLE`/`FLAT`/`PER_FIXTURE` shapes, `ElementFilter` — is resolved **once per FX per
 register generation**, into an `FxTargetExpansion` held on the `FxInstance`. The compose pass reads
 it; it does not walk the group.
 
@@ -2156,7 +2174,7 @@ stamped *inside* the cached value and re-checked on every read. That is delibera
 `LookRegistry`, whose fast path returns a hit without re-validating and therefore needs a
 fill-time re-check, a retry loop and `putIfAbsent` — here a value built across an invalidation is
 simply rebuilt on the next read. `elementFilter` is part of the cache identity; `elementMode` is
-not, because both shapes it selects between are built up front.
+not, because every shape it selects between is built up front.
 
 The consequence to know about: an FX whose group or fixture has been deleted now logs
 "not found" **once per register generation** rather than on every tick.

@@ -8,6 +8,8 @@ import {
   spreadShapeOf,
   spreadSummary,
 } from './spreadShape'
+import { ELEMENT_MODE_OPTIONS } from '@/components/fx/fxConstants'
+import { spreadHeadCount } from '@/components/fx/fxEditorModel'
 
 /**
  * The dial preview's copy of the spread's shape against the desk's (effects plan P2). The vector is
@@ -34,6 +36,18 @@ describe('spreadOffsets', () => {
       c.offsets.forEach((expected, i) => {
         expect(Math.abs(offsets[i] - expected), `${c.name}: head ${i} is at ${offsets[i]}, not ${expected}`).toBeLessThan(1e-9)
       })
+    }
+  })
+
+  it('counts the units each element mode spreads over as the desk does', () => {
+    const cases = (vector.cases as Array<{ name: string; heads: number; over?: { mode: string; fixtures: number; elementsEach: number } }>).filter(
+      (c) => c.over != null,
+    )
+    expect(new Set(cases.map((c) => c.over!.mode))).toEqual(new Set(ELEMENT_MODE_OPTIONS.map((o) => o.value)))
+    for (const c of cases) {
+      const { mode, fixtures, elementsEach } = c.over!
+      const rig = Array.from({ length: fixtures }, () => ({ attributes: [], elements: Array.from({ length: elementsEach }, () => ({})) }))
+      expect(spreadHeadCount(rig, true, 'rgbColour', mode, 'ALL'), c.name).toBe(c.heads)
     }
   })
 

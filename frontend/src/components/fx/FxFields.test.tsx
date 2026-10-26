@@ -218,6 +218,21 @@ describe('FxFields', () => {
     expect(screen.queryByRole('combobox', { name: 'Distribution' })).toBeNull()
   })
 
+  it('draws Over beside Order where a fixture has elements, and nothing of it in Advanced (FX editor follow-ups D7)', () => {
+    fields(PULSE, draft(), HEADS)
+    expect(screen.queryByRole('radiogroup', { name: 'Over' })).toBeNull()
+    cleanup()
+    const { set } = fields(PULSE, draft({ elementMode: 'PER_FIXTURE' }), { heads: true, elementMode: true, elementFilter: true })
+    const over = screen.getByRole('radiogroup', { name: 'Over' })
+    expect([...over.querySelectorAll('[role="radio"]')].map((r) => r.textContent)).toEqual(['Fixtures', 'Elements', 'Each fixture'])
+    expect(screen.getByRole('radio', { name: 'Each fixture' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Fixtures' }))
+    expect(set).toHaveBeenLastCalledWith({ elementMode: 'WHOLE' })
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    expect(screen.queryByText('Element mode')).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Heads' })).toBeTruthy()
+  })
+
   it('writes Spread in percent and the three counts on Enter, refusing a count out of range', () => {
     // Parts start at 2 so that typing 0 is a change: a field already showing 0 fires no onChange.
     const { set } = fields(PULSE, draft({ parts: 2 }), HEADS)
