@@ -46,8 +46,6 @@ The plan's own rules:
 
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
-| `RigSafetyRoutesTest` "make rig safe that cannot turn every lamp off blacks out but is not ready", a bare `AssertionError` | #253's CI run 39954841494 (ab01733, 2026-10-23), 1 of 3796 tests; 6 of 6 local runs of the class pass on that commit | Partly traced: the test holds mac2 busy with a 2 s reset (`holdMsFor = { 2_000 }`) and expects *Make rig safe* to find it busy. Lamp-off starts every unit at once (`BulkCommandRun.together()`), so mac2 is refused only if the rig-safe POST reaches it inside those 2 s; on a loaded runner it can arrive later, mac2 turns off, `notOff` is empty and the run reads ready, failing `assertFalse(after.ready)`. Not confirmed which assertion failed: the log names only `Assert.java:89` | 2 |
-| `RigSafetyRoutesTest` "undo strikes the lamps it turned off once their restrike time is up, then releases the blackout", `only the selection's lamp expected:<[mac1]> but was:<[]>` | local full `./gradlew test` on `claude/terminology-s4` before its first commit (2026-10-23, Linux cloud container), 1 of 1 full runs; passes alone | Suspected, not traced: `awaitRunFinished` returns the first `rigSafety.state` whose run has finished, and under a loaded full run that snapshot can be published before *Undo*'s list is filled in, so `undo` reads empty. The class shares its timing sensitivity with the row above | 2 |
 | `PatchSheet.test.tsx` (frontend) "opens the ten swatches on Set and picks one; the same colour again sends nothing", `setPatchColours` never called after the Cyan click | local `vitest run` of the file on 500dc85 (2026-10-23, macOS), 4 of 4 runs; passes alone, and in that commit's CI run | Partly traced: it fails only after the Gel column's "takes the first match on Enter, and Open white clears a gel", which seems to leave a popover open, so the second Set opens no fresh swatches. Why CI's runner does not hit it is not known | 3 |
 | `AppliedTables.test.tsx` (frontend) "the Scenery table > draws Open only on a drawn drape…", `setScenery` last called with `e-tabs {open: 0.4}` instead of `e-cloth {trimM: 8}` | local `vitest run` of the file and `npm run check:quick` on b6964df and on `claude/terminology-s3` (2026-10-23), every run; passes alone (`-t`) and in the full `npm run check` | Suspected, not traced: order-dependence inside the Scenery `describe`, an earlier case leaving the stub's last call or an open popover behind, the pattern of the PatchSheet row | 3 |
 | `ProjectActionPlaces.test.tsx` (frontend), *for a show behind its venue*: `Test timed out in 5000ms` | a full local `npm run check` on `claude/fx-editor-followups-s2` before its first commit (2026-10-26, Linux cloud container, a backend suite and two review agents running beside it), 1 of 1; passes alone | Suspected, not traced: load. The container was also running the full backend suite, and the test renders three menus in one case | 4 |
@@ -59,6 +57,8 @@ The plan's own rules:
 
 | Test | Fixed in | What it was |
 |---|---|---|
+| `RigSafetyRoutesTest` "make rig safe that cannot turn every lamp off blacks out but is not ready", a bare `AssertionError` | session 2 | Seen on #253's CI run 39954841494 (ab01733, 2026-10-23), 1 of 3796 tests. Two causes, both traced, either enough to fail it. The test held mac2 busy with a 2 s reset and needed the rig-safe POST to reach mac2 inside those 2 s; it now holds mac2 until teardown. And the snapshot it read could be torn, as in the row below: one with the run finished but the blackout not yet set fails `assertTrue(after.blackout)` |
+| `RigSafetyRoutesTest` "undo strikes the lamps it turned off once their restrike time is up, then releases the blackout", `only the selection's lamp expected:<[mac1]> but was:<[]>` | session 2 | Seen locally in a full `./gradlew test` on `claude/terminology-s4` (2026-10-23). Traced, a code race (D3): `BulkCommandRun.execute()` published the run finished before `RigSafetyService` had acted on its end (the blackout, *Undo*'s lamps, `notOff`), so every window could see a finished *Make rig safe* with nothing to undo. A run now reads finished only once its end has been acted on. "a run is not finished until its end has been acted on" forces the window: it failed 5 of 5 runs on main |
 | `StageRenderJob.test.tsx`, `BuskingView.test.tsx` and `store/cues.test.tsx` (frontend), an unhandled `ReferenceError: cancelAnimationFrame is not defined` after a file's tests pass, or `Hook timed out in 10000ms` on `test/setup.ts`'s closing frame wait | session 1 | Seen locally, each passing alone: `StageRenderJob` 1 of 2 runs of `npm run check:quick` on `claude/fixture-colours` (2026-10-19) and its hook timeout in 1 full `npm run check` on `claude/fx-editor-s5` (2026-10-25); `BuskingView` 1 of 1 `check:quick` on `claude/fx-editor-s4` (2026-10-24); `store/cues` 1 full `npm run check` on `claude/fx-editor-followups-s2` (2026-10-26). Traced: RTK Query's subscription middleware dispatches an auto-batched `subscriptionsUpdated` from a 500 ms timer after a subscription changes, and `resetApiState` does not cancel it, so a file's last render can notify after setup's one-frame wait. Batched on a frame, RTK's 100 ms fallback timer then outlived jsdom and called the deleted `cancelAnimationFrame`. The hook timeout was not load: a batched dispatch under fake timers (`StageRenderJob`'s) started jsdom's frame interval on the fake clock, so after `useRealTimers` no frame came for the rest of the file. Every store a test builds now batches to the end of the tick (`setup.ts` wraps `configureStore`) and the frame wait is gone; `storeBatching.test.tsx` forces both, failing 4 of 4 cases on main |
 | `FxApplyOrderKeptTest` and `SameTypeFxWriteBackTest`, any case that awaits the dimmer after its FX come off (`clearStage`, a Look pressed off) | 48eb0ea | Traced: a removal reset what it uncovered without `passLock`, so a compose pass that had read the old FX list committed the removed FX's frame over the reset, and with nothing left running no later pass painted it out. After its commit a pass now resets what the FX in its list that are no longer in the engine leave uncovered; `FxRemovalRaceTest` forces the interleavings. Seen on `claude/eager-archimedes-ka6utl` and main's 5ee8331 (`FxApplyOrderKeptTest` alone, 2 of 10 runs); 10 of 10 runs of both passed after the fix |
 | `CueSpeedMastersTest` "GO, GO TO, GO BACK and auto-advance each set the cue's masters, and a tap wins until the next cue" | a3949db | Traced: `activateEntry` sets the cue's tempo before the stack's active cue moves, so waiting on the BPM could end before the GO landed; the test now waits on the active cue |
@@ -82,8 +82,8 @@ A session's PR is titled *Flaky tests: session N — title*.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The jsdom teardown frame | in review | `claude/flaky-tests-s1` | | |
-| 2 | Rig safety's timing | planned | | | |
+| 1 | The jsdom teardown frame | merged | `claude/flaky-tests-s1` | [#298](https://github.com/cjcormack/lighting7/pull/298) | c29dd54 |
+| 2 | Rig safety's timing | in review | `claude/flaky-tests-s2` | | |
 | 3 | A popover left open between cases | planned | | | |
 | 4 | Timeouts under load | planned | | | |
 
@@ -144,6 +144,23 @@ Rows: both `RigSafetyRoutesTest` rows.
   forcing test the trace yields.
 - **Docs.** `docs/fixtures-engineering.md` §"Bulk commands and Make rig safe", if the service's
   publish order changes.
+- **Result (2026-10-26, Linux cloud container, 4 cores).** Both rows are fixed, and the second is
+  D3's code case. `BulkCommandRun.execute()`'s `finally` publishes the run with `finished` set, and
+  only then does `RigSafetyService.begin` run its end: the blackout, *Undo*'s lamps, `notOff`. So a
+  `rigSafety.state` with the run finished and those empty reached every window, and the frontend
+  re-enabled *Undo* and *Release* while the server still refused them `COMMAND_RUN_BUSY`.
+  `RigSafetyService.publish` now reports a run finished only once `active` no longer names it, which
+  `begin` clears after the end has been acted on. The torn snapshot fails the first row as well: its
+  first assertion is the blackout. Its 2 s hold was the plan's suspicion too. The class's three
+  2 s holds (that row's, the per-unit refusal's, and undo refused in flight) are now held until
+  teardown, which ends them. `holdMsFor` was seam enough, so `CommandOutput` gained none. The new
+  "a run is not finished until its end has been acted on" reads the published snapshot from inside the
+  window, through an Unconfined collector on `safeBlackout`. On main it failed 5 of 5 runs
+  (`finished=true`, `undo=[]`, `blackout=false`). *Cancel* now follows the same rule: a run the frame
+  still shows in flight answers 204 rather than 409 `COMMAND_NO_RUN`, and stops nothing once its
+  last hold has ended.
+- **D5.** The class, including the new test, 20 times under an 8-process CPU soak (load 2 to 11):
+  20 of 20 passed. A full `./gradlew test` was not run beside it; the soak stood in for it.
 
 ### Session 3 — A popover left open between cases
 
