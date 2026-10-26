@@ -23,5 +23,5 @@ parameters:
 val min = params.ubyte("min")
 val max = params.ubyte("max")
 val dutyCycle = params.double("dutyCycle")
-val value = if (phase < dutyCycle) max else min
+val value = if (phaseBefore(phase, dutyCycle)) max else min
 FxOutput.Slider(value)

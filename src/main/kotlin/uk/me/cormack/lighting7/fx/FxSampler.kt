@@ -562,9 +562,6 @@ internal class FxSampler(
         /** The envelope, taken as full: a fade in or out is not drawn. */
         private const val ENVELOPE = 1.0
 
-        /** A member's own clock within this much of a whole cycle counts as on it, against rounding. */
-        private const val CYCLE_EPSILON = 1e-9
-
         /** A sample landing within this much of a tick counts as on it, against floating-point division. */
         private const val TICK_EPSILON = 1e-6
 
@@ -581,9 +578,9 @@ internal class FxSampler(
          * since the sample before, or sits on one at the first, and the member is not holding.
          */
         private fun starts(own: DoubleArray, holding: BooleanArray): List<Int> {
-            fun cycle(x: Double) = floor(x + CYCLE_EPSILON)
+            fun cycle(x: Double) = floor(x + PHASE_EPSILON)
             return own.indices.filter { s ->
-                !holding[s] && if (s == 0) abs(own[0] - cycle(own[0])) < CYCLE_EPSILON else cycle(own[s]) > cycle(own[s - 1])
+                !holding[s] && if (s == 0) abs(own[0] - cycle(own[0])) < PHASE_EPSILON else cycle(own[s]) > cycle(own[s - 1])
             }
         }
 

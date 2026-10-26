@@ -23,5 +23,5 @@ parameters:
 val onColour = params.colour("onColour")
 val offColour = params.colour("offColour")
 val onRatio = params.double("onRatio")
-val colour = if (phase < onRatio) onColour else offColour
+val colour = if (phaseBefore(phase, onRatio)) onColour else offColour
 FxOutput.Colour(colour)

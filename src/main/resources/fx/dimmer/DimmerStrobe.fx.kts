@@ -23,5 +23,5 @@ parameters:
 val offValue = params.ubyte("offValue")
 val onValue = params.ubyte("onValue")
 val onRatio = params.double("onRatio")
-val value = if (phase < onRatio) onValue else offValue
+val value = if (phaseBefore(phase, onRatio)) onValue else offValue
 FxOutput.Slider(value)
