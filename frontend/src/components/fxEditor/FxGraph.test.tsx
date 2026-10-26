@@ -103,7 +103,7 @@ function draw(answer: FxPreviewAnswer | null = answerOf(), props: Partial<Parame
     <FxGraph
       answer={answer}
       error={null}
-      empty={false}
+      empty={null}
       narrow={false}
       fxName={(t) => t}
       fixtureName={() => undefined}
@@ -130,11 +130,13 @@ const runFrames = () =>
   })
 
 describe('the graph', () => {
-  it('says it is asking before the desk answers, and what it lacks with no FX', () => {
+  it('says it is asking before the desk answers, and why it has nothing to draw', () => {
     draw(null)
     expect(screen.getByText('Asking the desk…')).toBeTruthy()
-    draw(null, { empty: true })
+    draw(null, { empty: 'nothing-reaches' })
     expect(screen.getByText('No FX reaches the selection.')).toBeTruthy()
+    draw(null, { empty: 'nothing-selected' })
+    expect(screen.getByText('Select heads to draw their FX.')).toBeTruthy()
   })
 
   it('draws one canvas per lane from the answer, each row labelled', () => {
@@ -149,7 +151,7 @@ describe('the graph', () => {
     const { rerender } = draw()
     act(() => setFxGraphOption('rigOrder', true))
     expect(labels('Intensity')).toEqual(['Hex 1', 'Hex 2'])
-    const props = { error: null, empty: false, narrow: false, fxName: (t: string) => t, fixtureName: () => undefined, solo: null, onUnsolo: () => {}, contextOf }
+    const props = { error: null, empty: null, narrow: false, fxName: (t: string) => t, fixtureName: () => undefined, solo: null, onUnsolo: () => {}, contextOf }
     rerender(<FxGraph answer={reversed} {...props} />)
     expect(labels('Intensity')).toEqual(['Hex 1', 'Hex 2'])
     act(() => setFxGraphOption('rigOrder', false))
@@ -250,7 +252,7 @@ describe('the graph', () => {
 })
 
 describe('reading the answer as the stage runs it', () => {
-  const props = { error: null, empty: false, narrow: false, fxName: (t: string) => t, fixtureName: () => undefined, solo: null, onUnsolo: () => {}, contextOf }
+  const props = { error: null, empty: null, narrow: false, fxName: (t: string) => t, fixtureName: () => undefined, solo: null, onUnsolo: () => {}, contextOf }
 
   it('draws a cell’s colour as seen under its fixture’s one dimmer', () => {
     const rows = [row('bar', 0, { label: 'Bar 1' }), row('bar.0', 1, { fixtureKey: 'bar', label: 'Bar 1 · 1', element: 0 })]
@@ -343,7 +345,7 @@ describe('the playhead', () => {
   it('asks for a beat when a fresh answer lands on the master it follows', () => {
     const { rerender } = draw()
     expect(wire.requested).toEqual([])
-    const props = { error: null, empty: false, narrow: false, fxName: (t: string) => t, fixtureName: () => undefined, solo: null, onUnsolo: () => {}, contextOf }
+    const props = { error: null, empty: null, narrow: false, fxName: (t: string) => t, fixtureName: () => undefined, solo: null, onUnsolo: () => {}, contextOf }
     rerender(<FxGraph answer={answerOf()} {...props} />)
     expect(wire.requested).toEqual(['m1'])
   })

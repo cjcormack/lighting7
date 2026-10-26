@@ -1,16 +1,17 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ChevronDown, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { SheetPage } from '@/components/sheet/SheetPage'
-import { ProgrammerTableTabs } from '@/components/programmer/ProgrammerTableTabs'
+import { ProgrammerTableTabs, useProgrammerTables } from '@/components/programmer/ProgrammerTableTabs'
 import { DeskChip } from '@/components/desk/DeskChip'
 import { SelectionMaskPill } from '@/components/programmer/SelectionMaskPill'
 import { usePublishedRemask } from '@/components/fixtures-list/remaskStore'
 import { RecordLookSheet } from '@/components/programmer/RecordLookSheet'
 import { ProgrammerAddFxSheet, useProgrammerAddFx } from '@/components/programmer/ProgrammerAddFx'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
+import { ToolbarMenu, ToolbarMenuItem, ToolbarMenuLabel } from '@/components/sheet/ToolbarMenu'
+import { ColourSwatch } from '@/components/fixtureColours/ColourSwatches'
 import { OwnerEditor } from '@/components/stage/OwnerEditor'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { FxPicker } from '@/components/fx/FxPicker'
@@ -24,6 +25,7 @@ import {
   type GraphMark,
   type LinkedEditor,
 } from '@/components/fx/fxGraphLink'
+import type { CueTarget } from '@/api/cuesApi'
 import type { UpdateFxRequest } from '@/api/fxApi'
 import { fxTargetOf, useWindowFxPair } from '@/components/fx/selectionFxTarget'
 import { useStopFx, useToggleFxPause } from '@/components/fx/useFxControls'
@@ -31,6 +33,8 @@ import { useCueLabel, useFxDetail } from '@/components/fixtureSheet/fxLabels'
 import { selectWindowHeads } from '@/components/fixtures-list/programmerSelectRequest'
 import { findFxEntry } from '@/components/busking/buskingTypes'
 import { useContainerBand } from '@/hooks/useContainerBand'
+import { useCoarsePointer } from '@/hooks/useCoarsePointer'
+import { useFixtureColourIndex } from '@/hooks/useFixtureColourIndex'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { useActiveFxQuery, useFxLibraryQuery, type ActiveFx } from '@/store/fixtureFx'
@@ -55,6 +59,7 @@ import {
 import { LANE_ATTRIBUTE, fxLanes, fxTargetsOf, heldBackReasons, type FxLane } from './fxEditorList'
 import { FxLaneList } from './FxLaneList'
 import { FxGraph } from './FxGraph'
+import { runningCards, subjectForm, type SubjectFixture } from './fxEditorHead'
 import { pickedIndex, windowRequest } from './fxGraphModel'
 import { useFxPreview } from './useFxPreview'
 
@@ -164,7 +169,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
   const listedLanes = form === 'stacked' ? lanes.filter((l) => l.family === phoneLane) : lanes
   const list =
     targets.length === 0 ? (
-      <NothingSelected effects={running} library={library} fixtures={rig} />
+      <NothingSelected effects={running} library={library} fixtures={rig} detail={detail} onPick={pick} />
     ) : (
       <FxLaneList
         lanes={listedLanes}
@@ -267,7 +272,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
     <FxGraph
       answer={anchor == null ? null : preview.answer}
       error={preview.error}
-      empty={anchor == null}
+      empty={targets.length === 0 ? 'nothing-selected' : anchor == null ? 'nothing-reaches' : null}
       narrow={form === 'stacked'}
       scrollRows
       fxName={fxName}
@@ -306,7 +311,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
             )}
           >
             <div data-fx-list className={cn('flex min-h-0 flex-col gap-2 p-2', form !== 'stacked' && 'overflow-y-auto border-r')}>
-              <Subject target={fxTarget} units={units} families={pair.families} />
+              <Subject projectId={projectId} target={fxTarget} targets={targets} fixtures={rig} families={pair.families} asSheet={form === 'stacked'} />
               {form === 'stacked' && targets.length > 0 && <LaneChips lanes={lanes} open={phoneLane} pickedId={picked?.id ?? null} />}
               {list}
             </div>
@@ -411,33 +416,68 @@ function underneathAt(lane: FxLane, units: ReturnType<typeof selectionUnits>): {
 }
 
 /**
- * The subject (FX editor plan §4.3): *Hex 1–8 · 8 heads*, *Slender 1–2 · 8 elements*, the family
- * pill and the desk chip, as the Values grid's row C has them — the pill writing through the list's
- * desk bridge while the window follows the desk.
+ * The subject (FX editor follow-ups plan D2): a group's name and how many fixtures, one fixture's
+ * name and its elements, or — for several fixtures — *4 fixtures · 12 elements ▾*, which opens
+ * their list. Beside it the family pill and the desk chip, on one row; the pill writes through the
+ * list's desk bridge while the window follows the desk. A name truncates beside them; the count
+ * never does, and the pill and chip wrap below it only where the column is too narrow for all three.
  */
 function Subject({
+  projectId,
   target,
-  units,
+  targets,
+  fixtures,
   families,
+  asSheet,
 }: {
+  projectId: number
   target: ReturnType<typeof fxTargetOf>
-  units: ReturnType<typeof selectionUnits>
+  targets: readonly CueTarget[]
+  fixtures: readonly Fixture[]
   families: readonly AttributeFamily[] | null
+  asSheet: boolean
 }) {
   const remask = usePublishedRemask()
-  if (target == null) return null
-  const name = target.type === 'fixture' ? target.fixture.name : target.type === 'group' ? target.group.name : target.label
-  const elements = units.reduce((n, unit) => n + (unit.elements?.length ?? 0), 0)
-  const count = elements > 0 ? `${elements} ${elements === 1 ? 'element' : 'elements'}` : `${units.length} ${units.length === 1 ? 'head' : 'heads'}`
+  const name = target == null ? '' : target.type === 'fixture' ? target.fixture.name : target.type === 'group' ? target.group.name : target.label
+  const form = useMemo(() => (target == null ? null : subjectForm(targets, fixtures, name)), [fixtures, name, target, targets])
+  const row = useRef<HTMLDivElement>(null)
+  const narrowed = useRef(false)
+  // Only takes away the chip its list closes onto, so focus goes to the mask on the same row.
+  useEffect(() => {
+    if (!narrowed.current) return
+    narrowed.current = false
+    if (form?.kind === 'several' || (document.activeElement != null && document.activeElement !== document.body)) return
+    row.current?.querySelector<HTMLElement>('[data-fx-subject-mask]')?.focus()
+  }, [form?.kind, targets])
+  if (form == null) return null
   return (
-    <div data-fx-subject className="flex min-w-0 flex-wrap items-center gap-1.5 px-0.5 text-[11.5px]">
-      <span className="min-w-0 truncate font-medium">{name}</span>
-      <span className="text-muted-foreground">· {count}</span>
+    <div
+      ref={row}
+      data-fx-subject
+      className={cn('flex min-w-0 items-center gap-1.5 px-0.5 text-[11.5px]', form.kind === 'several' && 'flex-wrap')}
+    >
+      {form.kind === 'named' ? (
+        <span className="flex min-w-0 flex-[1_1_auto] items-baseline gap-1">
+          <span className="min-w-0 truncate font-medium" title={form.name}>
+            {form.name}
+          </span>
+          <span className="shrink-0 text-muted-foreground">· {form.count}</span>
+        </span>
+      ) : (
+        <SubjectFixtures
+          projectId={projectId}
+          label={form.label}
+          list={form.fixtures}
+          fixtures={fixtures}
+          asSheet={asSheet}
+          onOnly={() => (narrowed.current = true)}
+        />
+      )}
       {remask != null ? (
-        <SelectionMaskPill families={families != null ? [...families] : null} onChange={remask} tone="bar" />
+        <SelectionMaskPill families={families != null ? [...families] : null} onChange={remask} tone="bar" className="block min-w-0 shrink truncate" marker="data-fx-subject-mask" />
       ) : (
         // A window with its own selection: the mask is the marquee's, so it is read here, not set.
-        <span className="rounded border px-1 text-[10px] text-muted-foreground" title="The selection’s attribute mask">
+        <span data-fx-subject-mask tabIndex={-1} className="min-w-0 shrink truncate rounded border px-1 text-[10px] text-muted-foreground" title="The selection’s attribute mask">
           {families != null && families.length > 0 ? formatFamilyList(families, ' · ') : 'All'}
         </span>
       )}
@@ -446,41 +486,133 @@ function Subject({
   )
 }
 
-/** With nothing selected: say so, and offer the heads of a running FX (FX editor plan §4.1). */
+/**
+ * *4 fixtures · 12 elements ▾* and the list it opens (D2, §4): each fixture's colour, name and
+ * selected elements, a press narrowing the selection to it (*Only*, shown on the hovered row, and on
+ * every row under a finger). A dropdown beside the chip, a bottom sheet of 44px rows below the
+ * editor's 760 arm; the list takes focus as it opens and Escape hands it back to the chip.
+ */
+function SubjectFixtures({
+  projectId,
+  label,
+  list,
+  fixtures,
+  asSheet,
+  onOnly,
+}: {
+  projectId: number
+  label: string
+  list: readonly SubjectFixture[]
+  fixtures: readonly Fixture[]
+  asSheet: boolean
+  onOnly: () => void
+}) {
+  const colours = useFixtureColourIndex(projectId)
+  const coarse = useCoarsePointer()
+  return (
+    <ToolbarMenu
+      asSheet={asSheet}
+      title="Selected fixtures"
+      contentClassName="w-64"
+      trigger={
+        <button
+          type="button"
+          data-fx-subject-fixtures
+          title={label}
+          className="inline-flex h-6 max-w-full shrink-0 items-center gap-1 rounded-full border bg-card px-2 font-medium tabular-nums hover:bg-accent"
+        >
+          <span className="min-w-0 truncate">{label}</span>
+          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+        </button>
+      }
+    >
+      {list.map(({ fixture, elements, targets }) => {
+        const colour = colours.get(fixture.key)
+        return (
+          <ToolbarMenuItem
+            key={fixture.key}
+            onSelect={() => {
+              onOnly()
+              selectWindowHeads(targets, fixtures)
+            }}
+            title={`Select ${fixture.name} only`}
+            className="group/only gap-2"
+          >
+            {colour != null ? <ColourSwatch colour={colour} className="h-4 w-1 rounded-sm" /> : <span aria-hidden className="h-4 w-1 shrink-0 rounded-sm bg-muted-foreground/25" />}
+            <span className="min-w-0 flex-1 truncate">{fixture.name}</span>
+            {elements > 0 && <span className="shrink-0 text-muted-foreground tabular-nums">{elements}</span>}
+            <span
+              className={cn(
+                'shrink-0 text-[10.5px] text-violet-600 dark:text-violet-400',
+                !asSheet && !coarse && 'opacity-0 group-hover/only:opacity-100 group-focus/only:opacity-100 group-data-[highlighted]/only:opacity-100',
+              )}
+            >
+              Only
+            </span>
+          </ToolbarMenuItem>
+        )
+      })}
+      <ToolbarMenuLabel>Elements counted under each fixture. Only narrows the selection; the desk’s while this window follows it.</ToolbarMenuLabel>
+    </ToolbarMenu>
+  )
+}
+
+/**
+ * With nothing selected (D1): one line, then the running FX as cards by family and name — what it
+ * runs on, its cycle and master — a press selecting its heads and picking it. With none running,
+ * the way to the Values table, where heads are selected.
+ */
 function NothingSelected({
   effects,
   library,
   fixtures,
+  detail,
+  onPick,
 }: {
   effects: readonly ActiveFx[]
   library: ReturnType<typeof useFxLibraryQuery>['data']
   fixtures: readonly Fixture[]
+  detail: (effect: ActiveFx) => string
+  onPick: (effect: ActiveFx) => void
 }) {
-  const choices = effects.filter((e) => e.leaving !== true)
+  const tables = useProgrammerTables()
+  const name = useCallback((effect: ActiveFx) => findFxEntry(library, effect.fxType)?.name ?? effect.fxType, [library])
+  const cards = useMemo(() => runningCards(effects, fixtures, name), [effects, fixtures, name])
+  const showValues = () => tables?.select('values')
   return (
-    <div data-fx-nothing-selected className="flex flex-col items-start gap-2 p-2">
-      <EditorReadout>Nothing is selected. Select heads to see the FX on them, top first in the order they apply.</EditorReadout>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-7" disabled={choices.length === 0}>
-            Select the heads of a running FX…
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {choices.map((effect) => (
-            <DropdownMenuItem
-              key={effect.id}
-              onClick={() => {
-                selectWindowHeads(fxTargetsOf(effect), fixtures)
-                setPickedFx(effect.id)
-              }}
-            >
-              {findFxEntry(library, effect.fxType)?.name ?? effect.fxType}
-              <span className="ml-auto pl-3 font-mono text-[10px] text-muted-foreground">{effect.attribute}</span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <div data-fx-nothing-selected className="flex flex-col gap-2 p-0.5">
+      <p className="text-[12px] leading-snug">
+        <span className="font-semibold">No heads selected.</span>
+        {cards.length > 0 && <span className="text-muted-foreground"> Pick a running FX to edit it on its heads.</span>}
+      </p>
+      {cards.map(({ effect, drives, on }) => (
+        <button
+          key={effect.id}
+          type="button"
+          data-fx-running-card={effect.id}
+          onClick={() => {
+            selectWindowHeads(fxTargetsOf(effect), fixtures)
+            onPick(effect)
+          }}
+          className="grid w-full grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 rounded-md border bg-card/40 px-2 py-1.5 text-left hover:border-violet-500/60"
+        >
+          <span aria-hidden className="row-span-2 size-2 rounded-full bg-violet-500" />
+          <span className="truncate text-[12.5px] font-semibold">{name(effect)}</span>
+          <span className="font-mono text-[10.5px] text-muted-foreground">{drives}</span>
+          <span className="col-span-2 truncate text-[11px] text-muted-foreground">
+            {on} · {detail(effect)}
+          </span>
+        </button>
+      ))}
+      {cards.length > 0 ? (
+        <button type="button" onClick={showValues} className="self-start text-[11.5px] text-muted-foreground underline underline-offset-2 hover:text-foreground">
+          or select heads in Values
+        </button>
+      ) : (
+        <Button variant="outline" size="sm" className="h-7 self-start" onClick={showValues}>
+          Select heads in Values
+        </Button>
+      )}
     </div>
   )
 }

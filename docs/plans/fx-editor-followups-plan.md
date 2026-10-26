@@ -118,8 +118,8 @@ follow-ups: session N — title*. Never merge a later session's PR before an ear
 |---|---|---|---|---|---|
 | 1 | Steps land on their sample | merged | claude/fx-editor-followups-s1 | [#292](https://github.com/cjcormack/lighting7/pull/292) | 1da63241 |
 | 2 | Fixtures: the third element mode, and Over | merged | claude/fx-editor-followups-s2 | [#293](https://github.com/cjcormack/lighting7/pull/293) | c3b12b23 |
-| 3 | The graph: ruler, knobs, fixture rows and room for names | in review | claude/fx-editor-followups-s3 | | |
-| 4 | The list's head: nothing selected and the subject | planned | | | |
+| 3 | The graph: ruler, knobs, fixture rows and room for names | merged | claude/fx-editor-followups-s3 | [#294](https://github.com/cjcormack/lighting7/pull/294) | 729f62b1 |
+| 4 | The list's head: nothing selected and the subject | in review | claude/fx-editor-followups-s4 | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -282,6 +282,22 @@ the next; whoever merges the last fills its own.
   picks; the empty-rig button; the graph's two empty sentences; the subject's three forms; the list
   and *Only*.
 - **Docs:** `frontend/CLAUDE.md`, the FX editor's list bullets.
+- **Recorded (session 4):** the words are a pure module, `fxEditorHead.ts` (`subjectForm`,
+  `runningCards`), beside `fxEditorList.ts`. The count chip keeps its width and the row wraps as D2
+  says: with a mask set, the pill outgrows the room the 248 column leaves beside the count, so the
+  pill and badge drop to a line below. A named subject stays on one row, the name truncating and the
+  pill too where a long mask would overflow the column. Elements of one fixture read as that fixture
+  with its elements counted, and a fixture with none as *1 head*, as today. The list is the heads chip's
+  `ToolbarMenu`, so the desk's arm is a dropdown whose rows are the *Only* press, the word shown on
+  the highlighted row; the phone's sheet shows it on every row, since a finger has no hover.
+  `FxGraph`'s `empty` is a reason, `nothing-selected` or `nothing-reaches`, rather than a flag.
+  Chris's calls during the session's review: a card names its attribute where that is not its
+  family's own (*UV*, *Zoom*), as a lane card does, where the board drew the family alone, since two
+  FX of one type on one target were otherwise the same card; *Only* takes away the chip its list
+  closes onto, so focus goes to the mask pill on the row; and in a window with its own selection
+  *Only* goes through Include's request as the plan says, so the marquee's mask and the grid's
+  filter are let go there, where following the desk keeps the mask. *Only* is also shown on every
+  row under a coarse pointer, whatever the editor's width.
 
 ## 6. Migration
 
@@ -330,3 +346,10 @@ reads `followups.md`'s index for a gate on FX tick loops before it starts, per C
     toolbar, so below 300px of toolbar a segment's label folds and its buttons wrap inside it.
 - **Session 4:** from nothing selected, one press on a card puts its FX in the inspector with its
   heads selected; the subject reads at 248px with four fixtures.
+  - **Measured (session 4)**, in Chromium on an isolated desk with four Shehds (three zones each)
+    and a par, at 1440: a press on Colour Cycle's card selected the Shehds group and put the FX in
+    the inspector. Four Shehds selected read *4 fixtures · 12 elements*: the count 166px, the pill
+    27, the link badge 21, 226 of the row's 231 with the gaps; with *Intensity · Colour* masked
+    the count kept its 166 and the pill (98) and badge dropped to a second line, nothing past the
+    column. *Only* narrowed to one, which read
+    *LX2 Shehds 19x15 SR · 3 elements*. At 375 the list opened as a bottom sheet of 44px rows.

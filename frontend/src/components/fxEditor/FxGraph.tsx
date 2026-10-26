@@ -83,8 +83,8 @@ export const PATH_PX = 132
 export interface FxGraphProps {
   answer: FxPreviewAnswer | null
   error: string | null
-  /** No FX reaches the selection, so nothing is asked. */
-  empty: boolean
+  /** Why nothing is asked: no heads are selected, or no FX reaches them; null while there is an ask. */
+  empty: 'nothing-selected' | 'nothing-reaches' | null
   /** Below the editor's 760 arm: the picked FX's lane alone, at most six rows. */
   narrow: boolean
   /** With [narrow], every row laid out and six of them shown, the rest a scroll away (§4.2's phone arm). */
@@ -147,7 +147,7 @@ export function FxGraph({
   if (answer == null) {
     return (
       <div data-fx-graph className="flex min-h-[120px] min-w-0 flex-col gap-1 p-3">
-        <EditorReadout error={error ?? undefined}>{empty ? 'No FX reaches the selection.' : 'Asking the desk…'}</EditorReadout>
+        <EditorReadout error={error ?? undefined}>{empty === 'nothing-selected' ? 'Select heads to draw their FX.' : empty === 'nothing-reaches' ? 'No FX reaches the selection.' : 'Asking the desk…'}</EditorReadout>
       </div>
     )
   }
