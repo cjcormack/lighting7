@@ -276,6 +276,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
       onUnsolo={unsolo}
       bounce={running.find((e) => e.id === anchor)?.direction === 'BOUNCE'}
       highlight={highlight}
+      onHighlight={setHighlight}
       linkedRow={ladderRow}
       onHoverRow={graphRow.set}
       editor={editor != null && editor.fxId === picked?.id ? editor : null}

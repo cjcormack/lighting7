@@ -5297,9 +5297,8 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
 - **The graph draws the answer and computes nothing** (P2; `FxGraph.tsx`). `fxPreviewDecode.ts`
   decodes the base64 planes once per answer into `Uint8Array`s per row, attribute and FX (a Steps
   output's steps as an `Int32Array` beside its labels); `fxGraphModel.ts` lays a lane out —
-  one section per attribute, its rows in the answer's order (the picked FX's Order, a fixture's name
-  once over its elements) or by `rigIndex` under *Rig order*, a heat map at 6px a row from 25 rows —
-  and reads the marks off the answer: the start ticks are `starts`, the hatching `holding`
+  one section per attribute, its rows in the answer's order (the picked FX's Order) or by `rigIndex`
+  under *Rig order*, a heat map at 6px a row from 25 rows — and reads the marks off the answer: the start ticks are `starts`, the hatching `holding`
   (inclusive), Segments and Parts brackets and the Wings' mirror the ladder's rungs, a row's phase on
   hover the distance between its starts (a cycle is 48 samples, the desk's rate, cut or not). The
   desk starts the window at whatever tick the master is on, so the beat grid and the hover's *Beat*
@@ -5317,6 +5316,41 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   (`scrollRows`, the editor's; `narrow` without it cuts at six). The playhead sits inside the
   scroller (`RowScroll`), so it spans every row. The column's rows size to their content there
   (`auto-rows-max`), since the graph under the list is tall.
+- **A fixture's own row** (follow-ups D5): every multi-element fixture gets a row over its elements —
+  `layoutLane` groups a section's rows by fixture, in the order each first appears. Where the answer
+  has a row for the fixture itself (an attribute it carries, a bar's dimmer) that row is it; else it
+  is a **mixed** row (`LaidRow.mix`, `row` -1, hovered by `mixKeyOf`, which no answer row has),
+  drawn as the mean of its elements' samples per plane, rounded — built once per answer as the
+  attribute's `mixed` (`fxPreviewDecode.ts`' `mixedRows`, `mixRow`, `mixSeries`), drawing as *As
+  seen* is, never output (P2). A Position or Steps section draws its name and no mix. A mixed row
+  takes no Phase drag and no hover phase, reads *Bar · mix of 3* on hover through the one
+  `HoverReadout` (the view honoured), and draws a start tick only where its elements share it
+  (`rowStarts`). The brackets and the Wings' mirror are ranked over the answer's rows, a mixed row
+  standing in for its elements (`rungRow`) only while they are folded. Its chevron folds the elements,
+  per window (`programmer.fx.foldedFixtures`, beside the folded lanes); folded, it is drawn alone.
+  The heat map counts the answer's rows, a folded fixture as one — a mixed row over drawn elements
+  adds none — and since a heat section draws no names, the lane's header carries *Fold elements* /
+  *Show elements* for every fixture in it (`setFixturesFolded`). The strip draws fixture rows too,
+  with no chevron or fold.
+- **Names** (D6) are DOM over the canvas (`GutterLabels`), never canvas text: a fixture's cut in the
+  middle by measured width (`middleCut`, an `OffscreenCanvas` where there is one, else an estimate)
+  with its whole name on hover; an element reads its own words after the fixture's name, else — or
+  where they do not fit — its number (`elementLabel`). The name column is the window's
+  (`programmer.fx.graph`'s `gutter`, 152 by default, 96–280), set by a grip between names and plot
+  (`role="separator"`, the arrow keys stepping 8) and held at the default under a coarse pointer,
+  where the grip is not drawn; wherever it would leave the plot under 160px it gives way, down to
+  72 (`fitGutter`) — the side form's graph beside an open inspector is ~236px at the band's floor.
+  The grip sits inside the names, at the width drawn, but reports and moves the window's width, so
+  a key press while the names are narrowed never loses it.
+  The strip's is a fixed 72, since its hosts are narrow.
+- **The ruler and the toolbar** (D4): a 24px ruler canvas over the lanes numbers the picked FX's
+  master's beats from the tick the window started on (`rulerTicks`: bar numbers on the bar, counted
+  from the bar the window starts in, `bar.beat` between where there is room, bars alone over 16
+  beats), or seconds on its own clock. The toolbar is one row of 28px segments, each labelled inside
+  (*Window*, *Draw*), the window's length (*8 beats · 4 s*) beside Window, wrapping between segments;
+  below 300px of toolbar (a container query on it) a segment's label folds and its buttons wrap
+  inside it. The line under it is the hover's, or the row order and the hint. Widths measured at
+  each band are the plan's §9.
 - **The inspector and the graph meet through one context** (`components/fx/fxGraphLink.ts`'s
   `FxGraphLink`), which `FxEditorSelection` provides around its three columns only — never the sheets
   it opens (a cue's editor, *+ FX*'s sheet), whose editors have no graph — and only the live editor and
@@ -5353,15 +5387,22 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   `palette.highlight` / `highlightArea`): Cycle shades the first cycle (over the rows, so a colour
   strip does not hide it), Spread, Order, the Shapes and Phase the start ticks, Wings the mirror,
   Segments and Parts the brackets, Runs the hatching, Amount the gap between *This FX* and *Result*.
-  A light whose control unmounts under the pointer puts itself out.
-- **The handles** (D12, `GraphHandles.tsx`, `fxGraphHandles.ts`) sit over the picked FX's own section
-  of its lane, only while the inspector edits that FX, never under a coarse pointer
-  (`hooks/useCoarsePointer.ts`) or read-only: the first cycle's right edge (always sample 48, the
-  desk's rate) for Cycle, snapped to `SPEED_STEPS` by ratio — the cycle the drag began on counting as
+  A light whose control unmounts under the pointer puts itself out. A knob lights the same way, run the
+  other way (`FxGraph`'s `onHighlight`): the Cycle tab the first cycle, Spread's knob the start ticks,
+  a max or min knob the level lines (`levels`).
+- **The handles** (D12, `GraphHandles.tsx`, `fxGraphHandles.ts`; follow-ups D4) are knobs — a violet
+  disc, named on hover (*Spread 100%*) — and a mark is a tick or a thin line. Only while the inspector
+  edits the picked FX, never under a coarse pointer (`hooks/useCoarsePointer.ts`) or read-only: the
+  **Cycle tab** on the ruler at the first cycle's end (always sample 48, the desk's rate), labelled
+  with the cycle (*1 bar ⇔*), snapped to `SPEED_STEPS` by ratio — the cycle the drag began on counting as
   a step, so a triplet or 32 beats is kept until the drag leaves it — or, in seconds (a wall-clock FX,
-  or one on *Seconds*), moved to the nearest 0.05 s; the line through each row's first start
-  for Spread; a row block dragged sideways (the canvas's own pointer-down) for Phase; an Intensity
-  FX's `max` and `min` lines, each row on its own scale (`levelScale`, the drawing's). Each is measured
+  or one on *Seconds*), moved to the nearest 0.05 s; over the picked FX's own section, **Spread's
+  knob** at the end of the dashed line through each row's first start, on the lowest row Spread
+  moves furthest (a row of share 0 never moves, so a knob there would not follow the finger); a
+  row block dragged sideways (the canvas's own pointer-down) for Phase; an Intensity FX's `max` and
+  `min` lines on every row, as marks, with one pair of knobs at the first row's right end, since
+  they are the FX's (`levelScale`, the drawing's). A knob's light goes out as the pointer leaves
+  it, so the next knob's holds. Each is measured
   from where the drag began, since the answer redraws under the finger, starts only once its own
   pointer has moved 3 px (`DRAG_SLOP_PX`, so a click edits nothing), writes `set(patch, false)` per
   move and lands `set(patch, true)` on release — nothing for a drag that changed nothing — through the

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { cn } from '@/lib/utils'
 import { getCycleLabel } from '@/components/fx/fxConstants'
-import type { LinkedEditor } from '@/components/fx/fxGraphLink'
+import type { GraphMark, LinkedEditor } from '@/components/fx/fxGraphLink'
 import type { FxPreviewFx, FxPreviewRow } from '@/store/fxPreview'
-import { SAMPLES_PER_CYCLE, levelScale, sampleX, type LaidSection, type LaneLayout } from './fxGraphModel'
+import { SAMPLES_PER_CYCLE, levelScale, rowStarts, rungRow, sampleX, type LaidSection, type LaneLayout } from './fxGraphModel'
 import { cycleFromDrag, spreadFromDrag, spreadShareOf } from './fxGraphHandles'
 
 /** How far the pointer goes before a press is a drag: a click with a jitter in it edits nothing. */
@@ -61,12 +62,152 @@ export function useDragCancel(): { current: (() => void) | null } {
   return cancel
 }
 
+/** A handle's knob: a violet disc that names itself on hover and lights what it changes. */
+function Knob({
+  name,
+  row,
+  x,
+  y,
+  tip,
+  cursor,
+  mark,
+  onHighlight,
+  onPointerDown,
+}: {
+  name: string
+  row?: string
+  x: number
+  y: number
+  tip: string
+  cursor: string
+  mark: GraphMark
+  onHighlight?: (mark: GraphMark | null) => void
+  onPointerDown: (e: ReactPointerEvent) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  // Gone under the pointer, a knob puts its light out; leaving does so at once, so the next knob's survives.
+  const lit = useRef(false)
+  const highlight = useRef(onHighlight)
+  highlight.current = onHighlight
+  useEffect(() => () => {
+    if (lit.current) highlight.current?.(null)
+  }, [])
+  return (
+    <div
+      data-fx-handle={name}
+      data-row={row}
+      title={tip}
+      onPointerDown={onPointerDown}
+      onPointerEnter={() => {
+        setHovered(true)
+        lit.current = true
+        onHighlight?.(mark)
+      }}
+      onPointerLeave={() => {
+        setHovered(false)
+        lit.current = false
+        onHighlight?.(null)
+      }}
+      className="pointer-events-auto absolute grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center"
+      style={{ left: x, top: y, cursor }}
+    >
+      <i className="block size-2.5 rounded-full bg-violet-600 shadow-[0_0_0_2px_var(--background),0_0_0_3px_rgb(139_92_246)]" />
+      {hovered && (
+        <span
+          data-fx-knob-tip
+          className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 rounded border border-violet-600 bg-background px-1 text-[10.5px] font-semibold whitespace-nowrap text-violet-700 dark:text-violet-300"
+        >
+          {tip}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /**
- * **The graph's handles** (FX editor plan D12, §4.4), over the picked FX's section of its lane: the
- * first cycle's right edge (Cycle, snapping to the cycle steps), the line joining the rows' start
- * ticks (Spread), and an Intensity FX's max and min lines. A row dragged sideways (Phase) is the
- * canvas's own gesture. Each writes through the inspector's editor ([editor]) — its draft, its
- * floor, its Revert — and the editor tells the preview the unsent move, so the graph follows.
+ * **The Cycle tab** (FX editor follow-ups D4), on the beat ruler at the first cycle's end, labelled
+ * with the cycle: dragged sideways it sets Cycle, snapping to the cycle steps (or to 0.05 s in
+ * seconds), and writes through the inspector's editor as the graph's other handles do.
+ */
+export function CycleTab({
+  plotLeft,
+  plotWidth,
+  samples,
+  editor,
+  lit,
+  onHighlight,
+}: {
+  plotLeft: number
+  plotWidth: number
+  samples: number
+  editor: LinkedEditor
+  lit: boolean
+  onHighlight?: (mark: GraphMark | null) => void
+}) {
+  const cancel = useDragCancel()
+  const [drag, setDrag] = useState<{ x: number; cycle: number } | null>(null)
+  const edgeX = sampleX({ plotLeft, plotWidth }, samples, SAMPLES_PER_CYCLE)
+  const inSeconds = editor.draft.seconds || editor.wallClock
+  const cycleWords = (cycle: number) => (inSeconds ? `${cycle} s` : getCycleLabel(cycle))
+  const hovering = useRef(false)
+  useEffect(() => () => {
+    if (hovering.current) onHighlight?.(null)
+  }, [onHighlight])
+  if (SAMPLES_PER_CYCLE > samples) return null
+
+  const start = (e: ReactPointerEvent) => {
+    const from = editor.draft.cycle
+    let last = from
+    const started = beginDrag(
+      e,
+      cancel,
+      (dx) => {
+        const cycle = cycleFromDrag(from, plotLeft, edgeX, edgeX + dx, inSeconds)
+        setDrag({ x: plotLeft + ((edgeX - plotLeft) * cycle) / from, cycle })
+        if (cycle !== last) editor.set({ cycle }, false)
+        last = cycle
+      },
+      (moved) => {
+        setDrag(null)
+        if (moved && last !== from) editor.set({ cycle: last }, true)
+      },
+    )
+    if (started) setDrag({ x: edgeX, cycle: from })
+  }
+  const cycle = drag?.cycle ?? editor.draft.cycle
+  return (
+    <div
+      data-fx-handle="cycle"
+      title={`Cycle ${cycleWords(editor.draft.cycle)} — drag to set it`}
+      onPointerDown={start}
+      onPointerEnter={() => {
+        hovering.current = true
+        onHighlight?.('cycle')
+      }}
+      onPointerLeave={() => {
+        hovering.current = false
+        onHighlight?.(null)
+      }}
+      className={cn(
+        'pointer-events-auto absolute top-[3px] inline-flex h-[18px] -translate-x-1/2 cursor-ew-resize items-center gap-1 rounded-full bg-violet-600 px-2 text-[10.5px] font-semibold whitespace-nowrap text-white select-none',
+        lit && 'ring-2 ring-fuchsia-400',
+      )}
+      style={{ left: drag?.x ?? edgeX }}
+    >
+      <span data-fx-handle-label>{cycleWords(cycle)}</span>
+      <span aria-hidden>⇔</span>
+    </div>
+  )
+}
+
+/**
+ * **The graph's handles** (FX editor plan D12, §4.4; follow-ups D4), over the picked FX's section of
+ * its lane: Spread's knob at the end of the line joining the rows' start ticks, and an Intensity
+ * FX's max and min lines, each with a knob at its right end. A knob is a handle and a line a mark;
+ * hovering a knob names it and lights what it changes. Cycle is the ruler's tab ([CycleTab]); a row
+ * dragged sideways (Phase) is the canvas's own gesture. Each writes through the inspector's editor
+ * ([editor]) — its draft, its floor, its Revert — and the editor tells the preview the unsent move,
+ * so the graph follows.
  */
 export function GraphHandles({
   layout,
@@ -75,6 +216,8 @@ export function GraphHandles({
   fx,
   rows,
   editor,
+  highlight = null,
+  onHighlight,
 }: {
   layout: LaneLayout
   section: LaidSection
@@ -82,72 +225,39 @@ export function GraphHandles({
   fx: FxPreviewFx
   rows: readonly FxPreviewRow[]
   editor: LinkedEditor
+  highlight?: GraphMark | null
+  onHighlight?: (mark: GraphMark | null) => void
 }) {
-  const box = useRef<HTMLDivElement>(null)
   const cancel = useDragCancel()
-  const [cycleDrag, setCycleDrag] = useState<{
-    x: number
-    cycle: number
-  } | null>(null)
   const top = section.top
   const height = section.rows.length * section.rowH
   const samplesToPx = layout.plotWidth / Math.max(1, samples)
 
-  const edgeX = sampleX(layout, samples, SAMPLES_PER_CYCLE)
-  const cycleHandle = SAMPLES_PER_CYCLE <= samples
-  const inSeconds = editor.draft.seconds || editor.wallClock
-  const cycleWords = (cycle: number) => (inSeconds ? `${cycle} s` : getCycleLabel(cycle))
-
-  const startCycle = (e: ReactPointerEvent) => {
-    const start = editor.draft.cycle
-    let last = start
-    const started = beginDrag(
-      e,
-      cancel,
-      (dx) => {
-        const cycle = cycleFromDrag(start, layout.plotLeft, edgeX, edgeX + dx, inSeconds)
-        setCycleDrag({
-          x: layout.plotLeft + ((edgeX - layout.plotLeft) * cycle) / start,
-          cycle,
-        })
-        if (cycle !== last) editor.set({ cycle }, false)
-        last = cycle
-      },
-      (moved) => {
-        setCycleDrag(null)
-        if (moved && last !== start) editor.set({ cycle: last }, true)
-      },
-    )
-    if (started) setCycleDrag({ x: edgeX, cycle: start })
-  }
-
   // The chase line: each painted row's first start, at the top of its row.
   const points = section.rows.flatMap((laid) => {
-    const s = fx.starts[laid.row]?.[0]
+    const s = rowStarts(fx, laid)?.[0]
     return s == null ? [] : [{ laid, x: sampleX(layout, samples, s), y: laid.y + 2 - top }]
   })
-  const shares = points.map((p) => spreadShareOf(fx, p.laid.row) ?? 0)
+  const shares = points.map((p) => spreadShareOf(fx, rungRow(p.laid)) ?? 0)
   const spreadHandle = editor.draft.order !== 'UNIFIED' && points.length >= 2 && shares.some((q) => q > 0)
+  // The knob rides the row Spread moves furthest — the lowest of those — so it follows the finger.
+  const most = Math.max(0, ...shares)
+  const knobAt = shares.lastIndexOf(most)
+  const knob = points[knobAt]
 
   const startSpread = (e: ReactPointerEvent) => {
-    const rect = box.current?.getBoundingClientRect()
-    const y = rect == null ? 0 : e.clientY - rect.top - top
-    let nearest = 0
-    points.forEach((p, i) => {
-      if (Math.abs(p.y - y) < Math.abs(points[nearest].y - y)) nearest = i
-    })
-    const share = shares[nearest] > 0 ? shares[nearest] : Math.max(...shares)
+    const share = most
     const start = editor.draft.spread
-    let last = start
+    let value = start
     beginDrag(
       e,
       cancel,
       (dx) => {
-        last = spreadFromDrag(start, dx / samplesToPx, share)
-        editor.set({ spread: last }, false)
+        value = spreadFromDrag(start, dx / samplesToPx, share)
+        editor.set({ spread: value }, false)
       },
       (moved) => {
-        if (moved && last !== start) editor.set({ spread: last }, true)
+        if (moved && value !== start) editor.set({ spread: value }, true)
       },
     )
   }
@@ -171,75 +281,67 @@ export function GraphHandles({
       },
     )
   }
+  const levelsLit = highlight === 'levels'
+  const knobX = layout.plotLeft + layout.plotWidth - 6
+  // High and Low are the FX's, not a row's: one pair of knobs, on the first row the answer has.
+  const knobRow = section.rows.find((laid) => laid.mix == null)
 
   return (
-    <div ref={box} data-fx-handles aria-hidden className="pointer-events-none absolute inset-x-0" style={{ top: 0, height: layout.height }}>
+    <div data-fx-handles aria-hidden className="pointer-events-none absolute inset-x-0" style={{ top: 0, height: layout.height }}>
       {levelHandles &&
         section.rows.flatMap((laid) =>
-          (['max', 'min'] as const).map((name) => {
-            const y = levelScale(section, laid.y).yOf(level(name))
-            return (
-              <div
-                key={`${laid.row}-${name}`}
-                data-fx-handle={name}
-                data-row={rows[laid.row]?.key}
-                title={`Drag to set ${name === 'max' ? 'High' : 'Low'}`}
-                onPointerDown={(e) => startLevel(e, name, laid)}
-                className="pointer-events-auto absolute cursor-ns-resize"
-                style={{
-                  left: layout.plotLeft,
-                  width: layout.plotWidth,
-                  top: y - 2.5,
-                  height: 5,
-                }}
-              >
-                <i className="absolute inset-x-0 top-[2px] block border-t border-dashed border-violet-500/70" />
-              </div>
-            )
-          }),
+          laid.mix != null
+            ? []
+            : (['max', 'min'] as const).map((name) => {
+                const y = levelScale(section, laid.y).yOf(level(name))
+                return (
+                  <div key={`${laid.row}-${name}`}>
+                    <i
+                      data-fx-level-line={name}
+                      className={cn('absolute block border-t border-dashed', levelsLit ? 'border-fuchsia-600 dark:border-fuchsia-300' : 'border-violet-500/70')}
+                      style={{ left: layout.plotLeft, width: layout.plotWidth, top: Math.round(y) }}
+                    />
+                    {laid === knobRow && (
+                    <Knob
+                      name={name}
+                      row={rows[laid.row]?.key}
+                      x={knobX}
+                      y={y}
+                      tip={`${name === 'max' ? 'High' : 'Low'} ${Math.round(level(name) / 2.55)}%`}
+                      cursor="ns-resize"
+                      mark="levels"
+                      onHighlight={onHighlight}
+                      onPointerDown={(e) => startLevel(e, name, laid)}
+                    />
+                    )}
+                  </div>
+                )
+              }),
         )}
-      {spreadHandle && (
-        <svg className="absolute overflow-visible" style={{ left: 0, top, width: layout.width, height }}>
-          <polyline
-            points={points.map((p) => `${p.x},${p.y}`).join(' ')}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.25}
-            className="text-violet-500/70"
-          />
-          <polyline
-            data-fx-handle="spread"
-            points={points.map((p) => `${p.x},${p.y}`).join(' ')}
-            fill="none"
-            stroke="transparent"
-            strokeWidth={8}
+      {spreadHandle && knob != null && (
+        <>
+          <svg className="absolute overflow-visible" style={{ left: 0, top, width: layout.width, height }}>
+            <polyline
+              data-fx-spread-line
+              points={points.map((p) => `${p.x},${p.y}`).join(' ')}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.25}
+              strokeDasharray="4 3"
+              className="text-violet-500/70"
+            />
+          </svg>
+          <Knob
+            name="spread"
+            x={knob.x}
+            y={top + knob.y}
+            tip={`Spread ${Math.round(editor.draft.spread * 100)}%`}
+            cursor="ew-resize"
+            mark="starts"
+            onHighlight={onHighlight}
             onPointerDown={startSpread}
-            className="cursor-ew-resize"
-            style={{ pointerEvents: 'stroke' }}
-          >
-            <title>Drag to set Spread</title>
-          </polyline>
-        </svg>
-      )}
-      {cycleHandle && (
-        <div
-          data-fx-handle="cycle"
-          title="Drag to set Cycle"
-          onPointerDown={startCycle}
-          className="pointer-events-auto absolute flex cursor-ew-resize justify-center"
-          style={{ left: (cycleDrag?.x ?? edgeX) - 4, top, width: 8, height }}
-        >
-          <i className="block h-full w-0.5 bg-violet-500" />
-          <i className="absolute top-1/2 block h-4 w-1.5 -translate-y-1/2 rounded-sm bg-violet-300" />
-          {cycleDrag != null && (
-            <span
-              data-fx-handle-label
-              className="absolute -top-0.5 left-2 rounded bg-violet-600 px-1 text-[10px] whitespace-nowrap text-white"
-            >
-              {cycleWords(cycleDrag.cycle)}
-            </span>
-          )}
-        </div>
+          />
+        </>
       )}
     </div>
   )

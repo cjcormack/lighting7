@@ -42,6 +42,11 @@ export interface DecodedAttribute {
   rows: DecodedAttributeRow[]
   /** [rows] by the answer's row index. */
   byRow: ReadonlyMap<number, DecodedAttributeRow>
+  /**
+   * A level's or a colour's mixed row for each fixture whose elements carry the attribute and which
+   * does not, by fixture key: built once per answer ([mixRow]).
+   */
+  mixed: ReadonlyMap<string, DecodedAttributeRow>
 }
 
 export interface DecodedLane {
@@ -51,6 +56,8 @@ export interface DecodedLane {
 
 export interface DecodedPreview {
   samples: number
+  /** The answer's rows, which say whose element each row is. */
+  rows: FxPreviewAnswer['rows']
   lanes: DecodedLane[]
 }
 
@@ -98,7 +105,7 @@ export function ownOutputOnly(
         const output = heldOver(own.output, holding(row.row) ?? [])
         return [{ row: row.row, parked: false, underneath: NO_SERIES, result: output, fx: [{ ...own, output, heldBackReason: null }] }]
       })
-      return rows.length === 0 ? [] : [{ ...attribute, rows, byRow: new Map(rows.map((r) => [r.row, r])) }]
+      return rows.length === 0 ? [] : [{ ...attribute, rows, byRow: new Map(rows.map((r) => [r.row, r])), mixed: mixedRows(attribute.kind, rows, preview.rows) }]
     })
     return attributes.length === 0 ? [] : [{ ...lane, attributes }]
   })
@@ -122,9 +129,64 @@ function heldOver(series: DecodedSeries, ranges: readonly (readonly number[])[])
   return { ...series, planes, steps: series.steps == null ? null : hold(series.steps) }
 }
 
+/**
+ * [series] averaged per plane and sample, rounded — a fixture's row drawn from its elements (FX
+ * editor follow-ups D5). A plane is the mean of the series that carry it. Drawing, as *As seen* is
+ * (P2): it reads the desk's samples and works out no FX's output.
+ */
+export function mixSeries(series: readonly DecodedSeries[]): DecodedSeries {
+  const planes: DecodedSeries['planes'] = {}
+  for (const name of PREVIEW_PLANES) {
+    const carried = series.flatMap((s) => (s.planes[name] == null ? [] : [s.planes[name] as Uint8Array]))
+    if (carried.length === 0) continue
+    const length = Math.max(...carried.map((p) => p.length))
+    const out = new Uint8Array(length)
+    for (let i = 0; i < length; i++) {
+      let sum = 0
+      for (const p of carried) sum += p[Math.min(i, p.length - 1)]
+      out[i] = Math.round(sum / carried.length)
+    }
+    planes[name] = out
+  }
+  return { planes, steps: null, stepLabels: null }
+}
+
+/** The mixed rows of an attribute's [rows]: a level or a colour, for each fixture drawn only through its elements. */
+export function mixedRows(kind: string, rows: readonly DecodedAttributeRow[], answerRows: FxPreviewAnswer['rows']): ReadonlyMap<string, DecodedAttributeRow> {
+  const out = new Map<string, DecodedAttributeRow>()
+  if (kind !== 'SLIDER' && kind !== 'COLOUR') return out
+  const own = new Set<string>()
+  const elements = new Map<string, DecodedAttributeRow[]>()
+  for (const row of rows) {
+    const answerRow = answerRows[row.row]
+    if (answerRow == null) continue
+    if (answerRow.element == null) own.add(answerRow.fixtureKey)
+    else elements.set(answerRow.fixtureKey, [...(elements.get(answerRow.fixtureKey) ?? []), row])
+  }
+  for (const [fixtureKey, members] of elements) if (!own.has(fixtureKey)) out.set(fixtureKey, mixRow(members))
+  return out
+}
+
+/** A fixture's mixed row from its elements' rows: each series and each FX's output averaged; no row of the answer's. */
+export function mixRow(rows: readonly DecodedAttributeRow[]): DecodedAttributeRow {
+  const fxIndices = [...new Set(rows.flatMap((r) => r.fx.map((o) => o.fx)))]
+  return {
+    row: -1,
+    parked: rows.length > 0 && rows.every((r) => r.parked),
+    underneath: mixSeries(rows.map((r) => r.underneath)),
+    result: mixSeries(rows.map((r) => r.result)),
+    fx: fxIndices.map((fx) => {
+      const outputs = rows.flatMap((r) => r.fx.filter((o) => o.fx === fx))
+      const reasons = new Set(outputs.map((o) => o.heldBackReason))
+      return { fx, output: mixSeries(outputs.map((o) => o.output)), heldBackReason: reasons.size === 1 ? outputs[0].heldBackReason : null }
+    }),
+  }
+}
+
 export function decodePreview(answer: FxPreviewAnswer): DecodedPreview {
   return {
     samples: answer.window.samples,
+    rows: answer.rows,
     lanes: answer.lanes.map((lane) => ({
       family: lane.family != null && FAMILIES.includes(lane.family) ? (lane.family as AttributeFamily) : null,
       attributes: lane.attributes.map((attribute) => {
@@ -141,7 +203,13 @@ export function decodePreview(answer: FxPreviewAnswer): DecodedPreview {
             })),
           }),
         )
-        return { attribute: attribute.attribute, kind: attribute.kind, rows, byRow: new Map(rows.map((r) => [r.row, r])) }
+        return {
+          attribute: attribute.attribute,
+          kind: attribute.kind,
+          rows,
+          byRow: new Map(rows.map((r) => [r.row, r])),
+          mixed: mixedRows(attribute.kind, rows, answer.rows),
+        }
       }),
     })),
   }

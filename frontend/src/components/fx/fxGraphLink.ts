@@ -14,7 +14,7 @@ import type { FxDraft } from './fxEditorModel'
  */
 
 /** A mark on the graph a control changes, lit while the pointer rests on it (§4.5). */
-export type GraphMark = 'cycle' | 'starts' | 'mirror' | 'brackets' | 'holding' | 'amount'
+export type GraphMark = 'cycle' | 'starts' | 'mirror' | 'brackets' | 'holding' | 'amount' | 'levels'
 
 /** The editor open in the inspector, lent to the graph's handles: they write through it, as its own fields do. */
 export interface LinkedEditor {
