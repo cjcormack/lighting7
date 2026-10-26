@@ -47,8 +47,6 @@ The plan's own rules:
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
 | `RigSafetyRoutesTest` "output during the cool-down drops it, and making safe again keeps each lamp's cool time", "each lamp still says when its mains can be cut" | local `./gradlew :test --tests 'uk.me.cormack.lighting7.routes.*'` (with six other packages) on `claude/fx-settings-s2` before its first commit (2026-10-26, Linux cloud container), 1 of 1 package runs; passes alone, 14 of 14 | Not traced. Seen on a commit without session 2's fix (9dc4e15), which stopped a run being published finished before its end was acted on; that race may be the cause, but these cases were not run against the fix | |
-| `ProjectActionPlaces.test.tsx` (frontend), *for a show behind its venue*: `Test timed out in 5000ms` | a full local `npm run check` on `claude/fx-editor-followups-s2` before its first commit (2026-10-26, Linux cloud container, a backend suite and two review agents running beside it), 1 of 1; passes alone | Suspected, not traced: load. The container was also running the full backend suite, and the test renders three menus in one case | 4 |
-| `errorToastMiddleware.test.ts` (frontend) "only names endpoints that actually exist", a 5005 ms timeout | local full `npm run check` on `claude/colour-everywhere-else` before its first commit (2026-10-19), 1 of 2 full runs, at a load average of ~8; 10 of 10 alone | Suspected, not traced: the test dynamically imports about 35 store modules, and their cold transform under a loaded full run takes longer than the 5 s default | 4 |
 
 ## 4. Fixed
 
@@ -56,6 +54,8 @@ The plan's own rules:
 
 | Test | Fixed in | What it was |
 |---|---|---|
+| `ProjectActionPlaces.test.tsx` (frontend), *for a show behind its venue*: `Test timed out in 5000ms` | session 4 | Seen locally in a full `npm run check` on `claude/fx-editor-followups-s2` (2026-10-26, Linux cloud container, a backend suite and two review agents running beside it), 1 of 1; passed alone. Traced: load on a synchronous case that rendered three surfaces (the Projects card, the home's ⋮ and ⌘K), about 0.5 s alone and 0.8 s for the file's cold first case. Vitest fails a synchronous test that returns after its 5 s. Pinned to one core beside six busy loops, the first case timed out in 5 of 5 runs on main, at 7.5 to 8.5 s. Each case is now one test per place, each comparing that place's actions with the set written out, so no test renders more than once |
+| `errorToastMiddleware.test.ts` (frontend) "only names endpoints that actually exist", a 5005 ms timeout | session 4 | Seen locally in a full `npm run check` on `claude/colour-everywhere-else` (2026-10-19), 1 of 2 full runs, at a load average of ~8; 10 of 10 alone. Traced: the test imported 33 store modules to fill `restApi.endpoints`, about 0.9 s alone, and two of them were most of it: `oauthGithub` imports the navigation tree (350 ms) and `cues` the app store (278 ms). Pinned as above, it timed out in 5 of 5 runs on main. It now reads the endpoint names from the store modules' source (`name: build.query(…)` or `build.mutation(…)`) and imports none; that read gives exactly the 315 endpoints `restApi` holds with every store module loaded |
 | `PatchSheet.test.tsx` (frontend) "opens the ten swatches on Set and picks one; the same colour again sends nothing" and the Gel column's "takes the first match on Enter, and Open white clears a gel", and `AppliedTables.test.tsx` (frontend) "the Scenery table > draws Open only on a drawn drape…": the second write not yet sent when asserted | session 3 | Seen locally: PatchSheet's swatch case 4 of 4 runs of the file on 500dc85 (2026-10-23, macOS), AppliedTables every run of the file on b6964df and `claude/terminology-s3` (2026-10-23); PatchSheet passed in that commit's CI run, AppliedTables alone and in a full `npm run check`. The Gel case was never seen failing; it makes the same two commits, and the forcing below found it with the other two. Traced: no popover was left open, and nothing a case leaves behind reaches the next. `useSheet` sends every commit from a cell's editor through `useLivePush` with a 33 ms floor, so a second commit within 33 ms of the first is held on a timer and lands when the floor lifts. Each case makes two commits and asserted the second one synchronously, which holds only on a machine slow enough to take 33 ms between them. That the Mac running PatchSheet's file was fast enough to fail, and CI and a full run were not, is inferred rather than measured, and so is why the swatch case passed alone there (a cold first case is slower). The writes were never lost, so the tests were wrong (D3): each asserts its second write through `waitFor`. Freezing `Date.now` for `useLivePush` alone forces it: the three cases failed every run on the base, and nothing else in the frontend suite failed |
 | `RigSafetyRoutesTest` "make rig safe that cannot turn every lamp off blacks out but is not ready", a bare `AssertionError` | session 2 | Seen on #253's CI run 39954841494 (ab01733, 2026-10-23), 1 of 3796 tests. Two causes, both traced, either enough to fail it. The test held mac2 busy with a 2 s reset and needed the rig-safe POST to reach mac2 inside those 2 s; it now holds mac2 until teardown. And the snapshot it read could be torn, as in the row below: one with the run finished but the blackout not yet set fails `assertTrue(after.blackout)` |
 | `RigSafetyRoutesTest` "undo strikes the lamps it turned off once their restrike time is up, then releases the blackout", `only the selection's lamp expected:<[mac1]> but was:<[]>` | session 2 | Seen locally in a full `./gradlew test` on `claude/terminology-s4` (2026-10-23). Traced, a code race (D3): `BulkCommandRun.execute()` published the run finished before `RigSafetyService` had acted on its end (the blackout, *Undo*'s lamps, `notOff`), so every window could see a finished *Make rig safe* with nothing to undo. A run now reads finished only once its end has been acted on. "a run is not finished until its end has been acted on" forces the window: it failed 5 of 5 runs on main |
@@ -84,8 +84,8 @@ A session's PR is titled *Flaky tests: session N — title*.
 |---|---|---|---|---|---|
 | 1 | The jsdom teardown frame | merged | `claude/flaky-tests-s1` | [#298](https://github.com/cjcormack/lighting7/pull/298) | c29dd54 |
 | 2 | Rig safety's timing | merged | `claude/flaky-tests-s2` | [#300](https://github.com/cjcormack/lighting7/pull/300) | 9dc4e15 |
-| 3 | The sheet's commit floor | in review | `claude/flaky-tests-s3` | | |
-| 4 | Timeouts under load | planned | | | |
+| 3 | The sheet's commit floor | merged | `claude/flaky-tests-s3` | [#301](https://github.com/cjcormack/lighting7/pull/301) | 5194d0d |
+| 4 | Timeouts under load | in review | `claude/flaky-tests-s4` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -214,6 +214,30 @@ Rows: `ProjectActionPlaces.test.tsx` and `errorToastMiddleware.test.ts`.
   slow under load. A raised timeout is not the fix here (D4).
 - **Recipe for D5.** `npm run check` beside `./gradlew test`, 20 times, or the two files in a loop
   under the same load.
+- **Result (2026-10-26, Linux cloud container, 4 cores).** Both rows are fixed, by cutting the work;
+  no timeout was raised. Under an 8-process CPU soak (load around 12) the whole frontend suite passed
+  once, with `errorToastMiddleware`'s test at 1.7 s and `ProjectActionPlaces`' first two cases at
+  2.7 s and 1.6 s, so the recipe below pins the load instead: the two files run on one core beside
+  busy loops pinned to it. Beside four loops `ProjectActionPlaces` timed out 2 of 2; beside six both
+  timed out 5 of 5. The plan was wrong about `errorToastMiddleware` in one respect: its time was not
+  the 33 modules' transform but two graphs they pull in, the navigation tree through `oauthGithub` and
+  the app store through `cues`, so cutting the imports was possible without weakening the test. A
+  scan of `src/store/*.ts` for `name: build.query|mutation` declarations matched `restApi.endpoints`
+  with every store module loaded, 315 names each, so the test now reads the source; a renamed entry
+  still fails it. `ProjectActionPlaces` was render time, not waiting: every case is synchronous. The
+  case that timed out under the recipe was the file's first, which pays the cold first render of
+  each surface; the row's *behind its venue* case is the second, on the same three renders. Each case
+  is now three tests, one render each, against the set that place must offer, written out as the two
+  venue cases already were. The slowest test in the file alone is now 0.37 s, the first.
+  `saveStatusSlice.test.ts`'s "only names endpoints that actually exist" imports the same way and
+  took 1.6 s under the soak; it has not been seen failing, so it is left as it is (§7), and the same
+  source read would fix it.
+- **D5.** The two files pinned to one core beside six busy loops: on main both timed out in 5 of 5
+  runs; with the fix, 20 of 20 passed. The slowest test in `errorToastMiddleware.test.ts` took 28 to
+  54 ms. In `ProjectActionPlaces.test.tsx` the slowest was always the first, at 3.2 to 4.4 s (3.7 s
+  on average), against 7.5 to 8.5 s for the old first case. Under this load the file's cold first
+  render, which every jsdom file pays, is most of the 5 s, and splitting cannot cut it. `./gradlew
+  test` was not run beside it; the pinned loops stood in for it.
 
 ## 6. Adding a session
 
