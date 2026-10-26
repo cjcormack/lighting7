@@ -155,7 +155,7 @@ held only on an idle machine — it failed 3 of 4 full runs and 0 of 5 runs of t
 
 FX run on the live clock too, so a test that compares channels must not compare one an
 FX is running on: an engine tick between the two reads moves it (`ProgrammerDetachTest`
-leaves out the channel its Pulse drives; see [`plans/flaky-tests.md`](plans/flaky-tests.md)).
+leaves out the channel its Pulse drives; see [`plans/flaky-tests-plan.md`](plans/flaky-tests-plan.md)).
 
 `RouteIntegrationTest` puts a 60 s `Timeout` rule on every test so a hung one fails loudly
 instead of stalling the run until the worker idle timeout (~30 min). Note that JUnit 4's
