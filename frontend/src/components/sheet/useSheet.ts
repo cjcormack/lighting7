@@ -248,10 +248,11 @@ export function useSheet<Row extends SheetRow, C extends string>({
     },
     [cellSelection, columnByKey, commitToCells, rowSelection, selectedRows],
   )
-  // Continuous drag commits are throttled to ~30 Hz with a trailing call — a level slider spreads out
-  // to one frame per selected channel — through `useLivePush`, the busk tabs' discipline (D16):
-  // the first commit goes at once, a second inside the floor is held and sent when the floor
-  // lifts. The hook's dedupe is switched off (`neverEqual`, above). `send` reads `commitNow`
+  // Every editor commit — a drag's frame, an Enter, a pick — is throttled to ~30 Hz with a trailing
+  // call through `useLivePush`, the busk tabs' discipline (D16), since a level slider's drag spreads
+  // out to one frame per selected channel: the first commit goes at once, a second inside the floor
+  // is held and sent when the floor lifts. A key typed over the marquee (`openOrType`) is not.
+  // The hook's dedupe is switched off (`neverEqual`, above). `send` reads `commitNow`
   // through the hook's own ref, and `push` / `flush` are stable for the component's life, which is
   // what keeps `onCellCommit`'s identity stable for `SheetRowView`'s memo — the hook's *object* is
   // fresh per render, so it is the two functions that are depended on, never `live` itself.

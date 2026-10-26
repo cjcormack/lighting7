@@ -4205,7 +4205,10 @@ each was:
   relies on `reset()` for a fresh gesture, and a sheet's value moves by routes the hook never sees
   — ⌫ through `column.clear`, Fan, Park, the wire — so a value set, cleared and retyped would
   never reach the rig while the field showed it. `useSheet.test.ts` pins the cadence as the
-  literal 33, the trailing call, and that a repeat is sent.
+  literal 33, the trailing call, and that a repeat is sent. So a component test's **second**
+  editor commit on one sheet (an Enter, a pick; a key typed over the marquee is not throttled) lands
+  at once only if 33 ms have passed since the first, which a fast machine does not take: assert it
+  through `waitFor` (flaky-tests plan session 3).
 
 - **`PaletteBands`** — `components/editor/PaletteBands.tsx`, the per-attribute popup (apply-model
   plan §4.3, D4; session 5): the family's palettes **round** a value cell's editor, in every form it

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FixturePatch } from '@/api/patchApi'
 
@@ -481,7 +481,8 @@ describe('PatchSheet', () => {
       fireEvent.click(gelCell('PAR 1'))
       fireEvent.click(screen.getByRole('button', { name: 'Set' }))
       fireEvent.click(await screen.findByRole('option', { name: /Open white/ }))
-      expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, gelCode: null })
+      // A second commit inside the sheet's 33 ms floor is held until the floor lifts.
+      await waitFor(() => expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, gelCode: null }))
     })
   })
 
@@ -690,7 +691,8 @@ describe('PatchSheet', () => {
       expect(setPatchColours).not.toHaveBeenCalled()
       fireEvent.click(screen.getByRole('button', { name: 'Set' }))
       fireEvent.click(within(await screen.findByRole('group', { name: 'Colours' })).getByRole('button', { name: /Cyan/ }))
-      expect(setPatchColours).toHaveBeenCalledWith({ projectId: 1, colours: [{ patchId: 1, colour: 'cyan' }] })
+      // A second commit inside the sheet's 33 ms floor is held until the floor lifts.
+      await waitFor(() => expect(setPatchColours).toHaveBeenCalledWith({ projectId: 1, colours: [{ patchId: 1, colour: 'cyan' }] }))
     })
 
     it('toasts a refused colour by its code (COLOUR_UNKNOWN), once per column', async () => {
