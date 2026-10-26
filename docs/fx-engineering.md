@@ -337,6 +337,17 @@ they step — the Family column — through `stepsFxFamily` and, on the client, 
 first. Amount, direction and the spread apply as to any FX, so a Backward or Bounce phase runs the
 steps back.
 
+**A step lands on its sample.** Every built-in that turns a phase into a step goes through
+`stepIndex(phase, n)` (`fx/StepList.kt`; `stepsAt` and Colour Cycle), and every one that tests a
+phase against an edge through `phaseBefore` (the strobes, Square Wave, the pulses, Lightning Strike).
+Both allow `PHASE_EPSILON` (1e-9): a member's phase is the clock's less its offset, wrapped into the
+cycle (`FxPhase`), and at a boundary that arithmetic can fall a rounding error short — a third of a
+cycle comes back as 0.33333333333333326 — which put one row's step a sample late while its
+neighbours stepped on time (`StepBoundaryTest`). A phase that short of a whole cycle is the next
+cycle's start (`cyclePhase`). A reversed phase reaches each boundary from above, so Backward and
+Bounce read `1 − p` twice that tolerance short (`FxDirection`), which lands it on the step it enters
+and keeps phase 0 at the very end of the cycle.
+
 **The target resolves a step per head** (`StepList.valueFor`, `colourFor` on the colour target):
 `SliderTarget`, `ColourTarget` and `PositionTarget` blend the two steps in proportion (a byte, an
 `ExtendedColour`, pan and tilt each), and `SettingTarget` snaps to the nearer — a slot has no halfway

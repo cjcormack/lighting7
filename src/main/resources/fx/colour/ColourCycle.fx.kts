@@ -24,9 +24,8 @@ if (colours.isEmpty()) {
 } else if (colours.size == 1) {
     FxOutput.Colour(colours[0])
 } else {
-    val segmentSize = 1.0 / colours.size
-    val segmentIndex = (phase / segmentSize).toInt().coerceIn(0, colours.size - 1)
-    val segmentPhase = (phase - segmentIndex * segmentSize) / segmentSize
+    val segmentIndex = stepIndex(phase, colours.size)
+    val segmentPhase = stepWithin(phase, colours.size)
 
     val currentColour = colours[segmentIndex]
     val nextColour = colours[(segmentIndex + 1) % colours.size]

@@ -34,17 +34,18 @@ val attackRatio = params.double("attackRatio")
 val holdRatio = params.double("holdRatio")
 val curve = params.easingCurve("curve")
 val releaseRatio = 1.0 - attackRatio - holdRatio
+val p = cyclePhase(phase)
 
 val value = when {
-    phase < attackRatio -> {
-        val attackPhase = phase / attackRatio
+    phaseBefore(p, attackRatio) -> {
+        val attackPhase = p / attackRatio
         curve.interpolate(min.toDouble(), max.toDouble(), attackPhase)
     }
-    phase < attackRatio + holdRatio -> {
+    phaseBefore(p, attackRatio + holdRatio) -> {
         max.toDouble()
     }
     else -> {
-        val releasePhase = (phase - attackRatio - holdRatio) / releaseRatio
+        val releasePhase = if (releaseRatio > 0.0) (p - attackRatio - holdRatio) / releaseRatio else 1.0
         curve.interpolate(max.toDouble(), min.toDouble(), releasePhase)
     }
 }

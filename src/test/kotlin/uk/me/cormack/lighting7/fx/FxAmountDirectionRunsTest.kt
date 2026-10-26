@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -72,7 +73,7 @@ class FxAmountDirectionRunsTest {
         override val name = "Phase Slider"
         override val outputType = FxOutputType.SLIDER
         override fun calculate(phase: Double, context: FxContext): FxOutput =
-            FxOutput.Slider((10 + (phase * 200).toInt()).toUByte())
+            FxOutput.Slider((10 + (phase * 200).roundToInt()).toUByte())
     }
 
     private fun bandEffect(
@@ -225,7 +226,7 @@ class FxAmountDirectionRunsTest {
     fun `backward reads phase 0 as the very end of the cycle, never past it`() {
         val phase = FxDirection.BACKWARD.apply(0.0, 0)
         assertTrue(phase < 1.0, "a list indexed by floor(phase × n) must not run off its end")
-        assertEquals(0.75, FxDirection.BACKWARD.apply(0.25, 7))
+        assertEquals(0.75, FxDirection.BACKWARD.apply(0.25, 7), 1e-8)
     }
 
     @Test

@@ -22,14 +22,15 @@ val minBrightness = params.ubyte("minBrightness")
 val FLASH_END = 0.05
 val DECAY_END = 0.3
 val range = maxBrightness.toInt() - minBrightness.toInt()
+val p = cyclePhase(phase)
 
 when {
     // Flash: snap to full brightness
-    phase < FLASH_END -> FxOutput.Slider(maxBrightness)
+    phaseBefore(p, FLASH_END) -> FxOutput.Slider(maxBrightness)
 
     // Decay: quadratic fade
-    phase < DECAY_END -> {
-        val decayProgress = (phase - FLASH_END) / (DECAY_END - FLASH_END)
+    phaseBefore(p, DECAY_END) -> {
+        val decayProgress = (p - FLASH_END) / (DECAY_END - FLASH_END)
         val decayCurve = (1.0 - decayProgress).pow(2.0)
         FxOutput.Slider(
             (minBrightness.toInt() + range * decayCurve).toInt().coerceIn(0, 255).toUByte()

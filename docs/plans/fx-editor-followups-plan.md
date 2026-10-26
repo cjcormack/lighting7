@@ -116,7 +116,7 @@ follow-ups: session N — title*. Never merge a later session's PR before an ear
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Steps land on their sample | planned | | | |
+| 1 | Steps land on their sample | in review | claude/fx-editor-followups-s1 | | |
 | 2 | Fixtures: the third element mode, and Over | planned | | | |
 | 3 | The graph: ruler, knobs, fixture rows and room for names | planned | | | |
 | 4 | The list's head: nothing selected and the subject | planned | | | |
@@ -144,6 +144,19 @@ the next; whoever merges the last fills its own.
 - **Tests:** the sampler test above; `stepIndex` at *k/n* for n in 2..8 with the offsets a spread of
   n members produces; the built-ins' existing tests unchanged.
 - **Docs:** `docs/fx-engineering.md` §"Step FX", a sentence on `stepIndex` and why.
+- **Recorded (session 1):** the sampler test failed on `main` as diagnosed: zone 1, offset 0, changed
+  colour at samples 17 · 33 · 48 · 65 · 81 over a one-bar cycle. The error is `FxPhase.shape`'s wrap,
+  `((x % 1) + 1) % 1`, which turns tick 32 of 96 into 0.33333333333333326, a rounding error short of a third.
+  The wrap is left as it is, since every FX's phase would move with it; the tolerance absorbs it.
+  ε is `PHASE_EPSILON` = 1e-9 (of a step in `stepIndex`, of a cycle elsewhere), not a tick: the error
+  to absorb is float rounding (~1e-15), and a tick-sized ε (a 24th of a cycle) would move steps that
+  are not at a boundary. FxSampler's cycle starts share it. Colour Cycle also needs how far through
+  its step a phase is, so `stepWithin` sits beside `stepIndex`; an edge that is no whole step (an on
+  ratio, a duty cycle) takes `phaseBefore`, used by the two strobes, Square Wave, Pulse, Frost Pulse,
+  Iris Pulse and Lightning Strike. Rainbow Cycle and Ramp's `phase < 0.5` are continuous across their
+  edge, so they are unchanged. The plan missed direction: a reversed phase meets each boundary from
+  above, so an upward ε alone put Backward a sample late and flashed a step at each Bounce.
+  `FxDirection.reverse` now reads `1 − p` two ε short, which also keeps phase 0 at the cycle's end.
 
 ### Session 2 — Fixtures: the third element mode, and Over
 

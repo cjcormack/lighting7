@@ -580,7 +580,7 @@ the inspector's fields saying what follows what.
 2026-10-23
 
 Palette Steps and Colour Cycle give every entry an equal share of the cycle (`stepsAt` in
-`fx/StepList.kt`, Colour Cycle's own `segmentSize`), with one `fadeRatio` across them. MagicQ's Width
+`fx/StepList.kt`, Colour Cycle through `stepIndex`), with one `fadeRatio` across them. MagicQ's Width
 on its 2col, 3col and 4col FX lets one step hold longer than the rest.
 
 The shape: a per-entry weight in the step list's grammar (`pal:{uuid}*2`, `#ff0000*2`), read by both

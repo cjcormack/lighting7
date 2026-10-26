@@ -285,6 +285,40 @@ class PaletteStepList(val steps: List<PaletteStep>) : StepList {
 }
 
 /**
+ * How far short of a boundary — a step's, an edge's or a whole cycle's — a phase may fall and still
+ * be on it: a member's phase is the clock's less its offset, wrapped into the cycle, and that
+ * arithmetic can land a rounding error (~1e-15) under a boundary — a third of a cycle comes back as
+ * 0.33333333333333326. In steps for [stepIndex], in cycles elsewhere.
+ */
+const val PHASE_EPSILON = 1e-9
+
+/** [phase] in `[0, 1)`, a phase a rounding error short of a whole cycle read as the next one's start. */
+fun cyclePhase(phase: Double): Double {
+    val within = phase - floor(phase)
+    return if (within + PHASE_EPSILON >= 1.0) 0.0 else within
+}
+
+/**
+ * Which of [n] equal steps of a cycle [phase] is on, 0 until n − 1: the one place an FX turns a phase
+ * into a step, so every member of a chase steps on the same sample. A phase a rounding error short of
+ * a boundary is on the step it reaches.
+ */
+fun stepIndex(phase: Double, n: Int): Int {
+    require(n > 0) { "a cycle of no steps" }
+    return floor(cyclePhase(phase) * n + PHASE_EPSILON).toInt().coerceAtMost(n - 1)
+}
+
+/** How far through its step [stepIndex] finds [phase], from 0 at the boundary to short of 1. */
+fun stepWithin(phase: Double, n: Int): Double =
+    (cyclePhase(phase) * n - stepIndex(phase, n)).coerceAtLeast(0.0)
+
+/**
+ * [phase] is short of [edge], a fraction of the cycle where an FX's output changes (a strobe's on
+ * ratio, a pulse's attack), with [stepIndex]'s tolerance.
+ */
+fun phaseBefore(phase: Double, edge: Double): Boolean = cyclePhase(phase) + PHASE_EPSILON < edge
+
+/**
  * The step a phase is on (effects plan §3.6): [steps] in equal segments of the cycle, each held for
  * `1 − fadeRatio` of its segment and crossing to the next over the rest — Colour Cycle's rule, so a
  * fade ratio means the same on both. The last step crosses back to the first. A list of one is that
@@ -296,10 +330,8 @@ class PaletteStepList(val steps: List<PaletteStep>) : StepList {
 fun stepsAt(phase: Double, steps: StepList, fadeRatio: Double = 0.0): FxOutput.Steps {
     val n = steps.size
     if (n <= 1) return FxOutput.Steps(0, 0, 0.0, steps)
-    val p = phase - floor(phase)
-    val scaled = p * n
-    val from = scaled.toInt().coerceIn(0, n - 1)
-    val within = scaled - from
+    val from = stepIndex(phase, n)
+    val within = stepWithin(phase, n)
     val fade = fadeRatio.coerceIn(0.0, 1.0)
     val hold = 1.0 - fade
     val blend = if (fade <= 0.0 || within < hold) 0.0 else ((within - hold) / fade).coerceIn(0.0, 1.0)

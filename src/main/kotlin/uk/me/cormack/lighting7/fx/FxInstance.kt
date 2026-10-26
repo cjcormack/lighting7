@@ -134,10 +134,13 @@ enum class FxDirection {
             entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
         /**
-         * `1 − p`, kept inside `[0, 1)`: phase 0 reads as the very end of the cycle rather than 1.0,
-         * which an effect indexing a list by `floor(phase × n)` would read one past its last entry.
+         * `1 − p`, read [REVERSE_SHORT] short so it stays inside `[0, 1)` — phase 0 is the very end of
+         * the cycle — and a boundary, which a reversed phase reaches from above, lands on the step it
+         * enters rather than inside [PHASE_EPSILON] of the one it leaves.
          */
-        private fun reverse(phase: Double): Double = minOf(1.0 - phase, Math.nextDown(1.0))
+        private fun reverse(phase: Double): Double = (1.0 - cyclePhase(phase) - REVERSE_SHORT).coerceAtLeast(0.0)
+
+        private const val REVERSE_SHORT = 2 * PHASE_EPSILON
     }
 }
 
