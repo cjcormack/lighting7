@@ -170,7 +170,9 @@ export function forkRequest(
     family: entry.family,
     outputType: entry.outputType,
     fxMode: entry.fxMode,
-    parameters: entry.parameters.map((p) => ({ ...p })),
+    // A curve's options are the desk's own list, filled in by the library: a fork stores none, so it
+    // keeps following the desk's curves.
+    parameters: entry.parameters.map((p) => (p.type === 'easingCurve' ? { ...p, options: undefined } : { ...p })),
     compatibleAttributes: [...entry.compatibleAttributes],
     script: entry.script ?? '',
     timingSource: entry.timingSource ?? 'BEAT',

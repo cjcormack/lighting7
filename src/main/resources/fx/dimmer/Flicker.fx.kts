@@ -10,10 +10,21 @@ parameters:
     type: ubyte
     default: "100"
     description: Minimum value
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: max
   - name: max
     type: ubyte
     default: "255"
     description: Maximum value
+    label: High
+    min: 0
+    max: 255
+    step: 1
+    unit: %
 ---*/
 
 val min = params.ubyte("min")

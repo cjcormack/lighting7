@@ -11,18 +11,40 @@ parameters:
     type: ubyte
     default: "255"
     description: Normal on brightness
+    label: High
+    min: 0
+    max: 255
+    step: 1
+    unit: %
   - name: offLevel
     type: ubyte
     default: "0"
     description: Off/flicker brightness
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: onLevel
   - name: flickerDurationMs
     type: int
     default: "800"
     description: Total duration of the flicker burst in milliseconds
+    label: Burst
+    min: 0
+    max: 5000
+    step: 10
+    unit: ms
   - name: flickerSpeed
     type: double
     default: "0.3"
     description: How fast the on/off cycles are during a flicker (lower = faster)
+    label: Speed
+    min: 0.05
+    max: 0.95
+    step: 0.01
+    unit: ratio
+    role: detail
 ---*/
 
 val onLevel = params.ubyte("onLevel")

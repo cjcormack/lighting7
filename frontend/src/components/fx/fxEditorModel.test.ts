@@ -16,8 +16,10 @@ import {
   withPaletteDraft,
   draftOf,
   levelModeOf,
+  isParamShown,
   paramAxis,
   paramRole,
+  paramView,
   pickerFamilyForSheet,
   pickerFamilyOf,
   startingSpec,
@@ -358,3 +360,41 @@ describe("a pad's instance against its palette (§3.3, D20)", () => {
     expect(withPaletteDraft(template, { ...instance, order: 'RANDOM' }).order).toBe('RANDOM')
   })
 })
+
+describe('paramView (fx-settings plan D1)', () => {
+  it('reads what the desk declares, and guesses only what it leaves out', () => {
+    const attack = { ...p('attackRatio', 'double', '0.1'), label: 'Attack', min: 0, max: 1, unit: 'ratio' as const, role: 'detail' as const }
+    const pulse = entry({ parameters: [p('min', 'ubyte'), attack] })
+    expect(paramView(pulse, attack)).toEqual({ label: 'Attack', unit: 'ratio', min: 0, max: 1, step: 0.01, fold: 'detail', open: false })
+    // Labelled only: the rest is still guessed — a ratio beside a level, folded.
+    const speed = { ...p('speedRatio', 'double', '0.3'), label: 'Speed' }
+    expect(paramView(entry({ parameters: [p('min', 'ubyte'), speed] }), speed)).toEqual({
+      label: 'Speed',
+      unit: 'ratio',
+      min: 0,
+      max: 1,
+      step: 0.01,
+      fold: 'detail',
+      open: false,
+    })
+  })
+
+  it("guesses as paramRole always has for a parameter that declares nothing", () => {
+    const circle = paramView(CIRCLE, CIRCLE.parameters[0])
+    expect(circle).toMatchObject({ label: 'Pan', unit: 'position', min: 0, max: 255, fold: 'main' })
+    expect(paramView(CIRCLE, CIRCLE.parameters[2])).toMatchObject({ label: 'Pan size', unit: 'dmx' })
+    const pulse = entry({ parameters: [p('min', 'ubyte'), p('holdRatio', 'double', '0.3')] })
+    expect(paramView(pulse, pulse.parameters[0])).toMatchObject({ label: 'Low', unit: '%' })
+    expect(paramView(pulse, pulse.parameters[1])).toMatchObject({ label: 'Hold', unit: 'ratio', fold: 'detail' })
+  })
+
+  it('shows a parameter only while its shownWhen holds, against the default when unset', () => {
+    const shape = { ...p('shape', 'choice', 'SINE'), options: [{ value: 'SINE', label: 'Sine' }, { value: 'SQUARE', label: 'Square' }] }
+    const width = { ...p('width', 'double', '0.5'), shownWhen: { param: 'shape', values: ['SQUARE'] } }
+    const wave = entry({ parameters: [shape, width] })
+    expect(isParamShown(wave, width, {})).toBe(false)
+    expect(isParamShown(wave, width, { shape: 'square' })).toBe(true)
+    expect(isParamShown(wave, shape, {})).toBe(true)
+  })
+})
+

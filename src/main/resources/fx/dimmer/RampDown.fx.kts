@@ -10,14 +10,27 @@ parameters:
     type: ubyte
     default: "0"
     description: Minimum value
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: max
   - name: max
     type: ubyte
     default: "255"
     description: Maximum value
+    label: High
+    min: 0
+    max: 255
+    step: 1
+    unit: %
   - name: curve
     type: easingCurve
     default: "LINEAR"
     description: Easing curve
+    label: Curve
+    role: detail
 ---*/
 
 val min = params.ubyte("min")

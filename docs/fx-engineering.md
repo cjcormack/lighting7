@@ -553,7 +553,7 @@ fx_definitions table (user FX only):
 │                       the built-ins' own; the New FX sheet offers neither)
 ├── output_type       — SLIDER, COLOUR, or POSITION (never STEPS — refused, see Step FX)
 ├── fx_mode           — STANDARD or STATEFUL
-├── parameters        — JSON schema [{name, type, defaultValue, description}]
+├── parameters        — JSON schema [{name, type, defaultValue, description, …}] (§"Parameters")
 ├── compatible_attributes — JSON array of attribute names
 ├── script            — the calculate() body only
 ├── project_id        — owning project (required)
@@ -579,6 +579,7 @@ params.boolean("enabled")    → Boolean
 params.colour("baseColor")   → ExtendedColour (resolves a palette reference, "pal:{uuid}")
 params.colourList("colours") → List<ExtendedColour> (literal colours only; a palette is dropped)
 params.easingCurve("curve")  → EasingCurve
+params.choice("shape")       → String (one of its declared options; another reads as the default)
 params.string("name")        → String
 ```
 
@@ -638,6 +639,9 @@ val value = (min.toInt() + (max.toInt() - min.toInt()) * sine)
 FxOutput.Slider(value)
 ```
 
+Each parameter also declares how the editor draws it — a label, a range, a unit, a pair — which
+the example leaves out; see §"Parameters".
+
 At startup, `FxFileLoader` scans the resource directory, parses each file's
 frontmatter into metadata and script body, compiles the script, and registers
 the FX in the FxRegistry with `source = BUILT_IN`.
@@ -651,6 +655,70 @@ door that makes an FX without naming them takes them: the add routes, the progra
 the MCP tools, the picker and the palette editor. A swap to another type in the picker or the
 palette editor takes the new type's where the FX still stood at the old type's
 (`swappedTiming`). A user FX definition has neither, so runs Forward at one bar.
+
+### Parameters
+
+A parameter is `ParameterInfo` (`fx/FxRegistry.kt`): its `name`, `type`, `defaultValue` and
+`description`, and — all optional — how the editor draws it (fx-settings plan D1). The desk
+declares; the editor reads, and guesses from the name and type only what a parameter leaves out —
+everything, for a script FX's that declares none (`paramView` in
+`frontend/src/components/fx/fxEditorModel.ts`).
+
+| Key | Means |
+|---|---|
+| `label` | The editor's word for it — *Low*, *Attack*, *Pan size* |
+| `min`, `max`, `step` | The range offered, in the stored value's terms: a byte's 0–255, a ratio's 0–1 |
+| `unit` | How the value reads: `%` a byte level as a percent of full, `ratio` a 0–1 share as a percent, `dmx` a byte in DMX steps, `position` a byte about its axis's centre (`-128..127`), `ms` milliseconds |
+| `options` | A `choice`'s values and labels, drawn as a segment |
+| `role` | `main`, drawn with the FX, or `detail`, folded under *More* |
+| `shownWhen` | Drawn only while another parameter holds one of the values named |
+| `pair` | On a low, the high it is drawn with as one two-thumb range |
+
+In frontmatter, under the parameter's other keys:
+
+```
+  - name: min
+    type: ubyte
+    default: "0"
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: max
+  - name: shape
+    type: choice
+    default: "SINE"
+    options: [SINE: Sine, SQUARE: Square]
+  - name: width
+    type: double
+    default: "0.5"
+    role: detail
+    shownWhen: shape = [SQUARE]
+```
+
+Every built-in declares a label for each parameter and a range and a unit for each numeric one,
+its script's clamps as the range (`FxFileLoaderTest`). The ranges are the editor's, not a refusal:
+a stored value outside one still runs as the script reads it.
+
+`parameterMetadataProblems` (`fx/ParameterMetadata.kt`) is what a declaration must pass — each
+name once, a known role, a known unit on a type it reads (`%` and `position` a byte, `ratio` a
+double, `dmx` and `ms` any number), `min` ≤ `max`, a range only on a number, a choice's default among
+its options and each option once with a value and a label, a `shownWhen` and a `pair` naming another
+parameter (a pair two numbers of one type, each in one pair). A built-in that breaks one fails to
+load; a script's `registerFx` throws; a user FX definition that breaks one is refused 400 by
+`POST` / `PUT /fx/definitions`, every problem named.
+
+A **`choice`** holds one of its `options`, matched ignoring case: every write boundary refuses
+another (`choiceProblem`, through `routes/storedFxRules.kt`'s `fxWriteProblem`), and
+`params.choice` reads one an older row holds as the declared default. An **`easingCurve`**'s options
+are the desk's own curves, filled in by `GET /fx/library` (`withImpliedOptions`) so no FX has to
+list them. `describe_rig`'s FX library lines carry the metadata in brackets
+(`ai/RigBriefing.kt`'s `parameterBrief`).
+
+The keys are additive in canonical JSON, so a user FX definition carrying them syncs without a
+`formatVersion` change: an older reader imports the definition without them, and its next push drops
+them (`docs/sync-engineering.md` §"Format versioning" says why that is no degraded record).
 
 ### Three Script Base Classes
 
@@ -2100,6 +2168,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/Fx.kt` | Fx, StatefulFx interfaces, FxOutput types |
 | `fx/FxRegistry.kt` | Unified FX registry, FxRegistration, ParameterInfo, FxTypeInfo |
 | `fx/FxFileLoader.kt` | Loads and parses .fx.kts files from resources |
+| `fx/ParameterMetadata.kt` | A parameter's editor metadata rules, the `choice` type's refusal, a curve's implied options (§"Parameters") |
 | `fx/TypedParams.kt` | Typed parameter accessor for FX scripts |
 | `fx/ScriptFxAdapter.kt` | Bridges compiled FX scripts to Fx interfaces |
 | `fx/FxScriptCompiler.kt` | Compiles and caches FX calculate scripts |

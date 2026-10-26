@@ -84,9 +84,7 @@ class FxFileLoader(
                     scriptBody = scriptBody,
                     fxMode = FxMode.valueOf(metadata.fxMode),
                     outputType = FxOutputType.valueOf(metadata.outputType),
-                    parameters = metadata.parameters.map { p ->
-                        ParameterInfo(p.name, p.type, p.default, p.description)
-                    },
+                    parameters = metadata.parameters.map(FxFileParameter::toParameterInfo),
                 )
             } catch (e: Exception) {
                 logger.error("Failed to parse built-in fx/{}", relativePath, e)
@@ -262,7 +260,10 @@ class FxFileLoader(
         private val FRONTMATTER_REGEX = Regex("""/\*---\s*\n(.*?)\n\s*---\*/""", RegexOption.DOT_MATCHES_ALL)
 
         /** The keys a `parameters:` list item may carry; see [parseSimpleYaml]'s continuation branch. */
-        private val PARAM_KEYS = setOf("name", "type", "default", "description")
+        private val PARAM_KEYS = setOf(
+            "name", "type", "default", "description",
+            "label", "min", "max", "step", "unit", "options", "role", "shownWhen", "pair",
+        )
 
         /**
          * Parse an .fx.kts file into metadata and script body.
@@ -314,12 +315,7 @@ class FxFileLoader(
                 if (trimmed.startsWith("- ") && inParameters) {
                     // Save previous param if any
                     currentParam?.let { map ->
-                        parameters.add(FxFileParameter(
-                            name = map["name"] ?: "",
-                            type = map["type"] ?: "string",
-                            default = map["default"] ?: "",
-                            description = map["description"] ?: "",
-                        ))
+                        parameters.add(parseParameter(map))
                     }
                     // Start new param
                     currentParam = mutableMapOf()
@@ -332,7 +328,7 @@ class FxFileLoader(
                     continue
                 }
 
-                // Continuation of the current param: `type`, `default`, `description`. Indentation
+                // Continuation of the current param: one of [PARAM_KEYS]. Indentation
                 // has to be read off the *raw* line — `trimmed` can never start with whitespace,
                 // and testing it here meant this branch never ran, so every built-in parameter
                 // parsed with type "string", no default and no description. Nothing noticed for a
@@ -364,12 +360,7 @@ class FxFileLoader(
 
                 // Not in a parameter entry anymore
                 if (currentParam != null) {
-                    parameters.add(FxFileParameter(
-                        name = currentParam["name"] ?: "",
-                        type = currentParam["type"] ?: "string",
-                        default = currentParam["default"] ?: "",
-                        description = currentParam["description"] ?: "",
-                    ))
+                    parameters.add(parseParameter(currentParam))
                     currentParam = null
                 }
 
@@ -401,13 +392,11 @@ class FxFileLoader(
 
             // Flush last param
             currentParam?.let { map ->
-                parameters.add(FxFileParameter(
-                    name = map["name"] ?: "",
-                    type = map["type"] ?: "string",
-                    default = map["default"] ?: "",
-                    description = map["description"] ?: "",
-                ))
+                parameters.add(parseParameter(map))
             }
+
+            val problems = parameterMetadataProblems(parameters.map(FxFileParameter::toParameterInfo))
+            require(problems.isEmpty()) { "FX '$id': ${problems.joinToString("; ")}" }
 
             return FxFileMetadata(
                 id = id,
@@ -422,6 +411,50 @@ class FxFileLoader(
                 compatibleAttributes = compatibleAttributes,
                 aliases = aliases,
                 parameters = parameters,
+            )
+        }
+
+        /**
+         * One `parameters:` item. The editor's metadata (fx-settings plan D1) is written as:
+         *
+         * ```
+         * min: 0                                  # max, step likewise; in the stored value's terms
+         * unit: %                                 # one of PARAMETER_UNITS
+         * options: [SINE: Sine, RAMP_UP: Ramp up] # a choice's values, each `value: label` or a bare value; no commas
+         * role: detail
+         * shownWhen: shape = [SQUARE, PULSE]      # or `shape = SQUARE`
+         * pair: max                               # on a low, its high
+         * ```
+         */
+        private fun parseParameter(map: Map<String, String>): FxFileParameter {
+            val name = map["name"] ?: ""
+            fun number(key: String): Double? = map[key]?.let {
+                it.toDoubleOrNull() ?: throw IllegalArgumentException("parameter '$name': $key must be a number, got '$it'")
+            }
+            return FxFileParameter(
+                name = name,
+                type = map["type"] ?: "string",
+                default = map["default"] ?: "",
+                description = map["description"] ?: "",
+                label = map["label"],
+                min = number("min"),
+                max = number("max"),
+                step = number("step"),
+                unit = map["unit"],
+                options = map["options"]?.let { value ->
+                    parseYamlArray(value).map { item ->
+                        val (optionValue, optionLabel) = if (item.contains(":")) item.split(":", limit = 2) else listOf(item, item)
+                        ParameterOption(optionValue.trim().removeSurrounding("\""), optionLabel.trim().removeSurrounding("\""))
+                    }
+                },
+                role = map["role"],
+                shownWhen = map["shownWhen"]?.let { value ->
+                    val (param, values) = value.split("=", limit = 2).takeIf { it.size == 2 }
+                        ?: throw IllegalArgumentException("parameter '$name': shownWhen is `other = [values]`, got '$value'")
+                    val list = values.trim()
+                    ParameterCondition(param.trim(), if (list.startsWith("[")) parseYamlArray(list) else listOf(list))
+                },
+                pair = map["pair"],
             )
         }
 
@@ -462,4 +495,29 @@ data class FxFileParameter(
     val type: String,
     val default: String,
     val description: String = "",
-)
+    val label: String? = null,
+    val min: Double? = null,
+    val max: Double? = null,
+    val step: Double? = null,
+    val unit: String? = null,
+    val options: List<ParameterOption>? = null,
+    val role: String? = null,
+    val shownWhen: ParameterCondition? = null,
+    val pair: String? = null,
+) {
+    fun toParameterInfo(): ParameterInfo = ParameterInfo(
+        name = name,
+        type = type,
+        defaultValue = default,
+        description = description,
+        label = label,
+        min = min,
+        max = max,
+        step = step,
+        unit = unit,
+        options = options,
+        role = role,
+        shownWhen = shownWhen,
+        pair = pair,
+    )
+}

@@ -12,10 +12,12 @@ parameters:
     type: colour
     default: "#ff0000"
     description: Starting colour
+    label: From
   - name: toColour
     type: colour
     default: "#0000ff"
     description: Ending colour
+    label: To
 ---*/
 
 val fromColour = params.colour("fromColour")

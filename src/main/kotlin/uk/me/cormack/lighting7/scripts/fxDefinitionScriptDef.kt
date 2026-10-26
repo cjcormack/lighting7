@@ -69,6 +69,9 @@ abstract class FxDefinitionScript(
             "'${registration.id}' was a built-in FX's id and is retired; register the FX under another id"
         }
         LegacyNames.familyProblem(registration.family)?.let { throw IllegalArgumentException("'${registration.id}': $it") }
+        parameterMetadataProblems(registration.parameters).takeIf { it.isNotEmpty() }?.let {
+            throw IllegalArgumentException("'${registration.id}': ${it.joinToString("; ")}")
+        }
         val scriptReg = registration.copy(source = FxSource.USER, sourceDefinitionId = scriptId)
         show.fxRegistry.register(scriptReg)
         registeredFxIds.add(scriptReg.id)

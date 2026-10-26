@@ -83,7 +83,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Palette | a palette is asked to address a two-wheel head's second wheel |
 | [`FU-TMPL-KELVIN`](#fu-tmpl-kelvin) | Ready | Palette | — |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
-| [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined FX declares a numeric parameter outside the guessed range |
 | [`FU-FE-FILTER-FLEX-SPLIT`](#fu-fe-filter-flex-split) | Ready | FE | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
@@ -2477,38 +2476,6 @@ show whose cues each layer one look, this never fires.
 
 ---
 
-### `FU-FE-FX-PARAM-RANGE`
-
-**The FX sheet guesses a numeric parameter's range, because the wire carries no bounds** · Trigger ·
-frontend sweep `FS-COORD-FXLIBRARY-PARAMS`, 2026-08-29
-
-`GET /fx/library` describes each parameter with `name` / `type` / `defaultValue` / `description`
-(`FxRegistry.ParameterInfo`, filled from each `.fx.kts` file's frontmatter via `FxFileParameter`)
-and nothing else. The FX editor's fields (`FxFields`' `ParamControl`, which replaced
-`EffectParameterForm.ParameterInput` in fixture-fx-sheets session 5) therefore have to invent the slider range for
-every numeric control: a `double` gets 0–1 when its default is `<= 1.0` and 0–10 otherwise, and an
-`int` gets `max(255, default * 2)`.
-
-For the 28 built-ins this is exactly right and was verified parameter by parameter when backend D7
-(`84885df`) started sending real defaults: all ten declared doubles are 0–1 ratios with defaults
-between 0.1 and 1.0, so the 0–10 arm is unreachable, and the two ints (`ColourFlicker.variation` 50,
-`FluorescentFlicker.flickerDurationMs` 800) land in usable ranges. The guess only breaks for an
-FX the built-ins don't constrain — a script-defined one registered through `registerFx` /
-an `FX_DEFINITION` script, which may declare a double whose real range is 0–360 (rendered 0–1
-because its default is 0) or 0–1000 (rendered 0–10).
-
-The fix is to declare the bounds rather than widen the guess: add nullable `min` / `max` to
-`FxFileParameter` and `ParameterInfo`, teach `FxFileLoader.parseSimpleYaml`'s `parameters:`
-continuation branch the two extra keys, declare them on the numeric built-ins, and have
-`ParameterInput` prefer them with the present heuristic as the fallback for a definition that
-declares none. Additive on the wire and additive in canonical JSON, so no `formatVersion` change —
-but it is a backend change, which is why the sweep item that found it did not take it.
-
-**Trigger**: a script-defined FX declares a numeric parameter whose sensible range is not the
-one the heuristic picks, and the operator finds the slider unusable.
-
----
-
 ### `FU-FE-FILTER-FLEX-SPLIT`
 
 **Row B's filter is given half the width it asks for, because a decorative spacer competes with
@@ -3184,6 +3151,9 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-FE-FX-PARAM-RANGE` — an FX parameter declares its label, range, step and unit (and a choice's
+  options, a fold, a `shownWhen` and a `pair`) in frontmatter, `GET /fx/library` carries them and the
+  editor draws from them, guessing only for one that declares none (fx-settings plan session 1).
 - `FU-FX-SPLIT-DUPLICATE` — `SPLIT` folded into `EDGES_IN` (*Centre in*): the parse no longer knows
   it, and database step 4 and `sync/LegacyNames.kt` rewrite a stored one (terminology plan session 3).
 - `FU-PERF-FRAME-TXN-UNIFY` — one compose pass: a beat wake or the ticker runs one pass over every

@@ -794,8 +794,11 @@ Release folds to its glyph and the scope line drops the fade.
   reads back as Around; a level FX asks *Over the level underneath: Replace it | Within it*
   (`OVERRIDE` / `MULTIPLY`, default Replace). Levels are percents; a size (`…Radius`, `…Range`) is a
   distance in **DMX steps**, and a centre or a sweep's end a position on its axis, **centre-relative**
-  (`-128..127`, venue-visit plan D3) on every head — the value is raw DMX, so no head is consulted. Curves, switches and ratios beside levels sit
-  behind **Shape**, its summary line saying what is in it; **Advanced** holds the phase, the raw
+  (`-128..127`, venue-visit plan D3) on every head — the value is raw DMX, so no head is consulted. **Each parameter is drawn from the
+  desk's metadata** (fx-settings plan D1; `paramView` in `fxEditorModel.ts`): its label, range, step and unit, a `choice` as a
+  segment, a `pair` as one two-thumb range with a field at each end, one whose `shownWhen` is false not at all, and `detail`
+  ones folded under **More**; `paramRole` and the board's label table guess these only for a parameter that declares none
+  (a script FX's), whose curves, switches and ratios beside levels sit behind **Shape**, its summary line saying what is in it; **Advanced** holds the phase, the raw
   blend (every FX, so nothing is out of reach), **Runs** — *Forever* or a count of cycles, after
   which each head hands back to what is underneath (effects plan D9; a null count is sent as
   `runForever: true`, since the frame's absent `runs` means keep) — and — on a group or a fixture with

@@ -282,6 +282,15 @@ show detached before Att.1 is one, and an attach of one falls back to the no-ori
 record the show lacks comes in, each offered a hide in the review) rather than doing anything silently.
 So no record degrades, and the writer is still v35.
 
+**An FX parameter's editor metadata (fx-settings plan session 1) took no bump, by the same
+question.** A user FX definition's `parameters` may carry `label`, `min`, `max`, `step`, `unit`,
+`options`, `role`, `shownWhen` and `pair`. A v40 reader ignores them and imports the definition with
+none, which is a valid state — the editor guesses for a parameter that declares nothing — and its next
+push writes them away. The one record that would degrade is a `choice` stripped of its options, and
+nothing on the desk authors a `choice` yet: no built-in declares one and the definition sheet does not
+offer the type. Session 2's `minReader` 41 closes that before one can exist; until then a choice with
+no options takes any value (`choiceProblem`, `TypedParams.choice`). The writer is still v40.
+
 **Deferred Look FX going (absolute-looks plan D2) took no bump, by the same question.** Nothing
 new is written: every Look FX this desk exports names a fixture, a group or a selection, which a
 v37 reader imports as what it is. The change is on the reading side. A `deferred` FX, which ran on

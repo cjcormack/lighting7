@@ -10,14 +10,21 @@ parameters:
     type: colour
     default: "#ffffff"
     description: Colour when on
+    label: On colour
   - name: offColour
     type: colour
     default: "#000000"
     description: Colour when off
+    label: Off colour
   - name: onRatio
     type: double
     default: "0.1"
     description: Portion of cycle that is on
+    label: Width
+    min: 0
+    max: 1
+    step: 0.01
+    unit: ratio
 ---*/
 
 val onColour = params.colour("onColour")

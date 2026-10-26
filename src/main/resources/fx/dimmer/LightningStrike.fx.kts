@@ -10,10 +10,21 @@ parameters:
     type: ubyte
     default: "255"
     description: Peak brightness during flash
+    label: High
+    min: 0
+    max: 255
+    step: 1
+    unit: %
   - name: minBrightness
     type: ubyte
     default: "0"
     description: Base brightness between strikes
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: maxBrightness
 ---*/
 
 val maxBrightness = params.ubyte("maxBrightness")

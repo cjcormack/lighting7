@@ -10,22 +10,47 @@ parameters:
     type: ubyte
     default: "0"
     description: Iris between pulses
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: max
   - name: max
     type: ubyte
     default: "160"
     description: Iris at the peak
+    label: High
+    min: 0
+    max: 255
+    step: 1
+    unit: %
   - name: attackRatio
     type: double
     default: "0.1"
     description: Portion of cycle for attack
+    label: Attack
+    min: 0
+    max: 1
+    step: 0.01
+    unit: ratio
+    role: detail
   - name: holdRatio
     type: double
     default: "0.3"
     description: Portion of cycle for hold at max
+    label: Hold
+    min: 0
+    max: 1
+    step: 0.01
+    unit: ratio
+    role: detail
   - name: curve
     type: easingCurve
     default: "QUAD_OUT"
     description: Easing curve for attack/release
+    label: Curve
+    role: detail
 ---*/
 
 val min = params.ubyte("min")

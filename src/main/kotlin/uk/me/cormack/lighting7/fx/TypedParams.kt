@@ -51,6 +51,7 @@ class TypedParams(
     private val floatCache = ConcurrentHashMap<String, Float>()
     private val booleanCache = ConcurrentHashMap<String, Boolean>()
     private val easingCurveCache = ConcurrentHashMap<String, EasingCurve>()
+    private val choiceCache = ConcurrentHashMap<String, String>()
     private val slotStepsCache = ConcurrentHashMap<String, StepList>()
 
     /**
@@ -111,6 +112,21 @@ class TypedParams(
 
     /** Get a String parameter (no parsing needed). */
     fun string(name: String): String = raw(name)
+
+    /**
+     * A `choice` parameter: one of its declared options, in the option's spelling. A value no option
+     * matches — which every write boundary refuses ([choiceProblem]), so only an older row or a bare
+     * `createFx` holds one — reads as the declared default, else the first option.
+     */
+    fun choice(name: String): String = choiceCache.getOrPut(name) {
+        val param = schema.firstOrNull { it.name == name }
+        val first = param?.options?.firstOrNull()
+        if (param == null || first == null) {
+            raw(name)
+        } else {
+            choiceOption(param, raw(name)) ?: choiceOption(param, param.defaultValue) ?: first.value
+        }
+    }
 
     /**
      * Parse a colour parameter, resolving a template reference (`pal:{uuid}`) through the colour

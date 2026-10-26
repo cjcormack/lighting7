@@ -10,18 +10,38 @@ parameters:
     type: ubyte
     default: "128"
     description: Centre pan position
+    label: Pan
+    min: 0
+    max: 255
+    step: 1
+    unit: position
   - name: tiltCentre
     type: ubyte
     default: "128"
     description: Centre tilt position
+    label: Tilt
+    min: 0
+    max: 255
+    step: 1
+    unit: position
   - name: panRadius
     type: ubyte
     default: "64"
     description: Radius of pan movement
+    label: Pan size
+    min: 0
+    max: 255
+    step: 1
+    unit: dmx
   - name: tiltRadius
     type: ubyte
     default: "64"
     description: Radius of tilt movement
+    label: Tilt size
+    min: 0
+    max: 255
+    step: 1
+    unit: dmx
 ---*/
 
 val panCentre = params.ubyte("panCentre")

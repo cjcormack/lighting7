@@ -10,10 +10,21 @@ parameters:
     type: ubyte
     default: "64"
     description: Narrowest zoom
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: max
   - name: max
     type: ubyte
     default: "192"
     description: Widest zoom
+    label: High
+    min: 0
+    max: 255
+    step: 1
+    unit: %
 ---*/
 
 val min = params.ubyte("min")

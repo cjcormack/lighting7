@@ -10,10 +10,16 @@ parameters:
     type: colourList
     default: "#ff0000,#00ff00,#0000ff"
     description: Comma-separated literal colours, each a hex, a name or an extended colour
+    label: Colours
   - name: fadeRatio
     type: double
     default: "0.5"
     description: Crossfade ratio (0 = hard cut, 1 = full crossfade)
+    label: Fade
+    min: 0
+    max: 1
+    step: 0.01
+    unit: ratio
 ---*/
 
 val colours = params.colourList("colours")

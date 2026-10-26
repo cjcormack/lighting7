@@ -110,12 +110,37 @@ export interface FixtureFx {
   indirect: FixtureIndirectFx[]
 }
 
+/**
+ * One FX parameter, and how the desk says to draw it (fx-settings plan D1). Every field after
+ * `description` is optional: a script FX that declares none is drawn as the editor guesses
+ * (`paramView` in `fxEditorModel.ts`).
+ */
 export interface FxParameterDef {
   name: string
   type: string
   defaultValue: string
   description: string
+  label?: string | null
+  /** In the stored value's terms: a byte's 0–255, a ratio's 0–1. */
+  min?: number | null
+  max?: number | null
+  step?: number | null
+  unit?: FxParamUnit | null
+  /** A `choice`'s values, and the desk's curves on an `easingCurve`. */
+  options?: { value: string; label: string }[] | null
+  /** `detail` folds under *More*. */
+  role?: 'main' | 'detail' | null
+  /** Drawn only while `param` holds one of `values`. */
+  shownWhen?: { param: string; values: string[] } | null
+  /** On a low, the high it is drawn with as one range. */
+  pair?: string | null
 }
+
+/**
+ * `%` a byte level read as a percent of full, `ratio` a 0–1 share as a percent, `dmx` a byte in DMX
+ * steps, `position` a byte about its axis's centre, `ms` milliseconds — the desk's `PARAMETER_UNITS`.
+ */
+export type FxParamUnit = '%' | 'ratio' | 'dmx' | 'position' | 'ms'
 
 export interface FxLibraryEntry {
   name: string

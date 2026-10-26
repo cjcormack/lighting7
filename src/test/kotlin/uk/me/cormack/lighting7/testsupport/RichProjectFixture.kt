@@ -12,7 +12,9 @@ import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.FxMode
 import uk.me.cormack.lighting7.fx.FxOutputType
+import uk.me.cormack.lighting7.fx.ParameterCondition
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.fx.ParameterOption
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.DaoCueSceneryRow
 import uk.me.cormack.lighting7.models.DaoCueEvent
@@ -549,7 +551,16 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // left at its emptyList() default the field is omitted from canonical JSON entirely,
         // and a copier that lost every effect's parameter metadata would still pass.
         parameters = listOf(
-            ParameterInfo(name = "depth", type = "double", defaultValue = "0.8", description = "flicker depth"),
+            ParameterInfo(
+                name = "depth", type = "double", defaultValue = "0.8", description = "flicker depth",
+                label = "Depth", min = 0.0, max = 1.0, step = 0.05, unit = "ratio", role = "detail",
+                shownWhen = ParameterCondition("mode", listOf("DEEP")), pair = "depthMax",
+            ),
+            ParameterInfo(name = "depthMax", type = "double", defaultValue = "1.0"),
+            ParameterInfo(
+                name = "mode", type = "choice", defaultValue = "DEEP",
+                options = listOf(ParameterOption("DEEP", "Deep"), ParameterOption("SHALLOW", "Shallow")),
+            ),
             ParameterInfo(name = "seed", type = "int", defaultValue = "7"),
         )
     }
