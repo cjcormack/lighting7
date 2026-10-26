@@ -126,7 +126,7 @@ dependencies {
     // Errors, logs and traces to Sentry — docs/observability-engineering.md. No Sentry Gradle
     // plugin: it auto-adds integrations and touches the build
     // (docs/plans/completed/sentry-plan.md D2).
-    implementation(platform("io.sentry:sentry-bom:8.61.0"))
+    implementation(platform("io.sentry:sentry-bom:8.61.1"))
     implementation("io.sentry:sentry")
     implementation("io.sentry:sentry-logback")
     implementation("io.sentry:sentry-kotlin-extensions")
