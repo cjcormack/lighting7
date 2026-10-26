@@ -46,8 +46,6 @@ The plan's own rules:
 
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
-| `PatchSheet.test.tsx` (frontend) "opens the ten swatches on Set and picks one; the same colour again sends nothing", `setPatchColours` never called after the Cyan click | local `vitest run` of the file on 500dc85 (2026-10-23, macOS), 4 of 4 runs; passes alone, and in that commit's CI run | Partly traced: it fails only after the Gel column's "takes the first match on Enter, and Open white clears a gel", which seems to leave a popover open, so the second Set opens no fresh swatches. Why CI's runner does not hit it is not known | 3 |
-| `AppliedTables.test.tsx` (frontend) "the Scenery table > draws Open only on a drawn drape…", `setScenery` last called with `e-tabs {open: 0.4}` instead of `e-cloth {trimM: 8}` | local `vitest run` of the file and `npm run check:quick` on b6964df and on `claude/terminology-s3` (2026-10-23), every run; passes alone (`-t`) and in the full `npm run check` | Suspected, not traced: order-dependence inside the Scenery `describe`, an earlier case leaving the stub's last call or an open popover behind, the pattern of the PatchSheet row | 3 |
 | `ProjectActionPlaces.test.tsx` (frontend), *for a show behind its venue*: `Test timed out in 5000ms` | a full local `npm run check` on `claude/fx-editor-followups-s2` before its first commit (2026-10-26, Linux cloud container, a backend suite and two review agents running beside it), 1 of 1; passes alone | Suspected, not traced: load. The container was also running the full backend suite, and the test renders three menus in one case | 4 |
 | `errorToastMiddleware.test.ts` (frontend) "only names endpoints that actually exist", a 5005 ms timeout | local full `npm run check` on `claude/colour-everywhere-else` before its first commit (2026-10-19), 1 of 2 full runs, at a load average of ~8; 10 of 10 alone | Suspected, not traced: the test dynamically imports about 35 store modules, and their cold transform under a loaded full run takes longer than the 5 s default | 4 |
 
@@ -57,6 +55,7 @@ The plan's own rules:
 
 | Test | Fixed in | What it was |
 |---|---|---|
+| `PatchSheet.test.tsx` (frontend) "opens the ten swatches on Set and picks one; the same colour again sends nothing" and the Gel column's "takes the first match on Enter, and Open white clears a gel", and `AppliedTables.test.tsx` (frontend) "the Scenery table > draws Open only on a drawn drape…": the second write not yet sent when asserted | session 3 | Seen locally: PatchSheet's swatch case 4 of 4 runs of the file on 500dc85 (2026-10-23, macOS), AppliedTables every run of the file on b6964df and `claude/terminology-s3` (2026-10-23); PatchSheet passed in that commit's CI run, AppliedTables alone and in a full `npm run check`. The Gel case was never seen failing; it makes the same two commits, and the forcing below found it with the other two. Traced: no popover was left open, and nothing a case leaves behind reaches the next. `useSheet` sends every commit from a cell's editor through `useLivePush` with a 33 ms floor, so a second commit within 33 ms of the first is held on a timer and lands when the floor lifts. Each case makes two commits and asserted the second one synchronously, which holds only on a machine slow enough to take 33 ms between them. That the Mac running PatchSheet's file was fast enough to fail, and CI and a full run were not, is inferred rather than measured, and so is why the swatch case passed alone there (a cold first case is slower). The writes were never lost, so the tests were wrong (D3): each asserts its second write through `waitFor`. Freezing `Date.now` for `useLivePush` alone forces it: the three cases failed every run on the base, and nothing else in the frontend suite failed |
 | `RigSafetyRoutesTest` "make rig safe that cannot turn every lamp off blacks out but is not ready", a bare `AssertionError` | session 2 | Seen on #253's CI run 39954841494 (ab01733, 2026-10-23), 1 of 3796 tests. Two causes, both traced, either enough to fail it. The test held mac2 busy with a 2 s reset and needed the rig-safe POST to reach mac2 inside those 2 s; it now holds mac2 until teardown. And the snapshot it read could be torn, as in the row below: one with the run finished but the blackout not yet set fails `assertTrue(after.blackout)` |
 | `RigSafetyRoutesTest` "undo strikes the lamps it turned off once their restrike time is up, then releases the blackout", `only the selection's lamp expected:<[mac1]> but was:<[]>` | session 2 | Seen locally in a full `./gradlew test` on `claude/terminology-s4` (2026-10-23). Traced, a code race (D3): `BulkCommandRun.execute()` published the run finished before `RigSafetyService` had acted on its end (the blackout, *Undo*'s lamps, `notOff`), so every window could see a finished *Make rig safe* with nothing to undo. A run now reads finished only once its end has been acted on. "a run is not finished until its end has been acted on" forces the window: it failed 5 of 5 runs on main |
 | `StageRenderJob.test.tsx`, `BuskingView.test.tsx` and `store/cues.test.tsx` (frontend), an unhandled `ReferenceError: cancelAnimationFrame is not defined` after a file's tests pass, or `Hook timed out in 10000ms` on `test/setup.ts`'s closing frame wait | session 1 | Seen locally, each passing alone: `StageRenderJob` 1 of 2 runs of `npm run check:quick` on `claude/fixture-colours` (2026-10-19) and its hook timeout in 1 full `npm run check` on `claude/fx-editor-s5` (2026-10-25); `BuskingView` 1 of 1 `check:quick` on `claude/fx-editor-s4` (2026-10-24); `store/cues` 1 full `npm run check` on `claude/fx-editor-followups-s2` (2026-10-26). Traced: RTK Query's subscription middleware dispatches an auto-batched `subscriptionsUpdated` from a 500 ms timer after a subscription changes, and `resetApiState` does not cancel it, so a file's last render can notify after setup's one-frame wait. Batched on a frame, RTK's 100 ms fallback timer then outlived jsdom and called the deleted `cancelAnimationFrame`. The hook timeout was not load: a batched dispatch under fake timers (`StageRenderJob`'s) started jsdom's frame interval on the fake clock, so after `useRealTimers` no frame came for the rest of the file. Every store a test builds now batches to the end of the tick (`setup.ts` wraps `configureStore`) and the frame wait is gone; `storeBatching.test.tsx` forces both, failing 4 of 4 cases on main |
@@ -83,8 +82,8 @@ A session's PR is titled *Flaky tests: session N — title*.
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | The jsdom teardown frame | merged | `claude/flaky-tests-s1` | [#298](https://github.com/cjcormack/lighting7/pull/298) | c29dd54 |
-| 2 | Rig safety's timing | in review | `claude/flaky-tests-s2` | | |
-| 3 | A popover left open between cases | planned | | | |
+| 2 | Rig safety's timing | merged | `claude/flaky-tests-s2` | [#300](https://github.com/cjcormack/lighting7/pull/300) | 9dc4e15 |
+| 3 | The sheet's commit floor | in review | `claude/flaky-tests-s3` | | |
 | 4 | Timeouts under load | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -162,7 +161,7 @@ Rows: both `RigSafetyRoutesTest` rows.
 - **D5.** The class, including the new test, 20 times under an 8-process CPU soak (load 2 to 11):
   20 of 20 passed. A full `./gradlew test` was not run beside it; the soak stood in for it.
 
-### Session 3 — A popover left open between cases
+### Session 3 — The sheet's commit floor
 
 Rows: `PatchSheet.test.tsx` and `AppliedTables.test.tsx`. Both pass alone and fail after a sibling
 case.
@@ -179,6 +178,26 @@ case.
   ordering), but not a blocker.
 - **Recipe for D5.** Each file 20 times on macOS and on Linux, or in whichever environments the
   session has.
+- **Result (2026-10-26, Linux cloud container, 4 cores).** The plan's reading was wrong: nothing a
+  case leaves behind reaches the next. Neither row reproduced here as found, on Node 22, 24 or 26,
+  on this branch, on 500dc85 or on b6964df. A Vitest setup file that froze `Date.now` made both fail
+  with their recorded assertions, AppliedTables' case run alone as well as in its file, and the Gel
+  case's second half with them, though it was never seen failing. Why the swatch case passed alone
+  on the Mac and failed after the Gel case is not shown; a cold first case taking longer than 33 ms
+  between its commits would explain it. Logging that clock's callers led to `useSheet`'s commit
+  path: every commit from a cell's editor (not a key typed over the marquee) goes through
+  `useLivePush` at `COMMIT_INTERVAL_MS` (33 ms), and a commit inside the floor of the last send, for
+  the same cell or another, waits on a timer and lands when it lifts, as `useSheet.test.ts` pins.
+  Each case made two commits and checked the second at once, so it passed only where 33 ms went by
+  between them. On the rig the write lands 33 ms late at most, so D3 puts the fault in the tests,
+  and each now asserts its second write through `waitFor`. The forcing recipe is a setup file that
+  freezes `Date.now` only when `useLivePush` is on the stack: on the base each file failed 5 of 5
+  runs, and the whole frontend suite under it (522 files, 6281 tests) failed only these three cases.
+  Frontend `CLAUDE.md`'s note on the sheet's throttle says to assert a second commit through
+  `waitFor`. Why CI passed is inferred, not measured: its shared runner, like this container, takes
+  longer than 33 ms between the two commits.
+- **D5.** With `useLivePush`'s clock frozen, each file passed 20 of 20 runs; without it, each passed
+  20 of 20.
 
 ### Session 4 — Timeouts under load
 
