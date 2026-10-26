@@ -130,12 +130,22 @@ export function mintForkFxId(sourceId: string, takenIds: Iterable<string>): { fx
   return uniqueFxId(`${sourceId}Custom`, takenIds)
 }
 
-/** Every id a new definition must not take — the library's and the definitions'. */
+/**
+ * The ids the desk retired, which it refuses for a definition: the terminology plan's renames and
+ * the level waves Wave replaced (fx-settings plan D2). The desk's `LegacyNames.retiredFxIds`, pinned
+ * to it by `src/test/resources/fx/retiredFxIds.fixture.json`.
+ */
+export const RETIRED_FX_IDS: readonly string[] = [
+  'Breathe', 'ColourPulse', 'DimmerStrobe', 'FocusPull', 'FrostPulse', 'IrisPulse', 'Pulse', 'Ramp',
+  'RampDown', 'RampUp', 'SineWave', 'SquareWave', 'Strobe', 'Triangle', 'ZoomBreathe', 'ZoomWave',
+]
+
+/** Every id a new definition must not take — the library's, the definitions' and the retired ones. */
 export function takenFxIds(
   library: readonly FxLibraryEntry[],
   definitions: readonly FxDefinition[],
 ): string[] {
-  return [...library.map((e) => e.name), ...definitions.map((d) => d.fxId)]
+  return [...library.map((e) => e.name), ...definitions.map((d) => d.fxId), ...RETIRED_FX_IDS]
 }
 
 /**

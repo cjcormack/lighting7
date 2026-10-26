@@ -262,7 +262,9 @@ export function GraphHandles({
     )
   }
 
-  const level = (name: 'min' | 'max') => Number(editor.draft.parameters[name])
+  // The knobs are named min and max; the parameters they write are the FX's own pair (Wave's low and high).
+  const levelParam = { min: editor.levelParams?.low ?? 'min', max: editor.levelParams?.high ?? 'max' }
+  const level = (name: 'min' | 'max') => Number(editor.draft.parameters[levelParam[name]])
   const levelHandles = editor.levels && !section.heat && ['min', 'max'].every((p) => Number.isFinite(level(p as 'min' | 'max')))
   const startLevel = (e: ReactPointerEvent, name: 'min' | 'max', laid: LaidSection['rows'][number]) => {
     const scale = levelScale(section, laid.y)
@@ -274,10 +276,10 @@ export function GraphHandles({
       cancel,
       (_, dy) => {
         last = String(scale.byteAt(from + dy))
-        editor.setParam(name, last, false)
+        editor.setParam(levelParam[name], last, false)
       },
       (moved) => {
-        if (moved && last !== start) editor.setParam(name, last, true)
+        if (moved && last !== start) editor.setParam(levelParam[name], last, true)
       },
     )
   }

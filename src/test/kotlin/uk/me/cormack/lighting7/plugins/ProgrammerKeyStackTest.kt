@@ -119,7 +119,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     fun `a cue Pulse under a programmer dimmer is listed below it and held back`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val pulse = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
+        val pulse = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
         setDimmer("hex-1", 200)
 
         val stack = ask("fixture", "hex-1", "dimmer").stacks.single()
@@ -145,7 +145,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     fun `blind empties the held-back set and takes the programmer off stage`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
+        FxTestSupport.start(state, "Wave", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
         setDimmer("hex-1", 200)
         state.show.fxEngine.programmer.setBlind(true)
 
@@ -161,7 +161,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     fun `blind holds a band effect, listed as held back by Blind and off stage`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val pulse = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val pulse = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
         setDimmer("hex-1", 200)
         state.show.fxEngine.programmer.setBlind(true)
 

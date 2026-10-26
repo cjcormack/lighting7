@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 40`, `minReader = 40`. Rules for future
+Current writer emits `formatVersion = 41`, `minReader = 41`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -288,8 +288,8 @@ question.** A user FX definition's `parameters` may carry `label`, `min`, `max`,
 none, which is a valid state — the editor guesses for a parameter that declares nothing — and its next
 push writes them away. The one record that would degrade is a `choice` stripped of its options, and
 nothing on the desk authors a `choice` yet: no built-in declares one and the definition sheet does not
-offer the type. Session 2's `minReader` 41 closes that before one can exist; until then a choice with
-no options takes any value (`choiceProblem`, `TypedParams.choice`). The writer is still v40.
+offer the type. Session 2's `minReader` 41 closed that before one could exist (§"Version 41 — Wave");
+a choice with no options takes any value (`choiceProblem`, `TypedParams.choice`). The writer stayed v40.
 
 **Deferred Look FX going (absolute-looks plan D2) took no bump, by the same question.** Nothing
 new is written: every Look FX this desk exports names a fixture, a group or a selection, which a
@@ -328,7 +328,7 @@ REST layer and the client know only today's. It maps by **field**, never by vers
 name never returns with a new meaning in the same field — so it applies to every archive, and to a
 tree that mixes two. `ProjectImporter.readDir` reads each folder under its old names too and passes
 every record through `LegacyNames.record` before decoding it, a record in today's folder winning over
-its namesake in an old one; then every FX goes through `LegacyNames.rewriteFx`. `RecordHasher` keys a
+its namesake in an old one; then every FX goes through `LegacyNames.rewriteFx`, then `consolidateFx`. `RecordHasher` keys a
 record in an old folder by today's name, so a merge across the rename pairs a record with itself.
 
 | Where | Old | Today |
@@ -342,6 +342,7 @@ record in an old folder by today's name, so a merge across the rename pairs a re
 | a speed master | `usage` | `family` |
 | an FX definition | `effectId`, `category`, `effectMode`, `compatibleProperties`, `defaultStepTiming` (boolean) | `fxId`, `family`, `fxMode`, `compatibleAttributes`, `defaultTiming` |
 | `fxType` | `Triangle`, `ColourPulse`, `Strobe`, `ZoomBreathe` | `Ramp`, `ColourWave`, `DimmerStrobe`, `ZoomWave` |
+| a stored FX's `fxType`, `family`, `parameters` and `attribute` (v41) | `SineWave`, `RampUp`, `RampDown`, `Ramp`, `SquareWave`, `Pulse`, `DimmerStrobe`, `ZoomWave`, `IrisPulse`, `FrostPulse`, `FocusPull`, and their parameters | `Wave` on its shape, with Wave's parameters (§"Version 41 — Wave") |
 | `order` | `LINEAR`, `CENTER_OUT`, `EDGES_IN`, `SPLIT` | `NORMAL`, `CENTRE_OUT`, `CENTRE_IN`, `CENTRE_IN` |
 | `family`, a master's too | `dimmer`, `palette` | `intensity`, `steps` |
 | an FX's `family` | `composite` | the family of its output: `intensity` for Lightning Strike and any slider, else `colour` or `position` |
@@ -435,6 +436,27 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 41 — Wave
+
+fx-settings plan session 2: Wave replaces Sine Wave, Ramp Up, Ramp Down, Ramp, Square Wave, Pulse,
+Dimmer Strobe, Zoom Wave, Iris Pulse, Frost Pulse and Focus Pull (`docs/fx-engineering.md` §"Wave").
+A stored FX on one of those ids, in a Look, a cue or a palette, is read through
+`LegacyNames.consolidateFx` after `rewriteFx`, whatever the archive's `formatVersion`: its `fxType`
+is `Wave`, its `family` `intensity`, its parameters Wave's at the values the old script read (its
+shape, `low` and `high` for `min` and `max` or `offValue` and `onValue` or `start` and `end`, `width`,
+`attack`, `hold`, `curve`), and a beam one naming no `attribute` names the one it drove (so on a group
+where only some heads have it, it now runs on those, where it ran on none; logged as output that moves). Database step
+7 (`state/FxConsolidationMigration.kt`) does the same to a database's rows. No folder or field is
+renamed, so `RecordHasher` hashes an older desk's record as it was written: after the upgrade a
+converted record reads as this desk's change and is pushed in the Wave form, which every desk
+converting it writes byte for byte, and one an older desk edited meanwhile is a conflict, as any record
+both sides changed is.
+
+`SUPPORTED_FORMAT_VERSION = 41`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5. **`minReader` moves to 41**:
+a v40 reader knows no Wave, so would refuse to start or skip every level FX in the show. Wave's
+`shape` is the first `choice` a stored FX holds, which session 1's note above waited on.
+`RichProjectFixture`'s level FX are Waves: Sines, one with its `low` set, and Pulses with their `hold` set.
 
 ### Version 40 — Fixtures
 

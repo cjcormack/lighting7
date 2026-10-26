@@ -65,12 +65,12 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
     private data class Child(val uuid: String, val blendMode: String, val level: String?)
 
     private fun children(cueId: Int): List<Child> = transaction(state.database) {
-        DaoCue.findById(cueId)!!.adHocFxInOrder().map { Child(it.uuid.toString(), it.blendMode, it.parameters["max"]) }
+        DaoCue.findById(cueId)!!.adHocFxInOrder().map { Child(it.uuid.toString(), it.blendMode, it.parameters["high"]) }
     }
 
-    /** A Sine Wave on Hex 1's dimmer whose min and max agree: one level whatever the phase. */
+    /** A Wave on Hex 1's dimmer whose low and high agree: one level whatever the phase. */
     private suspend fun HttpClient.pressSine(level: Int, blendMode: String, stack: Boolean): FxInstance =
-        pressLevel("SineWave", hex, level, blendMode, stack)
+        pressLevel("Wave", hex, level, blendMode, stack)
 
     /** [fxType] on [targets]' dimmer at one level whatever the phase. */
     private suspend fun HttpClient.pressLevel(
@@ -85,7 +85,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
             setBody(
                 ProgrammerFxRequest(
                     fxType = fxType, attribute = "dimmer", targets = targets,
-                    parameters = mapOf("min" to "$level", "max" to "$level"), blendMode = blendMode, stack = stack,
+                    parameters = mapOf("low" to "$level", "high" to "$level"), blendMode = blendMode, stack = stack,
                 ),
             )
         }
@@ -180,7 +180,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         val edited = client.put("/api/rest/fx/${included("MULTIPLY").id}") {
             contentType(ContentType.Application.Json)
-            setBody(UpdateFxRequest(parameters = mapOf("min" to "64", "max" to "64")))
+            setBody(UpdateFxRequest(parameters = mapOf("low" to "64", "high" to "64")))
         }
         assertEquals(HttpStatusCode.OK, edited.status, edited.bodyAsText())
         awaitDimmer(50, "the edited Within")
@@ -262,16 +262,16 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         val swapped = client.put("/api/rest/fx/${included("MULTIPLY").id}") {
             contentType(ContentType.Application.Json)
-            setBody(UpdateFxRequest(fxType = "SquareWave", parameters = mapOf("min" to "128", "max" to "128")))
+            setBody(UpdateFxRequest(fxType = "Flicker", parameters = mapOf("min" to "128", "max" to "128")))
         }
         assertEquals(HttpStatusCode.OK, swapped.status, swapped.bodyAsText())
 
         assertEquals(1, client.update().fxWritten)
-        assertEquals(listOf(stored[0].uuid to "SineWave", stored[1].uuid to "SquareWave"), types(cueId), "the same two children")
+        assertEquals(listOf(stored[0].uuid to "Wave", stored[1].uuid to "Flicker"), types(cueId), "the same two children")
 
         clearStage()
         client.applyCue(cueId)
-        awaitDimmer(100, "the Square Wave Within over the Replace, nothing doubled")
+        awaitDimmer(100, "the Flicker Within over the Replace, nothing doubled")
     }
 
     @Test
@@ -405,7 +405,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
     /** A Pulse on the wash at [level], Replacing unless [blendMode] says otherwise. */
     private suspend fun HttpClient.pressWash(level: Int, blendMode: String = "OVERRIDE", stack: Boolean = false) =
-        pressLevel("Pulse", wash, level, blendMode, stack)
+        pressLevel("Wave", wash, level, blendMode, stack)
 
     /** A cue holding one Pulse on the wash, Replacing at 200; the stage cleared after. */
     private suspend fun HttpClient.cueWithOnePulse(): Pair<Int, Child> {

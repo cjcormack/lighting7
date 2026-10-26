@@ -153,7 +153,7 @@ internal fun pressBareFx(
     val stamped = request.speedMasterUuid ?: if (request.seconds) {
         null
     } else {
-        familyMasterUuidFor(state.show.fxRegistry, engine.speedMasters, request.fxType)?.toString()
+        familyMasterUuidFor(state.show.fxRegistry, engine.speedMasters, request.fxType, attribute = request.attribute)?.toString()
     }
     fun build(start: FxStacking.Start?) = buildFxInstance(
         state,

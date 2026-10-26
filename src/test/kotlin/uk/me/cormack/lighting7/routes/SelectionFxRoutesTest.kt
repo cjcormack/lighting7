@@ -60,7 +60,7 @@ class SelectionFxRoutesTest : RouteIntegrationTest() {
     private suspend fun HttpClient.addOverSelection(): Long {
         val response = add(
             AddFxRequest(
-                fxType = "Pulse", attribute = "dimmer", targets = selectionTargets, programmerOwned = true,
+                fxType = "Wave", attribute = "dimmer", targets = selectionTargets, programmerOwned = true,
             ),
         )
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
@@ -87,7 +87,7 @@ class SelectionFxRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedRig()
         val response = jsonClient().add(
-            AddFxRequest(fxType = "Pulse", attribute = "dimmer", targets = listOf(CueTargetDto("group", "quad"))),
+            AddFxRequest(fxType = "Wave", attribute = "dimmer", targets = listOf(CueTargetDto("group", "quad"))),
         )
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         val instance = assertNotNull(engine.getFx(response.body<AddFxResponse>().fxId))
@@ -100,7 +100,7 @@ class SelectionFxRoutesTest : RouteIntegrationTest() {
         seedRig()
         val response = jsonClient().add(
             AddFxRequest(
-                fxType = "Pulse", attribute = "dimmer",
+                fxType = "Wave", attribute = "dimmer",
                 targets = listOf(CueTargetDto("fixture", "nope"), CueTargetDto("group", "gone"), CueTargetDto("selection", "[]")),
             ),
         )
@@ -143,7 +143,7 @@ class SelectionFxRoutesTest : RouteIntegrationTest() {
         seedRig()
         val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
         val effect = CueAdHocFxDto(
-            targetType = FxTargetsRef.Selection.TYPE, targetKey = selectionKey, fxType = "Pulse",
+            targetType = FxTargetsRef.Selection.TYPE, targetKey = selectionKey, fxType = "Wave",
             family = "intensity", attribute = "dimmer", cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
         )
         val created = client.post("/api/rest/projects/$projectId/cues") {
@@ -215,7 +215,7 @@ class SelectionFxRoutesTest : RouteIntegrationTest() {
         val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
         val added = client.add(
             AddFxRequest(
-                fxType = "Pulse", attribute = "dimmer", programmerOwned = true,
+                fxType = "Wave", attribute = "dimmer", programmerOwned = true,
                 targets = keys.map { CueTargetDto(TargetRef.Fixture.TYPE, it) },
             ),
         )
@@ -237,7 +237,7 @@ class SelectionFxRoutesTest : RouteIntegrationTest() {
         val effect = LookFxDto(
             targetType = FxTargetsRef.Selection.TYPE,
             targetKey = """[ {"type":"fixture", "key":"hex-4"}, {"type":"group","key":"quad"} ]""",
-            fxType = "Pulse", family = "intensity", attribute = "dimmer", cycle = 1.0,
+            fxType = "Wave", family = "intensity", attribute = "dimmer", cycle = 1.0,
             blendMode = "OVERRIDE", order = "NORMAL",
         )
         val one = effect.copy(targetKey = """[{"type":"fixture","key":"hex-5"}]""", sortOrder = 1)
@@ -257,7 +257,7 @@ class SelectionFxRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         seedRig()
         val effect = LookFxDto(
-            targetType = FxTargetsRef.Selection.TYPE, targetKey = selectionKey, fxType = "Pulse",
+            targetType = FxTargetsRef.Selection.TYPE, targetKey = selectionKey, fxType = "Wave",
             family = "intensity", attribute = "dimmer", cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
         )
         val created = client.post("/api/rest/projects/$projectId/looks") {

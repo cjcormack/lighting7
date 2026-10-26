@@ -146,8 +146,8 @@ is titled *FX settings: session N — title*. Never merge a later session's PR b
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Parameter metadata: the desk declares, the editor reads | in review | `claude/fx-settings-s1` | | |
-| 2 | Wave: one FX for the level waves | planned | | | |
+| 1 | Parameter metadata: the desk declares, the editor reads | merged | `claude/fx-settings-s1` | [#299](https://github.com/cjcormack/lighting7/pull/299) | `dc33373d` |
+| 2 | Wave: one FX for the level waves | in review | `claude/fx-settings-s2` | | |
 | 3 | Colour Cycle and Path absorb their siblings | planned | | | |
 | 4 | Each head later by: spread in steps, and Width one head | planned | | | |
 | 5 | The inspector in four questions | planned | | | |
@@ -221,6 +221,46 @@ the next; whoever merges the last fills its own.
 - **Docs:** root `CLAUDE.md` (the built-in list and its count, the migrations section),
   `docs/fx-engineering.md`, `docs/sync-engineering.md` (41), `docs/glossary.md` (Wave and its shapes
   `done`; the old names as *Was*).
+
+- **What landed, and where it differs from the above:**
+  - **P3:** `LegacyEquivalenceTest` found every one of the eleven old FX equal to its Wave, to the
+    byte, over 97 phases plus the edges, a spread over four heads at five spreads, each Direction on
+    an even and an odd cycle, three contexts and each row's parameter grid (blank, out-of-range and
+    unparsable values included). None stays legacy, so the `legacy: true` frontmatter key was not
+    built: session 3 adds it if P3 refuses a colour or position mapping.
+  - **Old ids map by name, not by `formatVersion`**, as every `LegacyNames` map does: no old id
+    returns with a new meaning. `LegacyNames.consolidateFx` runs after `rewriteFx` on import and is
+    database step 7 alone, so step 4 never half-converts a row.
+  - **The registry does not resolve an old id.** A script's `effect()` and MCP's FX tools map one
+    (`LegacyNames.runnableFx`, `asWave`) before they reach it; every stored write still refuses one
+    (`writeProblem`), naming its shape. An old Focus Pull from MCP or a script starts at its half-bar
+    Bounce (`waveTiming`).
+  - **`attributeDefaults` also covers `focus`** (64–192, Focus Pull's), and is laid under a spawn's
+    parameters on every spawn that names its attribute (`withAttributeDefaults`: `FxSpawner`, the FX
+    routes, the group route, the preview), not a script's `effect()`, which builds the FX before it
+    knows the attribute.
+  - **D5's rule:** Beam on a beam attribute (zoom, iris, frost, focus, prism — the palette
+    vocabulary's), else the library family. A Wave on `uv` stays Intensity, as Sine Wave on UV always
+    routed, rather than taking UV's Colour. A stored FX keeps `family: intensity` — Record files a
+    Wave so too — and the function is read over it, which is what keeps a palette's Rule 3 (its family
+    agrees with the registration) true. The picker lists the bare Wave under Beam as well as its
+    presets, on the head's beam attribute.
+  - **Old ids the registry does not resolve.** A script or FX definition that looks one up
+    (`getRegistration("Pulse")`) finds nothing; step 7 names each such stored script in a warning, as
+    step 6 names an old centre, and rewrites none. A project FX definition may no longer take the id
+    `Wave`, and step 7 names one that already does.
+  - **A Wave in a Beam palette names its attribute** (the palette editor's *Attribute* select), since
+    six compatible attributes name no single one; step 7 writes a beam palette FX's attribute.
+  - Wave's `curve` defaults to `LINEAR`; a stored Pulse is written with its `QUAD_OUT`, and the
+    presets name theirs.
+  - **One recorded exception to D3**, which Chris accepted on 2026-10-26: a beam wave stored with no
+    attribute — every Beam FX palette the UI made, and any beam Look or cue FX stored without one — ran
+    on a group only where every head had its attribute, and on none of that group otherwise. Migrated,
+    it names the attribute, so on a mixed group it now runs on the heads that have it, as a Wave
+    authored on that attribute does. Exact behaviour would have needed hidden legacy types for most
+    Beam palettes (D3's route) or a stored marker. Fixture and selection targets, groups whose heads
+    all have the attribute, and *Apply as values* are unchanged. Step 7 and the importer name every
+    such row in the log (`output moves: …`), and `FxSpawnerBeamTest` pins both sides.
 
 ### Session 3 — Colour Cycle and Path absorb their siblings
 

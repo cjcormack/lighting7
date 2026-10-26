@@ -78,7 +78,7 @@ class CueRoutesTest {
         val dto = CueAdHocFxDto(
             targetType = "group",
             targetKey = "front-wash",
-            fxType = "SineWave",
+            fxType = "Wave",
             family = "intensity",
             attribute = "dimmer",
             cycle = 1.0,
@@ -88,7 +88,7 @@ class CueRoutesTest {
             elementMode = "FLAT",
             elementFilter = "ODD",
             timing = Timing.HEAD,
-            parameters = mapOf("min" to "0", "max" to "255"),
+            parameters = mapOf("shape" to "SINE", "low" to "0", "high" to "255"),
         )
         val serialized = json.encodeToString(dto)
         val deserialized = json.decodeFromString<CueAdHocFxDto>(serialized)
@@ -207,14 +207,14 @@ class CueRoutesTest {
                 CueAdHocFxDto(
                     targetType = "fixture",
                     targetKey = "hex-1",
-                    fxType = "Pulse",
+                    fxType = "Wave",
                     family = "intensity",
                     attribute = "dimmer",
                     cycle = 0.5,
                     blendMode = "ADDITIVE",
                     order = "CENTRE_OUT",
                     phaseOffset = 0.1,
-                    parameters = mapOf("min" to "50", "max" to "200", "attackRatio" to "0.3"),
+                    parameters = mapOf("shape" to "PULSE", "low" to "50", "high" to "200", "attack" to "0.3"),
                 ),
             ),
         )
@@ -351,13 +351,13 @@ class CueRoutesTest {
                 CueAdHocFxDto(
                     targetType = "fixture",
                     targetKey = "strobe-1",
-                    fxType = "DimmerStrobe",
+                    fxType = "Wave",
                     family = "intensity",
                     attribute = "dimmer",
                     cycle = 0.25,
                     blendMode = "MAX",
                     order = "UNIFIED",
-                    parameters = mapOf("offValue" to "0", "onValue" to "255", "onRatio" to "0.1"),
+                    parameters = mapOf("shape" to "SQUARE", "low" to "0", "high" to "255", "width" to "0.1"),
                 ),
             ),
         )

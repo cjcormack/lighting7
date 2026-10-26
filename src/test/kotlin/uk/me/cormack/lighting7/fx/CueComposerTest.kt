@@ -623,7 +623,7 @@ class CueComposerTest {
                 FxEntry(
                     target = FxTargetsRef.Single(TargetRef.Fixture("hex-1")),
                     effect = StoredFx(
-                        fxType = "SineWave",
+                        fxType = "Wave",
                         family = "intensity",
                         attribute = "dimmer",
                         cycle = 1.0,

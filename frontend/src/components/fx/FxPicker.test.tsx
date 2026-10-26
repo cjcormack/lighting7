@@ -325,6 +325,142 @@ describe('the Beam family (effects plan §4.4)', () => {
   })
 })
 
+describe('Wave and its presets (fx-settings plan D4, D5)', () => {
+  const WAVE: FxLibraryEntry = {
+    name: 'Wave',
+    family: 'intensity',
+    outputType: 'SLIDER',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleAttributes: ['dimmer', 'uv', 'zoom', 'iris', 'frost', 'focus'],
+    parameters: [
+      { name: 'shape', type: 'choice', defaultValue: 'SINE', description: '' },
+      { name: 'low', type: 'ubyte', defaultValue: '0', description: '' },
+      { name: 'high', type: 'ubyte', defaultValue: '255', description: '' },
+      { name: 'curve', type: 'easingCurve', defaultValue: 'LINEAR', description: '' },
+    ],
+    attributeDefaults: { zoom: { low: '64', high: '192' }, iris: { low: '0', high: '160' }, focus: { low: '64', high: '192' } },
+    presets: [
+      { name: 'Strobe', attribute: 'dimmer', parameters: { shape: 'SQUARE', width: '0.1' } },
+      { name: 'Zoom Wave', attribute: 'zoom', parameters: { shape: 'SINE', low: '64', high: '192' } },
+      { name: 'Iris Pulse', attribute: 'iris', parameters: { shape: 'PULSE', low: '0', high: '160', curve: 'QUAD_OUT' } },
+      { name: 'Frost Pulse', attribute: 'frost', parameters: { shape: 'PULSE', low: '0', high: '160', curve: 'QUAD_OUT' } },
+      {
+        name: 'Focus Pull',
+        attribute: 'focus',
+        parameters: { shape: 'RAMP_UP', low: '64', high: '192', curve: 'SINE_IN_OUT' },
+        cycle: 2,
+        direction: 'BOUNCE',
+      },
+    ],
+  }
+  const PROFILE = makeFixture('profile-1', [
+    sliderProp('dimmer', 'dimmer', chan(1)),
+    sliderProp('zoom', 'zoom', chan(2)),
+    sliderProp('iris', 'iris', chan(3)),
+    sliderProp('focus', 'focus', chan(4)),
+  ])
+
+  function WaveHarness({ initialFamily = 'BEAM' as 'BEAM' | 'INTENSITY' }) {
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
+    return (
+      <FxPicker
+        target={{ type: 'fixture', fixture: PROFILE }}
+        initialFamily={initialFamily}
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+      />
+    )
+  }
+
+  const presetsIn = (list: HTMLElement) =>
+    Array.from(list.querySelectorAll('[data-effect-preset]')).map((b) => b.getAttribute('data-effect-preset'))
+
+  beforeEach(() => {
+    wire.library = [WAVE]
+  })
+
+  it('lists each preset under the family its attribute gives, only where the head has the attribute', () => {
+    render(<WaveHarness />)
+    expect(presetsIn(screen.getByRole('list', { name: 'Beam FX' }))).toEqual(['Zoom Wave', 'Iris Pulse', 'Focus Pull'])
+    fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
+    const intensity = screen.getByRole('list', { name: 'Intensity FX' })
+    expect(Array.from(intensity.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual(['Wave'])
+    expect(presetsIn(intensity)).toEqual(['Strobe'])
+  })
+
+  it('starts a preset as Wave on its attribute, with its parameters, on the Beam master', async () => {
+    render(<WaveHarness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Pulse' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      fxType: 'Wave',
+      attribute: 'iris',
+      cycle: 4,
+      speedMasterUuid: 'm-beam',
+      parameters: { shape: 'PULSE', low: '0', high: '160', curve: 'QUAD_OUT' },
+    })
+    expect(screen.getByRole('button', { name: 'Iris Pulse' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('starts a preset at its own cycle and Direction: Focus Pull bounces at half a bar', async () => {
+    render(<WaveHarness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Focus Pull' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Wave', attribute: 'focus', cycle: 2, direction: 'BOUNCE' })
+  })
+
+  it('swaps from one preset to another on the same attribute with one updateFx carrying the preset’s parameters', async () => {
+    const DIMMER = makeFixture('par-1', [sliderProp('dimmer', 'dimmer', chan(1))])
+    function Swap() {
+      const [current, setCurrent] = useState<AuditionedFx | null>(null)
+      return <FxPicker target={{ type: 'fixture', fixture: DIMMER }} initialFamily="INTENSITY" current={current} onCurrent={setCurrent} />
+    }
+    render(<Swap />)
+    fireEvent.click(screen.getByRole('button', { name: 'Wave' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Wave', attribute: 'dimmer', parameters: { shape: 'SINE', low: '0' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Strobe' }))
+    expect(addFixtureFx).toHaveBeenCalledTimes(1)
+    expect(updateFx).toHaveBeenCalledTimes(1)
+    expect(updateFx.mock.calls[0][1]).toMatchObject({ fxType: 'Wave', parameters: { shape: 'SQUARE', width: '0.1' } })
+    expect(screen.getByRole('button', { name: 'Strobe' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Wave' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('lists the Wave type under Beam too, on the head’s beam attribute, lit there once it runs on one', async () => {
+    render(<WaveHarness />)
+    const beam = screen.getByRole('list', { name: 'Beam FX' })
+    const wave = beam.querySelector<HTMLElement>('[data-effect-pick="Wave"]')!
+    fireEvent.click(wave)
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      fxType: 'Wave',
+      attribute: 'zoom',
+      speedMasterUuid: 'm-beam',
+      parameters: { shape: 'SINE', low: '64', high: '192' },
+    })
+    expect(wave).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
+    expect(screen.getByRole('list', { name: 'Intensity FX' }).querySelector('[data-effect-pick="Wave"]')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('starts the Wave type on a beam attribute at its attribute defaults', async () => {
+    const ZOOM_ONLY = makeFixture('zoom-1', [sliderProp('zoom', 'zoom', chan(1))])
+    const picks: DraftFxPick[] = []
+    render(
+      <FxPicker
+        target={{ type: 'fixture', fixture: ZOOM_ONLY }}
+        initialFamily="INTENSITY"
+        draft={{ current: null, onPick: (pick) => picks.push(pick) }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Wave' }))
+    expect(picks[0]).toMatchObject({ fxType: 'Wave', family: 'intensity', attribute: 'zoom', speedMasterUuid: 'm-beam', parameters: { low: '64', high: '192' } })
+  })
+})
+
 describe('the step effects (effects plan session 7, §4.4)', () => {
   const PALETTE_STEPS: FxLibraryEntry = {
     name: 'PaletteSteps',

@@ -1,5 +1,5 @@
 import type { PaletteSummary } from '@/api/palettesApi'
-import { attributeFamilyForFxFamily } from '@/lib/attributeFamily'
+import { fxAttributeFamily } from '@/lib/attributeFamily'
 import { stepFxPaletteShape } from '@/lib/stepFx'
 import type { ProgrammerLayer } from '@/store/programmer'
 import type { ActiveFx, FxLibraryEntry } from '@/store/fixtureFx'
@@ -60,7 +60,7 @@ export function saveAsPaletteOffer(
   // category — Palette Steps' `steps` names no family at all.
   const step = stepFxPaletteShape(effect, templates)
   if (step != null) return step.reason != null ? { enabled: false, reason: step.reason } : { enabled: true }
-  const family = attributeFamilyForFxFamily(entry.family)
+  const family = fxAttributeFamily(entry.family, effect.attribute)
   if (family == null) {
     return {
       enabled: false,

@@ -104,6 +104,7 @@ class FxFileLoaderTest {
             "type: ubyte\n  default: \"0\"\n  unit: ratio" to "unit 'ratio' reads a double or float",
             "type: choice\n  default: \"A\"\n  options: [A, a]" to "option 'A' twice",
             "type: ubyte\n  default: \"0\"\n- name: p\n  type: ubyte\n  default: \"1\"" to "parameter 'p' twice",
+            "type: ubyte\n  default: \"0\"\n  descripton: typo" to "'descripton' is no key of a parameters item",
         )
         for ((body, problem) in broken) {
             val error = assertFailsWith<IllegalArgumentException>(body) { parse("- name: p\n  $body") }
@@ -178,5 +179,58 @@ class FxFileLoaderTest {
         assertEquals("high", low.pair)
         assertEquals(uk.me.cormack.lighting7.dmx.EasingCurve.entries.map { it.name }, curve.options?.map { it.value })
         assertEquals("Sine in out", curve.options?.first { it.value == "SINE_IN_OUT" }?.label)
+    }
+
+    private fun metadata(tail: String): FxFileMetadata =
+        FxFileLoader.parseFxFile(
+            "/*---\nid: Probe\nname: Probe\nfamily: intensity\noutputType: SLIDER\n" +
+                "compatibleAttributes: [dimmer, zoom]\nparameters:\n" +
+                "  - name: shape\n    type: choice\n    default: \"SINE\"\n    options: [SINE, SQUARE]\n" +
+                "  - name: low\n    type: ubyte\n    default: \"0\"\n" +
+                tail.trimIndent() + "\n---*/\nFxOutput.Slider(0u)\n",
+        ).first
+
+    @Test
+    fun `presets and attribute defaults are parsed (fx-settings plan session 2)`() {
+        val parsed = metadata(
+            """
+            attributeDefaults:
+              - attribute: zoom
+                parameters: {low: 64}
+            presets:
+              - name: Zoom Wave
+                attribute: zoom
+                parameters: {shape: SQUARE, low: 64}
+                cycle: 2.0
+                direction: bounce
+              - name: Plain
+                attribute: dimmer
+            """,
+        )
+        assertEquals(mapOf("zoom" to mapOf("low" to "64")), parsed.attributeDefaults)
+        assertEquals(
+            listOf(
+                FxPreset("Zoom Wave", "zoom", mapOf("shape" to "SQUARE", "low" to "64"), 2.0, "BOUNCE"),
+                FxPreset("Plain", "dimmer"),
+            ),
+            parsed.presets,
+        )
+        assertEquals(listOf("shape", "low"), parsed.parameters.map { it.name }, "the parameter list ends where presets begins")
+    }
+
+    @Test
+    fun `a preset or attribute default naming what the FX lacks fails to load`() {
+        val broken = listOf(
+            "presets:\n  - name: P\n    attribute: iris" to "'iris' is not a compatible attribute",
+            "presets:\n  - name: P\n    attribute: dimmer\n    parameters: {width: 1}" to "preset 'P': no parameter 'width'",
+            "presets:\n  - name: P\n    attribute: dimmer\n    parameters: {shape: SAW}" to "'shape' is one of",
+            "presets:\n  - name: P\n    attribute: dimmer\n    direction: sideways" to "unknown direction",
+            "attributeDefaults:\n  - attribute: zoom\n    parameters: {high: 9}" to "attributeDefaults 'zoom': no parameter 'high'",
+            "presets:\n  - name: P\n    attribute: dimmer\n    cycel: 2.0" to "'cycel' is no key of a presets item",
+        )
+        for ((tail, problem) in broken) {
+            val error = assertFailsWith<IllegalArgumentException>(tail) { metadata(tail) }
+            assertTrue(problem in error.message.orEmpty(), "expected '$problem' in '${error.message}'")
+        }
     }
 }

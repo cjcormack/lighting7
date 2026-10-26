@@ -370,7 +370,7 @@ class VenueAttachTest : RouteIntegrationTest() {
             val effect = DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = FxTargetsRef.Selection.TYPE
                 targetKey = FxTargetsRef.Selection(listOf(TargetRef.Fixture("hex-3b"), TargetRef.Fixture("hex-1"))).key
-                fxType = "Pulse"; family = "intensity"; cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
+                fxType = "Wave"; family = "intensity"; cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
             }
             val look = DaoLook.new { project = show; name = "Hex 3 special" }

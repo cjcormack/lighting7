@@ -64,7 +64,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     private fun base() = "/api/rest/projects/$projectId/cues"
 
     private val pulse = CueAdHocFxDto(
-        targetType = "fixture", targetKey = "hex-1", fxType = "Pulse", family = "intensity",
+        targetType = "fixture", targetKey = "hex-1", fxType = "Wave", family = "intensity",
         attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
     )
 
@@ -104,7 +104,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         // spelled the other way, one row dropped and one added, everything else as it was.
         val input = cue.asInput().let { input ->
             input.copy(
-                adHocFx = input.adHocFx.map { it.copy(cycle = 2.0, parameters = mapOf("min" to "40")) },
+                adHocFx = input.adHocFx.map { it.copy(cycle = 2.0, parameters = mapOf("low" to "40")) },
                 attributeAssignments = input.attributeAssignments
                     .filterNot { it.attribute == "uv" }
                     .map { if (it.targetKey == "hex-2") it.copy(attribute = "colour") else it } +
@@ -136,7 +136,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         // Another effect type on the same property is a new effect, not this one edited.
         val swapped = client.put("${base()}/${cue.id}") {
             contentType(ContentType.Application.Json)
-            setBody(input.copy(adHocFx = listOf(pulse.copy(fxType = "RampUp"))))
+            setBody(input.copy(adHocFx = listOf(pulse.copy(fxType = "Flicker"))))
         }
         assertEquals(HttpStatusCode.OK, swapped.status, swapped.bodyAsText())
         assertNotEquals(before.effects, children(cue.id).effects)
@@ -198,7 +198,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         val client = jsonClient()
         val (warm, cool) = client.twoLooks()
         val dynamics = pulse.copy(seconds = true, cycle = 2.0, amount = 0.5, direction = "BOUNCE", runs = 3)
-        val chase = pulse.copy(targetKey = "hex-2", fxType = "SineWave", sortOrder = 1)
+        val chase = pulse.copy(targetKey = "hex-2", fxType = "Flicker", sortOrder = 1)
         val created = client.createCue(
             NewCue(
                 name = "order",
@@ -234,7 +234,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         assertEquals(before.effects.reversed(), after.effects, "each effect keeps its uuid in its new place")
         val details = response.body<CueDetails>()
         assertEquals(listOf(true, false), details.layers.map { it.enabled }, "the disabled layer is stored")
-        val moved = details.adHocFx.single { it.fxType == "Pulse" }
+        val moved = details.adHocFx.single { it.fxType == "Wave" }
         assertEquals(listOf(true, 0.5, "BOUNCE", 3), listOf(moved.seconds, moved.amount, moved.direction, moved.runs))
     }
 
@@ -468,7 +468,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     @Test
     fun `create_cue gives its effects no run key, and refuses one a call names`() = testApplication {
         mountTestApp(state)
-        val effect = """{"targetType":"fixture","targetKey":"hex-1","fxType":"Pulse","family":"intensity","attribute":"dimmer",""" +
+        val effect = """{"targetType":"fixture","targetKey":"hex-1","fxType":"Wave","family":"intensity","attribute":"dimmer",""" +
             """"cycle":0.5,"blendMode":"OVERRIDE"}"""
         val keyed = AiTools(state).executeTool(
             "create_cue",

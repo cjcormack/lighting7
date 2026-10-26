@@ -20,8 +20,10 @@ export type GraphMark = 'cycle' | 'starts' | 'mirror' | 'brackets' | 'holding' |
 export interface LinkedEditor {
   fxId: number
   draft: FxDraft
-  /** An Intensity FX with a `min` and a `max`: the graph draws their lines as handles. */
+  /** An Intensity FX with a low and a high: the graph draws their lines as handles. */
   levels: boolean
+  /** Which parameters those are — Wave's `low` and `high`; absent, `min` and `max`. */
+  levelParams?: { low: string; high: string }
   /** A wall-clock FX, whose cycle is seconds whatever its master. */
   wallClock: boolean
   readOnly: boolean

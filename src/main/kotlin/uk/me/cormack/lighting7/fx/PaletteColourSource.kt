@@ -259,7 +259,10 @@ fun FxRegistry.createFxWithPalettes(
     templates: PaletteRegistry,
     fxType: String,
     parameters: Map<String, String> = emptyMap(),
+    /** The attribute the FX drives, whose `attributeDefaults` fill what [parameters] leave out. */
+    attribute: String? = null,
 ): Fx {
+    val parameters = withAttributeDefaults(fxType, parameters, attribute)
     // The values `TypedParams` will actually read, resolved by its own rule: a supplied value
     // wins unless it is blank, otherwise the schema default (see `TypedParams.raw`). Declared
     // defaults have to be in here — a default that is itself a `pal:` reference would otherwise
@@ -282,4 +285,15 @@ fun FxRegistry.createFxWithPalettes(
         // edit to B. See [PaletteRegistry.versionFor].
         colourSourceVersion = { templates.versionFor(refs) },
     )
+}
+
+/**
+ * [parameters] over the frontmatter's `attributeDefaults` for [attribute] (fx-settings plan session
+ * 2): a Wave on zoom with no `low` or `high` runs 64–192, as a Zoom Wave did. A blank value counts as
+ * absent, as [TypedParams.raw] reads one.
+ */
+fun FxRegistry.withAttributeDefaults(fxType: String, parameters: Map<String, String>, attribute: String?): Map<String, String> {
+    val defaults = attribute?.let { getRegistration(fxType)?.attributeDefaults?.get(it.lowercase()) } ?: return parameters
+    val missing = defaults.filterKeys { parameters[it].isNullOrBlank() }
+    return if (missing.isEmpty()) parameters else parameters + missing
 }

@@ -76,7 +76,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     private fun running(request: AddFxRequest): FxInstance = buildFxInstance(state, request).also { engine.addFx(it) }
 
     private fun sine(targets: List<CueTargetDto>, parameters: Map<String, String> = emptyMap(), programmerOwned: Boolean = false) =
-        AddFxRequest(fxType = "SineWave", attribute = "dimmer", targets = targets, parameters = parameters, programmerOwned = programmerOwned)
+        AddFxRequest(fxType = "Wave", attribute = "dimmer", targets = targets, parameters = parameters, programmerOwned = programmerOwned)
 
     private fun draft(vararg fields: Pair<String, Any>): JsonObject = buildJsonObject {
         for ((name, value) in fields) {
@@ -179,7 +179,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
         val answer = preview(
             FxPreviewRequest(
                 targets = group("quad"),
-                fx = listOf(FxPreviewEntry(draft = draft("fxType" to "SineWave", "attribute" to "dimmer", "order" to "REVERSE"))),
+                fx = listOf(FxPreviewEntry(draft = draft("fxType" to "Wave", "attribute" to "dimmer", "order" to "REVERSE"))),
                 include = "ONLY",
             ),
         )
@@ -213,7 +213,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     @Test
     fun `a draft move previews the moved settings while the running FX and the stage stay as they were`() {
         seedHexes(1)
-        val held = running(sine(fixture("hex-0"), mapOf("min" to "200", "max" to "200"), programmerOwned = true))
+        val held = running(sine(fixture("hex-0"), mapOf("low" to "200", "high" to "200"), programmerOwned = true))
         awaitDimmer(200, "the running FX holds 200")
         val dynamicsBefore = held.dynamics
 
@@ -221,7 +221,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
             FxPreviewRequest(
                 targets = fixture("hex-0"),
                 fx = listOf(
-                    FxPreviewEntry(fxId = held.id, draft = draft("parameters" to mapOf("min" to "50", "max" to "50"), "segments" to 2)),
+                    FxPreviewEntry(fxId = held.id, draft = draft("parameters" to mapOf("low" to "50", "high" to "50"), "segments" to 2)),
                 ),
             ),
         )
@@ -232,7 +232,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
         assertEquals(200, dimmer(), "the stage still holds the running FX's level")
         val live = assertNotNull(engine.getFx(held.id))
         assertSame(held, live, "the running instance was not swapped")
-        assertEquals(mapOf("min" to "200", "max" to "200"), live.effect.parameters)
+        assertEquals(mapOf("low" to "200", "high" to "200"), live.effect.parameters)
         assertEquals(dynamicsBefore, live.dynamics, "its dynamics did not move")
     }
 
@@ -246,7 +246,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
                 targets = group("eight"),
                 fx = listOf(
                     FxPreviewEntry(
-                        draft = draft("fxType" to "SineWave", "attribute" to "dimmer", "spread" to 0.5, "segments" to 2, "programmerOwned" to true),
+                        draft = draft("fxType" to "Wave", "attribute" to "dimmer", "spread" to 0.5, "segments" to 2, "programmerOwned" to true),
                     ),
                 ),
             ),
@@ -276,8 +276,8 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     fun `STACK folds every running FX reaching the rows and ONLY just the ones asked for`() {
         seedHexes(4)
         val under = running(sine(group("quad")))
-        val elsewhere = running(sine(fixture("hex-0")).copy(attribute = "uv", fxType = "SineWave"))
-        val pulse = draft("fxType" to "Pulse", "attribute" to "dimmer", "blendMode" to "MULTIPLY", "programmerOwned" to true)
+        val elsewhere = running(sine(fixture("hex-0")).copy(attribute = "uv", fxType = "Wave"))
+        val pulse = draft("fxType" to "Wave", "attribute" to "dimmer", "blendMode" to "MULTIPLY", "programmerOwned" to true)
 
         val stack = preview(FxPreviewRequest(targets = fixture("hex-1"), fx = listOf(FxPreviewEntry(draft = pulse))))
         assertEquals(listOf(under.id, null), stack.fx.map { it.fxId }, "the running FX under the draft, in apply order")
@@ -293,7 +293,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     fun `STACK draws every selected head anything paints, so an FX reaching only another selected head is folded`() {
         seedHexes(2)
         val other = running(sine(fixture("hex-1")))
-        val onHex0 = draft("fxType" to "Pulse", "attribute" to "dimmer", "fixtureKey" to "hex-0")
+        val onHex0 = draft("fxType" to "Wave", "attribute" to "dimmer", "fixtureKey" to "hex-0")
         val targets = fixture("hex-0") + fixture("hex-1")
 
         val stack = preview(FxPreviewRequest(targets = targets, fx = listOf(FxPreviewEntry(draft = onHex0))))
@@ -343,8 +343,8 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     @Test
     fun `solo draws the lane as the picked FX alone over what is underneath`() {
         seedHexes(1)
-        running(sine(fixture("hex-0"), mapOf("min" to "200", "max" to "200")))
-        val pulse = draft("fxType" to "SineWave", "attribute" to "dimmer", "parameters" to mapOf("min" to "50", "max" to "50"), "blendMode" to "MAX")
+        running(sine(fixture("hex-0"), mapOf("low" to "200", "high" to "200")))
+        val pulse = draft("fxType" to "Wave", "attribute" to "dimmer", "parameters" to mapOf("low" to "50", "high" to "50"), "blendMode" to "MAX")
         fun result(solo: Int?) = bytes(
             preview(FxPreviewRequest(targets = fixture("hex-0"), fx = listOf(FxPreviewEntry(draft = pulse)), solo = solo))
                 .lanes.single().attributes.single().rows.single().result.planes["level"],
@@ -356,7 +356,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     @Test
     fun `solo draws the rest of its family's lane as what is underneath`() {
         seedHexes(1)
-        running(sine(fixture("hex-0"), mapOf("min" to "200", "max" to "200")).copy(attribute = "uv"))
+        running(sine(fixture("hex-0"), mapOf("low" to "200", "high" to "200")).copy(attribute = "uv"))
         val rainbow = draft("fxType" to "RainbowCycle", "attribute" to "rgbColour")
         fun uv(solo: Int?): Set<Int> {
             val answer = preview(FxPreviewRequest(targets = fixture("hex-0"), fx = listOf(FxPreviewEntry(draft = rainbow)), solo = solo))
@@ -464,7 +464,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
                 addJsonObject { put("fxId", 99_999) }
                 addJsonObject {
                     putJsonObject("draft") {
-                        put("fxType", "SineWave"); put("attribute", "dimmer"); put("fixtureKey", "hex-0"); put("amount", 2.0)
+                        put("fxType", "Wave"); put("attribute", "dimmer"); put("fixtureKey", "hex-0"); put("amount", 2.0)
                     }
                 }
                 addJsonObject { put("fxId", sine.id); putJsonObject("draft") { put("spread", 5.0) } }
@@ -514,9 +514,9 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     @Test
     fun `notional heads take every family a palette can drive`() {
         for ((fxType, attribute, family) in listOf(
-            Triple("SineWave", "dimmer", "INTENSITY"),
+            Triple("Wave", "dimmer", "INTENSITY"),
             Triple("RainbowCycle", "rgbColour", "COLOUR"),
-            Triple("ZoomWave", "zoom", "BEAM"),
+            Triple("Wave", "zoom", "BEAM"),
         )) {
             val answer = preview(
                 FxPreviewRequest(fx = listOf(FxPreviewEntry(draft = draft("fxType" to fxType, "attribute" to attribute))), include = "ONLY", notional = 4),

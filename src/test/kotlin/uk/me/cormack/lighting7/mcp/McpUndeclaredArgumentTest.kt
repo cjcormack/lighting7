@@ -57,7 +57,7 @@ class McpUndeclaredArgumentTest : RouteIntegrationTest() {
 
     @Test
     fun `an old field inside an FX item is refused with its path`() {
-        val fx = """{"targetType":"fixture","targetKey":"foh-1","fxType":"Pulse","family":"intensity","attribute":"dimmer","cycle":1.0,"blendMode":"OVERRIDE","parameters":{},"size":0.5}"""
+        val fx = """{"targetType":"fixture","targetKey":"foh-1","fxType":"Wave","family":"intensity","attribute":"dimmer","cycle":1.0,"blendMode":"OVERRIDE","parameters":{},"size":0.5}"""
         val result = callTool("create_look", """{"name":"Throb","fx":[$fx]}""")
         assertTrue(result.isError(), result.text())
         assertTrue("'fx[0].size' is not an argument of create_look" in result.text(), result.text())

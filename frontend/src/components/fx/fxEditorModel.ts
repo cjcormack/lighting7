@@ -1,7 +1,8 @@
 import type { FxDirection, Timing, UpdateFxRequest } from '@/api/fxApi'
-import type { ActiveFx, FxLibraryEntry, FxParamUnit, FxParameterDef } from '@/store/fixtureFx'
+import type { ActiveFx, FxLibraryEntry, FxParamUnit, FxParameterDef, FxPreset } from '@/store/fixtureFx'
 import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
 import { isMirroredOrder } from '@/lib/spreadShape'
+import { fxAttributeFamily } from '@/lib/attributeFamily'
 import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
 import { STORED_ELEMENT_MODE } from './fxConstants'
 
@@ -27,9 +28,24 @@ export {
 /** D12a: a level effect replaces the level underneath, or moves within it. */
 export type LevelMode = 'replace' | 'within'
 
-/** The level effects — the intensity category, D12a's *Replace it | Within it*. */
-export function isLevelFx(entry: Pick<FxLibraryEntry, 'family'>): boolean {
-  return entry.family === 'intensity'
+/**
+ * The level effects — the intensity category on the attribute it drives, D12a's *Replace it | Within
+ * it*. A Wave on zoom, iris, frost or focus is Beam's (fx-settings plan D5), and asks no level question.
+ */
+export function isLevelFx(entry: Pick<FxLibraryEntry, 'family'>, attribute?: string | null): boolean {
+  return fxAttributeFamily(entry.family, attribute) === 'INTENSITY'
+}
+
+/**
+ * A level effect's low and high, which the graph draws as handles: the byte its frontmatter pairs
+ * (`low` with `high` on Wave), else a `min` and a `max`; null where it has neither.
+ */
+export function levelPairOf(entry: Pick<FxLibraryEntry, 'parameters'>): { low: string; high: string } | null {
+  const declared = entry.parameters.find(
+    (p) => p.type === 'ubyte' && p.pair != null && entry.parameters.some((q) => q.name === p.pair && q.type === 'ubyte'),
+  )
+  if (declared?.pair != null) return { low: declared.name, high: declared.pair }
+  return ['min', 'max'].every((name) => entry.parameters.some((p) => p.name === name)) ? { low: 'min', high: 'max' } : null
 }
 
 /** Replace is Override, Within is Multiply (call 2); anything else is neither. */
@@ -45,13 +61,21 @@ export function blendForLevelMode(mode: LevelMode): string {
 }
 
 /**
- * How an effect starts from the picker: its defaults, and — for a movement effect — *Around*
- * (D12, "movement starts Around"). A level effect starts Replace (call 2), everything else Override.
+ * How an effect starts from the picker: its defaults — over them its `attributeDefaults` for the
+ * attribute it lands on and a picked preset's parameters (fx-settings plan session 2, D4) — and, for
+ * a movement effect, *Around* (D12, "movement starts Around"). A level effect starts Replace
+ * (call 2), everything else Override.
  */
 export function startingSpec(
-  entry: Pick<FxLibraryEntry, 'family' | 'parameters'>,
+  entry: Pick<FxLibraryEntry, 'family' | 'parameters' | 'attributeDefaults'>,
+  on?: { attribute?: string | null; preset?: Pick<FxPreset, 'parameters'> | null },
 ): { blendMode: string; parameters: Record<string, string> } {
-  const spec = { blendMode: 'OVERRIDE', parameters: defaultParameters(entry) }
+  const parameters = {
+    ...defaultParameters(entry),
+    ...(on?.attribute != null ? entry.attributeDefaults?.[on.attribute] : undefined),
+    ...on?.preset?.parameters,
+  }
+  const spec = { blendMode: 'OVERRIDE', parameters }
   return hasCentre(entry) ? withCentreMode(spec, 'around') : spec
 }
 

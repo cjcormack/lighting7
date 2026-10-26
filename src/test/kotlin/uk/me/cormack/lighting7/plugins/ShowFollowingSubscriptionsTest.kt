@@ -74,7 +74,7 @@ class ShowFollowingSubscriptionsTest : RouteIntegrationTest() {
 
                 val fxId = rest.post("/api/rest/fx/add") {
                     contentType(ContentType.Application.Json)
-                    setBody(AddFxRequest(fxType = "Pulse", fixtureKey = "other-hex", attribute = "dimmer"))
+                    setBody(AddFxRequest(fxType = "Wave", fixtureKey = "other-hex", attribute = "dimmer"))
                 }.body<AddFxResponse>().fxId
                 awaitOfType<FxStateOutMessage> { frame ->
                     frame.activeFx.any { it.id == fxId && it.targetKey == "other-hex" }

@@ -366,6 +366,7 @@ private fun applyGroupFx(
         state.show.paletteRegistry,
         request.fxType,
         request.parameters,
+        request.attribute,
     )
     val registration = state.show.fxRegistry.getRegistration(request.fxType)
     val timing = FxTiming(request.cycle ?: registration?.defaultCycle ?: CycleLength.ONE_BAR)

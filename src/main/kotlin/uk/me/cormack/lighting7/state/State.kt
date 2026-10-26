@@ -1386,6 +1386,10 @@ class State(val config: ApplicationConfig) {
         // recorded, so it meets the renamed schema. `AttributeNamesMigration.kt`.
         AttributeNamesMigration.runIfNeeded(ds, database, dbPath)
 
+        // fx-settings plan step 7: every stored FX on a level wave onto Wave, backed up first when
+        // anything moves. After step 6. `FxConsolidationMigration.kt`.
+        FxConsolidationMigration.runIfNeeded(ds, database, dbPath)
+
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database
     }

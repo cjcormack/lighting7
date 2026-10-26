@@ -92,3 +92,22 @@ describe('NewPaletteFromFxSheet on a step effect', () => {
     expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'PaletteSteps', family: 'position', attribute: null })
   })
 })
+
+describe('NewPaletteFromFxSheet on a Wave (fx-settings plan D5)', () => {
+  beforeEach(() => {
+    mocks.library = [{ ...entry('Wave', 'intensity'), compatibleAttributes: ['dimmer', 'uv', 'zoom', 'iris', 'frost', 'focus'] }]
+  })
+
+  it('saves a Wave on zoom as a Beam palette naming zoom, filed under its library family', async () => {
+    open(running({ fxType: 'Wave', attribute: 'zoom', parameters: { shape: 'SINE', low: '64', high: '192' } }))
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled())
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'Wave', family: 'intensity', attribute: 'zoom' })
+    expect(screen.getByText(/Beam/)).toBeTruthy()
+  })
+
+  it('saves a Wave on the dimmer as an Intensity palette naming no property', async () => {
+    open(running({ fxType: 'Wave', attribute: 'dimmer', parameters: { shape: 'PULSE' } }))
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled())
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'Wave', family: 'intensity', attribute: null })
+  })
+})

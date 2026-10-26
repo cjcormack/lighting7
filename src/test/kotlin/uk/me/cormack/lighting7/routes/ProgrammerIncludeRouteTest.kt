@@ -145,7 +145,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             adHoc = listOf(
                 CueAdHocFxSpec(
                     targetType = "fixture", targetKey = "hex-1",
-                    fxType = "SineWave", attribute = "dimmer",
+                    fxType = "Wave", attribute = "dimmer",
                 ),
             ),
         )
@@ -174,7 +174,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             adHoc = listOf(
                 CueAdHocFxSpec(
                     targetType = "fixture", targetKey = "hex-1",
-                    fxType = "SineWave", attribute = "dimmer",
+                    fxType = "Wave", attribute = "dimmer",
                 ),
             ),
         )
@@ -200,7 +200,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             // the cue's immediate FX children from the band, then deleted it from the cue.
             //
             // Editing a live cue is how the two diverge: PUT rewrites the children without
-            // re-applying, so the layer's Pulse is running and the new SineWave child is not.
+            // re-applying, so the layer's Pulse is running and the new Flicker child is not.
             mountTestApp(state)
             val client = jsonClient()
             seedHex("hex-1", 1)
@@ -209,7 +209,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                 effects = listOf(
                     LookFxDto(
                         targetType = "fixture", targetKey = "hex-1",
-                        fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                        fxType = "Wave", family = "intensity", attribute = "dimmer",
                         cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                     ),
                 ),
@@ -222,7 +222,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             val cueId = createCue(client, "layered", layers = layers)
             client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
             assertEquals(
-                listOf("Pulse"),
+                listOf("Wave"),
                 state.show.fxEngine.getActiveFx().map { it.registrationId },
                 "only the layer's effect is on stage",
             )
@@ -236,7 +236,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                         adHocFx = listOf(
                             CueAdHocFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                fxType = "SineWave", family = "intensity",
+                                fxType = "Flicker", family = "intensity",
                                 attribute = "dimmer", cycle = 1.0,
                                 blendMode = "OVERRIDE", order = "NORMAL",
                             ),
@@ -250,7 +250,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             val band = state.show.fxEngine.getActiveFx()
                 .filter { FxEngine.isProgrammerFxPriority(it.priority) }
             assertTrue(
-                band.any { it.registrationId == "SineWave" },
+                band.any { it.registrationId == "Flicker" },
                 "the ad-hoc child is a different effect from the layer's Pulse, so it has to " +
                     "reach the band for Update to write it back",
             )

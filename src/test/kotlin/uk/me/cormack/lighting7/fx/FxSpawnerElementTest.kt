@@ -118,7 +118,7 @@ class FxSpawnerElementTest : RouteIntegrationTest() {
         // fallback — which used to see no fixture at all for an element key and answer a
         // SettingTarget that discards every slider frame.
         val spec = LookFxSpec(
-            fxType = "Pulse", family = "intensity", attribute = "white",
+            fxType = "Wave", family = "intensity", attribute = "white",
             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
         )
         val target = FxSpawner.resolveTargetForCue(state, CueTargetDto("fixture", cell(2)), spec)

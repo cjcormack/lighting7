@@ -237,7 +237,7 @@ class CueHoldsTest : RouteIntegrationTest() {
             DaoCueAdHocFxEntity.new {
                 this.cue = DaoCue[rig.c]
                 targetType = "fixture"; targetKey = "hex-2"
-                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                fxType = "Wave"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
             }

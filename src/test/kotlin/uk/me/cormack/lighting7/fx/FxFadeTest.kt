@@ -32,6 +32,7 @@ import uk.me.cormack.lighting7.routes.ToggleLookRequest
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
 import uk.me.cormack.lighting7.testsupport.FxTestSupport
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
+import uk.me.cormack.lighting7.testsupport.PULSE_WAVE
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -73,7 +74,7 @@ class FxFadeTest : RouteIntegrationTest() {
     /** A Look with a dimmer effect on each of [heads], and a dimmer row of its own on [rowOn] when named. */
     private suspend fun HttpClient.look(
         name: String,
-        fxType: String,
+        parameters: Map<String, String>,
         heads: List<String>,
         rowOn: String? = null,
         runs: Int? = null,
@@ -87,9 +88,9 @@ class FxFadeTest : RouteIntegrationTest() {
                     fx = heads.mapIndexed { i, head ->
                         LookFxDto(
                             targetType = "fixture", targetKey = head,
-                            fxType = fxType, family = "intensity", attribute = "dimmer",
+                            fxType = "Wave", family = "intensity", attribute = "dimmer",
                             cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
-                            runs = runs, sortOrder = i,
+                            parameters = parameters, runs = runs, sortOrder = i,
                         )
                     },
                 ),
@@ -104,11 +105,11 @@ class FxFadeTest : RouteIntegrationTest() {
         state.show.fxEngine.sweepsLeaving = false
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         LocateTestSupport.seedHex(state, projectId, "hex-2", 21)
-        return Looks(perHead("Pulse", "Pulse"), perHead("Sine", "SineWave"))
+        return Looks(perHead("Pulse", PULSE_WAVE), perHead("Sine", emptyMap()))
     }
 
-    private suspend fun HttpClient.perHead(name: String, fxType: String): PerHead =
-        PerHead(listOf("hex-1", "hex-2").associateWith { look("$name $it", fxType, listOf(it)) })
+    private suspend fun HttpClient.perHead(name: String, parameters: Map<String, String>): PerHead =
+        PerHead(listOf("hex-1", "hex-2").associateWith { look("$name $it", parameters, listOf(it)) })
 
     /** A cue layering each of [layers], with [fadeMs]. */
     private fun cue(name: String, fadeMs: Long?, vararg layers: LookDetails): Int = transaction(state.database) {
@@ -246,7 +247,7 @@ class FxFadeTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val looks = client.seedLooks()
-        val shot = client.look("Shot", "Pulse", listOf("hex-2"), runs = 3)
+        val shot = client.look("Shot", PULSE_WAVE, listOf("hex-2"), runs = 3)
         val q1 = cue("Q1", null, looks.pulse["hex-1"], shot)
         val q2 = cue("Q2", 2000, looks.pulse["hex-1"], shot)
         val (s, entries) = stack("S", 0, q1, q2)
@@ -495,9 +496,9 @@ class FxFadeTest : RouteIntegrationTest() {
         DaoCueAdHocFxEntity.new {
             cue = DaoCue[cueId]
             targetType = "fixture"; targetKey = fixture
-            fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+            fxType = "Wave"; family = "intensity"; attribute = "dimmer"
             cycle = division; blendMode = "OVERRIDE"; this.order = order
-            parameters = emptyMap()
+            parameters = PULSE_WAVE
             this.wings = wings
             this.seconds = seconds
             this.runs = runs
@@ -823,7 +824,7 @@ class FxFadeTest : RouteIntegrationTest() {
             DaoCueAdHocFxEntity.new {
                 cue = DaoCue[q1]
                 targetType = "fixture"; targetKey = "hex-2"
-                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                fxType = "Wave"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
             }
@@ -871,7 +872,7 @@ class FxFadeTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         client.seedLooks()
-        val washPulse = client.look("Wash pulse", "Pulse", listOf("hex-1"), rowOn = "hex-1")
+        val washPulse = client.look("Wash pulse", PULSE_WAVE, listOf("hex-1"), rowOn = "hex-1")
         val source = LayerSource.look(washPulse.id, UUID.fromString(washPulse.uuid), washPulse.name)
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
 
@@ -911,7 +912,7 @@ class FxFadeTest : RouteIntegrationTest() {
         assertEquals(1500, layerFx.envelope.durationMs)
 
         // A local effect: the programmer's own, on hex-2.
-        val local = FxTestSupport.start(state, "SineWave", "hex-2", "dimmer", programmerBand = true)
+        val local = FxTestSupport.start(state, "Wave", "hex-2", "dimmer", programmerBand = true)
         assertTrue(local.isLocalFx)
 
         val answer = ProgrammerHandler.clearTarget(

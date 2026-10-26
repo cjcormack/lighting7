@@ -90,7 +90,7 @@ class AttributeNamesMigrationTest {
             val cue = DaoCue.new { this.project = project; name = "Q1" }
             DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "group"; targetKey = "movers"
-                fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+                fxType = "Flicker"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = mapOf("panCenter" to "1")
             }
@@ -99,7 +99,7 @@ class AttributeNamesMigrationTest {
         setUserVersion(TERMINOLOGY_RENAMED_USER_VERSION)
 
         val reopened = startDesk()
-        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
+        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion(), "step 7 follows")
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         transaction(reopened.database) {
             val bindings = DaoControlSurfaceBinding.all().associate { it.controlId to (it.targetType to it.targetPayload) }
@@ -158,14 +158,14 @@ class AttributeNamesMigrationTest {
         stopDesk()
         setUserVersion(TERMINOLOGY_RENAMED_USER_VERSION)
         startDesk()
-        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
+        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion(), "step 7 follows")
         assertEquals(emptyList(), backups())
     }
 
     @Test
-    fun `a fresh database is born at step 6`() {
+    fun `a fresh database is born past step 6`() {
         startDesk()
-        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
+        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion(), "step 7 follows")
         assertEquals(emptyList(), backups())
     }
 }

@@ -152,23 +152,27 @@ class LegacyNamesTest {
 
     @Test
     fun `a write naming an old name is refused, so no row written today is rewritten on import`() {
-        assertEquals("'Triangle' is now 'Ramp'", LegacyNames.writeProblem("Triangle", emptyMap()))
+        assertEquals("'Triangle' is now Wave, shape TRIANGLE", LegacyNames.writeProblem("Triangle", emptyMap()))
+        assertEquals("'Ramp' is now Wave, shape TRIANGLE", LegacyNames.writeProblem("Ramp", emptyMap()))
+        assertEquals("'Colour Pulse' is now 'ColourWave'", LegacyNames.writeProblem("Colour Pulse", emptyMap()))
         assertNotNull(LegacyNames.writeProblem("Breathe", emptyMap()))
         assertNotNull(LegacyNames.writeProblem("Sweep", mapOf("pingPong" to "false")))
         assertNull(LegacyNames.writeProblem("Sweep", mapOf("startPan" to "0")))
-        assertNull(LegacyNames.writeProblem("Ramp", emptyMap()))
+        assertNull(LegacyNames.writeProblem("Wave", mapOf("shape" to "TRIANGLE")))
         assertNull(LegacyNames.writeProblem("MyChase", mapOf("pingPong" to "true")), "a script FX's own parameter")
         assertNotNull(LegacyNames.writeProblem("ColourCycle", mapOf("colours" to "tmpl:u,#ff0000")))
         assertNull(LegacyNames.writeProblem("ColourCycle", mapOf("colours" to "pal:u,#ff0000")))
-        assertEquals("family 'dimmer' is now 'intensity'", LegacyNames.writeProblem("Pulse", emptyMap(), family = "dimmer"))
+        assertEquals("family 'dimmer' is now 'intensity'", LegacyNames.writeProblem("Wave", emptyMap(), family = "dimmer"))
         assertNotNull(LegacyNames.familyProblem("palette"))
         assertNull(LegacyNames.familyProblem("intensity"))
     }
 
     @Test
     fun `a retired id is matched as the registry matches one`() {
-        for (id in listOf("Triangle", "strobe", "Zoom Breathe", "breathe")) assertTrue(LegacyNames.isRetiredFxId(id), id)
-        assertTrue(!LegacyNames.isRetiredFxId("DimmerStrobe"))
+        for (id in listOf("Triangle", "strobe", "Zoom Breathe", "breathe", "DimmerStrobe", "sine wave")) {
+            assertTrue(LegacyNames.isRetiredFxId(id), id)
+        }
+        assertTrue(!LegacyNames.isRetiredFxId("Wave"))
     }
 
     @Test
@@ -365,6 +369,14 @@ class LegacyNamesTest {
         val read = canonicalJson.parseToJsonElement(LegacyNames.record("looks", look)).jsonObject
         val parameters = read["fx"]!!.jsonArray.single().jsonObject["parameters"]!!.jsonObject
         assertEquals(setOf("panCentre", "tiltCentre"), parameters.keys)
+    }
+
+    @Test
+    fun `the retired ids are the shared vector the client mints around`() {
+        val vector = kotlinx.serialization.json.Json.parseToJsonElement(
+            javaClass.getResource("/fx/retiredFxIds.fixture.json")!!.readText(),
+        ).jsonObject.getValue("ids").jsonArray.map { it.jsonPrimitive.content }.toSet()
+        assertEquals(vector, LegacyNames.retiredFxIds)
     }
 }
 

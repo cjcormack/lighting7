@@ -24,7 +24,7 @@ import { findFxEntry } from '@/components/busking/buskingTypes'
 import { useCreatePaletteMutation, usePaletteListQuery } from '@/store/palettes'
 import { stepFxPaletteShape } from '@/lib/stepFx'
 import { useFxLibraryQuery } from '@/store/fixtureFx'
-import { FAMILY_LABELS, attributeFamilyForFxFamily } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, attributeFamilyForFxFamily, fxAttributeFamily } from '@/lib/attributeFamily'
 import { formatError } from '@/lib/formatError'
 import type { ActiveFx } from '@/store/fixtureFx'
 import type { PaletteFx } from '@/api/palettesApi'
@@ -79,7 +79,14 @@ export function NewPaletteFromFxSheet({
   const step = useMemo(() => (effect == null ? null : stepFxPaletteShape(effect, templates)), [effect, templates])
   const stepShape = step != null && step.reason == null ? step : null
   const category = step != null ? (stepShape?.fxFamily ?? null) : (entry?.family ?? null)
-  const family = stepShape != null ? stepShape.family : category == null ? null : attributeFamilyForFxFamily(category)
+  // A Wave on zoom is Beam's (fx-settings plan D5): it keeps the attribute it drives, which is what
+  // lands it there on a press, since it is compatible with more than one.
+  const beamAttribute =
+    step == null && category != null && effect != null && fxAttributeFamily(category, effect.attribute) === 'BEAM' &&
+    attributeFamilyForFxFamily(category) !== 'BEAM'
+      ? effect.attribute
+      : null
+  const family = stepShape != null ? stepShape.family : category == null ? null : fxAttributeFamily(category, beamAttribute)
   // The **instance's** own answer, not the library entry's. They agree, but a running effect
   // reports its timing source directly and that is the nearer authority for describing this one.
   const isWallClock = effect?.timingSource === 'WALL_CLOCK'
@@ -107,8 +114,9 @@ export function NewPaletteFromFxSheet({
       fxType: effect.fxType,
       family: category,
       // Null deliberately: a template effect names no target (D3), so it names no property on one —
-      // but for Slot Steps, which names the setting it steps (the write boundary refuses one without).
-      attribute: stepShape?.attribute ?? null,
+      // but for Slot Steps, which names the setting it steps (the write boundary refuses one without),
+      // and a Wave on a beam attribute, which names the one it drives.
+      attribute: stepShape?.attribute ?? beamAttribute,
       // The running FX's Over, which it reports where it lands on elements; else Fixtures, as an
       // authored palette starts.
       elementMode: effect.elementMode ?? NEW_FX_ELEMENT_MODE,

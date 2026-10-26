@@ -82,7 +82,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
             state, TargetRef.Fixture("hex-1"), "rgbColour",
             CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(java.awt.Color(200, 40, 0))), fadeMs = 0,
         )
-        FxTestSupport.start(state, "SineWave", "hex-1", "uv")
+        FxTestSupport.start(state, "Wave", "hex-1", "uv")
         assertEquals(
             ProvenanceSource.PROGRAMMER,
             provenance(CueAssignmentResolver.Key.fixture("hex-1", "rgbColour")).source,

@@ -188,7 +188,7 @@ class ProjectCloneTest {
         fun stacked(projectId: Int) = transaction(state.database) {
             DaoProject.findById(projectId)!!.looks.single { it.name == "stacked" }.fxInOrder().map { it.fxType to it.sortOrder }
         }
-        assertEquals(listOf("SquareWave" to 0, "SineWave" to 1), stacked(sourceId))
+        assertEquals(listOf("Flicker" to 0, "Wave" to 1), stacked(sourceId))
         assertEquals(stacked(sourceId), stacked(result.projectId))
     }
 
