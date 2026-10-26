@@ -22,7 +22,7 @@ const wire = vi.hoisted(() => ({
   scope: { kind: 'local' } as { kind: string } | null,
   store: null as object | null,
 }))
-vi.mock('@/components/fx/selectionFxTarget', () => ({ useWindowFxPair: () => wire.pair }))
+vi.mock('@/components/fx/selectionFxTarget', () => ({ useWindowFxPair: () => wire.pair, readProgrammerFxPair: () => wire.pair }))
 vi.mock('@/hooks/usePress', () => ({ useWindowPaletteFit: () => ({ families: null, emitters: null }) }))
 vi.mock('./ProgrammerScope', () => ({ useProgrammerScope: () => wire.scope }))
 vi.mock('./LookRowStore', () => ({ useLookRowStore: () => wire.store }))
@@ -36,7 +36,7 @@ vi.mock('@/components/press/ApplyPicker', () => ({
 
 const { ProgrammerAddFxDoor, ProgrammerAddFxSheet, useProgrammerAddFx } = await import('./ProgrammerAddFx')
 const { ProgrammerAddFxButton } = await import('./ProgrammerAddFxButton')
-const { openAddFxDoor } = await import('./addFxDoor')
+const { readProgrammerCommands, runProgrammerCommand } = await import('./commandDoors')
 const { getPickedFx, resetFxEditorViewStores, setFxTabView, useFxTabView } = await import('@/lib/fxEditorView')
 
 type PickerProps = {
@@ -176,8 +176,24 @@ describe('the doors', () => {
     wire.pair = FOUR
     render(onProgrammer(<ProgrammerAddFxDoor projectId={3} />))
     expect(picker).not.toHaveBeenCalled()
-    act(() => void openAddFxDoor())
+    act(() => void runProgrammerCommand('selection.addFx'))
     expect(picker).toHaveBeenCalledWith(expect.objectContaining({ editOnStart: true, family: 'INTENSITY' }))
     expect(lastPicker().onOpenInEditor).toBeTypeOf('function')
+  })
+
+  it('⌘K’s door names what it acts on, and is offered only where it can act', () => {
+    wire.pair = FOUR
+    const view = render(onProgrammer(<ProgrammerAddFxDoor projectId={3} />))
+    const offered = () => readProgrammerCommands().find((c) => c.id === 'selection.addFx')
+    expect(offered()).toMatchObject({ label: 'Add FX on the selection…', hint: '4 heads · Intensity', canAct: true })
+    wire.scope = { kind: 'output' }
+    view.rerender(onProgrammer(<ProgrammerAddFxDoor projectId={3} />))
+    expect(offered()?.canAct).toBe(false)
+    wire.scope = { kind: 'layer' }
+    wire.store = { lookName: 'Warm wash' }
+    view.rerender(onProgrammer(<ProgrammerAddFxDoor projectId={3} />))
+    expect(offered()).toMatchObject({ hint: '4 heads · into Warm wash', canAct: true })
+    view.unmount()
+    expect(offered()).toBeUndefined()
   })
 })

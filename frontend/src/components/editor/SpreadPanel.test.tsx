@@ -774,6 +774,29 @@ describe('Fan (venue-visit plan S12)', () => {
     expect(radio('Fan mode', 'About each position')).toHaveAttribute('aria-checked', 'true')
     expect(onSeedConsumed).toHaveBeenCalled()
   })
+
+  it('an open seed — ⌘K’s Fan — opens the popover as its trigger would, and is spent', () => {
+    const onSeedConsumed = vi.fn()
+    render(<SpreadPanel host="popover" plans={[intentPlan()]} seed={{ open: true, key: 1 }} onSeedConsumed={onSeedConsumed} />)
+    expect(document.querySelector('[data-spread-panel]')).not.toBeNull()
+    expect(onSeedConsumed).toHaveBeenCalled()
+  })
+
+  it('an open seed the trigger would refuse says why, and opens nothing', () => {
+    const onSeedConsumed = vi.fn()
+    render(
+      <SpreadPanel
+        host="popover"
+        plans={[intentPlan()]}
+        disabledReason="Output is a read of the cook"
+        seed={{ open: true, key: 1 }}
+        onSeedConsumed={onSeedConsumed}
+      />,
+    )
+    expect(document.querySelector('[data-spread-panel]')).toBeNull()
+    expect(toast.warning).toHaveBeenCalledWith('Output is a read of the cook')
+    expect(onSeedConsumed).toHaveBeenCalled()
+  })
 })
 
 describe('what it reaches', () => {

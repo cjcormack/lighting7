@@ -86,17 +86,24 @@ vi.mock('@/components/programmer/ApplyLayerPicker', () => ({
 }))
 vi.mock('@/components/programmer/ProgrammerAddFx', async () => {
   const { useEffect, useState } = await import('react')
-  const { registerAddFxDoor } = await import('@/components/programmer/addFxDoor')
+  const { registerCommandDoor } = await import('@/components/programmer/commandDoors')
   return {
     useProgrammerAddFx: () => ({ disabled: false, reason: 'Add an FX to the programmer.', pair: { targets: [], families: null } }),
     ProgrammerAddFxSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-effect" /> : null),
     ProgrammerAddFxDoor: () => {
       const [asked, setAsked] = useState(false)
-      useEffect(() => registerAddFxDoor(() => setAsked(true)), [])
+      useEffect(
+        () =>
+          registerCommandDoor('fx', () => [
+            { id: 'selection.addFx', group: 'selection', label: 'Add FX on the selection…', canAct: true, run: () => setAsked(true) },
+          ]),
+        [],
+      )
       return asked ? <div data-testid="add-effect-door" /> : null
     },
   }
 })
+vi.mock('@/components/programmer/ProgrammerPressDoors', () => ({ ProgrammerLookDoor: () => null, ProgrammerPaletteDoor: () => null }))
 vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => <div data-testid="hand-layer-strip" /> }))
 vi.mock('@/components/programmer/useReplacementNotes', () => ({
   ReplacementNotesProvider: ({ children }: { children: ReactNode }) => children,
@@ -154,7 +161,7 @@ const { DEFAULT_SCENERY_FILTERS, SCENERY_FILTERS_KEY, resetSceneryFiltersStore }
   '@/components/programmer/ProgrammerSceneryList'
 )
 const { FxSelectionStoreContext, createFxSelectionStore } = await import('@/components/fixtures-list/fxSelection')
-const { openAddFxDoor } = await import('@/components/programmer/addFxDoor')
+const { readProgrammerCommands, runProgrammerCommand } = await import('@/components/programmer/commandDoors')
 const { getPickedFx, resetFxEditorViewStores, setFxTabView, useFxTabView } = await import('@/lib/fxEditorView')
 
 function effect(id: number, over: Partial<ActiveFx> = {}): ActiveFx {
@@ -720,11 +727,27 @@ describe('what the tables’ frame carries for every table', () => {
     const view = drawRoute('')
     expect(screen.queryByTestId('add-effect-door')).toBeNull()
     act(() => {
-      expect(openAddFxDoor()).toBe(true)
+      expect(runProgrammerCommand('selection.addFx')).toBe(true)
     })
     expect(screen.getByTestId('add-effect-door')).toBeInTheDocument()
     view.unmount()
-    expect(openAddFxDoor()).toBe(false)
+    expect(runProgrammerCommand('selection.addFx')).toBe(false)
+  })
+
+  it('offers ⌘K the other three tables, each with its count, and shows one when run', () => {
+    const view = drawRoute('?table=stack')
+    const tables = readProgrammerCommands().filter((c) => c.id.startsWith('programmer.table.'))
+    expect(tables.map((c) => [c.label, c.canAct])).toEqual([
+      ['Show the Values table', true],
+      ['Show the Stack table', false],
+      ['Show the FX table', true],
+      ['Show the Scenery table', true],
+    ])
+    expect(tables.find((c) => c.id === 'programmer.table.fx')?.hint).toMatch(/running$/)
+    act(() => void runProgrammerCommand('programmer.table.fx'))
+    expect(document.querySelector('[data-programmer-table="fx"][role="tabpanel"]')).not.toBeNull()
+    view.unmount()
+    expect(readProgrammerCommands().some((c) => c.id.startsWith('programmer.table.'))).toBe(false)
   })
 })
 

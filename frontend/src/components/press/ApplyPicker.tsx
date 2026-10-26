@@ -36,7 +36,7 @@ import { useActiveFxQuery, useFxLibraryQuery } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
 import { useStopFx } from '@/components/fx/useFxControls'
 import { FAMILY_LABELS, PALETTE_FAMILY_ORDER, type AttributeFamily } from '@/lib/attributeFamily'
-import { outsideMaskReason, paletteFits, type PaletteFit } from '@/lib/paletteOffer'
+import { outsideMaskReason, paletteFits, splitByMask, type FxFitContext, type PaletteFit } from '@/lib/paletteOffer'
 import { recentPalettes } from '@/lib/paletteRecents'
 import { cn } from '@/lib/utils'
 import { useAbsorbLookFxMutation, useLookListQuery } from '@/store/looks'
@@ -190,7 +190,7 @@ export function ApplyPicker({
   // Effect palettes are narrowed by the property their effect drives, as the cell's Effects band
   // narrows them, so the band and its *All …* offer one set.
   const { data: fxLibrary } = useFxLibraryQuery(undefined, { skip: !open || library !== 'palettes' })
-  const fitContext = useMemo(() => ({ library: fxLibrary, templates }), [fxLibrary, templates])
+  const fitContext = useMemo<FxFitContext>(() => ({ library: fxLibrary, palettes: templates }), [fxLibrary, templates])
   const fitting = useMemo(
     () =>
       !open || library !== 'palettes'
@@ -217,11 +217,9 @@ export function ApplyPicker({
       const all = (looks ?? []).filter((look) => matches(look.name))
       return [{ key: 'all', label: 'All', caption: 'A–Z', items: all.map((look) => ({ kind: 'look' as const, look })) }]
     }
-    const inside = shownPalettes.filter((t) => outsideMaskReason(t.family, mask) == null)
-    const outside = shownPalettes.flatMap((t) => {
-      const reason = outsideMaskReason(t.family, mask)
-      return reason == null ? [] : [{ kind: 'palette' as const, palette: t, reason }]
-    })
+    const split = splitByMask(shownPalettes, mask)
+    const inside = split.inside
+    const outside = split.outside.map(({ palette, reason }) => ({ kind: 'palette' as const, palette, reason }))
     const palettes = (list: readonly PaletteSummary[]) => list.map((palette) => ({ kind: 'palette' as const, palette }))
     return [
       { key: 'recent', label: 'Recent', caption: 'what you pressed last', items: palettes(recentPalettes(inside)) },
@@ -795,7 +793,7 @@ function EffectsArm({
     (template: PaletteSummary, gesture: PressGesture) => void press({ kind: 'palette', palette: template }, gesture),
     [press],
   )
-  const context = useMemo(() => ({ library, templates }), [library, templates])
+  const context = useMemo<FxFitContext>(() => ({ library, palettes: templates }), [library, templates])
   const fxFit = useMemo<PaletteFit>(
     () => ({ ...fit, families: family != null ? [family] : fit.families, attribute: attribute ?? fit.attribute }),
     [fit, family, attribute],

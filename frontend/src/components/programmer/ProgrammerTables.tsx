@@ -17,6 +17,7 @@ import {
   useProgrammerTable,
   viewFromSearch,
   PROGRAMMER_TABLE_LABELS,
+  PROGRAMMER_TABLES,
   type ProgrammerTable,
   type TableView,
 } from '@/lib/programmerTables'
@@ -27,6 +28,8 @@ import {
   type ProgrammerTablesChoice,
 } from './ProgrammerTableTabs'
 import { ProgrammerAddFxDoor } from './ProgrammerAddFx'
+import { ProgrammerLookDoor, ProgrammerPaletteDoor } from './ProgrammerPressDoors'
+import { useCommandDoor } from './commandDoors'
 import { ReplacementNotesProvider } from './useReplacementNotes'
 
 /**
@@ -76,6 +79,18 @@ export function ProgrammerTables({ projectId, values }: { projectId: number; val
   const counts = useProgrammerTableCounts(projectId)
   const choice = useMemo<ProgrammerTablesChoice>(() => ({ table, select, counts }), [counts, select, table])
   const [view, setView] = useTableView(table, settled, searchParams, setSearchParams)
+  // ⌘K's *Show the … table* (programmer-toolbar plan D13): the other three, as a tab press.
+  useCommandDoor('tables', () =>
+    PROGRAMMER_TABLES.map((next) => ({
+      id: `programmer.table.${next}`,
+      group: 'programmer' as const,
+      label: `Show the ${PROGRAMMER_TABLE_LABELS[next]} table`,
+      hint: tableCountHint(next, counts),
+      keywords: ['table', 'tab', PROGRAMMER_TABLE_LABELS[next]],
+      canAct: next !== table,
+      run: () => select(next),
+    })),
+  )
 
   return (
     <ProgrammerTablesContext.Provider value={choice}>
@@ -108,10 +123,12 @@ export function ProgrammerTables({ projectId, values }: { projectId: number; val
           </div>
         )}
         {/* The hand's place on the programmer's stack, under whichever table shows — drawn only while
-            something that can become a layer is held — and ⌘K's *+ Effect*, which draws nothing until
-            asked. Both outlive a tab switch. */}
+            something that can become a layer is held — and ⌘K's *Add FX on the selection…*, *Add a
+            Look…* and *Apply a palette…* doors, which draw nothing. All of them outlive a tab switch. */}
         <HandProgrammerLayerStrip className="mx-3 my-1.5 w-auto shrink-0" />
         <ProgrammerAddFxDoor projectId={projectId} />
+        <ProgrammerLookDoor projectId={projectId} />
+        <ProgrammerPaletteDoor projectId={projectId} />
       </ReplacementNotesProvider>
     </ProgrammerTablesContext.Provider>
   )
@@ -162,4 +179,20 @@ function isDefaultView(view: TableView): boolean {
     view.q === DEFAULT_TABLE_VIEW.q &&
     view.chip === DEFAULT_TABLE_VIEW.chip
   )
+}
+
+/** What a table holds, for ⌘K's hint: *2 layers*, *3 running*. */
+function tableCountHint(table: ProgrammerTable, counts: ProgrammerTablesChoice['counts']): string | undefined {
+  const n = counts[table]
+  if (n == null) return undefined
+  switch (table) {
+    case 'stack':
+      return `${n} layer${n === 1 ? '' : 's'}`
+    case 'fx':
+      return `${n} running`
+    case 'scenery':
+      return `${n} piece${n === 1 ? '' : 's'} held`
+    default:
+      return undefined
+  }
 }

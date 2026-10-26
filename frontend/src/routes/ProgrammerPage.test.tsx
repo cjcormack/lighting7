@@ -59,6 +59,11 @@ vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip:
 vi.mock('@/components/programmer/ProgrammerAddFx', () => ({
   ProgrammerAddFxDoor: () => null,
 }))
+// ⌘K's Look and palette doors press through the store; here they only have to be mounted.
+vi.mock('@/components/programmer/ProgrammerPressDoors', () => ({
+  ProgrammerLookDoor: () => null,
+  ProgrammerPaletteDoor: () => null,
+}))
 vi.mock('@/components/programmer/ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
 // The three tables have their suite (`AppliedTables.test.tsx`); here each is its own row B's tabs
 // and a landmark, mounted on demand beside the one grid.

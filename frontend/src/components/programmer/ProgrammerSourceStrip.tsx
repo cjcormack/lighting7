@@ -16,6 +16,7 @@ import { useProjectCueListQuery } from '@/store/cues'
 import { useVenueMode } from '@/store/venues'
 import { useLookListQuery } from '@/store/looks'
 import { useIncludeBaseline } from './useIncludeBaseline'
+import { useCommandDoor } from './commandDoors'
 import { isShowInclude, useShowInclude } from '@/lib/showInclude'
 
 const ZONE_LABEL = 'text-[9px] font-bold uppercase tracking-[0.1em]'
@@ -223,6 +224,41 @@ export function ProgrammerSourceStrip({
     dirty,
     cueLocation,
     lookFamilies,
+  })
+
+  // ⌘K's *Update* and *Revert* (programmer-toolbar plan D13), offered where this box's buttons are.
+  useCommandDoor('source', () => {
+    const editing = (source.kind === 'cue' || source.kind === 'look') && !source.missing ? source : null
+    const inSync = editing == null || canClaimInSync(editing)
+    const name =
+      editing == null
+        ? ''
+        : editing.kind === 'cue'
+          ? [editing.number, editing.name].filter(Boolean).join(' ') || 'the cue'
+          : editing.name || 'the Look'
+    return [
+      {
+        id: 'programmer.update',
+        group: 'programmer',
+        label: `Update ${name}`,
+        hint:
+          editing?.dirty == null
+            ? 'writes the edits back'
+            : `${editing.dirty} change${editing.dirty === 1 ? '' : 's'} not written back`,
+        keywords: ['update', 'write back', 'save'],
+        canAct: !inSync && !isVenue,
+        run: onUpdate,
+      },
+      {
+        id: 'programmer.revert',
+        group: 'programmer',
+        label: `Revert to ${name}`,
+        hint: 'clear, then include again',
+        keywords: ['revert', 'discard', 'reload'],
+        canAct: !inSync,
+        run: onRevert,
+      },
+    ]
   })
 
   if (source.kind === 'empty') {

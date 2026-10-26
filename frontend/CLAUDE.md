@@ -851,10 +851,10 @@ Release folds to its glyph and the scope line drops the fade.
   the targets `useWindowSelectionTargets` gives — the programmer's rows in grid order, a group row
   kept a group so its FX is one group FX with its Order, the desk's while following,
   else the busk view's copy — and the mask a press from this window carries. **On the programmer
-  ⌘K's *On the selection* opens the programmer's `+ FX`** (`programmer/addFxDoor.ts`,
-  `ProgrammerAddFxDoor` registering it while the tables are mounted): the palette lives in `Layout`, outside the programmer's
-  marquee store and scope, so a picker of its own there could read neither the marquee's mask nor a
-  focused Look layer. Elsewhere it opens its own picker on the window's pair, and its per-fixture
+  ⌘K's *On the selection* opens the programmer's `+ FX`**, as its *Add FX on the selection…* does
+  (`ProgrammerAddFxDoor`, one of the command doors — §"⌘K on the programmer"): the palette lives in
+  `Layout`, outside the programmer's marquee store and scope, so a picker of its own there could read
+  neither the marquee's mask nor a focused Look layer. Elsewhere it opens its own picker on the window's pair, and its per-fixture
   and per-group items press that one target with no mask. In a focused Look layer the bare FX starts
   on `/fx/add` alone and is absorbed into the Look once the panel's session ends — closed or
   unmounted — by the id the create answered, after the editor lands its held move: the press's
@@ -4673,6 +4673,30 @@ The request itself is a **one-shot** on both halves: the container drops it on t
 is set, and `FixturesTable` folds it into `autoOpenCell`, so there is one mechanism for "open that
 editor with no click" — Enter and the bar's Set are the same request. A request left standing
 re-opens the editor the next time the virtualiser renders the row it names.
+
+### ⌘K on the programmer
+
+**On the programmer route ⌘K lists two groups first, *Programmer* and *Selection*** (programmer-toolbar
+plan D13): row A's verbs, the source box's Update and Revert, the fade, the tables and the scope; then
+row C's — Set, *Apply a palette…*, *Add FX on the selection…*, Fan, both Releases, the subsets, the
+mask, the rig verbs, the follow toggle and Deselect. Every item names what it would act on (*6 heads ·
+Colour*, *over 1s*) and is **missing, not disabled,** when its control would be refused. *Add a Look…*
+and *Apply a palette…* open sub-pages, ⏎ a press as a layer and ⌥⏎ or an ⌥-click *Apply as values*.
+
+**The palette runs nothing itself.** It is mounted in `Layout`, outside the programmer's marquee,
+scope and sheets, so each component that owns a command registers a **door** while it is mounted
+(`programmer/commandDoors.ts`, `useCommandDoor`): its commands, each with its label, hint, whether it
+can act and the handler its own control runs. ⌘K reads every door **once, as it opens**
+(`readProgrammerCommands`), so `Layout` subscribes to nothing at selection rate, and a door's offer
+reads its owner's latest render through a stable callback, never re-registering. The owners are row A
+(`ProgrammerActionBar`, `AddLookAndInclude`), the source box, `ProgrammerTables`, the scope band, the
+programmer's list (`selectionCommandDoors.ts`, from `FixturesListContainer`'s programmer arm) and three
+renderless doors the tables mount: `ProgrammerAddFxDoor`, and `ProgrammerLookDoor` and
+`ProgrammerPaletteDoor` (`ProgrammerPressDoors.tsx`), which press through `usePress` exactly as + Look
+and the picker do — *Apply a palette…* offering the picker's set through the same `paletteFits` and
+`splitByMask`. A new command goes on the door of whatever owns its control, in
+`COMMAND_DOORS`' order; Set and Fan bring the Values table back first, since the grid is hidden under
+the others, and Fan opens through an `{open: true}` seed (`SpreadSeed`) so its refusal is the trigger's.
 
 ### One selection, two shapes
 

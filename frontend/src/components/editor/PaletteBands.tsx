@@ -10,7 +10,7 @@ import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPalette
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { usePress, type PressGesture, type PressInto, type PressPair } from '@/hooks/usePress'
 import { FAMILY_LABELS, attributeFamilyForFxFamily, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
-import { paletteFits, type PaletteFit } from '@/lib/paletteOffer'
+import { paletteFits, type FxFitContext, type PaletteFit } from '@/lib/paletteOffer'
 import { paletteAttributeFor } from '@/lib/paletteIntent'
 import { recentFirst } from '@/lib/paletteRecents'
 import { cn } from '@/lib/utils'
@@ -443,7 +443,7 @@ export function FxBand({
     [press],
   )
   const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters: null, attribute }), [family, attribute])
-  const context = useMemo(() => ({ library, templates }), [library, templates])
+  const context = useMemo<FxFitContext>(() => ({ library, palettes: templates }), [library, templates])
   const offered = useMemo(
     () => recentFirst((templates ?? []).filter((t) => t.kind === 'fx' && paletteFits(t, fit, context))),
     [templates, fit, context],

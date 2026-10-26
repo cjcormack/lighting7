@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { ApplyPicker } from '@/components/press/ApplyPicker'
 import type { PressPair } from '@/hooks/usePress'
 import type { PaletteFit } from '@/lib/paletteOffer'
+import { useCommandDoor } from './commandDoors'
 
 /** A Look lands whole: its press names no targets and no mask (absolute-looks plan D1). */
 const WHOLE: PressPair = { targets: [], families: null }
@@ -14,6 +15,7 @@ const EVERY_FIT: PaletteFit = { families: null, emitters: null }
  * the one picker on its Looks (`ApplyPicker`, `library="looks"`), pressed whole: the lit ring, a tap
  * a layer, ⌥-click its values, and it stays open while pressed. Below 600px of row A the two are one
  * **+**, whose picker has *Include a cue or Look…* at its top, so the verbs keep their phone width.
+ * Include is ⌘K's *Include a cue or Look…* too (D13); *Add a Look…* is `ProgrammerLookDoor`'s.
  */
 export function AddLookAndInclude({
   projectId,
@@ -32,6 +34,17 @@ export function AddLookAndInclude({
   const [mounted, setMounted] = useState(false)
   // The pair's box, drawn at every width, so a row crossing 600 under an open picker keeps its anchor.
   const anchor = useRef<HTMLSpanElement>(null)
+  useCommandDoor('include', () => [
+    {
+      id: 'programmer.include',
+      group: 'programmer',
+      label: 'Include a cue or Look…',
+      hint: 'replaces the source',
+      keywords: ['include', 'load', 'cue', 'look'],
+      canAct: true,
+      run: onInclude,
+    },
+  ])
   const toggle = (door: 'look' | 'plus') => () => {
     setMounted(true)
     setOpened((was) => (was === door ? null : door))

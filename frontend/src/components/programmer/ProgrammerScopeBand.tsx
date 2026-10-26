@@ -9,6 +9,7 @@ import { useFocusedPaletteLayer } from './FocusedPaletteLayer'
 import { useLocalValueCount } from './useLocalFamilyCounts'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
 import type { LookSaveState } from './LookRowStore'
+import { useCommandDoor } from './commandDoors'
 
 const SAVE_LABELS: Record<Exclude<LookSaveState, 'clean'>, string> = {
   dirty: 'Unsaved',
@@ -63,6 +64,32 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
   const saveState = useLookSaveState()
   const localCount = useLocalValueCount()
   const focusedPalette = useFocusedPaletteLayer()
+
+  // ⌘K's *Show Output* and *Show Local* (programmer-toolbar plan D13): the pills, the one not on.
+  useCommandDoor('scope', () =>
+    scope == null || actions == null
+      ? []
+      : [
+          {
+            id: 'programmer.scope.output',
+            group: 'programmer',
+            label: 'Show Output',
+            hint: 'everything composed, read-only',
+            keywords: ['output', 'scope', 'composed', 'cook'],
+            canAct: scope.kind !== 'output',
+            run: () => actions.setScope({ kind: 'output' }),
+          },
+          {
+            id: 'programmer.scope.local',
+            group: 'programmer',
+            label: 'Show Local',
+            hint: `${localCount} value${localCount === 1 ? '' : 's'} you set`,
+            keywords: ['local', 'scope', 'mine'],
+            canAct: scope.kind !== 'local',
+            run: () => actions.setScope({ kind: 'local' }),
+          },
+        ],
+  )
 
   if (!scope || !actions) return null
 
