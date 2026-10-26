@@ -48,7 +48,7 @@ class CueComposerPaletteLayerTest {
     /** An **effect** template: no rows, one target-less effect (D1/D3). */
     private fun fxPalette(
         name: String,
-        fxType: String = "Pulse",
+        fxType: String = "Wave",
         category: String = "dimmer",
         attribute: String? = "dimmer",
     ) = PaletteSnapshot(
@@ -322,7 +322,7 @@ class CueComposerPaletteLayerTest {
         )
         // One instance per head: the layer names the targets, the template names the effect.
         assertEquals(listOf("hex-1", "hex-2"), effects.map { it.third.key })
-        assertTrue(effects.all { it.second.fxType == "Pulse" })
+        assertTrue(effects.all { it.second.fxType == "Wave" })
     }
 
     /** An effect palette's targets are its layer's, so a layer naming none spawns nothing rather than the whole rig. */

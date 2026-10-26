@@ -84,7 +84,7 @@ eagerly and does not stop it when collected, so each discarded `Show` leaked one
 
 - **Warm** (no code changed since the last run) and **cold** (any rebuild). The compiled-script
   jar cache is keyed partly on a fingerprint of the classpath, so editing any source file
-  invalidates all 30 built-in FX jars and they recompile from source, once per fork. In a normal
+  invalidates all 19 built-in FX jars and they recompile from source, once per fork. In a normal
   edit-test loop this is paid every time.
 
 Measured on 2026-10-16 (`./gradlew test --rerun`, an M-series Mac with a desk running), the two
@@ -254,7 +254,7 @@ quiet while the numbers stay plausible.
 The **FX** the harness applies are load-bearing for the same reason the rigs are, and they
 live in `testsupport/TestFx.kt` rather than coming from the `FxRegistry`. FX maths runs
 inside the measured loop, so a baseline is only comparable while that maths stays put — and the
-registry's 30 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
+registry's 19 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
 `WindowedSlider`, `HueSweepColour` and `SteppedColour` are frozen copies of the retired
 `fx.effects` classes the 2026-04-22 baseline was taken against (backend-sweep item D7). Don't
 "improve" their maths, and don't repoint the harness at the registry: either silently moves every

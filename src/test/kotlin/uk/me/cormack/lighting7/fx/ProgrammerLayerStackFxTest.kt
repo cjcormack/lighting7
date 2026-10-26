@@ -55,7 +55,7 @@ class ProgrammerLayerStackFxTest : RouteIntegrationTest() {
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            fxType = "Wave", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -84,7 +84,7 @@ class ProgrammerLayerStackFxTest : RouteIntegrationTest() {
             assertEquals(look.id, effects.single().lookId)
             // The registration id, not the display name: the two coincide for a built-in and
             // diverge for every user-defined FX definition.
-            assertEquals("Pulse", effects.single().registrationId)
+            assertEquals("Wave", effects.single().registrationId)
         }
 
     @Test

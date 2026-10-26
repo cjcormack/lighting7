@@ -187,6 +187,7 @@ internal object FxSpawner {
             state.show.paletteRegistry,
             fxSpec.fxType,
             fxSpec.parameters,
+            fxTarget.attribute,
         )
         val timing = FxTiming(fxSpec.cycle)
 

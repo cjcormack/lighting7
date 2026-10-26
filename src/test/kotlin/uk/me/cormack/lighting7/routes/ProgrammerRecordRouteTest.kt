@@ -1059,11 +1059,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         // dropped the master before S15, so a recorded busk fell back to master 1.
         for ((key, request) in listOf(
             "hex-1" to AddFxRequest(
-                fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer",
+                fxType = "Wave", fixtureKey = "hex-1", attribute = "dimmer",
                 speedMasterUuid = master, programmerOwned = true,
             ),
             "hex-2" to AddFxRequest(
-                fxType = "Pulse", fixtureKey = "hex-2", attribute = "dimmer",
+                fxType = "Wave", fixtureKey = "hex-2", attribute = "dimmer",
                 cycle = 8.0, seconds = true, programmerOwned = true,
             ),
         )) {

@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.testsupport.PULSE_WAVE
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -85,8 +86,8 @@ class LocalFxBandTest {
     @Test
     fun `a Local Pulse applies above a palette layer's FX on the same dimmer`() {
         val registry = FxComposePassTest.registry
-        fun sine() = layerFx(registry.createFx("SineWave", emptyMap()), index = 3)
-        fun pulse() = local(registry.createFx("Pulse", emptyMap()))
+        fun sine() = layerFx(registry.createFx("Wave", emptyMap()), index = 3)
+        fun pulse() = local(registry.createFx("Wave", PULSE_WAVE))
 
         val both = newRig().apply { engine.addFx(sine()); engine.addFx(pulse()) }
         val pulseAlone = newRig().apply { engine.addFx(pulse()) }

@@ -32,7 +32,7 @@ export interface FxFitContext {
  * they offer one set: the family, every emitter the palette names somewhere in the selection (a
  * **union**, as `targetEmitters` is built — the desk reports a head without it as a skip), and for a
  * Beam property the property the palette sets — a value palette's own rows, an effect palette's
- * driven property ([fxPaletteDrives]) — so a zoom cell is offered *Wide* and Zoom Wave, a gobo
+ * driven property ([fxPaletteDrives]) — so a zoom cell is offered *Wide* and a Wave on zoom, a gobo
  * cell the Slot Steps that steps its gobo.
  */
 export function paletteFits(template: PaletteSummary, fit: PaletteFit, context: FxFitContext = {}): boolean {
@@ -73,7 +73,7 @@ export function splitByMask(
 /**
  * The properties an effect palette's effect drives, or null where the context cannot say: Slot
  * Steps the setting it names, Palette Steps the properties its palettes' rows set, a library effect
- * the properties it is compatible with.
+ * the attribute it names, else the properties it is compatible with.
  */
 export function fxPaletteDrives(template: PaletteSummary, context: FxFitContext): readonly string[] | null {
   const effect = template.fx
@@ -86,6 +86,8 @@ export function fxPaletteDrives(template: PaletteSummary, context: FxFitContext)
       .filter((t) => named.has(t.uuid))
       .flatMap((t) => (t.rows ?? []).map((row) => row.attribute))
   }
+  // One that names its attribute drives that one — a Wave in a Beam palette its zoom (fx-settings plan D5).
+  if (effect.attribute) return [effect.attribute]
   if (context.library == null) return null
   const entry = context.library.find((e) => fxKey(e.name) === fxKey(effect.fxType))
   return entry?.compatibleAttributes ?? null

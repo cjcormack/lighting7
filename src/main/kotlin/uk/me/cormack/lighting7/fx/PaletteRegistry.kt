@@ -57,12 +57,12 @@ data class PaletteSnapshot(
  * differ for a template whose lowest-ordered row is corrupt, and only for a row a press would refuse.
  */
 internal fun PaletteSnapshot.familyOf(): AttributeFamily? =
-    paletteFamily(rows.map { it.attribute }, effect?.family)
+    paletteFamily(rows.map { it.attribute }, effect?.family, effect?.attribute)
 
-/** The one derivation behind both `familyOf`s. */
-internal fun paletteFamily(attributesInOrder: List<String>, fxCategory: String?): AttributeFamily? =
+/** The one derivation behind both `familyOf`s; an FX's by [fxAttributeFamily]. */
+internal fun paletteFamily(attributesInOrder: List<String>, fxCategory: String?, fxAttribute: String?): AttributeFamily? =
     attributesInOrder.firstNotNullOfOrNull { PaletteAttribute.ofOrNull(it)?.family }
-        ?: fxCategory?.let { attributeFamilyForFxFamily(it) }
+        ?: fxCategory?.let { fxAttributeFamily(it, fxAttribute) }
 
 /**
  * Templates, cached by uuid.

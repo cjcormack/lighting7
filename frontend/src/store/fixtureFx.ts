@@ -163,6 +163,23 @@ export interface FxLibraryEntry {
   source?: string
   sourceDefinitionId?: number | null
   script?: string | null
+  /** The picker's familiar names for this FX on one attribute (fx-settings plan D4). */
+  presets?: FxPreset[]
+  /** Parameters a new FX on an attribute starts with, by attribute — Wave's zoom at 64–192. */
+  attributeDefaults?: Record<string, Record<string, string>>
+}
+
+/**
+ * A familiar name the picker lists beside the FX types (fx-settings plan D4): its FX on
+ * `attribute`, starting with `parameters` over the FX's defaults, at its own `cycle` (beats) and
+ * `direction` where it names them.
+ */
+export interface FxPreset {
+  name: string
+  attribute: string
+  parameters?: Record<string, string>
+  cycle?: number | null
+  direction?: string | null
 }
 
 export interface AddFixtureFxRequest {

@@ -307,7 +307,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 40
+internal const val SUPPORTED_FORMAT_VERSION = 41
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -2219,9 +2219,18 @@ class ProjectImporter(private val state: State) {
         )
     }
 
-    /** [fx] on today's FX library, or null when it holds no old name, logged by [what]. */
+    /**
+     * [fx] on today's FX library — the terminology plan's rewrites, then Wave's (fx-settings plan
+     * D3) — or null when it holds no old name, logged by [what].
+     */
     private fun legacyFx(what: String, fx: LegacyNames.StoredFx, legacy: LegacyNames.Context): LegacyNames.StoredFx? {
-        val rewrite = LegacyNames.rewriteFx(fx, legacy) ?: return null
+        val renamed = LegacyNames.rewriteFx(fx, legacy)
+        val waved = LegacyNames.consolidateFx(renamed?.fx ?: fx, legacy.definitions)
+        val rewrite = when {
+            renamed == null -> waved
+            waved == null -> renamed
+            else -> LegacyNames.Rewrite(waved.fx, renamed.changes + waved.changes, renamed.notes + waved.notes)
+        } ?: return null
         if (rewrite.notes.isEmpty()) {
             logger.info("Import: {}: {} — {}", what, fx.fxType, rewrite.changes.joinToString("; "))
         } else {

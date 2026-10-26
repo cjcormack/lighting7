@@ -122,6 +122,21 @@ const PULSE: FxLibraryEntry = {
   ],
 }
 
+/** Wave's levels, a declared pair (fx-settings plan D1, D2). */
+const WAVE: FxLibraryEntry = {
+  name: 'Wave',
+  family: 'intensity',
+  outputType: 'SLIDER',
+  fxMode: 'STANDARD',
+  timingSource: 'BEAT',
+  compatibleAttributes: ['dimmer', 'uv', 'zoom', 'iris', 'frost', 'focus'],
+  parameters: [
+    { name: 'shape', type: 'choice', defaultValue: 'SINE', description: '' },
+    { name: 'low', type: 'ubyte', defaultValue: '0', description: '', pair: 'high' },
+    { name: 'high', type: 'ubyte', defaultValue: '255', description: '' },
+  ],
+}
+
 /** A mover whose pan travels 540° and tilt 270°, as the Robe ColorSpot annotates. */
 const SPOT = makeFixture('spot-3', [
   sliderProp('dimmer', 'dimmer', chan(1)),
@@ -142,7 +157,7 @@ const aroundCircle = () =>
 const lastFrame = () => updateFx.mock.calls.at(-1)?.[1] as Record<string, unknown>
 
 beforeEach(() => {
-  library.entries = [CIRCLE, PULSE]
+  library.entries = [CIRCLE, PULSE, WAVE]
   lookup.fixtures = [SPOT]
   updateFx.mockClear()
   resetFx.mockClear()
@@ -684,6 +699,24 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
 
     fireEvent.pointerEnter(document.querySelector('[data-ladder-step="order"] [data-ladder-dot="hex-3"]')!)
     expect(link.setLadderRow).toHaveBeenLastCalledWith('hex-3')
+  })
+
+  it('lends a Wave’s low and high to the graph as its levels, and none on a beam attribute, which asks no level question', () => {
+    const wave = (attribute: string) =>
+      groupPulse({ fxType: 'Wave', attribute, parameters: { shape: 'SINE', low: '40', high: '200' } })
+    const { link, held } = linkOf()
+    const { unmount } = inspector(link, wave('dimmer'))
+    expect(held.editor?.levels).toBe(true)
+    expect(held.editor?.levelParams).toEqual({ low: 'low', high: 'high' })
+    expect(screen.getByText('Over the level underneath')).toBeTruthy()
+    act(() => held.editor!.setParam(held.editor!.levelParams!.high, '180', true))
+    expect((lastFrame().parameters as Record<string, string>).high).toBe('180')
+    unmount()
+
+    const zoom = linkOf()
+    inspector(zoom.link, wave('zoom'))
+    expect(zoom.held.editor?.levels).toBe(false)
+    expect(screen.queryByText('Over the level underneath')).toBeNull()
   })
 
   it('lends the graph’s handles a write through the 50 ms floor, the release landing, and tells the preview each move', () => {

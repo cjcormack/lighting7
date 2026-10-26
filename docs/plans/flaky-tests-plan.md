@@ -46,6 +46,7 @@ The plan's own rules:
 
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
+| `RigSafetyRoutesTest` "output during the cool-down drops it, and making safe again keeps each lamp's cool time", "each lamp still says when its mains can be cut" | local `./gradlew :test --tests 'uk.me.cormack.lighting7.routes.*'` (with six other packages) on `claude/fx-settings-s2` before its first commit (2026-10-26, Linux cloud container), 1 of 1 package runs; passes alone, 14 of 14 | Not traced. Seen on a commit without session 2's fix (9dc4e15), which stopped a run being published finished before its end was acted on; that race may be the cause, but these cases were not run against the fix | |
 
 ## 4. Fixed
 

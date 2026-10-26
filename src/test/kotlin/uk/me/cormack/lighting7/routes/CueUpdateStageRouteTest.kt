@@ -215,8 +215,8 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
             targetType = "fixture", targetKey = fixture, fxType = type, family = "intensity",
             attribute = attribute, cycle = division, blendMode = "OVERRIDE", order = "NORMAL", amount = size,
         )
-        val sine = effect("hex-1", "SineWave", "dimmer")
-        val pulse = effect("hex-2", "Pulse", "dimmer")
+        val sine = effect("hex-1", "Wave", "dimmer")
+        val pulse = effect("hex-2", "Flicker", "dimmer")
         client.patch("$base/cues/${rig.q}") {
             contentType(ContentType.Application.Json)
             setBody(mapOf("adHocFx" to listOf(sine, pulse)))
@@ -232,7 +232,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         // Sine slowed and halved, Pulse gone, a UV pulse on hex-1 new.
         client.patch("$base/cues/${rig.q}") {
             contentType(ContentType.Application.Json)
-            setBody(mapOf("adHocFx" to listOf(sine.copy(cycle = 1.0, amount = 0.5), effect("hex-1", "Pulse", "uv"))))
+            setBody(mapOf("adHocFx" to listOf(sine.copy(cycle = 1.0, amount = 0.5), effect("hex-1", "Flicker", "uv"))))
         }
         assertTrue(holds.isEdited(rig.q))
         val dry = client.updateStage(rig.q, dryRun = true).body<UpdateStageResponse>()
@@ -263,7 +263,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         // A Look per head, each a Pulse on its head: a Look lands whole.
         val looks = listOf("hex-1", "hex-2").associateWith { head ->
             val pulse = LookFxDto(
-                targetType = "fixture", targetKey = head, fxType = "Pulse", family = "intensity",
+                targetType = "fixture", targetKey = head, fxType = "Flicker", family = "intensity",
                 attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
             )
             client.post("$base/looks") {
@@ -294,7 +294,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         assertEquals(listOf("hex-2"), pulsing())
     }
 
-    private fun dimmerEffect(fixture: String, type: String = "SineWave", division: Double = 0.5) = CueAdHocFxDto(
+    private fun dimmerEffect(fixture: String, type: String = "Wave", division: Double = 0.5) = CueAdHocFxDto(
         targetType = "fixture", targetKey = fixture, fxType = type, family = "intensity",
         attribute = "dimmer", cycle = division, blendMode = "OVERRIDE", order = "NORMAL",
     )
@@ -323,7 +323,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         assertTrue(engine.cueFx(rig.q).isEmpty())
 
         // One it gains starts, though.
-        client.setFx(rig.q, dimmerEffect("hex-2"), dimmerEffect("hex-1", "Pulse"))
+        client.setFx(rig.q, dimmerEffect("hex-2"), dimmerEffect("hex-1", "Flicker"))
         assertEquals(UpdateStageFx(0, 0, 1), client.updateStage(rig.q).body<UpdateStageResponse>().fx)
         assertEquals(listOf("hex-1"), engine.cueFx(rig.q).map { it.target.targetKey })
     }
@@ -377,7 +377,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val rig = seed()
         val pulse = LookFxDto(
-            targetType = "fixture", targetKey = "hex-2", fxType = "Pulse", family = "intensity",
+            targetType = "fixture", targetKey = "hex-2", fxType = "Flicker", family = "intensity",
             attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
         )
         val look = client.post("$base/looks") {
@@ -413,7 +413,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val rig = seed()
         val pulse = LookFxDto(
-            targetType = "fixture", targetKey = "hex-2", fxType = "Pulse", family = "intensity",
+            targetType = "fixture", targetKey = "hex-2", fxType = "Flicker", family = "intensity",
             attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
         )
         val look = client.post("$base/looks") {

@@ -66,6 +66,10 @@ data class FxRegistration(
     val defaultCycle: Double = CycleLength.ONE_BAR,
     /** Timing source for this effect (BEAT or WALL_CLOCK) */
     val timingSource: TimingSource = TimingSource.BEAT,
+    /** The picker's familiar names for this FX on one attribute (fx-settings plan D4). */
+    val presets: List<FxPreset> = emptyList(),
+    /** Parameters a new FX on an attribute starts with, by attribute — Wave's zoom at 64–192. */
+    val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
     /** Factory to create an Effect instance from string parameters */
     val factory: FxFactory,
 )
@@ -89,6 +93,22 @@ data class FxTypeInfo(
     val defaultDirection: String = FxDirection.FORWARD.name,
     /** What a new instance's `cycle` is when its author names none. */
     val defaultCycle: Double = CycleLength.ONE_BAR,
+    val presets: List<FxPreset> = emptyList(),
+    val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
+)
+
+/**
+ * A familiar name the picker lists beside the FX types (fx-settings plan D4): this FX on
+ * [attribute], starting with [parameters] over the FX's defaults, and its own [cycle] (beats) and
+ * [direction] where it names them.
+ */
+@Serializable
+data class FxPreset(
+    val name: String,
+    val attribute: String,
+    val parameters: Map<String, String> = emptyMap(),
+    val cycle: Double? = null,
+    val direction: String? = null,
 )
 
 /**
@@ -221,6 +241,8 @@ class FxRegistry {
                     timingSource = reg.timingSource.name,
                     defaultDirection = reg.defaultDirection.name,
                     defaultCycle = reg.defaultCycle,
+                    presets = reg.presets,
+                    attributeDefaults = reg.attributeDefaults,
                 )
             }
     }

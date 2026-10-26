@@ -119,13 +119,7 @@ export function getElementFilterLabel(filter: string): string {
 
 /** Fallback descriptions if the library API doesn't provide them */
 export const FX_DESCRIPTIONS: Record<string, string> = {
-  sinewave: 'Smooth wave oscillation',
-  rampup: 'Gradual fade up, then reset',
-  rampdown: 'Gradual fade down, then reset',
-  ramp: 'Linear fade up and down',
-  pulse: 'Sharp spike with quick decay',
-  squarewave: 'Alternates between on and off',
-  dimmerstrobe: 'Fast on/off flashing on the dimmer',
+  wave: 'A level wave — sine, ramp, triangle, square or pulse — on a dimmer or a beam attribute',
   flicker: 'Random candle-like flicker',
   colourcycle: 'Step through a list of colours',
   rainbowcycle: 'Smooth rainbow hue rotation',
@@ -139,10 +133,6 @@ export const FX_DESCRIPTIONS: Record<string, string> = {
   pansweep: 'Horizontal pan back and forth',
   tiltsweep: 'Vertical tilt up and down',
   randomposition: 'Random position jumps',
-  zoomwave: 'Zoom waving between two widths',
-  irispulse: 'Iris pulsing closed and open',
-  frostpulse: 'Frost pulsing in and out',
-  focuspull: 'Focus pulled between two distances',
   palettesteps: 'Steps through palettes of one family — each head goes to its own value for each',
   slotsteps: 'Steps a gobo or colour wheel through named slots — each head to its own level for each',
 }

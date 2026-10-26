@@ -958,11 +958,14 @@ private fun findElementAttribute(element: FixtureElement<*>, name: String): Fixt
  * The family Record files a running effect under: the step effects' own (effects plan §3.6) —
  * Slot Steps is a beam effect whatever setting it steps, Palette Steps is its palettes' family,
  * read off the property it drives (a strobe in an Intensity palette is `intensity`, not `controls`) —
- * else [categoryFromAttributeName].
+ * Wave's library family on every attribute, as every other door stores it (fx-settings plan D5:
+ * `fxAttributeFamily` reads the family a beam attribute gives it over that) — else
+ * [categoryFromAttributeName].
  */
 internal fun recordedFxFamily(effect: FxInstance): String {
     val attribute = effect.target.attribute
     return when {
+        effect.fxTypeId.equals(WAVE_ID, ignoreCase = true) -> WAVE_FAMILY
         effect.fxTypeId.equals(SLOT_STEPS_ID, ignoreCase = true) -> "beam"
         effect.fxTypeId.equals(PALETTE_STEPS_ID, ignoreCase = true) ->
             PaletteAttribute.ofOrNull(attribute)?.family?.let(::fxFamilyForAttributeFamily)

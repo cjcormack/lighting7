@@ -1572,7 +1572,7 @@ The FX runs and consumes cycles, but parking wins. De-parking channel 12 immedia
 
 ### Example 2 — programmer value over a running FX
 
-Setup: operator drags dimmer on channel 7 to 180 (the `updateChannel` shim lifts it to a `web` programmer entry on the fixture's `dimmer` attribute). A `SineWave` FX targets the same attribute with `blendMode: ADDITIVE`.
+Setup: operator drags dimmer on channel 7 to 180 (the `updateChannel` shim lifts it to a `web` programmer entry on the fixture's `dimmer` attribute). A `Wave` FX targets the same attribute with `blendMode: ADDITIVE`.
 
 Per frame:
 - Tier 5: 0.

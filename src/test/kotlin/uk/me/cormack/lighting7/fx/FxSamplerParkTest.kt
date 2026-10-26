@@ -37,7 +37,7 @@ class FxSamplerParkTest : RouteIntegrationTest() {
         )
         val registry = FxSamplerParityTest.registry
         val sine = FxInstance(
-            registry.createFx("SineWave"), SliderTarget.forGroup("hexes", "dimmer"), FxTiming(CycleLength.ONE_BAR), BlendMode.OVERRIDE,
+            registry.createFx("Wave"), SliderTarget.forGroup("hexes", "dimmer"), FxTiming(CycleLength.ONE_BAR), BlendMode.OVERRIDE,
         )
         engine.addFx(sine)
 

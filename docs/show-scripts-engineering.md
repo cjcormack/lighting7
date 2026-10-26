@@ -254,7 +254,7 @@ persistent compilation cache below.
 
 ### Persistent compilation cache (on disk)
 
-Runtime script compilation — 30 built-in FX, cue-trigger scripts, user FX — is
+Runtime script compilation — 19 built-in FX, cue-trigger scripts, user FX — is
 the dominant start-up cost. `buildScriptingHostConfiguration` installs a
 `CompiledScriptJarsCache` under `<appDataDir>/script-cache` (override with `scriptCache.path`;
 disable with `scriptCache.enabled=false`). The first compile of each distinct script writes a

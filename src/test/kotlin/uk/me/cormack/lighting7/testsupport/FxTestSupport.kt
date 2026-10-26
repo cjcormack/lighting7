@@ -49,3 +49,6 @@ object FxTestSupport {
         return instance
     }
 }
+
+/** Wave as the Pulse it replaced: Pulse's QUAD_OUT curve is not Wave's default. */
+val PULSE_WAVE: Map<String, String> = mapOf("shape" to "PULSE", "curve" to "QUAD_OUT")

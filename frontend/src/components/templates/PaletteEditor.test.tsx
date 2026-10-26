@@ -61,6 +61,21 @@ const library: FxLibraryEntry[] = [
     compatibleAttributes: ['zoom'],
   },
   {
+    // Intensity's level waves, which a beam attribute makes Beam's (fx-settings plan D5).
+    name: 'Wave',
+    family: 'intensity',
+    outputType: 'SLIDER',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    parameters: [
+      { name: 'shape', type: 'choice', defaultValue: 'SINE', description: '' },
+      { name: 'low', type: 'ubyte', defaultValue: '0', description: '' },
+      { name: 'high', type: 'ubyte', defaultValue: '255', description: '' },
+    ],
+    compatibleAttributes: ['dimmer', 'uv', 'zoom', 'iris'],
+    attributeDefaults: { zoom: { low: '64', high: '192' }, iris: { low: '0', high: '160' } },
+  },
+  {
     name: 'Sine Dim',
     family: 'intensity',
     outputType: 'LEVEL',
@@ -422,6 +437,28 @@ describe('validity and the save body', () => {
       family: 'beam',
       attribute: null,
       speedMasterUuid: 'master-3-uuid',
+    })
+  })
+
+  it('saves a Wave in a Beam palette on the beam attribute it drives, at its defaults there, on the Beam master', async () => {
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Iris breathe' } })
+    chooseFx('Wave')
+    fireEvent.click(screen.getByRole('combobox', { name: 'Attribute' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Zoom', 'Iris'])
+    fireEvent.click(screen.getByRole('option', { name: 'Iris' }))
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
+    expect(body.fx).toMatchObject({
+      fxType: 'Wave',
+      family: 'intensity',
+      attribute: 'iris',
+      speedMasterUuid: 'master-3-uuid',
+      parameters: { shape: 'SINE', low: '0', high: '160' },
     })
   })
 

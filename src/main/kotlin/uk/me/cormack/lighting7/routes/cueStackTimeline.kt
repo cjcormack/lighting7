@@ -16,7 +16,7 @@ import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.TimingSource
-import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
+import uk.me.cormack.lighting7.fx.fxAttributeFamily
 import uk.me.cormack.lighting7.fx.perFixtureRowTargetsOf
 import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
@@ -204,7 +204,7 @@ private class TimelineReads(
         if (fixtures != null) {
             look.derivedFamilyGroups(fixtures).toMaskNames()
         } else {
-            look.effects.mapNotNullTo(LinkedHashSet()) { attributeFamilyForFxFamily(it.family) }.toMaskNames()
+            look.effects.mapNotNullTo(LinkedHashSet()) { fxAttributeFamily(it.family, it.attribute) }.toMaskNames()
         }
 
     /**
@@ -212,7 +212,7 @@ private class TimelineReads(
      * head's property's group, else its library category's.
      */
     private fun fxFamilyOf(effect: CueAdHocFxDto, heads: List<String>): AttributeFamily? {
-        val byCategory = attributeFamilyForFxFamily(effect.family)
+        val byCategory = fxAttributeFamily(effect.family, effect.attribute)
         val attribute = effect.attribute ?: return byCategory
         val fixture = heads.firstOrNull()?.let { key -> runCatching { fixtures?.untypedGroupableFixture(key) }.getOrNull() }
             ?: return byCategory

@@ -1,6 +1,11 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fx.FxDirection
+import uk.me.cormack.lighting7.fx.WAVE_FAMILY
+import uk.me.cormack.lighting7.fx.WAVE_ID
+import uk.me.cormack.lighting7.fx.toEasingCurveParam
+import uk.me.cormack.lighting7.fx.toUByteParam
 import uk.me.cormack.lighting7.fx.PALETTE_COLOUR_REF_PREFIX
 import uk.me.cormack.lighting7.models.TIMING_CYCLE
 import uk.me.cormack.lighting7.models.TIMING_HEAD
@@ -172,7 +177,7 @@ object LegacyNames {
     private val LIGHTNING_COLOURS = setOf("flashColour", "decayColour", "ambientColour")
 
     /** Every FX id the registry no longer knows: a script may still name one, and no FX definition may take one. */
-    val retiredFxIds: Set<String> get() = FX_IDS.keys + BREATHE
+    val retiredFxIds: Set<String> get() = FX_IDS.keys + BREATHE + WAVE_ROWS.keys
 
     /** Whether [fxId] is a retired FX id, matched as the registry matches one. */
     fun isRetiredFxId(fxId: String): Boolean = retiredFxIds.any { same(it, fxId) }
@@ -184,7 +189,8 @@ object LegacyNames {
      * rewrite (P3).
      */
     fun writeProblem(fxType: String, parameters: Map<String, String>, family: String? = null): String? = when {
-        same(fxType, BREATHE) -> "'$fxType' is gone: Sine Wave a quarter-cycle on (phase offset + 0.75) draws it"
+        same(fxType, BREATHE) -> "'$fxType' is gone: Wave a quarter-cycle on (phase offset + 0.75) draws it"
+        isWaveFx(fxType) -> "'$fxType' is now Wave, shape ${waveRow(fxId(fxType))!!.second.shape}"
         isRetiredFxId(fxType) -> "'$fxType' is now '${fxId(fxType)}'"
         bouncedFxIds.any { same(it, fxType) } && PING_PONG in parameters ->
             "'$fxType' takes no pingPong: it bounces by Direction (BOUNCE)"
@@ -371,6 +377,148 @@ object LegacyNames {
     /** Today's script type for a stored `scriptType`, by name. */
     fun scriptType(stored: String): String = SCRIPT_TYPES[stored.trim().uppercase()] ?: stored
 
+    /** Wave's id (fx-settings plan D2). */
+    const val WAVE = WAVE_ID
+
+    /** One old parameter as its FX read it: its type, its declared default, and its name on Wave. */
+    private class OldParameter(val type: String, val default: String, val wave: String)
+
+    /**
+     * One level wave Wave replaced (fx-settings plan §3): the [shape] it is, its [parameters] by old
+     * name, and the one [attribute] a beam FX drove, which a stored row naming none ran on.
+     */
+    private class WaveRow(
+        val shape: String,
+        val parameters: Map<String, OldParameter>,
+        val attribute: String? = null,
+        /** The old FX's own new-instance cycle (beats) and Direction, where they were not Wave's. */
+        val cycle: Double? = null,
+        val direction: String? = null,
+    )
+
+    private fun levels(low: String, high: String, lowName: String = "min", highName: String = "max") = mapOf(
+        lowName to OldParameter("ubyte", low, "low"),
+        highName to OldParameter("ubyte", high, "high"),
+    )
+
+    private fun curve(default: String) = mapOf("curve" to OldParameter("easingCurve", default, "curve"))
+
+    private val PULSE_TIMES = mapOf(
+        "attackRatio" to OldParameter("double", "0.1", "attack"),
+        "holdRatio" to OldParameter("double", "0.3", "hold"),
+    )
+
+    /** §3's Wave block: each old id as Wave, every parameter as its old script read it. */
+    private val WAVE_ROWS: Map<String, WaveRow> = mapOf(
+        "SineWave" to WaveRow("SINE", levels("0", "255")),
+        "RampUp" to WaveRow("RAMP_UP", levels("0", "255") + curve("LINEAR")),
+        "RampDown" to WaveRow("RAMP_DOWN", levels("0", "255") + curve("LINEAR")),
+        "Ramp" to WaveRow("TRIANGLE", levels("0", "255") + curve("LINEAR")),
+        "SquareWave" to WaveRow("SQUARE", levels("0", "255") + mapOf("dutyCycle" to OldParameter("double", "0.5", "width"))),
+        "Pulse" to WaveRow("PULSE", levels("0", "255") + PULSE_TIMES + curve("QUAD_OUT")),
+        "DimmerStrobe" to WaveRow(
+            "SQUARE",
+            levels("0", "255", "offValue", "onValue") + mapOf("onRatio" to OldParameter("double", "0.1", "width")),
+        ),
+        "ZoomWave" to WaveRow("SINE", levels("64", "192"), attribute = "zoom"),
+        "IrisPulse" to WaveRow("PULSE", levels("0", "160") + PULSE_TIMES + curve("QUAD_OUT"), attribute = "iris"),
+        "FrostPulse" to WaveRow("PULSE", levels("0", "160") + PULSE_TIMES + curve("QUAD_OUT"), attribute = "frost"),
+        "FocusPull" to WaveRow(
+            "RAMP_UP", levels("64", "192", "start", "end") + curve("SINE_IN_OUT"),
+            attribute = "focus", cycle = 2.0, direction = FxDirection.BOUNCE.name,
+        ),
+    )
+
+    /**
+     * The cycle (beats) and Direction a new FX of the old level wave [fxType] started at when its
+     * author named none, where they differ from Wave's: Focus Pull's half-bar Bounce. Null otherwise.
+     */
+    fun waveTiming(fxType: String): Pair<Double, String>? =
+        waveRow(fxId(fxType))?.second?.let { row -> row.cycle?.let { it to (row.direction ?: FxDirection.FORWARD.name) } }
+
+    /** [fxType]'s row in [WAVE_ROWS] and its canonical id, matched as the registry matches one, or null. */
+    private fun waveRow(fxType: String): Pair<String, WaveRow>? =
+        WAVE_ROWS.entries.firstOrNull { same(it.key, fxType) }?.toPair()
+
+    /** The ids of the level waves Wave replaced, as they were spelled. */
+    val waveIds: Set<String> get() = WAVE_ROWS.keys
+
+    /** Whether [fxType] is one of the level waves Wave replaced. */
+    fun isWaveFx(fxType: String): Boolean = waveRow(fxId(fxType)) != null
+
+    /**
+     * [parameters] of an FX of the old type [fxType] as Wave's: its shape, and each parameter it
+     * declared under Wave's name at the value its script read — a blank or absent one at its old
+     * default, a level as `TypedParams.ubyte` clamps it, an unknown curve as `LINEAR` — so a default
+     * that differs from Wave's (Zoom Wave's 64–192, Pulse's curve) is written out. A parameter the old
+     * FX never declared is dropped, as it never read one. Null when [fxType] is no level wave.
+     *
+     * What a script's `effect("SineWave", …)` and MCP's tools run, and what [consolidateFx] stores.
+     */
+    fun waveParameters(fxType: String, parameters: Map<String, String>): Map<String, String>? {
+        val (_, row) = waveRow(fxId(fxType)) ?: return null
+        return buildMap {
+            put("shape", row.shape)
+            for ((old, p) in row.parameters) {
+                val raw = parameters[old]?.takeIf { it.isNotBlank() } ?: p.default
+                put(
+                    p.wave,
+                    when (p.type) {
+                        "ubyte" -> (raw.toUByteParam() ?: 0u).toString()
+                        "double" -> raw.takeIf { it.toDoubleOrNull() != null } ?: p.default
+                        else -> (raw.toEasingCurveParam() ?: EasingCurve.LINEAR).name
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * Session 2's rewrite of [fx] onto Wave (fx-settings plan D3), or null when it is no level wave:
+     * its id Wave, its family Wave's (a beam attribute makes it Beam's, D5), its parameters by
+     * [waveParameters], and — for a beam FX stored naming no attribute, which ran on its one — that
+     * attribute. Nothing else moves: the cycle, Direction, spread and phase run the same shape the
+     * same way, which `LegacyEquivalenceTest` proves for every row. A script FX definition's own id
+     * is never rewritten ([definitions]).
+     *
+     * One output moves, and says so in [Rewrite.notes] (fx-settings plan session 2, an exception to D3
+     * Chris accepted): a beam FX that named no attribute ran on a group only where every head had its
+     * attribute, and on none of that group otherwise; named, it runs on the heads that have it, as a
+     * Wave authored on that attribute does.
+     *
+     * Separate from [rewriteFx] because database step 4 must not take it: its rows have no attribute
+     * column to write, and step 7 (`state/FxConsolidationMigration.kt`) is this alone.
+     */
+    fun consolidateFx(fx: StoredFx, definitions: (String) -> Definition?): Rewrite? {
+        if (definitions(fx.fxType) != null) return null
+        val (id, row) = waveRow(fxId(fx.fxType)) ?: return null
+        val parameters = waveParameters(id, fx.parameters)!!
+        val changes = arrayListOf("${fx.fxType} is now Wave, shape ${row.shape}")
+        val dropped = fx.parameters.keys - row.parameters.keys
+        if (dropped.isNotEmpty()) changes += "${dropped.joinToString { "'$it'" }} named nothing it read, so went"
+        val notes = ArrayList<String>()
+        val attribute = fx.attribute?.takeIf { it.isNotBlank() } ?: row.attribute?.also {
+            changes += "it names '$it', which it drove"
+            notes += "on a group where not every head has '$it' it now runs on those that do; before, it ran on none of that group"
+        }
+        return Rewrite(
+            fx.copy(fxType = WAVE, family = WAVE_FAMILY, parameters = parameters, attribute = attribute),
+            changes,
+            notes,
+        )
+    }
+
+    /**
+     * An FX a script or a tool names, as the registry runs it today: a level wave as Wave with its
+     * parameters ([waveParameters]), any other renamed id at its new id; [fxType] and [parameters]
+     * themselves otherwise. The one door an old id still opens (fx-settings plan D3) — every stored
+     * write refuses one ([writeProblem]).
+     */
+    fun runnableFx(fxType: String, parameters: Map<String, String>): Pair<String, Map<String, String>> {
+        val renamed = fxId(fxType)
+        return waveParameters(renamed, parameters)?.let { WAVE to it } ?: (renamed to parameters)
+    }
+
     /** The fields of a stored FX that §4.2's rewrites read or move, whatever home it lives in. */
     data class StoredFx(
         val fxType: String,
@@ -382,6 +530,8 @@ object LegacyNames {
         val direction: String,
         val runs: Int?,
         val spread: Double,
+        /** The attribute it drives, where it names one; [consolidateFx] names a beam FX's. */
+        val attribute: String? = null,
     )
 
     /** A rewritten FX, and what changed about it in words for the log; [notes] say what output moved. */

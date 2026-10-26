@@ -59,7 +59,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            fxType = "Wave", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -71,7 +71,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals("dim-50", created.name)
         assertEquals("128", created.rows.single().value)
         assertEquals(750L, created.rows.single().fadeDurationMs)
-        assertEquals("Pulse", created.fx.single().fxType)
+        assertEquals("Wave", created.fx.single().fxType)
         val lookId = created.id
 
         val list = client.get(base()).body<List<LookDto>>()
@@ -225,7 +225,7 @@ class LookRoutesTest : RouteIntegrationTest() {
             val client = jsonClient()
             fun effect(targetType: String, targetKey: String, blendMode: String = "OVERRIDE") = LookFxDto(
                 targetType = targetType, targetKey = targetKey,
-                fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                fxType = "Wave", family = "intensity", attribute = "dimmer",
                 cycle = 0.5, blendMode = blendMode, order = "NORMAL",
             )
             val resp = client.post(base()) {
@@ -268,7 +268,7 @@ class LookRoutesTest : RouteIntegrationTest() {
             mountTestApp(state)
             val client = jsonClient()
             val pulse = LookFxDto(
-                targetType = "group", targetKey = "front-wash", fxType = "Pulse", family = "intensity",
+                targetType = "group", targetKey = "front-wash", fxType = "Wave", family = "intensity",
                 attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL", amount = 0.4,
             )
             val lookId = client.post(base()) {
@@ -328,7 +328,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         fx = listOf(
                             LookFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                                fxType = "Wave", family = "intensity", attribute = "dimmer",
                                 cycle = 0.5, blendMode = "ADD", order = "NORMAL",
                             ),
                         ),
@@ -347,7 +347,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         fx = listOf(
                             LookFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                                fxType = "Wave", family = "intensity", attribute = "dimmer",
                                 cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                                 elementFilter = "THIRDS",
                             ),
@@ -469,7 +469,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            fxType = "Wave", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -509,7 +509,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            fxType = "Wave", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -731,7 +731,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            fxType = "Wave", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),

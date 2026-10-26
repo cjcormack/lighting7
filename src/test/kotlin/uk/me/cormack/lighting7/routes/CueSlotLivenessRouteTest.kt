@@ -92,7 +92,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
                         listOf(
                             LookFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                                fxType = "Wave", family = "intensity", attribute = "dimmer",
                                 cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                             ),
                         )

@@ -230,6 +230,8 @@ class FxFileLoader(
                     defaultDirection = p.metadata.defaultDirection,
                     defaultCycle = p.metadata.defaultCycle,
                     timingSource = timingSource,
+                    presets = p.metadata.presets,
+                    attributeDefaults = p.metadata.attributeDefaults,
                     factory = factory,
                 ))
 
@@ -263,6 +265,25 @@ class FxFileLoader(
         private val PARAM_KEYS = setOf(
             "name", "type", "default", "description",
             "label", "min", "max", "step", "unit", "options", "role", "shownWhen", "pair",
+        )
+
+        /** The keys a `presets:` list item may carry. */
+        private val PRESET_KEYS = setOf("name", "attribute", "parameters", "cycle", "direction")
+
+        /** The keys an `attributeDefaults:` list item may carry. */
+        private val ATTRIBUTE_DEFAULT_KEYS = setOf("attribute", "parameters")
+
+        /** The keys the frontmatter itself takes, which an indented line after a list may still be. */
+        private val TOP_LEVEL_KEYS = setOf(
+            "id", "name", "family", "outputType", "fxMode", "defaultTiming", "defaultDirection", "defaultCycle",
+            "timingSource", "compatibleAttributes", "aliases", "parameters", "presets", "attributeDefaults",
+        )
+
+        /** The frontmatter's three lists, each item a map of one of these key sets. */
+        private val LIST_KEYS = mapOf(
+            "parameters" to PARAM_KEYS,
+            "presets" to PRESET_KEYS,
+            "attributeDefaults" to ATTRIBUTE_DEFAULT_KEYS,
         )
 
         /**
@@ -303,21 +324,20 @@ class FxFileLoader(
             var timingSource = "BEAT"
             var compatibleAttributes = listOf<String>()
             var aliases: List<String>? = null
-            val parameters = mutableListOf<FxFileParameter>()
+            val items = LIST_KEYS.keys.associateWith { mutableListOf<Map<String, String>>() }
 
-            var inParameters = false
+            // The list whose items the lines below belong to, and the item being read.
+            var inList: String? = null
             var currentParam: MutableMap<String, String>? = null
 
             for (line in lines) {
                 val trimmed = line.trim()
                 if (trimmed.isEmpty() || trimmed.startsWith("#")) continue
 
-                if (trimmed.startsWith("- ") && inParameters) {
-                    // Save previous param if any
-                    currentParam?.let { map ->
-                        parameters.add(parseParameter(map))
-                    }
-                    // Start new param
+                if (trimmed.startsWith("- ") && inList != null) {
+                    // Save previous item if any
+                    currentParam?.let { map -> items.getValue(inList).add(map) }
+                    // Start new item
                     currentParam = mutableMapOf()
                     // Parse inline key-value on the "- " line
                     val afterDash = trimmed.removePrefix("- ").trim()
@@ -349,7 +369,7 @@ class FxFileLoader(
                 if (currentParam != null &&
                     (line.startsWith("  ") || line.startsWith("\t")) &&
                     !trimmed.startsWith("- ") &&
-                    trimmed.substringBefore(":").trim() in PARAM_KEYS
+                    trimmed.substringBefore(":").trim() in LIST_KEYS.getValue(inList!!)
                 ) {
                     if (trimmed.contains(":")) {
                         val (k, v) = trimmed.split(":", limit = 2)
@@ -358,11 +378,22 @@ class FxFileLoader(
                     continue
                 }
 
-                // Not in a parameter entry anymore
+                // An indented key neither a list item nor the frontmatter takes (a typo) would otherwise
+                // end the list here, and every item after it would be lost without a word. An indented
+                // top-level key ends the list and is read as itself, below.
+                require(
+                    currentParam == null || !(line.startsWith("  ") || line.startsWith("\t")) || trimmed.startsWith("- ") ||
+                        trimmed.substringBefore(":").trim() in TOP_LEVEL_KEYS,
+                ) {
+                    "FX '$id': '${trimmed.substringBefore(":").trim()}' is no key of a $inList item"
+                }
+
+                // Not in a list item anymore
                 if (currentParam != null) {
-                    parameters.add(parseParameter(currentParam))
+                    items.getValue(inList!!).add(currentParam)
                     currentParam = null
                 }
+                inList = null
 
                 if (!trimmed.contains(":")) continue
                 val (key, value) = trimmed.split(":", limit = 2).map { it.trim() }
@@ -382,21 +413,33 @@ class FxFileLoader(
                     "timingSource" -> timingSource = value
                     "compatibleAttributes" -> compatibleAttributes = parseYamlArray(value)
                     "aliases" -> aliases = parseYamlArray(value)
-                    "parameters" -> {
-                        inParameters = true
-                        // If it's an inline empty array
-                        if (value == "[]") inParameters = false
+                    "parameters", "presets", "attributeDefaults" -> {
+                        // An inline empty array opens no list
+                        inList = key.takeUnless { value == "[]" }
                     }
                 }
             }
 
-            // Flush last param
-            currentParam?.let { map ->
-                parameters.add(parseParameter(map))
-            }
+            // Flush last item
+            currentParam?.let { map -> items.getValue(inList!!).add(map) }
+            val parameters = items.getValue("parameters").map(::parseParameter)
 
             val problems = parameterMetadataProblems(parameters.map(FxFileParameter::toParameterInfo))
             require(problems.isEmpty()) { "FX '$id': ${problems.joinToString("; ")}" }
+            val presets = items.getValue("presets").map(::parsePreset)
+            val attributeDefaults = items.getValue("attributeDefaults").associate { map ->
+                val attribute = map["attribute"]?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalArgumentException("FX '$id': an attributeDefaults item needs an attribute")
+                attribute to parseInlineMap(map["parameters"].orEmpty())
+            }
+            val schema = parameters.map(FxFileParameter::toParameterInfo)
+            val namesProblems = (presets.map { "preset '${it.name}'" to it.parameters } +
+                attributeDefaults.map { (attribute, values) -> "attributeDefaults '$attribute'" to values })
+                .flatMap { (at, values) ->
+                    values.keys.filter { key -> schema.none { it.name == key } }.map { "$at: no parameter '$it'" } +
+                        listOfNotNull(choiceProblem(schema, values)?.let { "$at: $it" })
+                } + presets.filter { it.attribute !in compatibleAttributes }.map { "preset '${it.name}': '${it.attribute}' is not a compatible attribute" }
+            require(namesProblems.isEmpty()) { "FX '$id': ${namesProblems.joinToString("; ")}" }
 
             return FxFileMetadata(
                 id = id,
@@ -411,7 +454,50 @@ class FxFileLoader(
                 compatibleAttributes = compatibleAttributes,
                 aliases = aliases,
                 parameters = parameters,
+                presets = presets,
+                attributeDefaults = attributeDefaults,
             )
+        }
+
+        /**
+         * One `presets:` item (fx-settings plan D4): a familiar name for this FX on one attribute,
+         * with the parameters, cycle and Direction it starts with.
+         *
+         * ```
+         * - name: Focus Pull
+         *   attribute: focus
+         *   parameters: {shape: RAMP_UP, curve: SINE_IN_OUT}
+         *   cycle: 2.0          # beats; absent is the FX's defaultCycle
+         *   direction: BOUNCE   # absent is the FX's defaultDirection
+         * ```
+         */
+        private fun parsePreset(map: Map<String, String>): FxPreset {
+            val name = map["name"]?.takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("a preset needs a name")
+            return FxPreset(
+                name = name,
+                attribute = map["attribute"]?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalArgumentException("preset '$name' needs an attribute"),
+                parameters = parseInlineMap(map["parameters"].orEmpty()),
+                cycle = map["cycle"]?.let {
+                    it.toDoubleOrNull()?.takeIf { c -> c > 0.0 }
+                        ?: throw IllegalArgumentException("preset '$name': cycle must be a positive number of beats, got '$it'")
+                },
+                direction = map["direction"]?.let {
+                    (FxDirection.byName(it) ?: throw IllegalArgumentException("preset '$name': unknown direction '$it'")).name
+                },
+            )
+        }
+
+        /** `{key: value, key: value}` as a map; values hold no commas. Empty for a blank string. */
+        private fun parseInlineMap(value: String): Map<String, String> {
+            val trimmed = value.trim()
+            if (trimmed.isEmpty()) return emptyMap()
+            require(trimmed.startsWith("{") && trimmed.endsWith("}")) { "expected {key: value, …}, got '$value'" }
+            return trimmed.removeSurrounding("{", "}").split(",").filter { it.isNotBlank() }.associate { entry ->
+                val (k, v) = entry.split(":", limit = 2).takeIf { it.size == 2 }
+                    ?: throw IllegalArgumentException("expected key: value, got '${entry.trim()}'")
+                k.trim() to v.trim().removeSurrounding("\"")
+            }
         }
 
         /**
@@ -488,6 +574,9 @@ data class FxFileMetadata(
     val compatibleAttributes: List<String> = emptyList(),
     val aliases: List<String>? = null,
     val parameters: List<FxFileParameter> = emptyList(),
+    val presets: List<FxPreset> = emptyList(),
+    /** Parameters a new FX on an attribute starts with, by attribute (fx-settings plan session 2). */
+    val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
 )
 
 data class FxFileParameter(

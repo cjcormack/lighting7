@@ -1027,7 +1027,7 @@ The `fxState` WebSocket message includes `cueStackId` on each FX in `activeFx`:
 {
   "type": "fxState",
   "activeFx": [
-    { "id": 1, "fxType": "SineWave", "targetKey": "front-wash", "cueId": 10, "cueStackId": 1, ... }
+    { "id": 1, "fxType": "Wave", "targetKey": "front-wash", "cueId": 10, "cueStackId": 1, ... }
   ]
 }
 ```

@@ -180,7 +180,7 @@ export function FxFields({
   // An absent centre is the library's default (128 on every built-in) — a script or a cue may store a
   // Circle without spelling it, and that is still Around.
   const centreMode = centred ? centreModeOf(draft.blendMode, { ...defaultParameters(entry), ...draft.parameters }) : null
-  const level = isLevelFx(entry)
+  const level = isLevelFx(entry, attribute)
   const levelMode = level ? levelModeOf(draft.blendMode) : null
 
   const showTiming = scope.timing ?? scope.heads

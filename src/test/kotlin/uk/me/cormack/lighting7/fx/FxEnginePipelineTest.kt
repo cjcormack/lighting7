@@ -1106,7 +1106,7 @@ class FxEnginePipelineTest {
             it.programmerLayerFxKey = ProgrammerLayerFxKey(
                 layerId = 3,
                 effect = StoredFx(
-                    fxType = "Pulse", family = "intensity",
+                    fxType = "Wave", family = "intensity",
                     attribute = "dimmer", cycle = 1.0, blendMode = "ADDITIVE",
                     order = "NORMAL", phaseOffset = 0.0, elementMode = null,
                     elementFilter = null, timing = null, parameters = emptyMap(),

@@ -288,7 +288,7 @@ internal fun previewFx(state: State, request: FxPreviewRequest, clock: FxSampleC
     if (problems.isNotEmpty()) return FxPreviewOutcome.Invalid(problems)
     val fx = asked.map { checkNotNull(it) }
 
-    val sampler = sampling.sampler { state.show.fxRegistry.createFxWithPalettes(state.show.paletteRegistry, it.fxTypeId, it.effect.parameters) }
+    val sampler = sampling.sampler { state.show.fxRegistry.createFxWithPalettes(state.show.paletteRegistry, it.fxTypeId, it.effect.parameters, it.target.attribute) }
     val clock = clock ?: sampler.clock()
     val reads = sampler.snapshot()
     val covered = coveredBy(state, request.targets)

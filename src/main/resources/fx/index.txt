@@ -1,14 +1,8 @@
 # Built-in FX effect definitions
 # Each line is a path relative to the fx/ resource directory
 
-# Intensity effects
-dimmer/SineWave.fx.kts
-dimmer/RampUp.fx.kts
-dimmer/RampDown.fx.kts
-dimmer/Ramp.fx.kts
-dimmer/Pulse.fx.kts
-dimmer/SquareWave.fx.kts
-dimmer/DimmerStrobe.fx.kts
+# Intensity effects — Wave also drives the beam attributes (fx-settings plan D2)
+dimmer/Wave.fx.kts
 dimmer/Flicker.fx.kts
 dimmer/CandleFlicker.fx.kts
 dimmer/FluorescentFlicker.fx.kts
@@ -29,12 +23,6 @@ position/Sweep.fx.kts
 position/PanSweep.fx.kts
 position/TiltSweep.fx.kts
 position/RandomPosition.fx.kts
-
-# Beam effects
-beam/ZoomWave.fx.kts
-beam/IrisPulse.fx.kts
-beam/FrostPulse.fx.kts
-beam/FocusPull.fx.kts
 
 # Step effects (effects plan §3.6)
 steps/PaletteSteps.fx.kts

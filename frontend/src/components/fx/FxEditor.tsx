@@ -22,6 +22,7 @@ import {
   differsFromPalette,
   draftOf,
   isLevelFx,
+  levelPairOf,
   withPaletteDraft,
   OPTIONAL_FIELDS,
   sameRequest,
@@ -216,7 +217,11 @@ export function FxEditor({
 
   // Lent to the graph's handles while this editor is open, through the same write its fields use —
   // but not while a split edit is held, which the graph cannot draw.
-  const levels = entry != null && isLevelFx(entry) && ['min', 'max'].every((p) => entry.parameters.some((d) => d.name === p))
+  const levelPair = useMemo(
+    () => (entry != null && isLevelFx(entry, effect.attribute) ? levelPairOf(entry) : null),
+    [entry, effect.attribute],
+  )
+  const levels = levelPair != null
   const libraryDefaults = useMemo(() => (entry ? defaultParameters(entry) : {}), [entry])
   const holding = hold != null
   useEffect(() => {
@@ -227,13 +232,14 @@ export function FxEditor({
       // An FX carries only the parameters it was given: the rest are the library's.
       draft: { ...draft, parameters: { ...libraryDefaults, ...draft.parameters } },
       levels,
+      ...(levelPair != null ? { levelParams: levelPair } : {}),
       wallClock: (entry?.timingSource ?? effect.timingSource) === 'WALL_CLOCK',
       readOnly: !connected || holding,
       set: (patch, release) => write({ ...draftRef.current, ...patch }, release, OPTIONAL_FIELDS.filter((field) => field in patch)),
       setParam: (name, value, release) =>
         write({ ...draftRef.current, parameters: { ...draftRef.current.parameters, [name]: value } }, release),
     })
-  }, [connected, draft, effect.id, effect.timingSource, entry?.timingSource, holding, levels, libraryDefaults, write])
+  }, [connected, draft, effect.id, effect.timingSource, entry?.timingSource, holding, levels, levelPair, libraryDefaults, write])
   useEffect(
     () => () => {
       linkRef.current?.detach(effect.id)

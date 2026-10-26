@@ -140,7 +140,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             }.inStack(stack, sortOrder = 0)
             DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                fxType = "Pulse"; family = "intensity"; cycle = 1.0
+                fxType = "Wave"; family = "intensity"; cycle = 1.0
                 blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 speedMasterUuid = UUID.fromString(master2.uuid)
@@ -231,7 +231,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             }.inStack(stack, sortOrder = 0)
             DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                fxType = "Pulse"; family = "intensity"; cycle = 1.0
+                fxType = "Wave"; family = "intensity"; cycle = 1.0
                 blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 speedMasterUuid = UUID.fromString(master2.uuid)

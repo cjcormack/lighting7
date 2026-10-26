@@ -31,7 +31,7 @@ import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.canonicalAttributeName
-import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
+import uk.me.cormack.lighting7.fx.fxAttributeFamily
 import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.familyForAttribute
@@ -1087,9 +1087,10 @@ internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<AttributeFamil
         familyForAttribute(fixture, canonical)?.let { families.add(it) }
     }
 
-    // Effects declare a category directly, so they need no fixture to classify.
+    // Effects declare a category directly, read on the attribute they drive (fx-settings plan D5),
+    // so they need no fixture to classify.
     for (effect in effects) {
-        attributeFamilyForFxFamily(effect.family)?.let { families.add(it) }
+        fxAttributeFamily(effect.family, effect.attribute)?.let { families.add(it) }
     }
     return AttributeFamily.entries.filterTo(LinkedHashSet()) { it in families }
 }

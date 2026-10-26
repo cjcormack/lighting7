@@ -60,7 +60,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         val id = client.add(
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", cycle = 10.0, seconds = true),
+            AddFxRequest(fxType = "Wave", fixtureKey = "hex-1", attribute = "dimmer", cycle = 10.0, seconds = true),
         ).body<AddFxResponse>().fxId
 
         val instance = effect(id)
@@ -86,12 +86,12 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         val master = masterUuid(0)
 
         val refused = client.add(
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", seconds = true, speedMasterUuid = master),
+            AddFxRequest(fxType = "Wave", fixtureKey = "hex-1", attribute = "dimmer", seconds = true, speedMasterUuid = master),
         )
         assertEquals(HttpStatusCode.BadRequest, refused.status)
         assertTrue(engine.getActiveFx().isEmpty())
 
-        val id = client.add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer"))
+        val id = client.add(AddFxRequest(fxType = "Wave", fixtureKey = "hex-1", attribute = "dimmer"))
             .body<AddFxResponse>().fxId
         val before = effect(id)
         val update = client.update(id, UpdateFxRequest(seconds = true, speedMasterUuid = master))
@@ -104,7 +104,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
     fun `an omitted division is one bar`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val id = jsonClient().add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer"))
+        val id = jsonClient().add(AddFxRequest(fxType = "Wave", fixtureKey = "hex-1", attribute = "dimmer"))
             .body<AddFxResponse>().fxId
         assertEquals(CycleLength.ONE_BAR, effect(id).timing.cycle)
     }
@@ -115,7 +115,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
         val second = masterUuid(1).takeIf { engine.speedMasters.masterStates().size > 1 }
-        val id = client.add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer"))
+        val id = client.add(AddFxRequest(fxType = "Wave", fixtureKey = "hex-1", attribute = "dimmer"))
             .body<AddFxResponse>().fxId
 
         val onSeconds = client.update(id, UpdateFxRequest(seconds = true, cycle = 6.0)).body<FxDto>()
@@ -191,7 +191,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val master = java.util.UUID.fromString(masterUuid(0))
         val spec = LookFxSpec(
-            fxType = "Pulse", family = "intensity", attribute = "dimmer", cycle = 5.0,
+            fxType = "Wave", family = "intensity", attribute = "dimmer", cycle = 5.0,
             blendMode = "OVERRIDE", order = "NORMAL", seconds = true,
         )
         val target = uk.me.cormack.lighting7.fx.FxTargetFactory.forFixture(
@@ -216,7 +216,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
     @Test
     fun `a layer's division override leaves an effect on Seconds alone`() {
         val spec = LookFxSpec(
-            fxType = "Pulse", family = "intensity", cycle = 12.0, blendMode = "OVERRIDE", order = "NORMAL",
+            fxType = "Wave", family = "intensity", cycle = 12.0, blendMode = "OVERRIDE", order = "NORMAL",
         )
         assertEquals(2.0, spec.withCycleOverride(2.0).cycle)
         assertEquals(12.0, spec.copy(seconds = true).withCycleOverride(2.0).cycle)
@@ -227,7 +227,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
     fun `Include carries a cue effect's timing`() {
         val master = "8b0d5f7e-2c1a-4f53-9d2e-6a1b3c4d5e6f"
         val child = CueAdHocFxDto(
-            targetType = "fixture", targetKey = "hex-1", fxType = "Pulse", family = "intensity",
+            targetType = "fixture", targetKey = "hex-1", fxType = "Wave", family = "intensity",
             cycle = 2.0, blendMode = "OVERRIDE", order = "NORMAL",
             speedMasterUuid = master,
         )
