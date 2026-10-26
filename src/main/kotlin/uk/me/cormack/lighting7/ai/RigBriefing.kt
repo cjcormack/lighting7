@@ -1,9 +1,11 @@
 package uk.me.cormack.lighting7.ai
 
+import uk.me.cormack.lighting7.fx.CHOICE_TYPE
 import uk.me.cormack.lighting7.fx.CycleLength
 import uk.me.cormack.lighting7.fx.FxDirection
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
+import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.GelLibrary
 import uk.me.cormack.lighting7.fixture.FixtureCommands
@@ -177,13 +179,19 @@ class RigBriefing(private val state: State) {
         // Effect library summary
         sb.appendLine("## FX Library (for create_look)")
         for (effect in state.show.fxRegistry.getLibrary()) {
-            val params = effect.parameters.joinToString(", ") { "${it.name}:${it.type}=${it.defaultValue}" }
+            val params = effect.parameters.joinToString(", ") { parameterBrief(it) }
             val defaults = (if (effect.defaultCycle != CycleLength.ONE_BAR) ", cycle=${effect.defaultCycle}" else "") +
                 (if (effect.defaultDirection != FxDirection.FORWARD.name) ", direction=${effect.defaultDirection}" else "")
             sb.appendLine("- **${effect.name}** (family=${effect.family}, output=${effect.outputType}$defaults) params: $params")
         }
         // The two step effects take references rather than values (effects plan §3.6), which
         // neither the parameter type nor the category says on its own.
+        sb.appendLine(
+            "A parameter's brackets give its label, its range (in the stored value: a byte 0–255, a " +
+                "ratio 0–1), its unit (% a byte level read as a percent, ratio a 0–1 share, dmx DMX " +
+                "steps, position a byte about its axis's centre, ms milliseconds), a choice's options, " +
+                "`when` the other parameter's values it applies under, and `with` the high a low pairs with.",
+        )
         sb.appendLine(
             "PaletteSteps steps through generic value palettes of one family (`palettes`: two or more " +
                 "`pal:{uuid}`, comma-separated) — store it with that family (intensity, colour, " +
@@ -648,3 +656,19 @@ private fun briefingTargetOf(effect: FxInstance): String =
     (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items
         ?.joinToString(", ", "selection(", ")") { if (it is TargetRef.Group) "group:${it.key}" else it.key }
         ?: effect.target.targetKey
+
+/** One parameter for the FX library listing: `min:ubyte=0 ["Low" 0–255 % with max]`. */
+internal fun parameterBrief(p: ParameterInfo): String {
+    fun n(v: Double) = if (v == Math.floor(v)) v.toLong().toString() else v.toString()
+    val notes = listOfNotNull(
+        p.label?.let { "\"$it\"" },
+        if (p.min != null || p.max != null) "${p.min?.let(::n) ?: ""}–${p.max?.let(::n) ?: ""}" else null,
+        p.unit,
+        p.options?.takeIf { p.type == CHOICE_TYPE }?.joinToString("|") { it.value },
+        p.role?.takeIf { it == "detail" },
+        p.shownWhen?.let { "when ${it.param}=${it.values.joinToString("|")}" },
+        p.pair?.let { "with $it" },
+    )
+    val base = "${p.name}:${p.type}=${p.defaultValue}"
+    return if (notes.isEmpty()) base else "$base [${notes.joinToString(" ")}]"
+}

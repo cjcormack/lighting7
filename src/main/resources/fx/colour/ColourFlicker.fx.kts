@@ -10,10 +10,16 @@ parameters:
     type: colour
     default: "#ff0000"
     description: Base colour to vary around
+    label: Colour
   - name: variation
     type: int
     default: "50"
     description: Maximum channel variation (0-255)
+    label: Variation
+    min: 0
+    max: 255
+    step: 1
+    unit: dmx
 ---*/
 
 val baseColour = params.colour("baseColour")

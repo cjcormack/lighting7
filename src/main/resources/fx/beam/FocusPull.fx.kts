@@ -12,14 +12,26 @@ parameters:
     type: ubyte
     default: "64"
     description: Focus at the start of the pull
+    label: Start
+    min: 0
+    max: 255
+    step: 1
+    unit: %
   - name: end
     type: ubyte
     default: "192"
     description: Focus at the end of the pull
+    label: End
+    min: 0
+    max: 255
+    step: 1
+    unit: %
   - name: curve
     type: easingCurve
     default: "SINE_IN_OUT"
     description: Easing curve
+    label: Curve
+    role: detail
 ---*/
 
 val start = params.ubyte("start")

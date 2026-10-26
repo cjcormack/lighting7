@@ -11,18 +11,40 @@ parameters:
     type: ubyte
     default: "180"
     description: The average brightness level
+    label: Base
+    min: 0
+    max: 255
+    step: 1
+    unit: %
   - name: min
     type: ubyte
     default: "100"
     description: Minimum value floor
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: max
   - name: max
     type: ubyte
     default: "230"
     description: Maximum value ceiling
+    label: High
+    min: 0
+    max: 255
+    step: 1
+    unit: %
   - name: smoothing
     type: double
     default: "0.85"
     description: Smoothing factor - higher values give slower, smoother drift
+    label: Settle
+    min: 0
+    max: 0.99
+    step: 0.01
+    unit: ratio
+    role: detail
 ---*/
 
 val baseLevel = params.ubyte("baseLevel").toDouble()

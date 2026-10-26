@@ -10,10 +10,12 @@ parameters:
     type: colour
     default: "#000000"
     description: First colour
+    label: First colour
   - name: colourB
     type: colour
     default: "#ffffff"
     description: Second colour
+    label: Second colour
 ---*/
 
 val colourA = params.colour("colourA")

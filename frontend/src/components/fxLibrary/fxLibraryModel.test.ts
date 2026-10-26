@@ -140,6 +140,19 @@ describe('forkRequest', () => {
     expect(body.compatibleAttributes).not.toBe(pulse.compatibleAttributes)
   })
 
+  it('keeps a parameter’s metadata but not a curve’s options, which are the desk’s own list', () => {
+    const curved = entry('Ramp', {
+      parameters: [
+        { name: 'min', type: 'ubyte', defaultValue: '0', description: '', label: 'Low', min: 0, max: 255, unit: '%' },
+        { name: 'curve', type: 'easingCurve', defaultValue: 'LINEAR', description: '', label: 'Curve', options: [{ value: 'LINEAR', label: 'Linear' }] },
+      ],
+    })
+    const [min, curve] = forkRequest(curved, [curved], []).parameters ?? []
+    expect(min).toMatchObject({ label: 'Low', min: 0, max: 255, unit: '%' })
+    expect(curve.label).toBe('Curve')
+    expect(curve.options).toBeUndefined()
+  })
+
   it('mints against the library and the definitions both, and numbers the name to match', () => {
     const library = [pulse, entry('PulseCustom', { source: 'USER', sourceDefinitionId: 3 })]
     // A definition whose script failed to register still holds its id.

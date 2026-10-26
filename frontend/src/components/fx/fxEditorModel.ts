@@ -1,5 +1,5 @@
 import type { FxDirection, Timing, UpdateFxRequest } from '@/api/fxApi'
-import type { ActiveFx, FxLibraryEntry, FxParameterDef } from '@/store/fixtureFx'
+import type { ActiveFx, FxLibraryEntry, FxParamUnit, FxParameterDef } from '@/store/fixtureFx'
 import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
 import { isMirroredOrder } from '@/lib/spreadShape'
 import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
@@ -102,6 +102,118 @@ export function paramAxis(name: string): 'pan' | 'tilt' | null {
 export function isRatioParam(param: FxParameterDef): boolean {
   const type = param.type.toLowerCase()
   return (type === 'double' || type === 'float') && Number(param.defaultValue) <= 1
+}
+
+/** The board's words for the built-ins' parameters, for a parameter that declares no label. */
+const PARAM_LABELS: Record<string, string> = {
+  panCentre: 'Pan',
+  tiltCentre: 'Tilt',
+  panRadius: 'Pan size',
+  tiltRadius: 'Tilt size',
+  panRange: 'Pan range',
+  tiltRange: 'Tilt range',
+  min: 'Low',
+  max: 'High',
+  attackRatio: 'Attack',
+  holdRatio: 'Hold',
+  fadeRatio: 'Fade',
+  dutyCycle: 'Duty',
+  onRatio: 'On',
+}
+
+/** A parameter's guessed label: the board's word for it, else its name as words. */
+export function paramLabel(name: string): string {
+  return (
+    PARAM_LABELS[name] ??
+    name
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, (s) => s.toUpperCase())
+      .trim()
+  )
+}
+
+/** How the editor draws one parameter: its label, unit and range, and whether it folds under *More*. */
+export interface ParamView {
+  label: string
+  unit: FxParamUnit | null
+  min: number
+  max: number
+  step: number
+  fold: 'main' | 'detail'
+  /** A guessed range (no `min` or `max` declared): the field reads values past it, as an older row may hold. */
+  open: boolean
+}
+
+/** Whether the desk declared anything about [param] beyond its name, type, default and description. */
+export function declaresMetadata(param: FxParameterDef): boolean {
+  return (
+    param.label != null ||
+    param.min != null ||
+    param.max != null ||
+    param.step != null ||
+    param.unit != null ||
+    param.role != null ||
+    param.shownWhen != null ||
+    param.pair != null ||
+    (param.options != null && param.type.toLowerCase() === 'choice')
+  )
+}
+
+/**
+ * [param] as the editor draws it (fx-settings plan D1): what the desk declares, each field it leaves
+ * out guessed from the name and type ([paramRole]) — all of them for a script FX's parameter that
+ * declares nothing.
+ */
+export function paramView(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>, param: FxParameterDef): ParamView {
+  const guess = guessedView(entry, param)
+  if (!declaresMetadata(param)) return guess
+  const ranged = param.min != null || param.max != null
+  return {
+    label: param.label ?? guess.label,
+    unit: param.unit ?? guess.unit,
+    min: param.min ?? guess.min,
+    max: param.max ?? guess.max,
+    step: param.step ?? guess.step,
+    fold: param.role ?? guess.fold,
+    open: guess.open && !ranged,
+  }
+}
+
+function guessedView(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>, param: FxParameterDef): ParamView {
+  const type = param.type.toLowerCase()
+  const role = paramRole(entry, param)
+  const fold = role === 'shape' ? 'detail' : 'main'
+  const label = paramLabel(param.name)
+  if (type === 'ubyte') {
+    const unit: FxParamUnit | null =
+      role === 'centre' || role === 'axis' ? 'position' : role === 'size' ? 'dmx' : role === 'level' ? '%' : null
+    return { label, unit, min: 0, max: 255, step: 1, fold, open: false }
+  }
+  if (type === 'double' || type === 'float') {
+    return isRatioParam(param)
+      ? { label, unit: 'ratio', min: 0, max: 1, step: 0.01, fold, open: false }
+      : { label, unit: null, min: 0, max: 10, step: 0.1, fold, open: true }
+  }
+  if (type === 'int') {
+    // From the declared default and nothing else, so the range never moves under a drag.
+    const max = Math.max(255, (Number(param.defaultValue) || 0) * 2)
+    return { label, unit: /Ms$/.test(param.name) ? 'ms' : null, min: 0, max, step: 1, fold, open: true }
+  }
+  return { label, unit: null, min: 0, max: 0, step: 1, fold, open: false }
+}
+
+/** Whether [param] is drawn while the FX holds [parameters] — its `shownWhen`, against the library's defaults. */
+export function isParamShown(
+  entry: Pick<FxLibraryEntry, 'parameters'>,
+  param: FxParameterDef,
+  parameters: Record<string, string>,
+): boolean {
+  const when = param.shownWhen
+  if (when == null) return true
+  const other = entry.parameters.find((p) => p.name === when.param)
+  if (other == null) return true
+  const value = (parameters[other.name] || other.defaultValue).trim().toUpperCase()
+  return when.values.some((v) => v.toUpperCase() === value)
 }
 
 export function clampByte(n: number): number {

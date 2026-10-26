@@ -10,6 +10,7 @@ parameters:
     type: slotList
     default: ""
     description: Comma-separated option names of the setting — each head goes to its own level for each, and holds where it has no such slot
+    label: Slots
 ---*/
 
 // A slot has no halfway, so there is no fade: each step snaps.

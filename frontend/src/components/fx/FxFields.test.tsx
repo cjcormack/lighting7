@@ -31,17 +31,24 @@ vi.mock('@/components/ui/slider', () => ({
     onValueCommit?: (v: number[]) => void
     'aria-label'?: string
   }) => (
-    <input
-      type="range"
-      aria-label={label}
-      min={min}
-      max={max}
-      step={step}
-      value={value[0]}
-      disabled={disabled}
-      onChange={(e) => onValueChange?.([Number(e.target.value)])}
-      onPointerUp={(e) => onValueCommit?.([Number((e.target as HTMLInputElement).value)])}
-    />
+    <>
+      {value.map((v, i) => (
+        <input
+          key={i}
+          type="range"
+          aria-label={value.length > 1 ? `${label} ${i + 1}` : label}
+          min={min}
+          max={max}
+          step={step}
+          value={v}
+          disabled={disabled}
+          onChange={(e) => onValueChange?.(value.map((x, j) => (j === i ? Number(e.target.value) : x)).sort((a, b) => a - b))}
+          onPointerUp={(e) =>
+            onValueCommit?.(value.map((x, j) => (j === i ? Number((e.target as HTMLInputElement).value) : x)).sort((a, b) => a - b))
+          }
+        />
+      ))}
+    </>
   ),
 }))
 
@@ -283,5 +290,131 @@ describe('FxFields', () => {
     expect(screen.getByText('+4')).toBeTruthy()
     expect(screen.getByText('Over its 20 heads')).toBeTruthy()
   })
-})
 
+  // ─── Parameter metadata (fx-settings plan D1) ──────────────────────────────────────────────────
+
+  const WAVE: FxLibraryEntry = {
+    ...PULSE,
+    name: 'Probe',
+    parameters: [
+      {
+        name: 'shape',
+        type: 'choice',
+        defaultValue: 'SINE',
+        description: '',
+        label: 'Shape',
+        options: [
+          { value: 'SINE', label: 'Sine' },
+          { value: 'SQUARE', label: 'Square' },
+        ],
+      },
+      { name: 'high', type: 'ubyte', defaultValue: '255', description: '', label: 'High', min: 0, max: 255, unit: '%' },
+      { name: 'low', type: 'ubyte', defaultValue: '0', description: '', label: 'Low', min: 0, max: 255, unit: '%', pair: 'high' },
+      {
+        name: 'width',
+        type: 'double',
+        defaultValue: '0.5',
+        description: '',
+        label: 'Width',
+        min: 0,
+        max: 1,
+        step: 0.01,
+        unit: 'ratio',
+        role: 'detail',
+        shownWhen: { param: 'shape', values: ['SQUARE'] },
+      },
+      { name: 'burst', type: 'int', defaultValue: '800', description: '', label: 'Burst', min: 0, max: 5000, step: 10, unit: 'ms' },
+    ],
+  }
+  const waveDraft = (parameters: Record<string, string>) => draft({ parameters })
+
+  it('draws a choice as a segment of its options, landing on the press', () => {
+    const { setParam } = fields(WAVE, waveDraft({ shape: 'SINE' }))
+    const segment = screen.getByRole('radiogroup', { name: 'Shape' })
+    expect(Array.from(segment.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Sine', 'Square'])
+    fireEvent.click(screen.getByRole('radio', { name: 'Square' }))
+    expect(setParam).toHaveBeenLastCalledWith('shape', 'SQUARE', true)
+  })
+
+  it('draws a pair as one range with a field for each end, where the first of the two is declared', () => {
+    const { set } = fields(WAVE, waveDraft({ low: '51', high: '204' }))
+    expect(screen.getByText('Low – High')).toBeTruthy()
+    const low = screen.getByRole('spinbutton', { name: 'Low percent' }) as HTMLInputElement
+    const high = screen.getByRole('spinbutton', { name: 'High percent' }) as HTMLInputElement
+    expect([low.value, high.value]).toEqual(['20', '80'])
+    expect(screen.queryByText('High', { selector: 'label, span' })).toBeNull()
+    fireEvent.change(high, { target: { value: '100' } })
+    fireEvent.keyDown(high, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ parameters: { low: '51', high: '255' } }, true)
+  })
+
+  it('writes both ends of a range in one write, so a thumb dragged past the other loses neither', () => {
+    const { set, setParam } = fields(WAVE, waveDraft({ low: '50', high: '100' }))
+    // The low thumb dragged to 120: Radix answers the pair sorted, [100, 120].
+    fireEvent.change(screen.getByRole('slider', { name: 'Low – High 1' }), { target: { value: '120' } })
+    expect(set).toHaveBeenLastCalledWith({ parameters: { low: '100', high: '120' } }, false)
+    expect(set).toHaveBeenCalledTimes(1)
+    expect(setParam).not.toHaveBeenCalled()
+    // A release that moved nothing still lands, once.
+    fireEvent.pointerUp(screen.getByRole('slider', { name: 'Low – High 2' }))
+    expect(set).toHaveBeenLastCalledWith({ parameters: { low: '50', high: '100' } }, true)
+    expect(set).toHaveBeenCalledTimes(2)
+  })
+
+  it('writes an int pair whole', () => {
+    const COUNTS: FxLibraryEntry = {
+      ...PULSE,
+      name: 'Counts',
+      parameters: [
+        { name: 'fewest', type: 'int', defaultValue: '2', description: '', label: 'Fewest', min: 0, max: 20, pair: 'most' },
+        { name: 'most', type: 'int', defaultValue: '8', description: '', label: 'Most', min: 0, max: 20 },
+      ],
+    }
+    const { set } = fields(COUNTS, waveDraft({ fewest: '2', most: '8' }))
+    const field = screen.getByRole('spinbutton', { name: 'Fewest' })
+    fireEvent.change(field, { target: { value: '4.6' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ parameters: { fewest: '5', most: '8' } }, true)
+  })
+
+  it('hides a parameter whose shownWhen is false, and folds a detail one under More', () => {
+    fields(WAVE, waveDraft({ shape: 'SINE' }))
+    expect(screen.queryByRole('button', { name: /^More/ })).toBeNull()
+    expect(screen.queryByRole('spinbutton', { name: /Width/ })).toBeNull()
+    cleanup()
+    fields(WAVE, waveDraft({ shape: 'SQUARE', width: '0.25' }))
+    expect(screen.queryByRole('button', { name: /^Shape/ })).toBeNull()
+    const more = screen.getByRole('button', { name: /^More/ })
+    expect(more.textContent).toContain('width 25%')
+    fireEvent.click(more)
+    expect((screen.getByRole('spinbutton', { name: 'Width percent' }) as HTMLInputElement).value).toBe('25')
+  })
+
+  it('draws a declared unit in its field and holds the field to the declared range', () => {
+    const { setParam } = fields(WAVE, waveDraft({ burst: '800' }))
+    const slider = screen.getByRole('slider', { name: 'Burst' })
+    expect([slider.getAttribute('max'), slider.getAttribute('step')]).toEqual(['5000', '10'])
+    const field = screen.getByRole('spinbutton', { name: 'Burst ms' })
+    fireEvent.change(field, { target: { value: '9000' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(setParam).toHaveBeenLastCalledWith('burst', '5000', true)
+  })
+
+  it('guesses for a script FX that declares nothing, as it always has', () => {
+    const SCRIPT: FxLibraryEntry = {
+      ...PULSE,
+      name: 'Mine',
+      parameters: [
+        { name: 'min', type: 'ubyte', defaultValue: '0', description: '' },
+        { name: 'max', type: 'ubyte', defaultValue: '255', description: '' },
+        { name: 'attackRatio', type: 'double', defaultValue: '0.1', description: '' },
+      ],
+    }
+    fields(SCRIPT, draft({ parameters: { min: '0', max: '255', attackRatio: '0.1' } }))
+    expect(screen.getByRole('spinbutton', { name: 'Low percent' })).toBeTruthy()
+    expect(screen.getByRole('spinbutton', { name: 'High percent' })).toBeTruthy()
+    expect(screen.queryByText('Low – High')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Shape/ }))
+    expect(screen.getByRole('spinbutton', { name: 'Attack percent' })).toBeTruthy()
+  })
+})

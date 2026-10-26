@@ -92,7 +92,9 @@ data class FxTypeInfo(
 )
 
 /**
- * DTO describing a single effect parameter.
+ * DTO describing a single effect parameter: what it is to the FX ([name], [type], [defaultValue]) and,
+ * optionally, how the editor draws it (fx-settings plan D1). Every metadata field may be absent; the
+ * editor then guesses as it always has. [parameterMetadataProblems] is what a declaration must pass.
  */
 @Serializable
 data class ParameterInfo(
@@ -100,7 +102,31 @@ data class ParameterInfo(
     val type: String,
     val defaultValue: String,
     val description: String = "",
+    /** The editor's word for it — *Low*, *Attack*. */
+    val label: String? = null,
+    /** The lowest value the editor offers, in the stored value's terms (a byte's 0–255, a ratio's 0–1). */
+    val min: Double? = null,
+    val max: Double? = null,
+    val step: Double? = null,
+    /** How the stored value reads: one of [PARAMETER_UNITS]. */
+    val unit: String? = null,
+    /** A `choice` parameter's values, in the order drawn. */
+    val options: List<ParameterOption>? = null,
+    /** `main`, drawn with the FX, or `detail`, folded under *More*. */
+    val role: String? = null,
+    /** Drawn only while another parameter holds one of these values. */
+    val shownWhen: ParameterCondition? = null,
+    /** On a low, the high it is drawn with as one range. */
+    val pair: String? = null,
 )
+
+/** One value a `choice` parameter may hold, and its label. */
+@Serializable
+data class ParameterOption(val value: String, val label: String)
+
+/** "While [param] is one of [values]". */
+@Serializable
+data class ParameterCondition(val param: String, val values: List<String>)
 
 /**
  * Unified registry for all effect types (built-in and script-defined).
@@ -187,7 +213,7 @@ class FxRegistry {
                     family = reg.family,
                     outputType = reg.outputType.name,
                     fxMode = reg.fxMode.name,
-                    parameters = reg.parameters,
+                    parameters = reg.parameters.map { it.withImpliedOptions() },
                     compatibleAttributes = reg.compatibleAttributes,
                     source = reg.source.name,
                     sourceDefinitionId = reg.sourceDefinitionId,

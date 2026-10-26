@@ -67,7 +67,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         call.requireScriptAccess(state)
         val request = call.receive<CreateFxDefinitionRequest>()
         val currentProject = state.show.project
-        (retiredIdProblem(request.fxId) ?: LegacyNames.familyProblem(request.family))?.let {
+        (retiredIdProblem(request.fxId) ?: LegacyNames.familyProblem(request.family) ?: parametersProblem(request.parameters))?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@post
         }
@@ -157,7 +157,11 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
-        (request.fxId?.let { retiredIdProblem(it) } ?: LegacyNames.familyProblem(request.family))?.let {
+        (
+            request.fxId?.let { retiredIdProblem(it) }
+                ?: LegacyNames.familyProblem(request.family)
+                ?: request.parameters?.let { parametersProblem(it) }
+        )?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
@@ -524,6 +528,10 @@ internal fun DaoFxDefinition.toDto(): FxDefinitionDto = FxDefinitionDto(
     defaultTiming = timingOf(this.defaultTiming) ?: Timing.CYCLE,
     timingSource = this.timingSource.name,
 )
+
+/** The parameters' editor metadata refused, every problem named; null when it is sound. */
+internal fun parametersProblem(parameters: List<ParameterInfo>): String? =
+    parameterMetadataProblems(parameters).takeIf { it.isNotEmpty() }?.joinToString("; ")
 
 /**
  * Why [fxId] may not name a script FX definition, or null: a retired built-in id would return

@@ -146,7 +146,7 @@ is titled *FX settings: session N — title*. Never merge a later session's PR b
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Parameter metadata: the desk declares, the editor reads | planned | | | |
+| 1 | Parameter metadata: the desk declares, the editor reads | in review | `claude/fx-settings-s1` | | |
 | 2 | Wave: one FX for the level waves | planned | | | |
 | 3 | Colour Cycle and Path absorb their siblings | planned | | | |
 | 4 | Each head later by: spread in steps, and Width one head | planned | | | |
@@ -174,6 +174,17 @@ the next; whoever merges the last fills its own.
   segment for a choice, a range for a pair, `shownWhen` hiding, the fallback for a bare script FX).
 - **Docs:** `docs/fx-engineering.md` §"Parameters"; `docs/show-scripts-engineering.md` on what a
   script FX may declare. Close `FU-FE-FX-PARAM-RANGE` in `docs/plans/followups.md`.
+- **As built:** `%` is a byte level read as a percent and `ratio` a 0–1 share read as one; ranges
+  are in the stored value's terms. A `pair` sits on the low and names its high. A `choice` matches
+  its options ignoring case; the write boundary refuses another (`fxWriteProblem`), and
+  `params.choice` reads one an older row holds as its default. An `easingCurve`'s options are the
+  desk's `EasingCurve`s, filled in by `GET /fx/library`, because the client's own list named curves
+  the desk lacks (`NORMAL`, `EXPO_*`, which ran as Linear) and missed four it has; a fork stores no
+  curve options, so it follows the desk's. A unit names the types it reads (`%` and `position` a
+  byte's, `ratio` a fraction's). The editor reads what a parameter declares and guesses each field it
+  leaves out, as before. A user FX definition's and a script's `registerFx` metadata are checked as a
+  built-in's is (400 on `/fx/definitions`). No `formatVersion` change: `docs/sync-engineering.md`
+  §"Format versioning" records why.
 
 ### Session 2 — Wave: one FX for the level waves
 

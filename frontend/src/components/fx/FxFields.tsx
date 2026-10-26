@@ -14,14 +14,15 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { CENTRE_MAX, CENTRE_MIN, centreToDmx, dmxToCentre } from '@/lib/positionScale'
-import type { FxLibraryEntry, FxParameterDef } from '@/store/fixtureFx'
+import { centreToDmx, dmxToCentre } from '@/lib/positionScale'
+import type { FxLibraryEntry, FxParamUnit, FxParameterDef } from '@/store/fixtureFx'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import type { SettingAttributeDescriptor } from '@/store/fixtures'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { SheetField } from '../fixtureSheet/SheetField'
 import { fromPct, toPct } from '../editor/cellPercent'
+import { CENTRE_PARAMS } from './centreMode'
 import { FxColourPicker } from './FxColourPicker'
 import { FxColourListPicker } from './FxColourListPicker'
 import { FxPaletteListPicker, FxSlotListPicker } from './FxStepListPickers'
@@ -56,10 +57,11 @@ import {
   draftOf,
   hasCentre,
   isLevelFx,
-  isRatioParam,
+  declaresMetadata,
+  isParamShown,
   levelModeOf,
   orderPatch,
-  paramRole,
+  paramView,
   runsWord,
   timingChoicePatch,
   withCentreMode,
@@ -67,48 +69,61 @@ import {
   type FxDraft,
   type FxScope,
   type LevelMode,
+  type ParamView,
 } from './fxEditorModel'
 
+/** The desk's `EasingCurve`s, for a desk whose library names none on an easing-curve parameter. */
 const CURVES = [
-  'NORMAL',
+  'LINEAR',
   'SINE_IN',
   'SINE_OUT',
   'SINE_IN_OUT',
   'QUAD_IN',
   'QUAD_OUT',
   'QUAD_IN_OUT',
-  'EXPO_IN',
-  'EXPO_OUT',
-  'EXPO_IN_OUT',
+  'CUBIC_IN',
+  'CUBIC_OUT',
+  'CUBIC_IN_OUT',
+  'STEP',
+  'STEP_HALF',
 ] as const
 
-/** The board's words for the built-ins' parameters; anything else is its name as words. */
-const PARAM_LABELS: Record<string, string> = {
-  panCentre: 'Pan',
-  tiltCentre: 'Tilt',
-  panRadius: 'Pan size',
-  tiltRadius: 'Tilt size',
-  panRange: 'Pan range',
-  tiltRange: 'Tilt range',
-  min: 'Low',
-  max: 'High',
-  attackRatio: 'Attack',
-  holdRatio: 'Hold',
-  fadeRatio: 'Fade',
-  dutyCycle: 'Duty',
-  onRatio: 'On',
+/** A parameter as drawn: alone, or a low drawn with its high as one range (its `pair`). */
+type ParamItem =
+  | { kind: 'one'; param: FxParameterDef; view: ParamView }
+  | { kind: 'pair'; low: FxParameterDef; high: FxParameterDef; lowView: ParamView; highView: ParamView }
+
+/**
+ * The parameters to draw, in order: each shown one ([isParamShown]) once, a pair at whichever of
+ * its two comes first, [hidden] left out.
+ */
+function paramItems(
+  entry: FxLibraryEntry,
+  parameters: Record<string, string>,
+  hidden: (param: FxParameterDef) => boolean,
+): ParamItem[] {
+  const shown = entry.parameters.filter((p) => !hidden(p) && isParamShown(entry, p, parameters))
+  const byName = new Map(shown.map((p) => [p.name, p]))
+  const placed = new Set<string>()
+  const items: ParamItem[] = []
+  for (const param of shown) {
+    if (placed.has(param.name)) continue
+    const low = param.pair != null && byName.has(param.pair) ? param : shown.find((p) => p.pair === param.name && p !== param)
+    const high = low === param ? byName.get(param.pair ?? '') : low != null ? param : undefined
+    if (low != null && high != null && !placed.has(low.name) && !placed.has(high.name)) {
+      placed.add(low.name).add(high.name)
+      items.push({ kind: 'pair', low, high, lowView: paramView(entry, low), highView: paramView(entry, high) })
+    } else {
+      placed.add(param.name)
+      items.push({ kind: 'one', param, view: paramView(entry, param) })
+    }
+  }
+  return items
 }
 
-export function paramLabel(name: string): string {
-  return (
-    PARAM_LABELS[name] ??
-    name
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, (s) => s.toUpperCase())
-      .trim()
-  )
-}
-
+const itemFold = (item: ParamItem) => (item.kind === 'pair' ? item.lowView.fold : item.view.fold)
+const itemKey = (item: ParamItem) => (item.kind === 'pair' ? item.low.name : item.param.name)
+const itemDeclares = (item: ParamItem) => declaresMetadata(item.kind === 'pair' ? item.low : item.param)
 
 /**
  * The editor's fields over one draft — Cycle, Amount, Direction, Order and Over, the two questions, the
@@ -172,28 +187,49 @@ export function FxFields({
   // A whole cycle in the phase offset is Bounce's parity (a migrated `pingPong` FX keeps one): the
   // Phase control edits the part within the cycle and leaves it be.
   const phaseCycles = Math.floor(draft.phaseOffset)
-  const roles = entry.parameters.map((param) => ({ param, role: paramRole(entry, param) }))
   // Around hides the centre: it is pinned at 128, and showing it would offer a knob that turns the
   // orbit into an offset nobody asked for.
-  const main = roles.filter(({ role }) => role !== 'shape' && !(role === 'centre' && centreMode === 'around'))
-  const shape = roles.filter(({ role }) => role === 'shape')
-
-  const paramControl = ({ param, role }: { param: FxParameterDef; role: ReturnType<typeof paramRole> }) => (
-    <ParamControl
-      key={param.name}
-      param={param}
-      role={role}
-      value={draft.parameters[param.name] ?? param.defaultValue}
-      extendedChannels={extendedChannels}
-      settingAttribute={param.name === 'level' ? settingAttribute : undefined}
-      slotSetting={settingAttribute}
-      attribute={attribute}
-      paletteFamily={paletteFamily}
-      slotsFromRig={slotsFromRig}
-      readOnly={readOnly}
-      onChange={(value, release) => setParam(param.name, value, release)}
-    />
+  const items = paramItems(
+    entry,
+    draft.parameters,
+    (param) => centreMode === 'around' && (CENTRE_PARAMS as readonly string[]).includes(param.name),
   )
+  const main = items.filter((item) => itemFold(item) === 'main')
+  const shape = items.filter((item) => itemFold(item) === 'detail')
+  // A desk that declares its parameters folds its `detail` ones under *More*; a guessed fold is *Shape*.
+  const foldLabel = shape.some(itemDeclares) ? 'More' : 'Shape'
+
+  // Blank is the default, as the desk reads it (`TypedParams.raw`).
+  const valueOf = (param: FxParameterDef) => draft.parameters[param.name] || param.defaultValue
+  const paramControl = (item: ParamItem) =>
+    item.kind === 'pair' ? (
+      <RangeRow
+        key={itemKey(item)}
+        low={item.low}
+        high={item.high}
+        lowView={item.lowView}
+        highView={item.highView}
+        lowValue={valueOf(item.low)}
+        highValue={valueOf(item.high)}
+        readOnly={readOnly}
+        onChange={(changes, release) => set({ parameters: { ...draft.parameters, ...changes } }, release)}
+      />
+    ) : (
+      <ParamControl
+        key={itemKey(item)}
+        param={item.param}
+        view={item.view}
+        value={valueOf(item.param)}
+        extendedChannels={extendedChannels}
+        settingAttribute={item.param.name === 'level' ? settingAttribute : undefined}
+        slotSetting={settingAttribute}
+        attribute={attribute}
+        paletteFamily={paletteFamily}
+        slotsFromRig={slotsFromRig}
+        readOnly={readOnly}
+        onChange={(value, release) => setParam(item.param.name, value, release)}
+      />
+    )
 
   // Where the raw blend is drawn, for a question whose answer is neither of its two.
   const blendHome = layout === 'inspector' ? 'Blend' : 'Advanced'
@@ -246,7 +282,11 @@ export function FxFields({
   const spread = scope.heads && (
     <SpreadSection draft={draft} headCount={scope.headCount} readOnly={readOnly} set={set} ladder={layout === 'inspector'} />
   )
-  const shapeSummaries = shape.map(({ param }) => shapeSummary(param, draft.parameters[param.name] ?? param.defaultValue))
+  const shapeSummaries = shape.map((item) =>
+    item.kind === 'pair'
+      ? `${shapeSummary(item.low, item.lowView, valueOf(item.low))}–${shapeSummary(item.high, item.highView, valueOf(item.high))}`
+      : shapeSummary(item.param, item.view, valueOf(item.param)),
+  )
   const phase = (
     <Lights mark="starts">
       <SliderRow
@@ -325,7 +365,15 @@ export function FxFields({
           <section aria-label="Shape" className="flex flex-col gap-2.5">
             <SectionLabel>Shape</SectionLabel>
             {main.map(paramControl)}
-            {shape.map(paramControl)}
+            {foldLabel === 'More' ? (
+              shape.length > 0 && (
+                <Disclosure label="More" summary={shapeSummaries}>
+                  {shape.map(paramControl)}
+                </Disclosure>
+              )
+            ) : (
+              shape.map(paramControl)
+            )}
           </section>
         )}
         {spread}
@@ -357,7 +405,7 @@ export function FxFields({
       {spread}
 
       {shape.length > 0 && (
-        <Disclosure label="Shape" summary={shapeSummaries}>
+        <Disclosure label={foldLabel} summary={shapeSummaries}>
           {shape.map(paramControl)}
         </Disclosure>
       )}
@@ -1134,13 +1182,45 @@ function Disclosure({ label, summary, children }: { label: string; summary: stri
   )
 }
 
-function shapeSummary(param: FxParameterDef, value: string): string {
+function shapeSummary(param: FxParameterDef, view: ParamView, value: string): string {
   const type = param.type.toLowerCase()
-  const label = paramLabel(param.name).toLowerCase()
-  if (type === 'easingcurve') return value.toLowerCase().replace(/_/g, ' ')
+  const label = view.label.toLowerCase()
+  const option = param.options?.find((o) => o.value.toUpperCase() === value.trim().toUpperCase())
+  if (type === 'easingcurve') return (option?.label ?? value).toLowerCase().replace(/_/g, ' ')
+  if (type === 'choice') return `${label} ${(option?.label ?? value).toLowerCase()}`
   if (type === 'boolean') return `${label} ${value === 'true' ? 'on' : 'off'}`
-  if (isRatioParam(param)) return `${label} ${Math.round(Number(value) * 100)}%`
+  const { display, suffix } = unitDisplay(view.unit)
+  if (view.unit != null) return `${label} ${Math.round(display(Number(value) || 0))}${suffix ?? ''}`
   return `${label} ${value}`
+}
+
+/** A number as [param]'s type stores it: a byte clamped, an int whole, a double as it is. */
+function writeNumber(param: FxParameterDef, v: number): string {
+  const type = param.type.toLowerCase()
+  return type === 'ubyte' ? String(clampByte(v)) : type === 'int' ? String(Math.round(v)) : String(v)
+}
+
+/** How a stored value reads in its unit (`FxParamUnit`), and the suffix its field carries. */
+function unitDisplay(unit: FxParamUnit | null): {
+  display: (value: number) => number
+  fromDisplay: (display: number) => number
+  suffix?: string
+} {
+  switch (unit) {
+    case '%':
+      return { display: toPct, fromDisplay: (d) => fromPct(Math.max(0, Math.min(100, d))), suffix: '%' }
+    case 'ratio':
+      return { display: (v) => Math.round(v * 100), fromDisplay: (d) => d / 100, suffix: '%' }
+    case 'position':
+      // A centre or a sweep's end is a point on its axis, read centre-relative on every head
+      // (venue-visit plan D3): `-128..127`, 0 the centre of travel (DMX 128, where Around pins it).
+      // The value is raw DMX either way, so no head's range is consulted.
+      return { display: dmxToCentre, fromDisplay: centreToDmx }
+    case 'ms':
+      return { display: (v) => v, fromDisplay: (d) => d, suffix: 'ms' }
+    default:
+      return { display: (v) => v, fromDisplay: (d) => d }
+  }
 }
 
 /**
@@ -1248,13 +1328,13 @@ function SelectRow({
 }
 
 /**
- * One parameter, in its role's unit (`paramRole`): a level as a percent, a size in DMX steps, a
- * centre or a sweep's end centre-relative on its axis,
- * a ratio as a percent, a curve as a list, a colour through the FX colour pickers.
+ * One parameter, in its unit (`paramView`): a level or a ratio as a percent, a size in DMX steps, a
+ * centre or a sweep's end centre-relative on its axis, a choice as a segment, a curve as a list, a
+ * colour through the FX colour pickers.
  */
 function ParamControl({
   param,
-  role,
+  view,
   value,
   extendedChannels,
   settingAttribute,
@@ -1266,7 +1346,7 @@ function ParamControl({
   onChange,
 }: {
   param: FxParameterDef
-  role: ReturnType<typeof paramRole>
+  view: ParamView
   value: string
   extendedChannels: ReturnType<typeof detectExtendedChannels>
   settingAttribute: SettingAttributeDescriptor | undefined
@@ -1279,7 +1359,7 @@ function ParamControl({
   onChange: (value: string, release: boolean) => void
 }) {
   const type = param.type.toLowerCase()
-  const label = paramLabel(param.name)
+  const label = view.label
   const num = Number(value) || 0
 
   if (settingAttribute != null && settingAttribute.options.length > 0) {
@@ -1294,115 +1374,37 @@ function ParamControl({
     )
   }
 
-  if (type === 'ubyte') {
-    // A centre or a sweep's end is a point on its axis, read centre-relative on every head
-    // (venue-visit plan D3): `-128..127`, 0 the centre of travel (DMX 128, where Around pins it).
-    // A size (a radius, a range) is a distance and stays in DMX steps — never offset. The value is
-    // raw DMX either way, so no head's range is consulted.
-    if (role === 'centre' || role === 'axis') {
-      return (
-        <SliderRow
-          label={label}
-          description={param.description || undefined}
-          value={num}
-          min={0}
-          max={255}
-          step={1}
-          display={(v) => dmxToCentre(v)}
-          fromDisplay={(d) => centreToDmx(d)}
-          displayMin={CENTRE_MIN}
-          displayMax={CENTRE_MAX}
-          readOnly={readOnly}
-          onChange={(v, release) => onChange(String(clampByte(v)), release)}
-        />
-      )
-    }
-    if (role === 'level') {
-      return (
-        <SliderRow
-          label={label}
-          description={param.description || undefined}
-          unit="%"
-          value={num}
-          min={0}
-          max={255}
-          step={1}
-          display={toPct}
-          fromDisplay={(d) => fromPct(Math.max(0, Math.min(100, d)))}
-          displayMin={0}
-          displayMax={100}
-          readOnly={readOnly}
-          onChange={(v, release) => onChange(String(clampByte(v)), release)}
-        />
-      )
-    }
+  if (type === 'ubyte' || type === 'double' || type === 'float' || type === 'int') {
+    const { display, fromDisplay, suffix } = unitDisplay(view.unit)
+    const write = (v: number) => writeNumber(param, v)
     return (
       <SliderRow
         label={label}
         description={param.description || undefined}
+        unit={suffix}
         value={num}
-        min={0}
-        max={255}
-        step={1}
+        min={view.min}
+        max={view.max}
+        step={view.step}
+        display={display}
+        fromDisplay={fromDisplay}
+        displayMin={display(view.min)}
+        displayMax={view.open ? 1_000_000 : display(view.max)}
         readOnly={readOnly}
-        onChange={(v, release) => onChange(String(clampByte(v)), release)}
+        onChange={(v, release) => onChange(write(v), release)}
       />
     )
   }
 
-  if (type === 'double' || type === 'float') {
-    if (isRatioParam(param)) {
-      return (
-        <SliderRow
-          label={label}
-          description={param.description || undefined}
-          unit="%"
-          value={num}
-          min={0}
-          max={1}
-          step={0.01}
-          display={(v) => Math.round(v * 100)}
-          fromDisplay={(d) => Math.max(0, Math.min(1, d / 100))}
-          displayMin={0}
-          displayMax={100}
-          readOnly={readOnly}
-          onChange={(v, release) => onChange(String(v), release)}
-        />
-      )
-    }
-    // The wire declares no range (`FU-FE-FX-PARAM-RANGE`); a double defaulting above 1 is a guess at
-    // 0–10, which only a script's effect reaches. The field takes anything typed.
+  if (type === 'choice' && param.options != null && param.options.length > 0) {
     return (
-      <SliderRow
+      <ChoiceRow
         label={label}
+        value={value}
+        options={param.options}
         description={param.description || undefined}
-        value={num}
-        min={0}
-        max={10}
-        step={0.1}
-        displayMax={1_000_000}
         readOnly={readOnly}
-        onChange={(v, release) => onChange(String(v), release)}
-      />
-    )
-  }
-
-  if (type === 'int') {
-    // From the declared default and nothing else, so the range never moves under a drag
-    // (the rule the old `EffectParameterForm` kept); the field reaches a value outside it.
-    const max = Math.max(255, (Number(param.defaultValue) || 0) * 2)
-    return (
-      <SliderRow
-        label={label}
-        description={param.description || undefined}
-        unit={/Ms$/.test(param.name) ? 'ms' : undefined}
-        value={num}
-        min={0}
-        max={max}
-        step={1}
-        displayMax={1_000_000}
-        readOnly={readOnly}
-        onChange={(v, release) => onChange(String(Math.round(v)), release)}
+        onChange={(v) => onChange(v, true)}
       />
     )
   }
@@ -1429,7 +1431,7 @@ function ParamControl({
         label={label}
         value={value}
         readOnly={readOnly}
-        options={CURVES.map((c) => ({ value: c, label: c.toLowerCase().replace(/_/g, ' ') }))}
+        options={param.options ?? CURVES.map((c) => ({ value: c, label: c.toLowerCase().replace(/_/g, ' ') }))}
         onChange={(v) => onChange(v, true)}
       />
     )
@@ -1488,6 +1490,128 @@ function ParamControl({
   }
 
   return <TextParam label={label} value={value} readOnly={readOnly} onEnter={(v) => onChange(v, true)} />
+}
+
+/** A `choice` parameter: a segment of its options, landing on the press. */
+function ChoiceRow({
+  label,
+  value,
+  options,
+  description,
+  readOnly,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: readonly { value: string; label: string }[]
+  description?: string
+  readOnly: boolean
+  onChange: (value: string) => void
+}) {
+  const current = options.find((o) => o.value.toUpperCase() === value.trim().toUpperCase())?.value ?? ''
+  return (
+    <div className="flex flex-col gap-1">
+      <EditorLabel>{label}</EditorLabel>
+      <ToggleGroup
+        type="single"
+        size="sm"
+        value={current}
+        disabled={readOnly}
+        aria-label={label}
+        onValueChange={(v) => v && onChange(v)}
+        className="flex w-full flex-wrap"
+      >
+        {options.map((option) => (
+          <ToggleGroupItem key={option.value} value={option.value} className="min-w-0 flex-1 truncate px-2 text-xs">
+            {option.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      {description && <EditorReadout>{description}</EditorReadout>}
+    </div>
+  )
+}
+
+/**
+ * A low and its high (the low's `pair`) as one two-thumb range, each with its own field. A stored
+ * pair whose low is above its high keeps that way round: the thumbs are drawn in order, and a drag
+ * writes the larger back to the low. Both ends go in one [onChange], since a host builds each write
+ * from the draft it last rendered and a second would undo the first.
+ */
+function RangeRow({
+  low,
+  high,
+  lowView,
+  highView,
+  lowValue,
+  highValue,
+  readOnly,
+  onChange,
+}: {
+  low: FxParameterDef
+  high: FxParameterDef
+  lowView: ParamView
+  highView: ParamView
+  lowValue: string
+  highValue: string
+  readOnly: boolean
+  onChange: (changes: Record<string, string>, release: boolean) => void
+}) {
+  const { display, fromDisplay, suffix } = unitDisplay(lowView.unit)
+  const min = Math.min(lowView.min, highView.min)
+  const max = Math.max(lowView.max, highView.max)
+  const clamp = (v: number) => Math.max(min, Math.min(max, v))
+  const lo = clamp(Number(lowValue) || 0)
+  const hi = clamp(Number(highValue) || 0)
+  const inverted = lo > hi
+  const write = (v: number) => writeNumber(low, v)
+  const move = ([a, b]: number[], release: boolean) => {
+    if (a === undefined || b === undefined) return
+    const [nextLow, nextHigh] = inverted ? [Math.max(a, b), Math.min(a, b)] : [Math.min(a, b), Math.max(a, b)]
+    const changes: Record<string, string> = {}
+    if (nextLow !== lo) changes[low.name] = write(nextLow)
+    if (nextHigh !== hi) changes[high.name] = write(nextHigh)
+    // A release lands even when the drag's last move already did, so the host's floor flushes it.
+    if (Object.keys(changes).length === 0) {
+      if (!release) return
+      changes[low.name] = write(nextLow)
+      changes[high.name] = write(nextHigh)
+    }
+    onChange(changes, release)
+  }
+  const descriptions = [low.description, high.description].filter((d) => d)
+  const field = (param: FxParameterDef, view: ParamView, value: number) => (
+    <SheetField
+      label={`${view.label}${suffix ? ` ${unitWord(suffix)}` : ''}`}
+      unit={suffix}
+      value={Math.round(display(value) * 100) / 100}
+      min={display(min)}
+      max={display(max)}
+      disabled={readOnly}
+      onEnter={(d) => onChange({ [param.name]: write(clamp(fromDisplay(d))) }, true)}
+    />
+  )
+  return (
+    <div className="flex flex-col gap-1">
+      <EditorLabel>{`${lowView.label} – ${highView.label}`}</EditorLabel>
+      <div className="flex items-center gap-2">
+        {field(low, lowView, lo)}
+        <Slider
+          aria-label={`${lowView.label} – ${highView.label}`}
+          value={inverted ? [hi, lo] : [lo, hi]}
+          min={min}
+          max={max}
+          step={lowView.step}
+          disabled={readOnly}
+          onValueChange={(v) => move(v, false)}
+          onValueCommit={(v) => move(v, true)}
+          className="min-w-[60px] flex-1"
+        />
+        {field(high, highView, hi)}
+      </div>
+      {descriptions.length > 0 && <EditorReadout>{descriptions.join(' · ')}</EditorReadout>}
+    </div>
+  )
 }
 
 /** A parameter the editor has no control for: a text field, committed on Enter. */
