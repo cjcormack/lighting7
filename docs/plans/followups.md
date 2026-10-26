@@ -449,9 +449,10 @@ one for the instance.
 
 Every desk surveyed (`completed/effects-design/survey.md`) has a *width* (how much of the cycle is on) and a
 *softness* (how hard the edges are) that read the same on every waveform. Ours are each FX's own
-parameter under its own name — Pulse's `attackRatio` / `holdRatio`, Square Wave's `dutyCycle`, Dimmer Strobe's
-`onRatio`, Colour Cycle's `fadeRatio` — and the editor labels them as such (*Attack*, *Duty*, *On*,
-*Fade*). Amount (D2) and direction (D5) became fields of every FX in session 1; width and softness
+parameter under its own name — Wave's `width` (Square) and `attack` / `hold` (Pulse), which since the
+fx-settings plan's session 2 stand for Square Wave's `dutyCycle`, Dimmer Strobe's `onRatio` and Pulse's
+`attackRatio` / `holdRatio`, and Colour Cycle's `fadeRatio` — and the editor labels them as such (*Width*,
+*Attack*, *Hold*, *Fade*). Amount (D2) and direction (D5) became fields of every FX in session 1; width and softness
 did not, because each built-in means something slightly different by them and a common field would
 change what a stored FX plays (P6).
 

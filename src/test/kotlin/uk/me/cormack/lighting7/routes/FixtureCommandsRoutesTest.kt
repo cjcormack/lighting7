@@ -293,7 +293,7 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
 
         val effect = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
-            setBody("""{"fxType":"Pulse","fixtureKey":"vary","attribute":"reset","cycle":1.0}""")
+            setBody("""{"fxType":"Wave","fixtureKey":"vary","attribute":"reset","cycle":1.0}""")
         }
         assertEquals(HttpStatusCode.BadRequest, effect.status, effect.bodyAsText())
         assertTrue("fixture command" in effect.bodyAsText(), effect.bodyAsText())
@@ -317,7 +317,7 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         val ai = AiTools(state).executeTool(
             "create_look",
             Json.parseToJsonElement(
-                """{"name":"X","fx":[{"targetType":"fixture","targetKey":"vary","fxType":"Pulse","family":"intensity","attribute":"reset","cycle":1.0,"blendMode":"OVERRIDE"}]}""",
+                """{"name":"X","fx":[{"targetType":"fixture","targetKey":"vary","fxType":"Wave","family":"intensity","attribute":"reset","cycle":1.0,"blendMode":"OVERRIDE"}]}""",
             ).jsonObject,
         )
         assertFalse(ai.success, ai.description)

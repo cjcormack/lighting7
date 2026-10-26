@@ -165,7 +165,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 40, minReader = 40), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 41, minReader = 41), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -361,11 +361,11 @@ class ProjectRoundTripTest {
             stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
                 .map { canonicalDecode(LookJson.serializer(), Files.readString(it)) }
         }.single { it.name == "stacked" }
-        assertEquals(listOf("SquareWave" to 0, "SineWave" to 1), stacked.fx.map { it.fxType to it.sortOrder })
+        assertEquals(listOf("Flicker" to 0, "Wave" to 1), stacked.fx.map { it.fxType to it.sortOrder })
 
         wipeDatabase()
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null).projectId
-        assertEquals(listOf("SquareWave", "SineWave"), stackedLookFx(imported))
+        assertEquals(listOf("Flicker", "Wave"), stackedLookFx(imported))
     }
 
     /** An archive FX naming no element mode, as every one before v40 might, imports naming none and runs as Each fixture. */
@@ -404,7 +404,7 @@ class ProjectRoundTripTest {
 
         wipeDatabase()
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null).projectId
-        assertEquals(listOf("SineWave", "SquareWave"), stackedLookFx(imported))
+        assertEquals(listOf("Wave", "Flicker"), stackedLookFx(imported))
     }
 
     /** The "stacked" Look's FX types as a press spawns them: by `sortOrder`, ties in id order. */

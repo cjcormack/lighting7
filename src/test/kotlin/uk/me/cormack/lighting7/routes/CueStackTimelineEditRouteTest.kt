@@ -438,7 +438,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
             ),
             effects = listOf(
                 CueAdHocFxDto(
-                    targetType = "group", targetKey = "wash", fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                    targetType = "group", targetKey = "wash", fxType = "Wave", family = "intensity", attribute = "dimmer",
                     cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
                 ),
             ),
@@ -524,7 +524,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
 
     // ─── Effect cells and runs (session 5) ───────────────────────────────────────────────────────
 
-    private fun pulse(fixture: String = "hex-1", fxType: String = "Pulse") = CueAdHocFxDto(
+    private fun pulse(fixture: String = "hex-1", fxType: String = "Wave") = CueAdHocFxDto(
         targetType = "fixture", targetKey = fixture, fxType = fxType, family = "intensity", attribute = "dimmer",
         cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
     )
@@ -559,7 +559,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1", effects = listOf(pulse().copy(cycle = 0.5, amount = 0.6)))
-        val q2 = client.cue(act, "Q2", effects = listOf(pulse("hex-2", "SineWave")))
+        val q2 = client.cue(act, "Q2", effects = listOf(pulse("hex-2", "Flicker")))
         val source = client.fx(q1).single()
         assertEquals(null, source.runUuid)
 
@@ -567,7 +567,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
 
         assertEquals(listOf(q2, q1).toSet(), answer.changed.toSet(), "the source took the key too")
         val copy = client.fx(q2).last()
-        assertEquals(listOf("SineWave", "Pulse"), client.fx(q2).map { it.fxType }, "the copy goes on top")
+        assertEquals(listOf("Flicker", "Wave"), client.fx(q2).map { it.fxType }, "the copy goes on top")
         assertEquals(0.5, copy.cycle)
         assertEquals(0.6, copy.amount)
         assertTrue(copy.uuid != source.uuid, "a row of its own")
@@ -584,7 +584,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         assertEquals(emptyList(), client.edit(act, fxOn(q3, source.uuid)).changed, "already on")
 
         client.edit(act, fxOp("fxOff", q2, copy.uuid))
-        assertEquals(listOf("SineWave"), client.fx(q2).map { it.fxType })
+        assertEquals(listOf("Flicker"), client.fx(q2).map { it.fxType })
 
         val refused = client.editRaw(act, listOf(fxOp("fxOff", q2, UUID.randomUUID().toString()), fxOn(q2, "not-a-uuid")))
         assertEquals(HttpStatusCode.BadRequest, refused.status)
@@ -671,7 +671,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1", effects = listOf(pulse()))
-        val q2 = client.cue(act, "Q2", effects = listOf(pulse(fxType = "SineWave")))
+        val q2 = client.cue(act, "Q2", effects = listOf(pulse(fxType = "Flicker")))
         val key = UUID.randomUUID()
         setKey(q1, key)
         setKey(q2, key)
@@ -682,21 +682,21 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val problem = refused.body<TimelineEditRefusal>().problems.single()
         assertEquals(0, problem.op)
         assertTrue("run key" in problem.message, problem.message)
-        assertEquals(listOf("SineWave"), client.fx(q2).map { it.fxType }, "nothing written")
+        assertEquals(listOf("Flicker"), client.fx(q2).map { it.fxType }, "nothing written")
 
         // A key two effects already shared as the batch found the cue is not the op's to refuse.
         transaction(state.database) {
             DaoCueAdHocFxEntity.new {
                 cue = uk.me.cormack.lighting7.models.DaoCue[q2]
                 targetType = "fixture"; targetKey = "hex-2"
-                fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+                fxType = "Wave"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
                 sortOrder = 1; runUuid = key
             }
         }
-        val q3 = client.cue(act, "Q3", effects = listOf(pulse("hex-1", "SquareWave")))
+        val q3 = client.cue(act, "Q3", effects = listOf(pulse("hex-1", "FluorescentFlicker")))
         client.edit(act, fxOn(q2, client.fx(q3).single().uuid!!))
-        assertEquals(listOf("SineWave", "Pulse", "SquareWave"), client.fx(q2).map { it.fxType })
+        assertEquals(listOf("Flicker", "Wave", "FluorescentFlicker"), client.fx(q2).map { it.fxType })
     }
 
     @Test

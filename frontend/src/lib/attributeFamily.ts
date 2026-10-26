@@ -147,6 +147,26 @@ export function attributeFamilyForFxFamily(category: string): AttributeFamily | 
   }
 }
 
+/** The attributes a palette files under Beam — `PALETTE_ATTRIBUTES`' Beam rows, which a test pins. */
+export const BEAM_FX_ATTRIBUTES: ReadonlySet<string> = new Set(['zoom', 'focus', 'iris', 'frost', 'prism'])
+
+/**
+ * The family an FX of library `category` is in while it drives `attribute` (fx-settings plan D5):
+ * Beam on a beam attribute — Wave, an Intensity FX, on zoom, iris, frost or focus — else the library
+ * category's ([attributeFamilyForFxFamily]). The desk's `fxAttributeFamily` in `fx/AttributeMask.kt`;
+ * keep the two in step, or a palette offered here is banked elsewhere by the desk.
+ */
+export function fxAttributeFamily(category: string, attribute?: string | null): AttributeFamily | null {
+  const library = attributeFamilyForFxFamily(category)
+  if (library == null) return null
+  return attribute != null && BEAM_FX_ATTRIBUTES.has(attribute) ? 'BEAM' : library
+}
+
+/** [fxAttributeFamily] in the library's own words — what a speed master's `family` says. */
+export function fxFamilyOnAttribute(category: string, attribute?: string | null): string {
+  return fxAttributeFamily(category, attribute) === 'BEAM' ? 'beam' : category
+}
+
 /**
  * The families an **effect template** can be banked under (fx-templates D4): all four, since the
  * effect library's `beam` category (effects plan D6) gave Beam effects of its own.

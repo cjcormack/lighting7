@@ -42,14 +42,14 @@ class LookSnapshotLoadTest : RouteIntegrationTest() {
                 name = "S5 Deferred FX"
             }
             look.effect(DEFERRED_TARGET_TYPE, "", "ColourCycle", 0)
-            look.effect("group", "front-wash", "Pulse", 1)
+            look.effect("group", "front-wash", "Wave", 1)
             look.uuid
         }
 
         val (snapshot, logs) = captureLogs("loadLookSnapshot") { loadLookSnapshot(state.database, lookUuid) }
 
         assertEquals(
-            listOf(FxTargetsRef.Single(TargetRef.Group("front-wash")) to "Pulse"),
+            listOf(FxTargetsRef.Single(TargetRef.Group("front-wash")) to "Wave"),
             snapshot!!.effects.map { it.target to it.effect.fxType },
         )
         assertEquals(1, logs.size, "$logs")

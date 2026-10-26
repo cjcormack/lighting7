@@ -630,9 +630,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoLookFxEntity.new {
         look = boundLook; targetType = FxTargetsRef.Selection.TYPE
         targetKey = FxTargetsRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Group("front-wash"))).key
-        fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+        fxType = "Wave"; family = "intensity"; attribute = "dimmer"
         cycle = 2.0; blendMode = "OVERRIDE"; order = "REVERSE"
-        parameters = mapOf("min" to "40")
+        parameters = mapOf("low" to "40")
         sortOrder = 0
     }
 
@@ -645,13 +645,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoLookFxEntity.new {
         look = effectsLook; targetType = "group"; targetKey = "front-wash"
-        fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+        fxType = "Wave"; family = "intensity"; attribute = "dimmer"
         cycle = 0.5; blendMode = "OVERRIDE"; order = "NORMAL"
         phaseOffset = 0.25
         elementMode = "ALL"
         elementFilter = "ODD"
         timing = TIMING_HEAD
-        parameters = mapOf("depth" to "0.8")
+        parameters = mapOf("shape" to "PULSE", "hold" to "0.8")
         // A real column now rather than a field inside a JSON blob, but the reference still has
         // to be remapped for a clone to point at its own master.
         speedMasterUuid = slowMaster.uuid
@@ -681,13 +681,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoLookFxEntity.new {
         look = stackedLook; targetType = "fixture"; targetKey = "hex-2"
-        fxType = "SineWave"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
+        fxType = "Wave"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
         cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
         sortOrder = 1
     }
     DaoLookFxEntity.new {
         look = stackedLook; targetType = "fixture"; targetKey = "hex-2"
-        fxType = "SquareWave"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
+        fxType = "Flicker"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
         cycle = 1.0; blendMode = "MULTIPLY"; order = "NORMAL"
         sortOrder = 0
     }
@@ -853,9 +853,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // v37: the Pulse runs on into "build", show-1's next cue, so two rows share a run key.
     DaoCueAdHocFxEntity.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
-        fxType = "Pulse"; family = "intensity"; cycle = 0.5
+        fxType = "Wave"; family = "intensity"; cycle = 0.5
         blendMode = "OVERRIDE"; order = "NORMAL"
-        parameters = mapOf("depth" to "0.8")
+        parameters = mapOf("shape" to "PULSE", "hold" to "0.8")
         attribute = "dimmer"
         phaseOffset = 0.25
         elementMode = "ALL"
@@ -887,9 +887,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueAdHocFxEntity.new {
         cue = cue1; targetType = FxTargetsRef.Selection.TYPE
         targetKey = FxTargetsRef.Selection(listOf(TargetRef.Group("front-wash"), TargetRef.Fixture("hex-4"))).key
-        fxType = "Pulse"; family = "intensity"; cycle = 1.0
+        fxType = "Wave"; family = "intensity"; cycle = 1.0
         blendMode = "OVERRIDE"; order = "CENTRE_OUT"
-        parameters = mapOf("depth" to "0.5")
+        parameters = mapOf("shape" to "PULSE", "hold" to "0.5")
         attribute = "dimmer"
         elementMode = "WHOLE"
         sortOrder = 4
@@ -940,8 +940,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueStackEntry.new { stack = stack1; cue = build; ordinal = 2.0 }
     DaoCueAdHocFxEntity.new {
         cue = build; targetType = "fixture"; targetKey = "hex-1"
-        fxType = "Pulse"; family = "intensity"; attribute = "dimmer"; cycle = 0.5
-        blendMode = "OVERRIDE"; order = "NORMAL"; parameters = mapOf("depth" to "0.8")
+        fxType = "Wave"; family = "intensity"; attribute = "dimmer"; cycle = 0.5
+        blendMode = "OVERRIDE"; order = "NORMAL"; parameters = mapOf("shape" to "PULSE", "hold" to "0.8")
         runUuid = RICH_PROJECT_PULSE_RUN
     }
     // v32 (cue model plan §3.9): show-1's list as the archive now carries it, entry by entry, with

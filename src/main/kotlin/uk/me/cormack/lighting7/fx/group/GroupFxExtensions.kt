@@ -175,7 +175,7 @@ fun FixtureGroup<*>.clearFx(engine: FxEngine): Int {
  * Example:
  * ```kotlin
  * group.fx(fxEngine) {
- *     dimmer(effect("Pulse"), CycleLength.ONE_BEAT, order = SpreadOrder.NORMAL)
+ *     dimmer(effect("Wave", "shape" to "PULSE"), CycleLength.ONE_BEAT, order = SpreadOrder.NORMAL)
  *     colour(effect("RainbowCycle"), CycleLength.ONE_BAR, order = SpreadOrder.UNIFIED)
  * }
  * ```

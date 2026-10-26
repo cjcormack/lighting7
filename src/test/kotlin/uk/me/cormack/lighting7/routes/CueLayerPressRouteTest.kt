@@ -70,7 +70,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
                     fx = if (!effect) emptyList() else listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = keys.first(),
-                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                            fxType = "Wave", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),

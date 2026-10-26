@@ -160,10 +160,13 @@ class LegacyFxArchiveImportTest {
             val effects = DaoLookFxEntity.all().filter { it.look.id == look.id }.sortedBy { it.sortOrder }
 
             val (sine, ramp, sweep, panSweep, steps) = effects
-            assertEquals("SineWave", sine.fxType)
+            // Breathe and Triangle are Sine Wave and Ramp, which the importer then stores as Wave.
+            assertEquals("Wave", sine.fxType)
+            assertEquals(mapOf("shape" to "SINE", "low" to "0", "high" to "255"), sine.parameters)
             assertEquals(0.25, sine.phaseOffset, 1e-12)
             assertEquals("FORWARD", sine.direction)
-            assertEquals("Ramp", ramp.fxType)
+            assertEquals("Wave", ramp.fxType)
+            assertEquals("TRIANGLE", ramp.parameters["shape"])
 
             assertEquals(listOf(2.0, 1.0, 4, 1.5, "BOUNCE"), listOf(sweep.cycle, sweep.phaseOffset, sweep.runs, sweep.spread, sweep.direction))
             assertEquals(emptyMap(), sweep.parameters)

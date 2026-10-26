@@ -64,11 +64,14 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         assertEquals(expected, dimmer(), why)
     }
 
-    /** One level whatever the phase: a wave whose min and max agree. */
+    /** One level whatever the phase: a Wave or a Flicker whose two levels agree. */
     private fun level(fxType: String, value: Int, blendMode: String, stack: Boolean) = ProgrammerFxRequest(
         fxType = fxType, attribute = "dimmer", targets = hex,
-        parameters = mapOf("min" to "$value", "max" to "$value"), blendMode = blendMode, stack = stack,
+        parameters = flat(fxType, value), blendMode = blendMode, stack = stack,
     )
+
+    private fun flat(fxType: String, value: Int) =
+        if (fxType == "Wave") mapOf("low" to "$value", "high" to "$value") else mapOf("min" to "$value", "max" to "$value")
 
     private suspend fun HttpClient.press(request: ProgrammerFxRequest): FxInstance {
         val response = post("/api/rest/projects/$projectId/programmer/fx") {
@@ -81,8 +84,8 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
 
     /** The two Local FX, Within pressed last so on top; moved under the Replace when [moved]. */
     private suspend fun HttpClient.stackTwo(moved: Boolean): Pair<FxInstance, FxInstance> {
-        val replace = press(level("SineWave", 200, "OVERRIDE", stack = false))
-        val within = press(level("SquareWave", 128, "MULTIPLY", stack = true))
+        val replace = press(level("Wave", 200, "OVERRIDE", stack = false))
+        val within = press(level("Flicker", 128, "MULTIPLY", stack = true))
         awaitDimmer(withinOnTop, "pressed last, the Within applies on top")
         if (moved) {
             assertTrue(fx.moveLocalFx(within.id, aboveId = null) is FxEngine.LocalMoveOutcome.Moved)
@@ -266,7 +269,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val uv = client.press(
-            ProgrammerFxRequest(fxType = "Pulse", attribute = "uv", targets = hex),
+            ProgrammerFxRequest(fxType = "Wave", attribute = "uv", targets = hex),
         )
         val cueId = client.record("CREATE", name = "Stacked").cue.id
         fx.removeFx(uv.id)
@@ -312,9 +315,9 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
      * the gaps in their stored orders.
      */
     private val twoLanes = listOf(
-        lookFx("SineWave", 200, "OVERRIDE").copy(sortOrder = 0),
-        lookFx("SquareWave", 128, "MULTIPLY").copy(sortOrder = 5),
-        lookFx("Pulse", 0, "OVERRIDE").copy(attribute = "uv", parameters = emptyMap(), sortOrder = 9),
+        lookFx("Wave", 200, "OVERRIDE").copy(sortOrder = 0),
+        lookFx("Flicker", 128, "MULTIPLY").copy(sortOrder = 5),
+        lookFx("Wave", 0, "OVERRIDE").copy(attribute = "uv", parameters = emptyMap(), sortOrder = 9),
     )
 
     @Test
@@ -371,7 +374,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
     private fun lookFx(fxType: String, value: Int, blendMode: String) = LookFxDto(
         targetType = TargetRef.Fixture.TYPE, targetKey = "hex-1", fxType = fxType, family = "intensity",
         attribute = "dimmer", cycle = 4.0, blendMode = blendMode, order = "NORMAL",
-        parameters = mapOf("min" to "$value", "max" to "$value"),
+        parameters = flat(fxType, value),
     )
 
     @Test
@@ -379,8 +382,8 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val replace = lookFx("SineWave", 200, "OVERRIDE")
-        val within = lookFx("SquareWave", 128, "MULTIPLY")
+        val replace = lookFx("Wave", 200, "OVERRIDE")
+        val within = lookFx("Flicker", 128, "MULTIPLY")
 
         val created = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
@@ -414,7 +417,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
     fun `create_look keeps its list's order`() {
         seedRig()
         val json = Json { encodeDefaults = false }
-        val effects = listOf(lookFx("SquareWave", 128, "MULTIPLY"), lookFx("SineWave", 200, "OVERRIDE"))
+        val effects = listOf(lookFx("Flicker", 128, "MULTIPLY"), lookFx("Wave", 200, "OVERRIDE"))
             .joinToString(",", "[", "]") { json.encodeToString(LookFxDto.serializer(), it) }
         val result = runBlocking {
             AiTools(state).executeTool("create_look", Json.parseToJsonElement("""{"name":"Tool","fx":$effects}""").jsonObject)

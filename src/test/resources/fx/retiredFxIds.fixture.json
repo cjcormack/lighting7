@@ -1,0 +1,21 @@
+{
+  "comment": "Every FX id the desk retired (LegacyNames.retiredFxIds), which no FX definition may take: read by LegacyNamesTest and the client's fxLibraryModel.test.ts, so the client mints around them.",
+  "ids": [
+    "Breathe",
+    "ColourPulse",
+    "DimmerStrobe",
+    "FocusPull",
+    "FrostPulse",
+    "IrisPulse",
+    "Pulse",
+    "Ramp",
+    "RampDown",
+    "RampUp",
+    "SineWave",
+    "SquareWave",
+    "Strobe",
+    "Triangle",
+    "ZoomBreathe",
+    "ZoomWave"
+  ]
+}

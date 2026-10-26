@@ -750,9 +750,13 @@ Release folds to its glyph and the scope line drops the fade.
   defaults, on that row's attribute where the FX can take it, as a **programmer FX**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
   it), a movement FX starting *Around*, every FX starting on its type's own cycle and Direction
-  — **one bar**, Forward, but half a bar and Bounce for Colour Fade, Focus Pull and the sweeps
-  (`newFxDivision`, `newFxDirection`) — on the master tagged for its family
-  (venue-visit plan D16; a wall-clock FX on four seconds). **Another tap swaps it** through `updateFx` — the new
+  — **one bar**, Forward, but half a bar and Bounce for Colour Fade, the sweeps and Wave's *Focus
+  Pull* (`newFxDivision`, `newFxDirection`, `presetDefaults`) — on the master tagged for its family
+  on that attribute (venue-visit plan D16, fx-settings plan D5; a wall-clock FX on four seconds).
+  **Presets** (fx-settings plan D4) sit beside the types: Wave's *Strobe* under Intensity, and *Zoom
+  Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* under Beam where the head has the attribute,
+  each a Wave starting with its parameters, cycle and Direction; the bare Wave is listed under Beam
+  too, on the head's beam attribute, starting at that attribute's `attributeDefaults`. **Another tap swaps it** through `updateFx` — the new
   type with its own defaults and starting blend, id and phase kept — so the operator auditions by
   tapping down the list; a tap that lands on another *attribute* cannot be a swap (an instance keeps
   its target), so it stops the auditioned FX and starts afresh. An FX offered through a
@@ -1016,8 +1020,8 @@ two it holds is `kind`, and it is fixed at creation the way the family is; three
 FX half narrow, and each removes a way for it to complicate the cook: **a value or an FX**,
 **one FX** (several together is what a Look is for), and **always
 generic** (an FX fans over whatever the layer names, so `isGeneric` is true for every one).
-Every family may hold an FX — a **Beam** one a beam built-in (Zoom Wave, Iris Pulse, Frost
-Pulse, Focus Pull; effects plan D6) or Slot Steps naming its setting, and any family Palette Steps
+Every family may hold an FX — a **Beam** one a Wave naming the beam attribute it drives (zoom, iris,
+frost or focus: the palette editor's *Attribute* select; fx-settings plan D5) or Slot Steps naming its setting, and any family Palette Steps
 over that family's palettes (session 7, `lib/stepFx.ts`'s `stepFxPaletteShape`) — and the
 backend refuses `controls` **by name**, since it names no family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/palettes.kt`; the completed records are
@@ -4254,10 +4258,10 @@ each was:
   that fit, pressed through `usePress` as the Palettes band's are, and *+ FX …*, the picker's
   FX arm on this attribute under the cell's family. Its family is the attribute's group as the
   press reads it (a Pulse on a uv cell is Colour). `paletteFits` narrows a Beam cell's FX
-  palettes by the attribute the FX drives — a beam built-in's library attribute, Slot Steps' named
-  setting, Palette Steps' palettes' rows (`fxPaletteDrives`, given the library and palette list
-  through its `FxFitContext`) — so a zoom cell is offered the Zoom Wave palettes and a gobo cell
-  the Slot Steps of its gobo. **In the cue editor** (apply-model plan session 8) the bands carry the
+  palettes by the attribute the FX drives — the attribute an FX palette names (a Wave's), else its
+  library attributes, Slot Steps' named setting, Palette Steps' palettes' rows (`fxPaletteDrives`,
+  given the library and palette list through its `FxFitContext`) — so a zoom cell is offered the
+  palettes of a Wave on zoom and a gobo cell the Slot Steps of its gobo. **In the cue editor** (apply-model plan session 8) the bands carry the
   cue arm without a prop: `usePress` reads `PressCue` (`components/press/pressCue.ts`), which
   `CueRowStoreProvider` provides, so a band press there is the cue's layer press and the line reads
   *Into Q1 · as a layer*; a chip is ringed partly where the cue layers its record (`cuePresence` — by

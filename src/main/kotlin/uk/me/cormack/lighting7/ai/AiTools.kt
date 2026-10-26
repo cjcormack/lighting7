@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.serialization.json.*
 import kotlinx.serialization.json.JsonNull
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.fx.toMaskNames
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -2206,7 +2207,8 @@ class AiTools(private val state: State) {
      * `look_effects` rows directly, and `executeTool`'s catch is the AI surface's 400 — the model
      * is told the valid set and can retry, rather than the desk storing a blend it will not play.
      */
-    private fun parseLookFx(obj: JsonObject, at: String): LookFxSpec {
+    private fun parseLookFx(named: JsonObject, at: String): LookFxSpec {
+        val obj = asWave(named)
         val timing = parseFxTiming(obj, at)
         val dynamics = parseFxDynamics(obj, at)
         val spec = LookFxSpec(
@@ -2257,7 +2259,8 @@ class AiTools(private val state: State) {
      * `writeCueChildren`, which rejects an unrecognised value itself, and `executeTool`'s catch
      * turns that message into a failed result the same way.
      */
-    private fun parseAdHocFxFromJson(obj: JsonObject, at: String): CueAdHocFxDto {
+    private fun parseAdHocFxFromJson(named: JsonObject, at: String): CueAdHocFxDto {
+        val obj = asWave(named)
         val timing = parseFxTiming(obj, at)
         val dynamics = parseFxDynamics(obj, at)
         val target = parseAdHocFxTarget(obj, at)
@@ -2285,6 +2288,35 @@ class AiTools(private val state: State) {
             wings = dynamics.wings,
             segments = dynamics.segments,
             parts = dynamics.parts,
+        )
+    }
+
+    /**
+     * [obj], an FX a tool call names, with a level wave Wave replaced named as Wave (fx-settings plan
+     * D3): its parameters, family and a beam FX's attribute as [LegacyNames.consolidateFx] stores
+     * them, and the old FX's own cycle and Direction where the call names none. [obj] itself otherwise.
+     */
+    private fun asWave(obj: JsonObject): JsonObject {
+        val fxType = obj["fxType"]?.jsonPrimitive?.contentOrNull ?: return obj
+        if (!LegacyNames.isWaveFx(fxType)) return obj
+        val stored = LegacyNames.StoredFx(
+            fxType = fxType,
+            family = obj["family"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            cycle = 0.0, order = "", phaseOffset = 0.0, direction = "", runs = null, spread = 0.0,
+            parameters = (obj["parameters"] as? JsonObject)?.mapValues { it.value.jsonPrimitive.content }.orEmpty(),
+            attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull,
+        )
+        val wave = LegacyNames.consolidateFx(stored) { null }?.fx ?: return obj
+        val timing = LegacyNames.waveTiming(fxType)
+        return JsonObject(
+            obj + buildMap {
+                put("fxType", JsonPrimitive(wave.fxType))
+                put("family", JsonPrimitive(wave.family))
+                put("parameters", JsonObject(wave.parameters.mapValues { JsonPrimitive(it.value) }))
+                wave.attribute?.let { put("attribute", JsonPrimitive(it)) }
+                if (timing != null && obj.present("cycle") == null) put("cycle", JsonPrimitive(timing.first))
+                if (timing != null && obj.present("direction") == null) put("direction", JsonPrimitive(timing.second))
+            },
         )
     }
 
@@ -2393,6 +2425,7 @@ class AiTools(private val state: State) {
         return familyMasterUuidFor(
             state.show.fxRegistry, state.show.fxEngine.speedMasters, fxType,
             obj["family"]?.jsonPrimitive?.contentOrNull,
+            obj["attribute"]?.jsonPrimitive?.contentOrNull,
         )?.toString()
     }
 

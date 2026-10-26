@@ -176,7 +176,7 @@ group.applyColourFx(
 // Centre-out dimmer FX
 group.applyDimmerFx(
     fxEngine,
-    SineWave(),
+    effect("Wave"),
     order = SpreadOrder.CENTRE_OUT
 )
 ```
@@ -514,7 +514,7 @@ GET /api/rest/groups/front-wash/fx
 [
   {
     "id": 1001,
-    "fxType": "Pulse",
+    "fxType": "Wave",
     "attribute": "dimmer",
     "cycle": 1.0,
     "blendMode": "OVERRIDE",

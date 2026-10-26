@@ -182,8 +182,30 @@ class RigBriefing(private val state: State) {
             val params = effect.parameters.joinToString(", ") { parameterBrief(it) }
             val defaults = (if (effect.defaultCycle != CycleLength.ONE_BAR) ", cycle=${effect.defaultCycle}" else "") +
                 (if (effect.defaultDirection != FxDirection.FORWARD.name) ", direction=${effect.defaultDirection}" else "")
-            sb.appendLine("- **${effect.name}** (family=${effect.family}, output=${effect.outputType}$defaults) params: $params")
+            sb.appendLine(
+                "- **${effect.name}** (family=${effect.family}, output=${effect.outputType}$defaults, " +
+                    "on=${effect.compatibleAttributes.joinToString("/")}) params: $params",
+            )
+            // Presets (fx-settings plan D4): the familiar names an operator looks for, each this FX
+            // on one attribute.
+            if (effect.presets.isNotEmpty()) {
+                sb.appendLine(
+                    "  presets: " + effect.presets.joinToString("; ") { preset ->
+                        val timing = listOfNotNull(preset.cycle?.let { "cycle=$it" }, preset.direction?.let { "direction=$it" })
+                        "${preset.name} = on ${preset.attribute} " +
+                            preset.parameters.entries.joinToString(", ") { "${it.key}=${it.value}" } +
+                            (if (timing.isEmpty()) "" else " (${timing.joinToString(", ")})")
+                    },
+                )
+            }
         }
+        sb.appendLine(
+            "Wave is every level wave (Sine Wave, Pulse, Ramp Up, Square Wave, Dimmer Strobe, Zoom Wave, " +
+                "Iris Pulse, Frost Pulse, Focus Pull …), its `shape` saying which. On zoom, iris, frost or " +
+                "focus it is a Beam FX: name the attribute, and store its family as intensity, the " +
+                "library's — a Beam palette of it names the attribute it drives. Without levels there it " +
+                "starts at its attribute's own (zoom and focus 64–192, iris and frost 0–160).",
+        )
         // The two step effects take references rather than values (effects plan §3.6), which
         // neither the parameter type nor the category says on its own.
         sb.appendLine(

@@ -34,6 +34,11 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v41: Wave replaces Sine Wave, the ramps, Square Wave, Pulse, Dimmer Strobe, Zoom Wave, Iris and
+    // Frost Pulse and Focus Pull (fx-settings plan session 2); a stored FX on one of those ids is
+    // read through `sync/LegacyNames.kt`'s `consolidateFx`. `minReader` moves to **41**: a v40 reader
+    // knows no Wave, so would refuse or skip every such FX. See `docs/sync-engineering.md`
+    // §"Version 41 — Wave".
     // v40: a stored FX's `elementMode` may be `WHOLE` (FX editor follow-ups plan session 2), which a
     // v39 reader cannot parse. `minReader` moves to **40**: a v39 reader would run each such FX as
     // its stored default, `PER_FIXTURE`, warning only in its log. See `docs/sync-engineering.md`
@@ -327,9 +332,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 40,
+    val formatVersion: Int = 41,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 40,
+    val minReader: Int = 41,
 )
 
 /**
@@ -499,6 +504,7 @@ interface StoredFxFields {
     val direction: String
     val runs: Int?
     val spread: Double
+    val attribute: String?
 }
 
 @Serializable
@@ -512,7 +518,7 @@ data class LookFxJson(
     val targetKey: String,
     override val fxType: String,
     override val family: String,
-    val attribute: String? = null,
+    override val attribute: String? = null,
     override val cycle: Double,
     val blendMode: String,
     override val order: String,
@@ -603,7 +609,7 @@ data class PaletteFxJson(
     val uuid: String,
     override val fxType: String,
     override val family: String,
-    val attribute: String? = null,
+    override val attribute: String? = null,
     override val cycle: Double,
     val blendMode: String,
     override val order: String,
@@ -991,7 +997,7 @@ data class CueAdHocFxJson(
     val targetKey: String,
     override val fxType: String,
     override val family: String,
-    val attribute: String? = null,
+    override val attribute: String? = null,
     override val cycle: Double,
     val blendMode: String,
     override val order: String,

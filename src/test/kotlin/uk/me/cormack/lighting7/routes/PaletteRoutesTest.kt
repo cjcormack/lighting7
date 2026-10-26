@@ -1475,8 +1475,8 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     }
 
     /**
-     * A beam effect is a Beam palette (effects plan D6). Its stored effect names no property, so a
-     * press lands on the one property the beam effect declares, and a head without it is skipped.
+     * A Wave on a beam attribute is a Beam palette (fx-settings plan D5). A press lands on the
+     * attribute it names, and a head without it is skipped.
      */
     @Test
     fun `a beam effect palette saves and presses onto the heads with its attribute`() = testApplication {
@@ -1490,7 +1490,8 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             setBody(
                 PaletteInput(
                     name = "zoom-breathe",
-                    fx = colourEffect(fxType = "ZoomWave", category = "beam").copy(attribute = null),
+                    fx = colourEffect(fxType = "Wave", category = "intensity", parameters = mapOf("low" to "64", "high" to "192"))
+                        .copy(attribute = "zoom"),
                 )
             )
         }
@@ -1523,9 +1524,9 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val registry = state.show.fxRegistry
-        val sine = registry.getRegistration("SineWave")!!
+        val wave = registry.getRegistration("Wave")!!
         for ((id, attributes) in listOf("TwoBeams" to listOf("zoom", "iris"), "AnyBeam" to listOf("slider"))) {
-            registry.register(sine.copy(id = id, aliases = emptySet(), name = id, family = "beam", compatibleAttributes = attributes))
+            registry.register(wave.copy(id = id, aliases = emptySet(), name = id, family = "beam", compatibleAttributes = attributes))
         }
         try {
             for (id in listOf("TwoBeams", "AnyBeam")) {
@@ -1659,6 +1660,14 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             assertEquals(HttpStatusCode.BadRequest, unknown.status)
             assertTrue(unknown.bodyAsText().contains("not an FX this desk knows"), unknown.bodyAsText())
 
+            // An old level wave says what it is now (fx-settings plan D3).
+            val old = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(PaletteInput(name = "zoom", fx = colourEffect(fxType = "ZoomWave")))
+            }
+            assertEquals(HttpStatusCode.BadRequest, old.status)
+            assertTrue(old.bodyAsText().contains("'ZoomWave' is now Wave, shape SINE"), old.bodyAsText())
+
             // A real dimmer effect declared as colour: the template would bank under Colour and
             // run as Intensity, so the library is the authority and the two must agree.
             val mismatched = client.post(base()) {
@@ -1666,7 +1675,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
                 setBody(
                     PaletteInput(
                         name = "mislabelled",
-                        fx = colourEffect(fxType = "Pulse", category = "colour"),
+                        fx = colourEffect(fxType = "Wave", category = "colour"),
                     )
                 )
             }

@@ -515,6 +515,18 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
     expect(editor.setParam).toHaveBeenLastCalledWith('min', '128', true)
   })
 
+  it('drags a Wave’s low and high by the same knobs, writing the parameters the FX pairs', () => {
+    const editor = {
+      ...editorOf({ fxType: 'Wave', parameters: { shape: 'SINE', low: '0', high: '255' } }),
+      levelParams: { low: 'low', high: 'high' },
+    }
+    draw(handleAnswer(), { editor })
+    drag(document.querySelector('[data-fx-handle="max"][data-row="hex-1"]')!, { x: 100, y: 2 }, { x: 100, y: 14.5 })
+    expect(editor.setParam).toHaveBeenLastCalledWith('high', '128', true)
+    drag(document.querySelector('[data-fx-handle="min"][data-row="hex-1"]')!, { x: 100, y: 27 }, { x: 100, y: 14.5 })
+    expect(editor.setParam).toHaveBeenLastCalledWith('low', '128', true)
+  })
+
   it('keeps a knob’s light when the pointer moves straight onto another knob', () => {
     const onHighlight = vi.fn()
     draw(handleAnswer(), { editor: editorOf(), onHighlight })

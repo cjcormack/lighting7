@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
 /**
  * Database step 4 (terminology plan §5): every stored FX onto today's library, run the way a desk
  * meets it — inside `State`'s `initDatabase`, over a database whose `PRAGMA user_version` says it
- * has not run yet.
+ * has not run yet. Step 7 follows it there, so a level wave step 4 leaves is stored as Wave.
  */
 class FxLibraryMigrationTest {
 
@@ -141,7 +141,7 @@ class FxLibraryMigrationTest {
     fun `a fresh database is already past the step`() {
         startDesk()
         stopDesk()
-        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
+        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion())
     }
 
     @Test
@@ -154,7 +154,7 @@ class FxLibraryMigrationTest {
 
         assertEquals(
             listOf(
-                listOf("SineWave", "intensity", 4.0, "NORMAL", 0.0, """{"min":"0","max":"255"}""", "FORWARD", null, 1.0),
+                listOf("Wave", "intensity", 4.0, "NORMAL", 0.0, """{"shape":"SINE","low":"0","high":"255"}""", "FORWARD", null, 1.0),
                 listOf("Sweep", "position", 2.0, "NORMAL", 0.5, "{}", "BOUNCE", 4, 1.5),
                 listOf("PaletteSteps", "colour", 4.0, "NORMAL", 0.25, """{"palettes":"pal:$red,pal:$blue"}""", "FORWARD", null, 1.0),
             ),
@@ -162,9 +162,16 @@ class FxLibraryMigrationTest {
         )
         assertEquals(
             listOf(
-                listOf("Ramp", "intensity", 1.0, "CENTRE_IN", 0.0, "{}", "FORWARD", null, 1.0),
+                listOf(
+                    "Wave", "intensity", 1.0, "CENTRE_IN", 0.0, """{"shape":"TRIANGLE","low":"0","high":"255","curve":"LINEAR"}""",
+                    "FORWARD", null, 1.0,
+                ),
                 listOf("ColourCycle", "colour", 1.0, "NORMAL", 0.0, """{"colours":"#ff0000,#00ff00"}""", "FORWARD", null, 1.0),
-                listOf("Pulse", "intensity", 1.0, "NORMAL", 0.0, "{}", "FORWARD", null, 1.0),
+                listOf(
+                    "Wave", "intensity", 1.0, "NORMAL", 0.0,
+                    """{"shape":"PULSE","low":"0","high":"255","attack":"0.1","hold":"0.3","curve":"QUAD_OUT"}""",
+                    "FORWARD", null, 1.0,
+                ),
             ),
             stored("cue_ad_hoc_fx"),
         )
@@ -178,7 +185,7 @@ class FxLibraryMigrationTest {
             "a composite is filed under the family of the output it applied",
         )
         assertEquals(listOf("FX_CALC", "GENERAL"), query("SELECT script_type FROM scripts ORDER BY name") { it.getString(1) })
-        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
+        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion())
 
         fun logged(vararg words: String) = assertTrue(logs.any { line -> words.all { it in line } }, "${words.toList()} in $logs")
         logged("Look 'S3 Old FX' in 'Experiment'", "Breathe is now Sine Wave")

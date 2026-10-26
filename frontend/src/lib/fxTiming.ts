@@ -67,6 +67,20 @@ export interface FxDefaults {
 }
 
 /**
+ * What a picker preset starts at (fx-settings plan D4): its own cycle and Direction, else its FX's —
+ * so the *Focus Pull* preset bounces at half a bar, as Focus Pull did.
+ */
+export function presetDefaults(
+  entry: FxDefaults | null | undefined,
+  preset: { cycle?: number | null; direction?: string | null } | null | undefined,
+): FxDefaults {
+  return {
+    defaultCycle: preset?.cycle ?? entry?.defaultCycle,
+    defaultDirection: preset?.direction ?? entry?.defaultDirection,
+  }
+}
+
+/**
  * A new FX's division: its type's own default (half a bar for the FX that bounce, terminology plan
  * D24), else [NEW_FX_DIVISION].
  */

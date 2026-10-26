@@ -376,7 +376,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
     @Test
     fun `create_look and update_look refuse an effect with no target, and write one with a target`() {
         patchRig()
-        val settings = """"fxType":"Pulse","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}"""
+        val settings = """"fxType":"Wave","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}"""
         fun storedTargets() = transaction(state.database) {
             DaoLook.find { DaoLooks.name eq "Throb" }.single().effects.map { it.targetType to it.targetKey }
         }

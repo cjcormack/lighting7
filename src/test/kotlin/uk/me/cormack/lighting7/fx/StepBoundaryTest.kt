@@ -142,7 +142,10 @@ class StepBoundaryTest {
 
     @Test
     fun `Pulse with no release stays lit across the wrap`() {
-        val pulse = registry.createFx("Pulse", mapOf("min" to "0", "max" to "200", "attackRatio" to "0.3", "holdRatio" to "0.7"))
+        val pulse = registry.createFx(
+            "Wave",
+            mapOf("shape" to "PULSE", "low" to "0", "high" to "200", "attack" to "0.3", "hold" to "0.7", "curve" to "QUAD_OUT"),
+        )
         val atStart = (pulse.calculate(0.0, FxContext.SINGLE) as FxOutput.Slider).value
         for (phase in listOf(Math.nextDown(1.0), FxDirection.BACKWARD.apply(0.0, 0), 0.99)) {
             val value = (pulse.calculate(phase, FxContext.SINGLE) as FxOutput.Slider).value

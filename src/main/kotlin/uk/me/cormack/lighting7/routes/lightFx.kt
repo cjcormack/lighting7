@@ -421,7 +421,7 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
             state.show.fxRegistry.fxWriteProblem(fxType, params)
                 ?.let { throw IllegalArgumentException(it) }
             state.show.fxRegistry.createFxWithPalettes(
-                state.show.paletteRegistry, fxType, params,
+                state.show.paletteRegistry, fxType, params, existing.target.attribute,
             )
         } else null
 
@@ -732,6 +732,7 @@ private fun createFxFromRequest(request: AddFxRequest, state: State): Fx {
         state.show.paletteRegistry,
         request.fxType,
         request.parameters,
+        request.attribute,
     )
 }
 

@@ -9,8 +9,11 @@ import {
   forkRequest,
   fxSourceOf,
   mintForkFxId,
+  RETIRED_FX_IDS,
+  takenFxIds,
   uniqueFxId,
 } from './fxLibraryModel'
+import retired from '../../../../src/test/resources/fx/retiredFxIds.fixture.json'
 
 function entry(name: string, over: Partial<FxLibraryEntry> = {}): FxLibraryEntry {
   return {
@@ -159,5 +162,15 @@ describe('forkRequest', () => {
     const body = forkRequest(pulse, library, [definition(3, 'PulseCustom'), definition(4, 'PulseCustom2')])
     expect(body.fxId).toBe('PulseCustom3')
     expect(body.name).toBe('Pulse (Custom 3)')
+  })
+})
+
+describe('takenFxIds — the retired ids too (fx-settings plan D2)', () => {
+  it('names every id the desk retired, as the shared vector lists them', () => {
+    expect([...RETIRED_FX_IDS].sort()).toEqual([...retired.ids].sort())
+  })
+
+  it('so a new effect named Pulse mints around it', () => {
+    expect(uniqueFxId('Pulse', takenFxIds([entry('Wave')], [])).fxId).toBe('Pulse2')
   })
 })

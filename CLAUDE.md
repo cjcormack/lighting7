@@ -141,7 +141,7 @@ write disguises itself as a serialization regression. The suite runs in two fork
 claims its own `build/test-data/slot-N` (see `docs/testing-engineering.md` §"Two forks").
 
 The suite takes ~2 minutes locally in its two forks (measured 2026-10-16; ~4 minutes in
-one), warm or cold alike. The first run after any code change recompiles the 30 built-in FX
+one), warm or cold alike. The first run after any code change recompiles the 19 built-in FX
 (editing a source file changes the classpath fingerprint, which invalidates the
 compiled-script jar cache), and that cost lands on whichever class first builds a `Show` in
 each fork, which therefore *looks* slow. It is not slow; it is first. Before optimising
@@ -418,24 +418,29 @@ FX interfaces:
 - **Fx** - Pure phase-based: `(phase, context) → FxOutput`
 - **StatefulFx** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
 
-Built-in FX types — **all 29 live as `.fx.kts` resources** under
+Built-in FX types — **all 19 live as `.fx.kts` resources** under
 `src/main/resources/fx/`, compiled into the `FxRegistry` at startup by `FxFileLoader`. There are
 no compiled-in FX classes: the parallel `fx/effects/*.kt` set was deleted (sweep item D7)
 once it had drifted a file behind the resources and nothing but tests constructed it.
-- **Intensity**: SineWave, Pulse, RampUp/Down, Ramp, SquareWave, DimmerStrobe, Flicker, LightningStrike,
-  CandleFlicker, FluorescentFlicker
+- **Intensity**: Wave (fx-settings plan D2: one `shape` — Sine, Ramp up, Ramp down, Triangle, Square,
+  Pulse — on the dimmer, UV and the beam attributes, its family Beam on a beam attribute, D5),
+  Flicker, LightningStrike, CandleFlicker, FluorescentFlicker
 - **Colour**: ColourCycle (literal colours only), RainbowCycle, ColourStrobe, ColourWave, ColourFade, ColourFlicker
 - **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
-- **Beam**: ZoomWave, IrisPulse, FrostPulse, FocusPull — one attribute each (`zoom`, `iris`,
-  `frost`, `focus`), offered only on a head that has it (effects plan D6)
+- **Beam**: Wave on `zoom`, `iris`, `frost` or `focus`, which the picker offers as its presets *Zoom
+  Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* (D4), only on a head that has the attribute
 - **Steps**: PaletteSteps (through generic value palettes of one family, filed under that family)
   and SlotSteps (a setting's option names, `beam`), one family in the library (`family: steps`) — `FxOutput.Steps`, which the **target**
   resolves per head, so each head lands on its own value for each step (effects plan D8;
   `docs/fx-engineering.md` §"Step FX")
 
-Colour Fade, Focus Pull and the sweeps bounce by Direction at half a bar by default (frontmatter
+Colour Fade and the sweeps bounce by Direction at half a bar by default (frontmatter
 `defaultDirection`, `defaultCycle`). The old ids, Breathe, `pingPong`, `SPLIT` and the
-composite mode are read only by `sync/LegacyNames.kt` and refused at every write.
+composite mode are read only by `sync/LegacyNames.kt` and refused at every write. The eleven level
+waves Wave replaced (Sine Wave, the ramps, Square Wave, Pulse, Dimmer Strobe and the four beam waves)
+are refused at every stored write too, but a script's `effect("SineWave", …)` and MCP's FX tools still
+run one, as Wave with its parameters (`LegacyNames.runnableFx`); `LegacyEquivalenceTest` holds each to
+its old script, kept under `src/test/resources/fx/legacy/` — see `docs/fx-engineering.md` §"Wave".
 
 There is no static FX. A fixed level, colour, position or setting is a **value** on the
 fixture's own attribute — in the programmer, a Look or a cue — never an FX: StaticValue,
@@ -445,9 +450,10 @@ one is skipped with a warn where a cue or Include spawns it (`FxSpawner.createFx
 A **palette** may hold one FX instead of values — an *FX palette*, the busking pad for a
 named FX. It is always generic (it names no target; the layer's targets are the fan-out), always
 exactly one FX, and never both an FX and rows: which one a palette holds is its identity,
-refused at the write boundary if a write would flip it. Its family is derived from the FX's
-library `family` via `attributeFamilyForFxFamily`, so `controls` is refused by name;
-a Beam FX palette holds a beam built-in or Slot Steps (naming the setting it steps), and a
+refused at the write boundary if a write would flip it. Its family is its FX's library `family` on
+the attribute it names, via `fxAttributeFamily` (Beam on a beam attribute, else
+`attributeFamilyForFxFamily`), so `controls` is refused by name;
+a Beam FX palette holds a Wave naming its beam attribute or Slot Steps (naming the setting it steps), and a
 Palette Steps palette is its palettes' family, not its library family `steps`. A **Look's** FX,
 unlike a palette's, always name their own target — a fixture, a group or a selection (absolute-looks
 plan D2): `validateLookFx` refuses `deferred`, the importer drops one, and
@@ -471,11 +477,11 @@ nothing. The library itself is a flat list ordered by name. See §"The busk layo
 Scripts name an FX rather than constructing one — `effect(id, params)` resolves it through the
 registry, so a script reaches the same vocabulary as the UI and cues, user FX included:
 ```kotlin
-fixture.applyDimmerFx(fxEngine, effect("SineWave", "min" to "40"), FxTiming(CycleLength.TWO_BEATS))
+fixture.applyDimmerFx(fxEngine, effect("Wave", "low" to "40"), FxTiming(CycleLength.TWO_BEATS))
 fixture.applyColourFx(fxEngine, effect("RainbowCycle"), FxTiming(CycleLength.ONE_BAR))
 
 // Every apply site takes a speed master; null means master 1 (unscaled for the rate master)
-fixture.applyDimmerFx(fxEngine, effect("Pulse"), speedMasterUuid = speedMasterUuidAt(2))
+fixture.applyDimmerFx(fxEngine, effect("Wave", "shape" to "PULSE"), speedMasterUuid = speedMasterUuidAt(2))
 ```
 
 Scripts can also register custom FX that appear in the library API:
@@ -561,8 +567,8 @@ Applying FX to groups:
 ```kotlin
 val group = fixtures.group<HexFixture>("front-wash")
 
-// Pulse FX in Normal order
-val fxId = group.applyDimmerFx(fxEngine, effect("Pulse"), order = SpreadOrder.NORMAL)
+// A pulse in Normal order
+val fxId = group.applyDimmerFx(fxEngine, effect("Wave", "shape" to "PULSE"), order = SpreadOrder.NORMAL)
 
 // Unified colour across all fixtures
 group.applyColourFx(fxEngine, effect("RainbowCycle"), order = SpreadOrder.UNIFIED)
@@ -813,6 +819,14 @@ is backed up first to `<db>.pre-attribute-<utc>.db`, which `VACUUM INTO` cannot 
 transaction. A stored script or project FX definition still saying `panCenter` / `tiltCenter` is named
 in a warning, never rewritten.
 
+**Step 7 follows it**: `state/FxConsolidationMigration.kt` (fx-settings plan session 2) rewrites every
+Look, cue and palette FX on one of the eleven level waves onto Wave through `LegacyNames.consolidateFx`,
+which the importer shares — its shape and its parameters at the values the old script read, a beam FX
+naming no attribute given the one it drove — logging each by its owner's name. A database holding none
+is only marked 7; one that holds some is backed up first to `<db>.pre-fx-consolidation-<utc>.db`.
+`FxConsolidationMigrationTest` runs it over `src/test/resources/db/pre-fx-consolidation.sql`, a database
+at 6 holding every old id; never regenerate it. A script naming an old id is left alone: it still runs.
+
 Otherwise the bet stands on there being exactly one database (the dev desk), and it
 expires the moment a second install exists — the Windows MSI ships an upgrade path.
 Before making a non-additive schema change once anything is deployed, write a
@@ -954,7 +968,7 @@ name through the `FxRegistry`; `speedMasterUuidAt(n)` names a speed master by it
 ```kotlin
 val wash = fixture<HexFixture>("front-wash-1")
 wash.fx {
-    dimmer(effect("SineWave", "min" to "40"), CycleLength.TWO_BEATS)
+    dimmer(effect("Wave", "low" to "40"), CycleLength.TWO_BEATS)
     colour(effect("ColourCycle"), CycleLength.ONE_BAR, speedMasterUuid = speedMasterUuidAt(2))
 }
 setBpm(128.0)

@@ -236,7 +236,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
             }
             DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "group"; targetKey = "phantoms"
-                fxType = "Pulse"; family = "intensity"; cycle = 1.0
+                fxType = "Wave"; family = "intensity"; cycle = 1.0
                 blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap(); attribute = "dimmer"
             }
             cue.id.value
@@ -412,7 +412,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
                 DaoCue.new { project = DaoProject[source]; this.name = name }.inStack(stack, sortOrder = i).also { cue ->
                     DaoCueAdHocFxEntity.new {
                         this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                        fxType = "Pulse"; family = "intensity"; attribute = "dimmer"; cycle = 1.0
+                        fxType = "Wave"; family = "intensity"; attribute = "dimmer"; cycle = 1.0
                         blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
                         runUuid = if (name == "c") null else run
                     }

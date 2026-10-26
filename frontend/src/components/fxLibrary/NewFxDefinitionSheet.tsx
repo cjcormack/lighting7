@@ -44,7 +44,8 @@ const NEW_FX_DEFAULTS = {
 /**
  * A new custom definition — the library row's *New effect*. Its `fxId` is the name without
  * spaces, **made unique across the library** ([uniqueFxId], D9's rule): a new effect named
- * *Pulse* would otherwise take the built-in's id and replace it in the registry.
+ * *Flicker* would otherwise take the built-in's id and replace it in the registry, and one named
+ * *Pulse* a retired id the desk refuses.
  */
 export function NewFxDefinitionSheet({
   takenIds,

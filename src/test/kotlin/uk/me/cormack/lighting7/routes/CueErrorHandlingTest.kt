@@ -194,7 +194,7 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
 
         val pulse = Json.encodeToJsonElement(
             CueAdHocFxDto(
-                targetType = "fixture", targetKey = "foh-1", fxType = "Pulse", family = "intensity",
+                targetType = "fixture", targetKey = "foh-1", fxType = "Wave", family = "intensity",
                 attribute = "dimmer", cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
             ),
         ).jsonObject

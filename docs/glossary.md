@@ -49,7 +49,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Direction: forwards | Forward | `FORWARD` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
 | Direction: backwards | Backward | `BACKWARD` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
 | Direction: there and back | Bounce | `BOUNCE` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
-| The bounce of Colour Fade, Focus Pull and the sweeps, by Direction rather than a parameter (D24) | Bounce | Direction `BOUNCE`; frontmatter and library `defaultDirection` | `pingPong` | | FX parameters, FX frontmatter | done | `src:components/fx/FxFields.tsx` |
+| The bounce of Colour Fade, Wave's *Focus Pull* and the sweeps, by Direction rather than a parameter (D24) | Bounce | Direction `BOUNCE`; frontmatter and library `defaultDirection` | `pingPong` | | FX parameters, FX frontmatter | done | `src:components/fx/FxFields.tsx` |
 | Cycles to run before handing back (D28) | Runs | `runs`, `runsStartTick`…; column `runs` | `nShot`, `nShotStartTick`, `n_shot` | One Shot | screen, wire, code, storage | done | `src:components/fx/FxFields.tsx` |
 | Runs with no count | Forever | `runForever` | | | screen | done | `src:components/fx/FxFields.tsx` |
 | Cycle per head or for the whole FX (D22) | Timing: Per cycle \| Per head | `timing` `CYCLE` / `HEAD`, `defaultTiming`; columns `timing`, `default_timing` | Step timing; `stepTiming`, `defaultStepTiming`, `step_timing`, `default_step_timing` | Per Step \| Per Head | screen, wire, code, storage, FX frontmatter | done | `src:components/fx/FxFields.tsx` |
@@ -115,15 +115,21 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 
 | Idea | Word | In code | Was | MagicQ | Shows | Status | Key |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Intensity | Sine Wave | `SineWave` | | | FX library | done | `fx:SineWave` |
-| Intensity | Ramp Up | `RampUp` | | Ramp Up | FX library | done | `fx:RampUp` |
-| Intensity | Ramp Down | `RampDown` | | Ramp Down | FX library | done | `fx:RampDown` |
-| Intensity, up and down (D10) | Ramp | `Ramp` | Triangle; `Triangle` | Ramp | FX library | done | `fx:Ramp` |
-| Intensity | Pulse | `Pulse` | | | FX library | done | `fx:Pulse` |
-| Intensity | Square Wave | `SquareWave` | | | FX library | done | `fx:SquareWave` |
-| Intensity, on the dimmer (D12) | Dimmer Strobe | `DimmerStrobe` | Strobe; `Strobe` | | FX library | done | `fx:DimmerStrobe` |
+| Intensity and beam, the level waves as one FX (fx-settings plan D2) | Wave | `Wave`, family `intensity`, on `dimmer`, `uv`, `zoom`, `iris`, `frost`, `focus` | Sine Wave, Ramp Up, Ramp Down, Ramp, Square Wave, Pulse, Dimmer Strobe, Zoom Wave, Iris Pulse, Frost Pulse, Focus Pull, Zoom Breathe; `SineWave`, `RampUp`, `RampDown`, `Ramp`, `SquareWave`, `Pulse`, `DimmerStrobe`, `ZoomWave`, `IrisPulse`, `FrostPulse`, `FocusPull`, `ZoomBreathe` | | FX library | done | `fx:Wave` |
+| Wave's shape | Sine | `shape` `SINE` | Sine Wave, Zoom Wave, Zoom Breathe; `SineWave`, `ZoomWave`, `ZoomBreathe` | | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape | Ramp up | `RAMP_UP` | Ramp Up, Focus Pull; `RampUp`, `FocusPull` | Ramp Up | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape | Ramp down | `RAMP_DOWN` | Ramp Down; `RampDown` | Ramp Down | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape, up and down (D10) | Triangle | `TRIANGLE` | Ramp, Triangle; `Ramp`, `Triangle` | Ramp | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape | Square | `SQUARE` | Square Wave, Dimmer Strobe, Strobe; `SquareWave`, `DimmerStrobe`, `Strobe` | | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape | Pulse | `PULSE` | Pulse, Iris Pulse, Frost Pulse; `Pulse`, `IrisPulse`, `FrostPulse` | | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| The bottom of a level FX (fx-settings plan D2) | Low | `low` | Min, Off value, Start; `min`, `offValue`, `start` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| The top of a level FX | High | `high` | Max, On value, End; `max`, `onValue`, `end` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| How much of the cycle a Square is high | Width | `width` | Duty cycle, On ratio; `dutyCycle`, `onRatio` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| A Pulse's rise | Attack | `attack` | `attackRatio` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| A Pulse's hold at the top | Hold | `hold` | `holdRatio` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| A familiar name the picker lists for an FX on one attribute (fx-settings plan D4): Wave's *Strobe*, *Zoom Wave*, *Iris Pulse*, *Frost Pulse*, *Focus Pull* | Preset | frontmatter `presets`, `FxPreset`, the library's `presets` | | | FX picker | done | `doc:docs/fx-engineering.md` |
 | Intensity | Flicker | `Flicker` | | | FX library | done | `fx:Flicker` |
-| Intensity, what Breathe was (D13): a Sine Wave a quarter-cycle on | Sine Wave | `SineWave`, phase offset + 0.75 | Breathe; `Breathe` | | FX library | done | `fx:SineWave` |
+| Intensity, what Breathe was (D13): a Wave on Sine a quarter-cycle on | Wave | `Wave` `SINE`, phase offset + 0.75 | Breathe; `Breathe` | | FX library | done | `fx:Wave` |
 | Intensity | Candle Flicker | `CandleFlicker` | | | FX library | done | `fx:CandleFlicker` |
 | Intensity | Fluorescent Flicker | `FluorescentFlicker` | | | FX library | done | `fx:FluorescentFlicker` |
 | Intensity (D27) | Lightning Strike | `LightningStrike` | | | FX library | done | `fx:LightningStrike` |
@@ -139,10 +145,6 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Position | Pan Sweep | `PanSweep` | | | FX library | done | `fx:PanSweep` |
 | Position | Tilt Sweep | `TiltSweep` | | | FX library | done | `fx:TiltSweep` |
 | Position | Random Position | `RandomPosition` | | | FX library | done | `fx:RandomPosition` |
-| Beam (D13) | Zoom Wave | `ZoomWave` | Zoom Breathe; `ZoomBreathe` | | FX library | done | `fx:ZoomWave` |
-| Beam | Iris Pulse | `IrisPulse` | | | FX library | done | `fx:IrisPulse` |
-| Beam | Frost Pulse | `FrostPulse` | | | FX library | done | `fx:FrostPulse` |
-| Beam | Focus Pull | `FocusPull` | | | FX library | done | `fx:FocusPull` |
 | Steps, each palette on each head for itself (D23) | Palette Steps | `PaletteSteps` | | 2col, 3col, 4col | FX library | done | `fx:PaletteSteps` |
 | Steps, a setting's named slots (D23) | Slot Steps | `SlotSteps` | | | FX library | done | `fx:SlotSteps` |
 
