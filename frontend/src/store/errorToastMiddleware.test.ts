@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// lightingApi opens a real WebSocket at import; the store modules below register WS
-// subscriptions at module load, so it has to be stubbed before any of them are pulled in.
-vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
-
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
 import { toast } from 'sonner'
@@ -100,51 +96,29 @@ describe('ignoreReportedError', () => {
   })
 })
 
+/**
+ * Every endpoint a store module declares, read from the modules' source. Every endpoint is injected
+ * into `restApi` by a module here as `name: build.query(…)` or `name: build.mutation(…)`, so this is
+ * the set `restApi.endpoints` holds once they are all loaded. Loading them instead is slow enough to
+ * time out under load.
+ */
+const sources = import.meta.glob(['./*.ts', '!./*.test.ts'], {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>
+const declaredEndpoints = new Set(
+  Object.values(sources).flatMap((source) =>
+    [...source.matchAll(/^\s*(\w+): *build\.(?:query|mutation|infiniteQuery)\b/gm)].map((m) => m[1]),
+  ),
+)
+
 describe('SILENT_ENDPOINTS', () => {
-  it('only names endpoints that actually exist', async () => {
+  it('only names endpoints that actually exist', () => {
     // A renamed or deleted endpoint would otherwise leave a stale entry here — harmless-looking,
     // but it means the *real* endpoint of that name silently stops being suppressed (or, worse,
     // a typo means a call site that reports its own errors double-toasts forever).
-    const { restApi } = await import('./restApi')
-    await Promise.all([
-      import('./cues'),
-      import('./cueStacks'),
-      import('./looks'),
-      import('./palettes'),
-      import('./busk'),
-      import('./scripts'),
-      import('./projects'),
-      import('./cloudSync'),
-      import('./oauthGithub'),
-      import('./installs'),
-      import('./stageRegions'),
-      import('./stageViewpoints'),
-      import('./stageElements'),
-      import('./sceneImages'),
-      import('./riggings'),
-      import('./patches'),
-      import('./programmerOps'),
-      import('./speedMasters'),
-      import('./fxDefinitions'),
-      import('./auth'),
-      import('./users'),
-      import('./passwordReset'),
-      import('./deviceLogin'),
-      import('./updates'),
-      import('./remoteAccess'),
-      import('./stageRenders'),
-      import('./commands'),
-      import('./rigSafety'),
-      import('./venues'),
-      import('./venueHold'),
-      import('./fxPreview'),
-      // The three WebSocket-backed mutations, injected from these two modules.
-      import('./park'),
-      import('./channels'),
-    ])
-
-    const known = new Set(Object.keys(restApi.endpoints))
-    const unknown = [...SILENT_ENDPOINTS].filter((name) => !known.has(name))
+    const unknown = [...SILENT_ENDPOINTS].filter((name) => !declaredEndpoints.has(name))
     expect(unknown).toEqual([])
   })
 })
