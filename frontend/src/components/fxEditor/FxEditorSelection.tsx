@@ -13,7 +13,8 @@ import { ProgrammerAddFxSheet, useProgrammerAddFx } from '@/components/programme
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import { OwnerEditor } from '@/components/stage/OwnerEditor'
 import { EditorReadout } from '@/components/editor/EditorReadout'
-import { FxPicker, type AuditionedFx } from '@/components/fx/FxPicker'
+import { FxPicker } from '@/components/fx/FxPicker'
+import { useAuditionedFx } from '@/components/fx/useAuditionedFx'
 import { SplitFxEditor, type SplitSession } from '@/components/fx/SplitFxEditor'
 import { useReplaceStack } from '@/components/fx/useReplaceStack'
 import {
@@ -557,7 +558,8 @@ function Inspector({
 
 /**
  * *+ FX* on a lane (FX editor plan §4.3, D6): the picker's press arm, opening on the lane's family,
- * asking `ReplaceStack` as the picker's FX arm does ([useReplaceStack]).
+ * asking `ReplaceStack` as the picker's FX arm does ([useReplaceStack]). Kept mounted while the
+ * window's pair moves, so the FX a tap swaps is the one started over the selection it is on.
  */
 function AddFx({
   projectId,
@@ -574,7 +576,7 @@ function AddFx({
   onPicked: (fxId: number) => void
   onClose: () => void
 }) {
-  const [current, setCurrent] = useState<AuditionedFx | null>(null)
+  const { current, onCurrent } = useAuditionedFx(pair.targets)
   const { segment, onLanding, stackOn } = useReplaceStack(pair.targets, true, current)
   return (
     <div data-fx-add={family} className="flex flex-col gap-2">
@@ -599,7 +601,7 @@ function AddFx({
           press={{ projectId, families: pair.families, stackOn }}
           onLanding={onLanding}
           current={current}
-          onCurrent={setCurrent}
+          onCurrent={onCurrent}
           onEdit={current != null ? () => onPicked(current.fxId) : undefined}
         />
       )}
