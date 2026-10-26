@@ -46,14 +46,11 @@ The plan's own rules:
 
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
-| `StageRenderJob.test.tsx` (frontend), an unhandled `ReferenceError: cancelAnimationFrame is not defined` after its tests pass; or `Hook timed out in 10000ms` on `test/setup.ts`'s closing frame wait | local `npm run check:quick` on `claude/fixture-colours` before its first commit (2026-10-19), 1 of 2 runs; the hook timeout in a full local `npm run check` on `claude/fx-editor-s5` (2026-10-25, Linux cloud container), 1 of 1 runs; passes alone | Suspected, not traced: an RTK Query auto-batch timer (`redux-toolkit.modern.mjs`'s rAF fallback) firing after the file's jsdom environment is torn down. The tests pass; Vitest fails the run on the unhandled error | 1 |
-| `BuskingView.test.tsx` (frontend), an unhandled `ReferenceError: cancelAnimationFrame is not defined` after its tests pass | local `npm run check:quick` on `claude/fx-editor-s4` before its first commit (2026-10-24, Linux cloud container), 1 of 1 runs; passes alone, 2 of 2 | Suspected, not traced: the `StageRenderJob.test.tsx` row's signature, an RTK Query auto-batch timer firing after the file's jsdom environment is torn down | 1 |
-| `store/cues.test.tsx` (frontend), an unhandled `ReferenceError: cancelAnimationFrame is not defined` after its tests pass | a full local `npm run check` on `claude/fx-editor-followups-s2` before its first commit (2026-10-26, Linux cloud container, a backend suite and two review agents running beside it), 1 of 1 runs; passes alone | Suspected, not traced: the `StageRenderJob.test.tsx` row's signature, an RTK Query auto-batch timer firing after the file's jsdom environment is torn down | 1 |
 | `RigSafetyRoutesTest` "make rig safe that cannot turn every lamp off blacks out but is not ready", a bare `AssertionError` | #253's CI run 39954841494 (ab01733, 2026-10-23), 1 of 3796 tests; 6 of 6 local runs of the class pass on that commit | Partly traced: the test holds mac2 busy with a 2 s reset (`holdMsFor = { 2_000 }`) and expects *Make rig safe* to find it busy. Lamp-off starts every unit at once (`BulkCommandRun.together()`), so mac2 is refused only if the rig-safe POST reaches it inside those 2 s; on a loaded runner it can arrive later, mac2 turns off, `notOff` is empty and the run reads ready, failing `assertFalse(after.ready)`. Not confirmed which assertion failed: the log names only `Assert.java:89` | 2 |
 | `RigSafetyRoutesTest` "undo strikes the lamps it turned off once their restrike time is up, then releases the blackout", `only the selection's lamp expected:<[mac1]> but was:<[]>` | local full `./gradlew test` on `claude/terminology-s4` before its first commit (2026-10-23, Linux cloud container), 1 of 1 full runs; passes alone | Suspected, not traced: `awaitRunFinished` returns the first `rigSafety.state` whose run has finished, and under a loaded full run that snapshot can be published before *Undo*'s list is filled in, so `undo` reads empty. The class shares its timing sensitivity with the row above | 2 |
 | `PatchSheet.test.tsx` (frontend) "opens the ten swatches on Set and picks one; the same colour again sends nothing", `setPatchColours` never called after the Cyan click | local `vitest run` of the file on 500dc85 (2026-10-23, macOS), 4 of 4 runs; passes alone, and in that commit's CI run | Partly traced: it fails only after the Gel column's "takes the first match on Enter, and Open white clears a gel", which seems to leave a popover open, so the second Set opens no fresh swatches. Why CI's runner does not hit it is not known | 3 |
 | `AppliedTables.test.tsx` (frontend) "the Scenery table > draws Open only on a drawn drape…", `setScenery` last called with `e-tabs {open: 0.4}` instead of `e-cloth {trimM: 8}` | local `vitest run` of the file and `npm run check:quick` on b6964df and on `claude/terminology-s3` (2026-10-23), every run; passes alone (`-t`) and in the full `npm run check` | Suspected, not traced: order-dependence inside the Scenery `describe`, an earlier case leaving the stub's last call or an open popover behind, the pattern of the PatchSheet row | 3 |
-| `ProjectActionPlaces.test.tsx` (frontend), *for a show behind its venue*: `Test timed out in 5000ms` | the same run as the `store/cues.test.tsx` row, 1 of 1; passes alone | Suspected, not traced: load. The container was also running the full backend suite, and the test renders three menus in one case | 4 |
+| `ProjectActionPlaces.test.tsx` (frontend), *for a show behind its venue*: `Test timed out in 5000ms` | a full local `npm run check` on `claude/fx-editor-followups-s2` before its first commit (2026-10-26, Linux cloud container, a backend suite and two review agents running beside it), 1 of 1; passes alone | Suspected, not traced: load. The container was also running the full backend suite, and the test renders three menus in one case | 4 |
 | `errorToastMiddleware.test.ts` (frontend) "only names endpoints that actually exist", a 5005 ms timeout | local full `npm run check` on `claude/colour-everywhere-else` before its first commit (2026-10-19), 1 of 2 full runs, at a load average of ~8; 10 of 10 alone | Suspected, not traced: the test dynamically imports about 35 store modules, and their cold transform under a loaded full run takes longer than the 5 s default | 4 |
 
 ## 4. Fixed
@@ -62,6 +59,7 @@ The plan's own rules:
 
 | Test | Fixed in | What it was |
 |---|---|---|
+| `StageRenderJob.test.tsx`, `BuskingView.test.tsx` and `store/cues.test.tsx` (frontend), an unhandled `ReferenceError: cancelAnimationFrame is not defined` after a file's tests pass, or `Hook timed out in 10000ms` on `test/setup.ts`'s closing frame wait | session 1 | Seen locally, each passing alone: `StageRenderJob` 1 of 2 runs of `npm run check:quick` on `claude/fixture-colours` (2026-10-19) and its hook timeout in 1 full `npm run check` on `claude/fx-editor-s5` (2026-10-25); `BuskingView` 1 of 1 `check:quick` on `claude/fx-editor-s4` (2026-10-24); `store/cues` 1 full `npm run check` on `claude/fx-editor-followups-s2` (2026-10-26). Traced: RTK Query's subscription middleware dispatches an auto-batched `subscriptionsUpdated` from a 500 ms timer after a subscription changes, and `resetApiState` does not cancel it, so a file's last render can notify after setup's one-frame wait. Batched on a frame, RTK's 100 ms fallback timer then outlived jsdom and called the deleted `cancelAnimationFrame`. The hook timeout was not load: a batched dispatch under fake timers (`StageRenderJob`'s) started jsdom's frame interval on the fake clock, so after `useRealTimers` no frame came for the rest of the file. Every store a test builds now batches to the end of the tick (`setup.ts` wraps `configureStore`) and the frame wait is gone; `storeBatching.test.tsx` forces both, failing 4 of 4 cases on main |
 | `FxApplyOrderKeptTest` and `SameTypeFxWriteBackTest`, any case that awaits the dimmer after its FX come off (`clearStage`, a Look pressed off) | 48eb0ea | Traced: a removal reset what it uncovered without `passLock`, so a compose pass that had read the old FX list committed the removed FX's frame over the reset, and with nothing left running no later pass painted it out. After its commit a pass now resets what the FX in its list that are no longer in the engine leave uncovered; `FxRemovalRaceTest` forces the interleavings. Seen on `claude/eager-archimedes-ka6utl` and main's 5ee8331 (`FxApplyOrderKeptTest` alone, 2 of 10 runs); 10 of 10 runs of both passed after the fix |
 | `CueSpeedMastersTest` "GO, GO TO, GO BACK and auto-advance each set the cue's masters, and a tap wins until the next cue" | a3949db | Traced: `activateEntry` sets the cue's tempo before the stack's active cue moves, so waiting on the BPM could end before the GO landed; the test now waits on the active cue |
 | `ProgrammerDetachTest` "detach keeps the layer's effects running as Local effects" | 7a9c7cd | Traced: a running Pulse moved hex-1's dimmer channel between the test's two reads of hex-1's channels, whatever Detach did. The comparison now leaves out the channel the Pulse drives, found from the dimmer attribute (`DmxSlider.channelNo`), and the FX is asserted on its own. Seen on `main`'s CI (run 401, 1933e64), both attempts of #183's run 402 and 2 of 10 local runs; 20 of 20 passed after the fix |
@@ -84,7 +82,7 @@ A session's PR is titled *Flaky tests: session N — title*.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The jsdom teardown frame | planned | | | |
+| 1 | The jsdom teardown frame | in review | `claude/flaky-tests-s1` | | |
 | 2 | Rig safety's timing | planned | | | |
 | 3 | A popover left open between cases | planned | | | |
 | 4 | Timeouts under load | planned | | | |
@@ -115,6 +113,19 @@ closing frame wait timing out.
 - **Recipe for D5.** `npm run check` while `./gradlew test` runs beside it, 20 times, with none of
   the three files failing. If that is too slow, run the three files in a loop under the same load.
 - **Docs.** Update `setup.ts`'s module comment to describe what the fix does now.
+- **Result (2026-10-26, Linux cloud container, 4 cores).** The late dispatch is RTK Query's
+  `subscriptionsUpdated`, from a 500 ms timer `resetApiState` does not cancel, seen queued after
+  setup's frame wait by logging RTK's 100 ms timers. The hook timeout is not load: under fake
+  timers the auto-batch's frame starts jsdom's frame interval on the fake clock, and after
+  `useRealTimers` no frame comes. The plan's first candidate is the fix: `setup.ts` wraps
+  `configureStore` so every store a test builds batches with `{ type: 'tick' }`, and the frame
+  wait is gone. `storeBatching.test.tsx` forces both signatures on the app store and on a store a
+  test builds: 4 of 4 cases fail on main, the last with `Hook timed out in 10000ms`, and with
+  batching off the end-of-tick case fails. The full frontend suite passed with the fix (522 files,
+  6281 tests), so no test relied on frame timing.
+- **D5.** The three files in a loop under an 8-process CPU soak (load 10 to 21): on main 1 of 20
+  runs failed (`StageRenderJob`'s hook timeout); with the fix, plus `storeBatching.test.tsx`, 0 of
+  20 failed (load 6 to 17). `./gradlew test` was not run beside it; the soak stood in for it.
 
 ### Session 2 — Rig safety's timing
 
