@@ -157,6 +157,8 @@ export interface AddFixtureFxRequest {
   parameters: Record<string, string>
   order?: string
   elementFilter?: string
+  /** What the spread counts over fixtures' elements; absent starts on Fixtures (`WHOLE`). */
+  elementMode?: string
   timing?: Timing
   /** Speed master to subscribe to, as the master's uuid (omitted → master 1). */
   speedMasterUuid?: string

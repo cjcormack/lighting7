@@ -158,6 +158,20 @@ describe('fxEditorModel', () => {
     expect(differsFromPalette(draft, palette, 'm1', {}, { order: false })).toBe(false)
   })
 
+  it('reads, writes and compares a palette\'s Over, but not one the instance did not report', () => {
+    const palette = { fxType: 'ColourCycle', family: 'colour', cycle: 4, blendMode: 'OVERRIDE', order: 'NORMAL', parameters: {} }
+    const draft = paletteDraftOf(palette)
+    expect(draft.elementMode).toBe('PER_FIXTURE')
+    expect(withPaletteDraft(palette, draft)).not.toHaveProperty('elementMode')
+    expect(withPaletteDraft(palette, { ...draft, elementMode: 'WHOLE' })).toMatchObject({ elementMode: 'WHOLE' })
+    expect(paletteDraftOf({ ...palette, elementMode: 'FLAT' }).elementMode).toBe('FLAT')
+    expect(differsFromPalette({ ...draft, elementMode: 'WHOLE' }, palette, 'm1')).toBe(true)
+    // A running instance that lands on no elements reports no mode, so its draft's guess is neither an edit nor written.
+    const whole = { ...palette, elementMode: 'WHOLE' }
+    expect(differsFromPalette(draft, whole, 'm1', {}, { elementMode: false })).toBe(false)
+    expect(withPaletteDraft(whole, draft, { elementMode: false })).toMatchObject({ elementMode: 'WHOLE' })
+  })
+
   it('reads the spread\'s shape off the wire at its defaults, and sends each field once touched (D4)', () => {
     const plain = draftOf(makeActiveFx({}))
     expect([plain.spread, plain.wings, plain.segments, plain.parts]).toEqual([1, 1, 1, 0])
@@ -229,6 +243,10 @@ describe('fxEditorModel', () => {
     expect(spreadHeadCount([bar], false, 'dimmer', 'PER_FIXTURE', 'ODD')).toBe(6)
     expect(spreadHeadCount([bar, bar], true, 'dimmer', 'FLAT', 'FIRST_HALF')).toBe(12)
     expect(spreadHeadCount([bar, bar], true, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
+    // Fixtures (FX editor follow-ups D7): one unit a fixture with heads, whatever the filter.
+    expect(spreadHeadCount([bar, bar, par], true, 'dimmer', 'WHOLE', 'ODD')).toBe(2)
+    expect(spreadHeadCount([bar], false, 'dimmer', 'WHOLE', 'ALL')).toBe(1)
+    expect(selectionHeadCount([{ key: 'b1', attributes: [], elements: [{ key: 'b1.h1', attributes: [{ name: 'dimmer', type: 'slider' }] }, { key: 'b1.h2', attributes: [{ name: 'dimmer', type: 'slider' }] }] }, { key: 'p', attributes: [{ name: 'dimmer', type: 'slider' }] }], 'dimmer', 'WHOLE', 'ALL')).toBe(2)
   })
 
   it('counts a fixture that carries the property itself once, whatever heads it has (the desk\'s DIRECT_FIXTURE)', () => {

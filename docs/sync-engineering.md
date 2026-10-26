@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 39`, `minReader = 39`. Rules for future
+Current writer emits `formatVersion = 40`, `minReader = 40`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -426,6 +426,15 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 40 — Fixtures
+
+FX editor follow-ups plan session 2: a stored FX's `elementMode` — a cue's ad-hoc FX, a Look's, a
+palette's — may be `WHOLE`, *Over: Fixtures* (`docs/fx-engineering.md` §"Element Mode: what *Over*
+counts"). Nothing is renamed or moved, and an FX without the field still imports as `PER_FIXTURE`.
+`SUPPORTED_FORMAT_VERSION = 40`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5. **`minReader` moves to 40**:
+a v39 reader keeps the string but its lenient parse runs each `WHOLE` FX as `PER_FIXTURE`, so the
+show would play differently there with nothing but a warning in its log. `RichProjectFixture`'s selection FX is `WHOLE`.
 
 ### Version 39 — attributes and centres
 

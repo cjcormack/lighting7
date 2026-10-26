@@ -5,7 +5,7 @@ import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { Fixture, SettingAttributeDescriptor } from '@/store/fixtures'
 import { detectExtendedChannels } from './colourUtils'
-import { selectionHeadCount, spreadHeadCount, type FxScope } from './fxEditorModel'
+import { carriesFxAttribute, selectionHeadCount, spreadHeadCount, type FxScope } from './fxEditorModel'
 
 /**
  * What an effect's **target** says about its editor (fixture-fx-sheets plan D11): which optional
@@ -50,11 +50,16 @@ export function useFxScope({
   }, [items, isGroupTarget, targetKey, fixtures, fixtureByKey])
 
   const baseScope = useMemo((): FxScope => {
+    // Over says what the spread counts on elements, so it is drawn only where the FX lands on them,
+    // as the desk's expansion decides: a group or a fixture by its first fixture, a selection by any unit.
+    const landsOnElements = (f: Fixture | undefined) =>
+      f != null && (f.elements?.length ?? 0) > 0 && (attribute == null || !carriesFxAttribute(f.attributes, attribute))
+    const onElements = items != null ? targetFixtures.some(landsOnElements) : landsOnElements(targetFixtures[0])
     const multiElement = targetFixtures.some((f) => (f.elements?.length ?? 0) > 1)
-    if (overMembers) return { heads: true, elementMode: multiElement, elementFilter: multiElement }
+    if (overMembers) return { heads: true, elementMode: multiElement && onElements, elementFilter: multiElement }
     const heads = targetFixtures.some((f) => (f.elementGroupAttributes?.length ?? 0) > 0)
-    return { heads, elementMode: false, elementFilter: heads }
-  }, [overMembers, targetFixtures])
+    return { heads, elementMode: heads && onElements, elementFilter: heads }
+  }, [overMembers, targetFixtures, attribute, items])
 
   const extendedChannels = useMemo(
     () => (entry?.family === 'colour' ? detectExtendedChannels(targetFixtures.map((f) => f.attributes ?? [])) : undefined),

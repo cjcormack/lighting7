@@ -40,6 +40,11 @@ import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
+import uk.me.cormack.lighting7.fx.ElementMode
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
+import java.util.UUID
 import uk.me.cormack.lighting7.fx.loadLookSnapshot
 import org.junit.After
 import org.junit.Before
@@ -160,7 +165,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 39, minReader = 39), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 40, minReader = 40), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -361,6 +366,27 @@ class ProjectRoundTripTest {
         wipeDatabase()
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null).projectId
         assertEquals(listOf("SquareWave", "SineWave"), stackedLookFx(imported))
+    }
+
+    /** An archive FX naming no element mode, as every one before v40 might, imports naming none and runs as Each fixture. */
+    @Test
+    fun `an archive FX with no element mode imports as Each fixture`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val file = Files.walk(exportDirA.resolve("cueAdHocFx")).use { stream -> stream.toList() }
+            .filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+            .single { canonicalDecode(CueAdHocFxJson.serializer(), Files.readString(it)).elementMode == "WHOLE" }
+        val fx = canonicalDecode(CueAdHocFxJson.serializer(), Files.readString(file))
+        Files.writeString(file, canonicalEncode(CueAdHocFxJson.serializer(), fx.copy(elementMode = null)))
+        assertTrue("elementMode" !in Files.readString(file))
+
+        wipeDatabase()
+        ProjectImporter(state).import(exportDirA, nameOverride = null)
+        val stored = transaction(state.database) {
+            DaoCueAdHocFxEntity.find { DaoCueAdHocFx.uuid eq UUID.fromString(fx.uuid) }.single().elementMode
+        }
+        assertEquals(null, stored)
+        assertEquals(ElementMode.PER_FIXTURE, FxSpecCoercion.Lenient.elementMode(stored) { "test" })
     }
 
     /** An archive whose Look FX carry no order, as every Look did before Record wrote one, reads them in file order. */

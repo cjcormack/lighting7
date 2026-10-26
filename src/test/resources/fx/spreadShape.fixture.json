@@ -4,7 +4,8 @@
     "position i/(heads-1) (0.5 for one head): each head's phase offset and the slot count after step 4.",
     "Read by fx/SpreadShapeTest.kt (DistributionPlan.forElements) and frontend/src/lib/spreadShape.test.ts.",
     "An absent spread, wings, segments or parts is its default: 1.0, 1, 1, 0 (off). Offsets compare to 1e-9.",
-    "Random is SpreadOrder.RANDOM's default seed 0."
+    "Random is SpreadOrder.RANDOM's default seed 0.",
+    "A case with `over` is one element mode over `fixtures` fixtures of `elementsEach` elements: `heads` is the units the spread counts (the dials), and SpreadShapeTest checks every element takes its unit's offset."
   ],
   "cases": [
     {
@@ -520,6 +521,81 @@
         0.0
       ],
       "slots": 1
+    },
+    {
+      "name": "Fixtures over 4 three-zone fixtures",
+      "order": "NORMAL",
+      "over": {
+        "mode": "WHOLE",
+        "fixtures": 4,
+        "elementsEach": 3
+      },
+      "heads": 4,
+      "offsets": [
+        0.0,
+        0.25,
+        0.5,
+        0.75
+      ],
+      "slots": 4
+    },
+    {
+      "name": "Fixtures over 4 three-zone fixtures, centre out",
+      "order": "CENTRE_OUT",
+      "over": {
+        "mode": "WHOLE",
+        "fixtures": 4,
+        "elementsEach": 3
+      },
+      "heads": 4,
+      "offsets": [
+        0.5,
+        0.0,
+        0.0,
+        0.5
+      ],
+      "slots": 2
+    },
+    {
+      "name": "Elements over 4 three-zone fixtures",
+      "order": "NORMAL",
+      "over": {
+        "mode": "FLAT",
+        "fixtures": 4,
+        "elementsEach": 3
+      },
+      "heads": 12,
+      "offsets": [
+        0.0,
+        0.08333333333333333,
+        0.16666666666666666,
+        0.25,
+        0.3333333333333333,
+        0.4166666666666667,
+        0.5,
+        0.5833333333333334,
+        0.6666666666666666,
+        0.75,
+        0.8333333333333334,
+        0.9166666666666666
+      ],
+      "slots": 12
+    },
+    {
+      "name": "Each fixture over 4 three-zone fixtures",
+      "order": "NORMAL",
+      "over": {
+        "mode": "PER_FIXTURE",
+        "fixtures": 4,
+        "elementsEach": 3
+      },
+      "heads": 3,
+      "offsets": [
+        0.0,
+        0.333333333333,
+        0.666666666667
+      ],
+      "slots": 3
     }
   ]
 }

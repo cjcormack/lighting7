@@ -17,7 +17,7 @@ import { Loader2 } from 'lucide-react'
 import { AlsoAddToBuskRow } from '@/components/busking/AlsoAddToBuskRow'
 import { useAddToBuskPage } from '@/components/busking/useAddToBuskPage'
 import type { BuskAddTarget } from '@/lib/buskAdd'
-import { fxSpeedLabel } from '@/components/fx/fxConstants'
+import { fxSpeedLabel, NEW_FX_ELEMENT_MODE } from '@/components/fx/fxConstants'
 import { isOnSeconds } from '@/lib/fxTiming'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { findFxEntry } from '@/components/busking/buskingTypes'
@@ -109,14 +109,16 @@ export function NewPaletteFromFxSheet({
       // Null deliberately: a template effect names no target (D3), so it names no property on one —
       // but for Slot Steps, which names the setting it steps (the write boundary refuses one without).
       attribute: stepShape?.attribute ?? null,
-      elementMode: null,
+      // The running FX's Over, which it reports where it lands on elements; else Fixtures, as an
+      // authored palette starts.
+      elementMode: effect.elementMode ?? NEW_FX_ELEMENT_MODE,
       cycle: effect.cycle,
       blendMode: effect.blendMode,
       // The fixture DTO reports the spread as `order`, and absent means `NORMAL`, the
       // vocabulary the write boundary accepts.
       order: effect.order ?? 'NORMAL',
       phaseOffset: effect.phaseOffset,
-      // Dropped with the two above, and for the same reason (D3): both are questions about a
+      // Dropped with the attribute, and for the same reason (D3): both are questions about a
       // *specific* multi-element head, and a template effect names no target. Carrying them would
       // also make a captured template differ from an authored one in two fields the editor can
       // neither show nor clear — `chooseFx` hard-nulls both, and `fxKey` does not watch

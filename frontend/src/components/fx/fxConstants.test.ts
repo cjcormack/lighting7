@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { SPEED_STEPS, fxSpeedLabel, getCycleLabel } from './fxConstants'
+import { SPEED_STEPS, elementModeSummary, fxSpeedLabel, getCycleLabel } from './fxConstants'
+
+describe('elementModeSummary', () => {
+  it('words Over so a summary never reads it as a target', () => {
+    expect(['WHOLE', 'FLAT', 'PER_FIXTURE'].map(elementModeSummary)).toEqual(['over fixtures', 'over elements', 'each fixture'])
+  })
+})
 
 /**
  * `cycle` carries two readings on one field, and they are a tempo apart. Every surface that

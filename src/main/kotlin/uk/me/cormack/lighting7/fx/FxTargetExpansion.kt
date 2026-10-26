@@ -47,8 +47,8 @@ internal class FxTargetExpansion(
     /**
      * The [FxInstance.elementFilter] the filtered lists below were built for.
      *
-     * `elementMode` is deliberately *not* part of the identity: it selects between [perFixture]
-     * and [flat] at dispatch time, and both are built here, so toggling it costs nothing.
+     * `elementMode` is deliberately *not* part of the identity: it selects between [perFixture],
+     * [flat] and [whole] at dispatch time, and all are built here, so toggling it costs nothing.
      * `order` is not either — it moves the offsets, not which keys resolve.
      */
     val elementFilter: ElementFilter,
@@ -92,9 +92,20 @@ internal class FxTargetExpansion(
     val members: List<MemberSlot>,
 ) {
     /**
+     * Under [ElementMode.WHOLE]: the units the spread counts, one per fixture, each the keys that
+     * fixture paints — [perFixture] for a group or selection, [flat] for a lone fixture. A unit
+     * the element filter emptied still counts, so the filter never moves another fixture's offset.
+     */
+    val whole: List<List<String>> = when (kind) {
+        Kind.FIXTURE_ELEMENTS -> listOf(flat)
+        Kind.GROUP_ELEMENTS -> perFixture
+        else -> emptyList()
+    }
+
+    /**
      * The branch the engine takes. Mirrors the decision the `process*` functions used to make
      * inline: does the target itself have the property, do its elements, and — for a group of
-     * multi-element fixtures — [ElementMode] picks between [perFixture] and [flat].
+     * multi-element fixtures — [ElementMode] picks between [perFixture], [flat] and [whole].
      */
     enum class Kind {
         /** Nothing to do: target missing, group empty, or neither it nor its elements have the property. */
@@ -109,7 +120,7 @@ internal class FxTargetExpansion(
         /** A group whose members have the property directly; distributes across [members]. */
         GROUP_MEMBERS,
 
-        /** A group of multi-element fixtures; [ElementMode] picks [perFixture] or [flat]. */
+        /** A group of multi-element fixtures; [ElementMode] picks [perFixture], [flat] or [whole]. */
         GROUP_ELEMENTS,
     }
 

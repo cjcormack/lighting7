@@ -111,7 +111,7 @@ export function paramLabel(name: string): string {
 
 
 /**
- * The editor's fields over one draft — Cycle, Amount, Direction and Order, the two questions, the
+ * The editor's fields over one draft — Cycle, Amount, Direction, Order and Over, the two questions, the
  * parameters in their roles, Spread, Shape and Advanced — with no write of their own: [set] and [setParam] are the host's. `FxEditor`
  * writes them live into a running effect; `PaletteEditor` (fixture-fx-sheets plan D16) keeps them
  * as the template's draft until Save, so a movement template asks the same *Centre* question
@@ -154,9 +154,9 @@ export function FxFields({
   set: (patch: Partial<FxDraft>, release?: boolean) => void
   setParam: (name: string, value: string, release: boolean) => void
   /**
-   * `inspector` is the FX editor's order (FX editor plan §4.5): Cycle, Amount, Direction and Order;
-   * **Shape**, every parameter; Spread; **Over what's underneath**, the family's question and the
-   * raw blend; **Advanced**, Phase, Timing, Runs and the element fields. `editor` is every other
+   * `inspector` is the FX editor's order (FX editor plan §4.5): Cycle, Amount, Direction, Order and
+   * Over; **Shape**, every parameter; Spread; **Over what's underneath**, the family's question and
+   * the raw blend; **Advanced**, Phase, Timing, Runs and the head filter. `editor` is every other
    * host's.
    */
   layout?: 'editor' | 'inspector'
@@ -202,7 +202,9 @@ export function FxFields({
       <SpeedSection timingSource={timingSource} entry={entry} draft={draft} readOnly={readOnly} set={set} />
     </Lights>
   )
-  const amount = <AmountSection draft={draft} ordered={scope.heads} readOnly={readOnly} set={set} />
+  const amount = (
+    <AmountSection draft={draft} ordered={scope.heads} over={scope.elementMode} readOnly={readOnly} set={set} />
+  )
   const centreQuestion = centred && (
     <Question
       label="Centre"
@@ -299,15 +301,6 @@ export function FxFields({
   )
   const elementRows = (
     <>
-      {scope.elementMode && (
-        <SelectRow
-          label="Element mode"
-          value={draft.elementMode}
-          readOnly={readOnly}
-          options={ELEMENT_MODE_OPTIONS}
-          onChange={(elementMode) => set({ elementMode })}
-        />
-      )}
       {scope.elementFilter && (
         <SelectRow
           label="Heads"
@@ -399,17 +392,20 @@ const DIRECTIONS: readonly { value: FxDirection; label: string; Icon: typeof Arr
  * a percent of the FX that reaches the stage over what is underneath — a Replace at 50 % sits
  * halfway between the level underneath and the FX, an Around movement's radius halves about the
  * position underneath — Direction is how each head runs its cycle, and Order the order the heads'
- * offsets run in, drawn only where there are heads to order ([ordered]). All three are the desk's to
+ * offsets run in, drawn only where there are heads to order ([ordered]). *Over* (FX editor follow-ups
+ * plan D7) says what the Order counts where a fixture has elements ([over]). All are the desk's to
  * apply (P2): this only writes the fields, and edits them in place, so the phase is kept.
  */
 function AmountSection({
   draft,
   ordered,
+  over,
   readOnly,
   set,
 }: {
   draft: FxDraft
   ordered: boolean
+  over: boolean
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
 }) {
@@ -465,6 +461,26 @@ function AmountSection({
           </Lights>
         )}
       </div>
+      {over && (
+        <div className="flex items-center gap-2">
+          <EditorLabel>Over</EditorLabel>
+          <span className="flex-1" />
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={draft.elementMode}
+            disabled={readOnly}
+            onValueChange={(v) => v && set({ elementMode: v })}
+            aria-label="Over"
+          >
+            {ELEMENT_MODE_OPTIONS.map(({ value, label, description }) => (
+              <ToggleGroupItem key={value} value={value} title={description} className="px-2 text-xs">
+                {label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+      )}
     </div>
   )
 }

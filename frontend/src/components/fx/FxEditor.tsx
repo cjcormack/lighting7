@@ -267,9 +267,10 @@ export function FxEditor({
   // The instance says its distribution only where it has one (a group, or heads); the operator
   // setting one here says it too.
   const hasOrder = effect.order != null || setFields.current.has('order')
+  // The same for the element mode: said only where the FX lands on elements, or once set here.
+  const said = { order: hasOrder, elementMode: effect.elementMode != null || setFields.current.has('elementMode') }
   const edited =
-    spawning?.palette.fx != null &&
-    differsFromPalette(draft, spawning.palette.fx, master1Uuid, libraryDefaults, { order: hasOrder })
+    spawning?.palette.fx != null && differsFromPalette(draft, spawning.palette.fx, master1Uuid, libraryDefaults, said)
   /** The desk put the instance back (or re-keyed it): the draft is what it now runs. */
   const reseed = useCallback(
     (next: ActiveFx) => {
@@ -356,7 +357,7 @@ export function FxEditor({
             palette={spawning.palette}
             projectId={spawning.projectId}
             draft={draft}
-            hasOrder={hasOrder}
+            said={said}
             edited={edited}
             readOnly={readOnly}
             flushHeld={flushHeld}
@@ -416,7 +417,7 @@ function PaletteArm({
   palette: template,
   projectId,
   draft,
-  hasOrder,
+  said,
   edited,
   readOnly,
   flushHeld,
@@ -427,7 +428,8 @@ function PaletteArm({
   palette: PaletteSummary
   projectId: number
   draft: FxDraft
-  hasOrder: boolean
+  /** Which of the draft's guessable fields the instance said, or the operator set: only those are written. */
+  said: { order: boolean; elementMode: boolean }
   edited: boolean
   readOnly: boolean
   flushHeld: () => void
@@ -443,7 +445,7 @@ function PaletteArm({
     // The move the floor still holds lands first, so the template takes what the rig shows.
     flushHeld()
     try {
-      await savePalette({ projectId, paletteId: template.id, fx: withPaletteDraft(template.fx, draft, { order: hasOrder }) }).unwrap()
+      await savePalette({ projectId, paletteId: template.id, fx: withPaletteDraft(template.fx, draft, said) }).unwrap()
       reseed(await resetFx({ id: effect.id }).unwrap())
       toast.success(`Updated “${template.name}” from this ${effect.fxType}`)
     } catch {

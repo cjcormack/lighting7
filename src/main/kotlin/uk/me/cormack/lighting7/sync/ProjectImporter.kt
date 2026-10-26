@@ -307,7 +307,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 39
+internal const val SUPPORTED_FORMAT_VERSION = 40
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**

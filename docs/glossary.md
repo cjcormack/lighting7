@@ -62,8 +62,10 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | A movement at its own pan and tilt | Absolute | `OVERRIDE` | | | screen | done | `src:components/fx/FxFields.tsx` |
 | A level FX that ignores the level underneath | Replace it | `OVERRIDE` | | | screen | done | `src:components/fx/FxFields.tsx` |
 | A level FX scaled by the level underneath | Within it | `MULTIPLY` | | | screen | done | `src:components/fx/FxFields.tsx` |
-| Each fixture runs the FX for itself | Per Fixture | `PER_FIXTURE` | | | screen, wire | done | `ELEMENT_MODE_OPTIONS.PER_FIXTURE` |
-| Every element in one strip | Flat | `FLAT` | | | screen, wire | done | `ELEMENT_MODE_OPTIONS.FLAT` |
+| What an FX's spread counts where it lands on fixtures' elements | Over | `elementMode`; column `element_mode` | Element mode | Dup · Include · Use Elements | screen | done | `src:components/fx/FxFields.tsx` |
+| Each fixture is one unit, its elements alike; a new FX's default | Fixtures | `WHOLE` | | Dup Elements | screen, wire, storage, archive | done | `ELEMENT_MODE_OPTIONS.WHOLE` |
+| Every element in one strip | Elements | `FLAT` | Flat | Include Elements | screen, wire | done | `ELEMENT_MODE_OPTIONS.FLAT` |
+| Each fixture runs the FX for itself; a stored FX's default | Each fixture | `PER_FIXTURE` | Per Fixture | Use Elements | screen, wire | done | `ELEMENT_MODE_OPTIONS.PER_FIXTURE` |
 
 ## Spread
 

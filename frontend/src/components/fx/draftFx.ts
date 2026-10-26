@@ -1,5 +1,6 @@
 import type { CueAdHocFx, CueTarget } from '@/api/cuesApi'
 import type { DraftFxPick, FxTarget } from './FxPicker'
+import { NEW_FX_ELEMENT_MODE } from './fxConstants'
 
 /**
  * The stored effect a draft pick makes (show-cue-editing plan D17), on the picker's target: one
@@ -22,7 +23,7 @@ export function storedFxOf(pick: DraftFxPick, target: FxTarget): CueAdHocFx {
     direction: pick.direction,
     blendMode: pick.blendMode,
     phaseOffset: 0,
-    elementMode: null,
+    elementMode: NEW_FX_ELEMENT_MODE,
     elementFilter: pick.elementFilter ?? null,
     timing: null,
     parameters: pick.parameters,

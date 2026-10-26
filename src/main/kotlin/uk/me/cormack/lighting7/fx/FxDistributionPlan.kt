@@ -138,8 +138,8 @@ internal class DistributionPlan private constructor(
  * shape, cached on the instance the same way [FxTargetExpansion] is and validated the same way: by
  * identity against the expansion it was built from, plus the order and shape it was built for.
  *
- * Both the element shapes are built up front for the same reason [FxTargetExpansion] builds both
- * key lists — [ElementMode] is not part of the expansion's identity, so a mode toggle must not
+ * Every element shape is built up front for the same reason [FxTargetExpansion] builds every
+ * key list — [ElementMode] is not part of the expansion's identity, so a mode toggle must not
  * need an invalidation. The unused arms are [DistributionPlan.EMPTY], which costs nothing.
  */
 internal class FxDistributionPlans private constructor(
@@ -155,6 +155,8 @@ internal class FxDistributionPlans private constructor(
     val flat: DistributionPlan,
     /** One per [FxTargetExpansion.perFixture] list, same order. */
     val perFixture: List<DistributionPlan>,
+    /** Over [FxTargetExpansion.whole]'s units, one offset per fixture. */
+    val whole: DistributionPlan,
 ) {
     companion object {
         fun build(
@@ -168,6 +170,7 @@ internal class FxDistributionPlans private constructor(
                     members = DistributionPlan.of(order, expansion.members, shape),
                     flat = DistributionPlan.EMPTY,
                     perFixture = emptyList(),
+                    whole = DistributionPlan.EMPTY,
                 )
 
                 FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> FxDistributionPlans(
@@ -175,6 +178,7 @@ internal class FxDistributionPlans private constructor(
                     members = DistributionPlan.EMPTY,
                     flat = DistributionPlan.forElements(order, expansion.flat.size, shape),
                     perFixture = emptyList(),
+                    whole = DistributionPlan.forElements(order, expansion.whole.size, shape),
                 )
 
                 FxTargetExpansion.Kind.GROUP_ELEMENTS -> FxDistributionPlans(
@@ -184,6 +188,7 @@ internal class FxDistributionPlans private constructor(
                     perFixture = expansion.perFixture.map {
                         DistributionPlan.forElements(order, it.size, shape)
                     },
+                    whole = DistributionPlan.forElements(order, expansion.whole.size, shape),
                 )
 
                 // DIRECT_FIXTURE uses FxContext.SINGLE; NONE applies nothing.
@@ -194,6 +199,7 @@ internal class FxDistributionPlans private constructor(
                     members = DistributionPlan.EMPTY,
                     flat = DistributionPlan.EMPTY,
                     perFixture = emptyList(),
+                    whole = DistributionPlan.EMPTY,
                 )
             }
     }

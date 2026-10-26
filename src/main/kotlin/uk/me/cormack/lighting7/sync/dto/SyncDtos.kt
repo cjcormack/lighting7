@@ -34,6 +34,10 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v40: a stored FX's `elementMode` may be `WHOLE` (FX editor follow-ups plan session 2), which a
+    // v39 reader cannot parse. `minReader` moves to **40**: a v39 reader would run each such FX as
+    // its stored default, `PER_FIXTURE`, warning only in its log. See `docs/sync-engineering.md`
+    // §"Version 40 — Fixtures".
     // v39: a surface binding's attribute targets are `fixtureAttribute`, `groupAttribute` and
     // `selectionAttribute`, and theirs and `encoderBankSet`'s `propertyName` is `attribute`, a
     // flash's nested target too; Circle's, Figure 8's and Random Position's `panCenter` and
@@ -323,9 +327,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 39,
+    val formatVersion: Int = 40,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 39,
+    val minReader: Int = 40,
 )
 
 /**

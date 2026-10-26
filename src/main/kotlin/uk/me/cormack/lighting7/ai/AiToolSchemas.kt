@@ -7,6 +7,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import uk.me.cormack.lighting7.fx.ElementMode
 import uk.me.cormack.lighting7.fx.SpreadShape
 
 /** What `get_current_state` can `include`; anything else is refused by name. */
@@ -68,6 +69,18 @@ private val timingSchema = buildJsonObject {
         "description",
         "CYCLE: cycle is the length of the whole FX. HEAD: cycle is each head's step, so the whole FX takes cycle × steps. " +
             "Omit for the FX type's own: HEAD for a step chase, CYCLE for a continuous FX (every built-in).",
+    )
+}
+
+/** What an FX's spread counts on multi-element fixtures, the same on every FX schema. */
+private val elementModeSchema = buildJsonObject {
+    put("type", "string")
+    put("enum", buildJsonArray { ElementMode.entries.forEach { add(it.name) } })
+    put(
+        "description",
+        "Only where the FX lands on fixtures' elements (a bar's cells). WHOLE: each fixture is one unit, its elements alike. " +
+            "FLAT: every element of every fixture one strip. PER_FIXTURE: the FX runs within each fixture, every fixture alike. " +
+            "Omit for WHOLE.",
     )
 }
 
@@ -197,10 +210,7 @@ private val lookFxSchema = buildJsonObject {
             })
         })
         put("phaseOffset", buildJsonObject { put("type", "number"); put("description", "0.0-1.0") })
-        put("elementMode", buildJsonObject {
-            put("type", "string")
-            put("enum", buildJsonArray { add("PER_FIXTURE"); add("FLAT") })
-        })
+        put("elementMode", elementModeSchema)
         put("timing", timingSchema)
         put("elementFilter", buildJsonObject {
             put("type", "string")
@@ -593,10 +603,7 @@ private val adHocFxSchema = buildJsonObject {
             })
         })
         put("phaseOffset", buildJsonObject { put("type", "number") })
-        put("elementMode", buildJsonObject {
-            put("type", "string")
-            put("enum", buildJsonArray { add("PER_FIXTURE"); add("FLAT") })
-        })
+        put("elementMode", elementModeSchema)
         put("elementFilter", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("ALL"); add("ODD"); add("EVEN"); add("FIRST_HALF"); add("SECOND_HALF") })

@@ -880,7 +880,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         blendMode = "OVERRIDE"; order = "CENTRE_OUT"
         parameters = mapOf("depth" to "0.5")
         attribute = "dimmer"
-        elementMode = "FLAT"
+        elementMode = "WHOLE"
         sortOrder = 4
     }
     // A timed layer over the effects-only look — the shape a timed preset application migrated into,

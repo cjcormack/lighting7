@@ -131,8 +131,10 @@ export function FxSheet({
     const effect = paletteById.get(e.paletteId!)?.fx
     if (effect == null) return false
     const entry = findFxEntry(library, e.fxType)
+    // The instance says its Order and Over only where it has one; an absent one is no edit.
     return differsFromPalette(draftOf(e), effect, master1Uuid, entry ? defaultParameters(entry) : {}, {
       order: e.order != null,
+      elementMode: e.elementMode != null,
     })
   }
 

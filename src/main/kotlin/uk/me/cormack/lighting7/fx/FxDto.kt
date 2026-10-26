@@ -173,7 +173,7 @@ internal fun FxInstance.toFxDto(
         parameters = effect.parameters,
         isGroupTarget = isGroupFx,
         order = if (showOrder) order.javaClass.simpleName else null,
-        elementMode = if (spreadsOverMembers && isMultiElementExpanded) elementMode.name else null,
+        elementMode = if (isMultiElementExpanded) elementMode.name else null,
         elementFilter = if (showOrder && elementFilter != ElementFilter.ALL) elementFilter.name else null,
         timing = dynamics.timing,
         lookId = lookId,

@@ -453,8 +453,8 @@ private fun DaoCueAdHocFxEntity.matches(dto: CueAdHocFxDto, registry: FxRegistry
 
 /**
  * [effect]'s settings in one spelling, so a stored child and the FX Capture read back compare equal
- * whenever they spawn the same effect: names as the spawner parses them, an element mode only over
- * members, the filter and step timing filled in with their defaults, the parameters laid over the
+ * whenever they spawn the same effect: names as the spawner parses them, an element mode as
+ * [ElementMode.stored] keeps it, the filter and step timing filled in with their defaults, the parameters laid over the
  * library's, Seconds and the masters as `applyTimingChoice` reads them, and no family beside a
  * property, which the spawner then never reads. Timing, place and uuids are blanked: the cue owns the
  * first two, and the match was made on the last.
@@ -471,8 +471,10 @@ private fun CueAdHocFxDto.canonical(registry: FxRegistry): CueAdHocFxDto {
         blendMode = names.blendMode(blendMode)?.name ?: blendMode,
         order = names.order(order)?.javaClass?.simpleName ?: order,
         elementMode = if (overMembers) {
-            elementMode?.let { names.elementMode(it)?.name ?: it } ?: ElementMode.PER_FIXTURE.name
-        } else null,
+            elementMode?.let { names.elementMode(it)?.name ?: it } ?: ElementMode.STORED_DEFAULT.name
+        } else {
+            elementMode?.let { names.elementMode(it) }?.let { ElementMode.stored(false, it) }
+        },
         elementFilter = elementFilter?.let { names.elementFilter(it)?.name ?: it } ?: ElementFilter.ALL.name,
         timing = timing ?: registration?.defaultTiming ?: Timing.CYCLE,
         parameters = registration?.parameters.orEmpty().associate { it.name to it.defaultValue } + parameters,

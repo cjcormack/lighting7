@@ -377,14 +377,15 @@ See the [FX System docs](fx-engineering.md#multi-element-fixture-expansion) for 
 
 ### Group FX Element Mode
 
-When a group contains multi-element fixtures and the FX targets an element-level attribute, the `elementMode` field controls how distribution is applied:
+When a group contains multi-element fixtures and the FX targets an element-level attribute, the `elementMode` field — *Over* on screen — controls how distribution is applied:
 
-| Mode | Behaviour | Example (2 quad movers, 4 heads each) |
-|------|-----------|---------------------------------------|
-| `PER_FIXTURE` | Each fixture gets the FX independently across its own elements. All fixtures look the same. | Head #0 on both fixtures = same colour. Distribution across 4 heads per fixture. |
-| `FLAT` | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (0-7). A NORMAL chase sweeps across all 8 heads sequentially. |
+| Mode | Over | Behaviour | Example (2 quad movers, 4 heads each) |
+|------|------|-----------|---------------------------------------|
+| `WHOLE` | Fixtures | Each fixture is one unit and its elements take its output. Distribution runs across the fixtures. | 2 units: each mover's 4 heads one colour, the two movers apart. |
+| `FLAT` | Elements | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (0-7). A NORMAL chase sweeps across all 8 heads sequentially. |
+| `PER_FIXTURE` | Each fixture | Each fixture gets the FX independently across its own elements. All fixtures look the same. | Head #0 on both fixtures = same colour. Distribution across 4 heads per fixture. |
 
-`elementMode` defaults to `PER_FIXTURE` and is only relevant when group members are multi-element fixtures whose elements have the target attribute. When members directly have the attribute, `elementMode` is ignored.
+An FX started without one — `POST /groups/{name}/fx` included — runs on `WHOLE`; a stored FX naming none means `PER_FIXTURE` (`ElementMode.NEW_FX_DEFAULT` / `STORED_DEFAULT`). It is only relevant when group members are multi-element fixtures whose elements have the target attribute. When members directly have the attribute, `elementMode` is ignored.
 
 **Script example:**
 ```kotlin
@@ -524,7 +525,7 @@ GET /api/rest/groups/front-wash/fx
 ]
 ```
 
-The `elementMode` field is `null` when the FX targets attributes that members have directly. It shows `"PER_FIXTURE"` or `"FLAT"` when the FX expands to multi-element fixture elements.
+The `elementMode` field is `null` when the FX targets attributes that members have directly. It shows `"WHOLE"`, `"FLAT"` or `"PER_FIXTURE"` when the FX expands to multi-element fixture elements.
 
 **Add Group FX:**
 ```json
@@ -535,7 +536,7 @@ POST /api/rest/groups/front-wash/fx
   "cycle": 1.0,
   "blendMode": "OVERRIDE",
   "order": "NORMAL",
-  "elementMode": "PER_FIXTURE",
+  "elementMode": "WHOLE",
   "parameters": {
     "min": "0",
     "max": "255"
@@ -548,7 +549,7 @@ Response:
 }
 ```
 
-The `elementMode` field defaults to `"PER_FIXTURE"` and controls how FX distribute across multi-element fixture elements. See [Group FX Element Mode](#group-fx-element-mode).
+An absent `elementMode` starts the FX on `"WHOLE"`; it controls how FX distribute across multi-element fixture elements. See [Group FX Element Mode](#group-fx-element-mode).
 
 Note: The response returns a single `fxId` because one `FxInstance` is created that targets the entire group. The engine expands this to group members at processing time.
 

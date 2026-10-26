@@ -455,7 +455,8 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
     fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
-    expect(body.fx).toMatchObject({ fxType: 'Circle', blendMode: 'ADDITIVE' })
+    // A new FX palette starts on Fixtures (FX editor follow-ups D8).
+    expect(body.fx).toMatchObject({ fxType: 'Circle', blendMode: 'ADDITIVE', elementMode: 'WHOLE' })
     expect(body.fx?.parameters).toMatchObject({ panCentre: '128', tiltCentre: '128' })
   })
 
@@ -491,6 +492,51 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
     expect(body.fx).toMatchObject({ blendMode: 'ADDITIVE' })
     expect(body.fx?.parameters).toMatchObject({ panCentre: '128', tiltCentre: '128' })
+  })
+})
+
+describe('Over in a palette', () => {
+  it.each([null, 'FLAT'])('keeps a stored palette’s element mode (%s) when its FX type is swapped', async (elementMode) => {
+    const { onSave } = renderEditor({
+      palette: template({
+        name: 'Pulse',
+        family: 'COLOUR',
+        kind: 'fx',
+        rows: undefined,
+        fx: {
+          fxType: 'Colour Pulse',
+          family: 'colour',
+          attribute: null,
+          cycle: 4,
+          blendMode: 'OVERRIDE',
+          order: 'NORMAL',
+          phaseOffset: 0,
+          elementMode,
+          parameters: { colourA: '#FF9D4A' },
+          speedMasterUuid: null,
+          rateSpeedMasterUuid: null,
+          timingSource: 'BEAT',
+        },
+      }),
+    })
+    chooseFx('Rainbow Cycle')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
+    expect(body.fx).toMatchObject({ fxType: 'Rainbow Cycle', elementMode })
+  })
+
+  it('draws Over on an FX palette and saves the choice', async () => {
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chase' } })
+    chooseFx('Rainbow Cycle')
+    expect(screen.getByRole('radio', { name: 'Fixtures' })).toHaveAttribute('data-state', 'on')
+    fireEvent.click(screen.getByRole('radio', { name: 'Elements' }))
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(((onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput).fx).toMatchObject({ elementMode: 'FLAT' })
   })
 })
 

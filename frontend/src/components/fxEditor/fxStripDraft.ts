@@ -7,6 +7,7 @@ import type { PaletteSummary } from '@/api/palettesApi'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { FxPreviewDraft } from '@/store/fxPreview'
 import { LANE_ATTRIBUTE } from './fxEditorList'
+import { STORED_ELEMENT_MODE } from '@/components/fx/fxConstants'
 
 /** A stored FX's fields as a palette or a cue holds them — `PaletteFx`'s and `CueAdHocFx`'s, structurally. */
 export interface StoredFxFields {
@@ -75,7 +76,8 @@ export function previewDraftOf(
     parameters: { ...effect.parameters },
     order: effect.order,
     ...(effect.phaseOffset != null ? { phaseOffset: effect.phaseOffset } : {}),
-    ...(effect.elementMode != null ? { elementMode: effect.elementMode } : {}),
+    // Said even when the FX says none: the add starts an absent one on Fixtures, a stored FX means Each fixture.
+    elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     ...(effect.elementFilter != null ? { elementFilter: effect.elementFilter } : {}),
     ...(effect.timing != null ? { timing: effect.timing } : {}),
     ...(seconds ? { seconds: true } : {}),

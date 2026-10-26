@@ -219,7 +219,8 @@ data class AddGroupFxRequest(
     val order: String = "NORMAL",
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
-    val elementMode: String = "PER_FIXTURE",  // PER_FIXTURE or FLAT
+    /** `WHOLE`, `FLAT` or `PER_FIXTURE`; absent is [ElementMode.NEW_FX_DEFAULT]. */
+    val elementMode: String? = null,
     val elementFilter: String = "ALL",
     val timing: Timing? = null,
     /** Speed master to subscribe to, as the master's uuid (null → master 1). */
@@ -370,7 +371,7 @@ private fun applyGroupFx(
     val timing = FxTiming(request.cycle ?: registration?.defaultCycle ?: CycleLength.ONE_BAR)
     val blendMode = FxSpecCoercion.Strict.blendMode(request.blendMode)
     val spreadOrder = FxSpecCoercion.Strict.order(request.order)
-    val elementMode = FxSpecCoercion.Strict.elementMode(request.elementMode)
+    val elementMode = request.elementMode?.let { FxSpecCoercion.Strict.elementMode(it) } ?: ElementMode.NEW_FX_DEFAULT
 
     // No effect may drive a member's one-shot trigger (stage-view plan session 9, D15).
     TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.attribute, "FX")
