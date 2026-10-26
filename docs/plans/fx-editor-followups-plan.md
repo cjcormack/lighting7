@@ -119,7 +119,7 @@ follow-ups: session N — title*. Never merge a later session's PR before an ear
 | 1 | Steps land on their sample | merged | claude/fx-editor-followups-s1 | [#292](https://github.com/cjcormack/lighting7/pull/292) | 1da63241 |
 | 2 | Fixtures: the third element mode, and Over | merged | claude/fx-editor-followups-s2 | [#293](https://github.com/cjcormack/lighting7/pull/293) | c3b12b23 |
 | 3 | The graph: ruler, knobs, fixture rows and room for names | merged | claude/fx-editor-followups-s3 | [#294](https://github.com/cjcormack/lighting7/pull/294) | 729f62b1 |
-| 4 | The list's head: nothing selected and the subject | in review | claude/fx-editor-followups-s4 | | |
+| 4 | The list's head: nothing selected and the subject | merged | claude/fx-editor-followups-s4 | [#295](https://github.com/cjcormack/lighting7/pull/295) | dec701db |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
