@@ -28,6 +28,7 @@ vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: venue.isVenue
 
 import { ProgrammerSourceStrip } from './ProgrammerSourceStrip'
 import { resetShowIncludeForTests, setShowInclude } from '@/lib/showInclude'
+import { readProgrammerCommands } from './commandDoors'
 
 function Where() {
   const l = useLocation()
@@ -414,4 +415,51 @@ describe('ProgrammerSourceStrip', () => {
       expect(screen.queryByRole('button', { name: 'Back to Show' })).toBeNull()
     })
   })
+
+  describe('⌘K’s Update and Revert (programmer-toolbar plan D13)', () => {
+    const command = (id: string) => readProgrammerCommands().find((c) => c.id === id)
+
+    it('names the source and what has changed, and runs the box’s own handlers', () => {
+      summary = { ...summary, entryCount: 9, lastIncluded: CUE }
+      dirty = 2
+      stacks = [STACK]
+      const onUpdate = vi.fn()
+      const onRevert = vi.fn()
+      render(
+        <MemoryRouter>
+          <ProgrammerSourceStrip projectId={1} onUpdate={onUpdate} onRevert={onRevert} />
+        </MemoryRouter>,
+      )
+      expect(command('programmer.update')).toMatchObject({ label: 'Update Q4 Warm Wash', hint: '2 changes not written back', canAct: true })
+      expect(command('programmer.revert')).toMatchObject({ label: 'Revert to Q4 Warm Wash', canAct: true })
+      command('programmer.update')!.run!()
+      command('programmer.revert')!.run!()
+      expect(onUpdate).toHaveBeenCalledTimes(1)
+      expect(onRevert).toHaveBeenCalledTimes(1)
+    })
+
+    it('cannot act in sync, with nothing included, or — Update — in a venue', () => {
+      summary = { ...summary, entryCount: 9, lastIncluded: CUE }
+      dirty = 0
+      stacks = [STACK]
+      draw()
+      expect(command('programmer.update')?.canAct).toBe(false)
+      expect(command('programmer.revert')?.canAct).toBe(false)
+      cleanup()
+
+      summary = { ...summary, lastIncluded: null }
+      draw()
+      expect(command('programmer.update')?.canAct).toBe(false)
+      cleanup()
+
+      summary = { ...summary, lastIncluded: CUE }
+      dirty = 3
+      venue.isVenue = true
+      draw()
+      expect(command('programmer.update')?.canAct).toBe(false)
+      expect(command('programmer.revert')?.canAct).toBe(true)
+      venue.isVenue = false
+    })
+  })
 })
+

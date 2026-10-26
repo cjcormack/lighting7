@@ -52,6 +52,25 @@ export function paletteFits(template: PaletteSummary, fit: PaletteFit, context: 
 }
 
 /**
+ * What a selection is offered, split by its mask: the palettes that fit ([paletteFits]), those the
+ * mask keeps, and those it leaves out with the reason ([outsideMaskReason]). The picker's and ⌘K's
+ * *Apply a palette…* read this one split, so the two cannot offer different sets.
+ */
+export function splitByMask(
+  palettes: readonly PaletteSummary[],
+  mask: readonly AttributeFamily[] | null,
+): { inside: PaletteSummary[]; outside: { palette: PaletteSummary; reason: string }[] } {
+  const inside: PaletteSummary[] = []
+  const outside: { palette: PaletteSummary; reason: string }[] = []
+  for (const palette of palettes) {
+    const reason = outsideMaskReason(palette.family, mask)
+    if (reason == null) inside.push(palette)
+    else outside.push({ palette, reason })
+  }
+  return { inside, outside }
+}
+
+/**
  * The properties an effect palette's effect drives, or null where the context cannot say: Slot
  * Steps the setting it names, Palette Steps the properties its palettes' rows set, a library effect
  * the properties it is compatible with.

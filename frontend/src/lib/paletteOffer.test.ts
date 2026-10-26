@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PaletteSummary } from '@/api/palettesApi'
-import { outsideMaskReason, paletteFits } from './paletteOffer'
+import { outsideMaskReason, paletteFits, splitByMask } from './paletteOffer'
 import { recentFirst } from './paletteRecents'
 
 /**
@@ -75,6 +75,19 @@ describe('the mask', () => {
     expect(outsideMaskReason('COLOUR', ['POSITION'])).toBe('Colour — the selection is Position')
     expect(outsideMaskReason('COLOUR', ['COLOUR'])).toBeNull()
     expect(outsideMaskReason('COLOUR', null)).toBeNull()
+  })
+})
+
+describe('splitByMask', () => {
+  it('keeps what the mask covers, and gives the rest with the reason, in order', () => {
+    const red = palette({ id: 1, name: 'Red' })
+    const full = palette({ id: 2, name: 'Full', family: 'INTENSITY' })
+    const blue = palette({ id: 3, name: 'Blue' })
+    expect(splitByMask([red, full, blue], ['COLOUR'])).toEqual({
+      inside: [red, blue],
+      outside: [{ palette: full, reason: outsideMaskReason('INTENSITY', ['COLOUR']) }],
+    })
+    expect(splitByMask([red, full], null)).toEqual({ inside: [red, full], outside: [] })
   })
 })
 

@@ -100,6 +100,8 @@ import {
   ROW_C_VERB_WORD_CLASS,
 } from '../programmer/rowCFolds'
 import { ReleaseTargetsButton } from '../fixtureSheet/ReleaseTargetsButton'
+import { useReleaseTargets } from '../fixtureSheet/useRelease'
+import { useSelectionCommandDoors } from '../programmer/selectionCommandDoors'
 import type { ReleaseTarget } from '../fixtureSheet/useRelease'
 import { CellSelectionActions } from '../sheet/CellSelectionActions'
 import { SpreadPopover, spreadColumnsForTargets, type SpreadColumn } from './SpreadPopover'
@@ -109,6 +111,8 @@ import { GroupDetailModal } from '../fixtures/GroupDetailModal'
 import type { ColumnKey } from './columns'
 import { useDeskSelectionBridge } from './useDeskSelectionBridge'
 import { useDeskFollow } from '@/lib/deskFollow'
+import { setProgrammerTable } from '@/lib/programmerTables'
+import { usePressFamilies } from '@/store/selection'
 import type {
   CellBatch,
   CellCommit,
@@ -123,6 +127,7 @@ import type { LocateTarget } from '../../store/locate'
 import type { Fixture } from '../../store/fixtures'
 import type { CueTarget } from '../../api/cuesApi'
 import { useStableCallback } from '@/hooks/useStableCallback'
+import { toast } from 'sonner'
 import type { GroupSummary } from '../../api/groupsApi'
 
 const EMPTY_FIXTURES: Fixture[] = []
@@ -1111,6 +1116,56 @@ export function FixturesListContainer({
     setRetryRef.current = requestAnimationFrame(retry)
   }, [setPending, cellSelection.cells, openCellEditorAtButton])
 
+  // ⌘K's *Selection* group (programmer-toolbar plan D13): row C's verbs, run from the palette. The
+  // grid is hidden under the other tables, so the two that open on it bring Values back first.
+  const releaseSelectedHeads = useReleaseTargets(releaseTargets)
+  const commandFamilies = usePressFamilies(cellCount > 0 ? cellFamilies(cellSelection.cells) : null)
+  const releaseHeadCount = releaseTargets.reduce(
+    (n, t) => n + (t.type === 'group' ? (groups.find((g) => g.name === t.key)?.memberCount ?? 0) : 1),
+    0,
+  )
+  // Run against the selection as it is now, not as ⌘K read it: a request armed for cells or heads
+  // that have since gone would wait and open on whatever is selected next.
+  const runSetCommand = useStableCallback(() => {
+    if (cellCount === 0) {
+      toast.warning('The cells are no longer selected — nothing to set')
+      return
+    }
+    setProgrammerTable('values')
+    setSetPending(true)
+  })
+  const runFanCommand = useStableCallback(() => {
+    if (locateTargets.length === 0) {
+      toast.warning('Nothing is selected now — nothing to fan across')
+      return
+    }
+    setProgrammerTable('values')
+    setSpreadSeed((prev) => ({ open: true, key: (prev?.key ?? 0) + 1 }))
+  })
+  useSelectionCommandDoors(
+    isProgrammer
+      ? {
+          heads: paletteTargets.length,
+          cells: cellCount,
+          families: commandFamilies,
+          canSet: cellCount > 0 && keys.entry,
+          onSet: runSetCommand,
+          canFan: locateTargets.length > 0 && keys.entry,
+          onFan: runFanCommand,
+          canReleaseCells: cellCount > 0 && keys.clear,
+          onReleaseCells: clearSelectedCells,
+          releaseHeads: releaseHeadCount,
+          canReleaseHeads: releaseTargets.length > 0 && scope?.kind !== 'layer',
+          onReleaseHeads: () => void releaseSelectedHeads(),
+          onSubselect: listWrites.subselect,
+          onRemask: remaskDesk,
+          rigVerbs,
+          following: followingDesk,
+          onDeselect: clearByLadder,
+        }
+      : null,
+  )
+
   // The marquee has to be counted, or the editor's label line says "1 head" while the commit
   // writes six hundred. **One batch per marquee column**, keyed by column: a commit from a cell in
   // column X lands on column X's targets alone (`commitToCells` shape-filters the rest), so what an
@@ -1567,8 +1622,8 @@ export function FixturesListContainer({
           projectId={routeProjectId}
           desk
           scopeLabel={scopeLabel}
-          seed={cellCount > 0 ? spreadSeed : undefined}
-          onSeedConsumed={cellCount > 0 ? consumeSpreadSeed : undefined}
+          seed={cellCount > 0 || (spreadSeed != null && 'open' in spreadSeed) ? spreadSeed : undefined}
+          onSeedConsumed={consumeSpreadSeed}
           wordClass={ROW_C_VERB_WORD_CLASS}
         />
         {routeProjectId != null && <ProgrammerAddFxButton projectId={routeProjectId} wordClass={ROW_C_VERB_WORD_CLASS} />}
@@ -1581,10 +1636,7 @@ export function FixturesListContainer({
           cells={{
             count: cellCount,
             // What the whole-heads arm releases: a group row is every member, shown or not.
-            heads: releaseTargets.reduce(
-              (n, t) => n + (t.type === 'group' ? (groups.find((g) => g.name === t.key)?.memberCount ?? 0) : 1),
-              0,
-            ),
+            heads: releaseHeadCount,
             onRelease: clearSelectedCells,
             refused: keys.clear ? null : cellCopy.clearTitle,
             kbdClass: ROW_C_KBD_CLASS,

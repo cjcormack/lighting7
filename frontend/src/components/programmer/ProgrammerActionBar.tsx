@@ -36,6 +36,7 @@ import { useHeldSceneryCount } from './ProgrammerSceneryList'
 import { NewPaletteFromSelectionSheet } from './NewPaletteFromSelectionSheet'
 import { AddLookAndInclude } from './AddLook'
 import { useMarquee } from '@/components/fixtures-list/marqueeContext'
+import { useCommandDoor } from './commandDoors'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
 const FADE_OPTIONS = [
@@ -181,6 +182,85 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const includedStack =
     includedEntry?.stack ??
     (target?.kind === 'CUE' && target.cueStackId != null ? stacks?.find((s) => s.id === target.cueStackId) : undefined)
+
+  // ⌘K's *Programmer* group (programmer-toolbar plan D13): this row's verbs, each run as its control
+  // runs it, and each missing from ⌘K while its control would be disabled.
+  const contents = contentsOf(entryCount, sceneryCount, layerCount, programmerFxCount)
+  const over = fade > 0 ? `over ${fade / 1000}s` : 'snap'
+  const includedLabel = [includedCue?.number, includedCue?.name].filter(Boolean).join(' ')
+  useCommandDoor('record', () => [
+    {
+      id: 'programmer.record',
+      group: 'programmer',
+      label: 'Record…',
+      hint: contents,
+      keywords: ['record', 'save', 'cue', 'store'],
+      canAct: canRecord,
+      run: () => sheets.openRecord(),
+    },
+    {
+      id: 'programmer.recordIncluded',
+      group: 'programmer',
+      label: `Record into ${includedLabel || 'the included cue'}`,
+      hint: 'the cue you are editing',
+      keywords: ['record', 'merge', 'update', 'cue'],
+      canAct: canRecord && cueId != null,
+      run: () => {
+        if (cueId != null) sheets.openRecord({ targetCueId: cueId, targetCueName: includedCue?.name })
+      },
+    },
+    {
+      id: 'programmer.recordLook',
+      group: 'programmer',
+      label: 'Record a new Look…',
+      hint: contents,
+      keywords: ['record', 'look', 'save'],
+      canAct: canRecord,
+      run: sheets.openRecordLook,
+    },
+    {
+      id: 'programmer.newPalette',
+      group: 'programmer',
+      label: 'A new palette from the selection…',
+      hint: `${paletteTargets.length} head${paletteTargets.length === 1 ? '' : 's'}`,
+      keywords: ['palette', 'record', 'save', 'new'],
+      canAct: canNewPalette,
+      run: () => setNewPaletteOpen(true),
+    },
+  ])
+  useCommandDoor('clear', () => [
+    {
+      id: 'programmer.clear',
+      group: 'programmer',
+      label: 'Clear the programmer',
+      hint: `${contents} · ${over}`,
+      keywords: ['clear', 'release', 'empty', 'reset'],
+      canAct: hasSomethingToClear,
+      run: () => programmerClearAll(fade),
+    },
+  ])
+  useCommandDoor('blind', () => [
+    {
+      id: 'programmer.blind',
+      group: 'programmer',
+      label: blind ? 'Blind off' : 'Blind on',
+      hint: over,
+      keywords: ['blind', 'preview', 'hold'],
+      canAct: deskConnected,
+      run: () => programmerSetBlind(!blind, fade),
+    },
+  ])
+  useCommandDoor('fade', () =>
+    FADE_OPTIONS.map((option) => ({
+      id: `programmer.fade.${option.value}`,
+      group: 'programmer' as const,
+      label: `Programmer fade: ${option.label}`,
+      hint: `now ${FADE_OPTIONS.find((o) => o.value === fadeMs)?.label ?? `${fade / 1000}s`}`,
+      keywords: ['fade', 'time', 'programmer'],
+      canAct: option.value !== fadeMs,
+      run: () => setProgrammerFade(option.value),
+    })),
+  )
 
   return (
     <div className="flex shrink-0 items-center gap-2">
@@ -414,10 +494,17 @@ function MenuItem({
  * say it holds nothing.
  */
 export function recordMenuLabel(values: number, scenery: number, layers = 0): string {
-  const parts = [
-    values > 0 || (scenery === 0 && layers === 0) ? `${values} value${values === 1 ? '' : 's'}` : null,
-    layers > 0 ? `${layers} layer${layers === 1 ? '' : 's'}` : null,
-    scenery > 0 ? `${scenery} piece${scenery === 1 ? '' : 's'} of scenery` : null,
-  ].filter((p): p is string => p != null)
-  return `Write ${listOf(parts)} into`
+  return `Write ${contentsOf(values, scenery, layers)} into`
+}
+
+/** What the programmer holds, as Record's heading and ⌘K say it: *3 values and 1 layer*. */
+function contentsOf(values: number, scenery: number, layers: number, fx = 0): string {
+  return listOf(
+    [
+      values > 0 || (scenery === 0 && layers === 0 && fx === 0) ? `${values} value${values === 1 ? '' : 's'}` : null,
+      fx > 0 ? `${fx} FX` : null,
+      layers > 0 ? `${layers} layer${layers === 1 ? '' : 's'}` : null,
+      scenery > 0 ? `${scenery} piece${scenery === 1 ? '' : 's'} of scenery` : null,
+    ].filter((p): p is string => p != null),
+  )
 }

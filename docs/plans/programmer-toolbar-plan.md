@@ -114,8 +114,8 @@ each session deletes or rewrites a test file another suite imports from. A sessi
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Row C: three clusters, the heads chip, Set on rows, Release, no strip | merged | claude/amazing-wozniak-7r87f8 | [#283](https://github.com/cjcormack/lighting7/pull/283) | f11be5db |
-| 2 | + Look in row A, and FX on row C with Replace · Stack | in review | claude/programmer-toolbar-s2 | | |
-| 3 | ⌘K's Programmer and Selection groups | planned | | | |
+| 2 | + Look in row A, and FX on row C with Replace · Stack | merged | claude/programmer-toolbar-s2 | [#285](https://github.com/cjcormack/lighting7/pull/285) | 637d6ae0 |
+| 3 | ⌘K's Programmer and Selection groups | in review | claude/jolly-albattani-gi8f0u | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -239,6 +239,36 @@ the next; whoever merges the last fills its own.
 - **Docs:** `frontend/CLAUDE.md` has no ⌘K section: add a short one beside §"The programmer's
   keyboard" (the door registry, the two groups, the offers), and update the live editor paragraph's
   sentence on ⌘K's *On the selection* (`addFxDoor.ts`).
+- **What the code said, recorded at the session** (where this section was wrong or silent):
+  - *Each owner registers its own door.* "The programmer registers one handler per command" reads as
+    one place; the commands' state lives in six (row A, `AddLookAndInclude`, the source box,
+    `ProgrammerTables`, the scope band, the list's container), so each registers what it owns
+    (`commandDoors.ts`, `useCommandDoor`), read in `COMMAND_DOORS`' order. `addFxDoor.ts` is
+    deleted rather than kept beside it: `ProgrammerAddFxDoor` is the `fx` door, reading its offer
+    from the marquee store and the desk's selection without subscribing (`readProgrammerFxPair`).
+  - *The sub-pages' doors are renderless components.* *Add a Look…* and *Apply a palette…* press
+    through `usePress`, whose mutation hooks row A's + Look button cannot carry without every test of
+    row A gaining a store, so they are `ProgrammerLookDoor` and `ProgrammerPaletteDoor`, which the
+    tables' frame mounts beside `ProgrammerAddFxDoor`. A press from a sub-page closes ⌘K, as every
+    other ⌘K action does; the picker is still the way to audition several.
+  - *A multi-valued row is one command per value.* *Programmer fade (Snap · 0.5 s · …)*, *Show the …
+    table*, *Show Output / Local*, the subsets and *Mask (All · Intensity · …)* are an item each, the
+    one already chosen missing, since it cannot act. The steps read *Previous* and *Next*; Highlight
+    latches (*Stop highlighting*), as the phone's menu does, since a command cannot be held.
+  - *Set and Fan bring Values back.* The grid is hidden and inert under the other tables, so the two
+    commands that open on it switch the table first; Set goes through Set-on-rows' retry, and Fan
+    through a new `{open: true}` seed (`SpreadSeed`), so a Fan its trigger would refuse says the
+    trigger's reason instead of opening.
+  - *⌘K kept a highlight whose row had gone.* After a sub-page opened, cmdk highlighted nothing and
+    ⏎ ran nothing (found on the desk; jsdom's timing hid it), so the palette now holds the highlight
+    and moves it to a new page's first row once drawn — which fixes *Apply FX*'s sub-page too.
+  - *The picker's and Set's fit contexts named `templates`.* `FxFitContext` reads `palettes`, so
+    neither the picker nor Set's Effects band narrowed a Palette Steps palette by the cell's
+    attribute. Both pass `palettes` now, and the picker and *Apply a palette…* share the mask split
+    (`splitByMask`), so the three offer one set.
+  - *Add FX's hint names the heads and the mask, not Replace · Stack.* Whether a Local FX of the
+    family is on a selected head depends on the family, which is chosen in the picker; the picker
+    asks there.
 
 ## 6. Migration
 
@@ -314,4 +344,17 @@ change might fire, per CLAUDE.md.
   | 852 × 393 | 612 | 579 | 600 | iconic, cells only (short) |
   | 390 × 844 | 390 | 358 | 349 | phone |
   | 360 × 780 | 360 | 358 | 349 | phone |
-- **Session 3:** every command in both groups does what its row says, from ⌘K, on the desk.
+- **Session 3:** every command in both groups does what its row says, from ⌘K, on the desk. Checked
+  2026-10-25 in Chromium (Playwright, 1440 × 900) on a desk with 4 hexes and two palettes, through
+  the working tree's dev server: with nothing selected the groups offered Programmer's verbs and the
+  follow toggle alone; over four rows every Selection command was listed with *4 heads*; *Apply a
+  palette…* listed both palettes, ⏎ pressed Amber wash as a layer and the next open said *on*;
+  *Record a new Look…*, *Record…* (into a new stack), *A new palette from the selection…* and
+  *Include…* opened their sheets; *Clear* emptied the programmer and left ⌘K without it; *Add a
+  Look…* pressed the recorded Look and lit it; Odd narrowed four heads to two; *Mask: Colour* set the
+  pill and the mask rows then said *now Colour*; Fan opened its panel; *Add FX…* opened the picker on
+  4 heads; over a two-cell marquee *Set* opened the Dimmer editor, from the FX table too, landing back
+  on `?table=values`; *Show Output* pressed the pill and Set left ⌘K there; Blind went on and off at
+  the fade ⌘K had set; Locate, Highlight, *Set locate from current*, Release, the follow toggle both
+  ways and Deselect did as row C's controls do; with a recorded cue included and one change made,
+  *Update 1 Cue 1* opened Update and *Revert* cleared and included it again.

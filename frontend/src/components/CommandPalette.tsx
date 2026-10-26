@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react"
 import { useLocation, useNavigate } from "react-router"
 import { Command } from "cmdk"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
@@ -30,7 +30,12 @@ import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { PressPair } from "@/hooks/usePress"
 import { fxTargetOf, useWindowFxPair } from "@/components/fx/selectionFxTarget"
-import { openAddFxDoor } from "@/components/programmer/addFxDoor"
+import {
+  readProgrammerCommands,
+  runProgrammerCommand,
+  type CommandPage,
+  type ProgrammerCommand,
+} from "@/components/programmer/commandDoors"
 import { useGetParkStateListQuery } from "@/store/park"
 import { useGetChannelMappingListQuery } from "@/store/channelMapping"
 import type { ProjectSummary } from "@/api/projectApi"
@@ -166,6 +171,10 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const [createKind, setCreateKind] = useState<"SHOW" | "VENUE">("SHOW")
   const [importOpen, setImportOpen] = useState(false)
   const [search, setSearch] = useState("")
+  // The highlighted row, held here so a page change can move it: cmdk keeps a value whose row has
+  // gone, and ⏎ on a fresh page would then run nothing.
+  const [highlighted, setHighlighted] = useState("")
+  const listRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { data: projects } = useProjectListQuery(undefined, closed)
   const { data: fixtures } = useVisibleFixtureListQuery(closed)
@@ -174,7 +183,8 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   // One effect over this window's selection, in its order (effects plan D3) — the programmer's rows
   // on the programmer, the desk's or the busk view's own elsewhere.
   const { pathname } = useLocation()
-  const windowPair = useWindowFxPair(pathname.includes("/programmer"))
+  const onProgrammer = pathname.includes("/programmer")
+  const windowPair = useWindowFxPair(onProgrammer)
   const selectionTarget = useMemo(
     () => fxTargetOf(windowPair.targets, fixtures, groups),
     [windowPair.targets, fixtures, groups],
@@ -224,18 +234,16 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
 
   const activePage = pages[pages.length - 1] ?? "root"
 
-  // Cmd+K / Ctrl+K to open
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        setOpen((o) => !o)
-        setEverOpened(true)
-      }
-    }
-    document.addEventListener("keydown", handler)
-    return () => document.removeEventListener("keydown", handler)
-  }, [])
+  // The programmer's doors (programmer-toolbar plan D13), read once as the palette opens and never
+  // subscribed: a door's offer says what it would act on now, and the palette is closed by the time
+  // anything it runs has moved the selection.
+  const [programmerCommands, setProgrammerCommands] = useState<readonly ProgrammerCommand[]>([])
+  const [programmerPage, setProgrammerPage] = useState<CommandPage | null>(null)
+  useLayoutEffect(() => {
+    if (open) setProgrammerCommands(onProgrammer ? readProgrammerCommands().filter((c) => c.canAct) : [])
+  }, [open, onProgrammer])
+  // ⌥⏎ or an ⌥-click on a sub-page's row is *Apply as values*; cmdk's `onSelect` carries no event.
+  const altPressRef = useRef(false)
 
   // Reset state when dialog closes
   const handleOpenChange = useCallback((next: boolean) => {
@@ -244,8 +252,31 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
     if (!next) {
       setPages([])
       setSearch("")
+      setHighlighted("")
     }
   }, [])
+
+  // A new page highlights its first row once it has drawn.
+  useEffect(() => {
+    if (!open) return
+    const first = listRef.current?.querySelector('[cmdk-item]:not([data-disabled="true"])')
+    setHighlighted(first?.getAttribute("data-value") ?? "")
+  }, [open, activePage])
+
+  // Cmd+K / Ctrl+K toggles it, through the same reset as Escape: a page left open would come back
+  // with its offer as it stood then.
+  const openRef = useRef(open)
+  openRef.current = open
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        handleOpenChange(!openRef.current)
+      }
+    }
+    document.addEventListener("keydown", handler)
+    return () => document.removeEventListener("keydown", handler)
+  }, [handleOpenChange])
 
   const runAction = (fn: () => void) => {
     handleOpenChange(false)
@@ -255,11 +286,25 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const pushPage = (page: string) => {
     setPages((p) => [...p, page])
     setSearch("")
+    setHighlighted("")
   }
 
   const popPage = () => {
     setPages((p) => p.slice(0, -1))
     setSearch("")
+    setHighlighted("")
+  }
+
+  const emptyProgrammerPage =
+    activePage === "programmer-page" && programmerPage != null && programmerPage.sections.every((section) => section.items.length === 0)
+
+  const runProgrammer = (command: ProgrammerCommand) => {
+    if (command.page != null) {
+      setProgrammerPage(command.page())
+      pushPage("programmer-page")
+    } else if (command.run != null) {
+      runAction(command.run)
+    }
   }
 
   return (
@@ -269,6 +314,12 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
       onOpenChange={handleOpenChange}
       label="Command palette"
       filter={commandFilter}
+      value={highlighted}
+      onValueChange={setHighlighted}
+      // Every ⏎ reaches the root, wherever the focus is — the list's, after a click.
+      onKeyDown={(e) => {
+        if (e.key === "Enter") altPressRef.current = e.altKey
+      }}
       loop
       overlayClassName="fixed inset-0 z-50 bg-black/50"
       contentClassName="fixed top-[20%] left-1/2 z-50 w-full max-w-lg -translate-x-1/2 rounded-lg border bg-background shadow-lg"
@@ -285,6 +336,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
           placeholder={
             activePage === "apply-fx" ? "Select a fixture or group..."
             : activePage === "parked-channel" ? "Jump to a parked channel..."
+            : activePage === "programmer-page" ? `${programmerPage?.title ?? "Search"}…`
             : "Type a command or search..."
           }
           value={search}
@@ -299,13 +351,20 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
         />
       </div>
 
-      <Command.List className="max-h-72 overflow-y-auto p-1">
-        <Command.Empty className="py-6 text-center text-sm text-muted-foreground">
-          No results found.
-        </Command.Empty>
+      <Command.List ref={listRef} className="max-h-72 overflow-y-auto p-1">
+        {/* A door's sub-page with nothing to list says its own empty line instead. */}
+        {!emptyProgrammerPage && (
+          <Command.Empty className="py-6 text-center text-sm text-muted-foreground">
+            No results found.
+          </Command.Empty>
+        )}
 
         {activePage === "root" && (
           <>
+            {/* The programmer's own two groups, first on its route (programmer-toolbar plan D13). */}
+            <ProgrammerCommandGroup heading="Programmer" icon={SlidersHorizontal} commands={programmerCommands.filter((c) => c.group === "programmer")} onRun={runProgrammer} />
+            <ProgrammerCommandGroup heading="Selection" icon={ListOrdered} commands={programmerCommands.filter((c) => c.group === "selection")} onRun={runProgrammer} />
+
             {/* Navigation */}
             {viewedProject && (
               <Command.Group heading="Navigation" className={groupClassName}>
@@ -623,7 +682,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   value={`On the selection ${selectionLabel}`}
                   keywords={["selection", "selected", "marquee"]}
                   onSelect={() => {
-                    if (onApplyFx) runAction(() => openAddFxDoor() || onApplyFx(windowPair))
+                    if (onApplyFx) runAction(() => runProgrammerCommand("selection.addFx") || onApplyFx(windowPair))
                   }}
                   className={itemClassName}
                 >
@@ -658,6 +717,47 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   />
                 ))}
               </Command.Group>
+            )}
+          </>
+        )}
+
+        {/* A programmer door's sub-page — *Add a Look…*, *Apply a palette…* — as it stood when opened. */}
+        {activePage === "programmer-page" && programmerPage != null && (
+          <>
+            {emptyProgrammerPage && (
+              <p className="py-6 text-center text-sm text-muted-foreground">{programmerPage.empty}</p>
+            )}
+            {programmerPage.sections.map((section) =>
+              section.items.length === 0 ? null : (
+                <Command.Group
+                  key={section.heading}
+                  heading={section.note ? `${section.heading} · ${section.note}` : section.heading}
+                  className={groupClassName}
+                >
+                  {section.items.map((item) => (
+                    <Command.Item
+                      key={item.id}
+                      value={`${item.label} ${item.id}`}
+                      keywords={[item.label]}
+                      onPointerDown={(e) => {
+                        altPressRef.current = e.altKey
+                      }}
+                      onSelect={() => runAction(() => item.press(altPressRef.current))}
+                      className={cn(itemClassName, item.dimmed != null && "text-muted-foreground")}
+                      data-command-page-item={item.id}
+                    >
+                      <span
+                        className="size-3 shrink-0 rounded-full border"
+                        style={item.swatch != null ? { backgroundColor: item.swatch } : undefined}
+                      />
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {(item.dimmed ?? item.hint) && (
+                        <span className="max-w-[55%] truncate text-xs text-muted-foreground">{item.dimmed ?? item.hint}</span>
+                      )}
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              ),
             )}
           </>
         )}
@@ -701,14 +801,17 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
         <span>
           <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">↑↓</kbd> navigate
         </span>
-        <span>
-          <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">↵</kbd> select
-        </span>
+        {activePage !== "programmer-page" && (
+          <span>
+            <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">↵</kbd> select
+          </span>
+        )}
         {activePage !== "root" && (
           <span>
             <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">⌫</kbd> back
           </span>
         )}
+        {activePage === "programmer-page" && programmerPage != null && <span className="ml-auto">{programmerPage.footer}</span>}
         <span>
           <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">esc</kbd> close
         </span>
@@ -725,6 +828,45 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
     <ImportProjectDialog open={importOpen} setOpen={setImportOpen} />
     {viewedDialogs}
     </>
+  )
+}
+
+/**
+ * One of the programmer's groups: each command its door offered as able to act, its hint naming
+ * what it acts on, and the grid key that does the same.
+ */
+function ProgrammerCommandGroup({
+  heading,
+  icon: Icon,
+  commands,
+  onRun,
+}: {
+  heading: string
+  icon: LucideIcon
+  commands: readonly ProgrammerCommand[]
+  onRun: (command: ProgrammerCommand) => void
+}) {
+  if (commands.length === 0) return null
+  return (
+    <Command.Group heading={heading} className={groupClassName}>
+      {commands.map((command) => (
+        <Command.Item
+          key={command.id}
+          value={command.label}
+          keywords={[heading, ...(command.hint != null ? [command.hint] : []), ...(command.keywords ?? [])]}
+          onSelect={() => onRun(command)}
+          className={itemClassName}
+          data-programmer-command={command.id}
+        >
+          <Icon className="size-4 text-muted-foreground" />
+          <span className="flex-1 truncate">{command.label}</span>
+          {command.hint && <span className="max-w-[45%] truncate text-xs text-muted-foreground">{command.hint}</span>}
+          {command.kbd && (
+            <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">{command.kbd}</kbd>
+          )}
+        </Command.Item>
+      ))}
+    </Command.Group>
   )
 }
 

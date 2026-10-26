@@ -15,6 +15,7 @@ import type { LookSaveState } from './LookRowStore'
 const state = {
   scope: { kind: 'layer', layerId: 7 } as ProgrammerScope,
   save: 'clean' as LookSaveState,
+  setScope: vi.fn(),
 }
 const LAYER: ProgrammerLayer = {
   layerId: 7,
@@ -35,10 +36,11 @@ vi.mock('./FocusedPaletteLayer', () => ({ useFocusedPaletteLayer: () => null }))
 vi.mock('./useLocalFamilyCounts', () => ({ useLocalValueCount: () => 0 }))
 vi.mock('./ProgrammerScope', () => ({
   useProgrammerScope: () => state.scope,
-  useProgrammerScopeActions: () => ({ setScope: () => {} }),
+  useProgrammerScopeActions: () => ({ setScope: state.setScope }),
 }))
 
 const { ProgrammerScopeBand } = await import('./ProgrammerScopeBand')
+const { readProgrammerCommands } = await import('./commandDoors')
 
 afterEach(() => {
   cleanup()
@@ -114,3 +116,23 @@ describe('ProgrammerScopeBand — the phone arm', () => {
     expect(pill.querySelector('span[aria-hidden]')).toBeNull()
   })
 })
+
+describe('⌘K’s Show Output and Show Local (programmer-toolbar plan D13)', () => {
+  const command = (id: string) => readProgrammerCommands().find((c) => c.id === id)
+
+  it('offers the pill not on, and presses it', () => {
+    state.scope = { kind: 'local' }
+    render(<ProgrammerScopeBand />)
+    expect(command('programmer.scope.local')?.canAct).toBe(false)
+    expect(command('programmer.scope.output')?.canAct).toBe(true)
+    command('programmer.scope.output')!.run!()
+    expect(state.setScope).toHaveBeenCalledWith({ kind: 'output' })
+  })
+
+  it('offers both from a focused layer', () => {
+    render(<ProgrammerScopeBand />)
+    expect(command('programmer.scope.local')).toMatchObject({ canAct: true, hint: '0 values you set' })
+    expect(command('programmer.scope.output')?.canAct).toBe(true)
+  })
+})
+

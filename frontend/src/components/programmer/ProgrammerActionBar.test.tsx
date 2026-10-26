@@ -57,6 +57,7 @@ vi.mock('./NewPaletteFromSelectionSheet', () => ({
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
 import { ProgrammerActionBar, clearSentence, recordMenuLabel } from './ProgrammerActionBar'
 import { createMarqueeStore, MarqueeStoreContext, type MarqueeSnapshot } from '@/components/fixtures-list/marqueeContext'
+import { readProgrammerCommands } from './commandDoors'
 
 /**
  * Radix's DropdownMenuTrigger opens on `pointerdown`, not `click` — so `fireEvent.click` alone
@@ -371,5 +372,77 @@ describe('ProgrammerActionBar', () => {
       expect(screen.getByText('A new palette').closest('[role="menuitem"]')).toHaveAttribute('data-disabled')
     })
   })
-})
 
+  describe('⌘K’s Programmer group (programmer-toolbar plan D13)', () => {
+    const command = (id: string) => readProgrammerCommands().find((c) => c.id === id)
+
+    it('offers Record, Clear, Blind and the fade, each saying what it acts on, and runs them as the row does', () => {
+      summary = { blind: false, entryCount: 3, lastIncluded: CUE }
+      layers = [{}]
+      act(() => setProgrammerFade('1000'))
+      render(<ProgrammerActionBar projectId={1} />)
+      expect(command('programmer.record')).toMatchObject({ label: 'Record…', hint: '3 values and 1 layer', canAct: true })
+      expect(command('programmer.recordIncluded')).toMatchObject({ label: 'Record into Q4 Warm Wash', canAct: true })
+      expect(command('programmer.recordLook')?.canAct).toBe(true)
+      expect(command('programmer.clear')).toMatchObject({ hint: '3 values and 1 layer · over 1s', canAct: true })
+      expect(command('programmer.blind')).toMatchObject({ label: 'Blind on', hint: 'over 1s', canAct: true })
+      expect(
+        readProgrammerCommands()
+          .filter((c) => c.id.startsWith('programmer.fade.'))
+          .map((c) => [c.label, c.canAct]),
+      ).toEqual([
+        ['Programmer fade: Snap', true],
+        ['Programmer fade: 0.5s', true],
+        ['Programmer fade: 1s', false],
+        ['Programmer fade: 2s', true],
+        ['Programmer fade: 3s', true],
+      ])
+
+      command('programmer.recordIncluded')!.run!()
+      expect(sheets.openRecord).toHaveBeenLastCalledWith({ targetCueId: 5, targetCueName: 'Warm Wash' })
+      command('programmer.clear')!.run!()
+      expect(programmerClearAll).toHaveBeenCalledWith(1000)
+      command('programmer.blind')!.run!()
+      expect(programmerSetBlind).toHaveBeenCalledWith(true, 1000)
+      act(() => command('programmer.fade.2000')!.run!())
+      expect(screen.getByRole('combobox', { name: 'Fade time' })).toHaveTextContent('2s')
+    })
+
+    it('counts the programmer’s FX in what Clear and Record act on', () => {
+      effects = [{ programmerOwned: true }, { programmerOwned: true }, { programmerOwned: false }]
+      render(<ProgrammerActionBar projectId={1} />)
+      expect(command('programmer.clear')).toMatchObject({ hint: '2 FX · snap', canAct: true })
+      expect(command('programmer.record')?.hint).toBe('2 FX')
+    })
+
+    it('says Blind off while blind, and cannot act while the desk is offline', () => {
+      summary = { blind: true, entryCount: 0, lastIncluded: null }
+      desk.connected = false
+      render(<ProgrammerActionBar projectId={1} />)
+      expect(command('programmer.blind')).toMatchObject({ label: 'Blind off', canAct: false })
+    })
+
+    it('cannot Record, Clear or Record into a cue on an empty programmer', () => {
+      render(<ProgrammerActionBar projectId={1} />)
+      for (const id of ['programmer.record', 'programmer.recordIncluded', 'programmer.recordLook', 'programmer.clear', 'programmer.newPalette']) {
+        expect(command(id)?.canAct, id).toBe(false)
+      }
+      expect(command('programmer.include')).toMatchObject({ canAct: true })
+      command('programmer.include')!.run!()
+      expect(sheets.openInclude).toHaveBeenCalledTimes(1)
+    })
+
+    it('opens A new palette from the selection’s heads', () => {
+      const store = createMarqueeStore()
+      store.set({ press: { targets: [{ type: 'fixture', key: 'a' }], askedFamilies: null, targetFamilies: [], targetEmitters: [] } })
+      render(
+        <MarqueeStoreContext.Provider value={store}>
+          <ProgrammerActionBar projectId={1} />
+        </MarqueeStoreContext.Provider>,
+      )
+      expect(command('programmer.newPalette')).toMatchObject({ hint: '1 head', canAct: true })
+      act(() => command('programmer.newPalette')!.run!())
+      expect(newPalette.last?.open).toBe(true)
+    })
+  })
+})

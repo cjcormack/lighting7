@@ -115,6 +115,7 @@ vi.mock('./useDeskSelectionBridge', () => ({ useDeskSelectionBridge: () => {} })
 vi.mock('@/store/selection', () => ({
   usePressFamilies: (local: unknown) => local,
   useDeskSelectionSnapshot: () => ({ targets: [], families: null, source: null }),
+  unlinkFromDeskNow: () => {},
 }))
 // The plain lists draw the kit's selection bar as their row C (CLAUDE.md §List shell), and it asks
 // the viewport's height; jsdom has no `matchMedia`, and a desk is tall.
@@ -148,7 +149,9 @@ vi.mock('../sheet/CellSelectionActions', () => ({
 }))
 vi.mock('./SpreadPopover', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./SpreadPopover')>()),
-  SpreadPopover: () => <span data-testid="row-spread" />,
+  SpreadPopover: ({ seed }: { seed?: { key: number } | null }) => (
+    <span data-testid="row-spread" data-seed={seed == null ? '' : JSON.stringify(seed)} />
+  ),
 }))
 // Row C's FX reads the window's pair and opens the picker; `ProgrammerAddFx.test.tsx` has it.
 vi.mock('../programmer/ProgrammerAddFxButton', () => ({
@@ -239,6 +242,8 @@ vi.mock('./FixturesTable', () => ({
 
 const { FixturesListContainer } = await import('./FixturesListContainer')
 import { createMarqueeStore, MarqueeStoreContext, type MarqueeStore } from './marqueeContext'
+import { readProgrammerCommands } from '../programmer/commandDoors'
+import { getProgrammerTable, resetProgrammerTableStore, setProgrammerTable } from '@/lib/programmerTables'
 
 /** The programmer's row C, drawn bare: its two right-hand clusters, in order. */
 const programmerToolbar = (parts: { actions: ReactNode; selection: ReactNode }) => (
@@ -266,6 +271,7 @@ beforeEach(() => {
   table.keyboardOpens = []
   table.revealCell = null
   include.request = { nonce: 0, fixtureKeys: [], groupKeys: [] }
+  resetProgrammerTableStore()
 })
 afterEach(cleanup)
 
@@ -823,6 +829,62 @@ describe('row C on the programmer (programmer-toolbar plan D3, D6, D7)', () => {
     const set = screen.getByRole('button', { name: 'Set an attribute on the 1 head' })
     expect(set).toBeDisabled()
     expect(set.getAttribute('title')).toMatch(/Output is a read/)
+  })
+})
+
+describe('⌘K’s Selection group from the programmer’s list (programmer-toolbar plan D13)', () => {
+  const command = (id: string) => readProgrammerCommands().find((c) => c.id === id)
+
+  it('opens Set on the marquee from another table, bringing Values back first', () => {
+    render(
+      <>
+        <div data-row-id="fixture:a" />
+        <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />
+      </>,
+    )
+    fireEvent.click(screen.getByTestId('cell'))
+    act(() => setProgrammerTable('fx'))
+    expect(command('selection.set')).toMatchObject({ hint: '1 cell', canAct: true })
+    act(() => command('selection.set')!.run!())
+    expect(getProgrammerTable()).toBe('values')
+    expect(table.keyboardOpens.at(-1)).toMatchObject({ atButton: true })
+  })
+
+  it('opens Fan on the selection as its trigger would', () => {
+    rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />)
+    expect(command('selection.fan')).toMatchObject({ hint: '2 heads', canAct: true })
+    act(() => command('selection.fan')!.run!())
+    expect(screen.getByTestId('row-spread').dataset.seed).toContain('"open":true')
+  })
+
+  it('releases the whole heads as Release’s face does', async () => {
+    rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />)
+    expect(command('selection.releaseHeads')).toMatchObject({ hint: '2 heads · values and Local FX', canAct: true })
+    act(() => command('selection.releaseHeads')!.run!())
+    await vi.waitFor(() => expect(releaseFrames.calls).toHaveLength(2))
+  })
+
+  it('runs Set and Fan against the selection as it is when run, not as ⌘K read it', () => {
+    rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
+    const props = { projectId: 1, grouped: false, selectionScope: 'programmer' as const, showOwnership: true, renderToolbar: programmerToolbar }
+    const { rerender } = render(<FixturesListContainer {...props} />)
+    const fan = command('selection.fan')!
+    rowSelection.ids = new Set()
+    rerender(<FixturesListContainer {...props} />)
+    act(() => fan.run!())
+    expect(screen.queryByTestId('row-spread')).toBeNull()
+    rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
+    rerender(<FixturesListContainer {...props} />)
+    // Nothing was left armed for the next selection.
+    expect(screen.getByTestId('row-spread').dataset.seed).toBe('')
+  })
+
+  it('registers nothing on the plain lists', () => {
+    rowSelection.ids = new Set(['fixture:a'])
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+    expect(readProgrammerCommands().filter((c) => c.group === 'selection')).toEqual([])
   })
 })
 

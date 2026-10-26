@@ -5,10 +5,12 @@ import type { GroupSummary } from '@/api/groupsApi'
 import type { Fixture } from '@/store/fixtures'
 import { useDeskSelection, usePressFamilies } from '@/store/selection'
 import { selectRowTargets } from '@/store/selectionSlice'
-import { useDeskFollow, useLocalSelection } from '@/lib/deskFollow'
+import { isFollowingDesk, useDeskFollow, useLocalSelection } from '@/lib/deskFollow'
+import { normaliseFamilies } from '@/lib/selectionMask'
+import { lightingApi } from '@/api/lightingApi'
 import { fxTargetLabel, selectionFixtures } from '@/lib/fxTargets'
 import { headAsFixture } from '@/components/fixtureSheet/sheetPick'
-import { useMarquee } from '@/components/fixtures-list/marqueeContext'
+import { useMarquee, type MarqueeSnapshot } from '@/components/fixtures-list/marqueeContext'
 import type { PressPair } from '@/hooks/usePress'
 import type { FxTarget } from './FxPicker'
 
@@ -80,4 +82,17 @@ export function useWindowFxPair(onProgrammer: boolean): PressPair {
   const marquee = useMarquee()
   const families = usePressFamilies(onProgrammer ? (marquee?.press.askedFamilies ?? null) : local.families)
   return useMemo(() => ({ targets, families }), [targets, families])
+}
+
+/**
+ * The programmer's [useWindowFxPair] read once, subscribing to nothing — for ⌘K's door, which asks
+ * only when the palette opens, to say what it would act on. Unlinked it reads the marquee's heads,
+ * a group row as its members: what to count and the mask, never a press's targets.
+ */
+export function readProgrammerFxPair(marquee: MarqueeSnapshot | null): PressPair {
+  if (isFollowingDesk()) {
+    const desk = lightingApi.selection.getState()
+    return { targets: desk?.targets ?? [], families: desk?.families ?? null }
+  }
+  return { targets: marquee?.press.targets ?? [], families: normaliseFamilies(marquee?.press.askedFamilies ?? null) }
 }

@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, type RefObject } from 'react'
 import { toast } from 'sonner'
 import { ApplyPicker } from '@/components/press/ApplyPicker'
-import { useWindowFxPair } from '@/components/fx/selectionFxTarget'
+import { readProgrammerFxPair, useWindowFxPair } from '@/components/fx/selectionFxTarget'
+import { MarqueeStoreContext } from '@/components/fixtures-list/marqueeContext'
 import { useWindowPaletteFit, type PressPair } from '@/hooks/usePress'
-import { useLookRowStore } from './LookRowStore'
-import { useProgrammerScope } from './ProgrammerScope'
+import { formatFamilyList } from '@/lib/attributeFamily'
+import { useLookRowStore, type LookRowStoreValue } from './LookRowStore'
+import { useProgrammerScope, type ProgrammerScope } from './ProgrammerScope'
 import { useOpenInFxEditor } from '@/components/fxEditor/openInFxEditor'
-import { registerAddFxDoor } from './addFxDoor'
+import { countOf, useCommandDoor } from './commandDoors'
 
 /** What `+ Effect` can do right now, and why not when it cannot. */
 export interface AddFxOffer {
@@ -43,17 +45,20 @@ export interface AddFxOffer {
 export function useProgrammerAddFx(): AddFxOffer {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
+  // The selection is the operator's own answer to "which heads?", in the grid's order: one row is
+  // that fixture, cell or group alone, several are one effect spread over them in that order, as a
+  // group's members are (effects plan D3).
+  const pair = useWindowFxPair(true)
+  return addFxOffer(scope, store, pair)
+}
 
+/** [useProgrammerAddFx]'s answer for a scope, the focused Look's row store and a pair. */
+export function addFxOffer(scope: ProgrammerScope | null, store: LookRowStoreValue | null, pair: PressPair): AddFxOffer {
   // A **template layer takes no effect from here**: a palette holds one thing, fixed at creation
   // (fx-templates D1), and adding a *first* effect to a value palette would flip what it holds,
   // which is its identity. A focused template layer has no `LookRowStore` either, so without this
   // the button would offer to absorb an effect into nothing at all.
   const paletteFocused = scope?.kind === 'layer' && store == null
-
-  // The selection is the operator's own answer to "which heads?", in the grid's order: one row is
-  // that fixture, cell or group alone, several are one effect spread over them in that order, as a
-  // group's members are (effects plan D3).
-  const pair = useWindowFxPair(true)
 
   const reason =
     scope == null || scope.kind === 'output'
@@ -137,13 +142,37 @@ function AddFxPicker({
 }
 
 /**
- * ⌘K's *Apply FX → On the selection* on the programmer (`addFxDoor.ts`): *+ Effect*, whichever
- * table is showing. Mounted by the tables' frame for the page's life, it holds **no** selection
- * subscription until the door is asked — the offer is read then, and a refusal is said as a toast.
+ * ⌘K's *Add FX on the selection…* on the programmer (`commandDoors.ts`), and *Apply FX → On the
+ * selection*: *+ FX*, whichever table is showing. Mounted by the tables' frame for the page's life,
+ * it holds **no** selection subscription: the offer is read when ⌘K opens, the picker's own once
+ * asked, and a refusal is said as a toast.
  */
 export function ProgrammerAddFxDoor({ projectId }: { projectId: number }) {
   const [asked, setAsked] = useState(0)
-  useEffect(() => registerAddFxDoor(() => setAsked((n) => n + 1)), [])
+  const scope = useProgrammerScope()
+  const lookStore = useLookRowStore()
+  const marquee = useContext(MarqueeStoreContext)
+  useCommandDoor('fx', () => {
+    const offer = addFxOffer(scope, lookStore, readProgrammerFxPair(marquee?.get() ?? null))
+    const heads = countOf(offer.pair.targets.length, 'head')
+    const families = offer.pair.families
+    return [
+      {
+        id: 'selection.addFx',
+        group: 'selection',
+        label: 'Add FX on the selection…',
+        hint:
+          scope?.kind === 'layer'
+            ? `${heads} · into ${lookStore?.lookName ?? 'the Look'}`
+            : families != null && families.length > 0
+              ? `${heads} · ${formatFamilyList(families, ' · ')}`
+              : heads,
+        keywords: ['effect', 'fx', 'apply', 'start'],
+        canAct: !offer.disabled,
+        run: () => setAsked((n) => n + 1),
+      },
+    ]
+  })
   const done = useCallback(() => setAsked(0), [])
   return asked === 0 ? null : <AskedAddFx key={asked} projectId={projectId} onDone={done} />
 }

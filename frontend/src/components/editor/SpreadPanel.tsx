@@ -112,8 +112,11 @@ import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type Positi
  * write as it is edited (until Live is on), so there is a press to stand in for.
  */
 
-/** A hand-over into the panel: the Colour editor's colour as *From*, or the position cell's *Fan…* opening About each position. */
-export type SpreadSeed = ColourSpreadSeed | FanSpreadSeed
+/**
+ * A hand-over into the panel: the Colour editor's colour as *From*, the position cell's *Fan…*
+ * opening About each position, or ⌘K's *Fan across the selection…* opening it as its trigger would.
+ */
+export type SpreadSeed = ColourSpreadSeed | FanSpreadSeed | OpenSpreadSeed
 
 /** The Colour editor's *Fan…*: its colour as *From*. */
 export interface ColourSpreadSeed {
@@ -131,6 +134,12 @@ export interface ColourSpreadSeed {
 /** The position cell's *Fan…*: the panel on Position, About each position, at no fan, over where the heads are. */
 export interface FanSpreadSeed {
   fan: true
+  key: number
+}
+
+/** ⌘K's *Fan across the selection…*: the popover, opened as its trigger opens it, or the trigger's refusal said. */
+export interface OpenSpreadSeed {
+  open: true
   key: number
 }
 
@@ -798,7 +807,7 @@ export function SpreadPanel({
   // The colour editor's hand-over: Colour, From set to its colour, the knob seeded to it, applied
   // once per seed and then dropped by the host. In the popover host it opens the panel.
   useEffect(() => {
-    if (seed == null) return
+    if (seed == null || 'open' in seed) return
     if ('fan' in seed) {
       // The position cell's *Spread…*: Position, Fan, no fan yet — a fan starts where the heads are.
       if (intentPlan == null || (headFamilies.length > 0 && !headFamilies.includes('POSITION'))) {
@@ -970,6 +979,15 @@ export function SpreadPanel({
       : !canSpread
         ? `Fan needs two or more cells in a column it can drive — ${drivableHint}`
         : 'Fan first→last across the selected cells')
+
+  useEffect(() => {
+    if (seed == null || !('open' in seed)) return
+    if (host === 'popover') {
+      if (canSpread) setIsOpen(true)
+      else toast.warning(title)
+    }
+    onSeedConsumed?.()
+  }, [seed, onSeedConsumed, host, canSpread, title])
 
   // ── The controls ────────────────────────────────────────────────────────────────────────────
   const editorKind = spreadEditorKind(form.attribute)
