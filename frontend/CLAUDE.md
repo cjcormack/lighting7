@@ -5222,7 +5222,7 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   folded lanes and the graph's toolbar (`programmer.fx.graph`). Solo is a mark on the card: the graph
   draws it (D14), the stage never changes.
   `ProgrammerFxTab` is the tab's host and draws *Selection · All* after the table tabs on row B.
-  *All*'s row press and *Select the heads of a running FX…* select through
+  *All*'s row press and a running FX's card with nothing selected select through
   `fixtures-list/programmerSelectRequest.ts`: `setDeskSelection` while following, the desk's mask
   kept, else Include's request (`store/includeSelection.ts`), which opens the group or fixture a head
   sits in and clears the filter — a group sent as its row and its members, since a flat list has no
@@ -5245,10 +5245,28 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   type's own (`newFxDirection`; the sweeps bounce by default). A layer's card has pause and no ×,
   as the busk FX tab's pad FX has none: stopping the instance alone, the layer respawns it on
   its next recook, so the layer is what lets it go.
-- **The subject line is row C's**: the family pill (`SelectionMaskPill`) writes through the
-  programmer list's desk bridge, which the grid's toolbar publishes in `fixtures-list/remaskStore.ts`
-  (`ProgrammerPage` provides it), so a marquee whose columns no longer say the mask drops to its
-  rows as it does from row C; on a window with its own selection the pill is a read-out.
+- **Nothing selected** (follow-ups D1, `fxEditorHead.ts`' `runningCards`): one line, then every
+  running FX not leaving as a card, by family in the lanes' order then by name — its family, or its
+  attribute where that is not the family's own (*UV*, *Zoom*), its target (`fxTargetLabel`, a head
+  by `headName`), how many fixtures that is, its cycle and master. A press is *All*'s row press:
+  the FX's heads selected (`selectWindowHeads(fxTargetsOf(…))`) and the FX picked. With none
+  running, *Select heads in Values* shows the Values table. The graph says why it is empty —
+  *Select heads to draw their FX.* or *No FX reaches the selection.* (`FxGraph`'s `empty`).
+- **The subject** (follow-ups D2, `subjectForm`): a group reads its name and how many fixtures, one
+  fixture (or elements of one) its name and its elements, several fixtures *4 fixtures · 12
+  elements ▾* — a `ToolbarMenu`, a dropdown on a desk and a bottom sheet of 44px rows below the 760
+  arm, listing each fixture's colour (`useFixtureColourIndex`), name and selected elements, a press
+  being *Only* (`selectWindowHeads` with that fixture's targets: the fixture whole, or the elements
+  of it the selection named), the word shown on the highlighted row and on every row under a finger.
+  *Only* takes the chip away, so focus goes to the mask pill. In a window with its own selection it
+  goes through Include's request, so the marquee's mask is let go there. The count never truncates:
+  the pill and badge wrap below it where the column is too narrow, and a named subject's name
+  truncates beside them. Measured at
+  248px with four Shehds, the count, the pill and the link badge take 226 of the row's 231. The
+  family pill (`SelectionMaskPill`) is row C's: it writes through the programmer list's desk bridge,
+  which the grid's toolbar publishes in `fixtures-list/remaskStore.ts` (`ProgrammerPage` provides
+  it), so a marquee whose columns no longer say the mask drops to its rows as it does from row C; on
+  a window with its own selection the pill is a read-out.
 - **A drag is one `programmer.moveFx`** (`moveLocalFx`, `localMovesFor`): a Local card drops on
   another Local card of its lane and takes its place, the frame naming the card that ends directly
   above it; the grip moves it with ↑ / ↓. The desk can only put an FX *below* another, so the one
