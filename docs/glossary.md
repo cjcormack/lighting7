@@ -49,10 +49,10 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Direction: forwards | Forward | `FORWARD` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
 | Direction: backwards | Backward | `BACKWARD` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
 | Direction: there and back | Bounce | `BOUNCE` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
-| The bounce of Colour Fade, Focus Pull and the sweeps, by Direction rather than a parameter (D24) | Bounce | Direction `BOUNCE`; frontmatter and library `defaultDirection` | `pingPong` | | FX parameters, FX frontmatter | done | `src:components/fx/FxFields.tsx` |
+| The bounce of Colour Fade, Wave's *Focus Pull* and Path's sweeps, by Direction rather than a parameter (D24) | Bounce | Direction `BOUNCE`; frontmatter and library `defaultDirection` | `pingPong` | | FX parameters, FX frontmatter | done | `src:components/fx/FxFields.tsx` |
 | Cycles to run before handing back (D28) | Runs | `runs`, `runsStartTick`…; column `runs` | `nShot`, `nShotStartTick`, `n_shot` | One Shot | screen, wire, code, storage | done | `src:components/fx/FxFields.tsx` |
 | Runs with no count | Forever | `runForever` | | | screen | done | `src:components/fx/FxFields.tsx` |
-| Cycle per head or for the whole FX (D22) | Timing: Per cycle \| Per head | `timing` `CYCLE` / `HEAD`, `defaultTiming`; columns `timing`, `default_timing` | Step timing; `stepTiming`, `defaultStepTiming`, `step_timing`, `default_step_timing` | Per Step \| Per Head | screen, wire, code, storage, FX frontmatter | done | `src:components/fx/FxFields.tsx` |
+| Cycle per head or for the whole FX (D22) | One cycle for: All heads \| Each head | `timing` `CYCLE` / `HEAD`, `defaultTiming`; columns `timing`, `default_timing` (the wire's values unchanged, fx-settings plan D9) | Timing: Per cycle \| Per head; Step timing; `stepTiming`, `defaultStepTiming`, `step_timing`, `default_step_timing` | Per Step \| Per Head | screen, wire, code, storage, FX frontmatter | done | `src:components/fx/FxFields.tsx` |
 | Blend: take the FX's value | Override | `OVERRIDE` | | | screen, wire | done | `BLEND_MODE_OPTIONS.OVERRIDE` |
 | Blend: add to what is underneath | Add | `ADDITIVE` | | | screen | done | `BLEND_MODE_OPTIONS.ADDITIVE` |
 | Blend: scale what is underneath | Multiply | `MULTIPLY` | | | screen, wire | done | `BLEND_MODE_OPTIONS.MULTIPLY` |
@@ -62,8 +62,10 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | A movement at its own pan and tilt | Absolute | `OVERRIDE` | | | screen | done | `src:components/fx/FxFields.tsx` |
 | A level FX that ignores the level underneath | Replace it | `OVERRIDE` | | | screen | done | `src:components/fx/FxFields.tsx` |
 | A level FX scaled by the level underneath | Within it | `MULTIPLY` | | | screen | done | `src:components/fx/FxFields.tsx` |
-| Each fixture runs the FX for itself | Per Fixture | `PER_FIXTURE` | | | screen, wire | done | `ELEMENT_MODE_OPTIONS.PER_FIXTURE` |
-| Every element in one strip | Flat | `FLAT` | | | screen, wire | done | `ELEMENT_MODE_OPTIONS.FLAT` |
+| What an FX's spread counts where it lands on fixtures' elements | Over | `elementMode`; column `element_mode` | Element mode | Dup · Include · Use Elements | screen | done | `src:components/fx/FxFields.tsx` |
+| Each fixture is one unit, its elements alike; a new FX's default | Fixtures | `WHOLE` | | Dup Elements | screen, wire, storage, archive | done | `ELEMENT_MODE_OPTIONS.WHOLE` |
+| Every element in one strip | Elements | `FLAT` | Flat | Include Elements | screen, wire | done | `ELEMENT_MODE_OPTIONS.FLAT` |
+| Each fixture runs the FX for itself; a stored FX's default | Each fixture | `PER_FIXTURE` | Per Fixture | Use Elements | screen, wire | done | `ELEMENT_MODE_OPTIONS.PER_FIXTURE` |
 
 ## Spread
 
@@ -78,7 +80,8 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Order: there and back across the heads | Ping-pong | `PING_PONG` | | | screen, wire | done | `ORDER_LABELS.PING_PONG` |
 | Order: by where each fixture hangs | Position | `POSITIONAL` | | | screen | done | `ORDER_LABELS.POSITIONAL` |
 | Order: every head in step | Unified | `UNIFIED` | | | screen, wire | done | `ORDER_LABELS.UNIFIED` |
-| How much of the cycle the heads cover, as a percentage | Spread | `spread` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
+| How far apart the heads start, a share of the cycle or the FX's own steps; asked on screen as *Each head later by*, *Spread* naming the slider under *Free* | Spread | `spread` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
+| What Spread counts (fx-settings plan D6): a share of the cycle, or the FX's own steps, each head that many after the one before; on screen *Fit the cycle* · *1 step* · *Free* (D10) | Each head later by | `spreadUnit`, `SpreadUnit` — `CYCLE` \| `STEP`; column `spread_unit` | | | screen, wire, storage, archive | done | `src:components/fx/FxFields.tsx` |
 | Mirrored repeats of the spread (D5) | Wings | `wings` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
 | The spread repeats every N heads (D4) | Parts | `parts`; column `spread_parts` | Groups; `groups`, `spread_groups` | Parts | screen, wire, code, storage, archive | done | `src:components/fx/FxFields.tsx` |
 | N neighbours share one offset (D4) | Segments | `segments`; column `spread_segments` | Blocks; `blocks`, `spread_blocks` | Segments | screen, wire, code, storage, archive | done | `src:components/fx/FxFields.tsx` |
@@ -113,34 +116,44 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 
 | Idea | Word | In code | Was | MagicQ | Shows | Status | Key |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Intensity | Sine Wave | `SineWave` | | | FX library | done | `fx:SineWave` |
-| Intensity | Ramp Up | `RampUp` | | Ramp Up | FX library | done | `fx:RampUp` |
-| Intensity | Ramp Down | `RampDown` | | Ramp Down | FX library | done | `fx:RampDown` |
-| Intensity, up and down (D10) | Ramp | `Ramp` | Triangle; `Triangle` | Ramp | FX library | done | `fx:Ramp` |
-| Intensity | Pulse | `Pulse` | | | FX library | done | `fx:Pulse` |
-| Intensity | Square Wave | `SquareWave` | | | FX library | done | `fx:SquareWave` |
-| Intensity, on the dimmer (D12) | Dimmer Strobe | `DimmerStrobe` | Strobe; `Strobe` | | FX library | done | `fx:DimmerStrobe` |
+| Intensity and beam, the level waves as one FX (fx-settings plan D2) | Wave | `Wave`, family `intensity`, on `dimmer`, `uv`, `zoom`, `iris`, `frost`, `focus` | Sine Wave, Ramp Up, Ramp Down, Ramp, Square Wave, Pulse, Dimmer Strobe, Zoom Wave, Iris Pulse, Frost Pulse, Focus Pull, Zoom Breathe; `SineWave`, `RampUp`, `RampDown`, `Ramp`, `SquareWave`, `Pulse`, `DimmerStrobe`, `ZoomWave`, `IrisPulse`, `FrostPulse`, `FocusPull`, `ZoomBreathe` | | FX library | done | `fx:Wave` |
+| Wave's shape | Sine | `shape` `SINE` | Sine Wave, Zoom Wave, Zoom Breathe; `SineWave`, `ZoomWave`, `ZoomBreathe` | | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape | Ramp up | `RAMP_UP` | Ramp Up, Focus Pull; `RampUp`, `FocusPull` | Ramp Up | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape | Ramp down | `RAMP_DOWN` | Ramp Down; `RampDown` | Ramp Down | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape, up and down (D10) | Triangle | `TRIANGLE` | Ramp, Triangle; `Ramp`, `Triangle` | Ramp | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape | Square | `SQUARE` | Square Wave, Dimmer Strobe, Strobe; `SquareWave`, `DimmerStrobe`, `Strobe` | | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| Wave's shape | Pulse | `PULSE` | Pulse, Iris Pulse, Frost Pulse; `Pulse`, `IrisPulse`, `FrostPulse` | | FX editor | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| The bottom of a level FX (fx-settings plan D2) | Low | `low` | Min, Off value, Off level, Min brightness, Start; `min`, `offValue`, `offLevel`, `minBrightness`, `start` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| The top of a level FX | High | `high` | Max, On value, On level, Max brightness, End; `max`, `onValue`, `onLevel`, `maxBrightness`, `end` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| How much of the cycle a Square, or a Colour Strobe, is on | Width | `width` | Duty cycle, On ratio; `dutyCycle`, `onRatio` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| A Pulse's rise | Attack | `attack` | `attackRatio` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| A Pulse's hold at the top | Hold | `hold` | `holdRatio` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/Wave.fx.kts` |
+| A familiar name the picker lists for an FX on one attribute (fx-settings plan D4): Wave's *Strobe*, *Zoom Wave*, *Iris Pulse*, *Frost Pulse*, *Focus Pull*; Colour Cycle's *Colour Fade*, *Colour Wave*; Path's *Sweep*, *Pan Sweep*, *Tilt Sweep* | Preset | frontmatter `presets`, `FxPreset`, the library's `presets` | | | FX picker | done | `doc:docs/fx-engineering.md` |
 | Intensity | Flicker | `Flicker` | | | FX library | done | `fx:Flicker` |
-| Intensity, what Breathe was (D13): a Sine Wave a quarter-cycle on | Sine Wave | `SineWave`, phase offset + 0.75 | Breathe; `Breathe` | | FX library | done | `fx:SineWave` |
+| Intensity, what Breathe was (D13): a Wave on Sine a quarter-cycle on | Wave | `Wave` `SINE`, phase offset + 0.75 | Breathe; `Breathe` | | FX library | done | `fx:Wave` |
 | Intensity | Candle Flicker | `CandleFlicker` | | | FX library | done | `fx:CandleFlicker` |
+| The level Candle Flicker drifts about (fx-settings plan §3) | Base | `base` | Base level; `baseLevel` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/CandleFlicker.fx.kts` |
+| How slowly Candle Flicker drifts | Settle | `settle` | Smoothing; `smoothing` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/CandleFlicker.fx.kts` |
 | Intensity | Fluorescent Flicker | `FluorescentFlicker` | | | FX library | done | `fx:FluorescentFlicker` |
+| How long a Fluorescent Flicker's burst lasts | Burst | `burstMs` | Flicker duration; `flickerDurationMs` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/FluorescentFlicker.fx.kts` |
+| How fast a Fluorescent Flicker's burst switches | Speed | `speed` | Flicker speed; `flickerSpeed` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/dimmer/FluorescentFlicker.fx.kts` |
 | Intensity (D27) | Lightning Strike | `LightningStrike` | | | FX library | done | `fx:LightningStrike` |
 | Colour | Colour Cycle | `ColourCycle` | | | FX library | done | `fx:ColourCycle` |
+| How Colour Cycle's colours give way to each other (fx-settings plan D2): Cut · Fade · Smooth | Between | `between` `CUT` / `FADE` / `SMOOTH` | Fade ratio 0 for a cut; `fadeRatio` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/colour/ColourCycle.fx.kts` |
+| The share of each colour's step a Fade spends crossing | Fade | `fade` | Fade ratio; `fadeRatio` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/colour/ColourCycle.fx.kts` |
 | Colour | Rainbow Cycle | `RainbowCycle` | | | FX library | done | `fx:RainbowCycle` |
 | Colour | Colour Strobe | `ColourStrobe` | | | FX library | done | `fx:ColourStrobe` |
-| Colour (D11) | Colour Wave | `ColourWave` | Colour Pulse; `ColourPulse` | | FX library | done | `fx:ColourWave` |
-| Colour | Colour Fade | `ColourFade` | | | FX library | done | `fx:ColourFade` |
+| Colour (D11), kept for stored FX only (fx-settings plan D3): Colour Cycle's Smooth misses it by a DMX step, so the picker's *Colour Wave* starts a Colour Cycle | Colour Wave | `ColourWave`, `legacy: true` | Colour Pulse; `ColourPulse` | | FX library | done | `fx:ColourWave` |
+| Colour, kept for stored FX only (fx-settings plan D3): Colour Cycle's Fade misses its bounce by a DMX step, so the picker's *Colour Fade* starts a Colour Cycle | Colour Fade | `ColourFade`, `legacy: true` | | | FX library | done | `fx:ColourFade` |
+| A built-in kept only for what is stored (fx-settings plan D3): it runs and edits, but no picker or listing offers it | Legacy | frontmatter `legacy: true`, `FxRegistration.legacy`, the library's `legacy` | | | FX library | done | `doc:docs/fx-engineering.md` |
 | Colour | Colour Flicker | `ColourFlicker` | | | FX library | done | `fx:ColourFlicker` |
-| Position | Circle | `Circle` | | | FX library | done | `fx:Circle` |
-| Position | Figure 8 | `Figure8` | | | FX library | done | `fx:Figure8` |
-| Position | Sweep | `Sweep` | | | FX library | done | `fx:Sweep` |
-| Position | Pan Sweep | `PanSweep` | | | FX library | done | `fx:PanSweep` |
-| Position | Tilt Sweep | `TiltSweep` | | | FX library | done | `fx:TiltSweep` |
-| Position | Random Position | `RandomPosition` | | | FX library | done | `fx:RandomPosition` |
-| Beam (D13) | Zoom Wave | `ZoomWave` | Zoom Breathe; `ZoomBreathe` | | FX library | done | `fx:ZoomWave` |
-| Beam | Iris Pulse | `IrisPulse` | | | FX library | done | `fx:IrisPulse` |
-| Beam | Frost Pulse | `FrostPulse` | | | FX library | done | `fx:FrostPulse` |
-| Beam | Focus Pull | `FocusPull` | | | FX library | done | `fx:FocusPull` |
+| Position, the movements as one FX (fx-settings plan D2) | Path | `Path`, family `position`, on `position` | Circle, Figure 8, Sweep, Pan Sweep, Tilt Sweep, Random Position; `Circle`, `Figure8`, `Sweep`, `PanSweep`, `TiltSweep`, `RandomPosition` | | FX library | done | `fx:Path` |
+| Path's shape | Circle | `shape` `CIRCLE` | `Circle` | | FX editor | done | `doc:src/main/resources/fx/position/Path.fx.kts` |
+| Path's shape | Figure 8 | `FIGURE_8` | `Figure8` | | FX editor | done | `doc:src/main/resources/fx/position/Path.fx.kts` |
+| Path's shape, from one end to the other | Line | `LINE` | Sweep, Pan Sweep, Tilt Sweep; `Sweep`, `PanSweep`, `TiltSweep` | | FX editor | done | `doc:src/main/resources/fx/position/Path.fx.kts` |
+| Path's shape | Random | `RANDOM` | Random Position; `RandomPosition` | | FX editor | done | `doc:src/main/resources/fx/position/Path.fx.kts` |
+| How far a Path reaches either side of its centre in pan | Pan size | `panSize` | Pan radius, Pan range; `panRadius`, `panRange` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/position/Path.fx.kts` |
+| How far a Path reaches either side of its centre in tilt | Tilt size | `tiltSize` | Tilt radius, Tilt range; `tiltRadius`, `tiltRange` | | FX editor, FX parameters | done | `doc:src/main/resources/fx/position/Path.fx.kts` |
 | Steps, each palette on each head for itself (D23) | Palette Steps | `PaletteSteps` | | 2col, 3col, 4col | FX library | done | `fx:PaletteSteps` |
 | Steps, a setting's named slots (D23) | Slot Steps | `SlotSteps` | | | FX library | done | `fx:SlotSteps` |
 

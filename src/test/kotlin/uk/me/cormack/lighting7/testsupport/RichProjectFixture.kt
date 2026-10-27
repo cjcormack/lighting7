@@ -12,7 +12,9 @@ import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.FxMode
 import uk.me.cormack.lighting7.fx.FxOutputType
+import uk.me.cormack.lighting7.fx.ParameterCondition
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.fx.ParameterOption
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.DaoCueSceneryRow
 import uk.me.cormack.lighting7.models.DaoCueEvent
@@ -549,7 +551,16 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // left at its emptyList() default the field is omitted from canonical JSON entirely,
         // and a copier that lost every effect's parameter metadata would still pass.
         parameters = listOf(
-            ParameterInfo(name = "depth", type = "double", defaultValue = "0.8", description = "flicker depth"),
+            ParameterInfo(
+                name = "depth", type = "double", defaultValue = "0.8", description = "flicker depth",
+                label = "Depth", min = 0.0, max = 1.0, step = 0.05, unit = "ratio", role = "detail",
+                shownWhen = ParameterCondition("mode", listOf("DEEP")), pair = "depthMax",
+            ),
+            ParameterInfo(name = "depthMax", type = "double", defaultValue = "1.0"),
+            ParameterInfo(
+                name = "mode", type = "choice", defaultValue = "DEEP",
+                options = listOf(ParameterOption("DEEP", "Deep"), ParameterOption("SHALLOW", "Shallow")),
+            ),
             ParameterInfo(name = "seed", type = "int", defaultValue = "7"),
         )
     }
@@ -619,9 +630,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoLookFxEntity.new {
         look = boundLook; targetType = FxTargetsRef.Selection.TYPE
         targetKey = FxTargetsRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Group("front-wash"))).key
-        fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+        fxType = "Wave"; family = "intensity"; attribute = "dimmer"
         cycle = 2.0; blendMode = "OVERRIDE"; order = "REVERSE"
-        parameters = mapOf("min" to "40")
+        parameters = mapOf("low" to "40")
         sortOrder = 0
     }
 
@@ -634,13 +645,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoLookFxEntity.new {
         look = effectsLook; targetType = "group"; targetKey = "front-wash"
-        fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+        fxType = "Wave"; family = "intensity"; attribute = "dimmer"
         cycle = 0.5; blendMode = "OVERRIDE"; order = "NORMAL"
         phaseOffset = 0.25
         elementMode = "ALL"
         elementFilter = "ODD"
         timing = TIMING_HEAD
-        parameters = mapOf("depth" to "0.8")
+        parameters = mapOf("shape" to "PULSE", "hold" to "0.8")
         // A real column now rather than a field inside a JSON blob, but the reference still has
         // to be remapped for a clone to point at its own master.
         speedMasterUuid = slowMaster.uuid
@@ -670,14 +681,30 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoLookFxEntity.new {
         look = stackedLook; targetType = "fixture"; targetKey = "hex-2"
-        fxType = "SineWave"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
+        fxType = "Wave"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
         cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
         sortOrder = 1
     }
     DaoLookFxEntity.new {
         look = stackedLook; targetType = "fixture"; targetKey = "hex-2"
-        fxType = "SquareWave"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
+        fxType = "Flicker"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
         cycle = 1.0; blendMode = "MULTIPLY"; order = "NORMAL"
+        sortOrder = 0
+    }
+    // A chase one colour behind on each head (fx-settings plan D6, formatVersion 43): its spread counts
+    // Colour Cycle's own steps, so the round trip sees a non-default unit.
+    val chaseLook = DaoLook.new {
+        this.project = project
+        name = "Steps chase"
+    }
+    DaoLookFxEntity.new {
+        look = chaseLook; targetType = "group"; targetKey = "front-wash"
+        fxType = "ColourCycle"; family = "colour"; attribute = "rgbColour"
+        // Only `colours`: a test re-reads this archive as v23, which drops a `between` the old FX never read.
+        parameters = mapOf("colours" to "#ff0000,#00ff00,#0000ff")
+        cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
+        spread = 2.0
+        spreadUnit = "STEP"
         sortOrder = 0
     }
     // A position FX's centre, spelled the UK way since v39 (terminology plan D20).
@@ -687,9 +714,16 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoLookFxEntity.new {
         look = swirlLook; targetType = "fixture"; targetKey = "hex-2"
-        fxType = "Circle"; family = "position"; attribute = "position"
-        parameters = mapOf("panCentre" to "100", "tiltCentre" to "140", "panRadius" to "30")
+        fxType = "Path"; family = "position"; attribute = "position"
+        parameters = mapOf("shape" to "CIRCLE", "panCentre" to "100", "tiltCentre" to "140", "panSize" to "30")
         cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
+    }
+    // A Path's Line (fx-settings plan session 3), whose two ends a round trip must keep.
+    DaoLookFxEntity.new {
+        look = swirlLook; targetType = "fixture"; targetKey = "hex-2"
+        fxType = "Path"; family = "position"; attribute = "position"
+        parameters = mapOf("shape" to "LINE", "startPan" to "20", "startTilt" to "40", "endPan" to "230", "endTilt" to "90", "curve" to "QUAD_IN")
+        cycle = 2.0; blendMode = "OVERRIDE"; order = "NORMAL"; direction = "BOUNCE"; sortOrder = 1
     }
 
     // A **generic** template: one deferred row, one family, an intent rather than a literal. This is
@@ -745,6 +779,22 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         wings = 3
         segments = 2
         parts = 2
+    }
+
+    // A step chase as an FX palette (fx-settings plan D6, formatVersion 43): its spread counts Colour
+    // Cycle's steps, so the palette FX's import and export carry a non-default unit.
+    val stepsPalette = DaoPalette.new {
+        this.project = project
+        name = "steps-chase"
+        fadeDuration = null
+    }
+    DaoPaletteFxEntity.new {
+        palette = stepsPalette
+        fxType = "ColourCycle"; family = "colour"; attribute = "rgbColour"
+        cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
+        parameters = mapOf("colours" to "#ff0000,#00ff00,#0000ff")
+        spread = 1.5
+        spreadUnit = "STEP"
     }
 
     // A **per-fixture** template — a focus position, where each head holds its own value. Seeded
@@ -842,9 +892,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // v37: the Pulse runs on into "build", show-1's next cue, so two rows share a run key.
     DaoCueAdHocFxEntity.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
-        fxType = "Pulse"; family = "intensity"; cycle = 0.5
+        fxType = "Wave"; family = "intensity"; cycle = 0.5
         blendMode = "OVERRIDE"; order = "NORMAL"
-        parameters = mapOf("depth" to "0.8")
+        parameters = mapOf("shape" to "PULSE", "hold" to "0.8")
         attribute = "dimmer"
         phaseOffset = 0.25
         elementMode = "ALL"
@@ -876,12 +926,23 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueAdHocFxEntity.new {
         cue = cue1; targetType = FxTargetsRef.Selection.TYPE
         targetKey = FxTargetsRef.Selection(listOf(TargetRef.Group("front-wash"), TargetRef.Fixture("hex-4"))).key
-        fxType = "Pulse"; family = "intensity"; cycle = 1.0
+        fxType = "Wave"; family = "intensity"; cycle = 1.0
         blendMode = "OVERRIDE"; order = "CENTRE_OUT"
-        parameters = mapOf("depth" to "0.5")
+        parameters = mapOf("shape" to "PULSE", "hold" to "0.5")
         attribute = "dimmer"
-        elementMode = "FLAT"
+        elementMode = "WHOLE"
         sortOrder = 4
+    }
+    // A step chase as a cue's own FX (fx-settings plan D6, formatVersion 43).
+    DaoCueAdHocFxEntity.new {
+        cue = cue1; targetType = "group"; targetKey = "front-wash"
+        fxType = "ColourCycle"; family = "colour"; cycle = 4.0
+        blendMode = "OVERRIDE"; order = "NORMAL"
+        parameters = mapOf("colours" to "#ff0000,#00ff00,#0000ff")
+        attribute = "rgbColour"
+        spread = 3.0
+        spreadUnit = "STEP"
+        sortOrder = 5
     }
     // A timed layer over the effects-only look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides. A Look layer names no
@@ -929,8 +990,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueStackEntry.new { stack = stack1; cue = build; ordinal = 2.0 }
     DaoCueAdHocFxEntity.new {
         cue = build; targetType = "fixture"; targetKey = "hex-1"
-        fxType = "Pulse"; family = "intensity"; attribute = "dimmer"; cycle = 0.5
-        blendMode = "OVERRIDE"; order = "NORMAL"; parameters = mapOf("depth" to "0.8")
+        fxType = "Wave"; family = "intensity"; attribute = "dimmer"; cycle = 0.5
+        blendMode = "OVERRIDE"; order = "NORMAL"; parameters = mapOf("shape" to "PULSE", "hold" to "0.8")
         runUuid = RICH_PROJECT_PULSE_RUN
     }
     // v32 (cue model plan §3.9): show-1's list as the archive now carries it, entry by entry, with

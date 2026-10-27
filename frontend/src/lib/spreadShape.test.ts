@@ -3,11 +3,14 @@ import vector from '../../../src/test/resources/fx/spreadShape.fixture.json'
 import {
   DEFAULT_SPREAD_SHAPE,
   isMirroredOrder,
+  newFxSpread,
   orderRanks,
+  stepCountOf,
   spreadOffsets,
   spreadShapeOf,
-  spreadSummary,
 } from './spreadShape'
+import { ELEMENT_MODE_OPTIONS } from '@/components/fx/fxConstants'
+import { spreadHeadCount } from '@/components/fx/fxEditorModel'
 
 /**
  * The dial preview's copy of the spread's shape against the desk's (effects plan P2). The vector is
@@ -25,15 +28,30 @@ describe('spreadOffsets', () => {
       wings?: number
       segments?: number
       parts?: number
+      spreadUnit?: string
+      steps?: number
       offsets: number[]
       slots: number
     }>) {
-      const { offsets, slots } = spreadOffsets(c.order, c.heads, spreadShapeOf(c))
+      const shape = spreadShapeOf({ ...c, spreadUnit: c.spreadUnit === 'STEP' ? 'STEP' : 'CYCLE' })
+      const { offsets, slots } = spreadOffsets(c.order, c.heads, shape, c.steps ?? null)
       expect(slots, `${c.name}: slots`).toBe(c.slots)
       expect(offsets.length, c.name).toBe(c.offsets.length)
       c.offsets.forEach((expected, i) => {
         expect(Math.abs(offsets[i] - expected), `${c.name}: head ${i} is at ${offsets[i]}, not ${expected}`).toBeLessThan(1e-9)
       })
+    }
+  })
+
+  it('counts the units each element mode spreads over as the desk does', () => {
+    const cases = (vector.cases as Array<{ name: string; heads: number; over?: { mode: string; fixtures: number; elementsEach: number } }>).filter(
+      (c) => c.over != null,
+    )
+    expect(new Set(cases.map((c) => c.over!.mode))).toEqual(new Set(ELEMENT_MODE_OPTIONS.map((o) => o.value)))
+    for (const c of cases) {
+      const { mode, fixtures, elementsEach } = c.over!
+      const rig = Array.from({ length: fixtures }, () => ({ attributes: [], elements: Array.from({ length: elementsEach }, () => ({})) }))
+      expect(spreadHeadCount(rig, true, 'rgbColour', mode, 'ALL'), c.name).toBe(c.heads)
     }
   })
 
@@ -59,17 +77,38 @@ describe('spreadOffsets', () => {
   })
 })
 
-describe('spreadSummary', () => {
-  it('says every non-default field, the order apart', () => {
-    expect(spreadSummary('NORMAL', DEFAULT_SPREAD_SHAPE)).toEqual([])
-    expect(spreadSummary('NORMAL', { spread: 0.5, wings: 2, segments: 1, parts: 0 })).toEqual(['50 %', '2 wings'])
-    expect(spreadSummary('REVERSE', { spread: 1, wings: 1, segments: 3, parts: 2 })).toEqual([
-      'segments of 3',
-      'parts of 2',
-    ])
+describe('a spread in steps', () => {
+  it('has cases in the shared vector after Segments, Wings and Parts and above 200 %', () => {
+    const steps = (vector.cases as Array<{ name: string; spreadUnit?: string; segments?: number; wings?: number; parts?: number; offsets: number[] }>).filter(
+      (c) => c.spreadUnit === 'STEP',
+    )
+    expect(steps.some((c) => (c.segments ?? 1) > 1)).toBe(true)
+    expect(steps.some((c) => (c.wings ?? 1) > 1)).toBe(true)
+    expect(steps.some((c) => (c.parts ?? 0) > 0)).toBe(true)
+    expect(steps.some((c) => Math.max(...c.offsets) > 2)).toBe(true)
   })
 
-  it('leaves wings under a mirrored order unsaid', () => {
-    expect(spreadSummary('CENTRE_OUT', { spread: 1, wings: 2, segments: 1, parts: 0 })).toEqual([])
+  it('runs as the cycle with no step count, as the desk does', () => {
+    const step = { ...DEFAULT_SPREAD_SHAPE, spreadUnit: 'STEP' as const }
+    expect(spreadOffsets('NORMAL', 4, step, null)).toEqual(spreadOffsets('NORMAL', 4, DEFAULT_SPREAD_SHAPE))
+    expect(spreadOffsets('NORMAL', 4, step, 3).offsets).toEqual([0, 1 / 3, 2 / 3, 1])
+  })
+
+  it('counts an FX\'s steps from the list it names', () => {
+    const cycle = {
+      stepsFrom: 'colours',
+      parameters: [{ name: 'colours', type: 'colourList', defaultValue: '#ff0000,#00ff00,#0000ff' }],
+    }
+    expect(stepCountOf(cycle, {})).toBe(3)
+    expect(stepCountOf(cycle, { colours: '#ff0000, ,pal:abc,#0000ff' })).toBe(2)
+    expect(stepCountOf(cycle, { colours: ' ' }), 'a blank list is the default, as the desk reads one').toBe(3)
+    const palettes = { stepsFrom: 'palettes', parameters: [{ name: 'palettes', type: 'paletteList', defaultValue: '' }] }
+    expect(stepCountOf(palettes, { palettes: 'pal:a,pal:b' })).toBe(2)
+    expect(stepCountOf({ parameters: [] }, {})).toBeNull()
+  })
+
+  it('starts a new step FX one step behind and anything else as it was', () => {
+    expect(newFxSpread('colours')).toEqual({ spread: 1, spreadUnit: 'STEP' })
+    expect(newFxSpread(undefined)).toEqual({})
   })
 })

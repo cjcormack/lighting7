@@ -31,12 +31,14 @@ class GlossaryVocabularyTest {
         val index = loader.getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(index.size >= 28, "fx/index.txt should list at least 28 effects, got ${index.size}")
+        assertTrue(index.size >= 14, "fx/index.txt should list at least 14 effects, got ${index.size}")
 
         index.map { path -> FxFileLoader.parseFxFile(loader.getResource("fx/$path")!!.readText()).first }
     }
 
-    private fun builtInFamilies(): Set<String> = builtIns.map { it.family }.toSet()
+    /** Each built-in's library family, and the family it is in on each attribute it drives: Wave on zoom is Beam. */
+    private fun builtInFamilies(): Set<String> =
+        builtIns.flatMap { fx -> listOf(fx.family) + fx.compatibleAttributes.map { fxFamilyOnAttribute(fx.family, it) } }.toSet()
 
     private val rows: List<Row> by lazy { parseGlossary(File("docs/glossary.md").readText()) }
 

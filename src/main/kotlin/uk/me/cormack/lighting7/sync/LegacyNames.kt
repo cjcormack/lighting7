@@ -1,6 +1,13 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fx.FxDirection
+import uk.me.cormack.lighting7.fx.WAVE_FAMILY
+import uk.me.cormack.lighting7.fx.WAVE_ID
+import uk.me.cormack.lighting7.fx.PATH_FAMILY
+import uk.me.cormack.lighting7.fx.PATH_ID
+import uk.me.cormack.lighting7.fx.toEasingCurveParam
+import uk.me.cormack.lighting7.fx.toUByteParam
 import uk.me.cormack.lighting7.fx.PALETTE_COLOUR_REF_PREFIX
 import uk.me.cormack.lighting7.models.TIMING_CYCLE
 import uk.me.cormack.lighting7.models.TIMING_HEAD
@@ -100,7 +107,7 @@ object LegacyNames {
     private val BINDING_FIELDS = mapOf("templateUuid" to "paletteUuid", "propertyName" to "attribute")
 
     /** The built-in FX whose centre parameters took the UK spelling (D20), and the old names of those parameters. */
-    private val CENTRED_FX = setOf("Circle", "Figure8", "RandomPosition")
+    private val CENTRED_FX = setOf("Circle", "Figure8", "RandomPosition", PATH_ID)
     internal val CENTRE_PARAMETERS = mapOf("panCenter" to "panCentre", "tiltCenter" to "tiltCentre")
 
     /** A palette reference's old prefix, `tmpl:{uuid}`, today [PALETTE_COLOUR_REF_PREFIX]. */
@@ -172,7 +179,7 @@ object LegacyNames {
     private val LIGHTNING_COLOURS = setOf("flashColour", "decayColour", "ambientColour")
 
     /** Every FX id the registry no longer knows: a script may still name one, and no FX definition may take one. */
-    val retiredFxIds: Set<String> get() = FX_IDS.keys + BREATHE
+    val retiredFxIds: Set<String> by lazy { FX_IDS.keys + BREATHE + CONSOLIDATIONS.keys }
 
     /** Whether [fxId] is a retired FX id, matched as the registry matches one. */
     fun isRetiredFxId(fxId: String): Boolean = retiredFxIds.any { same(it, fxId) }
@@ -184,14 +191,16 @@ object LegacyNames {
      * rewrite (P3).
      */
     fun writeProblem(fxType: String, parameters: Map<String, String>, family: String? = null): String? = when {
-        same(fxType, BREATHE) -> "'$fxType' is gone: Sine Wave a quarter-cycle on (phase offset + 0.75) draws it"
+        same(fxType, BREATHE) -> "'$fxType' is gone: Wave a quarter-cycle on (phase offset + 0.75) draws it"
+        isConsolidatedFx(fxType) -> consolidation(fxId(fxType))!!.second.let { "'$fxType' is now ${it.into}, shape ${it.shape}" }
         isRetiredFxId(fxType) -> "'$fxType' is now '${fxId(fxType)}'"
         bouncedFxIds.any { same(it, fxType) } && PING_PONG in parameters ->
             "'$fxType' takes no pingPong: it bounces by Direction (BOUNCE)"
         isCentred(fxType) && parameters.keys.any { it in CENTRE_PARAMETERS } ->
             parameters.keys.first { it in CENTRE_PARAMETERS }.let { "'$it' is now '${CENTRE_PARAMETERS.getValue(it)}'" }
-        else -> parameters.entries.firstOrNull { OLD_PALETTE_REF.containsMatchIn(it.value) }
-            ?.let { "'${it.key}' names a palette as tmpl:{uuid}; a palette reference is pal:{uuid}" }
+        else -> parameterNameProblem(fxType, parameters)
+            ?: parameters.entries.firstOrNull { OLD_PALETTE_REF.containsMatchIn(it.value) }
+                ?.let { "'${it.key}' names a palette as tmpl:{uuid}; a palette reference is pal:{uuid}" }
             ?: familyProblem(family)
     }
 
@@ -371,6 +380,337 @@ object LegacyNames {
     /** Today's script type for a stored `scriptType`, by name. */
     fun scriptType(stored: String): String = SCRIPT_TYPES[stored.trim().uppercase()] ?: stored
 
+    /** Wave's id (fx-settings plan D2). */
+    const val WAVE = WAVE_ID
+
+    /** Path's id (fx-settings plan D2). */
+    const val PATH = PATH_ID
+
+    /**
+     * The `formatVersion` that put the movements on Path and renamed the parameters (fx-settings plan
+     * session 3): an FX in an archive below it was written before them ([absorbFx]'s `writtenBefore`).
+     */
+    const val SIBLINGS_FORMAT_VERSION = 42
+
+    /**
+     * The built-in [fxId] names that old ids were rewritten onto — Wave or Path, as spelled — matched as
+     * the registry matches one, or null. No FX definition may take one, or it would run them all.
+     */
+    fun consolidatedTypeNamed(fxId: String): String? = listOf(WAVE, PATH).firstOrNull { same(it, fxId) }
+
+    /** One old parameter as its FX read it: its type, its declared default, and the names it now goes by. */
+    private class OldParameter(val type: String, val default: String, val names: List<String>) {
+        constructor(type: String, default: String, name: String) : this(type, default, listOf(name))
+    }
+
+    /**
+     * One old FX a consolidated type replaced (fx-settings plan §3): the type it is [into] and that
+     * type's [family], the [shape] it is, its [parameters] by old name, and the one [attribute] a beam
+     * FX drove, which a stored row naming none ran on.
+     */
+    private class Consolidation(
+        val into: String,
+        val family: String,
+        val shape: String,
+        val parameters: Map<String, OldParameter>,
+        val attribute: String? = null,
+        /** The old FX's own new-instance cycle (beats) and Direction, where they were not its new type's. */
+        val cycle: Double? = null,
+        val direction: String? = null,
+    )
+
+    private fun levels(low: String, high: String, lowName: String = "min", highName: String = "max") = mapOf(
+        lowName to OldParameter("ubyte", low, "low"),
+        highName to OldParameter("ubyte", high, "high"),
+    )
+
+    private fun curve(default: String) = mapOf("curve" to OldParameter("easingCurve", default, "curve"))
+
+    private val PULSE_TIMES = mapOf(
+        "attackRatio" to OldParameter("double", "0.1", "attack"),
+        "holdRatio" to OldParameter("double", "0.3", "hold"),
+    )
+
+    private fun wave(shape: String, parameters: Map<String, OldParameter>, attribute: String? = null, cycle: Double? = null, direction: String? = null) =
+        Consolidation(WAVE, WAVE_FAMILY, shape, parameters, attribute, cycle, direction)
+
+    /** §3's Wave block: each old id as Wave, every parameter as its old script read it. */
+    private val WAVE_ROWS: Map<String, Consolidation> = mapOf(
+        "SineWave" to wave("SINE", levels("0", "255")),
+        "RampUp" to wave("RAMP_UP", levels("0", "255") + curve("LINEAR")),
+        "RampDown" to wave("RAMP_DOWN", levels("0", "255") + curve("LINEAR")),
+        "Ramp" to wave("TRIANGLE", levels("0", "255") + curve("LINEAR")),
+        "SquareWave" to wave("SQUARE", levels("0", "255") + mapOf("dutyCycle" to OldParameter("double", "0.5", "width"))),
+        "Pulse" to wave("PULSE", levels("0", "255") + PULSE_TIMES + curve("QUAD_OUT")),
+        "DimmerStrobe" to wave(
+            "SQUARE",
+            levels("0", "255", "offValue", "onValue") + mapOf("onRatio" to OldParameter("double", "0.1", "width")),
+        ),
+        "ZoomWave" to wave("SINE", levels("64", "192"), attribute = "zoom"),
+        "IrisPulse" to wave("PULSE", levels("0", "160") + PULSE_TIMES + curve("QUAD_OUT"), attribute = "iris"),
+        "FrostPulse" to wave("PULSE", levels("0", "160") + PULSE_TIMES + curve("QUAD_OUT"), attribute = "frost"),
+        "FocusPull" to wave(
+            "RAMP_UP", levels("64", "192", "start", "end") + curve("SINE_IN_OUT"),
+            attribute = "focus", cycle = 2.0, direction = FxDirection.BOUNCE.name,
+        ),
+    )
+
+    private fun position(default: String, name: String) = OldParameter("ubyte", default, name)
+
+    private fun centred(panSize: String, tiltSize: String, panSizeName: String, tiltSizeName: String) = mapOf(
+        "panCentre" to position("128", "panCentre"),
+        "tiltCentre" to position("128", "tiltCentre"),
+        panSizeName to position(panSize, "panSize"),
+        tiltSizeName to position(tiltSize, "tiltSize"),
+    )
+
+    private fun path(shape: String, parameters: Map<String, OldParameter>, bounces: Boolean = false) = Consolidation(
+        PATH, PATH_FAMILY, shape, parameters,
+        cycle = if (bounces) 2.0 else null, direction = if (bounces) FxDirection.BOUNCE.name else null,
+    )
+
+    /** §3's Path block: each old movement as Path, its parameters as its old script read them. */
+    private val PATH_ROWS: Map<String, Consolidation> = mapOf(
+        "Circle" to path("CIRCLE", centred("64", "64", "panRadius", "tiltRadius")),
+        "Figure8" to path("FIGURE_8", centred("64", "32", "panRadius", "tiltRadius")),
+        "RandomPosition" to path("RANDOM", centred("64", "64", "panRange", "tiltRange")),
+        "Sweep" to path(
+            "LINE",
+            mapOf(
+                "startPan" to position("64", "startPan"), "startTilt" to position("128", "startTilt"),
+                "endPan" to position("192", "endPan"), "endTilt" to position("128", "endTilt"),
+            ) + curve("SINE_IN_OUT"),
+            bounces = true,
+        ),
+        "PanSweep" to path(
+            "LINE",
+            mapOf(
+                "startPan" to position("64", "startPan"), "endPan" to position("192", "endPan"),
+                "tilt" to OldParameter("ubyte", "128", listOf("startTilt", "endTilt")),
+            ) + curve("SINE_IN_OUT"),
+            bounces = true,
+        ),
+        "TiltSweep" to path(
+            "LINE",
+            mapOf(
+                "startTilt" to position("64", "startTilt"), "endTilt" to position("192", "endTilt"),
+                "pan" to OldParameter("ubyte", "128", listOf("startPan", "endPan")),
+            ) + curve("SINE_IN_OUT"),
+            bounces = true,
+        ),
+    )
+
+    /**
+     * The built-ins that kept their ids and renamed their parameters to D1's normalised names
+     * (fx-settings plan §3): each old name to its new one, read the same way.
+     */
+    private val PARAMETER_RENAMES: Map<String, Map<String, String>> = mapOf(
+        "Flicker" to mapOf("min" to "low", "max" to "high"),
+        "CandleFlicker" to mapOf("baseLevel" to "base", "min" to "low", "max" to "high", "smoothing" to "settle"),
+        "FluorescentFlicker" to mapOf("offLevel" to "low", "onLevel" to "high", "flickerDurationMs" to "burstMs", "flickerSpeed" to "speed"),
+        LIGHTNING_STRIKE to mapOf("minBrightness" to "low", "maxBrightness" to "high"),
+        "ColourStrobe" to mapOf("onRatio" to "width"),
+    )
+
+    /**
+     * The renamed parameters' old names a script could only mean as one of those FX's: all but
+     * Flicker's and Candle Flicker's `min` and `max`, which any FX may name. Colour Cycle's
+     * `fadeRatio` is not one — Palette Steps still reads its own ([COLOUR_CYCLE_FADE_RATIO]).
+     */
+    val distinctiveOldParameters: Set<String> = PARAMETER_RENAMES.values.flatMap { it.keys }.toSet() - setOf("min", "max")
+
+    /** Colour Cycle's old crossfade parameter, which Palette Steps still declares under the same name. */
+    const val COLOUR_CYCLE_FADE_RATIO = FADE_RATIO
+
+    /** Colour Cycle's `between` (fx-settings plan D2) and the value it takes for a cut. */
+    private const val BETWEEN = "between"
+    private const val BETWEEN_CUT = "CUT"
+    private const val BETWEEN_FADE = "FADE"
+    private const val FADE = "fade"
+
+    /** Colour Cycle's old crossfade's default, which a blank or unparsable `fadeRatio` read as. */
+    private const val FADE_RATIO_DEFAULT = 0.5
+
+    /** Every consolidation, Wave's and Path's. */
+    private val CONSOLIDATIONS: Map<String, Consolidation> = WAVE_ROWS + PATH_ROWS
+
+    /**
+     * The cycle (beats) and Direction a new FX of the old type [fxType] started at when its author
+     * named none, where they differ from its new type's: Focus Pull's and the sweeps' half-bar Bounce.
+     * Null otherwise.
+     */
+    fun consolidatedTiming(fxType: String): Pair<Double, String>? =
+        consolidation(fxId(fxType))?.second?.let { row -> row.cycle?.let { it to (row.direction ?: FxDirection.FORWARD.name) } }
+
+    /** The entry of this map keyed by [fxType], matched as the registry matches an id, with its key as spelled; or null. */
+    private fun <V> Map<String, V>.matching(fxType: String): Pair<String, V>? =
+        entries.firstOrNull { same(it.key, fxType) }?.toPair()
+
+    /** [fxType]'s consolidation and its canonical id, or null. */
+    private fun consolidation(fxType: String): Pair<String, Consolidation>? = CONSOLIDATIONS.matching(fxType)
+
+    /** The ids of the level waves Wave replaced, as they were spelled. */
+    val waveIds: Set<String> get() = WAVE_ROWS.keys
+
+    /** The ids of the movements Path replaced, as they were spelled. */
+    val pathIds: Set<String> get() = PATH_ROWS.keys
+
+    /** Whether [fxType] is one of the FX a consolidated type replaced: a level wave or a movement. */
+    fun isConsolidatedFx(fxType: String): Boolean = consolidation(fxId(fxType)) != null
+
+    /**
+     * [parameters] of an FX of the old type [fxType] as its consolidated type's: its shape, and each
+     * parameter it declared under its new name at the value its script read — a blank or absent one at
+     * its old default, a level or a position as `TypedParams.ubyte` clamps it, an unknown curve as
+     * `LINEAR` — so a default that differs from the new type's (Zoom Wave's 64–192, Figure 8's tilt
+     * size) is written out. A parameter the old FX never declared is dropped, as it never read one.
+     * Null when [fxType] is no consolidated FX.
+     *
+     * What a script's `effect("SineWave", …)` and MCP's tools run, and what [consolidateFx] and
+     * [absorbFx] store.
+     */
+    fun consolidatedParameters(fxType: String, parameters: Map<String, String>): Map<String, String>? {
+        val (id, row) = consolidation(fxId(fxType)) ?: return null
+        // A centre under its US spelling (terminology plan D20) is the centre, as step 6 and the importer read it.
+        val read = centreParameters(id, parameters)
+        return buildMap {
+            put("shape", row.shape)
+            for ((old, p) in row.parameters) {
+                val raw = read[old]?.takeIf { it.isNotBlank() } ?: p.default
+                val value = when (p.type) {
+                    "ubyte" -> (raw.toUByteParam() ?: 0u).toString()
+                    "double" -> raw.takeIf { it.toDoubleOrNull() != null } ?: p.default
+                    else -> (raw.toEasingCurveParam() ?: EasingCurve.LINEAR).name
+                }
+                for (name in p.names) put(name, value)
+            }
+        }
+    }
+
+    /** [fx] onto the consolidated type its [row] names; [changes] and [notes] say so. */
+    private fun consolidated(fx: StoredFx, id: String, row: Consolidation): Rewrite {
+        val parameters = consolidatedParameters(id, fx.parameters)!!
+        val changes = arrayListOf("${fx.fxType} is now ${row.into}, shape ${row.shape}")
+        val dropped = fx.parameters.keys - row.parameters.keys
+        if (dropped.isNotEmpty()) changes += "${dropped.joinToString { "'$it'" }} named nothing it read, so went"
+        val notes = ArrayList<String>()
+        val attribute = fx.attribute?.takeIf { it.isNotBlank() } ?: row.attribute?.also {
+            changes += "it names '$it', which it drove"
+            notes += "on a group where not every head has '$it' it now runs on those that do; before, it ran on none of that group"
+        }
+        return Rewrite(fx.copy(fxType = row.into, family = row.family, parameters = parameters, attribute = attribute), changes, notes)
+    }
+
+    /**
+     * Session 2's rewrite of [fx] onto Wave (fx-settings plan D3), or null when it is no level wave:
+     * its id Wave, its family Wave's (a beam attribute makes it Beam's, D5), its parameters by
+     * [consolidatedParameters], and — for a beam FX stored naming no attribute, which ran on its one —
+     * that attribute. Nothing else moves: the cycle, Direction, spread and phase run the same shape the
+     * same way, which `LegacyEquivalenceTest` proves for every row. A script FX definition's own id
+     * is never rewritten ([definitions]).
+     *
+     * One output moves, and says so in [Rewrite.notes] (fx-settings plan session 2, an exception to D3
+     * Chris accepted): a beam FX that named no attribute ran on a group only where every head had its
+     * attribute, and on none of that group otherwise; named, it runs on the heads that have it, as a
+     * Wave authored on that attribute does.
+     *
+     * Separate from [rewriteFx] because database step 4 must not take it: its rows have no attribute
+     * column to write, and step 7 (`state/FxConsolidationMigration.kt`) is this alone.
+     */
+    fun consolidateFx(fx: StoredFx, definitions: (String) -> Definition?): Rewrite? {
+        if (definitions(fx.fxType) != null) return null
+        val (id, row) = WAVE_ROWS.matching(fxId(fx.fxType)) ?: return null
+        return consolidated(fx, id, row)
+    }
+
+    /**
+     * Session 3's rewrite of [fx] (fx-settings plan D2, D3), or null when it holds nothing it moves:
+     * a movement Path replaced as Path ([consolidatedParameters]); a Flicker, a Candle, Fluorescent
+     * Flicker, Lightning Strike or Colour Strobe with its parameters at their new names; a Colour
+     * Cycle's `fadeRatio` as `between` and `fade` — 0 a cut, anything else a fade of that share, which
+     * Colour Cycle's Fade computes exactly as the old crossfade did. `LegacyEquivalenceTest` proves
+     * each; the cycle, Direction, spread and phase are untouched. A script FX definition is never
+     * rewritten ([definitions]).
+     *
+     * [writtenBefore] says [fx] was written before the renames ([SIBLINGS_FORMAT_VERSION]), so a key
+     * under a new name the old FX did not declare — a Flicker's `low`, a Colour Cycle's `between` — was
+     * never read, and goes, as [consolidated] drops what a movement never read; else the new script
+     * would start reading it. An FX written since means it, so a tool's call passes false.
+     *
+     * Separate from [consolidateFx] because database step 8 (`state/FxSiblingsMigration.kt`) is this
+     * alone; the importer runs both.
+     */
+    fun absorbFx(fx: StoredFx, writtenBefore: Boolean = true, definitions: (String) -> Definition?): Rewrite? {
+        if (definitions(fx.fxType) != null) return null
+        PATH_ROWS.matching(fxId(fx.fxType))?.let { (id, row) -> return consolidated(fx, id, row) }
+        if (same(fx.fxType, COLOUR_CYCLE)) {
+            cycleBetween(fx.parameters)?.let {
+                return Rewrite(fx.copy(parameters = it), listOf("'fadeRatio' is now '${it.getValue(BETWEEN)}'"), emptyList())
+            }
+            val unread = if (writtenBefore) fx.parameters.keys.filter { it == BETWEEN || it == FADE } else emptyList()
+            if (unread.isEmpty()) return null
+            return Rewrite(fx.copy(parameters = fx.parameters - unread.toSet()), listOf(unreadChange(unread)), emptyList())
+        }
+        val (_, renames) = PARAMETER_RENAMES.matching(fx.fxType) ?: return null
+        val moved = renames.filterKeys { it in fx.parameters }
+        val unread = if (writtenBefore) fx.parameters.keys.filter { key -> key in renames.values && moved.values.none { it == key } } else emptyList()
+        if (moved.isEmpty() && unread.isEmpty()) return null
+        val parameters = (renamedParameters(fx.parameters, renames) ?: fx.parameters) - unread.toSet()
+        val changes = moved.map { (old, new) -> "'$old' is now '$new'" } + listOfNotNull(unread.takeIf { it.isNotEmpty() }?.let(::unreadChange))
+        return Rewrite(fx.copy(parameters = parameters), changes, emptyList())
+    }
+
+    /** The log's words for [keys], parameters an old FX never declared, which go. */
+    private fun unreadChange(keys: List<String>) = "${keys.joinToString { "'$it'" }} named nothing it read, so went"
+
+    /**
+     * [parameters] with each old name in [renames] at its new one, or null when it holds none. An old
+     * name beside its new one wins, being the one the FX read.
+     */
+    private fun renamedParameters(parameters: Map<String, String>, renames: Map<String, String>): Map<String, String>? {
+        val moved = parameters.filterKeys { it in renames }.mapKeys { renames.getValue(it.key) }
+        if (moved.isEmpty()) return null
+        return parameters.filterKeys { it !in renames && it !in moved } + moved
+    }
+
+    /**
+     * A Colour Cycle's [parameters] with its `fadeRatio` as `between` and `fade`, or null when it
+     * names none: read as `TypedParams.double` read it (blank or unparsable, the old default), 0 a
+     * cut, and anything else a fade of that share — so even a ratio outside 0–1 runs as it ran.
+     */
+    private fun cycleBetween(parameters: Map<String, String>): Map<String, String>? {
+        val raw = parameters[FADE_RATIO] ?: return null
+        val ratio = raw.takeIf { it.isNotBlank() }?.toDoubleOrNull() ?: FADE_RATIO_DEFAULT
+        val kept = parameters - FADE_RATIO - BETWEEN - FADE
+        return if (ratio == 0.0) kept + (BETWEEN to BETWEEN_CUT)
+        else kept + (BETWEEN to BETWEEN_FADE) + (FADE to (raw.takeIf { it.isNotBlank() && it.toDoubleOrNull() != null } ?: FADE_RATIO_DEFAULT.toString()))
+    }
+
+    /**
+     * An FX a script or a tool names, as the registry runs it today: an FX a consolidated type
+     * replaced as that type with its parameters ([consolidatedParameters]), a renamed parameter at its
+     * new name, any other renamed id at its new id; [fxType] and [parameters] themselves otherwise. The
+     * one door an old name still opens (fx-settings plan D3) — every stored write refuses one
+     * ([writeProblem]).
+     */
+    fun runnableFx(fxType: String, parameters: Map<String, String>): Pair<String, Map<String, String>> {
+        val renamed = fxId(fxType)
+        consolidation(renamed)?.let { (id, row) -> return row.into to consolidatedParameters(id, parameters)!! }
+        if (same(renamed, COLOUR_CYCLE)) return renamed to (cycleBetween(parameters) ?: parameters)
+        val (_, renames) = PARAMETER_RENAMES.matching(renamed) ?: return renamed to parameters
+        return renamed to (renamedParameters(parameters, renames) ?: parameters)
+    }
+
+    /**
+     * Why [parameters] of a stored FX of [fxType] name a parameter by its old name (fx-settings plan
+     * §3), or null.
+     */
+    private fun parameterNameProblem(fxType: String, parameters: Map<String, String>): String? {
+        if (same(fxType, COLOUR_CYCLE) && FADE_RATIO in parameters) return "'$FADE_RATIO' is now '$BETWEEN' and '$FADE'"
+        val (_, renames) = PARAMETER_RENAMES.matching(fxType) ?: return null
+        return parameters.keys.firstOrNull { it in renames }?.let { "'$it' is now '${renames.getValue(it)}'" }
+    }
+
     /** The fields of a stored FX that §4.2's rewrites read or move, whatever home it lives in. */
     data class StoredFx(
         val fxType: String,
@@ -382,6 +722,8 @@ object LegacyNames {
         val direction: String,
         val runs: Int?,
         val spread: Double,
+        /** The attribute it drives, where it names one; [consolidateFx] names a beam FX's. */
+        val attribute: String? = null,
     )
 
     /** A rewritten FX, and what changed about it in words for the log; [notes] say what output moved. */
@@ -410,6 +752,8 @@ object LegacyNames {
         val palettes: (UUID) -> Palette?,
         val definitions: (String) -> Definition?,
         val absentPingPongIsOn: Boolean,
+        /** The FX were written before [SIBLINGS_FORMAT_VERSION]: [absorbFx]'s `writtenBefore`. */
+        val writtenBeforeSiblings: Boolean = true,
     )
 
     /**

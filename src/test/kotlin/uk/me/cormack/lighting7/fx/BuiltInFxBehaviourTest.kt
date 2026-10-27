@@ -55,15 +55,22 @@ class BuiltInFxBehaviourTest {
      */
     @Test
     fun `declared parameter metadata survives frontmatter parsing`() {
-        val sine = registry.getRegistration("SineWave")!!
+        val wave = registry.getRegistration("Wave")!!
         assertEquals(
-            listOf("min" to "0", "max" to "255"),
-            sine.parameters.map { it.name to it.defaultValue },
-            "SineWave's declared defaults should reach the registry",
+            listOf(
+                "shape" to "SINE", "low" to "0", "high" to "255", "width" to "0.5", "widthUnit" to "RATIO",
+                "attack" to "0.1", "hold" to "0.3", "curve" to "LINEAR",
+            ),
+            wave.parameters.map { it.name to it.defaultValue },
+            "Wave's declared defaults should reach the registry",
         )
-        assertTrue(sine.parameters.all { it.type == "ubyte" }, "declared types should survive")
+        assertEquals(
+            listOf("choice", "ubyte", "ubyte", "double", "choice", "double", "double", "easingCurve"),
+            wave.parameters.map { it.type },
+            "declared types should survive",
+        )
         assertTrue(
-            sine.parameters.all { it.description.isNotBlank() },
+            wave.parameters.all { it.description.isNotBlank() },
             "declared descriptions should survive — the library API is the UI's only source for them",
         )
 
@@ -78,9 +85,9 @@ class BuiltInFxBehaviourTest {
             .map { (id, p) -> "$id.${p.name}" }
         assertEquals(emptyList(), blank, "every built-in parameter should declare a type and default")
 
-        // And the defaults are load-bearing: with no parameters at all, SineWave still spans 0-255.
-        assertEquals(255.toUByte(), fx("SineWave").calculate(0.25).slider())
-        assertEquals(0.toUByte(), fx("SineWave").calculate(0.75).slider())
+        // And the defaults are load-bearing: with no parameters at all, Wave is a sine spanning 0-255.
+        assertEquals(255.toUByte(), fx("Wave").calculate(0.25).slider())
+        assertEquals(0.toUByte(), fx("Wave").calculate(0.75).slider())
     }
 
     /**
@@ -95,8 +102,8 @@ class BuiltInFxBehaviourTest {
      */
     @Test
     fun `a blank stored parameter falls back to the declared default`() {
-        val stored = registry.createFx("SineWave", mapOf("min" to "", "max" to ""))
-        val fresh = fx("SineWave")
+        val stored = registry.createFx("Wave", mapOf("shape" to "", "low" to "", "high" to ""))
+        val fresh = fx("Wave")
         for (i in 0..20) {
             val phase = i / 20.0
             assertEquals(
@@ -107,16 +114,16 @@ class BuiltInFxBehaviourTest {
         // And it is not merely equal-but-dead: the effect actually moves.
         assertTrue(
             (0..20).map { stored.calculate(it / 20.0).slider() }.distinct().size > 1,
-            "a Sine Wave rehydrated from blank params should still move",
+            "a Wave rehydrated from blank params should still move",
         )
 
         val circle = registry.createFx(
-            "Circle",
-            mapOf("panCentre" to "", "tiltCentre" to "", "panRadius" to "", "tiltRadius" to ""),
+            "Path",
+            mapOf("shape" to "", "panCentre" to "", "tiltCentre" to "", "panSize" to "", "tiltSize" to ""),
         )
         assertEquals(
-            fx("Circle").calculate(0.0).position(), circle.calculate(0.0).position(),
-            "a Circle rehydrated from blank params should use its declared centre and radius",
+            fx("Path").calculate(0.0).position(), circle.calculate(0.0).position(),
+            "a Path rehydrated from blank params should use its declared shape, centre and size",
         )
     }
 
@@ -156,8 +163,8 @@ class BuiltInFxBehaviourTest {
     // --- Dimmer ---
 
     @Test
-    fun `SineWave oscillates between min and max`() {
-        val effect = fx("SineWave", "min" to "0", "max" to "255")
+    fun `Wave's sine oscillates between low and high`() {
+        val effect = fx("Wave", "shape" to "SINE", "low" to "0", "high" to "255")
 
         // sin(0) = 0, normalised to 0.5 — starts at the midpoint rising
         assertEquals(127.toUByte(), effect.calculate(0.0).slider())
@@ -170,8 +177,8 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `SineWave respects min and max bounds`() {
-        val effect = fx("SineWave", "min" to "50", "max" to "200")
+    fun `Wave's sine respects low and high bounds`() {
+        val effect = fx("Wave", "shape" to "SINE", "low" to "50", "high" to "200")
         for (i in 0..100) {
             val phase = i / 100.0
             val value = effect.calculate(phase).slider()
@@ -181,16 +188,16 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `RampUp goes from min to max`() {
-        val effect = fx("RampUp", "min" to "0", "max" to "255", "curve" to "LINEAR")
+    fun `Wave's ramp up goes from low to high`() {
+        val effect = fx("Wave", "shape" to "RAMP_UP", "low" to "0", "high" to "255", "curve" to "LINEAR")
         assertEquals(0.toUByte(), effect.calculate(0.0).slider())
         assertEquals(127.toUByte(), effect.calculate(0.5).slider())
         assertEquals(255.toUByte(), effect.calculate(1.0).slider())
     }
 
     @Test
-    fun `RampDown goes from max to min`() {
-        val effect = fx("RampDown", "min" to "0", "max" to "255", "curve" to "LINEAR")
+    fun `Wave's ramp down goes from high to low`() {
+        val effect = fx("Wave", "shape" to "RAMP_DOWN", "low" to "0", "high" to "255", "curve" to "LINEAR")
         assertEquals(255.toUByte(), effect.calculate(0.0).slider())
         assertEquals(127.toUByte(), effect.calculate(0.5).slider())
         assertEquals(0.toUByte(), effect.calculate(1.0).slider())
@@ -200,7 +207,7 @@ class BuiltInFxBehaviourTest {
     fun `a built-in a script makes reports its registry id, not its display name`() {
         // A script's `effect(id)` builds through the registry but never sets the instance's own
         // registrationId, so what a Record stores comes from the effect itself.
-        for (id in listOf("Ramp", "DimmerStrobe", "ColourWave", "ZoomWave", "SineWave")) {
+        for (id in listOf("Wave", "Flicker", "ColourWave", "Path")) {
             val effect = registry.createFx(id)
             assertEquals(id, effect.registrationId, "$id's effect should carry its registry id")
             val instance = FxInstance(effect, SliderTarget("hex-a", "dimmer"), FxTiming(cycle = 1.0))
@@ -209,20 +216,20 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `Ramp rises then falls`() {
-        val effect = fx("Ramp", "min" to "0", "max" to "255", "curve" to "LINEAR")
+    fun `Wave's triangle rises then falls`() {
+        val effect = fx("Wave", "shape" to "TRIANGLE", "low" to "0", "high" to "255", "curve" to "LINEAR")
         assertEquals(0.toUByte(), effect.calculate(0.0).slider())
         assertEquals(255.toUByte(), effect.calculate(0.5).slider())
         assertEquals(0.toUByte(), effect.calculate(1.0).slider())
     }
 
     @Test
-    fun `Pulse follows attack-hold-release envelope`() {
+    fun `Wave's pulse follows attack-hold-release envelope`() {
         // attack 0-0.25, hold 0.25-0.75, release 0.75-1.0
         val effect = fx(
-            "Pulse",
-            "min" to "0", "max" to "255",
-            "attackRatio" to "0.25", "holdRatio" to "0.5", "curve" to "LINEAR",
+            "Wave",
+            "shape" to "PULSE", "low" to "0", "high" to "255",
+            "attack" to "0.25", "hold" to "0.5", "curve" to "LINEAR",
         )
         assertEquals(0.toUByte(), effect.calculate(0.0).slider())
 
@@ -234,8 +241,8 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `SquareWave alternates between min and max`() {
-        val effect = fx("SquareWave", "min" to "0", "max" to "255", "dutyCycle" to "0.5")
+    fun `Wave's square alternates between low and high`() {
+        val effect = fx("Wave", "shape" to "SQUARE", "low" to "0", "high" to "255", "width" to "0.5")
         assertEquals(255.toUByte(), effect.calculate(0.0).slider())
         assertEquals(255.toUByte(), effect.calculate(0.25).slider())
         assertEquals(255.toUByte(), effect.calculate(0.49).slider())
@@ -244,8 +251,8 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `DimmerStrobe flashes on briefly`() {
-        val effect = fx("DimmerStrobe", "offValue" to "0", "onValue" to "255", "onRatio" to "0.1")
+    fun `Wave's narrow square flashes on briefly`() {
+        val effect = fx("Wave", "shape" to "SQUARE", "low" to "0", "high" to "255", "width" to "0.1")
         assertEquals(255.toUByte(), effect.calculate(0.0).slider())
         assertEquals(255.toUByte(), effect.calculate(0.05).slider())
         assertEquals(0.toUByte(), effect.calculate(0.1).slider())
@@ -255,15 +262,19 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `the retired ids are gone from the library`() {
-        for (id in listOf("Triangle", "Strobe", "ColourPulse", "ZoomBreathe", "Breathe")) {
+        for (id in listOf(
+            "Triangle", "Strobe", "ColourPulse", "ZoomBreathe", "Breathe",
+            "SineWave", "RampUp", "RampDown", "Ramp", "SquareWave", "Pulse", "DimmerStrobe",
+            "ZoomWave", "IrisPulse", "FrostPulse", "FocusPull",
+        )) {
             assertEquals(null, registry.getRegistration(id), "$id should no longer be registered")
         }
     }
 
-    /** Breathe's stored rows become Sine Wave a quarter-cycle on: `sin²(πφ)` is `SineWave(φ + ¾)`. */
+    /** Breathe's stored rows become Wave a quarter-cycle on: `sin²(πφ)` is a Wave sine at `φ + ¾`. */
     @Test
-    fun `SineWave a quarter-cycle on is the curve Breathe drew`() {
-        val effect = fx("SineWave", "min" to "10", "max" to "250")
+    fun `Wave's sine a quarter-cycle on is the curve Breathe drew`() {
+        val effect = fx("Wave", "shape" to "SINE", "low" to "10", "high" to "250")
         for (i in 0..100) {
             val phase = i / 100.0
             val s = kotlin.math.sin(phase * kotlin.math.PI)
@@ -275,7 +286,7 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `Flicker produces varying values within range`() {
-        val effect = fx("Flicker", "min" to "50", "max" to "200")
+        val effect = fx("Flicker", "low" to "50", "high" to "200")
         val values = mutableSetOf<UByte>()
         for (i in 0..100) {
             val phase = i / 100.0
@@ -316,7 +327,7 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `ColourCycle steps through colours`() {
-        val effect = fx("ColourCycle", "colours" to "#ff0000,#00ff00,#0000ff", "fadeRatio" to "0.0")
+        val effect = fx("ColourCycle", "colours" to "#ff0000,#00ff00,#0000ff", "between" to "CUT")
         assertEquals(Color.RED, effect.calculate(0.0).colour())
         assertEquals(Color.GREEN, effect.calculate(0.4).colour())
         assertEquals(Color.BLUE, effect.calculate(0.7).colour())
@@ -324,7 +335,7 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `ColourCycle with fade produces intermediate colours`() {
-        val effect = fx("ColourCycle", "colours" to "#ff0000,#0000ff", "fadeRatio" to "1.0")
+        val effect = fx("ColourCycle", "colours" to "#ff0000,#0000ff", "between" to "FADE", "fade" to "1.0")
         val midFade = effect.calculate(0.25).colour()
         assertTrue(midFade.red > 0, "Should have some red, was $midFade")
         assertTrue(midFade.blue > 0, "Should have some blue, was $midFade")
@@ -334,7 +345,7 @@ class BuiltInFxBehaviourTest {
     fun `ColourStrobe alternates between on and off colours`() {
         val effect = fx(
             "ColourStrobe",
-            "onColour" to "#ffffff", "offColour" to "#000000", "onRatio" to "0.5",
+            "onColour" to "#ffffff", "offColour" to "#000000", "width" to "0.5",
         )
         assertEquals(Color.WHITE, effect.calculate(0.0).colour())
         assertEquals(Color.WHITE, effect.calculate(0.25).colour())
@@ -383,14 +394,20 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `the FX that bounced by pingPong bounce by Direction at half the cycle`() {
-        for (id in listOf("ColourFade", "FocusPull", "Sweep", "PanSweep", "TiltSweep")) {
-            val registration = registry.getRegistration(id)!!
-            assertTrue(registration.parameters.none { it.name == "pingPong" }, "$id should take no pingPong")
-            assertEquals(FxDirection.BOUNCE, registration.defaultDirection, id)
-            assertEquals(CycleLength.TWO_BEATS, registration.defaultCycle, id)
-            assertEquals(FxDirection.BOUNCE, registry.createFx(id).defaultDirection, id)
+        val fade = registry.getRegistration("ColourFade")!!
+        assertTrue(fade.parameters.none { it.name == "pingPong" }, "ColourFade should take no pingPong")
+        assertEquals(FxDirection.BOUNCE, fade.defaultDirection)
+        assertEquals(CycleLength.TWO_BEATS, fade.defaultCycle)
+        assertEquals(FxDirection.BOUNCE, registry.createFx("ColourFade").defaultDirection)
+        // The sweeps are Path's presets now, each bouncing at half a bar as the sweep it names did.
+        val path = registry.getRegistration("Path")!!
+        assertTrue(path.parameters.none { it.name == "pingPong" })
+        val sweeps = path.presets.filter { it.name.endsWith("Sweep") }
+        assertEquals(listOf("Sweep", "Pan Sweep", "Tilt Sweep"), sweeps.map { it.name })
+        for (preset in sweeps) {
+            assertEquals(FxDirection.BOUNCE.name to CycleLength.TWO_BEATS, preset.direction to preset.cycle, preset.name)
         }
-        val forward = registry.getRegistration("SineWave")!!
+        val forward = registry.getRegistration("Wave")!!
         assertEquals(FxDirection.FORWARD, forward.defaultDirection)
         assertEquals(CycleLength.ONE_BAR, forward.defaultCycle)
     }
@@ -425,10 +442,10 @@ class BuiltInFxBehaviourTest {
     // --- Position ---
 
     @Test
-    fun `Circle produces circular movement`() {
+    fun `Path on Circle produces circular movement`() {
         val effect = fx(
-            "Circle",
-            "panCentre" to "128", "tiltCentre" to "128", "panRadius" to "50", "tiltRadius" to "50",
+            "Path",
+            "shape" to "CIRCLE", "panCentre" to "128", "tiltCentre" to "128", "panSize" to "50", "tiltSize" to "50",
         )
         // cos(0) = 1, sin(0) = 0
         assertEquals(178.toUByte() to 128.toUByte(), effect.calculate(0.0).position())
@@ -439,11 +456,11 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `Circle stays within valid DMX range`() {
+    fun `Path on Circle stays within valid DMX range`() {
         // Centre plus radius overruns 255 — the effect must clamp, not wrap.
         val effect = fx(
-            "Circle",
-            "panCentre" to "250", "tiltCentre" to "250", "panRadius" to "50", "tiltRadius" to "50",
+            "Path",
+            "shape" to "CIRCLE", "panCentre" to "250", "tiltCentre" to "250", "panSize" to "50", "tiltSize" to "50",
         )
         for (i in 0..100) {
             val (pan, tilt) = effect.calculate(i / 100.0).position()
@@ -453,10 +470,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `Figure8 sweeps both axes`() {
+    fun `Path on Figure 8 sweeps both axes`() {
         val effect = fx(
-            "Figure8",
-            "panCentre" to "128", "tiltCentre" to "128", "panRadius" to "50", "tiltRadius" to "30",
+            "Path",
+            "shape" to "FIGURE_8", "panCentre" to "128", "tiltCentre" to "128", "panSize" to "50", "tiltSize" to "30",
         )
         val positions = (0..20).map { effect.calculate(it / 20.0).position() }
         val pans = positions.map { it.first.toInt() }
@@ -466,10 +483,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `Sweep moves from start to end over one cycle`() {
+    fun `Path on a Line moves from start to end over one cycle`() {
         val effect = fx(
-            "Sweep",
-            "startPan" to "0", "startTilt" to "0", "endPan" to "255", "endTilt" to "255",
+            "Path",
+            "shape" to "LINE", "startPan" to "0", "startTilt" to "0", "endPan" to "255", "endTilt" to "255",
             "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(0.toUByte() to 0.toUByte(), effect.calculate(0.0).position())
@@ -478,10 +495,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `PanSweep only changes pan`() {
+    fun `Path on a level Line only changes pan`() {
         val effect = fx(
-            "PanSweep",
-            "startPan" to "50", "endPan" to "200", "tilt" to "100",
+            "Path",
+            "shape" to "LINE", "startPan" to "50", "endPan" to "200", "startTilt" to "100", "endTilt" to "100",
             "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(50.toUByte() to 100.toUByte(), effect.calculate(0.0).position())
@@ -489,10 +506,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `TiltSweep only changes tilt`() {
+    fun `Path on an upright Line only changes tilt`() {
         val effect = fx(
-            "TiltSweep",
-            "startTilt" to "50", "endTilt" to "200", "pan" to "100",
+            "Path",
+            "shape" to "LINE", "startTilt" to "50", "endTilt" to "200", "startPan" to "100", "endPan" to "100",
             "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(100.toUByte() to 50.toUByte(), effect.calculate(0.0).position())
@@ -500,10 +517,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `RandomPosition stays within range`() {
+    fun `Path on Random stays within range`() {
         val effect = fx(
-            "RandomPosition",
-            "panCentre" to "128", "tiltCentre" to "128", "panRange" to "50", "tiltRange" to "50",
+            "Path",
+            "shape" to "RANDOM", "panCentre" to "128", "tiltCentre" to "128", "panSize" to "50", "tiltSize" to "50",
         )
         for (i in 0..100) {
             val (pan, tilt) = effect.calculate(i / 100.0).position()
@@ -515,52 +532,70 @@ class BuiltInFxBehaviourTest {
     // --- Beam ---
 
     @Test
-    fun `ZoomWave is a sine between its two zooms`() {
-        val effect = fx("ZoomWave", "min" to "40", "max" to "200")
+    fun `Wave's sine drives a zoom between its two levels`() {
+        val effect = fx("Wave", "shape" to "SINE", "low" to "40", "high" to "200")
         assertEquals(120.toUByte(), effect.calculate(0.0).slider())
         assertEquals(200.toUByte(), effect.calculate(0.25).slider())
         assertEquals(40.toUByte(), effect.calculate(0.75).slider())
     }
 
     @Test
-    fun `IrisPulse and FrostPulse take Pulse's envelope`() {
-        val params = arrayOf("min" to "10", "max" to "150", "attackRatio" to "0.25", "holdRatio" to "0.5", "curve" to "LINEAR")
-        val pulse = fx("Pulse", *params)
-        for (id in listOf("IrisPulse", "FrostPulse")) {
-            val effect = fx(id, *params)
-            for (i in 0..20) {
-                val phase = i / 20.0
-                assertEquals(pulse.calculate(phase).slider(), effect.calculate(phase).slider(), "$id at $phase")
-            }
-        }
-        assertEquals(150.toUByte(), fx("IrisPulse", *params).calculate(0.5).slider())
+    fun `Wave's pulse with a QUAD_OUT curve peaks at high`() {
+        val effect = fx(
+            "Wave",
+            "shape" to "PULSE", "low" to "10", "high" to "150",
+            "attack" to "0.25", "hold" to "0.5", "curve" to "QUAD_OUT",
+        )
+        assertEquals(10.toUByte(), effect.calculate(0.0).slider())
+        assertEquals(150.toUByte(), effect.calculate(0.5).slider())
+        val rising = (0..5).map { effect.calculate(it * 0.05).slider() }
+        assertEquals(rising.sorted(), rising, "the attack should rise")
     }
 
     @Test
-    fun `FocusPull pulls from start to end over one cycle`() {
-        val effect = fx("FocusPull", "start" to "20", "end" to "220", "curve" to "LINEAR")
+    fun `Wave's ramp up pulls a focus from low to high`() {
+        val effect = fx("Wave", "shape" to "RAMP_UP", "low" to "20", "high" to "220", "curve" to "LINEAR")
         assertEquals(20.toUByte(), effect.calculate(0.0).slider())
         assertEquals(120.toUByte(), effect.calculate(0.5).slider())
         assertEquals(220.toUByte(), effect.calculate(1.0).slider())
     }
 
     @Test
-    fun `each beam built-in declares exactly its own attribute`() {
-        val expected = mapOf("ZoomWave" to "zoom", "IrisPulse" to "iris", "FrostPulse" to "frost", "FocusPull" to "focus")
+    fun `Wave drives the beam attributes, with their own defaults and presets`() {
+        val wave = registry.getRegistration("Wave")!!
+        assertEquals("intensity", wave.family)
+        assertEquals(listOf("dimmer", "uv", "zoom", "iris", "frost", "focus"), wave.compatibleAttributes)
+        assertEquals(FxOutputType.SLIDER, wave.outputType)
+        assertEquals(
+            mapOf(
+                "zoom" to mapOf("low" to "64", "high" to "192"),
+                "iris" to mapOf("low" to "0", "high" to "160"),
+                "frost" to mapOf("low" to "0", "high" to "160"),
+                "focus" to mapOf("low" to "64", "high" to "192"),
+            ),
+            wave.attributeDefaults,
+        )
+        val focusPull = wave.presets.single { it.name == "Focus Pull" }
+        assertEquals("focus", focusPull.attribute)
+        assertEquals(2.0, focusPull.cycle)
+        assertEquals(FxDirection.BOUNCE.name, focusPull.direction)
+        assertEquals(
+            listOf("Strobe", "Chase", "Zoom Wave", "Iris Pulse", "Frost Pulse", "Focus Pull"),
+            wave.presets.map { it.name },
+        )
+    }
+
+    @Test
+    fun `no built-in is filed under beam but Slot Steps drives it`() {
         // Slot Steps drives Beam too (effects plan §3.6), but is filed in the Steps family and steps
         // a setting its row names — it declares only the `setting` sentinel, and emits steps.
-        val beam = registry.allRegistrations.filter { it.family == "beam" }
-        assertEquals(expected.keys, beam.map { it.id }.toSet())
+        assertEquals(emptyList(), registry.allRegistrations.filter { it.family == "beam" }.map { it.id })
         val slotSteps = registry.getRegistration(SLOT_STEPS_ID)!!
         assertEquals(STEPS_CATEGORY, slotSteps.family)
         assertEquals(STEPS_CATEGORY, registry.getRegistration(PALETTE_STEPS_ID)!!.family)
         assertEquals("beam", stepsFxFamily(SLOT_STEPS_ID, null))
         assertEquals(listOf("setting"), slotSteps.compatibleAttributes)
         assertEquals(FxOutputType.STEPS, slotSteps.outputType)
-        for (reg in beam) {
-            assertEquals(listOf(expected.getValue(reg.id)), reg.compatibleAttributes, reg.id)
-            assertEquals(FxOutputType.SLIDER, reg.outputType, reg.id)
-        }
     }
 
     // --- Lightning Strike, an Intensity FX since the composite mode went ---
@@ -575,7 +610,7 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `LightningStrike flashes then decays then goes dark`() {
-        val effect = fx("LightningStrike", "maxBrightness" to "255", "minBrightness" to "10")
+        val effect = fx("LightningStrike", "high" to "255", "low" to "10")
 
         val flash = effect.calculate(0.02).slider()
         val decay = effect.calculate(0.15).slider()
@@ -589,7 +624,7 @@ class BuiltInFxBehaviourTest {
     /** The decay curve the composite computed, `min + range × (1 − t)²` over 0.05–0.3, unchanged. */
     @Test
     fun `LightningStrike decays on the curve it always had`() {
-        val effect = fx("LightningStrike", "maxBrightness" to "200", "minBrightness" to "20")
+        val effect = fx("LightningStrike", "high" to "200", "low" to "20")
         for (phase in listOf(0.05, 0.1, 0.175, 0.25, 0.299)) {
             val t = (phase - 0.05) / 0.25
             val expected = (20 + 180 * (1.0 - t) * (1.0 - t)).toInt().toUByte()
@@ -612,7 +647,7 @@ class BuiltInFxBehaviourTest {
     fun `CandleFlicker stays within bounds over many ticks`() {
         val effect = fx(
             "CandleFlicker",
-            "baseLevel" to "180", "min" to "100", "max" to "230",
+            "base" to "180", "low" to "100", "high" to "230",
         ) as StatefulFx
         effect.initialize()
 
@@ -627,7 +662,7 @@ class BuiltInFxBehaviourTest {
     fun `CandleFlicker respects custom bounds`() {
         val effect = fx(
             "CandleFlicker",
-            "baseLevel" to "50", "min" to "20", "max" to "80",
+            "base" to "50", "low" to "20", "high" to "80",
         ) as StatefulFx
         effect.initialize()
 
@@ -642,7 +677,7 @@ class BuiltInFxBehaviourTest {
     fun `CandleFlicker initialize resets towards the base level`() {
         val effect = fx(
             "CandleFlicker",
-            "baseLevel" to "180", "min" to "100", "max" to "230",
+            "base" to "180", "low" to "100", "high" to "230",
         ) as StatefulFx
         effect.initialize()
         for (i in 0L..100L) {
@@ -661,7 +696,7 @@ class BuiltInFxBehaviourTest {
     fun `CandleFlicker produces varying output over time`() {
         val effect = fx(
             "CandleFlicker",
-            "baseLevel" to "180", "min" to "100", "max" to "230", "smoothing" to "0.5",
+            "base" to "180", "low" to "100", "high" to "230", "settle" to "0.5",
         ) as StatefulFx
         effect.initialize()
 

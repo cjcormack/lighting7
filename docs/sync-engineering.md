@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 39`, `minReader = 39`. Rules for future
+Current writer emits `formatVersion = 43`, `minReader = 43`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -281,6 +281,15 @@ writes them away. What that loses is the origin alone, and a show with no origin
 show detached before Att.1 is one, and an attach of one falls back to the no-origin rule (every venue
 record the show lacks comes in, each offered a hide in the review) rather than doing anything silently.
 So no record degrades, and the writer is still v35.
+
+**An FX parameter's editor metadata (fx-settings plan session 1) took no bump, by the same
+question.** A user FX definition's `parameters` may carry `label`, `min`, `max`, `step`, `unit`,
+`options`, `role`, `shownWhen` and `pair`. A v40 reader ignores them and imports the definition with
+none, which is a valid state — the editor guesses for a parameter that declares nothing — and its next
+push writes them away. The one record that would degrade is a `choice` stripped of its options, and
+nothing on the desk authors a `choice` yet: no built-in declares one and the definition sheet does not
+offer the type. Session 2's `minReader` 41 closed that before one could exist (§"Version 41 — Wave");
+a choice with no options takes any value (`choiceProblem`, `TypedParams.choice`). The writer stayed v40.
 
 **Deferred Look FX going (absolute-looks plan D2) took no bump, by the same question.** Nothing
 new is written: every Look FX this desk exports names a fixture, a group or a selection, which a
@@ -319,7 +328,7 @@ REST layer and the client know only today's. It maps by **field**, never by vers
 name never returns with a new meaning in the same field — so it applies to every archive, and to a
 tree that mixes two. `ProjectImporter.readDir` reads each folder under its old names too and passes
 every record through `LegacyNames.record` before decoding it, a record in today's folder winning over
-its namesake in an old one; then every FX goes through `LegacyNames.rewriteFx`. `RecordHasher` keys a
+its namesake in an old one; then every FX goes through `LegacyNames.rewriteFx`, then `consolidateFx`. `RecordHasher` keys a
 record in an old folder by today's name, so a merge across the rename pairs a record with itself.
 
 | Where | Old | Today |
@@ -333,6 +342,9 @@ record in an old folder by today's name, so a merge across the rename pairs a re
 | a speed master | `usage` | `family` |
 | an FX definition | `effectId`, `category`, `effectMode`, `compatibleProperties`, `defaultStepTiming` (boolean) | `fxId`, `family`, `fxMode`, `compatibleAttributes`, `defaultTiming` |
 | `fxType` | `Triangle`, `ColourPulse`, `Strobe`, `ZoomBreathe` | `Ramp`, `ColourWave`, `DimmerStrobe`, `ZoomWave` |
+| a stored FX's `fxType`, `family`, `parameters` and `attribute` (v41) | `SineWave`, `RampUp`, `RampDown`, `Ramp`, `SquareWave`, `Pulse`, `DimmerStrobe`, `ZoomWave`, `IrisPulse`, `FrostPulse`, `FocusPull`, and their parameters | `Wave` on its shape, with Wave's parameters (§"Version 41 — Wave") |
+| a stored FX's `fxType`, `family` and `parameters` (v42) | `Circle`, `Figure8`, `RandomPosition`, `Sweep`, `PanSweep`, `TiltSweep`, and their parameters | `Path` on its shape, with Path's parameters (§"Version 42 — Path") |
+| a stored FX's `parameters` (v42) | Flicker's `min`, `max`; Candle Flicker's `baseLevel`, `min`, `max`, `smoothing`; Fluorescent Flicker's `offLevel`, `onLevel`, `flickerDurationMs`, `flickerSpeed`; Lightning Strike's `minBrightness`, `maxBrightness`; Colour Strobe's `onRatio`; Colour Cycle's `fadeRatio` | `low`, `high`; `base`, `low`, `high`, `settle`; `low`, `high`, `burstMs`, `speed`; `low`, `high`; `width`; `between` and `fade` |
 | `order` | `LINEAR`, `CENTER_OUT`, `EDGES_IN`, `SPLIT` | `NORMAL`, `CENTRE_OUT`, `CENTRE_IN`, `CENTRE_IN` |
 | `family`, a master's too | `dimmer`, `palette` | `intensity`, `steps` |
 | an FX's `family` | `composite` | the family of its output: `intensity` for Lightning Strike and any slider, else `colour` or `position` |
@@ -426,6 +438,69 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 43 — Each head later by
+
+fx-settings plan session 4: a stored FX — a Look's, a cue's ad-hoc one or a palette's — carries
+`spreadUnit`, `STEP` where its `spread` counts the FX's own steps (each head that many steps after the
+one before) rather than a share of the cycle (`docs/fx-engineering.md` §"The spread's shape"). Absent
+is `CYCLE`, so every older record means what it meant, and the writer omits it at `CYCLE`; the column
+is `spread_unit`, null for `CYCLE`. The importer stores the unit as the archive says it
+(`SpreadUnit.canonical`), and checks nothing about the FX: a `STEP` on a type with no steps runs as
+`CYCLE`.
+
+`SUPPORTED_FORMAT_VERSION = 43`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5. **`minReader` moves to 43**:
+a v42 reader would run a `STEP` spread as a share of the cycle, staggering the chase it was set to
+align, and its next push would write the unit away. `RichProjectFixture`'s *Steps chase* Look holds a
+Colour Cycle at `STEP` 2.
+
+### Version 42 — Path
+
+fx-settings plan session 3: Path replaces Circle, Figure 8, Random Position, Sweep, Pan Sweep and
+Tilt Sweep; Colour Cycle's `fadeRatio` is `between` (`CUT` where it was 0, else `FADE`) and `fade`; and
+the Flicker family's, Lightning Strike's and Colour Strobe's parameters take their normalised names
+(`docs/fx-engineering.md` §"Path, Colour Cycle and the renamed parameters"). A stored FX holding any of
+them is read through `LegacyNames.absorbFx` after `consolidateFx`, whatever the archive's
+`formatVersion`, and database step 8 (`state/FxSiblingsMigration.kt`) does the same to a database's
+rows; nothing a head does moves (`LegacyEquivalenceTest`). Colour Wave and Colour Fade are not
+rewritten — no Colour Cycle draws either to the DMX step — and stay as they are written, still
+registered as legacy. A record below 42 that holds a key under a new name its old FX never read (a
+stray `low` on a Flicker) loses it, since the new script would start reading it. As at v41, no folder or field is renamed, so a converted record reads as this
+desk's change and is pushed in the new form.
+
+`SUPPORTED_FORMAT_VERSION = 42`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5. **`minReader` moves to 42**:
+a v41 reader knows no Path, and would read a renamed parameter as absent, so a Flicker would run at its
+defaults. `RichProjectFixture`'s Swirl Look holds a Path Circle and a Path Line with both ends set.
+
+### Version 41 — Wave
+
+fx-settings plan session 2: Wave replaces Sine Wave, Ramp Up, Ramp Down, Ramp, Square Wave, Pulse,
+Dimmer Strobe, Zoom Wave, Iris Pulse, Frost Pulse and Focus Pull (`docs/fx-engineering.md` §"Wave").
+A stored FX on one of those ids, in a Look, a cue or a palette, is read through
+`LegacyNames.consolidateFx` after `rewriteFx`, whatever the archive's `formatVersion`: its `fxType`
+is `Wave`, its `family` `intensity`, its parameters Wave's at the values the old script read (its
+shape, `low` and `high` for `min` and `max` or `offValue` and `onValue` or `start` and `end`, `width`,
+`attack`, `hold`, `curve`), and a beam one naming no `attribute` names the one it drove (so on a group
+where only some heads have it, it now runs on those, where it ran on none; logged as output that moves). Database step
+7 (`state/FxConsolidationMigration.kt`) does the same to a database's rows. No folder or field is
+renamed, so `RecordHasher` hashes an older desk's record as it was written: after the upgrade a
+converted record reads as this desk's change and is pushed in the Wave form, which every desk
+converting it writes byte for byte, and one an older desk edited meanwhile is a conflict, as any record
+both sides changed is.
+
+`SUPPORTED_FORMAT_VERSION = 41`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5. **`minReader` moves to 41**:
+a v40 reader knows no Wave, so would refuse to start or skip every level FX in the show. Wave's
+`shape` is the first `choice` a stored FX holds, which session 1's note above waited on.
+`RichProjectFixture`'s level FX are Waves: Sines, one with its `low` set, and Pulses with their `hold` set.
+
+### Version 40 — Fixtures
+
+FX editor follow-ups plan session 2: a stored FX's `elementMode` — a cue's ad-hoc FX, a Look's, a
+palette's — may be `WHOLE`, *Over: Fixtures* (`docs/fx-engineering.md` §"Element Mode: what *Over*
+counts"). Nothing is renamed or moved, and an FX without the field still imports as `PER_FIXTURE`.
+`SUPPORTED_FORMAT_VERSION = 40`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5. **`minReader` moves to 40**:
+a v39 reader keeps the string but its lenient parse runs each `WHOLE` FX as `PER_FIXTURE`, so the
+show would play differently there with nothing but a warning in its log. `RichProjectFixture`'s selection FX is `WHOLE`.
 
 ### Version 39 — attributes and centres
 

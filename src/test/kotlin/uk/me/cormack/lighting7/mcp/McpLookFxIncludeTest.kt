@@ -61,9 +61,9 @@ class McpLookFxIncludeTest : RouteIntegrationTest() {
         assertTrue(patched.success, patched.result)
     }
 
-    /** A Look of one Pulse on [fixture], and its id. */
+    /** A Look of one Wave on [fixture], and its id. */
     private fun pulseLook(name: String = "Throb", fixture: String = "foh-1"): Int {
-        val pulse = """{"targetType":"fixture","targetKey":"$fixture","fxType":"Pulse","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+        val pulse = """{"targetType":"fixture","targetKey":"$fixture","fxType":"Wave","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
         return ok("create_look", """{"name":"$name","fx":[$pulse]}""")["lookId"]!!.jsonPrimitive.int
     }
 
@@ -148,14 +148,14 @@ class McpLookFxIncludeTest : RouteIntegrationTest() {
         val first = included(lookId).single()
         // A changed type is no longer the Look's running effect to Include, so a second Include
         // spawns another instance of the same row.
-        applyFxUpdate(state, first.id, UpdateFxRequest(fxType = "SineWave"))
+        applyFxUpdate(state, first.id, UpdateFxRequest(fxType = "Flicker"))
         ok("include_into_programmer", """{"lookId":$lookId}""")
         val second = included(lookId).single { it.id != first.id }
         applyFxUpdate(state, second.id, UpdateFxRequest(cycle = 4.0))
 
         assertEquals(1, ok("update_from_programmer", "{}")["fxWritten"]!!.jsonPrimitive.int)
         val stored = transaction(state.database) { storedFx("Throb").let { it.fxType to it.cycle } }
-        assertTrue(stored in setOf("SineWave" to 1.0, "Pulse" to 4.0), "one instance's edit, never the two merged: $stored")
+        assertTrue(stored in setOf("Flicker" to 1.0, "Wave" to 4.0), "one instance's edit, never the two merged: $stored")
     }
 
     @Test
@@ -168,7 +168,7 @@ class McpLookFxIncludeTest : RouteIntegrationTest() {
             DaoLookFxEntity.new {
                 this.look = look
                 targetType = DEFERRED_TARGET_TYPE; targetKey = ""
-                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                fxType = "Wave"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 sortOrder = 1
@@ -179,7 +179,7 @@ class McpLookFxIncludeTest : RouteIntegrationTest() {
 
         val include = ok("include_into_programmer", """{"lookId":$lookId}""")
         assertEquals(1, include["fxSpawned"]!!.jsonPrimitive.int, "$include")
-        assertEquals(listOf("foh-1" to "Pulse"), included(lookId).map { it.target.targetKey to it.registrationId })
+        assertEquals(listOf("foh-1" to "Wave"), included(lookId).map { it.target.targetKey to it.registrationId })
         assertTrue(warnings(include).isEmpty(), "$include")
 
         // Included again over itself: the first Include's instance is already running it.

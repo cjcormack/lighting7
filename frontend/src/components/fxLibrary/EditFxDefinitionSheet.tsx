@@ -165,7 +165,7 @@ export function EditFxDefinitionSheet({
 
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Label id="edit-fx-timing">Timing by default</Label>
+            <Label id="edit-fx-timing">One cycle for</Label>
             <ToggleGroup
               type="single"
               size="sm"
@@ -174,17 +174,17 @@ export function EditFxDefinitionSheet({
               onValueChange={(v) => v && setEdits({ ...edits, defaultTiming: v === 'head' ? 'HEAD' : 'CYCLE' })}
             >
               <ToggleGroupItem value="cycle" className="px-2 text-xs">
-                Per cycle
+                All heads
               </ToggleGroupItem>
               <ToggleGroupItem value="head" className="px-2 text-xs">
-                Per head
+                Each head
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
           <p className="text-xs text-muted-foreground" data-testid="fork-step-timing-note">
             {forkedFrom
-              ? `Forked from ${forkedFrom}. A fork starts per cycle — the library does not publish the built-in’s own default, so check it matches before you use this.`
-              : 'New instances of this FX start per cycle or per head as set here.'}
+              ? `Forked from ${forkedFrom}. A fork starts on one cycle for all heads — the library does not publish the built-in’s own default, so check it matches before you use this.`
+              : 'New instances of this FX start on one cycle for all heads, or for each head, as set here.'}
           </p>
         </div>
 

@@ -58,6 +58,9 @@ vi.mock('@/store/palettes', () => ({
           blendMode: 'ADDITIVE',
           order: 'NORMAL',
           phaseOffset: 0,
+          // Stored on Fixtures, as a new palette is; the spots' position is their own, so the
+          // running instance reports no Over, and that is no edit.
+          elementMode: 'WHOLE',
           parameters: { panCentre: '128', tiltCentre: '128', panRadius: '60', tiltRadius: '20' },
           speedMasterUuid: null,
           rateSpeedMasterUuid: null,

@@ -627,7 +627,8 @@ live state are not repeated: the client has them from the stack list, `cueRunSta
   settings}`, the target canonical (`canonicalTarget`). `family` is the group of the attribute it
   drives as Record reads it — the first head's attribute, else the library `family`'s. `settings` is
   what `comparableFxSettings` compares, built from the **row** rather than a live instance: the
-  canonical type, the parameters over the library's defaults, an element mode only over members, a
+  canonical type, the parameters over the library's defaults, an element mode as `ElementMode.stored`
+  keeps it (over members, or `WHOLE` on a lone fixture), a
   filter or Timing only where not the default, and only the master the timing reads, master 1
   by its uuid. Two rows of one run with equal settings are one FX to a GO; unequal, an edit in
   place (◆, D8) — unless either has Runs set, which a GO never hands on.
@@ -1026,7 +1027,7 @@ The `fxState` WebSocket message includes `cueStackId` on each FX in `activeFx`:
 {
   "type": "fxState",
   "activeFx": [
-    { "id": 1, "fxType": "SineWave", "targetKey": "front-wash", "cueId": 10, "cueStackId": 1, ... }
+    { "id": 1, "fxType": "Wave", "targetKey": "front-wash", "cueId": 10, "cueStackId": 1, ... }
   ]
 }
 ```

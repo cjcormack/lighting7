@@ -10,11 +10,13 @@ import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.ElementMode
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.TimingSource
-import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
+import uk.me.cormack.lighting7.fx.fxAttributeFamily
 import uk.me.cormack.lighting7.fx.perFixtureRowTargetsOf
 import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
@@ -202,7 +204,7 @@ private class TimelineReads(
         if (fixtures != null) {
             look.derivedFamilyGroups(fixtures).toMaskNames()
         } else {
-            look.effects.mapNotNullTo(LinkedHashSet()) { attributeFamilyForFxFamily(it.family) }.toMaskNames()
+            look.effects.mapNotNullTo(LinkedHashSet()) { fxAttributeFamily(it.family, it.attribute) }.toMaskNames()
         }
 
     /**
@@ -210,7 +212,7 @@ private class TimelineReads(
      * head's property's group, else its library category's.
      */
     private fun fxFamilyOf(effect: CueAdHocFxDto, heads: List<String>): AttributeFamily? {
-        val byCategory = attributeFamilyForFxFamily(effect.family)
+        val byCategory = fxAttributeFamily(effect.family, effect.attribute)
         val attribute = effect.attribute ?: return byCategory
         val fixture = heads.firstOrNull()?.let { key -> runCatching { fixtures?.untypedGroupableFixture(key) }.getOrNull() }
             ?: return byCategory
@@ -220,7 +222,7 @@ private class TimelineReads(
     /**
      * What [uk.me.cormack.lighting7.fx.comparableFxSettings] compares, read off the stored row
      * rather than a running instance: the canonical effect type, the parameters over the library's
-     * defaults, an element mode only over members, the filter and step timing only where they differ
+     * defaults, an element mode as [ElementMode.stored] keeps it, the filter and step timing only where they differ
      * from the default, and only the master the effect's timing reads, master 1 spelled by its uuid.
      */
     private fun comparableSettingsOf(
@@ -238,7 +240,10 @@ private class TimelineReads(
             blendMode = effect.blendMode.uppercase(),
             order = effect.order.uppercase(),
             phaseOffset = effect.phaseOffset,
-            elementMode = effect.elementMode?.uppercase()?.takeIf { overMembers },
+            elementMode = effect.elementMode?.let { raw ->
+                FxSpecCoercion.Names.elementMode(raw)?.let { ElementMode.stored(overMembers, it) }
+                    ?: raw.uppercase().takeIf { overMembers }
+            },
             elementFilter = effect.elementFilter?.takeUnless { it.equals("ALL", ignoreCase = true) },
             timing = effect.timing?.takeUnless { it == (registration?.defaultTiming ?: Timing.CYCLE) },
             parameters = (defaults + effect.parameters).toSortedMap(),
@@ -252,6 +257,7 @@ private class TimelineReads(
             wings = effect.wings,
             segments = effect.segments,
             parts = effect.parts,
+            spreadUnit = effect.spreadUnit,
         )
     }
 }
@@ -353,6 +359,7 @@ internal data class TimelineFxSettingsDto(
     val wings: Int,
     val segments: Int,
     val parts: Int,
+    val spreadUnit: String?,
 )
 
 @Serializable

@@ -154,6 +154,22 @@ Scripts have a `ScriptType` enum stored in the database:
 | `FX_CALC` | `FxCalcScript` | Pure phase-based FX calculation |
 | `FX_CALC_STATEFUL` | `FxStatefulCalcScript` | Tick-based FX with internal state |
 
+### What a script FX may declare
+
+An `FX_DEFINITION` script's `registerFx(FxRegistration(…, parameters = listOf(…)))` names each
+parameter as a `ParameterInfo`, and may give it the editor metadata a built-in's frontmatter does —
+`label`, `min` / `max` / `step`, `unit`, `options` (for `type = "choice"`, read with
+`params.choice`), `role`, `shownWhen` and `pair` (`docs/fx-engineering.md` §"Parameters"):
+
+```kotlin
+ParameterInfo("depth", "double", "0.5", "How deep the flicker dips",
+    label = "Depth", min = 0.0, max = 1.0, step = 0.05, unit = "ratio")
+```
+
+`registerFx` refuses a declaration that breaks one of `parameterMetadataProblems`' rules, as a
+built-in's load does. Each field a parameter leaves out is drawn as the editor guesses from its name
+and type.
+
 ### Script Wrapping
 
 Scripts are wrapped differently based on type:
@@ -238,7 +254,7 @@ persistent compilation cache below.
 
 ### Persistent compilation cache (on disk)
 
-Runtime script compilation — 30 built-in FX, cue-trigger scripts, user FX — is
+Runtime script compilation — 14 built-in FX, cue-trigger scripts, user FX — is
 the dominant start-up cost. `buildScriptingHostConfiguration` installs a
 `CompiledScriptJarsCache` under `<appDataDir>/script-cache` (override with `scriptCache.path`;
 disable with `scriptCache.enabled=false`). The first compile of each distinct script writes a

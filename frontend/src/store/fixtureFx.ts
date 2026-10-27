@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import { useCallback } from 'react'
 import { useDispatch } from 'react-redux'
 import { toast } from 'sonner'
@@ -110,12 +111,37 @@ export interface FixtureFx {
   indirect: FixtureIndirectFx[]
 }
 
+/**
+ * One FX parameter, and how the desk says to draw it (fx-settings plan D1). Every field after
+ * `description` is optional: a script FX that declares none is drawn as the editor guesses
+ * (`paramView` in `fxEditorModel.ts`).
+ */
 export interface FxParameterDef {
   name: string
   type: string
   defaultValue: string
   description: string
+  label?: string | null
+  /** In the stored value's terms: a byte's 0–255, a ratio's 0–1. */
+  min?: number | null
+  max?: number | null
+  step?: number | null
+  unit?: FxParamUnit | null
+  /** A `choice`'s values, and the desk's curves on an `easingCurve`. */
+  options?: { value: string; label: string }[] | null
+  /** `detail` folds under *More*. */
+  role?: 'main' | 'detail' | null
+  /** Drawn only while `param` holds one of `values`. */
+  shownWhen?: { param: string; values: string[] } | null
+  /** On a low, the high it is drawn with as one range. */
+  pair?: string | null
 }
+
+/**
+ * `%` a byte level read as a percent of full, `ratio` a 0–1 share as a percent, `dmx` a byte in DMX
+ * steps, `position` a byte about its axis's centre, `ms` milliseconds — the desk's `PARAMETER_UNITS`.
+ */
+export type FxParamUnit = '%' | 'ratio' | 'dmx' | 'position' | 'ms'
 
 export interface FxLibraryEntry {
   name: string
@@ -138,6 +164,33 @@ export interface FxLibraryEntry {
   source?: string
   sourceDefinitionId?: number | null
   script?: string | null
+  /** The picker's familiar names for this FX on one attribute (fx-settings plan D4). */
+  presets?: FxPreset[]
+  /** Parameters a new FX on an attribute starts with, by attribute — Wave's zoom at 64–192. */
+  attributeDefaults?: Record<string, Record<string, string>>
+  /**
+   * Kept for what is already stored and never offered (fx-settings plan D3): Colour Fade and Colour
+   * Wave, which Colour Cycle draws a DMX step apart. It runs and edits as any FX; no picker lists it.
+   */
+  legacy?: boolean
+  /**
+   * The list parameter whose entries are this FX's steps (fx-settings plan D6) — Colour Cycle's
+   * `colours` — absent for an FX with none: only one that names it takes a `STEP` spread.
+   */
+  stepsFrom?: string
+}
+
+/**
+ * A familiar name the picker lists beside the FX types (fx-settings plan D4): its FX on
+ * `attribute`, starting with `parameters` over the FX's defaults, at its own `cycle` (beats) and
+ * `direction` where it names them.
+ */
+export interface FxPreset {
+  name: string
+  attribute: string
+  parameters?: Record<string, string>
+  cycle?: number | null
+  direction?: string | null
 }
 
 export interface AddFixtureFxRequest {
@@ -157,6 +210,8 @@ export interface AddFixtureFxRequest {
   parameters: Record<string, string>
   order?: string
   elementFilter?: string
+  /** What the spread counts over fixtures' elements; absent starts on Fixtures (`WHOLE`). */
+  elementMode?: string
   timing?: Timing
   /** Speed master to subscribe to, as the master's uuid (omitted → master 1). */
   speedMasterUuid?: string
@@ -178,6 +233,8 @@ export interface AddFixtureFxRequest {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -333,6 +390,8 @@ export interface ActiveFx {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * An N-shot that has run its count and is kept, painting nothing, until its programmer layer goes
    * (the desk's `FxInstance.spent`). Any other spent N-shot has already left the list.

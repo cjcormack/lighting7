@@ -1,6 +1,10 @@
 package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.fx.FxOutputType
+import uk.me.cormack.lighting7.fx.FxRegistration
+import uk.me.cormack.lighting7.fx.FxRegistry
+import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.fx.ParameterOption
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -74,10 +78,38 @@ class FxDefinitionCompatibilityValidationTest {
     }
 
     @Test
+    fun `a definition's parameter metadata is checked as a built-in's is`() {
+        assertNull(parametersProblem(listOf(ParameterInfo("low", "ubyte", "0", label = "Low", min = 0.0, max = 255.0, unit = "%"))))
+        val message = assertNotNull(parametersProblem(listOf(ParameterInfo("low", "ubyte", "0", unit = "furlongs", pair = "high"))))
+        kotlin.test.assertTrue("furlongs" in message && "pair" in message, "every problem is named: $message")
+    }
+
+    @Test
+    fun `a choice value none of its options is is refused where an FX is written`() {
+        val registry = FxRegistry()
+        registry.register(
+            FxRegistration(
+                id = "Probe", name = "Probe", family = "intensity", outputType = FxOutputType.SLIDER,
+                parameters = listOf(
+                    ParameterInfo("shape", "choice", "SINE", options = listOf(ParameterOption("SINE", "Sine"), ParameterOption("SQUARE", "Square"))),
+                ),
+                compatibleAttributes = listOf("dimmer"),
+                factory = { _, _, _ -> error("not built") },
+            ),
+        )
+        assertNull(registry.fxWriteProblem("Probe", mapOf("shape" to "SQUARE")))
+        assertNotNull(registry.fxWriteProblem("Probe", mapOf("shape" to "TRIANGLE")))
+    }
+
+    @Test
     fun `a retired built-in id may not name a definition`() {
         // An archive's old FX use it in the same field, and the importer renames it (terminology plan P3).
         for (id in listOf("Triangle", "Strobe", "Colour Pulse", "zoom_breathe", "Breathe")) assertNotNull(retiredIdProblem(id), id)
         assertNull(retiredIdProblem("MyStrobe"))
+        // Nor may the built-ins the old ids now run as: a definition would take them all over (fx-settings plan D3).
+        assertEquals("'path' is the built-in Path's id; give the FX another id", retiredIdProblem("path"))
+        assertEquals("'Wave' is the built-in Wave's id; give the FX another id", retiredIdProblem("Wave"))
+        assertNotNull(retiredIdProblem("Pan Sweep"))
     }
 
     // ─── Normalisation ──────────────────────────────────────────────────────

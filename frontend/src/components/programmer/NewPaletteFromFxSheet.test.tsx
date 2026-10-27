@@ -76,12 +76,38 @@ describe('NewPaletteFromFxSheet on a step effect', () => {
   it('saves Slot Steps as a Beam palette naming the setting it steps', async () => {
     open(running({ fxType: 'SlotSteps', attribute: 'gobo', parameters: { slots: 'GOBO_3,GOBO_5' } }))
     await waitFor(() => expect(mocks.create).toHaveBeenCalled())
-    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'SlotSteps', family: 'beam', attribute: 'gobo' })
+    // An FX reporting no Over starts the palette on Fixtures.
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'SlotSteps', family: 'beam', attribute: 'gobo', elementMode: 'WHOLE' })
+  })
+
+  it('keeps the running FX\'s own Over', async () => {
+    open(running({ fxType: 'SlotSteps', attribute: 'gobo', parameters: { slots: 'GOBO_3,GOBO_5' }, elementMode: 'FLAT' }))
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled())
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ elementMode: 'FLAT' })
   })
 
   it("saves Palette Steps under its palettes' family, naming no property", async () => {
     open(running({ fxType: 'PaletteSteps', attribute: 'position', parameters: { palettes: 'pal:a,pal:b' } }))
     await waitFor(() => expect(mocks.create).toHaveBeenCalled())
     expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'PaletteSteps', family: 'position', attribute: null })
+  })
+})
+
+describe('NewPaletteFromFxSheet on a Wave (fx-settings plan D5)', () => {
+  beforeEach(() => {
+    mocks.library = [{ ...entry('Wave', 'intensity'), compatibleAttributes: ['dimmer', 'uv', 'zoom', 'iris', 'frost', 'focus'] }]
+  })
+
+  it('saves a Wave on zoom as a Beam palette naming zoom, filed under its library family', async () => {
+    open(running({ fxType: 'Wave', attribute: 'zoom', parameters: { shape: 'SINE', low: '64', high: '192' } }))
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled())
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'Wave', family: 'intensity', attribute: 'zoom' })
+    expect(screen.getByText(/Beam/)).toBeTruthy()
+  })
+
+  it('saves a Wave on the dimmer as an Intensity palette naming no property', async () => {
+    open(running({ fxType: 'Wave', attribute: 'dimmer', parameters: { shape: 'PULSE' } }))
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled())
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'Wave', family: 'intensity', attribute: null })
   })
 })

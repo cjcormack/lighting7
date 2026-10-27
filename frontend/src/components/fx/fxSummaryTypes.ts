@@ -54,9 +54,9 @@ export interface FxSummaryData {
 const FX_CATEGORY_MAP: Record<string, string> = {}
 
 // Build the map from known effect names
-const DIMMER_FX = ['sinewave', 'rampup', 'rampdown', 'ramp', 'pulse', 'squarewave', 'dimmerstrobe', 'flicker']
+const DIMMER_FX = ['wave', 'flicker', 'candleflicker', 'fluorescentflicker', 'lightningstrike']
 const COLOUR_FX = ['colourcycle', 'rainbowcycle', 'colourstrobe', 'colourwave', 'colourfade', 'colourflicker']
-const POSITION_FX = ['circle', 'figure8', 'sweep', 'pansweep', 'tiltsweep', 'randomposition']
+const POSITION_FX = ['path']
 
 for (const name of DIMMER_FX) FX_CATEGORY_MAP[name] = 'intensity'
 for (const name of COLOUR_FX) FX_CATEGORY_MAP[name] = 'colour'

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import type { UpdateFxRequest } from '@/api/fxApi'
-import { useFxLibraryQuery, useResetFxToPaletteMutation, type ActiveFx } from '@/store/fixtureFx'
+import { useFxLibraryQuery, useResetFxToPaletteMutation, type ActiveFx, type FxLibraryEntry } from '@/store/fixtureFx'
 import { useSavePaletteMutation } from '@/store/palettes'
 import type { PaletteSummary } from '@/api/palettesApi'
 import { useMaster1Uuid } from '@/store/speedMasters'
@@ -14,7 +14,7 @@ import { EditorReadout } from '../editor/EditorReadout'
 import { EditorFooter } from '../editor/EditorFooter'
 import { useLivePush } from '../editor/useLivePush'
 import { findFxEntry } from '../busking/buskingTypes'
-import { FxFields } from './FxFields'
+import { FxFields, type FxTypeSwap } from './FxFields'
 import { useSpawningPalette } from './useSpawningPalette'
 import { useToggleFxPause } from './useFxControls'
 import {
@@ -22,15 +22,20 @@ import {
   differsFromPalette,
   draftOf,
   isLevelFx,
+  levelPairOf,
   withPaletteDraft,
   OPTIONAL_FIELDS,
   sameRequest,
+  fxSwapOptions,
+  isPaletteLayerInstance,
+  swappedDraft,
   updateRequestOf,
   type FxDraft,
   type OptionalField,
 } from './fxEditorModel'
 import { useFxScope } from './useFxScope'
 import { useFxGraphLink } from './fxGraphLink'
+import { stepCountOf } from '@/lib/spreadShape'
 
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
@@ -93,11 +98,15 @@ export function FxEditor({
    */
   alsoIds?: readonly number[]
   className?: string
-  /** `FxFields`' section order: the FX editor's inspector draws its own (FX editor plan §4.5). */
+  /** `FxFields`' spacing and the inspector's head ladder, from the desk's preview (fx-settings plan D10). */
   layout?: 'editor' | 'inspector'
 }) {
   const { data: library } = useFxLibraryQuery()
-  const entry = useMemo(() => findFxEntry(library, effect.fxType), [library, effect.fxType])
+  // A header swap draws the new type at once: the host remounts the editor on it once the desk's
+  // answer reaches the running list, and a move before then must already be the new type's.
+  const [swappedTo, setSwappedTo] = useState<FxLibraryEntry | null>(null)
+  const listed = useMemo(() => findFxEntry(library, effect.fxType), [library, effect.fxType])
+  const entry = swappedTo ?? listed
   const connected = useIsDeskConnected()
   const master1Uuid = useMaster1Uuid()
 
@@ -111,7 +120,7 @@ export function FxEditor({
   linkRef.current = link
   // A gesture is running: moves pushed, the release not yet sent.
   const gesture = useRef(false)
-  // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
+  // Across the heads is drawn over the effect's own heads, as the head filter and element
   // mode the draft now says narrow them.
   const { scope: spreadScope, extendedChannels, settingAttribute } = useFxScope({
     target: effect,
@@ -216,9 +225,14 @@ export function FxEditor({
 
   // Lent to the graph's handles while this editor is open, through the same write its fields use —
   // but not while a split edit is held, which the graph cannot draw.
-  const levels = entry != null && isLevelFx(entry) && ['min', 'max'].every((p) => entry.parameters.some((d) => d.name === p))
+  const levelPair = useMemo(
+    () => (entry != null && isLevelFx(entry, effect.attribute) ? levelPairOf(entry) : null),
+    [entry, effect.attribute],
+  )
+  const levels = levelPair != null
   const libraryDefaults = useMemo(() => (entry ? defaultParameters(entry) : {}), [entry])
   const holding = hold != null
+  const steps = useMemo(() => stepCountOf(entry, draft.parameters), [entry, draft.parameters])
   useEffect(() => {
     const target = linkRef.current
     if (target == null) return
@@ -227,13 +241,15 @@ export function FxEditor({
       // An FX carries only the parameters it was given: the rest are the library's.
       draft: { ...draft, parameters: { ...libraryDefaults, ...draft.parameters } },
       levels,
+      ...(levelPair != null ? { levelParams: levelPair } : {}),
       wallClock: (entry?.timingSource ?? effect.timingSource) === 'WALL_CLOCK',
+      steps,
       readOnly: !connected || holding,
       set: (patch, release) => write({ ...draftRef.current, ...patch }, release, OPTIONAL_FIELDS.filter((field) => field in patch)),
       setParam: (name, value, release) =>
         write({ ...draftRef.current, parameters: { ...draftRef.current.parameters, [name]: value } }, release),
     })
-  }, [connected, draft, effect.id, effect.timingSource, entry?.timingSource, holding, levels, libraryDefaults, write])
+  }, [connected, draft, effect.id, effect.timingSource, entry?.timingSource, holding, levels, levelPair, libraryDefaults, steps, write])
   useEffect(
     () => () => {
       linkRef.current?.detach(effect.id)
@@ -267,9 +283,38 @@ export function FxEditor({
   // The instance says its distribution only where it has one (a group, or heads); the operator
   // setting one here says it too.
   const hasOrder = effect.order != null || setFields.current.has('order')
+  // The same for the element mode: said only where the FX lands on elements, or once set here.
+  const said = { order: hasOrder, elementMode: effect.elementMode != null || setFields.current.has('elementMode') }
   const edited =
-    spawning?.palette.fx != null &&
-    differsFromPalette(draft, spawning.palette.fx, master1Uuid, libraryDefaults, { order: hasOrder })
+    spawning?.palette.fx != null && differsFromPalette(draft, spawning.palette.fx, master1Uuid, libraryDefaults, said)
+  // The header's type switcher (fx-settings plan D9): the picker's swap, onto the FX this attribute
+  // takes. Not on a pad's instance, whose palette names its type, nor while a split edit is held,
+  // which a swap would send to every head.
+  const swap = useMemo((): FxTypeSwap | undefined => {
+    if (entry == null || hold != null || isPaletteLayerInstance(effect)) return undefined
+    return {
+      options: fxSwapOptions(library, effect.attribute, entry),
+      onSwap: (to) => {
+        flushHeld()
+        const from = draftRef.current
+        const next = swappedDraft(from, entry, to, effect.attribute, spreadScope.headCount)
+        send({
+          fxType: to.name,
+          parameters: next.parameters,
+          blendMode: next.blendMode,
+          ...(next.cycle !== from.cycle ? { cycle: next.cycle } : {}),
+          ...(next.direction !== from.direction ? { direction: next.direction } : {}),
+        })
+        // The desk converts a step spread itself; the draft only draws what it will run.
+        latest.current = null
+        touched.current = false
+        live.reset()
+        setDraft(next)
+        draftRef.current = next
+        setSwappedTo(to)
+      },
+    }
+  }, [entry, hold, effect, library, flushHeld, send, spreadScope.headCount, live])
   /** The desk put the instance back (or re-keyed it): the draft is what it now runs. */
   const reseed = useCallback(
     (next: ActiveFx) => {
@@ -334,6 +379,7 @@ export function FxEditor({
           readOnly={readOnly}
           set={set}
           setParam={setParam}
+          swap={swap}
           layout={layout}
         />
       )}
@@ -356,7 +402,7 @@ export function FxEditor({
             palette={spawning.palette}
             projectId={spawning.projectId}
             draft={draft}
-            hasOrder={hasOrder}
+            said={said}
             edited={edited}
             readOnly={readOnly}
             flushHeld={flushHeld}
@@ -364,7 +410,7 @@ export function FxEditor({
             reseed={reseed}
           />
         ) : (
-          <Button variant="outline" size="sm" className="h-7" disabled={readOnly || !dirty} onClick={revert}>
+          <Button variant="outline" size="sm" className="h-7" disabled={readOnly || !dirty || swappedTo != null} onClick={revert}>
             Revert
           </Button>
         )}
@@ -416,7 +462,7 @@ function PaletteArm({
   palette: template,
   projectId,
   draft,
-  hasOrder,
+  said,
   edited,
   readOnly,
   flushHeld,
@@ -427,7 +473,8 @@ function PaletteArm({
   palette: PaletteSummary
   projectId: number
   draft: FxDraft
-  hasOrder: boolean
+  /** Which of the draft's guessable fields the instance said, or the operator set: only those are written. */
+  said: { order: boolean; elementMode: boolean }
   edited: boolean
   readOnly: boolean
   flushHeld: () => void
@@ -443,7 +490,7 @@ function PaletteArm({
     // The move the floor still holds lands first, so the template takes what the rig shows.
     flushHeld()
     try {
-      await savePalette({ projectId, paletteId: template.id, fx: withPaletteDraft(template.fx, draft, { order: hasOrder }) }).unwrap()
+      await savePalette({ projectId, paletteId: template.id, fx: withPaletteDraft(template.fx, draft, said) }).unwrap()
       reseed(await resetFx({ id: effect.id }).unwrap())
       toast.success(`Updated “${template.name}” from this ${effect.fxType}`)
     } catch {

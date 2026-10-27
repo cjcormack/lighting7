@@ -1,11 +1,22 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
-import { Pause, Play, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pause, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { paletteAttributeFor } from '@/lib/paletteIntent'
 import { dmxToCentre, formatCentre } from '@/lib/positionScale'
-import { setFxGraphOption, useFxGraphOptions, type FxGraphOptions } from '@/lib/fxEditorView'
+import {
+  GUTTER_DEFAULT_PX,
+  GUTTER_MAX_PX,
+  GUTTER_MIN_PX,
+  clampGutter,
+  setFxGraphOption,
+  setFixturesFolded,
+  toggleFixtureFold,
+  useFoldedFixtures,
+  useFxGraphOptions,
+  type FxGraphOptions,
+} from '@/lib/fxEditorView'
 import { useIsDarkMode } from '@/hooks/useIsDarkMode'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { useCoarsePointer } from '@/hooks/useCoarsePointer'
@@ -17,11 +28,12 @@ import {
   tapSpeedMaster,
   useSpeedMasterLiveQuery,
 } from '@/store/speedMasters'
-import { decodePreview, type DecodedLane, type DecodedPreview } from './fxPreviewDecode'
+import { decodePreview, type DecodedAttribute, type DecodedAttributeRow, type DecodedLane, type DecodedPreview } from './fxPreviewDecode'
 import {
   GRAPH_WINDOWS,
-  GUTTER_PX,
   GraphPlayhead,
+  MIN_PLOT_PX,
+  fitGutter,
   NARROW_ROWS,
   SAMPLES_PER_CYCLE,
   barBeatAt,
@@ -29,19 +41,24 @@ import {
   graphRowOrder,
   isHolding,
   layoutLane,
+  middleCut,
+  mixFixtureOf,
   phaseAt,
   pickedIndex,
   planeAt,
   playheadClockOf,
   rowAt,
+  rulerTicks,
+  RULER_PX,
   sampleAt,
   startBeatOf,
   truncatedWords,
   visibleHeight,
+  type LaidRow,
   type LaneLayout,
   type PlayheadClock,
 } from './fxGraphModel'
-import { GraphHandles, beginDrag, useDragCancel } from './GraphHandles'
+import { CycleTab, GraphHandles, beginDrag, useDragCancel } from './GraphHandles'
 import { phaseFromDrag } from './fxGraphHandles'
 import {
   DARK_PALETTE,
@@ -62,14 +79,12 @@ export type GraphContextOf = (canvas: HTMLCanvasElement) => GraphCtx | null
 const canvasContext: GraphContextOf = (canvas) => canvas.getContext('2d')
 
 export const PATH_PX = 132
-/** The least plot the lanes keep beside the path panel before it moves under them. */
-export const MIN_PLOT_PX = 160
 
 export interface FxGraphProps {
   answer: FxPreviewAnswer | null
   error: string | null
-  /** No FX reaches the selection, so nothing is asked. */
-  empty: boolean
+  /** Why nothing is asked: no heads are selected, or no FX reaches them; null while there is an ask. */
+  empty: 'nothing-selected' | 'nothing-reaches' | null
   /** Below the editor's 760 arm: the picked FX's lane alone, at most six rows. */
   narrow: boolean
   /** With [narrow], every row laid out and six of them shown, the rest a scroll away (§4.2's phone arm). */
@@ -83,9 +98,11 @@ export interface FxGraphProps {
   bounce?: boolean
   /** The mark a hovered control in the inspector changes, lit (FX editor plan §4.5). */
   highlight?: GraphMark | null
-  /** A row a ladder dot links to, by key, marked in the gutter. */
+  /** A knob the pointer rests on lights what it changes, as the inspector's hover does (follow-ups D4). */
+  onHighlight?: (mark: GraphMark | null) => void
+  /** A row a ladder head links to, by key, marked in the gutter. */
   linkedRow?: string | null
-  /** The row the pointer rests on, by key, as it moves: the ladder lights its dots. */
+  /** The row the pointer rests on, by key, as it moves: the ladder rings its head. */
   onHoverRow?: (key: string | null) => void
   /** The inspector's editor, while it edits the picked FX: the handles write through it (D12). */
   editor?: LinkedEditor | null
@@ -114,6 +131,7 @@ export function FxGraph({
   onUnsolo,
   bounce = false,
   highlight = null,
+  onHighlight,
   linkedRow = null,
   onHoverRow,
   editor = null,
@@ -129,7 +147,7 @@ export function FxGraph({
   if (answer == null) {
     return (
       <div data-fx-graph className="flex min-h-[120px] min-w-0 flex-col gap-1 p-3">
-        <EditorReadout error={error ?? undefined}>{empty ? 'No FX reaches the selection.' : 'Asking the desk…'}</EditorReadout>
+        <EditorReadout error={error ?? undefined}>{empty === 'nothing-selected' ? 'Select heads to draw their FX.' : empty === 'nothing-reaches' ? 'No FX reaches the selection.' : 'Asking the desk…'}</EditorReadout>
       </div>
     )
   }
@@ -145,11 +163,13 @@ export function FxGraph({
       onUnsolo={onUnsolo}
       bounce={bounce}
       highlight={highlight}
+      onHighlight={onHighlight}
       linkedRow={linkedRow}
       onHoverRow={onHoverRow}
       editor={coarse || editor?.readOnly === true ? null : editor}
       contextOf={contextOf}
       options={options}
+      coarse={coarse}
       frozen={options.paused || reducedMotion}
       palette={palette}
     />
@@ -174,17 +194,20 @@ function GraphBody({
   onUnsolo,
   bounce,
   highlight,
+  onHighlight,
   linkedRow,
   onHoverRow,
   editor,
   contextOf,
   options,
+  coarse,
   frozen,
   palette,
 }: Omit<FxGraphProps, 'empty' | 'contextOf'> & {
   answer: FxPreviewAnswer
   contextOf: GraphContextOf
   options: FxGraphOptions
+  coarse: boolean
   frozen: boolean
   palette: GraphPalette
 }) {
@@ -193,9 +216,16 @@ function GraphBody({
   const picked = pickedIndex(answer)
   const pickedFx = picked == null ? null : answer.fx[picked]
   const [measure, width] = useWidth()
+  // The name column: the window's width, held at the default under a finger, where it has no grip.
+  const [dragGutter, setDragGutter] = useState<number | null>(null)
+  const chosenGutter = coarse ? GUTTER_DEFAULT_PX : (dragGutter ?? options.gutter)
+  const foldedKeys = useFoldedFixtures()
+  const folded = useMemo(() => new Set(foldedKeys), [foldedKeys])
   // The path panel sits beside the lanes where that leaves them a plot, else under them.
-  const pathBeside = !narrow && width - PATH_PX - 12 >= GUTTER_PX + MIN_PLOT_PX
+  const pathBeside = !narrow && width - PATH_PX - 12 >= chosenGutter + MIN_PLOT_PX
   const lanesWidth = Math.max(0, width - (hasPosition(decoded) && pathBeside ? PATH_PX + 12 : 0))
+  // A narrow graph keeps its plot: the names give way first.
+  const gutter = fitGutter(chosenGutter, lanesWidth)
   const clock = useMemo(() => playheadClockOf(answer), [answer])
 
   const lanes = useMemo(() => {
@@ -211,15 +241,17 @@ function GraphBody({
       lanes.map((lane) =>
         layoutLane(lane, {
           width: lanesWidth,
+          gutter,
           order,
           rows: answer.rows,
           stepsAttributes: stepsAttributes(lane),
+          folded,
           maxRows: narrow && !scrollRows ? NARROW_ROWS : undefined,
           fixtureName,
           attributeLabel,
         }),
       ),
-    [answer.rows, fixtureName, lanes, lanesWidth, narrow, order, scrollRows],
+    [answer.rows, fixtureName, folded, gutter, lanes, lanesWidth, narrow, order, scrollRows],
   )
   const linkedIndex = linkedRow == null ? -1 : answer.rows.findIndex((r) => r.key === linkedRow)
   const drawOptions = useMemo(
@@ -262,6 +294,7 @@ function GraphBody({
   const onHover = useCallback((next: Hover | null) => setHover(next), [])
   const hoverRow = hover == null ? -1 : answer.rows.findIndex((r) => r.key === hover.key)
   const hovered = hover != null && hoverRow >= 0 && hover.sample < answer.window.samples ? { ...hover, row: hoverRow } : null
+  const hoverMix = hover != null && hoverRow < 0 && hover.sample < answer.window.samples ? mixedRowOf(layouts, hover.key) : null
   const hoveredKey = hovered?.key ?? null
   const onHoverRowRef = useRef(onHoverRow)
   onHoverRowRef.current = onHoverRow
@@ -272,7 +305,7 @@ function GraphBody({
   useEffect(() => () => onHoverRowRef.current?.(null), [])
 
   const truncated = truncatedWords(answer.truncated)
-  const hiddenRows = narrow && !scrollRows ? Math.max(0, ...layouts.flatMap((l) => l.sections.map((s) => countRows(lanes, s.attribute) - s.rows.length))) : 0
+  const hiddenRows = narrow && !scrollRows ? Math.max(0, ...layouts.flatMap((l) => l.sections.map((s) => s.cut))) : 0
   const scrolled = scrollRows === true && layouts.some((l) => visibleHeight(l, NARROW_ROWS) != null)
   const pathRows = useMemo(() => pathRowsOf(decoded, order, drawOptions), [decoded, drawOptions, order])
 
@@ -280,10 +313,19 @@ function GraphBody({
     <div data-fx-graph className="flex min-h-[120px] min-w-0 flex-col">
       <GraphToolbar answer={answer} pickedFx={pickedFx} options={options} solo={solo} onUnsolo={onUnsolo} />
       <div data-fx-graph-readout className="flex min-h-6 flex-wrap items-center gap-x-3 border-b px-3 py-0.5 text-[11px] text-muted-foreground tabular-nums">
-        {hovered != null ? (
-          <HoverReadout answer={answer} decoded={decoded} hover={hovered} clock={clock} view={options.view} pickedFx={pickedFx} picked={picked} />
+        {hovered != null || (hover != null && hoverMix != null) ? (
+          <HoverReadout
+            answer={answer}
+            decoded={decoded}
+            sample={(hovered ?? hover)!.sample}
+            at={hovered != null ? { row: hovered.row } : { mix: hoverMix! }}
+            clock={clock}
+            view={options.view}
+            pickedFx={pickedFx}
+            picked={picked}
+          />
         ) : (
-          <WindowReadout answer={answer} pickedFx={pickedFx} fxName={fxName} rigOrder={options.rigOrder} />
+          <WindowReadout pickedFx={pickedFx} fxName={fxName} rigOrder={options.rigOrder} />
         )}
       </div>
       {(error != null || truncated != null || narrow) && (
@@ -298,6 +340,22 @@ function GraphBody({
         </div>
       )}
       <div ref={measure} className={cn('flex min-w-0 gap-3 px-3 py-2', !pathBeside && 'flex-col')}>
+        <div className="flex min-w-0 flex-1 flex-col">
+        {plotWidth > 0 && (
+          <GraphRuler
+            width={lanesWidth}
+            plotLeft={gutter}
+            plotWidth={plotWidth}
+            answer={answer}
+            clock={clock}
+            palette={palette}
+            contextOf={contextOf}
+          >
+            {handles != null && (
+              <CycleTab plotLeft={gutter} plotWidth={plotWidth} samples={answer.window.samples} editor={handles} lit={highlight === 'cycle'} onHighlight={onHighlight} />
+            )}
+          </GraphRuler>
+        )}
         <RowScroll height={scrolled ? scrollHeight(layouts, NARROW_ROWS) : null}>
         <div className="relative min-w-0 flex-1" data-fx-graph-lanes>
           {lanes.map((lane, i) => (
@@ -313,6 +371,9 @@ function GraphBody({
               editor={handles}
               contextOf={contextOf}
               onHover={onHover}
+              onToggleFold={toggleFixtureFold}
+              onFoldAll={setFixturesFolded}
+              onHighlight={onHighlight}
             />
           ))}
           {plotWidth > 0 && (
@@ -321,7 +382,18 @@ function GraphBody({
               data-fx-playhead
               aria-hidden
               className="pointer-events-none absolute top-0 bottom-0 w-[1.5px] bg-sky-500/90"
-              style={{ left: GUTTER_PX }}
+              style={{ left: gutter }}
+            />
+          )}
+          {!coarse && plotWidth > 0 && (
+            <GutterGrip
+              gutter={gutter}
+              chosen={chosenGutter}
+              onDrag={setDragGutter}
+              onSet={(px) => {
+                setDragGutter(null)
+                setFxGraphOption('gutter', clampGutter(px))
+              }}
             />
           )}
           {hovered != null && (
@@ -329,6 +401,7 @@ function GraphBody({
           )}
         </div>
         </RowScroll>
+        </div>
         {pathRows.length > 0 && (narrow ? lanes.some((l) => l.family === 'POSITION') : true) && (
           <PathPanel
             rows={pathRows}
@@ -366,10 +439,6 @@ const LANE_FOOT_PX = 8
 
 export function hasPosition(decoded: DecodedPreview): boolean {
   return decoded.lanes.some((l) => l.attributes.some((a) => a.kind === 'POSITION'))
-}
-
-function countRows(lanes: readonly DecodedLane[], attribute: string): number {
-  return lanes.flatMap((l) => l.attributes).find((a) => a.attribute === attribute)?.rows.length ?? 0
 }
 
 export const attributeLabel = (attribute: string) => paletteAttributeFor(attribute)?.label ?? attribute
@@ -478,6 +547,9 @@ export const GraphLane = memo(function GraphLane({
   editor,
   contextOf,
   onHover,
+  onToggleFold,
+  onFoldAll,
+  onHighlight,
   underneath = true,
 }: {
   lane: DecodedLane
@@ -490,6 +562,11 @@ export const GraphLane = memo(function GraphLane({
   editor: LinkedEditor | null
   contextOf: GraphContextOf
   onHover: (hover: Hover | null) => void
+  /** Folds a fixture's elements under its row; without it, a fixture row has no chevron. */
+  onToggleFold?: (fixtureKey: string) => void
+  /** Folds or unfolds every listed fixture: the lane's way out of a heat map, which draws no chevrons. */
+  onFoldAll?: (fixtureKeys: readonly string[], folded: boolean) => void
+  onHighlight?: (mark: GraphMark | null) => void
   /** The key names *Underneath*: false where the lane draws none. */
   underneath?: boolean
 }) {
@@ -507,7 +584,7 @@ export const GraphLane = memo(function GraphLane({
   const phaseRowAt = (x: number, y: number) => {
     if (handleSection == null || sampleAt(layout, options.samples, x) == null) return null
     const at = rowAt(layout, y)
-    return at != null && at.section === handleSection ? at : null
+    return at != null && at.section === handleSection && at.row.mix == null ? at : null
   }
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
     const box = e.currentTarget.getBoundingClientRect()
@@ -539,8 +616,7 @@ export const GraphLane = memo(function GraphLane({
     const x = e.clientX - box.left
     const s = sampleAt(layout, options.samples, x)
     const at = rowAt(layout, e.clientY - box.top)
-    const key = at == null ? undefined : answer.rows[at.row.row]?.key
-    onHover(s == null || key == null ? null : { sample: s, key, x })
+    onHover(s == null || at == null ? null : { sample: s, key: at.row.key, x })
     e.currentTarget.style.cursor = phaseRowAt(x, e.clientY - box.top) != null ? 'ew-resize' : ''
   }
 
@@ -549,6 +625,9 @@ export const GraphLane = memo(function GraphLane({
   const representative = answer.fx.filter((f) => f.representative === true && (f.family ?? null) === family)
   const slider = lane.attributes.some((a) => a.kind === 'SLIDER')
   const own = options.view === 'this' && pickedFx != null && pickedFx.family === family
+  const fixtureRows = layout.sections.flatMap((s) => s.rows.filter((r) => r.kind === 'fixture'))
+  const foldKeys = [...new Set(fixtureRows.map((r) => r.fixtureKey))]
+  const allFolded = fixtureRows.length > 0 && fixtureRows.every((r) => r.folded)
 
   return (
     <div data-fx-graph-lane={family ?? 'OTHER'} className="pb-2">
@@ -569,6 +648,16 @@ export const GraphLane = memo(function GraphLane({
             {underneath && <Key colour="border-t border-dashed border-zinc-400 bg-transparent">Underneath</Key>}
           </>
         ) : null}
+        {onFoldAll != null && foldKeys.length > 0 && (
+          <button
+            type="button"
+            data-fx-fold-all
+            onClick={() => onFoldAll(foldKeys, !allFolded)}
+            className="ml-auto rounded px-1 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            {allFolded ? 'Show elements' : 'Fold elements'}
+          </button>
+        )}
         {representative.map((f) => (
           <span
             key={`${f.fxId ?? f.entry}`}
@@ -591,8 +680,18 @@ export const GraphLane = memo(function GraphLane({
           onPointerDown={onPointerDown}
           onPointerLeave={() => onHover(null)}
         />
+        <GutterLabels layout={layout} onToggleFold={onToggleFold} />
         {editor != null && handleSection != null && pickedFx != null && (
-          <GraphHandles layout={layout} section={handleSection} samples={options.samples} fx={pickedFx} rows={answer.rows} editor={editor} />
+          <GraphHandles
+            layout={layout}
+            section={handleSection}
+            samples={options.samples}
+            fx={pickedFx}
+            rows={answer.rows}
+            editor={editor}
+            highlight={options.highlight}
+            onHighlight={onHighlight}
+          />
         )}
       </div>
     </div>
@@ -680,14 +779,19 @@ function GraphToolbar({
   onUnsolo: () => void
 }) {
   const clock = playheadClockOf(answer)
+  const beats = Math.round(answer.window.beats * 100) / 100
+  const seconds = Math.round(answer.window.seconds * 10) / 10
   return (
-    <div data-fx-graph-toolbar className="flex min-h-9 flex-wrap items-center gap-2 border-b px-3 py-1">
+    <div data-fx-graph-toolbar className="@container flex min-h-11 flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b px-3 py-1.5">
       <Segment
         label="Window"
         value={options.window}
         choices={GRAPH_WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
         onChange={(v) => setFxGraphOption('window', v)}
       />
+      <span data-fx-graph-length className="font-mono text-[11.5px] whitespace-nowrap text-muted-foreground tabular-nums">
+        {`${beats} ${beats === 1 ? 'beat' : 'beats'} · ${seconds} s`}
+      </span>
       <Segment
         label="Draw"
         value={options.view}
@@ -697,30 +801,36 @@ function GraphToolbar({
         ]}
         onChange={(v) => setFxGraphOption('view', v)}
       />
-      <Toggle on={options.rigOrder} title="Hold the rows in rig order while the Order changes" onClick={() => setFxGraphOption('rigOrder', !options.rigOrder)}>
-        Rig order
-      </Toggle>
-      <Toggle on={options.asSeen} title="Colour as seen: the colour lane multiplied by the Intensity result" onClick={() => setFxGraphOption('asSeen', !options.asSeen)}>
-        As seen
-      </Toggle>
+      <div role="group" aria-label="Rows and colour" className={SEGMENT_CLASS}>
+        <Toggle on={options.rigOrder} title="Hold the rows in rig order while the Order changes" onClick={() => setFxGraphOption('rigOrder', !options.rigOrder)}>
+          Rig order
+        </Toggle>
+        <Toggle on={options.asSeen} title="Colour as seen: the colour lane multiplied by the Intensity result" onClick={() => setFxGraphOption('asSeen', !options.asSeen)}>
+          As seen
+        </Toggle>
+      </div>
       {solo != null && (
-        <span data-fx-graph-solo className="inline-flex h-6 items-center gap-1 rounded border border-sky-500/60 pl-1.5 text-[11px] text-sky-700 dark:text-sky-300">
+        <span data-fx-graph-solo className="inline-flex h-7 items-center gap-1 rounded-md border border-sky-500/60 pl-2 text-xs text-sky-700 dark:text-sky-300">
           Solo: {solo.name}
-          <button type="button" aria-label="Unsolo" onClick={onUnsolo} className="grid size-5 place-items-center rounded hover:bg-accent">
+          <button type="button" aria-label="Unsolo" onClick={onUnsolo} className="grid size-6 place-items-center rounded hover:bg-accent">
             <X className="size-3" />
           </button>
         </span>
       )}
       <div className="ml-auto flex items-center gap-1.5">
-        {clock.kind === 'master' ? <MasterChip uuid={clock.speedMasterUuid} /> : pickedFx != null && <span className="rounded border px-1.5 text-[11px] text-muted-foreground">Seconds</span>}
+        {clock.kind === 'master' ? (
+          <MasterChip uuid={clock.speedMasterUuid} />
+        ) : (
+          pickedFx != null && <span className="inline-flex h-7 items-center rounded-md border px-2 text-xs text-muted-foreground">Seconds</span>
+        )}
         <button
           type="button"
           aria-label={options.paused ? 'Run the playhead' : 'Pause the playhead'}
           title={options.paused ? 'Run the playhead' : 'Pause the playhead — the graph’s, not the stage’s'}
           onClick={() => setFxGraphOption('paused', !options.paused)}
-          className="grid size-6 place-items-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="grid size-7 place-items-center rounded-md border text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          {options.paused ? <Play className="size-3" /> : <Pause className="size-3" />}
+          {options.paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
         </button>
       </div>
     </div>
@@ -737,15 +847,23 @@ function MasterChip({ uuid }: { uuid: string }) {
   })
   return (
     <>
-      <span data-fx-graph-bpm className="rounded border px-1.5 text-[11px] tabular-nums text-muted-foreground">
+      <span data-fx-graph-bpm className="inline-flex h-7 items-center rounded-md border px-2 font-mono text-[11.5px] tabular-nums">
         {master == null ? '—' : `M${master.index} · ${Math.round(master.bpm)}`}
       </span>
-      <button type="button" onClick={() => tapSpeedMaster(uuid)} className="h-6 rounded-md border px-2 text-[11px] hover:bg-accent">
+      <button type="button" onClick={() => tapSpeedMaster(uuid)} className="h-7 rounded-md border px-2.5 text-xs hover:bg-accent">
         Tap
       </button>
     </>
   )
 }
+
+/**
+ * The toolbar's 28px segment, its label inside it (follow-ups D4). Below 300px of toolbar — the side
+ * form's graph beside an open inspector — the label folds (the group's name keeps it) and the
+ * buttons may wrap inside the segment rather than past the graph's edge.
+ */
+const SEGMENT_CLASS =
+  'flex h-7 items-center gap-0.5 rounded-md border bg-background p-0.5 @max-[300px]:h-auto @max-[300px]:min-h-7 @max-[300px]:flex-wrap'
 
 function Segment<T extends string>({
   label,
@@ -759,7 +877,10 @@ function Segment<T extends string>({
   onChange: (value: T) => void
 }) {
   return (
-    <div role="group" aria-label={label} className="flex h-6 items-center rounded-md border p-0.5">
+    <div role="group" aria-label={label} className={SEGMENT_CLASS}>
+      <span aria-hidden className="pr-1 pl-1.5 text-[10.5px] tracking-wide text-muted-foreground uppercase @max-[300px]:hidden">
+        {label}
+      </span>
       {choices.map((c) => (
         <button
           key={c.value}
@@ -767,7 +888,10 @@ function Segment<T extends string>({
           aria-pressed={value === c.value}
           title={c.title}
           onClick={() => onChange(c.value)}
-          className={cn('h-full rounded px-1.5 text-[11px] text-muted-foreground hover:text-foreground', value === c.value && 'bg-accent font-medium text-foreground')}
+          className={cn(
+            'h-[22px] rounded px-2 text-xs whitespace-nowrap text-foreground/75 hover:text-foreground',
+            value === c.value && 'bg-accent font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--border)]',
+          )}
         >
           {c.label}
         </button>
@@ -783,42 +907,285 @@ function Toggle({ on, title, onClick, children }: { on: boolean; title: string; 
       aria-pressed={on}
       title={title}
       onClick={onClick}
-      className={cn('h-6 rounded-md border px-1.5 text-[11px] text-muted-foreground hover:text-foreground', on && 'bg-accent font-medium text-foreground')}
+      className={cn(
+        'h-[22px] rounded px-2 text-xs whitespace-nowrap text-foreground/75 hover:text-foreground',
+        on && 'bg-accent font-semibold text-foreground shadow-[inset_0_0_0_1px_var(--border)]',
+      )}
     >
       {children}
     </button>
   )
 }
 
-function WindowReadout({
-  answer,
-  pickedFx,
-  fxName,
-  rigOrder,
-}: {
-  answer: FxPreviewAnswer
-  pickedFx: FxPreviewFx | null
-  fxName: (fxType: string) => string
-  rigOrder: boolean
-}) {
-  const beats = Math.round(answer.window.beats * 100) / 100
-  const seconds = Math.round(answer.window.seconds * 10) / 10
+function WindowReadout({ pickedFx, fxName, rigOrder }: { pickedFx: FxPreviewFx | null; fxName: (fxType: string) => string; rigOrder: boolean }) {
   return (
     <>
-      <span>
-        Window <b className="font-medium text-foreground">{`${beats} ${beats === 1 ? 'beat' : 'beats'}`}</b> · {seconds} s
-      </span>
       {rigOrder ? <span>Rows in rig order</span> : pickedFx != null && <span>{`Rows in ${fxName(pickedFx.fxType)}’s Order`}</span>}
       <span>Hover a row to read it</span>
     </>
   )
 }
 
-/** A row's value in every lane at the hovered moment, and the picked FX's phase there. */
+/**
+ * **The beat ruler** over the lanes (follow-ups D4): bars and beats on the picked FX's master, from
+ * the tick the window started on, or seconds on its own clock. Its children — the Cycle tab — sit on
+ * it, at the plot's own x.
+ */
+function GraphRuler({
+  width,
+  plotLeft,
+  plotWidth,
+  answer,
+  clock,
+  palette,
+  contextOf,
+  children,
+}: {
+  width: number
+  plotLeft: number
+  plotWidth: number
+  answer: FxPreviewAnswer
+  clock: PlayheadClock
+  palette: GraphPalette
+  contextOf: GraphContextOf
+  children?: ReactNode
+}) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  const ticks = useMemo(() => rulerTicks(clock, answer.window, plotLeft, plotWidth), [answer.window, clock, plotLeft, plotWidth])
+  useLayoutEffect(() => {
+    const canvas = ref.current
+    if (canvas == null || width <= 0) return
+    const ctx = prepare(canvas, width, RULER_PX, contextOf)
+    if (ctx == null) return
+    ctx.clearRect(0, 0, width, RULER_PX)
+    ctx.fillStyle = palette.grid
+    ctx.fillRect(plotLeft, RULER_PX - 1, plotWidth, 1)
+    ctx.font = '10.5px ui-monospace, Menlo, monospace'
+    ctx.textBaseline = 'alphabetic'
+    ctx.textAlign = 'left'
+    for (const tick of ticks) {
+      const x = Math.round(tick.x)
+      ctx.fillStyle = tick.major ? palette.text : palette.dim
+      ctx.fillRect(x, tick.major ? 12 : 17, 1, tick.major ? 12 : 7)
+      if (tick.label != null) ctx.fillText(tick.label, x + 3, 10)
+    }
+  }, [contextOf, palette, plotLeft, plotWidth, ticks, width])
+  return (
+    <div data-fx-graph-ruler className="relative shrink-0" style={{ width, height: RULER_PX }}>
+      <canvas ref={ref} aria-label="Beat ruler" style={{ width, height: RULER_PX, display: 'block' }} />
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The grip between the names and the plot (D6): dragged, or stepped 8px by the arrow keys, it sets
+ * the window's width ([chosen]); it sits at the width drawn ([gutter]), which a narrow graph narrows.
+ */
+function GutterGrip({
+  gutter,
+  chosen,
+  onDrag,
+  onSet,
+}: {
+  gutter: number
+  chosen: number
+  onDrag: (px: number | null) => void
+  onSet: (px: number) => void
+}) {
+  const cancel = useDragCancel()
+  const [dragging, setDragging] = useState(false)
+  // A grip gone mid-drag (the plot emptied, a finger arrived) lets go of the width it was showing.
+  const dragRef = useRef<{ dragging: boolean; onDrag: typeof onDrag }>({ dragging, onDrag })
+  dragRef.current = { dragging, onDrag }
+  useEffect(() => () => {
+    if (dragRef.current.dragging) dragRef.current.onDrag(null)
+  }, [])
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    const from = chosen
+    let last = from
+    const started = beginDrag(
+      e,
+      cancel,
+      (dx) => {
+        last = clampGutter(from + dx)
+        onDrag(last)
+      },
+      (moved) => {
+        setDragging(false)
+        if (moved) onSet(last)
+        else onDrag(null)
+      },
+    )
+    if (started) setDragging(true)
+  }
+  return (
+    <div
+      data-fx-gutter-grip
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Name column width"
+      aria-valuenow={chosen}
+      aria-valuemin={GUTTER_MIN_PX}
+      aria-valuemax={GUTTER_MAX_PX}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onKeyDown={(e) => {
+        const step = e.key === 'ArrowLeft' ? -8 : e.key === 'ArrowRight' ? 8 : 0
+        if (step === 0) return
+        e.preventDefault()
+        onSet(chosen + step)
+      }}
+      className="group absolute top-0 bottom-0 flex w-[9px] cursor-col-resize touch-none justify-end outline-none"
+      style={{ left: gutter - 9 }}
+    >
+      <i
+        className={cn(
+          'block h-full w-px bg-border group-hover:w-[3px] group-hover:rounded-sm group-hover:bg-violet-500 group-focus-visible:w-[3px] group-focus-visible:bg-violet-500',
+          dragging && 'w-[3px] rounded-sm bg-violet-500',
+        )}
+      />
+    </div>
+  )
+}
+
+/** Room the brackets at the gutter's right edge keep. */
+const BRACKET_ROOM_PX = 16
+const ELEMENT_INDENT_PX = 18
+const CHEVRON_PX = 16
+
+/**
+ * The gutter's names (D5, D6): a fixture's own row in its name — cut in the middle to fit, whole on
+ * hover — with a chevron that folds its elements; an element in its own words, else its number; any
+ * other row its label. A heat map draws none.
+ */
+function GutterLabels({ layout, onToggleFold }: { layout: LaneLayout; onToggleFold?: (fixtureKey: string) => void }) {
+  const room = layout.plotLeft - BRACKET_ROOM_PX
+  return (
+    <div data-fx-graph-gutter className="pointer-events-none absolute top-0 left-0" style={{ width: layout.plotLeft, height: layout.height }}>
+      {layout.sections.flatMap((section) =>
+        section.heat
+          ? []
+          : section.rows.map((laid) => (
+              <GutterLabel key={`${section.attribute}-${laid.key}`} laid={laid} rowH={section.rowH} room={room} onToggleFold={onToggleFold} />
+            )),
+      )}
+    </div>
+  )
+}
+
+function GutterLabel({ laid, rowH, room, onToggleFold }: { laid: LaidRow; rowH: number; room: number; onToggleFold?: (fixtureKey: string) => void }) {
+  const style = { top: laid.y, height: rowH }
+  if (laid.kind === 'element') {
+    return (
+      <span
+        data-fx-graph-label={laid.key}
+        title={laid.label}
+        className="pointer-events-auto absolute left-0 flex items-center text-[11px] whitespace-nowrap text-muted-foreground"
+        style={{ ...style, paddingLeft: ELEMENT_INDENT_PX }}
+      >
+        {elementWords(laid, room - ELEMENT_INDENT_PX)}
+      </span>
+    )
+  }
+  const fixture = laid.kind === 'fixture'
+  const foldable = fixture && onToggleFold != null
+  const name = middleCut(laid.label, room - (fixture ? CHEVRON_PX : 4), labelWidth(fixture))
+  const words = (
+    <>
+      {fixture && (
+        <span aria-hidden className="grid w-3 shrink-0 place-items-center text-muted-foreground">
+          {foldable ? laid.folded ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" /> : null}
+        </span>
+      )}
+      <span className="truncate">{name}</span>
+    </>
+  )
+  const title = laid.mix != null ? `${laid.label} · mix of ${laid.mix.length}` : laid.label
+  if (foldable) {
+    return (
+      <button
+        type="button"
+        data-fx-graph-label={laid.key}
+        aria-expanded={!laid.folded}
+        aria-label={`${laid.label} — ${laid.folded ? 'show its elements' : 'fold its elements'}`}
+        title={title}
+        onClick={() => onToggleFold(laid.fixtureKey)}
+        className="pointer-events-auto absolute left-0 flex items-center gap-1 rounded-sm pl-0.5 text-[11px] font-semibold whitespace-nowrap text-foreground hover:bg-accent/60"
+        style={{ ...style, maxWidth: room + 4 }}
+      >
+        {words}
+      </button>
+    )
+  }
+  return (
+    <span
+      data-fx-graph-label={laid.key}
+      title={title}
+      className={cn('pointer-events-auto absolute left-0 flex items-center gap-1 pl-1 text-[11px] whitespace-nowrap text-foreground', fixture && 'font-semibold')}
+      style={style}
+    >
+      {words}
+    </span>
+  )
+}
+
+/** An element's own words where they fit, else its number (D6). */
+function elementWords(laid: LaidRow, room: number): string {
+  const measure = labelWidth(false)
+  if (measure(laid.label) <= room || laid.element == null) return middleCut(laid.label, room, measure)
+  return `${laid.element + 1}`
+}
+
+const LABEL_FONT = '11px ui-sans-serif, system-ui, sans-serif'
+const measureCache = new Map<string, number>()
+let measureContext: { font: string; measureText: (text: string) => { width: number } } | null | undefined
+
+/** A gutter label's width in px: measured on an offscreen canvas where there is one, else estimated. */
+function labelWidth(bold: boolean): (text: string) => number {
+  const font = `${bold ? '600 ' : ''}${LABEL_FONT}`
+  return (text) => {
+    const key = `${font}|${text}`
+    const hit = measureCache.get(key)
+    if (hit != null) return hit
+    if (measureContext === undefined) {
+      measureContext = typeof OffscreenCanvas === 'function' ? (new OffscreenCanvas(1, 1).getContext('2d') ?? null) : null
+    }
+    let width: number
+    if (measureContext != null) {
+      measureContext.font = font
+      width = measureContext.measureText(text).width
+    } else {
+      width = text.length * (bold ? 6.6 : 6.2)
+    }
+    if (measureCache.size > 5000) measureCache.clear()
+    measureCache.set(key, width)
+    return width
+  }
+}
+
+/** The mixed row a hovered key names, in any lane. */
+function mixedRowOf(layouts: readonly LaneLayout[], key: string): LaidRow | null {
+  if (mixFixtureOf(key) == null) return null
+  for (const layout of layouts) {
+    for (const section of layout.sections) {
+      const laid = section.rows.find((r) => r.key === key)
+      if (laid != null) return laid
+    }
+  }
+  return null
+}
+
+/**
+ * A row's value in every lane at the hovered moment, and the picked FX's phase there. A fixture's
+ * mixed row (D5) reads each lane through the fixture's own row where it has one, else its elements'
+ * mix, as *Fixture · mix of 3*, and has no phase: it has no cycle of its own.
+ */
 function HoverReadout({
   answer,
   decoded,
-  hover,
+  sample: s,
+  at,
   clock,
   view,
   pickedFx,
@@ -826,17 +1193,23 @@ function HoverReadout({
 }: {
   answer: FxPreviewAnswer
   decoded: DecodedPreview
-  hover: Hover & { row: number }
+  sample: number
+  at: { row: number } | { mix: LaidRow }
   clock: PlayheadClock
   view: FxGraphOptions['view']
   pickedFx: FxPreviewFx | null
   picked: number | null
 }) {
-  const { sample: s, row } = hover
+  const mix = 'mix' in at ? at.mix : null
+  const rowOf = (attribute: DecodedAttribute): DecodedAttributeRow | undefined => {
+    if (mix == null) return attribute.byRow.get((at as { row: number }).row)
+    if (attribute.kind === 'POSITION') return undefined
+    return attribute.rows.find((r) => answer.rows[r.row]?.key === mix.fixtureKey) ?? attribute.mixed.get(mix.fixtureKey)
+  }
   const parts: string[] = []
   for (const lane of decoded.lanes) {
     for (const attribute of lane.attributes) {
-      const r = attribute.byRow.get(row)
+      const r = rowOf(attribute)
       if (r == null) continue
       const own = view === 'this' && pickedFx != null && pickedFx.family === lane.family ? r.fx.find((o) => o.fx === picked)?.output : undefined
       const series = own ?? r.result
@@ -857,10 +1230,13 @@ function HoverReadout({
     }
   }
   let phase: string | null = null
-  if (pickedFx != null && pickedFx.starts[row] != null) {
-    const p = phaseAt(pickedFx, row, s, pickedFx.entry === 0 ? SAMPLES_PER_CYCLE : null)
-    if (isHolding(pickedFx.holding[row], s)) phase = 'Phase holding'
-    else if (p != null) phase = `Phase ${Math.round(p * 360)}°`
+  if (mix == null && pickedFx != null) {
+    const row = (at as { row: number }).row
+    if (pickedFx.starts[row] != null) {
+      const p = phaseAt(pickedFx, row, s, pickedFx.entry === 0 ? SAMPLES_PER_CYCLE : null)
+      if (isHolding(pickedFx.holding[row], s)) phase = 'Phase holding'
+      else if (p != null) phase = `Phase ${Math.round(p * 360)}°`
+    }
   }
   const beat = barBeatAt(clock, answer.window, s)
   return (
@@ -874,7 +1250,7 @@ function HoverReadout({
           <b className="font-medium text-foreground">{((s * answer.window.sampleMs) / 1000).toFixed(2)} s</b>
         </span>
       )}
-      <b className="font-medium text-foreground">{answer.rows[row]?.label}</b>
+      <b className="font-medium text-foreground">{mix != null ? `${mix.label} · mix of ${mix.mix?.length ?? 0}` : answer.rows[(at as { row: number }).row]?.label}</b>
       {parts.map((p, i) => (
         <span key={i}>{p}</span>
       ))}

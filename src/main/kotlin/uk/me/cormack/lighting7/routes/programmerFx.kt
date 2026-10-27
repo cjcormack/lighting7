@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.fx.familyMasterUuidFor
+import uk.me.cormack.lighting7.fx.shownParameters
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
@@ -112,10 +113,12 @@ internal data class ProgrammerFxRequest(
     val amount: Double? = null,
     val direction: String? = null,
     val runs: Int? = null,
-    val spread: Double = 1.0,
+    /** Absent 1; see [AddFxRequest.spread] and [AddFxRequest.spreadUnit] — a step FX starts one step behind. */
+    val spread: Double? = null,
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    val spreadUnit: String? = null,
     /** Add the FX on top of the Local FX on the selection, replacing none (FX editor plan D6). */
     val stack: Boolean = false,
 )
@@ -153,7 +156,7 @@ internal fun pressBareFx(
     val stamped = request.speedMasterUuid ?: if (request.seconds) {
         null
     } else {
-        familyMasterUuidFor(state.show.fxRegistry, engine.speedMasters, request.fxType)?.toString()
+        familyMasterUuidFor(state.show.fxRegistry, engine.speedMasters, request.fxType, attribute = request.attribute)?.toString()
     }
     fun build(start: FxStacking.Start?) = buildFxInstance(
         state,
@@ -180,6 +183,7 @@ internal fun pressBareFx(
             wings = request.wings,
             segments = request.segments,
             parts = request.parts,
+            spreadUnit = request.spreadUnit,
             programmerOwned = true,
         ),
     )
@@ -199,8 +203,9 @@ internal fun pressBareFx(
     if (request.stack) {
         // The family is read off a built instance, so one that stacks is built again on its start.
         if (family != null && (request.blendMode == null || request.amount == null)) {
+            // A Path's centres count only on a shape that draws them: a Line has none to stack around.
             val declared = state.show.fxRegistry.getRegistration(request.fxType)?.parameters
-                ?.mapTo(HashSet()) { it.name }.orEmpty()
+                ?.let { shownParameters(it, request.parameters) }.orEmpty()
             instance = try {
                 build(FxStacking.startFor(family, declared))
             } catch (e: Exception) {

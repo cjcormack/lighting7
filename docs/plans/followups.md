@@ -83,7 +83,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Palette | a palette is asked to address a two-wheel head's second wheel |
 | [`FU-TMPL-KELVIN`](#fu-tmpl-kelvin) | Ready | Palette | — |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
-| [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined FX declares a numeric parameter outside the guessed range |
 | [`FU-FE-FILTER-FLEX-SPLIT`](#fu-fe-filter-flex-split) | Ready | FE | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
@@ -267,8 +266,8 @@ mirrors in `store/programmerOps.ts` (`SpreadCurve`, `SpreadOver`, `SpreadRequest
 `spreadIntent.ts`, `spreadPlans.ts` and `spreadOver.ts`. Session 5 renamed the wire and left these,
 by Chris's call. Rename them to Fan in one change; the glossary's Fan row names
 `src:components/editor/SpreadPanel.tsx` and `src:lib/spreadIntent.ts` as its keys, so those move
-with the files. The fx Spread section (the spread's shape: Spread %, Wings, Segments, Parts) is a
-different thing and keeps its name.
+with the files. The FX spread's shape (*Across the heads*: Each head later by, Segments, Parts,
+Wings) is a different thing and keeps its name.
 
 ### `FU-FE-REBIND-INPLACE`
 
@@ -450,9 +449,10 @@ one for the instance.
 
 Every desk surveyed (`completed/effects-design/survey.md`) has a *width* (how much of the cycle is on) and a
 *softness* (how hard the edges are) that read the same on every waveform. Ours are each FX's own
-parameter under its own name — Pulse's `attackRatio` / `holdRatio`, Square Wave's `dutyCycle`, Dimmer Strobe's
-`onRatio`, Colour Cycle's `fadeRatio` — and the editor labels them as such (*Attack*, *Duty*, *On*,
-*Fade*). Amount (D2) and direction (D5) became fields of every FX in session 1; width and softness
+parameter under its own name — Wave's `width` (Square) and `attack` / `hold` (Pulse), which since the
+fx-settings plan's session 2 stand for Square Wave's `dutyCycle`, Dimmer Strobe's `onRatio` and Pulse's
+`attackRatio` / `holdRatio`, Colour Strobe's `width` (its `onRatio` until session 3) and Colour Cycle's
+`fade` (its `fadeRatio`) — and the editor labels them as such (*Width*, *Attack*, *Hold*, *Fade*). Amount (D2) and direction (D5) became fields of every FX in session 1; width and softness
 did not, because each built-in means something slightly different by them and a common field would
 change what a stored FX plays (P6).
 
@@ -580,7 +580,7 @@ the inspector's fields saying what follows what.
 2026-10-23
 
 Palette Steps and Colour Cycle give every entry an equal share of the cycle (`stepsAt` in
-`fx/StepList.kt`, Colour Cycle's own `segmentSize`), with one `fadeRatio` across them. MagicQ's Width
+`fx/StepList.kt`, Colour Cycle through `stepIndex`), with one `fadeRatio` across them. MagicQ's Width
 on its 2col, 3col and 4col FX lets one step hold longer than the rest.
 
 The shape: a per-entry weight in the step list's grammar (`pal:{uuid}*2`, `#ff0000*2`), read by both
@@ -598,7 +598,7 @@ The terminology survey matched MagicQ's waveform library against lighting7's bui
 shapes have no FX here: *square* (a position square), *diamond* (a position diamond) and *TiltDim*
 (tilt and dimmer moving together, a two-attribute FX — see `FU-SPEED-PER-ATTRIBUTE`).
 
-The shape: square and diamond are `.fx.kts` files beside Circle and Figure 8; TiltDim needs one FX to
+The shape: square and diamond are two more of Path's shapes beside Circle and Figure 8 (fx-settings plan D2); TiltDim needs one FX to
 drive two attributes first.
 
 **Trigger**: an operator reaches for one of the three.
@@ -2477,38 +2477,6 @@ show whose cues each layer one look, this never fires.
 
 ---
 
-### `FU-FE-FX-PARAM-RANGE`
-
-**The FX sheet guesses a numeric parameter's range, because the wire carries no bounds** · Trigger ·
-frontend sweep `FS-COORD-FXLIBRARY-PARAMS`, 2026-08-29
-
-`GET /fx/library` describes each parameter with `name` / `type` / `defaultValue` / `description`
-(`FxRegistry.ParameterInfo`, filled from each `.fx.kts` file's frontmatter via `FxFileParameter`)
-and nothing else. The FX editor's fields (`FxFields`' `ParamControl`, which replaced
-`EffectParameterForm.ParameterInput` in fixture-fx-sheets session 5) therefore have to invent the slider range for
-every numeric control: a `double` gets 0–1 when its default is `<= 1.0` and 0–10 otherwise, and an
-`int` gets `max(255, default * 2)`.
-
-For the 28 built-ins this is exactly right and was verified parameter by parameter when backend D7
-(`84885df`) started sending real defaults: all ten declared doubles are 0–1 ratios with defaults
-between 0.1 and 1.0, so the 0–10 arm is unreachable, and the two ints (`ColourFlicker.variation` 50,
-`FluorescentFlicker.flickerDurationMs` 800) land in usable ranges. The guess only breaks for an
-FX the built-ins don't constrain — a script-defined one registered through `registerFx` /
-an `FX_DEFINITION` script, which may declare a double whose real range is 0–360 (rendered 0–1
-because its default is 0) or 0–1000 (rendered 0–10).
-
-The fix is to declare the bounds rather than widen the guess: add nullable `min` / `max` to
-`FxFileParameter` and `ParameterInfo`, teach `FxFileLoader.parseSimpleYaml`'s `parameters:`
-continuation branch the two extra keys, declare them on the numeric built-ins, and have
-`ParameterInput` prefer them with the present heuristic as the fallback for a definition that
-declares none. Additive on the wire and additive in canonical JSON, so no `formatVersion` change —
-but it is a backend change, which is why the sweep item that found it did not take it.
-
-**Trigger**: a script-defined FX declares a numeric parameter whose sensible range is not the
-one the heuristic picks, and the operator finds the slider unusable.
-
----
-
 ### `FU-FE-FILTER-FLEX-SPLIT`
 
 **Row B's filter is given half the width it asks for, because a decorative spacer competes with
@@ -3184,6 +3152,9 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-FE-FX-PARAM-RANGE` — an FX parameter declares its label, range, step and unit (and a choice's
+  options, a fold, a `shownWhen` and a `pair`) in frontmatter, `GET /fx/library` carries them and the
+  editor draws from them, guessing only for one that declares none (fx-settings plan session 1).
 - `FU-FX-SPLIT-DUPLICATE` — `SPLIT` folded into `EDGES_IN` (*Centre in*): the parse no longer knows
   it, and database step 4 and `sync/LegacyNames.kt` rewrite a stored one (terminology plan session 3).
 - `FU-PERF-FRAME-TXN-UNIFY` — one compose pass: a beat wake or the ticker runs one pass over every

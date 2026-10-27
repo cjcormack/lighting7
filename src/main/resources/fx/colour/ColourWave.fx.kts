@@ -5,15 +5,18 @@ family: colour
 outputType: COLOUR
 fxMode: STANDARD
 compatibleAttributes: [rgbColour]
+legacy: true
 parameters:
   - name: colourA
     type: colour
     default: "#000000"
     description: First colour
+    label: First colour
   - name: colourB
     type: colour
     default: "#ffffff"
     description: Second colour
+    label: Second colour
 ---*/
 
 val colourA = params.colour("colourA")

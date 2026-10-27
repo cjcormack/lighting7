@@ -186,13 +186,20 @@ data class AddFxRequest(
     /** Runs (D9): stop after this many cycles, at least 1; absent runs forever. */
     val runs: Int? = null,
     /**
-     * The spread's shape (effects plan D4): Spread 0–2, Wings and Segments at least 1, Parts 0 (off) or
-     * more. Refused out of range, and Wings above 1 under a mirrored order (Centre out, Centre in).
+     * The spread's shape (effects plan D4): Spread 0–2 (absent 1), Wings and Segments at least 1, Parts
+     * 0 (off) or more. Refused out of range, and Wings above 1 under a mirrored order (Centre out,
+     * Centre in).
      */
-    val spread: Double = 1.0,
+    val spread: Double? = null,
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /**
+     * What [spread] counts (fx-settings plan D6): `CYCLE`, or `STEP` — 0–16 of the FX's own steps,
+     * refused on an FX with none. Absent, an FX that steps and names no spread starts one step behind
+     * (`STEP`, 1: D7); anything else is `CYCLE`.
+     */
+    val spreadUnit: String? = null,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]) rather than as a plain manual effect. Band
@@ -249,6 +256,8 @@ data class IndirectFxDto(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** See [FxDto.spreadUnit]. */
+    val spreadUnit: String = SpreadUnit.CYCLE.name,
 )
 
 @Serializable
@@ -302,6 +311,12 @@ data class UpdateFxRequest(
     val wings: Int? = null,
     val segments: Int? = null,
     val parts: Int? = null,
+    /**
+     * What [spread] counts (fx-settings plan D6), `CYCLE` or `STEP`; null = no change, except that a
+     * swap ([fxType]) onto an FX with no steps leaves `STEP` for the `CYCLE` spread that keeps the
+     * heads' offsets. `STEP` on an FX with no steps is refused.
+     */
+    val spreadUnit: String? = null,
     /**
      * The heads this edit is for (apply-model plan §3.4, D5): fixtures, cells and groups, as a press
      * names them. Absent, or naming every head the effect paints, is the in-place edit. Naming some
@@ -421,7 +436,7 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
             state.show.fxRegistry.fxWriteProblem(fxType, params)
                 ?.let { throw IllegalArgumentException(it) }
             state.show.fxRegistry.createFxWithPalettes(
-                state.show.paletteRegistry, fxType, params,
+                state.show.paletteRegistry, fxType, params, existing.target.attribute,
             )
         } else null
 
@@ -450,15 +465,34 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
         // hold wings under a mirrored Order (lenient on spawn, ignored by [SpreadShaping]), and an edit
         // of its Spread, Segments or Parts — or a frame re-sending the Order it already has — must not
         // be refused for them.
+        // What the spread counts (fx-settings plan D6): a swap onto an FX with no steps, naming no unit,
+        // leaves STEP for the CYCLE spread that runs the offsets the heads had — a spread it re-sends
+        // unchanged included, which is the STEP one.
+        val requestedUnit = request.spreadUnit?.let { FxSpecCoercion.Strict.spreadUnit(it) }
+        val stepsAfter = (newFx ?: existing.effect).stepCount != null
+        val leavesSteps = newFx != null && requestedUnit == null && !stepsAfter &&
+            existing.dynamics.spreadUnit == SpreadUnit.STEP &&
+            (request.spread == null || request.spread == existing.dynamics.spread)
+        val newSpreadUnit = if (leavesSteps) SpreadUnit.CYCLE else requestedUnit
+        val newSpread = if (leavesSteps) {
+            SpreadShaping.cycleSpread(existing.dynamics.spread, state.show.fxEngine.spreadSlots(existing), existing.effect.stepCount)
+        } else {
+            request.spread
+        }
         if (request.spread != null || request.wings != null || request.segments != null || request.parts != null ||
-            newOrder != null
+            newOrder != null || newSpreadUnit != null || newFx != null
         ) {
             val dyn = existing.dynamics
             val order = newOrder ?: dyn.order
             val orderMoved = newOrder != null && newOrder != dyn.order
             val wings = request.wings ?: dyn.wings.takeIf { orderMoved }
-            FxSpecCoercion.Strict.spreadProblem(request.spread, wings, request.segments, request.parts, order)
-                ?.let { return refused(it) }
+            val unit = newSpreadUnit ?: dyn.spreadUnit
+            // A unit change is checked against the spread it will count, sent or kept.
+            val spread = newSpread ?: dyn.spread.takeIf { newSpreadUnit != null && newSpreadUnit != dyn.spreadUnit }
+            FxSpecCoercion.Strict.spreadProblem(
+                spread, wings, request.segments, request.parts, order, unit,
+                request.fxType ?: existing.fxTypeId, stepsAfter,
+            )?.let { return refused(it) }
         }
         // Only when the client actually renamed the type; a parameters-only edit leaves the
         // instance's registration id — and the clock it runs on — alone. A type swap takes the new
@@ -489,10 +523,11 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
                 if (newOrder != null && newOrder != dyn.order) add("order")
                 if (newElementMode != null && newElementMode != dyn.elementMode) add("elementMode")
                 if (newElementFilter != null && newElementFilter != dyn.elementFilter) add("elementFilter")
-                if (request.spread != null && request.spread != dyn.spread) add("spread")
+                if (newSpread != null && newSpread != dyn.spread) add("spread")
                 if (request.wings != null && request.wings != dyn.wings) add("wings")
                 if (request.segments != null && request.segments != dyn.segments) add("segments")
                 if (request.parts != null && request.parts != dyn.parts) add("parts")
+                if (newSpreadUnit != null && newSpreadUnit != dyn.spreadUnit) add("spreadUnit")
             }
             if (shapeMoved.isNotEmpty()) {
                 return refused(
@@ -521,10 +556,11 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
                 newDirection = newDirection,
                 newRuns = newRuns,
                 clearRuns = request.runForever,
-                newSpread = request.spread,
+                newSpread = newSpread,
                 newWings = request.wings,
                 newSegments = request.segments,
                 newParts = request.parts,
+                newSpreadUnit = newSpreadUnit,
             ),
             splitHeads,
         )
@@ -543,14 +579,31 @@ internal fun FxInstance.applyRequestedDynamics(size: Double, direction: String?,
     val checkedSize = FxSpecCoercion.Strict.amount(size)
     val checkedDirection = direction?.let { FxSpecCoercion.Strict.direction(it) } ?: effect.defaultDirection
     val checkedRuns = FxSpecCoercion.Strict.runs(runs)
-    val checkedShape = FxSpecCoercion.Strict.spreadShape(shape, order)
+    val checkedShape = FxSpecCoercion.Strict.spreadShape(shape, order, fxTypeId, effect.stepCount != null)
     updateDynamics {
         it.copy(
             amount = checkedSize, direction = checkedDirection, runs = checkedRuns,
             spread = checkedShape.spread, wings = checkedShape.wings,
-            segments = checkedShape.segments, parts = checkedShape.parts,
+            segments = checkedShape.segments, parts = checkedShape.parts, spreadUnit = checkedShape.unit,
         )
     }
+}
+
+/**
+ * The spread's shape a request that starts an FX names, [spreadUnit] parsed strictly: an FX that steps
+ * ([steps]) and names neither a spread nor a unit starts one step behind (fx-settings plan D7).
+ */
+internal fun requestedSpreadShape(
+    spread: Double?,
+    wings: Int,
+    segments: Int,
+    parts: Int,
+    spreadUnit: String?,
+    steps: Boolean,
+): SpreadShape {
+    val unit = spreadUnit?.let { FxSpecCoercion.Strict.spreadUnit(it) }
+        ?: if (spread == null) SpreadUnit.newFx(steps) else SpreadUnit.CYCLE
+    return SpreadShape(spread ?: 1.0, wings, segments, parts, unit)
 }
 
 /**
@@ -602,6 +655,7 @@ private fun FxInstance.toIndirectDto() = IndirectFxDto(
     wings = dynamics.wings,
     segments = dynamics.segments,
     parts = dynamics.parts,
+    spreadUnit = dynamics.spreadUnit.name,
     spent = spent,
 )
 
@@ -634,9 +688,7 @@ internal fun buildFxInstance(
     request.order?.let {
         instance.order = FxSpecCoercion.Strict.order(it)
     }
-    request.elementMode?.let {
-        instance.elementMode = FxSpecCoercion.Strict.elementMode(it)
-    }
+    instance.elementMode = request.elementMode?.let { FxSpecCoercion.Strict.elementMode(it) } ?: ElementMode.NEW_FX_DEFAULT
     request.elementFilter?.let {
         instance.elementFilter = FxSpecCoercion.Strict.elementFilter(it)
     }
@@ -645,7 +697,9 @@ internal fun buildFxInstance(
     }
     instance.applyRequestedDynamics(
         request.amount, request.direction, request.runs,
-        SpreadShape(request.spread, request.wings, request.segments, request.parts),
+        requestedSpreadShape(
+            request.spread, request.wings, request.segments, request.parts, request.spreadUnit, effect.stepCount != null,
+        ),
     )
 
     // Propagate timing source and identity from the effect's registration
@@ -734,6 +788,7 @@ private fun createFxFromRequest(request: AddFxRequest, state: State): Fx {
         state.show.paletteRegistry,
         request.fxType,
         request.parameters,
+        request.attribute,
     )
 }
 

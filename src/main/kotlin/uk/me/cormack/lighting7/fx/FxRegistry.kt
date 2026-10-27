@@ -66,6 +66,20 @@ data class FxRegistration(
     val defaultCycle: Double = CycleLength.ONE_BAR,
     /** Timing source for this effect (BEAT or WALL_CLOCK) */
     val timingSource: TimingSource = TimingSource.BEAT,
+    /** The picker's familiar names for this FX on one attribute (fx-settings plan D4). */
+    val presets: List<FxPreset> = emptyList(),
+    /** Parameters a new FX on an attribute starts with, by attribute — Wave's zoom at 64–192. */
+    val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
+    /**
+     * A built-in kept only for what is already stored (fx-settings plan D3): one no consolidated type
+     * reproduces exactly. It runs and is edited as any FX, but no picker or listing offers it.
+     */
+    val legacy: Boolean = false,
+    /**
+     * The list parameter whose entries are this FX's steps (fx-settings plan D6) — Colour Cycle's
+     * `colours` — or null: only an FX that names one takes a [SpreadUnit.STEP] spread.
+     */
+    val stepsFrom: String? = null,
     /** Factory to create an Effect instance from string parameters */
     val factory: FxFactory,
 )
@@ -89,10 +103,32 @@ data class FxTypeInfo(
     val defaultDirection: String = FxDirection.FORWARD.name,
     /** What a new instance's `cycle` is when its author names none. */
     val defaultCycle: Double = CycleLength.ONE_BAR,
+    val presets: List<FxPreset> = emptyList(),
+    val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
+    /** Kept for stored FX only, never offered ([FxRegistration.legacy]); absent is false. */
+    val legacy: Boolean = false,
+    /** [FxRegistration.stepsFrom]; absent for an FX with no steps. */
+    val stepsFrom: String? = null,
 )
 
 /**
- * DTO describing a single effect parameter.
+ * A familiar name the picker lists beside the FX types (fx-settings plan D4): this FX on
+ * [attribute], starting with [parameters] over the FX's defaults, and its own [cycle] (beats) and
+ * [direction] where it names them.
+ */
+@Serializable
+data class FxPreset(
+    val name: String,
+    val attribute: String,
+    val parameters: Map<String, String> = emptyMap(),
+    val cycle: Double? = null,
+    val direction: String? = null,
+)
+
+/**
+ * DTO describing a single effect parameter: what it is to the FX ([name], [type], [defaultValue]) and,
+ * optionally, how the editor draws it (fx-settings plan D1). Every metadata field may be absent; the
+ * editor then guesses as it always has. [parameterMetadataProblems] is what a declaration must pass.
  */
 @Serializable
 data class ParameterInfo(
@@ -100,7 +136,31 @@ data class ParameterInfo(
     val type: String,
     val defaultValue: String,
     val description: String = "",
+    /** The editor's word for it — *Low*, *Attack*. */
+    val label: String? = null,
+    /** The lowest value the editor offers, in the stored value's terms (a byte's 0–255, a ratio's 0–1). */
+    val min: Double? = null,
+    val max: Double? = null,
+    val step: Double? = null,
+    /** How the stored value reads: one of [PARAMETER_UNITS]. */
+    val unit: String? = null,
+    /** A `choice` parameter's values, in the order drawn. */
+    val options: List<ParameterOption>? = null,
+    /** `main`, drawn with the FX, or `detail`, folded under *More*. */
+    val role: String? = null,
+    /** Drawn only while another parameter holds one of these values. */
+    val shownWhen: ParameterCondition? = null,
+    /** On a low, the high it is drawn with as one range. */
+    val pair: String? = null,
 )
+
+/** One value a `choice` parameter may hold, and its label. */
+@Serializable
+data class ParameterOption(val value: String, val label: String)
+
+/** "While [param] is one of [values]". */
+@Serializable
+data class ParameterCondition(val param: String, val values: List<String>)
 
 /**
  * Unified registry for all effect types (built-in and script-defined).
@@ -176,6 +236,12 @@ class FxRegistry {
     }
 
     /**
+     * Whether [fxType] runs through steps a [SpreadUnit.STEP] spread can count ([FxRegistration.stepsFrom]),
+     * or null for a type the registry does not know.
+     */
+    fun steps(fxType: String): Boolean? = getRegistration(fxType)?.let { it.stepsFrom != null }
+
+    /**
      * Get the effect library as DTOs for the API.
      */
     fun getLibrary(): List<FxTypeInfo> {
@@ -187,7 +253,7 @@ class FxRegistry {
                     family = reg.family,
                     outputType = reg.outputType.name,
                     fxMode = reg.fxMode.name,
-                    parameters = reg.parameters,
+                    parameters = reg.parameters.map { it.withImpliedOptions() },
                     compatibleAttributes = reg.compatibleAttributes,
                     source = reg.source.name,
                     sourceDefinitionId = reg.sourceDefinitionId,
@@ -195,6 +261,10 @@ class FxRegistry {
                     timingSource = reg.timingSource.name,
                     defaultDirection = reg.defaultDirection.name,
                     defaultCycle = reg.defaultCycle,
+                    presets = reg.presets,
+                    attributeDefaults = reg.attributeDefaults,
+                    legacy = reg.legacy,
+                    stepsFrom = reg.stepsFrom,
                 )
             }
     }

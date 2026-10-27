@@ -1,0 +1,528 @@
+<title>FX Editor Follow-ups</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column, the FX editor's design page's family; the desk drawings are dark in both themes, as the desk is. */
+:root {
+  --bg: #f5f4f7; --card: #ffffff; --fg: #1b1a20; --muted: #5e5b68; --line: #dddae3;
+  --accent: #6a3dcb; --accent-soft: #efe8fd; --amber: #8f5500; --amber-soft: #fbefd9;
+  --go: #1f7a45; --go-soft: #dcf2e4; --bad: #b42318; --bad-soft: #fde7e5;
+  --desk-bg: #0c0b10; --desk-panel: #15141b; --desk-raise: #1f1d27; --desk-line: #2c2a35;
+  --desk-fg: #ecebf1; --desk-muted: #a3a0ae; --desk-faint: #6d6a78;
+  --desk-violet: #a78bfa; --desk-violet-strong: #8b5cf6; --desk-sky: #38bdf8; --desk-amber: #f5b14a;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 56px; }
+.read { max-width: 760px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(32px, 5vw, 50px); font-weight: 800; line-height: 1.04; }
+h2 { font-size: 24px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; color: var(--muted); max-width: 64ch; }
+.lede b, .muted b, li b { color: var(--fg); font-weight: 600; }
+.muted { color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.86em; background: color-mix(in srgb, var(--line) 60%, transparent); padding: 1px 5px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 18px; }
+.head { display: flex; flex-direction: column; gap: 8px; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; font-family: var(--mono); background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tag.back { background: var(--amber-soft); color: var(--amber); }
+.tag.both { background: var(--go-soft); color: var(--go); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 680px; }
+th { text-align: left; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--fg); }
+td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+td:first-child { font-family: var(--mono); font-size: 13px; color: var(--muted); white-space: nowrap; }
+td b { color: var(--fg); font-weight: 600; }
+ul.points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 14.5px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 28px; align-items: start; }
+.cols > * { min-width: 0; }
+button { font: inherit; }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Desk drawings */
+.board { border: 1px solid var(--line); border-radius: 12px; background: var(--desk-bg); color: var(--desk-fg); overflow: hidden; font-size: 13px; line-height: 1.4; }
+.board-cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 9px 14px; background: var(--card); color: var(--fg); border-bottom: 1px solid var(--line); }
+.board-cap h3 { font-size: 14px; margin-right: auto; }
+.board-cap span { font-size: 12.5px; color: var(--muted); }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1px; background: var(--desk-line); }
+.pane { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pane-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--desk-faint); }
+.pane-label.now { color: var(--desk-amber); }
+.pane-label.next { color: var(--desk-violet); }
+.dcol { width: 248px; max-width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.dmuted { color: var(--desk-muted); }
+.dsmall { font-size: 11.5px; }
+.dbtn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--desk-line); background: var(--desk-raise); color: var(--desk-fg); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.dbtn.ghost { background: transparent; }
+.dbtn.overflow { width: 300px; overflow: visible; font-size: 15px; height: 34px; color: var(--desk-muted); border-color: var(--desk-line); background: var(--desk-raise); }
+.readout { font-size: 11.5px; color: var(--desk-muted); background: var(--desk-raise); border-radius: 6px; padding: 7px 9px; }
+.fxcard { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--desk-line); background: var(--desk-raise); cursor: pointer; }
+.fxcard:hover { border-color: var(--desk-violet-strong); }
+.fxcard .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--desk-violet); grid-row: span 2; }
+.fxcard b { font-weight: 600; font-size: 12.5px; }
+.fxcard .meta { grid-column: 2 / 4; font-size: 11px; color: var(--desk-muted); }
+.fxcard .fam { font-size: 10.5px; color: var(--desk-muted); font-family: var(--mono); }
+.chiprow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--desk-line); background: var(--desk-raise); font-size: 11.5px; color: var(--desk-fg); white-space: nowrap; }
+.chip.btn { cursor: pointer; }
+.chip .chev { color: var(--desk-muted); }
+.chip.link { width: 24px; padding: 0; justify-content: center; color: var(--desk-sky); }
+.trunc { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pop { border: 1px solid var(--desk-line); background: var(--desk-raise); border-radius: 9px; padding: 6px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45); }
+.pop .row { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 5px 6px; border-radius: 6px; font-size: 12px; }
+.pop .row:hover { background: var(--desk-panel); }
+.pop .sw { width: 4px; height: 16px; border-radius: 2px; }
+.pop .only { font-size: 10.5px; color: var(--desk-violet); visibility: hidden; }
+.pop .row:hover .only { visibility: visible; }
+.pop .foot { border-top: 1px solid var(--desk-line); margin-top: 4px; padding: 6px 6px 2px; font-size: 11px; color: var(--desk-muted); }
+
+/* The graph mock */
+.gtool { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 12px; border-bottom: 1px solid var(--desk-line); background: var(--desk-panel); }
+.seg { display: inline-flex; align-items: center; height: 28px; border: 1px solid var(--desk-line); border-radius: 7px; padding: 2px; gap: 2px; background: var(--desk-bg); }
+.seg .lab { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--desk-faint); padding: 0 6px 0 4px; }
+.seg button { height: 22px; padding: 0 8px; border-radius: 5px; border: 0; background: transparent; color: var(--desk-muted); font-size: 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--desk-raise); color: var(--desk-fg); font-weight: 600; box-shadow: inset 0 0 0 1px var(--desk-line); }
+.seg button:hover { color: var(--desk-fg); }
+.gtool .sp { flex: 1; }
+.gtool .win { font-family: var(--mono); font-size: 11.5px; color: var(--desk-muted); }
+.gtool .bpm { font-family: var(--mono); font-size: 11.5px; padding: 0 8px; height: 28px; display: inline-flex; align-items: center; border: 1px solid var(--desk-line); border-radius: 7px; color: var(--desk-fg); }
+.gwrap { padding: 10px 12px 14px; overflow-x: auto; }
+.graph { position: relative; display: grid; min-width: 620px; }
+.gutter { position: relative; }
+.glabel { height: 18px; display: flex; align-items: center; gap: 4px; font-size: 11.5px; white-space: nowrap; overflow: hidden; }
+.glabel.fx { color: var(--desk-fg); font-weight: 600; cursor: pointer; }
+.glabel.el { color: var(--desk-muted); padding-left: 18px; }
+.glabel .chev { width: 12px; color: var(--desk-muted); flex: none; font-size: 10px; }
+.grip { position: absolute; top: 0; bottom: 0; width: 9px; cursor: col-resize; display: flex; justify-content: center; touch-action: none; }
+.grip::after { content: ""; width: 1px; height: 100%; background: var(--desk-line); }
+.grip:hover::after, .grip.drag::after { width: 3px; border-radius: 2px; background: var(--desk-violet); }
+.plot { position: relative; min-width: 0; }
+.plot canvas { display: block; width: 100%; }
+.cyc { position: absolute; top: 2px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 9px; background: var(--desk-violet-strong); color: #fff; font-size: 10.5px; font-weight: 600; white-space: nowrap; cursor: ew-resize; }
+.knobtip { position: absolute; transform: translate(10px, -50%); font-size: 10.5px; font-weight: 600; color: var(--desk-violet); background: var(--desk-bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--desk-violet-strong); white-space: nowrap; pointer-events: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 12px; border-top: 1px solid var(--desk-line); font-size: 11.5px; color: var(--desk-muted); background: var(--desk-panel); }
+.legend i { display: inline-block; vertical-align: middle; margin-right: 6px; }
+.lg-knob { width: 10px; height: 10px; border-radius: 50%; background: var(--desk-violet-strong); box-shadow: 0 0 0 2px var(--desk-bg), 0 0 0 3px var(--desk-violet); }
+.lg-tick { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid var(--desk-violet); }
+.lg-play { width: 2px; height: 12px; background: var(--desk-sky); }
+.lg-mix { width: 14px; height: 10px; border-radius: 2px; background: linear-gradient(90deg, #e23b2e, #2f6bff, #2fc45a); }
+
+/* Inspector strip and the stage */
+.insp { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 12px; border-bottom: 1px solid var(--desk-line); background: var(--desk-panel); }
+.insp .fld { display: flex; flex-direction: column; gap: 3px; }
+.insp .fl { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--desk-faint); }
+.insp .hint { font-size: 11.5px; color: var(--desk-muted); max-width: 46ch; }
+.stage { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--desk-line); }
+.unit { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10.5px; color: var(--desk-muted); }
+.lamp { position: relative; width: 52px; height: 52px; border-radius: 50%; background: #000; box-shadow: 0 0 0 1px var(--desk-line); }
+.lamp span { position: absolute; border-radius: 50%; inset: 0; }
+.lamp span:nth-child(2) { inset: 9px; }
+.lamp span:nth-child(3) { inset: 18px; }
+.stage .now { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--desk-muted); }
+
+/* Item 3's sample strips */
+.steps { display: flex; flex-direction: column; gap: 6px; }
+.stp { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 11.5px; color: var(--desk-muted); }
+.stp .bar { display: flex; height: 14px; border-radius: 3px; overflow: hidden; }
+.stp .bar span { display: block; border-right: 1px solid rgba(0, 0, 0, 0.35); }
+.stp .nums { grid-column: 2; font-family: var(--mono); font-size: 11px; }
+.stp .nums b { color: var(--desk-amber); font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { .cyc, .fxcard { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="read head">
+    <div class="eyebrow">FX editor · follow-ups · design record · 2026-10-26</div>
+    <h1>FX Editor Follow-ups</h1>
+    <p class="lede">Six things found using the FX editor on the rig, and what changes for each. Five are the editor's own drawing and wording; one, <b>a fixture's elements running as one</b>, is a gap in the desk's model that MagicQ fills with its <i>Dup Elements</i>.</p>
+    <div class="tags"><span class="tag">frontend</span><span class="tag back">backend</span><span class="tag both">both</span></div>
+  </header>
+
+  <section>
+    <div class="head read"><h2>The decisions</h2><p class="muted">D5, D7, D8 and the toolbar's shape were answered on 2026-10-26; the rest follow from them.</p></div>
+    <div class="scroll"><table>
+      <thead><tr><th>#</th><th>Item</th><th>What changes</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>D1</td><td><b>Nothing selected</b></td><td>One line, then <b>the running FX as cards</b>: a press selects that FX's heads and picks it. With nothing running, <i>Select heads in Values</i>. The graph says <i>Select heads to draw their FX</i> rather than <i>No FX reaches the selection</i>.</td><td><span class="tag">frontend</span></td></tr>
+        <tr><td>D2</td><td><b>The subject</b></td><td>One fixture or a group keeps its name. Several read <b>4 fixtures · 12 elements ▾</b>, which lists them by name with each one's element count and an <i>Only</i> that narrows the selection to it. Mask pill and link badge on the same row.</td><td><span class="tag">frontend</span></td></tr>
+        <tr><td>D3</td><td><b>Colour steps misaligned</b></td><td>A step that lands exactly on a sample is decided by float rounding, so one row steps at 17 · 15 · 16 samples where its neighbours step at 16 · 16 · 16. The step FX share one step function with a tolerance; a sampler test pins equal widths. The stage gets the same fix, a tick at a time.</td><td><span class="tag back">backend</span></td></tr>
+        <tr><td>D4</td><td><b>Controls hard to make out</b></td><td><b>A beat ruler over the lanes</b> carries the Cycle tab; Spread ends in a knob; handles are violet with knobs and named on hover, marks stay thin and playhead stays sky. The toolbar takes 28px labelled segments and the window's length moves into it.</td><td><span class="tag">frontend</span></td></tr>
+        <tr><td>D5</td><td><b>The fixture's own row</b></td><td>Where a fixture has no attribute of its own, its row draws <b>the mix of its elements</b> (their mean, as the fixture reads from a distance). Where it has one (a bar's dimmer) the row is that attribute, as now. Its elements fold under a chevron.</td><td><span class="tag">frontend</span></td></tr>
+        <tr><td>D6</td><td><b>Names don't fit</b></td><td>The gutter grows from 72 to <b>152px</b> and drags between 96 and 280, kept per window. A fixture's name is cut in the middle (<i>LX2 Shehds…15 SR</i>), its whole name on hover; an element row reads its number or its own name.</td><td><span class="tag">frontend</span></td></tr>
+        <tr><td>D7</td><td><b>Elements alike, fixtures different</b></td><td>A third element mode on the desk: <b>each fixture is one unit and its elements take its output</b>, so Order, Spread, Segments and Parts run over fixtures. The inspector's <b>Over: Fixtures · Elements · Each fixture</b> sits beside Order and replaces Element mode in Advanced.</td><td><span class="tag both">both</span></td></tr>
+        <tr><td>D8</td><td><b>The default</b></td><td>A new FX on an attribute a fixture carries only on its elements starts on <b>Fixtures</b>, as MagicQ's Dup Elements is its default. Stored FX keep their mode: the stored default stays Each fixture and Fixtures is written explicitly.</td><td><span class="tag both">both</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="head read"><h2>D1 · D2 · The list's head</h2><p class="muted">The list column is 248px. Today's empty state is a paragraph and a 300px button that runs out of the column; its subject line is the selection's names joined until they truncate.</p></div>
+    <div class="board">
+      <div class="board-cap"><h3>Nothing selected</h3><span>list column, 248px</span></div>
+      <div class="pair">
+        <div class="pane">
+          <div class="pane-label now">Now</div>
+          <div class="dcol">
+            <div class="readout">Nothing is selected. Select heads to see the FX on them, top first in the order they apply.</div>
+            <div class="dbtn overflow">Select the heads of a running FX…</div>
+          </div>
+        </div>
+        <div class="pane">
+          <div class="pane-label next">Proposed</div>
+          <div class="dcol" id="empty-list">
+            <div><b>No heads selected.</b> <span class="dmuted dsmall">Pick a running FX to edit it on its heads.</span></div>
+            <div class="fxcard" tabindex="0"><span class="dot"></span><b class="trunc">Colour Cycle</b><span class="fam">Colour</span><span class="meta trunc">LX1–LX2 Shehds · 4 fixtures · 1 bar · M1</span></div>
+            <div class="fxcard" tabindex="0"><span class="dot"></span><b class="trunc">Pulse</b><span class="fam">Intensity</span><span class="meta trunc">Front wash · 8 fixtures · 1 beat · M1</span></div>
+            <div class="fxcard" tabindex="0"><span class="dot"></span><b class="trunc">Circle</b><span class="fam">Position</span><span class="meta trunc">Spots · 6 fixtures · 2 bars · M2</span></div>
+            <span class="dmuted dsmall">or <u>select heads in Values</u></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="board">
+      <div class="board-cap"><h3>The subject</h3><span>a press on the count opens the list</span></div>
+      <div class="pair">
+        <div class="pane">
+          <div class="pane-label now">Now</div>
+          <div class="dcol">
+            <div class="chiprow"><b class="trunc" style="max-width:100%">LX2 Shehds 19x15 SR, LX2 Shehds 19x…</b></div>
+            <div class="chiprow"><span class="dmuted">· 12 elements</span><span class="chip">All</span><span class="chip link">⛓</span></div>
+          </div>
+        </div>
+        <div class="pane">
+          <div class="pane-label next">Proposed</div>
+          <div class="dcol">
+            <div class="chiprow"><span class="chip btn" tabindex="0">4 fixtures · 12 elements <span class="chev">▾</span></span><span class="chip">All</span><span class="chip link" title="Following the desk selection">⛓</span></div>
+            <div class="pop">
+              <div class="row"><span class="sw" style="background:#e23b2e"></span><span class="trunc">LX1 Shehds 19x15 SL</span><span class="dmuted">3</span><span class="only">Only</span></div>
+              <div class="row"><span class="sw" style="background:#e23b2e"></span><span class="trunc">LX1 Shehds 19x15 SR</span><span class="dmuted">3</span><span class="only">Only</span></div>
+              <div class="row"><span class="sw" style="background:#2f6bff"></span><span class="trunc">LX2 Shehds 19x15 SL</span><span class="dmuted">3</span><span class="only">Only</span></div>
+              <div class="row"><span class="sw" style="background:#2f6bff"></span><span class="trunc">LX2 Shehds 19x15 SR</span><span class="dmuted">3</span><span class="only">Only</span></div>
+              <div class="foot">Elements counted under each fixture. <i>Only</i> narrows the selection; the desk's while this window follows it.</div>
+            </div>
+            <span class="dmuted dsmall">One fixture: <i>LX2 Shehds 19x15 SR · 3 elements</i>. A group: <i>Front wash · 8 fixtures</i>.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="head read"><h2>D4 · D5 · D6 · D7 · The graph and Over</h2>
+      <p class="muted">Four Shehds, three elements each, running Colour Cycle over four colours at one bar a cycle. Switch <b>Over</b> to see what each mode does; the fixture rows draw the mix of their elements, so they read solid only where the elements agree. Drag the gutter's edge, fold a fixture by its name.</p></div>
+    <div class="board" id="graph-board">
+      <div class="board-cap"><h3>The FX editor's graph, proposed</h3><span>the lane, its toolbar and the inspector's Over</span></div>
+      <div class="insp">
+        <div class="fld"><span class="fl">Order</span><div class="seg"><button aria-pressed="true">Normal</button></div></div>
+        <div class="fld"><span class="fl">Over</span><div class="seg" id="over">
+          <button data-v="fixtures" aria-pressed="true">Fixtures</button>
+          <button data-v="elements" aria-pressed="false">Elements</button>
+          <button data-v="each" aria-pressed="false">Each fixture</button>
+        </div></div>
+        <div class="fld"><span class="fl">Colour Cycle · fade</span><div class="seg" id="fade">
+          <button data-v="0" aria-pressed="true">Cut</button>
+          <button data-v="0.5" aria-pressed="false">Fade</button>
+        </div></div>
+        <p class="hint" id="over-hint"></p>
+      </div>
+      <div class="stage" id="stage" aria-label="The four fixtures as the stage shows them now"></div>
+      <div class="gtool">
+        <div class="seg"><span class="lab">Window</span><button aria-pressed="false">1 cycle</button><button aria-pressed="true">2 cycles</button><button aria-pressed="false">2 bars</button><button aria-pressed="false">8 bars</button></div>
+        <span class="win">8 beats · 4 s</span>
+        <div class="seg"><span class="lab">Draw</span><button aria-pressed="true">Result</button><button aria-pressed="false">This FX</button></div>
+        <div class="seg"><button aria-pressed="false">Rig order</button><button aria-pressed="false">As seen</button></div>
+        <span class="sp"></span>
+        <span class="bpm">M1 · 120</span>
+        <div class="seg"><button aria-pressed="false" id="pause">Pause</button></div>
+      </div>
+      <div class="gwrap"><div class="graph" id="graph">
+        <div class="gutter" id="gutter"></div>
+        <div class="plot" id="plot"><canvas id="ruler" height="24"></canvas><canvas id="lane"></canvas><span class="cyc" id="cyc" title="Drag to set Cycle">1 bar ⇔</span><span class="knobtip" id="knobtip">Spread 100%</span></div>
+        <div class="grip" id="grip" role="separator" aria-orientation="vertical" aria-label="Gutter width" tabindex="0"></div>
+      </div></div>
+      <div class="legend">
+        <span><i class="lg-knob"></i>a handle: drag it</span>
+        <span><i class="lg-tick"></i>where a row's cycle starts</span>
+        <span><i class="lg-play"></i>playhead</span>
+        <span><i class="lg-mix"></i>a fixture row: the mix of its elements</span>
+      </div>
+    </div>
+    <div class="cols">
+      <ul class="points">
+        <li><b>The ruler</b> numbers bars and beats from the master's tick, as the hover's <i>Beat</i> does, and holds the Cycle tab at the first cycle's end. Below a mouse it is a read-out; handles are pointer-only, as now.</li>
+        <li><b>Handles and marks are told apart by shape</b>: a knob is a handle, a tick or a thin line is a mark. Hovering a knob names it (<i>Spread 100%</i>) and lights what it changes, the inspector's hover rule run the other way.</li>
+        <li><b>The toolbar</b> is one row of the shell's 28px segments, each labelled, and the window's length (<i>8 beats · 4 s</i>) sits beside Window, where it was mistaken for a control.</li>
+      </ul>
+      <ul class="points">
+        <li><b>The mix is drawing, not output.</b> The client averages the desk's own samples for a row the desk does not send, as <i>As seen</i> already multiplies two of them. A level averages; a colour averages in RGB.</li>
+        <li><b>Folding is per window</b>, beside the folded lanes. A folded fixture draws its mixed row alone, so a rig of 12-cell bars reads as bars.</li>
+        <li><b>Over</b> takes the Fan's word for the same question (<i>Over: Heads · Elements</i>), and is drawn only where a selected fixture has elements.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="head read"><h2>D3 · Steps that land on a sample</h2>
+      <p class="muted">Colour Cycle picks its colour with <code>(phase / segmentSize).toInt()</code>. At a third of a cycle that division is sometimes <code>0.9999…</code> and sometimes <code>1.0</code>, depending on the row's offset, so a step lands a sample late on one row and early on the next. Read off the screenshot at 16.7px a sample:</p></div>
+    <div class="board">
+      <div class="pane">
+        <div class="steps" id="steps"></div>
+      </div>
+    </div>
+    <ul class="points read">
+      <li>Colour Cycle, Palette Steps, Slot Steps and the square and strobe waves share a step function on the desk that adds a tolerance before it floors, so a boundary at an exact fraction lands on that sample in every row.</li>
+      <li>The sampler test that pins it runs Colour Cycle over three elements and asserts every step is 16 samples wide; it fails today.</li>
+      <li>On stage the error is one tick (a 24th of a beat), never seen; the graph draws it a sample wide, which is why it showed there first.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="head read"><h2>D7 · D8 · What the desk gains</h2>
+      <p class="muted">MagicQ asks how to treat elements whenever an FX lands on multi-element heads. The desk has two of its three answers.</p></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Over</th><th>What runs</th><th>MagicQ</th><th>Desk today</th><th>Wire</th></tr></thead>
+      <tbody>
+        <tr><td>Fixtures</td><td><b>Each fixture is one unit</b>; all its elements take its output. Order, Spread, Segments and Parts count fixtures.</td><td>Dup Elements (its default)</td><td><b>missing</b></td><td>new, e.g. <code>WHOLE</code></td></tr>
+        <tr><td>Elements</td><td>Every element of every fixture is one strip.</td><td>Include Elements</td><td>Flat</td><td><code>FLAT</code></td></tr>
+        <tr><td>Each fixture</td><td>The FX runs inside each fixture, every fixture alike.</td><td>Use Elements</td><td>Per Fixture (default)</td><td><code>PER_FIXTURE</code></td></tr>
+      </tbody>
+    </table></div>
+    <ul class="points read">
+      <li><b>The stored default does not move.</b> Canonical JSON omits a field at its default, so an archive's FX with no element mode means <code>PER_FIXTURE</code> forever. D8 is the creation doors (the picker, + FX, the palette editor, the cue editor, MCP's add tools) writing <code>WHOLE</code> explicitly where the attribute lives only on elements.</li>
+      <li><b>Sync:</b> a desk that does not know <code>WHOLE</code> cannot read an FX that carries it, so the archive's <code>formatVersion</code> and <code>minReader</code> both move.</li>
+      <li><b>Glossary:</b> Per Fixture and Flat become <i>Each fixture</i> and <i>Elements</i> on screen; <i>Fixtures</i> is new; <i>Over</i> is the control's word.</li>
+      <li>What item 6 asked for, with the Shehds: <b>Over Fixtures</b>, Colour Cycle with one colour per fixture, a cycle as many beats as fixtures, Spread 100%. Each beat the colours move one fixture; <i>Fade</i> crossfades them.</li>
+    </ul>
+  </section>
+
+  <section class="read">
+    <div class="head"><h2>Not changing</h2></div>
+    <ul class="points">
+      <li>The graph is still the desk's samples; nothing here computes an FX's output on the client.</li>
+      <li>Shapes stay the nine. Over is not a Shape: it decides what the Shapes count.</li>
+      <li>Handles stay pointer-only and stay off read-only and coarse-pointer hosts.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(() => {
+  const COLOURS = [[226, 59, 46], [47, 107, 255], [47, 196, 90], [245, 177, 74]];
+  const FIXTURES = ['LX1 Shehds 19x15 SL', 'LX1 Shehds 19x15 SR', 'LX2 Shehds 19x15 SL', 'LX2 Shehds 19x15 SR'];
+  const ELEMENTS = 3, CYCLE_BEATS = 4, WINDOW_BEATS = 8, ROW = 18, SPB = 12;
+  const HINTS = {
+    fixtures: 'Each fixture is one unit: its three elements take one colour, and the colour moves fixture to fixture.',
+    elements: 'All twelve elements are one strip: the chase runs element by element across the fixtures.',
+    each: 'The FX runs inside each fixture: every fixture shows the same chase over its own three elements.',
+  };
+  const state = { over: 'fixtures', fade: 0, gutter: 152, folded: new Set(), paused: false, t0: performance.now(), held: 0 };
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const offsetOf = (f, e) =>
+    state.over === 'fixtures' ? f / FIXTURES.length : state.over === 'elements' ? (f * ELEMENTS + e) / (FIXTURES.length * ELEMENTS) : e / ELEMENTS;
+  function colourAt(beat, f, e) {
+    let p = ((beat / CYCLE_BEATS - offsetOf(f, e)) % 1 + 1) % 1;
+    const n = COLOURS.length, seg = Math.min(n - 1, Math.floor(p * n + 1e-9)), sp = p * n - seg;
+    const a = COLOURS[seg], b = COLOURS[(seg + 1) % n], hold = 1 - state.fade;
+    if (state.fade === 0 || sp < hold) return a;
+    const k = (sp - hold) / state.fade;
+    return a.map((v, i) => Math.round(v + (b[i] - v) * k));
+  }
+  const mix = (cs) => cs[0].map((_, i) => Math.round(cs.reduce((s, c) => s + c[i], 0) / cs.length));
+  const css = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+  function rows() {
+    const out = [];
+    FIXTURES.forEach((name, f) => {
+      out.push({ kind: 'fx', f, name });
+      if (!state.folded.has(f)) for (let e = 0; e < ELEMENTS; e++) out.push({ kind: 'el', f, e });
+    });
+    return out;
+  }
+
+  const gutter = document.getElementById('gutter'), plot = document.getElementById('plot'), graph = document.getElementById('graph');
+  const lane = document.getElementById('lane'), ruler = document.getElementById('ruler'), cyc = document.getElementById('cyc'), tip = document.getElementById('knobtip');
+  const measure = document.createElement('canvas').getContext('2d');
+  function middleCut(text, px) {
+    measure.font = '600 11.5px "IBM Plex Sans", system-ui, sans-serif';
+    if (measure.measureText(text).width <= px) return text;
+    let keep = text.length;
+    while (keep > 4) {
+      keep--;
+      const head = Math.ceil(keep / 2), tail = keep - head;
+      const t = text.slice(0, head) + '…' + text.slice(text.length - tail);
+      if (measure.measureText(t).width <= px) return t;
+    }
+    return text.slice(0, 3) + '…';
+  }
+
+  function layout() {
+    graph.style.gridTemplateColumns = `${state.gutter}px minmax(0, 1fr)`;
+    const grip = document.getElementById('grip');
+    grip.style.left = `${state.gutter - 5}px`;
+    const list = rows();
+    gutter.innerHTML = '<div style="height:24px"></div>';
+    for (const r of list) {
+      const d = document.createElement('div');
+      if (r.kind === 'fx') {
+        d.className = 'glabel fx';
+        d.tabIndex = 0;
+        d.title = r.name;
+        d.innerHTML = `<span class="chev">${state.folded.has(r.f) ? '▸' : '▾'}</span><span></span>`;
+        d.lastChild.textContent = middleCut(r.name, state.gutter - 26);
+        const toggle = () => { state.folded.has(r.f) ? state.folded.delete(r.f) : state.folded.add(r.f); layout(); };
+        d.addEventListener('click', toggle);
+        d.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } });
+      } else {
+        d.className = 'glabel el';
+        d.textContent = `${r.e + 1}`;
+      }
+      gutter.appendChild(d);
+    }
+    draw();
+  }
+
+  function prep(c, h) {
+    const w = plot.clientWidth, dpr = Math.min(2, devicePixelRatio || 1);
+    c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); c.style.height = `${h}px`;
+    const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return [ctx, w];
+  }
+  const cs = getComputedStyle(document.documentElement);
+  const tok = (n) => cs.getPropertyValue(n).trim();
+
+  function draw() {
+    const list = rows();
+    const [rc, w] = prep(ruler, 24);
+    const x = (beat) => (beat / WINDOW_BEATS) * w;
+    rc.fillStyle = tok('--desk-muted'); rc.font = '10.5px "IBM Plex Mono", monospace';
+    for (let b = 0; b <= WINDOW_BEATS; b++) {
+      const bar = Math.floor(b / 4) + 1, beat = (b % 4) + 1, X = Math.round(x(b));
+      rc.fillStyle = b % 4 === 0 ? tok('--desk-fg') : tok('--desk-faint');
+      rc.fillRect(X, b % 4 === 0 ? 12 : 17, 1, b % 4 === 0 ? 12 : 7);
+      if (b < WINDOW_BEATS) { rc.fillStyle = b % 4 === 0 ? tok('--desk-fg') : tok('--desk-muted'); rc.fillText(b % 4 === 0 ? `${bar}` : `${bar}.${beat}`, X + 3, 10); }
+    }
+    cyc.style.left = `${x(CYCLE_BEATS)}px`;
+
+    const h = list.length * ROW;
+    const [ctx] = prep(lane, h);
+    const samples = WINDOW_BEATS * SPB, sw = w / samples;
+    list.forEach((r, i) => {
+      const y = i * ROW;
+      for (let s = 0; s < samples; s++) {
+        const beat = s / SPB;
+        const c = r.kind === 'fx' ? mix([...Array(ELEMENTS).keys()].map((e) => colourAt(beat, r.f, e))) : colourAt(beat, r.f, r.e);
+        ctx.fillStyle = css(c);
+        ctx.fillRect(s * sw, y + (r.kind === 'fx' ? 1 : 3), sw + 0.6, r.kind === 'fx' ? ROW - 2 : ROW - 6);
+      }
+      if (r.kind === 'fx') { ctx.fillStyle = tok('--desk-line'); ctx.fillRect(0, y, w, 1); }
+    });
+    ctx.fillStyle = tok('--desk-faint');
+    for (let b = 1; b < WINDOW_BEATS; b++) ctx.fillRect(Math.round(x(b)), 0, 1, h);
+
+    const starts = [];
+    list.forEach((r, i) => {
+      const off = r.kind === 'fx' ? (state.over === 'each' ? null : offsetOf(r.f, 0)) : offsetOf(r.f, r.e);
+      if (off == null) return;
+      const X = x(off * CYCLE_BEATS), Y = i * ROW;
+      ctx.fillStyle = tok('--desk-violet');
+      ctx.beginPath(); ctx.moveTo(X - 4, Y); ctx.lineTo(X + 4, Y); ctx.lineTo(X, Y + 6); ctx.fill();
+      if (r.kind === 'el' || state.over === 'fixtures') starts.push([X, Y + 3]);
+    });
+    if (starts.length > 1) {
+      const pts = state.over === 'each' ? starts.slice(0, ELEMENTS) : starts;
+      ctx.strokeStyle = tok('--desk-violet'); ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+      ctx.beginPath(); pts.forEach(([X, Y], k) => (k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y))); ctx.stroke(); ctx.setLineDash([]);
+      const [kx, ky] = pts[pts.length - 1];
+      ctx.fillStyle = tok('--desk-violet-strong'); ctx.beginPath(); ctx.arc(kx, ky, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = tok('--desk-bg'); ctx.lineWidth = 2; ctx.stroke();
+      tip.style.left = `${kx}px`; tip.style.top = `${24 + ky}px`;
+    }
+    playhead();
+  }
+
+  const stage = document.getElementById('stage');
+  stage.innerHTML = FIXTURES.map((n) => `<div class="unit"><div class="lamp"><span></span><span></span><span></span></div><span>${n.replace('Shehds 19x15 ', '')}</span></div>`).join('') + '<span class="now" id="now"></span>';
+  const lamps = [...stage.querySelectorAll('.lamp')];
+  let headEl = null;
+  function beatNow() {
+    const ms = state.paused || reduced ? state.held : performance.now() - state.t0;
+    return ((ms / 500) % WINDOW_BEATS + WINDOW_BEATS) % WINDOW_BEATS;
+  }
+  function playhead() {
+    const beat = beatNow();
+    if (!headEl) { headEl = document.createElement('div'); headEl.style.cssText = `position:absolute;top:24px;bottom:0;width:2px;background:${tok('--desk-sky')};pointer-events:none`; plot.appendChild(headEl); }
+    headEl.style.left = `${(beat / WINDOW_BEATS) * plot.clientWidth}px`;
+    lamps.forEach((l, f) => [...l.children].forEach((s, e) => { s.style.background = css(colourAt(beat, f, 2 - e)); }));
+    document.getElementById('now').textContent = `beat ${(Math.floor(beat / 4) + 1)}.${(Math.floor(beat) % 4) + 1}`;
+  }
+  function frame() { playhead(); if (!state.paused && !reduced) requestAnimationFrame(frame); }
+
+  function segment(id, key, parse) {
+    const el = document.getElementById(id);
+    el.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button'); if (!b) return;
+      el.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      state[key] = parse(b.dataset.v);
+      document.getElementById('over-hint').textContent = HINTS[state.over];
+      draw();
+    });
+  }
+  segment('over', 'over', (v) => v);
+  segment('fade', 'fade', Number);
+  document.getElementById('over-hint').textContent = HINTS[state.over];
+  document.getElementById('pause').addEventListener('click', (ev) => {
+    state.paused = !state.paused;
+    ev.target.setAttribute('aria-pressed', String(state.paused));
+    ev.target.textContent = state.paused ? 'Run' : 'Pause';
+    if (state.paused) state.held = performance.now() - state.t0; else { state.t0 = performance.now() - state.held; frame(); }
+  });
+
+  const grip = document.getElementById('grip');
+  const setGutter = (px) => { state.gutter = Math.max(96, Math.min(280, Math.round(px))); layout(); };
+  grip.addEventListener('pointerdown', (ev) => {
+    grip.setPointerCapture(ev.pointerId); grip.classList.add('drag');
+    const x0 = ev.clientX, g0 = state.gutter;
+    const move = (e) => setGutter(g0 + e.clientX - x0);
+    const up = () => { grip.classList.remove('drag'); grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); };
+    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+  });
+  grip.addEventListener('keydown', (ev) => { if (ev.key === 'ArrowLeft') setGutter(state.gutter - 8); if (ev.key === 'ArrowRight') setGutter(state.gutter + 8); });
+
+  new ResizeObserver(() => draw()).observe(plot);
+  document.fonts?.ready.then(layout);
+  layout();
+  if (!reduced) requestAnimationFrame(frame);
+
+  const steps = document.getElementById('steps');
+  const strip = (label, widths, note) => {
+    const cols = ['#e23b2e', '#2fc45a', '#2f6bff'];
+    const total = widths.reduce((a, b) => a + b, 0);
+    const bar = widths.map((w, i) => `<span style="flex:${w};background:${cols[i % 3]}"></span>`).join('');
+    const nums = widths.map((w) => (w === 16 ? `${w}` : `<b>${w}</b>`)).join(' · ');
+    return `<div class="stp"><span>${label}</span><div class="bar" style="width:${(total / 96) * 100}%">${bar}</div><span class="nums">${nums} samples ${note}</span></div>`;
+  };
+  steps.innerHTML =
+    '<div class="pane-label now">Now · element 1 against its neighbours</div>' +
+    strip('Element 1', [17, 15, 16, 17, 15, 16], '— one sample late, then early') +
+    strip('Element 2', [16, 16, 16, 16, 16, 16], '') +
+    '<div class="pane-label next" style="margin-top:8px">With the tolerance · every row</div>' +
+    strip('Element 1', [16, 16, 16, 16, 16, 16], '') +
+    strip('Element 2', [16, 16, 16, 16, 16, 16], '');
+})();
+</script>

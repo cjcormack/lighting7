@@ -590,7 +590,7 @@ internal fun fxInstancesToCueChildren(
                     blendMode = effect.blendMode.name,
                     order = dyn.order.javaClass.simpleName,
                     phaseOffset = effect.storedPhaseOffset(dyn),
-                    elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
+                    elementMode = uk.me.cormack.lighting7.fx.ElementMode.stored(effect.spreadsOverMembers, dyn.elementMode),
                     elementFilter = if (dyn.elementFilter != uk.me.cormack.lighting7.fx.ElementFilter.ALL) {
                         dyn.elementFilter.name
                     } else null,
@@ -613,6 +613,7 @@ internal fun fxInstancesToCueChildren(
                     wings = dyn.wings,
                     segments = dyn.segments,
                     parts = dyn.parts,
+                    spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.toStored(dyn.spreadUnit),
                 )
         )
     }

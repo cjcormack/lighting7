@@ -90,7 +90,7 @@ class AttributeNamesMigrationTest {
             val cue = DaoCue.new { this.project = project; name = "Q1" }
             DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "group"; targetKey = "movers"
-                fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+                fxType = "Flicker"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = mapOf("panCenter" to "1")
             }
@@ -99,7 +99,7 @@ class AttributeNamesMigrationTest {
         setUserVersion(TERMINOLOGY_RENAMED_USER_VERSION)
 
         val reopened = startDesk()
-        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
+        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion(), "steps 7 and 8 follow")
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         transaction(reopened.database) {
             val bindings = DaoControlSurfaceBinding.all().associate { it.controlId to (it.targetType to it.targetPayload) }
@@ -115,8 +115,9 @@ class AttributeNamesMigrationTest {
                 bindings["button-2"],
             )
             assertEquals("blackout" to """{"type":"blackout"}""", bindings["button-3"])
+            // Step 8 then makes the Circle a Path, its centres kept as step 6 named them.
             assertEquals(
-                mapOf("panCentre" to "100", "tiltCentre" to "140", "panRadius" to "30"),
+                mapOf("shape" to "CIRCLE", "panCentre" to "100", "tiltCentre" to "140", "panSize" to "30", "tiltSize" to "64"),
                 DaoLookFxEntity.all().single().parameters,
             )
             assertEquals(mapOf("panCenter" to "1"), DaoCueAdHocFxEntity.all().single().parameters, "only the position FX's centres are renamed")
@@ -158,14 +159,14 @@ class AttributeNamesMigrationTest {
         stopDesk()
         setUserVersion(TERMINOLOGY_RENAMED_USER_VERSION)
         startDesk()
-        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
+        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion(), "steps 7 and 8 follow")
         assertEquals(emptyList(), backups())
     }
 
     @Test
-    fun `a fresh database is born at step 6`() {
+    fun `a fresh database is born past step 6`() {
         startDesk()
-        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
+        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion(), "steps 7 and 8 follow")
         assertEquals(emptyList(), backups())
     }
 }

@@ -57,7 +57,7 @@ fun secondsTimingConflict(seconds: Boolean?, speedMasterUuid: String?, rateSpeed
 
 /**
  * Venue-visit plan D16's default master for a new effect of [fxType]: the speed master whose
- * `family` is the effect's family — its registration's category, else [fallbackCategory] (always for
+ * `family` is the effect's family — its registration's category on [attribute] ([fxFamilyOnAttribute]), else [fallbackCategory] (always for
  * a Steps FX, whose `steps` category names no family: Slot Steps is Beam's, Palette Steps the
  * caller's) — or null,
  * which is master 1. Null too for a wall-clock effect, whose Seconds is having no rate master, since
@@ -73,13 +73,15 @@ fun familyMasterUuidFor(
     speedMasters: SpeedMasterBank,
     fxType: String,
     fallbackCategory: String? = null,
+    /** The attribute the new effect drives: Wave on zoom is Beam's (fx-settings plan D5). */
+    attribute: String? = null,
 ): java.util.UUID? {
     val registration = registry.getRegistration(fxType)
     if (registration?.timingSource == TimingSource.WALL_CLOCK) return null
     val family = when {
         registration == null -> fallbackCategory
         registration.family == STEPS_CATEGORY -> stepsFxFamily(registration.id, fallbackCategory)
-        else -> registration.family
+        else -> fxFamilyOnAttribute(registration.family, attribute)
     } ?: return null
     return speedMasters.masterStates().firstOrNull { it.family == family }?.uuid
 }

@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import type { SceneryChange, SceneryState } from './sceneryApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { AssignmentHealth } from './cuesApi'
@@ -84,6 +85,8 @@ export interface LookFx {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   sortOrder?: number
 }
 

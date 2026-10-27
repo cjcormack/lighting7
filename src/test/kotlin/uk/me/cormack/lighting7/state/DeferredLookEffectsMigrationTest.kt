@@ -77,7 +77,10 @@ class DeferredLookEffectsMigrationTest {
         parameters = emptyMap()
     }
 
-    /** A desk on [IntegrationTestDb] holding Experiment's *S5 Deferred FX*: one deferred effect, one bound. */
+    /**
+     * A desk on [IntegrationTestDb] holding Experiment's *S5 Deferred FX*: one deferred effect, one bound —
+     * a Pulse, which step 7 stores as Wave.
+     */
     private fun seedLook() {
         val desk = startDesk()
         val projectId = seedMinimalProject(desk, projectName = "Experiment")
@@ -109,7 +112,7 @@ class DeferredLookEffectsMigrationTest {
             stopDesk()
         }
 
-        assertEquals(listOf("fixture" to "Pulse"), storedEffects())
+        assertEquals(listOf("fixture" to "Wave"), storedEffects())
         assertTrue(userVersion() >= DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION, "user_version ${userVersion()}")
         assertEquals(1, logs.size, "one line per Look: $logs")
         assertTrue("'S5 Deferred FX' in 'Experiment'" in logs.single() && "ColourCycle" in logs.single(), logs.single())
@@ -135,7 +138,7 @@ class DeferredLookEffectsMigrationTest {
             stopDesk()
         }
 
-        assertEquals(listOf("fixture" to "Pulse"), storedEffects())
+        assertEquals(listOf("fixture" to "Wave"), storedEffects())
         assertTrue(logs.any { "#$goneId, deleted" in it && "Strobe" in it }, "$logs")
     }
 
@@ -156,7 +159,7 @@ class DeferredLookEffectsMigrationTest {
             stopDesk()
         }
 
-        assertEquals(listOf("fixture" to "Pulse", DEFERRED_TARGET_TYPE to "Breathe"), storedEffects())
+        assertEquals(listOf("fixture" to "Wave", DEFERRED_TARGET_TYPE to "Breathe"), storedEffects())
         assertTrue(userVersion() >= DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION, "user_version ${userVersion()}")
         assertEquals(emptyList(), logs)
     }

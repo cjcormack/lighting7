@@ -1,8 +1,13 @@
 import type { FxDirection, Timing, UpdateFxRequest } from '@/api/fxApi'
-import type { ActiveFx, FxLibraryEntry, FxParameterDef } from '@/store/fixtureFx'
-import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
-import { isMirroredOrder } from '@/lib/spreadShape'
-import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
+import type { ActiveFx, FxLibraryEntry, FxParamUnit, FxParameterDef, FxPreset } from '@/store/fixtureFx'
+import { beatsToSeconds, isOnSeconds, secondsToBeats, swappedTiming } from '@/lib/fxTiming'
+import { MAX_SPREAD, isMirroredOrder, spreadOffsets, stepCountOf, type SpreadUnit } from '@/lib/spreadShape'
+import { fxAttributeFamily } from '@/lib/attributeFamily'
+import { compatibleFxFor } from '@/lib/fxTargetAttributes'
+import { isPaletteSteps } from '@/lib/stepFx'
+import { normalizeFxName } from '../busking/buskingTypes'
+import { CENTRE_BYTE, CENTRE_PARAMS, centreModeOf, hasCentre, defaultParameters, withCentreMode } from './centreMode'
+import { STORED_ELEMENT_MODE } from './fxConstants'
 
 export {
   CENTRE_BYTE,
@@ -10,6 +15,7 @@ export {
   defaultParameters,
   hasCentre,
   isAroundSpelling,
+  isParamShown,
   storedCentreMode,
   withCentreMode,
   type CentreMode,
@@ -26,9 +32,24 @@ export {
 /** D12a: a level effect replaces the level underneath, or moves within it. */
 export type LevelMode = 'replace' | 'within'
 
-/** The level effects — the intensity category, D12a's *Replace it | Within it*. */
-export function isLevelFx(entry: Pick<FxLibraryEntry, 'family'>): boolean {
-  return entry.family === 'intensity'
+/**
+ * The level effects — the intensity category on the attribute it drives, D12a's *Replace it | Within
+ * it*. A Wave on zoom, iris, frost or focus is Beam's (fx-settings plan D5), and asks no level question.
+ */
+export function isLevelFx(entry: Pick<FxLibraryEntry, 'family'>, attribute?: string | null): boolean {
+  return fxAttributeFamily(entry.family, attribute) === 'INTENSITY'
+}
+
+/**
+ * A level effect's low and high, which the graph draws as handles: the byte its frontmatter pairs
+ * (`low` with `high` on Wave), else a `min` and a `max`; null where it has neither.
+ */
+export function levelPairOf(entry: Pick<FxLibraryEntry, 'parameters'>): { low: string; high: string } | null {
+  const declared = entry.parameters.find(
+    (p) => p.type === 'ubyte' && p.pair != null && entry.parameters.some((q) => q.name === p.pair && q.type === 'ubyte'),
+  )
+  if (declared?.pair != null) return { low: declared.name, high: declared.pair }
+  return ['min', 'max'].every((name) => entry.parameters.some((p) => p.name === name)) ? { low: 'min', high: 'max' } : null
 }
 
 /** Replace is Override, Within is Multiply (call 2); anything else is neither. */
@@ -44,14 +65,132 @@ export function blendForLevelMode(mode: LevelMode): string {
 }
 
 /**
- * How an effect starts from the picker: its defaults, and — for a movement effect — *Around*
- * (D12, "movement starts Around"). A level effect starts Replace (call 2), everything else Override.
+ * How an effect starts from the picker: its defaults — over them its `attributeDefaults` for the
+ * attribute it lands on and a picked preset's parameters (fx-settings plan session 2, D4) — and, for
+ * a movement effect, *Around* (D12, "movement starts Around"). A level effect starts Replace
+ * (call 2), everything else Override.
  */
 export function startingSpec(
-  entry: Pick<FxLibraryEntry, 'family' | 'parameters'>,
+  entry: Pick<FxLibraryEntry, 'family' | 'parameters' | 'attributeDefaults'>,
+  on?: { attribute?: string | null; preset?: Pick<FxPreset, 'parameters'> | null },
 ): { blendMode: string; parameters: Record<string, string> } {
-  const spec = { blendMode: 'OVERRIDE', parameters: defaultParameters(entry) }
-  return hasCentre(entry) ? withCentreMode(spec, 'around') : spec
+  const parameters = {
+    ...defaultParameters(entry),
+    ...(on?.attribute != null ? entry.attributeDefaults?.[on.attribute] : undefined),
+    ...on?.preset?.parameters,
+  }
+  const spec = { blendMode: 'OVERRIDE', parameters }
+  return hasCentre(entry, parameters) ? withCentreMode(spec, 'around') : spec
+}
+
+/** The four FX of the Flicker family (fx-settings plan D2), by `normalizeFxName`. */
+const FLICKER_FX: ReadonlySet<string> = new Set(['flicker', 'candleflicker', 'fluorescentflicker', 'lightningstrike'])
+
+/**
+ * The editor's section for an FX's own settings, named for what it holds (fx-settings plan D9): a
+ * script FX's *Parameters*, the Flicker family's *Flicker*, a step FX's *Steps*, else the family it
+ * drives on [attribute] — *Levels* for a level or a beam FX, *Colours*, *Path*.
+ */
+export function fxSectionName(
+  entry: Pick<FxLibraryEntry, 'name' | 'family' | 'source'>,
+  attribute?: string | null,
+): string {
+  if (entry.source != null && entry.source !== 'BUILT_IN') return 'Parameters'
+  if (FLICKER_FX.has(normalizeFxName(entry.name))) return 'Flicker'
+  if (entry.family.toLowerCase() === 'steps') return 'Steps'
+  switch (fxAttributeFamily(entry.family, attribute)) {
+    case 'INTENSITY':
+    case 'BEAM':
+      return 'Levels'
+    case 'COLOUR':
+      return 'Colours'
+    case 'POSITION':
+      return 'Path'
+    default:
+      return 'Parameters'
+  }
+}
+
+/**
+ * The draft an FX becomes when its type is swapped for [to] from the editor's header (fx-settings
+ * plan D9), as the picker's swap writes one: the new type's starting parameters on [attribute]; its
+ * starting blend unless the blend was changed from the old type's (a stacked FX's is kept); the
+ * division and Direction carried unless they stood at the old type's defaults (`swappedTiming`),
+ * the division started afresh across a beat and a wall-clock FX. A `STEP` spread onto an FX with no
+ * steps becomes the `CYCLE` spread that keeps the offsets it ran at over [heads] (the desk's
+ * `SpreadShaping.cycleSpread`, plan §3), and the cycle's own where there are no heads to keep them
+ * over (a palette's).
+ */
+export function swappedDraft(
+  draft: FxDraft,
+  from: FxLibraryEntry | undefined,
+  to: FxLibraryEntry,
+  attribute?: string | null,
+  heads?: number,
+): FxDraft {
+  const spec = startingSpec(to, { attribute })
+  const startedOn = from != null ? startingSpec(from, { attribute }).blendMode : null
+  const unitOf = (entry: FxLibraryEntry | undefined) =>
+    draft.seconds || entry?.timingSource === 'WALL_CLOCK' ? 'seconds' : 'beats'
+  const timing = swappedTiming(draft, from, to, unitOf(from) === unitOf(to))
+  return {
+    ...draft,
+    parameters: spec.parameters,
+    blendMode: startedOn == null || draft.blendMode === startedOn ? spec.blendMode : draft.blendMode,
+    cycle: timing.cycle,
+    direction: timing.direction,
+    ...(draft.spreadUnit === 'STEP' && !to.stepsFrom ? { spreadUnit: 'CYCLE' as const, spread: keptCycleSpread(draft, from, heads) } : {}),
+  }
+}
+
+/** `spread × slots / steps`, capped at [MAX_SPREAD]: the `CYCLE` spread a `STEP` one runs as over [heads]. */
+function keptCycleSpread(draft: FxDraft, from: FxLibraryEntry | undefined, heads: number | undefined): number {
+  if (heads == null || heads <= 0) return 1
+  const steps = stepCountOf(from, draft.parameters)
+  const { slots } = spreadOffsets(draft.order, heads, draft)
+  const count = Math.max(slots, 1)
+  return Math.min((draft.spread * count) / (steps != null ? Math.max(steps, 1) : count), MAX_SPREAD)
+}
+
+/**
+ * The FX the header can swap [entry] for on [attribute]: the FX that list it, but Palette Steps,
+ * whose palettes only the picker offers, with [entry] itself first where the listing leaves it out
+ * (a legacy FX).
+ */
+export function fxSwapOptions(
+  library: FxLibraryEntry[] | undefined,
+  attribute: string,
+  entry: FxLibraryEntry,
+): FxLibraryEntry[] {
+  const offered = compatibleFxFor(library, new Set([attribute])).filter((e) => !isPaletteSteps(e.name))
+  return offered.some((e) => e.name === entry.name) ? offered : [entry, ...offered]
+}
+
+/**
+ * A parameter change that makes the effect ask D12's question, or stop asking it — a Path's shape
+ * moving to or from a Line — as the whole write. Out of an *Around* shape it replaces at its own
+ * positions, since a line has no centre to orbit; any other blend is kept. Into a centred shape it
+ * starts *Around*, as a new one does, while its centres are still the pinned 128 — but centres the
+ * operator moved (an *Absolute* circle taken through a Line and back) keep their blend and place.
+ * Null for any other change, which is the parameter alone.
+ */
+export function centreFlip(
+  entry: Pick<FxLibraryEntry, 'family' | 'parameters'>,
+  draft: { blendMode: string; parameters: Record<string, string> },
+  name: string,
+  value: string,
+): { blendMode: string; parameters: Record<string, string> } | null {
+  const parameters = { ...draft.parameters, [name]: value }
+  const before = hasCentre(entry, draft.parameters)
+  const after = hasCentre(entry, parameters)
+  if (before === after) return null
+  const held = { ...defaultParameters(entry), ...parameters }
+  if (after) {
+    const pinned = CENTRE_PARAMS.every((p) => Number(held[p]) === CENTRE_BYTE)
+    return pinned ? withCentreMode({ blendMode: draft.blendMode, parameters }, 'around') : { blendMode: draft.blendMode, parameters }
+  }
+  const wasAround = centreModeOf(draft.blendMode, { ...defaultParameters(entry), ...draft.parameters }) === 'around'
+  return { blendMode: wasAround ? 'OVERRIDE' : draft.blendMode, parameters }
 }
 
 /**
@@ -62,7 +201,7 @@ export function startingSpec(
  * - `axis` — any other position byte (a sweep's ends): a position on its axis, centre-relative
  *   (`-128..127`, venue-visit plan D3), as the centre is.
  * - `level` — a byte anywhere else: a percent, as the level row reads.
- * - `shape` — a curve, a switch, or a ratio beside levels: behind the Shape disclosure.
+ * - `shape` — a curve, a switch, or a ratio beside levels: folded under *More*.
  * - `main` — everything else, drawn with the levels.
  *
  * The ratio rule is the board's: a Pulse's attack and hold are its shape (it has levels to be the
@@ -103,6 +242,104 @@ export function isRatioParam(param: FxParameterDef): boolean {
   return (type === 'double' || type === 'float') && Number(param.defaultValue) <= 1
 }
 
+/** The board's words for the built-ins' parameters, for a parameter that declares no label. */
+const PARAM_LABELS: Record<string, string> = {
+  panCentre: 'Pan',
+  tiltCentre: 'Tilt',
+  panRadius: 'Pan size',
+  tiltRadius: 'Tilt size',
+  panRange: 'Pan range',
+  tiltRange: 'Tilt range',
+  min: 'Low',
+  max: 'High',
+  attackRatio: 'Attack',
+  holdRatio: 'Hold',
+  fadeRatio: 'Fade',
+  dutyCycle: 'Duty',
+  onRatio: 'On',
+}
+
+/** A parameter's guessed label: the board's word for it, else its name as words. */
+export function paramLabel(name: string): string {
+  return (
+    PARAM_LABELS[name] ??
+    name
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, (s) => s.toUpperCase())
+      .trim()
+  )
+}
+
+/** How the editor draws one parameter: its label, unit and range, and whether it folds under *More*. */
+export interface ParamView {
+  label: string
+  unit: FxParamUnit | null
+  min: number
+  max: number
+  step: number
+  fold: 'main' | 'detail'
+  /** A guessed range (no `min` or `max` declared): the field reads values past it, as an older row may hold. */
+  open: boolean
+}
+
+/** Whether the desk declared anything about [param] beyond its name, type, default and description. */
+function declaresMetadata(param: FxParameterDef): boolean {
+  return (
+    param.label != null ||
+    param.min != null ||
+    param.max != null ||
+    param.step != null ||
+    param.unit != null ||
+    param.role != null ||
+    param.shownWhen != null ||
+    param.pair != null ||
+    (param.options != null && param.type.toLowerCase() === 'choice')
+  )
+}
+
+/**
+ * [param] as the editor draws it (fx-settings plan D1): what the desk declares, each field it leaves
+ * out guessed from the name and type ([paramRole]) — all of them for a script FX's parameter that
+ * declares nothing.
+ */
+export function paramView(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>, param: FxParameterDef): ParamView {
+  const guess = guessedView(entry, param)
+  if (!declaresMetadata(param)) return guess
+  const ranged = param.min != null || param.max != null
+  return {
+    label: param.label ?? guess.label,
+    unit: param.unit ?? guess.unit,
+    min: param.min ?? guess.min,
+    max: param.max ?? guess.max,
+    step: param.step ?? guess.step,
+    fold: param.role ?? guess.fold,
+    open: guess.open && !ranged,
+  }
+}
+
+function guessedView(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>, param: FxParameterDef): ParamView {
+  const type = param.type.toLowerCase()
+  const role = paramRole(entry, param)
+  const fold = role === 'shape' ? 'detail' : 'main'
+  const label = paramLabel(param.name)
+  if (type === 'ubyte') {
+    const unit: FxParamUnit | null =
+      role === 'centre' || role === 'axis' ? 'position' : role === 'size' ? 'dmx' : role === 'level' ? '%' : null
+    return { label, unit, min: 0, max: 255, step: 1, fold, open: false }
+  }
+  if (type === 'double' || type === 'float') {
+    return isRatioParam(param)
+      ? { label, unit: 'ratio', min: 0, max: 1, step: 0.01, fold, open: false }
+      : { label, unit: null, min: 0, max: 10, step: 0.1, fold, open: true }
+  }
+  if (type === 'int') {
+    // From the declared default and nothing else, so the range never moves under a drag.
+    const max = Math.max(255, (Number(param.defaultValue) || 0) * 2)
+    return { label, unit: /Ms$/.test(param.name) ? 'ms' : null, min: 0, max, step: 1, fold, open: true }
+  }
+  return { label, unit: null, min: 0, max: 0, step: 1, fold, open: false }
+}
+
 export function clampByte(n: number): number {
   return Math.max(0, Math.min(255, Math.round(n)))
 }
@@ -137,13 +374,15 @@ export interface FxDraft {
   runs: number | null
   /**
    * The spread's shape (effects plan D4): Spread 0–2, Wings and Segments at least 1, Parts 0 (off) or
-   * more. The desk shapes the heads from them (P2); the editor's dials only preview it
+   * more. The desk shapes the heads from them (P2); the editor's head ladder only previews it
    * (`lib/spreadShape.ts`).
    */
   spread: number
   wings: number
   segments: number
   parts: number
+  /** What [spread] counts (fx-settings plan D6): the cycle, or the FX's own steps. */
+  spreadUnit: SpreadUnit
 }
 
 /**
@@ -159,7 +398,7 @@ export function draftOf(effect: ActiveFx): FxDraft {
     phaseOffset: effect.phaseOffset,
     timing: effect.timing ?? 'CYCLE',
     order: effect.order ?? 'NORMAL',
-    elementMode: effect.elementMode ?? 'PER_FIXTURE',
+    elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     elementFilter: effect.elementFilter ?? 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
@@ -176,6 +415,7 @@ export function draftOf(effect: ActiveFx): FxDraft {
     wings: effect.wings ?? 1,
     segments: effect.segments ?? 1,
     parts: effect.parts ?? 0,
+    spreadUnit: effect.spreadUnit ?? 'CYCLE',
   }
 }
 
@@ -183,7 +423,7 @@ export function draftOf(effect: ActiveFx): FxDraft {
 export interface FxScope {
   /** A group, or a fixture with heads: Order and Timing. */
   heads: boolean
-  /** A group with multi-element members. */
+  /** A target with a fixture that has elements: *Over*. */
   elementMode: boolean
   /** A fixture with heads, or a group with multi-element members. */
   elementFilter: boolean
@@ -193,8 +433,8 @@ export interface FxScope {
    */
   timing?: boolean
   /**
-   * How many heads the effect runs over, for the Spread section's dials — a live effect's own (they
-   * draw up to sixteen, then *+n*). Absent on an effect palette, which has no target: the dials draw
+   * How many heads the effect runs over, for *Across the heads* — a live effect's own (the ladder
+   * draws up to sixteen, then *+n*). Absent on an effect palette, which has no target: it is drawn on
    * eight notional heads (effects plan §4.1).
    */
   headCount?: number
@@ -216,6 +456,7 @@ export type OptionalField =
   | 'wings'
   | 'segments'
   | 'parts'
+  | 'spreadUnit'
 
 export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'timing',
@@ -232,13 +473,14 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'wings',
   'segments',
   'parts',
+  'spreadUnit',
 ]
 
 /**
  * One `updateFx` frame for the draft — every write carries the parameters, speed, blend and phase,
  * so a floored push that drops an intermediate move can never drop a *different* field the operator
- * set in the same window. `fxType` is never sent: the editor edits one type, and a type swap is
- * the picker's.
+ * set in the same window. `fxType` is never sent here: a type swap is a frame of its own, the
+ * picker's or the header's ([swappedDraft]).
  *
  * The optional fields go only once [touched]: the DTO leaves a distribution, element mode or filter
  * out where it does not apply (`FxDto`'s `showOrder`), so the draft's default for an
@@ -284,6 +526,7 @@ export function updateRequestOf(
     ...(touched.has('wings') ? { wings: draft.wings } : {}),
     ...(touched.has('segments') ? { segments: draft.segments } : {}),
     ...(touched.has('parts') ? { parts: draft.parts } : {}),
+    ...(touched.has('spreadUnit') ? { spreadUnit: draft.spreadUnit } : {}),
     ...(!onSeconds && touched.has('speedMasterUuid') && speedMasterUuid != null ? { speedMasterUuid } : {}),
     ...(!onSeconds && touched.has('rateSpeedMasterUuid') && draft.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: draft.rateSpeedMasterUuid }
@@ -349,14 +592,14 @@ export function carriesFxAttribute(attributes: readonly CarrierAttribute[] | nul
 }
 
 /**
- * How many heads a live effect's distribution runs over, for the Spread section's dials — the desk's
+ * How many heads a live effect's distribution runs over, for *Across the heads* — the desk's
  * `FxEngine.buildExpansion`, counted. The first fixture stands for a group, as on the desk: where it
  * carries the effect's property itself ([carriesFxAttribute]) the effect runs once per fixture —
  * a group's members, unfiltered, or the one fixture — whatever heads it has (a pixel bar's master
- * dimmer). Otherwise it runs over the heads: one fixture's, narrowed by the head filter; a group's
- * under `FLAT` as one strip, the filter across the whole strip on its global index; under
- * `PER_FIXTURE` each member's own, filtered within it — the most any member keeps. A preview's
- * count, never sent.
+ * dimmer). Otherwise it runs over the heads: under `WHOLE` one unit per fixture with heads; one
+ * fixture's, narrowed by the head filter; a group's under `FLAT` as one strip, the filter across the
+ * whole strip on its global index; under `PER_FIXTURE` each member's own, filtered within it — the
+ * most any member keeps. A preview's count, never sent.
  */
 export function spreadHeadCount(
   fixtures: readonly { attributes?: readonly CarrierAttribute[] | null; elements?: readonly unknown[] | null }[],
@@ -370,6 +613,7 @@ export function spreadHeadCount(
   if (!first || carriesFxAttribute(first.attributes, attribute)) return perFixture
   const elementCounts = fixtures.map((f) => f.elements?.length ?? 0)
   if (!elementCounts.some((n) => n > 0)) return perFixture
+  if (elementMode === 'WHOLE') return isGroup ? elementCounts.filter((n) => n > 0).length : 1
   if (isGroup && elementMode === 'FLAT') {
     return filteredElementCount(
       elementCounts.reduce((sum, n) => sum + n, 0),
@@ -391,8 +635,9 @@ export interface SelectionUnit {
  * `buildSelectionExpansion`, counted. Each unit, in selection order, is one member where it carries
  * the property itself, else its heads that carry it; a head reached twice counts once, at its first
  * place, and a unit left with nothing is skipped. With no unit its heads, the members are the count;
- * otherwise a member is a run of one head beside each fixture's run of its heads — one strip under
- * `FLAT`, filtered across it, else the most any run keeps. A preview's count, never sent.
+ * otherwise a member is a run of one head beside each fixture's run of its heads — one unit each under
+ * `WHOLE`, one strip under `FLAT`, filtered across it, else the most any run keeps. A preview's count,
+ * never sent.
  */
 export function selectionHeadCount(
   units: readonly SelectionUnit[],
@@ -418,7 +663,7 @@ export function selectionHeadCount(
       anyHeads = true
     }
   }
-  if (!anyHeads) return runs.length
+  if (!anyHeads || elementMode === 'WHOLE') return runs.length
   if (elementMode === 'FLAT') return filteredElementCount(runs.reduce((sum, n) => sum + n, 0), elementFilter)
   return Math.max(...runs.map((n) => filteredElementCount(n, elementFilter)))
 }
@@ -537,15 +782,19 @@ export interface PaletteFxFields {
   wings?: number
   segments?: number
   parts?: number
+  /** What the spread counts as stored (fx-settings plan D6); absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /** The palette's resolved timing source, where the desk has said it. */
   timingSource?: string | null
+  /** *Over* as stored; absent is Each fixture. */
+  elementMode?: string | null
 }
 
 /**
  * A template's effect as the editor's draft (fixture-fx-sheets plan D16): the same `FxDraft` a live
  * instance opens on, so `PaletteEditor` asks the *Centre* question through the same rules. The
- * fields a template has no answer for — Timing, element mode, the head filter — read as their
- * defaults and are never written back ([withPaletteDraft]).
+ * fields a template has no answer for — Timing and the head filter — read as their defaults and are
+ * never written back ([withPaletteDraft]); its *Over* is its own.
  */
 export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | null): FxDraft {
   return {
@@ -555,7 +804,7 @@ export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | 
     phaseOffset: effect.phaseOffset ?? 0,
     timing: 'CYCLE',
     order: effect.order,
-    elementMode: 'PER_FIXTURE',
+    elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     elementFilter: 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
@@ -567,6 +816,7 @@ export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | 
     wings: effect.wings ?? 1,
     segments: effect.segments ?? 1,
     parts: effect.parts ?? 0,
+    spreadUnit: effect.spreadUnit ?? 'CYCLE',
   }
 }
 
@@ -574,12 +824,13 @@ export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | 
  * [effect] with the draft's fields written back — only the ones a palette stores. A draft opened
  * on a running instance whose DTO said nothing about its distribution (a single fixture: the desk
  * leaves it out where it does not apply) holds `draftOf`'s `NORMAL` guess, so [order] false
- * keeps the palette's own rather than writing the guess over it.
+ * keeps the palette's own rather than writing the guess over it; [elementMode] false does the same
+ * for an element mode the instance did not report.
  */
 export function withPaletteDraft<E extends PaletteFxFields>(
   effect: E,
   draft: FxDraft,
-  { order = true }: { order?: boolean } = {},
+  { order = true, elementMode = true }: { order?: boolean; elementMode?: boolean } = {},
 ): E {
   return {
     ...effect,
@@ -588,6 +839,10 @@ export function withPaletteDraft<E extends PaletteFxFields>(
     blendMode: draft.blendMode,
     phaseOffset: draft.phaseOffset,
     order: order ? draft.order : effect.order,
+    // Said where it is not the stored default, or where the palette already said one.
+    ...(elementMode && (draft.elementMode !== STORED_ELEMENT_MODE || effect.elementMode != null)
+      ? { elementMode: draft.elementMode }
+      : {}),
     // Seconds follows no master (D7), so a draft on Seconds stores none beside the flag.
     speedMasterUuid: draft.seconds ? null : draft.speedMasterUuid,
     rateSpeedMasterUuid: draft.seconds ? null : draft.rateSpeedMasterUuid,
@@ -603,6 +858,7 @@ export function withPaletteDraft<E extends PaletteFxFields>(
     ...(draft.wings !== 1 || effect.wings != null ? { wings: draft.wings } : {}),
     ...(draft.segments !== 1 || effect.segments != null ? { segments: draft.segments } : {}),
     ...(draft.parts !== 0 || effect.parts != null ? { parts: draft.parts } : {}),
+    ...(draft.spreadUnit !== 'CYCLE' || effect.spreadUnit != null ? { spreadUnit: draft.spreadUnit } : {}),
   }
 }
 
@@ -628,7 +884,7 @@ export function cueFxDraftOf(effect: CueFxFields, timingSource?: string | null):
   return {
     ...paletteDraftOf(effect, timingSource),
     timing: effect.timing ?? 'CYCLE',
-    elementMode: effect.elementMode ?? 'PER_FIXTURE',
+    elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     elementFilter: effect.elementFilter ?? 'ALL',
   }
 }
@@ -643,7 +899,7 @@ export function withCueFxDraft<E extends CueFxFields>(effect: E, draft: FxDraft)
   return {
     ...withPaletteDraft(effect, draft),
     ...(draft.timing !== 'CYCLE' || effect.timing != null ? { timing: draft.timing } : {}),
-    ...(draft.elementMode !== 'PER_FIXTURE' || effect.elementMode != null ? { elementMode: draft.elementMode } : {}),
+    ...(draft.elementMode !== STORED_ELEMENT_MODE || effect.elementMode != null ? { elementMode: draft.elementMode } : {}),
     ...(draft.elementFilter !== 'ALL' || effect.elementFilter != null ? { elementFilter: draft.elementFilter } : {}),
   }
 }
@@ -693,12 +949,13 @@ export function differsFromPalette(
   effect: PaletteFxFields,
   master1Uuid: string | null,
   defaults: Record<string, string> = {},
-  { order = true }: { order?: boolean } = {},
+  { order = true, elementMode = true }: { order?: boolean; elementMode?: boolean } = {},
 ): boolean {
   if (Math.abs(draft.cycle - effect.cycle) > 1e-6) return true
   if (draft.blendMode.toUpperCase() !== effect.blendMode.toUpperCase()) return true
   if (Math.abs(draft.phaseOffset - (effect.phaseOffset ?? 0)) > 1e-6) return true
   if (order && draft.order !== effect.order) return true
+  if (elementMode && draft.elementMode !== (effect.elementMode ?? STORED_ELEMENT_MODE)) return true
   if ((draft.speedMasterUuid ?? master1Uuid) !== (effect.speedMasterUuid ?? master1Uuid)) return true
   if ((draft.rateSpeedMasterUuid ?? null) !== (effect.rateSpeedMasterUuid ?? null)) return true
   if (draft.seconds !== isOnSeconds(effect, effect.timingSource)) return true
@@ -709,6 +966,7 @@ export function differsFromPalette(
   if (draft.wings !== (effect.wings ?? 1)) return true
   if (draft.segments !== (effect.segments ?? 1)) return true
   if (draft.parts !== (effect.parts ?? 0)) return true
+  if (draft.spreadUnit !== (effect.spreadUnit ?? 'CYCLE')) return true
   const names = new Set([...Object.keys(draft.parameters), ...Object.keys(effect.parameters)])
   for (const name of names) {
     if (!sameParam(draft.parameters[name] ?? defaults[name], effect.parameters[name] ?? defaults[name])) return true

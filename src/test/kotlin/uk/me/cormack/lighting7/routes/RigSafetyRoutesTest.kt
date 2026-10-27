@@ -10,7 +10,10 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
@@ -25,6 +28,7 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.plugins.toMessage
 import uk.me.cormack.lighting7.state.BulkCommandRun
+import uk.me.cormack.lighting7.state.CommandOutput
 import uk.me.cormack.lighting7.state.RigSafetyService
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -40,7 +44,8 @@ import kotlin.test.assertTrue
  * Bulk commands, *Make rig safe*, *Undo* and *Quit desk* (venue-visit plan S6) over a real desk with
  * patched fixtures on a MOCK universe. Holds are cut to 50 ms through `CommandOutput.holdMsFor`, a
  * lamp's cool-down to nothing (but in the test of cooling), and the service's clock is moved past a
- * lamp's restrike time rather than waiting it out.
+ * lamp's restrike time rather than waiting it out. A unit a test needs busy is held until teardown
+ * ([holdBusy]), so it is busy however slow the runner.
  *
  * Patched: two MAC 250s (lamp on, lamp off, reset — 8-minute restrike) at 1 and 20, a Varytec (a
  * reset, no lamp) at 40.
@@ -63,6 +68,13 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         patch("varytec-easymove-xl-60-spot-11ch", "vary", 40)
         state.show.commandOutput.holdMsFor = { 50 }
         rig.coolDownMsFor = { 0 }
+    }
+
+    /** Start [key]'s reset and hold it until the test's teardown closes the show. */
+    private fun holdBusy(key: String) {
+        state.show.commandOutput.holdMsFor = { UNTIL_TEARDOWN_MS }
+        assertTrue(state.show.commandOutput.run(key, "reset") is CommandOutput.Outcome.Started)
+        state.show.commandOutput.holdMsFor = { 50 }
     }
 
     private suspend fun HttpClient.json(path: String, body: String = "{}"): HttpResponse =
@@ -234,6 +246,48 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a run is not finished until its end has been acted on`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        // The run's end sets the blackout before it fills in Undo; read what every window sees then.
+        var atBlackout: RigSafetyService.Snapshot? = null
+        val watcher = CoroutineScope(Dispatchers.Unconfined).launch {
+            state.scalerHolderFor(projectId).safeBlackout.collect { if (it) atBlackout = rig.snapshot.value }
+        }
+        try {
+            client.json("projects/$projectId/rig-safe", """{"targets":[{"type":"fixture","key":"mac1"}]}""")
+            val done = awaitRunFinished()
+            assertEquals(listOf("mac1"), done.undo.map { it.first })
+            val seen = assertNotNull(atBlackout, "the blackout was set")
+            assertFalse(seen.run!!.finished, "a finished run published before Undo knew its lamps: undo=${seen.undo}")
+        } finally {
+            watcher.cancel()
+        }
+    }
+
+    @Test
+    fun `a run is not finished until the restrike ledger holds its lamps`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        // The ledger stamps a lamp-off with the clock; make that write slow, so a run that waits only on the hold finishes first.
+        val wallClock = rig.clock
+        val slowed = java.util.concurrent.atomic.AtomicInteger()
+        rig.clock = {
+            if (Thread.currentThread().stackTrace.any { it.methodName == "commandEnded" }) {
+                slowed.incrementAndGet()
+                Thread.sleep(300)
+            }
+            wallClock()
+        }
+        client.json("projects/$projectId/rig-safe")
+        val done = awaitRunFinished()
+        assertEquals(setOf("mac1", "mac2"), done.lampsOff.map { it.fixtureKey }.toSet(), "a finished run published before the ledger heard of its lamps")
+        assertEquals(2, slowed.get(), "the ledger's write for each lamp was slowed")
+    }
+
+    @Test
     fun `a strike inside a lamp's restrike time waits, is reported, and can be cancelled`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
@@ -274,9 +328,7 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         val role = client.json("projects/$projectId/commands", """{"role":"OTHER"}""")
         assertEquals(RigSafetyService.CODE_ROLE_UNKNOWN, role.code())
 
-        state.show.commandOutput.holdMsFor = { 2_000 }
-        assertTrue(state.show.commandOutput.run("mac1", "reset") is uk.me.cormack.lighting7.state.CommandOutput.Outcome.Started)
-        state.show.commandOutput.holdMsFor = { 50 }
+        holdBusy("mac1")
         val resp = client.json("projects/$projectId/commands", """{"role":"LAMP_OFF"}""")
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
         val finished = awaitRunFinished().run!!.units.associateBy { it.unit.fixtureKey }
@@ -290,9 +342,7 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         client.rig()
-        state.show.commandOutput.holdMsFor = { 2_000 }
-        state.show.commandOutput.run("mac2", "reset")
-        state.show.commandOutput.holdMsFor = { 50 }
+        holdBusy("mac2")
         client.json("projects/$projectId/rig-safe")
         val after = awaitRunFinished()
         assertTrue(after.blackout)
@@ -374,7 +424,7 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         client.json("projects/$projectId/rig-safe")
         awaitSnapshot("ready") { it.ready }
 
-        state.show.commandOutput.holdMsFor = { 2_000 }
+        state.show.commandOutput.holdMsFor = { UNTIL_TEARDOWN_MS }
         assertEquals(HttpStatusCode.OK, client.json("projects/$projectId/commands", """{"role":"RESET","targets":[{"type":"fixture","key":"vary"}]}""").status)
         val undo = client.json("projects/$projectId/rig-safe/undo")
         assertEquals(HttpStatusCode.Conflict, undo.status)
@@ -384,5 +434,10 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         assertEquals(RigSafetyService.CODE_RUN_BUSY, release.code())
         assertEquals(listOf("mac1", "mac2"), rig.snapshot.value.undo.map { it.first })
         assertTrue(rig.snapshot.value.blackout)
+    }
+
+    private companion object {
+        /** A hold no test outlives: the per-test timeout is 60 s, and teardown ends the hold. */
+        const val UNTIL_TEARDOWN_MS = 600_000L
     }
 }

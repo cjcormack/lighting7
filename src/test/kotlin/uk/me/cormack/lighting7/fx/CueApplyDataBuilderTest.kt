@@ -117,7 +117,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
             DaoCueAdHocFxEntity.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                fxType = "Wave"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 delay = Duration.ofMillis(750L)

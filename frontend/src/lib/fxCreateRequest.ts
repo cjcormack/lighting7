@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import type { ApplyFxRequest, BlendMode, SpreadOrder, ElementMode } from '@/api/groupsApi'
 import type { AddFixtureFxRequest } from '@/store/fixtureFx'
 import type { FxDirection, Timing } from '@/api/fxApi'
@@ -6,7 +7,7 @@ import type { CueTarget } from '@/api/cuesApi'
 /**
  * The one place that knows how "start this effect" is spelled for a fixture and for a group.
  *
- * The two create routes differ — a group carries an `elementMode` and requires an `order`, a
+ * The two create routes differ — a group requires an `order`, a
  * fixture carries `startOnBeat` and leaves its `order` optional — so every surface that starts an effect used to write the branch out for itself. There were four
  * copies between the old add/edit sheet and the busking pad, and they had already drifted: only some of
  * them sent the Timing, and the sheet suppressed a fixture's Order while the pad sent it
@@ -42,7 +43,7 @@ export interface FxCreateRequest {
    * off entirely rather than pinning a choice nobody made onto the instance.
    */
   order?: SpreadOrder
-  /** Group only — how a multi-element member's heads are addressed. */
+  /** What the spread counts over fixtures' elements (*Over*); the desk starts an absent one on `WHOLE`. */
   elementMode?: ElementMode
   /** Restrict the effect to some of a multi-head fixture's elements. Absent means all of them. */
   elementFilter?: string
@@ -62,6 +63,8 @@ export interface FxCreateRequest {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * Create in the programmer's reserved priority band. Always set by the busking pad; the sheet
    * sets it only for the programmer's own `+ Effect`.
@@ -89,6 +92,7 @@ export function fxCreateAddition(
     parameters: { ...request.parameters },
     ...(request.programmerOwned ? { programmerOwned: true } : {}),
     ...(request.elementFilter !== undefined ? { elementFilter: request.elementFilter } : {}),
+    ...(request.elementMode ? { elementMode: request.elementMode } : {}),
     ...(request.timing !== undefined ? { timing: request.timing } : {}),
     ...(request.speedMasterUuid != null ? { speedMasterUuid: request.speedMasterUuid } : {}),
     ...(request.rateSpeedMasterUuid != null
@@ -103,6 +107,8 @@ export function fxCreateAddition(
     ...(request.wings != null && request.wings !== 1 ? { wings: request.wings } : {}),
     ...(request.segments != null && request.segments !== 1 ? { segments: request.segments } : {}),
     ...(request.parts != null && request.parts !== 0 ? { parts: request.parts } : {}),
+    // What the spread counts, whenever the caller says: absent, a step FX starts one step behind.
+    ...(request.spreadUnit != null ? { spreadUnit: request.spreadUnit } : {}),
   }
 
   if (target.type === 'group') {
@@ -112,7 +118,6 @@ export function fxCreateAddition(
       payload: {
         ...shared,
         order: request.order ?? 'NORMAL',
-        ...(request.elementMode ? { elementMode: request.elementMode } : {}),
       },
     }
   }

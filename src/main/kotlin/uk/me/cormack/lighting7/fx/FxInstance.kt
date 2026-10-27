@@ -66,15 +66,22 @@ enum class ElementFilter {
 }
 
 /**
- * Controls how group effects interact with multi-element fixture members.
+ * What an effect's spread counts when it lands on multi-element fixtures' elements: a property only
+ * the elements have (e.g. a bar's colour), on a fixture, a group or a selection.
  *
- * When a group contains multi-element fixtures (e.g. quad moving head bars)
- * and the effect targets a property only the elements have (e.g. colour),
- * this mode determines the distribution dimension.
+ * Has no effect when the target or its members directly have the property.
  *
- * Has no effect when group members directly have the target property.
+ * Two defaults, never to be confused: a **stored** FX with no mode is [STORED_DEFAULT], so no row or
+ * archive changes meaning; an FX a door **starts** or creates with none named is [NEW_FX_DEFAULT].
  */
 enum class ElementMode {
+    /**
+     * Each fixture is one unit: Order and the spread's shape count fixtures, and every element a
+     * fixture paints takes that unit's output. Elements within a fixture are alike, fixtures differ.
+     * The element filter still picks which elements of each fixture are painted.
+     */
+    WHOLE,
+
     /**
      * Each fixture gets the effect applied independently to its own elements.
      *
@@ -91,7 +98,22 @@ enum class ElementMode {
      * 2×4-head fixtures = 8 elements total, distributed as indices 0-7.
      * Creates chase effects that sweep across all heads sequentially.
      */
-    FLAT
+    FLAT;
+
+    companion object {
+        /** What a stored FX (a cue's, a Look's, a palette's, an archive's) without a mode means. */
+        val STORED_DEFAULT = PER_FIXTURE
+
+        /** What an FX started or created without a mode gets: the start routes and MCP's tools. */
+        val NEW_FX_DEFAULT = WHOLE
+
+        /**
+         * The mode a stored row records for an FX in [mode]: over members, the mode; on a lone
+         * fixture, `WHOLE` alone, the one mode that differs from the stored default there.
+         */
+        fun stored(overMembers: Boolean, mode: ElementMode): String? =
+            if (overMembers || mode == WHOLE) mode.name else null
+    }
 }
 
 /**
@@ -134,10 +156,13 @@ enum class FxDirection {
             entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
         /**
-         * `1 − p`, kept inside `[0, 1)`: phase 0 reads as the very end of the cycle rather than 1.0,
-         * which an effect indexing a list by `floor(phase × n)` would read one past its last entry.
+         * `1 − p`, read [REVERSE_SHORT] short so it stays inside `[0, 1)` — phase 0 is the very end of
+         * the cycle — and a boundary, which a reversed phase reaches from above, lands on the step it
+         * enters rather than inside [PHASE_EPSILON] of the one it leaves.
          */
-        private fun reverse(phase: Double): Double = minOf(1.0 - phase, Math.nextDown(1.0))
+        private fun reverse(phase: Double): Double = (1.0 - cyclePhase(phase) - REVERSE_SHORT).coerceAtLeast(0.0)
+
+        private const val REVERSE_SHORT = 2 * PHASE_EPSILON
     }
 }
 
@@ -239,6 +264,7 @@ data class LookFxSettings(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    val spreadUnit: String? = null,
 )
 
 /**
@@ -250,7 +276,7 @@ fun FxInstance.storedPhaseOffset(dyn: FxDynamics = dynamics): Double =
     dyn.phaseOffset - (splitMember?.offset ?: 0.0)
 
 /**
- * This instance's [LookFxSettings]. Element mode is a group effect's alone, and an element
+ * This instance's [LookFxSettings]. Element mode as [ElementMode.stored] records it, and an element
  * filter or step timing is stored only where it differs from the default, so a row says what the
  * operator chose rather than what the effect would do anyway.
  */
@@ -263,7 +289,7 @@ fun FxInstance.lookFxSettings(): LookFxSettings {
         blendMode = blendMode.name,
         order = dyn.order.javaClass.simpleName,
         phaseOffset = storedPhaseOffset(dyn),
-        elementMode = if (spreadsOverMembers) dyn.elementMode.name else null,
+        elementMode = ElementMode.stored(spreadsOverMembers, dyn.elementMode),
         elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
         timing = if (dyn.timing != effect.defaultTiming) dyn.timing else null,
         parameters = effect.parameters,
@@ -277,6 +303,7 @@ fun FxInstance.lookFxSettings(): LookFxSettings {
         wings = dyn.wings,
         segments = dyn.segments,
         parts = dyn.parts,
+        spreadUnit = SpreadUnit.toStored(dyn.spreadUnit),
     )
 }
 
@@ -370,12 +397,41 @@ data class ProgrammerLayerFxKey(
  * covers, and a phase offset per copy would collapse them into unison. Stored data has no field for
  * it (apply-model plan P7), so whatever stores a copy folds it in — [storedPhaseOffset] — and a
  * recorded copy keeps its phase, though not its set's step cycle or sweep. Runtime only otherwise.
+ *
+ * [step] is shared by the copies split from one fixture of a stateful effect under
+ * [ElementMode.WHOLE], so the fixture's elements keep taking one output a tick, as they did.
  */
 data class SplitMember(
     val groupSize: Int,
     val offset: Double,
     val context: FxContext,
+    val step: SharedStep? = null,
 )
+
+/**
+ * One stateful output per tick, shared by the copies of one [ElementMode.WHOLE] unit
+ * ([SplitMember.step]) that run the same effect object. An edit that names some of the copies gives
+ * them a new effect object, so they step apart from the rest, and together.
+ */
+class SharedStep {
+    private class Step(val fx: Fx, val tickNumber: Long, val timestampMs: Long, val output: FxOutput)
+
+    private val steps = ArrayList<Step>(1)
+
+    /** The output another copy running [fx] already calculated for [tick], else [calculate]'s. */
+    @Synchronized
+    fun outputFor(fx: Fx, tick: MasterClock.ClockTick, calculate: () -> FxOutput): FxOutput {
+        steps.firstOrNull { it.fx === fx && it.tickNumber == tick.tickNumber && it.timestampMs == tick.timestampMs }
+            ?.let { return it.output }
+        // A step is the latest one of its effect object; one no copy has run for a second is let go.
+        steps.removeAll { it.fx === fx || tick.timestampMs - it.timestampMs > STALE_MS }
+        return calculate().also { steps.add(Step(fx, tick.tickNumber, tick.timestampMs, it)) }
+    }
+
+    private companion object {
+        const val STALE_MS = 1_000L
+    }
+}
 
 /**
  * The parameters of a running [FxInstance] that request threads may change while the tick
@@ -415,11 +471,11 @@ data class FxDynamics(
     val order: SpreadOrder = SpreadOrder.NORMAL,
 
     /**
-     * Element mode for group effects on multi-element fixtures: distribution per fixture, or
-     * across all elements as one flat list. Deliberately *outside* [FxInstance.expansion]'s
-     * validity check — see that doc for why both shapes are built up front.
+     * What the spread counts on multi-element fixtures' elements — see [ElementMode].
+     * Deliberately *outside* [FxInstance.expansion]'s validity check — see that doc for why every
+     * shape is built up front.
      */
-    val elementMode: ElementMode = ElementMode.PER_FIXTURE,
+    val elementMode: ElementMode = ElementMode.STORED_DEFAULT,
 
     /**
      * Which elements receive the effect ([ElementFilter.ALL] = no filtering). Part of
@@ -460,9 +516,15 @@ data class FxDynamics(
 
     /** Parts (D4, step 4): the spread repeats every this many members; 0 is off. */
     val parts: Int = 0,
+
+    /**
+     * What [spread] counts (fx-settings plan D6): a share of the cycle, or the FX's own steps
+     * ([Fx.stepCount]), resolved at expansion so a head joining keeps a chase on its boundaries.
+     */
+    val spreadUnit: SpreadUnit = SpreadUnit.CYCLE,
 ) {
-    /** The four shape fields as one value, for the plan cache and [DistributionPlan.of]. Cold path. */
-    val spreadShape: SpreadShape get() = SpreadShape(spread, wings, segments, parts)
+    /** The shape fields as one value, for the plan cache and [DistributionPlan.of]. Cold path. */
+    val spreadShape: SpreadShape get() = SpreadShape(spread, wings, segments, parts, spreadUnit)
 
     /**
      * The rank count left after the spread's shape over [groupSize] members — [DistributionPlan.slots]
@@ -891,6 +953,13 @@ class FxInstance internal constructor(
      */
     @Volatile
     internal var distributionPlans: FxDistributionPlans? = null
+
+    /**
+     * The step count [dyn]'s spread counts in: the FX's own ([Fx.stepCount]) under
+     * [SpreadUnit.STEP], else null, so a `CYCLE` FX never reads its parameters for it.
+     */
+    internal fun planSteps(dyn: FxDynamics): Int? =
+        if (dyn.spreadUnit == SpreadUnit.STEP) effect.stepCount else null
 
     /**
      * Timing source for this effect.

@@ -12,8 +12,8 @@ import { formatError } from '../lib/formatError'
  * arg (`query: ({ projectId, ...body }) => ({ body })`), so an extra flag would be sent to the
  * server. Hence a deny-list keyed on endpoint name.
  *
- * `errorToastMiddleware.test.ts` asserts every name here actually exists on `restApi`, so a
- * renamed or deleted endpoint can't silently leave a hole.
+ * `errorToastMiddleware.test.ts` asserts every name here is an endpoint a store module declares,
+ * so a renamed or deleted endpoint can't silently leave a hole.
  */
 export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Inline <Alert variant="destructive"> rendered from the mutation's own `error` state

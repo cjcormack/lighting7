@@ -154,3 +154,36 @@ internal fun attributeFamilyForFxFamily(fxFamily: String): AttributeFamily? = wh
     "beam" -> AttributeFamily.BEAM
     else -> null
 }
+
+/** Wave's registry id (fx-settings plan D2): the level waves as one FX. */
+const val WAVE_ID = "Wave"
+
+/** The library family Wave is filed under, and stored with, on every attribute it drives. */
+const val WAVE_FAMILY = "intensity"
+
+/** Path's registry id (fx-settings plan D2): the movements as one FX. */
+const val PATH_ID = "Path"
+
+/** The library family Path is filed under. */
+const val PATH_FAMILY = "position"
+
+/**
+ * The attribute family an FX of library [fxFamily] is in while it drives [attribute] (fx-settings
+ * plan D5): Beam on a beam attribute — Wave, an Intensity FX, on zoom, iris, frost or focus — else
+ * its library family's ([attributeFamilyForFxFamily]). A dimmer or UV channel is the Intensity FX's
+ * own, as it always was for the speed masters and an FX palette's bank. Null where the library
+ * family names none (`steps`, `controls`), which [attribute] does not change.
+ *
+ * The one reading for the speed-master routing ([familyMasterUuidFor]), an FX palette's family, a
+ * Look's families and the Timeline; the client's `fxAttributeFamily` (`lib/attributeFamily.ts`) is
+ * its twin. A stored FX keeps its library family; this is read over it.
+ */
+internal fun fxAttributeFamily(fxFamily: String, attribute: String?): AttributeFamily? {
+    val library = attributeFamilyForFxFamily(fxFamily) ?: return null
+    val driven = attribute?.takeIf { it.isNotBlank() }?.let { PaletteAttribute.ofOrNull(it)?.family }
+    return if (driven == AttributeFamily.BEAM) AttributeFamily.BEAM else library
+}
+
+/** [fxAttributeFamily] in the library's own words — what a speed master's `family` says. */
+internal fun fxFamilyOnAttribute(fxFamily: String, attribute: String?): String =
+    if (fxAttributeFamily(fxFamily, attribute) == AttributeFamily.BEAM) "beam" else fxFamily

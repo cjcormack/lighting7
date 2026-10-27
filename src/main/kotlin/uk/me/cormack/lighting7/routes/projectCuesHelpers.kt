@@ -107,7 +107,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 blendMode = effect.blendMode.name,
                 order = dyn.order.javaClass.simpleName,
                 phaseOffset = effect.storedPhaseOffset(dyn),
-                elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
+                elementMode = ElementMode.stored(effect.spreadsOverMembers, dyn.elementMode),
                 elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
                 timing = if (dyn.timing != effect.effect.defaultTiming) dyn.timing else null,
                 parameters = effect.effect.parameters,
@@ -122,6 +122,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 wings = dyn.wings,
                 segments = dyn.segments,
                 parts = dyn.parts,
+                spreadUnit = SpreadUnit.toStored(dyn.spreadUnit),
             ))
             adHocSourceIds += effect.id.takeIf { effect.isLocalFx }
         }
@@ -559,6 +560,9 @@ internal fun validateCueChildren(
             wings = effect.wings,
             segments = effect.segments,
             parts = effect.parts,
+            spreadUnit = effect.spreadUnit,
+            fxType = effect.fxType,
+            fxSteps = registry.steps(effect.fxType),
         )?.let { return it }
         registry.fxWriteProblem(effect.fxType, effect.parameters, effect.family)?.let { return it }
     }
@@ -874,6 +878,7 @@ internal fun DaoCueAdHocFxEntity.take(effect: CueAdHocFxDto) {
     this.wings = effect.wings
     this.segments = effect.segments
     this.parts = effect.parts
+    this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(effect.spreadUnit)
 }
 
 /** [row] onto this row, but for the target [writeCueChildren] matched it on. */
@@ -958,11 +963,14 @@ private fun findElementAttribute(element: FixtureElement<*>, name: String): Fixt
  * The family Record files a running effect under: the step effects' own (effects plan §3.6) —
  * Slot Steps is a beam effect whatever setting it steps, Palette Steps is its palettes' family,
  * read off the property it drives (a strobe in an Intensity palette is `intensity`, not `controls`) —
- * else [categoryFromAttributeName].
+ * Wave's library family on every attribute, as every other door stores it (fx-settings plan D5:
+ * `fxAttributeFamily` reads the family a beam attribute gives it over that) — else
+ * [categoryFromAttributeName].
  */
 internal fun recordedFxFamily(effect: FxInstance): String {
     val attribute = effect.target.attribute
     return when {
+        effect.fxTypeId.equals(WAVE_ID, ignoreCase = true) -> WAVE_FAMILY
         effect.fxTypeId.equals(SLOT_STEPS_ID, ignoreCase = true) -> "beam"
         effect.fxTypeId.equals(PALETTE_STEPS_ID, ignoreCase = true) ->
             PaletteAttribute.ofOrNull(attribute)?.family?.let(::fxFamilyForAttributeFamily)

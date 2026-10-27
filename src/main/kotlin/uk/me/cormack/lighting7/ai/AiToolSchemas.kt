@@ -7,7 +7,9 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import uk.me.cormack.lighting7.fx.ElementMode
 import uk.me.cormack.lighting7.fx.SpreadShape
+import uk.me.cormack.lighting7.fx.SpreadUnit
 
 /** What `get_current_state` can `include`; anything else is refused by name. */
 internal val CURRENT_STATE_PARTS: Set<String> = linkedSetOf(
@@ -71,6 +73,18 @@ private val timingSchema = buildJsonObject {
     )
 }
 
+/** What an FX's spread counts on multi-element fixtures, the same on every FX schema. */
+private val elementModeSchema = buildJsonObject {
+    put("type", "string")
+    put("enum", buildJsonArray { ElementMode.entries.forEach { add(it.name) } })
+    put(
+        "description",
+        "Only where the FX lands on fixtures' elements (a bar's cells). WHOLE: each fixture is one unit, its elements alike. " +
+            "FLAT: every element of every fixture one strip. PER_FIXTURE: the FX runs within each fixture, every fixture alike. " +
+            "Omit for WHOLE.",
+    )
+}
+
 /** The speed-master field's words, shared by every effect schema. */
 private const val SPEED_MASTER_DESCRIPTION =
     "Speed master whose tempo this FX follows, by uuid (describe_rig lists them). Omit for the master whose family " +
@@ -112,13 +126,25 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putFxDynamics() {
     put("spread", buildJsonObject {
         put("type", "number")
         put("minimum", 0)
-        put("maximum", 2)
+        put("maximum", SpreadShape.MAX_STEP_SPREAD)
         put(
             "description",
             "How much of the cycle the heads cover, 0.0–2.0, over the order: 1.0 spreads them over one " +
-                "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Omit for 1.0. Spread, wings, " +
+                "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Under spreadUnit STEP it is " +
+                "instead how many of the FX's own steps each head starts after the one before, 0–16. Omit for 1.0. Spread, wings, " +
                 "segments and parts shape a spreading order only — send one (NORMAL for a chase), since an omitted " +
                 "order is UNIFIED, under which every head is in step and the shape does nothing.",
+        )
+    })
+    put("spreadUnit", buildJsonObject {
+        put("type", "string")
+        put("enum", buildJsonArray { SpreadUnit.entries.forEach { add(it.name) } })
+        put(
+            "description",
+            "What spread counts. CYCLE: a share of the cycle. STEP: the FX's own steps — Colour Cycle's colours, " +
+                "Palette Steps' palettes, Slot Steps' slots — so spread 1 puts each head one colour behind the last, " +
+                "changing together on each step whatever the head count. STEP is refused on an FX with no steps. " +
+                "Omit both spread and spreadUnit and an FX that steps starts one step behind; anything else is CYCLE.",
         )
     })
     put("wings", buildJsonObject {
@@ -197,10 +223,7 @@ private val lookFxSchema = buildJsonObject {
             })
         })
         put("phaseOffset", buildJsonObject { put("type", "number"); put("description", "0.0-1.0") })
-        put("elementMode", buildJsonObject {
-            put("type", "string")
-            put("enum", buildJsonArray { add("PER_FIXTURE"); add("FLAT") })
-        })
+        put("elementMode", elementModeSchema)
         put("timing", timingSchema)
         put("elementFilter", buildJsonObject {
             put("type", "string")
@@ -593,10 +616,7 @@ private val adHocFxSchema = buildJsonObject {
             })
         })
         put("phaseOffset", buildJsonObject { put("type", "number") })
-        put("elementMode", buildJsonObject {
-            put("type", "string")
-            put("enum", buildJsonArray { add("PER_FIXTURE"); add("FLAT") })
-        })
+        put("elementMode", elementModeSchema)
         put("elementFilter", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("ALL"); add("ODD"); add("EVEN"); add("FIRST_HALF"); add("SECOND_HALF") })

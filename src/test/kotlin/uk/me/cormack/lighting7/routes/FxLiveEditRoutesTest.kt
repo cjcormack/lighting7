@@ -56,7 +56,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
     private fun templates() = "/api/rest/projects/$projectId/palettes"
 
     private val pulse = PaletteFxDto(
-        fxType = "Pulse",
+        fxType = "Wave",
         family = "intensity",
         attribute = "dimmer",
         cycle = 0.5,
@@ -89,12 +89,12 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
     fun `updateFx edits in place, keeping the id and the phase, and answers fxChanged`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val before = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val before = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
         val clock = before.clock()
 
         createWsClient().webSocket("/api") {
             sendSerialized<InMessage>(
-                UpdateFxInMessage(before.id, cycle = 2.0, blendMode = "ADDITIVE", parameters = mapOf("min" to "40")),
+                UpdateFxInMessage(before.id, cycle = 2.0, blendMode = "ADDITIVE", parameters = mapOf("low" to "40")),
             )
             val changed = awaitOfType<FxChangedOutMessage>()
             assertEquals(FxChangeType.UPDATED, changed.changeType)
@@ -103,7 +103,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
         val after = assertNotNull(engine.getFx(before.id))
         assertEquals(2.0, after.timing.cycle)
         assertEquals(BlendMode.ADDITIVE, after.blendMode)
-        assertEquals("40", after.effect.parameters["min"])
+        assertEquals("40", after.effect.parameters["low"])
         assertEquals(clock, after.clock(), "the phase is kept: nothing it is derived from moved")
     }
 
@@ -122,7 +122,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
     fun `updateFx refuses a blend the strict policy does not know, and changes nothing`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val effect = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val effect = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
 
         createWsClient().webSocket("/api") {
             sendSerialized<InMessage>(UpdateFxInMessage(effect.id, cycle = 4.0, blendMode = "SIDEWAYS"))
@@ -140,7 +140,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
     fun `PUT and updateFx are one parse — the same refusal, and the same 404`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val effect = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer")
+        val effect = FxTestSupport.start(state, "Wave", "hex-1", "dimmer")
         val client = jsonClient()
 
         val refused = client.put("/api/rest/fx/${effect.id}") {
@@ -177,7 +177,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
     fun `a type swap takes the new type's clock with it`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val effect = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val effect = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
         val wallClock = state.show.fxRegistry.getRegistration("CandleFlicker")!!.timingSource
 
         val outcome = applyFxUpdate(state, effect.id, UpdateFxRequest(fxType = "CandleFlicker"))
@@ -200,7 +200,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
 
         applyFxUpdate(
             state, instance.id,
-            UpdateFxRequest(cycle = 4.0, blendMode = "ADDITIVE", parameters = mapOf("min" to "90")),
+            UpdateFxRequest(cycle = 4.0, blendMode = "ADDITIVE", parameters = mapOf("low" to "90")),
         )
         assertEquals(4.0, engine.getFx(instance.id)!!.timing.cycle)
 
@@ -211,7 +211,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
         val live = engine.getFx(instance.id)!!
         assertEquals(0.5, live.timing.cycle)
         assertEquals(BlendMode.OVERRIDE, live.blendMode)
-        assertNotEquals("90", live.effect.parameters["min"], "the edited parameter is gone")
+        assertNotEquals("90", live.effect.parameters["low"], "the edited parameter is gone")
         assertEquals(clock, live.clock(), "the phase is kept")
     }
 
@@ -219,7 +219,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
     fun `reset is refused for an instance no template spawned, and 404s an unknown one`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val manual = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val manual = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
         val client = jsonClient()
 
         val refused = client.post("/api/rest/fx/${manual.id}/reset")
@@ -240,14 +240,14 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
         val template = client.palette("pulse")
         client.press(template)
         val instance = spawned()
-        applyFxUpdate(state, instance.id, UpdateFxRequest(cycle = 4.0, parameters = mapOf("min" to "90")))
+        applyFxUpdate(state, instance.id, UpdateFxRequest(cycle = 4.0, parameters = mapOf("low" to "90")))
         val layerId = instance.programmerLayerId!!
 
         fun assertEdited(after: String) {
             val live = engine.getFx(instance.id)
             assertNotNull(live, "respawned after $after")
             assertEquals(4.0, live.timing.cycle, "the edit was lost after $after")
-            assertEquals("90", live.effect.parameters["min"], "the edit was lost after $after")
+            assertEquals("90", live.effect.parameters["low"], "the edit was lost after $after")
         }
 
         stack.patch(layerId, amount = 0.5)

@@ -8,22 +8,26 @@ import type { FxDraft } from './fxEditorModel'
  * **What ties the FX editor's inspector to its graph** (FX editor plan D9, D12, D13, §4.5): the
  * FX editor provides it around its columns — not the sheets it opens — so the live editor in the
  * inspector lights the graph's marks,
- * draws the offset ladder from the desk's answer, offers *Same as…* over the list's other FX, and
+ * draws the head ladder from the desk's answer, offers *Same as…* over the list's other FX, and
  * lends its draft and its write to the graph's handles. Every other host of the live editor has no
  * graph and provides nothing, so none of this is drawn there.
  */
 
 /** A mark on the graph a control changes, lit while the pointer rests on it (§4.5). */
-export type GraphMark = 'cycle' | 'starts' | 'mirror' | 'brackets' | 'holding' | 'amount'
+export type GraphMark = 'cycle' | 'starts' | 'mirror' | 'brackets' | 'holding' | 'amount' | 'levels'
 
 /** The editor open in the inspector, lent to the graph's handles: they write through it, as its own fields do. */
 export interface LinkedEditor {
   fxId: number
   draft: FxDraft
-  /** An Intensity FX with a `min` and a `max`: the graph draws their lines as handles. */
+  /** An Intensity FX with a low and a high: the graph draws their lines as handles. */
   levels: boolean
+  /** Which parameters those are — Wave's `low` and `high`; absent, `min` and `max`. */
+  levelParams?: { low: string; high: string }
   /** A wall-clock FX, whose cycle is seconds whatever its master. */
   wallClock: boolean
+  /** The FX's own steps, which a `STEP` spread counts (fx-settings plan D6); null for an FX with none. */
+  steps?: number | null
   readOnly: boolean
   /** A move (`release` false), held by the floor, or the release, which lands. */
   set: (patch: Partial<FxDraft>, release: boolean) => void
@@ -32,7 +36,7 @@ export interface LinkedEditor {
 
 /**
  * The row the graph's pointer rests on, by key: a store rather than state, so a pointer crossing
- * the rows redraws the ladder's dots and nothing else.
+ * the rows redraws the head ladder and nothing else.
  */
 export interface HoveredRowStore {
   get: () => string | null
@@ -74,9 +78,9 @@ export interface MatchSource {
 export interface FxGraphLink {
   /** The picked FX as the desk's preview answered it, and the answer's rows: what the ladder draws. */
   ladder: { fx: FxPreviewFx; rows: readonly FxPreviewRow[] } | null
-  /** The row the graph's pointer rests on, which lights its dots. */
+  /** The row the graph's pointer rests on, which rings its head on the ladder. */
   hoveredRow: HoveredRowStore
-  /** A dot the pointer rests on, linking it to its graph row. */
+  /** A ladder head the pointer rests on, linking it to its graph row. */
   setLadderRow: (key: string | null) => void
   setHighlight: (mark: GraphMark | null) => void
   others: readonly MatchSource[]

@@ -38,7 +38,7 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
     }
 
     private fun pulse(targetType: String, targetKey: String) = CueAdHocFxDto(
-        targetType = targetType, targetKey = targetKey, fxType = "Pulse",
+        targetType = targetType, targetKey = targetKey, fxType = "Wave",
         family = categoryFromAttributeName("dimmer"), attribute = "dimmer",
         cycle = 1.0, blendMode = "override", order = "normal",
     )

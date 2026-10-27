@@ -51,8 +51,15 @@ class RecordedFxCategoryTest {
     }
 
     @Test
+    fun `Wave keeps its library family on every attribute, a beam one included (fx-settings plan D5)`() {
+        for (attribute in listOf("dimmer", "uv", "zoom", "focus")) {
+            assertEquals("intensity", recordedFxFamily(running("Wave", FxOutputType.SLIDER, SliderTarget(FxTargetRef.fixture("spot"), attribute))))
+        }
+    }
+
+    @Test
     fun `any other effect keeps the attribute name's category`() {
-        val pulse = running("Pulse", FxOutputType.SLIDER, SliderTarget(FxTargetRef.fixture("hex"), "strobe"))
-        assertEquals("controls", recordedFxFamily(pulse))
+        val flicker = running("Flicker", FxOutputType.SLIDER, SliderTarget(FxTargetRef.fixture("hex"), "strobe"))
+        assertEquals("controls", recordedFxFamily(flicker))
     }
 }

@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.scripts
 
 import kotlinx.coroutines.*
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
@@ -64,7 +65,10 @@ abstract class LightingScript(
         speedMasters.masterStates().firstOrNull { it.index == index }?.uuid
 
     /**
-     * Build an effect by registered type name, e.g. `effect("SineWave", "min" to "40")`.
+     * Build an effect by registered type name, e.g. `effect("Wave", "shape" to "PULSE", "low" to "40")`.
+     * An old name still runs as today's (fx-settings plan D3): a level wave as Wave and a movement as Path,
+     * with their parameters (`effect("SineWave", "min" to "40")`, `effect("Circle")`), and a renamed
+     * parameter at its new name (`effect("Flicker", "min" to "40")`, Colour Cycle's `fadeRatio`).
      *
      * The registry is the single effect vocabulary — the same one the UI, cues and Looks use,
      * including user effects from `fx_definitions`. Names match case-insensitively, ignoring
@@ -72,13 +76,15 @@ abstract class LightingScript(
      *
      * @throws IllegalArgumentException if no effect is registered under [id]
      */
-    fun effect(id: String, params: Map<String, String>): Fx =
-        show.fxRegistry.createFxWithPalettes(show.paletteRegistry, id, params)
+    fun effect(id: String, params: Map<String, String>): Fx {
+        val (type, parameters) = LegacyNames.runnableFx(id, params)
+        return show.fxRegistry.createFxWithPalettes(show.paletteRegistry, type, parameters)
+    }
 
     /**
-     * [effect] with parameters as pairs, and the no-parameter form `effect("Pulse")`.
+     * [effect] with parameters as pairs, and the no-parameter form `effect("Wave")`.
      * Deliberately not a default on the [Map] overload — that would make the bare
-     * `effect("Pulse")` call ambiguous between the two.
+     * `effect("Wave")` call ambiguous between the two.
      */
     fun effect(id: String, vararg params: Pair<String, String>): Fx =
         effect(id, params.toMap())

@@ -17,14 +17,14 @@ import { Loader2 } from 'lucide-react'
 import { AlsoAddToBuskRow } from '@/components/busking/AlsoAddToBuskRow'
 import { useAddToBuskPage } from '@/components/busking/useAddToBuskPage'
 import type { BuskAddTarget } from '@/lib/buskAdd'
-import { fxSpeedLabel } from '@/components/fx/fxConstants'
+import { fxSpeedLabel, NEW_FX_ELEMENT_MODE } from '@/components/fx/fxConstants'
 import { isOnSeconds } from '@/lib/fxTiming'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { findFxEntry } from '@/components/busking/buskingTypes'
 import { useCreatePaletteMutation, usePaletteListQuery } from '@/store/palettes'
 import { stepFxPaletteShape } from '@/lib/stepFx'
 import { useFxLibraryQuery } from '@/store/fixtureFx'
-import { FAMILY_LABELS, attributeFamilyForFxFamily } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, attributeFamilyForFxFamily, fxAttributeFamily } from '@/lib/attributeFamily'
 import { formatError } from '@/lib/formatError'
 import type { ActiveFx } from '@/store/fixtureFx'
 import type { PaletteFx } from '@/api/palettesApi'
@@ -79,7 +79,14 @@ export function NewPaletteFromFxSheet({
   const step = useMemo(() => (effect == null ? null : stepFxPaletteShape(effect, templates)), [effect, templates])
   const stepShape = step != null && step.reason == null ? step : null
   const category = step != null ? (stepShape?.fxFamily ?? null) : (entry?.family ?? null)
-  const family = stepShape != null ? stepShape.family : category == null ? null : attributeFamilyForFxFamily(category)
+  // A Wave on zoom is Beam's (fx-settings plan D5): it keeps the attribute it drives, which is what
+  // lands it there on a press, since it is compatible with more than one.
+  const beamAttribute =
+    step == null && category != null && effect != null && fxAttributeFamily(category, effect.attribute) === 'BEAM' &&
+    attributeFamilyForFxFamily(category) !== 'BEAM'
+      ? effect.attribute
+      : null
+  const family = stepShape != null ? stepShape.family : category == null ? null : fxAttributeFamily(category, beamAttribute)
   // The **instance's** own answer, not the library entry's. They agree, but a running effect
   // reports its timing source directly and that is the nearer authority for describing this one.
   const isWallClock = effect?.timingSource === 'WALL_CLOCK'
@@ -107,16 +114,19 @@ export function NewPaletteFromFxSheet({
       fxType: effect.fxType,
       family: category,
       // Null deliberately: a template effect names no target (D3), so it names no property on one —
-      // but for Slot Steps, which names the setting it steps (the write boundary refuses one without).
-      attribute: stepShape?.attribute ?? null,
-      elementMode: null,
+      // but for Slot Steps, which names the setting it steps (the write boundary refuses one without),
+      // and a Wave on a beam attribute, which names the one it drives.
+      attribute: stepShape?.attribute ?? beamAttribute,
+      // The running FX's Over, which it reports where it lands on elements; else Fixtures, as an
+      // authored palette starts.
+      elementMode: effect.elementMode ?? NEW_FX_ELEMENT_MODE,
       cycle: effect.cycle,
       blendMode: effect.blendMode,
       // The fixture DTO reports the spread as `order`, and absent means `NORMAL`, the
       // vocabulary the write boundary accepts.
       order: effect.order ?? 'NORMAL',
       phaseOffset: effect.phaseOffset,
-      // Dropped with the two above, and for the same reason (D3): both are questions about a
+      // Dropped with the attribute, and for the same reason (D3): both are questions about a
       // *specific* multi-element head, and a template effect names no target. Carrying them would
       // also make a captured template differ from an authored one in two fields the editor can
       // neither show nor clear — `chooseFx` hard-nulls both, and `fxKey` does not watch
@@ -137,6 +147,7 @@ export function NewPaletteFromFxSheet({
       ...(effect.wings != null && effect.wings !== 1 ? { wings: effect.wings } : {}),
       ...(effect.segments != null && effect.segments !== 1 ? { segments: effect.segments } : {}),
       ...(effect.parts != null && effect.parts !== 0 ? { parts: effect.parts } : {}),
+      ...(effect.spreadUnit === 'STEP' ? { spreadUnit: effect.spreadUnit } : {}),
     }
     try {
       const created = await create({ projectId: projectIdNum, name: name.trim(), fx: body }).unwrap()

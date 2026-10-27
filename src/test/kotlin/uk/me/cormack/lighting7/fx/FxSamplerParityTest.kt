@@ -90,6 +90,13 @@ class FxSamplerParityTest {
         }
     }
 
+    private fun pulse(
+        target: FxTarget,
+        division: Double = CycleLength.ONE_BAR,
+        blend: BlendMode = BlendMode.OVERRIDE,
+        configure: FxInstance.() -> Unit = {},
+    ): FxInstance = fx("Wave", target, division, blend, mapOf("shape" to "PULSE", "curve" to "QUAD_OUT"), configure)
+
     private fun FxInstance.dynamics(transform: (FxDynamics) -> FxDynamics) = apply { updateDynamics(transform) }
 
     private fun tick(n: Long): MasterClock.ClockTick {
@@ -193,7 +200,7 @@ class FxSamplerParityTest {
     fun `Sine Wave on a group under every Order, with Segments, Wings, Parts and Spread set`() {
         assertEquals(SpreadOrder.availableOrders.size, orders.size, "every Order is here")
         for (order in orders) {
-            val sine = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer")) {
+            val sine = fx("Wave", SliderTarget.forGroup("hexes", "dimmer")) {
                 this.order = order
             }.dynamics { it.copy(spread = 0.75, wings = 2, segments = 2, parts = 4) }
             val samples = assertParity(rig(), listOf(sine))
@@ -203,7 +210,7 @@ class FxSamplerParityTest {
 
     @Test
     fun `Runs 2 with Direction Bounce holds underneath before and after each head's runs`() {
-        val pulse = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer"), division = CycleLength.ONE_BAR)
+        val pulse = fx("Wave", SliderTarget.forGroup("hexes", "dimmer"), division = CycleLength.ONE_BAR)
             .dynamics { it.copy(runs = 2, direction = FxDirection.BOUNCE) }
         val samples = assertParity(rig(), listOf(pulse), passes = 24 * 4 * 4)
         val last = samples.attribute("dimmer")!!.row("hex-7")!!.fx.single()
@@ -213,7 +220,7 @@ class FxSamplerParityTest {
 
     @Test
     fun `Timing Per head`() {
-        val chase = fx("Pulse", SliderTarget.forGroup("hexes", "dimmer"), division = CycleLength.ONE_BEAT) {
+        val chase = pulse(SliderTarget.forGroup("hexes", "dimmer"), division = CycleLength.ONE_BEAT) {
             updateDynamics { it.copy(timing = Timing.HEAD) }
         }
         assertParity(rig(), listOf(chase), passes = 24 * 8 + 12)
@@ -221,8 +228,8 @@ class FxSamplerParityTest {
 
     @Test
     fun `two Intensity FX, Replace under Within`() {
-        val sine = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer")) { priority = 1 }
-        val pulse = fx("Pulse", SliderTarget.forGroup("hexes", "dimmer"), division = CycleLength.TWO_BEATS, blend = BlendMode.MULTIPLY) {
+        val sine = fx("Wave", SliderTarget.forGroup("hexes", "dimmer")) { priority = 1 }
+        val pulse = pulse(SliderTarget.forGroup("hexes", "dimmer"), division = CycleLength.TWO_BEATS, blend = BlendMode.MULTIPLY) {
             priority = 2
         }
         val samples = assertParity(rig(), listOf(pulse, sine))
@@ -233,7 +240,7 @@ class FxSamplerParityTest {
     fun `a Circle Around a programmer position`() {
         val rig = rig()
         rig.store.put(ProgrammerOwner.WEB, "vary", "position", CueAssignmentResolver.AttributeValue.Position(100u, 150u))
-        val circle = fx("Circle", PositionTarget("vary"), blend = BlendMode.ADDITIVE) {
+        val circle = fx("Path", PositionTarget("vary"), blend = BlendMode.ADDITIVE) {
             priority = FxEngine.localFxPriority(0)
         }
         val samples = assertParity(rig, listOf(circle))
@@ -271,7 +278,7 @@ class FxSamplerParityTest {
 
     @Test
     fun `a Seconds FX`() {
-        val sine = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer"), division = 1.5) {
+        val sine = fx("Wave", SliderTarget.forGroup("hexes", "dimmer"), division = 1.5) {
             applyTimingChoice(TimingSource.BEAT, seconds = true)
         }
         assertParity(rig(), listOf(sine), wake = Wake.TICKER)
@@ -295,7 +302,7 @@ class FxSamplerParityTest {
     fun `a held-back FX is sampled but left out of the result`() {
         val rig = rig()
         rig.store.put(ProgrammerOwner.WEB, "hex-0", "dimmer", CueAssignmentResolver.AttributeValue.Slider(100u))
-        val sine = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer"))
+        val sine = fx("Wave", SliderTarget.forGroup("hexes", "dimmer"))
         val samples = assertParity(rig, listOf(sine))
         val held = samples.attribute("dimmer")!!.row("hex-0")!!
         assertEquals(HeldBackReason.PROGRAMMER, held.fx.single().heldBack)
@@ -306,13 +313,13 @@ class FxSamplerParityTest {
 
     @Test
     fun `a Local FX sits over a palette layer's FX on one key`() {
-        val local = fx("Pulse", SliderTarget("hex-0", "dimmer")) { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
-        val layer = fx("SineWave", SliderTarget("hex-0", "dimmer")) {
+        val local = pulse(SliderTarget("hex-0", "dimmer")) { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
+        val layer = fx("Wave", SliderTarget("hex-0", "dimmer")) {
             priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE
             programmerLayerFxKey = ProgrammerLayerFxKey(
                 1,
                 StoredFx(
-                    fxType = "SineWave", family = "intensity", attribute = "dimmer", cycle = CycleLength.ONE_BAR,
+                    fxType = "Wave", family = "intensity", attribute = "dimmer", cycle = CycleLength.ONE_BAR,
                     blendMode = "OVERRIDE", order = "NORMAL", phaseOffset = 0.0, elementMode = null,
                     elementFilter = null, timing = null, parameters = emptyMap(), speedMasterUuid = null,
                     rateSpeedMasterUuid = null,
@@ -326,8 +333,8 @@ class FxSamplerParityTest {
 
     @Test
     fun `a beat Sine Wave with a wall-clock FX Within it on one dimmer`() {
-        val beat = fx("SineWave", SliderTarget("hex-0", "dimmer")) { priority = 1 }
-        val wall = fx("SineWave", SliderTarget("hex-0", "dimmer"), division = 0.7, blend = BlendMode.MULTIPLY) {
+        val beat = fx("Wave", SliderTarget("hex-0", "dimmer")) { priority = 1 }
+        val wall = fx("Wave", SliderTarget("hex-0", "dimmer"), division = 0.7, blend = BlendMode.MULTIPLY) {
             applyTimingChoice(TimingSource.BEAT, seconds = true)
             priority = 2
         }
@@ -356,7 +363,7 @@ class FxSamplerParityTest {
     @Test
     fun `a paused FX alone on a head leaves its last frame, and Result shows it`() {
         val rig = rig()
-        val sine = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer"))
+        val sine = fx("Wave", SliderTarget.forGroup("hexes", "dimmer"))
         val id = rig.engine.addFx(sine)
         for (s in 0 until 20) rig.engine.processBeatTick(tick(START + s))
         rig.engine.pauseFx(id)
@@ -382,9 +389,9 @@ class FxSamplerParityTest {
         // Two rigs run alike; one is sampled part-way. Every field the pass owns is unchanged by it,
         // and the two rigs still agree channel for channel afterwards, the stateful FX's state included.
         fun running(rig: Rig): List<FxInstance> {
-            val beat = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer")).dynamics { it.copy(runs = 3) }
+            val beat = fx("Wave", SliderTarget.forGroup("hexes", "dimmer")).dynamics { it.copy(runs = 3) }
             val candle = fx("CandleFlicker", SliderTarget.forGroup("hexes", "uv"), division = 1.0)
-            val wall = fx("Circle", PositionTarget("vary"), division = 2.0) {
+            val wall = fx("Path", PositionTarget("vary"), division = 2.0) {
                 applyTimingChoice(TimingSource.BEAT, seconds = true)
             }.dynamics { it.copy(runs = 2) }
             return listOf(beat, candle, wall).onEach { rig.engine.addFx(it) }
@@ -419,7 +426,7 @@ class FxSamplerParityTest {
         assertEquals(before, fx.map { it.fields() })
         assertEquals(channels, sampled.controller.currentValues.toMap())
 
-        untouched.engine.getActiveFx().first { it.fxTypeId == "SineWave" && it.target is SliderTarget }
+        untouched.engine.getActiveFx().first { it.fxTypeId == "Wave" && it.target is SliderTarget }
             .updateEnvelope { FxEnvelope.constant(0.8) }
         for (s in 30 until 90) {
             sampled.pass(s)
@@ -438,7 +445,7 @@ class FxSamplerParityTest {
                 SpeedMasterSnapshot(master2, 2, "Master 2", 62.5, SpeedMasterSource.MANUAL, null, null, null, null),
             ),
         )
-        val draft = fx("SineWave", SliderTarget("hex-0", "dimmer")) { speedMasterUuid = master2 }
+        val draft = fx("Wave", SliderTarget("hex-0", "dimmer")) { speedMasterUuid = master2 }
         val slowClock = FxSampleClock(ticks = { START }, msPerTicks = { if (it == 1) 2 * MS_PER_TICK else MS_PER_TICK }, rateScales = { 1.0 })
         val samples = rig.engine.sampler(::fresh).sample(FxSampleRequest(listOf(draft), window = FxSampleWindow.Cycles(1.0)), slowClock)
         assertEquals(2 * CycleLength.ONE_BAR * MasterClock.TICKS_PER_BEAT * MS_PER_TICK / 48, samples.sampleMs)
@@ -447,9 +454,9 @@ class FxSamplerParityTest {
     @Test
     fun `a draft folds where adding it would put it`() {
         val rig = rig()
-        val running = fx("Pulse", SliderTarget("hex-0", "dimmer"))
+        val running = pulse(SliderTarget("hex-0", "dimmer"))
         rig.engine.addFx(running)
-        val draft = fx("SineWave", SliderTarget("hex-0", "dimmer"))
+        val draft = fx("Wave", SliderTarget("hex-0", "dimmer"))
         val samples = rig.engine.sampler(::fresh).sampleAt(
             listOf(draft), FxSampleRequest.Include.STACK, null, clock, DoubleArray(96) { it * MS_PER_TICK }, MS_PER_TICK,
         )
@@ -457,9 +464,9 @@ class FxSamplerParityTest {
         val row = samples.attribute("dimmer")!!.row("hex-0")!!
         assertContentEquals((row.fx.last().output as FxSampleSeries.Bytes).values, (row.result as FxSampleSeries.Bytes).values)
 
-        val local = fx("Pulse", SliderTarget("hex-0", "dimmer")) { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
+        val local = pulse(SliderTarget("hex-0", "dimmer")) { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
         rig.engine.addFx(local)
-        val localDraft = fx("SineWave", SliderTarget("hex-0", "dimmer")) { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
+        val localDraft = fx("Wave", SliderTarget("hex-0", "dimmer")) { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
         val stacked = rig.engine.sampler(::fresh).sample(FxSampleRequest(listOf(localDraft)), clock)
         assertEquals(listOf(running, local, localDraft), stacked.fx.map { it.fx }, "a Local draft at the top of its lane")
         assertNull(stacked.attribute("dimmer")!!.row("hex-0")!!.fx.last().heldBack)
@@ -468,9 +475,9 @@ class FxSamplerParityTest {
     @Test
     fun `an FX whose object cannot be built holds, and the rest are still sampled`() {
         val rig = rig()
-        val gone = fx("Pulse", SliderTarget("hex-0", "dimmer"))
+        val gone = pulse(SliderTarget("hex-0", "dimmer"))
         rig.engine.addFx(gone)
-        val sine = fx("SineWave", SliderTarget("hex-0", "dimmer"), blend = BlendMode.MAX)
+        val sine = fx("Wave", SliderTarget("hex-0", "dimmer"), blend = BlendMode.MAX)
         val sampler = rig.engine.sampler { if (it === gone) error("Unknown effect type") else fresh(it) }
         val samples = sampler.sample(FxSampleRequest(listOf(sine)), clock)
         val row = samples.attribute("dimmer")!!.row("hex-0")!!
@@ -481,7 +488,7 @@ class FxSamplerParityTest {
     @Test
     fun `the window takes 48 samples a cycle and caps what it is asked for`() {
         val rig = rig()
-        val sine = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer"))
+        val sine = fx("Wave", SliderTarget.forGroup("hexes", "dimmer"))
         rig.engine.addFx(sine)
         val sampler = rig.engine.sampler(::fresh)
 
@@ -494,7 +501,7 @@ class FxSamplerParityTest {
         assertEquals(FxSampler.MAX_SAMPLES, long.offsetsMs.size)
         assertEquals(setOf(FxSamples.Truncation.SAMPLES), long.truncated)
 
-        val many = (0 until 10).map { fx("Pulse", SliderTarget(hexes[it % 8], "uv")) }
+        val many = (0 until 10).map { pulse(SliderTarget(hexes[it % 8], "uv")) }
         val capped = sampler.sample(FxSampleRequest(many, include = FxSampleRequest.Include.ONLY), clock)
         assertEquals(FxSampler.MAX_FX, capped.fx.size)
         assertTrue(FxSamples.Truncation.FX in capped.truncated)

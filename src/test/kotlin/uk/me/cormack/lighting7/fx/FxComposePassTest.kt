@@ -69,7 +69,7 @@ class FxComposePassTest {
      * (one with nothing running on a clock that woke it is skipped).
      */
     private fun Rig.withCompanionOn(timingSource: TimingSource) = engine.addFx(
-        if (timingSource == TimingSource.BEAT) instance(fx("Pulse"), BlendMode.OVERRIDE, timingSource, attribute = "uv")
+        if (timingSource == TimingSource.BEAT) instance(fx("Wave", "shape" to "PULSE", "curve" to "QUAD_OUT"), BlendMode.OVERRIDE, timingSource, attribute = "uv")
         else instance(fx("CandleFlicker"), BlendMode.OVERRIDE, timingSource, attribute = "uv"),
     )
 
@@ -128,7 +128,7 @@ class FxComposePassTest {
         rig.engine.addFx(sine)
         rig.engine.addFx(candle)
 
-        val sineTwin = registry.createFx("SineWave", sineParams)
+        val sineTwin = registry.createFx("Wave", sineParams)
         val sineClock = FxInstance(sineTwin, SliderTarget("hex-a", "dimmer"), FxTiming(cycle = sineDivision))
         val candleTwin = fx("CandleFlicker") as StatefulFx
         var candleSteps = 0L
@@ -157,7 +157,7 @@ class FxComposePassTest {
     @Test
     fun `a Candle Flicker Within a Sine Wave on one dimmer composes on every pass`() {
         assertComposes(
-            sine = instance(fx("SineWave"), BlendMode.OVERRIDE, TimingSource.BEAT, division = 1.0),
+            sine = instance(fx("Wave"), BlendMode.OVERRIDE, TimingSource.BEAT, division = 1.0),
             candle = instance(fx("CandleFlicker"), BlendMode.MULTIPLY, TimingSource.WALL_CLOCK),
             sineDivision = 1.0,
         ) { sine, candle -> sine * candle / 255 }
@@ -166,10 +166,10 @@ class FxComposePassTest {
     @Test
     fun `a wall-clock FX Added onto a beat FX composes on every pass`() {
         assertComposes(
-            sine = instance(fx("SineWave", "max" to "100"), BlendMode.OVERRIDE, TimingSource.BEAT, division = 2.0),
+            sine = instance(fx("Wave", "high" to "100"), BlendMode.OVERRIDE, TimingSource.BEAT, division = 2.0),
             candle = instance(fx("CandleFlicker"), BlendMode.ADDITIVE, TimingSource.WALL_CLOCK),
             sineDivision = 2.0,
-            sineParams = mapOf("max" to "100"),
+            sineParams = mapOf("high" to "100"),
         ) { sine, candle -> (sine + candle).coerceAtMost(255) }
     }
 
@@ -177,7 +177,7 @@ class FxComposePassTest {
     fun `a beat FX at Max over a wall-clock FX composes on every pass`() {
         // The Candle Flicker first in apply order this time: the beat FX is the one on top.
         assertComposes(
-            sine = instance(fx("SineWave"), BlendMode.MAX, TimingSource.BEAT, division = 1.0, priority = 1),
+            sine = instance(fx("Wave"), BlendMode.MAX, TimingSource.BEAT, division = 1.0, priority = 1),
             candle = instance(fx("CandleFlicker"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK),
             sineDivision = 1.0,
         ) { sine, candle -> maxOf(sine, candle) }
@@ -189,14 +189,14 @@ class FxComposePassTest {
         // by the ticker and a fast master's every tick in between.
         fun rigWith(): Pair<Rig, FxInstance> {
             val rig = newRig()
-            val sine = instance(fx("SineWave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 2.0)
+            val sine = instance(fx("Wave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 2.0)
             rig.engine.addFx(sine)
             return rig to sine
         }
         val (tickerOnly, quiet) = rigWith()
         val (busy, woken) = rigWith()
         // A beat FX keeps the beat wakes doing work on the busy rig.
-        busy.engine.addFx(instance(fx("Pulse"), BlendMode.MAX, TimingSource.BEAT))
+        busy.engine.addFx(instance(fx("Wave", "shape" to "PULSE", "curve" to "QUAD_OUT"), BlendMode.MAX, TimingSource.BEAT))
 
         tickerOnly.engine.processWallClockTick(T0)
         busy.engine.processWallClockTick(T0)
@@ -254,7 +254,7 @@ class FxComposePassTest {
     @Test
     fun `a beat N-shot ends on a beat-woken pass`() {
         val rig = newRig()
-        val pulse = instance(fx("Pulse"), BlendMode.OVERRIDE, TimingSource.BEAT, division = 1.0)
+        val pulse = instance(fx("Wave", "shape" to "PULSE", "curve" to "QUAD_OUT"), BlendMode.OVERRIDE, TimingSource.BEAT, division = 1.0)
         pulse.updateDynamics { it.copy(runs = 1) }
         rig.engine.addFx(pulse)
         rig.withCompanionOn(TimingSource.WALL_CLOCK)
@@ -273,7 +273,7 @@ class FxComposePassTest {
     @Test
     fun `a beat FX given a count mid-run goes on painting on ticker-woken passes`() {
         val rig = newRig()
-        val pulse = instance(fx("Pulse", "min" to "200", "max" to "200"), BlendMode.OVERRIDE, TimingSource.BEAT)
+        val pulse = instance(fx("Wave", "shape" to "PULSE", "curve" to "QUAD_OUT", "low" to "200", "high" to "200"), BlendMode.OVERRIDE, TimingSource.BEAT)
         rig.engine.addFx(pulse)
         rig.withCompanionOn(TimingSource.WALL_CLOCK)
         rig.engine.processBeatTick(tick(10), T0)
@@ -288,7 +288,7 @@ class FxComposePassTest {
     @Test
     fun `a wall-clock N-shot ends on a ticker-woken pass`() {
         val rig = newRig()
-        val sine = instance(fx("SineWave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 1.0)
+        val sine = instance(fx("Wave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 1.0)
         sine.updateDynamics { it.copy(runs = 1) }
         rig.engine.addFx(sine)
         rig.withCompanionOn(TimingSource.BEAT)
@@ -305,7 +305,7 @@ class FxComposePassTest {
     @Test
     fun `a pass with nothing running on a clock that woke it is skipped, and its time kept`() {
         val rig = newRig()
-        val sine = instance(fx("SineWave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 2.0)
+        val sine = instance(fx("Wave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 2.0)
         rig.engine.addFx(sine)
 
         rig.engine.processWallClockTick(T0)

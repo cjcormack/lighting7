@@ -528,6 +528,18 @@ describe('the FX tab', () => {
     expect('uuid' in edited).toBe(false)
   })
 
+  it('swaps a stored FX’s type from its section’s header: its own parameters and family, the rest of the row kept', async () => {
+    data.library = [PULSE, { ...SINE, family: 'mine', source: 'USER' }]
+    data.cue = cueOf({ adHocFx: [pulse()] })
+    render(<Editor tab="fx" />)
+    fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'FX type: Pulse' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'SineWave' }))
+    const [swapped] = (await patched(1)).adHocFx as CueAdHocFx[]
+    expect(swapped).toMatchObject({ fxType: 'SineWave', family: 'mine', attribute: 'dimmer', targetKey: 'orbit-sr', delayMs: 500, runs: 3 })
+    expect(swapped.parameters).toEqual({ min: '0', max: '255' })
+  })
+
   it('the open row draws its FX alone on its own targets, include ONLY, saying what is underneath is not drawn', async () => {
     data.cue = cueOf({ adHocFx: [pulse()] })
     render(<Editor tab="fx" />)

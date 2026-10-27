@@ -1,12 +1,16 @@
 import type { FxDraft } from './fxEditorModel'
 
 /**
- * **Shapes** (FX editor plan D11): nine named spreads, each the five fields that make it — Order,
- * Spread, Wings, Segments and Parts. A tap writes all five in one `updateFx`; a Shape is lit only
- * while every field matches it, else the Spread section says *Custom*. Nothing is stored: a Shape is
- * a name for five fields the FX already has.
+ * **Patterns** (FX editor plan D11; fx-settings plan D10): nine named orderings of the heads, each the
+ * four fields that make it — Order, Wings, Segments and Parts. A tap writes all four in one
+ * `updateFx`; a pattern is lit only while every field matches it, else *Custom*. How far apart the
+ * heads start is *Each head later by*'s, so a pattern leaves Spread and its unit alone. Nothing is
+ * stored: a pattern is a name for four fields the FX already has.
  */
-export type ShapeFields = Pick<FxDraft, 'order' | 'spread' | 'wings' | 'segments' | 'parts'>
+export type ShapeFields = Pick<FxDraft, 'order' | 'wings' | 'segments' | 'parts'>
+
+/** What *Same spread as…* copies: a pattern's fields and Spread with its unit. */
+export type SpreadFields = Pick<FxDraft, 'order' | 'spread' | 'spreadUnit' | 'wings' | 'segments' | 'parts'>
 
 export interface FxShape {
   name: string
@@ -15,7 +19,6 @@ export interface FxShape {
 
 const plain = (order: string, over: Partial<ShapeFields> = {}): ShapeFields => ({
   order,
-  spread: 1,
   wings: 1,
   segments: 1,
   parts: 0,
@@ -38,23 +41,23 @@ export function matchesShape(draft: ShapeFields, shape: FxShape): boolean {
   const f = shape.fields
   return (
     draft.order === f.order &&
-    draft.spread === f.spread &&
     draft.wings === f.wings &&
     draft.segments === f.segments &&
     draft.parts === f.parts
   )
 }
 
-/** The Shape every field matches, or null — *Custom*. */
+/** The pattern every field matches, or null — *Custom*. */
 export function shapeOf(draft: ShapeFields): FxShape | null {
   return FX_SHAPES.find((shape) => matchesShape(draft, shape)) ?? null
 }
 
-/** The five fields of [from], for *Same spread as…* (D13): copied once, linking nothing. */
-export function spreadFieldsOf(from: ShapeFields): ShapeFields {
+/** The fields of [from], for *Same spread as…* (D13): copied once, linking nothing. */
+export function spreadFieldsOf(from: SpreadFields): SpreadFields {
   return {
     order: from.order,
     spread: from.spread,
+    spreadUnit: from.spreadUnit,
     wings: from.wings,
     segments: from.segments,
     parts: from.parts,

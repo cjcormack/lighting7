@@ -127,6 +127,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         wings = instance.dynamics.wings,
                         segments = instance.dynamics.segments,
                         parts = instance.dynamics.parts,
+                        spreadUnit = instance.dynamics.spreadUnit.name,
                         spent = instance.spent,
                     )
                 }
@@ -219,7 +220,8 @@ data class AddGroupFxRequest(
     val order: String = "NORMAL",
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
-    val elementMode: String = "PER_FIXTURE",  // PER_FIXTURE or FLAT
+    /** `WHOLE`, `FLAT` or `PER_FIXTURE`; absent is [ElementMode.NEW_FX_DEFAULT]. */
+    val elementMode: String? = null,
     val elementFilter: String = "ALL",
     val timing: Timing? = null,
     /** Speed master to subscribe to, as the master's uuid (null → master 1). */
@@ -234,11 +236,12 @@ data class AddGroupFxRequest(
     val direction: String? = null,
     /** Runs (D9) — see [AddFxRequest.runs]. */
     val runs: Int? = null,
-    /** The spread's shape (D4) — see [AddFxRequest.spread]. */
-    val spread: Double = 1.0,
+    /** The spread's shape (D4) and what it counts (fx-settings plan D6) — see [AddFxRequest.spread], [AddFxRequest.spreadUnit]. */
+    val spread: Double? = null,
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    val spreadUnit: String? = null,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddFxRequest.programmerOwned].
@@ -287,6 +290,8 @@ data class GroupFxDto(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** See [uk.me.cormack.lighting7.fx.FxDto.spreadUnit]. */
+    val spreadUnit: String = uk.me.cormack.lighting7.fx.SpreadUnit.CYCLE.name,
 )
 
 @Serializable
@@ -365,12 +370,13 @@ private fun applyGroupFx(
         state.show.paletteRegistry,
         request.fxType,
         request.parameters,
+        request.attribute,
     )
     val registration = state.show.fxRegistry.getRegistration(request.fxType)
     val timing = FxTiming(request.cycle ?: registration?.defaultCycle ?: CycleLength.ONE_BAR)
     val blendMode = FxSpecCoercion.Strict.blendMode(request.blendMode)
     val spreadOrder = FxSpecCoercion.Strict.order(request.order)
-    val elementMode = FxSpecCoercion.Strict.elementMode(request.elementMode)
+    val elementMode = request.elementMode?.let { FxSpecCoercion.Strict.elementMode(it) } ?: ElementMode.NEW_FX_DEFAULT
 
     // No effect may drive a member's one-shot trigger (stage-view plan session 9, D15).
     TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.attribute, "FX")
@@ -408,7 +414,9 @@ private fun applyGroupFx(
         this.elementFilter = elFilter
         applyRequestedDynamics(
             request.amount, request.direction, request.runs,
-            SpreadShape(request.spread, request.wings, request.segments, request.parts),
+            requestedSpreadShape(
+                request.spread, request.wings, request.segments, request.parts, request.spreadUnit, effect.stepCount != null,
+            ),
         )
         request.timing?.let { t -> updateDynamics { it.copy(timing = t) } }
         speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)

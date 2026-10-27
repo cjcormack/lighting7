@@ -135,7 +135,7 @@ fun <T> T.applyPositionFx(
  * Example:
  * ```
  * fixture.fx(fxEngine) {
- *     dimmer(effect("SineWave"), CycleLength.TWO_BEATS)
+ *     dimmer(effect("Wave"), CycleLength.TWO_BEATS)
  *     colour(effect("RainbowCycle"), CycleLength.ONE_BAR)
  * }
  * ```

@@ -155,6 +155,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 wings = effect.wings
                 segments = effect.segments
                 parts = effect.parts
+                spreadUnit = effect.spreadUnit
                 runUuid = effect.runUuid?.let { runKeys.getOrPut(it) { UUID.randomUUID() } }
             }
         }
@@ -255,6 +256,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 wings = effect.wings
                 segments = effect.segments
                 parts = effect.parts
+                spreadUnit = effect.spreadUnit
                 sortOrder = effect.sortOrder
             }
         }
@@ -324,6 +326,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 wings = effect.wings
                 segments = effect.segments
                 parts = effect.parts
+                spreadUnit = effect.spreadUnit
             }
         }
         return copy

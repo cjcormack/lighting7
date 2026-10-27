@@ -33,11 +33,19 @@ const mocks = vi.hoisted(() => ({
   realPicker: false,
   pressFx: vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ fxId: 50, stopped: [], narrowed: [] }) })),
   updateFx: vi.fn((_id: number, _req: unknown) => true),
+  selectTable: vi.fn(),
+  /** `fxTargetOf` answers a group by its name, for the subject's group form. */
+  namedGroup: false,
 }))
 
 vi.mock('@/components/fx/selectionFxTarget', () => ({
   useWindowFxPair: () => ({ targets: mocks.targets, families: null }),
-  fxTargetOf: (targets: CueTarget[]) => (targets.length === 0 ? null : { type: 'selection', targets, fixtures: HEX, label: 'Hex 1, Hex 2' }),
+  fxTargetOf: (targets: CueTarget[]) =>
+    targets.length === 0
+      ? null
+      : mocks.namedGroup
+        ? { type: 'group', group: { name: 'Front wash' } }
+        : { type: 'selection', targets, fixtures: HEX, label: 'Hex 1, Hex 2' },
 }))
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: HEX }) }))
 vi.mock('@/store/groups', () => ({
@@ -85,7 +93,11 @@ vi.mock('@/components/fx/useFxControls', () => ({
   useStopFx: () => mocks.stop,
   useToggleFxPause: () => mocks.pause,
 }))
-vi.mock('@/components/programmer/ProgrammerTableTabs', () => ({ ProgrammerTableTabs: () => null }))
+vi.mock('@/components/programmer/ProgrammerTableTabs', () => ({
+  ProgrammerTableTabs: () => null,
+  useProgrammerTables: () => ({ table: 'fx', select: mocks.selectTable, counts: {} }),
+}))
+vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => new Map([['hex-1', 'red']]) }))
 vi.mock('@/components/desk/DeskChip', () => ({ DeskChip: () => null }))
 vi.mock('@/components/programmer/RecordLookSheet', () => ({
   RecordLookSheet: ({ open, targets, initialMask, initialFxIds }: { open: boolean; targets: unknown; initialMask: unknown; initialFxIds: number[] }) =>
@@ -168,6 +180,7 @@ beforeEach(() => {
   mocks.asks = []
   mocks.library = []
   mocks.realPicker = false
+  mocks.namedGroup = false
   mocks.pressFx.mockClear()
   mocks.updateFx.mockClear()
   mocks.effects = [
@@ -177,7 +190,7 @@ beforeEach(() => {
     fx(4),
     fx(5, { attribute: 'rgbColour', programmerOwned: false, cueId: 12 }),
   ]
-  for (const spy of [mocks.moveFx, mocks.selectHeads, mocks.stop, mocks.pause]) spy.mockClear()
+  for (const spy of [mocks.moveFx, mocks.selectHeads, mocks.stop, mocks.pause, mocks.selectTable]) spy.mockClear()
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ width: mocks.width, height: 600 }) as DOMRect)
 })
 afterEach(() => {
@@ -385,17 +398,152 @@ describe('+ FX', () => {
     expect(mocks.updateFx).toHaveBeenCalledWith(50, expect.objectContaining({ fxType: 'Colour Cycle', blendMode: 'OVERRIDE' }))
     expect(mocks.pressFx).toHaveBeenCalledTimes(1)
   })
+
+  it('starts afresh once the selection moves, asking where it applies and swapping nothing on the old heads', async () => {
+    const colour = (name: string): Partial<FxLibraryEntry> => ({
+      name,
+      family: 'colour',
+      outputType: 'COLOUR',
+      fxMode: 'STANDARD',
+      timingSource: 'BEAT',
+      compatibleAttributes: ['rgbColour'],
+      parameters: [],
+    })
+    mocks.library = [colour('Rainbow Cycle'), colour('Colour Cycle')]
+    mocks.realPicker = true
+    const { rerender } = draw()
+    fireEvent.click(within(lane('COLOUR')).getByRole('button', { name: 'FX' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rainbow Cycle' }))
+    await waitFor(() => expect(mocks.pressFx).toHaveBeenCalledTimes(1))
+    mocks.effects = [...mocks.effects, fx(50, { fxType: 'RainbowCycle', attribute: 'rgbColour' })]
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+
+    // Hex 2 alone, the picker still open: FX 50 reaches it, so the fresh start asks.
+    mocks.targets = [{ type: 'fixture', key: 'hex-2' }]
+    mocks.pressFx.mockImplementationOnce(() => ({ unwrap: () => Promise.resolve({ fxId: 51, stopped: [], narrowed: [] }) }))
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+    expect(screen.getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Colour Cycle' }))
+    await waitFor(() => expect(mocks.pressFx).toHaveBeenCalledTimes(2))
+    expect(mocks.pressFx.mock.calls[1][0]).toEqual(expect.objectContaining({ fxType: 'Colour Cycle', targets: [{ type: 'fixture', key: 'hex-2' }] }))
+    expect(mocks.updateFx).not.toHaveBeenCalled()
+
+    // Back on the heads it was started on, a tap swaps FX 50 again.
+    mocks.targets = FRONT
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Colour Cycle' }))
+    expect(mocks.updateFx).toHaveBeenCalledWith(50, expect.objectContaining({ fxType: 'Colour Cycle' }))
+    expect(mocks.pressFx).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('with nothing selected', () => {
-  it('says so, and selects the heads of a running FX picked from the menu', () => {
+  it('says so in one line and lists the running FX as cards, by family then name, with what each runs on', () => {
+    mocks.targets = []
+    mocks.effects = [fx(3, { fxType: 'Pulse' }), fx(5, { fxType: 'Colour Cycle', attribute: 'rgbColour' }), fx(4, { fxType: 'Breath' }), fx(6, { leaving: true })]
+    draw()
+    const empty = document.querySelector<HTMLElement>('[data-fx-nothing-selected]')!
+    expect(empty).toHaveTextContent('No heads selected. Pick a running FX to edit it on its heads.')
+    const cards = [...empty.querySelectorAll<HTMLElement>('[data-fx-running-card]')]
+    expect(cards.map((c) => c.dataset.fxRunningCard)).toEqual(['4', '3', '5'])
+    expect(cards[2]).toHaveTextContent(/^Colour CycleColour/)
+    expect(cards[2]).toHaveTextContent('front · 2 fixtures · 1 bar · M1')
+  })
+
+  it('selects a card’s heads and picks its FX with one press', () => {
     mocks.targets = []
     draw()
-    expect(document.querySelector('[data-fx-nothing-selected]')).toHaveTextContent('Nothing is selected')
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Select the heads of a running FX…' }), { button: 0, ctrlKey: false })
-    fireEvent.click(screen.getByRole('menuitem', { name: /FX 3/ }))
+    fireEvent.click(document.querySelector<HTMLElement>('[data-fx-running-card="3"]')!)
     expect(mocks.selectHeads.mock.calls).toEqual([[[{ type: 'group', key: 'front' }], HEX]])
     expect(getPickedFx()).toBe(3)
+  })
+
+  it('puts the card’s FX in the inspector in place of a + FX picker left open', () => {
+    const { rerender } = draw()
+    fireEvent.click(within(lane('INTENSITY')).getByRole('button', { name: 'FX' }))
+    expect(screen.getByTestId('picker')).toBeTruthy()
+    mocks.targets = []
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+    fireEvent.click(document.querySelector<HTMLElement>('[data-fx-running-card="3"]')!)
+    mocks.targets = FRONT
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+    expect(screen.queryByTestId('picker')).toBeNull()
+    expect(screen.getByTestId('inspector-editor')).toHaveTextContent('3')
+  })
+
+  it('offers the Values table, where heads are selected, and only that with nothing running', () => {
+    mocks.targets = []
+    mocks.effects = []
+    draw()
+    expect(document.querySelector('[data-fx-nothing-selected]')).toHaveTextContent(/^No heads selected\.Select heads in Values$/)
+    fireEvent.click(screen.getByRole('button', { name: 'Select heads in Values' }))
+    expect(mocks.selectTable).toHaveBeenCalledWith('values')
+  })
+
+  it('tells the graph why it is empty: nothing selected, or nothing reaching the selection', () => {
+    mocks.targets = []
+    draw()
+    expect(within(document.querySelector<HTMLElement>('[data-fx-graph]')!).getByText('Select heads to draw their FX.')).toBeTruthy()
+    cleanup()
+    mocks.targets = FRONT
+    mocks.effects = []
+    draw()
+    expect(within(document.querySelector<HTMLElement>('[data-fx-graph]')!).getByText('No FX reaches the selection.')).toBeTruthy()
+  })
+})
+
+describe('the subject', () => {
+  const subject = () => document.querySelector<HTMLElement>('[data-fx-subject]')!
+
+  it('reads a group as its name and how many fixtures, with no list to open', () => {
+    mocks.namedGroup = true
+    draw()
+    expect(subject()).toHaveTextContent(/^Front wash· 2 fixtures/)
+    expect(subject().querySelector('[data-fx-subject-fixtures]')).toBeNull()
+  })
+
+  it('reads several fixtures as a count that opens their list, the mask pill beside it', () => {
+    mocks.targets = HEX.map((f) => ({ type: 'fixture' as const, key: f.key }))
+    draw()
+    const chip = subject().querySelector<HTMLElement>('[data-fx-subject-fixtures]')!
+    expect(chip).toHaveTextContent('2 fixtures')
+    expect(subject()).toHaveTextContent('All')
+    fireEvent.pointerDown(chip, { button: 0, ctrlKey: false })
+    const rows = screen.getAllByRole('menuitem')
+    expect(rows.map((r) => r.textContent)).toEqual(['Hex 1Only', 'Hex 2Only'])
+    expect(rows[0].querySelector('[aria-hidden]')!.getAttribute('style')).toContain('--tag-red')
+    expect(rows[1].querySelector('[aria-hidden]')!.getAttribute('style')).toBeNull()
+  })
+
+  it('narrows the selection to one fixture with Only', () => {
+    mocks.targets = HEX.map((f) => ({ type: 'fixture' as const, key: f.key }))
+    draw()
+    fireEvent.pointerDown(subject().querySelector<HTMLElement>('[data-fx-subject-fixtures]')!, { button: 0, ctrlKey: false })
+    fireEvent.click(screen.getByRole('menuitem', { name: /Hex 2/ }))
+    expect(mocks.selectHeads.mock.calls).toEqual([[[{ type: 'fixture', key: 'hex-2' }], HEX]])
+  })
+
+  it('hands focus to the mask once Only has taken the chip away', () => {
+    mocks.targets = HEX.map((f) => ({ type: 'fixture' as const, key: f.key }))
+    const { rerender } = draw()
+    fireEvent.pointerDown(subject().querySelector<HTMLElement>('[data-fx-subject-fixtures]')!, { button: 0, ctrlKey: false })
+    fireEvent.click(screen.getByRole('menuitem', { name: /Hex 2/ }))
+    act(() => (document.activeElement as HTMLElement | null)?.blur())
+    mocks.targets = [{ type: 'fixture', key: 'hex-2' }]
+    rerender(<FxEditorSelection projectId={1} viewSwitch={null} />)
+    expect(subject().querySelector('[data-fx-subject-fixtures]')).toBeNull()
+    expect(document.activeElement).toBe(subject().querySelector('[data-fx-subject-mask]'))
+  })
+
+  it('opens the list as a bottom sheet below the 760 arm', () => {
+    mocks.width = 390
+    mocks.targets = HEX.map((f) => ({ type: 'fixture' as const, key: f.key }))
+    draw()
+    fireEvent.click(subject().querySelector<HTMLElement>('[data-fx-subject-fixtures]')!)
+    const sheet = screen.getByRole('menu', { name: 'Selected fixtures' })
+    expect(within(sheet).getAllByRole('menuitem').map((r) => r.className)).toEqual([expect.stringContaining('min-h-11'), expect.stringContaining('min-h-11')])
+    // A finger has no hover, so every row says Only.
+    expect(within(sheet).getAllByText('Only').map((o) => o.className)).toEqual([expect.not.stringContaining('opacity-0'), expect.not.stringContaining('opacity-0')])
   })
 })
 

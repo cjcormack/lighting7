@@ -129,31 +129,30 @@ class FxRegistryTest {
             .getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(indexed.size >= 28, "fx/index.txt should list at least 28 effects, got ${indexed.size}")
+        assertTrue(indexed.size >= 14, "fx/index.txt should list at least 14 effects, got ${indexed.size}")
         assertEquals(indexed.size, loaded, "Every effect in fx/index.txt should load")
         assertEquals(indexed.size, registry.size, "Every loaded effect should be registered")
 
         // Spot-check key effects exist across categories
-        assertNotNull(registry.getRegistration("SineWave"), "SineWave should be registered")
+        assertNotNull(registry.getRegistration("Wave"), "Wave should be registered")
         assertNotNull(registry.getRegistration("ColourCycle"), "ColourCycle should be registered")
-        assertNotNull(registry.getRegistration("Circle"), "Circle should be registered")
+        assertNotNull(registry.getRegistration("Path"), "Path should be registered")
         assertNotNull(registry.getRegistration("CandleFlicker"), "CandleFlicker should be registered")
         assertNotNull(registry.getRegistration("LightningStrike"), "LightningStrike should be registered")
-        assertNotNull(registry.getRegistration("ZoomWave"), "ZoomWave should be registered")
         assertNotNull(registry.getRegistration(PALETTE_STEPS_ID), "PaletteSteps should be registered")
         assertNotNull(registry.getRegistration(SLOT_STEPS_ID), "SlotSteps should be registered")
         // A fixed value is the fixture's own property, never an effect.
-        for (gone in listOf("StaticValue", "StaticSetting", "StaticColour", "StaticPosition")) {
+        for (gone in listOf("StaticValue", "StaticSetting", "StaticColour", "StaticPosition", "SineWave", "ZoomWave", "Circle", "Sweep")) {
             assertEquals(null, registry.getRegistration(gone), "$gone should not be registered")
         }
 
         // Normalized lookup should work (case-insensitive, spaces/underscores stripped)
-        assertNotNull(registry.getRegistration("sinewave"), "Normalized 'sinewave' should resolve")
-        assertNotNull(registry.getRegistration("Sine Wave"), "Spaced 'Sine Wave' should resolve")
+        assertNotNull(registry.getRegistration("candleflicker"), "Normalized 'candleflicker' should resolve")
+        assertNotNull(registry.getRegistration("Candle Flicker"), "Spaced 'Candle Flicker' should resolve")
 
         // Verify source is BUILT_IN
-        val sineWave = registry.getRegistration("SineWave")!!
-        assertEquals(FxSource.BUILT_IN, sineWave.source)
+        val wave = registry.getRegistration("Wave")!!
+        assertEquals(FxSource.BUILT_IN, wave.source)
     }
 
     @Test

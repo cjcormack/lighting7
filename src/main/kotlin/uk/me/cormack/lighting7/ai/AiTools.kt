@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.serialization.json.*
 import kotlinx.serialization.json.JsonNull
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.fx.toMaskNames
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -563,11 +564,14 @@ class AiTools(private val state: State) {
                             if (dyn.amount != 1.0) put("amount", dyn.amount)
                             if (dyn.direction != FxDirection.FORWARD) put("direction", dyn.direction.name)
                             dyn.runs?.let { put("runs", it) }
-                            // D4's shape, likewise.
-                            if (dyn.spread != 1.0) put("spread", dyn.spread)
+                            // D4's shape, likewise — but an FX that steps always says its spread and
+                            // unit, since one naming neither is written back one step behind (D7).
+                            val steps = state.show.fxRegistry.steps(effect.fxTypeId) == true
+                            if (steps || dyn.spread != 1.0) put("spread", dyn.spread)
                             if (dyn.wings != 1) put("wings", dyn.wings)
                             if (dyn.segments != 1) put("segments", dyn.segments)
                             if (dyn.parts != 0) put("parts", dyn.parts)
+                            if (steps || dyn.spreadUnit != SpreadUnit.CYCLE) put("spreadUnit", dyn.spreadUnit.name)
                             put("blendMode", effect.blendMode.name)
                             put("isRunning", effect.isRunning)
                             if (effect.leaving) put("leaving", true)
@@ -2156,6 +2160,7 @@ class AiTools(private val state: State) {
                 wings = spec.wings,
                 segments = spec.segments,
                 parts = spec.parts,
+                spreadUnit = spec.spreadUnit,
             )
         }
         // Said here rather than left to the write boundary only because the model reads this
@@ -2206,7 +2211,8 @@ class AiTools(private val state: State) {
      * `look_effects` rows directly, and `executeTool`'s catch is the AI surface's 400 — the model
      * is told the valid set and can retry, rather than the desk storing a blend it will not play.
      */
-    private fun parseLookFx(obj: JsonObject, at: String): LookFxSpec {
+    private fun parseLookFx(named: JsonObject, at: String): LookFxSpec {
+        val obj = asToday(named)
         val timing = parseFxTiming(obj, at)
         val dynamics = parseFxDynamics(obj, at)
         val spec = LookFxSpec(
@@ -2218,7 +2224,7 @@ class AiTools(private val state: State) {
             order = obj["order"]?.jsonPrimitive?.content ?: "UNIFIED",
             phaseOffset = obj["phaseOffset"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
             timing = parseTiming(obj, at),
-            elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
+            elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull ?: ElementMode.NEW_FX_DEFAULT.name,
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
             speedMasterUuid = timing.speedMasterUuid,
@@ -2231,6 +2237,7 @@ class AiTools(private val state: State) {
             wings = dynamics.wings,
             segments = dynamics.segments,
             parts = dynamics.parts,
+            spreadUnit = SpreadUnit.toStored(dynamics.spreadUnit),
         )
         FxSpecCoercion.Strict.problem(
             blendMode = spec.blendMode,
@@ -2244,6 +2251,7 @@ class AiTools(private val state: State) {
             wings = spec.wings,
             segments = spec.segments,
             parts = spec.parts,
+            spreadUnit = spec.spreadUnit,
         )?.let { throw IllegalArgumentException(it) }
         state.show.fxRegistry.fxWriteProblem(spec.fxType, spec.parameters, spec.family)
             ?.let { throw IllegalArgumentException("$at: $it") }
@@ -2257,7 +2265,8 @@ class AiTools(private val state: State) {
      * `writeCueChildren`, which rejects an unrecognised value itself, and `executeTool`'s catch
      * turns that message into a failed result the same way.
      */
-    private fun parseAdHocFxFromJson(obj: JsonObject, at: String): CueAdHocFxDto {
+    private fun parseAdHocFxFromJson(named: JsonObject, at: String): CueAdHocFxDto {
+        val obj = asToday(named)
         val timing = parseFxTiming(obj, at)
         val dynamics = parseFxDynamics(obj, at)
         val target = parseAdHocFxTarget(obj, at)
@@ -2271,7 +2280,7 @@ class AiTools(private val state: State) {
             blendMode = obj.requiredString("blendMode", at),
             order = obj["order"]?.jsonPrimitive?.content ?: "UNIFIED",
             phaseOffset = obj["phaseOffset"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-            elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
+            elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull ?: ElementMode.NEW_FX_DEFAULT.name,
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             timing = parseTiming(obj, at),
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
@@ -2285,6 +2294,38 @@ class AiTools(private val state: State) {
             wings = dynamics.wings,
             segments = dynamics.segments,
             parts = dynamics.parts,
+            spreadUnit = SpreadUnit.toStored(dynamics.spreadUnit),
+        )
+    }
+
+    /**
+     * [obj], an FX a tool call names, in today's names (fx-settings plan D3): an FX Wave or Path
+     * replaced as that type, with its parameters, family and a beam FX's attribute as
+     * [LegacyNames.consolidateFx] and [LegacyNames.absorbFx] store them and the old FX's own cycle and
+     * Direction where the call names none; a renamed parameter at its new name. [obj] itself otherwise.
+     */
+    private fun asToday(obj: JsonObject): JsonObject {
+        val fxType = obj["fxType"]?.jsonPrimitive?.contentOrNull ?: return obj
+        val stored = LegacyNames.StoredFx(
+            fxType = fxType,
+            family = obj["family"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            cycle = 0.0, order = "", phaseOffset = 0.0, direction = "", runs = null, spread = 0.0,
+            parameters = (obj["parameters"] as? JsonObject)?.mapValues { it.value.jsonPrimitive.content }.orEmpty(),
+            attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull,
+        )
+        // A tool's call is written today: a parameter under a new name is meant, never stripped.
+        val today = (LegacyNames.consolidateFx(stored) { null } ?: LegacyNames.absorbFx(stored, writtenBefore = false) { null })?.fx
+            ?: return obj
+        val timing = LegacyNames.consolidatedTiming(fxType)
+        return JsonObject(
+            obj + buildMap {
+                put("fxType", JsonPrimitive(today.fxType))
+                if (today.family != stored.family) put("family", JsonPrimitive(today.family))
+                put("parameters", JsonObject(today.parameters.mapValues { JsonPrimitive(it.value) }))
+                today.attribute?.let { put("attribute", JsonPrimitive(it)) }
+                if (timing != null && obj.present("cycle") == null) put("cycle", JsonPrimitive(timing.first))
+                if (timing != null && obj.present("direction") == null) put("direction", JsonPrimitive(timing.second))
+            },
         )
     }
 
@@ -2300,13 +2341,16 @@ class AiTools(private val state: State) {
         val wings: Int = 1,
         val segments: Int = 1,
         val parts: Int = 0,
+        val spreadUnit: SpreadUnit = SpreadUnit.CYCLE,
     )
 
     /**
      * Those out of one effect in a tool call, each refused by name when malformed — an amount outside
-     * 0–1, an unknown direction, a count below one, a spread outside 0–2 or a count of wings, segments
-     * or parts out of range — so the model is told which and can retry. Wings under a mirrored order
-     * are refused by the spec's own check ([FxSpecCoercion.Strict.problem]), which has the order.
+     * 0–1, an unknown direction, a count below one, a spread outside 0–2 (0–16 steps under `STEP`), a
+     * count of wings, segments or parts out of range, or `STEP` on an FX with no steps — so the model is
+     * told which and can retry. Wings under a mirrored order are refused by the spec's own check
+     * ([FxSpecCoercion.Strict.problem]), which has the order. An FX that steps and names neither a
+     * spread nor a unit starts one step behind (fx-settings plan D7).
      */
     private fun parseFxDynamics(obj: JsonObject, at: String): ParsedFxDynamics {
         val amount = obj.present("amount")?.let {
@@ -2325,10 +2369,20 @@ class AiTools(private val state: State) {
                 ?: throw IllegalArgumentException("$at: 'runs' must be a whole number of cycles")
         }
         runs?.let { n -> FxSpecCoercion.Strict.runsProblem(n)?.let { throw IllegalArgumentException("$at: $it") } }
-        val spread = obj.present("spread")?.let {
+        val spreadUnit = obj.present("spreadUnit")?.let {
+            val raw = (it as? JsonPrimitive)?.contentOrNull
+                ?: throw IllegalArgumentException("$at: 'spreadUnit' must be CYCLE or STEP")
+            FxSpecCoercion.Names.spreadUnit(raw)
+                ?: throw IllegalArgumentException("$at: 'spreadUnit' must be CYCLE or STEP, got '$raw'")
+        }
+        val sentSpread = obj.present("spread")?.let {
             (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.doubleOrNull
-                ?: throw IllegalArgumentException("$at: 'spread' must be a number from 0 to 2")
-        } ?: 1.0
+                ?: throw IllegalArgumentException("$at: 'spread' must be a number (0 to 2, or steps under STEP)")
+        }
+        val fxType = obj["fxType"]?.jsonPrimitive?.contentOrNull
+        val fxSteps = fxType?.let { state.show.fxRegistry.steps(it) }
+        val unit = spreadUnit ?: if (sentSpread == null) SpreadUnit.newFx(fxSteps == true) else SpreadUnit.CYCLE
+        val spread = sentSpread ?: 1.0
         fun count(field: String, default: Int): Int = obj.present(field)?.let {
             (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.intOrNull
                 ?: throw IllegalArgumentException("$at: '$field' must be a whole number")
@@ -2336,9 +2390,9 @@ class AiTools(private val state: State) {
         val wings = count("wings", 1)
         val segments = count("segments", 1)
         val parts = count("parts", 0)
-        FxSpecCoercion.Strict.spreadProblem(spread, wings, segments, parts, SpreadOrder.NORMAL)
+        FxSpecCoercion.Strict.spreadProblem(spread, wings, segments, parts, SpreadOrder.NORMAL, unit, fxType, fxSteps)
             ?.let { throw IllegalArgumentException("$at: $it") }
-        return ParsedFxDynamics(amount, direction, runs, spread, wings, segments, parts)
+        return ParsedFxDynamics(amount, direction, runs, spread, wings, segments, parts, unit)
     }
 
     /** An FX's `timing`, `CYCLE` or `HEAD`, as a tool call gives it; absent is the FX type's own. */
@@ -2393,6 +2447,7 @@ class AiTools(private val state: State) {
         return familyMasterUuidFor(
             state.show.fxRegistry, state.show.fxEngine.speedMasters, fxType,
             obj["family"]?.jsonPrimitive?.contentOrNull,
+            obj["attribute"]?.jsonPrimitive?.contentOrNull,
         )?.toString()
     }
 
@@ -2431,6 +2486,7 @@ class AiTools(private val state: State) {
                 wings = spec.wings,
                 segments = spec.segments,
                 parts = spec.parts,
+                spreadUnit = spec.spreadUnit,
                 sortOrder = index,
             )
         }

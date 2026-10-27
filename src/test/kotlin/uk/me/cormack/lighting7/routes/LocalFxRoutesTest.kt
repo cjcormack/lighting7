@@ -70,7 +70,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
     private val quad = listOf(CueTargetDto(TargetRef.Group.TYPE, "quad"))
 
     private fun pulse(targets: List<CueTargetDto>, families: List<String>? = null) =
-        ProgrammerFxRequest(fxType = "Pulse", attribute = "dimmer", targets = targets, families = families)
+        ProgrammerFxRequest(fxType = "Wave", attribute = "dimmer", targets = targets, families = families)
 
     private fun colourCycle(targets: List<CueTargetDto>) =
         ProgrammerFxRequest(fxType = "ColourCycle", attribute = "rgbColour", targets = targets)
@@ -259,7 +259,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
         assertEquals(CODE_FX_SPLIT_LAYER_FX, toLayer.body<ErrorResponse>().code)
         assertEquals(0.5, live(layered.id).timing.cycle, "refused whole")
 
-        val manual = FxTestSupport.start(state, "Pulse", "quad", "dimmer", group = true)
+        val manual = FxTestSupport.start(state, "Wave", "quad", "dimmer", group = true)
         val toManual = client.edit(manual.id, UpdateFxRequest(cycle = 2.0, targets = fixtures("hex-0")))
         assertEquals(HttpStatusCode.Conflict, toManual.status)
         assertEquals(CODE_FX_SPLIT_NOT_LOCAL, toManual.body<ErrorResponse>().code)
@@ -381,7 +381,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         val cueId = ProgrammerRouteTestSupport.createCue(
             client, projectId, "chase",
-            adHoc = listOf(CueAdHocFxSpec(targetType = "group", targetKey = "quad", fxType = "Pulse", attribute = "dimmer")),
+            adHoc = listOf(CueAdHocFxSpec(targetType = "group", targetKey = "quad", fxType = "Wave", attribute = "dimmer")),
         )
         val include = client.post("/api/rest/programmer/include") {
             contentType(ContentType.Application.Json)
@@ -452,16 +452,22 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
         val spot = fixtures("spot-1")
 
         val colour = live(
-            client.pressed(ProgrammerFxRequest("Pulse", "uv", targets = fixtures("hex-0"), stack = true)).fxId,
+            client.pressed(ProgrammerFxRequest("Wave", "uv", targets = fixtures("hex-0"), stack = true)).fxId,
         )
         assertEquals(BlendMode.OVERRIDE to 0.5, colour.blendMode to colour.dynamics.amount, "a Pulse on UV is Colour")
 
-        val position = live(client.pressed(ProgrammerFxRequest("Circle", "position", targets = spot, stack = true)).fxId)
-        assertEquals(BlendMode.ADDITIVE to 1.0, position.blendMode to position.dynamics.amount)
+        val position = live(client.pressed(ProgrammerFxRequest("Path", "position", targets = spot, stack = true)).fxId)
+        assertEquals(BlendMode.ADDITIVE to 1.0, position.blendMode to position.dynamics.amount, "a Path's Circle stacks Around")
         assertEquals("128", position.effect.parameters["panCentre"])
         assertEquals("128", position.effect.parameters["tiltCentre"])
 
-        val beam = live(client.pressed(ProgrammerFxRequest("Pulse", "focus", targets = spot, stack = true)).fxId)
+        val line = live(
+            client.pressed(ProgrammerFxRequest("Path", "position", targets = spot, stack = true, parameters = mapOf("shape" to "LINE"))).fxId,
+        )
+        assertEquals(BlendMode.OVERRIDE to 1.0, line.blendMode to line.dynamics.amount, "a Line has no centre to stack about")
+        assertEquals(null, line.effect.parameters["panCentre"])
+
+        val beam = live(client.pressed(ProgrammerFxRequest("Wave", "focus", targets = spot, stack = true)).fxId)
         assertEquals(BlendMode.OVERRIDE to 0.5, beam.blendMode to beam.dynamics.amount)
 
         val centred = setOf("panCentre", "tiltCentre")
@@ -496,7 +502,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
         val absolute = live(
             client.pressed(
                 ProgrammerFxRequest(
-                    "Circle", "position", targets = fixtures("spot-1"), stack = true, blendMode = "OVERRIDE",
+                    "Path", "position", targets = fixtures("spot-1"), stack = true, blendMode = "OVERRIDE",
                     parameters = mapOf("panCentre" to "40"),
                 ),
             ).fxId,
@@ -558,7 +564,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun sine(targets: List<CueTargetDto>) =
-        ProgrammerFxRequest(fxType = "SineWave", attribute = "dimmer", targets = targets)
+        ProgrammerFxRequest(fxType = "Wave", attribute = "dimmer", targets = targets)
 
     /** An effect palette pressed as a layer onto [targets]; answers the instance it spawned. */
     private suspend fun pressPaletteLayer(client: HttpClient, targets: List<CueTargetDto>): FxInstance {
@@ -568,7 +574,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
                 PaletteInput(
                     name = "Chase ${engine.getActiveFx().size}",
                     fx = PaletteFxDto(
-                        fxType = "Pulse", family = "intensity", attribute = "dimmer",
+                        fxType = "Wave", family = "intensity", attribute = "dimmer",
                         cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                     ),
                 ),

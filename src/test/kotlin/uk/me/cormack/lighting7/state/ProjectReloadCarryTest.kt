@@ -102,7 +102,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
             "dimmer",
             CueAssignmentResolver.AttributeValue.Slider(150u),
         )
-        FxTestSupport.start(state, "SineWave", "hex-3", "dimmer", programmerBand = true)
+        FxTestSupport.start(state, "Wave", "hex-3", "dimmer", programmerBand = true)
         state.show.parkManager.park(0, 300, 255u)
         // A channel no fixture covers, left up by a raw write: nothing will hold it after the reload.
         mock().setValue(400, 90u)
@@ -146,14 +146,14 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
     @Test
     fun `a reload keeps the order of the Local FX on a key, a moved one included`() = runBlocking {
         LocateTestSupport.seedHex(state, projectId, "hex-1", startChannel = 1)
-        val types = listOf("SineWave", "Pulse", "CandleFlicker")
+        val types = listOf("Wave", "Flicker", "CandleFlicker")
         val started = types.map { FxTestSupport.start(state, it, "hex-1", "dimmer", programmerBand = true) }
         assertTrue(state.show.fxEngine.moveLocalFx(started.last().id, aboveId = started.first().id) is FxEngine.LocalMoveOutcome.Moved)
         fun applyOrder() = state.show.fxEngine.getActiveFx()
             .sortedWith(compareBy({ it.priority }, { it.composeOrder }, { it.id }))
             .map { it.registrationId }
         val before = applyOrder()
-        assertEquals(listOf("CandleFlicker", "SineWave", "Pulse"), before)
+        assertEquals(listOf("CandleFlicker", "Wave", "Flicker"), before)
 
         state.projectManager.switchProject(projectId, reload = true)
 

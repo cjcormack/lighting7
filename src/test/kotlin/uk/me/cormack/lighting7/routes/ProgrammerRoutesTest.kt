@@ -142,7 +142,7 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(
                 AddFxRequest(
-                    fxType = "SineWave",
+                    fxType = "Wave",
                     fixtureKey = "hex-band",
                     attribute = "dimmer",
                     programmerOwned = true,
@@ -154,7 +154,7 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(
                 AddFxRequest(
-                    fxType = "SineWave",
+                    fxType = "Wave",
                     fixtureKey = "hex-band",
                     attribute = "strobe",
                 )

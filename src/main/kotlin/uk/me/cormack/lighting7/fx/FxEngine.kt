@@ -1011,7 +1011,21 @@ class FxEngine(
      * One head a running effect paints, as its tick pass spreads it (apply-model plan §3.4): the
      * offset, list size and context the pass hands the phase function and the effect for it.
      */
-    data class PaintedHead(val key: String, val offset: Double, val groupSize: Int, val context: FxContext)
+    data class PaintedHead(
+        val key: String,
+        val offset: Double,
+        val groupSize: Int,
+        val context: FxContext,
+        /** Under [ElementMode.WHOLE], the index of the fixture the head belongs to; null otherwise. */
+        val unit: Int? = null,
+    )
+
+    /**
+     * The most slots any list [effect] spreads over has after its shape ([FxContext.numDistinctSlots]),
+     * at least 1: what a `STEP` spread is turned into a `CYCLE` one over ([SpreadShaping.cycleSpread]).
+     */
+    fun spreadSlots(effect: FxInstance): Int =
+        paintedHeads(effect).maxOfOrNull { it.context.numDistinctSlots }?.coerceAtLeast(1) ?: 1
 
     /**
      * The heads [effect] paints, in its order, each as the tick pass spreads it under its current
@@ -1023,6 +1037,10 @@ class FxEngine(
         val expansion = expansionFor(effect, dyn)
         fun spread(keys: List<String>, plan: DistributionPlan): List<PaintedHead> =
             keys.mapIndexed { i, key -> PaintedHead(key, plan.offsets[i], keys.size, plan.contexts[i]) }
+        fun whole(plan: DistributionPlan): List<PaintedHead> =
+            expansion.whole.flatMapIndexed { i, keys ->
+                keys.map { key -> PaintedHead(key, plan.offsets[i], expansion.whole.size, plan.contexts[i], unit = i) }
+            }
         return when (expansion.kind) {
             FxTargetExpansion.Kind.NONE -> emptyList()
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
@@ -1032,7 +1050,10 @@ class FxEngine(
                     else PaintedHead(effect.target.targetKey, carry.offset, carry.groupSize, carry.context),
                 )
             }
-            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> spread(expansion.flat, plansFor(effect, expansion, dyn).flat)
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> {
+                val plans = plansFor(effect, expansion, dyn)
+                if (dyn.elementMode == ElementMode.WHOLE) whole(plans.whole) else spread(expansion.flat, plans.flat)
+            }
             FxTargetExpansion.Kind.GROUP_MEMBERS -> {
                 val plan = plansFor(effect, expansion, dyn).members
                 expansion.members.mapIndexedNotNull { i, member ->
@@ -1044,6 +1065,7 @@ class FxEngine(
             FxTargetExpansion.Kind.GROUP_ELEMENTS -> {
                 val plans = plansFor(effect, expansion, dyn)
                 when (dyn.elementMode) {
+                    ElementMode.WHOLE -> whole(plans.whole)
                     ElementMode.PER_FIXTURE -> expansion.perFixture.flatMapIndexed { i, keys -> spread(keys, plans.perFixture[i]) }
                     ElementMode.FLAT -> spread(expansion.flat, plans.flat)
                 }
@@ -1062,8 +1084,13 @@ class FxEngine(
      * Update reads to retire the child the copies now stand for. A Look Include's is not kept: a
      * Look's effect is written back whole.
      */
-    fun headCopies(effect: FxInstance, drop: Set<String> = emptySet()): List<FxInstance> =
-        paintedHeads(effect).filter { it.key !in drop }.map { head ->
+    fun headCopies(effect: FxInstance, drop: Set<String> = emptySet()): List<FxInstance> {
+        // A stateful effect under WHOLE steps once a fixture; its copies share that step, and a copy
+        // split again keeps the one it has.
+        val steps = HashMap<Int, SharedStep>()
+        fun stepFor(head: PaintedHead): SharedStep? = effect.splitMember?.step
+            ?: if (effect.effect is StatefulFx) head.unit?.let { steps.getOrPut(it) { SharedStep() } } else null
+        return paintedHeads(effect).filter { it.key !in drop }.map { head ->
             val target = FxTargetFactory.forFixture(
                 head.key, effect.target.attribute, effect.effect.outputType,
                 runCatching { fixtures.untypedGroupableFixture(head.key) }.getOrNull(),
@@ -1085,10 +1112,11 @@ class FxEngine(
                 seconds = effect.seconds
                 speedMasterUuid = effect.speedMasterUuid
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid
-                splitMember = SplitMember(head.groupSize, head.offset, head.context)
+                splitMember = SplitMember(head.groupSize, head.offset, head.context, stepFor(head))
                 takeRunningStateFrom(effect)
             }
         }
+    }
 
     /** What a copy takes from its parent each time it is built or swapped in ([headCopies]). */
     private fun FxInstance.takeRunningStateFrom(parent: FxInstance) {
@@ -1316,6 +1344,8 @@ class FxEngine(
         newWings: Int? = null,
         newSegments: Int? = null,
         newParts: Int? = null,
+        /** What [newSpread] counts (fx-settings plan D6); null = keep. A dynamics field. */
+        newSpreadUnit: SpreadUnit? = null,
     ): FxInstance? = updateFx(
         fxId,
         FxEdit(
@@ -1326,6 +1356,7 @@ class FxEngine(
             newTimingSource = newTimingSource, replaceMasters = replaceMasters, newSeconds = newSeconds,
             newAmount = newAmount, newDirection = newDirection, newRuns = newRuns, clearRuns = clearRuns,
             newSpread = newSpread, newWings = newWings, newSegments = newSegments, newParts = newParts,
+            newSpreadUnit = newSpreadUnit,
         ),
     )
 
@@ -1353,11 +1384,12 @@ class FxEngine(
         val newWings: Int? = null,
         val newSegments: Int? = null,
         val newParts: Int? = null,
+        val newSpreadUnit: SpreadUnit? = null,
     ) {
         val touchesDynamics: Boolean
             get() = newPhaseOffset != null || newOrder != null || newElementMode != null || newElementFilter != null ||
                 newTimingMode != null || newAmount != null || newDirection != null || newRuns != null || clearRuns ||
-                newSpread != null || newWings != null || newSegments != null || newParts != null
+                newSpread != null || newWings != null || newSegments != null || newParts != null || newSpreadUnit != null
 
         /** [dyn] with this edit's dynamics fields. */
         fun applyTo(dyn: FxDynamics): FxDynamics = dyn.copy(
@@ -1373,6 +1405,7 @@ class FxEngine(
             wings = newWings ?: dyn.wings,
             segments = newSegments ?: dyn.segments,
             parts = newParts ?: dyn.parts,
+            spreadUnit = newSpreadUnit ?: dyn.spreadUnit,
         )
 
         /** Whether this edit moves [existing]'s Runs, which then count again from the next pass. */
@@ -2324,17 +2357,29 @@ class FxEngine(
                 // An N-shot outside its runs holds what is underneath (D9).
                 if (FxInstance.isHolding(fxPhase)) return
                 // A copy split off a spread effect is the member it was (apply-model plan §3.4).
-                val context = effect.splitMember?.context ?: FxContext.SINGLE
-                val output = calculateFxOutput(effect, fixtureKey, tick, deltaMs, step, fxPhase, context)
+                val carry = effect.splitMember
+                val context = carry?.context ?: FxContext.SINGLE
+                val calculate = { calculateFxOutput(effect, fixtureKey, tick, deltaMs, step, fxPhase, context) }
+                val output = carry?.step?.outputFor(effect.effect, tick, calculate) ?: calculate()
                 if (!isSuppressed(suppression, blind, fixtureKey, effect.target.attribute, effect)) {
                     effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, weightOf(effect, dyn))
                 }
             }
 
-            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> processElementKeys(
-                tick, effect, dyn, fixturesWithTx, expansion.flat,
-                plansFor(effect, expansion, dyn).flat, deltaMs, step, suppression, blind, phases,
-            )
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> {
+                val plans = plansFor(effect, expansion, dyn)
+                if (dyn.elementMode == ElementMode.WHOLE) {
+                    processWholeUnits(
+                        tick, effect, dyn, fixturesWithTx, expansion.whole, plans.whole,
+                        deltaMs, step, suppression, blind, phases,
+                    )
+                } else {
+                    processElementKeys(
+                        tick, effect, dyn, fixturesWithTx, expansion.flat, plans.flat,
+                        deltaMs, step, suppression, blind, phases,
+                    )
+                }
+            }
 
             // Neither parent nor elements have the property, or the fixture is gone:
             // silently skip. The group kinds cannot reach this function.
@@ -2390,6 +2435,41 @@ class FxEngine(
     }
 
     /**
+     * Process an effect under [ElementMode.WHOLE]: each of [units] is one fixture, spread by
+     * [plan] over the units, and its output is calculated once and written to every key it paints.
+     */
+    private fun processWholeUnits(
+        tick: MasterClock.ClockTick,
+        effect: FxInstance,
+        dyn: FxDynamics,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        units: List<List<String>>,
+        plan: DistributionPlan,
+        deltaMs: Long,
+        step: Boolean,
+        suppression: Map<String, Set<String>>,
+        blind: Boolean,
+        phases: PhaseSource,
+    ) {
+        val weight = weightOf(effect, dyn)
+        var lastMemberPhase = Double.NaN
+        for ((unitIdx, keys) in units.withIndex()) {
+            if (keys.isEmpty()) continue
+            val memberPhase = phases.member(effect, tick, units.size, dyn, plan.offsets[unitIdx])
+            if (FxInstance.isHolding(memberPhase)) continue
+            lastMemberPhase = memberPhase
+            // A stateful effect keeps its state under the unit's first key, so its elements share it.
+            val output = calculateFxOutput(effect, keys.first(), tick, deltaMs, step, memberPhase, plan.contexts[unitIdx])
+            for (key in keys) {
+                if (!isSuppressed(suppression, blind, key, effect.target.attribute, effect)) {
+                    effect.target.applyValue(fixturesWithTx, key, output, effect.blendMode, weight)
+                }
+            }
+        }
+        if (!lastMemberPhase.isNaN()) effect.lastPhase = lastMemberPhase
+    }
+
+    /**
      * Process an effect targeting a group or a selection - expands to all members with distribution.
      *
      * If members have the target property directly, applies the effect to each member
@@ -2401,6 +2481,7 @@ class FxEngine(
      *   its own elements. All fixtures look the same.
      * - [ElementMode.FLAT]: All elements across all fixtures form one flat list.
      *   Distribution runs across the entire set.
+     * - [ElementMode.WHOLE]: Each fixture is one unit and its elements share its output.
      */
     private fun processGroupFx(
         tick: MasterClock.ClockTick,
@@ -2440,6 +2521,10 @@ class FxEngine(
             FxTargetExpansion.Kind.GROUP_ELEMENTS -> {
                 val plans = plansFor(effect, expansion, dyn)
                 when (dyn.elementMode) {
+                    ElementMode.WHOLE -> processWholeUnits(
+                        tick, effect, dyn, fixturesWithTx, expansion.whole, plans.whole,
+                        deltaMs, step, suppression, blind, phases,
+                    )
                     // Each fixture gets the effect independently across its own elements, so its
                     // own list size is the group size the phase calculation sees.
                     ElementMode.PER_FIXTURE ->
@@ -2560,7 +2645,7 @@ class FxEngine(
      * `elementFilter` is part of the validity check rather than an invalidation hook on
      * `updateFx`: it is a plain enum, so the check is one identity compare on a path that
      * already reads the instance, and there is no mutation site left to forget. `elementMode`
-     * is not checked — both shapes it selects between are built up front. `order`
+     * is not checked — every shape it selects between is built up front. `order`
      * is not either: it moves the offsets, not which keys resolve. `target` is a `val`.
      *
      * The filter comes from [dyn], the caller's per-pass snapshot, so the expansion checked
@@ -2586,12 +2671,13 @@ class FxEngine(
     /** [effect]'s cached plans when they were built from [expansion] under [dyn]'s Order and shape. */
     private fun validPlans(effect: FxInstance, expansion: FxTargetExpansion, dyn: FxDynamics): FxDistributionPlans? {
         val cached = effect.distributionPlans ?: return null
-        // The shape's four fields compared one by one rather than through `dyn.spreadShape`, which
+        // The shape's fields compared one by one rather than through `dyn.spreadShape`, which
         // would allocate on every pass for a cache hit.
         return cached.takeIf {
             it.expansion === expansion && it.order == dyn.order &&
                 it.shape.spread == dyn.spread && it.shape.wings == dyn.wings &&
-                it.shape.segments == dyn.segments && it.shape.parts == dyn.parts
+                it.shape.segments == dyn.segments && it.shape.parts == dyn.parts &&
+                it.shape.unit == dyn.spreadUnit && it.steps == effect.planSteps(dyn)
         }
     }
 
@@ -2616,7 +2702,8 @@ class FxEngine(
         dyn: FxDynamics,
     ): FxDistributionPlans {
         validPlans(effect, expansion, dyn)?.let { return it }
-        return FxDistributionPlans.build(expansion, dyn.order, dyn.spreadShape).also { effect.distributionPlans = it }
+        return FxDistributionPlans.build(expansion, dyn.order, dyn.spreadShape, effect.planSteps(dyn))
+            .also { effect.distributionPlans = it }
     }
 
     /**
@@ -2664,7 +2751,7 @@ class FxEngine(
 
         override fun plans(effect: FxInstance, expansion: FxTargetExpansion, dynamics: FxDynamics): FxDistributionPlans =
             validPlans(effect, expansion, dynamics)
-                ?: FxDistributionPlans.build(expansion, dynamics.order, dynamics.spreadShape)
+                ?: FxDistributionPlans.build(expansion, dynamics.order, dynamics.spreadShape, effect.planSteps(dynamics))
 
         // A staging transaction that is never applied: the only way to read a head's values.
         override fun current(target: FxTarget, key: String): FxOutput? = try {
@@ -2786,8 +2873,8 @@ class FxEngine(
                 elementFilter = filter,
                 kind = FxTargetExpansion.Kind.GROUP_ELEMENTS,
                 coverageKeys = coverage,
-                // FLAT filters across the whole set, on the global flat index; PER_FIXTURE
-                // filters within each fixture, on that fixture's own element count. Both are
+                // FLAT filters across the whole set, on the global flat index; PER_FIXTURE and WHOLE
+                // filters within each fixture, on that fixture's own element count. All are
                 // built here so `elementMode` stays out of the cache identity.
                 flat = applyFilter(coverage),
                 perFixture = perMemberKeys.map { applyFilter(it) },

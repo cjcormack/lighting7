@@ -4,12 +4,16 @@ import {
   PALETTE_FX_FAMILIES,
   familyForCategory,
   attributeFamilyForFxFamily,
+  BEAM_FX_ATTRIBUTES,
+  fxAttributeFamily,
+  fxFamilyOnAttribute,
   familySlug,
   fixturesSupportingFamily,
   parseFamilySlug,
   parseAttributeMask,
   serializeAttributeMask,
 } from './attributeFamily'
+import { PALETTE_ATTRIBUTES } from './paletteIntent'
 import { SPEED_MASTER_FAMILIES } from './speedMasterModel'
 
 describe('attribute family slugs', () => {
@@ -160,5 +164,25 @@ describe('fixturesSupportingFamily', () => {
 
   it('answers 0 rather than throwing while the patch is still loading', () => {
     expect(fixturesSupportingFamily(undefined, 'COLOUR')).toBe(0)
+  })
+})
+
+describe('fxAttributeFamily (fx-settings plan D5)', () => {
+  it('is Beam on a beam attribute, else the library family', () => {
+    expect(fxAttributeFamily('intensity', 'zoom')).toBe('BEAM')
+    expect(fxAttributeFamily('intensity', 'focus')).toBe('BEAM')
+    expect(fxAttributeFamily('intensity', 'dimmer')).toBe('INTENSITY')
+    expect(fxAttributeFamily('intensity', 'uv')).toBe('INTENSITY')
+    expect(fxAttributeFamily('intensity', null)).toBe('INTENSITY')
+    expect(fxAttributeFamily('position', 'position')).toBe('POSITION')
+    expect(fxAttributeFamily('steps', 'zoom')).toBeNull()
+    expect(fxFamilyOnAttribute('intensity', 'iris')).toBe('beam')
+    expect(fxFamilyOnAttribute('intensity', 'dimmer')).toBe('intensity')
+  })
+
+  it('reads the beam attributes as the palette vocabulary files them', () => {
+    expect([...BEAM_FX_ATTRIBUTES].sort()).toEqual(
+      PALETTE_ATTRIBUTES.filter((p) => p.family === 'BEAM').map((p) => p.attribute).sort(),
+    )
   })
 })

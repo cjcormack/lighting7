@@ -26,9 +26,11 @@ import {
   ATTRIBUTE_FAMILIES,
   FAMILY_LABELS,
   attributeFamilyForFxFamily,
+  fxAttributeFamily,
+  fxFamilyOnAttribute,
   type AttributeFamily,
 } from '@/lib/attributeFamily'
-import { describePaletteIntent, type PaletteIntent } from '@/lib/paletteIntent'
+import { describePaletteIntent, paletteAttributeFor, type PaletteIntent } from '@/lib/paletteIntent'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import {
   findPanAttribute,
@@ -53,9 +55,11 @@ import {
   type PaletteSummary,
 } from '@/api/palettesApi'
 import { formatError } from '@/lib/formatError'
+import { NEW_FX_ELEMENT_MODE } from '@/components/fx/fxConstants'
 import { FxFields } from '@/components/fx/FxFields'
 import { startingSpec, paletteDraftOf, withPaletteDraft, type FxDraft, type FxScope } from '@/components/fx/fxEditorModel'
 import { swappedTiming } from '@/lib/fxTiming'
+import { offeredFx } from '@/lib/fxTargetAttributes'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { findFxEntry } from '@/components/busking/buskingTypes'
 import { useFxLibraryQuery, type FxLibraryEntry } from '@/store/fixtureFx'
@@ -70,6 +74,7 @@ import {
   withIntent,
   type PaletteValues,
 } from './familyControls/paletteRows'
+import { newFxSpread } from '@/lib/spreadShape'
 
 /**
  * Authoring a template: **family first, then Holds, then one control native to both.**
@@ -250,7 +255,7 @@ export function PaletteEditor({
         // pinned at 128), so a Circle pad pressed after a position pad orbits it; anything else
         // starts on Override. The blend is not carried from the last effect — it was the hard-coded
         // Override that made every Circle template circle 128/128.
-        const spec = startingSpec(entry)
+        const spec = startingSpec(entry, { attribute: extra?.attribute })
         // Seconds (D7) carries within one timing source like the division it qualifies.
         const seconds = sameTiming && prev?.seconds === true
         // A step effect's start is the controls' (`FxStart`): Palette Steps is filed under this
@@ -264,13 +269,14 @@ export function PaletteEditor({
           blendMode: spec.blendMode,
           order: prev?.order ?? 'NORMAL',
           phaseOffset: prev?.phaseOffset ?? 0,
-          elementMode: null,
+          // A swap keeps the palette's mode; only its first FX starts on Fixtures.
+          elementMode: prev != null ? (prev.elementMode ?? null) : NEW_FX_ELEMENT_MODE,
           elementFilter: null,
           timing: null,
           parameters: { ...spec.parameters, ...extra?.parameters },
           // Stamped at authoring time, not resolved later: `null` still means master 1 everywhere.
           // An effect on Seconds follows none.
-          speedMasterUuid: seconds ? null : masterForCategory(category),
+          speedMasterUuid: seconds ? null : masterForCategory(fxFamilyOnAttribute(category, extra?.attribute)),
           rateSpeedMasterUuid: seconds || !sameTiming ? null : (prev?.rateSpeedMasterUuid ?? null),
           seconds,
           // Amount and runs carry over like the phase: each means the same thing whichever effect is
@@ -283,6 +289,16 @@ export function PaletteEditor({
           ...(prev?.wings != null ? { wings: prev.wings } : {}),
           ...(prev?.segments != null ? { segments: prev.segments } : {}),
           ...(prev?.parts != null ? { parts: prev.parts } : {}),
+          // What the spread counts (fx-settings plan D6): a new step FX starts one step behind (D7), a
+          // swap keeps STEP onto an FX that steps and falls back to the cycle's own spread onto one that
+          // does not — a palette has no heads to keep the offsets of.
+          ...(prev == null
+            ? newFxSpread(entry.stepsFrom)
+            : prev.spreadUnit === 'STEP'
+              ? entry.stepsFrom
+                ? { spreadUnit: 'STEP' as const }
+                : { spreadUnit: 'CYCLE' as const, spread: 1 }
+              : {}),
           // The draft's own reading of its kind, until the desk answers with the registry's: what
           // tells a wall-clock effect's Seconds (no rate master) from a beat effect on a master.
           timingSource: entry.timingSource ?? 'BEAT',
@@ -583,11 +599,16 @@ function FxControls({
   // that *Save as template…* would happily bank under this very family.
   const offered = useMemo(
     () =>
-      (library ?? []).filter((e) =>
-        isPaletteSteps(e.name) ? stepOffer != null : attributeFamilyForFxFamily(drivenCategoryOf(e)) === family,
+      // The FX a palette already holds stays in its own list, a legacy one included.
+      [...offeredFx(library ?? []), ...(entry?.legacy ? [entry] : [])].filter((e) =>
+        isPaletteSteps(e.name)
+          ? stepOffer != null
+          : attributeFamilyForFxFamily(drivenCategoryOf(e)) === family || attributesInFamily(e, family).length > 0,
       ),
-    [library, family, stepOffer],
+    [library, family, stepOffer, entry],
   )
+  // A Wave in a Beam palette names the beam attribute it drives (fx-settings plan D5).
+  const beamAttributes = entry != null ? attributesInFamily(entry, family) : []
   const fxDraft = useMemo(() => (draft == null ? null : paletteDraftOf(draft)), [draft])
   const slotSetting = isSlotSteps(draft?.fxType) ? rigSettings.find((p) => p.name === draft?.attribute) : undefined
 
@@ -603,6 +624,8 @@ function FxControls({
       const setting = rigSettings.find((p) => p.category === 'gobo') ?? rigSettings[0]
       if (setting != null) return { attribute: setting.name, parameters: { slots: seedSlots(setting) } }
     }
+    const crossing = attributesInFamily(chosen, family)[0]
+    if (crossing != null) return { attribute: crossing }
     return undefined
   }
 
@@ -672,6 +695,26 @@ function FxControls({
               </p>
             </div>
           )}
+          {beamAttributes.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <Label>Attribute</Label>
+              <Select
+                value={draft.attribute ?? ''}
+                onValueChange={(name) => onAttribute(name, entry.attributeDefaults?.[name])}
+              >
+                <SelectTrigger aria-label="Attribute">
+                  <SelectValue placeholder="Choose the attribute it drives" />
+                </SelectTrigger>
+                <SelectContent>
+                  {beamAttributes.map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {paletteAttributeFor(name)?.label ?? name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <FxFields
             entry={entry}
             timingSource={draft.timingSource}
@@ -698,10 +741,21 @@ function FxControls({
 }
 
 /**
- * The Spread section (Order, Spread %, Wings, Segments, Parts) over eight notional heads — no
- * `headCount`, since a palette has no target — and nothing else that needs a head.
+ * The attributes an FX filed under another family drives in [family] — Wave's zoom, iris, frost and
+ * focus in a Beam palette (fx-settings plan D5) — or none where its own family is [family].
  */
-const PALETTE_SCOPE: FxScope = { heads: true, elementMode: false, elementFilter: false, timing: false }
+function attributesInFamily(entry: FxLibraryEntry, family: AttributeFamily): string[] {
+  const category = drivenCategoryOf(entry)
+  if (attributeFamilyForFxFamily(category) === family) return []
+  return entry.compatibleAttributes.filter((a) => fxAttributeFamily(category, a) === family)
+}
+
+/**
+ * *Across the heads* (the patterns, Each head later by, Segments, Parts, Wings) over eight notional heads — no
+ * `headCount`, since a palette has no target — and *Over*, which a pad's press reads on whatever
+ * heads it lands; nothing else that needs a head.
+ */
+const PALETTE_SCOPE: FxScope = { heads: true, elementMode: true, elementFilter: false, timing: false }
 
 /**
  * Where a step effect starts on an effect palette (effects plan §3.6): Palette Steps under this
@@ -780,6 +834,7 @@ function fxKey(effect: PaletteFx | null): string {
     effect.wings ?? 1,
     effect.segments ?? 1,
     effect.parts ?? 0,
+    effect.spreadUnit ?? 'CYCLE',
     Object.entries(effect.parameters).sort(([a], [b]) => a.localeCompare(b)),
   ])
 }

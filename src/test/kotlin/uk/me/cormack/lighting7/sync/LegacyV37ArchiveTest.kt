@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.assertExportsEqual
+import uk.me.cormack.lighting7.testsupport.consolidatedRecord
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -91,7 +92,8 @@ class LegacyV37ArchiveTest {
         ProjectExporter(state).export(imported, exported)
 
         // The frozen archive put into today's words by hand: each folder's records through the
-        // importer's own map, the version today's and `fxLibrary` gone, since v38 implies it.
+        // importer's own map and its level waves as Wave, the version today's and `fxLibrary` gone,
+        // since v38 implies it.
         val expected = scratch.resolve("expected")
         Files.walk(frozen).use { files -> files.toList() }.filter(Files::isRegularFile).forEach { file ->
             val rel = frozen.relativize(file)
@@ -109,7 +111,8 @@ class LegacyV37ArchiveTest {
                     val project = canonicalDecode(ProjectJson.serializer(), Files.readString(file))
                     Files.writeString(target, canonicalEncode(ProjectJson.serializer(), project.copy(fxLibrary = null)))
                 }
-                file.name.endsWith(".json") -> Files.writeString(target, LegacyNames.record(LegacyNames.folder(folder), Files.readString(file)))
+                file.name.endsWith(".json") ->
+                    Files.writeString(target, consolidatedRecord(LegacyNames.record(LegacyNames.folder(folder), Files.readString(file))))
                 else -> Files.copy(file, target)
             }
         }

@@ -967,6 +967,7 @@ internal fun CueAdHocFxDto.toLookFxSpec() = LookFxSpec(
     wings = wings,
     segments = segments,
     parts = parts,
+    spreadUnit = spreadUnit,
 )
 
 /**

@@ -230,10 +230,14 @@ once used (`1/4` for one beat) are gone (`FU-FE-FX-SPEED-SPELLING`, settled by S
 
 ## FX types
 
-Since the terminology plan's session 3 each id is its name without the spaces (D10–D13): `Ramp`,
-`DimmerStrobe`, `ColourWave` and `ZoomWave` were `Triangle`, `Strobe`, `ColourPulse` and `ZoomBreathe`,
-and `Breathe` is gone, a stored one now Sine Wave a quarter-cycle on. `sync/LegacyNames.kt` reads the
-old names (§"Old names" in `sync-engineering.md`).
+Since the terminology plan's session 3 each id is its name without the spaces (D10–D13): `ColourWave`
+was `ColourPulse`, and `Breathe` is gone, a stored one now a Sine Wave a quarter-cycle on. Since the
+fx-settings plan's session 2, **Wave** is the eleven level waves (D2): Sine Wave, Ramp Up, Ramp Down,
+Ramp, Square Wave, Pulse, Dimmer Strobe, Zoom Wave, Iris Pulse, Frost Pulse and Focus Pull, which were
+`Triangle`, `Strobe` and `ZoomBreathe` before that; since its session 3, **Path** is the six
+movements and Colour Cycle draws Colour Fade's and Colour Wave's colours, which stay registered as
+**legacy** (§"Path, Colour Cycle and the renamed parameters"). That leaves twelve built-ins to offer.
+`sync/LegacyNames.kt` reads every old name (§"Old names" in `sync-engineering.md`, and §"Wave" below).
 
 ### Intensity FX (`FxOutput.Slider`)
 
@@ -241,17 +245,11 @@ FX that produce single 0-255 values for dimmer/slider attributes.
 
 | FX | Description | Parameters |
 |----|-------------|------------|
-| `SineWave` | Smooth oscillation | `min`, `max` |
-| `RampUp` | Sawtooth up | `min`, `max`, `curve` |
-| `RampDown` | Sawtooth down | `min`, `max`, `curve` |
-| `Ramp` | Up then down | `min`, `max`, `curve` |
-| `Pulse` | Attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
-| `SquareWave` | On/off alternation | `min`, `max`, `dutyCycle` |
-| `DimmerStrobe` | Quick flash on the dimmer | `offValue`, `onValue`, `onRatio` |
-| `Flicker` | Random variation | `min`, `max` |
-| `CandleFlicker` | Organic candle or fire flicker by random walk; stateful, on the wall clock | `baseLevel`, `min`, `max`, `smoothing` |
-| `FluorescentFlicker` | A tube striking: a burst of on/off flicker, then on; stateful, on the wall clock | `onLevel`, `offLevel`, `flickerDurationMs`, `flickerSpeed` |
-| `LightningStrike` | A flash that decays | `maxBrightness`, `minBrightness` |
+| `Wave` | A level wave of one `shape`: Sine, Ramp up, Ramp down, Triangle, Square or Pulse; on the dimmer, UV and the beam attributes (§"Wave") | `shape`, `low`, `high`, `width` (Square), `widthUnit` (Square and Pulse: Width, or One head), `attack` and `hold` (Pulse), `curve` (the ramps, Triangle and Pulse) |
+| `Flicker` | Random variation | `low`, `high` |
+| `CandleFlicker` | Organic candle or fire flicker by random walk; stateful, on the wall clock | `base`, `low`, `high`, `settle` |
+| `FluorescentFlicker` | A tube striking: a burst of on/off flicker, then on; stateful, on the wall clock | `high`, `low`, `burstMs`, `speed` |
+| `LightningStrike` | A flash that decays | `high`, `low` |
 
 ### Colour FX (`FxOutput.Colour`)
 
@@ -259,11 +257,11 @@ FX that produce RGB colour values.
 
 | FX | Description | Parameters |
 |----|-------------|------------|
-| `ColourCycle` | Step through a list of literal colours | `colours`, `fadeRatio` |
+| `ColourCycle` | Step through a list of literal colours, each giving way to the next by `between`: Cut, Fade (over `fade` of its step) or Smooth (a cosine across it) | `colours`, `between`, `fade` |
 | `RainbowCycle` | Hue rotation | `saturation`, `brightness` |
-| `ColourStrobe` | Flash colour | `onColour`, `offColour`, `onRatio` |
-| `ColourWave` | Sine between two | `colourA`, `colourB` |
-| `ColourFade` | Linear fade, bouncing by default | `fromColour`, `toColour` |
+| `ColourStrobe` | Flash colour | `onColour`, `offColour`, `width` |
+| `ColourWave` | Sine between two — **legacy**: runs and edits stored ones, offered nowhere | `colourA`, `colourB` |
+| `ColourFade` | Linear fade, bouncing by default — **legacy**, likewise | `fromColour`, `toColour` |
 | `ColourFlicker` | Random variation | `baseColour`, `variation` |
 
 Colour Cycle takes **literal colours only** (terminology plan D14): a `colourList` parameter — its
@@ -279,28 +277,152 @@ FX that produce pan/tilt values for moving heads.
 
 | FX | Description | Parameters |
 |----|-------------|------------|
-| `Circle` | Circular movement | `panCentre`, `tiltCentre`, `panRadius`, `tiltRadius` |
-| `Figure8` | Figure-8 pattern | `panCentre`, `tiltCentre`, `panRadius`, `tiltRadius` |
-| `Sweep` | Linear movement, bouncing by default | `startPan`, `startTilt`, `endPan`, `endTilt`, `curve` |
-| `PanSweep` | Horizontal sweep, bouncing by default | `startPan`, `endPan`, `tilt`, `curve` |
-| `TiltSweep` | Vertical sweep, bouncing by default | `startTilt`, `endTilt`, `pan`, `curve` |
-| `RandomPosition` | Random movement | `panCentre`, `tiltCentre`, `panRange`, `tiltRange` |
+| `Path` | A movement of one `shape`: Circle, Figure 8, Random about a centre, or a Line between two ends (§"Path, Colour Cycle and the renamed parameters") | `shape`; `panCentre`, `tiltCentre`, `panSize`, `tiltSize` (Circle, Figure 8, Random); `startPan`, `startTilt`, `endPan`, `endTilt`, `curve` (Line) |
+
+### Wave (fx-settings plan session 2)
+
+One FX for the level waves (D2), `dimmer/Wave.fx.kts`, family `intensity`, compatible with `dimmer`,
+`uv`, `zoom`, `iris`, `frost` and `focus`. Its `shape` is a `choice` — `SINE`, `RAMP_UP`, `RAMP_DOWN`,
+`TRIANGLE`, `SQUARE`, `PULSE` — and each shape is the old FX's own maths, line for line, so a stored
+FX moved onto Wave runs as it did (`LegacyEquivalenceTest`, below). `low` and `high` are its levels
+(`low` above `high` runs the wave upside down, as Focus Pull's `start` above `end` did); `width` is a
+Square's share of the cycle high, `attack` and `hold` a Pulse's, `curve` the ramps', Triangle's and a
+Pulse's easing, each shown only for its shapes (`shownWhen`). The curve's default is `LINEAR`, which
+Pulse's was not (`QUAD_OUT`): a stored Pulse is written with its curve, and the presets name theirs.
+
+**Width: One head** (D8, session 4). `widthUnit`, a `choice` of `RATIO` (*Width*, the default) and
+`HEAD` (*One head*), shown for Square and Pulse: under `HEAD` a Square is high for `1 /
+numDistinctSlots` of the cycle and a Pulse plays its attack, hold and release within that share and
+rests low for the rest, so with the heads spread over the cycle exactly one is on at a time whatever
+the selection (grandMA3's Adaptive Width). It reads the context the FX already gets — the slots left
+after Segments, Wings and Parts — so it is a parameter, not an engine field; on one head it is on the
+whole cycle. Its preset *Chase* (Square, `HEAD`) sits with *Strobe*.
+
+**On an attribute.** The frontmatter's `attributeDefaults` are the parameters a Wave on that attribute
+starts with where its own name none — `zoom` and `focus` 64–192, `iris` and `frost` 0–160, the old
+beam FX's ranges. `createFxWithPalettes` lays them under the parameters on every spawn that names
+its attribute (`withAttributeDefaults`, given the attribute by `FxSpawner`, `POST /fx/add`, `PUT
+/fx/{id}`, the group route and the preview), so a Wave stored on zoom without levels runs at 64–192
+wherever the desk starts it; the picker and the palette editor write them out when they start one. A
+script's `effect()` builds the FX before it knows the attribute, so a script's Wave on zoom runs at its
+own `low` and `high` (an old `effect("ZoomWave")` still gets 64–192, through `runnableFx`). **Its family follows the
+attribute** (D5): `fxAttributeFamily` (`fx/AttributeMask.kt`) is Beam on a beam attribute, else the
+library family, so a Wave on zoom routes to the Beam speed master (`familyMasterUuidFor`, which now
+takes the attribute), banks an FX palette under Beam, and counts as Beam in a Look's families and the
+Timeline, while a Wave on `dimmer` or `uv` stays Intensity, as Sine Wave on UV always was. A stored
+FX keeps its library family, `intensity` — Record files a Wave so too (`recordedFxFamily`) — and the
+family is read over it. `lib/attributeFamily.ts`'s `fxAttributeFamily` is the client's twin: the
+picker lists the bare Wave under Beam on a head's beam attribute, the FX editor asks a Wave on one no
+*Replace it · Within it* and draws its `low` and `high` (the pair its frontmatter declares) as the
+graph's level handles only where it is a level FX, and *Save as palette…* keeps the beam attribute a
+running Wave drives. A project FX definition may not take the id `Wave` (`retiredIdProblem`,
+`registerFx`), which would take the place of every migrated level wave in its project.
+
+**Presets** (D4) keep the familiar names in the picker: frontmatter `presets`, each a `name`, an
+`attribute`, `parameters` over the FX's defaults and, where they differ from the FX's, a `cycle` and
+`direction`. Wave's are *Strobe* (Square at 10 %, on the dimmer), *Chase* (Square on for one head), *Zoom Wave*, *Iris Pulse*, *Frost
+Pulse* and *Focus Pull* (Ramp up, `SINE_IN_OUT`, bouncing at half a bar). The library answers them
+(`FxTypeInfo.presets`, `FxPreset`), `describe_rig` lists them beside each FX's attributes, and the picker draws each under the
+family its attribute gives, on a head that has the attribute (`FxPicker`); a tap starts Wave with the
+preset's parameters, cycle and Direction, and a tap on another preset of the running FX swaps its
+parameters in place. A preset is no stored thing: the FX it starts is a Wave.
+
+```
+attributeDefaults:
+  - attribute: zoom
+    parameters: {low: 64, high: 192}
+presets:
+  - name: Focus Pull
+    attribute: focus
+    parameters: {shape: RAMP_UP, low: 64, high: 192, curve: SINE_IN_OUT}
+    cycle: 2.0
+    direction: BOUNCE
+```
+
+**The old ids** (D3). `LegacyNames.consolidatedParameters` is each old FX as Wave: its shape, and every
+parameter it declared under Wave's name at the value its script read — absent or blank at its old
+default, a level clamped as `TypedParams.ubyte` reads one, an unknown curve `LINEAR` — and a beam FX
+that named no attribute the one it drove. Database step 7 (`state/FxConsolidationMigration.kt`) and
+the importer store that (`consolidateFx`); a script's `effect("SineWave", "min" to "40")` and MCP's
+FX tools run it (`runnableFx`, `asToday`, which also start an old Focus Pull at its half-bar Bounce);
+every other write boundary refuses an old id, naming its shape (`writeProblem`). The registry does
+not resolve one, so a script or FX definition that looks an old id up — `fxRegistry.getRegistration
+("Pulse")`, the way a definition builds on a built-in — finds nothing; step 7 names each stored script
+and definition that quotes an old id outside `effect(…)`, and any definition with the id `Wave`, in a
+warning, and rewrites none. The old scripts live
+on as test resources, `src/test/resources/fx/legacy/`, and `LegacyEquivalenceTest` runs each beside
+Wave over every head's phase — the clock at 1/96 of a cycle, a spread over four heads, each
+Direction on an even and an odd cycle — and a grid of its parameters, blank and unparsable ones
+included, and finds the same output exactly. No level wave failed, so none stays registered as legacy
+(P3; two colour FX do, §"Path, Colour Cycle and the renamed parameters"). One thing moves, and the log says so by owner: a beam wave stored with no attribute (a Beam FX
+palette the UI made) ran on a group only where every head had its attribute, and on none of a mixed
+group; migrated, it names the attribute and runs on the heads that have it, as a Wave authored there
+does — the plan's one recorded exception to D3.
+
+### Path, Colour Cycle and the renamed parameters (fx-settings plan session 3)
+
+**Path** (`position/Path.fx.kts`, family `position`) is the six movements (D2): `shape` `CIRCLE`,
+`FIGURE_8`, `RANDOM` about `panCentre` / `tiltCentre` at `panSize` / `tiltSize`, or `LINE` from
+`startPan` / `startTilt` to `endPan` / `endTilt` along `curve` — each shape the old FX's maths line
+for line. A Line's ends and a centred shape's centre and size are each `shownWhen` the other's
+shapes, so the editor draws only what the shape reads. Its defaults are Circle's and Sweep's; its
+presets are *Sweep*, *Pan Sweep* and *Tilt Sweep*, each a Line that bounces at half a bar as the
+sweeps did. **The Centre question** (D12) is asked only of a shape whose centre is drawn: the client's
+`hasCentre(entry, parameters)` reads the centres through their `shownWhen` (`isParamShown`), so a Line
+asks nothing, starts on Override and, when the shape moves to or from a Line, the blend moves with it
+(`centreFlip`: out of an *Around* shape Override; into a centred shape *Around* while the centres are
+still the pinned 128, else the blend and centres it held, so an *Absolute* circle taken through a Line
+comes back Absolute); a pad face never reads a Line as *around* (`isAroundSpelling`); the desk's stacking
+start does the same through `shownParameters` (`routes/programmerFx.kt`).
+
+**Colour Cycle** gains `between`, a `choice` of `CUT`, `FADE` and `SMOOTH`, and `fade`, the share of
+each colour's step a Fade crosses over — the old `fadeRatio`, computed exactly as it was, so even a
+ratio outside 0–1 runs as it ran. Smooth eases from each colour to the next on a cosine across the
+whole step. Its presets are *Colour Fade* (two colours, Fade 100 %, a four-beat cycle Forward: the old
+two-beat bounce one way in four) and *Colour Wave* (black to white, Smooth).
+
+**Legacy.** P3 refused two mappings, so **Colour Wave** and **Colour Fade** stay registered with
+`legacy: true` in their frontmatter (`FxRegistration.legacy`, the library's `legacy`): a stored one
+runs and edits as before and is still written back under its own id, but the picker, the palette
+editor's FX list, the FX Library page and `describe_rig` leave a legacy FX out, so nothing new is made
+of one. Colour Cycle draws each a DMX step apart: Smooth a quarter-cycle on is Colour Wave's sine, but
+the cosine and the sine floor either side of a byte at some phases (4 of 97 on a mixed pair), and
+Fade at twice the cycle is Colour Fade's bounce but for the turn, where the bounce's reversed phase
+reads 2ε short of the end and floors a step below Colour Cycle's own fall.
+
+**Renamed parameters** (§3 of the plan): Flicker's `min` / `max` are `low` / `high`; Candle Flicker's
+`baseLevel`, `min`, `max`, `smoothing` are `base`, `low`, `high`, `settle`; Fluorescent Flicker's
+`offLevel`, `onLevel`, `flickerDurationMs`, `flickerSpeed` are `low`, `high`, `burstMs`, `speed`;
+Lightning Strike's `minBrightness` / `maxBrightness` are `low` / `high`; Colour Strobe's `onRatio` is
+`width`. Each reads its value as before; only the key moved.
+
+**The old names.** `LegacyNames.absorbFx` is session 3's rewrite: a movement as Path through
+`consolidatedParameters` (the old parameters at the values their scripts read, written out, a Pan
+Sweep's `tilt` as both ends' tilt), a renamed parameter at its new name, Colour Cycle's `fadeRatio`
+as `between` and `fade` (0 a cut). A row written before the renames that already holds a key under a
+new name its old FX never declared — a Flicker's `low`, a Colour Cycle's `between` — loses it, since
+the new script would start reading it (`writtenBefore`: database step 8, and the importer below
+`formatVersion` 42); a tool's call today means it and keeps it. A movement's centre under its US
+spelling is read as its centre. Database step 8 (`state/FxSiblingsMigration.kt`, `user_version`
+8, backed up to `<db>.pre-fx-siblings-<utc>.db` when anything moves) and the importer store it, after
+step 7's `consolidateFx`; a script's `effect("Circle", …)` and MCP's FX tools run it (`runnableFx`,
+`asToday`, which start an old sweep at its half-bar Bounce, `consolidatedTiming`); every other write
+boundary refuses an old id or parameter name (`writeProblem`). Step 8 names each stored script and
+definition that quotes a movement's old id outside `effect(…)`, and any definition with the id `Path`,
+as step 7 does, and one quoting a renamed parameter's distinctive old name (`baseLevel`, `onRatio`,
+…, or a `fadeRatio` beside a Colour Cycle — Palette Steps still reads its own). Steps 7 and 8 are one `state/FxRewriteStep.kt`, configured. No FX definition may take Wave's or
+Path's id (`LegacyNames.consolidatedTypeNamed`), and the FX Library page still reserves a legacy FX's
+id, though it lists none (`offeredFx`). The old scripts are under `src/test/resources/fx/legacy/` with session 2's, and
+`LegacyEquivalenceTest` runs each beside its new form — the stateful flickers tick for tick over 400
+ticks — and finds the same output exactly, except the two above, which it pins as refused.
 
 ### Beam FX (`FxOutput.Slider`)
 
-Family `beam` (effects plan D6, session 6): each drives **one** beam attribute and declares only it
-in `compatibleAttributes`, so the picker offers it only on a head that has that attribute, under its
-**Beam** family. Level FX are not offered on beam sliders (`FU-FX-BEAM-ANY-SLIDER`).
-
-| FX | Attribute | Description | Parameters |
-|----|-----------|-------------|------------|
-| `ZoomWave` | `zoom` | Sine between two zooms | `min`, `max` |
-| `IrisPulse` | `iris` | Pulse's attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
-| `FrostPulse` | `frost` | Pulse's attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
-| `FocusPull` | `focus` | Sweep between two focus levels, bouncing by default | `start`, `end`, `curve` |
+A Wave on `zoom`, `iris`, `frost` or `focus` is a Beam FX (above), and the picker offers it there as
+its presets. Level FX other than Wave are not offered on beam sliders (`FU-FX-BEAM-ANY-SLIDER`).
 
 The values are raw DMX, as every level FX's are. A stepped zoom (the Robe's) is a setting, so
-Zoom Wave on it writes the byte and lands on whichever step that is. To step one by name, use
+a Wave on it writes the byte and lands on whichever step that is. To step one by name, use
 Slot Steps on it (`ZOOM_18, ZOOM_26`), or Palette Steps over Beam palettes whose zoom is a percent,
 which snaps to the step nearest that share of its angles, as a palette does (below).
 
@@ -308,11 +430,12 @@ A stored beam FX that names no attribute — an FX palette's, or any other store
 on the one attribute its registration declares (`FxSpawner`'s `beam` arm), on a group only where
 every member has it, as the dimmer arm asks of a group's dimmers; so a Beam palette's FX must
 name one attribute, its own `attribute` or else the one its registration declares, never a
-sentinel (`validatePaletteFx`) — Slot Steps names the setting it steps. A group or selection is resolved
+sentinel (`validatePaletteFx`) — Slot Steps names the setting it steps, and a Wave the beam attribute
+it drives (the palette editor's *Attribute* select). A group or selection is resolved
 through its first head that has the attribute (`referenceFixtureFor(target, attribute)`), so a
 selection that starts on a head without zoom still drives the zooms after it. Record files an
 FX on `zoom`, `iris`, `frost` or `focus` as family `beam` (`categoryFromAttributeName`; a step
-FX by `recordedFxFamily`, below), so a recorded Look's families include Beam. A speed master may take `family: beam`, and a Beam FX
+FX and a Wave by `recordedFxFamily`, below — a Wave as `intensity`, its library family), so a recorded Look's families include Beam. A speed master may take `family: beam`, and a Beam FX
 palette holds one of them (`PALETTE_FX_FAMILIES`).
 
 ### Step FX (`FxOutput.Steps`)
@@ -336,6 +459,17 @@ they step — the Family column — through `stepsFxFamily` and, on the client, 
 `1 − fadeRatio` of its own and crossing to the next over the rest, the last crossing back to the
 first. Amount, direction and the spread apply as to any FX, so a Backward or Bounce phase runs the
 steps back.
+
+**A step lands on its sample.** Every built-in that turns a phase into a step goes through
+`stepIndex(phase, n)` (`fx/StepList.kt`; `stepsAt` and Colour Cycle), and every one that tests a
+phase against an edge through `phaseBefore` (the strobes, Square Wave, the pulses, Lightning Strike).
+Both allow `PHASE_EPSILON` (1e-9): a member's phase is the clock's less its offset, wrapped into the
+cycle (`FxPhase`), and at a boundary that arithmetic can fall a rounding error short — a third of a
+cycle comes back as 0.33333333333333326 — which put one row's step a sample late while its
+neighbours stepped on time (`StepBoundaryTest`). A phase that short of a whole cycle is the next
+cycle's start (`cyclePhase`). A reversed phase reaches each boundary from above, so Backward and
+Bounce read `1 − p` twice that tolerance short (`FxDirection`), which lands it on the step it enters
+and keeps phase 0 at the very end of the cycle.
 
 **The target resolves a step per head** (`StepList.valueFor`, `colourFor` on the colour target):
 `SliderTarget`, `ColourTarget` and `PositionTarget` blend the two steps in proportion (a byte, an
@@ -503,7 +637,7 @@ FxRegistry
 ### FxRegistration
 
 Each registered FX provides:
-- `id` — canonical name (e.g., "SineWave")
+- `id` — canonical name (e.g., "Wave")
 - `aliases` — alternative names for lookup (e.g., "sine_wave", "sine")
 - `name` — human-readable display name
 - `family` — the library family ("intensity", "colour", "position", "beam", "steps", "controls"; `steps` is Palette Steps' and Slot Steps')
@@ -542,7 +676,7 @@ fx_definitions table (user FX only):
 │                       the built-ins' own; the New FX sheet offers neither)
 ├── output_type       — SLIDER, COLOUR, or POSITION (never STEPS — refused, see Step FX)
 ├── fx_mode           — STANDARD or STATEFUL
-├── parameters        — JSON schema [{name, type, defaultValue, description}]
+├── parameters        — JSON schema [{name, type, defaultValue, description, …}] (§"Parameters")
 ├── compatible_attributes — JSON array of attribute names
 ├── script            — the calculate() body only
 ├── project_id        — owning project (required)
@@ -563,11 +697,12 @@ string parameters according to the schema:
 // TypedParams methods:
 params.ubyte("min")          → UByte (default from schema)
 params.int("count")          → Int
-params.double("fadeRatio")   → Double
+params.double("fade")        → Double
 params.boolean("enabled")    → Boolean
 params.colour("baseColor")   → ExtendedColour (resolves a palette reference, "pal:{uuid}")
 params.colourList("colours") → List<ExtendedColour> (literal colours only; a palette is dropped)
 params.easingCurve("curve")  → EasingCurve
+params.choice("shape")       → String (one of its declared options; another reads as the default)
 params.string("name")        → String
 ```
 
@@ -579,8 +714,7 @@ organized by family:
 ```
 src/main/resources/fx/
 ├── dimmer/
-│   ├── SineWave.fx.kts
-│   ├── RampUp.fx.kts
+│   ├── Wave.fx.kts
 │   ├── CandleFlicker.fx.kts    (STATEFUL)
 │   └── ...
 ├── colour/
@@ -588,11 +722,7 @@ src/main/resources/fx/
 │   ├── RainbowCycle.fx.kts
 │   └── ...
 ├── position/
-│   ├── Circle.fx.kts
-│   └── ...
-├── beam/
-│   ├── ZoomWave.fx.kts
-│   └── ...
+│   └── Path.fx.kts
 └── steps/
     ├── PaletteSteps.fx.kts
     └── SlotSteps.fx.kts
@@ -602,30 +732,31 @@ Each file uses YAML frontmatter in a block comment, followed by the script body:
 
 ```kotlin
 /*---
-id: SineWave
-name: Sine Wave
+id: Flicker
+name: Flicker
 family: intensity
 outputType: SLIDER
 fxMode: STANDARD
 compatibleAttributes: [dimmer, uv]
 parameters:
-  - name: min
+  - name: low
     type: ubyte
-    default: "0"
-    description: Minimum value
-  - name: max
+    default: "100"
+    description: The lowest level it flickers to
+  - name: high
     type: ubyte
     default: "255"
-    description: Maximum value
+    description: The highest level it flickers to
 ---*/
 
-val min = params.ubyte("min")
-val max = params.ubyte("max")
-val sine = (Math.sin(phase * 2 * Math.PI) + 1.0) / 2.0
-val value = (min.toInt() + (max.toInt() - min.toInt()) * sine)
-    .toInt().coerceIn(0, 255).toUByte()
+val low = params.ubyte("low")
+val high = params.ubyte("high")
+…
 FxOutput.Slider(value)
 ```
+
+Each parameter also declares how the editor draws it — a label, a range, a unit, a pair — which
+the example leaves out; see §"Parameters".
 
 At startup, `FxFileLoader` scans the resource directory, parses each file's
 frontmatter into metadata and script body, compiles the script, and registers
@@ -633,13 +764,81 @@ the FX in the FxRegistry with `source = BUILT_IN`.
 
 Two optional frontmatter keys say what a **new** instance runs at, read as `defaultTiming` is:
 `defaultDirection` (`FORWARD`, `BACKWARD` or `BOUNCE`; `FxInstance` starts its dynamics on it) and
-`defaultCycle` (beats a cycle, one bar when absent). Colour Fade, Focus Pull and the sweeps
-declare `BOUNCE` at `2.0` (terminology plan D24): they once bounced by a `pingPong` parameter over a
-one-bar cycle, so a new one looks as it did. The library answers both (`FxTypeInfo`), and every
+`defaultCycle` (beats a cycle, one bar when absent). Colour Fade (legacy) declares `BOUNCE` at
+`2.0` (terminology plan D24), as Wave's *Focus Pull* and Path's sweep presets do: they once
+bounced by a `pingPong` parameter over a one-bar cycle, so a new one looks as it did. The library answers both (`FxTypeInfo`), and every
 door that makes an FX without naming them takes them: the add routes, the programmer's bare press,
 the MCP tools, the picker and the palette editor. A swap to another type in the picker or the
 palette editor takes the new type's where the FX still stood at the old type's
 (`swappedTiming`). A user FX definition has neither, so runs Forward at one bar.
+
+### Parameters
+
+A parameter is `ParameterInfo` (`fx/FxRegistry.kt`): its `name`, `type`, `defaultValue` and
+`description`, and — all optional — how the editor draws it (fx-settings plan D1). The desk
+declares; the editor reads, and guesses from the name and type only what a parameter leaves out —
+everything, for a script FX's that declares none (`paramView` in
+`frontend/src/components/fx/fxEditorModel.ts`).
+
+| Key | Means |
+|---|---|
+| `label` | The editor's word for it — *Low*, *Attack*, *Pan size* |
+| `min`, `max`, `step` | The range offered, in the stored value's terms: a byte's 0–255, a ratio's 0–1 |
+| `unit` | How the value reads: `%` a byte level as a percent of full, `ratio` a 0–1 share as a percent, `dmx` a byte in DMX steps, `position` a byte about its axis's centre (`-128..127`), `ms` milliseconds |
+| `options` | A `choice`'s values and labels, drawn as a segment |
+| `role` | `main`, drawn with the FX, or `detail`, folded under *More* |
+| `shownWhen` | Drawn only while another parameter holds one of the values named |
+| `pair` | On a low, the high it is drawn with as one two-thumb range |
+
+One frontmatter key is the FX's rather than a parameter's: `stepsFrom: colours` names the list
+parameter whose entries are its steps, which a `STEP` spread counts (§"The spread's shape"). It must
+name a `colourList`, `paletteList` or `slotList` parameter, else the FX fails to load.
+
+In frontmatter, under the parameter's other keys:
+
+```
+  - name: min
+    type: ubyte
+    default: "0"
+    label: Low
+    min: 0
+    max: 255
+    step: 1
+    unit: %
+    pair: max
+  - name: shape
+    type: choice
+    default: "SINE"
+    options: [SINE: Sine, SQUARE: Square]
+  - name: width
+    type: double
+    default: "0.5"
+    role: detail
+    shownWhen: shape = [SQUARE]
+```
+
+Every built-in declares a label for each parameter and a range and a unit for each numeric one,
+its script's clamps as the range (`FxFileLoaderTest`). The ranges are the editor's, not a refusal:
+a stored value outside one still runs as the script reads it.
+
+`parameterMetadataProblems` (`fx/ParameterMetadata.kt`) is what a declaration must pass — each
+name once, a known role, a known unit on a type it reads (`%` and `position` a byte, `ratio` a
+double, `dmx` and `ms` any number), `min` ≤ `max`, a range only on a number, a choice's default among
+its options and each option once with a value and a label, a `shownWhen` and a `pair` naming another
+parameter (a pair two numbers of one type, each in one pair). A built-in that breaks one fails to
+load; a script's `registerFx` throws; a user FX definition that breaks one is refused 400 by
+`POST` / `PUT /fx/definitions`, every problem named.
+
+A **`choice`** holds one of its `options`, matched ignoring case: every write boundary refuses
+another (`choiceProblem`, through `routes/storedFxRules.kt`'s `fxWriteProblem`), and
+`params.choice` reads one an older row holds as the declared default. An **`easingCurve`**'s options
+are the desk's own curves, filled in by `GET /fx/library` (`withImpliedOptions`) so no FX has to
+list them. `describe_rig`'s FX library lines carry the metadata in brackets
+(`ai/RigBriefing.kt`'s `parameterBrief`).
+
+The keys are additive in canonical JSON, so a user FX definition carrying them syncs without a
+`formatVersion` change: an older reader imports the definition without them, and its next push drops
+them (`docs/sync-engineering.md` §"Format versioning" says why that is no degraded record).
 
 ### Three Script Base Classes
 
@@ -843,8 +1042,8 @@ The live FX editor (`FxEditor`, fixture-fx-sheets plan D12, D12a) never shows th
 `ADDITIVE` or `MULTIPLY` for the two FX where the choice is the whole point; it asks a question
 in the desk's words and sends an existing spelling (plan P2 — no new field, no `formatVersion`):
 
-- **Movement — *Centre: Around current position | Absolute*.** A position FX with a centre pair
-  (Circle, Figure 8, Random position). **Around** is `ADDITIVE` with `panCentre` and `tiltCentre` at
+- **Movement — *Centre: Around current position | Absolute*.** A position FX with a centre pair it
+  draws: a Path on Circle, Figure 8 or Random, never a Line. **Around** is `ADDITIVE` with `panCentre` and `tiltCentre` at
   **128**: the position blend is `base + FX − 128`, so a shape centred on 128 orbits whatever the
   reset pass put underneath — the programmer's value, else the cue's, else the base. That is the only
   way a Circle orbits a set position; under `OVERRIDE` it circles its own 128/128. **Absolute** is
@@ -1225,7 +1424,7 @@ spread's shape** (§"The spread's shape"), so Segments and Parts leave no empty 
 
 **Default values**: Each FX type declares `defaultTiming` which is used when
 creating new `FxInstance`s. A step chase (a user FX windowed as above) declares `HEAD`;
-every built-in is a continuous FX (SineWave, Pulse, etc.) and defaults to `CYCLE` (full
+every built-in is a continuous FX (Wave, Flicker, etc.) and defaults to `CYCLE` (full
 cycle). The value can be overridden per-instance via the API.
 
 ## Previewing an FX
@@ -1289,7 +1488,7 @@ start, its tick count starting at 0 so the same request answers the same, and ma
 object too (`freshFx`, `createFxWithPalettes` in production), so a sample never shares one
 with the pass.
 
-**Caps.** 48 samples to a cycle of the first FX asked for (its whole cycle, Timing *Per head*
+**Caps.** 48 samples to a cycle of the first FX asked for (its whole cycle, *One cycle for: Each head*
 included), at most 1024 a row; at most 96 rows and 8 FX a request. Past a cap the answer is cut and
 `truncated` names which. A row is a head; its samples are a byte a sample per plane — a slider or a
 setting's level, RGB plus each bundled W, A and UV the head has, or pan and tilt — and a Steps FX's
@@ -1299,7 +1498,7 @@ own output carries the step it shows beside the steps' labels.
 envelope or `lastPhase`, or its expansion and plan caches, and never writes DMX: the one transaction it makes is
 a staging one it never applies, to read a paused FX's frame off a head. `FxSamplerParityTest`
 drives the engine a pass at a time and holds *Result* to the committed DMX at every sampled tick —
-every Order with Spread, Wings, Segments and Parts set, Runs with Bounce, Timing *Per head*, *Replace*
+every Order with Spread, Wings, Segments and Parts set, Runs with Bounce, *One cycle for: Each head*, *Replace*
 under *Within*, a Circle *Around* a programmer position, Amount, Palette Steps, a Seconds FX, each
 element mode and filter, a held-back FX, a Local FX over a layer's, and a beat FX with a wall-clock FX
 *Within* it — and checks that sampling leaves every instance field and the controller as they were.
@@ -1464,8 +1663,9 @@ FX). The route fixes only where it runs and whose it is:
   no targets is 400 `FX_NEEDS_SELECTION`. The family is `routes/programmerFx.kt`'s
   `fxFamily`: the family of the attribute it drives on the first head it paints
   (`familyForAttribute`, as Record and Include read an FX), so an Intensity Pulse on `uv`
-  is Colour. Agreed with Chris during session 2; an FX palette's family stays its library
-  family (`attributeFamilyForFxFamily`), since a palette names no attribute until it lands.
+  is Colour. Agreed with Chris during session 2; an FX palette's family is
+  `fxAttributeFamily` over its FX's library family and the attribute it names (fx-settings plan
+  D5), Intensity for one naming none.
 - **The timing.** No `cycle` is one bar; a beat FX naming no master and not on *Seconds* is
   stamped with the master whose `family` is its library `family`, else master 1 (venue-visit plan
   D16) — `fx/FxTimingChoice.kt`'s `familyMasterUuidFor`, the one reading MCP's FX tools stamp with
@@ -1517,7 +1717,7 @@ an element filter's left-out elements paint nothing and are not counted):
 **Each copy starts where its head was** (`SplitMember`, on `FxInstance.splitMember`). A copy is the
 member it was: its phase is computed by the same member call the parent's pass made for that head —
 the member's distribution offset, the size of the list it was spread over and its `FxContext` —
-so a copy on Timing *Per head* keeps its set's `distinctSlots`-scaled cycle and a ping-pong copy its sweep
+so a copy on *One cycle for: Each head* keeps its set's `distinctSlots`-scaled cycle and a ping-pong copy its sweep
 (Chris chose to carry them rather than refuse those splits), a copy with a run count runs its window from its
 own offset and Bounce counts its cycles from it, and an FX reading its place in the spread still
 sees it. `FxSplitTest` runs an FX on two rigs, splits one mid-run and compares every channel
@@ -1619,12 +1819,12 @@ val wash = fixture<HexFixture>("front-wash-1")
 val movers = group<MovingHead>("movers")
 
 wash.fx {
-    dimmer(effect("SineWave", "min" to "40"), CycleLength.TWO_BEATS)
+    dimmer(effect("Wave", "low" to "40"), CycleLength.TWO_BEATS)
     colour(effect("ColourCycle"), CycleLength.ONE_BAR)
 }
 
 movers.fx {
-    dimmer(effect("Pulse"), CycleLength.ONE_BEAT, order = SpreadOrder.CENTRE_OUT)
+    dimmer(effect("Wave", "shape" to "PULSE"), CycleLength.ONE_BEAT, order = SpreadOrder.CENTRE_OUT)
     colour(
         effect("RainbowCycle"), CycleLength.TWO_BARS,
         order = SpreadOrder.NORMAL,
@@ -1647,16 +1847,16 @@ wall-clock FX — see `FU-SPEED-RATEMASTER-STATEFUL`.
 Full-power scripts with explicit `fxEngine` parameter:
 
 ```kotlin
-fixture.applyDimmerFx(fxEngine, effect("SineWave"), FxTiming(CycleLength.TWO_BEATS))
+fixture.applyDimmerFx(fxEngine, effect("Wave"), FxTiming(CycleLength.TWO_BEATS))
 fixture.fx(fxEngine) {
-    dimmer(effect("Pulse"), CycleLength.ONE_BEAT)
+    dimmer(effect("Wave", "shape" to "PULSE"), CycleLength.ONE_BEAT)
     colour(effect("ColourCycle", "colours" to "#ff0000,#00ff00,#0000ff"), CycleLength.ONE_BAR)
 }
 fixture.clearFx(fxEngine)
 
 // Group with distribution
 val group = fixtures.group<HexFixture>("front-wash")
-group.applyDimmerFx(fxEngine, effect("Pulse"), order = SpreadOrder.NORMAL)
+group.applyDimmerFx(fxEngine, effect("Wave", "shape" to "PULSE"), order = SpreadOrder.NORMAL)
 ```
 
 ## Group FX Processing
@@ -1675,6 +1875,8 @@ When an `FxInstance` targets a group (or a selection, §"Over a selection"), the
 │     └─ NO  → Are members MultiElementFixture?                    │
 │               └─ YES → Do elements have the attribute?           │
 │                         └─ YES → Check elementMode:              │
+│                              ├─ WHOLE: Each parent is one unit, │
+│                              │   its elements take its output    │
 │                              ├─ PER_FIXTURE: For each parent,    │
 │                              │   distribute across its elements  │
 │                              │   (all fixtures look the same)    │
@@ -1685,19 +1887,35 @@ When an `FxInstance` targets a group (or a selection, §"Over a selection"), the
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Element Mode for Multi-Element Groups
+### Element Mode: what *Over* counts
 
-When a group FX targets an attribute only available on elements (not the parent
-fixtures), `ElementMode` determines the distribution dimension:
+When an FX targets an attribute only its fixtures' elements have (not the fixtures themselves) —
+on a group, a selection, or one multi-element fixture — `ElementMode` decides what the spread
+counts. The screen calls it **Over** (FX editor follow-ups plan D7):
 
-| Mode | Description | Example (2×4-head fixtures) |
-|------|-------------|----------------------------|
-| `PER_FIXTURE` | Each fixture gets the FX independently. Distribution runs within each fixture's elements. | All fixtures look the same — head #0 on fixture A matches head #0 on fixture B |
-| `FLAT` | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (indices 0-7), chase sweeps across all heads sequentially |
+| Mode | Over | Description | Example (2×4-head fixtures) | MagicQ |
+|------|------|-------------|----------------------------|--------|
+| `WHOLE` | Fixtures | Each fixture is one unit. Order and the spread's shape count fixtures, and every element a fixture paints takes that unit's output. | 2 units: each fixture's four heads alike, the two fixtures apart | Dup Elements |
+| `FLAT` | Elements | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (indices 0-7), chase sweeps across all heads sequentially | Include Elements |
+| `PER_FIXTURE` | Each fixture | Each fixture gets the FX independently. Distribution runs within each fixture's elements. | All fixtures look the same — head #0 on fixture A matches head #0 on fixture B | Use Elements |
 
-`ElementMode` is stored on `FxInstance` and defaults to `PER_FIXTURE`. It is only
-relevant when group members are multi-element fixtures and the target attribute is
-at the element level. It has no effect when members directly have the target attribute.
+Under `WHOLE`, `FxTargetExpansion.whole` lists the units — `perFixture` for a group or a selection,
+the fixture's own `flat` list for one fixture — and `FxDistributionPlans.whole` spreads over them;
+the engine computes one output a unit (a stateful FX keyed on its first element) and writes it to
+each element. The element filter keeps its meaning: it picks which elements of each fixture are
+painted, filtered within the fixture, and a fixture it empties still counts as a unit, so no other
+fixture's offset moves. Over one fixture, `FLAT` and `PER_FIXTURE` are the same spread; `WHOLE` is
+the one that differs, so the FX DTO reports the mode wherever the FX lands on elements, and a stored
+row records it over members, and on a lone fixture only when it is `WHOLE`
+(`ElementMode.stored`, which Record's canonical form reads too).
+
+**Two defaults, named apart** (D8). A **stored** FX with no mode — a cue's, a Look's, a palette's,
+an archive's, through `FxSpecCoercion.Lenient` — is `ElementMode.STORED_DEFAULT`, `PER_FIXTURE`, so
+no row changes meaning. An FX a door **starts** with none named — `POST /fx/add`,
+`POST /programmer/fx`, `POST /groups/{name}/fx`, and MCP's FX tools, which write it into the row —
+is `ElementMode.NEW_FX_DEFAULT`, `WHOLE`; the client's creation doors (the picker, a cue's draft FX,
+a new FX palette) write `WHOLE` themselves. `FxDynamics`' own default, and so the script API's, is
+the stored one. It has no effect when the target or its members directly have the attribute.
 
 ### Orders
 
@@ -1754,16 +1972,64 @@ synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
 4. **Parts** `G`: `r ← r mod G` over `G` ranks — when `G` is below the rank count; otherwise the
    ranks stand, so the slot count never exceeds what the members fill. `G = 0` is off.
 5. **Spread** `s`, 0–2: `offset = s × r / R`. 100 % is the Order's own; 50 % packs the heads into
-   half a cycle (a tighter ripple); 200 % runs them over two.
+   half a cycle (a tighter ripple); 200 % runs them over two. Under `spreadUnit: STEP` (below) it is
+   `s × r / steps` instead, `s` 0–16.
 
 `distinctSlots` is the rank count after step 4 (`DistributionPlan.slots`, each context's
 `numDistinctSlots`, and `FxDynamics.distinctSlots` — the same count in constant time, for the
-per-pass reads), so a step chase's window and Timing *Per head* stay gap-free: Parts of 2 over eight heads
+per-pass reads), so a step chase's window and *One cycle for: Each head* stay gap-free: Parts of 2 over eight heads
 are two slots, the odd heads and the even heads taking turns a step each. `PING_PONG`'s turnaround is
 **not** shaped: its sweep is the Order's own `(N − 1) / N` (§"Phase Calculation"), the shape setting only
 the offsets. At the default shape (100 %, 1, 1, 0) the
 plan does not run the shaping at all, so an FX that names no shape keeps its offsets bit for
 bit (P6). The plan cache (`FxDistributionPlans`) is keyed on the shape as on the Order.
+
+**Each head later by a step** (fx-settings plan D6, session 4). `SpreadShape.unit`, a
+`SpreadUnit`, says what `spread` counts: `CYCLE`, the share of the cycle over every slot, as above, or
+`STEP`, how many of the FX's **own steps** each slot starts after the one before — `offset = s × r /
+steps`, on the ranks steps 2–4 left. Colour Cycle with three colours over four heads at `CYCLE` 1
+starts them a quarter of a cycle apart and its colours change every third, so the edges stagger; at
+`STEP` 1 they start a third apart, each head one colour behind the last, and every colour changes on
+one boundary — and still does when a fifth head joins, because the desk resolves the step count at
+expansion rather than the client storing a spread worked out for four heads. `STEP` may run past
+`MAX_SPREAD` (eight heads over three colours is 8⁄3 of a cycle); 200 % caps only a stored `CYCLE` value.
+
+An FX steps when its frontmatter names the list parameter its steps come from — `stepsFrom: colours`
+on Colour Cycle, `palettes` on Palette Steps, `slots` on Slot Steps (`FxRegistration.stepsFrom`,
+`FxTypeInfo.stepsFrom` on `GET /fx/library`) — and `Fx.stepCount` counts that list as the FX reads it
+(`TypedParams.stepCount`: a colour the colour list drops is no step). `FxInstance.planSteps` asks for it
+only under `STEP`, and the plan cache is keyed on the unit and the count, so a colour-list edit or a
+palette that stops resolving re-plans. A `STEP` FX with no count (a stored row whose type lost its
+`stepsFrom`) runs as `CYCLE`. A project FX definition declares no `stepsFrom`.
+
+- **The unit's homes.** An `FxDynamics` field edited in place, phase kept; `spread_unit` on `look_fx`,
+  `cue_ad_hoc_fx` and `palette_fx`, nullable, `STEP` or null for `CYCLE` (`SpreadUnit.STORED_DEFAULT`,
+  so no row written before it changes meaning, and `SpreadUnit.canonical` writes `CYCLE` as null);
+  `LookFxSpec`, `StoredFx`, `LookFxSettings` (so Record, Include, Update and the Timeline's
+  `comparableFxSettings` keep it), every FX DTO, `POST /fx/add`, `PUT /fx/{id}`, the `updateFx` frame,
+  `POST /programmer/fx`, the group route, the sync DTOs from `formatVersion` 43
+  (`docs/sync-engineering.md` §"Version 43") and MCP's FX schemas.
+- **A new step FX starts one step behind** (D7): every door that starts or creates an FX writes `STEP`
+  and 1 for an FX with `stepsFrom` when the author names neither a spread nor a unit — `POST /fx/add`,
+  `POST /programmer/fx` and the group route (`requestedSpreadShape`), MCP's FX tools, and on the client
+  the picker, a cue's draft FX and a new FX palette (`newFxSpread`). A spread sent without a unit is
+  the cycle's, as it always was.
+- **Refused** at the write boundary: `STEP` on an FX with no steps (by the FX's name) and a `STEP`
+  spread outside 0–16 (`spreadProblem`'s `unit` and `fxSteps`; the stored homes ask the registry,
+  `FxRegistry.steps`). A stored `STEP` spread above 16 clamps on spawn.
+- **A swap off a step FX** (`PUT /fx/{id}` with a new `fxType` and no unit) leaves `STEP` for the
+  `CYCLE` spread that runs the heads' offsets, `spread × slots / steps` over the most slots the FX
+  spreads over (`SpreadShaping.cycleSpread`, `FxEngine.spreadSlots`), capped at 200 %; a swap onto
+  another FX that steps keeps `STEP`. The palette editor, which has no heads, swaps onto the cycle's
+  own spread.
+- The editor chooses the unit with *Each head later by* (fx-settings plan D10): *1 step* writes `STEP`
+  1, *Fit the cycle* `CYCLE` 1, and *Free* is a slider in the unit the FX is on. The head ladder and the
+  readout count the FX's steps (`lib/spreadShape.ts`'s `stepCountOf`), and the graph's Spread knob drags
+  in them.
+- **`stepsFrom` is kept by the FX.** A script's `registerFx` naming one is refused unless the FX its
+  factory builds answers `stepCount` (a copied built-in's does), and a stored `STEP` on an FX with no
+  steps spawns as `CYCLE` in the cycle's range. MCP's reads always say a step FX's spread and unit,
+  since a write naming neither starts it one step behind.
 
 **Runs end N cycles past the largest member offset — the shaped one.** A member's own clock is
 the FX's less its offset, so under Spread 50 % two runs over four heads (offsets 0, ⅛, ¼, ⅜)
@@ -1786,17 +2052,18 @@ to the same offsets, Random's shuffle included.
   clamped with a warn on spawn (`Lenient.spreadShape`), and stored wings under a mirrored Order are
   left as stored and not run.
 - **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `spread`, `wings`, `segments` and
-  `parts`; `PUT /fx/{id}` and `updateFx` take each with null meaning keep (`parts: 0` turns them
+  `parts` (and `spreadUnit`, above); `PUT /fx/{id}` and `updateFx` take each with null meaning keep (`parts: 0` turns them
   off). `FxDto` and the group and indirect DTOs report them. The MCP FX schemas take the four
   (`AiToolSchemas.putFxDynamics`), and `describe_rig` and `get_current_state` say them where they
   are not the default.
-- **The editor** (D11, §4.1): a *Spread* disclosure in `FxFields` — the Shapes (FX editor plan
-  D11: nine chips, each setting Order, Spread, Wings, Segments and Parts at once), Spread %, Wings
-  (hidden under a mirrored Order, and set back to 1 when one is chosen), Segments, Parts, and a row of
-  phase dials over eight notional heads on an FX palette and the FX's own heads live (up to sixteen,
-  then *+n*) — the FX editor's inspector draws the offset ladder from the preview in their place. The
-  Order select sits above it, beside Direction. Its summary says the Shape, else *Custom*, then the
-  non-defaults: *Custom · 50 % · 2 wings*.
+- **The editor** (D11, §4.1; fx-settings plan D10): *Across the heads* in `FxFields`, under *Over* — the head
+  ladder (each head numbered by when it starts, from the preview's `ladder.spread` in the FX editor's inspector,
+  else `lib/spreadShape.ts` over the FX's own heads or eight notional ones on a palette), the nine patterns (FX
+  editor plan D11: each setting Order, Wings, Segments and Parts at once, drawn on those heads; *Custom* opens the
+  Order select), *Each head later by* (*Fit the cycle* `CYCLE` 1, *1 step* `STEP` 1 on an FX with `stepsFrom`,
+  *Free* a slider in the unit the FX is on) with the offset between neighbours in cycles, steps, beats and degrees
+  and, under `STEP`, the spread the desk runs, then Segments · Parts · Wings as segments with typed counts and one
+  line saying what they do. Wings is hidden under a mirrored Order and set back to 1 when one is chosen.
 
 **Order interface properties:**
 
@@ -1922,7 +2189,7 @@ GET  /api/rest/fx/library          → [FxTypeInfo...]
 
 ```json
 {
-  "fxType": "SineWave",
+  "fxType": "Wave",
   "fixtureKey": "front-wash-1",
   "attribute": "dimmer",
   "cycle": 1.0,
@@ -1930,8 +2197,8 @@ GET  /api/rest/fx/library          → [FxTypeInfo...]
   "startOnBeat": true,
   "phaseOffset": 0.0,
   "parameters": {
-    "min": "0",
-    "max": "255"
+    "low": "0",
+    "high": "255"
   },
   "order": "NORMAL",
   "timing": "HEAD",
@@ -1958,8 +2225,8 @@ heads has the attribute is refused. The spread and element fields then apply as 
 
 ```json
 {
-  "fxType": "Pulse",
-  "parameters": { "min": "50", "max": "200" },
+  "fxType": "Wave",
+  "parameters": { "shape": "PULSE", "low": "50", "high": "200" },
   "cycle": 2.0,
   "blendMode": "ADDITIVE",
   "phaseOffset": 0.25,
@@ -2071,6 +2338,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/Fx.kt` | Fx, StatefulFx interfaces, FxOutput types |
 | `fx/FxRegistry.kt` | Unified FX registry, FxRegistration, ParameterInfo, FxTypeInfo |
 | `fx/FxFileLoader.kt` | Loads and parses .fx.kts files from resources |
+| `fx/ParameterMetadata.kt` | A parameter's editor metadata rules, the `choice` type's refusal, a curve's implied options (§"Parameters") |
 | `fx/TypedParams.kt` | Typed parameter accessor for FX scripts |
 | `fx/ScriptFxAdapter.kt` | Bridges compiled FX scripts to Fx interfaces |
 | `fx/FxScriptCompiler.kt` | Compiles and caches FX calculate scripts |
@@ -2091,7 +2359,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/SpreadOrder.kt` | The Orders |
 | `fx/group/GroupFxExtensions.kt` | Group FX extension functions |
-| `resources/fx/**/*.fx.kts` | Every built-in FX's metadata + calculate body (30 files) |
+| `resources/fx/**/*.fx.kts` | Every built-in FX's metadata + calculate body (14 files) |
 | `fx/PaletteColourSource.kt` | Colour-palette resolution, `PaletteSource` (also Palette Steps' palette lookup), and `createFxWithPalettes` — the one spawn helper every string-named FX goes through |
 | `fx/StepList.kt` | The step FX's lists, resolved per head (`SlotStepList`, `PaletteStepList`), `stepsAt` and `paletteStepsShape` |
 | `fx/PaletteRegistry.kt` | Palette snapshots cached by uuid — rows, or the one FX an FX palette holds; the scoped version a running FX's colour cache watches |
@@ -2126,7 +2394,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 ### Target expansion is cached, not re-derived
 
 Everything on this page about how a target expands — group members, `MultiElementFixture`
-elements, the `PER_FIXTURE`/`FLAT` split, `ElementFilter` — is resolved **once per FX per
+elements, the `WHOLE`/`FLAT`/`PER_FIXTURE` shapes, `ElementFilter` — is resolved **once per FX per
 register generation**, into an `FxTargetExpansion` held on the `FxInstance`. The compose pass reads
 it; it does not walk the group.
 
@@ -2145,7 +2413,7 @@ stamped *inside* the cached value and re-checked on every read. That is delibera
 `LookRegistry`, whose fast path returns a hit without re-validating and therefore needs a
 fill-time re-check, a retry loop and `putIfAbsent` — here a value built across an invalidation is
 simply rebuilt on the next read. `elementFilter` is part of the cache identity; `elementMode` is
-not, because both shapes it selects between are built up front.
+not, because every shape it selects between is built up front.
 
 The consequence to know about: an FX whose group or fixture has been deleted now logs
 "not found" **once per register generation** rather than on every tick.

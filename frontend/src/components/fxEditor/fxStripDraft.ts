@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import type { CueTarget } from '@/api/cuesApi'
 import type { FxDirection, Timing } from '@/api/fxApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
@@ -7,6 +8,7 @@ import type { PaletteSummary } from '@/api/palettesApi'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { FxPreviewDraft } from '@/store/fxPreview'
 import { LANE_ATTRIBUTE } from './fxEditorList'
+import { STORED_ELEMENT_MODE } from '@/components/fx/fxConstants'
 
 /** A stored FX's fields as a palette or a cue holds them — `PaletteFx`'s and `CueAdHocFx`'s, structurally. */
 export interface StoredFxFields {
@@ -29,6 +31,8 @@ export interface StoredFxFields {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
 }
 
 /**
@@ -75,7 +79,8 @@ export function previewDraftOf(
     parameters: { ...effect.parameters },
     order: effect.order,
     ...(effect.phaseOffset != null ? { phaseOffset: effect.phaseOffset } : {}),
-    ...(effect.elementMode != null ? { elementMode: effect.elementMode } : {}),
+    // Said even when the FX says none: the add starts an absent one on Fixtures, a stored FX means Each fixture.
+    elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     ...(effect.elementFilter != null ? { elementFilter: effect.elementFilter } : {}),
     ...(effect.timing != null ? { timing: effect.timing } : {}),
     ...(seconds ? { seconds: true } : {}),
@@ -88,5 +93,8 @@ export function previewDraftOf(
     ...(effect.wings != null ? { wings: effect.wings } : {}),
     ...(effect.segments != null ? { segments: effect.segments } : {}),
     ...(effect.parts != null ? { parts: effect.parts } : {}),
+    // Said even when the FX says none, as Over is: the add starts a step FX naming no spread one step
+    // behind, and a stored FX naming none counts the cycle.
+    spreadUnit: effect.spreadUnit ?? 'CYCLE',
   }
 }

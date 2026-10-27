@@ -729,8 +729,8 @@ Release folds to its glyph and the scope line drops the fade.
   **open**, two-line rows with pause and stop, up to half the sheet, scrolling itself; and
   **adding**, `FxPicker` in the open tray. While the programmer is blind a programmer FX's chip
   takes Blind's amber dot (its hover adds *held · Blind*) and its row the `HeldBlindMark`: the desk
-  is holding it, phase kept, until Blind goes off (show-cue-editing plan D7). A group's FX on the fixture reads *via <group>* (with
-  its element mode), and its stop **asks first** — the editor's × too — since it stops the FX on
+  is holding it, phase kept, until Blind goes off (show-cue-editing plan D7). A group's FX on the fixture reads *via <group>*, and
+  any FX landing on elements its Over (*over fixtures*, `elementModeSummary`), and its stop **asks first** — the editor's × too — since it stops the FX on
   every member. A fixture's head row sees an FX on the fixture, which the desk paints onto the
   heads (`fxReaching`, the one filter the rows and the tray share).
 - **The picker** (`components/fx/FxPicker.tsx`, D9, D10): a family segment (Intensity · Colour ·
@@ -749,10 +749,19 @@ Release folds to its glyph and the scope line drops the fade.
   patched head's options of the setting it names, `rigSettingUnion`, with typed names besides). **A tap is the start**: the FX runs at once with its
   defaults, on that row's attribute where the FX can take it, as a **programmer FX**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
-  it), a movement FX starting *Around*, every FX starting on its type's own cycle and Direction
-  — **one bar**, Forward, but half a bar and Bounce for Colour Fade, Focus Pull and the sweeps
-  (`newFxDivision`, `newFxDirection`) — on the master tagged for its family
-  (venue-visit plan D16; a wall-clock FX on four seconds). **Another tap swaps it** through `updateFx` — the new
+  it), a movement FX starting *Around* (a Path on a shape with a centre; a Line has none and starts
+  on Override), every FX starting on its type's own cycle and Direction
+  — **one bar**, Forward, but half a bar and Bounce for Path's sweep presets and Wave's *Focus
+  Pull* (`newFxDivision`, `newFxDirection`, `presetDefaults`) — on the master tagged for its family
+  on that attribute (venue-visit plan D16, fx-settings plan D5; a wall-clock FX on four seconds).
+  **Presets** (fx-settings plan D4) sit beside the types: Wave's *Strobe* and *Chase* under Intensity, and *Zoom
+  Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* under Beam where the head has the attribute,
+  each a Wave starting with its parameters, cycle and Direction; the bare Wave is listed under Beam
+  too, on the head's beam attribute, starting at that attribute's `attributeDefaults`. Colour Cycle's
+  *Colour Fade* and *Colour Wave* sit under Colour and Path's *Sweep*, *Pan Sweep* and *Tilt Sweep*
+  under Position (fx-settings plan session 3). A **legacy** FX (the library's `legacy`: Colour Fade
+  and Colour Wave themselves) is offered by no picker, the palette editor's FX list (but the one a
+  palette already holds) or the FX Library page (`compatibleFxFor`), yet edits as any FX. **Another tap swaps it** through `updateFx` — the new
   type with its own defaults and starting blend, id and phase kept — so the operator auditions by
   tapping down the list; a tap that lands on another *attribute* cannot be a swap (an instance keeps
   its target), so it stops the auditioned FX and starts afresh. An FX offered through a
@@ -772,18 +781,30 @@ Release folds to its glyph and the scope line drops the fade.
   to the list, landing any move the floor still held; **×** stops the FX, and pause / resume sit
   beside it. A write the closed socket dropped is forgotten as sent, so the release resends it. The draft is the editor's own while it is open, so a
   refetch never pulls a slider back under a finger; hosts key it on the FX's id *and* type, so
-  the picker's swap opens a fresh one. Cycle is a segment in **beats a cycle** — `⅛ beat` … `4 bars`,
-  `SPEED_STEPS` in `fxConstants.ts`, the one table every chip reads too (`FU-FE-FX-SPEED-SPELLING`,
-  settled by venue-visit plan S15) — any other division typed beside it, with the **timing** as a
-  chip: *Seconds* or a master (venue-visit plan D7; `TimingChip`, `timingChoicePatch`). On Seconds the
+  the picker's swap opens a fresh one. **The fields ask four questions, then Advanced** (fx-settings
+  plan D9), in this order in every host: *Timing*, the FX's own section, *Across the heads*, *Mix*.
+  **Timing is one strip of chips**: **Cycle** (`CycleChip`, `1 bar ▾`) opens its steps in **beats a
+  cycle** — `⅛ beat` … `4 bars`, `SPEED_STEPS` in `fxConstants.ts`, the one table every chip reads too
+  (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15) — any other division typed after them,
+  and *Same cycle as…*; the **timing** chip is *Seconds* or a master (venue-visit plan D7;
+  `TimingChip`, `timingChoicePatch`); **Direction** is a segment of three glyphs, → ← ↔,
+  the word on the hover; **Runs** (`RunsChip`, `∞ ▾`, `×2 ▾`) opens *Forever*, ×1 to ×4 and a typed
+  count — after which each head hands back to what is underneath (effects plan D9; a null count is
+  sent as `runForever: true`, since the frame's absent `runs` means keep). A chip opens a popover, and
+  a bottom sheet with 44px rows on the phone host or below the FX editor's 760 arm (`fxChipSheet.ts`,
+  which `FxEditorSelection` sets around its one-column inspector). **Every segment of presets ends in
+  a typed value, lit while the value matches none** (`TypedCell`): Cycle's steps, Runs' counts, and a
+  parameter's common values (`fxParamPresets.ts`, a client table keyed by FX and parameter — Wave's
+  Width *10 % · 50 % · One head · 35 %*, its `widthUnit` drawn inside the segment while Width shows;
+  Colour Strobe's Width). On Seconds the
   FX types its cycle in seconds and follows no master; a wall-clock FX types seconds either
   way, its master being its rate master. Moving a beat FX between the two converts the division
-  at the master's live tempo, so its cycle holds (`lib/fxTiming.ts`). **Under Cycle sit Amount,
-  Direction and Order** (effects plan D11, §4.1; terminology plan D3; `AmountSection`): Amount a slider and a percent field — how
+  at the master's live tempo, so its cycle holds (`lib/fxTiming.ts`). **Mix is Amount beside the
+  family's question** (effects plan D11; terminology plan D3): Amount a slider and a percent field — how
   much of the FX reaches the stage over what is underneath, which the desk weighs after the
-  blend (a Replace at 50 % sits halfway over the level underneath) — and Direction a segment of
-  three glyphs, → ← ↔, the word on the hover, with *Order* beside it on a group or a fixture with
-  heads (the Order, worded *Normal · Reverse · Centre out…* by `lib/orderLabels.ts` — the one
+  blend (a Replace at 50 % sits halfway over the level underneath) — and, for an FX that asks no
+  question, a line saying what its blend does. **Across the heads** holds *Over*, then on a group or a fixture with
+  heads the spread's questions (below; the Order, worded *Normal · Reverse · Centre out…* by `lib/orderLabels.ts` — the one
   vocabulary, which `fxConstants.ts`' `ORDER_OPTION_ENTRIES` / `getOrderLabel` (a
   Look's or cue's summary, a group's *Runs as*) and the Fan's `SPREAD_ORDERS` read too, keyed by the
   stored names `NORMAL`, `CENTRE_OUT`, `CENTRE_IN` and the rest). Amount and Direction are dynamics fields on the desk, so a write keeps
@@ -792,31 +813,65 @@ Release folds to its glyph and the scope line drops the fade.
   FX asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
   pinned at 128 and **hidden**, Absolute `OVERRIDE` with it shown, and a stored `ADDITIVE` + 128
   reads back as Around; a level FX asks *Over the level underneath: Replace it | Within it*
-  (`OVERRIDE` / `MULTIPLY`, default Replace). Levels are percents; a size (`…Radius`, `…Range`) is a
+  (`OVERRIDE` / `MULTIPLY`, default Replace), both in Mix. Levels are percents; a size (`…Radius`, `…Range`) is a
   distance in **DMX steps**, and a centre or a sweep's end a position on its axis, **centre-relative**
-  (`-128..127`, venue-visit plan D3) on every head — the value is raw DMX, so no head is consulted. Curves, switches and ratios beside levels sit
-  behind **Shape**, its summary line saying what is in it; **Advanced** holds the phase, the raw
-  blend (every FX, so nothing is out of reach), **Runs** — *Forever* or a count of cycles, after
-  which each head hands back to what is underneath (effects plan D9; a null count is sent as
-  `runForever: true`, since the frame's absent `runs` means keep) — and — on a group or a fixture with
-  heads — *Timing: Per cycle | Per head* (over `timing`, `CYCLE` | `HEAD`), Element mode and the head filter. **The
-  spread's shape is the *Spread* section's** (effects plan D11, §4.1; `SpreadSection`), a disclosure above Shape on a group or a
-  fixture with heads, and always on an FX palette: the **Shapes** (FX editor plan D11, below), *Spread* %,
-  *Wings* (hidden under a mirrored Order — Centre out, Centre in — and set back to 1 in the same
-  write when one is chosen, `orderPatch`, since the desk refuses wings there), *Segments* and *Parts*
-  (0 off), and — in every host but the FX editor's inspector, which draws the offset ladder in their
-  place — a row of **phase dials**: eight notional heads on a palette, the FX's own live
-  (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion` counted: one per fixture
-  where the first fixture carries the FX's attribute itself (`carriesFxAttribute`: a slider or
-  setting by name, a colour or position by type, the desk's traits), else its heads, a `FLAT` group's
-  head filter across the whole strip on its global index, a `PER_FIXTURE` one's within each fixture;
-  sixteen dials, then *+n*). Under Segments, Wings or Parts Position's continuous rank snaps to its
-  nearest slot first, as the desk's `wholeRanks` does. Its summary says the Shape, else *Custom*, then the non-defaults: *Custom · 50 % · 2 wings*.
-  The four ride `updateFx` once touched (`OPTIONAL_FIELDS`), `parts: 0` turning them off. **The
-  dials are the one client copy of the desk's rule** (P2): `lib/spreadShape.ts` mirrors
-  `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
-  `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
-  so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
+  (`-128..127`, venue-visit plan D3) on every head — the value is raw DMX, so no head is consulted. **Each parameter is drawn from the
+  desk's metadata** (fx-settings plan D1; `paramView` in `fxEditorModel.ts`): its label, range, step and unit, a `choice` as a
+  segment (a Wave's or a Path's `shape` with a small picture over each word, `fxShapeIcons.ts`, keyed by option), a `pair`
+  as one two-thumb range with a field at each end, one whose `shownWhen` is false not at all, and `detail`
+  ones folded under **More**, its summary line saying what is in it; `paramRole` and the board's label table guess these
+  only for a parameter that declares none (a script FX's), whose curves, switches and ratios beside levels fold under
+  *More* too. The parameters are **the FX's own section**, named for what it holds (`fxSectionName`: *Levels* for a Wave
+  or a level FX, *Colours*, *Path*, *Steps*, *Flicker* for the Flicker family, *Parameters* for a script FX), its header's
+  FX name the **type switcher** (`FxTypeSwap`): the FX this attribute takes, a pick swapping it as the picker does
+  (`swappedDraft` — the new type's starting parameters and blend, a blend changed from the old type's start kept, the
+  timing carried unless at the old type's defaults, a step spread kept at its offsets over the heads), id and phase kept
+  in the live editor, which draws the new type at once and offers no swap on a pad's instance; one stored write, its
+  family restamped, in the cue's FX tab. The palette editor's FX select above the fields is its switcher, so its header names the FX alone. **Advanced**
+  holds the phase, *One cycle for: All heads | Each head* on a group or a fixture with heads (over `timing`, `CYCLE` |
+  `HEAD`, the wire unchanged), the head filter and the raw blend (every FX, so nothing is out of reach), its summary
+  saying each: *phase 0° · one cycle for all heads · override*. **Over** — *Fixtures ·
+  Elements · Each fixture* (`WHOLE`, `FLAT`, `PER_FIXTURE`; FX editor follow-ups plan D7), what the spread counts where
+  the FX lands on fixtures' elements — heads Across the heads wherever a target fixture has elements, and every
+  door that starts or creates an FX writes `WHOLE` (D8: the picker, a cue's draft FX, a new FX palette), while a stored
+  FX naming none is Each fixture (`NEW_FX_ELEMENT_MODE` / `STORED_ELEMENT_MODE`, `fxConstants.ts`; a preview's draft says
+  the stored one, since the add route reads an absent one as Fixtures). The same doors start an FX whose
+  library entry names `stepsFrom` (Colour Cycle, Palette Steps, Slot Steps) **one step behind** — `spreadUnit:
+  'STEP'`, `spread: 1` (fx-settings plan D7, `newFxSpread`) — and a preview's draft says its stored unit, `CYCLE`
+  where it names none, for the same reason. **The
+  spread's shape is *Across the heads*'s** (fx-settings plan D10; `AcrossHeads` in `FxFields.tsx`) on a group or a
+  fixture with heads, and always on an FX palette, in this order under *Over*: the **head ladder** (`HeadLadder.tsx`),
+  each head numbered by when it starts — 1 first, heads starting together sharing a number and a colour — in rig
+  order: the desk's preview in the FX editor's inspector (`previewLadderHeads`, its rows sorted back by `rigIndex`,
+  a head hovering its graph row), elsewhere
+  `spreadOffsets` on the FX's own heads (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion`
+  counted: one per fixture where the first fixture carries the FX's attribute itself (`carriesFxAttribute`: a slider
+  or setting by name, a colour or position by type, the desk's traits), else its heads: one unit a fixture under
+  `WHOLE`, a `FLAT` group's head filter across the whole strip on its global index, a `PER_FIXTURE` one's within each
+  fixture), or eight notional heads on a palette or a group not yet loaded, *Drawn on eight heads* — sixteen, then
+  *+n*; then the **patterns** (FX editor plan D11, below), each drawn on those heads, up to sixteen, and *Custom*,
+  under which alone the Order select shows; then **Each head later by** — *Fit the cycle* (`CYCLE`, 1), *1 step*
+  (`STEP`, 1, only where the library entry names `stepsFrom`) or *Free*, a slider in the unit the FX is on (steps
+  0–16 under `STEP`, a percentage of the cycle 0–200 under `CYCLE`; it holds while its slider passes through 1, and
+  a spread written from outside reads afresh) — with a readout of the gap between neighbouring starts as the ladder
+  has them (`neighbourGap`) as a share of the cycle, in steps where the FX has them, in beats (seconds on Seconds or
+  the wall clock; a head's own cycle under *One cycle for: Each head*) and degrees, and under `STEP` on known heads
+  the spread the desk runs: *⅓ cycle · 1 step · 1⅓ beats · 120° · spread 133 %* (`acrossHeads.ts`'
+  `laterByReadout`, over `stepCountOf`; *on eight heads* where a `CYCLE` gap is the notional heads'); then **Segments · Parts · Wings**, each
+  a segment `1 · 2 · 3 · 4` (*off* for Parts and Wings) ending in a typed count lit while it is none of them, with
+  one line saying what they do (`groupingSentence`: *Segments 2: neighbours move in pairs · Parts off: one pattern
+  across all four · Wings off: no mirror*). *Wings* is hidden under a mirrored Order — Centre out, Centre in, the line
+  saying so — and set back to 1 in the same write when one is chosen (`orderPatch`, since the desk refuses wings
+  there); under Unison only the ladder and the patterns show. Under Segments, Wings or Parts Position's continuous rank
+  snaps to its nearest slot first, as the desk's `wholeRanks` does. The four and the unit ride `updateFx` once
+  touched (`OPTIONAL_FIELDS`), `parts: 0` turning them off. *Same spread as* copies the four, Spread and its unit,
+  and refuses a step spread onto an FX with none; the graph's Spread knob drags in steps under `STEP`
+  (`spreadShareOf` over the editor's `steps`) and its hover says *Later by ⅓ cycle · 1 step* (`laterByPhrase`, over
+  the preview's offsets). **The ladder, the drawings and the words are the one client copy of the desk's
+  rule** (P2): `lib/spreadShape.ts` mirrors `fx/SpreadShape.kt` and the strategies' ranks — Random through
+  `spreadPlans.ts`' `javaRandom` — and `spreadShape.test.ts` reads the desk's vector,
+  `src/test/resources/fx/spreadShape.fixture.json`, so a head's number is the start the rig runs. The rules are
+  pure, in `fxEditorModel.ts` and `acrossHeads.ts`.
   The Values grid's lens chips and a cell popup's FX band open the same editor in
   `EditorSurface` (`FxEditorPopover`), the FX editor draws it in its inspector, and the busk FX tab
   draws it inline under a row — `SplitFxEditor` (`components/fx/SplitFxEditor.tsx`), which the
@@ -930,8 +985,8 @@ Release folds to its glyph and the scope line drops the fade.
   scales each head's colour, so it is never one group entry. The row's × over a group's *All* is one group `clearEntry`.
 - **FX follow the pick** (`TrayPick`): the tray lists what reaches the picked heads or members
   (`fxReaching`, still the one filter), an FX on one head reading *on Head 3*. **+ FX**
-  starts on the fixture or the group for *All* (a group's with its Order, Element mode in the
-  editor's Advanced), on that head or member alone for one (`headAsFixture` — the desk resolves a
+  starts on the fixture or the group for *All* (a group's with its Order and Over in the
+  editor), on that head or member alone for one (`headAsFixture` — the desk resolves a
   head's key as an FX target), on the fixture with the **element filter** that names a pick of
   exactly the odd, even or a half of the heads (`elementFilterFor`, the desk's `ElementFilter` clause
   for clause), and otherwise says why it cannot — one FX has no target for heads 1, 2 and 7. A
@@ -1007,8 +1062,8 @@ two it holds is `kind`, and it is fixed at creation the way the family is; three
 FX half narrow, and each removes a way for it to complicate the cook: **a value or an FX**,
 **one FX** (several together is what a Look is for), and **always
 generic** (an FX fans over whatever the layer names, so `isGeneric` is true for every one).
-Every family may hold an FX — a **Beam** one a beam built-in (Zoom Wave, Iris Pulse, Frost
-Pulse, Focus Pull; effects plan D6) or Slot Steps naming its setting, and any family Palette Steps
+Every family may hold an FX — a **Beam** one a Wave naming the beam attribute it drives (zoom, iris,
+frost or focus: the palette editor's *Attribute* select; fx-settings plan D5) or Slot Steps naming its setting, and any family Palette Steps
 over that family's palettes (session 7, `lib/stepFx.ts`'s `stepFxPaletteShape`) — and the
 backend refuses `controls` **by name**, since it names no family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/palettes.kt`; the completed records are
@@ -1436,8 +1491,9 @@ fetched once by the route, so no row subscribes to anything.)
 plan D16, session 5) — D12's question, through the live editor's own rules (`fx/centreMode.ts`,
 re-exported by `fxEditorModel.ts`) rather than a second copy. `PaletteEditor`'s FX branch
 mounts **`FxFields`** — the live editor's fields over the palette's draft (`paletteDraftOf`
-/ `withPaletteDraft`), with no target: the Order beside Direction, no *Timing* segment, element mode,
-head filter, and the same timing chip — *Seconds* or a master — as the live editor.
+/ `withPaletteDraft`), with no target: the Order and *Over* in *Across the heads* (a palette's own, read and
+saved by both and compared by `differsFromPalette`; a new one starts on `WHOLE`, a type swap keeps
+it, *New palette from FX* takes the running FX's), no *One cycle for* or head filter, and the same timing chip — *Seconds* or a master — as the live editor.
 **`EffectParameterForm` is
 retired**, not rebuilt: it had been that branch's form and nothing else's since session 3. Choosing
 an FX starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement FX
@@ -3050,15 +3106,19 @@ than the auditioned FX's), the segment is drawn when one of them is
 held by a Local FX other than the session's own (a fresh start removes that one first), and the press
 takes the choice per landing attribute (`press.stackOn`). A **swap** is never asked, nor is the *On*
 row's move of the auditioned FX to another setting of its family: each keeps how its FX started, which `FxPicker` records on the auditioned FX (`AuditionedFx.stacked`). A fresh start —
-another attribute, or after the session's FX stopped elsewhere — is asked of its own landing, and
-every start puts the segment back on *Replace*. So every FX door on the programmer page asks — row C's FX, ⌘K's *On the selection*, the FX
+another attribute, a selection the session has started nothing over, or after the session's FX
+stopped elsewhere — is asked of its own landing, and every start puts the segment back on *Replace*.
+**The auditioned FX is the selection's**: both doors keep one per selection the session started over
+(`useAuditionedFx`, keyed by `selectionKeyOf`, the FX's own target order), so a tap after the
+selection moves starts afresh on the new heads and leaves the old FX running on the old ones, and back
+on those heads a tap swaps that FX again; in a focused Look the absorb takes every one. So every FX door on the programmer page asks — row C's FX, ⌘K's *On the selection*, the FX
 table's *+ FX*, a band's *+ FX …* and the palettes' *FX…* — and no door elsewhere does: the busk
 view's family tabs, its FX tab and ⌘K's own picker off the programmer still press as they always did.
 
 **Once started, row C's FX is the live editor** (D9): ⌘K's door too (`ProgrammerAddFxSheet`'s
 `editor`, the arm's `editOnStart`). A tap starts the FX and the panel turns into `FxEditor` on it,
 with *‹ Swap* back to the list — kept mounted under the editor, so it comes back on the family the FX
-was started from and its taps swap it, phase kept — *Open in FX editor* ⤢ and the editor's Done,
+was started from and, on the selection it was started over, its taps swap it, phase kept — *Open in FX editor* ⤢ and the editor's Done,
 which closes the picker; a selection that leaves under row C's open picker closes it. ⤢ is `useOpenInFxEditor` (`fxEditor/openInFxEditor.ts`, the
 fixture sheet's tray's move lifted out of `FxTray`): the FX picked, the FX tab on *Selection*, the FX
 table shown — `?table=fx`, replacing the address on the programmer. Nothing is reselected: the
@@ -4191,7 +4251,10 @@ each was:
   relies on `reset()` for a fresh gesture, and a sheet's value moves by routes the hook never sees
   — ⌫ through `column.clear`, Fan, Park, the wire — so a value set, cleared and retyped would
   never reach the rig while the field showed it. `useSheet.test.ts` pins the cadence as the
-  literal 33, the trailing call, and that a repeat is sent.
+  literal 33, the trailing call, and that a repeat is sent. So a component test's **second**
+  editor commit on one sheet (an Enter, a pick; a key typed over the marquee is not throttled) lands
+  at once only if 33 ms have passed since the first, which a fast machine does not take: assert it
+  through `waitFor` (flaky-tests plan session 3).
 
 - **`PaletteBands`** — `components/editor/PaletteBands.tsx`, the per-attribute popup (apply-model
   plan §4.3, D4; session 5): the family's palettes **round** a value cell's editor, in every form it
@@ -4240,10 +4303,10 @@ each was:
   that fit, pressed through `usePress` as the Palettes band's are, and *+ FX …*, the picker's
   FX arm on this attribute under the cell's family. Its family is the attribute's group as the
   press reads it (a Pulse on a uv cell is Colour). `paletteFits` narrows a Beam cell's FX
-  palettes by the attribute the FX drives — a beam built-in's library attribute, Slot Steps' named
-  setting, Palette Steps' palettes' rows (`fxPaletteDrives`, given the library and palette list
-  through its `FxFitContext`) — so a zoom cell is offered the Zoom Wave palettes and a gobo cell
-  the Slot Steps of its gobo. **In the cue editor** (apply-model plan session 8) the bands carry the
+  palettes by the attribute the FX drives — the attribute an FX palette names (a Wave's), else its
+  library attributes, Slot Steps' named setting, Palette Steps' palettes' rows (`fxPaletteDrives`,
+  given the library and palette list through its `FxFitContext`) — so a zoom cell is offered the
+  palettes of a Wave on zoom and a gobo cell the Slot Steps of its gobo. **In the cue editor** (apply-model plan session 8) the bands carry the
   cue arm without a prop: `usePress` reads `PressCue` (`components/press/pressCue.ts`), which
   `CueRowStoreProvider` provides, so a band press there is the cue's layer press and the line reads
   *Into Q1 · as a layer*; a chip is ringed partly where the cue layers its record (`cuePresence` — by
@@ -5202,7 +5265,7 @@ popover and row C's Fan — and `AppliedTables.test.tsx` pins what the tables ca
 **The FX editor** (FX editor plan D1–D6, session 4) is the FX tab's *Selection* view
 (`components/fxEditor/`): list · graph · inspector over the window's pair (`useWindowFxPair` — the
 desk's selection while the window follows it, else the programmer list's rows). The graph (session 5)
-draws the preview's answer; Shapes, the offset ladder, Match, hover lights and the graph's handles
+draws the preview's answer; the patterns, the head ladder, Match, hover lights and the graph's handles
 (session 6) tie the inspector to it; the FX palette editor, the cue editor's FX tab and the busk FX
 tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Things that will bite:
 
@@ -5211,7 +5274,7 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   folded lanes and the graph's toolbar (`programmer.fx.graph`). Solo is a mark on the card: the graph
   draws it (D14), the stage never changes.
   `ProgrammerFxTab` is the tab's host and draws *Selection · All* after the table tabs on row B.
-  *All*'s row press and *Select the heads of a running FX…* select through
+  *All*'s row press and a running FX's card with nothing selected select through
   `fixtures-list/programmerSelectRequest.ts`: `setDeskSelection` while following, the desk's mask
   kept, else Include's request (`store/includeSelection.ts`), which opens the group or fixture a head
   sits in and clears the filter — a group sent as its row and its members, since a flat list has no
@@ -5231,13 +5294,31 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   where a new Local FX lands. A card's family is the answer's, else its attribute's family on a
   head that carries it. A card names its attribute in words where the lane's family has several
   (`paletteAttributeFor`'s label — *UV*, *Zoom*), and its Direction only where it is not the FX
-  type's own (`newFxDirection`; the sweeps bounce by default). A layer's card has pause and no ×,
+  type's own (`newFxDirection`; Path's sweep presets bounce, by their own Direction). A layer's card has pause and no ×,
   as the busk FX tab's pad FX has none: stopping the instance alone, the layer respawns it on
   its next recook, so the layer is what lets it go.
-- **The subject line is row C's**: the family pill (`SelectionMaskPill`) writes through the
-  programmer list's desk bridge, which the grid's toolbar publishes in `fixtures-list/remaskStore.ts`
-  (`ProgrammerPage` provides it), so a marquee whose columns no longer say the mask drops to its
-  rows as it does from row C; on a window with its own selection the pill is a read-out.
+- **Nothing selected** (follow-ups D1, `fxEditorHead.ts`' `runningCards`): one line, then every
+  running FX not leaving as a card, by family in the lanes' order then by name — its family, or its
+  attribute where that is not the family's own (*UV*, *Zoom*), its target (`fxTargetLabel`, a head
+  by `headName`), how many fixtures that is, its cycle and master. A press is *All*'s row press:
+  the FX's heads selected (`selectWindowHeads(fxTargetsOf(…))`) and the FX picked. With none
+  running, *Select heads in Values* shows the Values table. The graph says why it is empty —
+  *Select heads to draw their FX.* or *No FX reaches the selection.* (`FxGraph`'s `empty`).
+- **The subject** (follow-ups D2, `subjectForm`): a group reads its name and how many fixtures, one
+  fixture (or elements of one) its name and its elements, several fixtures *4 fixtures · 12
+  elements ▾* — a `ToolbarMenu`, a dropdown on a desk and a bottom sheet of 44px rows below the 760
+  arm, listing each fixture's colour (`useFixtureColourIndex`), name and selected elements, a press
+  being *Only* (`selectWindowHeads` with that fixture's targets: the fixture whole, or the elements
+  of it the selection named), the word shown on the highlighted row and on every row under a finger.
+  *Only* takes the chip away, so focus goes to the mask pill. In a window with its own selection it
+  goes through Include's request, so the marquee's mask is let go there. The count never truncates:
+  the pill and badge wrap below it where the column is too narrow, and a named subject's name
+  truncates beside them. Measured at
+  248px with four Shehds, the count, the pill and the link badge take 226 of the row's 231. The
+  family pill (`SelectionMaskPill`) is row C's: it writes through the programmer list's desk bridge,
+  which the grid's toolbar publishes in `fixtures-list/remaskStore.ts` (`ProgrammerPage` provides
+  it), so a marquee whose columns no longer say the mask drops to its rows as it does from row C; on
+  a window with its own selection the pill is a read-out.
 - **A drag is one `programmer.moveFx`** (`moveLocalFx`, `localMovesFor`): a Local card drops on
   another Local card of its lane and takes its place, the frame naming the card that ends directly
   above it; the grip moves it with ↑ / ↓. The desk can only put an FX *below* another, so the one
@@ -5253,11 +5334,11 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   takes `+ FX`'s own sheet instead, which absorbs into the Look; Output and a palette layer refuse
   with the offer's reason, as *+ FX* does everywhere (`useProgrammerAddFx`).
 - **The inspector is the live editor** (`SplitFxEditor`, so the split, the 50 ms floor, Revert,
-  *Update palette* and *Reset to palette* are unchanged) with `layout="inspector"`, which orders
-  `FxFields` as §4.5 does: Cycle · Amount · Direction · Order, **Shape** (every parameter), Spread
-  (the Shapes, the fields and the offset ladder), **Over what's underneath** (the family's question
-  and the raw blend), **Advanced** (Phase, Timing, Runs, element mode and filter). Every other host
-  keeps the old order, and the phase dials in place of the ladder.
+  *Update palette* and *Reset to palette* are unchanged) with `layout="inspector"`: `FxFields` in the
+  four questions every host draws (fx-settings plan D9) — the Timing strip, the FX's own section, Across
+  the heads (Over, the head ladder from the preview, the patterns, Each head later by, Segments · Parts · Wings),
+  Mix — and Advanced, at the inspector's wider spacing. Every other host draws the ladder from `lib/spreadShape.ts`. The Timing strip's one row of
+  chips is what lets the inspector fit the editor's three bands without the old two-row Cycle grid.
 - **Widths are the editor's own** (`useContainerBand`, `FX_EDITOR_BAND_FLOORS`): from 1100 three
   columns, list 248 · graph · inspector 340; from 760 list · graph, the inspector over the graph's
   right half while something is picked or the picker is open; below 760 one column (§4.2's phone
@@ -5286,9 +5367,8 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
 - **The graph draws the answer and computes nothing** (P2; `FxGraph.tsx`). `fxPreviewDecode.ts`
   decodes the base64 planes once per answer into `Uint8Array`s per row, attribute and FX (a Steps
   output's steps as an `Int32Array` beside its labels); `fxGraphModel.ts` lays a lane out —
-  one section per attribute, its rows in the answer's order (the picked FX's Order, a fixture's name
-  once over its elements) or by `rigIndex` under *Rig order*, a heat map at 6px a row from 25 rows —
-  and reads the marks off the answer: the start ticks are `starts`, the hatching `holding`
+  one section per attribute, its rows in the answer's order (the picked FX's Order) or by `rigIndex`
+  under *Rig order*, a heat map at 6px a row from 25 rows — and reads the marks off the answer: the start ticks are `starts`, the hatching `holding`
   (inclusive), Segments and Parts brackets and the Wings' mirror the ladder's rungs, a row's phase on
   hover the distance between its starts (a cycle is 48 samples, the desk's rate, cut or not). The
   desk starts the window at whatever tick the master is on, so the beat grid and the hover's *Beat*
@@ -5306,10 +5386,45 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   (`scrollRows`, the editor's; `narrow` without it cuts at six). The playhead sits inside the
   scroller (`RowScroll`), so it spans every row. The column's rows size to their content there
   (`auto-rows-max`), since the graph under the list is tall.
+- **A fixture's own row** (follow-ups D5): every multi-element fixture gets a row over its elements —
+  `layoutLane` groups a section's rows by fixture, in the order each first appears. Where the answer
+  has a row for the fixture itself (an attribute it carries, a bar's dimmer) that row is it; else it
+  is a **mixed** row (`LaidRow.mix`, `row` -1, hovered by `mixKeyOf`, which no answer row has),
+  drawn as the mean of its elements' samples per plane, rounded — built once per answer as the
+  attribute's `mixed` (`fxPreviewDecode.ts`' `mixedRows`, `mixRow`, `mixSeries`), drawing as *As
+  seen* is, never output (P2). A Position or Steps section draws its name and no mix. A mixed row
+  takes no Phase drag and no hover phase, reads *Bar · mix of 3* on hover through the one
+  `HoverReadout` (the view honoured), and draws a start tick only where its elements share it
+  (`rowStarts`). The brackets and the Wings' mirror are ranked over the answer's rows, a mixed row
+  standing in for its elements (`rungRow`) only while they are folded. Its chevron folds the elements,
+  per window (`programmer.fx.foldedFixtures`, beside the folded lanes); folded, it is drawn alone.
+  The heat map counts the answer's rows, a folded fixture as one — a mixed row over drawn elements
+  adds none — and since a heat section draws no names, the lane's header carries *Fold elements* /
+  *Show elements* for every fixture in it (`setFixturesFolded`). The strip draws fixture rows too,
+  with no chevron or fold.
+- **Names** (D6) are DOM over the canvas (`GutterLabels`), never canvas text: a fixture's cut in the
+  middle by measured width (`middleCut`, an `OffscreenCanvas` where there is one, else an estimate)
+  with its whole name on hover; an element reads its own words after the fixture's name, else — or
+  where they do not fit — its number (`elementLabel`). The name column is the window's
+  (`programmer.fx.graph`'s `gutter`, 152 by default, 96–280), set by a grip between names and plot
+  (`role="separator"`, the arrow keys stepping 8) and held at the default under a coarse pointer,
+  where the grip is not drawn; wherever it would leave the plot under 160px it gives way, down to
+  72 (`fitGutter`) — the side form's graph beside an open inspector is ~236px at the band's floor.
+  The grip sits inside the names, at the width drawn, but reports and moves the window's width, so
+  a key press while the names are narrowed never loses it.
+  The strip's is a fixed 72, since its hosts are narrow.
+- **The ruler and the toolbar** (D4): a 24px ruler canvas over the lanes numbers the picked FX's
+  master's beats from the tick the window started on (`rulerTicks`: bar numbers on the bar, counted
+  from the bar the window starts in, `bar.beat` between where there is room, bars alone over 16
+  beats), or seconds on its own clock. The toolbar is one row of 28px segments, each labelled inside
+  (*Window*, *Draw*), the window's length (*8 beats · 4 s*) beside Window, wrapping between segments;
+  below 300px of toolbar (a container query on it) a segment's label folds and its buttons wrap
+  inside it. The line under it is the hover's, or the row order and the hint. Widths measured at
+  each band are the plan's §9.
 - **The inspector and the graph meet through one context** (`components/fx/fxGraphLink.ts`'s
   `FxGraphLink`), which `FxEditorSelection` provides around its three columns only — never the sheets
   it opens (a cue's editor, *+ FX*'s sheet), whose editors have no graph — and only the live editor and
-  `FxFields` read, so every other host draws none of what follows and keeps its dials. The live editor
+  `FxFields` read, so every other host draws none of what follows and draws its head ladder from `lib/spreadShape.ts`. The live editor
   **lends the graph its draft and its write** (`attach`; `detach` takes back only the editor it names,
   so one editor going never takes another's handles), its parameters filled from the library where
   the FX carries none, and tells it every move before the floor (`preview`): the editor holds it as
@@ -5320,37 +5435,45 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   ignores the draft), the ask behind it bringing the latest. A held split edit is never previewed, and
   lends no handles. The trigger subscriptions key on whether there is an ask, not its content, so a
   drag does not resubscribe them each move. The graph's hovered row is a store
-  (`HoveredRowStore`), read by the ladder alone, so a pointer crossing the rows redraws only its dots.
-- **Shapes** (D11, `fx/fxShapes.ts`) are chips at the head of Spread, in every host: one tap writes
-  Order, Spread, Wings, Segments and Parts in one `updateFx`; a chip is lit only while all five
-  match, else a lit *Custom* follows them, and the Spread summary leads with the name. A chip's 40 ×
-  16 drawing is `lib/spreadShape.ts` over eight notional heads — the one client rule, allowed where
-  the desk has not answered (P2), since a Shape is drawn before it runs.
-- **The offset ladder** (D9, `fx/OffsetLadder.tsx`) replaces the dials in the inspector: five dot rows
-  — Order, Segments, Wings, Parts, Spread — read from the answer's `ladder`, never computed: a rung's
-  dot at rank over that step's count, Spread's at its offset over the largest offset or one cycle. A
-  split-off copy has no rungs, so only its Spread row draws. Hovering a dot marks its graph row in the
-  gutter (`linkedRow`); hovering a graph row rings its dots (`onHoverRow`).
-- **Match** (D13) is *Same as…* on Cycle and on Spread, over the list's other FX: one write of the
-  source's cycle and what it follows (master 1 named by its uuid, since an absent master keeps), or
-  its five spread fields. A source on a master of the other clock — read from its library entry,
+  (`HoveredRowStore`), read by the head ladder alone, so a pointer crossing the rows redraws only its heads.
+- **Patterns** (D11, `fx/fxShapes.ts`; fx-settings plan D10) are chips under the head ladder, in every host: one
+  tap writes Order, Wings, Segments and Parts in one `updateFx` and leaves Spread and its unit to *Each head later
+  by*; a chip is lit only while all four match, else *Custom* is, which opens the Order select — and stays lit, once
+  pressed, for the fields it was pressed on and those its Order select writes, so Revert lights the pattern again. A chip's 40 × 16
+  drawing is `lib/spreadShape.ts` over the FX's own heads, up to sixteen, else eight notional — the one client rule,
+  allowed where the desk has not answered (P2), since a pattern is drawn before it runs.
+- **The head ladder** (fx-settings plan D10, `fx/HeadLadder.tsx`) heads *Across the heads*: in the inspector each row
+  the FX paints, numbered by its start in the answer's `ladder.spread`, never computed — the five-row offset ladder it
+  replaced drew each step of the spread, which the line under Segments · Parts · Wings now says in words. A split-off
+  copy keeps its start. Hovering a head marks its graph row in the gutter (`linkedRow`); hovering a graph row rings
+  its head (`onHoverRow`).
+- **Match** (D13) is *Same as…* in the Cycle chip's popover and beside the patterns, over the list's other FX: one
+  write of the source's cycle and what it follows (master 1 named by its uuid, since an absent master keeps), or
+  its four pattern fields with Spread and its unit. A source on a master of the other clock — read from its library entry,
   since a beat FX on *Seconds* reports the wall clock — is offered disabled (one on *Seconds* copies
   onto either), and so is a spread source on one head, which says no Order. Nothing links them
   afterwards (`FU-FX-LINKED-TIMING`).
 - **Hover lights** (§4.5): `FxFields` wraps each control in `Lights`, which sets the link's `highlight`
   while the pointer rests there, and `drawLane` lights that mark (`LaneDrawOptions.highlight`,
   `palette.highlight` / `highlightArea`): Cycle shades the first cycle (over the rows, so a colour
-  strip does not hide it), Spread, Order, the Shapes and Phase the start ticks, Wings the mirror,
+  strip does not hide it), Each head later by, Order, the patterns and Phase the start ticks, Wings the mirror,
   Segments and Parts the brackets, Runs the hatching, Amount the gap between *This FX* and *Result*.
-  A light whose control unmounts under the pointer puts itself out.
-- **The handles** (D12, `GraphHandles.tsx`, `fxGraphHandles.ts`) sit over the picked FX's own section
-  of its lane, only while the inspector edits that FX, never under a coarse pointer
-  (`hooks/useCoarsePointer.ts`) or read-only: the first cycle's right edge (always sample 48, the
-  desk's rate) for Cycle, snapped to `SPEED_STEPS` by ratio — the cycle the drag began on counting as
+  A light whose control unmounts under the pointer puts itself out. A knob lights the same way, run the
+  other way (`FxGraph`'s `onHighlight`): the Cycle tab the first cycle, Spread's knob the start ticks,
+  a max or min knob the level lines (`levels`).
+- **The handles** (D12, `GraphHandles.tsx`, `fxGraphHandles.ts`; follow-ups D4) are knobs — a violet
+  disc, named on hover (*Later by ¼ cycle*, *High 100%*) — and a mark is a tick or a thin line. Only while the inspector
+  edits the picked FX, never under a coarse pointer (`hooks/useCoarsePointer.ts`) or read-only: the
+  **Cycle tab** on the ruler at the first cycle's end (always sample 48, the desk's rate), labelled
+  with the cycle (*1 bar ⇔*), snapped to `SPEED_STEPS` by ratio — the cycle the drag began on counting as
   a step, so a triplet or 32 beats is kept until the drag leaves it — or, in seconds (a wall-clock FX,
-  or one on *Seconds*), moved to the nearest 0.05 s; the line through each row's first start
-  for Spread; a row block dragged sideways (the canvas's own pointer-down) for Phase; an Intensity
-  FX's `max` and `min` lines, each row on its own scale (`levelScale`, the drawing's). Each is measured
+  or one on *Seconds*), moved to the nearest 0.05 s; over the picked FX's own section, **Spread's
+  knob** at the end of the dashed line through each row's first start, on the lowest row Spread
+  moves furthest (a row of share 0 never moves, so a knob there would not follow the finger); a
+  row block dragged sideways (the canvas's own pointer-down) for Phase; an Intensity FX's `max` and
+  `min` lines on every row, as marks, with one pair of knobs at the first row's right end, since
+  they are the FX's (`levelScale`, the drawing's). A knob's light goes out as the pointer leaves
+  it, so the next knob's holds. Each is measured
   from where the drag began, since the answer redraws under the finger, starts only once its own
   pointer has moved 3 px (`DRAG_SLOP_PX`, so a click edits nothing), writes `set(patch, false)` per
   move and lands `set(patch, true)` on release — nothing for a drag that changed nothing — through the
@@ -5670,7 +5793,7 @@ bug — a wall-clock FX's "Speed Master" did nothing at all. **The live FX edito
 gate and draws the timing as a chip** (`FxFields`' `TimingChip`, fixture-fx-sheets D11 and
 venue-visit plan D7): *Seconds* first, then every master — on a beat FX the speed master (`M2 ·
 96`, master 1 when none is stored), on a wall-clock one the **rate** master (*Rate M2 · 96*) —
-beside the Cycle label rather than as a select under it. *Seconds* is an FX's own cycle with no
+beside the Cycle chip in the Timing strip rather than as a select under it. *Seconds* is an FX's own cycle with no
 master (`seconds` on the wire; a wall-clock FX's Seconds is no rate master). It lists the live
 bank and always sends a concrete uuid — choosing M1 sends master 1's uuid, `SpeedMasterSelect`'s rule,
 because `updateFx`'s absent field means "keep" — and it reads the live BPM, never the stored one.

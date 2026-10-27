@@ -9,8 +9,11 @@ import {
   forkRequest,
   fxSourceOf,
   mintForkFxId,
+  RETIRED_FX_IDS,
+  takenFxIds,
   uniqueFxId,
 } from './fxLibraryModel'
+import retired from '../../../../src/test/resources/fx/retiredFxIds.fixture.json'
 
 function entry(name: string, over: Partial<FxLibraryEntry> = {}): FxLibraryEntry {
   return {
@@ -140,11 +143,34 @@ describe('forkRequest', () => {
     expect(body.compatibleAttributes).not.toBe(pulse.compatibleAttributes)
   })
 
+  it('keeps a parameter’s metadata but not a curve’s options, which are the desk’s own list', () => {
+    const curved = entry('Ramp', {
+      parameters: [
+        { name: 'min', type: 'ubyte', defaultValue: '0', description: '', label: 'Low', min: 0, max: 255, unit: '%' },
+        { name: 'curve', type: 'easingCurve', defaultValue: 'LINEAR', description: '', label: 'Curve', options: [{ value: 'LINEAR', label: 'Linear' }] },
+      ],
+    })
+    const [min, curve] = forkRequest(curved, [curved], []).parameters ?? []
+    expect(min).toMatchObject({ label: 'Low', min: 0, max: 255, unit: '%' })
+    expect(curve.label).toBe('Curve')
+    expect(curve.options).toBeUndefined()
+  })
+
   it('mints against the library and the definitions both, and numbers the name to match', () => {
     const library = [pulse, entry('PulseCustom', { source: 'USER', sourceDefinitionId: 3 })]
     // A definition whose script failed to register still holds its id.
     const body = forkRequest(pulse, library, [definition(3, 'PulseCustom'), definition(4, 'PulseCustom2')])
     expect(body.fxId).toBe('PulseCustom3')
     expect(body.name).toBe('Pulse (Custom 3)')
+  })
+})
+
+describe('takenFxIds — the retired ids too (fx-settings plan D2)', () => {
+  it('names every id the desk retired, as the shared vector lists them', () => {
+    expect([...RETIRED_FX_IDS].sort()).toEqual([...retired.ids].sort())
+  })
+
+  it('so a new effect named Pulse mints around it', () => {
+    expect(uniqueFxId('Pulse', takenFxIds([entry('Wave')], [])).fxId).toBe('Pulse2')
   })
 })

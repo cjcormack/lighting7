@@ -49,7 +49,8 @@ import uk.me.cormack.lighting7.fx.PaletteIntent
 import uk.me.cormack.lighting7.fx.PaletteAttribute
 import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.WhitePolicy
-import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
+import uk.me.cormack.lighting7.fx.fxAttributeFamily
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.fx.parsePaletteIntent
 import uk.me.cormack.lighting7.fx.serializePaletteColourRef
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
@@ -579,6 +580,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                         this.wings = effect.wings
                         this.segments = effect.segments
                         this.parts = effect.parts
+                        this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(effect.spreadUnit)
                     }
                 }
                 CopyPaletteOutcome.Copied(
@@ -1058,7 +1060,7 @@ internal fun performPaletteCreate(
  */
 internal fun contentsFamily(rows: List<PaletteRowDto>, effect: PaletteFxDto?): AttributeFamily? =
     rows.firstNotNullOfOrNull { PaletteAttribute.ofOrNull(it.attribute)?.family }
-        ?: effect?.let { attributeFamilyForFxFamily(it.family) }
+        ?: effect?.let { fxAttributeFamily(it.family, it.attribute) }
 
 /**
  * A trigger's name is refused as a trigger (stage-view plan session 9), not with the slotted-property
@@ -1223,10 +1225,13 @@ private fun validatePaletteFx(
     ownUuid: java.util.UUID?,
     templates: PaletteRegistry?,
 ): String? {
-    // Rule 2 (D4): the family is the effect library's own category, through the same map a Look's
-    // derived families use. `controls` has no tempo, so names none; a beam effect (effects plan
-    // D6) is a Beam palette.
-    val family = attributeFamilyForFxFamily(effect.family)
+    // An old level wave is refused in its own words — it is now Wave — before the library is asked for it.
+    if (LegacyNames.isRetiredFxId(effect.fxType)) LegacyNames.writeProblem(effect.fxType, effect.parameters)?.let { return it }
+
+    // Rule 2 (D4): the family is the effect library's own category on the attribute it drives
+    // (fx-settings plan D5), through the same map a Look's derived families use. `controls` has no
+    // tempo, so names none; a beam effect (effects plan D6), or a Wave on zoom, is a Beam palette.
+    val family = fxAttributeFamily(effect.family, effect.attribute)
         ?: return "A palette cannot hold a '${effect.family}' FX — an FX palette is " +
             "banked by attribute family, and that FX family maps to none. FX palettes are: " +
             PALETTE_FX_FAMILIES.joinToString { it.name }
@@ -1285,6 +1290,9 @@ private fun validatePaletteFx(
         wings = effect.wings,
         segments = effect.segments,
         parts = effect.parts,
+        spreadUnit = effect.spreadUnit,
+        fxType = effect.fxType,
+        fxSteps = registry.steps(effect.fxType),
     )?.let { return it }
 
     registry.fxWriteProblem(effect.fxType, effect.parameters, effect.family)?.let { return it }
@@ -1399,6 +1407,7 @@ private fun createPaletteFx(template: DaoPalette, effect: PaletteFxDto, uuid: ja
         this.wings = effect.wings
         this.segments = effect.segments
         this.parts = effect.parts
+        this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(effect.spreadUnit)
     }
 }
 
@@ -1546,6 +1555,7 @@ internal fun DaoPaletteFxEntity.toDto(registry: FxRegistry) = PaletteFxDto(
     wings = wings,
     segments = segments,
     parts = parts,
+    spreadUnit = spreadUnit,
     // The registry is the authority, exactly as it is for `category` — which the write boundary
     // checks rather than trusts. Unlike `category` this one is not stored at all: an effect's
     // timing source is a property of the *effect type*, so a column would be a second copy that a
@@ -1570,7 +1580,7 @@ internal fun DaoPalette.familyOf(): AttributeFamily? =
     // been loaded, and re-ordering a loaded `SizedIterable` throws "Can't order already loaded
     // data". A template has a handful of rows, so sorting them in memory costs nothing and leaves
     // this function safe to call whatever the caller has already read.
-    paletteFamily(rows.sortedBy { it.sortOrder }.map { it.attribute }, effect?.family)
+    paletteFamily(rows.sortedBy { it.sortOrder }.map { it.attribute }, effect?.family, effect?.attribute)
 
 /**
  * The bundled emitters this template's rows name outright — `PaletteDto.requiredEmitters`.

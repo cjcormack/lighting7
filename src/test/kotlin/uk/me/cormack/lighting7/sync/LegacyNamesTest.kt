@@ -152,23 +152,93 @@ class LegacyNamesTest {
 
     @Test
     fun `a write naming an old name is refused, so no row written today is rewritten on import`() {
-        assertEquals("'Triangle' is now 'Ramp'", LegacyNames.writeProblem("Triangle", emptyMap()))
+        assertEquals("'Triangle' is now Wave, shape TRIANGLE", LegacyNames.writeProblem("Triangle", emptyMap()))
+        assertEquals("'Ramp' is now Wave, shape TRIANGLE", LegacyNames.writeProblem("Ramp", emptyMap()))
+        assertEquals("'Colour Pulse' is now 'ColourWave'", LegacyNames.writeProblem("Colour Pulse", emptyMap()))
         assertNotNull(LegacyNames.writeProblem("Breathe", emptyMap()))
         assertNotNull(LegacyNames.writeProblem("Sweep", mapOf("pingPong" to "false")))
-        assertNull(LegacyNames.writeProblem("Sweep", mapOf("startPan" to "0")))
-        assertNull(LegacyNames.writeProblem("Ramp", emptyMap()))
+        assertEquals("'Sweep' is now Path, shape LINE", LegacyNames.writeProblem("Sweep", mapOf("startPan" to "0")))
+        assertEquals("'Figure 8' is now Path, shape FIGURE_8", LegacyNames.writeProblem("Figure 8", emptyMap()))
+        assertNull(LegacyNames.writeProblem("Path", mapOf("shape" to "LINE", "startPan" to "0")))
+        assertNull(LegacyNames.writeProblem("Wave", mapOf("shape" to "TRIANGLE")))
+        assertEquals("'min' is now 'low'", LegacyNames.writeProblem("Flicker", mapOf("min" to "10")))
+        assertEquals("'smoothing' is now 'settle'", LegacyNames.writeProblem("Candle Flicker", mapOf("smoothing" to "0.5")))
+        assertEquals("'onRatio' is now 'width'", LegacyNames.writeProblem("ColourStrobe", mapOf("onRatio" to "0.5")))
+        assertEquals("'fadeRatio' is now 'between' and 'fade'", LegacyNames.writeProblem("ColourCycle", mapOf("fadeRatio" to "0.5")))
+        assertNull(LegacyNames.writeProblem("Flicker", mapOf("low" to "10")))
+        assertNull(LegacyNames.writeProblem("PaletteSteps", mapOf("fadeRatio" to "0.5")), "Palette Steps keeps its fadeRatio")
+        assertEquals("'panCenter' is now 'panCentre'", LegacyNames.writeProblem("Path", mapOf("panCenter" to "1")))
         assertNull(LegacyNames.writeProblem("MyChase", mapOf("pingPong" to "true")), "a script FX's own parameter")
         assertNotNull(LegacyNames.writeProblem("ColourCycle", mapOf("colours" to "tmpl:u,#ff0000")))
         assertNull(LegacyNames.writeProblem("ColourCycle", mapOf("colours" to "pal:u,#ff0000")))
-        assertEquals("family 'dimmer' is now 'intensity'", LegacyNames.writeProblem("Pulse", emptyMap(), family = "dimmer"))
+        assertEquals("family 'dimmer' is now 'intensity'", LegacyNames.writeProblem("Wave", emptyMap(), family = "dimmer"))
         assertNotNull(LegacyNames.familyProblem("palette"))
         assertNull(LegacyNames.familyProblem("intensity"))
     }
 
     @Test
     fun `a retired id is matched as the registry matches one`() {
-        for (id in listOf("Triangle", "strobe", "Zoom Breathe", "breathe")) assertTrue(LegacyNames.isRetiredFxId(id), id)
-        assertTrue(!LegacyNames.isRetiredFxId("DimmerStrobe"))
+        for (id in listOf("Triangle", "strobe", "Zoom Breathe", "breathe", "DimmerStrobe", "sine wave")) {
+            assertTrue(LegacyNames.isRetiredFxId(id), id)
+        }
+        assertTrue(!LegacyNames.isRetiredFxId("Wave"))
+        assertTrue(LegacyNames.isRetiredFxId("pan sweep"))
+        assertTrue(!LegacyNames.isRetiredFxId("Path"))
+        assertTrue(!LegacyNames.isRetiredFxId("ColourFade"), "Colour Fade stays registered, as legacy")
+    }
+
+    @Test
+    fun `a script's or a tool's old name runs as today's`() {
+        assertEquals(
+            "Path" to mapOf("shape" to "LINE", "startPan" to "64", "endPan" to "192", "startTilt" to "90", "endTilt" to "90", "curve" to "SINE_IN_OUT"),
+            LegacyNames.runnableFx("PanSweep", mapOf("tilt" to "90")),
+        )
+        assertEquals("Flicker" to mapOf("low" to "40", "high" to "255"), LegacyNames.runnableFx("Flicker", mapOf("min" to "40", "high" to "255")))
+        assertEquals("Flicker" to mapOf("low" to "40"), LegacyNames.runnableFx("Flicker", mapOf("low" to "40")))
+        assertEquals(
+            "ColourCycle" to mapOf("colours" to "red", "between" to "CUT"),
+            LegacyNames.runnableFx("ColourCycle", mapOf("colours" to "red", "fadeRatio" to "0")),
+        )
+        assertEquals("ColourFade" to emptyMap<String, String>(), LegacyNames.runnableFx("ColourFade", emptyMap()))
+    }
+
+    @Test
+    fun `a renamed parameter beside its new name gives way to the old, which is the one the FX read`() {
+        val result = assertNotNull(LegacyNames.absorbFx(fx("Flicker", mapOf("min" to "40", "low" to "90"))) { null })
+        assertEquals(mapOf("low" to "40"), result.fx.parameters)
+    }
+
+    @Test
+    fun `a key under a new name an old FX never read goes from a row written before the renames, and stays in one written since`() {
+        // Fluorescent Flicker read `onLevel`, so a stray `high` beside `offLevel` ran at 255; kept, it would run at 50.
+        val fluorescent = assertNotNull(LegacyNames.absorbFx(fx("FluorescentFlicker", mapOf("offLevel" to "10", "high" to "50"))) { null })
+        assertEquals(mapOf("low" to "10"), fluorescent.fx.parameters)
+        assertTrue(fluorescent.changes.any { "'high' named nothing it read" in it }, "${fluorescent.changes}")
+        // A Flicker holding only a new name, and a Colour Cycle a `between` and no `fadeRatio`, read neither.
+        assertEquals(emptyMap(), assertNotNull(LegacyNames.absorbFx(fx("Flicker", mapOf("low" to "40"))) { null }).fx.parameters)
+        assertEquals(
+            mapOf("colours" to "red,blue"),
+            assertNotNull(LegacyNames.absorbFx(fx("ColourCycle", mapOf("colours" to "red,blue", "between" to "CUT"))) { null }).fx.parameters,
+        )
+        // Written since, a new name is meant.
+        assertNull(LegacyNames.absorbFx(fx("Flicker", mapOf("low" to "40")), writtenBefore = false) { null })
+        assertNull(LegacyNames.absorbFx(fx("ColourCycle", mapOf("between" to "CUT")), writtenBefore = false) { null })
+        assertEquals(
+            mapOf("low" to "10", "high" to "50"),
+            assertNotNull(LegacyNames.absorbFx(fx("FluorescentFlicker", mapOf("offLevel" to "10", "high" to "50")), writtenBefore = false) { null }).fx.parameters,
+        )
+    }
+
+    @Test
+    fun `an old movement's centre under its US spelling is read as its centre`() {
+        assertEquals("40", LegacyNames.runnableFx("Circle", mapOf("panCenter" to "40")).second["panCentre"])
+        assertEquals("40", LegacyNames.consolidatedParameters("Figure 8", mapOf("tiltCenter" to "40"))!!["tiltCentre"])
+    }
+
+    @Test
+    fun `a script FX definition named as a movement is never rewritten`() {
+        assertNull(LegacyNames.absorbFx(fx("Circle", mapOf("panRadius" to "4"))) { LegacyNames.Definition("POSITION", emptySet()) })
+        assertNull(LegacyNames.absorbFx(fx("Flicker", mapOf("min" to "4"))) { LegacyNames.Definition("SLIDER", emptySet()) })
     }
 
     @Test
@@ -355,8 +425,8 @@ class LegacyNamesTest {
         )
         assertEquals(mapOf("panCentre" to "1"), LegacyNames.centreParameters("random_position", mapOf("panCenter" to "1")))
         assertEquals(mapOf("panCenter" to "1"), LegacyNames.centreParameters("MyOrbit", mapOf("panCenter" to "1")))
-        assertEquals("'panCenter' is now 'panCentre'", LegacyNames.writeProblem("Figure8", mapOf("panCenter" to "128")))
-        assertNull(LegacyNames.writeProblem("Figure8", mapOf("panCentre" to "128")))
+        assertEquals("'panCenter' is now 'panCentre'", LegacyNames.writeProblem("Path", mapOf("panCenter" to "128")))
+        assertNull(LegacyNames.writeProblem("Path", mapOf("panCentre" to "128")))
     }
 
     @Test
@@ -365,6 +435,14 @@ class LegacyNamesTest {
         val read = canonicalJson.parseToJsonElement(LegacyNames.record("looks", look)).jsonObject
         val parameters = read["fx"]!!.jsonArray.single().jsonObject["parameters"]!!.jsonObject
         assertEquals(setOf("panCentre", "tiltCentre"), parameters.keys)
+    }
+
+    @Test
+    fun `the retired ids are the shared vector the client mints around`() {
+        val vector = kotlinx.serialization.json.Json.parseToJsonElement(
+            javaClass.getResource("/fx/retiredFxIds.fixture.json")!!.readText(),
+        ).jsonObject.getValue("ids").jsonArray.map { it.jsonPrimitive.content }.toSet()
+        assertEquals(vector, LegacyNames.retiredFxIds)
     }
 }
 

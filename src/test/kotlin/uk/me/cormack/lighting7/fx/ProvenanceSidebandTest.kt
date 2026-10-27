@@ -43,7 +43,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
         handleUpdateChannel(state, UpdateChannelInMessage(0, 1, 200u, fadeTime = 0))
         assertEquals(CueAssignmentResolver.Key.fixture("spot-1", "pan"), panKey())
         assertTrue(state.show.programmerStore.slotsFor("spot-1", "pan").isNotEmpty())
-        val circle = FxTestSupport.start(state, "Circle", "spot-1", "position")
+        val circle = FxTestSupport.start(state, "Path", "spot-1", "position")
 
         val entry = provenance(panKey())
         assertEquals(ProvenanceSource.FX, entry.source)
@@ -68,7 +68,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.channelEntries().isNotEmpty())
         assertEquals(ProvenanceSource.PROGRAMMER, provenance(panKey()).source, "nothing running: the programmer's")
 
-        val circle = FxTestSupport.start(state, "Circle", "spot-1", "position")
+        val circle = FxTestSupport.start(state, "Path", "spot-1", "position")
         val entry = provenance(panKey())
         assertEquals(ProvenanceSource.FX, entry.source)
         assertEquals(circle.id, entry.fxId)
@@ -82,7 +82,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
             state, TargetRef.Fixture("hex-1"), "rgbColour",
             CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(java.awt.Color(200, 40, 0))), fadeMs = 0,
         )
-        FxTestSupport.start(state, "SineWave", "hex-1", "uv")
+        FxTestSupport.start(state, "Wave", "hex-1", "uv")
         assertEquals(
             ProvenanceSource.PROGRAMMER,
             provenance(CueAssignmentResolver.Key.fixture("hex-1", "rgbColour")).source,
@@ -106,7 +106,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
             state, TargetRef.Fixture("spot-1"), "position",
             CueAssignmentResolver.AttributeValue.Position(200u, 90u), fadeMs = 0,
         )
-        FxTestSupport.start(state, "Circle", "spot-1", "position")
+        FxTestSupport.start(state, "Path", "spot-1", "position")
         assertEquals(
             ProvenanceSource.PROGRAMMER,
             provenance(CueAssignmentResolver.Key.fixture("spot-1", "position")).source,
@@ -121,7 +121,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
             state, TargetRef.Fixture("spot-1"), "position",
             CueAssignmentResolver.AttributeValue.Position(200u, 90u), fadeMs = 0,
         )
-        val circle = FxTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
+        val circle = FxTestSupport.start(state, "Path", "spot-1", "position", programmerBand = true)
         val entry = provenance(CueAssignmentResolver.Key.fixture("spot-1", "position"))
         assertEquals(ProvenanceSource.FX, entry.source)
         assertEquals(circle.id, entry.fxId)

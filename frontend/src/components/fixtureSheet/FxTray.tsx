@@ -24,7 +24,7 @@ import { FxEditor } from '../fx/FxEditor'
 import { FxPicker, type AuditionedFx, type FxTarget } from '../fx/FxPicker'
 import { HELD_BLIND_WORDS, HeldBlindMark } from '../fx/HeldBlindMark'
 import { isCueFx, type PickerFamily } from '../fx/fxEditorModel'
-import { getElementFilterLabel, getElementModeLabel } from '../fx/fxConstants'
+import { getElementFilterLabel, elementModeSummary } from '../fx/fxConstants'
 import { EditorLabel } from '../editor/EditorLabel'
 import { OwnerEditor } from '../stage/OwnerEditor'
 import { fixtureHeadKeys } from './useRelease'
@@ -405,7 +405,7 @@ export function FxTray({
                     {onWhom(e) && ` · on ${onWhom(e)}`}
                     {e.elementFilter && e.elementFilter !== 'ALL' && ` · ${getElementFilterLabel(e.elementFilter).toLowerCase()} heads`}
                     {group && ` · via ${group}`}
-                    {spreadsOverMembers(e) && e.elementMode && ` · ${getElementModeLabel(e.elementMode)}`}
+                    {e.elementMode && ` · ${elementModeSummary(e.elementMode)}`}
                     {cueId != null && cueName != null ? (
                       <>
                         {' · '}

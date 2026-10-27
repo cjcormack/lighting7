@@ -6,7 +6,7 @@ import {
   fxSpeedLabel,
   secondsLabel,
   getOrderLabel,
-  getElementModeLabel,
+  elementModeSummary,
   getElementFilterLabel,
 } from './fxConstants'
 import { resolveColourToHex, isPaletteRef } from './colourUtils'
@@ -105,7 +105,7 @@ export function FxSummary({
           {effect.elementMode && (
             <>
               <Dot />
-              <span>{getElementModeLabel(effect.elementMode)}</span>
+              <span>{elementModeSummary(effect.elementMode)}</span>
             </>
           )}
           {effect.elementFilter && effect.elementFilter !== 'ALL' && (

@@ -141,7 +141,7 @@ write disguises itself as a serialization regression. The suite runs in two fork
 claims its own `build/test-data/slot-N` (see `docs/testing-engineering.md` §"Two forks").
 
 The suite takes ~2 minutes locally in its two forks (measured 2026-10-16; ~4 minutes in
-one), warm or cold alike. The first run after any code change recompiles the 30 built-in FX
+one), warm or cold alike. The first run after any code change recompiles the 14 built-in FX
 (editing a source file changes the classpath fingerprint, which invalidates the
 compiled-script jar cache), and that cost lands on whichever class first builds a `Show` in
 each fork, which therefore *looks* slow. It is not slow; it is first. Before optimising
@@ -402,8 +402,9 @@ Lighting scripts use embedded Kotlin via `LightingScript` base class:
 Tempo-synchronized FX for continuous animations without complex scripts:
 - **Seconds** - An FX's timing is a speed master or *Seconds*: its own cycle, `cycle` read as seconds, following no master (venue-visit plan D7; `fx/FxTimingChoice.kt`). A beat FX on Seconds runs on the wall clock; a wall-clock FX's Seconds is no rate master. Stored as `seconds` on every FX home (sync `formatVersion` 29), carried by Record, Include, the FX routes and the MCP tools. A new FX is one bar on the master tagged for its `family`, else master 1 (D16) — see `docs/fx-engineering.md` §"Seconds"
 - **Amount, Direction, Runs** - Every running FX has an `amount` (0–1: a weight applied *after* the blend, `out = before + (blended − before) × amount × envelope × stackAmount`, so a Replace at 50 % sits halfway over what is underneath and an Around movement's radius halves; `stackAmount` is its cue stack's runtime *FX amount*, D10), a `direction` (Forward, Backward, Bounce, applied to each member's phase) and an optional `runs` (run N cycles, each member handing back after its own; the instance ends N cycles past the largest offset, a programmer layer's kept *spent*). `intensityMultiplier` is the envelope a fade moves, never a scale on the raw output: an immutable ramp on the clock (`fx/FxEnvelope.kt`), so an FX **fades by amount with its cue** (a GO's outgoing FX shrink to nothing and are removed, its incoming grow, one both cues run continues untouched, a cue brought back mid-fade keeps its instances — effects plan session 4) and with the programmer's press, release, Clear and leaving Blind at the programmer fade (D13). An instance let go on a fade is `leaving` — nobody's, removed at 0 by the wall-clock pass. Stored on every FX home, synced from `formatVersion` 30 — see `docs/fx-engineering.md` §"Amount, direction and runs"
-- **The spread's shape** - An FX's ordering is its **Order**, and four more fields shape it (effects plan D4, §3.3): `spread` (0–2, how much of the cycle the members cover; 1 is the Order's own offsets), `wings` (mirrored wings, only under an asymmetric Order — `CENTRE_OUT` and `CENTRE_IN` are two wings already and refuse it), `segments` (neighbours sharing one phase) and `parts` (the spread repeating every N members; 0 is off), applied in `DistributionPlan.of` after the Order; `distinctSlots` is the rank count after Parts, so a step chase stays gap-free, and N runs end N cycles past the largest *shaped* offset. `FxDynamics` fields, edited in place; stored on every FX home, synced from `formatVersion` 33; the editor's phase dials are `frontend/src/lib/spreadShape.ts`, pinned to the desk by `src/test/resources/fx/spreadShape.fixture.json` — see `docs/fx-engineering.md` §"The spread's shape"
+- **The spread's shape** - An FX's ordering is its **Order**, and four more fields shape it (effects plan D4, §3.3): `spread` (0–2, how much of the cycle the members cover; 1 is the Order's own offsets), `wings` (mirrored wings, only under an asymmetric Order — `CENTRE_OUT` and `CENTRE_IN` are two wings already and refuse it), `segments` (neighbours sharing one phase) and `parts` (the spread repeating every N members; 0 is off), applied in `DistributionPlan.of` after the Order; `distinctSlots` is the rank count after Parts, so a step chase stays gap-free, and N runs end N cycles past the largest *shaped* offset. `FxDynamics` fields, edited in place; stored on every FX home, synced from `formatVersion` 33; the editor's head ladder, patterns and words are `frontend/src/lib/spreadShape.ts`, pinned to the desk by `src/test/resources/fx/spreadShape.fixture.json` — see `docs/fx-engineering.md` §"The spread's shape". **Each head later by** (fx-settings plan D6): `spreadUnit` `STEP` makes `spread` the FX's own steps each head starts after the one before (0–16), resolved at expansion from the list its frontmatter's `stepsFrom` names (Colour Cycle, Palette Steps, Slot Steps), so a chase stays on its steps whatever the head count; refused on an FX with none, absent `CYCLE`, and a new step FX starts one step behind at every door (D7). Column `spread_unit`, synced from `formatVersion` 43
 - **One FX over a selection** - An FX may target an ordered list of fixtures and groups (effects plan D3): `FxTargetsRef.Selection` beside `TargetRef` (`models/TargetRef.kt`), FX-only, so a value row, a layer's targets and a binding cannot hold one and their write boundaries refuse it; stored as `targetType: "selection"` with the list's canonical JSON as `targetKey` on a cue's ad-hoc FX and a Look's FX, synced from `formatVersion` 34. `FxEngine.buildSelectionExpansion` flattens it in order — a group as its members, a head named twice once — into one instance's members, distributed and shaped as a group's. `POST /fx/add` takes `targets`, Record and Include keep it one FX, MCP's ad-hoc FX take `targets`; the programmer's `+ FX` and ⌘K *Apply FX* start one over the selection's rows — see `docs/fx-engineering.md` §"Over a selection"
+- **Over** - What an FX's spread counts where it lands on fixtures' elements (FX editor follow-ups plan D7): *Fixtures* (`ElementMode.WHOLE` — each fixture one unit, its elements alike, MagicQ's Dup Elements), *Elements* (`FLAT`) or *Each fixture* (`PER_FIXTURE`). Two defaults named apart (D8): a door that starts an FX with none — `POST /fx/add`, `/programmer/fx`, `/groups/{name}/fx`, MCP's FX tools — gets `NEW_FX_DEFAULT`, `WHOLE`; a stored FX naming none is `STORED_DEFAULT`, `PER_FIXTURE`. Synced from `formatVersion` 40 — see `docs/fx-engineering.md` §"Element Mode: what *Over* counts"
 - **SpeedMasterBank** - Per-project bank of named tempo buses (persisted, portable in sync); slot 0 = master 1, the global tempo the script API (`setBpm`/`tapTempo`) and a bare AI `set_bpm` mean (that tool takes an optional `speedMasterUuid` to retune any other master, and `create_speed_master` adds one). FX subscribe via `speedMasterUuid` (null → master 1), and wall-clock FX scale their cycle via `rateSpeedMasterUuid` (null → unscaled); both are settable on every authoring surface. A master may also carry a `family` (intensity/colour/position/beam — the apply-time routing default, one per project) and a follow link (`follow_num`/`follow_den`/`follow_target_uuid`: the leader *drives the follower's clock*, so its beats land on the leader's rather than free-running; chains allowed, cycles refused; tempo writes on a follower are refused with `SPEED_MASTER_FOLLOWER`) — see `docs/fx-engineering.md` §"Family routing and follow". One engine pass per (conflated) tick wake-up, however many masters tick. `SpeedMasterBank.beats` fans every master's beat boundaries into one keyed stream (`speedMasters.beat`) — master 1 included, under its real uuid once the bank has loaded. Hardware drives masters through the `speedMasterBpm` / `speedMasterTap` binding targets. A **cue** can set masters too (venue-visit plan S16, D20): its `speedMasters` list, master and BPM pairs, is written to the bank on every GO into one of its entries — GO TO, GO BACK and a cue another stack already holds included — and every loose press, never on a reload's re-GO (`setTempo = false` in `Show.resume`, beside `fireEvents`); a follower or a missing master is skipped and logged, never failing the GO (`fx/CueTempo.kt`). A tap wins until the next cue. Synced from `formatVersion` 35 — see `docs/cues-engineering.md` §"Speed masters on a cue"
 - **MasterClock** - One master's tempo clock (20-300 BPM), emits 24 ticks/beat; phase is a pure function of the tick counter (`MasterClock.phaseForDivision`). A *follower's* clock is driven by its leader instead of by a timer (`adoptDriven`/`driveTo`), and its derived BPM is reported unclamped — the 20–300 range guards a timer it doesn't have
 - **FxEngine** - Processes active FX, applies to fixtures via transactions
@@ -417,24 +418,37 @@ FX interfaces:
 - **Fx** - Pure phase-based: `(phase, context) → FxOutput`
 - **StatefulFx** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
 
-Built-in FX types — **all 29 live as `.fx.kts` resources** under
+Built-in FX types — **all 14 live as `.fx.kts` resources** under
 `src/main/resources/fx/`, compiled into the `FxRegistry` at startup by `FxFileLoader`. There are
 no compiled-in FX classes: the parallel `fx/effects/*.kt` set was deleted (sweep item D7)
 once it had drifted a file behind the resources and nothing but tests constructed it.
-- **Intensity**: SineWave, Pulse, RampUp/Down, Ramp, SquareWave, DimmerStrobe, Flicker, LightningStrike,
-  CandleFlicker, FluorescentFlicker
-- **Colour**: ColourCycle (literal colours only), RainbowCycle, ColourStrobe, ColourWave, ColourFade, ColourFlicker
-- **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
-- **Beam**: ZoomWave, IrisPulse, FrostPulse, FocusPull — one attribute each (`zoom`, `iris`,
-  `frost`, `focus`), offered only on a head that has it (effects plan D6)
+- **Intensity**: Wave (fx-settings plan D2: one `shape` — Sine, Ramp up, Ramp down, Triangle, Square,
+  Pulse — on the dimmer, UV and the beam attributes, its family Beam on a beam attribute, D5; a
+  Square's or Pulse's `widthUnit` *One head* on for one slot's share, D8, its preset *Chase*),
+  Flicker, LightningStrike, CandleFlicker, FluorescentFlicker (their levels `low` / `high`)
+- **Colour**: ColourCycle (literal colours only; `between` Cut, Fade or Smooth — its presets *Colour
+  Fade* and *Colour Wave*), RainbowCycle, ColourStrobe, ColourFlicker; and ColourWave and ColourFade,
+  **legacy** (`legacy: true`): they run and edit what is stored, but no picker or listing offers them,
+  since Colour Cycle draws each a DMX step apart (fx-settings plan D3)
+- **Position**: Path (D2: one `shape` — Circle, Figure 8, Random about a centre, or a Line between
+  two ends; its presets *Sweep*, *Pan Sweep*, *Tilt Sweep*)
+- **Beam**: Wave on `zoom`, `iris`, `frost` or `focus`, which the picker offers as its presets *Zoom
+  Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* (D4), only on a head that has the attribute
 - **Steps**: PaletteSteps (through generic value palettes of one family, filed under that family)
   and SlotSteps (a setting's option names, `beam`), one family in the library (`family: steps`) — `FxOutput.Steps`, which the **target**
   resolves per head, so each head lands on its own value for each step (effects plan D8;
   `docs/fx-engineering.md` §"Step FX")
 
-Colour Fade, Focus Pull and the sweeps bounce by Direction at half a bar by default (frontmatter
-`defaultDirection`, `defaultCycle`). The old ids, Breathe, `pingPong`, `SPLIT` and the
-composite mode are read only by `sync/LegacyNames.kt` and refused at every write.
+Colour Fade and Path's sweep presets bounce by Direction at half a bar by default (frontmatter
+`defaultDirection`, `defaultCycle`, a preset's `cycle` and `direction`). The old ids, Breathe, `pingPong`, `SPLIT` and the
+composite mode are read only by `sync/LegacyNames.kt` and refused at every write. The eleven level
+waves Wave replaced (Sine Wave, the ramps, Square Wave, Pulse, Dimmer Strobe and the four beam waves)
+are refused at every stored write too, but a script's `effect("SineWave", …)` and MCP's FX tools still
+run one, as Wave with its parameters (`LegacyNames.runnableFx`); so do the six movements Path replaced,
+as Path, and the renamed parameters of the Flicker family, Lightning Strike, Colour Strobe and Colour
+Cycle's `fadeRatio`. `LegacyEquivalenceTest` holds each to its old script, kept under
+`src/test/resources/fx/legacy/` — see `docs/fx-engineering.md` §"Wave" and §"Path, Colour Cycle and the
+renamed parameters".
 
 There is no static FX. A fixed level, colour, position or setting is a **value** on the
 fixture's own attribute — in the programmer, a Look or a cue — never an FX: StaticValue,
@@ -444,9 +458,10 @@ one is skipped with a warn where a cue or Include spawns it (`FxSpawner.createFx
 A **palette** may hold one FX instead of values — an *FX palette*, the busking pad for a
 named FX. It is always generic (it names no target; the layer's targets are the fan-out), always
 exactly one FX, and never both an FX and rows: which one a palette holds is its identity,
-refused at the write boundary if a write would flip it. Its family is derived from the FX's
-library `family` via `attributeFamilyForFxFamily`, so `controls` is refused by name;
-a Beam FX palette holds a beam built-in or Slot Steps (naming the setting it steps), and a
+refused at the write boundary if a write would flip it. Its family is its FX's library `family` on
+the attribute it names, via `fxAttributeFamily` (Beam on a beam attribute, else
+`attributeFamilyForFxFamily`), so `controls` is refused by name;
+a Beam FX palette holds a Wave naming its beam attribute or Slot Steps (naming the setting it steps), and a
 Palette Steps palette is its palettes' family, not its library family `steps`. A **Look's** FX,
 unlike a palette's, always name their own target — a fixture, a group or a selection (absolute-looks
 plan D2): `validateLookFx` refuses `deferred`, the importer drops one, and
@@ -470,11 +485,11 @@ nothing. The library itself is a flat list ordered by name. See §"The busk layo
 Scripts name an FX rather than constructing one — `effect(id, params)` resolves it through the
 registry, so a script reaches the same vocabulary as the UI and cues, user FX included:
 ```kotlin
-fixture.applyDimmerFx(fxEngine, effect("SineWave", "min" to "40"), FxTiming(CycleLength.TWO_BEATS))
+fixture.applyDimmerFx(fxEngine, effect("Wave", "low" to "40"), FxTiming(CycleLength.TWO_BEATS))
 fixture.applyColourFx(fxEngine, effect("RainbowCycle"), FxTiming(CycleLength.ONE_BAR))
 
 // Every apply site takes a speed master; null means master 1 (unscaled for the rate master)
-fixture.applyDimmerFx(fxEngine, effect("Pulse"), speedMasterUuid = speedMasterUuidAt(2))
+fixture.applyDimmerFx(fxEngine, effect("Wave", "shape" to "PULSE"), speedMasterUuid = speedMasterUuidAt(2))
 ```
 
 Scripts can also register custom FX that appear in the library API:
@@ -560,8 +575,8 @@ Applying FX to groups:
 ```kotlin
 val group = fixtures.group<HexFixture>("front-wash")
 
-// Pulse FX in Normal order
-val fxId = group.applyDimmerFx(fxEngine, effect("Pulse"), order = SpreadOrder.NORMAL)
+// A pulse in Normal order
+val fxId = group.applyDimmerFx(fxEngine, effect("Wave", "shape" to "PULSE"), order = SpreadOrder.NORMAL)
 
 // Unified colour across all fixtures
 group.applyColourFx(fxEngine, effect("RainbowCycle"), order = SpreadOrder.UNIFIED)
@@ -579,7 +594,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), order = SpreadOrder.UNIFIE
 - `POST /api/rest/fx/add` - Add an FX to a fixture (`fixtureKey`), or one FX over `targets` — fixtures and groups in order, a selection (effects plan D3), every item checked at once
 - `DELETE /api/rest/fx/{id}` - Remove an FX
 - `POST /api/rest/fx/{id}/pause` / `resume` - Control an FX
-- `PUT /api/rest/fx/{id}` - Edit a running FX in place (id and phase kept); one parse with the `updateFx` frame (`applyFxUpdate`), 400 `FX_UPDATE_REFUSED` / 404 `FX_NOT_FOUND`. `amount` (0–1), `direction` (`FORWARD | BACKWARD | BOUNCE`) and `runs` (≥ 1; `runForever: true` clears it) are dynamics fields, edited with the phase kept (effects plan session 1), and the add routes take all three. `spread` (0–2), `wings`, `segments` (≥ 1) and `parts` (≥ 0, 0 off) are the spread's shape (effects plan session 2), dynamics fields too, the add routes taking them as well; wings above 1 under a mirrored Order — the request's or the FX's — is refused. `seconds` moves it onto *Seconds* or back to a master (D7) — `true` is also how a wall-clock FX goes back to unscaled; refused beside a master; that move restarts the FX's phase, since it changes the loop. `POST /fx/add` and `POST /groups/{name}/fx` take `seconds` too, and default an omitted `cycle` to one bar. `targets` (apply-model plan session 2) says which heads the edit is for: absent or every head the FX paints is the in-place edit; some of them **splits** them off — the FX becomes one instance per head, each carrying its member's offset, set amount and context so nothing jumps, the named heads' copies taking the edit — answered `{splitFxId, edited, rest}`. 409 `FX_SPLIT_LAYER_FX` for a programmer layer's FX, `FX_SPLIT_NOT_LOCAL` for a cue's or a manual one; a shape change (Order, Spread, Wings, Segments, Parts, element mode or filter) with some heads is 400 `FX_UPDATE_REFUSED`. See `docs/fx-engineering.md` §"Local FX follow the selection"
+- `PUT /api/rest/fx/{id}` - Edit a running FX in place (id and phase kept); one parse with the `updateFx` frame (`applyFxUpdate`), 400 `FX_UPDATE_REFUSED` / 404 `FX_NOT_FOUND`. `amount` (0–1), `direction` (`FORWARD | BACKWARD | BOUNCE`) and `runs` (≥ 1; `runForever: true` clears it) are dynamics fields, edited with the phase kept (effects plan session 1), and the add routes take all three. `spread` (0–2), `wings`, `segments` (≥ 1) and `parts` (≥ 0, 0 off) are the spread's shape (effects plan session 2), dynamics fields too, the add routes taking them as well, with `spreadUnit` (`CYCLE | STEP`, fx-settings plan D6: under `STEP` `spread` is 0–16 of the FX's own steps; a swap onto an FX with no steps leaves it for the `CYCLE` spread that keeps the heads' offsets); wings above 1 under a mirrored Order — the request's or the FX's — is refused. `seconds` moves it onto *Seconds* or back to a master (D7) — `true` is also how a wall-clock FX goes back to unscaled; refused beside a master; that move restarts the FX's phase, since it changes the loop. `POST /fx/add` and `POST /groups/{name}/fx` take `seconds` too, and default an omitted `cycle` to one bar. `targets` (apply-model plan session 2) says which heads the edit is for: absent or every head the FX paints is the in-place edit; some of them **splits** them off — the FX becomes one instance per head, each carrying its member's offset, set amount and context so nothing jumps, the named heads' copies taking the edit — answered `{splitFxId, edited, rest}`. 409 `FX_SPLIT_LAYER_FX` for a programmer layer's FX, `FX_SPLIT_NOT_LOCAL` for a cue's or a manual one; a shape change (Order, Spread, Wings, Segments, Parts, element mode or filter) with some heads is 400 `FX_UPDATE_REFUSED`. See `docs/fx-engineering.md` §"Local FX follow the selection"
 - `POST /api/rest/projects/{id}/programmer/fx` - The bare FX press (apply-model plan §3.4, D5): `{fxType, attribute, targets, families?, parameters?}` plus every FX field `POST /fx/add` takes, as **one Local FX** over the selection (one group FX on a group); no `cycle` is one bar and no master the one whose `family` is the FX's library `family` (D16, as MCP and the picker stamp). Its family is the group of the attribute it drives, as Record reads it (a Pulse on `uv` is Colour). It first takes the selected heads off every other Local FX of that family — stopping one wholly inside, narrowing one partly inside into one instance per head it keeps — unless `stack: true` (FX editor plan D6, §3.6), which adds it on top and stops and narrows nothing, an absent blend or `amount` starting on its family's row of `fx/FxStacking.kt` (Intensity `MULTIPLY` at 100 %, Position `ADDITIVE` at 100 % with both centres at 128 — `OVERRIDE` at 100 % for one with no centres — Colour and Beam `OVERRIDE` at 50 %). 400 `FX_OUTSIDE_MASK` / `FX_NEEDS_SELECTION`; answers `{fxId, stopped, narrowed}`. Every Local FX applies above every programmer layer's FX (`BASE + LOCAL_OFFSET + localRank`, a new one on top of its lane, FX editor plan D5) and the `programmer.moveFx` frame re-ranks one; see `docs/fx-engineering.md` §"Programmer suppression and the priority band". Current project only
 - `POST /api/rest/projects/{id}/fx/preview` - What the selection's heads will hold over a window (FX editor plan §3.3, D7): `{targets, fx: [{fxId} | {draft} | {fxId, draft}], include: STACK | ONLY, window: {cycles? | beats? | seconds?}, solo?, notional?}`, a draft built by `/fx/add`'s write boundary and never added, a draft move run through `PUT /fx/{id}`'s parse on a copy, `notional: n` the drafts on *n* heads the rig lacks (FX editor plan D15, `fx/NotionalRig.kt`: no `targets`, drafts only, `include: ONLY`), answered from `fx/FxSampler.kt` — rows in the first FX's Order, lanes by family with underneath, result and each FX's output, per FX its offsets, starts, holding ranges and offset ladder, the clock, `truncated` — and nothing written. 400 `FX_PREVIEW_INVALID` names every problem; current project only, both roles. See `docs/fx-engineering.md` §"Previewing an FX"
 - `POST /api/rest/fx/{id}/reset` - Re-apply a programmer palette layer's **current** FX to the instance it spawned, id and phase kept, and re-key it so the next recook keeps it (fixture-fx-sheets plan W5); 409 `FX_NOT_FROM_PALETTE` / `FX_PALETTE_GONE`. See `docs/fx-engineering.md` §"Programmer suppression and the priority band"
@@ -812,6 +827,23 @@ is backed up first to `<db>.pre-attribute-<utc>.db`, which `VACUUM INTO` cannot 
 transaction. A stored script or project FX definition still saying `panCenter` / `tiltCenter` is named
 in a warning, never rewritten.
 
+**Step 7 follows it**: `state/FxConsolidationMigration.kt` (fx-settings plan session 2) rewrites every
+Look, cue and palette FX on one of the eleven level waves onto Wave through `LegacyNames.consolidateFx`,
+which the importer shares — its shape and its parameters at the values the old script read, a beam FX
+naming no attribute given the one it drove — logging each by its owner's name. A database holding none
+is only marked 7; one that holds some is backed up first to `<db>.pre-fx-consolidation-<utc>.db`.
+`FxConsolidationMigrationTest` runs it over `src/test/resources/db/pre-fx-consolidation.sql`, a database
+at 6 holding every old id; never regenerate it. A script naming an old id is left alone: it still runs.
+
+**Step 8 follows it**: `state/FxSiblingsMigration.kt` (fx-settings plan session 3) rewrites every
+Look, cue and palette FX on one of the six movements onto Path, a Colour Cycle's `fadeRatio` as
+`between` and `fade`, and the Flicker family's, Lightning Strike's and Colour Strobe's parameters at
+their new names, through `LegacyNames.absorbFx`, which the importer runs after `consolidateFx`. A
+database holding none is only marked 8; one that holds some is backed up first to
+`<db>.pre-fx-siblings-<utc>.db`. `FxSiblingsMigrationTest` runs it over
+`src/test/resources/db/pre-fx-siblings.sql`, a database at 7; never regenerate it. Colour Wave and
+Colour Fade are left on their own ids, which stay registered as legacy.
+
 Otherwise the bet stands on there being exactly one database (the dev desk), and it
 expires the moment a second install exists — the Windows MSI ships an upgrade path.
 Before making a non-additive schema change once anything is deployed, write a
@@ -953,7 +985,7 @@ name through the `FxRegistry`; `speedMasterUuidAt(n)` names a speed master by it
 ```kotlin
 val wash = fixture<HexFixture>("front-wash-1")
 wash.fx {
-    dimmer(effect("SineWave", "min" to "40"), CycleLength.TWO_BEATS)
+    dimmer(effect("Wave", "low" to "40"), CycleLength.TWO_BEATS)
     colour(effect("ColourCycle"), CycleLength.ONE_BAR, speedMasterUuid = speedMasterUuidAt(2))
 }
 setBpm(128.0)
@@ -1075,7 +1107,7 @@ work — mostly Trigger-gated or Blocked, plus a handful of **Ready** items.
 operator-on-the-rig checks. Don't poll either routinely.
 
 **When CI goes red on a test your change doesn't touch, check
-[`docs/plans/flaky-tests.md`](docs/plans/flaky-tests.md)** before root-causing it. If the test is
+[`docs/plans/flaky-tests-plan.md`](docs/plans/flaky-tests-plan.md)** before root-causing it. If the test is
 there, re-run it once; if it isn't, add it once you have seen it fail on a commit it also passes on.
 
 **Open followups.md when your current change might fire a listed gate** (e.g.

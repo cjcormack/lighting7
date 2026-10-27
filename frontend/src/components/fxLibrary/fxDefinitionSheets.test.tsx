@@ -79,11 +79,11 @@ describe('NewFxDefinitionSheet', () => {
 })
 
 describe('EditFxDefinitionSheet', () => {
-  it('says a fork starts per cycle, and saves the toggle with the name and script', async () => {
+  it('says a fork starts on one cycle for all heads, and saves the toggle with the name and script', async () => {
     inSheet(<EditFxDefinitionSheet definitionId={5} forkedFrom="Pulse" onDelete={() => {}} />)
-    expect(screen.getByTestId('fork-step-timing-note')).toHaveTextContent('Forked from Pulse. A fork starts per cycle')
-    expect(screen.getByRole('radio', { name: 'Per cycle' })).toHaveAttribute('aria-checked', 'true')
-    fireEvent.click(screen.getByRole('radio', { name: 'Per head' }))
+    expect(screen.getByTestId('fork-step-timing-note')).toHaveTextContent('Forked from Pulse. A fork starts on one cycle for all heads')
+    expect(screen.getByRole('radio', { name: 'All heads' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Each head' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(updateDefinition).toHaveBeenCalledTimes(1))
     expect(updateDefinition.mock.calls[0][0]).toEqual({

@@ -1,0 +1,702 @@
+<title>FX Settings Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column in the family of the FX editor's earlier design pages; the desk drawings are dark in both themes, as the desk is. */
+:root {
+  --bg: #f5f4f7; --card: #ffffff; --fg: #1b1a20; --muted: #5e5b68; --line: #dddae3;
+  --accent: #6a3dcb; --accent-soft: #efe8fd; --amber: #8f5500; --amber-soft: #fbefd9;
+  --go: #1f7a45; --go-soft: #dcf2e4; --bad: #b42318; --bad-soft: #fde7e5;
+  --desk-bg: #0c0b10; --desk-panel: #15141b; --desk-raise: #1f1d27; --desk-line: #2c2a35;
+  --desk-fg: #ecebf1; --desk-muted: #a3a0ae; --desk-faint: #6d6a78;
+  --desk-violet: #a78bfa; --desk-violet-strong: #8b5cf6; --desk-sky: #38bdf8; --desk-amber: #f5b14a; --desk-blue: #2f7cf6;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 64px; }
+.read { max-width: 760px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(32px, 5vw, 50px); font-weight: 800; line-height: 1.04; }
+h2 { font-size: 26px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; color: var(--muted); max-width: 66ch; }
+.lede b, .muted b, li b, td b, p b { color: var(--fg); font-weight: 600; }
+.muted { color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.86em; background: color-mix(in srgb, var(--line) 60%, transparent); padding: 1px 5px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 20px; }
+.head { display: flex; flex-direction: column; gap: 8px; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; font-family: var(--mono); background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tag.back { background: var(--amber-soft); color: var(--amber); }
+.tag.both { background: var(--go-soft); color: var(--go); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 720px; }
+th { text-align: left; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--fg); }
+td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+td:first-child { color: var(--fg); font-weight: 600; white-space: nowrap; }
+ul.points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 14.5px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 28px; align-items: start; }
+.cols > * { min-width: 0; }
+button { font: inherit; }
+button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.callout { border-left: 3px solid var(--accent); background: var(--card); padding: 12px 16px; border-radius: 0 8px 8px 0; color: var(--muted); font-size: 14.5px; }
+
+/* Desk drawings */
+.board { border: 1px solid var(--line); border-radius: 12px; background: var(--desk-bg); color: var(--desk-fg); overflow: hidden; font-size: 13px; line-height: 1.4; }
+.board-cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 9px 14px; background: var(--card); color: var(--fg); border-bottom: 1px solid var(--line); }
+.board-cap h3 { font-size: 14px; margin-right: auto; }
+.board-cap span { font-size: 12.5px; color: var(--muted); }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 1px; background: var(--desk-line); }
+.pane { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pane-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--desk-faint); }
+.pane-label.now { color: var(--desk-amber); }
+.pane-label.next { color: var(--desk-violet); }
+.dmuted { color: var(--desk-muted); }
+.dsmall { font-size: 11.5px; }
+canvas.strip { display: block; width: 100%; border-radius: 4px; background: var(--desk-bg); }
+
+/* The inspector mock */
+.insp-grid { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 1px; background: var(--desk-line); }
+@media (max-width: 760px) { .insp-grid { grid-template-columns: minmax(0, 1fr); } }
+.insp { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ihead { display: flex; align-items: center; gap: 8px; }
+.ihead b { font-size: 15px; font-weight: 600; }
+.ihead .attr { font-family: var(--mono); font-size: 12px; color: var(--desk-muted); }
+.ihead .sp { flex: 1; }
+.ibtn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--desk-line); background: var(--desk-raise); color: var(--desk-muted); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.isec { display: flex; flex-direction: column; gap: 8px; }
+.isec-h { display: flex; align-items: baseline; gap: 8px; }
+.isec-h span { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--desk-faint); }
+.isec-h em { font-style: normal; font-size: 11px; color: var(--desk-muted); margin-left: auto; }
+.ann { font-family: var(--mono); font-size: 10px; color: var(--desk-violet); border: 1px solid var(--desk-violet-strong); border-radius: 50%; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dchip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--desk-line); background: var(--desk-raise); font-size: 12px; color: var(--desk-fg); white-space: nowrap; }
+.dchip.mono { font-family: var(--mono); font-size: 11.5px; }
+.dchip.on { border-color: var(--desk-violet-strong); background: color-mix(in srgb, var(--desk-violet-strong) 22%, var(--desk-raise)); }
+.dchip .cv { color: var(--desk-muted); font-size: 10px; }
+.dchip svg { color: var(--desk-violet); flex: none; }
+.seg { display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--desk-line); border-radius: 7px; padding: 2px; gap: 2px; background: var(--desk-bg); flex-wrap: wrap; }
+.seg button, .seg span.o { height: 22px; padding: 0 8px; border-radius: 5px; border: 0; background: transparent; color: var(--desk-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; white-space: nowrap; }
+.seg button[aria-pressed="true"], .seg span.o.on { background: var(--desk-raise); color: var(--desk-fg); font-weight: 600; box-shadow: inset 0 0 0 1px var(--desk-line); }
+.seg button:hover { color: var(--desk-fg); }
+.seg button:disabled { opacity: 0.35; cursor: default; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.row .lab { font-size: 12px; color: var(--desk-muted); min-width: 92px; }
+.sw { width: 26px; height: 26px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); display: inline-block; }
+.sw.add { border: 1px dashed var(--desk-line); background: transparent; color: var(--desk-muted); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+.slider { position: relative; height: 22px; flex: 1; min-width: 120px; }
+.slider .tr { position: absolute; left: 0; right: 0; top: 10px; height: 3px; border-radius: 2px; background: var(--desk-line); }
+.slider .fl { position: absolute; top: 10px; height: 3px; border-radius: 2px; background: var(--desk-blue); }
+.slider .th { position: absolute; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transform: translateX(-50%); }
+.val { font-family: var(--mono); font-size: 12px; min-width: 44px; text-align: right; color: var(--desk-fg); }
+.readout { font-size: 11.5px; color: var(--desk-muted); }
+.readout b { color: var(--desk-fg); font-weight: 600; }
+.ladder { display: flex; gap: 4px; flex-wrap: wrap; }
+.ladder .hd { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 26px; }
+.ladder .nm { white-space: nowrap; }
+.ladder .dot { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: #0c0b10; }
+.ladder .nm { font-size: 9.5px; color: var(--desk-faint); font-family: var(--mono); }
+.disc { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; font-size: 12.5px; color: var(--desk-fg); }
+.disc em { font-style: normal; color: var(--desk-muted); font-size: 11.5px; flex: 1 1 160px; }
+[hidden] { display: none !important; }
+.notes { background: var(--card); color: var(--fg); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.note { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; font-size: 14px; color: var(--muted); }
+.note .ann { color: var(--accent); border-color: var(--accent); }
+.note b { color: var(--fg); }
+
+/* Playground */
+.pg { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 1px; background: var(--desk-line); }
+@media (max-width: 760px) { .pg { grid-template-columns: minmax(0, 1fr); } }
+.pg .ctl { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pg .out { background: var(--desk-bg); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.stripwrap { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: start; }
+.names { display: flex; flex-direction: column; font-family: var(--mono); font-size: 10px; color: var(--desk-muted); }
+.names span { display: flex; align-items: center; justify-content: flex-end; white-space: nowrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11px; color: var(--desk-muted); }
+input[type=range] { accent-color: var(--desk-blue); flex: 1; min-width: 100px; }
+
+/* Recipes */
+.recipes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+.recipe { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); display: flex; flex-direction: column; }
+.recipe .rh { padding: 12px 14px 8px; display: flex; flex-direction: column; gap: 4px; }
+.recipe .rh p { font-size: 13.5px; color: var(--muted); }
+.recipe .rb { background: var(--desk-panel); color: var(--desk-fg); padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.recipe .kv { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 3px 8px; font-size: 12px; }
+.recipe .kv dt { color: var(--desk-faint); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding-top: 2px; }
+.recipe .kv dd { margin: 0; color: var(--desk-fg); }
+.recipe .kv dd i { font-style: normal; color: var(--desk-muted); }
+
+/* Look cards */
+.looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 1px; background: var(--desk-line); }
+.look { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.look h4 { margin: 0; font-family: var(--display); font-size: 15px; font-weight: 700; color: var(--desk-fg); }
+.look .from { font-size: 11px; color: var(--desk-muted); }
+.wave { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--desk-line); background: var(--desk-raise); font-size: 10px; color: var(--desk-muted); }
+.wave.on { border-color: var(--desk-violet-strong); color: var(--desk-fg); }
+.wave svg { display: block; }
+
+ol.dec { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; counter-reset: d; }
+ol.dec li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; }
+ol.dec li::before { counter-increment: d; content: "Q" counter(d); font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--accent); padding-top: 2px; }
+ol.dec h3 { margin-bottom: 4px; }
+ol.dec p { color: var(--muted); font-size: 14.5px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<main class="wrap">
+
+<header class="head read">
+  <span class="eyebrow">Design proposal · FX editor · 2026-10-26</span>
+  <h1>FX settings, simplified without losing the engine</h1>
+  <p class="lede">Every FX setting asks one of three questions: <b>what the light does</b>, <b>how it travels across the heads</b>, and <b>how it sits over what's underneath</b>. Today the editor mixes those up. Spread is a percentage of a cycle that has to be worked out by hand, three bare number boxes do the grouping, and 29 FX types repeat each other with different names for the same knob. This page proposes an editor built around the three questions, with the step-aligned chase you asked about as the default.</p>
+</header>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">The case that started this</span>
+    <h2>Four fixtures, three colours, Spread 100 %</h2>
+    <p class="muted">Spread 100 % shares the cycle evenly between the heads, so four fixtures start a quarter of a cycle apart. Colour Cycle changes colour every third of a cycle. A quarter never lands on a third, so the colour edges stagger. The graph was right. At 133 % each fixture starts exactly one colour behind the last, but nobody should have to work out 4 ÷ 3 at a desk. MagicQ has the same arithmetic and leaves it to the operator. grandMA3 2.4 added <i>Adaptive Width</i> for two-step phasers only. Onyx offers <i>Step per X</i> beside <i>Wave per X</i>, which is the idea taken here.</p>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>Colour Cycle over 4 Shehds, one bar, two cycles shown</h3><span>Rows in Order · triangles mark each row's cycle start</span></div>
+    <div class="pair">
+      <div class="pane">
+        <span class="pane-label now">Today · Spread 100 %</span>
+        <div class="stripwrap"><div class="names" id="caseNamesA"></div><canvas class="strip" id="caseA" height="120"></canvas></div>
+        <p class="readout">Each fixture starts <b>¼ cycle</b> after the last, which is ¾ of a colour, so the edges never line up.</p>
+      </div>
+      <div class="pane">
+        <span class="pane-label next">Proposed · Each head later by 1 step</span>
+        <div class="stripwrap"><div class="names" id="caseNamesB"></div><canvas class="strip" id="caseB" height="120"></canvas></div>
+        <p class="readout">The default for a step FX: each fixture starts <b>one colour</b> behind. The desk works the spread out (here 133 %) and keeps it right when the selection changes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Audit</span>
+    <h2>Every setting an FX has today, and what happens to it</h2>
+    <p class="muted">For one Colour Cycle on four multi-element fixtures the inspector draws five sections and about forty controls, counting each segment button. The engine fields are sound and stay. What changes is the words, the grouping, and which controls the operator sees first.</p>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Setting today</th><th>Where it lives now</th><th>Problem</th><th>Proposal</th></tr></thead>
+      <tbody>
+        <tr><td>Cycle</td><td>8-button grid, a typed field, <i>Same cycle as…</i>, the master chip</td><td>Three rows for one number</td><td><b>One chip</b> in a Timing strip (<code>1 bar ▾</code>), opening the 8 steps and the typed field. The graph's Cycle tab still drags it.</td></tr>
+        <tr><td>Master / Seconds</td><td>Chip beside Cycle</td><td>Fine</td><td>Stays, in the Timing strip.</td></tr>
+        <tr><td>Direction</td><td>Glyph segment under Amount</td><td>It is timing, not mix</td><td>Moves to the Timing strip.</td></tr>
+        <tr><td>Runs</td><td>Advanced</td><td>A one-shot is a common busk move and is buried</td><td><b>In the Timing strip</b>: <code>∞ ▾</code> opening ×1 ×2 ×3 ×4 or a count (MagicQ's One Shot, Hog's N Shot).</td></tr>
+        <tr><td>Amount</td><td>Top, under Cycle</td><td>It is the mix, separated from the Blend question</td><td>Moves into <b>Mix</b> beside <i>Replace it · Within it</i> or <i>Around · Absolute</i>.</td></tr>
+        <tr><td>Order</td><td>Select beside Direction</td><td>Duplicates the Shape chips, which also set it</td><td>Folds into <b>Pattern</b>. A pattern chip sets the order and the grouping; <i>Custom</i> shows the Order select.</td></tr>
+        <tr><td>Over</td><td>Segment under Direction</td><td>Fine, but it belongs with the heads</td><td>First row of <b>Across the heads</b>, only on multi-element fixtures, as now.</td></tr>
+        <tr><td>Spread %</td><td>Inside the Spread disclosure</td><td>A fraction of a cycle over all heads. Step FX misalign at 100 %.</td><td><b>Each head later by</b>, in the FX's own unit: steps for a step FX, else a share of the cycle, with beats and degrees beside it. Two snaps, <i>Fit the cycle</i> and <i>One step</i>, plus a free value.</td></tr>
+        <tr><td>Wings · Segments · Parts</td><td>Three number boxes and one grey line</td><td>Unreadable: nobody knows what they do</td><td>MagicQ's words kept, each a segment (<b>Segments</b> 1 · 2 · 3 · 4, <b>Parts</b> off · 2 · 3 · 4, <b>Wings</b> off · 2 · 3 · 4, then a typed count) with a one-line example under the three that names the current values: <i>Segments 2: neighbours move in pairs</i>. Each change redraws the head ladder above.</td></tr>
+        <tr><td>Shape chips (9)</td><td>Top of the Spread disclosure</td><td>Good idea, drawn on 8 notional heads</td><td>Become <b>Pattern</b>, drawn on the selection's own heads, numbered by start step.</td></tr>
+        <tr><td>Offset ladder</td><td>Under the Spread disclosure</td><td>Shows the result far from the controls</td><td>Becomes the head ladder at the top of <i>Across the heads</i>, always visible.</td></tr>
+        <tr><td>FX parameters</td><td>One list, roles guessed from names and types</td><td>Six names for Low/High; ratios as raw %; no ranges declared</td><td>The FX's own section, named for what it holds (<i>Colours</i>, <i>Levels</i>, <i>Path</i>, <i>Steps</i>), on fewer, consolidated FX (below), drawn from parameter metadata the desk declares.</td></tr>
+        <tr><td>Blend (raw)</td><td>Over what's underneath</td><td>Fine for experts, noisy for everyone else</td><td>Advanced. The family question stays in Mix.</td></tr>
+        <tr><td>Phase · Timing · Head filter</td><td>Advanced</td><td>Fine</td><td>Stay in Advanced. Timing reads <i>One cycle for · all heads · each head</i>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Other desks</span>
+    <h2>The same engine under six vocabularies</h2>
+    <p class="muted">Every desk has a cycle, an amount, an offset across fixtures, grouping, mirroring and a cycle count. They differ in words and in what they show first. Our three number boxes are MagicQ's words; grandMA3 and Hog use different words for the same three ideas.</p>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Idea</th><th>lighting7 today</th><th>MagicQ</th><th>grandMA3</th><th>Eos</th><th>Hog 4</th><th>Titan / Onyx</th><th>Proposed</th></tr></thead>
+      <tbody>
+        <tr><td>Offset across heads</td><td>Spread %</td><td>Spread %</td><td>Phase 0 thru 360°</td><td>Trail · Even · Solo</td><td>Offset ° fanned</td><td>Overlap / Wave per X · Step per X</td><td><b>Each head later by</b> · steps or cycle</td></tr>
+        <tr><td>Neighbours share a phase</td><td>Segments</td><td>Segments</td><td>XBlock</td><td>Grouping</td><td>Buddying</td><td>grouping tools</td><td><b>Segments</b> (kept, with an example)</td></tr>
+        <tr><td>Repeat every N</td><td>Parts</td><td>Parts</td><td>XGroup</td><td>Offset every nth</td><td>Repeat</td><td>Phase 180° = every 2</td><td><b>Parts</b> (kept, with an example)</td></tr>
+        <tr><td>Mirror</td><td>Wings</td><td>Wings</td><td>XWings</td><td>—</td><td>Fan centre / ends</td><td>fan options</td><td><b>Wings</b> (kept, with an example)</td></tr>
+        <tr><td>Cycle count</td><td>Runs (Advanced)</td><td>One–Four Shot</td><td>nShot</td><td>Duration</td><td>N Shot</td><td>—</td><td><b>Runs</b> in the Timing strip</td></tr>
+        <tr><td>Waveform</td><td>A separate FX type each</td><td>FX per waveform</td><td>Shapes pool</td><td>Relative forms</td><td>Table parameter</td><td>Shape generator</td><td><b>Shape</b> inside one FX</td></tr>
+        <tr><td>Element mode</td><td>Over</td><td>Dup · Include · Use</td><td>sub-fixture grid</td><td>cells</td><td>—</td><td>layout</td><td><b>Over</b> (unchanged)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="cols">
+    <div class="callout"><b>Taken:</b> Onyx's step-or-wave offset; grandMA3's adaptive width, generalised; Hog's waveform as one parameter (its 4.0 removal of stock colour FX is the warning against dropping presets); MagicQ's palette-pressed colour lists and One Shot; grandMA3's selection grid, as the head ladder; Avolites' "repeats every N" readout.</div>
+    <div class="callout"><b>Avoided:</b> grandMA3's phaser editor, which forum users call slow for a basic chase, and its exclusive-end phase calculator. That calculator causes the four-heads-on-three-steps misalignment. Hog's inclusive fan happens to avoid it, and no desk names the choice.</div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">The proposed editor</span>
+    <h2>Timing, Look, Across the heads, Mix</h2>
+    <p class="muted">The inspector on the FX editor's right, for the case above, after the change. Each section answers one question, and the order puts the controls an operator reaches for while busking at the top. The graph to its left is unchanged.</p>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>Inspector · Colour Cycle on 4 Shehds</h3><span>Numbers match the notes</span></div>
+    <div class="insp-grid">
+      <div class="insp" aria-label="Proposed inspector mock">
+        <div class="ihead"><b>Colours</b><span class="attr">→ rgbColour</span><span class="sp"></span><span class="ibtn" title="Pause">❚❚</span><span class="ibtn" title="Stop">✕</span></div>
+
+        <div class="isec">
+          <div class="isec-h"><span class="ann">1</span><span>Timing</span></div>
+          <div class="chips">
+            <span class="dchip mono on">1 bar <span class="cv">▾</span></span>
+            <span class="dchip mono">M1 · 120 <span class="cv">▾</span></span>
+            <span class="seg"><span class="o on">→</span><span class="o">←</span><span class="o">↔</span></span>
+            <span class="dchip mono">∞ <span class="cv">▾</span></span>
+          </div>
+        </div>
+
+        <div class="isec">
+          <div class="isec-h"><span class="ann">2</span><span>Colours</span><em>Colour Cycle</em></div>
+          <div class="chips">
+            <span class="sw" style="background:#ff1d1d"></span><span class="sw" style="background:#18e33b"></span><span class="sw" style="background:#1d4bff"></span><span class="sw add">+</span>
+            <span class="dchip">From palettes…</span>
+          </div>
+          <div class="row"><span class="lab">Between colours</span><span class="seg"><span class="o on">Cut</span><span class="o">Fade</span><span class="o">Smooth</span></span></div>
+        </div>
+
+        <div class="isec">
+          <div class="isec-h"><span class="ann">3</span><span>Across the heads</span><em>4 fixtures</em></div>
+          <div class="row"><span class="lab">Over</span><span class="seg"><span class="o on">Fixtures</span><span class="o">Elements</span><span class="o">Each fixture</span></span></div>
+          <div class="ladder" id="mockLadder"></div>
+          <div class="chips" id="mockPatterns" role="group" aria-label="Pattern"></div>
+          <div class="row"><span class="lab">Each head later by</span><span class="seg"><span class="o">Fit the cycle</span><span class="o on">1 step</span><span class="o">Free</span></span></div>
+          <p class="readout">= <b>⅓ cycle</b> · 1⅓ beats · 120° &nbsp;·&nbsp; spread 133 %</p>
+          <div class="row"><span class="lab">Segments</span><span class="seg"><span class="o on">1</span><span class="o">2</span><span class="o">3</span><span class="o">4</span><span class="o">…</span></span></div>
+          <div class="row"><span class="lab">Parts</span><span class="seg"><span class="o on">off</span><span class="o">2</span><span class="o">3</span><span class="o">4</span><span class="o">…</span></span></div>
+          <div class="row"><span class="lab">Wings</span><span class="seg"><span class="o on">off</span><span class="o">2</span><span class="o">3</span><span class="o">4</span><span class="o">…</span></span></div>
+          <p class="readout">Segments 1: each head on its own · Parts off: one pattern across all four · Wings off: no mirror</p>
+        </div>
+
+        <div class="isec">
+          <div class="isec-h"><span class="ann">4</span><span>Mix</span></div>
+          <div class="row"><span class="lab">Amount</span><span class="slider"><span class="tr"></span><span class="fl" style="left:0;width:100%"></span><span class="th" style="left:100%"></span></span><span class="val">100 %</span></div>
+          <p class="readout">Replaces the colour underneath · <span style="color:var(--desk-violet)">Blend in Advanced</span></p>
+        </div>
+
+        <div class="disc"><span class="ann">5</span><span>▸ Advanced</span><em>phase 0° · one cycle for all heads · all heads · override</em></div>
+      </div>
+      <div class="notes">
+        <div class="note"><span class="ann">1</span><p><b>Timing is one strip.</b> Cycle, master, direction and runs sit on one row of chips. A chip opens its choices: Cycle's eight steps and a typed beats field, the masters and <i>Seconds</i>, Runs' ×1 to ×4 and a count. One-shots come out of Advanced because they are a busking move.</p></div>
+        <div class="note"><span class="ann">2</span><p><b>The FX's own settings, named for what they hold.</b> Here <i>Colours</i>; a Wave's section is <i>Levels</i>, a Path's <i>Path</i>, a step FX's <i>Steps</i>. Never <i>Look</i>, which is the library's word for a recorded state. The header's FX name is the type switcher. Colour Cycle absorbs Colour Fade and Colour Wave on the desk: a list of colours, and <i>Between colours: Cut · Fade · Smooth</i> (Fade has a %). <i>From palettes…</i> switches to Palette Steps and taps palettes in order, as MagicQ's 2col / 3col does.</p></div>
+        <div class="note"><span class="ann">3</span><p><b>Across the heads leads with what will happen.</b> The ladder is the selection's own heads, each numbered by when it starts, recomputed by the desk's preview as in the graph. Pattern chips set the order and grouping together, and keep today's drawings, now drawn on the selection's own heads (four dots here) rather than eight notional ones. <i>Each head later by</i> says how far apart neighbours start, in the FX's own unit: <b>1 step</b> is the default for a step FX and holds when the selection changes. <i>Fit the cycle</i> is today's 100 %, and <i>Free</i> opens a slider in steps or cycles. Segments, Parts and Wings keep MagicQ's words, but each becomes a segment with <i>…</i> for a typed count, and one line under them says what the current values do, in the heads' own terms. The same rule holds everywhere: a segment of presets always ends in a typed value, so a preset never limits what can be set.</p></div>
+        <div class="note"><span class="ann">4</span><p><b>Mix is how much and how.</b> Amount moves here beside the family's question (<i>Replace it · Within it</i> for a level, <i>Around · Absolute</i> for a path). A colour FX has no question, so the readout says what the blend does. The raw blend modes go to Advanced, as before.</p></div>
+        <div class="note"><span class="ann">5</span><p><b>Advanced keeps the rest</b>: phase, <i>One cycle for: all heads · each head</i> (today's Timing per cycle / per head), the head filter, the raw blend and start on the beat. Its summary line lists anything not at its default, so nothing changed here is hidden.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Try it</span>
+    <h2>Across the heads, live</h2>
+    <p class="muted">A small model of the proposed section, using the desk's own spread rules (<code>SpreadShape.kt</code>, copied in <code>lib/spreadShape.ts</code>). Change the heads, the FX and the controls; the ladder and the strips follow. Random here uses a simple shuffle, not the desk's.</p>
+  </div>
+  <div class="board">
+    <div class="pg">
+      <div class="ctl">
+        <div class="row"><span class="lab">Heads</span><input type="range" id="pgN" min="2" max="16" value="4" aria-label="Heads"><span class="val" id="pgNv">4</span></div>
+        <div class="row"><span class="lab">FX</span><span class="seg" id="pgLook" role="group" aria-label="FX">
+          <button aria-pressed="true" data-v="rgb3">3 colours</button><button aria-pressed="false" data-v="rgb4">4 colours</button><button aria-pressed="false" data-v="sine">Sine</button><button aria-pressed="false" data-v="pulse">Pulse</button></span></div>
+        <div class="row"><span class="lab">Pattern</span><span class="seg" id="pgOrder" role="group" aria-label="Pattern">
+          <button aria-pressed="false" data-v="UNIFIED">Unison</button><button aria-pressed="true" data-v="NORMAL">Chase</button><button aria-pressed="false" data-v="REVERSE">Back</button><button aria-pressed="false" data-v="CENTRE_OUT">Centre out</button><button aria-pressed="false" data-v="CENTRE_IN">Centre in</button><button aria-pressed="false" data-v="RANDOM">Random</button></span></div>
+        <div class="row"><span class="lab">Later by</span><span class="seg" id="pgMode" role="group" aria-label="Each head later by">
+          <button aria-pressed="false" data-v="fit">Fit the cycle</button><button aria-pressed="true" data-v="step">1 step</button><button aria-pressed="false" data-v="free">Free</button></span></div>
+        <div class="row" id="pgFreeRow" hidden><span class="lab">Free</span><input type="range" id="pgFree" min="0" max="200" value="100" aria-label="Spread percent"><span class="val" id="pgFreev">100 %</span></div>
+        <div class="row"><span class="lab">Segments</span><span class="seg" id="pgSeg" role="group" aria-label="Segments">
+          <button aria-pressed="true" data-v="1">1</button><button aria-pressed="false" data-v="2">2</button><button aria-pressed="false" data-v="3">3</button><button aria-pressed="false" data-v="4">4</button></span></div>
+        <div class="row"><span class="lab">Parts</span><span class="seg" id="pgParts" role="group" aria-label="Parts">
+          <button aria-pressed="true" data-v="0">off</button><button aria-pressed="false" data-v="2">2</button><button aria-pressed="false" data-v="3">3</button><button aria-pressed="false" data-v="4">4</button></span></div>
+        <div class="row"><span class="lab">Wings</span><span class="seg" id="pgWings" role="group" aria-label="Wings">
+          <button aria-pressed="true" data-v="1">off</button><button aria-pressed="false" data-v="2">2</button><button aria-pressed="false" data-v="3">3</button></span></div>
+      </div>
+      <div class="out">
+        <div class="ladder" id="pgLadder" aria-live="polite"></div>
+        <p class="readout" id="pgRead"></p>
+        <div class="stripwrap"><div class="names" id="pgNames"></div><canvas class="strip" id="pgStrip" height="160"></canvas></div>
+        <div class="legend"><span>Two cycles · rows in rig order</span><span>▾ each row's cycle start</span><span>Ladder numbers: the order heads start in (same number = same time)</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">FX types</span>
+    <h2>29 built-ins become 12, grouped into 9 picker entries</h2>
+    <p class="muted">Many built-ins are the same maths under another name: Pulse, Iris Pulse and Frost Pulse share one script; Sine Wave and Zoom Wave another; Ramp Down is Ramp Up read backwards. On the desk they merge into <b>Wave</b>, <b>Colour Cycle</b> and <b>Path</b>, each with a <b>Shape</b> or a <i>Between</i> choice. A one-shot data step rewrites every stored FX onto the new types once, and <code>LegacyNames</code> maps old ids and parameters on import, in MCP and in a script's <code>effect("SineWave")</code>, so nothing stored or scripted breaks. A migration never changes what the rig does: a stored FX with no exact equivalent stays on its old type, kept registered and hidden from the picker. The Flicker family and the step FX keep their own types, since their timing models differ, and the picker groups them. Labels such as <code>onValue</code>, <code>offLevel</code> and <code>maxBrightness</code> become <i>Low · High</i>.</p>
+  </div>
+  <div class="board">
+    <div class="looks">
+      <div class="look"><h4>Wave</h4><span class="from">One desk FX for Sine Wave · Ramp Up · Ramp Down · Ramp · Square Wave · Pulse · Dimmer Strobe · Zoom Wave · Iris Pulse · Frost Pulse · Focus Pull</span>
+        <div class="chips" id="waveIcons"></div>
+        <div class="row"><span class="lab">Range</span><span class="slider"><span class="tr"></span><span class="fl" style="left:0;width:100%"></span><span class="th" style="left:0"></span><span class="th" style="left:100%"></span></span></div>
+        <div class="row"><span class="lab">Width</span><span class="seg"><span class="o">10 %</span><span class="o">50 %</span><span class="o">One head</span><span class="o on">35 %</span></span></div>
+        <p class="readout">On intensity, zoom, iris, frost or focus, with that attribute's default range. <i>Width</i> appears for Square and Pulse; <i>One head</i> is grandMA3's adaptive width, so exactly one head is on at a time. The last segment is a typed percentage (35 % here), lit when the width matches no preset. <i>One head</i> needs no new field: the FX already knows its slot count.</p></div>
+      <div class="look"><h4>Strobe</h4><span class="from">A picker entry: Wave on Square, or Colour Strobe</span>
+        <div class="row"><span class="lab">On for</span><span class="seg"><span class="o on">10 %</span><span class="o">25 %</span><span class="o">50 %</span><span class="o">… %</span></span></div>
+        <p class="readout">Kept as its own entry in the picker because operators look for the word, but it starts Wave on Square at a short width, or Colour Strobe.</p></div>
+      <div class="look"><h4>Flicker</h4><span class="from">A picker entry over four desk FX: Flicker · Candle Flicker · Fluorescent Flicker · Lightning Strike</span>
+        <div class="row"><span class="lab">Kind</span><span class="seg"><span class="o on">Random</span><span class="o">Candle</span><span class="o">Tube</span><span class="o">Lightning</span></span></div>
+        <div class="row"><span class="lab">Range</span><span class="slider"><span class="tr"></span><span class="fl" style="left:40%;width:50%"></span><span class="th" style="left:40%"></span><span class="th" style="left:90%"></span></span></div>
+        <p class="readout"><i>Kind</i> switches between the four types (two run on the beat, two on the wall clock, so they stay apart on the desk). One <i>Low · High</i> range for all four. Candle adds <i>Settle</i> (today's smoothing); Tube adds burst length.</p></div>
+      <div class="look"><h4>Colour Cycle</h4><span class="from">One desk FX for Colour Cycle · Colour Fade · Colour Wave</span>
+        <div class="chips"><span class="sw" style="background:#ff1d1d"></span><span class="sw" style="background:#ffb300"></span><span class="sw" style="background:#1d4bff"></span><span class="sw add">+</span></div>
+        <div class="row"><span class="lab">Between</span><span class="seg"><span class="o">Cut</span><span class="o on">Fade 50 %</span><span class="o">Smooth</span></span></div>
+        <p class="readout">Colour Fade becomes two colours at Fade 100 % over twice the cycle; Colour Wave two colours on Smooth. <i>From palettes…</i> switches to Palette Steps.</p></div>
+      <div class="look"><h4>Rainbow</h4><span class="from">Rainbow Cycle</span>
+        <div class="row"><span class="lab">Saturation</span><span class="slider"><span class="tr"></span><span class="fl" style="left:0;width:100%"></span><span class="th" style="left:100%"></span></span></div>
+        <p class="readout">Unchanged; Over: Elements and Fit the cycle draw one rainbow along a bar.</p></div>
+      <div class="look"><h4>Colour flicker</h4><span class="from">Colour Flicker</span>
+        <div class="row"><span class="lab">Around</span><span class="sw" style="background:#ff5a1d"></span><span class="lab" style="min-width:auto">by</span><span class="val">50</span></div>
+        <p class="readout">Unchanged, labels only.</p></div>
+      <div class="look"><h4>Path</h4><span class="from">One desk FX for Circle · Figure 8 · Sweep · Pan Sweep · Tilt Sweep · Random Position</span>
+        <div class="chips" id="pathIcons"></div>
+        <div class="row"><span class="lab">Size</span><span class="dchip mono">pan 64</span><span class="dchip mono">tilt 64</span><span class="dchip">⛓</span></div>
+        <p class="readout">A Line's size is signed, so it carries a sweep's two ends (a Pan Sweep is a Line with no tilt size); the rest have a size, linked by default. Centre (<i>Around · Absolute</i>) stays in Mix.</p></div>
+      <div class="look"><h4>Step through</h4><span class="from">A picker entry over Palette Steps · Slot Steps</span>
+        <div class="chips"><span class="dchip">Gobo 2</span><span class="dchip">Gobo 5</span><span class="dchip">Open</span><span class="sw add">+</span></div>
+        <p class="readout">Palettes of any family or a setting's slots. Like Colour Cycle, a step FX, so <i>1 step</i> is its default offset.</p></div>
+      <div class="look"><h4>Script FX</h4><span class="from">Anything registered by a project script</span>
+        <p class="readout">Drawn from its declared parameters as now. With the new metadata, a script can declare ranges, units and which settings are main.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Recipes</span>
+    <h2>Twelve common FX and how they'd be set</h2>
+    <p class="muted">The everyday jobs from every desk's manual, written in the proposed editor's words. Each preview is drawn by the same model as above; Candle's flicker is stateful on the desk, so its strip only shows its character.</p>
+  </div>
+  <div class="recipes" id="recipes"></div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">What changes where</span>
+    <h2>The client, and four desk changes</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Change</th><th>Where</th><th>Stored data</th></tr></thead>
+      <tbody>
+        <tr><td>Parameter metadata in frontmatter: label, range, unit, options, main or shape, shown-when</td><td><span class="tag both">both</span></td><td>None; the library DTO gains fields, and the editor stops guessing</td></tr>
+        <tr><td>Wave, Colour Cycle and Path consolidate the built-ins; Flicker family and Colour Strobe renamed to Low · High</td><td><span class="tag both">both</span></td><td>A one-shot data step rewrites stored FX; <code>LegacyNames</code> reads old ids on import, in MCP and in scripts; <code>formatVersion</code> and <code>minReader</code> move</td></tr>
+        <tr><td><b>Each head later by 1 step</b>: the spread follows the selection's slot count and the FX's step count</td><td><span class="tag both">both</span></td><td>New FX field <code>spreadUnit</code> (<code>CYCLE</code> · <code>STEP</code>) on every FX home, synced, <code>formatVersion</code> bump</td></tr>
+        <tr><td><b>Width: One head</b> for Square and Pulse</td><td><span class="tag back">desk</span></td><td>None: a Wave parameter, read against the slot count the FX already has</td></tr>
+        <tr><td>Inspector regrouped: Timing, the FX's own section, Mix, Advanced; Cycle as a chip</td><td><span class="tag">client</span></td><td>None</td></tr>
+        <tr><td>Across the heads: the ladder, patterns on the selection's heads, Each head later by, Segments · Parts · Wings as segments with an example</td><td><span class="tag">client</span></td><td>None beyond <code>spreadUnit</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Decided · 2026-10-26</span>
+    <h2>Seven answers</h2>
+  </div>
+  <ol class="dec read">
+    <li><div><h3>Consolidate the types on the desk</h3><p>Not looks over unchanged types. Wave, Colour Cycle and Path replace the built-ins that share their maths; the Flicker family and the step FX stay separate types under one picker entry each, because their timing models differ.</p></div></li>
+    <li><div><h3>Rewrite stored FX once, and read old names</h3><p>A one-shot data step (the next <code>user_version</code>) rewrites every Look, cue and palette FX onto the new types, and <code>LegacyNames</code> maps old ids and parameters wherever an old name can still arrive: an archive, MCP, a script's <code>effect()</code>. An FX with no exact equivalent stays on its old type, hidden from the picker.</p></div></li>
+    <li><div><h3>"1 step" is stored</h3><p>A synced <code>spreadUnit</code> the desk resolves at expansion, so a fixture joining the selection keeps the chase aligned.</p></div></li>
+    <li><div><h3>A new step FX starts at 1 step</h3><p>Colour Cycle, Palette Steps and Slot Steps started from any door begin at 1 step; a stored FX naming no unit keeps <code>CYCLE</code>.</p></div></li>
+    <li><div><h3>Keep MagicQ's words</h3><p>Segments · Parts · Wings stay on screen and in the glossary, each a segment with a typed count and a line saying what the current values do.</p></div></li>
+    <li><div><h3>Width: One head in the same plan</h3><p>A Wave parameter, read against the slot count the FX already knows.</p></div></li>
+    <li><div><h3>Cycle as a chip</h3><p>In the inspector's Timing strip; the graph's Cycle tab stays a drag.</p></div></li>
+  </ol>
+</section>
+
+</main>
+
+<script>
+(() => {
+  const COLS = { rgb3: ['#ff1d1d', '#18e33b', '#1d4bff'], rgb4: ['#ff1d1d', '#ffb300', '#18e33b', '#1d4bff'], drift: ['#ffb300', '#1d4bff'] };
+  const STEP_LOOKS = { rgb3: 3, rgb4: 4 };
+
+  // The desk's rule (SpreadShape.kt / lib/spreadShape.ts), Random aside.
+  function orderRanks(order, n) {
+    const lin = () => Array.from({ length: n }, (_, i) => i);
+    if (order === 'REVERSE') return { ranks: lin().map((i) => n - 1 - i), count: n };
+    if (order === 'UNIFIED') return { ranks: lin().map(() => 0), count: 1 };
+    if (order === 'CENTRE_OUT' || order === 'CENTRE_IN') {
+      const slots = Math.floor((n + 1) / 2);
+      if (n <= 1) return { ranks: lin().map(() => 0), count: slots };
+      const c = (n - 1) / 2;
+      const co = (i) => { const d = Math.abs(i - c); return n % 2 === 0 ? Math.trunc(d - 0.5) : Math.trunc(d); };
+      return { ranks: lin().map((i) => (order === 'CENTRE_OUT' ? co(i) : slots - 1 - co(i))), count: slots };
+    }
+    if (order === 'RANDOM') {
+      const d = lin(); let s = 7 + n * 31;
+      for (let i = n - 1; i >= 1; i--) { s = (s * 1103515245 + 12345) % 2147483648; const j = s % (i + 1); [d[i], d[j]] = [d[j], d[i]]; }
+      return { ranks: d, count: n };
+    }
+    return { ranks: lin(), count: n };
+  }
+  function shape(order, n, segments, wings, parts) {
+    const o = orderRanks(order, n);
+    let count = Math.max(o.count, 1);
+    let r = o.ranks.slice();
+    const mirrored = order === 'CENTRE_OUT' || order === 'CENTRE_IN';
+    if (segments > 1) { count = Math.ceil(count / segments); r = r.map((x) => Math.min(Math.floor(x / segments), count - 1)); }
+    if (wings > 1 && !mirrored) {
+      const m = Math.ceil(count / wings);
+      r = r.map((x) => { const run = Math.max(0, Math.min(wings - 1, Math.floor(x / m))); const local = x - run * m;
+        if (run % 2 === 1) { const len = Math.max(1, Math.min(m, count - run * m)); return Math.max(0, len - 1 - local); } return local; });
+      count = m;
+    }
+    if (parts >= 1 && parts < count) { r = r.map((x) => x - parts * Math.floor(x / parts)); count = parts; }
+    return { ranks: r, slots: count };
+  }
+
+  const frac = (x) => ((x % 1) + 1) % 1;
+  const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  function sample(look, phase, opts) {
+    if (look in COLS) {
+      const c = COLS[look], n = c.length, k = Math.floor(phase * n + 1e-9) % n;
+      const within = phase * n - Math.floor(phase * n + 1e-9);
+      const fade = opts.fade || 0;
+      if (fade > 0 && within > 1 - fade) {
+        const t = (within - (1 - fade)) / fade, a = hex(c[k]), b = hex(c[(k + 1) % n]);
+        return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`;
+      }
+      return c[k];
+    }
+    let lv;
+    if (look === 'rainbow') return `hsl(${Math.round(phase * 360)},100%,50%)`;
+    if (look === 'lightning') {
+      const l = phase < 0.05 ? 1 : phase < 0.3 ? (1 - (phase - 0.05) / 0.25) ** 2 : 0;
+      return `rgb(${[235, 240, 255].map((v) => Math.round(v * l)).join(',')})`;
+    }
+    if (look === 'sine') lv = 0.5 - 0.5 * Math.cos(phase * 2 * Math.PI);
+    else if (look === 'pulse') { const w = opts.width || 0.25; lv = phase < w * 0.25 ? phase / (w * 0.25) : phase < w ? 1 - (phase - w * 0.25) / (w * 0.75) : 0; }
+    else if (look === 'square') lv = phase < (opts.width || 0.5) ? 1 : 0;
+    else if (look === 'ramp') lv = phase;
+    else lv = 0;
+    const tint = opts.tint || [255, 196, 120];
+    return `rgb(${tint.map((v) => Math.round(v * lv)).join(',')})`;
+  }
+
+  // Offsets as each row's start, in cycles: the proposed "later by".
+  function offsets(cfg) {
+    const s = shape(cfg.order, cfg.n, cfg.segments || 1, cfg.wings || 1, cfg.parts || 0);
+    const steps = STEP_LOOKS[cfg.look];
+    let spread;
+    if (cfg.mode === 'step') spread = steps ? s.slots / steps : 1;
+    else if (cfg.mode === 'free') spread = cfg.free;
+    else spread = 1;
+    return { offs: s.ranks.map((r) => (spread * r) / s.slots), ranks: s.ranks, slots: s.slots, spread };
+  }
+
+  function draw(canvas, cfg, offs) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = canvas.clientWidth || 400, rows = cfg.n, rowH = cfg.rowH || 16, h = rows * rowH + 4;
+    canvas.style.height = h + 'px';
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    const g = canvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = '#0c0b10'; g.fillRect(0, 0, w, h);
+    const cycles = cfg.cycles || 2, cell = 2;
+    for (let r = 0; r < rows; r++) {
+      const y = 2 + r * rowH;
+      for (let x = 0; x < w; x += cell) {
+        const t = (x / w) * cycles, raw = t - offs[r];
+        let p = frac(raw);
+        if (cfg.dir === 'back') p = frac(1 - p);
+        if (cfg.runs && (raw < 0 || raw >= cfg.runs)) g.fillStyle = '#000';
+        else if (cfg.look === 'candle') {
+          // Candle is stateful on the desk; a smooth per-head wobble stands in for it here.
+          const v = 0.5 + 0.5 * (0.5 * Math.sin(t * 13.1 + r * 2.3) + 0.3 * Math.sin(t * 29.7 + r * 5.1) + 0.2 * Math.sin(t * 71.3 + r * 1.7));
+          const l = 0.4 + 0.5 * v;
+          g.fillStyle = `rgb(${Math.round(255 * l)},${Math.round(170 * l)},${Math.round(80 * l)})`;
+        } else g.fillStyle = sample(cfg.look, p, cfg);
+        g.fillRect(x, y + 1, cell + 0.5, rowH - 2);
+      }
+      if (cfg.noMarks) continue;
+      g.fillStyle = '#a78bfa';
+      for (let c = -1; c <= cycles; c++) {
+        const x = ((c + frac(offs[r])) / cycles) * w;
+        if (x >= 0 && x <= w) { g.beginPath(); g.moveTo(x - 4, y + 1); g.lineTo(x + 4, y + 1); g.lineTo(x, y + 6); g.fill(); }
+      }
+    }
+    g.fillStyle = 'rgba(236,235,241,0.18)';
+    for (let c = 1; c < cycles; c++) g.fillRect(Math.round((c / cycles) * w), 0, 1, h);
+  }
+
+  // A path FX: the path each head travels, and where each head is at one moment.
+  function drawPath(canvas, cfg, o) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = canvas.clientWidth || 400, h = 120;
+    canvas.style.height = h + 'px';
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    const g = canvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = '#0c0b10'; g.fillRect(0, 0, w, h);
+    const cx = w / 2, cy = h / 2, sx = Math.min(w * 0.42, 150), sy = h * 0.4;
+    const at = (p) => [cx + Math.sin(p * 127) * sx, cy - Math.sin(p * 211) * sy];
+    g.strokeStyle = 'rgba(167,139,250,0.35)'; g.lineWidth = 1; g.beginPath();
+    for (let i = 0; i <= 600; i++) { const [x, y] = at(i / 600); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+    const distinct = [...new Set(o.ranks)].sort((a, b) => a - b);
+    o.offs.forEach((off, r) => {
+      const [x, y] = at(frac(0.31 - off));
+      g.fillStyle = LADDER_COLS[distinct.indexOf(o.ranks[r]) % LADDER_COLS.length];
+      g.beginPath(); g.arc(x, y, 4, 0, 2 * Math.PI); g.fill();
+    });
+    g.fillStyle = '#a3a0ae'; g.font = '10px ui-monospace, monospace';
+    g.fillText('pan →', w - 44, h - 6); g.fillText('tilt ↑', 6, 12);
+  }
+
+  function names(el, n, rowH, label) {
+    el.innerHTML = '';
+    for (let i = 0; i < n; i++) { const s = document.createElement('span'); s.style.height = rowH + 'px'; s.textContent = label ? label(i) : 'Head ' + (i + 1); if (i === 0) s.style.marginTop = '2px'; el.appendChild(s); }
+  }
+
+  const LADDER_COLS = ['#a78bfa', '#38bdf8', '#f5b14a', '#86efac', '#f472b6', '#fca5a5', '#fde68a', '#c4b5fd'];
+  function ladder(el, ranks, label) {
+    el.innerHTML = '';
+    const distinct = [...new Set(ranks)].sort((a, b) => a - b);
+    ranks.forEach((r, i) => {
+      const k = distinct.indexOf(r);
+      const hd = document.createElement('div'); hd.className = 'hd';
+      const d = document.createElement('div'); d.className = 'dot'; d.style.background = LADDER_COLS[k % LADDER_COLS.length]; d.textContent = k + 1;
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = label ? label(i) : i + 1;
+      hd.append(d, nm); el.appendChild(hd);
+    });
+  }
+
+  const LX = ['LX2 SR', 'LX2 SL', 'LX1 SR', 'LX1 SL'];
+  const fracWord = (x) => {
+    const known = [[1, '1'], [1 / 2, '½'], [1 / 3, '⅓'], [2 / 3, '⅔'], [1 / 4, '¼'], [3 / 4, '¾'], [1 / 5, '⅕'], [1 / 6, '⅙'], [1 / 8, '⅛'], [0, '0']];
+    for (const [v, w] of known) if (Math.abs(x - v) < 1e-6) return w;
+    return x.toFixed(3);
+  };
+
+  function renderCase() {
+    const base = { n: 4, look: 'rgb3', order: 'NORMAL', rowH: 28 };
+    const a = offsets({ ...base, mode: 'fit' }), b = offsets({ ...base, mode: 'step' });
+    names(document.getElementById('caseNamesA'), 4, 28, (i) => LX[i]);
+    names(document.getElementById('caseNamesB'), 4, 28, (i) => LX[i]);
+    draw(document.getElementById('caseA'), base, a.offs);
+    draw(document.getElementById('caseB'), base, b.offs);
+    ladder(document.getElementById('mockLadder'), b.ranks, (i) => LX[i]);
+  }
+
+  const state = { n: 4, look: 'rgb3', order: 'NORMAL', mode: 'step', free: 1, segments: 1, parts: 0, wings: 1 };
+  function seg(id, key, parse) {
+    const el = document.getElementById(id);
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b || b.disabled) return;
+      state[key] = parse(b.dataset.v);
+      el.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      renderPg();
+    });
+  }
+  seg('pgLook', 'look', String); seg('pgOrder', 'order', String); seg('pgMode', 'mode', String);
+  seg('pgSeg', 'segments', Number); seg('pgParts', 'parts', Number); seg('pgWings', 'wings', Number);
+  const nIn = document.getElementById('pgN'), fIn = document.getElementById('pgFree');
+  nIn.addEventListener('input', () => { state.n = Number(nIn.value); renderPg(); });
+  fIn.addEventListener('input', () => { state.free = Number(fIn.value) / 100; renderPg(); });
+
+  function renderPg() {
+    document.getElementById('pgNv').textContent = state.n;
+    document.getElementById('pgFreev').textContent = Math.round(state.free * 100) + ' %';
+    document.getElementById('pgFreeRow').hidden = state.mode !== 'free';
+    const steps = STEP_LOOKS[state.look];
+    const stepBtn = document.querySelector('#pgMode [data-v="step"]');
+    stepBtn.disabled = !steps;
+    if (!steps && state.mode === 'step') { state.mode = 'fit'; document.querySelectorAll('#pgMode button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.v === 'fit'))); }
+    const mirrored = state.order === 'CENTRE_OUT' || state.order === 'CENTRE_IN';
+    document.querySelectorAll('#pgWings button').forEach((x) => { x.disabled = mirrored && x.dataset.v !== '1'; });
+    const cfg = { ...state, rowH: Math.max(10, Math.min(18, Math.floor(200 / state.n))), wings: mirrored ? 1 : state.wings };
+    const o = offsets(cfg);
+    ladder(document.getElementById('pgLadder'), o.ranks);
+    names(document.getElementById('pgNames'), state.n, cfg.rowH);
+    draw(document.getElementById('pgStrip'), cfg, o.offs);
+    const per = o.slots > 0 ? o.spread / o.slots : 0;
+    const beats = per * 4;
+    const stepWord = steps ? ` · ${(per * steps).toFixed(2).replace(/\.?0+$/, '')} step${Math.abs(per * steps - 1) < 1e-6 ? '' : 's'}` : '';
+    document.getElementById('pgRead').innerHTML =
+      `${o.slots} start${o.slots === 1 ? '' : 's'} · neighbours <b>${fracWord(per)} cycle</b> apart${stepWord} · ${beats.toFixed(2).replace(/\.?0+$/, '')} beats at one bar · ${Math.round(per * 360)}° &nbsp;·&nbsp; spread on the desk ${Math.round(o.spread * 100)} %`;
+  }
+
+  // Look icons
+  function waveSvg(fn) {
+    let d = '';
+    for (let i = 0; i <= 40; i++) { const p = i / 40; d += (i ? 'L' : 'M') + (2 + p * 36).toFixed(1) + ',' + (16 - fn(p) * 12).toFixed(1); }
+    return `<svg width="40" height="18" viewBox="0 0 40 18" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+  }
+  const waves = [['Sine', (p) => 0.5 - 0.5 * Math.cos(p * 2 * Math.PI)], ['Ramp up', (p) => p], ['Ramp down', (p) => 1 - p], ['Triangle', (p) => (p < 0.5 ? p * 2 : 2 - p * 2)], ['Square', (p) => (p < 0.5 ? 1 : 0)], ['Pulse', (p) => (p < 0.08 ? p / 0.08 : p < 0.3 ? 1 : p < 0.6 ? 1 - (p - 0.3) / 0.3 : 0)]];
+  document.getElementById('waveIcons').innerHTML = waves.map(([n, f], i) => `<span class="wave${i === 0 ? ' on' : ''}">${waveSvg(f)}${n}</span>`).join('');
+  function pathSvg(fx, fy) {
+    let d = '';
+    for (let i = 0; i <= 60; i++) { const t = i / 60; d += (i ? 'L' : 'M') + (20 + fx(t) * 15).toFixed(1) + ',' + (9 - fy(t) * 7).toFixed(1); }
+    return `<svg width="40" height="18" viewBox="0 0 40 18" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+  }
+  const T = 2 * Math.PI;
+  const paths = [['Circle', (t) => Math.cos(t * T), (t) => Math.sin(t * T)], ['Figure 8', (t) => Math.cos(t * T), (t) => Math.sin(2 * t * T)], ['Line', (t) => 2 * t - 1, () => 0], ['Random', (t) => Math.sin(t * 127) * 0.9, (t) => Math.sin(t * 211) * 0.9]];
+  document.getElementById('pathIcons').innerHTML = paths.map(([n, fx, fy], i) => `<span class="wave${i === 0 ? ' on' : ''}">${pathSvg(fx, fy)}${n}</span>`).join('');
+
+  // Pattern chips with their drawings, on the selection's own heads.
+  const PATTERNS = [['Unison', 'UNIFIED', 1, 1, 0], ['Chase', 'NORMAL', 1, 1, 0], ['Back', 'REVERSE', 1, 1, 0], ['Centre out', 'CENTRE_OUT', 1, 1, 0], ['Centre in', 'CENTRE_IN', 1, 1, 0], ['Pairs', 'NORMAL', 2, 1, 0], ['Odd/even', 'NORMAL', 1, 1, 2], ['Mirror', 'NORMAL', 1, 2, 0], ['Random', 'RANDOM', 1, 1, 0]];
+  function patternSvg(order, seg, wings, parts, n) {
+    const s = shape(order, n, seg, wings, parts), W = 4 + n * 5;
+    return `<svg width="${W}" height="16" viewBox="0 0 ${W} 16" aria-hidden="true">` + s.ranks.map((r, i) =>
+      `<rect x="${2 + i * 5}" y="${(12.5 - (r / s.slots) * 11).toFixed(1)}" width="3" height="3" rx="0.6" fill="currentColor"/>`).join('') + '</svg>';
+  }
+  document.getElementById('mockPatterns').innerHTML = PATTERNS.map(([nm, o, sg, w, p]) =>
+    `<span class="dchip${nm === 'Chase' ? ' on' : ''}">${patternSvg(o, sg, w, p, 4)}${nm}</span>`).join('');
+
+  // Recipes
+  const R = [
+    { t: 'Colour chase, one colour per fixture', p: 'Each fixture a colour behind the last, red to green to blue.', look: 'Colour Cycle · red, green, blue · Cut', across: 'Chase · later by <b>1 step</b>', timing: '1 bar', cfg: { n: 4, look: 'rgb3', order: 'NORMAL', mode: 'step' } },
+    { t: 'Dimmer chase, one on at a time', p: 'A single light running along a truss.', look: 'Wave · Square · width <b>One head</b>', across: 'Chase · Fit the cycle', timing: '1 bar', cfg: { n: 8, look: 'square', order: 'NORMAL', mode: 'fit', width: 1 / 8 } },
+    { t: 'Sine ripple along a pixel bar', p: 'A smooth wave travelling across every cell.', look: 'Wave · Sine · 0–100 %', across: 'Over <b>Elements</b> · Chase · Fit the cycle', timing: '1 bar', cfg: { n: 12, look: 'sine', order: 'NORMAL', mode: 'fit' } },
+    { t: 'Fly-out from the centre', p: 'A hit that starts in the middle and runs to both ends.', look: 'Wave · Pulse', across: '<b>Centre out</b> · Fit the cycle', timing: '½ bar', cfg: { n: 8, look: 'pulse', order: 'CENTRE_OUT', mode: 'fit', width: 0.5 } },
+    { t: 'Odd / even alternate', p: 'Two halves of the rig trading places.', look: 'Wave · Square · 50 %', across: 'Chase · <b>Parts 2</b> · Fit the cycle', timing: '1 beat', cfg: { n: 8, look: 'square', order: 'NORMAL', mode: 'fit', parts: 2, width: 0.5 } },
+    { t: 'Pairs chase on eight movers', p: 'Neighbouring heads moving as one.', look: 'Wave · Pulse', across: 'Chase · <b>Segments 2</b>', timing: '1 bar', cfg: { n: 8, look: 'pulse', order: 'NORMAL', mode: 'fit', segments: 2, width: 0.5 } },
+    { t: 'Mirrored wave', p: 'A wave running in from both ends to meet in the middle.', look: 'Wave · Sine', across: 'Chase · <b>Wings 2</b>', timing: '1 bar', cfg: { n: 8, look: 'sine', order: 'NORMAL', mode: 'fit', wings: 2 } },
+    { t: 'Rainbow along the rig', p: 'One rainbow spread across every cell.', look: 'Rainbow', across: 'Over <b>Elements</b> · Chase · Fit the cycle', timing: '2 bars', cfg: { n: 12, look: 'rainbow', order: 'NORMAL', mode: 'fit' } },
+    { t: 'Ballyhoo', p: 'Movers sweeping the audience, alternate heads opposed.', look: 'Path · Random · size 64', across: 'Chase · <b>Parts 2</b>', timing: '2 bars · Mix: Around', cfg: { n: 8, look: 'path', order: 'NORMAL', mode: 'fit', parts: 2 }, note: 'The path, and where the eight heads are at one moment: the four odd heads share the violet dot and the four even heads the blue one, half a cycle apart.' },
+    { t: 'Candles on practicals', p: 'Each lamp flickering on its own.', look: 'Flicker · Candle · 40–90 %', across: 'Random', timing: 'Seconds · 4 s · Mix: Within it', cfg: { n: 6, look: 'candle', order: 'RANDOM', mode: 'fit', noMarks: true } },
+    { t: 'Lightning, once', p: 'A single strike on a cue.', look: 'Flicker · Lightning', across: 'Unison', timing: '2 bars · Runs <b>×1</b>', cfg: { n: 4, look: 'lightning', order: 'UNIFIED', mode: 'fit', runs: 1 }, note: 'One strike, then dark for the second cycle: Runs ×1 hands back to what is underneath.' },
+    { t: 'Slow colour drift', p: 'Amber to blue and back over eight seconds.', look: 'Colour Cycle · amber, blue · Fade 100 %', across: 'Unison', timing: '<b>Seconds</b> · 8 s', cfg: { n: 4, look: 'drift', order: 'UNIFIED', mode: 'fit', fade: 1 } },
+  ];
+  const host = document.getElementById('recipes');
+  host.innerHTML = R.map((r, i) => `<article class="recipe"><div class="rh"><h3>${r.t}</h3><p>${r.p}</p></div><div class="rb">
+    <dl class="kv"><dt>FX</dt><dd>${r.look}</dd><dt>Across</dt><dd>${r.across}</dd><dt>Timing</dt><dd>${r.timing}</dd></dl>
+    ${r.cfg ? `<canvas class="strip" data-r="${i}" height="60"></canvas>` : ''}${r.note ? `<p class="readout">${r.note}</p>` : ''}</div></article>`).join('');
+
+  function renderRecipes() {
+    host.querySelectorAll('canvas[data-r]').forEach((c) => {
+      const r = R[Number(c.dataset.r)], cfg = { cycles: 2, rowH: Math.max(5, Math.floor(72 / r.cfg.n)), ...r.cfg };
+      const o = offsets(cfg);
+      if (cfg.look === 'path') drawPath(c, cfg, o); else draw(c, cfg, o.offs);
+    });
+  }
+
+  function all() { renderCase(); renderPg(); renderRecipes(); }
+  all();
+  let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(all, 120); });
+  document.fonts && document.fonts.ready.then(all);
+})();
+</script>

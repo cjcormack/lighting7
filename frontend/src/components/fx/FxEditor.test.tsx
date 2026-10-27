@@ -122,6 +122,21 @@ const PULSE: FxLibraryEntry = {
   ],
 }
 
+/** Wave's levels, a declared pair (fx-settings plan D1, D2). */
+const WAVE: FxLibraryEntry = {
+  name: 'Wave',
+  family: 'intensity',
+  outputType: 'SLIDER',
+  fxMode: 'STANDARD',
+  timingSource: 'BEAT',
+  compatibleAttributes: ['dimmer', 'uv', 'zoom', 'iris', 'frost', 'focus'],
+  parameters: [
+    { name: 'shape', type: 'choice', defaultValue: 'SINE', description: '' },
+    { name: 'low', type: 'ubyte', defaultValue: '0', description: '', pair: 'high' },
+    { name: 'high', type: 'ubyte', defaultValue: '255', description: '' },
+  ],
+}
+
 /** A mover whose pan travels 540° and tilt 270°, as the Robe ColorSpot annotates. */
 const SPOT = makeFixture('spot-3', [
   sliderProp('dimmer', 'dimmer', chan(1)),
@@ -142,7 +157,7 @@ const aroundCircle = () =>
 const lastFrame = () => updateFx.mock.calls.at(-1)?.[1] as Record<string, unknown>
 
 beforeEach(() => {
-  library.entries = [CIRCLE, PULSE]
+  library.entries = [CIRCLE, PULSE, WAVE]
   lookup.fixtures = [SPOT]
   updateFx.mockClear()
   resetFx.mockClear()
@@ -155,6 +170,12 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
 })
+
+
+/** The Cycle chip's popover: its steps, its typed field and *Same cycle as…*. */
+function openCycle() {
+  fireEvent.click(screen.getByRole('button', { name: /^Cycle: / }))
+}
 
 describe('FxEditor', () => {
   it('sends a drag at most one frame per 50 ms, and the release lands', () => {
@@ -198,6 +219,7 @@ describe('FxEditor', () => {
     const size = screen.getByRole('slider', { name: 'Pan size' })
     fireEvent.change(size, { target: { value: '200' } })
     fireEvent.pointerUp(size)
+    openCycle()
     fireEvent.click(screen.getByRole('radio', { name: '1 bar a cycle' }))
     updateFx.mockClear()
 
@@ -213,8 +235,8 @@ describe('FxEditor', () => {
 
   it('Revert onto Seconds sends seconds alone and draws no master — so it is no longer dirty', () => {
     render(<FxEditor effect={makeActiveFx({ fxType: 'Pulse', attribute: 'dimmer', cycle: 2, timingSource: 'WALL_CLOCK', seconds: true })} onDone={() => {}} onStop={() => {}} />)
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Timing: Seconds' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /M1 · Main/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Timing: Seconds' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'M1 · Main' }))
     expect(lastFrame()).toMatchObject({ seconds: false, speedMasterUuid: 'master-1' })
     updateFx.mockClear()
 
@@ -281,7 +303,7 @@ describe('FxEditor', () => {
     expect(lastFrame()).toMatchObject({ blendMode: 'OVERRIDE' })
   })
 
-  it('keeps the shape behind a disclosure that says what is in it', () => {
+  it('keeps the detail behind More, its summary saying what is in it', () => {
     const pulse = makeActiveFx({
       id: 31,
       fxType: 'Pulse',
@@ -291,7 +313,7 @@ describe('FxEditor', () => {
     })
     render(<FxEditor effect={pulse} onDone={() => {}} onStop={() => {}} />)
     expect(screen.queryByRole('slider', { name: 'Attack' })).toBeNull()
-    const shape = screen.getByRole('button', { name: /^Shape/ })
+    const shape = screen.getByRole('button', { name: /^More/ })
     expect(shape.textContent).toContain('attack 10%')
     expect(shape.textContent).toContain('quad out')
     fireEvent.click(shape)
@@ -318,6 +340,32 @@ describe('FxEditor', () => {
     expect(screen.getByRole('radio', { name: 'Around current position' }).getAttribute('aria-checked')).toBe('true')
   })
 
+  it('swaps the FX for another type on its attribute from its section’s header, in one write', () => {
+    const pulse = makeActiveFx({ id: 31, fxType: 'Pulse', targetKey: 'spot-3', attribute: 'dimmer', parameters: { min: '20' } })
+    render(<FxEditor effect={pulse} onDone={() => {}} onStop={() => {}} />)
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'FX type: Pulse' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    // Only the FX this attribute takes: no Circle on a dimmer.
+    expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual(['Pulse', 'Wave'])
+    updateFx.mockClear()
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Wave' }))
+    expect(updateFx).toHaveBeenCalledTimes(1)
+    expect(updateFx.mock.calls[0][0]).toBe(31)
+    expect(lastFrame()).toMatchObject({
+      fxType: 'Wave',
+      parameters: { shape: 'SINE', low: '0', high: '255' },
+      blendMode: 'OVERRIDE',
+    })
+
+    // Before the desk's answer remounts the editor it draws the new type, and a move is Wave's.
+    expect(screen.getByRole('button', { name: 'FX type: Wave' })).toBeTruthy()
+    const high = screen.getByRole('spinbutton', { name: 'High percent' })
+    fireEvent.change(high, { target: { value: '50' } })
+    fireEvent.keyDown(high, { key: 'Enter' })
+    expect((lastFrame().parameters as Record<string, string>).min).toBeUndefined()
+    expect(lastFrame()).toMatchObject({ parameters: { shape: 'SINE', low: '0', high: '128' } })
+    expect(screen.getByRole('button', { name: 'Revert' })).toBeDisabled()
+  })
+
   it('pauses the effect from its header, as every host lost its row button for', () => {
     render(<FxEditor effect={aroundCircle()} onDone={() => {}} onStop={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Pause Circle' }))
@@ -326,6 +374,7 @@ describe('FxEditor', () => {
 
   it('types a division the segment does not name — a triplet', () => {
     render(<FxEditor effect={aroundCircle()} onDone={() => {}} onStop={() => {}} />)
+    openCycle()
     const field = screen.getByRole('spinbutton', { name: 'Beats a cycle' })
     fireEvent.change(field, { target: { value: '0.333' } })
     fireEvent.keyDown(field, { key: 'Enter' })
@@ -368,6 +417,18 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     arm.spawning = { palette: BIG_CIRCLE, projectId: 1 }
   })
 
+  it('offers no type switch on a pad’s instance, whose palette names its type — its palette read or not', () => {
+    library.entries = [CIRCLE, { ...CIRCLE, name: 'Figure 8' }, PULSE, WAVE]
+    render(<FxEditor effect={padCircle()} onDone={() => {}} onStop={() => {}} />)
+    expect(screen.queryByRole('button', { name: /^FX type/ })).toBeNull()
+    cleanup()
+    // The palette list not read yet: the arm is not drawn, and still no swap.
+    arm.spawning = null
+    render(<FxEditor effect={padCircle()} onDone={() => {}} onStop={() => {}} />)
+    expect(screen.queryByRole('button', { name: /^FX type/ })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Path' }).textContent).toContain('Circle')
+  })
+
   it('is marked edited while it differs from its palette, and Reset to palette calls W5 in place of Revert', async () => {
     arm.resetAnswer = padCircle()
     render(<FxEditor effect={padCircle()} onDone={() => {}} onStop={() => {}} />)
@@ -398,6 +459,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     const size = screen.getByRole('slider', { name: 'Pan size' })
     fireEvent.change(size, { target: { value: '120' } })
     fireEvent.pointerUp(size)
+    openCycle()
     fireEvent.click(screen.getByRole('radio', { name: '2 beats a cycle' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Update palette' }))
@@ -424,7 +486,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
 })
 
 describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13, §4.5)', () => {
-  /** A Pulse over a group: the Spread section is drawn, and an Intensity FX with a min and a max. */
+  /** A Pulse over a group: Across the heads is drawn, and an Intensity FX with a min and a max. */
   const groupPulse = (over: Partial<ActiveFx> = {}) =>
     makeActiveFx({
       id: 41,
@@ -464,39 +526,33 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
         <FxEditor effect={effect} onDone={() => {}} onStop={() => {}} layout="inspector" />
       </FxGraphLinkContext.Provider>,
     )
-  const openSpread = () => fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
-  const shapeChip = (name: string) => within(screen.getByRole('group', { name: 'Shapes' })).getByRole('button', { name })
+  const shapeChip = (name: string) => within(screen.getByRole('group', { name: 'Patterns' })).getByRole('button', { name: new RegExp(name) })
 
-  it('writes each Shape’s five fields in one updateFx, and lights the Shape the fields match', () => {
+  it('writes each pattern’s four fields in one updateFx, and lights the pattern the fields match', () => {
     inspector(linkOf().link)
-    openSpread()
     // The FX opens on Chase: Normal, every other field at its default.
     expect(shapeChip('Chase').getAttribute('aria-pressed')).toBe('true')
     for (const shape of FX_SHAPES) {
       updateFx.mockClear()
-      fireEvent.click(shapeChip(shape.name))
+      fireEvent.click(shapeChip(`^${shape.name}$`))
       expect(updateFx).toHaveBeenCalledTimes(1)
       expect(lastFrame()).toMatchObject(shape.fields)
-      for (const other of FX_SHAPES) expect(shapeChip(other.name).getAttribute('aria-pressed')).toBe(String(other === shape))
-      expect(document.querySelector('[data-shape-custom]')).toBeNull()
+      for (const other of FX_SHAPES) expect(shapeChip(`^${other.name}$`).getAttribute('aria-pressed')).toBe(String(other === shape))
+      expect(document.querySelector('[data-shape-custom]')?.getAttribute('aria-pressed')).toBe('false')
     }
   })
 
-  it('says Custom while the fields match no Shape', () => {
+  it('says Custom while the fields match no pattern', () => {
     inspector(linkOf().link)
-    openSpread()
-    const spread = screen.getByRole('spinbutton', { name: /Spread percent/ })
-    fireEvent.change(spread, { target: { value: '50' } })
-    fireEvent.keyDown(spread, { key: 'Enter' })
-    expect(document.querySelector('[data-shape-custom]')?.textContent).toBe('Custom')
-    for (const shape of FX_SHAPES) expect(shapeChip(shape.name).getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(screen.getByRole('radio', { name: 'Segments 3' }))
+    expect(document.querySelector('[data-shape-custom]')?.getAttribute('aria-pressed')).toBe('true')
+    for (const shape of FX_SHAPES) expect(shapeChip(`^${shape.name}$`).getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('draws each Shape’s offsets over eight notional heads', () => {
+  it('draws each pattern’s starts, one dot a head', () => {
     inspector(linkOf().link)
-    openSpread()
-    const drawing = (name: string) => [...shapeChip(name).querySelectorAll('[data-shape-drawing] rect')].map((r) => Number(r.getAttribute('y')))
-    expect(drawing('Unison')).toHaveLength(8)
+    const drawing = (name: string) => [...shapeChip(`^${name}$`).querySelectorAll('[data-shape-drawing] rect')].map((r) => Number(r.getAttribute('y')))
+    expect(drawing('Unison').length).toBeGreaterThan(1)
     expect(new Set(drawing('Unison')).size).toBe(1)
     // Pairs: neighbours share a height.
     const pairs = drawing('Pairs')
@@ -514,16 +570,17 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     }
 
     updateFx.mockClear()
+    openCycle()
     pick('Same cycle as')
     expect(updateFx).toHaveBeenCalledTimes(1)
     // Master 1 is named by its uuid: the frame's absent master means "keep".
     expect(lastFrame()).toMatchObject({ cycle: 8, seconds: false, speedMasterUuid: 'master-1' })
 
-    openSpread()
     updateFx.mockClear()
     pick('Same spread as')
     expect(updateFx).toHaveBeenCalledTimes(1)
-    expect(lastFrame()).toMatchObject({ order: 'REVERSE', spread: 0.5, wings: 1, segments: 3, parts: 0 })
+    // The unit travels with the number (fx-settings plan D6), so 0.5 stays half a cycle.
+    expect(lastFrame()).toMatchObject({ order: 'REVERSE', spread: 0.5, wings: 1, segments: 3, parts: 0, spreadUnit: 'CYCLE' })
 
     // The source changes afterwards: nothing follows it.
     updateFx.mockClear()
@@ -548,6 +605,7 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
         ],
       }).link,
     )
+    openCycle()
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Same cycle as…' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(screen.getByRole('menuitem', { name: /Flicker/ }).getAttribute('aria-disabled')).toBe('true')
     updateFx.mockClear()
@@ -558,7 +616,6 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
   it('offers no spread from an FX on one head, which has none to copy', () => {
     const single = makeActiveFx({ id: 53, fxType: 'Pulse', attribute: 'uv', order: null })
     inspector(linkOf({ others: [{ effect: single, name: 'Pulse', wallClock: false }] }).link)
-    openSpread()
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Same spread as…' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(screen.getByRole('menuitem', { name: /Pulse/ }).getAttribute('aria-disabled')).toBe('true')
   })
@@ -566,7 +623,7 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
   it('puts out a light whose control goes from under the pointer', () => {
     const { link } = linkOf()
     const { unmount } = inspector(link)
-    fireEvent.pointerEnter(screen.getByRole('radiogroup', { name: 'Cycle' }).closest('[data-lights]')!)
+    fireEvent.pointerEnter(screen.getByRole('button', { name: /^Cycle: / }).closest('[data-lights]')!)
     expect(link.setHighlight).toHaveBeenLastCalledWith('cycle')
     unmount()
     expect(link.setHighlight).toHaveBeenLastCalledWith(null)
@@ -639,16 +696,21 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
   it('lights the mark each control changes while the pointer rests on it', () => {
     const { link } = linkOf()
     inspector(link)
-    openSpread()
     const lights = (control: HTMLElement) => control.closest('[data-lights]') as HTMLElement
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Free' }))
     const cases: [HTMLElement, string][] = [
-      [screen.getByRole('radiogroup', { name: 'Cycle' }), 'cycle'],
+      [screen.getByRole('button', { name: /^Cycle: / }), 'cycle'],
+      [screen.getByRole('button', { name: /^Timing: / }), 'cycle'],
+      [screen.getByRole('button', { name: /^Runs: / }), 'holding'],
       [screen.getByRole('slider', { name: 'Amount' }), 'amount'],
       [screen.getByRole('combobox', { name: 'Order' }), 'starts'],
+      [screen.getByRole('group', { name: 'Patterns' }), 'starts'],
+      [screen.getByRole('radiogroup', { name: 'Each head later by' }), 'starts'],
       [screen.getByRole('slider', { name: 'Spread' }), 'starts'],
-      [screen.getByRole('spinbutton', { name: 'Wings' }), 'mirror'],
-      [screen.getByRole('spinbutton', { name: 'Segments' }), 'brackets'],
-      [screen.getByRole('spinbutton', { name: 'Parts' }), 'brackets'],
+      [screen.getByRole('spinbutton', { name: 'Wings count' }), 'mirror'],
+      [screen.getByRole('spinbutton', { name: 'Segments count' }), 'brackets'],
+      [screen.getByRole('spinbutton', { name: 'Parts count' }), 'brackets'],
     ]
     for (const [control, mark] of cases) {
       fireEvent.pointerEnter(lights(control))
@@ -657,11 +719,11 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
       expect(link.setHighlight).toHaveBeenLastCalledWith(null)
     }
     fireEvent.click(screen.getByRole('button', { name: /^Advanced/ }))
-    fireEvent.pointerEnter(lights(screen.getByRole('radiogroup', { name: 'Runs' })))
-    expect(link.setHighlight).toHaveBeenLastCalledWith('holding')
+    fireEvent.pointerEnter(lights(screen.getByRole('slider', { name: 'Phase' })))
+    expect(link.setHighlight).toHaveBeenLastCalledWith('starts')
   })
 
-  it('draws the offset ladder from the desk’s answer in place of the dials, a dot linking to its row', () => {
+  it('draws the head ladder from the desk’s answer, numbered by start, a head linking to its row', () => {
     const rows = [row('hex-1', 0, { label: 'Hex 1' }), row('hex-2', 1, { label: 'Hex 2' }), row('hex-3', 2, { label: 'Hex 3' }), row('hex-4', 3, { label: 'Hex 4' })]
     const fx = previewFx(4, {
       offsets: [0, 0.5, 0, 0.5],
@@ -675,15 +737,52 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     })
     const { link } = linkOf({ ladder: { fx, rows } })
     inspector(link)
-    openSpread()
-    expect(screen.queryByRole('img', { name: /^Phase of/ })).toBeNull()
-    const at = (step: string) => [...document.querySelectorAll(`[data-ladder-step="${step}"] [data-ladder-dot]`)].map((d) => Number(d.getAttribute('data-at')))
-    expect(at('order')).toEqual([0, 0.25, 0.5, 0.75])
-    expect(at('segments')).toEqual([0, 0, 0.5, 0.5])
-    expect(at('spread')).toEqual([0, 0, 0.5, 0.5])
-
-    fireEvent.pointerEnter(document.querySelector('[data-ladder-step="order"] [data-ladder-dot="hex-3"]')!)
+    const heads = [...document.querySelectorAll('[data-ladder-head]')]
+    expect(heads.map((h) => [h.getAttribute('data-ladder-head'), Number(h.getAttribute('data-start'))])).toEqual([
+      ['hex-1', 1],
+      ['hex-2', 1],
+      ['hex-3', 2],
+      ['hex-4', 2],
+    ])
+    fireEvent.pointerEnter(document.querySelector('[data-ladder-head="hex-3"]')!)
     expect(link.setLadderRow).toHaveBeenLastCalledWith('hex-3')
+  })
+
+  it('draws the ladder in rig order though the answer’s rows come in the FX’s Order', () => {
+    // Reverse: the desk lists Hex 4 first, starting first.
+    const rows = [row('hex-4', 3, { label: 'Hex 4' }), row('hex-3', 2, { label: 'Hex 3' }), row('hex-2', 1, { label: 'Hex 2' }), row('hex-1', 0, { label: 'Hex 1' })]
+    const fx = previewFx(4, { ladder: { ...previewFx(4).ladder, spread: [0, 0.25, 0.5, 0.75] } })
+    inspector(linkOf({ ladder: { fx, rows } }).link)
+    const heads = [...document.querySelectorAll('[data-ladder-head]')]
+    expect(heads.map((h) => [h.getAttribute('data-ladder-head'), Number(h.getAttribute('data-start'))])).toEqual([
+      ['hex-1', 4],
+      ['hex-2', 3],
+      ['hex-3', 2],
+      ['hex-4', 1],
+    ])
+  })
+
+  it('asks the desk for the starts until its preview answers', () => {
+    inspector(linkOf().link)
+    expect(screen.getByText('Asking the desk for the starts…')).toBeTruthy()
+  })
+
+  it('lends a Wave’s low and high to the graph as its levels, and none on a beam attribute, which asks no level question', () => {
+    const wave = (attribute: string) =>
+      groupPulse({ fxType: 'Wave', attribute, parameters: { shape: 'SINE', low: '40', high: '200' } })
+    const { link, held } = linkOf()
+    const { unmount } = inspector(link, wave('dimmer'))
+    expect(held.editor?.levels).toBe(true)
+    expect(held.editor?.levelParams).toEqual({ low: 'low', high: 'high' })
+    expect(screen.getByText('Over the level underneath')).toBeTruthy()
+    act(() => held.editor!.setParam(held.editor!.levelParams!.high, '180', true))
+    expect((lastFrame().parameters as Record<string, string>).high).toBe('180')
+    unmount()
+
+    const zoom = linkOf()
+    inspector(zoom.link, wave('zoom'))
+    expect(zoom.held.editor?.levels).toBe(false)
+    expect(screen.queryByText('Over the level underneath')).toBeNull()
   })
 
   it('lends the graph’s handles a write through the 50 ms floor, the release landing, and tells the preview each move', () => {

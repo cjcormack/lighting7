@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.scripts
 
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.fixture.FixtureTarget
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
@@ -31,12 +32,12 @@ import kotlin.script.experimental.jvm.jvmTarget
  * val movers = group<MovingHead>("movers")
  *
  * wash.fx {
- *     dimmer(effect("SineWave", "min" to "40"), CycleLength.TWO_BEATS)
+ *     dimmer(effect("Wave", "low" to "40"), CycleLength.TWO_BEATS)
  *     colour(effect("ColourCycle"), CycleLength.ONE_BAR)
  * }
  *
  * movers.fx {
- *     dimmer(effect("Pulse"), CycleLength.ONE_BEAT, order = SpreadOrder.CENTRE_OUT)
+ *     dimmer(effect("Wave"), CycleLength.ONE_BEAT, order = SpreadOrder.CENTRE_OUT)
  * }
  *
  * // Run one effect off speed master 2 rather than the global tempo
@@ -90,7 +91,10 @@ abstract class FxApplicationScript(
     // --- Effect Construction ---
 
     /**
-     * Build an effect by registered type name, e.g. `effect("SineWave", "min" to "40")`.
+     * Build an effect by registered type name, e.g. `effect("Wave", "shape" to "PULSE", "low" to "40")`.
+     * An old name still runs as today's (fx-settings plan D3): a level wave as Wave and a movement as Path,
+     * with their parameters (`effect("SineWave", "min" to "40")`, `effect("Circle")`), and a renamed
+     * parameter at its new name (`effect("Flicker", "min" to "40")`, Colour Cycle's `fadeRatio`).
      *
      * Type names are matched case-insensitively, ignoring spaces and underscores, against
      * built-in effects and any user effect in `fx_definitions`. Parameter names and their string
@@ -100,13 +104,15 @@ abstract class FxApplicationScript(
      *
      * @throws IllegalArgumentException if no effect is registered under [id]
      */
-    fun effect(id: String, params: Map<String, String>): Fx =
-        show.fxRegistry.createFxWithPalettes(show.paletteRegistry, id, params)
+    fun effect(id: String, params: Map<String, String>): Fx {
+        val (type, parameters) = LegacyNames.runnableFx(id, params)
+        return show.fxRegistry.createFxWithPalettes(show.paletteRegistry, type, parameters)
+    }
 
     /**
-     * [effect] with parameters as pairs: `effect("Pulse", "min" to "0", "max" to "200")`, and the
-     * no-parameter form `effect("Pulse")`. Deliberately not a default on the [Map] overload —
-     * that would make the bare `effect("Pulse")` call ambiguous between the two.
+     * [effect] with parameters as pairs: `effect("Wave", "low" to "0", "high" to "200")`, and the
+     * no-parameter form `effect("Wave")`. Deliberately not a default on the [Map] overload —
+     * that would make the bare `effect("Wave")` call ambiguous between the two.
      */
     fun effect(id: String, vararg params: Pair<String, String>): Fx =
         effect(id, params.toMap())

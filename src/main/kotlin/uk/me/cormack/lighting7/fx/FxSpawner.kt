@@ -187,6 +187,7 @@ internal object FxSpawner {
             state.show.paletteRegistry,
             fxSpec.fxType,
             fxSpec.parameters,
+            fxTarget.attribute,
         )
         val timing = FxTiming(fxSpec.cycle)
 
@@ -201,12 +202,12 @@ internal object FxSpawner {
         val direction = FxSpecCoercion.Lenient.direction(fxSpec.direction, context)
         val amount = FxSpecCoercion.Lenient.amount(fxSpec.amount, context)
         val runs = FxSpecCoercion.Lenient.runs(fxSpec.runs, context)
-        val shape = FxSpecCoercion.Lenient.spreadShape(
-            fxSpec.spread, fxSpec.wings, fxSpec.segments, fxSpec.parts, context,
-        )
-
         // Propagate timing source from the effect's registration
         val registration = state.show.fxRegistry.getRegistration(fxSpec.fxType)
+        val shape = FxSpecCoercion.Lenient.spreadShape(
+            fxSpec.spread, fxSpec.wings, fxSpec.segments, fxSpec.parts, fxSpec.spreadUnit,
+            registration?.let { it.stepsFrom != null }, context,
+        )
         val timingSource = registration?.timingSource ?: TimingSource.BEAT
 
         return FxInstance(effect, fxTarget, timing, blendMode).apply {
@@ -227,6 +228,7 @@ internal object FxSpawner {
                 it.copy(
                     amount = amount, direction = direction, runs = runs,
                     spread = shape.spread, wings = shape.wings, segments = shape.segments, parts = shape.parts,
+                    spreadUnit = shape.unit,
                 )
             }
             speedMasterUuid = overrideSpeedMasterUuid

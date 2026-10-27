@@ -51,7 +51,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
             CueAssignmentResolver.AttributeValue.Position(40u, 200u), fadeMs = 0,
         )
         val circle = FxTestSupport.start(
-            state, "Circle", "spot-1", "position", programmerBand = true, blendMode = BlendMode.ADDITIVE,
+            state, "Path", "spot-1", "position", programmerBand = true, blendMode = BlendMode.ADDITIVE,
         )
 
         val answer = ask("fixture", "spot-1", "position")
@@ -82,7 +82,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
             state, TargetRef.Fixture("spot-1"), "position",
             CueAssignmentResolver.AttributeValue.Position(40u, 200u), fadeMs = 0,
         )
-        FxTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
+        FxTestSupport.start(state, "Path", "spot-1", "position", programmerBand = true)
 
         val layers = ask("fixture", "spot-1", "position").stacks.single().layers
         assertTrue(layers[0].onStage)
@@ -98,7 +98,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
                 state, TargetRef.Fixture("spot-1"), "position",
                 CueAssignmentResolver.AttributeValue.Position(40u, 200u), fadeMs = 0,
             )
-            val circle = FxTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
+            val circle = FxTestSupport.start(state, "Path", "spot-1", "position", programmerBand = true)
 
             // Effects plan P3: at 0 % the effect weighs nothing, so what is underneath is all the rig shows.
             circle.updateDynamics { it.copy(amount = 0.0) }
@@ -119,7 +119,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     fun `a cue Pulse under a programmer dimmer is listed below it and held back`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val pulse = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
+        val pulse = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
         setDimmer("hex-1", 200)
 
         val stack = ask("fixture", "hex-1", "dimmer").stacks.single()
@@ -145,7 +145,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     fun `blind empties the held-back set and takes the programmer off stage`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
+        FxTestSupport.start(state, "Wave", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
         setDimmer("hex-1", 200)
         state.show.fxEngine.programmer.setBlind(true)
 
@@ -161,7 +161,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     fun `blind holds a band effect, listed as held back by Blind and off stage`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val pulse = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val pulse = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
         setDimmer("hex-1", 200)
         state.show.fxEngine.programmer.setBlind(true)
 

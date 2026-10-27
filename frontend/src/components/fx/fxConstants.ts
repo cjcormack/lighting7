@@ -1,16 +1,17 @@
 import { Sun, Palette, Move, Aperture, SlidersHorizontal, ListOrdered, type LucideIcon } from 'lucide-react'
 import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
+import type { ElementMode } from '@/api/groupsApi'
 
 /**
- * The heads an FX palette is drawn on with nothing to count (FX editor plan D15): its phase dials
- * and its graph strip's notional heads. [NOTIONAL_HEADS_WORD] is the number in the strip's copy.
+ * The heads an FX palette is drawn on with nothing to count (FX editor plan D15): its head ladder
+ * and patterns, and its graph strip's notional heads. [NOTIONAL_HEADS_WORD] is the number in the strip's copy.
  */
 export const NOTIONAL_HEADS = 8
 export const NOTIONAL_HEADS_WORD = 'eight'
 
 /**
  * An FX's cycle, in **beats a cycle** — the one spelling every surface uses
- * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's Cycle segment draws
+ * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's Cycle chip draws
  * these labels and every chip reads them through [getCycleLabel], so a cycle is never *1*
  * in one place and *1/4* in another. A bar is four beats (venue-visit plan D16's words), so the
  * long cycles say bars.
@@ -80,10 +81,21 @@ const ORDER_DESCRIPTIONS: Record<string, string> = {
 export const ORDER_OPTION_ENTRIES: readonly { value: string; label: string; description: string }[] =
   ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value), description: ORDER_DESCRIPTIONS[value] ?? '' }))
 
+/**
+ * *Over* (FX editor follow-ups plan D7): what the spread counts where an FX lands on fixtures'
+ * elements. A stored FX naming none is Each fixture; one a door starts is Fixtures (D8).
+ */
 export const ELEMENT_MODE_OPTIONS = [
-  { value: 'PER_FIXTURE', label: 'Per Fixture', description: 'FX runs independently on each fixture' },
-  { value: 'FLAT', label: 'Flat', description: 'All heads treated as one continuous strip' },
+  { value: 'WHOLE', label: 'Fixtures', description: 'Each fixture is one unit, its elements alike' },
+  { value: 'FLAT', label: 'Elements', description: 'Every element of every fixture is one strip' },
+  { value: 'PER_FIXTURE', label: 'Each fixture', description: 'The FX runs within each fixture, every fixture alike' },
 ] as const
+
+/** The mode a door that starts or creates an FX writes (D8). */
+export const NEW_FX_ELEMENT_MODE: ElementMode = 'WHOLE'
+
+/** What a stored FX with no element mode means. */
+export const STORED_ELEMENT_MODE: ElementMode = 'PER_FIXTURE'
 
 export const ELEMENT_FILTER_OPTIONS = [
   { value: 'ALL', label: 'All', description: 'All elements' },
@@ -93,9 +105,11 @@ export const ELEMENT_FILTER_OPTIONS = [
   { value: 'SECOND_HALF', label: 'Second Half', description: 'Second half of elements' },
 ] as const
 
-export function getElementModeLabel(mode: string): string {
+/** An FX's Over in a summary line, worded so it never reads as a target: *over fixtures*, *each fixture*. */
+export function elementModeSummary(mode: string): string {
   const option = ELEMENT_MODE_OPTIONS.find((o) => o.value === mode)
-  return option?.label ?? mode.toLowerCase()
+  if (option == null) return mode.toLowerCase()
+  return option.value === 'PER_FIXTURE' ? option.label.toLowerCase() : `over ${option.label.toLowerCase()}`
 }
 
 export function getElementFilterLabel(filter: string): string {
@@ -105,13 +119,7 @@ export function getElementFilterLabel(filter: string): string {
 
 /** Fallback descriptions if the library API doesn't provide them */
 export const FX_DESCRIPTIONS: Record<string, string> = {
-  sinewave: 'Smooth wave oscillation',
-  rampup: 'Gradual fade up, then reset',
-  rampdown: 'Gradual fade down, then reset',
-  ramp: 'Linear fade up and down',
-  pulse: 'Sharp spike with quick decay',
-  squarewave: 'Alternates between on and off',
-  dimmerstrobe: 'Fast on/off flashing on the dimmer',
+  wave: 'A level wave — sine, ramp, triangle, square or pulse — on a dimmer or a beam attribute',
   flicker: 'Random candle-like flicker',
   colourcycle: 'Step through a list of colours',
   rainbowcycle: 'Smooth rainbow hue rotation',
@@ -119,16 +127,7 @@ export const FX_DESCRIPTIONS: Record<string, string> = {
   colourwave: 'Wave between two colours',
   colourfade: 'Crossfade between two colours',
   colourflicker: 'Random colour variation',
-  circle: 'Circular movement pattern',
-  figure8: 'Figure-8 movement pattern',
-  sweep: 'Sweep between two positions',
-  pansweep: 'Horizontal pan back and forth',
-  tiltsweep: 'Vertical tilt up and down',
-  randomposition: 'Random position jumps',
-  zoomwave: 'Zoom waving between two widths',
-  irispulse: 'Iris pulsing closed and open',
-  frostpulse: 'Frost pulsing in and out',
-  focuspull: 'Focus pulled between two distances',
+  path: 'A movement — circle, figure 8, random, or a line between two positions',
   palettesteps: 'Steps through palettes of one family — each head goes to its own value for each',
   slotsteps: 'Steps a gobo or colour wheel through named slots — each head to its own level for each',
 }

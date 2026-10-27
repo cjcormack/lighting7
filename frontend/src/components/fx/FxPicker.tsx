@@ -26,11 +26,12 @@ import {
   usePressProgrammerFxMutation,
   useRemoveFxMutation,
   type FxLibraryEntry,
+  type FxPreset,
 } from '@/store/fixtureFx'
 import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/groups'
 import { useIsDeskConnected } from '@/store/status'
 import { useSpeedMasterForFamily } from '@/store/speedMasters'
-import { isOnSeconds, newFxDirection, newFxDivision, swappedTiming } from '@/lib/fxTiming'
+import { isOnSeconds, newFxDirection, newFxDivision, presetDefaults, swappedTiming } from '@/lib/fxTiming'
 import { usePaletteListQuery } from '@/store/palettes'
 import {
   categoryForFamily,
@@ -47,11 +48,11 @@ import type { FxDirection } from '@/api/fxApi'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { CueTarget } from '@/api/cuesApi'
-import type { AttributeFamily } from '@/lib/attributeFamily'
+import { fxFamilyOnAttribute, type AttributeFamily } from '@/lib/attributeFamily'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { normalizeFxName } from '../busking/buskingTypes'
-import { getFxDescription } from './fxConstants'
+import { getFxDescription, NEW_FX_ELEMENT_MODE } from './fxConstants'
 import { familyOfFx } from '../fxEditor/fxEditorList'
 import {
   PICKER_FAMILIES,
@@ -60,6 +61,7 @@ import {
   startingSpec,
   type PickerFamily,
 } from './fxEditorModel'
+import { newFxSpread, type SpreadUnit } from '@/lib/spreadShape'
 
 /**
  * What an effect is started on: one fixture, a group, or a **selection** — several fixtures and
@@ -87,6 +89,20 @@ export interface DraftFxPick {
   blendMode: string
   parameters: Record<string, string>
   elementFilter?: string
+  /** One step behind for an FX that steps (fx-settings plan D7); absent otherwise. */
+  spread?: number
+  spreadUnit?: SpreadUnit
+}
+
+/**
+ * One row of the picker: an FX type, or one of its presets on the attribute it names (fx-settings plan
+ * D4). A type listed under a family other than its own — Wave under Beam — lands on [attribute], the
+ * target's first one of that family (D5).
+ */
+interface PickerItem {
+  entry: FxLibraryEntry
+  preset?: FxPreset
+  attribute?: string
 }
 
 /** The effect a picker session started and is auditioning — the one a second tap swaps. */
@@ -219,17 +235,34 @@ export function FxPicker({
     const has = (name: string) => targetNames.has(name) || (name === 'rgbColour' && targetNames.has('colour'))
     return new Map(paletteStepsOffers(templates ?? [], has, preferredAttribute).map((o): [PickerFamily, PaletteStepsOffer] => [o.family, o]))
   }, [paletteStepsEntry, templates, targetNames, preferredAttribute])
+  // Each type under the family it drives, then its presets the target can take, each under the family
+  // its attribute gives — Wave's *Zoom Wave* under Beam (fx-settings plan D4, D5).
   const byFamily = useMemo(() => {
-    const grouped = new Map<PickerFamily, FxLibraryEntry[]>()
+    const grouped = new Map<PickerFamily, PickerItem[]>()
+    const add = (family: PickerFamily, item: PickerItem) => grouped.set(family, [...(grouped.get(family) ?? []), item])
     for (const entry of compatible) {
-      const family = pickerFamilyOf(drivenCategoryOf(entry))
-      grouped.set(family, [...(grouped.get(family) ?? []), entry])
+      const home = pickerFamilyOf(drivenCategoryOf(entry))
+      add(home, { entry })
+      // Its attributes in another family (Wave's beam attributes): listed there too, on the first the
+      // target has — the row's own where it is one.
+      const elsewhere = new Map<PickerFamily, string>()
+      for (const name of entry.compatibleAttributes) {
+        if (!targetNames.has(name)) continue
+        const family = pickerFamilyOf(fxFamilyOnAttribute(entry.family, name))
+        if (family !== home && (!elsewhere.has(family) || name === preferredAttribute)) elsewhere.set(family, name)
+      }
+      for (const [family, attribute] of elsewhere) add(family, { entry, attribute })
     }
     if (paletteStepsEntry != null) {
-      for (const family of stepOffers.keys()) grouped.set(family, [...(grouped.get(family) ?? []), paletteStepsEntry])
+      for (const family of stepOffers.keys()) add(family, { entry: paletteStepsEntry })
+    }
+    for (const entry of compatible) {
+      for (const preset of entry.presets ?? []) {
+        if (targetNames.has(preset.attribute)) add(pickerFamilyOf(fxFamilyOnAttribute(entry.family, preset.attribute)), { entry, preset })
+      }
     }
     return grouped
-  }, [compatible, paletteStepsEntry, stepOffers])
+  }, [compatible, paletteStepsEntry, stepOffers, targetNames, preferredAttribute])
 
   const settingProps = settingAttributesFor([attributeTarget])
   const isSettingRow = preferredAttribute != null && settingProps.some((p) => p.name === preferredAttribute)
@@ -240,11 +273,13 @@ export function FxPicker({
   const openingFamily =
     initialFamily === 'BEAM' &&
     preferredAttribute != null &&
-    !(byFamily.get('BEAM') ?? []).some((e) =>
-      isPaletteSteps(e.name)
-        ? stepOffers.get('BEAM')?.attribute === preferredAttribute
-        : e.compatibleAttributes.includes(preferredAttribute) ||
-          (isSettingRow && e.compatibleAttributes.includes(SETTING_SENTINEL)),
+    !(byFamily.get('BEAM') ?? []).some(({ entry: e, preset }) =>
+      preset != null
+        ? preset.attribute === preferredAttribute
+        : isPaletteSteps(e.name)
+          ? stepOffers.get('BEAM')?.attribute === preferredAttribute
+          : e.compatibleAttributes.includes(preferredAttribute) ||
+            (isSettingRow && e.compatibleAttributes.includes(SETTING_SENTINEL)),
     )
       ? 'CONTROLS'
       : initialFamily
@@ -259,19 +294,40 @@ export function FxPicker({
   const [justStarted, setJustStarted] = useState<number | null>(null)
   const runningFx = current != null ? (active ?? []).find((e) => e.id === current?.fxId) : undefined
   const masterForCategory = useSpeedMasterForFamily()
+  // This picker's own swap, sent and not yet in the running list: until it is, the list's older type
+  // is no swap made elsewhere.
+  const [ownSwap, setOwnSwap] = useState<{ fxId: number; from: string } | null>(null)
+  const listedType = runningFx != null ? normalizeFxName(runningFx.fxType) : null
+  const awaitingOwn = ownSwap != null && ownSwap.fxId === current?.fxId && listedType === normalizeFxName(ownSwap.from)
+  // Swapped by the editor's header (fx-settings plan D9): the type the desk now runs is the one a tap
+  // swaps from, and no preset of the type it left is picked.
+  const swappedElsewhere =
+    current != null && runningFx != null && !awaitingOwn && listedType !== normalizeFxName(current.fxType)
   const running =
-    current != null && (runningFx != null || justStarted === current.fxId) ? current : null
+    current != null && (runningFx != null || justStarted === current.fxId)
+      ? swappedElsewhere && runningFx != null
+        ? { ...current, fxType: runningFx.fxType }
+        : current
+      : null
   /** What the rows mark as picked: the auditioned effect, or in draft the one the host stored. */
   const shown = draft != null ? draft.current : running
   useEffect(() => {
     if (justStarted != null && (active ?? []).some((e) => e.id === justStarted)) setJustStarted(null)
   }, [active, justStarted])
+  useEffect(() => {
+    if (ownSwap != null && !awaitingOwn) setOwnSwap(null)
+  }, [ownSwap, awaitingOwn])
 
   const [chosen, setChosen] = useState<{ setting?: string; slider?: string }>({})
+  /** The preset this session last started or swapped to, by name; null for a type's own row. */
+  const [chosenPreset, setPickedPreset] = useState<string | null>(null)
+  const pickedPreset = swappedElsewhere ? null : chosenPreset
   const busy = useRef(false)
   const [pending, setPending] = useState(false)
 
-  const attributeFor = (entry: FxLibraryEntry, pick = chosen): string | null => {
+  const attributeFor = (entry: FxLibraryEntry, pick = chosen, preset?: FxPreset, landing?: string): string | null => {
+    if (preset != null) return targetNames.has(preset.attribute) ? preset.attribute : null
+    if (landing != null) return landing
     if (isPaletteSteps(entry.name)) return stepOffers.get(family)?.attribute ?? null
     if (
       preferredAttribute != null &&
@@ -297,8 +353,8 @@ export function FxPicker({
    * The effect's starting spec, with the step lists filled so a tap shows it stepping: Palette
    * Steps through the family's palettes, Slot Steps through the setting's first slots past its open.
    */
-  const specFor = (entry: FxLibraryEntry, attribute: string) => {
-    const spec = startingSpec(entry)
+  const specFor = (entry: FxLibraryEntry, attribute: string, preset?: FxPreset) => {
+    const spec = startingSpec(entry, { attribute, preset })
     if (isPaletteSteps(entry.name)) {
       const offer = stepOffers.get(family)
       if (offer != null) {
@@ -325,18 +381,20 @@ export function FxPicker({
    * [moving] is the *On* row's move of the auditioned FX: within its family it keeps how it started,
    * as a swap does; into another it is asked, as any fresh start is.
    */
-  const start = async (entry: FxLibraryEntry, pick = chosen, moving = false) => {
+  const start = async ({ entry, preset, attribute: landing }: PickerItem, pick = chosen, moving = false) => {
     if (busy.current) return
-    const attribute = attributeFor(entry, pick)
+    const attribute = attributeFor(entry, pick, preset, landing)
     if (attribute == null) return
-    const spec = specFor(entry, attribute)
+    const spec = specFor(entry, attribute, preset)
+    // A preset starts at its own cycle and Direction, else its FX's (fx-settings plan D4).
+    const defaults = presetDefaults(entry, preset)
+    // The master tagged for the family the FX drives on this attribute (D16; fx-settings plan D5).
+    const master = masterForCategory(fxFamilyOnAttribute(categoryOf(entry), attribute))
+    const samePick = (fxType: string) =>
+      normalizeFxName(fxType) === normalizeFxName(entry.name) && (preset?.name ?? null) === pickedPreset
 
     if (draft != null) {
-      if (
-        draft.current != null &&
-        draft.current.attribute === attribute &&
-        normalizeFxName(draft.current.fxType) === normalizeFxName(entry.name)
-      ) {
+      if (draft.current != null && draft.current.attribute === attribute && samePick(draft.current.fxType)) {
         return
       }
       draft.onPick({
@@ -345,18 +403,20 @@ export function FxPicker({
         attribute,
         // A new effect runs at its type's own cycle and Direction on the master tagged for its
         // family (D16), as below.
-        cycle: newFxDivision(entry),
-        direction: newFxDirection(entry),
-        ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
+        cycle: newFxDivision(defaults),
+        direction: newFxDirection(defaults),
+        ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: master }),
         blendMode: spec.blendMode,
         parameters: spec.parameters,
         ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
+        ...newFxSpread(entry.stepsFrom),
       })
+      setPickedPreset(preset?.name ?? null)
       return
     }
 
     if (running != null && running.attribute === attribute) {
-      if (normalizeFxName(running.fxType) === normalizeFxName(entry.name)) return
+      if (samePick(running.fxType)) return
       // A swap across units (a beat effect for a wall-clock flicker) would carry the number across
       // them — 16 beats becoming 16 seconds — so it lands on the new type's own cycle; a swap within
       // one unit keeps the operator's speed and Direction, but for one still at the old type's
@@ -367,13 +427,16 @@ export function FxPicker({
       const fromUnit = (runningFx?.timingSource ?? 'BEAT') === 'WALL_CLOCK' ? 'seconds' : 'beats'
       const toUnit = entry.timingSource === 'WALL_CLOCK' || runningOnSeconds ? 'seconds' : 'beats'
       const fromEntry = library?.find((e) => normalizeFxName(e.name) === normalizeFxName(running.fxType))
-      const timing = swappedTiming(runningFx ?? {}, fromEntry, entry, fromUnit === toUnit)
+      const fromPreset = fromEntry?.presets?.find((p) => p.name === pickedPreset)
+      const timing = swappedTiming(runningFx ?? {}, presetDefaults(fromEntry, fromPreset), defaults, fromUnit === toUnit)
       const speed = timing.cycle === runningFx?.cycle ? {} : { cycle: timing.cycle }
       const direction = timing.direction === (runningFx?.direction ?? 'FORWARD') ? {} : { direction: timing.direction }
       const { blendMode, ...unblended } = spec
       const swapped = running.stacked === true ? unblended : { ...unblended, blendMode }
       if (lightingApi.fx.updateFx(running.fxId, { fxType: entry.name, ...swapped, ...speed, ...direction })) {
+        setOwnSwap({ fxId: running.fxId, from: running.fxType })
         onCurrent?.({ ...running, fxType: entry.name })
+        setPickedPreset(preset?.name ?? null)
       }
       return
     }
@@ -399,13 +462,15 @@ export function FxPicker({
         // master tagged with its family, else master 1 (venue-visit plan D16) — stamped
         // here, as the palette editor stamps one, so a null still means master 1 everywhere. A
         // wall-clock effect starts on its own Seconds.
-        cycle: newFxDivision(entry),
-        direction: newFxDirection(entry),
-        ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
+        cycle: newFxDivision(defaults),
+        direction: newFxDirection(defaults),
+        ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: master }),
         blendMode: spec.blendMode as BlendMode,
         phaseOffset: 0,
         parameters: spec.parameters,
+        elementMode: NEW_FX_ELEMENT_MODE,
         ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
+        ...newFxSpread(entry.stepsFrom),
       }
       const created = await (
         press != null
@@ -424,6 +489,7 @@ export function FxPicker({
         // leaves nothing auditioned.
         .catch(() => null)
       if (created) setJustStarted(created.fxId)
+      setPickedPreset(created ? (preset?.name ?? null) : null)
       onCurrent?.(created ? { fxId: created.fxId, fxType: entry.name, attribute, ...(stacked ? { stacked } : {}) } : null)
     } finally {
       busy.current = false
@@ -457,7 +523,7 @@ export function FxPicker({
   // auditioned FX's (a swap), and the *On* row's options in another family than it runs in.
   const moves = running != null && sentinel != null ? sentinel.options.map((p) => p.name).filter((n) => !sameFamily(n, running.attribute)) : []
   // Joined, so the report fires on a change of what a tap would drive and not on every render.
-  const landingKey = [...new Set([...effects.flatMap((e) => attributeFor(e) ?? []), ...moves])]
+  const landingKey = [...new Set([...effects.flatMap((item) => attributeFor(item.entry, chosen, item.preset, item.attribute) ?? []), ...moves])]
     .filter((a) => a !== running?.attribute)
     .join('\n')
   useEffect(() => onLanding?.(landingKey === '' ? [] : landingKey.split('\n')), [landingKey, onLanding])
@@ -492,25 +558,34 @@ export function FxPicker({
         <EditorReadout>Nothing in the library fits this {target.type}.</EditorReadout>
       ) : (
         <ul className="flex flex-col gap-0.5" aria-label={`${PICKER_FAMILY_LABELS[family]} FX`}>
-          {effects.map((entry) => {
-            const isCurrent = currentEntry != null && currentEntry.name === entry.name
+          {effects.map((item) => {
+            const { entry, preset } = item
+            // Lit in the family the shown FX runs in on its attribute: a Wave on zoom under Beam, not Intensity.
+            const isCurrent =
+              currentEntry != null &&
+              shown != null &&
+              currentEntry.name === entry.name &&
+              (preset?.name ?? null) === pickedPreset &&
+              pickerFamilyOf(fxFamilyOnAttribute(drivenCategoryOf(entry), shown.attribute)) === family
+            const label = preset?.name ?? entry.name
             return (
-              <li key={entry.name}>
+              <li key={preset != null ? `${entry.name}:${preset.name}` : `${entry.name}:${item.attribute ?? ''}`}>
                 <button
                   type="button"
-                  data-effect-pick={entry.name}
+                  {...(preset != null ? { 'data-effect-preset': preset.name } : { 'data-effect-pick': entry.name })}
                   disabled={(draft == null && !connected) || pending}
-                  aria-label={entry.name}
+                  aria-label={label}
                   aria-pressed={isCurrent}
-                  title={getFxDescription(entry.name, entry.description)}
-                  onClick={() => void start(entry)}
+                  title={preset != null ? `${entry.name} on ${preset.attribute}` : getFxDescription(entry.name, entry.description)}
+                  onClick={() => void start(item)}
                   className={cn(
                     'flex w-full min-w-0 items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-[12.5px] hover:bg-accent disabled:opacity-50',
                     isCurrent && 'border-violet-500/55 bg-violet-500/[0.08]',
                   )}
                 >
                   <span className={cn('size-[7px] shrink-0 rounded-full', isCurrent ? 'bg-violet-500' : 'bg-muted-foreground/40')} />
-                  <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+                  {preset != null && <span className="shrink-0 text-[10px] text-muted-foreground">{entry.name}</span>}
                   {isCurrent && (
                     <span className="shrink-0 text-[10px] text-violet-600 dark:text-violet-300">{draft != null ? 'in the cue' : 'running'}</span>
                   )}
@@ -530,7 +605,7 @@ export function FxPicker({
             onValueChange={(name) => {
               const pick = sentinel.kind === 'setting' ? { ...chosen, setting: name } : { ...chosen, slider: name }
               setChosen(pick)
-              void start(currentEntry, pick, true)
+              void start({ entry: currentEntry }, pick, true)
             }}
           >
             <SelectTrigger aria-label="Attribute" className="h-7 text-xs">

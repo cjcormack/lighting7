@@ -122,7 +122,7 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
             for ((cueId, name) in listOf(one to "dimmer", two to "dimmer", one to "uv")) {
                 DaoCueAdHocFxEntity.new {
                     cue = DaoCue[cueId]; targetType = "fixture"; targetKey = "hex-1"
-                    fxType = "Pulse"; family = "intensity"; attribute = name; cycle = 1.0
+                    fxType = "Wave"; family = "intensity"; attribute = name; cycle = 1.0
                     blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
                     runUuid = if (name == "dimmer") run else null
                 }

@@ -93,6 +93,8 @@ data class FxDto(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** What [spread] counts (fx-settings plan D6): `CYCLE`, or `STEP` — the FX's own steps. */
+    val spreadUnit: String = SpreadUnit.CYCLE.name,
     /**
      * An N-shot that has run its count and is kept, painting nothing, until its programmer layer
      * goes ([FxInstance.spent]). Any other spent N-shot has already left the list.
@@ -173,7 +175,7 @@ internal fun FxInstance.toFxDto(
         parameters = effect.parameters,
         isGroupTarget = isGroupFx,
         order = if (showOrder) order.javaClass.simpleName else null,
-        elementMode = if (spreadsOverMembers && isMultiElementExpanded) elementMode.name else null,
+        elementMode = if (isMultiElementExpanded) elementMode.name else null,
         elementFilter = if (showOrder && elementFilter != ElementFilter.ALL) elementFilter.name else null,
         timing = dynamics.timing,
         lookId = lookId,
@@ -192,6 +194,7 @@ internal fun FxInstance.toFxDto(
         wings = dyn.wings,
         segments = dyn.segments,
         parts = dyn.parts,
+        spreadUnit = dyn.spreadUnit.name,
         spent = spent,
         leaving = leaving,
         speedMasterUuid = reportedSpeedMasterUuid,

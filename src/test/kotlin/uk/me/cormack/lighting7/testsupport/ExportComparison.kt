@@ -1,10 +1,18 @@
 package uk.me.cormack.lighting7.testsupport
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.sync.RecordHasher
 import uk.me.cormack.lighting7.sync.canonicalDecode
 import uk.me.cormack.lighting7.sync.canonicalEncode
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
+import uk.me.cormack.lighting7.sync.canonicalJson
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -100,4 +108,45 @@ private fun normaliseProjectIdentity(json: String): String {
         ProjectJson.serializer(),
         decoded.copy(name = "<name>", description = "<description>"),
     )
+}
+
+/**
+ * [json], one archive record in today's field names, with every FX it holds that fx-settings plan D3
+ * moved as the importer stores it: through [LegacyNames.consolidateFx] then [LegacyNames.absorbFx],
+ * so a level wave's `fxType`, `family`, `parameters` and a beam FX's `attribute` are Wave's, a
+ * movement's Path's, and a renamed parameter its new name. Answers [json] itself when it holds none.
+ */
+fun consolidatedRecord(json: String): String {
+    fun consolidate(element: JsonElement): JsonElement = when (element) {
+        is JsonArray -> JsonArray(element.map(::consolidate))
+        is JsonObject -> {
+            val fxType = (element["fxType"] as? JsonPrimitive)?.contentOrNull
+            val parameters = (element["parameters"] as? JsonObject).orEmpty().mapValues { it.value.jsonPrimitive.content }
+            val stored = fxType?.let {
+                LegacyNames.StoredFx(
+                    fxType = it, family = (element["family"] as? JsonPrimitive)?.contentOrNull.orEmpty(), cycle = 0.0,
+                    order = "", phaseOffset = 0.0, parameters = parameters, direction = "", runs = null, spread = 0.0,
+                    attribute = (element["attribute"] as? JsonPrimitive)?.contentOrNull,
+                )
+            }
+            val waved = stored?.let { LegacyNames.consolidateFx(it) { null }?.fx ?: it }
+            val today = waved?.let { LegacyNames.absorbFx(it) { null }?.fx ?: it }
+            if (stored != null && today != stored) {
+                JsonObject(
+                    element + listOfNotNull(
+                        "fxType" to JsonPrimitive(today!!.fxType),
+                        "family" to JsonPrimitive(today.family),
+                        "parameters" to JsonObject(today.parameters.mapValues { JsonPrimitive(it.value) }),
+                        today.attribute?.let { "attribute" to JsonPrimitive(it) },
+                    ),
+                )
+            } else {
+                JsonObject(element.mapValues { consolidate(it.value) })
+            }
+        }
+        else -> element
+    }
+    val record = runCatching { canonicalJson.parseToJsonElement(json) }.getOrNull() ?: return json
+    val out = consolidate(record)
+    return if (out == record) json else canonicalEncode(JsonElement.serializer(), out)
 }

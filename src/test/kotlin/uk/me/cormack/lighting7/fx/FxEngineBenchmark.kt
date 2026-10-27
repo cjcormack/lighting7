@@ -998,7 +998,7 @@ class FxEngineBenchmark {
                 FxEntry(
                     target = FxTargetsRef.Single(TargetRef.Fixture(heads[i % heads.size])),
                     effect = StoredFx(
-                        fxType = "SineWave",
+                        fxType = "Wave",
                         family = "intensity",
                         attribute = "dimmer",
                         cycle = CycleLength.TWO_BEATS,
@@ -1008,7 +1008,7 @@ class FxEngineBenchmark {
                         elementMode = null,
                         elementFilter = null,
                         timing = null,
-                        parameters = mapOf("min" to "40", "max" to "220"),
+                        parameters = mapOf("low" to "40", "high" to "220"),
                         speedMasterUuid = null,
                         rateSpeedMasterUuid = null,
                     ),

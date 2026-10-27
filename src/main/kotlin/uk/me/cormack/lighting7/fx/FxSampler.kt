@@ -235,6 +235,14 @@ internal class FxSampler(
         }
         fun elements(keys: List<String>, plan: DistributionPlan) =
             spread(keys, plan, DistributionPlan.elementLadder(dyn.order, keys.size, dyn.spreadShape))
+        // Each element a row of its own, at its fixture's place among the fixtures.
+        fun whole(plan: DistributionPlan) {
+            val units = expansion.whole
+            val ladder = DistributionPlan.elementLadder(dyn.order, units.size, dyn.spreadShape)
+            for ((i, keys) in units.withIndex()) {
+                for (key in keys) out[key] = Member(units.size, plan.offsets[i], plan.contexts[i], FxLadderRung(ladder, i))
+            }
+        }
         when (expansion.kind) {
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
                 val carry = effect.splitMember
@@ -242,7 +250,10 @@ internal class FxSampler(
                     if (carry == null) Member(1, 0.0, FxContext.SINGLE, FxLadderRung.SINGLE)
                     else Member(carry.groupSize, carry.offset, carry.context, rung = null)
             }
-            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> elements(expansion.flat, view.plans(effect, expansion, dyn).flat)
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> {
+                val plans = view.plans(effect, expansion, dyn)
+                if (dyn.elementMode == ElementMode.WHOLE) whole(plans.whole) else elements(expansion.flat, plans.flat)
+            }
             FxTargetExpansion.Kind.GROUP_MEMBERS -> spread(
                 expansion.members.map { it.key },
                 view.plans(effect, expansion, dyn).members,
@@ -251,6 +262,7 @@ internal class FxSampler(
             FxTargetExpansion.Kind.GROUP_ELEMENTS -> {
                 val plans = view.plans(effect, expansion, dyn)
                 when (dyn.elementMode) {
+                    ElementMode.WHOLE -> whole(plans.whole)
                     ElementMode.PER_FIXTURE -> expansion.perFixture.forEachIndexed { i, keys -> elements(keys, plans.perFixture[i]) }
                     ElementMode.FLAT -> elements(expansion.flat, plans.flat)
                 }
@@ -562,9 +574,6 @@ internal class FxSampler(
         /** The envelope, taken as full: a fade in or out is not drawn. */
         private const val ENVELOPE = 1.0
 
-        /** A member's own clock within this much of a whole cycle counts as on it, against rounding. */
-        private const val CYCLE_EPSILON = 1e-9
-
         /** A sample landing within this much of a tick counts as on it, against floating-point division. */
         private const val TICK_EPSILON = 1e-6
 
@@ -581,9 +590,9 @@ internal class FxSampler(
          * since the sample before, or sits on one at the first, and the member is not holding.
          */
         private fun starts(own: DoubleArray, holding: BooleanArray): List<Int> {
-            fun cycle(x: Double) = floor(x + CYCLE_EPSILON)
+            fun cycle(x: Double) = floor(x + PHASE_EPSILON)
             return own.indices.filter { s ->
-                !holding[s] && if (s == 0) abs(own[0] - cycle(own[0])) < CYCLE_EPSILON else cycle(own[s]) > cycle(own[s - 1])
+                !holding[s] && if (s == 0) abs(own[0] - cycle(own[0])) < PHASE_EPSILON else cycle(own[s]) > cycle(own[s - 1])
             }
         }
 

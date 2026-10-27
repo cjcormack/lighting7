@@ -34,6 +34,24 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v43: a stored FX's `spreadUnit` may be `STEP` (fx-settings plan session 4): its `spread` counts the
+    // FX's own steps, not the cycle. `minReader` moves to **43**: a v42 reader would run each such FX's
+    // spread as a share of the cycle, staggering the chase. See `docs/sync-engineering.md`
+    // §"Version 43 — Each head later by".
+    // v42: Path replaces Circle, Figure 8, Sweep, Pan Sweep, Tilt Sweep and Random Position; Colour
+    // Cycle's `fadeRatio` is `between` and `fade`; the Flicker family's, Lightning Strike's and Colour
+    // Strobe's parameters take their normalised names (fx-settings plan session 3). Read through
+    // `sync/LegacyNames.kt`'s `absorbFx`. `minReader` moves to **42**: a v41 reader knows no Path and
+    // would read a renamed parameter as absent. See `docs/sync-engineering.md` §"Version 42 — Path".
+    // v41: Wave replaces Sine Wave, the ramps, Square Wave, Pulse, Dimmer Strobe, Zoom Wave, Iris and
+    // Frost Pulse and Focus Pull (fx-settings plan session 2); a stored FX on one of those ids is
+    // read through `sync/LegacyNames.kt`'s `consolidateFx`. `minReader` moves to **41**: a v40 reader
+    // knows no Wave, so would refuse or skip every such FX. See `docs/sync-engineering.md`
+    // §"Version 41 — Wave".
+    // v40: a stored FX's `elementMode` may be `WHOLE` (FX editor follow-ups plan session 2), which a
+    // v39 reader cannot parse. `minReader` moves to **40**: a v39 reader would run each such FX as
+    // its stored default, `PER_FIXTURE`, warning only in its log. See `docs/sync-engineering.md`
+    // §"Version 40 — Fixtures".
     // v39: a surface binding's attribute targets are `fixtureAttribute`, `groupAttribute` and
     // `selectionAttribute`, and theirs and `encoderBankSet`'s `propertyName` is `attribute`, a
     // flash's nested target too; Circle's, Figure 8's and Random Position's `panCenter` and
@@ -323,9 +341,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 39,
+    val formatVersion: Int = 43,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 39,
+    val minReader: Int = 43,
 )
 
 /**
@@ -495,6 +513,7 @@ interface StoredFxFields {
     val direction: String
     val runs: Int?
     val spread: Double
+    val attribute: String?
 }
 
 @Serializable
@@ -508,7 +527,7 @@ data class LookFxJson(
     val targetKey: String,
     override val fxType: String,
     override val family: String,
-    val attribute: String? = null,
+    override val attribute: String? = null,
     override val cycle: Double,
     val blendMode: String,
     override val order: String,
@@ -537,6 +556,8 @@ data class LookFxJson(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** v43: `STEP` when [spread] counts the FX's own steps; absent is `CYCLE`. */
+    val spreadUnit: String? = null,
     val sortOrder: Int = 0,
 ) : StoredFxFields
 
@@ -599,7 +620,7 @@ data class PaletteFxJson(
     val uuid: String,
     override val fxType: String,
     override val family: String,
-    val attribute: String? = null,
+    override val attribute: String? = null,
     override val cycle: Double,
     val blendMode: String,
     override val order: String,
@@ -628,6 +649,8 @@ data class PaletteFxJson(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** v43: `STEP` when [spread] counts the FX's own steps; absent is `CYCLE`. */
+    val spreadUnit: String? = null,
 ) : StoredFxFields
 
 /**
@@ -987,7 +1010,7 @@ data class CueAdHocFxJson(
     val targetKey: String,
     override val fxType: String,
     override val family: String,
-    val attribute: String? = null,
+    override val attribute: String? = null,
     override val cycle: Double,
     val blendMode: String,
     override val order: String,
@@ -1021,6 +1044,8 @@ data class CueAdHocFxJson(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** v43: `STEP` when [spread] counts the FX's own steps; absent is `CYCLE`. */
+    val spreadUnit: String? = null,
     /**
      * The run key (stack-timeline plan D7, formatVersion 37): rows of neighbouring cues sharing one
      * are one run. Omitted when null. Not an identity, so a clone's remap leaves it as it is.

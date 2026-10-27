@@ -94,10 +94,10 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
 
     private fun cue(arguments: String): Int = ok("create_cue", arguments)["cueId"]!!.jsonPrimitive.int
 
-    private val pulse = """{"targetType":"fixture","targetKey":"foh-1","fxType":"Pulse","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+    private val pulse = """{"targetType":"fixture","targetKey":"foh-1","fxType":"Wave","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
 
     /** [pulse] as a palette holds it: a palette's effect names no target. */
-    private val palettePulse = """{"fxType":"Pulse","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+    private val palettePulse = """{"fxType":"Wave","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
 
     @Test
     fun `update_look replacing values moves a live cue without a re-fire`() {
@@ -356,23 +356,23 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
         // which `McpFxTimingTest` pins. The family still is.
         refused(
             "create_look",
-            """{"name":"A","fx":[{"fxType":"Pulse","blendMode":"OVERRIDE"}]}""",
+            """{"name":"A","fx":[{"fxType":"Wave","blendMode":"OVERRIDE"}]}""",
             "fx[0] is missing 'family'",
         )
         refused(
             "create_look",
-            """{"name":"A","fx":[$pulse,{"fxType":"Pulse","family":"intensity","cycle":1.0}]}""",
+            """{"name":"A","fx":[$pulse,{"fxType":"Wave","family":"intensity","cycle":1.0}]}""",
             "fx[1] is missing 'blendMode'",
         )
         refused(
             "create_look",
-            """{"name":"A","fx":[{"fxType":"Pulse","family":"intensity","cycle":"fast","blendMode":"OVERRIDE"}]}""",
+            """{"name":"A","fx":[{"fxType":"Wave","family":"intensity","cycle":"fast","blendMode":"OVERRIDE"}]}""",
             "fx[0]: 'cycle' must be a number",
         )
         refused("create_palette", """{"name":"T","fx":{"family":"intensity","cycle":1.0,"blendMode":"OVERRIDE"}}""", "fx is missing 'fxType'")
         refused(
             "create_cue",
-            """{"name":"Q","adHocFx":[{"targetType":"fixture","targetKey":"foh-1","fxType":"Pulse","family":"intensity","cycle":1.0}]}""",
+            """{"name":"Q","adHocFx":[{"targetType":"fixture","targetKey":"foh-1","fxType":"Wave","family":"intensity","cycle":1.0}]}""",
             "adHocFx[0] is missing 'blendMode'",
         )
         val lookId = look("FOH", foh1("dmx:200"))
@@ -385,7 +385,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     fun `create_cue takes an ad-hoc effect over a selection as one effect`() {
         patchRig()
         val targets = """[{"type":"fixture","key":"foh-2"},{"type":"group","key":"Wash"}]"""
-        val effect = """{"targets":$targets,"fxType":"Pulse","family":"intensity","attribute":"dimmer","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+        val effect = """{"targets":$targets,"fxType":"Wave","family":"intensity","attribute":"dimmer","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
         val cueId = cue("""{"name":"Ripple","adHocFx":[$effect]}""")
         transaction(state.database) {
             val stored = DaoCue[cueId].adHocFx.single()
@@ -399,12 +399,12 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
 
         refused(
             "create_cue",
-            """{"name":"Q","adHocFx":[{"targets":$targets,"targetType":"fixture","targetKey":"foh-1","fxType":"Pulse","family":"intensity","blendMode":"OVERRIDE","parameters":{}}]}""",
+            """{"name":"Q","adHocFx":[{"targets":$targets,"targetType":"fixture","targetKey":"foh-1","fxType":"Wave","family":"intensity","blendMode":"OVERRIDE","parameters":{}}]}""",
             "send targets, or targetType and targetKey",
         )
         refused(
             "create_cue",
-            """{"name":"Q","adHocFx":[{"targets":[{"type":"selection","key":"x"}],"fxType":"Pulse","family":"intensity","blendMode":"OVERRIDE","parameters":{}}]}""",
+            """{"name":"Q","adHocFx":[{"targets":[{"type":"selection","key":"x"}],"fxType":"Wave","family":"intensity","blendMode":"OVERRIDE","parameters":{}}]}""",
             "type must be 'fixture' or 'group'",
         )
     }

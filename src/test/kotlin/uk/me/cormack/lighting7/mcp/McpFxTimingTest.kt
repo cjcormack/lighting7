@@ -54,7 +54,7 @@ class McpFxTimingTest : RouteIntegrationTest() {
         assertEquals(StoredFx(CycleLength.ONE_BAR, colourMaster, false), storedFx("Cycle"))
 
         // No master is tagged intensity, so an intensity effect stays on master 1 — null, as everywhere.
-        val pulse = call("create_look", """{"name":"Pulse","fx":[${effect("Pulse", "intensity")}]}""")
+        val pulse = call("create_look", """{"name":"Pulse","fx":[${effect("Wave", "intensity")}]}""")
         assertTrue(pulse.success, pulse.result)
         assertEquals(StoredFx(CycleLength.ONE_BAR, null, false), storedFx("Pulse"))
     }
@@ -65,9 +65,58 @@ class McpFxTimingTest : RouteIntegrationTest() {
             createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Beam", family = "beam")),
         ).dto.uuid
 
-        val zoom = call("create_look", """{"name":"Zoom","fx":[${effect("ZoomWave", "beam")}]}""")
+        val zoom = call("create_look", """{"name":"Zoom","fx":[${effect("Wave", "intensity", ""","attribute":"zoom"""")}]}""")
         assertTrue(zoom.success, zoom.result)
         assertEquals(StoredFx(CycleLength.ONE_BAR, beamMaster, false), storedFx("Zoom"))
+    }
+
+    @Test
+    fun `an old level wave from a tool runs as Wave, an old Focus Pull at its half-bar Bounce though cycle and direction are null`() {
+        val beamMaster = assertIs<CreateSpeedMasterOutcome.Created>(
+            createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Beam", family = "beam")),
+        ).dto.uuid
+        val pull = call("create_look", """{"name":"Pull","fx":[${effect("FocusPull", "beam", ""","cycle":null,"direction":null""")}]}""")
+        assertTrue(pull.success, pull.result)
+        transaction(state.database) {
+            val stored = DaoLook.find { DaoLooks.name eq "Pull" }.single().effects.single()
+            assertEquals("Wave", stored.fxType)
+            assertEquals("intensity", stored.family)
+            assertEquals("focus", stored.attribute)
+            assertEquals(2.0, stored.cycle)
+            assertEquals("BOUNCE", stored.direction)
+            assertEquals(beamMaster, stored.speedMasterUuid?.toString())
+            assertEquals(mapOf("shape" to "RAMP_UP", "low" to "64", "high" to "192", "curve" to "SINE_IN_OUT"), stored.parameters)
+        }
+    }
+
+    @Test
+    fun `an old movement from a tool runs as Path, an old Pan Sweep at its half-bar Bounce`() {
+        val sweep = call(
+            "create_look",
+            """{"name":"Sweep","fx":[{"targetType":"fixture","targetKey":"foh-1","fxType":"PanSweep","family":"position",""" +
+                """"attribute":"position","blendMode":"OVERRIDE","parameters":{"tilt":"90"}}]}""",
+        )
+        assertTrue(sweep.success, sweep.result)
+        transaction(state.database) {
+            val stored = DaoLook.find { DaoLooks.name eq "Sweep" }.single().effects.single()
+            assertEquals("Path", stored.fxType)
+            assertEquals("position", stored.family)
+            assertEquals(2.0 to "BOUNCE", stored.cycle to stored.direction)
+            assertEquals(
+                mapOf("shape" to "LINE", "startPan" to "64", "endPan" to "192", "startTilt" to "90", "endTilt" to "90", "curve" to "SINE_IN_OUT"),
+                stored.parameters,
+            )
+        }
+        // A renamed parameter from a tool takes its new name.
+        val flicker = call(
+            "create_look",
+            """{"name":"Flicker","fx":[{"targetType":"fixture","targetKey":"foh-1","fxType":"Flicker","family":"intensity",""" +
+                """"blendMode":"OVERRIDE","parameters":{"min":"40"}}]}""",
+        )
+        assertTrue(flicker.success, flicker.result)
+        transaction(state.database) {
+            assertEquals(mapOf("low" to "40"), DaoLook.find { DaoLooks.name eq "Flicker" }.single().effects.single().parameters)
+        }
     }
 
     @Test
@@ -76,7 +125,7 @@ class McpFxTimingTest : RouteIntegrationTest() {
 
         val breathe = call(
             "create_look",
-            """{"name":"Breathe","fx":[${effect("Pulse", "intensity", ""","cycle":12,"seconds":true""")}]}""",
+            """{"name":"Breathe","fx":[${effect("Wave", "intensity", ""","cycle":12,"seconds":true""")}]}""",
         )
         assertTrue(breathe.success, breathe.result)
         val stored = storedFx("Breathe")
@@ -87,7 +136,7 @@ class McpFxTimingTest : RouteIntegrationTest() {
         val master = state.show.fxEngine.speedMasters.masterStates().first().uuid.toString()
         val both = call(
             "create_look",
-            """{"name":"Both","fx":[${effect("Pulse", "intensity", ""","seconds":true,"speedMasterUuid":"$master"""")}]}""",
+            """{"name":"Both","fx":[${effect("Wave", "intensity", ""","seconds":true,"speedMasterUuid":"$master"""")}]}""",
         )
         assertFalse(both.success, "Seconds beside a master is two answers to one question")
         assertTrue(both.description.contains("seconds") || both.result.contains("seconds"), both.toString())

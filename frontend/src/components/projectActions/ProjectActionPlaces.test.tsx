@@ -208,36 +208,25 @@ function paletteIds(project: ProjectSummary): (string | null)[] {
   return ids
 }
 
+// One render a test: three in one test ran past its 5 s under load.
 describe('the card, the home’s ⋮ and ⌘K offer the same set', () => {
-  it.each([
-    ['a standalone show', STANDALONE],
-    ['a show behind its venue', BEHIND],
-    ['a show whose venue is not here', MISSING],
-    ['the show on the rig', ON_THE_RIG],
-  ])('for %s', (_, project) => {
-    const card = cardIds(project)
-    expect(card.length).toBeGreaterThan(0)
-    expect(homeIds(project)).toEqual(card)
-    expect(paletteIds(project)).toEqual(card)
-  })
-
-  it('to an operator too', () => {
-    isAdmin = false
-    const card = cardIds(BEHIND)
-    expect(card).not.toContain('export')
-    expect(homeIds(BEHIND)).toEqual(card)
-    expect(paletteIds(BEHIND)).toEqual(card)
-  })
-
-  it.each([
-    ['to an admin', true, ['make-current', 'settings', 'clone', 'export', 'history', 'publish', 'delete']],
-    ['to an operator', false, ['make-current', 'settings']],
-  ])('for a venue, %s', (_, admin, expected) => {
-    isAdmin = admin
-    const card = cardIds(VENUE)
-    expect(card).toEqual(expected)
-    expect(homeIds(VENUE)).toEqual(card)
-    expect(paletteIds(VENUE)).toEqual(card)
+  describe.each([
+    ['a standalone show', STANDALONE, true, ['make-current', 'settings', 'clone', 'export', 'attach', 'extract', 'delete']],
+    ['a show behind its venue', BEHIND, true, ['make-current', 'settings', 'clone', 'export', 'update-venue', 'detach', 'delete']],
+    ['a show whose venue is not here', MISSING, true, ['make-current', 'settings', 'clone', 'export', 'delete']],
+    ['the show on the rig', ON_THE_RIG, true, ['settings', 'clone', 'export', 'attach', 'extract', 'delete']],
+    ['a show behind its venue, to an operator', BEHIND, false, ['make-current', 'settings', 'clone', 'update-venue', 'detach', 'delete']],
+    ['a venue, to an admin', VENUE, true, ['make-current', 'settings', 'clone', 'export', 'history', 'publish', 'delete']],
+    ['a venue, to an operator', VENUE, false, ['make-current', 'settings']],
+  ])('for %s', (_, project, admin, expected) => {
+    it.each([
+      ['on the card', cardIds],
+      ['on the home’s ⋮', homeIds],
+      ['in ⌘K', paletteIds],
+    ])('%s', (_, idsOf) => {
+      isAdmin = admin
+      expect(idsOf(project)).toEqual(expected)
+    })
   })
 })
 

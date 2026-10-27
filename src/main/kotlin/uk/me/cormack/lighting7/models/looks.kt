@@ -126,6 +126,8 @@ data class LookFxDto(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** What [spread] counts (fx-settings plan D6): `STEP`, the FX's own steps; null is `CYCLE`. */
+    val spreadUnit: String? = null,
     val sortOrder: Int = 0,
 ) {
     /** This effect with its target spelled as the desk stores it ([FxTargetsRef.canonical]). */
@@ -278,6 +280,8 @@ object DaoLookFx : IntIdTable("look_fx") {
     val wings = integer("spread_wings").default(1)
     val segments = integer("spread_segments").default(1)
     val parts = integer("spread_parts").default(0)
+    /** [LookFxSpec.spreadUnit]: `STEP`, or null for `CYCLE` — every row written before it existed. */
+    val spreadUnit = varchar("spread_unit", 8).nullable()
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
@@ -353,6 +357,8 @@ data class LookFxSpec(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** What [spread] counts (fx-settings plan D6): `STEP`, the FX's own steps; null is `CYCLE`. */
+    val spreadUnit: String? = null,
 )
 
 /**
@@ -390,6 +396,7 @@ class DaoLookFxEntity(id: EntityID<Int>) : IntEntity(id) {
     var wings by DaoLookFx.wings
     var segments by DaoLookFx.segments
     var parts by DaoLookFx.parts
+    var spreadUnit by DaoLookFx.spreadUnit
     var sortOrder by DaoLookFx.sortOrder
     var uuid by DaoLookFx.uuid
 

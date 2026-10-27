@@ -288,6 +288,8 @@ object DaoPaletteFx : IntIdTable("palette_fx") {
     val wings = integer("spread_wings").default(1)
     val segments = integer("spread_segments").default(1)
     val parts = integer("spread_parts").default(0)
+    /** [LookFxSpec.spreadUnit]: `STEP`, or null for `CYCLE` — every row written before it existed. */
+    val spreadUnit = varchar("spread_unit", 8).nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -322,6 +324,7 @@ class DaoPaletteFxEntity(id: EntityID<Int>) : IntEntity(id) {
     var wings by DaoPaletteFx.wings
     var segments by DaoPaletteFx.segments
     var parts by DaoPaletteFx.parts
+    var spreadUnit by DaoPaletteFx.spreadUnit
     var uuid by DaoPaletteFx.uuid
 }
 
@@ -379,6 +382,8 @@ data class PaletteFxDto(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** What [spread] counts (fx-settings plan D6): `STEP`, the FX's own steps; null is `CYCLE`. */
+    val spreadUnit: String? = null,
     /**
      * `BEAT` or `WALL_CLOCK`, **resolved server-side on read and ignored on write** — the same
      * contract [PaletteRowDto.health] has, and for the same reason: it is the registry's answer

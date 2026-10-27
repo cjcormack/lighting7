@@ -266,7 +266,8 @@ private fun JdbcTransaction.leaveCompositeMode(projects: Map<Int, String>) {
 /** What in a script's [source] the FX library changed under it, each in words. */
 internal fun scriptEdits(source: String): List<String> = buildList {
     for (id in LegacyNames.retiredFxIds) {
-        if ("\"$id\"" !in source) continue
+        // A level wave or a movement still runs from a script, as Wave or Path (fx-settings plan D3); step 4 has nothing to say of it.
+        if ("\"$id\"" !in source || (LegacyNames.isConsolidatedFx(id) && LegacyNames.fxId(id) == id)) continue
         val now = LegacyNames.fxId(id).takeUnless { it == id }
         add(if (now != null) "$id is now $now" else "$id is gone; SineWave a quarter-cycle on draws it")
     }

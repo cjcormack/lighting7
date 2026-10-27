@@ -78,6 +78,7 @@ data class UpdateFxInMessage(
     val wings: Int? = null,
     val segments: Int? = null,
     val parts: Int? = null,
+    val spreadUnit: String? = null,
     val targets: List<CueTargetDto>? = null,
 ) : FxInMessage() {
     fun toRequest() = UpdateFxRequest(
@@ -100,6 +101,7 @@ data class UpdateFxInMessage(
         wings = wings,
         segments = segments,
         parts = parts,
+        spreadUnit = spreadUnit,
         runForever = runForever,
         targets = targets,
     )

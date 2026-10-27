@@ -117,9 +117,9 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
     fun `local effects on the fixture stop, and an effect that belongs to something stays`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val local = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
-        val cue = FxTestSupport.start(state, "SineWave", "hex-1", "uv", priority = 1_000_001, cueId = 9)
-        val manual = FxTestSupport.start(state, "SineWave", "hex-1", "strobe")
+        val local = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
+        val cue = FxTestSupport.start(state, "Wave", "hex-1", "uv", priority = 1_000_001, cueId = 9)
+        val manual = FxTestSupport.start(state, "Wave", "hex-1", "strobe")
 
         val answer = release("fixture", "hex-1")
         assertEquals(1, answer.fx)
@@ -135,7 +135,7 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         LocateTestSupport.seedHex(state, projectId, "hex-2", 20)
         LocateTestSupport.seedGroup(state, projectId, "front", "hex-1", "hex-2")
-        val groupFx = FxTestSupport.start(state, "Pulse", "front", "dimmer", group = true, programmerBand = true)
+        val groupFx = FxTestSupport.start(state, "Wave", "front", "dimmer", group = true, programmerBand = true)
 
         val member = release("fixture", "hex-1")
         assertEquals(0, member.fx)
@@ -172,7 +172,7 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         set("hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u))
-        val effect = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val effect = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
         val before = controller().changesTo(1).size
 
         release("fixture", "hex-1", fadeMs = 1_500)
@@ -192,7 +192,7 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         engine.sweepsLeaving = false
-        val effect = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val effect = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true)
 
         val answer = release("fixture", "hex-1", fadeMs = 1_500)
         // Effects plan D13: nothing the Release takes is under it, so it shrinks to nothing over the
@@ -209,7 +209,7 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         set("hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u))
-        val fxId = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true).id
+        val fxId = FxTestSupport.start(state, "Wave", "hex-1", "dimmer", programmerBand = true).id
 
         release("fixture", "hex-1")
 

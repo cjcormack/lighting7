@@ -38,6 +38,16 @@ const library: FxLibraryEntry[] = [
     compatibleAttributes: ['rgbColour'],
   },
   {
+    name: 'Colour Cycle',
+    family: 'colour',
+    outputType: 'COLOUR',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    stepsFrom: 'colours',
+    parameters: [{ name: 'colours', type: 'colourList', defaultValue: '#ff0000,#00ff00,#0000ff', description: '' }],
+    compatibleAttributes: ['rgbColour'],
+  },
+  {
     name: 'Circle',
     family: 'position',
     outputType: 'POSITION',
@@ -59,6 +69,21 @@ const library: FxLibraryEntry[] = [
     timingSource: 'BEAT',
     parameters: [{ name: 'min', type: 'ubyte', defaultValue: '64', description: '' }],
     compatibleAttributes: ['zoom'],
+  },
+  {
+    // Intensity's level waves, which a beam attribute makes Beam's (fx-settings plan D5).
+    name: 'Wave',
+    family: 'intensity',
+    outputType: 'SLIDER',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    parameters: [
+      { name: 'shape', type: 'choice', defaultValue: 'SINE', description: '' },
+      { name: 'low', type: 'ubyte', defaultValue: '0', description: '' },
+      { name: 'high', type: 'ubyte', defaultValue: '255', description: '' },
+    ],
+    compatibleAttributes: ['dimmer', 'uv', 'zoom', 'iris'],
+    attributeDefaults: { zoom: { low: '64', high: '192' }, iris: { low: '0', high: '160' } },
   },
   {
     name: 'Sine Dim',
@@ -425,6 +450,28 @@ describe('validity and the save body', () => {
     })
   })
 
+  it('saves a Wave in a Beam palette on the beam attribute it drives, at its defaults there, on the Beam master', async () => {
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Iris breathe' } })
+    chooseFx('Wave')
+    fireEvent.click(screen.getByRole('combobox', { name: 'Attribute' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Zoom', 'Iris'])
+    fireEvent.click(screen.getByRole('option', { name: 'Iris' }))
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
+    expect(body.fx).toMatchObject({
+      fxType: 'Wave',
+      family: 'intensity',
+      attribute: 'iris',
+      speedMasterUuid: 'master-3-uuid',
+      parameters: { shape: 'SINE', low: '0', high: '160' },
+    })
+  })
+
   it('sends `rows` and no `effect` for a value palette', async () => {
     const { onSave } = renderEditor({ palette: template() })
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Warm Amber' } })
@@ -434,6 +481,26 @@ describe('validity and the save body', () => {
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
     expect(body.fx).toBeUndefined()
     expect(body.rows).toHaveLength(1)
+  })
+})
+
+describe('a step FX palette (fx-settings plan D7)', () => {
+  it('starts one step behind, and a swap onto an FX with no steps goes back to the cycle', async () => {
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chase' } })
+    chooseFx('Colour Cycle')
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    const stepped = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
+    expect(stepped.fx).toMatchObject({ fxType: 'Colour Cycle', spreadUnit: 'STEP' })
+
+    chooseFx('Rainbow Cycle')
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
+    const swapped = (onSave as ReturnType<typeof vi.fn>).mock.calls[1][0] as PaletteInput
+    expect(swapped.fx).toMatchObject({ fxType: 'Rainbow Cycle', spreadUnit: 'CYCLE', spread: 1 })
   })
 })
 
@@ -455,7 +522,8 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
     fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
-    expect(body.fx).toMatchObject({ fxType: 'Circle', blendMode: 'ADDITIVE' })
+    // A new FX palette starts on Fixtures (FX editor follow-ups D8).
+    expect(body.fx).toMatchObject({ fxType: 'Circle', blendMode: 'ADDITIVE', elementMode: 'WHOLE' })
     expect(body.fx?.parameters).toMatchObject({ panCentre: '128', tiltCentre: '128' })
   })
 
@@ -491,6 +559,51 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
     expect(body.fx).toMatchObject({ blendMode: 'ADDITIVE' })
     expect(body.fx?.parameters).toMatchObject({ panCentre: '128', tiltCentre: '128' })
+  })
+})
+
+describe('Over in a palette', () => {
+  it.each([null, 'FLAT'])('keeps a stored palette’s element mode (%s) when its FX type is swapped', async (elementMode) => {
+    const { onSave } = renderEditor({
+      palette: template({
+        name: 'Pulse',
+        family: 'COLOUR',
+        kind: 'fx',
+        rows: undefined,
+        fx: {
+          fxType: 'Colour Pulse',
+          family: 'colour',
+          attribute: null,
+          cycle: 4,
+          blendMode: 'OVERRIDE',
+          order: 'NORMAL',
+          phaseOffset: 0,
+          elementMode,
+          parameters: { colourA: '#FF9D4A' },
+          speedMasterUuid: null,
+          rateSpeedMasterUuid: null,
+          timingSource: 'BEAT',
+        },
+      }),
+    })
+    chooseFx('Rainbow Cycle')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
+    expect(body.fx).toMatchObject({ fxType: 'Rainbow Cycle', elementMode })
+  })
+
+  it('draws Over on an FX palette and saves the choice', async () => {
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chase' } })
+    chooseFx('Rainbow Cycle')
+    expect(screen.getByRole('radio', { name: 'Fixtures' })).toHaveAttribute('data-state', 'on')
+    fireEvent.click(screen.getByRole('radio', { name: 'Elements' }))
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(((onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput).fx).toMatchObject({ elementMode: 'FLAT' })
   })
 })
 

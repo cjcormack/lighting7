@@ -19,13 +19,35 @@ function paramNamed(entry: Pick<FxLibraryEntry, 'parameters'>, name: string): Fx
 }
 
 /**
- * The movement effects — a position effect with a centre pair (Circle, Figure 8, Random position).
+ * The movement effects — a position effect with a centre pair drawn for what it holds: a Path's
+ * Circle, Figure 8 or Random (fx-settings plan session 3), whose centres a Line's `shownWhen` hides.
  * Those are the ones D12's question is about: *Around* pins the centre at 128 and adds the shape to
  * whatever holds the position underneath, which is the only way a Circle orbits a set position. A
- * sweep has no centre to pin, so it asks nothing and keeps its blend under Advanced.
+ * line has no centre to pin, so it asks nothing and keeps its blend under Advanced.
  */
-export function hasCentre(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>): boolean {
-  return entry.family === 'position' && CENTRE_PARAMS.every((name) => paramNamed(entry, name) != null)
+export function hasCentre(
+  entry: Pick<FxLibraryEntry, 'family' | 'parameters'>,
+  parameters: Record<string, string> = {},
+): boolean {
+  if (entry.family !== 'position') return false
+  return CENTRE_PARAMS.every((name) => {
+    const param = paramNamed(entry, name)
+    return param != null && isParamShown(entry, param, parameters)
+  })
+}
+
+/** Whether [param] is drawn while the FX holds [parameters] — its `shownWhen`, against the library's defaults. */
+export function isParamShown(
+  entry: Pick<FxLibraryEntry, 'parameters'>,
+  param: FxParameterDef,
+  parameters: Record<string, string>,
+): boolean {
+  const when = param.shownWhen
+  if (when == null) return true
+  const other = paramNamed(entry, when.param)
+  if (other == null) return true
+  const value = (parameters[other.name] || other.defaultValue).trim().toUpperCase()
+  return when.values.some((v) => v.toUpperCase() === value)
 }
 
 /**
@@ -67,7 +89,7 @@ export function storedCentreMode(
   effect: { blendMode: string; parameters: Record<string, string> },
   entry: Pick<FxLibraryEntry, 'family' | 'parameters'> | undefined,
 ): CentreMode | null {
-  if (entry == null || !hasCentre(entry)) return null
+  if (entry == null || !hasCentre(entry, effect.parameters)) return null
   return centreModeOf(effect.blendMode, { ...defaultParameters(entry), ...effect.parameters })
 }
 
@@ -75,10 +97,12 @@ export function storedCentreMode(
  * Whether a stored effect is spelled *Around* — a movement effect (a `position` effect carrying both
  * centre parameters) on `ADDITIVE` with both at 128. For the pad face's *around* (D16), which cannot
  * read the library: a template's effect carries every parameter its editor seeded, so the centres
- * are present on any movement template it made; one stored without them says nothing.
+ * are present on any movement template it made; one stored without them says nothing. A Path's Line
+ * carries them too, and draws no centre, so it is never Around whatever its blend.
  */
 export function isAroundSpelling(effect: { family: string; blendMode: string; parameters: Record<string, string> }): boolean {
   if (effect.family.toLowerCase() !== 'position') return false
+  if (effect.parameters.shape?.trim().toUpperCase() === 'LINE') return false
   if (!CENTRE_PARAMS.every((name) => effect.parameters[name] != null)) return false
   return centreModeOf(effect.blendMode, effect.parameters) === 'around'
 }

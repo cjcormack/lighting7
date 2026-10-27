@@ -29,6 +29,7 @@ import { FxEditor } from '@/components/fx/FxEditor'
 import { FxPicker, type AuditionedFx } from '@/components/fx/FxPicker'
 import { pickerFamilyForSheet } from '@/components/fx/fxEditorModel'
 import { useReplaceStack } from '@/components/fx/useReplaceStack'
+import { useAuditionedFx } from '@/components/fx/useAuditionedFx'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import { fxTargetOf } from '@/components/fx/selectionFxTarget'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
@@ -666,13 +667,15 @@ function LookPad({
  * The effects arm: the add sheet ⌘K and *+ Effect* had, folded into the one picker (apply-model plan §5). Above,
  * **`FxPicker` on the bare effect press** — a tap starts one Local effect over the pair the door
  * handed it (`POST /programmer/fx`, its mask the pair's), which first takes those heads off
- * every other Local effect of its family; another tap swaps it, phase kept; *Edit <name>* opens the
- * live editor here, whose Done comes back to the list. Below, the **effect palettes** that fit,
+ * every other Local effect of its family; another tap swaps it, phase kept — the one started over the
+ * selection the tap is on ([useAuditionedFx]), so a tap after the selection moves starts afresh;
+ * *Edit <name>* opens the live editor here, whose Done comes back to the list. Below, the **effect palettes** that fit,
  * pressed the chip's way through `usePress`.
  *
  * **Under a focused Look** the bare effect starts on `/fx/add` alone and is absorbed into the Look
- * once the session ends — the panel closed or unmounted — by the id the create answered, after the
- * editor has landed any move its floor still held: the press's replacement would take heads off
+ * once the session ends — the panel closed or unmounted — every one the session started, by the ids
+ * the creates answered, after the editor has landed any move its floor still held: the press's
+ * replacement would take heads off
  * other Local effects, which a press into a Look must not do (§3.2 rule 6). An effect palette goes in
  * through `usePress`'s own Look arm.
  *
@@ -724,9 +727,11 @@ function EffectsArm({
   const target = useMemo(() => fxTargetOf(pair.targets, fixtures, groups), [pair.targets, fixtures, groups])
   const over = selectionKeyOf(pair.targets)
   const swapping = picked != null && picked.over === over ? picked.effect : null
-  const [current, setCurrent] = useState<AuditionedFx | null>(null)
+  const { current, onCurrent: fileCurrent, started, forget, reset: resetAuditions } = useAuditionedFx(pair.targets)
   const [editing, setEditing] = useState(false)
-  const live = current != null ? ((active ?? []).find((e) => e.id === current.fxId) ?? null) : null
+  // The FX the editor opens on: the last one started or asked to edit, whatever is selected since.
+  const [shownId, setShownId] = useState<number | null>(null)
+  const live = shownId != null ? ((active ?? []).find((e) => e.id === shownId) ?? null) : null
 
   // *Replace · Stack*: asked on the programmer page, of the bare press alone — a Look absorbs the FX
   // and a cue stores it, and neither takes heads off anything.
@@ -734,41 +739,44 @@ function EffectsArm({
   const { segment, onLanding, stackOn, reset: resetStack } = useReplaceStack(pair.targets, asks, current)
   const onCurrent = useCallback(
     (next: AuditionedFx | null) => {
-      setCurrent(next)
-      if (editOnStart && next != null) setEditing(true)
+      fileCurrent(next)
+      if (next == null) return
+      setShownId(next.fxId)
+      if (editOnStart) setEditing(true)
     },
-    [editOnStart],
+    [fileCurrent, editOnStart],
   )
 
   /** The open editor's "land what the floor holds" — written before the effect goes into the Look. */
   const flushEditor = useRef<(() => void) | null>(null)
-  const session = useRef<{ current: AuditionedFx | null; look: typeof look; finished: boolean }>({
-    current: null,
+  const session = useRef<{ started: readonly AuditionedFx[]; look: typeof look; finished: boolean }>({
+    started: [],
     look,
     finished: false,
   })
-  session.current.current = current
+  session.current.started = started
   session.current.look = look
   const finish = useCallback(() => {
     const s = session.current
     if (s.finished) return
     s.finished = true
-    if (s.current == null || s.look == null) return
+    if (s.started.length === 0 || s.look == null) return
     flushEditor.current?.()
-    void absorb({ projectId: s.look.projectId, lookId: s.look.lookId, fxIds: [s.current.fxId] })
+    void absorb({ projectId: s.look.projectId, lookId: s.look.lookId, fxIds: s.started.map((fx) => fx.fxId) })
   }, [absorb])
   // A fresh session per open, the one before it finished first; a close or an unmount finishes it.
   useEffect(() => {
     if (open) {
       session.current.finished = false
-      setCurrent(null)
+      resetAuditions()
+      setShownId(null)
       setEditing(false)
       setPicked(null)
       resetStack()
       return
     }
     finish()
-  }, [open, finish, resetStack])
+  }, [open, finish, resetAuditions, resetStack])
   useEffect(() => finish, [finish])
 
   const onPalette = useCallback(
@@ -866,7 +874,8 @@ function EffectsArm({
                   onStop={() => {
                     // Stopped, so nothing is left to absorb: the session's effect is cleared with it.
                     stopFx(live)
-                    setCurrent(null)
+                    forget(live.id)
+                    setShownId(null)
                     setEditing(false)
                   }}
                   flushRef={flushEditor}
@@ -882,7 +891,10 @@ function EffectsArm({
                 preferredAttribute={attribute ?? fit.attribute}
                 current={current}
                 onCurrent={onCurrent}
-                onEdit={() => setEditing(true)}
+                onEdit={() => {
+                  if (current != null) setShownId(current.fxId)
+                  setEditing(true)
+                }}
                 press={into.kind === 'look' ? undefined : pressFamilies}
                 onLanding={onLanding}
                 underFamilies={segment}

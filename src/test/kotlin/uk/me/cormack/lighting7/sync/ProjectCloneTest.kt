@@ -188,7 +188,7 @@ class ProjectCloneTest {
         fun stacked(projectId: Int) = transaction(state.database) {
             DaoProject.findById(projectId)!!.looks.single { it.name == "stacked" }.fxInOrder().map { it.fxType to it.sortOrder }
         }
-        assertEquals(listOf("SquareWave" to 0, "SineWave" to 1), stacked(sourceId))
+        assertEquals(listOf("Flicker" to 0, "Wave" to 1), stacked(sourceId))
         assertEquals(stacked(sourceId), stacked(result.projectId))
     }
 
@@ -330,7 +330,7 @@ class ProjectCloneTest {
             // `ExportUuidRemapper` knows nothing about — which is the point: the remap is a blind
             // uuid substitution across the export text, so a new inline child is covered with no
             // code of its own.
-            val paletteFx = clone.palettes.mapNotNull { it.effect }.single()
+            val paletteFx = clone.palettes.single { it.name == "amber-breathe" }.effect!!
             assertEquals(
                 cloneMaster.uuid, paletteFx.speedMasterUuid,
                 "the template effect's reference must point at the clone's master",

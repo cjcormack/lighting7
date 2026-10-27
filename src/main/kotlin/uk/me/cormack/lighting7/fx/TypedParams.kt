@@ -51,6 +51,7 @@ class TypedParams(
     private val floatCache = ConcurrentHashMap<String, Float>()
     private val booleanCache = ConcurrentHashMap<String, Boolean>()
     private val easingCurveCache = ConcurrentHashMap<String, EasingCurve>()
+    private val choiceCache = ConcurrentHashMap<String, String>()
     private val slotStepsCache = ConcurrentHashMap<String, StepList>()
 
     /**
@@ -111,6 +112,21 @@ class TypedParams(
 
     /** Get a String parameter (no parsing needed). */
     fun string(name: String): String = raw(name)
+
+    /**
+     * A `choice` parameter: one of its declared options, in the option's spelling. A value no option
+     * matches — which every write boundary refuses ([choiceProblem]), so only an older row or a bare
+     * `createFx` holds one — reads as the declared default, else the first option.
+     */
+    fun choice(name: String): String = choiceCache.getOrPut(name) {
+        val param = schema.firstOrNull { it.name == name }
+        val first = param?.options?.firstOrNull()
+        if (param == null || first == null) {
+            raw(name)
+        } else {
+            choiceOption(param, raw(name)) ?: choiceOption(param, param.defaultValue) ?: first.value
+        }
+    }
 
     /**
      * Parse a colour parameter, resolving a template reference (`pal:{uuid}`) through the colour
@@ -188,6 +204,17 @@ class TypedParams(
     fun slotSteps(name: String): StepList = slotStepsCache.getOrPut(name) {
         val names = raw(name).split(",").map { it.trim() }.filter { it.isNotEmpty() }
         if (names.isEmpty()) StepList.EMPTY else SlotStepList(names)
+    }
+
+    /**
+     * How many steps list parameter [name] holds, as its own reader parses it — so a colour the
+     * colour list drops is no step — for a `stepsFrom` declaration ([Fx.stepCount]).
+     */
+    fun stepCount(name: String): Int = when (schema.firstOrNull { it.name == name }?.type) {
+        "colourList" -> colourList(name).size
+        "paletteList" -> paletteSteps(name).size
+        "slotList" -> slotSteps(name).size
+        else -> raw(name).split(",").count { it.isNotBlank() }
     }
 
     /** Parse an EasingCurve parameter. */

@@ -90,7 +90,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
     }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<CueDetails>().id
 
     private fun pulse(targetType: String, targetKey: String, speedMasterUuid: String? = null) = CueAdHocFxDto(
-        targetType = targetType, targetKey = targetKey, fxType = "Pulse", family = "intensity", attribute = "dimmer",
+        targetType = targetType, targetKey = targetKey, fxType = "Wave", family = "intensity", attribute = "dimmer",
         cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL", speedMasterUuid = speedMasterUuid,
     )
 
@@ -140,7 +140,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
             act, "Q2",
             effects = listOf(
                 pulse("group", "wash", speedMasterUuid = master1),
-                pulse("fixture", "hex-1").copy(fxType = "SineWave", attribute = "dimmer"),
+                pulse("fixture", "hex-1").copy(fxType = "Flicker", attribute = "dimmer"),
             ),
         )
         // Q1 again, a second place of the same cue.
@@ -149,8 +149,8 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
             setBody(AddCueToStackRequest(cueId = q1))
         }.also { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
         val run = UUID.randomUUID()
-        keyRun(q1, "Pulse", run)
-        keyRun(q2, "Pulse", run)
+        keyRun(q1, "Wave", run)
+        keyRun(q2, "Wave", run)
 
         val resp = client.get("$base/cue-stacks/$act/timeline")
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
@@ -178,10 +178,10 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
         assertEquals(true, onGroup.timed)
         assertEquals(first.layers, again.layers, "a cue's two places carry the same layers")
 
-        // Effects: the keyed Pulse in Q1 and Q2 one run with one settings; the SineWave unkeyed.
+        // Effects: the keyed Pulse in Q1 and Q2 one run with one settings; the Flicker unkeyed.
         val pulse1 = first.fx.single()
-        val pulse2 = second.fx.single { it.fxType == "Pulse" }
-        val sine = second.fx.single { it.fxType == "SineWave" }
+        val pulse2 = second.fx.single { it.fxType == "Wave" }
+        val sine = second.fx.single { it.fxType == "Flicker" }
         assertEquals(run.toString(), pulse1.runUuid)
         assertEquals(pulse1.runUuid, pulse2.runUuid)
         assertTrue(pulse1.uuid != pulse2.uuid)

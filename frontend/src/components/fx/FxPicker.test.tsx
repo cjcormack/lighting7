@@ -151,8 +151,38 @@ describe('FxPicker', () => {
       // D16: one bar, on the master tagged with its family.
       cycle: 4,
       speedMasterUuid: 'm-position',
+      // New FX start on Fixtures (FX editor follow-ups D8).
+      elementMode: 'WHOLE',
     })
     expect(updateFx).not.toHaveBeenCalled()
+  })
+
+  it('starts an FX that steps one step behind, in draft and live (fx-settings plan D7)', async () => {
+    const stepper: FxLibraryEntry = {
+      ...position('Stepper'),
+      stepsFrom: 'points',
+      parameters: [{ name: 'points', type: 'string', defaultValue: 'a,b,c', description: '' }],
+    }
+    const before = wire.library
+    wire.library = [...before, stepper]
+    try {
+      const picks: DraftFxPick[] = []
+      const { unmount } = render(
+        <FxPicker target={TARGET} initialFamily="POSITION" onEdit={() => {}} draft={{ current: null, onPick: (pick) => picks.push(pick) }} />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Stepper' }))
+      expect(picks[0]).toMatchObject({ fxType: 'Stepper', spread: 1, spreadUnit: 'STEP' })
+      fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+      expect(picks[1]).not.toHaveProperty('spreadUnit')
+      unmount()
+
+      render(<Harness />)
+      fireEvent.click(screen.getByRole('button', { name: 'Stepper' }))
+      await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+      expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Stepper', spreadUnit: 'STEP' })
+    } finally {
+      wire.library = before
+    }
   })
 
   it('starts on master 1 — no master sent — where no master is tagged for the family', async () => {
@@ -183,6 +213,36 @@ describe('FxPicker', () => {
       blendMode: 'ADDITIVE',
       parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '32' },
     })
+  })
+
+  it('swaps from the type the desk runs after the editor’s header swapped it, a tap back on the old one included', async () => {
+    const { rerender } = render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    // The editor's header swapped it to Figure 8: the picker's own record still says Circle.
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Figure 8', targetKey: 'spot-3', attribute: 'position' })]
+    rerender(<Harness />)
+    expect(screen.getByRole('button', { name: 'Figure 8' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Circle' }).getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    expect(updateFx).toHaveBeenCalledTimes(1)
+    expect(updateFx.mock.calls[0][0]).toBe(77)
+    expect(updateFx.mock.calls[0][1]).toMatchObject({ fxType: 'Circle' })
+  })
+
+  it('swaps back on a tap made before the desk has answered its own swap', async () => {
+    const { rerender } = render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Circle', targetKey: 'spot-3', attribute: 'position' })]
+    rerender(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Figure 8' }))
+    // The running list still says Circle: that is this picker's swap in flight, not one made elsewhere.
+    rerender(<Harness />)
+    expect(screen.getByRole('button', { name: 'Figure 8' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    expect(updateFx).toHaveBeenCalledTimes(2)
+    expect(updateFx.mock.calls[1][1]).toMatchObject({ fxType: 'Circle' })
   })
 
   it('restarts rather than swaps when the tap lands on another property', async () => {
@@ -320,6 +380,142 @@ describe('the Beam family (effects plan §4.4)', () => {
       cycle: 4,
       speedMasterUuid: 'm-beam',
     })
+  })
+})
+
+describe('Wave and its presets (fx-settings plan D4, D5)', () => {
+  const WAVE: FxLibraryEntry = {
+    name: 'Wave',
+    family: 'intensity',
+    outputType: 'SLIDER',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleAttributes: ['dimmer', 'uv', 'zoom', 'iris', 'frost', 'focus'],
+    parameters: [
+      { name: 'shape', type: 'choice', defaultValue: 'SINE', description: '' },
+      { name: 'low', type: 'ubyte', defaultValue: '0', description: '' },
+      { name: 'high', type: 'ubyte', defaultValue: '255', description: '' },
+      { name: 'curve', type: 'easingCurve', defaultValue: 'LINEAR', description: '' },
+    ],
+    attributeDefaults: { zoom: { low: '64', high: '192' }, iris: { low: '0', high: '160' }, focus: { low: '64', high: '192' } },
+    presets: [
+      { name: 'Strobe', attribute: 'dimmer', parameters: { shape: 'SQUARE', width: '0.1' } },
+      { name: 'Zoom Wave', attribute: 'zoom', parameters: { shape: 'SINE', low: '64', high: '192' } },
+      { name: 'Iris Pulse', attribute: 'iris', parameters: { shape: 'PULSE', low: '0', high: '160', curve: 'QUAD_OUT' } },
+      { name: 'Frost Pulse', attribute: 'frost', parameters: { shape: 'PULSE', low: '0', high: '160', curve: 'QUAD_OUT' } },
+      {
+        name: 'Focus Pull',
+        attribute: 'focus',
+        parameters: { shape: 'RAMP_UP', low: '64', high: '192', curve: 'SINE_IN_OUT' },
+        cycle: 2,
+        direction: 'BOUNCE',
+      },
+    ],
+  }
+  const PROFILE = makeFixture('profile-1', [
+    sliderProp('dimmer', 'dimmer', chan(1)),
+    sliderProp('zoom', 'zoom', chan(2)),
+    sliderProp('iris', 'iris', chan(3)),
+    sliderProp('focus', 'focus', chan(4)),
+  ])
+
+  function WaveHarness({ initialFamily = 'BEAM' as 'BEAM' | 'INTENSITY' }) {
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
+    return (
+      <FxPicker
+        target={{ type: 'fixture', fixture: PROFILE }}
+        initialFamily={initialFamily}
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+      />
+    )
+  }
+
+  const presetsIn = (list: HTMLElement) =>
+    Array.from(list.querySelectorAll('[data-effect-preset]')).map((b) => b.getAttribute('data-effect-preset'))
+
+  beforeEach(() => {
+    wire.library = [WAVE]
+  })
+
+  it('lists each preset under the family its attribute gives, only where the head has the attribute', () => {
+    render(<WaveHarness />)
+    expect(presetsIn(screen.getByRole('list', { name: 'Beam FX' }))).toEqual(['Zoom Wave', 'Iris Pulse', 'Focus Pull'])
+    fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
+    const intensity = screen.getByRole('list', { name: 'Intensity FX' })
+    expect(Array.from(intensity.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual(['Wave'])
+    expect(presetsIn(intensity)).toEqual(['Strobe'])
+  })
+
+  it('starts a preset as Wave on its attribute, with its parameters, on the Beam master', async () => {
+    render(<WaveHarness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Pulse' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      fxType: 'Wave',
+      attribute: 'iris',
+      cycle: 4,
+      speedMasterUuid: 'm-beam',
+      parameters: { shape: 'PULSE', low: '0', high: '160', curve: 'QUAD_OUT' },
+    })
+    expect(screen.getByRole('button', { name: 'Iris Pulse' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('starts a preset at its own cycle and Direction: Focus Pull bounces at half a bar', async () => {
+    render(<WaveHarness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Focus Pull' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Wave', attribute: 'focus', cycle: 2, direction: 'BOUNCE' })
+  })
+
+  it('swaps from one preset to another on the same attribute with one updateFx carrying the preset’s parameters', async () => {
+    const DIMMER = makeFixture('par-1', [sliderProp('dimmer', 'dimmer', chan(1))])
+    function Swap() {
+      const [current, setCurrent] = useState<AuditionedFx | null>(null)
+      return <FxPicker target={{ type: 'fixture', fixture: DIMMER }} initialFamily="INTENSITY" current={current} onCurrent={setCurrent} />
+    }
+    render(<Swap />)
+    fireEvent.click(screen.getByRole('button', { name: 'Wave' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Wave', attribute: 'dimmer', parameters: { shape: 'SINE', low: '0' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Strobe' }))
+    expect(addFixtureFx).toHaveBeenCalledTimes(1)
+    expect(updateFx).toHaveBeenCalledTimes(1)
+    expect(updateFx.mock.calls[0][1]).toMatchObject({ fxType: 'Wave', parameters: { shape: 'SQUARE', width: '0.1' } })
+    expect(screen.getByRole('button', { name: 'Strobe' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Wave' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('lists the Wave type under Beam too, on the head’s beam attribute, lit there once it runs on one', async () => {
+    render(<WaveHarness />)
+    const beam = screen.getByRole('list', { name: 'Beam FX' })
+    const wave = beam.querySelector<HTMLElement>('[data-effect-pick="Wave"]')!
+    fireEvent.click(wave)
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      fxType: 'Wave',
+      attribute: 'zoom',
+      speedMasterUuid: 'm-beam',
+      parameters: { shape: 'SINE', low: '64', high: '192' },
+    })
+    expect(wave).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
+    expect(screen.getByRole('list', { name: 'Intensity FX' }).querySelector('[data-effect-pick="Wave"]')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('starts the Wave type on a beam attribute at its attribute defaults', async () => {
+    const ZOOM_ONLY = makeFixture('zoom-1', [sliderProp('zoom', 'zoom', chan(1))])
+    const picks: DraftFxPick[] = []
+    render(
+      <FxPicker
+        target={{ type: 'fixture', fixture: ZOOM_ONLY }}
+        initialFamily="INTENSITY"
+        draft={{ current: null, onPick: (pick) => picks.push(pick) }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Wave' }))
+    expect(picks[0]).toMatchObject({ fxType: 'Wave', family: 'intensity', attribute: 'zoom', speedMasterUuid: 'm-beam', parameters: { low: '64', high: '192' } })
   })
 })
 
@@ -786,5 +982,71 @@ describe('FxPicker on the bare effect press', () => {
     wire.active = []
     rerender(<Asking stackOn={() => false} onLanding={onLanding} />)
     expect(onLanding).toHaveBeenLastCalledWith(['position'])
+  })
+})
+
+describe('Path and the legacy colour FX (fx-settings plan session 3)', () => {
+  const centred = { param: 'shape', values: ['CIRCLE', 'FIGURE_8', 'RANDOM'] }
+  const line = { param: 'shape', values: ['LINE'] }
+  const PATH: FxLibraryEntry = {
+    name: 'Path',
+    family: 'position',
+    outputType: 'POSITION',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleAttributes: ['position'],
+    parameters: [
+      { name: 'shape', type: 'choice', defaultValue: 'CIRCLE', description: '' },
+      { name: 'panCentre', type: 'ubyte', defaultValue: '128', description: '', shownWhen: centred },
+      { name: 'tiltCentre', type: 'ubyte', defaultValue: '128', description: '', shownWhen: centred },
+      { name: 'panSize', type: 'ubyte', defaultValue: '64', description: '', shownWhen: centred },
+      { name: 'tiltSize', type: 'ubyte', defaultValue: '64', description: '', shownWhen: centred },
+      { name: 'startPan', type: 'ubyte', defaultValue: '64', description: '', shownWhen: line },
+      { name: 'endPan', type: 'ubyte', defaultValue: '192', description: '', shownWhen: line },
+    ],
+    presets: [{ name: 'Sweep', attribute: 'position', parameters: { shape: 'LINE' }, cycle: 2, direction: 'BOUNCE' }],
+  }
+  const legacyColour = (name: string): FxLibraryEntry => ({
+    name,
+    family: 'colour',
+    outputType: 'COLOUR',
+    fxMode: 'STANDARD',
+    compatibleAttributes: ['position'],
+    parameters: [],
+    legacy: true,
+  })
+
+  beforeEach(() => {
+    wire.library = [PATH, legacyColour('ColourFade')]
+  })
+
+  it('starts the Sweep preset as a Line on Bounce at half a bar, on Override: a line has no centre to go Around', async () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sweep' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      fxType: 'Path',
+      attribute: 'position',
+      cycle: 2,
+      direction: 'BOUNCE',
+      blendMode: 'OVERRIDE',
+      parameters: { shape: 'LINE' },
+    })
+  })
+
+  it('starts the bare Path, a Circle, Around with both centres pinned', async () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Path' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      fxType: 'Path',
+      blendMode: 'ADDITIVE',
+      parameters: { shape: 'CIRCLE', panCentre: '128', tiltCentre: '128' },
+    })
+  })
+
+  it('offers no legacy FX', () => {
+    render(<Harness />)
+    expect(document.querySelector('[data-effect-pick="ColourFade"]')).toBeNull()
   })
 })

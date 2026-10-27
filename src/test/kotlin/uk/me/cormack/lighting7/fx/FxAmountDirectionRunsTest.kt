@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -72,7 +73,7 @@ class FxAmountDirectionRunsTest {
         override val name = "Phase Slider"
         override val outputType = FxOutputType.SLIDER
         override fun calculate(phase: Double, context: FxContext): FxOutput =
-            FxOutput.Slider((10 + (phase * 200).toInt()).toUByte())
+            FxOutput.Slider((10 + (phase * 200).roundToInt()).toUByte())
     }
 
     private fun bandEffect(
@@ -146,8 +147,8 @@ class FxAmountDirectionRunsTest {
     @Test
     fun `an Around circle at 50 percent has half the radius about the position underneath`() {
         val circle = registry.createFx(
-            "Circle",
-            mapOf("panCentre" to "128", "tiltCentre" to "128", "panRadius" to "64", "tiltRadius" to "64"),
+            "Path",
+            mapOf("shape" to "CIRCLE", "panCentre" to "128", "tiltCentre" to "128", "panSize" to "64", "tiltSize" to "64"),
         )
         fun positionAt(size: Double, n: Long): Pair<Int, Int> {
             val rig = newRig()
@@ -206,7 +207,7 @@ class FxAmountDirectionRunsTest {
 
     @Test
     fun `Colour Cycle backward runs blue, green, red`() {
-        val cycle = registry.createFx("ColourCycle", mapOf("colours" to "#ff0000,#00ff00,#0000ff", "fadeRatio" to "0"))
+        val cycle = registry.createFx("ColourCycle", mapOf("colours" to "#ff0000,#00ff00,#0000ff", "between" to "CUT"))
         fun coloursAt(direction: FxDirection): List<Color> {
             val instance = FxInstance(cycle, ColourTarget("hex-a"), FxTiming(cycle = 3.0))
             instance.updateDynamics { it.copy(direction = direction) }
@@ -225,7 +226,7 @@ class FxAmountDirectionRunsTest {
     fun `backward reads phase 0 as the very end of the cycle, never past it`() {
         val phase = FxDirection.BACKWARD.apply(0.0, 0)
         assertTrue(phase < 1.0, "a list indexed by floor(phase × n) must not run off its end")
-        assertEquals(0.75, FxDirection.BACKWARD.apply(0.25, 7))
+        assertEquals(0.75, FxDirection.BACKWARD.apply(0.25, 7), 1e-8)
     }
 
     @Test

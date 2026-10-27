@@ -6,7 +6,11 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import { makeActiveFx } from '@/test/fixtureFactories'
 import {
+  centreFlip,
   centreModeOf,
+  hasCentre,
+  isAroundSpelling,
+  storedCentreMode,
   differsFromPalette,
   filteredElementCount,
   orderPatch,
@@ -16,11 +20,15 @@ import {
   withPaletteDraft,
   draftOf,
   levelModeOf,
+  isParamShown,
   paramAxis,
   paramRole,
+  paramView,
   pickerFamilyForSheet,
   pickerFamilyOf,
   startingSpec,
+  fxSwapOptions,
+  swappedDraft,
   paletteDraftOf,
   timingChoicePatch,
   updateRequestOf,
@@ -158,6 +166,20 @@ describe('fxEditorModel', () => {
     expect(differsFromPalette(draft, palette, 'm1', {}, { order: false })).toBe(false)
   })
 
+  it('reads, writes and compares a palette\'s Over, but not one the instance did not report', () => {
+    const palette = { fxType: 'ColourCycle', family: 'colour', cycle: 4, blendMode: 'OVERRIDE', order: 'NORMAL', parameters: {} }
+    const draft = paletteDraftOf(palette)
+    expect(draft.elementMode).toBe('PER_FIXTURE')
+    expect(withPaletteDraft(palette, draft)).not.toHaveProperty('elementMode')
+    expect(withPaletteDraft(palette, { ...draft, elementMode: 'WHOLE' })).toMatchObject({ elementMode: 'WHOLE' })
+    expect(paletteDraftOf({ ...palette, elementMode: 'FLAT' }).elementMode).toBe('FLAT')
+    expect(differsFromPalette({ ...draft, elementMode: 'WHOLE' }, palette, 'm1')).toBe(true)
+    // A running instance that lands on no elements reports no mode, so its draft's guess is neither an edit nor written.
+    const whole = { ...palette, elementMode: 'WHOLE' }
+    expect(differsFromPalette(draft, whole, 'm1', {}, { elementMode: false })).toBe(false)
+    expect(withPaletteDraft(whole, draft, { elementMode: false })).toMatchObject({ elementMode: 'WHOLE' })
+  })
+
   it('reads the spread\'s shape off the wire at its defaults, and sends each field once touched (D4)', () => {
     const plain = draftOf(makeActiveFx({}))
     expect([plain.spread, plain.wings, plain.segments, plain.parts]).toEqual([1, 1, 1, 0])
@@ -203,7 +225,7 @@ describe('fxEditorModel', () => {
     const heads = (key: string, n: number) => Array.from({ length: n }, (_, i) => ({ key: `${key}.pixel-${i}`, attributes: dimmer }))
     const bar = { key: 'bar', attributes: [], elements: heads('bar', 12) }
     const strip = { key: 'strip', attributes: [], elements: heads('strip', 4) }
-    // Every unit a member: one dial each, a repeat counted once.
+    // Every unit a member: one head each, a repeat counted once.
     expect(selectionHeadCount([par('p1'), par('p2'), par('p3'), par('p1')], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(3)
     // Every unit its heads: as a group of bars — each bar its own run, or one strip.
     expect(selectionHeadCount([bar, strip], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
@@ -221,7 +243,7 @@ describe('fxEditorModel', () => {
     expect(selectionHeadCount([par('p1'), { key: 'x', attributes: [] }], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
   })
 
-  it('counts a live effect\'s heads for the dials as the desk distributes them', () => {
+  it('counts a live effect\'s heads as the desk distributes them', () => {
     const bar = { elements: Array.from({ length: 12 }) }
     const par = { elements: null }
     expect(spreadHeadCount([par, par, par], true, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(3)
@@ -229,11 +251,15 @@ describe('fxEditorModel', () => {
     expect(spreadHeadCount([bar], false, 'dimmer', 'PER_FIXTURE', 'ODD')).toBe(6)
     expect(spreadHeadCount([bar, bar], true, 'dimmer', 'FLAT', 'FIRST_HALF')).toBe(12)
     expect(spreadHeadCount([bar, bar], true, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
+    // Fixtures (FX editor follow-ups D7): one unit a fixture with heads, whatever the filter.
+    expect(spreadHeadCount([bar, bar, par], true, 'dimmer', 'WHOLE', 'ODD')).toBe(2)
+    expect(spreadHeadCount([bar], false, 'dimmer', 'WHOLE', 'ALL')).toBe(1)
+    expect(selectionHeadCount([{ key: 'b1', attributes: [], elements: [{ key: 'b1.h1', attributes: [{ name: 'dimmer', type: 'slider' }] }, { key: 'b1.h2', attributes: [{ name: 'dimmer', type: 'slider' }] }] }, { key: 'p', attributes: [{ name: 'dimmer', type: 'slider' }] }], 'dimmer', 'WHOLE', 'ALL')).toBe(2)
   })
 
   it('counts a fixture that carries the property itself once, whatever heads it has (the desk\'s DIRECT_FIXTURE)', () => {
     // A Slender 14ch: a master dimmer on the fixture, four cells beneath. A Pulse on the master runs
-    // once on the desk — one dial, not four — and a group of three such bars runs three members.
+    // once on the desk — one head, not four — and a group of three such bars runs three members.
     const slender = { attributes: [{ name: 'dimmer', type: 'slider' }], elements: Array.from({ length: 4 }) }
     expect(spreadHeadCount([slender], false, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
     expect(spreadHeadCount([slender, slender, slender], true, 'dimmer', 'FLAT', 'ALL')).toBe(3)
@@ -338,5 +364,160 @@ describe("a pad's instance against its palette (§3.3, D20)", () => {
   it('keeps the palette’s own distribution on Update where the instance said none', () => {
     expect(withPaletteDraft(template, instance, { order: false }).order).toBe('CENTRE_OUT')
     expect(withPaletteDraft(template, { ...instance, order: 'RANDOM' }).order).toBe('RANDOM')
+  })
+})
+
+describe('paramView (fx-settings plan D1)', () => {
+  it('reads what the desk declares, and guesses only what it leaves out', () => {
+    const attack = { ...p('attackRatio', 'double', '0.1'), label: 'Attack', min: 0, max: 1, unit: 'ratio' as const, role: 'detail' as const }
+    const pulse = entry({ parameters: [p('min', 'ubyte'), attack] })
+    expect(paramView(pulse, attack)).toEqual({ label: 'Attack', unit: 'ratio', min: 0, max: 1, step: 0.01, fold: 'detail', open: false })
+    // Labelled only: the rest is still guessed — a ratio beside a level, folded.
+    const speed = { ...p('speedRatio', 'double', '0.3'), label: 'Speed' }
+    expect(paramView(entry({ parameters: [p('min', 'ubyte'), speed] }), speed)).toEqual({
+      label: 'Speed',
+      unit: 'ratio',
+      min: 0,
+      max: 1,
+      step: 0.01,
+      fold: 'detail',
+      open: false,
+    })
+  })
+
+  it("guesses as paramRole always has for a parameter that declares nothing", () => {
+    const circle = paramView(CIRCLE, CIRCLE.parameters[0])
+    expect(circle).toMatchObject({ label: 'Pan', unit: 'position', min: 0, max: 255, fold: 'main' })
+    expect(paramView(CIRCLE, CIRCLE.parameters[2])).toMatchObject({ label: 'Pan size', unit: 'dmx' })
+    const pulse = entry({ parameters: [p('min', 'ubyte'), p('holdRatio', 'double', '0.3')] })
+    expect(paramView(pulse, pulse.parameters[0])).toMatchObject({ label: 'Low', unit: '%' })
+    expect(paramView(pulse, pulse.parameters[1])).toMatchObject({ label: 'Hold', unit: 'ratio', fold: 'detail' })
+  })
+
+  it('shows a parameter only while its shownWhen holds, against the default when unset', () => {
+    const shape = { ...p('shape', 'choice', 'SINE'), options: [{ value: 'SINE', label: 'Sine' }, { value: 'SQUARE', label: 'Square' }] }
+    const width = { ...p('width', 'double', '0.5'), shownWhen: { param: 'shape', values: ['SQUARE'] } }
+    const wave = entry({ parameters: [shape, width] })
+    expect(isParamShown(wave, width, {})).toBe(false)
+    expect(isParamShown(wave, width, { shape: 'square' })).toBe(true)
+    expect(isParamShown(wave, shape, {})).toBe(true)
+  })
+})
+
+
+describe('the Centre question on a Path (fx-settings plan session 3)', () => {
+  const centred = { param: 'shape', values: ['CIRCLE', 'FIGURE_8', 'RANDOM'] }
+  const PATH: FxLibraryEntry = {
+    name: 'Path',
+    family: 'position',
+    outputType: 'POSITION',
+    fxMode: 'STANDARD',
+    compatibleAttributes: ['position'],
+    parameters: [
+      { name: 'shape', type: 'choice', defaultValue: 'CIRCLE', description: '' },
+      { name: 'panCentre', type: 'ubyte', defaultValue: '128', description: '', shownWhen: centred },
+      { name: 'tiltCentre', type: 'ubyte', defaultValue: '128', description: '', shownWhen: centred },
+      { name: 'startPan', type: 'ubyte', defaultValue: '64', description: '', shownWhen: { param: 'shape', values: ['LINE'] } },
+    ],
+  }
+
+  it('asks it of a shape whose centre is drawn, and never of a Line', () => {
+    expect(hasCentre(PATH)).toBe(true)
+    expect(hasCentre(PATH, { shape: 'FIGURE_8' })).toBe(true)
+    expect(hasCentre(PATH, { shape: 'LINE' })).toBe(false)
+    expect(hasCentre(PATH, { shape: 'line' })).toBe(false)
+  })
+
+  it('starts a Circle Around, both centres pinned, and a Line on Override', () => {
+    expect(startingSpec(PATH)).toEqual({
+      blendMode: 'ADDITIVE',
+      parameters: { shape: 'CIRCLE', panCentre: '128', tiltCentre: '128', startPan: '64' },
+    })
+    expect(startingSpec(PATH, { preset: { parameters: { shape: 'LINE' } } }).blendMode).toBe('OVERRIDE')
+  })
+
+  it('reads a stored Line as asking nothing', () => {
+    expect(storedCentreMode({ blendMode: 'ADDITIVE', parameters: { shape: 'LINE', panCentre: '128', tiltCentre: '128' } }, PATH)).toBeNull()
+    expect(storedCentreMode({ blendMode: 'ADDITIVE', parameters: { shape: 'CIRCLE' } }, PATH)).toBe('around')
+  })
+
+  it('moves the blend with a shape change across a Line, and leaves any other change alone', () => {
+    const around = { blendMode: 'ADDITIVE', parameters: { shape: 'CIRCLE', panCentre: '128', tiltCentre: '128' } }
+    expect(centreFlip(PATH, around, 'shape', 'LINE')).toEqual({ blendMode: 'OVERRIDE', parameters: { ...around.parameters, shape: 'LINE' } })
+    const line = { blendMode: 'OVERRIDE', parameters: { shape: 'LINE' } }
+    expect(centreFlip(PATH, line, 'shape', 'CIRCLE')).toEqual({
+      blendMode: 'ADDITIVE',
+      parameters: { shape: 'CIRCLE', panCentre: '128', tiltCentre: '128' },
+    })
+    // An Absolute circle taken through a Line comes back Absolute, where it was.
+    const absoluteCircle = { blendMode: 'OVERRIDE', parameters: { shape: 'CIRCLE', panCentre: '40', tiltCentre: '200' } }
+    const throughLine = centreFlip(PATH, absoluteCircle, 'shape', 'LINE')!
+    expect(throughLine).toEqual({ blendMode: 'OVERRIDE', parameters: { shape: 'LINE', panCentre: '40', tiltCentre: '200' } })
+    expect(centreFlip(PATH, throughLine, 'shape', 'CIRCLE')).toEqual({
+      blendMode: 'OVERRIDE',
+      parameters: { shape: 'CIRCLE', panCentre: '40', tiltCentre: '200' },
+    })
+    expect(centreFlip(PATH, around, 'shape', 'FIGURE_8')).toBeNull()
+    expect(centreFlip(PATH, around, 'panCentre', '40')).toBeNull()
+    const absolute = { blendMode: 'MAX', parameters: { shape: 'CIRCLE' } }
+    expect(centreFlip(PATH, absolute, 'shape', 'LINE')?.blendMode).toBe('MAX')
+  })
+})
+
+describe('isAroundSpelling on a Path (fx-settings plan session 3)', () => {
+  it('reads a Circle on Additive at 128 as around, and a Line never', () => {
+    const at128 = { panCentre: '128', tiltCentre: '128' }
+    expect(isAroundSpelling({ family: 'position', blendMode: 'ADDITIVE', parameters: { shape: 'CIRCLE', ...at128 } })).toBe(true)
+    expect(isAroundSpelling({ family: 'position', blendMode: 'ADDITIVE', parameters: { shape: 'LINE', ...at128 } })).toBe(false)
+  })
+})
+
+describe('swappedDraft — the header’s type swap (fx-settings plan D9)', () => {
+  const base = () => draftOf(makeActiveFx({ fxType: 'Circle', blendMode: 'ADDITIVE', cycle: 4, parameters: { panRadius: '90' } }))
+  const FIGURE8 = entry({ ...CIRCLE, name: 'Figure 8' })
+
+  it('takes the new type’s starting parameters and blend, carrying a timing the operator chose', () => {
+    const next = swappedDraft({ ...base(), cycle: 2, direction: 'BACKWARD' }, CIRCLE, PULSE, 'dimmer')
+    expect(next.parameters).toEqual({ min: '0', max: '255', attackRatio: '0.1' })
+    expect(next.blendMode).toBe('OVERRIDE')
+    expect([next.cycle, next.direction]).toEqual([2, 'BACKWARD'])
+  })
+
+  it('keeps a blend changed from the old type’s start — a stacked FX’s', () => {
+    expect(swappedDraft({ ...base(), blendMode: 'MULTIPLY' }, CIRCLE, PULSE).blendMode).toBe('MULTIPLY')
+    // A Circle swapped for a Figure 8 is still Around.
+    expect(swappedDraft(base(), CIRCLE, FIGURE8).blendMode).toBe('ADDITIVE')
+  })
+
+  it('starts the division afresh across a beat and a wall-clock FX', () => {
+    const FLICKER = entry({ name: 'Flicker', timingSource: 'WALL_CLOCK', defaultCycle: 4, parameters: [] })
+    expect(swappedDraft({ ...base(), cycle: 16 }, PULSE, FLICKER).cycle).toBe(4)
+    expect(swappedDraft({ ...base(), cycle: 16 }, PULSE, entry({ name: 'Other', parameters: [] })).cycle).toBe(16)
+  })
+
+  it('moves a step spread onto the cycle at the offsets it ran at over the heads, else the cycle’s own', () => {
+    const stepped = { ...base(), spreadUnit: 'STEP' as const, spread: 1, parameters: { colours: '#ff0000,#00ff00,#0000ff,#ffffff' } }
+    const FOUR = entry({ ...CYCLE, stepsFrom: 'colours' })
+    // Four colours over eight heads, one step each: a quarter of the cycle between neighbours, which
+    // the desk's cycleSpread keeps as 8 / 4; over twelve, 3 is capped at the Spread's 200 %.
+    expect(swappedDraft(stepped, FOUR, PULSE, 'dimmer', 8)).toMatchObject({ spreadUnit: 'CYCLE', spread: 2 })
+    expect(swappedDraft(stepped, FOUR, PULSE, 'dimmer', 6)).toMatchObject({ spreadUnit: 'CYCLE', spread: 1.5 })
+    expect(swappedDraft(stepped, FOUR, PULSE, 'dimmer', 12)).toMatchObject({ spreadUnit: 'CYCLE', spread: 2 })
+    // No heads to keep the offsets over (a palette): the cycle's own spread.
+    expect(swappedDraft({ ...stepped, spread: 2 }, FOUR, PULSE)).toMatchObject({ spreadUnit: 'CYCLE', spread: 1 })
+    expect(swappedDraft(stepped, CYCLE, entry({ ...CYCLE, name: 'Palette Steps', stepsFrom: 'palettes' }))).toMatchObject({
+      spreadUnit: 'STEP',
+      spread: 1,
+    })
+  })
+})
+
+describe('fxSwapOptions', () => {
+  it('lists the FX the attribute takes but Palette Steps, the current one first where the listing leaves it out', () => {
+    const steps = entry({ name: 'Palette Steps', compatibleAttributes: ['dimmer'] })
+    const legacy = entry({ name: 'Old Pulse', legacy: true })
+    const library = [PULSE, entry({ ...CIRCLE, compatibleAttributes: ['position'] }), steps, legacy]
+    expect(fxSwapOptions(library, 'dimmer', PULSE).map((e) => e.name)).toEqual(['Pulse'])
+    expect(fxSwapOptions(library, 'dimmer', legacy).map((e) => e.name)).toEqual(['Old Pulse', 'Pulse'])
   })
 })

@@ -721,6 +721,44 @@ describe('ApplyPicker — effects', () => {
     expect(new Set(holders.excepts)).toEqual(new Set([77]))
   })
 
+  it('keeps the FX it started for the selection it started over: elsewhere a tap starts afresh, asked on Replace', () => {
+    programmerScope.value = { kind: 'local' }
+    holders.attributes = new Set(['uv'])
+    const { rerender } = render(picker({ library: 'fx', pair: MASKED }))
+    act(() => fxPicker.mock.lastCall![0].onLanding(['uv']))
+    fireEvent.click(within(panel()).getByRole('radio', { name: 'Stack' }))
+    act(() => fxPicker.mock.lastCall![0].onCurrent({ fxId: 77, fxType: 'Pulse', attribute: 'uv', stacked: true }))
+    expect(fxPicker.mock.lastCall![0].current).toEqual(expect.objectContaining({ fxId: 77 }))
+
+    // Another selection with the picker open: nothing to swap there, and the question back on Replace.
+    const HEX_2: PressPair = { ...MASKED, targets: [{ type: 'fixture', key: 'hex-2' }] }
+    rerender(picker({ library: 'fx', pair: HEX_2 }))
+    expect(fxPicker.mock.lastCall![0].current).toBeNull()
+    expect(within(panel()).getByRole('radio', { name: 'Replace' })).toHaveAttribute('aria-checked', 'true')
+    expect(fxPicker.mock.lastCall![0].press.stackOn('uv')).toBe(false)
+    act(() => fxPicker.mock.lastCall![0].onCurrent({ fxId: 78, fxType: 'Pulse', attribute: 'uv' }))
+    expect(fxPicker.mock.lastCall![0].current).toEqual(expect.objectContaining({ fxId: 78 }))
+
+    // Back on the first selection, its own FX is the one a tap swaps again.
+    rerender(picker({ library: 'fx', pair: MASKED }))
+    expect(fxPicker.mock.lastCall![0].current).toEqual(expect.objectContaining({ fxId: 77 }))
+  })
+
+  it('in a focused Look absorbs every FX the session started, on every selection, and a failed start forgets none', () => {
+    focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
+    const HEX_2: PressPair = { ...MASKED, targets: [{ type: 'fixture', key: 'hex-2' }] }
+    const { rerender } = render(picker({ library: 'fx', pair: MASKED }))
+    fireEvent.click(panel().querySelector('[data-fx-picker]')!)
+    rerender(picker({ library: 'fx', pair: HEX_2 }))
+    act(() => fxPicker.mock.lastCall![0].onCurrent(null))
+    act(() => fxPicker.mock.lastCall![0].onCurrent({ fxId: 78, fxType: 'Pulse', attribute: 'dimmer' }))
+    rerender(picker({ library: 'fx', pair: MASKED }))
+    expect(fxPicker.mock.lastCall![0].current).toEqual(expect.objectContaining({ fxId: 77 }))
+    rerender(picker({ library: 'fx', pair: MASKED, open: false }))
+    expect(absorb).toHaveBeenCalledTimes(1)
+    expect(absorb).toHaveBeenCalledWith({ projectId: 1, lookId: 9, fxIds: [77, 78] })
+  })
+
   it('asks from Set’s *+ FX …* band too, a door that passes nothing: the page decides', async () => {
     const { FxBand } = await import('@/components/editor/PaletteBands')
     programmerScope.value = { kind: 'local' }

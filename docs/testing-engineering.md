@@ -84,7 +84,7 @@ eagerly and does not stop it when collected, so each discarded `Show` leaked one
 
 - **Warm** (no code changed since the last run) and **cold** (any rebuild). The compiled-script
   jar cache is keyed partly on a fingerprint of the classpath, so editing any source file
-  invalidates all 30 built-in FX jars and they recompile from source, once per fork. In a normal
+  invalidates all 14 built-in FX jars and they recompile from source, once per fork. In a normal
   edit-test loop this is paid every time.
 
 Measured on 2026-10-16 (`./gradlew test --rerun`, an M-series Mac with a desk running), the two
@@ -155,7 +155,7 @@ held only on an idle machine — it failed 3 of 4 full runs and 0 of 5 runs of t
 
 FX run on the live clock too, so a test that compares channels must not compare one an
 FX is running on: an engine tick between the two reads moves it (`ProgrammerDetachTest`
-leaves out the channel its Pulse drives; see [`plans/flaky-tests.md`](plans/flaky-tests.md)).
+leaves out the channel its Pulse drives; see [`plans/flaky-tests-plan.md`](plans/flaky-tests-plan.md)).
 
 `RouteIntegrationTest` puts a 60 s `Timeout` rule on every test so a hung one fails loudly
 instead of stalling the run until the worker idle timeout (~30 min). Note that JUnit 4's
@@ -254,7 +254,7 @@ quiet while the numbers stay plausible.
 The **FX** the harness applies are load-bearing for the same reason the rigs are, and they
 live in `testsupport/TestFx.kt` rather than coming from the `FxRegistry`. FX maths runs
 inside the measured loop, so a baseline is only comparable while that maths stays put — and the
-registry's 30 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
+registry's 14 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
 `WindowedSlider`, `HueSweepColour` and `SteppedColour` are frozen copies of the retired
 `fx.effects` classes the 2026-04-22 baseline was taken against (backend-sweep item D7). Don't
 "improve" their maths, and don't repoint the harness at the registry: either silently moves every

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
@@ -687,7 +687,8 @@ describe('the Scenery table', () => {
     const trim = await screen.findByLabelText('Trim')
     fireEvent.change(trim, { target: { value: '20' } })
     fireEvent.keyDown(trim, { key: 'Enter' })
-    expect(mocks.setScenery).toHaveBeenLastCalledWith('e-cloth', { trimM: 8 }, 0)
+    // A second commit inside the sheet's 33 ms floor is held until the floor lifts.
+    await waitFor(() => expect(mocks.setScenery).toHaveBeenLastCalledWith('e-cloth', { trimM: 8 }, 0))
   })
 
   it('marks a held row with a tint and an edge in its name cell, never a ring the sticky cell cuts', () => {

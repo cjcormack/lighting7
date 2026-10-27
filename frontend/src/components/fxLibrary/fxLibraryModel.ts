@@ -130,12 +130,23 @@ export function mintForkFxId(sourceId: string, takenIds: Iterable<string>): { fx
   return uniqueFxId(`${sourceId}Custom`, takenIds)
 }
 
-/** Every id a new definition must not take — the library's and the definitions'. */
+/**
+ * The ids the desk retired, which it refuses for a definition: the terminology plan's renames, the
+ * level waves Wave replaced and the movements Path replaced (fx-settings plan D2). The desk's
+ * `LegacyNames.retiredFxIds`, pinned to it by `src/test/resources/fx/retiredFxIds.fixture.json`.
+ */
+export const RETIRED_FX_IDS: readonly string[] = [
+  'Breathe', 'Circle', 'ColourPulse', 'DimmerStrobe', 'Figure8', 'FocusPull', 'FrostPulse', 'IrisPulse',
+  'PanSweep', 'Pulse', 'Ramp', 'RampDown', 'RampUp', 'RandomPosition', 'SineWave', 'SquareWave', 'Strobe',
+  'Sweep', 'TiltSweep', 'Triangle', 'ZoomBreathe', 'ZoomWave',
+]
+
+/** Every id a new definition must not take — the library's, the definitions' and the retired ones. */
 export function takenFxIds(
   library: readonly FxLibraryEntry[],
   definitions: readonly FxDefinition[],
 ): string[] {
-  return [...library.map((e) => e.name), ...definitions.map((d) => d.fxId)]
+  return [...library.map((e) => e.name), ...definitions.map((d) => d.fxId), ...RETIRED_FX_IDS]
 }
 
 /**
@@ -170,7 +181,9 @@ export function forkRequest(
     family: entry.family,
     outputType: entry.outputType,
     fxMode: entry.fxMode,
-    parameters: entry.parameters.map((p) => ({ ...p })),
+    // A curve's options are the desk's own list, filled in by the library: a fork stores none, so it
+    // keeps following the desk's curves.
+    parameters: entry.parameters.map((p) => (p.type === 'easingCurve' ? { ...p, options: undefined } : { ...p })),
     compatibleAttributes: [...entry.compatibleAttributes],
     script: entry.script ?? '',
     timingSource: entry.timingSource ?? 'BEAT',

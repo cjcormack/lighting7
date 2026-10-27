@@ -14,7 +14,8 @@ import kotlin.test.assertTrue
  * P4 of the terminology plan: a migrated show looks the same. Each FX §4.2 rewrites — a Breathe, a
  * `pingPong` sweep over a group with a spread and runs — is run tick by tick through the engine's own
  * phase, once as the old FX on its stored fields and once as today's FX on the fields
- * [LegacyNames.rewriteFx] writes, and every head's output compared.
+ * [LegacyNames.rewriteFx] writes (and [LegacyNames.consolidateFx] after it, as the importer runs them),
+ * and every head's output compared.
  *
  * The old FX are their `.fx.kts` bodies as they were, which is why they are written out here.
  */
@@ -101,9 +102,12 @@ class LegacyFxOutputTest {
     }
 
     @Test
-    fun `a Breathe and the Sine Wave it becomes land the same levels`() {
+    fun `a Breathe and the Wave it becomes land the same levels`() {
         val stored = LegacyNames.StoredFx("Breathe", "intensity", 2.0, "NORMAL", 0.4, mapOf("min" to "20", "max" to "230"), "BACKWARD", null, 0.5)
-        val rewritten = LegacyNames.rewriteFx(stored, LegacyNames.Context({ null }, { null }, absentPingPongIsOn = true))!!.fx
+        val sine = LegacyNames.rewriteFx(stored, LegacyNames.Context({ null }, { null }, absentPingPongIsOn = true))!!.fx
+        // The importer's second step: the Sine Wave the rename writes is stored as Wave.
+        val rewritten = LegacyNames.consolidateFx(sine) { null }!!.fx
+        assertEquals("Wave", rewritten.fxType)
         val ticks = 0L until (MasterClock.TICKS_PER_BEAT * 2 * 3).toLong()
         assertSameOutput(
             run(breathe(20, 230), stored, HEADS, ticks),
@@ -121,7 +125,10 @@ class LegacyFxOutputTest {
         val stored = LegacyNames.StoredFx("Sweep", "position", 4.0, "NORMAL", 0.3, params, "FORWARD", 2, 0.75)
         val rewritten = LegacyNames.rewriteFx(stored, LegacyNames.Context({ null }, { null }, absentPingPongIsOn = true))!!.fx
         assertEquals("BOUNCE", rewritten.direction)
-        val today = registry.createFx("Sweep", rewritten.parameters)
+        // The importer's third step: the Sweep the rename writes is stored as Path.
+        val path = LegacyNames.absorbFx(rewritten) { null }!!.fx
+        assertEquals("Path", path.fxType)
+        val today = registry.createFx(path.fxType, path.parameters)
         // Past both runs and the stagger, so the hold after the last run is compared too.
         val ticks = 0L until (MasterClock.TICKS_PER_BEAT * 4 * 4).toLong()
         assertSameOutput(run(withPingPong(today), stored, HEADS, ticks), run(today, rewritten, HEADS, ticks), "Sweep")

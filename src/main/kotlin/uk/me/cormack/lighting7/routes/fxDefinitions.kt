@@ -67,7 +67,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         call.requireScriptAccess(state)
         val request = call.receive<CreateFxDefinitionRequest>()
         val currentProject = state.show.project
-        (retiredIdProblem(request.fxId) ?: LegacyNames.familyProblem(request.family))?.let {
+        (retiredIdProblem(request.fxId) ?: LegacyNames.familyProblem(request.family) ?: parametersProblem(request.parameters))?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@post
         }
@@ -157,7 +157,11 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
-        (request.fxId?.let { retiredIdProblem(it) } ?: LegacyNames.familyProblem(request.family))?.let {
+        (
+            request.fxId?.let { retiredIdProblem(it) }
+                ?: LegacyNames.familyProblem(request.family)
+                ?: request.parameters?.let { parametersProblem(it) }
+        )?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
@@ -525,14 +529,18 @@ internal fun DaoFxDefinition.toDto(): FxDefinitionDto = FxDefinitionDto(
     timingSource = this.timingSource.name,
 )
 
+/** The parameters' editor metadata refused, every problem named; null when it is sound. */
+internal fun parametersProblem(parameters: List<ParameterInfo>): String? =
+    parameterMetadataProblems(parameters).takeIf { it.isNotEmpty() }?.joinToString("; ")
+
 /**
  * Why [fxId] may not name a script FX definition, or null: a retired built-in id would return
  * with a new meaning in the field an archive's old FX use it in (terminology plan P3), and the
- * importer renames it to today's built-in.
+ * importer renames it to today's built-in; and Wave's or Path's would take the place of the FX the
+ * old ids were rewritten onto (fx-settings plan D3), in the project's registry.
  */
 internal fun retiredIdProblem(fxId: String): String? =
-    if (LegacyNames.isRetiredFxId(fxId)) {
-        "'$fxId' was a built-in FX's id and is retired; give the FX another id"
-    } else {
-        null
+    when {
+        LegacyNames.isRetiredFxId(fxId) -> "'$fxId' was a built-in FX's id and is retired; give the FX another id"
+        else -> LegacyNames.consolidatedTypeNamed(fxId)?.let { "'$fxId' is the built-in $it's id; give the FX another id" }
     }
