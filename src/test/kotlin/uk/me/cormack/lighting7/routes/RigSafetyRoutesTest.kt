@@ -270,6 +270,27 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a run is not finished until the restrike ledger holds its lamps`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        // The ledger stamps a lamp-off with the clock; make that write slow, so a run that waits only on the hold finishes first.
+        val wallClock = rig.clock
+        val slowed = java.util.concurrent.atomic.AtomicInteger()
+        rig.clock = {
+            if (Thread.currentThread().stackTrace.any { it.methodName == "commandEnded" }) {
+                slowed.incrementAndGet()
+                Thread.sleep(300)
+            }
+            wallClock()
+        }
+        client.json("projects/$projectId/rig-safe")
+        val done = awaitRunFinished()
+        assertEquals(setOf("mac1", "mac2"), done.lampsOff.map { it.fixtureKey }.toSet(), "a finished run published before the ledger heard of its lamps")
+        assertEquals(2, slowed.get(), "the ledger's write for each lamp was slowed")
+    }
+
+    @Test
     fun `a strike inside a lamp's restrike time waits, is reported, and can be cancelled`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

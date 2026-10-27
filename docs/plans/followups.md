@@ -266,8 +266,8 @@ mirrors in `store/programmerOps.ts` (`SpreadCurve`, `SpreadOver`, `SpreadRequest
 `spreadIntent.ts`, `spreadPlans.ts` and `spreadOver.ts`. Session 5 renamed the wire and left these,
 by Chris's call. Rename them to Fan in one change; the glossary's Fan row names
 `src:components/editor/SpreadPanel.tsx` and `src:lib/spreadIntent.ts` as its keys, so those move
-with the files. The fx Spread section (the spread's shape: Spread %, Wings, Segments, Parts) is a
-different thing and keeps its name.
+with the files. The FX spread's shape (*Across the heads*: Each head later by, Segments, Parts,
+Wings) is a different thing and keeps its name.
 
 ### `FU-FE-REBIND-INPLACE`
 

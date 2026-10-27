@@ -74,7 +74,10 @@ class CommandOutput(
     private val venueRefusal: () -> String? = { null },
     /** A hold began — whichever door ran it (`state/RigSafetyService.kt` clears *Ready to switch off*). */
     private val onStarted: (Running) -> Unit = {},
-    /** A hold ended, and how — where the restrike ledger learns that a lamp went off. */
+    /**
+     * A hold ended, and how — where the restrike ledger learns that a lamp went off. Called before
+     * [Running.done] completes, so whoever awaits a hold sees the ledger that follows it.
+     */
     private val onEnded: (Running, Ended) -> Unit = { _, _ -> },
 ) : ParkSource, FixturesChangeListener, TransmitModifier {
 
@@ -93,7 +96,7 @@ class CommandOutput(
         val command: ResolvedCommand,
         val startedAt: Instant,
         val endsAt: Instant,
-        /** Completes when the hold ends, with how. */
+        /** Completes when the hold ends, with how, once [onEnded] has heard of it. */
         val done: CompletableDeferred<Ended>,
     )
 
@@ -247,7 +250,6 @@ class CommandOutput(
             running.remove(fixtureKey)
             rebuildLocked()
         }
-        // The hook first: whoever awaits [Running.done] then sees what the hook recorded (the restrike ledger).
         notifyEnded(which, how)
         which.done.complete(how)
         logger.info("Command '{}' on '{}' {}", which.command.name, fixtureKey, if (how == Ended.COMPLETED) "released" else "interrupted")

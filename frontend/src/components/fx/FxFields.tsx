@@ -28,11 +28,13 @@ import { CENTRE_PARAMS } from './centreMode'
 import { FxColourPicker } from './FxColourPicker'
 import { FxColourListPicker } from './FxColourListPicker'
 import { FxPaletteListPicker, FxSlotListPicker } from './FxStepListPickers'
-import { OffsetLadder } from './OffsetLadder'
+import { HeadLadder, previewLadderHeads } from './HeadLadder'
+import { groupingSentence, laterByReadout, neighbourGap } from './acrossHeads'
 import { useFxChipSheet } from './fxChipSheet'
 import { paramPresetsOf, type ParamPresets } from './fxParamPresets'
 import { SHAPE_ICON_BOX, shapeIconPath } from './fxShapeIcons'
 import { FX_SHAPES, matchesShape, shapeOf, spreadFieldsOf, type FxShape } from './fxShapes'
+import { useFingerSized } from '../fixtureSheet/sheetContext'
 import { useFxGraphLink, type GraphMark, type MatchSource } from './fxGraphLink'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { detectExtendedChannels } from './colourUtils'
@@ -41,7 +43,6 @@ import {
   isMirroredOrder,
   orderLabel,
   spreadOffsets,
-  spreadSummary,
   MAX_SPREAD,
   MAX_SPREAD_COUNT,
   MAX_STEP_SPREAD,
@@ -164,7 +165,7 @@ export interface FxTypeSwap {
  * **Timing**, one strip of chips — Cycle, the master or Seconds, Direction, Runs; **the FX's own
  * section**, named for what it holds (*Levels*, *Colours*, *Path*, *Steps*, *Flicker*, a script
  * FX's *Parameters*), its header's FX name the type switcher ([swap]), `detail` parameters folded
- * under *More*; **Across the heads**, Over, Order and Spread, where there are heads; **Mix**, Amount
+ * under *More*; **Across the heads** (D10), where there are heads; **Mix**, Amount
  * beside the family's question; **Advanced**, Phase, *One cycle for*, the head filter and the raw
  * blend. No write of its own: [set] and [setParam] are the host's. `FxEditor` writes them live into
  * a running FX; `PaletteEditor` and the cue's FX tab keep them as a draft until it is stored, so
@@ -209,8 +210,8 @@ export function FxFields({
   /** The header's type switcher. Absent, the FX's name is drawn alone. */
   swap?: FxTypeSwap
   /**
-   * `inspector` is the FX editor's, with its wider spacing and the offset ladder from the desk's
-   * preview in place of the phase dials; `editor` is every other host's.
+   * `inspector` is the FX editor's, with its wider spacing and the head ladder from the desk's
+   * preview; `editor` is every other host's, whose ladder is `lib/spreadShape.ts`'s.
    */
   layout?: 'editor' | 'inspector'
 }) {
@@ -331,10 +332,6 @@ export function FxFields({
       }
     />
   )
-  const order = draft.order
-  const orderOptions = ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value) }))
-  // An Order this editor does not offer (a script's, a newer desk's) is still drawn, as itself.
-  if (!ORDER_OPTIONS.includes(order)) orderOptions.push({ value: order, label: orderLabel(order) })
   const across = (scope.heads || scope.elementMode) && (
     <Section label="Across the heads" gap={gap}>
       {scope.elementMode && (
@@ -358,18 +355,14 @@ export function FxFields({
         </div>
       )}
       {scope.heads && (
-        <Lights mark="starts">
-          <SelectRow label="Order" value={order} readOnly={readOnly} options={orderOptions} onChange={(next) => set(orderPatch(draft, next))} />
-        </Lights>
-      )}
-      {scope.heads && (
-        <SpreadSection
+        <AcrossHeads
           draft={draft}
           entry={entry}
           headCount={scope.headCount}
+          inSeconds={draft.seconds || (entry.timingSource ?? timingSource) === 'WALL_CLOCK'}
           readOnly={readOnly}
           set={set}
-          ladder={layout === 'inspector'}
+          fromPreview={layout === 'inspector'}
         />
       )}
     </Section>
@@ -948,38 +941,40 @@ function TimingChip({
   )
 }
 
-// ─── Spread ───────────────────────────────────────────────────────────────────────────────────
+// ─── Across the heads ─────────────────────────────────────────────────────────────────────────
 
-/** The dials a live effect draws before the rest of its heads fold into *+n* (effects plan §4.1). */
-const MAX_DIALS = 16
+/** The heads a pattern's drawing spreads at most; with no selection, eight notional. */
+const MAX_PATTERN_HEADS = 16
 
 /**
- * The Spread section (effects plan D11, §4.1; FX editor plan D11, §4.5), on a group, a selection or
- * a fixture with heads, and always on an FX palette: the **Shapes**, *Spread* %, *Wings*, *Segments*
- * and *Parts*, and what they do to the heads under the Order chosen above. Its summary line says the
- * Shape and the non-defaults: *Custom · 50 % · 2 wings*.
+ * **Across the heads** (fx-settings plan D10), on a group, a selection or a fixture with heads, and
+ * always on an FX palette, after *Over*: the **head ladder**, each head numbered by when it starts;
+ * the **patterns**, each drawn on the selection's own heads, the Order select under *Custom*;
+ * **Each head later by** — *Fit the cycle*, *1 step* on an FX with steps, or *Free* — with what it
+ * comes to between neighbours; and **Segments · Parts · Wings** with a line saying what they do.
  *
- * The desk shapes the heads (P2): this writes the four fields and the Order. What it draws of them
- * is the **offset ladder** in the FX editor's inspector ([ladder]), read from the desk's preview, and
- * elsewhere the phase dials, drawn by `lib/spreadShape.ts`, the one client copy of the rule, pinned to
- * the desk's by a shared vector. Wings are hidden under a mirrored Order (Centre out, Centre in — two
- * wings already).
+ * The desk shapes the heads (P2): this writes the fields. The ladder in the FX editor's inspector
+ * ([fromPreview]) is the desk's preview; elsewhere it, the drawings and the words come from
+ * `lib/spreadShape.ts`, the one client copy of the rule, pinned to the desk's by a shared vector.
  */
-function SpreadSection({
+function AcrossHeads({
   draft,
   entry,
   headCount,
+  inSeconds,
   readOnly,
   set,
-  ladder,
+  fromPreview,
 }: {
   draft: FxDraft
   entry: FxLibraryEntry
   headCount: number | undefined
+  /** The cycle is seconds — on *Seconds*, or a wall-clock FX — so the readout says seconds, not beats. */
+  inSeconds: boolean
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
-  /** The FX editor's inspector: the offset ladder in place of the dials. */
-  ladder: boolean
+  /** The FX editor's inspector: the ladder from the desk's preview. */
+  fromPreview: boolean
 }) {
   const link = useFxGraphLink()
   const order = draft.order
@@ -990,253 +985,385 @@ function SpreadSection({
     parts: draft.parts,
     spreadUnit: draft.spreadUnit,
   }
-  // Under STEP the spread counts the FX's own steps (fx-settings plan D6); the choice is session 6's.
-  const inSteps = draft.spreadUnit === 'STEP'
   const steps = stepCountOf(entry, draft.parameters)
-  const mirrored = isMirroredOrder(order)
-  const unison = order === 'UNIFIED'
-  const named = shapeOf(draft)
-  return (
-    <Disclosure label="Spread" summary={[named?.name ?? 'Custom', ...spreadSummary(order, shape)]}>
-      <Lights mark="starts">
-        <ShapeChips draft={draft} readOnly={readOnly} onPick={(picked) => set({ ...picked.fields })} />
+  // A group whose members have not loaded counts none: drawn on notional heads until it has.
+  const known = headCount != null && headCount > 0 ? headCount : null
+  const heads = known ?? NOTIONAL_HEADS
+  const { offsets, slots } = spreadOffsets(order, heads, shape, steps)
+  const ladder =
+    fromPreview && link != null ? (
+      <HeadLadder
+        heads={link.ladder == null ? null : previewLadderHeads(link.ladder.fx, link.ladder.rows)}
+        hoveredRow={link.hoveredRow}
+        onHoverRow={link.setLadderRow}
+      />
+    ) : (
+      <HeadLadder
+        heads={offsets.map((start, i) => ({ key: String(i), label: String(i + 1), start }))}
+        caption={known == null ? 'Drawn on eight heads' : undefined}
+      />
+    )
+  const counts = (
+    <>
+      <Lights mark="brackets">
+        <CountSegment label="Segments" value={draft.segments} min={1} readOnly={readOnly} onChange={(segments) => set({ segments })} />
       </Lights>
-      {link != null && (
-        <SameAs
-          label="Same spread as"
-          others={link.others}
-          readOnly={readOnly}
-          // An FX on one head says no Order, so its spread is the defaults and copying it would say Chase.
-          refuse={({ effect }) =>
-            effect.order == null
-              ? 'That FX runs on one head, so it has no spread to copy'
-              : effect.spreadUnit === 'STEP' && !entry.stepsFrom
-                ? 'That FX starts each head some of its steps later, and this FX has no steps'
-                : null
-          }
-          onPick={(effect) => {
-            const from = draftOf(effect)
-            set({ ...spreadFieldsOf(from), spreadUnit: from.spreadUnit })
-          }}
-        />
+      <Lights mark="brackets">
+        <CountSegment label="Parts" value={draft.parts} min={0} off={0} readOnly={readOnly} onChange={(parts) => set({ parts })} />
+      </Lights>
+      {!isMirroredOrder(order) && (
+        <Lights mark="mirror">
+          <CountSegment label="Wings" value={draft.wings} min={1} off={1} readOnly={readOnly} onChange={(wings) => set({ wings })} />
+        </Lights>
       )}
-      {unison ? (
-        <EditorReadout>Every head runs in step, so there is no spread to shape.</EditorReadout>
+      <EditorReadout>{groupingSentence(order, shape, known)}</EditorReadout>
+    </>
+  )
+  return (
+    <>
+      {ladder}
+      <Patterns draft={draft} entry={entry} heads={Math.min(heads, MAX_PATTERN_HEADS)} readOnly={readOnly} set={set} />
+      {order === 'UNIFIED' ? (
+        <EditorReadout>Every head starts together, so there is nothing to spread.</EditorReadout>
       ) : (
         <>
-          <Lights mark="starts">
-            {inSteps ? (
-              <SliderRow
-                label="Spread"
-                unit="steps"
-                value={draft.spread}
-                min={0}
-                max={MAX_STEP_SPREAD}
-                step={0.05}
-                display={(v) => Math.round(v * 100) / 100}
-                readOnly={readOnly}
-                onChange={(spread, release) => set({ spread }, release)}
-              />
-            ) : (
-              <SliderRow
-                label="Spread"
-                unit="%"
-                value={draft.spread}
-                min={0}
-                max={MAX_SPREAD}
-                step={0.01}
-                display={(v) => Math.round(v * 100)}
-                fromDisplay={(d) => d / 100}
-                displayMin={0}
-                displayMax={MAX_SPREAD * 100}
-                readOnly={readOnly}
-                onChange={(spread, release) => set({ spread }, release)}
-              />
-            )}
-          </Lights>
-          <div className="grid grid-cols-3 gap-2">
-            {mirrored ? (
-              <div className="flex flex-col gap-1">
-                <EditorLabel>Wings</EditorLabel>
-                <span className="text-[11px] text-muted-foreground" title={`${orderLabel(order)} is two wings already`}>
-                  two already
-                </span>
-              </div>
-            ) : (
-              <Lights mark="mirror">
-                <CountRow label="Wings" value={draft.wings} min={1} readOnly={readOnly} onChange={(wings) => set({ wings })} />
-              </Lights>
-            )}
-            <Lights mark="brackets">
-              <CountRow label="Segments" value={draft.segments} min={1} readOnly={readOnly} onChange={(segments) => set({ segments })} />
-            </Lights>
-            <Lights mark="brackets">
-              <CountRow label="Parts" value={draft.parts} min={0} readOnly={readOnly} onChange={(parts) => set({ parts })} />
-            </Lights>
-          </div>
-          <EditorReadout>
-            {mirrored ? '' : 'Wings mirror alternate runs · '}Segments move neighbours as one · Parts repeat the spread (0 is off)
-          </EditorReadout>
+          <LaterBy
+            draft={draft}
+            entry={entry}
+            shape={shape}
+            steps={steps}
+            gap={neighbourGap(offsets)}
+            slots={slots}
+            inSeconds={inSeconds}
+            selectionKnown={known != null}
+            readOnly={readOnly}
+            set={set}
+          />
+          {counts}
         </>
       )}
-      {ladder && link != null ? (
-        <OffsetLadder
-          ladder={link.ladder}
-          spread={draft.spread}
-          spreadUnit={draft.spreadUnit}
-          hoveredRow={link.hoveredRow}
-          onHoverRow={link.setLadderRow}
-        />
-      ) : (
-        <SpreadDials order={order} shape={shape} steps={steps} headCount={headCount} />
-      )}
-    </Disclosure>
+    </>
   )
 }
 
-/** The heads a Shape's drawing spreads — notional, since the Shape is not running yet. */
-const SHAPE_HEADS = 8
-
 /**
- * The nine Shapes (FX editor plan D11) as chips, each with a 40 × 16 drawing of its offsets over
- * eight notional heads, lit while every field matches it — else a lit *Custom* after them. A tap
- * writes all five fields at once.
- *
- * The drawings are `lib/spreadShape.ts`'s, the client's one copy of the desk's rule, used where the
- * desk has not answered (P2): a Shape is drawn before it is picked, so no preview of it exists.
+ * The nine patterns (FX editor plan D11) as chips, each with a 40 × 16 drawing of its starts over
+ * [heads], lit while its four fields match, and *Custom*, lit when none does, which opens the Order
+ * select. A tap writes the four fields at once and leaves Spread to *Each head later by*.
  */
-function ShapeChips({ draft, readOnly, onPick }: { draft: FxDraft; readOnly: boolean; onPick: (shape: FxShape) => void }) {
-  const custom = shapeOf(draft) == null
+function Patterns({
+  draft,
+  entry,
+  heads,
+  readOnly,
+  set,
+}: {
+  draft: FxDraft
+  entry: FxLibraryEntry
+  heads: number
+  readOnly: boolean
+  set: (patch: Partial<FxDraft>, release?: boolean) => void
+}) {
+  const link = useFxGraphLink()
+  // *Custom* pressed holds for the fields it was pressed on, and those its own Order select writes: a
+  // change from outside — Revert, *Same spread as*, another window — lights whichever pattern matches.
+  const [customAt, setCustomAt] = useState<string | null>(null)
+  const customOpen = customAt === patternKey(draft)
+  const custom = customOpen || shapeOf(draft) == null
+  const order = draft.order
+  const orderOptions = ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value) }))
+  // An Order this editor does not offer (a script's, a newer desk's) is still drawn, as itself.
+  if (!ORDER_OPTIONS.includes(order)) orderOptions.push({ value: order, label: orderLabel(order) })
   return (
-    <div role="group" aria-label="Shapes" className="grid grid-cols-3 gap-1">
-      {FX_SHAPES.map((shape) => {
-        const lit = matchesShape(draft, shape)
-        return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <EditorLabel>Pattern</EditorLabel>
+        <span className="flex-1" />
+        {link != null && (
+          <SameAs
+            label="Same spread as"
+            others={link.others}
+            readOnly={readOnly}
+            // An FX on one head says no Order, so its spread is the defaults and copying it would say Chase.
+            refuse={({ effect }) =>
+              effect.order == null
+                ? 'That FX runs on one head, so it has no spread to copy'
+                : effect.spreadUnit === 'STEP' && !entry.stepsFrom
+                  ? 'That FX starts each head some of its steps later, and this FX has no steps'
+                  : null
+            }
+            onPick={(effect) => {
+              setCustomAt(null)
+              set(spreadFieldsOf(draftOf(effect)))
+            }}
+          />
+        )}
+      </div>
+      <Lights mark="starts">
+        <div role="group" aria-label="Patterns" className="grid grid-cols-3 gap-1">
+          {FX_SHAPES.map((shape) => {
+            const lit = !customOpen && matchesShape(draft, shape)
+            return (
+              <button
+                key={shape.name}
+                type="button"
+                aria-pressed={lit}
+                disabled={readOnly}
+                title={`${shape.name}: sets Order, Segments, Parts and Wings`}
+                onClick={() => {
+                  setCustomAt(null)
+                  set({ ...shape.fields })
+                }}
+                className={cn(PATTERN_CLASS, lit && PATTERN_LIT_CLASS)}
+              >
+                <PatternDrawing shape={shape} heads={heads} />
+                <span className="truncate">{shape.name}</span>
+              </button>
+            )
+          })}
           <button
-            key={shape.name}
             type="button"
-            aria-pressed={lit}
+            aria-pressed={custom}
             disabled={readOnly}
-            title={`${shape.name}: sets Order, Spread, Wings, Segments and Parts`}
-            onClick={() => onPick(shape)}
-            className={cn(
-              'flex min-w-0 items-center gap-1 rounded-md border px-1 py-0.5 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50',
-              lit && 'border-primary/60 bg-primary/10 font-medium text-foreground',
-            )}
+            data-shape-custom
+            title="Any Order, with Segments, Parts and Wings set by hand"
+            onClick={() => setCustomAt(patternKey(draft))}
+            className={cn(PATTERN_CLASS, 'justify-center', custom && PATTERN_LIT_CLASS)}
           >
-            <ShapeDrawing shape={shape} />
-            <span className="truncate">{shape.name}</span>
+            Custom
           </button>
-        )
-      })}
+        </div>
+      </Lights>
       {custom && (
-        <span
-          data-shape-custom
-          title="The fields match no Shape"
-          className="flex items-center justify-center rounded-md border border-primary/60 bg-primary/10 px-1 py-0.5 text-[10.5px] font-medium"
-        >
-          Custom
-        </span>
+        <Lights mark="starts">
+          <SelectRow
+            label="Order"
+            value={order}
+            readOnly={readOnly}
+            options={orderOptions}
+            onChange={(next) => {
+              const patch = orderPatch(draft, next)
+              setCustomAt(patternKey({ ...draft, ...patch }))
+              set(patch)
+            }}
+          />
+        </Lights>
       )}
     </div>
   )
 }
 
-/** A Shape's offsets over eight notional heads: a dot a head, left to right, higher the later in the cycle. */
-function ShapeDrawing({ shape }: { shape: FxShape }) {
-  const { offsets } = spreadOffsets(shape.fields.order, SHAPE_HEADS, { ...shape.fields, spreadUnit: 'CYCLE' })
+/** The four fields a pattern sets, as one key. */
+function patternKey(d: Pick<FxDraft, 'order' | 'wings' | 'segments' | 'parts'>): string {
+  return `${d.order}|${d.wings}|${d.segments}|${d.parts}`
+}
+
+const PATTERN_CLASS =
+  'flex min-w-0 items-center gap-1 rounded-md border px-1 py-0.5 text-[10.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50'
+const PATTERN_LIT_CLASS = 'border-primary/60 bg-primary/10 font-medium text-foreground'
+
+/** A pattern's starts over [heads]: a dot a head, left to right, higher the later in the cycle. */
+function PatternDrawing({ shape, heads }: { shape: FxShape; heads: number }) {
+  const { offsets } = spreadOffsets(shape.fields.order, heads, { ...shape.fields, spread: 1, spreadUnit: 'CYCLE' })
+  const pitch = heads > 1 ? 33.5 / (heads - 1) : 0
+  const size = Math.min(2.5, Math.max(1.2, pitch * 0.8))
   return (
     <svg viewBox="0 0 40 16" width={40} height={16} aria-hidden data-shape-drawing className="shrink-0 text-primary">
       {offsets.map((o, i) => (
-        <rect key={i} x={2 + i * 4.75} y={12.5 - (((o % 1) + 1) % 1) * 11} width={2.5} height={2.5} rx={0.5} fill="currentColor" />
+        <rect
+          key={i}
+          x={heads > 1 ? 2 + i * pitch : 18.75}
+          y={12.5 - (((o % 1) + 1) % 1) * 11}
+          width={size}
+          height={2.5}
+          rx={0.5}
+          fill="currentColor"
+        />
       ))}
     </svg>
   )
 }
 
-/** A whole-number field under its label, committing on Enter — Wings, Segments, Parts. */
-function CountRow({
+/**
+ * **Each head later by** (fx-settings plan D6, D10): *Fit the cycle* (`CYCLE`, 1 — the heads share
+ * one cycle), *1 step* (`STEP`, 1 — each head one of the FX's steps behind, on an FX with steps), or
+ * *Free*, a slider in the unit the FX is on: steps under `STEP`, a share of the cycle under `CYCLE`.
+ * Under it, what that comes to between neighbours (`laterByReadout`).
+ */
+function LaterBy({
+  draft,
+  entry,
+  shape,
+  steps,
+  gap,
+  slots,
+  inSeconds,
+  selectionKnown,
+  readOnly,
+  set,
+}: {
+  draft: FxDraft
+  entry: FxLibraryEntry
+  shape: SpreadShape
+  steps: number | null
+  /** Between neighbouring starts, as a share of the cycle (`neighbourGap`). */
+  gap: number
+  slots: number
+  inSeconds: boolean
+  selectionKnown: boolean
+  readOnly: boolean
+  set: (patch: Partial<FxDraft>, release?: boolean) => void
+}) {
+  const finger = useFingerSized()
+  const stepped = !!entry.stepsFrom
+  const inSteps = draft.spreadUnit === 'STEP'
+  // *Free* holds for the spread it was pressed on and every value its slider writes, so a drag through
+  // 1 never swaps the slider out from under the pointer; a spread written from outside reads afresh.
+  const spreadKey = (spread: number) => `${spread}|${draft.spreadUnit}`
+  const [freeAt, setFreeAt] = useState<string | null>(null)
+  const snapped = draft.spread === 1 ? (inSteps ? (stepped ? 'step' : null) : 'fit') : null
+  const mode = freeAt === spreadKey(draft.spread) || snapped == null ? 'free' : snapped
+  const setFree = (spread: number, release: boolean) => {
+    setFreeAt(spreadKey(spread))
+    set({ spread }, release)
+  }
+  // Under *One cycle for: Each head* a head's cycle is the FX's times its slots (`FxPhase.memberDivision`).
+  const headCycle = draft.timing === 'HEAD' ? draft.cycle * Math.max(slots, 1) : draft.cycle
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Lights mark="starts" className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <EditorLabel>Each head later by</EditorLabel>
+          <span className="flex-1" />
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={mode}
+            disabled={readOnly}
+            aria-label="Each head later by"
+            onValueChange={(v) => {
+              if (v === 'free') setFreeAt(spreadKey(draft.spread))
+              else if (v === 'fit' || v === 'step') {
+                setFreeAt(null)
+                set({ spread: 1, spreadUnit: v === 'step' ? 'STEP' : 'CYCLE' }, true)
+              }
+            }}
+          >
+            <ToggleGroupItem value="fit" title="The heads share one cycle between them" className={cn('px-2 text-xs', finger && 'min-h-8')}>
+              Fit the cycle
+            </ToggleGroupItem>
+            {stepped && (
+              <ToggleGroupItem value="step" title="Each head one of the FX's steps behind the one before" className={cn('px-2 text-xs', finger && 'min-h-8')}>
+                1 step
+              </ToggleGroupItem>
+            )}
+            <ToggleGroupItem value="free" title="Any spread" className={cn('px-2 text-xs', finger && 'min-h-8')}>
+              Free
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        {mode === 'free' &&
+          (inSteps ? (
+            <SliderRow
+              label="Spread"
+              unit="steps"
+              value={draft.spread}
+              min={0}
+              max={MAX_STEP_SPREAD}
+              step={0.05}
+              display={(v) => Math.round(v * 100) / 100}
+              readOnly={readOnly}
+              onChange={setFree}
+            />
+          ) : (
+            <SliderRow
+              label="Spread"
+              unit="%"
+              value={draft.spread}
+              min={0}
+              max={MAX_SPREAD}
+              step={0.01}
+              display={(v) => Math.round(v * 100)}
+              fromDisplay={(d) => d / 100}
+              displayMin={0}
+              displayMax={MAX_SPREAD * 100}
+              readOnly={readOnly}
+              onChange={setFree}
+            />
+          ))}
+      </Lights>
+      <EditorReadout>
+        {laterByReadout(shape, gap, slots, steps, { value: headCycle, seconds: inSeconds }, selectionKnown)}
+      </EditorReadout>
+    </div>
+  )
+}
+
+/** The counts Segments, Parts and Wings offer before their typed count. */
+const COUNT_PRESETS = [1, 2, 3, 4] as const
+
+/**
+ * Segments, Parts or Wings as a segment — `1 · 2 · 3 · 4`, its [off] value said *off* — ending in a
+ * typed count, lit while the count is none of them (fx-settings plan D10). Keeps 32px cells on the
+ * phone host (§4).
+ */
+function CountSegment({
   label,
   value,
   min,
+  off,
   readOnly,
   onChange,
 }: {
   label: string
   value: number
   min: number
+  /** The value that turns it off — 0 for Parts, 1 for Wings — drawn as the segment's first. */
+  off?: number
   readOnly: boolean
   onChange: (value: number) => void
 }) {
+  const finger = useFingerSized()
+  const presets = off == null ? [...COUNT_PRESETS] : [off, ...COUNT_PRESETS.filter((n) => n > 1)]
+  const pressed = presets.includes(value) ? String(value) : ''
   return (
-    <div className="flex flex-col gap-1">
-      <EditorLabel>{label}</EditorLabel>
-      <SheetField
-        label={label}
-        value={value}
-        min={min}
-        max={MAX_SPREAD_COUNT}
-        step={1}
+    <div className="flex flex-wrap items-center gap-1.5">
+      <EditorLabel className="w-[64px]">{label}</EditorLabel>
+      <ToggleGroup
+        type="single"
+        size="sm"
+        value={pressed}
         disabled={readOnly}
-        className="w-full"
-        onEnter={(n) => {
-          const next = Math.round(n)
-          if (next >= min && next <= MAX_SPREAD_COUNT) onChange(next)
-        }}
-      />
-    </div>
-  )
-}
-
-/**
- * The row of phase dials (effects plan §4.1): one per head — eight notional heads on an FX
- * palette, the FX's own heads live, up to sixteen and then *+n* — each hand at the head's offset
- * through the cycle, as the desk will run it. A preview: nothing here is sent.
- */
-function SpreadDials({
-  order,
-  shape,
-  steps,
-  headCount,
-}: {
-  order: string
-  shape: SpreadShape
-  steps: number | null
-  headCount: number | undefined
-}) {
-  const heads = headCount ?? NOTIONAL_HEADS
-  const { offsets } = spreadOffsets(order, heads, shape, steps)
-  const shown = offsets.slice(0, MAX_DIALS)
-  const more = offsets.length - shown.length
-  const degrees = shown.map((o) => Math.round((((o % 1) + 1) % 1) * 360))
-  return (
-    <div className="flex flex-col gap-1">
-      <div
-        role="img"
-        aria-label={`Phase of ${heads} head${heads === 1 ? '' : 's'}: ${degrees.map((d) => `${d}°`).join(', ')}${more > 0 ? ` and ${more} more` : ''}`}
-        data-spread-dials
-        className="flex flex-wrap items-center gap-1"
+        aria-label={label}
+        onValueChange={(v) => v && onChange(Number(v))}
       >
-        {degrees.map((deg, i) => (
-          <PhaseDial key={i} degrees={deg} />
+        {presets.map((n) => (
+          <ToggleGroupItem
+            key={n}
+            value={String(n)}
+            aria-label={n === off ? `${label} off` : `${label} ${n}`}
+            className={cn('min-w-7 px-1.5 font-mono text-xs', finger && 'min-h-8 min-w-8')}
+          >
+            {n === off ? 'off' : n}
+          </ToggleGroupItem>
         ))}
-        {more > 0 && <span className="text-[11px] tabular-nums text-muted-foreground">+{more}</span>}
-      </div>
-      <EditorReadout>{headCount == null ? 'Previewed over eight heads' : `Over its ${heads} head${heads === 1 ? '' : 's'}`}</EditorReadout>
+      </ToggleGroup>
+      <TypedCell lit={pressed === ''}>
+        <SheetField
+          label={`${label} count`}
+          value={value}
+          min={min}
+          max={MAX_SPREAD_COUNT}
+          step={1}
+          disabled={readOnly}
+          className="w-[56px]"
+          onEnter={(n) => {
+            const next = Math.round(n)
+            if (next >= min && next <= MAX_SPREAD_COUNT) onChange(next)
+          }}
+        />
+      </TypedCell>
     </div>
-  )
-}
-
-/** One head's phase: a ring and a hand from the top, clockwise through the cycle. */
-function PhaseDial({ degrees }: { degrees: number }) {
-  const radians = (degrees * Math.PI) / 180
-  const x = 9 + 6 * Math.sin(radians)
-  const y = 9 - 6 * Math.cos(radians)
-  return (
-    <svg viewBox="0 0 18 18" className="size-[18px] shrink-0 text-muted-foreground" aria-hidden data-phase={degrees}>
-      <circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.5" />
-      <line x1="9" y1="9" x2={x} y2={y} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-primary" />
-    </svg>
   )
 }
 

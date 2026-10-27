@@ -920,8 +920,9 @@ desk-owned, attached to each show as it starts, like the effects service — and
   desk (`COMMAND_RUN_BUSY`); *Cancel* stops what has not started and lets a running hold finish. A
   project switch drops the run with the show.
 - **The restrike ledger** records when each unit's lamp went off — from every door, a single command
-  and MCP's included, through `CommandOutput`'s end hook (run before anything awaiting the hold hears
-  it ended), a hold that ran its full time only — and a strike that runs its time clears it. A strike
+  and MCP's included, through `CommandOutput`'s end hook, a hold that ran its full time only — and a
+  strike that runs its time clears it. The hook runs before the hold's `done` completes, so a run
+  that waits on its holds, and a single command's answer, already see the ledger they leave. A strike
   also marks its lamp **struck** as it starts, however it ends, and only a lamp-off that runs its time
   clears the mark (and restarts that lamp's off time); a strike cut short keeps its lamp's restrike
   time but leaves it struck. Runtime only: a restart forgets both.

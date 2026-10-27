@@ -225,7 +225,7 @@ describe('fxEditorModel', () => {
     const heads = (key: string, n: number) => Array.from({ length: n }, (_, i) => ({ key: `${key}.pixel-${i}`, attributes: dimmer }))
     const bar = { key: 'bar', attributes: [], elements: heads('bar', 12) }
     const strip = { key: 'strip', attributes: [], elements: heads('strip', 4) }
-    // Every unit a member: one dial each, a repeat counted once.
+    // Every unit a member: one head each, a repeat counted once.
     expect(selectionHeadCount([par('p1'), par('p2'), par('p3'), par('p1')], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(3)
     // Every unit its heads: as a group of bars — each bar its own run, or one strip.
     expect(selectionHeadCount([bar, strip], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
@@ -243,7 +243,7 @@ describe('fxEditorModel', () => {
     expect(selectionHeadCount([par('p1'), { key: 'x', attributes: [] }], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
   })
 
-  it('counts a live effect\'s heads for the dials as the desk distributes them', () => {
+  it('counts a live effect\'s heads as the desk distributes them', () => {
     const bar = { elements: Array.from({ length: 12 }) }
     const par = { elements: null }
     expect(spreadHeadCount([par, par, par], true, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(3)
@@ -259,7 +259,7 @@ describe('fxEditorModel', () => {
 
   it('counts a fixture that carries the property itself once, whatever heads it has (the desk\'s DIRECT_FIXTURE)', () => {
     // A Slender 14ch: a master dimmer on the fixture, four cells beneath. A Pulse on the master runs
-    // once on the desk — one dial, not four — and a group of three such bars runs three members.
+    // once on the desk — one head, not four — and a group of three such bars runs three members.
     const slender = { attributes: [{ name: 'dimmer', type: 'slider' }], elements: Array.from({ length: 4 }) }
     expect(spreadHeadCount([slender], false, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
     expect(spreadHeadCount([slender, slender, slender], true, 'dimmer', 'FLAT', 'ALL')).toBe(3)

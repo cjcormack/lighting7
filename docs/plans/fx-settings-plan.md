@@ -150,8 +150,8 @@ is titled *FX settings: session N — title*. Never merge a later session's PR b
 | 2 | Wave: one FX for the level waves | merged | `claude/fx-settings-s2` | [#302](https://github.com/cjcormack/lighting7/pull/302) | `5ad80802` |
 | 3 | Colour Cycle and Path absorb their siblings | merged | `claude/fx-settings-s3` | [#304](https://github.com/cjcormack/lighting7/pull/304) | `01b2f45a` |
 | 4 | Each head later by: spread in steps, and Width one head | merged | `claude/fx-settings-s4` | [#305](https://github.com/cjcormack/lighting7/pull/305) | `f64856a1` |
-| 5 | The inspector in four questions | in review | `claude/fx-settings-s5` | | |
-| 6 | Across the heads | planned | | | |
+| 5 | The inspector in four questions | merged | `claude/fx-settings-s5` | [#306](https://github.com/cjcormack/lighting7/pull/306) | `934a5aba` |
+| 6 | Across the heads | in review | `claude/fx-settings-s6` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -459,6 +459,35 @@ the next; whoever merges the last fills its own.
   `FxGraph.test.tsx` (the knob's words under `STEP`).
 - **Docs:** `frontend/CLAUDE.md`, the Spread section's bullet rewritten; `docs/glossary.md` (*Each
   head later by* on screen for the Spread row).
+
+- **What landed, and where it differs from the above:**
+  - **A pattern is four fields, not five.** With *Each head later by* its own question, a pattern writes
+    Order, Wings, Segments and Parts and leaves Spread and its unit alone, and is lit on those four;
+    otherwise picking *Back* on a Free 50 % chase would reset it to 100 %. *Same spread as* still
+    copies all of them with the unit.
+  - ***Custom* is a chip of its own**, after the nine: lit when no pattern matches, and pressed to open
+    the Order select, so an Order no pattern names (Position, Ping-pong) is still one tap away.
+  - ***Free* is a slider in the unit the FX is on** — steps under `STEP`, a percentage of the cycle
+    under `CYCLE` — with no unit switch inside it: converting between the two needs the head count,
+    which a palette does not have. A step FX reaches a free count of steps through *1 step*, then
+    *Free*.
+  - **The readout** says the offset between neighbours in cycles, steps (where the FX has them), beats
+    (seconds on *Seconds* or the wall clock) and degrees; the spread the desk runs only under `STEP` on
+    known heads, since under `CYCLE` it is the value itself and on a palette it depends on heads it has
+    not got. A group whose members have not loaded (a head count of 0) is drawn on eight heads.
+  - **The five-row offset ladder went whole** (`OffsetLadder.tsx`): the head ladder in the inspector
+    reads the preview's `ladder.spread`, and what each of Segments, Wings and Parts does is the line
+    under them. `spreadSummary` went with the Spread fold it summarised.
+  - **The readout reads the gap off the starts** (`neighbourGap`): the smallest gap between distinct
+    offsets, so Position's ends and every shaping read as the ladder draws them, and the graph knob
+    reads the preview's own offsets. Under *One cycle for: Each head* its beats are a head's cycle (the
+    FX's times its slots, as `FxPhase.memberDivision` runs it).
+  - **The inspector's ladder is in rig order**: the preview's rows come in the FX's Order, so they are
+    sorted back by `rigIndex`; otherwise Back would read as Chase.
+  - ***Custom* and *Free* hold for the fields they were pressed on** and what their own controls write,
+    so Revert or another window's write lights what the fields now say, and a Free drag through 1 keeps
+    its slider.
+  - **Under Unison** only the ladder and the patterns show. No backend change.
 
 ## 6. Migration
 
