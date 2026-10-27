@@ -46,7 +46,6 @@ The plan's own rules:
 
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
-| `RigSafetyRoutesTest` "output during the cool-down drops it, and making safe again keeps each lamp's cool time", "each lamp still says when its mains can be cut" | local `./gradlew :test --tests 'uk.me.cormack.lighting7.routes.*'` (with six other packages) on `claude/fx-settings-s2` before its first commit (2026-10-26, Linux cloud container), 1 of 1 package runs; passes alone, 14 of 14 | Not traced. Seen on a commit without session 2's fix (9dc4e15), which stopped a run being published finished before its end was acted on; that race may be the cause, but these cases were not run against the fix | |
 
 ## 4. Fixed
 
@@ -54,6 +53,7 @@ The plan's own rules:
 
 | Test | Fixed in | What it was |
 |---|---|---|
+| `RigSafetyRoutesTest` "output during the cool-down drops it, and making safe again keeps each lamp's cool time", at its assertion "each lamp still says when its mains can be cut" | session 5 | Seen locally running the `routes` package with six others on `claude/fx-settings-s2` before its first commit (2026-10-26, Linux cloud container), 1 of 1 package runs; 14 of 14 alone. Traced, a code race (D3): `CommandOutput` completed a hold's `done` before its end hook told the restrike ledger, so a *Make rig safe* run could finish, and the test move its clock 240 s on, before the ledger stamped a lamp's off time from that clock. The hook now runs first. "a run is not finished until the restrike ledger holds its lamps" forces the gap: it failed 5 of 5 runs on main |
 | `ProjectActionPlaces.test.tsx` (frontend), *for a show behind its venue*: `Test timed out in 5000ms` | session 4 | Seen locally in a full `npm run check` on `claude/fx-editor-followups-s2` (2026-10-26, Linux cloud container, a backend suite and two review agents running beside it), 1 of 1; passed alone. Traced: load on a synchronous case that rendered three surfaces (the Projects card, the home's ⋮ and ⌘K), about 0.5 s alone and 0.8 s for the file's cold first case. Vitest fails a synchronous test that returns after its 5 s. Pinned to one core beside six busy loops, the first case timed out in 5 of 5 runs on main, at 7.5 to 8.5 s. Each case is now one test per place, each comparing that place's actions with the set written out, so no test renders more than once |
 | `errorToastMiddleware.test.ts` (frontend) "only names endpoints that actually exist", a 5005 ms timeout | session 4 | Seen locally in a full `npm run check` on `claude/colour-everywhere-else` (2026-10-19), 1 of 2 full runs, at a load average of ~8; 10 of 10 alone. Traced: the test imported 33 store modules to fill `restApi.endpoints`, about 0.9 s alone, and two of them were most of it: `oauthGithub` imports the navigation tree (350 ms) and `cues` the app store (278 ms). Pinned as above, it timed out in 5 of 5 runs on main. It now reads the endpoint names from the store modules' source (`name: build.query(…)` or `build.mutation(…)`) and imports none; that read gives exactly the 315 endpoints `restApi` holds with every store module loaded |
 | `PatchSheet.test.tsx` (frontend) "opens the ten swatches on Set and picks one; the same colour again sends nothing" and the Gel column's "takes the first match on Enter, and Open white clears a gel", and `AppliedTables.test.tsx` (frontend) "the Scenery table > draws Open only on a drawn drape…": the second write not yet sent when asserted | session 3 | Seen locally: PatchSheet's swatch case 4 of 4 runs of the file on 500dc85 (2026-10-23, macOS), AppliedTables every run of the file on b6964df and `claude/terminology-s3` (2026-10-23); PatchSheet passed in that commit's CI run, AppliedTables alone and in a full `npm run check`. The Gel case was never seen failing; it makes the same two commits, and the forcing below found it with the other two. Traced: no popover was left open, and nothing a case leaves behind reaches the next. `useSheet` sends every commit from a cell's editor through `useLivePush` with a 33 ms floor, so a second commit within 33 ms of the first is held on a timer and lands when the floor lifts. Each case makes two commits and asserted the second one synchronously, which holds only on a machine slow enough to take 33 ms between them. That the Mac running PatchSheet's file was fast enough to fail, and CI and a full run were not, is inferred rather than measured, and so is why the swatch case passed alone there (a cold first case is slower). The writes were never lost, so the tests were wrong (D3): each asserts its second write through `waitFor`. Freezing `Date.now` for `useLivePush` alone forces it: the three cases failed every run on the base, and nothing else in the frontend suite failed |
@@ -85,7 +85,8 @@ A session's PR is titled *Flaky tests: session N — title*.
 | 1 | The jsdom teardown frame | merged | `claude/flaky-tests-s1` | [#298](https://github.com/cjcormack/lighting7/pull/298) | c29dd54 |
 | 2 | Rig safety's timing | merged | `claude/flaky-tests-s2` | [#300](https://github.com/cjcormack/lighting7/pull/300) | 9dc4e15 |
 | 3 | The sheet's commit floor | merged | `claude/flaky-tests-s3` | [#301](https://github.com/cjcormack/lighting7/pull/301) | 5194d0d |
-| 4 | Timeouts under load | in review | `claude/flaky-tests-s4` | | |
+| 4 | Timeouts under load | merged | `claude/flaky-tests-s4` | [#303](https://github.com/cjcormack/lighting7/pull/303) | f932c5d |
+| 5 | The ledger after the clock moves | in review | `claude/flaky-tests-s5` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -239,6 +240,60 @@ Rows: `ProjectActionPlaces.test.tsx` and `errorToastMiddleware.test.ts`.
   render, which every jsdom file pays, is most of the 5 s, and splitting cannot cut it. `./gradlew
   test` was not run beside it; the pinned loops stood in for it.
 
+### Session 5 — The ledger after the clock moves
+
+Rows: the `RigSafetyRoutesTest` cool-down row. It is one test; "each lamp still says when its mains
+can be cut" is its assertion message, not a second case.
+
+- **What is there (read, not reproduced).** `CommandOutput.finish` completes a hold's `done` and
+  only then calls `onEnded`, the hook through which `RigSafetyService.commandEnded` writes a
+  lamp-off into the restrike ledger (`lampOffs`) at `clock()`. The bulk run waits on `done`, so
+  *Make rig safe*'s end, which sets `coolUntilMs` from `now + coolDownMs`, can run before the
+  ledger has a lamp's row, and the test's `awaitSnapshot("cooling")` can return then. The test then
+  moves the clock to `t0 + 240_000`. A ledger write after that records `offAtMs = t0 + 240_000`, so
+  that lamp's `coolRemainingMs` is 600 000 rather than 360 000, and the case's last
+  `again.lampsOff.all { it.offAtMs == t0 }` would fail the same way. `makeSafe` already allows for
+  the lag ("This run's lamp-offs may end before the ledger hears of them"); the test does not.
+- **Reproduce (D2).** A delay between `done.complete` and `onEnded`, injected while diagnosing,
+  should fail the case on every run. If it does not, the trace is wrong: record what was tried in
+  the row and look again. Then write a forcing test that holds the ledger write back through a seam,
+  as session 2's test did with `safeBlackout`, and check that it fails on `main`.
+- **Code or test (D3).** Decide whether a window can meet the gap. `rigSafety.state` can carry a
+  finished, cooling *Make rig safe* with a lamp missing from `lampsOff`, and the Rig safety panel's
+  per-lamp countdown reads `lampsOff`. If that frame reaches a client, this is D3's code case, as
+  session 2's was. One fix is for the ledger to hear of a hold's end before `done` completes; only
+  `Show` wires `onEnded`, but check what else awaits `done`. Another is for the run's end to wait for
+  the ledger. If only a test can see the gap, because only a test jumps the clock, fix the test: wait
+  until the ledger holds both lamps before moving `rig.clock`. Either way, check the class's other
+  cases that move `rig.clock` after an await ("made safe, the rig is cooling…", "undo strikes the
+  lamps…", "a strike inside a lamp's restrike time…") for the same gap.
+- **Tests.** The class and the `routes` package locally; the full suite is CI's.
+- **Recipe for D5.** The class 20 times under an 8-process CPU soak, plus the forcing test, and the
+  `routes` package run that failed it if the time allows.
+- **Docs.** `docs/fixtures-engineering.md` §"Bulk commands and Make rig safe", if the ledger's order
+  changes.
+- **Result (2026-10-27, Linux cloud container, 4 cores).** The trace held, and it is D3's code case.
+  A 300 ms sleep between `done.complete` and `onEnded` failed 4 of the class's 15 cases on main. This
+  row's case was one of them. With both ledger writes late, `lampsOff` was still empty when "each
+  lamp still says…" ran, so that check passed vacuously and the case failed on the next assertion,
+  "the lamps were already off and cooling" (`t0 + 840 000` for `t0 + 600 000`). The row's failure,
+  at "each lamp still says…", needs one write late and one in time. Of the three cases the section
+  guessed, only "a strike inside a lamp's restrike time waits…" failed; "made safe, the rig is
+  cooling…" and "undo strikes the lamps…" did not. Two it did not guess failed too: "make rig safe
+  lamps off every lamped unit…" (`lampsOff` empty) and "a selection's run is ready when the lamps
+  outside it are already off…". That case and the strike case each waited out their 5 s, since the
+  ledger did not yet hold the lamps the run reads. A client meets the same gap: a `rigSafety.state` with *Make rig safe*
+  finished could miss a lamp from `lampsOff`, and the single command's answer could come back before
+  the ledger knew of it. `CommandOutput` now calls `onEnded` before it completes `done`, on all three
+  ways a hold ends, so anything that awaits a hold sees the ledger that follows it. `makeSafe` still
+  counts this run's lamps from its end as well, and its comment now says that this covers a lamp the
+  ledger missed. "a run is not finished until the restrike ledger holds its lamps" forces the gap by
+  slowing the ledger's clock read while `commandEnded` is on the stack, and fails 5 of 5 runs on
+  main.
+- **D5.** The class, including the new test, 20 times under an 8-process CPU soak (load 4 to 11):
+  20 of 20 passed. The `routes` package run that first failed it was not repeated under load; the
+  soak stood in for it.
+
 ## 6. Adding a session
 
 To queue a fix for open rows that no session has taken:
@@ -251,6 +306,10 @@ To queue a fix for open rows that no session has taken:
 Group rows that probably share a cause into one session. A row whose cause is unknown can be a
 session of its own. Do this on a branch and merge it like any other change, so that `/next-session`
 finds it on `main`.
+
+`/next-session` does this itself when every session has merged and an Open row has no session: it
+drafts the next session on that session's own branch, then runs it, so the section and the fix
+land in one PR.
 
 ## 7. Explicitly out of scope
 
