@@ -379,7 +379,8 @@ private val groupEditSchema = objectSchema(required = listOf("name")) {
     stringListProp(
         "members",
         "The group's whole membership, in order — fixture keys from get_patch. Members not listed leave the group; the fixtures stay patched. " +
-            "Order is how a group's FX and fans run across it. Not with add or remove.",
+            "Order is how a group's FX and fans run across it. Not with add or remove. " +
+            "On a show on a venue, a venue group takes only its own fixtures in another order: this show's order of it.",
     )
     stringListProp("add", "Fixture keys to append to the group, in order. One already in it is left where it is.")
     stringListProp("remove", "Fixture keys to take out of the group. The fixtures stay patched.")
@@ -394,7 +395,8 @@ internal val editGroupsTool = ToolDef(
     name = "edit_groups",
     description = "Change a project's fixture groups (the current one unless projectId names another): take fixtures out of a group, set its whole membership and order, append to it, rename it, or make a new one. " +
         "patch_fixtures only ever adds a fixture to a group; this is how one leaves. delete_groups deletes a group. " +
-        "On a show on a venue only the show's own groups can be edited (a show's group may hold the venue's fixtures); a venue group is the venue's. " +
+        "On a show on a venue only the show's own groups can be edited (a show's group may hold the venue's fixtures); a venue group is the venue's, " +
+        "except that a row sending only colour recolours it for this show, and one sending members as the same fixtures in another order is this show's order of it (members in the venue's order takes the venue's back). " +
         "On the current project a renamed group's cues and Looks already running are recomposed under the new name; the programmer's own values and FX already running are not. " +
         "Everything is checked first and nothing is written if any row fails; dryRun answers what would change.",
     inputSchema = objectSchema(required = listOf("groups")) {

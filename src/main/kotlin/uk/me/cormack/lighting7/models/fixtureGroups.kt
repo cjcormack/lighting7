@@ -59,16 +59,17 @@ class DaoFixtureGroupMember(id: EntityID<Int>) : IntEntity(id) {
  * order given, the places the members named held; a member not named **keeps its place** — a venue
  * patch the show hides, which no view of the show lists, or an infrastructure head the Groups views
  * leave out — so a view reorders what it shows without knowing what it doesn't. An id that is not a
- * member, and a repeat, are ignored. Ties in a stored order are broken by row id, the order they
- * were added in.
+ * member, and a repeat, are ignored ([GroupOrder.merge]).
  */
 fun reorderGroupMembers(group: DaoFixtureGroup, ordered: List<Int>) {
-    val all = group.members.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
-    val byPatch = all.associateBy { it.readValues[DaoFixtureGroupMembers.fixturePatch].value }
-    val named = ordered.distinct().mapNotNull { byPatch[it] }
-    val namedSet = named.toSet()
-    val next = named.iterator()
-    all.map { if (it in namedSet) next.next() else it }.forEachIndexed { i, member ->
+    GroupOrder.merge(storedMemberOrder(group.members), ordered) { it.patchId }.forEachIndexed { i, member ->
         if (member.sortOrder != i) member.sortOrder = i
     }
 }
+
+/** [members] in their stored order, ties broken by row id: the order they were added in. */
+fun storedMemberOrder(members: Iterable<DaoFixtureGroupMember>): List<DaoFixtureGroupMember> =
+    members.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+
+/** The member's patch id, read without loading the patch. */
+val DaoFixtureGroupMember.patchId: Int get() = readValues[DaoFixtureGroupMembers.fixturePatch].value

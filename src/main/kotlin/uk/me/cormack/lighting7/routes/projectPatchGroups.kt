@@ -72,15 +72,23 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
                 return@withProject
             }
             val colourOnly = ShowColours.isRecolour(body.keys)
+            val orderSent = ShowGroupOrders.FIELD in body
+            // A venue group in a show takes the show's recolour (tables-colours plan D10) and its order
+            // (group-order plan D5), and nothing else.
+            val showLayerOnly = (colourSent || orderSent) &&
+                body.keys.all { it == FixtureColours.FIELD || it == ShowGroupOrders.FIELD }
             val result = transaction(state.database) {
                 val rig = RigScope.of(project)
                 val found = DaoFixtureGroup.findById(resource.groupId)
-                // A venue group in a show takes the show's recolour (tables-colours plan D10), and nothing else.
-                if (found != null && colourOnly && rig.ownerOf(found.project.id) == RigOwner.VENUE &&
+                if (found != null && showLayerOnly && rig.ownerOf(found.project.id) == RigOwner.VENUE &&
                     !rig.isHidden(HideKind.GROUP, found.uuid)
                 ) {
-                    ShowColours.put(project.id, found.uuid, colour)
-                    return@transaction Pair<PatchGroupDetailDto?, String?>(found.toDetailDto(rig), null)
+                    if (colourSent) ShowColours.put(project.id, found.uuid, colour)
+                    if (orderSent) {
+                        val byPatch = rig.members(found).associateBy { it.patchId }
+                        ShowGroupOrders.reorder(rig, found, request.memberOrder?.mapNotNull { byPatch[it] })
+                    }
+                    return@transaction Pair<PatchGroupDetailDto?, String?>(found.toDetailDto(RigScope.of(project)), null)
                 }
                 val group = VenueRigGuard.ownForWrite(
                     rig, found, { it.project.id }, { "Group '${it.name}'" },
@@ -121,8 +129,8 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
                 }
             }
             state.show.fixtures.patchListChanged()
-            // A busk rig tile embeds its group's colour.
-            if (colourSent) state.show.fixtures.buskRigChanged()
+            // A busk rig tile embeds its group's colour and member order.
+            if (colourSent || orderSent) state.show.fixtures.buskRigChanged()
 
             call.respond(groupDto!!)
         }
@@ -187,6 +195,8 @@ data class PatchGroupDto(
     val colour: String? = null,
     /** On a venue group in a show: whether [colour] is the show's recolour or the venue's own. Null otherwise. */
     val colourOwner: ColourOwner? = null,
+    /** On a venue group in a show: whether its member order is the show's or the venue's (group-order plan D8). */
+    val orderOwner: OrderOwner? = null,
 )
 
 @Serializable
@@ -197,6 +207,7 @@ data class PatchGroupDetailDto(
     val owner: RigOwner = RigOwner.SHOW,
     val colour: String? = null,
     val colourOwner: ColourOwner? = null,
+    val orderOwner: OrderOwner? = null,
 )
 
 @Serializable
@@ -205,6 +216,7 @@ data class PatchGroupMemberDto(
     val fixtureKey: String,
     val fixtureName: String,
     val fixtureTypeKey: String,
+    /** The member's place in the group's effective order, `0…n−1`. */
     val sortOrder: Int,
 )
 
@@ -213,7 +225,9 @@ data class UpdatePatchGroupRequest(
     val name: String? = null,
     /**
      * Patch ids in the order wanted. The members named take the places the members named held, so
-     * a member left out — a venue patch the show hides — keeps its own ([reorderGroupMembers]).
+     * a member left out — a venue patch the show hides — keeps its own ([reorderGroupMembers]). On a
+     * venue group in a show, a body naming only this (and `colour`) is the show's order of it, and an
+     * explicit null takes the venue's back (group-order plan D5).
      */
     val memberOrder: List<Int>? = null,
     /**
@@ -227,10 +241,11 @@ data class UpdatePatchGroupRequest(
 private fun DaoFixtureGroup.toSummaryDto(rig: RigScope) = PatchGroupDto(
     id = id.value,
     name = name,
-    memberCount = rig.members(this).count().toInt(),
+    memberCount = rig.members(this).size,
     owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
     colour = rig.colourOf(this),
     colourOwner = rig.colourOwnerOf(project.id, uuid),
+    orderOwner = rig.orderOwnerOf(project.id, uuid),
 )
 
 private fun DaoFixtureGroup.toDetailDto(rig: RigScope) = PatchGroupDetailDto(
@@ -239,13 +254,14 @@ private fun DaoFixtureGroup.toDetailDto(rig: RigScope) = PatchGroupDetailDto(
     owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
     colour = rig.colourOf(this),
     colourOwner = rig.colourOwnerOf(project.id, uuid),
-    members = rig.members(this)
-        .sortedBy { it.sortOrder }
-        .map { PatchGroupMemberDto(
+    orderOwner = rig.orderOwnerOf(project.id, uuid),
+    members = rig.members(this).mapIndexed { i, it ->
+        PatchGroupMemberDto(
             patchId = it.fixturePatch.id.value,
             fixtureKey = it.fixturePatch.key,
             fixtureName = it.fixturePatch.displayName,
             fixtureTypeKey = it.fixturePatch.fixtureTypeKey,
-            sortOrder = it.sortOrder,
-        ) },
+            sortOrder = i,
+        )
+    },
 )

@@ -170,8 +170,9 @@ data class GroupSummaryDto(
     val symmetricMode: String,
     val defaultOrder: String,
     /**
-     * Every member's key in the group's order (`sort_order`, venue-visit plan S7) — the order its
-     * effects and a spread over it run in, which the Groups list draws its member rows in.
+     * Every member's key in the group's order (venue-visit plan S7; a show's own order of a venue group,
+     * group-order plan D4) — the order its effects and a spread over it run in, which the Groups list draws
+     * its member rows in.
      */
     val memberKeys: List<String> = emptyList(),
     /**

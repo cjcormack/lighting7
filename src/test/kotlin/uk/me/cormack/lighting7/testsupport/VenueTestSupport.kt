@@ -9,6 +9,8 @@ import uk.me.cormack.lighting7.models.DaoShowParkRelease
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.ShowColours
+import uk.me.cormack.lighting7.models.ShowGroupOrders
+import uk.me.cormack.lighting7.models.storedMemberOrder
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoRiggings
@@ -79,7 +81,8 @@ fun seedVenueReadyShow(state: State): Int {
  * **overrides** three facets of one venue patch, every value non-default so canonical JSON carries it:
  * its Address (start channel 470 on the venue's universe 0), its Position (hung on the show's own
  * "Panto boom SR" — a show-owned rigging, so a clone must remap the value's rigging uuid) and its Media
- * (gel L202).
+ * (gel L202). It recolours a venue patch and group, and (group-order plan session 1) chases the venue's
+ * front-wash in the reverse of the venue's order.
  */
 data class VenueShowFixture(
     val showId: Int,
@@ -109,8 +112,13 @@ fun seedShowOnVenue(state: State): VenueShowFixture {
         val show = DaoProject[showId]
         val snapshot = RigScope.of(show).venue!!.snapshotId
         // The first venue record the show does not use, tried kind by kind through the same rule the
-        // route applies (`VENUE_HIDE_IN_USE`), so the hide is one an operator could make.
-        val candidates = DaoFixturePatch.find { DaoFixturePatches.project eq snapshot }.map { HideKind.PATCH to it.uuid } +
+        // route applies (`VENUE_HIDE_IN_USE`), so the hide is one an operator could make. Never a member of
+        // front-wash, whose order the show chases below: hiding one would leave that order nothing to do.
+        val frontWash = DaoFixtureGroup.find {
+            (DaoFixtureGroups.project eq snapshot) and (DaoFixtureGroups.name eq "front-wash")
+        }.single().members.map { it.fixturePatch.uuid }.toSet()
+        val candidates = DaoFixturePatch.find { DaoFixturePatches.project eq snapshot }
+            .filter { it.uuid !in frontWash }.map { HideKind.PATCH to it.uuid } +
             DaoRigging.find { DaoRiggings.project eq snapshot }.map { HideKind.RIGGING to it.uuid } +
             DaoStageRegion.find { DaoStageRegions.project eq snapshot }.map { HideKind.REGION to it.uuid } +
             DaoStageViewpoint.find { DaoStageViewpoints.project eq snapshot }.map { HideKind.VIEWPOINT to it.uuid }
@@ -188,6 +196,12 @@ fun seedShowOnVenue(state: State): VenueShowFixture {
         val venueGroup = DaoFixtureGroup.find { DaoFixtureGroups.project eq target.venue.snapshotId }
             .orderBy(DaoFixtureGroups.name to org.jetbrains.exposed.v1.core.SortOrder.ASC).first()
         ShowColours.put(show.id, venueGroup.uuid, "cyan")
+        // A show's order of a venue group (formatVersion 44): front-wash chased the other way.
+        val frontWash = DaoFixtureGroup.find {
+            (DaoFixtureGroups.project eq target.venue.snapshotId) and (DaoFixtureGroups.name eq "front-wash")
+        }.single()
+        val venueOrder = storedMemberOrder(frontWash.members).map { it.fixturePatch.uuid }
+        ShowGroupOrders.put(show.id, frontWash.uuid, venueOrder.reversed(), venueOrder)
         target.patch.uuid to boom.uuid
     }
     // Venue parks (formatVersion 27): the rich project's three parks moved into the venue with the

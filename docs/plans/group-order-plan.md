@@ -1,6 +1,6 @@
 # A show's order for a venue group
 
-> **Document status: READY — calls decided 2026-10-27 (§3).** No session has started.
+> **Document status: READY — calls decided 2026-10-27 (§3).** Session 1 in review.
 
 ## 1. Context
 
@@ -123,7 +123,7 @@ session's PR is titled *Group order: session N — title*. Never merge session 2
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The overlay on the desk | planned | | | |
+| 1 | The overlay on the desk | in review | claude/zealous-fermi-lcmwzb | | |
 | 2 | The sheets and the reviews | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -150,6 +150,21 @@ the next; whoever merges the last fills its own.
 - Docs: `docs/groups-engineering.md` §"Member order", `docs/fixtures-engineering.md` §"Shows on a
   venue", `docs/sync-engineering.md` §"Version 44", the root `CLAUDE.md`'s venue paragraph.
 - Run the full suites locally: a `formatVersion` bump.
+
+**Where session 1 followed the code over the plan.**
+
+- `describe_rig` is `ai/RigBriefing.kt`; `ai/SetupTools.kt` line 440 (D4) is `get_patch`. Both read
+  the effective order: the briefing lists each group's members in it and marks a show-ordered group
+  `order=show`, and `get_patch` answers `showOrderedGroups` beside `groups` (D13).
+- `minReader` was already 43 (fx-settings plan session 4), not 5, and stays 43 (D9).
+- `RichProjectFixture` is a standalone show and cannot hold an overlay. As for the hides, overrides and
+  recolours, `seedShowOnVenue` holds it (front-wash in the reverse of the venue's order), which is what
+  `SyncCoverageTest`, the clone tests and the Detach→Attach round trip read.
+- Update's `order:` decisions are their own list, `VenueUpdateDto.orders` (`UpdateOrderDto`: the group,
+  `mine` and `venue` by key, the answer), answered like drift. `UpdateDriftDto` is shaped for a facet.
+- Detach answers `ordersApplied` beside `coloursApplied` (D10).
+- Attach judges an order-only pair's order on the members the show and the origin share (§4), so a
+  member both sides added does not count as the show reordering.
 
 ### Session 2 — The sheets and the reviews
 

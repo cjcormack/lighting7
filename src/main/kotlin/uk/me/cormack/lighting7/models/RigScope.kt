@@ -248,15 +248,49 @@ class RigScope private constructor(
         DaoFixtureGroup.find(scoped(DaoFixtureGroups.project, DaoFixtureGroups.uuid, HideKind.GROUP, where))
 
     /**
-     * [group]'s members, as the rig sees them: less any venue patch the show hides, which a venue
-     * group (and a show group) may still hold. The group must come from this scope.
+     * [group]'s members as the rig sees them, in its **effective order** (group-order plan D4): less any
+     * venue patch the show hides, which a venue group (and a show group) may still hold, in stored order —
+     * with the show's order merged over it on a venue group the show orders ([GroupOrder.merge]). A
+     * member's place in this list is its index; read the order here, never off `sortOrder`. The group
+     * must come from this scope.
      */
-    fun members(group: DaoFixtureGroup): SizedIterable<DaoFixtureGroupMember> {
+    fun members(group: DaoFixtureGroup): List<DaoFixtureGroupMember> {
+        val stored = venueOrder(group)
+        val wanted = orderOf(group) ?: return stored
+        return GroupOrder.merge(stored, wanted) { it.fixturePatch.uuid }
+    }
+
+    /**
+     * [group]'s members in its own stored order, less the patches the show hides: the venue's order as
+     * the show sees it, for a venue group — what the show's order is merged over, and compared with.
+     */
+    fun venueOrder(group: DaoFixtureGroup): List<DaoFixtureGroupMember> {
         val hidden = venue?.hiddenPatchIds.orEmpty()
-        if (hidden.isEmpty()) return group.members
-        return DaoFixtureGroupMember.find {
+        if (hidden.isEmpty()) return storedMemberOrder(group.members)
+        return storedMemberOrder(DaoFixtureGroupMember.find {
             (DaoFixtureGroupMembers.group eq group.id) and (DaoFixtureGroupMembers.fixturePatch notInList hidden)
-        }
+        })
+    }
+
+    /**
+     * The show's orders of venue groups (group-order plan D2), by group uuid: venue patch uuids. Empty for
+     * [own], a standalone show, a venue and a version.
+     */
+    val groupOrders: Map<UUID, List<UUID>> by lazy {
+        if (venue == null) return@lazy emptyMap()
+        DaoShowGroupOrder.find { DaoShowGroupOrders.project eq projectId }
+            .associate { it.groupUuid to ShowGroupOrders.decode(it.members) }
+    }
+
+    /** The show's order of [group], or null when it has none — only a group of the pinned snapshot takes one. */
+    private fun orderOf(group: DaoFixtureGroup): List<UUID>? =
+        if (group.readValues[DaoFixtureGroups.project] == venue?.snapshotId) groupOrders[group.uuid] else null
+
+    /** Whose a group's member order is: null for a group this project owns, else the show's order or the venue's. */
+    fun orderOwnerOf(rowProject: EntityID<Int>, uuid: UUID): OrderOwner? = when {
+        rowProject == projectId -> null
+        rowProject == venue?.snapshotId -> if (uuid in groupOrders) OrderOwner.SHOW else OrderOwner.VENUE
+        else -> null
     }
 
     /**

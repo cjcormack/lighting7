@@ -2491,7 +2491,7 @@ and every method reads:
 ```
 rows(kind) = the show's own rows(kind)
            ∪ the snapshot's rows(kind) − the show's hides(kind) − (kind = ELEMENT ? the snapshot's Preset seating : ∅)
-members(group) = group.members − the hidden patches
+members(group) = merge(group.members − the hidden patches, the show's order of it)
 ```
 
 A pin whose snapshot this desk does not hold resolves to nothing, and the scope is the show's own
@@ -2502,7 +2502,8 @@ write, a sort order and an export are still the show's.
 VIEWPOINT` — and `record_uuid`, unique on the three, with a uuid of its own, exported as
 `showHides/{uuid}.json` from `formatVersion` 24)
 are one of the changes a show makes to a venue's row (`venue/ShowHides.kt`); the others are a
-patch's facet overrides (§"Facet overrides") and a patch's or group's recolour (§"Fixture colours"). A uuid is a
+patch's facet overrides (§"Facet overrides"), a patch's or group's recolour (§"Fixture colours") and a
+group's member order (`show_group_orders`, `docs/groups-engineering.md` §"Member order"). A uuid is a
 record's identity across versions, so a hide outlives an Update to a version that still holds it.
 Only a venue record hides (409 `NOT_A_VENUE_RECORD` for a standalone show or a show's own row — delete
 that instead), and **nothing the rig still uses hides** (409 `VENUE_HIDE_IN_USE`, naming what holds
@@ -2533,7 +2534,7 @@ one and another show's included, before).
 `plugins/ErrorHandling.kt`); its message names the facet route, which is how a show changes a venue
 patch's address, position, focus or media for itself (§"Facet overrides"). That is the patch PUT, DELETE and bulk placements (atomic: the whole
 request; non-atomic: that entry), the rigging, region, element, viewpoint and group PUT and DELETE,
-the universe DELETE and a controller-type change, and the project's stage size. Three writes are
+the universe DELETE and a controller-type change, and the project's stage size. Four writes are
 deliberately not refused, each because it does not change the venue's row:
 
 - **A show group's membership** of a venue patch (D12): a patch PUT carrying only `addToGroup` /
@@ -2544,13 +2545,19 @@ deliberately not refused, each because it does not change the venue's row:
   node's IP on this desk is. Its controller type is the venue's.
 - **An element's *Full detail*** (`PUT …/display-detail`): this machine's switch, keyed by the venue's
   id for a venue element.
+- **A venue patch's or group's recolour, and a venue group's order**: the show's own rows
+  (`show_colours`, `show_group_orders`), written by a body naming only `colour` (and, on a group,
+  `memberOrder`); §"Fixture colours" and `docs/groups-engineering.md` §"Member order".
 
 A show's reads by id and the live gestures act on the whole rig — a fixture command or a fire on a
 venue patch, a busk rig tile naming a venue group or patch, *Moves with* on a venue element. The MCP
 setup tools refuse the same writes (`docs/mcp-engineering.md` §"Tools on a show on a venue").
 
 **Groups (D12).** A show group may hold venue patches; a venue group holds the venue's alone — the
-venue is published from its own rows, so nothing a show does can put its patch in one. `PatchGroupDto`
+venue is published from its own rows, so nothing a show does can put its patch in one. A show may
+chase a venue group in its own order, the group PUT's `memberOrder` writing it rather than 409
+`VENUE_OWNED`; `PatchGroupDto` carries `orderOwner` beside `colourOwner` (`docs/groups-engineering.md`
+§"Member order"). `PatchGroupDto`
 and `FixturePatchDto` carry `owner` (`SHOW | VENUE`), and a patch's `groups` list only the groups of
 the rig it was read in (a snapshot patch is in every show's groups that hold it).
 

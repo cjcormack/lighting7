@@ -437,7 +437,7 @@ class SetupTools(
             val placementsByPatch = rig.effectivePlacementsByPatch(patchRows)
             val driftByPatch = ShowOverrides.drift(project).filter { !it.missing }.groupBy { it.recordUuid }
             val membersByGroup = groups.associate { g ->
-                g.name to rig.members(g).sortedBy { it.sortOrder }.mapNotNull { keyByPatchId[it.fixturePatch.id.value] }
+                g.name to rig.members(g).mapNotNull { keyByPatchId[it.fixturePatch.id.value] }
             }
             val groupsByKey = mutableMapOf<String, MutableList<String>>()
             membersByGroup.forEach { (group, keys) -> keys.forEach { groupsByKey.getOrPut(it) { mutableListOf() }.add(group) } }
@@ -463,7 +463,8 @@ class SetupTools(
                                 "A fixture's `overrides` lists those facets; its fields are already the overridden ones (but for a " +
                                 "`dormant` one, which names a universe or rigging the rig lacks, so the venue's stands), and `drifted` " +
                                 "marks a facet the venue has changed since (answer it with KEEP_MINE or VENUE). `hiddenFixtures` are " +
-                                "the venue's fixtures this show hides.",
+                                "the venue's fixtures this show hides. A show can chase a venue group in its own order with " +
+                                "edit_groups; `showOrderedGroups` names those, and `groups` lists their order as this show runs it.",
                         )
                         val hidden = hiddenVenuePatches(rig)
                         if (hidden.isNotEmpty()) {
@@ -592,6 +593,9 @@ class SetupTools(
                 putJsonObject("groups") {
                     membersByGroup.forEach { (group, keys) -> putJsonArray(group) { keys.forEach { add(it) } } }
                 }
+                // A venue group this show chases in its own order (group-order plan D13): `groups` lists that order.
+                val showOrdered = groups.filter { rig.orderOwnerOf(it.project.id, it.uuid) == OrderOwner.SHOW }.map { it.name }
+                if (showOrdered.isNotEmpty()) putJsonArray("showOrderedGroups") { showOrdered.forEach { add(it) } }
             }
         }
         return success("Patch and stage of '${body["project"]!!.jsonPrimitive.content}'", body)

@@ -15,6 +15,9 @@ import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoShowColour
 import uk.me.cormack.lighting7.models.DaoShowColours
+import uk.me.cormack.lighting7.models.DaoShowGroupOrder
+import uk.me.cormack.lighting7.models.DaoShowGroupOrders
+import uk.me.cormack.lighting7.models.ShowGroupOrders
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowParkRelease
 import uk.me.cormack.lighting7.models.DaoShowParkReleases
@@ -26,6 +29,7 @@ import uk.me.cormack.lighting7.models.facetElement
 import uk.me.cormack.lighting7.models.detachedFrom
 import uk.me.cormack.lighting7.models.isVenueBound
 import uk.me.cormack.lighting7.sync.dto.ShowColourJson
+import uk.me.cormack.lighting7.sync.dto.ShowGroupOrderJson
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
 import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
 import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
@@ -106,6 +110,7 @@ import uk.me.cormack.lighting7.routes.heldAutoNumbers
  * /showHides/{uuid}.json           -- v24: a show's hides of its venue's records
  * /showOverrides/{uuid}.json       -- v24 (session 5): a show's facet overrides of venue patches
  * /showColours/{uuid}.json         -- v36: a show's recolours of venue patches and groups
+ * /showGroupOrders/{uuid}.json     -- v44: a show's orders of venue groups' members
  * /showParkReleases/{uuid}.json    -- v27: a show's releases of its venue's parks
  * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
  * /cues/{uuid}.json               -- v32: what a cue is; no stack, position, number or follow
@@ -260,6 +265,19 @@ class ProjectExporter(private val state: State) {
                 ShowColourJson.serializer(), { it.uuid }, liveKeys,
             ) { c ->
                 ShowColourJson(uuid = c.uuid.toString(), recordUuid = c.recordUuid.toString(), colour = c.colour)
+            }
+
+            // v44: a show's orders of venue groups, as stored.
+            count += writeAll(
+                targetDir, "showGroupOrders",
+                DaoShowGroupOrder.find { DaoShowGroupOrders.project eq project.id }.toList(),
+                ShowGroupOrderJson.serializer(), { it.uuid }, liveKeys,
+            ) { o ->
+                ShowGroupOrderJson(
+                    uuid = o.uuid.toString(),
+                    groupUuid = o.groupUuid.toString(),
+                    members = ShowGroupOrders.decode(o.members).map { it.toString() },
+                )
             }
 
             count += writeAll(targetDir, "cueStacks", project.cueStacks.toList(), CueStackJson.serializer(), { it.uuid }, liveKeys) { s ->

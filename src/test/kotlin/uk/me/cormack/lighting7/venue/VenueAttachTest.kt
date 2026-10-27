@@ -59,6 +59,8 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoShowColour
 import uk.me.cormack.lighting7.models.DaoShowColours
+import uk.me.cormack.lighting7.models.DaoShowGroupOrder
+import uk.me.cormack.lighting7.models.DaoShowGroupOrders
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowOverride
@@ -666,6 +668,7 @@ class VenueAttachTest : RouteIntegrationTest() {
             "overrides" to DaoShowOverride.find { DaoShowOverrides.project eq projectId }.map { "${it.recordUuid}:${it.facet}=${it.value}@${it.base}" }.toSet(),
             "releases" to DaoShowParkRelease.find { DaoShowParkReleases.project eq projectId }.map { "${it.universe}-${it.channel}" }.toSet(),
             "colours" to DaoShowColour.find { DaoShowColours.project eq projectId }.map { "${it.recordUuid}=${it.colour}" }.toSet(),
+            "orders" to DaoShowGroupOrder.find { DaoShowGroupOrders.project eq projectId }.map { "${it.groupUuid}=${it.members}" }.toSet(),
         )
     }
 

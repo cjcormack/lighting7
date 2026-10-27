@@ -51,6 +51,9 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.DaoShowColour
 import uk.me.cormack.lighting7.models.DaoShowColours
+import uk.me.cormack.lighting7.models.DaoShowGroupOrder
+import uk.me.cormack.lighting7.models.DaoShowGroupOrders
+import uk.me.cormack.lighting7.models.ShowGroupOrders
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowParkRelease
 import uk.me.cormack.lighting7.models.DaoShowParkReleases
@@ -62,6 +65,7 @@ import uk.me.cormack.lighting7.models.decodeFacet
 import uk.me.cormack.lighting7.models.encodeFacet
 import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.sync.dto.ShowColourJson
+import uk.me.cormack.lighting7.sync.dto.ShowGroupOrderJson
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
 import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
 import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
@@ -250,6 +254,10 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // 5: a missing key is no run. Imported as stored: nothing checks that a key's rows are neighbours, or
 // that a cue holds it once.
 //
+// v44 added `showGroupOrders/`, a show's orders of its venue's groups' members (group-order plan D9).
+// SUPPORTED moved for v14's reason — a v43 reader would import the show without them and write them away
+// on its next push. MIN stays at 5: a missing folder is no orders. Imported as stored, as a recolour is.
+//
 // v24 made venues sync (venue plan session 4): `project.json`'s `kind`, a show's pin (`venueUuid`,
 // `venueVersion`) and `venueRepo` hint, and `showHides/`. A show's archive holds only its own rows, so
 // its links into the venue — a patch on a venue universe, a group member, a cue event, a scenery change,
@@ -307,7 +315,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 43
+internal const val SUPPORTED_FORMAT_VERSION = 44
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -595,6 +603,7 @@ class ProjectImporter(private val state: State) {
             DaoShowHides.deleteWhere { DaoShowHides.project eq project.id }
             DaoShowOverrides.deleteWhere { DaoShowOverrides.project eq project.id }
             DaoShowColours.deleteWhere { DaoShowColours.project eq project.id }
+            DaoShowGroupOrders.deleteWhere { DaoShowGroupOrders.project eq project.id }
             DaoShowParkReleases.deleteWhere { DaoShowParkReleases.project eq project.id }
 
             project.name = projectJson.name
@@ -712,6 +721,7 @@ class ProjectImporter(private val state: State) {
         importShowHides(sourceDir, project)
         importShowOverrides(sourceDir, project)
         importShowColours(sourceDir, project)
+        importShowGroupOrders(sourceDir, project)
         // Elements first (v20): a Look's, a stack's and a cue's scenery name one, and an element
         // names nothing that needs importing before it (a platform's region is a uuid in its params).
         val elementMap = venue.elements + importStageElements(sourceDir, project)
@@ -791,6 +801,40 @@ class ProjectImporter(private val state: State) {
                     this.project = project
                     this.recordUuid = recordUuid
                     this.colour = colour
+                    this.uuid = uuid
+                }
+            }
+            uuid to Unit
+        }
+    }
+
+    /**
+     * v44: a show's orders of its venue's groups, stored as the archive has them: the members name the
+     * pinned version's patches, which the merge reads, so one naming a patch the version lacks is kept
+     * and skipped there. One naming no group of the pinned version is kept, as a hide is; one an archive
+     * repeats for a group is kept once.
+     */
+    private fun importShowGroupOrders(dir: Path, project: DaoProject) {
+        val seen = HashSet<UUID>()
+        readDir(dir.resolve("showGroupOrders")) { json ->
+            val o = canonicalDecode(ShowGroupOrderJson.serializer(), json)
+            val uuid = runCatching { UUID.fromString(o.uuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("A show group order's uuid is not a uuid: ${o.uuid}")
+            val groupUuid = runCatching { UUID.fromString(o.groupUuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("Show group order ${o.uuid} names no group uuid: ${o.groupUuid}")
+            val members = o.members.map { m ->
+                runCatching { UUID.fromString(m) }.getOrNull()
+                    ?: throw ImportError.invalidArchive("Show group order ${o.uuid} names a member that is not a uuid: $m")
+            }
+            when {
+                project.kind != ProjectKind.SHOW || project.venueUuid == null ->
+                    logger.warn("Import: show group order {} in a project on no venue; dropping it", o.uuid)
+                !seen.add(groupUuid) ->
+                    logger.warn("Import: show group order {} names {} a second time; dropping it", o.uuid, o.groupUuid)
+                else -> DaoShowGroupOrder.new {
+                    this.project = project
+                    this.groupUuid = groupUuid
+                    this.members = ShowGroupOrders.encode(members)
                     this.uuid = uuid
                 }
             }

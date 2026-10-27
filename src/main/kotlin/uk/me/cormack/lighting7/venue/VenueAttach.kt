@@ -21,6 +21,8 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.ai.RigKeyReferences
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
 import uk.me.cormack.lighting7.models.DaoShowColour
+import uk.me.cormack.lighting7.models.DaoShowGroupOrder
+import uk.me.cormack.lighting7.models.ShowGroupOrders
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacements
@@ -233,6 +235,13 @@ class VenueAttach(private val state: State) {
                 project = show
                 this.recordUuid = recordUuid
                 this.colour = colour
+            }
+        }
+        for ((groupUuid, members) in w.orders) {
+            DaoShowGroupOrder.new {
+                project = show
+                this.groupUuid = groupUuid
+                this.members = ShowGroupOrders.encode(members)
             }
         }
         for ((kind, uuid) in w.hides) {

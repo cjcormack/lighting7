@@ -165,7 +165,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 43, minReader = 43), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 44, minReader = 43), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**

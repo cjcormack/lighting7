@@ -41,6 +41,7 @@ import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoParkedChannels
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoShowColours
+import uk.me.cormack.lighting7.models.DaoShowGroupOrders
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowParkReleases
 import uk.me.cormack.lighting7.models.ParkAddress
@@ -71,7 +72,8 @@ import java.util.UUID
  * the snapshot the show neither re-parks nor releases ([VenueParks]), so each parked channel holds. A patch is written
  * with its facet overrides **applied** — `RigScope.effective` / `effectivePlacements`' fields, never
  * the snapshot row's — and a dormant override contributes nothing, as it does to the loaded rig. A
- * venue group comes over with its members as the rig sees them (less hidden patches). The snapshot's
+ * venue group comes over with its members as the rig sees them (less hidden patches), in the show's
+ * order of it where it has one (group-order plan D10). The snapshot's
  * **Preset** seating is left out: the show already seats its own copy (D6), which the rig reads in
  * its place. **Fixed** seating comes over with its seat views.
  *
@@ -251,8 +253,11 @@ class VenueDetach(private val state: State) {
         for (group in groups) {
             val copy = copyRow(DaoFixtureGroups, group.id, DaoFixtureGroups.project, show.id)
             rig.colours[group.uuid]?.let { colour -> DaoFixtureGroup[copy].colour = colour }
-            // Its members as the rig sees them; each still names the snapshot's patch until the re-point.
-            members.getValue(group).forEach { copyRow(DaoFixtureGroupMembers, it.id, DaoFixtureGroupMembers.group, copy) }
+            // Its members as the rig sees them, in the show's order; each still names the snapshot's patch until the re-point.
+            members.getValue(group).forEachIndexed { i, member ->
+                val copied = copyRow(DaoFixtureGroupMembers, member.id, DaoFixtureGroupMembers.group, copy)
+                DaoFixtureGroupMembers.update({ DaoFixtureGroupMembers.id eq copied }) { it[DaoFixtureGroupMembers.sortOrder] = i }
+            }
         }
 
         // Every link from the snapshot onto the show's rows of the same uuid; one that finds none named a
@@ -323,6 +328,8 @@ class VenueDetach(private val state: State) {
         // Counted over the copies: a dormant recolour of a hidden record, or of one the pin lacks, was never written.
         val coloursApplied = patches.count { it.uuid in rig.colours } + groups.count { it.uuid in rig.colours }
         DaoShowColours.deleteWhere { DaoShowColours.project eq show.id }
+        val ordersApplied = groups.count { it.uuid in rig.groupOrders }
+        DaoShowGroupOrders.deleteWhere { DaoShowGroupOrders.project eq show.id }
         show.stageWidthM = snapshot.stageWidthM
         show.stageDepthM = snapshot.stageDepthM
         show.stageHeightM = snapshot.stageHeightM
@@ -355,6 +362,7 @@ class VenueDetach(private val state: State) {
             overridesApplied = overridden,
             hidesDropped = hides,
             coloursApplied = coloursApplied,
+            ordersApplied = ordersApplied,
             parkReleasesDropped = releasesDropped,
             relinked = relinked,
             dropped = dropped,
@@ -490,6 +498,8 @@ data class DetachResultDto(
     val hidesDropped: Int,
     /** The show's recolours of venue patches and groups, written into the copies' own colour. */
     val coloursApplied: Int = 0,
+    /** The show's orders of venue groups, written into the copies' member order (group-order plan D10). */
+    val ordersApplied: Int = 0,
     /** The show's releases of venue parks, gone with the venue parks they released. */
     val parkReleasesDropped: Int = 0,
     /** The show's links re-pointed from the version onto its own rows, by `table.column`. */

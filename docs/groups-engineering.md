@@ -183,8 +183,10 @@ group.applyDimmerFx(
 
 ## Member order
 
-A patched group's order is `fixture_group_members.sort_order` (venue-visit plan S7). The loader
-builds each group's members in that order, less any venue patch the show hides, and numbers them
+A patched group's order is `fixture_group_members.sort_order` (venue-visit plan S7), with a show's
+own order of a venue group merged over it (below). `RigScope.members` answers that **effective
+order**, less any venue patch the show hides, and every reader takes it from there rather than
+sorting by `sort_order` itself. The loader builds each group's members in it and numbers them
 `index` 0…n−1 with `normalizedPosition = i / (n − 1)`. Everything above reads only those two, so the
 stored order is the order a group's FX run in under every Order. `POSITIONAL` included: it is
 the list position, not the stage. A **spread** whose one target is a group runs in the group's order
@@ -199,8 +201,28 @@ put it anywhere (`routes/programmerFan.kt`).
 in the order given, the places the members named held. A member not named **keeps its place**, and
 every member is renumbered `0…n−1`. That is what lets a view send only what it shows: no view of a
 show lists a venue patch the show hides, and the Groups views leave out an infrastructure head. Ties
-in an old stored order break by row id, the order members were added in. A venue's group seen from a
-show is the venue's to order (409 `VENUE_OWNED`, like every write to it).
+in an old stored order break by row id, the order members were added in.
+
+**A show's order of a venue group** (group-order plan). A show may chase a venue group in its own
+order, and change nothing else of it: its name, membership and offsets stay the venue's. The order is
+a row of `show_group_orders` (`models/showGroupOrders.kt`), keyed by the group's uuid, holding the
+venue patch uuids in the show's order. `RigScope.members` merges it over the pinned version's order
+through `GroupOrder.merge` (`models/groupOrder.kt`), the rule `reorderGroupMembers` is built on, so a
+stored reorder and the overlay can never disagree: the members the row names that the group still
+holds fill, in its order, the places they hold in the venue's, a member the venue added since keeps
+its venue place, and one it removed is skipped. The patch-group PUT writes it when a body on a venue
+group in a show names only `memberOrder` (and `colour`): the ids are merged onto the effective order,
+then stored whole as uuids. `"memberOrder": null` takes the venue's back, and so does an order equal
+to the venue's, so no row restates the venue. Either role may make it, as a recolour; a hidden group
+refuses it and keeps its row, dormant. `edit_groups` writes it from a venue-group row whose `members`
+are the group's own fixtures in another order. `orderOwner` (`SHOW | VENUE`) on the group DTOs, `get_patch`'s
+`showOrderedGroups` and `describe_rig`'s `order=show` say whose it is. A venue reorder is drawing only
+(`VenueDiff`), and an order never puts a show behind on output. Detach writes the effective order
+into the copies' `sort_order`; Attach makes a pair that differs only in order an overlay (or takes
+the venue's when the origin shows only the venue reordered); Update drops the order of a group the
+target lacks (`ORDER`) and asks about a venue reorder (`order:<groupUuid>`, kept unless answered
+*Take venue's*). Sync carries it as `showGroupOrders/` (`formatVersion` 44). Anything else written to
+a venue group through a show is 409 `VENUE_OWNED`.
 
 **Reading it.** `GET /groups` answers each group's `memberKeys` in order, and the Groups list draws
 member rows in that order with their place. `GET /groups/{name}` adds `orderSteps`, each
@@ -210,8 +232,8 @@ function of the group's size alone, so the group sheet shows it without mirrorin
 moves with an optimistic reorder. `RANDOM` is seed 0, the seed a group FX gets by name. The
 group sheet's *Members* view is where a group is reordered from the Groups views. It is a numbered
 list in that order, dragged, with each member's step under the Order *Runs as* picks (the group's
-own Order first). A venue's group in a show, and a venue's rig for an operator, are read-only
-and say why. Patches' *Edit Group* sheet does the same (lighting7 `frontend/CLAUDE.md` §"The fixture
+own Order first). A venue's group in a show (until group-order plan session 2), and a venue's rig for
+an operator, are read-only and say why. Patches' *Edit Group* sheet does the same (lighting7 `frontend/CLAUDE.md` §"The fixture
 sheet").
 
 ## Group FX Extensions
