@@ -774,6 +774,8 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
     DaoShowParkRelease.find { DaoShowParkReleases.project eq project.id }.forEach { it.delete() }
     // And its recolours of venue patches and groups (tables-colours plan D10).
     DaoShowColour.find { DaoShowColours.project eq project.id }.forEach { it.delete() }
+    // And its orders of venue groups (group-order plan D2).
+    DaoShowGroupOrder.find { DaoShowGroupOrders.project eq project.id }.forEach { it.delete() }
 
     // Machine-local field overrides (controller IPs). Same story as the sync rows:
     // no ON DELETE cascade, so any project the operator gave a controller IP — and

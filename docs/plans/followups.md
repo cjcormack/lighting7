@@ -142,6 +142,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-VENUE-VERSION-PRUNE`](#fu-venue-version-prune) | Trigger | Venue | about fifty versions of one venue |
 | [`FU-VENUE-DRAFT-SYNC`](#fu-venue-draft-sync) | Trigger | Venue | two admins edit one venue on two desks |
 | [`FU-VENUE-ELEMENT-OVERRIDES`](#fu-venue-element-overrides) | Trigger | Venue | a show needs to change a venue rigging or element rather than hide it |
+| [`FU-VENUE-GROUP-OWN`](#fu-venue-group-own) | Trigger | Venue | a show needs a venue group's membership changed |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
 | [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
 | [`FU-GOBO-CUSTOM-IMAGES`](#fu-gobo-custom-images) | Trigger | Stage | a venue fits a gobo the 16-pattern library cannot stand in for |
@@ -2778,6 +2779,19 @@ venue rigging or element rather than hide it. **Then**: facets for those kinds t
 additive), a rigging's Position (pose, length) and an element's Pose · Finish facets, `base` and drift
 exactly as a patch's, applied by `RigScope` where it reads those rows — and the Stage editor's drag of
 a venue rigging becoming one, which a patch's deliberately did not (§"Facet overrides", *Not a drag*).
+
+### `FU-VENUE-GROUP-OWN`
+
+**A show can reorder a venue group, but not change its members** · Trigger · group-order plan §7, 2026-10-27
+
+A show may chase a venue group in its own order (`show_group_orders`, `docs/groups-engineering.md`
+§"Member order"), but its membership, offsets and name stay the venue's (group-order plan D1). A show
+that wants a fixture in or out of the house wash has to hide the group and build its own by hand,
+re-pointing the busk rig tiles that named it by id. **Trigger**: a show needs a venue group's
+membership changed. **Then**: *Make it the show's own* — one write that hides the venue group and adds
+a show group of the same name, members, offsets, colour and effective order, re-pointing busk rig tiles
+onto it (cues, Looks and palettes name a group by name, so they follow). `edit_groups`' refusal of a
+different member set names it once it exists.
 
 ### `FU-STAGE-INDEPENDENT-HEADS`
 

@@ -211,6 +211,8 @@ object VenueAttachPairing {
         val plannedOverrides = mutableListOf<PlannedOverride>()
         /** The show's recolours of the venue records its own replace (D10): target uuid → colour. */
         val plannedColours = LinkedHashMap<UUID, String>()
+        /** The show's orders of the venue groups its own replace (group-order plan D11): target uuid → member patch uuids. */
+        val plannedOrders = LinkedHashMap<UUID, List<UUID>>()
         val kept = mutableListOf<AttachItemDto>()
         val additions = mutableListOf<AttachItemDto>()
         val incoming = mutableListOf<AttachItemDto>()
@@ -561,8 +563,13 @@ object VenueAttachPairing {
                 val showRec = groupRecord(s)
                 val venueRec = groupRecord(tg)
                 val rename = if (s.name != tg.name) AttachRenameDto(AttachKind.GROUP, s.name, tg.name, showRec, venueRec) else null
-                val who = judge(showSide(s), venueSide(tg), originRecord(origin, tg.uuid) { it.uuid }?.let(::originSide))
-                val takeVenues = when (who) {
+                val sSide = showSide(s)
+                val tSide = venueSide(tg)
+                val oSide = originRecord(origin, tg.uuid) { it.uuid }?.let(::originSide)
+                val takeVenues = if (orderOnly(sSide, tSide)) {
+                    order(s, tg, sSide.second, tSide.second, oSide?.second, showRec, venueRec)
+                    true
+                } else when (val who = judge(sSide, tSide, oSide)) {
                     Who.SAME -> true
                     Who.VENUE -> true.also { drawing += change(AttachKind.GROUP, showRec, venueRec, "The venue changed its group ${tg.name}: yours takes it") }
                     Who.SHOW, Who.BOTH -> {
@@ -598,6 +605,42 @@ object VenueAttachPairing {
                 after[s.uuid] = s.uuid
                 keptGroups += s
                 additions += AttachItemDto(AttachKind.GROUP, groupRecord(s), null, "Your group ${s.name}", "ADDITION")
+            }
+        }
+
+        /**
+         * Whether a show group and the venue's differ only in member order (group-order plan D11): one name,
+         * and the same members with the same offsets, after the attach's hides, in another order.
+         */
+        fun orderOnly(s: Pair<String, List<GroupMemberRow>>, t: Pair<String, List<GroupMemberRow>>): Boolean =
+            s != t && s.first == t.first && s.second.size == t.second.size &&
+                s.second.toSet() == t.second.toSet() && s.second.toSet().size == s.second.size
+
+        /**
+         * An order-only pair (call B): the show takes the venue's group, and its order becomes an overlay —
+         * unless the origin shows the venue reordered and the show did not, when the show takes the venue's
+         * order too. Each side is judged against the origin on the members it shares with it, since their
+         * sets may differ (§4).
+         */
+        fun order(
+            s: GroupRow,
+            tg: GroupRow,
+            sMembers: List<GroupMemberRow>,
+            tMembers: List<GroupMemberRow>,
+            oMembers: List<GroupMemberRow>?,
+            showRec: AttachRecordDto,
+            venueRec: AttachRecordDto,
+        ) {
+            val sOrder = sMembers.map { it.patchUuid }
+            val tOrder = tMembers.map { it.patchUuid }
+            val oOrder = oMembers?.map { it.patchUuid }
+            fun moved(side: List<UUID>, origin: List<UUID>) = side.filter { it in origin } != origin.filter { it in side }
+            val venueReordered = oOrder != null && !moved(sOrder, oOrder) && moved(tOrder, oOrder)
+            if (venueReordered) {
+                drawing += change(AttachKind.GROUP, showRec, venueRec, "The venue reordered its group ${tg.name}: yours takes its order")
+            } else {
+                plannedOrders[tg.uuid] = sOrder
+                drawing += change(AttachKind.GROUP, showRec, venueRec, "Your group ${s.name} becomes the venue's, chased in your order")
             }
         }
 
@@ -974,6 +1017,7 @@ object VenueAttachPairing {
                     uuidRewrites = uuidRewrites,
                     overrides = plannedOverrides.toList(),
                     colours = plannedColours.toMap(),
+                    orders = plannedOrders.toMap(),
                     hides = finalHides.map { it.kind.hideKind!! to UUID.fromString(it.record.uuid) },
                     releases = releases.toList(),
                     parksDropped = parksDropped.toList(),
@@ -1164,6 +1208,8 @@ data class AttachWrites(
     val overrides: List<PlannedOverride>,
     /** The show's recolours of the venue's records (D10): target record uuid → the show's colour, as stored. */
     val colours: Map<UUID, String> = emptyMap(),
+    /** The show's orders of the venue's groups (group-order plan D11): target group uuid → member patch uuids. */
+    val orders: Map<UUID, List<UUID>> = emptyMap(),
     val hides: List<Pair<HideKind, UUID>>,
     val releases: List<ParkAddress>,
     /** The show's parks that go — the venue parks the channel at the same value — by the address their row has. */

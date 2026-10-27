@@ -34,6 +34,12 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v44: a show's order of a venue group's members travels as `showGroupOrders/{uuid}.json`
+    // ([ShowGroupOrderJson], group-order plan D9). A show with none exports byte-for-byte as at v43. The
+    // writer's number moves by the sharp-edge rule: a v43 reader would import the show without them and
+    // its next wipe-then-export push would write them away for every peer. `minReader` stays at **43** —
+    // an older archive simply has no orders. See `docs/sync-engineering.md` §"Version 44 — a show's order
+    // of a venue group".
     // v43: a stored FX's `spreadUnit` may be `STEP` (fx-settings plan session 4): its `spread` counts the
     // FX's own steps, not the cycle. `minReader` moves to **43**: a v42 reader would run each such FX's
     // spread as a share of the cycle, staggering the chase. See `docs/sync-engineering.md`
@@ -341,7 +347,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 43,
+    val formatVersion: Int = 44,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 43,
 )
@@ -415,6 +421,18 @@ data class ShowColourJson(
     val uuid: String,
     val recordUuid: String,
     val colour: String,
+)
+
+/**
+ * v44: a show's order of a venue group's members, `showGroupOrders/{uuid}.json` (group-order plan D9).
+ * `groupUuid` and `members` (venue patch uuids, in the show's order) name records of the pinned venue,
+ * never of the show's own archive, so a clone keeps them (only `uuid` is remapped).
+ */
+@Serializable
+data class ShowGroupOrderJson(
+    val uuid: String,
+    val groupUuid: String,
+    val members: List<String>,
 )
 
 /**

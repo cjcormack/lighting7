@@ -33,6 +33,10 @@ import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.SentColour
 import uk.me.cormack.lighting7.models.ShowColours
+import uk.me.cormack.lighting7.models.ShowGroupOrders
+import uk.me.cormack.lighting7.models.OrderOwner
+import uk.me.cormack.lighting7.models.ColourOwner
+import uk.me.cormack.lighting7.models.patchId
 import uk.me.cormack.lighting7.models.reorderGroupMembers
 import uk.me.cormack.lighting7.routes.deleteOwnPatch
 import uk.me.cormack.lighting7.routes.deleteOwnUniverse
@@ -243,6 +247,9 @@ internal class PatchEditTools(private val state: State) {
 
         /** A row that only colours its group — the one change a show may make to a venue's (D10). */
         val colourOnly get() = colour != null && newName == null && members == null && add.isEmpty() && remove.isEmpty()
+
+        /** A row that only recolours or reorders its group: what a show may make of a venue's (group-order plan D13). */
+        val showLayerOnly get() = newName == null && add.isEmpty() && remove.isEmpty() && (colour != null || members != null)
     }
 
     private class GroupDone(
@@ -253,6 +260,8 @@ internal class PatchEditTools(private val state: State) {
         val colour: String?,
         /** A venue group's colour is this show's recolour of it, not the venue's. */
         val recoloured: Boolean = false,
+        /** A venue group's member order is this show's, not the venue's. */
+        val reordered: Boolean = false,
     )
 
     private class Edited(
@@ -308,15 +317,20 @@ internal class PatchEditTools(private val state: State) {
 
             val existing = HashMap<Int, List<DaoFixtureGroupMember>>()
             val creates = mutableListOf<GroupRow>()
-            // A venue group's colour is this show's to recolour (tables-colours plan D10), and nothing else of it.
+            // A venue group's colour and member order are this show's to change (tables-colours plan D10,
+            // group-order plan D13), and nothing else of it: its members stay the venue's.
             val venueRecolours = mutableListOf<Pair<GroupRow, DaoFixtureGroup>>()
             rows.forEach { row ->
                 val group = own[row.name]
+                val venueGroup = inRig[row.name]
                 when {
-                    group != null -> existing[row.index] = rig.members(group).sortedBy { it.sortOrder }
-                        .filter { it.readValues[DaoFixtureGroupMembers.fixturePatch].value in keyById }
-                    row.name in inRig && row.colourOnly -> venueRecolours += row to inRig.getValue(row.name)
-                    row.name in inRig -> problems += VenueRigGuard.ownedProblem(rig, "Group '${row.name}'")
+                    group != null -> existing[row.index] = rig.members(group)
+                        .filter { it.patchId in keyById }
+                    venueGroup != null && row.showLayerOnly && row.members != null &&
+                        row.members.toSet() != rig.members(venueGroup).mapNotNull { keyById[it.patchId] }.toSet() ->
+                        problems += VenueRigGuard.ownedProblem(rig, "Group '${row.name}'", VenueRigGuard.VENUE_GROUP_HINT)
+                    venueGroup != null && row.showLayerOnly -> venueRecolours += row to venueGroup
+                    venueGroup != null -> problems += VenueRigGuard.ownedProblem(rig, "Group '${row.name}'", VenueRigGuard.VENUE_GROUP_HINT)
                     row.newName == null && row.remove.isEmpty() && (row.members != null || row.add.isNotEmpty()) -> creates += row
                     else -> problems += "${row.where}: this project has no group by that name " +
                         "(to make one, send members or add without newName or remove)"
@@ -352,12 +366,18 @@ internal class PatchEditTools(private val state: State) {
             }
             val groups = rows.map { row ->
                 venueRecolours.firstOrNull { it.first.index == row.index }?.second?.let { venueGroup ->
-                    val sent = row.colour?.value
-                    ShowColours.put(project.id, venueGroup.uuid, sent)
-                    val members = rig.members(venueGroup).sortedBy { it.sortOrder }
-                        .mapNotNull { keyById[it.readValues[DaoFixtureGroupMembers.fixturePatch].value] }
-                    val colour = FixtureColours.read(sent ?: venueGroup.colour)
-                    return@map GroupDone(row.name, null, created = false, members, colour, recoloured = sent != null)
+                    row.colour?.let { ShowColours.put(project.id, venueGroup.uuid, it.value) }
+                    row.members?.let { keys ->
+                        val byKey = rig.members(venueGroup).associateBy { keyById[it.patchId] }
+                        ShowGroupOrders.reorder(rig, venueGroup, keys.mapNotNull { byKey[it] })
+                    }
+                    val after = RigScope.of(project)
+                    val members = after.members(venueGroup).mapNotNull { keyById[it.patchId] }
+                    return@map GroupDone(
+                        row.name, null, created = false, members, after.colourOf(venueGroup),
+                        recoloured = after.colourOwnerOf(venueGroup.project.id, venueGroup.uuid) == ColourOwner.SHOW,
+                        reordered = after.orderOwnerOf(venueGroup.project.id, venueGroup.uuid) == OrderOwner.SHOW,
+                    )
                 }
                 val group = own[row.name] ?: DaoFixtureGroup.new {
                     this.project = project
@@ -382,8 +402,8 @@ internal class PatchEditTools(private val state: State) {
             } else {
                 announceRewrite(target, done.touched)
             }
-            // A busk rig tile embeds its group's colour.
-            if (rows.any { it.colour != null }) state.show.fixtures.buskRigChanged()
+            // A busk rig tile embeds its group's colour and member order.
+            if (rows.any { it.colour != null || it.members != null }) state.show.fixtures.buskRigChanged()
         }
         return success(
             "${if (dryRun) "Would edit" else "Edited"} ${done.groups.size} group(s)",
@@ -398,6 +418,7 @@ internal class PatchEditTools(private val state: State) {
                             putJsonArray("members") { g.members.forEach { add(it) } }
                             g.colour?.let { put("colour", it) }
                             if (g.recoloured) put("colourOwner", "show")
+                            if (g.reordered) put("orderOwner", "show")
                         }
                     }
                 }

@@ -158,13 +158,17 @@ class RigBriefing(private val state: State) {
             sb.appendLine()
         }
 
-        // Groups
+        // Groups, each with its members in the order its FX and fans run: on a show on a venue, a venue
+        // group's may be the show's own (group-order plan D13).
         sb.appendLine("## Available Groups")
+        val showOrdered = showOrderedGroups()
         for (group in state.show.fixtures.groups) {
             val caps = group.detectCapabilities()
             sb.appendLine(
-                "- **${group.name}** (${group.allMembers.size} members, capabilities=${caps.joinToString(",")}" +
+                "- **${group.name}** (${group.allMembers.size} members [${group.allMembers.joinToString(", ") { it.key }}], " +
+                    "capabilities=${caps.joinToString(",")}" +
                     (groupColours[group.name]?.let { ", colour=$it" } ?: "") +
+                    (if (group.name in showOrdered) ", order=show" else "") +
                     ownerLabel({ it.groups }, group.name) + ")",
             )
         }
@@ -677,6 +681,15 @@ class RigBriefing(private val state: State) {
             val rig = RigScope.of(project)
             rig.patches().mapNotNull { p -> rig.colourOf(p)?.let { p.key to it } }.toMap() to
                 rig.groups().mapNotNull { g -> rig.colourOf(g)?.let { g.name to it } }.toMap()
+        }
+    }
+
+    /** The current show's venue groups it chases in its own order (group-order plan D2). */
+    private fun showOrderedGroups(): Set<String> {
+        val project = state.projectManager.currentProject
+        return transaction(state.database) {
+            val rig = RigScope.of(project)
+            rig.groups().filter { rig.orderOwnerOf(it.project.id, it.uuid) == OrderOwner.SHOW }.map { it.name }.toSet()
         }
     }
 

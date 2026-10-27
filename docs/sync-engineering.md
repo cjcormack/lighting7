@@ -69,6 +69,8 @@ showParkReleases/{uuid}.json   # v27+: a show on a venue's releases of venue par
                                # channel)
 showColours/{uuid}.json        # v36+: a show on a venue's recolours of venue patches and groups
                                # (recordUuid, colour)
+showGroupOrders/{uuid}.json    # v44+: a show on a venue's orders of venue groups' members
+                               # (groupUuid, members)
 venueVersion.json              # v24+, a venue repo only: which version the tagged commit is
 showEntries/{uuid}.json
 cueStacks/{uuid}.json          # v20+: its set embedded as `scenery` (elementUuid, state)
@@ -251,7 +253,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 43`, `minReader = 43`. Rules for future
+Current writer emits `formatVersion = 44`, `minReader = 43`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -438,6 +440,25 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 44 — a show's order of a venue group
+
+Group-order plan session 1 (D9; `docs/groups-engineering.md` §"Member order"): a show on a venue's
+orders of its venue's groups travel as **`showGroupOrders/{uuid}.json`** (`ShowGroupOrderJson`:
+`uuid`, `groupUuid`, `members` — the venue patch uuids in the show's order). `show_group_orders` is
+`Portable("showGroupOrders")` in `SyncCoverageTest`, read from `seedShowOnVenue`'s export, which
+chases front-wash the other way. A show with none exports byte-for-byte as at v43.
+`SUPPORTED_FORMAT_VERSION = 44`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5, and **`minReader` stays 43**:
+a missing folder is no orders. The writer's number moves by the sharp-edge rule: a v43 reader would
+import the show without its orders and its next wipe-then-export push would write them away for every
+peer.
+
+**Imported as stored**, as a recolour is: the members name the pinned version's patches, which the
+merge reads, so one naming a patch the version lacks is kept and skipped there. An order naming a
+group the version lacks is kept, one an archive repeats for a group is kept once, and one in a project
+on no venue is dropped. Both its group and its members name venue records, never the show's archive,
+so a clone remaps only its own `uuid`. `replaceFromWorkingTree` and the project delete sweep a show's
+orders with its recolours.
 
 ### Version 43 — Each head later by
 

@@ -25,6 +25,7 @@ import uk.me.cormack.lighting7.models.DaoCueScenery
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackScenery
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
+import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatch
@@ -37,6 +38,8 @@ import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoRiggings
 import uk.me.cormack.lighting7.models.DaoShowColour
 import uk.me.cormack.lighting7.models.DaoShowColours
+import uk.me.cormack.lighting7.models.DaoShowGroupOrder
+import uk.me.cormack.lighting7.models.DaoShowGroupOrders
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowOverride
@@ -49,7 +52,10 @@ import uk.me.cormack.lighting7.models.DaoStageViewpoint
 import uk.me.cormack.lighting7.models.DaoStageViewpoints
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
+import uk.me.cormack.lighting7.models.GroupOrder
 import uk.me.cormack.lighting7.models.HideKind
+import uk.me.cormack.lighting7.models.ShowGroupOrders
+import uk.me.cormack.lighting7.models.storedMemberOrder
 import uk.me.cormack.lighting7.models.ParkAddress
 import uk.me.cormack.lighting7.models.VenueParks
 import uk.me.cormack.lighting7.models.PatchFacet
@@ -82,7 +88,9 @@ import java.util.UUID
  * show's own records, or a show patch on a universe T removes, is a **blocker**: it cannot be kept, so
  * the show must change first. An update with an open decision is refused (`VENUE_UPDATE_UNDECIDED`),
  * one with a blocker likewise (`VENUE_UPDATE_BLOCKED`). A drifted override may be answered *Take
- * venue's* in the same request; left alone it is kept, and its drift shows on the Patch list after.
+ * venue's* in the same request; left alone it is kept, and its drift shows on the Patch list after. So
+ * may a show's order of a venue group the venue reordered (`order:`, group-order plan D12), which
+ * *Take venue's* clears.
  *
  * **The review is the update rolled back** — as Extract's dry run is: the same code moves the pin and
  * re-points every link, reads the result, and throws it away, so the review can never disagree with
@@ -149,6 +157,7 @@ class VenueUpdate(private val state: State) {
                 drawing = hall.drawing,
                 carryOver = result.carryOver,
                 drift = result.drift,
+                orders = result.orders,
                 dropped = result.dropped,
                 decisions = result.decisions,
                 blockers = result.blockers,
@@ -204,6 +213,7 @@ class VenueUpdate(private val state: State) {
     private class Outcome(
         val carryOver: List<UpdateItemDto>,
         val drift: List<UpdateDriftDto>,
+        val orders: List<UpdateOrderDto>,
         val dropped: List<UpdateItemDto>,
         val decisions: List<UpdateDecisionDto>,
         val blockers: List<UpdateItemDto>,
@@ -239,6 +249,14 @@ class VenueUpdate(private val state: State) {
             dropped += UpdateItemDto("COLOUR", name, "Your colour ${c.colour} for $name: v${pin.to} has no such fixture or group", c.recordUuid.toString())
         }
 
+        // Orders of groups the target lacks (group-order plan D12). A member it removes needs nothing: the merge skips it.
+        val orders = DaoShowGroupOrder.find { DaoShowGroupOrders.project eq project.id }.toList()
+        val droppedOrders = orders.filter { recordIn(pin.toSnapshot, HideKind.GROUP, it.groupUuid) == null }
+        for (o in droppedOrders) {
+            val name = recordIn(pin.fromSnapshot, HideKind.GROUP, o.groupUuid) ?: o.groupUuid.toString()
+            dropped += UpdateItemDto("ORDER", name, "Your order of group $name: v${pin.to} has no such group", o.groupUuid.toString())
+        }
+
         // Overrides judged against the target: drift is kept (or taken back by a decision), a missing subject dropped.
         val drifts = ShowOverrides.drift(project, pin.toSnapshot)
         val fromPatches = DaoFixturePatch.find { DaoFixturePatches.project eq pin.fromSnapshot }.associateBy { it.uuid }
@@ -266,6 +284,9 @@ class VenueUpdate(private val state: State) {
                 answer = if (id in takeVenue) UpdateAnswer.TAKE_VENUES else UpdateAnswer.KEEP_MINE,
             )
         }
+        val hiddenPatches = hides.filter { it.recordKind == HideKind.PATCH }.map { it.recordUuid }.toSet()
+        val restatingOrders = mutableListOf<DaoShowGroupOrder>()
+        val orderDtos = (orders - droppedOrders.toSet()).mapNotNull { reorderOf(it, pin, hiddenPatches, takeVenue, restatingOrders) }
 
         // Move the pin, then every link.
         project.venueVersion = pin.to
@@ -283,6 +304,10 @@ class VenueUpdate(private val state: State) {
         // The dropped hides, recolours and overrides go once the links are clear of them.
         droppedHides.forEach { it.delete() }
         droppedColours.forEach { it.delete() }
+        droppedOrders.forEach { it.delete() }
+        restatingOrders.forEach { it.delete() }
+        // *Take venue's* on a reorder clears the show's order.
+        orders.filter { orderId(it.groupUuid) in takeVenue }.forEach { it.delete() }
         if (missing.isNotEmpty()) {
             DaoShowOverride.find { DaoShowOverrides.project eq project.id }
                 .filter { o -> missing.any { it.recordUuid == o.recordUuid && it.facet == o.facet } }
@@ -305,7 +330,7 @@ class VenueUpdate(private val state: State) {
         // one update are never offered the same channels.
         val suggested = HashMap<UUID, VenueRigChecks.Span>()
         val decisions = introduced.mapNotNull { (a, b) -> VenueRigChecks.decisionOf(project, a, b, afterSpans, suggested) }
-        val driftIds = driftDtos.map { it.id }.toSet()
+        val driftIds = driftDtos.map { it.id }.toSet() + orderDtos.map { it.id }
         val knownIds = decisions.map { it.id }.toSet() + driftIds
         answers.firstOrNull { it.id !in knownIds }?.let { bad ->
             throw VenueException.badRequest(CODE_UPDATE_INVALID, "No decision '${bad.id}' in this update")
@@ -332,10 +357,52 @@ class VenueUpdate(private val state: State) {
         return Outcome(
             carryOver = carryOver,
             drift = driftDtos,
+            orders = orderDtos,
             dropped = dropped,
             decisions = decided.map { if (warnings[it.id] != null) it.copy(message = "${it.message} ${warnings[it.id]}") else it },
             blockers = blockers,
             dead = dead,
+        )
+    }
+
+    /**
+     * [order]'s decision when the venue reordered its group between the pin and the target (group-order plan
+     * D12, call A): the members both versions hold, less the show's hidden patches, in another relative order.
+     * Null when it did not, which keeps the show's order with nothing to ask — and null, with the order
+     * added to [restating], when the order comes out as the target's own, so no row restates the venue.
+     */
+    private fun reorderOf(
+        order: DaoShowGroupOrder,
+        pin: Pin,
+        hiddenPatches: Set<UUID>,
+        takeVenue: Set<String>,
+        restating: MutableList<DaoShowGroupOrder>,
+    ): UpdateOrderDto? {
+        fun groupIn(snapshot: EntityID<Int>): DaoFixtureGroup? =
+            DaoFixtureGroup.find { (DaoFixtureGroups.project eq snapshot) and (DaoFixtureGroups.uuid eq order.groupUuid) }.firstOrNull()
+        val fromGroup = groupIn(pin.fromSnapshot)
+        val group = groupIn(pin.toSnapshot) ?: return null
+        val wanted = ShowGroupOrders.decode(order.members)
+        val toAll = storedMemberOrder(group.members)
+        if (GroupOrder.merge(toAll, wanted) { it.fixturePatch.uuid } == toAll) {
+            restating += order
+            return null
+        }
+        fromGroup ?: return null
+        val from = storedMemberOrder(fromGroup.members).filter { it.fixturePatch.uuid !in hiddenPatches }
+        val to = toAll.filter { it.fixturePatch.uuid !in hiddenPatches }
+        val fromUuids = from.map { it.fixturePatch.uuid }
+        val toUuids = to.map { it.fixturePatch.uuid }
+        if (fromUuids.filter { it in toUuids } == toUuids.filter { it in fromUuids }) return null
+        val id = orderId(order.groupUuid)
+        val mine = GroupOrder.merge(to, wanted) { it.fixturePatch.uuid }
+        return UpdateOrderDto(
+            id = id,
+            groupUuid = order.groupUuid.toString(),
+            groupName = group.name,
+            mine = mine.map { it.fixturePatch.key },
+            venue = to.map { it.fixturePatch.key },
+            answer = if (id in takeVenue) UpdateAnswer.TAKE_VENUES else UpdateAnswer.KEEP_MINE,
         )
     }
 
@@ -545,6 +612,8 @@ class VenueUpdate(private val state: State) {
         private val DRIFT_ANSWERS = listOf(UpdateAnswer.KEEP_MINE, UpdateAnswer.TAKE_VENUES)
 
         fun driftId(recordUuid: UUID, facet: PatchFacet) = "drift:$recordUuid:${facet.name}"
+
+        fun orderId(groupUuid: UUID) = "order:$groupUuid"
     }
 }
 
@@ -570,7 +639,7 @@ data class VenueRunAgainstRequest(val on: Boolean)
 /** One line of the review: a record carried over, dropped, or blocking. */
 @Serializable
 data class UpdateItemDto(
-    /** `OVERRIDE | HIDE | COLOUR | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
+    /** `OVERRIDE | HIDE | COLOUR | ORDER | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
     val kind: String,
     val name: String,
     val detail: String,
@@ -591,6 +660,23 @@ data class UpdateDriftDto(
     val venue: JsonElement? = null,
     /** The venue's value when the override was made (or last kept). */
     val base: JsonElement? = null,
+    val answer: UpdateAnswer = UpdateAnswer.KEEP_MINE,
+)
+
+/**
+ * A venue group the venue reordered under the show's order of it (group-order plan D12): kept unless
+ * answered `TAKE_VENUES`, which clears the show's order.
+ */
+@Serializable
+data class UpdateOrderDto(
+    /** `order:<groupUuid>`. */
+    val id: String,
+    val groupUuid: String,
+    val groupName: String,
+    /** The group's members, by key, in the show's order at the target version. */
+    val mine: List<String>,
+    /** The target version's order. */
+    val venue: List<String>,
     val answer: UpdateAnswer = UpdateAnswer.KEEP_MINE,
 )
 
@@ -652,6 +738,8 @@ data class VenueUpdateDto(
     val drawing: List<VenueChangeDto> = emptyList(),
     val carryOver: List<UpdateItemDto> = emptyList(),
     val drift: List<UpdateDriftDto> = emptyList(),
+    /** Venue groups the venue reordered under the show's order of them, answered like [drift]. */
+    val orders: List<UpdateOrderDto> = emptyList(),
     val dropped: List<UpdateItemDto> = emptyList(),
     val decisions: List<UpdateDecisionDto> = emptyList(),
     val blockers: List<UpdateItemDto> = emptyList(),

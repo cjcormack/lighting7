@@ -59,4 +59,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoShowParkReleases,
     // A show's recolours of venue patches and groups (tables-colours plan D10); keyed by record uuid.
     DaoShowColours,
+    // A show's order of a venue group's members (group-order plan D2); keyed by group uuid.
+    DaoShowGroupOrders,
 )

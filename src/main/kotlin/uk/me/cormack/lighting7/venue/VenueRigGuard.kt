@@ -11,10 +11,11 @@ import uk.me.cormack.lighting7.models.RigScope
  *
  * - **A venue's row is the venue's.** A write through a show that names one by id — a `PUT`, a
  *   `DELETE`, a placement, a membership — is refused with 409 [CODE_VENUE_OWNED], not a 404: the
- *   row is in the show's rig, it is just not the show's to change. A show makes three changes to a
+ *   row is in the show's rig, it is just not the show's to change. A show makes four changes to a
  *   venue row: it hides one (`PUT …/hidden`), it overrides a venue patch's facets — address,
- *   position, focus, media — through their own route (`PUT …/facets/{facet}`, `ShowOverrides`), and it
- *   recolours a venue patch or group, a write naming only `colour` (`ShowColours`).
+ *   position, focus, media — through their own route (`PUT …/facets/{facet}`, `ShowOverrides`), it
+ *   recolours a venue patch or group, a write naming only `colour` (`ShowColours`), and it chases a
+ *   venue group in its own order, a group write naming only `memberOrder` (`ShowGroupOrders`).
  * - **Keys are one namespace.** A show's own record may not take the key — or, for every kind the rig
  *   checks a clash for, the name or head number — of a venue record in its rig: 409
  *   [CODE_KEY_TAKEN_BY_VENUE]. A hidden venue record is not in the rig, so a show may reuse its key
@@ -73,7 +74,8 @@ object VenueRigGuard {
     /**
      * [venueOwned] as one problem line for a surface that lists every problem at once (MCP's setup
      * tools), led by its code so a model can key on it. It names tools rather than routes: [hint] says
-     * what a show can do instead for this kind of record — [VENUE_FIXTURE_HINT] for a fixture.
+     * what a show can do instead for this kind of record — [VENUE_FIXTURE_HINT] for a fixture,
+     * [VENUE_GROUP_HINT] for a group.
      */
     fun ownedProblem(scope: RigScope, what: String, hint: String = ""): String {
         val venue = scope.venue
@@ -87,6 +89,11 @@ object VenueRigGuard {
         " A show can make a venue fixture's address, position, focus or media its own, recolour it, or hide it, with " +
             "override_venue_fixtures (place_fixtures then edits the position, focus and media it owns, and its colour); " +
             "its name, key, type, head and kind are the venue's."
+
+    /** [ownedProblem]'s hint for a venue group: what a show may change about one, and with which tool. */
+    const val VENUE_GROUP_HINT =
+        " A show can recolour a venue group (send only colour) or chase it in its own order (send only members, the same " +
+            "fixtures in another order) with edit_groups; its name and membership are the venue's."
 
     /**
      * The code a list of problems carries, for the tool's `code` field: a venue rule's first, then an

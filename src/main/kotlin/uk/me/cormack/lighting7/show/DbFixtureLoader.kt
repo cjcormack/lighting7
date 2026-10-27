@@ -118,11 +118,9 @@ object DbFixtureLoader {
 
             val groups = rig.groups()
                 .map { group ->
-                    val members = rig.members(group)
-                        .sortedBy { it.sortOrder }
-                        .map { member ->
-                            GroupMemberData(member.fixturePatch.key, member.panOffset, member.tiltOffset, member.sortOrder)
-                        }
+                    val members = rig.members(group).map { member ->
+                        GroupMemberData(member.fixturePatch.key, member.panOffset, member.tiltOffset)
+                    }
                     GroupData(group.name, members)
                 }
 
@@ -258,7 +256,6 @@ object DbFixtureLoader {
         val fixtureKey: String,
         val panOffset: Double,
         val tiltOffset: Double,
-        val sortOrder: Int,
     )
 
     private data class GroupData(
