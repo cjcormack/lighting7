@@ -27,6 +27,8 @@ import {
   pickerFamilyForSheet,
   pickerFamilyOf,
   startingSpec,
+  fxSwapOptions,
+  swappedDraft,
   paletteDraftOf,
   timingChoicePatch,
   updateRequestOf,
@@ -467,5 +469,55 @@ describe('isAroundSpelling on a Path (fx-settings plan session 3)', () => {
     const at128 = { panCentre: '128', tiltCentre: '128' }
     expect(isAroundSpelling({ family: 'position', blendMode: 'ADDITIVE', parameters: { shape: 'CIRCLE', ...at128 } })).toBe(true)
     expect(isAroundSpelling({ family: 'position', blendMode: 'ADDITIVE', parameters: { shape: 'LINE', ...at128 } })).toBe(false)
+  })
+})
+
+describe('swappedDraft — the header’s type swap (fx-settings plan D9)', () => {
+  const base = () => draftOf(makeActiveFx({ fxType: 'Circle', blendMode: 'ADDITIVE', cycle: 4, parameters: { panRadius: '90' } }))
+  const FIGURE8 = entry({ ...CIRCLE, name: 'Figure 8' })
+
+  it('takes the new type’s starting parameters and blend, carrying a timing the operator chose', () => {
+    const next = swappedDraft({ ...base(), cycle: 2, direction: 'BACKWARD' }, CIRCLE, PULSE, 'dimmer')
+    expect(next.parameters).toEqual({ min: '0', max: '255', attackRatio: '0.1' })
+    expect(next.blendMode).toBe('OVERRIDE')
+    expect([next.cycle, next.direction]).toEqual([2, 'BACKWARD'])
+  })
+
+  it('keeps a blend changed from the old type’s start — a stacked FX’s', () => {
+    expect(swappedDraft({ ...base(), blendMode: 'MULTIPLY' }, CIRCLE, PULSE).blendMode).toBe('MULTIPLY')
+    // A Circle swapped for a Figure 8 is still Around.
+    expect(swappedDraft(base(), CIRCLE, FIGURE8).blendMode).toBe('ADDITIVE')
+  })
+
+  it('starts the division afresh across a beat and a wall-clock FX', () => {
+    const FLICKER = entry({ name: 'Flicker', timingSource: 'WALL_CLOCK', defaultCycle: 4, parameters: [] })
+    expect(swappedDraft({ ...base(), cycle: 16 }, PULSE, FLICKER).cycle).toBe(4)
+    expect(swappedDraft({ ...base(), cycle: 16 }, PULSE, entry({ name: 'Other', parameters: [] })).cycle).toBe(16)
+  })
+
+  it('moves a step spread onto the cycle at the offsets it ran at over the heads, else the cycle’s own', () => {
+    const stepped = { ...base(), spreadUnit: 'STEP' as const, spread: 1, parameters: { colours: '#ff0000,#00ff00,#0000ff,#ffffff' } }
+    const FOUR = entry({ ...CYCLE, stepsFrom: 'colours' })
+    // Four colours over eight heads, one step each: a quarter of the cycle between neighbours, which
+    // the desk's cycleSpread keeps as 8 / 4; over twelve, 3 is capped at the Spread's 200 %.
+    expect(swappedDraft(stepped, FOUR, PULSE, 'dimmer', 8)).toMatchObject({ spreadUnit: 'CYCLE', spread: 2 })
+    expect(swappedDraft(stepped, FOUR, PULSE, 'dimmer', 6)).toMatchObject({ spreadUnit: 'CYCLE', spread: 1.5 })
+    expect(swappedDraft(stepped, FOUR, PULSE, 'dimmer', 12)).toMatchObject({ spreadUnit: 'CYCLE', spread: 2 })
+    // No heads to keep the offsets over (a palette): the cycle's own spread.
+    expect(swappedDraft({ ...stepped, spread: 2 }, FOUR, PULSE)).toMatchObject({ spreadUnit: 'CYCLE', spread: 1 })
+    expect(swappedDraft(stepped, CYCLE, entry({ ...CYCLE, name: 'Palette Steps', stepsFrom: 'palettes' }))).toMatchObject({
+      spreadUnit: 'STEP',
+      spread: 1,
+    })
+  })
+})
+
+describe('fxSwapOptions', () => {
+  it('lists the FX the attribute takes but Palette Steps, the current one first where the listing leaves it out', () => {
+    const steps = entry({ name: 'Palette Steps', compatibleAttributes: ['dimmer'] })
+    const legacy = entry({ name: 'Old Pulse', legacy: true })
+    const library = [PULSE, entry({ ...CIRCLE, compatibleAttributes: ['position'] }), steps, legacy]
+    expect(fxSwapOptions(library, 'dimmer', PULSE).map((e) => e.name)).toEqual(['Pulse'])
+    expect(fxSwapOptions(library, 'dimmer', legacy).map((e) => e.name)).toEqual(['Old Pulse', 'Pulse'])
   })
 })

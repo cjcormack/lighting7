@@ -12,7 +12,7 @@ import { FxFields } from '@/components/fx/FxFields'
 import { FxPicker, type DraftFxPick } from '@/components/fx/FxPicker'
 import { selectionKeyOf, storedFxOf } from '@/components/fx/draftFx'
 import { fxSpeedLabel, secondsLabel } from '@/components/fx/fxConstants'
-import { cueFxDraftOf, runsWord, withCueFxDraft, type FxDraft } from '@/components/fx/fxEditorModel'
+import { cueFxDraftOf, fxSwapOptions, runsWord, swappedDraft, withCueFxDraft, type FxDraft } from '@/components/fx/fxEditorModel'
 import { useFxScope } from '@/components/fx/useFxScope'
 import { fxTargetOf } from '@/components/fx/selectionFxTarget'
 import { findFxEntry } from '@/components/busking/buskingTypes'
@@ -23,6 +23,7 @@ import { attributeFamilyForFxFamily } from '@/lib/attributeFamily'
 import { fxDynamicsParts } from '@/lib/fxDynamics'
 import { isOnSeconds } from '@/lib/fxTiming'
 import { fxTargetLabel, storedFxTargets, type FxTargetFields } from '@/lib/fxTargets'
+import { drivenCategoryOf } from '@/lib/stepFx'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { usePaletteListQuery } from '@/store/palettes'
 import { useFxLibraryQuery, type FxLibraryEntry } from '@/store/fixtureFx'
@@ -156,6 +157,33 @@ function FxBody({
     setOpen(null)
   }
 
+  /**
+   * The open row's type switcher (fx-settings plan D9): the stored FX becomes another type on its
+   * attribute, as the picker's draft swap stores one — its own parameters and family, the timing
+   * carried, a step spread kept at its offsets over the row's [heads].
+   */
+  const swapFor = (effect: CueAdHocFx, index: number): CueFxSwap | undefined => {
+    const from = findFxEntry(library, effect.fxType)
+    const attribute = effect.attribute
+    if (from == null || attribute == null || readOnly) return undefined
+    return {
+      options: fxSwapOptions(library, attribute, from),
+      onSwap: (to, heads) => {
+        editOne(
+          index,
+          (stored) => ({
+            ...withCueFxDraft(stored, swappedDraft(cueFxDraftOf(stored, from.timingSource), from, to, stored.attribute, heads)),
+            fxType: to.name,
+            family: drivenCategoryOf(to),
+          }),
+          true,
+        )
+        // The picker's next tap swaps from the type the row now holds.
+        setPicked((p) => (p != null && p.index === index ? { ...p, fxType: to.name } : p))
+      },
+    }
+  }
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor))
   const ids = effects.map((_, i) => `effect-${i}`)
   const onDragEnd = (event: DragEndEvent) => {
@@ -243,6 +271,7 @@ function FxBody({
                       entry={findFxEntry(library, effect.fxType)}
                       libraryLoaded={library != null}
                       readOnly={readOnly}
+                      swap={swapFor(effect, index)}
                       onDraft={(draft, release) => editOne(index, (stored) => withCueFxDraft(stored, draft), release)}
                       onTiming={(timing) => editOne(index, (stored) => ({ ...stored, ...timing }), false)}
                     />
@@ -255,6 +284,12 @@ function FxBody({
       )}
     </div>
   )
+}
+
+/** A row's type swap: the FX it can become, and the swap over the heads the row runs on. */
+interface CueFxSwap {
+  options: readonly FxLibraryEntry[]
+  onSwap: (to: FxLibraryEntry, heads: number | undefined) => void
 }
 
 function targetFieldsOf(effect: CueAdHocFx): FxTargetFields {
@@ -391,6 +426,7 @@ function CueFxEditor({
   entry,
   libraryLoaded,
   readOnly,
+  swap,
   onDraft,
   onTiming,
 }: {
@@ -398,6 +434,7 @@ function CueFxEditor({
   entry: FxLibraryEntry | undefined
   libraryLoaded: boolean
   readOnly: boolean
+  swap?: CueFxSwap
   onDraft: (draft: FxDraft, release: boolean) => void
   onTiming: (timing: Pick<CueAdHocFx, 'delayMs' | 'intervalMs' | 'randomWindowMs'>) => void
 }) {
@@ -434,6 +471,7 @@ function CueFxEditor({
           settingAttribute={settingAttribute}
           attribute={effect.attribute}
           readOnly={readOnly}
+          swap={swap && { options: swap.options, onSwap: (to) => swap.onSwap(to, scope.headCount) }}
           set={(patch, release = true) => write({ ...draft, ...patch }, release)}
           setParam={(name, value, release) => write({ ...draft, parameters: { ...draft.parameters, [name]: value } }, release)}
         />

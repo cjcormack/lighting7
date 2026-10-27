@@ -1,8 +1,11 @@
 import type { FxDirection, Timing, UpdateFxRequest } from '@/api/fxApi'
 import type { ActiveFx, FxLibraryEntry, FxParamUnit, FxParameterDef, FxPreset } from '@/store/fixtureFx'
-import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
-import { isMirroredOrder, type SpreadUnit } from '@/lib/spreadShape'
+import { beatsToSeconds, isOnSeconds, secondsToBeats, swappedTiming } from '@/lib/fxTiming'
+import { MAX_SPREAD, isMirroredOrder, spreadOffsets, stepCountOf, type SpreadUnit } from '@/lib/spreadShape'
 import { fxAttributeFamily } from '@/lib/attributeFamily'
+import { compatibleFxFor } from '@/lib/fxTargetAttributes'
+import { isPaletteSteps } from '@/lib/stepFx'
+import { normalizeFxName } from '../busking/buskingTypes'
 import { CENTRE_BYTE, CENTRE_PARAMS, centreModeOf, hasCentre, defaultParameters, withCentreMode } from './centreMode'
 import { STORED_ELEMENT_MODE } from './fxConstants'
 
@@ -80,6 +83,89 @@ export function startingSpec(
   return hasCentre(entry, parameters) ? withCentreMode(spec, 'around') : spec
 }
 
+/** The four FX of the Flicker family (fx-settings plan D2), by `normalizeFxName`. */
+const FLICKER_FX: ReadonlySet<string> = new Set(['flicker', 'candleflicker', 'fluorescentflicker', 'lightningstrike'])
+
+/**
+ * The editor's section for an FX's own settings, named for what it holds (fx-settings plan D9): a
+ * script FX's *Parameters*, the Flicker family's *Flicker*, a step FX's *Steps*, else the family it
+ * drives on [attribute] — *Levels* for a level or a beam FX, *Colours*, *Path*.
+ */
+export function fxSectionName(
+  entry: Pick<FxLibraryEntry, 'name' | 'family' | 'source'>,
+  attribute?: string | null,
+): string {
+  if (entry.source != null && entry.source !== 'BUILT_IN') return 'Parameters'
+  if (FLICKER_FX.has(normalizeFxName(entry.name))) return 'Flicker'
+  if (entry.family.toLowerCase() === 'steps') return 'Steps'
+  switch (fxAttributeFamily(entry.family, attribute)) {
+    case 'INTENSITY':
+    case 'BEAM':
+      return 'Levels'
+    case 'COLOUR':
+      return 'Colours'
+    case 'POSITION':
+      return 'Path'
+    default:
+      return 'Parameters'
+  }
+}
+
+/**
+ * The draft an FX becomes when its type is swapped for [to] from the editor's header (fx-settings
+ * plan D9), as the picker's swap writes one: the new type's starting parameters on [attribute]; its
+ * starting blend unless the blend was changed from the old type's (a stacked FX's is kept); the
+ * division and Direction carried unless they stood at the old type's defaults (`swappedTiming`),
+ * the division started afresh across a beat and a wall-clock FX. A `STEP` spread onto an FX with no
+ * steps becomes the `CYCLE` spread that keeps the offsets it ran at over [heads] (the desk's
+ * `SpreadShaping.cycleSpread`, plan §3), and the cycle's own where there are no heads to keep them
+ * over (a palette's).
+ */
+export function swappedDraft(
+  draft: FxDraft,
+  from: FxLibraryEntry | undefined,
+  to: FxLibraryEntry,
+  attribute?: string | null,
+  heads?: number,
+): FxDraft {
+  const spec = startingSpec(to, { attribute })
+  const startedOn = from != null ? startingSpec(from, { attribute }).blendMode : null
+  const unitOf = (entry: FxLibraryEntry | undefined) =>
+    draft.seconds || entry?.timingSource === 'WALL_CLOCK' ? 'seconds' : 'beats'
+  const timing = swappedTiming(draft, from, to, unitOf(from) === unitOf(to))
+  return {
+    ...draft,
+    parameters: spec.parameters,
+    blendMode: startedOn == null || draft.blendMode === startedOn ? spec.blendMode : draft.blendMode,
+    cycle: timing.cycle,
+    direction: timing.direction,
+    ...(draft.spreadUnit === 'STEP' && !to.stepsFrom ? { spreadUnit: 'CYCLE' as const, spread: keptCycleSpread(draft, from, heads) } : {}),
+  }
+}
+
+/** `spread × slots / steps`, capped at [MAX_SPREAD]: the `CYCLE` spread a `STEP` one runs as over [heads]. */
+function keptCycleSpread(draft: FxDraft, from: FxLibraryEntry | undefined, heads: number | undefined): number {
+  if (heads == null || heads <= 0) return 1
+  const steps = stepCountOf(from, draft.parameters)
+  const { slots } = spreadOffsets(draft.order, heads, draft)
+  const count = Math.max(slots, 1)
+  return Math.min((draft.spread * count) / (steps != null ? Math.max(steps, 1) : count), MAX_SPREAD)
+}
+
+/**
+ * The FX the header can swap [entry] for on [attribute]: the FX that list it, but Palette Steps,
+ * whose palettes only the picker offers, with [entry] itself first where the listing leaves it out
+ * (a legacy FX).
+ */
+export function fxSwapOptions(
+  library: FxLibraryEntry[] | undefined,
+  attribute: string,
+  entry: FxLibraryEntry,
+): FxLibraryEntry[] {
+  const offered = compatibleFxFor(library, new Set([attribute])).filter((e) => !isPaletteSteps(e.name))
+  return offered.some((e) => e.name === entry.name) ? offered : [entry, ...offered]
+}
+
 /**
  * A parameter change that makes the effect ask D12's question, or stop asking it — a Path's shape
  * moving to or from a Line — as the whole write. Out of an *Around* shape it replaces at its own
@@ -115,7 +201,7 @@ export function centreFlip(
  * - `axis` — any other position byte (a sweep's ends): a position on its axis, centre-relative
  *   (`-128..127`, venue-visit plan D3), as the centre is.
  * - `level` — a byte anywhere else: a percent, as the level row reads.
- * - `shape` — a curve, a switch, or a ratio beside levels: behind the Shape disclosure.
+ * - `shape` — a curve, a switch, or a ratio beside levels: folded under *More*.
  * - `main` — everything else, drawn with the levels.
  *
  * The ratio rule is the board's: a Pulse's attack and hold are its shape (it has levels to be the
@@ -197,7 +283,7 @@ export interface ParamView {
 }
 
 /** Whether the desk declared anything about [param] beyond its name, type, default and description. */
-export function declaresMetadata(param: FxParameterDef): boolean {
+function declaresMetadata(param: FxParameterDef): boolean {
   return (
     param.label != null ||
     param.min != null ||
@@ -393,8 +479,8 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
 /**
  * One `updateFx` frame for the draft — every write carries the parameters, speed, blend and phase,
  * so a floored push that drops an intermediate move can never drop a *different* field the operator
- * set in the same window. `fxType` is never sent: the editor edits one type, and a type swap is
- * the picker's.
+ * set in the same window. `fxType` is never sent here: a type swap is a frame of its own, the
+ * picker's or the header's ([swappedDraft]).
  *
  * The optional fields go only once [touched]: the DTO leaves a distribution, element mode or filter
  * out where it does not apply (`FxDto`'s `showOrder`), so the draft's default for an

@@ -11,7 +11,7 @@ export const NOTIONAL_HEADS_WORD = 'eight'
 
 /**
  * An FX's cycle, in **beats a cycle** — the one spelling every surface uses
- * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's Cycle segment draws
+ * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's Cycle chip draws
  * these labels and every chip reads them through [getCycleLabel], so a cycle is never *1*
  * in one place and *1/4* in another. A bar is four beats (venue-visit plan D16's words), so the
  * long cycles say bars.

@@ -100,7 +100,7 @@ internal object FxPhase {
     fun wallClockCycleMs(division: Double): Double = division * 1000.0
 
     /**
-     * The cycle length a member pass runs on: [division], scaled for a step-timed (Timing *Per head*)
+     * The cycle length a member pass runs on: [division], scaled for a step-timed (*One cycle for: Each head*)
      * effect by the number of distinct slots after the spread's shape (effects plan §3.3), so it is
      * the time per step rather than the whole cycle, and a chase over Segments or Parts has no empty steps.
      */

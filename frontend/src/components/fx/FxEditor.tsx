@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import type { UpdateFxRequest } from '@/api/fxApi'
-import { useFxLibraryQuery, useResetFxToPaletteMutation, type ActiveFx } from '@/store/fixtureFx'
+import { useFxLibraryQuery, useResetFxToPaletteMutation, type ActiveFx, type FxLibraryEntry } from '@/store/fixtureFx'
 import { useSavePaletteMutation } from '@/store/palettes'
 import type { PaletteSummary } from '@/api/palettesApi'
 import { useMaster1Uuid } from '@/store/speedMasters'
@@ -14,7 +14,7 @@ import { EditorReadout } from '../editor/EditorReadout'
 import { EditorFooter } from '../editor/EditorFooter'
 import { useLivePush } from '../editor/useLivePush'
 import { findFxEntry } from '../busking/buskingTypes'
-import { FxFields } from './FxFields'
+import { FxFields, type FxTypeSwap } from './FxFields'
 import { useSpawningPalette } from './useSpawningPalette'
 import { useToggleFxPause } from './useFxControls'
 import {
@@ -26,6 +26,9 @@ import {
   withPaletteDraft,
   OPTIONAL_FIELDS,
   sameRequest,
+  fxSwapOptions,
+  isPaletteLayerInstance,
+  swappedDraft,
   updateRequestOf,
   type FxDraft,
   type OptionalField,
@@ -95,11 +98,15 @@ export function FxEditor({
    */
   alsoIds?: readonly number[]
   className?: string
-  /** `FxFields`' section order: the FX editor's inspector draws its own (FX editor plan §4.5). */
+  /** `FxFields`' spacing and the inspector's offset ladder (FX editor plan §4.5). */
   layout?: 'editor' | 'inspector'
 }) {
   const { data: library } = useFxLibraryQuery()
-  const entry = useMemo(() => findFxEntry(library, effect.fxType), [library, effect.fxType])
+  // A header swap draws the new type at once: the host remounts the editor on it once the desk's
+  // answer reaches the running list, and a move before then must already be the new type's.
+  const [swappedTo, setSwappedTo] = useState<FxLibraryEntry | null>(null)
+  const listed = useMemo(() => findFxEntry(library, effect.fxType), [library, effect.fxType])
+  const entry = swappedTo ?? listed
   const connected = useIsDeskConnected()
   const master1Uuid = useMaster1Uuid()
 
@@ -280,6 +287,34 @@ export function FxEditor({
   const said = { order: hasOrder, elementMode: effect.elementMode != null || setFields.current.has('elementMode') }
   const edited =
     spawning?.palette.fx != null && differsFromPalette(draft, spawning.palette.fx, master1Uuid, libraryDefaults, said)
+  // The header's type switcher (fx-settings plan D9): the picker's swap, onto the FX this attribute
+  // takes. Not on a pad's instance, whose palette names its type, nor while a split edit is held,
+  // which a swap would send to every head.
+  const swap = useMemo((): FxTypeSwap | undefined => {
+    if (entry == null || hold != null || isPaletteLayerInstance(effect)) return undefined
+    return {
+      options: fxSwapOptions(library, effect.attribute, entry),
+      onSwap: (to) => {
+        flushHeld()
+        const from = draftRef.current
+        const next = swappedDraft(from, entry, to, effect.attribute, spreadScope.headCount)
+        send({
+          fxType: to.name,
+          parameters: next.parameters,
+          blendMode: next.blendMode,
+          ...(next.cycle !== from.cycle ? { cycle: next.cycle } : {}),
+          ...(next.direction !== from.direction ? { direction: next.direction } : {}),
+        })
+        // The desk converts a step spread itself; the draft only draws what it will run.
+        latest.current = null
+        touched.current = false
+        live.reset()
+        setDraft(next)
+        draftRef.current = next
+        setSwappedTo(to)
+      },
+    }
+  }, [entry, hold, effect, library, flushHeld, send, spreadScope.headCount, live])
   /** The desk put the instance back (or re-keyed it): the draft is what it now runs. */
   const reseed = useCallback(
     (next: ActiveFx) => {
@@ -344,6 +379,7 @@ export function FxEditor({
           readOnly={readOnly}
           set={set}
           setParam={setParam}
+          swap={swap}
           layout={layout}
         />
       )}
@@ -374,7 +410,7 @@ export function FxEditor({
             reseed={reseed}
           />
         ) : (
-          <Button variant="outline" size="sm" className="h-7" disabled={readOnly || !dirty} onClick={revert}>
+          <Button variant="outline" size="sm" className="h-7" disabled={readOnly || !dirty || swappedTo != null} onClick={revert}>
             Revert
           </Button>
         )}

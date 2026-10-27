@@ -215,6 +215,36 @@ describe('FxPicker', () => {
     })
   })
 
+  it('swaps from the type the desk runs after the editor’s header swapped it, a tap back on the old one included', async () => {
+    const { rerender } = render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    // The editor's header swapped it to Figure 8: the picker's own record still says Circle.
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Figure 8', targetKey: 'spot-3', attribute: 'position' })]
+    rerender(<Harness />)
+    expect(screen.getByRole('button', { name: 'Figure 8' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Circle' }).getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    expect(updateFx).toHaveBeenCalledTimes(1)
+    expect(updateFx.mock.calls[0][0]).toBe(77)
+    expect(updateFx.mock.calls[0][1]).toMatchObject({ fxType: 'Circle' })
+  })
+
+  it('swaps back on a tap made before the desk has answered its own swap', async () => {
+    const { rerender } = render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Circle', targetKey: 'spot-3', attribute: 'position' })]
+    rerender(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Figure 8' }))
+    // The running list still says Circle: that is this picker's swap in flight, not one made elsewhere.
+    rerender(<Harness />)
+    expect(screen.getByRole('button', { name: 'Figure 8' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    expect(updateFx).toHaveBeenCalledTimes(2)
+    expect(updateFx.mock.calls[1][1]).toMatchObject({ fxType: 'Circle' })
+  })
+
   it('restarts rather than swaps when the tap lands on another property', async () => {
     const { rerender } = render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
