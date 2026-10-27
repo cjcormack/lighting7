@@ -2,6 +2,7 @@ import {ChannelsApi, createChannelsApi} from "./channelsApi";
 import {ChannelMappingApi, createChannelMappingApi} from "./channelMappingApi";
 import {createStatusApi, StatusApi} from "./statusApi";
 import {createInternalApiConnection} from "./internalApi";
+import {webSocketUrlFor} from "./webSocketUrl";
 import {createUniversesApi, UniversesApi} from "./universesApi";
 
 import {createFixtureApi, FixturesApi} from "./fixturesApi";
@@ -109,7 +110,7 @@ function getWebSocketUrl() {
   if (import.meta.env.VITE_SOCKET_URL) {
     return import.meta.env.VITE_SOCKET_URL
   } else {
-    return 'ws://' + window.location.href.split('/')[2] + '/api'
+    return webSocketUrlFor(window.location)
   }
 }
 
