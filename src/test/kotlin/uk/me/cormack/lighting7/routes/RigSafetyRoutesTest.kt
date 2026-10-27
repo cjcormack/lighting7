@@ -20,9 +20,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
+import java.time.Instant
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.AttributeCategory
+import uk.me.cormack.lighting7.fixture.CommandRole
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
@@ -36,6 +38,7 @@ import uk.me.cormack.lighting7.testsupport.mountTestApp
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -414,6 +417,98 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         client.json("projects/$projectId/rig-safe")
         val again = awaitSnapshot("ready again") { it.ready && it.run?.finished == true }
         assertEquals(listOf("mac1"), again.undo.map { it.first }, "MAC1 is remembered from the first run; MAC2 was already off")
+    }
+
+    @Test
+    fun `a lamp being struck when the run ends is not off, though the ledger still holds it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        assertTrue(state.show.commandOutput.run("mac2", "lampOff") is CommandOutput.Outcome.Started)
+        awaitSnapshot("MAC2 in the ledger") { s -> s.lampsOff.any { it.fixtureKey == "mac2" } }
+        state.show.commandOutput.holdMsFor = { if (it.spec.role == CommandRole.LAMP_ON) UNTIL_TEARDOWN_MS else 50 }
+        assertTrue(state.show.commandOutput.run("mac2", "lampOn") is CommandOutput.Outcome.Started)
+
+        client.json("projects/$projectId/rig-safe", """{"targets":[{"type":"fixture","key":"mac1"}]}""")
+        val after = awaitRunFinished()
+        assertTrue(after.lampsOff.any { it.fixtureKey == "mac2" }, "the strike has not ended")
+        assertFalse(after.ready, "MAC2's lamp is striking")
+        assertEquals(listOf("MAC2"), after.notOff)
+    }
+
+    @Test
+    fun `a lamp the run turned off and that was struck before its end is not off`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        // MAC1's lamp-off starts first and is held until a park cuts it short, which ends the run.
+        var first = true
+        state.show.commandOutput.holdMsFor = { if (first) UNTIL_TEARDOWN_MS.also { first = false } else 50 }
+        client.json("projects/$projectId/rig-safe")
+        awaitSnapshot("MAC2 off by the run") { s -> s.lampsOff.any { it.fixtureKey == "mac2" } }
+        assertTrue(state.show.commandOutput.run("mac2", "lampOn") is CommandOutput.Outcome.Started)
+        awaitSnapshot("MAC2's strike ran its time") { s -> s.lampsOff.none { it.fixtureKey == "mac2" } }
+        state.show.parkManager.park(0, 1, 0u)
+
+        val after = awaitRunFinished()
+        assertFalse(after.ready)
+        assertEquals(listOf("MAC1", "MAC2"), after.notOff, "MAC1's lamp-off was cut short; MAC2 was struck")
+    }
+
+    @Test
+    fun `a strike cut short still leaves its lamp not off, and keeps its restrike time`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        assertTrue(state.show.commandOutput.run("mac2", "lampOff") is CommandOutput.Outcome.Started)
+        awaitSnapshot("MAC2 in the ledger") { s -> s.lampsOff.any { it.fixtureKey == "mac2" } }
+        state.show.commandOutput.holdMsFor = { UNTIL_TEARDOWN_MS }
+        val strike = assertIs<CommandOutput.Outcome.Started>(state.show.commandOutput.run("mac2", "lampOn"))
+        state.show.parkManager.park(0, 20, 0u)
+        assertEquals(CommandOutput.Ended.INTERRUPTED, withTimeout(5_000) { strike.running.done.await() })
+        state.show.commandOutput.holdMsFor = { 50 }
+
+        client.json("projects/$projectId/rig-safe", """{"targets":[{"type":"fixture","key":"mac1"}]}""")
+        val after = awaitRunFinished()
+        assertFalse(after.ready)
+        assertEquals(listOf("MAC2"), after.notOff)
+        assertTrue(after.lampsOff.any { it.fixtureKey == "mac2" }, "the next strike still waits out its restrike time")
+    }
+
+    @Test
+    fun `a strike that starts between a lamp-off's hold and its end hook keeps its lamp struck`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        val commands = state.show.commandOutput.commandsOf("mac2")
+        fun held(name: String) = CommandOutput.Running(
+            "mac2", "MAC2", commands.first { it.name == name }, Instant.now(), Instant.now(), kotlinx.coroutines.CompletableDeferred(),
+        )
+        val lampOff = held("lampOff")
+        val strike = held("lampOn")
+        // CommandOutput frees the unit before the lamp-off's end hook runs, so a strike's start hook can land between.
+        rig.commandStarted(projectId, lampOff)
+        rig.commandStarted(projectId, strike)
+        rig.commandEnded(projectId, lampOff, CommandOutput.Ended.COMPLETED)
+
+        client.json("projects/$projectId/rig-safe", """{"targets":[{"type":"fixture","key":"mac1"}]}""")
+        val after = awaitRunFinished()
+        assertFalse(after.ready)
+        assertEquals(listOf("MAC2"), after.notOff)
+    }
+
+    @Test
+    fun `a lamp struck and then turned off again is known off`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        for (command in listOf("lampOn", "lampOff")) {
+            val started = assertIs<CommandOutput.Outcome.Started>(state.show.commandOutput.run("mac2", command))
+            assertEquals(CommandOutput.Ended.COMPLETED, withTimeout(5_000) { started.running.done.await() })
+        }
+
+        client.json("projects/$projectId/rig-safe", """{"targets":[{"type":"fixture","key":"mac1"}]}""")
+        awaitSnapshot("ready") { it.ready }
     }
 
     @Test
