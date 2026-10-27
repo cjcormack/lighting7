@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { CompactFixtureCard, MultiElementCompactCard } from './CompactFixtureCard'
@@ -157,8 +158,9 @@ const ORDER_VALUES = new Set<string>(ORDER_OPTION_ENTRIES.map((o) => o.value))
  * numbered by its place in the whole group (an infrastructure head is still counted, so a number
  * can skip), with its **step** under the strategy *Runs as* names — the desk's
  * `orderSteps`, so shared steps (a `CENTRE_OUT` pair) read alike. A drag writes the new
- * order at once, optimistically, rolled back if the desk refuses it; a venue's group in a show,
- * and a venue's rig for an operator, are read-only and say why.
+ * order at once, optimistically, rolled back if the desk refuses it. On a venue's group in a show
+ * the drag is the show's order of it (group-order plan D14), marked *Your order* with *Take venue's*
+ * beside it; a venue's rig for an operator is read-only and says why.
  *
  * It nests its own `DndContext`, as Patches' Edit Group sheet does: the drag reorders a list within
  * itself and never ends on one of the shell's droppables (frontend CLAUDE.md §"Busk drag and drop").
@@ -185,6 +187,7 @@ function OrderedMembers({
   const steps = orderSteps?.[order]
   const orderName = ORDER_OPTION_ENTRIES.find((o) => o.value === order)?.label ?? order
   const editable = reorder.kind === 'editable'
+  const venueOrder = reorder.kind === 'editable' ? reorder.venueOrder : null
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -202,7 +205,15 @@ function OrderedMembers({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <h4 className="text-sm font-medium text-muted-foreground">Order</h4>
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-medium text-muted-foreground">Order</h4>
+          {venueOrder?.yours && <span className="text-[10px] text-primary">Your order</span>}
+          {venueOrder?.yours && (
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" aria-label="Take venue’s order" onClick={venueOrder.takeVenues}>
+              Take venue’s
+            </Button>
+          )}
+        </div>
         {orderSteps != null && (
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             Runs as
@@ -225,6 +236,7 @@ function OrderedMembers({
         {reorder.kind === 'readOnly'
           ? reorder.reason
           : `FX and a fan over ${groupName} run in this order${editable ? '. Drag to reorder.' : '.'}`}
+        {venueOrder != null && ' The venue’s group: an order you drag is this show’s alone.'}
         {steps != null && ` Step is when each member comes round under ${orderName}.`}
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

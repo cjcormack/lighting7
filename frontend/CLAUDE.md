@@ -1009,8 +1009,14 @@ Release folds to its glyph and the scope line drops the fade.
   sending only the members shown. The desk keeps every other member in its place, and so does the
   optimistic move (`lib/memberOrder.ts`'s `placeInOrder`), rolled back on a refusal.
   `useGroupMemberReorder` joins the runtime group to its patch group by name, for the id, the owner and
-  the patch ids. A venue's group in a show, and a venue's rig for an operator, are read-only with the
-  reason, here and in Patches' *Edit Group* sheet. The card keeps its members' cards. The Groups
+  the patch ids. On a venue's group in a show the drag is the show's order of it (group-order plan
+  D14): a body naming only `memberOrder`, which the desk stores as an overlay, drawn *Your order* with
+  *Take venue's* (`useTakeVenueGroupOrderMutation`, `memberOrder: null`) beside it while
+  `orderOwner` is `SHOW`. Patches' *Edit Group* sheet drags it too, keeping its name, members and
+  delete locked. A venue's rig for an operator is read-only with the reason, here and there. The
+  Update review lists the venue's reorders of a group the show orders beside facet drift, kept unless
+  answered *Take venue's* (`orders`, `order:<groupUuid>`); Attach's order-only pairs are a line of its
+  *Drawing only* list, which asks nothing. The card keeps its members' cards. The Groups
   list draws member rows in the group's order (`GroupSummary.memberKeys`) with their place, and has
   no drag of its own, by Chris's call: its rows already carry the marquee and row selection. A
   Fan over exactly one group row whose members are all listed and none filtered out sends the
