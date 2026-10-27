@@ -691,6 +691,22 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         cycle = 1.0; blendMode = "MULTIPLY"; order = "NORMAL"
         sortOrder = 0
     }
+    // A chase one colour behind on each head (fx-settings plan D6, formatVersion 43): its spread counts
+    // Colour Cycle's own steps, so the round trip sees a non-default unit.
+    val chaseLook = DaoLook.new {
+        this.project = project
+        name = "Steps chase"
+    }
+    DaoLookFxEntity.new {
+        look = chaseLook; targetType = "group"; targetKey = "front-wash"
+        fxType = "ColourCycle"; family = "colour"; attribute = "rgbColour"
+        // Only `colours`: a test re-reads this archive as v23, which drops a `between` the old FX never read.
+        parameters = mapOf("colours" to "#ff0000,#00ff00,#0000ff")
+        cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
+        spread = 2.0
+        spreadUnit = "STEP"
+        sortOrder = 0
+    }
     // A position FX's centre, spelled the UK way since v39 (terminology plan D20).
     val swirlLook = DaoLook.new {
         this.project = project
@@ -763,6 +779,22 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         wings = 3
         segments = 2
         parts = 2
+    }
+
+    // A step chase as an FX palette (fx-settings plan D6, formatVersion 43): its spread counts Colour
+    // Cycle's steps, so the palette FX's import and export carry a non-default unit.
+    val stepsPalette = DaoPalette.new {
+        this.project = project
+        name = "steps-chase"
+        fadeDuration = null
+    }
+    DaoPaletteFxEntity.new {
+        palette = stepsPalette
+        fxType = "ColourCycle"; family = "colour"; attribute = "rgbColour"
+        cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
+        parameters = mapOf("colours" to "#ff0000,#00ff00,#0000ff")
+        spread = 1.5
+        spreadUnit = "STEP"
     }
 
     // A **per-fixture** template — a focus position, where each head holds its own value. Seeded
@@ -900,6 +932,17 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         attribute = "dimmer"
         elementMode = "WHOLE"
         sortOrder = 4
+    }
+    // A step chase as a cue's own FX (fx-settings plan D6, formatVersion 43).
+    DaoCueAdHocFxEntity.new {
+        cue = cue1; targetType = "group"; targetKey = "front-wash"
+        fxType = "ColourCycle"; family = "colour"; cycle = 4.0
+        blendMode = "OVERRIDE"; order = "NORMAL"
+        parameters = mapOf("colours" to "#ff0000,#00ff00,#0000ff")
+        attribute = "rgbColour"
+        spread = 3.0
+        spreadUnit = "STEP"
+        sortOrder = 5
     }
     // A timed layer over the effects-only look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides. A Look layer names no

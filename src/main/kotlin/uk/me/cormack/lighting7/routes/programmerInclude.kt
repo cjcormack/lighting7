@@ -379,6 +379,7 @@ internal fun CueAdHocFxDto.toFxSpec() = LookFxSpec(
     wings = wings,
     segments = segments,
     parts = parts,
+    spreadUnit = spreadUnit,
 )
 
 /** The include target for [cueData], included from [entryId], for [uk.me.cormack.lighting7.fx.ProgrammerStore]. */

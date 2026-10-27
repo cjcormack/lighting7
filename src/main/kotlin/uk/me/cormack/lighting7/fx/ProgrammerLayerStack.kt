@@ -925,6 +925,7 @@ class ProgrammerLayerStack(
             newWings = fresh.dynamics.wings,
             newSegments = fresh.dynamics.segments,
             newParts = fresh.dynamics.parts,
+            newSpreadUnit = fresh.dynamics.spreadUnit,
         ) ?: return ResetToPaletteOutcome.NotFound
         updated.programmerLayerFxKey = ProgrammerLayerFxKey.of(key.layerId, entry, key.target)
         ResetToPaletteOutcome.Reset(updated)

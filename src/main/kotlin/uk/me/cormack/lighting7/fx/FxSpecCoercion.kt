@@ -40,6 +40,8 @@ object FxSpecCoercion {
 
         fun direction(raw: String): FxDirection? = FxDirection.byName(raw.trim())
 
+        fun spreadUnit(raw: String): SpreadUnit? = SpreadUnit.byName(raw)
+
         /**
          * [raw] as the name a row stores — `"backward"` as `BACKWARD` — for a value a write boundary
          * has already checked with [Strict.problem]; an unknown one is passed through unchanged.
@@ -79,6 +81,9 @@ object FxSpecCoercion {
         fun direction(raw: String): FxDirection =
             Names.direction(raw) ?: fail("direction", raw, FxDirection.entries.map { it.name })
 
+        fun spreadUnit(raw: String): SpreadUnit =
+            Names.spreadUnit(raw) ?: fail("spreadUnit", raw, SpreadUnit.entries.map { it.name })
+
         /**
          * The message the four functions above would throw for the first unrecognised value, or
          * null when every value supplied parses. **A null argument is "absent"** and takes no
@@ -101,6 +106,9 @@ object FxSpecCoercion {
             wings: Int? = null,
             segments: Int? = null,
             parts: Int? = null,
+            spreadUnit: String? = null,
+            fxType: String? = null,
+            fxSteps: Boolean? = null,
         ): String? {
             blendMode?.let { raw ->
                 Names.blendMode(raw) ?: return message("blendMode", raw, BlendMode.entries.map { it.name })
@@ -121,20 +129,25 @@ object FxSpecCoercion {
             }
             amount?.let { amountProblem(it)?.let { problem -> return problem } }
             runs?.let { runsProblem(it)?.let { problem -> return problem } }
-            if (spread != null || wings != null || segments != null || parts != null) {
+            val unit = spreadUnit?.let { raw ->
+                Names.spreadUnit(raw) ?: return message("spreadUnit", raw, SpreadUnit.entries.map { it.name })
+            }
+            if (spread != null || wings != null || segments != null || parts != null || unit != null) {
                 // An absent Order is the default one, NORMAL, which every stored spec falls back to.
                 val spreadOrder = order?.let { Names.order(it) } ?: SpreadOrder.NORMAL
-                spreadProblem(spread, wings, segments, parts, spreadOrder)?.let { return it }
+                spreadProblem(spread, wings, segments, parts, spreadOrder, unit, fxType, fxSteps)?.let { return it }
             }
             return null
         }
 
         /**
-         * Why the spread's shape (effects plan D4) is not one — Spread outside 0–2 (0–200 %), Wings or
-         * Segments below 1, Parts below 0 (off), any count above [SpreadShape.MAX_COUNT], or Wings above
-         * 1 under a mirrored Order ([SpreadOrder.isMirrored]: Centre out and Centre in
-         * are two wings already) — or null. A null field is absent and takes no part, except that
-         * [order] is checked against [wings] only when wings are given.
+         * Why the spread's shape (effects plan D4) is not one — Spread outside 0–2 (0–200 %), or 0–16
+         * steps under [SpreadUnit.STEP], Wings or Segments below 1, Parts below 0 (off), any count above
+         * [SpreadShape.MAX_COUNT], Wings above 1 under a mirrored Order ([SpreadOrder.isMirrored]: Centre
+         * out and Centre in are two wings already), or `STEP` on an FX with no steps ([fxSteps] false,
+         * fx-settings plan D6) — or null. A null field is absent and takes no part, except that [order]
+         * is checked against [wings] only when wings are given; [unit] is the one the FX will run, a
+         * null one `CYCLE`, and [fxSteps] null takes no view.
          */
         fun spreadProblem(
             spread: Double?,
@@ -142,9 +155,20 @@ object FxSpecCoercion {
             segments: Int?,
             parts: Int?,
             order: SpreadOrder,
+            unit: SpreadUnit? = null,
+            fxType: String? = null,
+            fxSteps: Boolean? = null,
         ): String? {
+            if (unit == SpreadUnit.STEP && fxSteps == false) {
+                return "spreadUnit STEP counts an FX's steps, and ${fxType ?: "this FX"} has none " +
+                    "(Colour Cycle, Palette Steps and Slot Steps do): send CYCLE"
+            }
             spread?.let {
-                if (it.isNaN() || it < 0.0 || it > SpreadShape.MAX_SPREAD) {
+                if (unit == SpreadUnit.STEP) {
+                    if (it.isNaN() || it < 0.0 || it > SpreadShape.MAX_STEP_SPREAD) {
+                        return "spread must be between 0 and 16 steps under spreadUnit STEP, got $it"
+                    }
+                } else if (it.isNaN() || it < 0.0 || it > SpreadShape.MAX_SPREAD) {
                     return "spread must be between 0 and 2 (0–200 %), got $it"
                 }
             }
@@ -162,9 +186,11 @@ object FxSpecCoercion {
         }
 
         /** [spreadProblem] as the [IllegalArgumentException] the apply routes answer 400 with. */
-        fun spreadShape(shape: SpreadShape, order: SpreadOrder): SpreadShape = shape.also {
-            spreadProblem(it.spread, it.wings, it.segments, it.parts, order)?.let { p -> throw IllegalArgumentException(p) }
-        }
+        fun spreadShape(shape: SpreadShape, order: SpreadOrder, fxType: String? = null, fxSteps: Boolean? = null): SpreadShape =
+            shape.also {
+                spreadProblem(it.spread, it.wings, it.segments, it.parts, order, it.unit, fxType, fxSteps)
+                    ?.let { p -> throw IllegalArgumentException(p) }
+            }
 
         private fun orderName(order: SpreadOrder): String = when (order) {
             SpreadOrder.CENTRE_OUT -> "Centre out"
@@ -233,16 +259,36 @@ object FxSpecCoercion {
         }
 
         /**
-         * A stored spread shape (effects plan D4) with each field clamped into its range, with a warn.
+         * A stored spread shape (effects plan D4) with each field clamped into its range, with a warn —
+         * Spread's by [unit], and a `STEP` on an FX with no steps ([steps] false) read as `CYCLE`.
          * Wings under a mirrored Order are left as stored: [SpreadShaping] ignores them, and the
          * editor shows them so the operator can see what the row says.
          */
-        fun spreadShape(spread: Double, wings: Int, segments: Int, parts: Int, context: () -> String): SpreadShape {
+        fun spreadShape(
+            spread: Double,
+            wings: Int,
+            segments: Int,
+            parts: Int,
+            unit: String? = null,
+            steps: Boolean? = null,
+            context: () -> String,
+        ): SpreadShape {
+            val stored = resolve(unit, context, "spreadUnit", SpreadUnit.STORED_DEFAULT, Names::spreadUnit)
+            // A STEP row on an FX with no steps (an archive's, which the importer does not check) runs
+            // as the cycle's spread, and so takes the cycle's range.
+            val spreadUnit = if (stored == SpreadUnit.STEP && steps == false) {
+                logger.warn("{}: spreadUnit STEP on an FX with no steps — running as CYCLE", context())
+                SpreadUnit.CYCLE
+            } else {
+                stored
+            }
+            val ceiling = if (spreadUnit == SpreadUnit.STEP) SpreadShape.MAX_STEP_SPREAD else SpreadShape.MAX_SPREAD
             val shape = SpreadShape(
-                spread = if (spread.isNaN()) 1.0 else spread.coerceIn(0.0, SpreadShape.MAX_SPREAD),
+                spread = if (spread.isNaN()) 1.0 else spread.coerceIn(0.0, ceiling),
                 wings = wings.coerceIn(1, SpreadShape.MAX_COUNT),
                 segments = segments.coerceIn(1, SpreadShape.MAX_COUNT),
                 parts = parts.coerceIn(0, SpreadShape.MAX_COUNT),
+                unit = spreadUnit,
             )
             if (shape.spread != spread || shape.wings != wings || shape.segments != segments || shape.parts != parts) {
                 logger.warn(

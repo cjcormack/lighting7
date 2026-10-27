@@ -28,6 +28,7 @@ export function storedFxOf(pick: DraftFxPick, target: FxTarget): CueAdHocFx {
     timing: null,
     parameters: pick.parameters,
     ...(pick.speedMasterUuid != null ? { speedMasterUuid: pick.speedMasterUuid } : {}),
+    ...(pick.spreadUnit != null ? { spread: pick.spread ?? 1, spreadUnit: pick.spreadUnit } : {}),
   }
 }
 

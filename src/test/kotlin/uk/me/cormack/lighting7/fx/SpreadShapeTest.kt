@@ -35,11 +35,13 @@ class SpreadShapeTest {
         val wings: Int = 1,
         val segments: Int = 1,
         val parts: Int = 0,
+        val spreadUnit: String? = null,
+        val steps: Int? = null,
         val offsets: List<Double>,
         val slots: Int,
         val over: Over? = null,
     ) {
-        val shape get() = SpreadShape(spread, wings, segments, parts)
+        val shape get() = SpreadShape(spread, wings, segments, parts, SpreadUnit.stored(spreadUnit))
     }
 
     /** One element mode over [fixtures] fixtures of [elementsEach] elements each. */
@@ -64,7 +66,7 @@ class SpreadShapeTest {
         assertTrue(vector.cases.size >= 20, "the vector covers the orders and each field")
         for (case in vector.cases) {
             val strategy = assertNotNull(SpreadOrder.byName(case.order), case.name)
-            val plan = DistributionPlan.forElements(strategy, case.heads, case.shape)
+            val plan = DistributionPlan.forElements(strategy, case.heads, case.shape, case.steps)
             assertEquals(case.offsets.size, plan.offsets.size, case.name)
             for ((i, expected) in case.offsets.withIndex()) {
                 assertTrue(
@@ -78,6 +80,7 @@ class SpreadShapeTest {
             val dyn = FxDynamics(
                 timing = Timing.CYCLE, order = strategy,
                 spread = case.spread, wings = case.wings, segments = case.segments, parts = case.parts,
+                spreadUnit = case.shape.unit,
             )
             assertEquals(case.slots, dyn.distinctSlots(case.heads), "${case.name}: FxDynamics.distinctSlots")
         }
@@ -95,7 +98,7 @@ class SpreadShapeTest {
                 structureVersion = 0, elementFilter = ElementFilter.ALL, kind = FxTargetExpansion.Kind.GROUP_ELEMENTS,
                 coverageKeys = keys.flatten(), flat = keys.flatten(), perFixture = keys, members = emptyList(),
             )
-            val plans = FxDistributionPlans.build(expansion, strategy, case.shape)
+            val plans = FxDistributionPlans.build(expansion, strategy, case.shape, case.steps)
             for (f in 0 until over.fixtures) {
                 for (e in 0 until over.elementsEach) {
                     val (units, offset, expected) = when (ElementMode.valueOf(over.mode)) {
@@ -118,12 +121,13 @@ class SpreadShapeTest {
         for (case in vector.cases) {
             val strategy = assertNotNull(SpreadOrder.byName(case.order), case.name)
             val ladder = DistributionPlan.elementLadder(strategy, case.heads, case.shape)
-            val plan = DistributionPlan.forElements(strategy, case.heads, case.shape)
+            val plan = DistributionPlan.forElements(strategy, case.heads, case.shape, case.steps)
             val parts = SpreadShaping.Step.PARTS.ordinal
             assertEquals(case.slots, ladder.counts[parts], "${case.name}: the last rung's count is the slots")
             if (case.shape.isDefault) continue
+            val over = SpreadShaping.spreadDivisor(case.shape.unit, ladder.counts[parts], case.steps)
             for (i in 0 until case.heads) {
-                val offset = case.spread * ladder.ranks[parts][i] / ladder.counts[parts]
+                val offset = case.spread * ladder.ranks[parts][i] / over
                 assertTrue(abs(plan.offsets[i] - offset) < 1e-9, "${case.name}: head $i's ladder gives $offset, not ${plan.offsets[i]}")
             }
         }
@@ -204,6 +208,47 @@ class SpreadShapeTest {
         assertNotNull(FxSpecCoercion.Strict.spreadProblem(null, null, null, -1, linear))
         assertNotNull(FxSpecCoercion.Strict.spreadProblem(null, null, SpreadShape.MAX_COUNT + 1, null, linear))
         assertNull(FxSpecCoercion.Strict.spreadProblem(null, null, null, 0, linear), "groups 0 is off")
+    }
+
+    @Test
+    fun `under STEP the spread is 0 to 16 steps, and only on an FX with steps`() {
+        val linear = SpreadOrder.NORMAL
+        val step = SpreadUnit.STEP
+        assertNull(FxSpecCoercion.Strict.spreadProblem(16.0, null, null, null, linear, step, "ColourCycle", true))
+        assertNull(FxSpecCoercion.Strict.spreadProblem(2.5, null, null, null, linear, step, "ColourCycle", true))
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(16.5, null, null, null, linear, step, "ColourCycle", true))
+        assertNotNull(FxSpecCoercion.Strict.spreadProblem(2.5, null, null, null, linear))
+        val onWave = assertNotNull(FxSpecCoercion.Strict.spreadProblem(1.0, null, null, null, linear, step, "Wave", false))
+        assertTrue("Wave" in onWave, onWave)
+        assertNotNull(FxSpecCoercion.Strict.problem(spreadUnit = "STEP", fxType = "Wave", fxSteps = false))
+        assertNotNull(FxSpecCoercion.Strict.problem(spreadUnit = "HEADS"), "an unknown unit is refused by name")
+        assertNull(FxSpecCoercion.Strict.problem(spreadUnit = "step", spread = 4.0, fxType = "ColourCycle", fxSteps = true))
+    }
+
+    @Test
+    fun `a stored STEP spread clamps at 16 steps, and an unknown unit runs as CYCLE`() {
+        assertEquals(
+            SpreadShape(spread = 16.0, unit = SpreadUnit.STEP),
+            FxSpecCoercion.Lenient.spreadShape(40.0, 1, 1, 0, "STEP") { "test row" },
+        )
+        assertEquals(SpreadShape(spread = 2.0), FxSpecCoercion.Lenient.spreadShape(3.0, 1, 1, 0, "HEADS") { "test row" })
+        assertEquals(SpreadUnit.CYCLE, FxSpecCoercion.Lenient.spreadShape(1.0, 1, 1, 0, null) { "test row" }.unit)
+        assertEquals(
+            SpreadShape(spread = 2.0),
+            FxSpecCoercion.Lenient.spreadShape(5.0, 1, 1, 0, "STEP", steps = false) { "test row" },
+            "a STEP row on an FX with no steps runs as CYCLE, in CYCLE's range",
+        )
+    }
+
+    @Test
+    fun `a STEP spread with no step count runs as CYCLE`() {
+        val shape = SpreadShape(spread = 1.0, unit = SpreadUnit.STEP)
+        assertEquals(
+            DistributionPlan.forElements(SpreadOrder.NORMAL, 4, SpreadShape.DEFAULT).offsets.toList(),
+            DistributionPlan.forElements(SpreadOrder.NORMAL, 4, shape, steps = null).offsets.toList(),
+        )
+        assertEquals(1.0, SpreadShaping.cycleSpread(1.0, 3, 3), "one step of three over three slots is the whole cycle")
+        assertEquals(SpreadShape.MAX_SPREAD, SpreadShaping.cycleSpread(1.0, 8, 3), "capped at 200 %")
     }
 
     @Test

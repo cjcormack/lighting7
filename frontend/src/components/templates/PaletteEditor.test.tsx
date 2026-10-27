@@ -38,6 +38,16 @@ const library: FxLibraryEntry[] = [
     compatibleAttributes: ['rgbColour'],
   },
   {
+    name: 'Colour Cycle',
+    family: 'colour',
+    outputType: 'COLOUR',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    stepsFrom: 'colours',
+    parameters: [{ name: 'colours', type: 'colourList', defaultValue: '#ff0000,#00ff00,#0000ff', description: '' }],
+    compatibleAttributes: ['rgbColour'],
+  },
+  {
     name: 'Circle',
     family: 'position',
     outputType: 'POSITION',
@@ -471,6 +481,26 @@ describe('validity and the save body', () => {
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
     expect(body.fx).toBeUndefined()
     expect(body.rows).toHaveLength(1)
+  })
+})
+
+describe('a step FX palette (fx-settings plan D7)', () => {
+  it('starts one step behind, and a swap onto an FX with no steps goes back to the cycle', async () => {
+    const { onSave } = renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chase' } })
+    chooseFx('Colour Cycle')
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    const stepped = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
+    expect(stepped.fx).toMatchObject({ fxType: 'Colour Cycle', spreadUnit: 'STEP' })
+
+    chooseFx('Rainbow Cycle')
+    fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
+    const swapped = (onSave as ReturnType<typeof vi.fn>).mock.calls[1][0] as PaletteInput
+    expect(swapped.fx).toMatchObject({ fxType: 'Rainbow Cycle', spreadUnit: 'CYCLE', spread: 1 })
   })
 })
 

@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import { useCallback } from 'react'
 import { useDispatch } from 'react-redux'
 import { toast } from 'sonner'
@@ -172,6 +173,11 @@ export interface FxLibraryEntry {
    * Wave, which Colour Cycle draws a DMX step apart. It runs and edits as any FX; no picker lists it.
    */
   legacy?: boolean
+  /**
+   * The list parameter whose entries are this FX's steps (fx-settings plan D6) — Colour Cycle's
+   * `colours` — absent for an FX with none: only one that names it takes a `STEP` spread.
+   */
+  stepsFrom?: string
 }
 
 /**
@@ -227,6 +233,8 @@ export interface AddFixtureFxRequest {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -382,6 +390,8 @@ export interface ActiveFx {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * An N-shot that has run its count and is kept, painting nothing, until its programmer layer goes
    * (the desk's `FxInstance.spent`). Any other spent N-shot has already left the list.

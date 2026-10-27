@@ -583,6 +583,7 @@ class ProjectExporter(private val state: State) {
                             wings = e.wings,
                             segments = e.segments,
                             parts = e.parts,
+                            spreadUnit = e.spreadUnit,
                             sortOrder = e.sortOrder,
                         )
                     }
@@ -639,6 +640,7 @@ class ProjectExporter(private val state: State) {
                             wings = e.wings,
                             segments = e.segments,
                             parts = e.parts,
+                            spreadUnit = e.spreadUnit,
                         )
                     },
                 )
@@ -914,6 +916,7 @@ class ProjectExporter(private val state: State) {
                         wings = e.wings,
                         segments = e.segments,
                         parts = e.parts,
+                        spreadUnit = e.spreadUnit,
                         runUuid = e.runUuid?.toString(),
                     ),
                 )

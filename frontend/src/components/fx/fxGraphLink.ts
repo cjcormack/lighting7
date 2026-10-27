@@ -26,6 +26,8 @@ export interface LinkedEditor {
   levelParams?: { low: string; high: string }
   /** A wall-clock FX, whose cycle is seconds whatever its master. */
   wallClock: boolean
+  /** The FX's own steps, which a `STEP` spread counts (fx-settings plan D6); null for an FX with none. */
+  steps?: number | null
   readOnly: boolean
   /** A move (`release` false), held by the floor, or the release, which lands. */
   set: (patch: Partial<FxDraft>, release: boolean) => void

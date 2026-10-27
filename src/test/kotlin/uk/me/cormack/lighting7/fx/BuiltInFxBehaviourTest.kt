@@ -58,14 +58,14 @@ class BuiltInFxBehaviourTest {
         val wave = registry.getRegistration("Wave")!!
         assertEquals(
             listOf(
-                "shape" to "SINE", "low" to "0", "high" to "255", "width" to "0.5",
+                "shape" to "SINE", "low" to "0", "high" to "255", "width" to "0.5", "widthUnit" to "RATIO",
                 "attack" to "0.1", "hold" to "0.3", "curve" to "LINEAR",
             ),
             wave.parameters.map { it.name to it.defaultValue },
             "Wave's declared defaults should reach the registry",
         )
         assertEquals(
-            listOf("choice", "ubyte", "ubyte", "double", "double", "double", "easingCurve"),
+            listOf("choice", "ubyte", "ubyte", "double", "choice", "double", "double", "easingCurve"),
             wave.parameters.map { it.type },
             "declared types should survive",
         )
@@ -580,7 +580,7 @@ class BuiltInFxBehaviourTest {
         assertEquals(2.0, focusPull.cycle)
         assertEquals(FxDirection.BOUNCE.name, focusPull.direction)
         assertEquals(
-            listOf("Strobe", "Zoom Wave", "Iris Pulse", "Frost Pulse", "Focus Pull"),
+            listOf("Strobe", "Chase", "Zoom Wave", "Iris Pulse", "Frost Pulse", "Focus Pull"),
             wave.presets.map { it.name },
         )
     }

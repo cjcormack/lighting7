@@ -41,6 +41,13 @@ parameters:
     step: 0.01
     unit: ratio
     shownWhen: shape = [SQUARE]
+  - name: widthUnit
+    type: choice
+    default: "RATIO"
+    description: What a Square or a Pulse is on for — Width, or one head's share of the cycle, so one head is on at a time
+    label: On for
+    options: [RATIO: Width, HEAD: One head]
+    shownWhen: shape = [SQUARE, PULSE]
   - name: attack
     type: double
     default: "0.1"
@@ -83,6 +90,9 @@ presets:
   - name: Strobe
     attribute: dimmer
     parameters: {shape: SQUARE, width: 0.1}
+  - name: Chase
+    attribute: dimmer
+    parameters: {shape: SQUARE, widthUnit: HEAD}
   - name: Zoom Wave
     attribute: zoom
     parameters: {shape: SINE, low: 64, high: 192}
@@ -103,6 +113,9 @@ val shape = params.choice("shape")
 val low = params.ubyte("low").toDouble()
 val high = params.ubyte("high").toDouble()
 val curve = params.easingCurve("curve")
+// One head (fx-settings plan D8): on for one slot's share of the cycle, whatever the head count.
+val oneHead = params.choice("widthUnit") == "HEAD"
+val slots = context.numDistinctSlots.coerceAtLeast(1)
 
 fun level(fraction: Double): UByte =
     (low.toInt() + (high.toInt() - low.toInt()) * fraction).toInt().coerceIn(0, 255).toUByte()
@@ -111,13 +124,18 @@ val value: UByte = when (shape) {
     "RAMP_UP" -> level(curve.apply(phase))
     "RAMP_DOWN" -> level(curve.apply(1.0 - phase))
     "TRIANGLE" -> level(curve.apply(if (phase < 0.5) phase * 2.0 else 2.0 * (1.0 - phase)))
-    "SQUARE" -> if (phaseBefore(phase, params.double("width"))) high.toInt().toUByte() else low.toInt().toUByte()
+    "SQUARE" -> {
+        val width = if (oneHead) 1.0 / slots else params.double("width")
+        if (phaseBefore(phase, width)) high.toInt().toUByte() else low.toInt().toUByte()
+    }
     "PULSE" -> {
         val attack = params.double("attack")
         val hold = params.double("hold")
         val release = 1.0 - attack - hold
-        val p = cyclePhase(phase)
+        // Under One head the whole pulse plays within one slot's share of the cycle, then rests low.
+        val p = if (oneHead) cyclePhase(phase) * slots else cyclePhase(phase)
         val pulse = when {
+            oneHead && !phaseBefore(phase, 1.0 / slots) -> low
             phaseBefore(p, attack) -> curve.interpolate(low, high, p / attack)
             phaseBefore(p, attack + hold) -> high
             else -> curve.interpolate(high, low, if (release > 0.0) (p - attack - hold) / release else 1.0)

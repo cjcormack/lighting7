@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import { InternalApiConnection, InternalEventType } from './internalApi'
 import { Subscription } from './subscription'
 import { sendGesture } from './wsGesture'
@@ -69,6 +70,8 @@ export interface ActiveFxState {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   // `speedMasterIndex` and `rateSpeedMasterIndex` — the 1-based display positions the server
   // numbered the bank at — were declared beside the two uuids and never read. The FX-sheet chip
   // resolves both indices from the live master list, which is the only way they can't drift from a
@@ -131,6 +134,8 @@ export interface UpdateFxRequest {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * The heads this edit is for (apply-model plan §3.4, D5): absent, or every head the effect paints,
    * is the in-place edit; some of them splits those off — only a Local effect's, and no change to

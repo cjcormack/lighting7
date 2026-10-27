@@ -74,6 +74,7 @@ import {
   withIntent,
   type PaletteValues,
 } from './familyControls/paletteRows'
+import { newFxSpread } from '@/lib/spreadShape'
 
 /**
  * Authoring a template: **family first, then Holds, then one control native to both.**
@@ -288,6 +289,16 @@ export function PaletteEditor({
           ...(prev?.wings != null ? { wings: prev.wings } : {}),
           ...(prev?.segments != null ? { segments: prev.segments } : {}),
           ...(prev?.parts != null ? { parts: prev.parts } : {}),
+          // What the spread counts (fx-settings plan D6): a new step FX starts one step behind (D7), a
+          // swap keeps STEP onto an FX that steps and falls back to the cycle's own spread onto one that
+          // does not — a palette has no heads to keep the offsets of.
+          ...(prev == null
+            ? newFxSpread(entry.stepsFrom)
+            : prev.spreadUnit === 'STEP'
+              ? entry.stepsFrom
+                ? { spreadUnit: 'STEP' as const }
+                : { spreadUnit: 'CYCLE' as const, spread: 1 }
+              : {}),
           // The draft's own reading of its kind, until the desk answers with the registry's: what
           // tells a wall-clock effect's Seconds (no rate master) from a beat effect on a master.
           timingSource: entry.timingSource ?? 'BEAT',
@@ -823,6 +834,7 @@ function fxKey(effect: PaletteFx | null): string {
     effect.wings ?? 1,
     effect.segments ?? 1,
     effect.parts ?? 0,
+    effect.spreadUnit ?? 'CYCLE',
     Object.entries(effect.parameters).sort(([a], [b]) => a.localeCompare(b)),
   ])
 }

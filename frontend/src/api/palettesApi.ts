@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { FxDirection, Timing } from './fxApi'
 
@@ -99,6 +100,8 @@ export interface PaletteFx {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * `BEAT` or `WALL_CLOCK` — **resolved server-side on read and ignored on write**, the same
    * contract `PaletteRow.health` has.

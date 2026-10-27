@@ -238,7 +238,10 @@ export function GraphHandles({
     const s = rowStarts(fx, laid)?.[0]
     return s == null ? [] : [{ laid, x: sampleX(layout, samples, s), y: laid.y + 2 - top }]
   })
-  const shares = points.map((p) => spreadShareOf(fx, rungRow(p.laid)) ?? 0)
+  // Under STEP the spread counts the FX's own steps (fx-settings plan D6), so each unit moves a row by
+  // its rank over the steps; with no step count the desk runs it as the cycle's.
+  const inSteps = editor.draft.spreadUnit === 'STEP' && editor.steps != null
+  const shares = points.map((p) => spreadShareOf(fx, rungRow(p.laid), inSteps ? (editor.steps ?? null) : null) ?? 0)
   const spreadHandle = editor.draft.order !== 'UNIFIED' && points.length >= 2 && shares.some((q) => q > 0)
   // The knob rides the row Spread moves furthest — the lowest of those — so it follows the finger.
   const most = Math.max(0, ...shares)
@@ -253,7 +256,7 @@ export function GraphHandles({
       e,
       cancel,
       (dx) => {
-        value = spreadFromDrag(start, dx / samplesToPx, share)
+        value = spreadFromDrag(start, dx / samplesToPx, share, inSteps)
         editor.set({ spread: value }, false)
       },
       (moved) => {
@@ -337,7 +340,11 @@ export function GraphHandles({
             name="spread"
             x={knob.x}
             y={top + knob.y}
-            tip={`Spread ${Math.round(editor.draft.spread * 100)}%`}
+            tip={
+              inSteps
+                ? `Spread ${Math.round(editor.draft.spread * 100) / 100} ${editor.draft.spread === 1 ? 'step' : 'steps'}`
+                : `Spread ${Math.round(editor.draft.spread * 100)}%`
+            }
             cursor="ew-resize"
             mark="starts"
             onHighlight={onHighlight}

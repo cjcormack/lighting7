@@ -20,23 +20,65 @@ import kotlin.math.min
  *   a stored row holds one anyway.
  * @property segments This many neighbouring members share one phase; 1 is none.
  * @property parts The spread repeats every this many members; 0 is off.
+ * @property unit What [spread] counts (fx-settings plan D6): a share of the cycle, or the FX's steps.
  */
 data class SpreadShape(
     val spread: Double = 1.0,
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    val unit: SpreadUnit = SpreadUnit.CYCLE,
 ) {
     val isDefault: Boolean get() = this == DEFAULT
 
     companion object {
         val DEFAULT = SpreadShape()
 
-        /** Spread's ceiling, 200 % (§3.1). */
+        /** Spread's ceiling under [SpreadUnit.CYCLE], 200 % (§3.1). */
         const val MAX_SPREAD = 2.0
+
+        /** Spread's ceiling under [SpreadUnit.STEP]: each head 16 steps after the one before. */
+        const val MAX_STEP_SPREAD = 16.0
 
         /** The ceiling on Wings, Segments and Parts: a universe of single-channel heads. */
         const val MAX_COUNT = 512
+    }
+}
+
+/**
+ * What a [SpreadShape.spread] counts (fx-settings plan D6, *Each head later by*).
+ *
+ * - [CYCLE]: the share of the cycle the slots cover, `offset = spread × rank / slots`.
+ * - [STEP]: how many of the FX's own steps each slot starts after the one before,
+ *   `offset = spread × rank / steps` — so a chase stays on its step boundaries whatever the head
+ *   count. Only an FX that declares where its steps come from (`stepsFrom`) takes it.
+ */
+enum class SpreadUnit {
+    CYCLE,
+    STEP,
+    ;
+
+    companion object {
+        /** What a stored FX naming no unit means: every row written before the unit existed. */
+        val STORED_DEFAULT = CYCLE
+
+        /** The unit [name] spells (any case), or null. */
+        fun byName(name: String): SpreadUnit? = entries.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }
+
+        /** A stored column's value: [STORED_DEFAULT] when null or unknown. */
+        fun stored(name: String?): SpreadUnit = name?.let(::byName) ?: STORED_DEFAULT
+
+        /** What a home stores for [unit]: null for [STORED_DEFAULT], so an unchanged row stays as it was. */
+        fun toStored(unit: SpreadUnit): String? = unit.takeIf { it != STORED_DEFAULT }?.name
+
+        /** [raw], a write boundary has checked, as a row stores it: `step` as `STEP`, `CYCLE` as null. */
+        fun canonical(raw: String?): String? = toStored(stored(raw))
+
+        /**
+         * The unit and spread an FX starts with when its author names neither (D7): one step behind for
+         * an FX that steps, else the cycle's own spread.
+         */
+        fun newFx(steps: Boolean): SpreadUnit = if (steps) STEP else CYCLE
     }
 }
 
@@ -82,12 +124,20 @@ object SpreadShaping {
      *    run but a short last one), so the outermost member of each wing pair shares a rank; over `m`.
      * 4. **Parts** `P`: `r ← r mod P`, over `P` ranks — when `P` is below the rank count; otherwise
      *    the ranks stand, so the slot count never exceeds what the members can fill.
-     * 5. **Spread** `s`: `offset = s × r / R`.
+     * 5. **Spread** `s`: `offset = s × r / R`; under [SpreadUnit.STEP], `s × r / steps`, the FX's
+     *    [steps] (at least 1), on the ranks steps 2–4 left. With no [steps] it runs as `CYCLE`.
      *
      * [Result.slots] is `R` after step 4: a step chase's window is `1 / slots` and its step timing
      * scales by it, so neither leaves a gap.
      */
-    fun shape(ranks: DoubleArray, rankCount: Int, shape: SpreadShape, wingsApply: Boolean, ladder: Ladder? = null): Result {
+    fun shape(
+        ranks: DoubleArray,
+        rankCount: Int,
+        shape: SpreadShape,
+        wingsApply: Boolean,
+        ladder: Ladder? = null,
+        steps: Int? = null,
+    ): Result {
         val n = ranks.size
         var count = max(rankCount, 1)
         val r = ranks.copyOf()
@@ -123,9 +173,22 @@ object SpreadShaping {
         }
         ladder?.record(Step.PARTS, r, count)
 
-        val offsets = DoubleArray(n) { shape.spread * r[it] / count }
+        val over = spreadDivisor(shape.unit, count, steps).toDouble()
+        val offsets = DoubleArray(n) { shape.spread * r[it] / over }
         return Result(offsets, count)
     }
+
+    /** What step 5 divides a rank by: the [slots] under `CYCLE`, the FX's [steps] under `STEP`. */
+    fun spreadDivisor(unit: SpreadUnit, slots: Int, steps: Int?): Int =
+        if (unit == SpreadUnit.STEP && steps != null) max(steps, 1) else slots
+
+    /**
+     * The `CYCLE` spread that runs the offsets a `STEP` [spread] does over [slots] slots of an FX with
+     * [steps] steps — `spread × slots / steps`, for a home that must leave the unit behind (a type
+     * swap onto an FX with no steps), capped at [SpreadShape.MAX_SPREAD].
+     */
+    fun cycleSpread(spread: Double, slots: Int, steps: Int?): Double =
+        min(spread * max(slots, 1) / spreadDivisor(SpreadUnit.STEP, max(slots, 1), steps), SpreadShape.MAX_SPREAD)
 
     /**
      * [Result.slots] without the ranks — what the step timing and ping-pong's turnaround read per pass

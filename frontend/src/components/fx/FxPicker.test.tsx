@@ -157,6 +157,34 @@ describe('FxPicker', () => {
     expect(updateFx).not.toHaveBeenCalled()
   })
 
+  it('starts an FX that steps one step behind, in draft and live (fx-settings plan D7)', async () => {
+    const stepper: FxLibraryEntry = {
+      ...position('Stepper'),
+      stepsFrom: 'points',
+      parameters: [{ name: 'points', type: 'string', defaultValue: 'a,b,c', description: '' }],
+    }
+    const before = wire.library
+    wire.library = [...before, stepper]
+    try {
+      const picks: DraftFxPick[] = []
+      const { unmount } = render(
+        <FxPicker target={TARGET} initialFamily="POSITION" onEdit={() => {}} draft={{ current: null, onPick: (pick) => picks.push(pick) }} />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Stepper' }))
+      expect(picks[0]).toMatchObject({ fxType: 'Stepper', spread: 1, spreadUnit: 'STEP' })
+      fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+      expect(picks[1]).not.toHaveProperty('spreadUnit')
+      unmount()
+
+      render(<Harness />)
+      fireEvent.click(screen.getByRole('button', { name: 'Stepper' }))
+      await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+      expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Stepper', spreadUnit: 'STEP' })
+    } finally {
+      wire.library = before
+    }
+  })
+
   it('starts on master 1 — no master sent — where no master is tagged for the family', async () => {
     render(<Harness initialFamily="INTENSITY" />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))

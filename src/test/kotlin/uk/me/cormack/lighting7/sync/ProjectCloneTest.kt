@@ -330,7 +330,7 @@ class ProjectCloneTest {
             // `ExportUuidRemapper` knows nothing about — which is the point: the remap is a blind
             // uuid substitution across the export text, so a new inline child is covered with no
             // code of its own.
-            val paletteFx = clone.palettes.mapNotNull { it.effect }.single()
+            val paletteFx = clone.palettes.single { it.name == "amber-breathe" }.effect!!
             assertEquals(
                 cloneMaster.uuid, paletteFx.speedMasterUuid,
                 "the template effect's reference must point at the clone's master",

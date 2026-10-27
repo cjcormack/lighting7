@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import type { CueTarget } from '@/api/cuesApi'
 import type { FxDirection, Timing } from '@/api/fxApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
@@ -30,6 +31,8 @@ export interface StoredFxFields {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
 }
 
 /**
@@ -90,5 +93,8 @@ export function previewDraftOf(
     ...(effect.wings != null ? { wings: effect.wings } : {}),
     ...(effect.segments != null ? { segments: effect.segments } : {}),
     ...(effect.parts != null ? { parts: effect.parts } : {}),
+    // Said even when the FX says none, as Over is: the add starts a step FX naming no spread one step
+    // behind, and a stored FX naming none counts the cycle.
+    spreadUnit: effect.spreadUnit ?? 'CYCLE',
   }
 }

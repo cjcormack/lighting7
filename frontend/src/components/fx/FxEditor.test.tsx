@@ -538,7 +538,8 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     updateFx.mockClear()
     pick('Same spread as')
     expect(updateFx).toHaveBeenCalledTimes(1)
-    expect(lastFrame()).toMatchObject({ order: 'REVERSE', spread: 0.5, wings: 1, segments: 3, parts: 0 })
+    // The unit travels with the number (fx-settings plan D6), so 0.5 stays half a cycle.
+    expect(lastFrame()).toMatchObject({ order: 'REVERSE', spread: 0.5, wings: 1, segments: 3, parts: 0, spreadUnit: 'CYCLE' })
 
     // The source changes afterwards: nothing follows it.
     updateFx.mockClear()

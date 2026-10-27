@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fx.SpreadUnit
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -263,6 +264,7 @@ internal fun alignmentRequest(live: FxSettingsSnapshot, fresh: FxSettingsSnapsho
         wings = now.wings.takeIf { it != was.wings },
         segments = now.segments.takeIf { it != was.segments },
         parts = now.parts.takeIf { it != was.parts },
+        spreadUnit = SpreadUnit.stored(now.spreadUnit).name.takeIf { now.spreadUnit != was.spreadUnit },
     )
 }
 

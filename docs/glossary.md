@@ -81,6 +81,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Order: by where each fixture hangs | Position | `POSITIONAL` | | | screen | done | `ORDER_LABELS.POSITIONAL` |
 | Order: every head in step | Unified | `UNIFIED` | | | screen, wire | done | `ORDER_LABELS.UNIFIED` |
 | How much of the cycle the heads cover, as a percentage | Spread | `spread` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
+| What Spread counts (fx-settings plan D6): a share of the cycle, or the FX's own steps, each head that many after the one before | Each head later by | `spreadUnit`, `SpreadUnit` — `CYCLE` \| `STEP`; column `spread_unit` | | | wire, storage, archive | done | `doc:docs/fx-engineering.md` |
 | Mirrored repeats of the spread (D5) | Wings | `wings` | | | screen, wire | done | `src:components/fx/FxFields.tsx` |
 | The spread repeats every N heads (D4) | Parts | `parts`; column `spread_parts` | Groups; `groups`, `spread_groups` | Parts | screen, wire, code, storage, archive | done | `src:components/fx/FxFields.tsx` |
 | N neighbours share one offset (D4) | Segments | `segments`; column `spread_segments` | Blocks; `blocks`, `spread_blocks` | Segments | screen, wire, code, storage, archive | done | `src:components/fx/FxFields.tsx` |

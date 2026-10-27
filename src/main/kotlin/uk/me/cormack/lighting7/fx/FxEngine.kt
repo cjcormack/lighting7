@@ -1021,6 +1021,13 @@ class FxEngine(
     )
 
     /**
+     * The most slots any list [effect] spreads over has after its shape ([FxContext.numDistinctSlots]),
+     * at least 1: what a `STEP` spread is turned into a `CYCLE` one over ([SpreadShaping.cycleSpread]).
+     */
+    fun spreadSlots(effect: FxInstance): Int =
+        paintedHeads(effect).maxOfOrNull { it.context.numDistinctSlots }?.coerceAtLeast(1) ?: 1
+
+    /**
      * The heads [effect] paints, in its order, each as the tick pass spreads it under its current
      * dynamics. Heads that paint nothing are left out: an element filter's, and a heterogeneous
      * group's members that lack the property (the group takes its first member's branch).
@@ -1337,6 +1344,8 @@ class FxEngine(
         newWings: Int? = null,
         newSegments: Int? = null,
         newParts: Int? = null,
+        /** What [newSpread] counts (fx-settings plan D6); null = keep. A dynamics field. */
+        newSpreadUnit: SpreadUnit? = null,
     ): FxInstance? = updateFx(
         fxId,
         FxEdit(
@@ -1347,6 +1356,7 @@ class FxEngine(
             newTimingSource = newTimingSource, replaceMasters = replaceMasters, newSeconds = newSeconds,
             newAmount = newAmount, newDirection = newDirection, newRuns = newRuns, clearRuns = clearRuns,
             newSpread = newSpread, newWings = newWings, newSegments = newSegments, newParts = newParts,
+            newSpreadUnit = newSpreadUnit,
         ),
     )
 
@@ -1374,11 +1384,12 @@ class FxEngine(
         val newWings: Int? = null,
         val newSegments: Int? = null,
         val newParts: Int? = null,
+        val newSpreadUnit: SpreadUnit? = null,
     ) {
         val touchesDynamics: Boolean
             get() = newPhaseOffset != null || newOrder != null || newElementMode != null || newElementFilter != null ||
                 newTimingMode != null || newAmount != null || newDirection != null || newRuns != null || clearRuns ||
-                newSpread != null || newWings != null || newSegments != null || newParts != null
+                newSpread != null || newWings != null || newSegments != null || newParts != null || newSpreadUnit != null
 
         /** [dyn] with this edit's dynamics fields. */
         fun applyTo(dyn: FxDynamics): FxDynamics = dyn.copy(
@@ -1394,6 +1405,7 @@ class FxEngine(
             wings = newWings ?: dyn.wings,
             segments = newSegments ?: dyn.segments,
             parts = newParts ?: dyn.parts,
+            spreadUnit = newSpreadUnit ?: dyn.spreadUnit,
         )
 
         /** Whether this edit moves [existing]'s Runs, which then count again from the next pass. */
@@ -2659,12 +2671,13 @@ class FxEngine(
     /** [effect]'s cached plans when they were built from [expansion] under [dyn]'s Order and shape. */
     private fun validPlans(effect: FxInstance, expansion: FxTargetExpansion, dyn: FxDynamics): FxDistributionPlans? {
         val cached = effect.distributionPlans ?: return null
-        // The shape's four fields compared one by one rather than through `dyn.spreadShape`, which
+        // The shape's fields compared one by one rather than through `dyn.spreadShape`, which
         // would allocate on every pass for a cache hit.
         return cached.takeIf {
             it.expansion === expansion && it.order == dyn.order &&
                 it.shape.spread == dyn.spread && it.shape.wings == dyn.wings &&
-                it.shape.segments == dyn.segments && it.shape.parts == dyn.parts
+                it.shape.segments == dyn.segments && it.shape.parts == dyn.parts &&
+                it.shape.unit == dyn.spreadUnit && it.steps == effect.planSteps(dyn)
         }
     }
 
@@ -2689,7 +2702,8 @@ class FxEngine(
         dyn: FxDynamics,
     ): FxDistributionPlans {
         validPlans(effect, expansion, dyn)?.let { return it }
-        return FxDistributionPlans.build(expansion, dyn.order, dyn.spreadShape).also { effect.distributionPlans = it }
+        return FxDistributionPlans.build(expansion, dyn.order, dyn.spreadShape, effect.planSteps(dyn))
+            .also { effect.distributionPlans = it }
     }
 
     /**
@@ -2737,7 +2751,7 @@ class FxEngine(
 
         override fun plans(effect: FxInstance, expansion: FxTargetExpansion, dynamics: FxDynamics): FxDistributionPlans =
             validPlans(effect, expansion, dynamics)
-                ?: FxDistributionPlans.build(expansion, dynamics.order, dynamics.spreadShape)
+                ?: FxDistributionPlans.build(expansion, dynamics.order, dynamics.spreadShape, effect.planSteps(dynamics))
 
         // A staging transaction that is never applied: the only way to read a head's values.
         override fun current(target: FxTarget, key: String): FxOutput? = try {

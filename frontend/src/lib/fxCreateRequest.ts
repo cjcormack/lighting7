@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import type { ApplyFxRequest, BlendMode, SpreadOrder, ElementMode } from '@/api/groupsApi'
 import type { AddFixtureFxRequest } from '@/store/fixtureFx'
 import type { FxDirection, Timing } from '@/api/fxApi'
@@ -62,6 +63,8 @@ export interface FxCreateRequest {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * Create in the programmer's reserved priority band. Always set by the busking pad; the sheet
    * sets it only for the programmer's own `+ Effect`.
@@ -104,6 +107,8 @@ export function fxCreateAddition(
     ...(request.wings != null && request.wings !== 1 ? { wings: request.wings } : {}),
     ...(request.segments != null && request.segments !== 1 ? { segments: request.segments } : {}),
     ...(request.parts != null && request.parts !== 0 ? { parts: request.parts } : {}),
+    // What the spread counts, whenever the caller says: absent, a step FX starts one step behind.
+    ...(request.spreadUnit != null ? { spreadUnit: request.spreadUnit } : {}),
   }
 
   if (target.type === 'group') {

@@ -257,6 +257,7 @@ private class TimelineReads(
             wings = effect.wings,
             segments = effect.segments,
             parts = effect.parts,
+            spreadUnit = effect.spreadUnit,
         )
     }
 }
@@ -358,6 +359,7 @@ internal data class TimelineFxSettingsDto(
     val wings: Int,
     val segments: Int,
     val parts: Int,
+    val spreadUnit: String?,
 )
 
 @Serializable

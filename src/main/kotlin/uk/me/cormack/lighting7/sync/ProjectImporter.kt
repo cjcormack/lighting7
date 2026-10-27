@@ -307,7 +307,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 42
+internal const val SUPPORTED_FORMAT_VERSION = 43
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1014,6 +1014,7 @@ class ProjectImporter(private val state: State) {
                     this.wings = e.wings
                     this.segments = e.segments
                     this.parts = e.parts
+                    this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(e.spreadUnit)
                     sortOrder = e.sortOrder
                     this.uuid = UUID.fromString(e.uuid)
                 }
@@ -1656,6 +1657,7 @@ class ProjectImporter(private val state: State) {
                     this.wings = e.wings
                     this.segments = e.segments
                     this.parts = e.parts
+                    this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(e.spreadUnit)
                     this.uuid = UUID.fromString(e.uuid)
                 }
             }
@@ -1771,6 +1773,7 @@ class ProjectImporter(private val state: State) {
                 this.wings = e.wings
                 this.segments = e.segments
                 this.parts = e.parts
+                this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(e.spreadUnit)
                 this.uuid = uuid
                 runUuid = e.runUuid?.let { UUID.fromString(it) }
             }

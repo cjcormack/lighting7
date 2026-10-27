@@ -1,7 +1,7 @@
 import type { FxDirection, Timing, UpdateFxRequest } from '@/api/fxApi'
 import type { ActiveFx, FxLibraryEntry, FxParamUnit, FxParameterDef, FxPreset } from '@/store/fixtureFx'
 import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
-import { isMirroredOrder } from '@/lib/spreadShape'
+import { isMirroredOrder, type SpreadUnit } from '@/lib/spreadShape'
 import { fxAttributeFamily } from '@/lib/attributeFamily'
 import { CENTRE_BYTE, CENTRE_PARAMS, centreModeOf, hasCentre, defaultParameters, withCentreMode } from './centreMode'
 import { STORED_ELEMENT_MODE } from './fxConstants'
@@ -295,6 +295,8 @@ export interface FxDraft {
   wings: number
   segments: number
   parts: number
+  /** What [spread] counts (fx-settings plan D6): the cycle, or the FX's own steps. */
+  spreadUnit: SpreadUnit
 }
 
 /**
@@ -327,6 +329,7 @@ export function draftOf(effect: ActiveFx): FxDraft {
     wings: effect.wings ?? 1,
     segments: effect.segments ?? 1,
     parts: effect.parts ?? 0,
+    spreadUnit: effect.spreadUnit ?? 'CYCLE',
   }
 }
 
@@ -367,6 +370,7 @@ export type OptionalField =
   | 'wings'
   | 'segments'
   | 'parts'
+  | 'spreadUnit'
 
 export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'timing',
@@ -383,6 +387,7 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'wings',
   'segments',
   'parts',
+  'spreadUnit',
 ]
 
 /**
@@ -435,6 +440,7 @@ export function updateRequestOf(
     ...(touched.has('wings') ? { wings: draft.wings } : {}),
     ...(touched.has('segments') ? { segments: draft.segments } : {}),
     ...(touched.has('parts') ? { parts: draft.parts } : {}),
+    ...(touched.has('spreadUnit') ? { spreadUnit: draft.spreadUnit } : {}),
     ...(!onSeconds && touched.has('speedMasterUuid') && speedMasterUuid != null ? { speedMasterUuid } : {}),
     ...(!onSeconds && touched.has('rateSpeedMasterUuid') && draft.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: draft.rateSpeedMasterUuid }
@@ -690,6 +696,8 @@ export interface PaletteFxFields {
   wings?: number
   segments?: number
   parts?: number
+  /** What the spread counts as stored (fx-settings plan D6); absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /** The palette's resolved timing source, where the desk has said it. */
   timingSource?: string | null
   /** *Over* as stored; absent is Each fixture. */
@@ -722,6 +730,7 @@ export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | 
     wings: effect.wings ?? 1,
     segments: effect.segments ?? 1,
     parts: effect.parts ?? 0,
+    spreadUnit: effect.spreadUnit ?? 'CYCLE',
   }
 }
 
@@ -763,6 +772,7 @@ export function withPaletteDraft<E extends PaletteFxFields>(
     ...(draft.wings !== 1 || effect.wings != null ? { wings: draft.wings } : {}),
     ...(draft.segments !== 1 || effect.segments != null ? { segments: draft.segments } : {}),
     ...(draft.parts !== 0 || effect.parts != null ? { parts: draft.parts } : {}),
+    ...(draft.spreadUnit !== 'CYCLE' || effect.spreadUnit != null ? { spreadUnit: draft.spreadUnit } : {}),
   }
 }
 
@@ -870,6 +880,7 @@ export function differsFromPalette(
   if (draft.wings !== (effect.wings ?? 1)) return true
   if (draft.segments !== (effect.segments ?? 1)) return true
   if (draft.parts !== (effect.parts ?? 0)) return true
+  if (draft.spreadUnit !== (effect.spreadUnit ?? 'CYCLE')) return true
   const names = new Set([...Object.keys(draft.parameters), ...Object.keys(effect.parameters)])
   for (const name of names) {
     if (!sameParam(draft.parameters[name] ?? defaults[name], effect.parameters[name] ?? defaults[name])) return true

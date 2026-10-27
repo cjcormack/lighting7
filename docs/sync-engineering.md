@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 42`, `minReader = 42`. Rules for future
+Current writer emits `formatVersion = 43`, `minReader = 43`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -438,6 +438,21 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 43 — Each head later by
+
+fx-settings plan session 4: a stored FX — a Look's, a cue's ad-hoc one or a palette's — carries
+`spreadUnit`, `STEP` where its `spread` counts the FX's own steps (each head that many steps after the
+one before) rather than a share of the cycle (`docs/fx-engineering.md` §"The spread's shape"). Absent
+is `CYCLE`, so every older record means what it meant, and the writer omits it at `CYCLE`; the column
+is `spread_unit`, null for `CYCLE`. The importer stores the unit as the archive says it
+(`SpreadUnit.canonical`), and checks nothing about the FX: a `STEP` on a type with no steps runs as
+`CYCLE`.
+
+`SUPPORTED_FORMAT_VERSION = 43`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5. **`minReader` moves to 43**:
+a v42 reader would run a `STEP` spread as a share of the cycle, staggering the chase it was set to
+align, and its next push would write the unit away. `RichProjectFixture`'s *Steps chase* Look holds a
+Colour Cycle at `STEP` 2.
 
 ### Version 42 — Path
 

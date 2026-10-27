@@ -113,10 +113,12 @@ internal data class ProgrammerFxRequest(
     val amount: Double? = null,
     val direction: String? = null,
     val runs: Int? = null,
-    val spread: Double = 1.0,
+    /** Absent 1; see [AddFxRequest.spread] and [AddFxRequest.spreadUnit] — a step FX starts one step behind. */
+    val spread: Double? = null,
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    val spreadUnit: String? = null,
     /** Add the FX on top of the Local FX on the selection, replacing none (FX editor plan D6). */
     val stack: Boolean = false,
 )
@@ -181,6 +183,7 @@ internal fun pressBareFx(
             wings = request.wings,
             segments = request.segments,
             parts = request.parts,
+            spreadUnit = request.spreadUnit,
             programmerOwned = true,
         ),
     )
