@@ -169,7 +169,7 @@ class Show(
         parkManager,
         isBlind = { programmerStore.blind },
         venueRefusal = { state.venueHold.effectsRefusal() },
-        onStarted = { state.rigSafety.commandStarted(it) },
+        onStarted = { state.rigSafety.commandStarted(project.id.value, it) },
         onEnded = { running, ended -> state.rigSafety.commandEnded(project.id.value, running, ended) },
     ).also { fixtures.registerListener(it) }
 

@@ -247,8 +247,9 @@ class CommandOutput(
             running.remove(fixtureKey)
             rebuildLocked()
         }
-        which.done.complete(how)
+        // The hook first: whoever awaits [Running.done] then sees what the hook recorded (the restrike ledger).
         notifyEnded(which, how)
+        which.done.complete(how)
         logger.info("Command '{}' on '{}' {}", which.command.name, fixtureKey, if (how == Ended.COMPLETED) "released" else "interrupted")
     }
 
@@ -266,7 +267,7 @@ class CommandOutput(
             running.clear()
             rebuildLocked()
         }
-        ended.forEach { it.done.complete(Ended.INTERRUPTED); notifyEnded(it, Ended.INTERRUPTED) }
+        ended.forEach { notifyEnded(it, Ended.INTERRUPTED); it.done.complete(Ended.INTERRUPTED) }
         scope.cancel()
         fixtures.unregisterListener(this)
         reattach()
@@ -318,8 +319,8 @@ class CommandOutput(
             rebuildLocked()
         }
         interrupted.forEach {
-            it.done.complete(Ended.INTERRUPTED)
             notifyEnded(it, Ended.INTERRUPTED)
+            it.done.complete(Ended.INTERRUPTED)
             logger.warn("Command '{}' on '{}' interrupted: the fixture was repatched", it.command.name, it.fixtureKey)
         }
     }

@@ -920,11 +920,17 @@ desk-owned, attached to each show as it starts, like the effects service — and
   desk (`COMMAND_RUN_BUSY`); *Cancel* stops what has not started and lets a running hold finish. A
   project switch drops the run with the show.
 - **The restrike ledger** records when each unit's lamp went off — from every door, a single command
-  and MCP's included, through `CommandOutput`'s end hook, a hold that ran its full time only — and a
-  strike that runs its time clears it. Runtime only: a restart forgets it.
+  and MCP's included, through `CommandOutput`'s end hook (run before anything awaiting the hold hears
+  it ended), a hold that ran its full time only — and a strike that runs its time clears it. A strike
+  also marks its lamp **struck** as it starts, however it ends, and only a lamp-off that runs its time
+  clears the mark (and restarts that lamp's off time); a strike cut short keeps its lamp's restrike
+  time but leaves it struck. Runtime only: a restart forgets both.
 - **Make rig safe** (`POST …/rig-safe` `{targets?}`) is a lamp-off run over every lamped unit, or the
   selection's, then *Make rig safe*'s blackout, then **Ready to switch off** — only when every lamped
-  unit **on the rig** is known off, by this run or by an earlier lamp-off the ledger holds. So a
+  unit **on the rig** is known off: the ledger holds it as off, by this run or an earlier lamp-off,
+  and it is not struck — so a strike started during the run, still running at its end or not, keeps
+  its lamp from counting. The run's end reads both under the lock a strike's start hook clears ready
+  under, so a strike starting at that moment is either counted or clears ready as it starts. So a
   selection's run is ready only if the lamps outside it were already off; otherwise the rig is blacked
   out and not ready, naming the lamps not known off. A park that holds a level stays lit through the
   blackout and does not keep the rig from ready (Chris, 2026-10-15). The blackout is
