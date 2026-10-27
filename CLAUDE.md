@@ -141,7 +141,7 @@ write disguises itself as a serialization regression. The suite runs in two fork
 claims its own `build/test-data/slot-N` (see `docs/testing-engineering.md` §"Two forks").
 
 The suite takes ~2 minutes locally in its two forks (measured 2026-10-16; ~4 minutes in
-one), warm or cold alike. The first run after any code change recompiles the 19 built-in FX
+one), warm or cold alike. The first run after any code change recompiles the 14 built-in FX
 (editing a source file changes the classpath fingerprint, which invalidates the
 compiled-script jar cache), and that cost lands on whichever class first builds a `Show` in
 each fork, which therefore *looks* slow. It is not slow; it is first. Before optimising
@@ -418,15 +418,19 @@ FX interfaces:
 - **Fx** - Pure phase-based: `(phase, context) → FxOutput`
 - **StatefulFx** - Tick-based with internal state: `(tick, deltaMs, context) → FxOutput` (e.g., CandleFlicker)
 
-Built-in FX types — **all 19 live as `.fx.kts` resources** under
+Built-in FX types — **all 14 live as `.fx.kts` resources** under
 `src/main/resources/fx/`, compiled into the `FxRegistry` at startup by `FxFileLoader`. There are
 no compiled-in FX classes: the parallel `fx/effects/*.kt` set was deleted (sweep item D7)
 once it had drifted a file behind the resources and nothing but tests constructed it.
 - **Intensity**: Wave (fx-settings plan D2: one `shape` — Sine, Ramp up, Ramp down, Triangle, Square,
   Pulse — on the dimmer, UV and the beam attributes, its family Beam on a beam attribute, D5),
-  Flicker, LightningStrike, CandleFlicker, FluorescentFlicker
-- **Colour**: ColourCycle (literal colours only), RainbowCycle, ColourStrobe, ColourWave, ColourFade, ColourFlicker
-- **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition
+  Flicker, LightningStrike, CandleFlicker, FluorescentFlicker (their levels `low` / `high`)
+- **Colour**: ColourCycle (literal colours only; `between` Cut, Fade or Smooth — its presets *Colour
+  Fade* and *Colour Wave*), RainbowCycle, ColourStrobe, ColourFlicker; and ColourWave and ColourFade,
+  **legacy** (`legacy: true`): they run and edit what is stored, but no picker or listing offers them,
+  since Colour Cycle draws each a DMX step apart (fx-settings plan D3)
+- **Position**: Path (D2: one `shape` — Circle, Figure 8, Random about a centre, or a Line between
+  two ends; its presets *Sweep*, *Pan Sweep*, *Tilt Sweep*)
 - **Beam**: Wave on `zoom`, `iris`, `frost` or `focus`, which the picker offers as its presets *Zoom
   Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* (D4), only on a head that has the attribute
 - **Steps**: PaletteSteps (through generic value palettes of one family, filed under that family)
@@ -434,13 +438,16 @@ once it had drifted a file behind the resources and nothing but tests constructe
   resolves per head, so each head lands on its own value for each step (effects plan D8;
   `docs/fx-engineering.md` §"Step FX")
 
-Colour Fade and the sweeps bounce by Direction at half a bar by default (frontmatter
-`defaultDirection`, `defaultCycle`). The old ids, Breathe, `pingPong`, `SPLIT` and the
+Colour Fade and Path's sweep presets bounce by Direction at half a bar by default (frontmatter
+`defaultDirection`, `defaultCycle`, a preset's `cycle` and `direction`). The old ids, Breathe, `pingPong`, `SPLIT` and the
 composite mode are read only by `sync/LegacyNames.kt` and refused at every write. The eleven level
 waves Wave replaced (Sine Wave, the ramps, Square Wave, Pulse, Dimmer Strobe and the four beam waves)
 are refused at every stored write too, but a script's `effect("SineWave", …)` and MCP's FX tools still
-run one, as Wave with its parameters (`LegacyNames.runnableFx`); `LegacyEquivalenceTest` holds each to
-its old script, kept under `src/test/resources/fx/legacy/` — see `docs/fx-engineering.md` §"Wave".
+run one, as Wave with its parameters (`LegacyNames.runnableFx`); so do the six movements Path replaced,
+as Path, and the renamed parameters of the Flicker family, Lightning Strike, Colour Strobe and Colour
+Cycle's `fadeRatio`. `LegacyEquivalenceTest` holds each to its old script, kept under
+`src/test/resources/fx/legacy/` — see `docs/fx-engineering.md` §"Wave" and §"Path, Colour Cycle and the
+renamed parameters".
 
 There is no static FX. A fixed level, colour, position or setting is a **value** on the
 fixture's own attribute — in the programmer, a Look or a cue — never an FX: StaticValue,
@@ -826,6 +833,15 @@ naming no attribute given the one it drove — logging each by its owner's name.
 is only marked 7; one that holds some is backed up first to `<db>.pre-fx-consolidation-<utc>.db`.
 `FxConsolidationMigrationTest` runs it over `src/test/resources/db/pre-fx-consolidation.sql`, a database
 at 6 holding every old id; never regenerate it. A script naming an old id is left alone: it still runs.
+
+**Step 8 follows it**: `state/FxSiblingsMigration.kt` (fx-settings plan session 3) rewrites every
+Look, cue and palette FX on one of the six movements onto Path, a Colour Cycle's `fadeRatio` as
+`between` and `fade`, and the Flicker family's, Lightning Strike's and Colour Strobe's parameters at
+their new names, through `LegacyNames.absorbFx`, which the importer runs after `consolidateFx`. A
+database holding none is only marked 8; one that holds some is backed up first to
+`<db>.pre-fx-siblings-<utc>.db`. `FxSiblingsMigrationTest` runs it over
+`src/test/resources/db/pre-fx-siblings.sql`, a database at 7; never regenerate it. Colour Wave and
+Colour Fade are left on their own ids, which stay registered as legacy.
 
 Otherwise the bet stands on there being exactly one database (the dev desk), and it
 expires the moment a second install exists — the Windows MSI ships an upgrade path.

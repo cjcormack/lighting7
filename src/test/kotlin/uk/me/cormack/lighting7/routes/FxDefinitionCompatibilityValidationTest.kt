@@ -106,6 +106,10 @@ class FxDefinitionCompatibilityValidationTest {
         // An archive's old FX use it in the same field, and the importer renames it (terminology plan P3).
         for (id in listOf("Triangle", "Strobe", "Colour Pulse", "zoom_breathe", "Breathe")) assertNotNull(retiredIdProblem(id), id)
         assertNull(retiredIdProblem("MyStrobe"))
+        // Nor may the built-ins the old ids now run as: a definition would take them all over (fx-settings plan D3).
+        assertEquals("'path' is the built-in Path's id; give the FX another id", retiredIdProblem("path"))
+        assertEquals("'Wave' is the built-in Wave's id; give the FX another id", retiredIdProblem("Wave"))
+        assertNotNull(retiredIdProblem("Pan Sweep"))
     }
 
     // ─── Normalisation ──────────────────────────────────────────────────────

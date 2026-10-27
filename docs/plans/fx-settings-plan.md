@@ -147,8 +147,8 @@ is titled *FX settings: session N — title*. Never merge a later session's PR b
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Parameter metadata: the desk declares, the editor reads | merged | `claude/fx-settings-s1` | [#299](https://github.com/cjcormack/lighting7/pull/299) | `dc33373d` |
-| 2 | Wave: one FX for the level waves | in review | `claude/fx-settings-s2` | | |
-| 3 | Colour Cycle and Path absorb their siblings | planned | | | |
+| 2 | Wave: one FX for the level waves | merged | `claude/fx-settings-s2` | [#302](https://github.com/cjcormack/lighting7/pull/302) | `5ad80802` |
+| 3 | Colour Cycle and Path absorb their siblings | in review | `claude/fx-settings-s3` | | |
 | 4 | Each head later by: spread in steps, and Width one head | planned | | | |
 | 5 | The inspector in four questions | planned | | | |
 | 6 | Across the heads | planned | | | |
@@ -280,6 +280,52 @@ the next; whoever merges the last fills its own.
 - **Tests:** as session 2's, for these FX; a Line Path round-trips its ends; Around on a Circle Path
   pins both centres; the picker's *Sweep* starts a Line on Bounce.
 - **Docs:** as session 2's.
+
+- **What landed, and where it differs from the above:**
+  - **P3 refused Colour Wave and Colour Fade**, each by one DMX step, so both stay registered as
+    **legacy** (`legacy: true` in frontmatter, built here as session 2 foresaw): a stored one runs and
+    edits as before under its own id, and the picker, the palette editor's FX list (but for the one a
+    palette already holds), the FX Library page and `describe_rig` leave it out. The library DTO still
+    carries it, flagged, so the editor can draw a stored one. Colour Wave against Smooth a quarter-cycle
+    on: equal on black–white and red–blue, but on a mixed pair (`#102030` to `#f0e0d0`) 4 of 97 phases
+    differ by a step, where the cosine and Colour Wave's sine floor either side of a byte; Backward and
+    Bounce would need another offset besides. Colour Fade (Bounce) against Fade 100 % at twice the cycle,
+    Forward: a step apart at every turn (5 of 579 samples on black–white, 247 on the mixed pair), because
+    the bounce's reversed phase reads 2ε short of the end and floors below Colour Cycle's own fall; no
+    spread or phase shift helps. `LegacyEquivalenceTest` pins both refusals. Their presets on Colour
+    Cycle start new ones: *Colour Fade* (two colours, Fade 100 %, a four-beat cycle Forward) and
+    *Colour Wave* (black to white, Smooth).
+  - **Every other mapping is exact**: the six movements as Path, the renamed parameters (the stateful
+    Candle and Fluorescent Flicker compared tick for tick over 400 ticks, a low above a high throwing
+    alike), and Colour Cycle's `fadeRatio` as `between` and `fade`. A `fadeRatio` of 0 is Cut; any
+    other, a blank or unparsable one included, is Fade at the value the old script read, ratios outside
+    0–1 and `NaN` running as they ran. Colour Cycle's Fade is the old crossfade's formula unchanged.
+  - **Path's defaults are Circle's and Sweep's**; Figure 8's 32 tilt size, the sweeps' and a Pan or
+    Tilt Sweep's fixed axis (both ends) are written out by `consolidatedParameters`, as session 2's
+    defaults were. The three sweep presets bounce at half a bar.
+  - **Step 8 is `LegacyNames.absorbFx` alone** (`state/FxSiblingsMigration.kt`, `user_version` 8); the
+    importer runs `rewriteFx`, `consolidateFx` and `absorbFx` in that order. Renames are by key only and
+    touch only a row that holds an old key; an old key beside its new one wins, being what the FX read.
+    `waveParameters` and `waveTiming` became `consolidatedParameters` and `consolidatedTiming`, which
+    cover Wave's rows and Path's; MCP's `asWave` became `asToday`.
+  - **The Centre question** reads the centres through their `shownWhen` on both sides: the client's
+    `hasCentre(entry, parameters)` (with `isParamShown` moved into `centreMode.ts`), and the desk's
+    stacking start through `shownParameters` (`fx/ParameterMetadata.kt`). A shape change across a Line
+    moves the blend with it (`centreFlip`): into a centred shape *Around*, out of an *Around* one
+    Override, any other blend kept. `LegacyNames.CENTRED_FX` gains Path, so a write naming `panCenter`
+    on one is refused by name.
+  - Frontmatter's inline preset maps take a quoted value holding commas (`colours: "#ff0000,#0000ff"`).
+  - **A key under a new name the old FX never read goes** from a row written before the renames (step
+    8; the importer below `formatVersion` 42), or the new script would start reading it: a Fluorescent
+    Flicker's stray `high` beside `offLevel` ran at 255 and would have run at its value. A tool's call
+    today keeps one. A movement's `panCenter` from a tool is its centre.
+  - **No FX definition may take Path's id**, as none may take Wave's (`consolidatedTypeNamed`), and the
+    FX Library page reserves a legacy FX's id though it lists none (`offeredFx` is the one filter).
+    Step 8 also names a stored script quoting a renamed parameter's distinctive old name. Steps 7 and 8
+    are one configured `state/FxRewriteStep.kt`.
+  - **`centreFlip`'s rule**, decided here: out of *Around* into a Line, Override; into a centred shape,
+    *Around* only while the centres are the pinned 128, so an *Absolute* circle taken through a Line
+    comes back Absolute where it was.
 
 ### Session 4 — Each head later by: spread in steps, and Width one head
 

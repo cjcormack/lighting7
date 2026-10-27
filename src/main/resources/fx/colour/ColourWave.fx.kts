@@ -5,6 +5,7 @@ family: colour
 outputType: COLOUR
 fxMode: STANDARD
 compatibleAttributes: [rgbColour]
+legacy: true
 parameters:
   - name: colourA
     type: colour

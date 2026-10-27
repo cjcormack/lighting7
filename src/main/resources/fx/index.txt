@@ -12,17 +12,14 @@ dimmer/LightningStrike.fx.kts
 colour/ColourCycle.fx.kts
 colour/RainbowCycle.fx.kts
 colour/ColourStrobe.fx.kts
-colour/ColourWave.fx.kts
-colour/ColourFade.fx.kts
 colour/ColourFlicker.fx.kts
 
-# Position effects
-position/Circle.fx.kts
-position/Figure8.fx.kts
-position/Sweep.fx.kts
-position/PanSweep.fx.kts
-position/TiltSweep.fx.kts
-position/RandomPosition.fx.kts
+# Kept for stored FX only (legacy: fx-settings plan D3): Colour Cycle draws them, a DMX step apart
+colour/ColourWave.fx.kts
+colour/ColourFade.fx.kts
+
+# Position effects — Path draws every movement (fx-settings plan D2)
+position/Path.fx.kts
 
 # Step effects (effects plan §3.6)
 steps/PaletteSteps.fx.kts

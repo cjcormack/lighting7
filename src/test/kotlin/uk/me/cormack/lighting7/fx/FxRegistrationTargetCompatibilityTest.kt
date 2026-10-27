@@ -74,7 +74,7 @@ class FxRegistrationTargetCompatibilityTest {
         val index = loader.getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(index.size >= 19, "fx/index.txt should list at least 19 effects, got ${index.size}")
+        assertTrue(index.size >= 14, "fx/index.txt should list at least 14 effects, got ${index.size}")
 
         return index.map { path ->
             val text = loader.getResource("fx/$path")!!.readText()
@@ -141,7 +141,7 @@ class FxRegistrationTargetCompatibilityTest {
             mapOf(
                 "intensity" to setOf("Wave", "Flicker", "CandleFlicker", "FluorescentFlicker", "LightningStrike"),
                 "colour" to setOf("ColourCycle", "RainbowCycle", "ColourStrobe", "ColourWave", "ColourFade", "ColourFlicker"),
-                "position" to setOf("Circle", "Figure8", "Sweep", "PanSweep", "TiltSweep", "RandomPosition"),
+                "position" to setOf("Path"),
                 STEPS_CATEGORY to setOf(PALETTE_STEPS_ID, SLOT_STEPS_ID),
             ),
             byFamily,

@@ -111,29 +111,33 @@ private fun normaliseProjectIdentity(json: String): String {
 }
 
 /**
- * [json], one archive record in today's field names, with every level wave it holds as the importer
- * stores it: through [LegacyNames.consolidateFx], so its `fxType`, `family`, `parameters` and a beam
- * FX's `attribute` are Wave's. Answers [json] itself when it holds none.
+ * [json], one archive record in today's field names, with every FX it holds that fx-settings plan D3
+ * moved as the importer stores it: through [LegacyNames.consolidateFx] then [LegacyNames.absorbFx],
+ * so a level wave's `fxType`, `family`, `parameters` and a beam FX's `attribute` are Wave's, a
+ * movement's Path's, and a renamed parameter its new name. Answers [json] itself when it holds none.
  */
 fun consolidatedRecord(json: String): String {
     fun consolidate(element: JsonElement): JsonElement = when (element) {
         is JsonArray -> JsonArray(element.map(::consolidate))
         is JsonObject -> {
             val fxType = (element["fxType"] as? JsonPrimitive)?.contentOrNull
-            if (fxType != null && LegacyNames.isWaveFx(fxType)) {
-                val parameters = (element["parameters"] as? JsonObject).orEmpty().mapValues { it.value.jsonPrimitive.content }
-                val stored = LegacyNames.StoredFx(
-                    fxType = fxType, family = (element["family"] as? JsonPrimitive)?.contentOrNull.orEmpty(), cycle = 0.0,
+            val parameters = (element["parameters"] as? JsonObject).orEmpty().mapValues { it.value.jsonPrimitive.content }
+            val stored = fxType?.let {
+                LegacyNames.StoredFx(
+                    fxType = it, family = (element["family"] as? JsonPrimitive)?.contentOrNull.orEmpty(), cycle = 0.0,
                     order = "", phaseOffset = 0.0, parameters = parameters, direction = "", runs = null, spread = 0.0,
                     attribute = (element["attribute"] as? JsonPrimitive)?.contentOrNull,
                 )
-                val wave = LegacyNames.consolidateFx(stored) { null }!!.fx
+            }
+            val waved = stored?.let { LegacyNames.consolidateFx(it) { null }?.fx ?: it }
+            val today = waved?.let { LegacyNames.absorbFx(it) { null }?.fx ?: it }
+            if (stored != null && today != stored) {
                 JsonObject(
                     element + listOfNotNull(
-                        "fxType" to JsonPrimitive(wave.fxType),
-                        "family" to JsonPrimitive(wave.family),
-                        "parameters" to JsonObject(wave.parameters.mapValues { JsonPrimitive(it.value) }),
-                        wave.attribute?.let { "attribute" to JsonPrimitive(it) },
+                        "fxType" to JsonPrimitive(today!!.fxType),
+                        "family" to JsonPrimitive(today.family),
+                        "parameters" to JsonObject(today.parameters.mapValues { JsonPrimitive(it.value) }),
+                        today.attribute?.let { "attribute" to JsonPrimitive(it) },
                     ),
                 )
             } else {

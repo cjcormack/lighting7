@@ -68,9 +68,10 @@ abstract class FxDefinitionScript(
         require(!LegacyNames.isRetiredFxId(registration.id)) {
             "'${registration.id}' was a built-in FX's id and is retired; register the FX under another id"
         }
-        // Every level wave was rewritten onto Wave (fx-settings plan D3); a script's own would take them over.
-        require(normalizeFxType(registration.id) != normalizeFxType(WAVE_ID)) {
-            "'${registration.id}' is the built-in Wave's id; register the FX under another id"
+        // The level waves were rewritten onto Wave and the movements onto Path (fx-settings plan D3); a
+        // script's own would take them over.
+        LegacyNames.consolidatedTypeNamed(registration.id)?.let {
+            throw IllegalArgumentException("'${registration.id}' is the built-in $it's id; register the FX under another id")
         }
         LegacyNames.familyProblem(registration.family)?.let { throw IllegalArgumentException("'${registration.id}': $it") }
         parameterMetadataProblems(registration.parameters).takeIf { it.isNotEmpty() }?.let {

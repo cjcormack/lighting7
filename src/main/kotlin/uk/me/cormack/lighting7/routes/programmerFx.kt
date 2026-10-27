@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.fx.familyMasterUuidFor
+import uk.me.cormack.lighting7.fx.shownParameters
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
@@ -199,8 +200,9 @@ internal fun pressBareFx(
     if (request.stack) {
         // The family is read off a built instance, so one that stacks is built again on its start.
         if (family != null && (request.blendMode == null || request.amount == null)) {
+            // A Path's centres count only on a shape that draws them: a Line has none to stack around.
             val declared = state.show.fxRegistry.getRegistration(request.fxType)?.parameters
-                ?.mapTo(HashSet()) { it.name }.orEmpty()
+                ?.let { shownParameters(it, request.parameters) }.orEmpty()
             instance = try {
                 build(FxStacking.startFor(family, declared))
             } catch (e: Exception) {

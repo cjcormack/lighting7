@@ -90,6 +90,36 @@ class McpFxTimingTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `an old movement from a tool runs as Path, an old Pan Sweep at its half-bar Bounce`() {
+        val sweep = call(
+            "create_look",
+            """{"name":"Sweep","fx":[{"targetType":"fixture","targetKey":"foh-1","fxType":"PanSweep","family":"position",""" +
+                """"attribute":"position","blendMode":"OVERRIDE","parameters":{"tilt":"90"}}]}""",
+        )
+        assertTrue(sweep.success, sweep.result)
+        transaction(state.database) {
+            val stored = DaoLook.find { DaoLooks.name eq "Sweep" }.single().effects.single()
+            assertEquals("Path", stored.fxType)
+            assertEquals("position", stored.family)
+            assertEquals(2.0 to "BOUNCE", stored.cycle to stored.direction)
+            assertEquals(
+                mapOf("shape" to "LINE", "startPan" to "64", "endPan" to "192", "startTilt" to "90", "endTilt" to "90", "curve" to "SINE_IN_OUT"),
+                stored.parameters,
+            )
+        }
+        // A renamed parameter from a tool takes its new name.
+        val flicker = call(
+            "create_look",
+            """{"name":"Flicker","fx":[{"targetType":"fixture","targetKey":"foh-1","fxType":"Flicker","family":"intensity",""" +
+                """"blendMode":"OVERRIDE","parameters":{"min":"40"}}]}""",
+        )
+        assertTrue(flicker.success, flicker.result)
+        transaction(state.database) {
+            assertEquals(mapOf("low" to "40"), DaoLook.find { DaoLooks.name eq "Flicker" }.single().effects.single().parameters)
+        }
+    }
+
+    @Test
     fun `an effect on Seconds follows no master, and asking for both is refused`() {
         createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Dim", family = "intensity"))
 

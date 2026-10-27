@@ -16,7 +16,7 @@ parameters:
     default: "#000000"
     description: Colour when off
     label: Off colour
-  - name: onRatio
+  - name: width
     type: double
     default: "0.1"
     description: Portion of cycle that is on
@@ -29,6 +29,6 @@ parameters:
 
 val onColour = params.colour("onColour")
 val offColour = params.colour("offColour")
-val onRatio = params.double("onRatio")
+val onRatio = params.double("width")
 val colour = if (phaseBefore(phase, onRatio)) onColour else offColour
 FxOutput.Colour(colour)

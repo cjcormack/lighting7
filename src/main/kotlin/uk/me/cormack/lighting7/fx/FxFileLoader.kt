@@ -232,6 +232,7 @@ class FxFileLoader(
                     timingSource = timingSource,
                     presets = p.metadata.presets,
                     attributeDefaults = p.metadata.attributeDefaults,
+                    legacy = p.metadata.legacy,
                     factory = factory,
                 ))
 
@@ -276,7 +277,7 @@ class FxFileLoader(
         /** The keys the frontmatter itself takes, which an indented line after a list may still be. */
         private val TOP_LEVEL_KEYS = setOf(
             "id", "name", "family", "outputType", "fxMode", "defaultTiming", "defaultDirection", "defaultCycle",
-            "timingSource", "compatibleAttributes", "aliases", "parameters", "presets", "attributeDefaults",
+            "timingSource", "compatibleAttributes", "aliases", "parameters", "presets", "attributeDefaults", "legacy",
         )
 
         /** The frontmatter's three lists, each item a map of one of these key sets. */
@@ -324,6 +325,7 @@ class FxFileLoader(
             var timingSource = "BEAT"
             var compatibleAttributes = listOf<String>()
             var aliases: List<String>? = null
+            var legacy = false
             val items = LIST_KEYS.keys.associateWith { mutableListOf<Map<String, String>>() }
 
             // The list whose items the lines below belong to, and the item being read.
@@ -413,6 +415,8 @@ class FxFileLoader(
                     "timingSource" -> timingSource = value
                     "compatibleAttributes" -> compatibleAttributes = parseYamlArray(value)
                     "aliases" -> aliases = parseYamlArray(value)
+                    "legacy" -> legacy = value.toBooleanStrictOrNull()
+                        ?: throw IllegalArgumentException("legacy must be true or false, got '$value'")
                     "parameters", "presets", "attributeDefaults" -> {
                         // An inline empty array opens no list
                         inList = key.takeUnless { value == "[]" }
@@ -456,6 +460,7 @@ class FxFileLoader(
                 parameters = parameters,
                 presets = presets,
                 attributeDefaults = attributeDefaults,
+                legacy = legacy,
             )
         }
 
@@ -488,16 +493,35 @@ class FxFileLoader(
             )
         }
 
-        /** `{key: value, key: value}` as a map; values hold no commas. Empty for a blank string. */
+        /**
+         * `{key: value, key: value}` as a map; a value holding a comma is quoted (`colours: "#f00,#00f"`).
+         * Empty for a blank string.
+         */
         private fun parseInlineMap(value: String): Map<String, String> {
             val trimmed = value.trim()
             if (trimmed.isEmpty()) return emptyMap()
             require(trimmed.startsWith("{") && trimmed.endsWith("}")) { "expected {key: value, …}, got '$value'" }
-            return trimmed.removeSurrounding("{", "}").split(",").filter { it.isNotBlank() }.associate { entry ->
+            return splitOutsideQuotes(trimmed.removeSurrounding("{", "}")).filter { it.isNotBlank() }.associate { entry ->
                 val (k, v) = entry.split(":", limit = 2).takeIf { it.size == 2 }
                     ?: throw IllegalArgumentException("expected key: value, got '${entry.trim()}'")
                 k.trim() to v.trim().removeSurrounding("\"")
             }
+        }
+
+        /** [text] split at each comma outside double quotes. */
+        private fun splitOutsideQuotes(text: String): List<String> {
+            val parts = ArrayList<String>()
+            val current = StringBuilder()
+            var quoted = false
+            for (c in text) {
+                when {
+                    c == '"' -> { quoted = !quoted; current.append(c) }
+                    c == ',' && !quoted -> { parts += current.toString(); current.clear() }
+                    else -> current.append(c)
+                }
+            }
+            parts += current.toString()
+            return parts
         }
 
         /**
@@ -577,6 +601,8 @@ data class FxFileMetadata(
     val presets: List<FxPreset> = emptyList(),
     /** Parameters a new FX on an attribute starts with, by attribute (fx-settings plan session 2). */
     val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
+    /** Kept for stored FX only (fx-settings plan D3): `legacy: true`. */
+    val legacy: Boolean = false,
 )
 
 data class FxFileParameter(

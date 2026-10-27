@@ -84,8 +84,8 @@ class FxLibraryMergeTest {
             val look = DaoLook.new { project = DaoProject[projectId]; name = "Ours" }
             DaoLookFxEntity.new {
                 this.look = look; targetType = "group"; targetKey = "front"
-                fxType = "Sweep"; family = "position"; cycle = 2.0; blendMode = "OVERRIDE"
-                order = "NORMAL"; direction = "BOUNCE"; parameters = emptyMap(); sortOrder = 0
+                fxType = "Path"; family = "position"; cycle = 2.0; blendMode = "OVERRIDE"
+                order = "NORMAL"; direction = "BOUNCE"; parameters = mapOf("shape" to "LINE"); sortOrder = 0
             }
         }
 

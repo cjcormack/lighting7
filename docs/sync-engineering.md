@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 41`, `minReader = 41`. Rules for future
+Current writer emits `formatVersion = 42`, `minReader = 42`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -343,6 +343,8 @@ record in an old folder by today's name, so a merge across the rename pairs a re
 | an FX definition | `effectId`, `category`, `effectMode`, `compatibleProperties`, `defaultStepTiming` (boolean) | `fxId`, `family`, `fxMode`, `compatibleAttributes`, `defaultTiming` |
 | `fxType` | `Triangle`, `ColourPulse`, `Strobe`, `ZoomBreathe` | `Ramp`, `ColourWave`, `DimmerStrobe`, `ZoomWave` |
 | a stored FX's `fxType`, `family`, `parameters` and `attribute` (v41) | `SineWave`, `RampUp`, `RampDown`, `Ramp`, `SquareWave`, `Pulse`, `DimmerStrobe`, `ZoomWave`, `IrisPulse`, `FrostPulse`, `FocusPull`, and their parameters | `Wave` on its shape, with Wave's parameters (§"Version 41 — Wave") |
+| a stored FX's `fxType`, `family` and `parameters` (v42) | `Circle`, `Figure8`, `RandomPosition`, `Sweep`, `PanSweep`, `TiltSweep`, and their parameters | `Path` on its shape, with Path's parameters (§"Version 42 — Path") |
+| a stored FX's `parameters` (v42) | Flicker's `min`, `max`; Candle Flicker's `baseLevel`, `min`, `max`, `smoothing`; Fluorescent Flicker's `offLevel`, `onLevel`, `flickerDurationMs`, `flickerSpeed`; Lightning Strike's `minBrightness`, `maxBrightness`; Colour Strobe's `onRatio`; Colour Cycle's `fadeRatio` | `low`, `high`; `base`, `low`, `high`, `settle`; `low`, `high`, `burstMs`, `speed`; `low`, `high`; `width`; `between` and `fade` |
 | `order` | `LINEAR`, `CENTER_OUT`, `EDGES_IN`, `SPLIT` | `NORMAL`, `CENTRE_OUT`, `CENTRE_IN`, `CENTRE_IN` |
 | `family`, a master's too | `dimmer`, `palette` | `intensity`, `steps` |
 | an FX's `family` | `composite` | the family of its output: `intensity` for Lightning Strike and any slider, else `colour` or `position` |
@@ -436,6 +438,24 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 42 — Path
+
+fx-settings plan session 3: Path replaces Circle, Figure 8, Random Position, Sweep, Pan Sweep and
+Tilt Sweep; Colour Cycle's `fadeRatio` is `between` (`CUT` where it was 0, else `FADE`) and `fade`; and
+the Flicker family's, Lightning Strike's and Colour Strobe's parameters take their normalised names
+(`docs/fx-engineering.md` §"Path, Colour Cycle and the renamed parameters"). A stored FX holding any of
+them is read through `LegacyNames.absorbFx` after `consolidateFx`, whatever the archive's
+`formatVersion`, and database step 8 (`state/FxSiblingsMigration.kt`) does the same to a database's
+rows; nothing a head does moves (`LegacyEquivalenceTest`). Colour Wave and Colour Fade are not
+rewritten — no Colour Cycle draws either to the DMX step — and stay as they are written, still
+registered as legacy. A record below 42 that holds a key under a new name its old FX never read (a
+stray `low` on a Flicker) loses it, since the new script would start reading it. As at v41, no folder or field is renamed, so a converted record reads as this
+desk's change and is pushed in the new form.
+
+`SUPPORTED_FORMAT_VERSION = 42`; `MIN_SUPPORTED_FORMAT_VERSION` stays 5. **`minReader` moves to 42**:
+a v41 reader knows no Path, and would read a renamed parameter as absent, so a Flicker would run at its
+defaults. `RichProjectFixture`'s Swirl Look holds a Path Circle and a Path Line with both ends set.
 
 ### Version 41 — Wave
 

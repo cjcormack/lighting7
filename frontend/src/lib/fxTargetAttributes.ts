@@ -100,15 +100,21 @@ export function attributesFor(targets: FxAttributeTarget[]): Set<string> {
   return names
 }
 
-/** The library entries at least one of whose declared properties the targets can supply. */
+/**
+ * The library entries a picker or listing may offer: all but a legacy FX (fx-settings plan D3), kept
+ * only for what is stored. Every lookup by name and every taken id reads the whole library instead.
+ */
+export function offeredFx(library: readonly FxLibraryEntry[]): FxLibraryEntry[] {
+  return library.filter((effect) => !effect.legacy)
+}
+
+/** The offered library entries the targets can take: at least one declared property they supply. */
 export function compatibleFxFor(
   library: FxLibraryEntry[] | undefined,
   attributes: Set<string>,
 ): FxLibraryEntry[] {
   if (!library) return []
-  return library.filter((effect) =>
-    effect.compatibleAttributes.some((propName) => attributes.has(propName)),
-  )
+  return offeredFx(library).filter((effect) => effect.compatibleAttributes.some((propName) => attributes.has(propName)))
 }
 
 /**

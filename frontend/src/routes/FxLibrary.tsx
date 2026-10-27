@@ -17,6 +17,7 @@ import { FxDetailSheet } from '../components/fxLibrary/FxDetailSheet'
 import { EditFxDefinitionSheet } from '../components/fxLibrary/EditFxDefinitionSheet'
 import { NewFxDefinitionSheet } from '../components/fxLibrary/NewFxDefinitionSheet'
 import { useFxDefinitionDelete } from '../components/fxLibrary/useFxDefinitionDelete'
+import { offeredFx } from '../lib/fxTargetAttributes'
 import {
   FX_FAMILY_LABELS,
   FX_FAMILY_ORDER,
@@ -91,7 +92,9 @@ export function ProjectFxLibrary() {
   const [sheetMode, setSheetMode] = useState<SheetMode>({ type: 'closed' })
 
   const isCurrentProject = currentProject?.id === projectIdNum
+  // Every id the desk holds, legacy ones included, is a taken id; the rows are the offered FX only.
   const library = useMemo(() => libraryData ?? [], [libraryData])
+  const offered = useMemo(() => offeredFx(library), [library])
   const definitions = useMemo(() => definitionData ?? [], [definitionData])
   const byFxId = useMemo(() => definitionsByFxId(definitions), [definitions])
 
@@ -108,7 +111,7 @@ export function ProjectFxLibrary() {
   /** Every member row, before the filters — the source and the name worked out once. */
   const members = useMemo<FxMemberRow[]>(
     () =>
-      library.map((entry) => {
+      offered.map((entry) => {
         const definition = byFxId.get(entry.name)
         return {
           id: fxRowId(entry.name),
@@ -118,7 +121,7 @@ export function ProjectFxLibrary() {
           name: entryName(entry, definition),
         }
       }),
-    [byFxId, library],
+    [byFxId, offered],
   )
 
   const categoryCounts = useMemo(() => {
@@ -224,7 +227,7 @@ export function ProjectFxLibrary() {
             fold={640}
             value={category}
             onChange={changeCategory}
-            allCount={library.length}
+            allCount={offered.length}
             options={FX_FAMILY_ORDER.map((c) => ({
               value: c,
               label: FX_FAMILY_LABELS[c],
@@ -243,7 +246,7 @@ export function ProjectFxLibrary() {
       />
       {libraryLoading || definitionsLoading ? (
         <SheetPage.Empty loading />
-      ) : library.length === 0 ? (
+      ) : offered.length === 0 ? (
         <SheetPage.Empty>No FX available.</SheetPage.Empty>
       ) : memberCount === 0 ? (
         <SheetPage.Empty>No FX match.</SheetPage.Empty>
@@ -259,7 +262,7 @@ export function ProjectFxLibrary() {
       )}
       <SheetPage.Footer>
         <span className="tabular-nums">
-          {library.length} FX · {yours} yours
+          {offered.length} FX · {yours} yours
           {category === 'ALL' && filter.trim() === '' ? '' : ` · showing ${memberCount}`}
         </span>
         <span className="ml-auto">

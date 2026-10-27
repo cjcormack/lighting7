@@ -97,7 +97,8 @@ class FxConsolidationMigrationTest {
 
         val (desk, logs) = captureLogs("FxConsolidationMigration") { startDesk() }
 
-        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion())
+        // Step 8 runs straight after (`FxSiblingsMigrationTest`): it renames the Flicker's parameters.
+        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion())
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         assertTrue(logs.any { "Look 'Levels' in 'Old waves': SineWave — SineWave is now Wave, shape SINE" in it }, logs.joinToString("\n"))
         assertTrue(logs.any { "Cue 'Q1' in 'Old waves': IrisPulse" in it && "it names 'iris'" in it }, logs.joinToString("\n"))
@@ -122,7 +123,7 @@ class FxConsolidationMigrationTest {
                         mapOf("shape" to "PULSE", "low" to "0", "high" to "255", "attack" to "0.2", "hold" to "0.3", "curve" to "QUAD_OUT"),
                     ),
                     Row("Wave", "intensity", "dimmer", mapOf("shape" to "SQUARE", "low" to "0", "high" to "255", "width" to "0.05"), cycle = 0.5),
-                    Row("Flicker", "intensity", "dimmer", mapOf("min" to "20")),
+                    Row("Flicker", "intensity", "dimmer", mapOf("low" to "20")),
                 ),
                 look,
             )
@@ -202,14 +203,14 @@ class FxConsolidationMigrationTest {
         stopDesk()
         setUserVersion(ATTRIBUTE_NAMES_USER_VERSION)
         startDesk()
-        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion())
+        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion(), "step 7 marks it, and step 8 after it")
         assertEquals(emptyList(), backups())
     }
 
     @Test
-    fun `a fresh database is born at step 7`() {
+    fun `a fresh database is born past step 7`() {
         startDesk()
-        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion())
+        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion())
         assertEquals(emptyList(), backups())
     }
 }

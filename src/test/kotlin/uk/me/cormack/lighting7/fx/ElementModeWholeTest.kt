@@ -205,8 +205,9 @@ class ElementModeWholeTest {
     fun `sampled under Fixtures, Colour Cycle moves one fixture a beat and a fixture's zones are equal at every sample`() {
         for (fadeRatio in listOf("0", "0.5")) {
             val rig = newRig()
+            val between = if (fadeRatio == "0") mapOf("between" to "CUT") else mapOf("between" to "FADE", "fade" to fadeRatio)
             val cycle = FxInstance(
-                registry.createFx("ColourCycle", mapOf("colours" to "#ff0000,#00ff00,#0000ff,#ffffff", "fadeRatio" to fadeRatio)),
+                registry.createFx("ColourCycle", mapOf("colours" to "#ff0000,#00ff00,#0000ff,#ffffff") + between),
                 ColourTarget(FxTargetRef.group("shehds")),
                 FxTiming(cycle = 4.0),
                 BlendMode.OVERRIDE,

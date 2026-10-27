@@ -129,20 +129,20 @@ class FxRegistryTest {
             .getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(indexed.size >= 19, "fx/index.txt should list at least 19 effects, got ${indexed.size}")
+        assertTrue(indexed.size >= 14, "fx/index.txt should list at least 14 effects, got ${indexed.size}")
         assertEquals(indexed.size, loaded, "Every effect in fx/index.txt should load")
         assertEquals(indexed.size, registry.size, "Every loaded effect should be registered")
 
         // Spot-check key effects exist across categories
         assertNotNull(registry.getRegistration("Wave"), "Wave should be registered")
         assertNotNull(registry.getRegistration("ColourCycle"), "ColourCycle should be registered")
-        assertNotNull(registry.getRegistration("Circle"), "Circle should be registered")
+        assertNotNull(registry.getRegistration("Path"), "Path should be registered")
         assertNotNull(registry.getRegistration("CandleFlicker"), "CandleFlicker should be registered")
         assertNotNull(registry.getRegistration("LightningStrike"), "LightningStrike should be registered")
         assertNotNull(registry.getRegistration(PALETTE_STEPS_ID), "PaletteSteps should be registered")
         assertNotNull(registry.getRegistration(SLOT_STEPS_ID), "SlotSteps should be registered")
         // A fixed value is the fixture's own property, never an effect.
-        for (gone in listOf("StaticValue", "StaticSetting", "StaticColour", "StaticPosition", "SineWave", "ZoomWave")) {
+        for (gone in listOf("StaticValue", "StaticSetting", "StaticColour", "StaticPosition", "SineWave", "ZoomWave", "Circle", "Sweep")) {
             assertEquals(null, registry.getRegistration(gone), "$gone should not be registered")
         }
 

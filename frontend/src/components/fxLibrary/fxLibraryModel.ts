@@ -131,13 +131,14 @@ export function mintForkFxId(sourceId: string, takenIds: Iterable<string>): { fx
 }
 
 /**
- * The ids the desk retired, which it refuses for a definition: the terminology plan's renames and
- * the level waves Wave replaced (fx-settings plan D2). The desk's `LegacyNames.retiredFxIds`, pinned
- * to it by `src/test/resources/fx/retiredFxIds.fixture.json`.
+ * The ids the desk retired, which it refuses for a definition: the terminology plan's renames, the
+ * level waves Wave replaced and the movements Path replaced (fx-settings plan D2). The desk's
+ * `LegacyNames.retiredFxIds`, pinned to it by `src/test/resources/fx/retiredFxIds.fixture.json`.
  */
 export const RETIRED_FX_IDS: readonly string[] = [
-  'Breathe', 'ColourPulse', 'DimmerStrobe', 'FocusPull', 'FrostPulse', 'IrisPulse', 'Pulse', 'Ramp',
-  'RampDown', 'RampUp', 'SineWave', 'SquareWave', 'Strobe', 'Triangle', 'ZoomBreathe', 'ZoomWave',
+  'Breathe', 'Circle', 'ColourPulse', 'DimmerStrobe', 'Figure8', 'FocusPull', 'FrostPulse', 'IrisPulse',
+  'PanSweep', 'Pulse', 'Ramp', 'RampDown', 'RampUp', 'RandomPosition', 'SineWave', 'SquareWave', 'Strobe',
+  'Sweep', 'TiltSweep', 'Triangle', 'ZoomBreathe', 'ZoomWave',
 ]
 
 /** Every id a new definition must not take — the library's, the definitions' and the retired ones. */

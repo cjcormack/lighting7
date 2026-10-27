@@ -34,6 +34,11 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v42: Path replaces Circle, Figure 8, Sweep, Pan Sweep, Tilt Sweep and Random Position; Colour
+    // Cycle's `fadeRatio` is `between` and `fade`; the Flicker family's, Lightning Strike's and Colour
+    // Strobe's parameters take their normalised names (fx-settings plan session 3). Read through
+    // `sync/LegacyNames.kt`'s `absorbFx`. `minReader` moves to **42**: a v41 reader knows no Path and
+    // would read a renamed parameter as absent. See `docs/sync-engineering.md` §"Version 42 — Path".
     // v41: Wave replaces Sine Wave, the ramps, Square Wave, Pulse, Dimmer Strobe, Zoom Wave, Iris and
     // Frost Pulse and Focus Pull (fx-settings plan session 2); a stored FX on one of those ids is
     // read through `sync/LegacyNames.kt`'s `consolidateFx`. `minReader` moves to **41**: a v40 reader
@@ -332,9 +337,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 41,
+    val formatVersion: Int = 42,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 41,
+    val minReader: Int = 42,
 )
 
 /**

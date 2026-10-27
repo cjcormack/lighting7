@@ -799,7 +799,7 @@ function centreValue(template: PaletteSummary, library: readonly FxLibraryEntry[
   if (entry == null) return undefined
   const mode = storedCentreMode(effect, entry)
   if (mode != null) return mode
-  return hasCentre(entry) ? '' : undefined
+  return hasCentre(entry, effect.parameters) ? '' : undefined
 }
 
 /** When a template was last pressed on this desk — `12s ago`, `3m ago`, `1h ago`, `2d ago`; `—` never. */

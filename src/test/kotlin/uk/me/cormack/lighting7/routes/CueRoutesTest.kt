@@ -333,7 +333,7 @@ class CueRoutesTest {
                 CueAdHocFxDto(
                     targetType = "group",
                     targetKey = "movers",
-                    fxType = "Circle",
+                    fxType = "Path",
                     family = "position",
                     attribute = "position",
                     cycle = 8.0,
@@ -342,10 +342,11 @@ class CueRoutesTest {
                     phaseOffset = 0.0,
                     elementMode = "PER_FIXTURE",
                     parameters = mapOf(
+                        "shape" to "CIRCLE",
                         "panCentre" to "128",
                         "tiltCentre" to "128",
-                        "panRadius" to "60",
-                        "tiltRadius" to "40",
+                        "panSize" to "60",
+                        "tiltSize" to "40",
                     ),
                 ),
                 CueAdHocFxDto(
@@ -367,6 +368,6 @@ class CueRoutesTest {
         assertEquals(2, deserialized.layers.size)
         assertEquals(2, deserialized.adHocFx.size)
         assertEquals(2, deserialized.layers[0].targets.size)
-        assertEquals(4, deserialized.adHocFx[0].parameters.size)
+        assertEquals(5, deserialized.adHocFx[0].parameters.size)
     }
 }

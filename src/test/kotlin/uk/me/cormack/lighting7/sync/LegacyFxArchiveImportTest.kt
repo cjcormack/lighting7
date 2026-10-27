@@ -143,7 +143,7 @@ class LegacyFxArchiveImportTest {
         editOne(".", "project.json") { JsonObject(it - "fxLibrary") }
         val projectId = wipeAndImport()
         val panSweep = importedLookFx(projectId)[3]
-        assertEquals(listOf("PanSweep", 2.0, "BOUNCE"), panSweep)
+        assertEquals(listOf("Path", 2.0, "BOUNCE"), panSweep, "a Pan Sweep, which the importer then stores as Path")
     }
 
     @Test
@@ -169,7 +169,11 @@ class LegacyFxArchiveImportTest {
             assertEquals("TRIANGLE", ramp.parameters["shape"])
 
             assertEquals(listOf(2.0, 1.0, 4, 1.5, "BOUNCE"), listOf(sweep.cycle, sweep.phaseOffset, sweep.runs, sweep.spread, sweep.direction))
-            assertEquals(emptyMap(), sweep.parameters)
+            // A Sweep, which the importer then stores as Path, its old defaults written out.
+            assertEquals(
+                mapOf("shape" to "LINE", "startPan" to "64", "startTilt" to "128", "endPan" to "192", "endTilt" to "128", "curve" to "SINE_IN_OUT"),
+                sweep.parameters,
+            )
             // An archive this desk wrote (v38) reads an FX that names no pingPong as today's.
             assertEquals(listOf(4.0, "FORWARD"), listOf(panSweep.cycle, panSweep.direction))
 
@@ -181,7 +185,7 @@ class LegacyFxArchiveImportTest {
 
             val strike = DaoPaletteFxEntity.all().single { it.palette.project.id == project.id }
             assertEquals("intensity", strike.family)
-            assertEquals(mapOf("maxBrightness" to "200"), strike.parameters)
+            assertEquals(mapOf("high" to "200"), strike.parameters, "and the importer then takes its parameters' new name")
 
             val definition = DaoFxDefinition.all().single { it.project.id == project.id }
             assertEquals(FxMode.STANDARD, definition.fxMode)

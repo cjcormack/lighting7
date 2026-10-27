@@ -167,6 +167,11 @@ export interface FxLibraryEntry {
   presets?: FxPreset[]
   /** Parameters a new FX on an attribute starts with, by attribute — Wave's zoom at 64–192. */
   attributeDefaults?: Record<string, Record<string, string>>
+  /**
+   * Kept for what is already stored and never offered (fx-settings plan D3): Colour Fade and Colour
+   * Wave, which Colour Cycle draws a DMX step apart. It runs and edits as any FX; no picker lists it.
+   */
+  legacy?: boolean
 }
 
 /**

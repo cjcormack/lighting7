@@ -2208,7 +2208,7 @@ class AiTools(private val state: State) {
      * is told the valid set and can retry, rather than the desk storing a blend it will not play.
      */
     private fun parseLookFx(named: JsonObject, at: String): LookFxSpec {
-        val obj = asWave(named)
+        val obj = asToday(named)
         val timing = parseFxTiming(obj, at)
         val dynamics = parseFxDynamics(obj, at)
         val spec = LookFxSpec(
@@ -2260,7 +2260,7 @@ class AiTools(private val state: State) {
      * turns that message into a failed result the same way.
      */
     private fun parseAdHocFxFromJson(named: JsonObject, at: String): CueAdHocFxDto {
-        val obj = asWave(named)
+        val obj = asToday(named)
         val timing = parseFxTiming(obj, at)
         val dynamics = parseFxDynamics(obj, at)
         val target = parseAdHocFxTarget(obj, at)
@@ -2292,13 +2292,13 @@ class AiTools(private val state: State) {
     }
 
     /**
-     * [obj], an FX a tool call names, with a level wave Wave replaced named as Wave (fx-settings plan
-     * D3): its parameters, family and a beam FX's attribute as [LegacyNames.consolidateFx] stores
-     * them, and the old FX's own cycle and Direction where the call names none. [obj] itself otherwise.
+     * [obj], an FX a tool call names, in today's names (fx-settings plan D3): an FX Wave or Path
+     * replaced as that type, with its parameters, family and a beam FX's attribute as
+     * [LegacyNames.consolidateFx] and [LegacyNames.absorbFx] store them and the old FX's own cycle and
+     * Direction where the call names none; a renamed parameter at its new name. [obj] itself otherwise.
      */
-    private fun asWave(obj: JsonObject): JsonObject {
+    private fun asToday(obj: JsonObject): JsonObject {
         val fxType = obj["fxType"]?.jsonPrimitive?.contentOrNull ?: return obj
-        if (!LegacyNames.isWaveFx(fxType)) return obj
         val stored = LegacyNames.StoredFx(
             fxType = fxType,
             family = obj["family"]?.jsonPrimitive?.contentOrNull.orEmpty(),
@@ -2306,14 +2306,16 @@ class AiTools(private val state: State) {
             parameters = (obj["parameters"] as? JsonObject)?.mapValues { it.value.jsonPrimitive.content }.orEmpty(),
             attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull,
         )
-        val wave = LegacyNames.consolidateFx(stored) { null }?.fx ?: return obj
-        val timing = LegacyNames.waveTiming(fxType)
+        // A tool's call is written today: a parameter under a new name is meant, never stripped.
+        val today = (LegacyNames.consolidateFx(stored) { null } ?: LegacyNames.absorbFx(stored, writtenBefore = false) { null })?.fx
+            ?: return obj
+        val timing = LegacyNames.consolidatedTiming(fxType)
         return JsonObject(
             obj + buildMap {
-                put("fxType", JsonPrimitive(wave.fxType))
-                put("family", JsonPrimitive(wave.family))
-                put("parameters", JsonObject(wave.parameters.mapValues { JsonPrimitive(it.value) }))
-                wave.attribute?.let { put("attribute", JsonPrimitive(it)) }
+                put("fxType", JsonPrimitive(today.fxType))
+                if (today.family != stored.family) put("family", JsonPrimitive(today.family))
+                put("parameters", JsonObject(today.parameters.mapValues { JsonPrimitive(it.value) }))
+                today.attribute?.let { put("attribute", JsonPrimitive(it)) }
                 if (timing != null && obj.present("cycle") == null) put("cycle", JsonPrimitive(timing.first))
                 if (timing != null && obj.present("direction") == null) put("direction", JsonPrimitive(timing.second))
             },

@@ -125,7 +125,10 @@ class LegacyFxOutputTest {
         val stored = LegacyNames.StoredFx("Sweep", "position", 4.0, "NORMAL", 0.3, params, "FORWARD", 2, 0.75)
         val rewritten = LegacyNames.rewriteFx(stored, LegacyNames.Context({ null }, { null }, absentPingPongIsOn = true))!!.fx
         assertEquals("BOUNCE", rewritten.direction)
-        val today = registry.createFx("Sweep", rewritten.parameters)
+        // The importer's third step: the Sweep the rename writes is stored as Path.
+        val path = LegacyNames.absorbFx(rewritten) { null }!!.fx
+        assertEquals("Path", path.fxType)
+        val today = registry.createFx(path.fxType, path.parameters)
         // Past both runs and the stagger, so the hold after the last run is compared too.
         val ticks = 0L until (MasterClock.TICKS_PER_BEAT * 4 * 4).toLong()
         assertSameOutput(run(withPingPong(today), stored, HEADS, ticks), run(today, rewritten, HEADS, ticks), "Sweep")

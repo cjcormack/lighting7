@@ -536,12 +536,11 @@ internal fun parametersProblem(parameters: List<ParameterInfo>): String? =
 /**
  * Why [fxId] may not name a script FX definition, or null: a retired built-in id would return
  * with a new meaning in the field an archive's old FX use it in (terminology plan P3), and the
- * importer renames it to today's built-in; and Wave's would take the place of the FX every level
- * wave was rewritten onto (fx-settings plan D3), in the project's registry.
+ * importer renames it to today's built-in; and Wave's or Path's would take the place of the FX the
+ * old ids were rewritten onto (fx-settings plan D3), in the project's registry.
  */
 internal fun retiredIdProblem(fxId: String): String? =
     when {
         LegacyNames.isRetiredFxId(fxId) -> "'$fxId' was a built-in FX's id and is retired; give the FX another id"
-        normalizeFxType(fxId) == normalizeFxType(WAVE_ID) -> "'$fxId' is the built-in Wave's id; give the FX another id"
-        else -> null
+        else -> LegacyNames.consolidatedTypeNamed(fxId)?.let { "'$fxId' is the built-in $it's id; give the FX another id" }
     }

@@ -7,6 +7,7 @@ fxMode: STANDARD
 defaultDirection: BOUNCE
 defaultCycle: 2.0
 compatibleAttributes: [rgbColour]
+legacy: true
 parameters:
   - name: fromColour
     type: colour

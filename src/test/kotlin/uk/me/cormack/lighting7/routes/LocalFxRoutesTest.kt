@@ -456,10 +456,16 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
         )
         assertEquals(BlendMode.OVERRIDE to 0.5, colour.blendMode to colour.dynamics.amount, "a Pulse on UV is Colour")
 
-        val position = live(client.pressed(ProgrammerFxRequest("Circle", "position", targets = spot, stack = true)).fxId)
-        assertEquals(BlendMode.ADDITIVE to 1.0, position.blendMode to position.dynamics.amount)
+        val position = live(client.pressed(ProgrammerFxRequest("Path", "position", targets = spot, stack = true)).fxId)
+        assertEquals(BlendMode.ADDITIVE to 1.0, position.blendMode to position.dynamics.amount, "a Path's Circle stacks Around")
         assertEquals("128", position.effect.parameters["panCentre"])
         assertEquals("128", position.effect.parameters["tiltCentre"])
+
+        val line = live(
+            client.pressed(ProgrammerFxRequest("Path", "position", targets = spot, stack = true, parameters = mapOf("shape" to "LINE"))).fxId,
+        )
+        assertEquals(BlendMode.OVERRIDE to 1.0, line.blendMode to line.dynamics.amount, "a Line has no centre to stack about")
+        assertEquals(null, line.effect.parameters["panCentre"])
 
         val beam = live(client.pressed(ProgrammerFxRequest("Wave", "focus", targets = spot, stack = true)).fxId)
         assertEquals(BlendMode.OVERRIDE to 0.5, beam.blendMode to beam.dynamics.amount)
@@ -496,7 +502,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
         val absolute = live(
             client.pressed(
                 ProgrammerFxRequest(
-                    "Circle", "position", targets = fixtures("spot-1"), stack = true, blendMode = "OVERRIDE",
+                    "Path", "position", targets = fixtures("spot-1"), stack = true, blendMode = "OVERRIDE",
                     parameters = mapOf("panCentre" to "40"),
                 ),
             ).fxId,

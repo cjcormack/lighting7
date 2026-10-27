@@ -307,7 +307,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 41
+internal const val SUPPORTED_FORMAT_VERSION = 42
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -2216,20 +2216,24 @@ class ProjectImporter(private val state: State) {
             palettes = { palettes[it] },
             definitions = { byId[normalizeFxType(it)] },
             absentPingPongIsOn = LegacyNames.absentPingPongIsOn(formatVersion, fxLibrary),
+            writtenBeforeSiblings = formatVersion < LegacyNames.SIBLINGS_FORMAT_VERSION,
         )
     }
 
     /**
-     * [fx] on today's FX library — the terminology plan's rewrites, then Wave's (fx-settings plan
-     * D3) — or null when it holds no old name, logged by [what].
+     * [fx] on today's FX library — the terminology plan's rewrites, then Wave's and the rest of
+     * fx-settings plan D3's, in database steps 4, 7 and 8's order — or null when it holds no old name,
+     * logged by [what].
      */
     private fun legacyFx(what: String, fx: LegacyNames.StoredFx, legacy: LegacyNames.Context): LegacyNames.StoredFx? {
-        val renamed = LegacyNames.rewriteFx(fx, legacy)
-        val waved = LegacyNames.consolidateFx(renamed?.fx ?: fx, legacy.definitions)
-        val rewrite = when {
-            renamed == null -> waved
-            waved == null -> renamed
-            else -> LegacyNames.Rewrite(waved.fx, renamed.changes + waved.changes, renamed.notes + waved.notes)
+        val steps = listOf<(LegacyNames.StoredFx) -> LegacyNames.Rewrite?>(
+            { LegacyNames.rewriteFx(it, legacy) },
+            { LegacyNames.consolidateFx(it, legacy.definitions) },
+            { LegacyNames.absorbFx(it, legacy.writtenBeforeSiblings, legacy.definitions) },
+        )
+        val rewrite = steps.fold(null as LegacyNames.Rewrite?) { done, step ->
+            val next = step(done?.fx ?: fx) ?: return@fold done
+            if (done == null) next else LegacyNames.Rewrite(next.fx, done.changes + next.changes, done.notes + next.notes)
         } ?: return null
         if (rewrite.notes.isEmpty()) {
             logger.info("Import: {}: {} — {}", what, fx.fxType, rewrite.changes.joinToString("; "))

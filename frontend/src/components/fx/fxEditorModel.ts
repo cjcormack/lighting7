@@ -3,7 +3,7 @@ import type { ActiveFx, FxLibraryEntry, FxParamUnit, FxParameterDef, FxPreset } 
 import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
 import { isMirroredOrder } from '@/lib/spreadShape'
 import { fxAttributeFamily } from '@/lib/attributeFamily'
-import { CENTRE_PARAMS, hasCentre, defaultParameters, withCentreMode } from './centreMode'
+import { CENTRE_BYTE, CENTRE_PARAMS, centreModeOf, hasCentre, defaultParameters, withCentreMode } from './centreMode'
 import { STORED_ELEMENT_MODE } from './fxConstants'
 
 export {
@@ -12,6 +12,7 @@ export {
   defaultParameters,
   hasCentre,
   isAroundSpelling,
+  isParamShown,
   storedCentreMode,
   withCentreMode,
   type CentreMode,
@@ -76,7 +77,34 @@ export function startingSpec(
     ...on?.preset?.parameters,
   }
   const spec = { blendMode: 'OVERRIDE', parameters }
-  return hasCentre(entry) ? withCentreMode(spec, 'around') : spec
+  return hasCentre(entry, parameters) ? withCentreMode(spec, 'around') : spec
+}
+
+/**
+ * A parameter change that makes the effect ask D12's question, or stop asking it — a Path's shape
+ * moving to or from a Line — as the whole write. Out of an *Around* shape it replaces at its own
+ * positions, since a line has no centre to orbit; any other blend is kept. Into a centred shape it
+ * starts *Around*, as a new one does, while its centres are still the pinned 128 — but centres the
+ * operator moved (an *Absolute* circle taken through a Line and back) keep their blend and place.
+ * Null for any other change, which is the parameter alone.
+ */
+export function centreFlip(
+  entry: Pick<FxLibraryEntry, 'family' | 'parameters'>,
+  draft: { blendMode: string; parameters: Record<string, string> },
+  name: string,
+  value: string,
+): { blendMode: string; parameters: Record<string, string> } | null {
+  const parameters = { ...draft.parameters, [name]: value }
+  const before = hasCentre(entry, draft.parameters)
+  const after = hasCentre(entry, parameters)
+  if (before === after) return null
+  const held = { ...defaultParameters(entry), ...parameters }
+  if (after) {
+    const pinned = CENTRE_PARAMS.every((p) => Number(held[p]) === CENTRE_BYTE)
+    return pinned ? withCentreMode({ blendMode: draft.blendMode, parameters }, 'around') : { blendMode: draft.blendMode, parameters }
+  }
+  const wasAround = centreModeOf(draft.blendMode, { ...defaultParameters(entry), ...draft.parameters }) === 'around'
+  return { blendMode: wasAround ? 'OVERRIDE' : draft.blendMode, parameters }
 }
 
 /**
@@ -224,20 +252,6 @@ function guessedView(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>, param
     return { label, unit: /Ms$/.test(param.name) ? 'ms' : null, min: 0, max, step: 1, fold, open: true }
   }
   return { label, unit: null, min: 0, max: 0, step: 1, fold, open: false }
-}
-
-/** Whether [param] is drawn while the FX holds [parameters] — its `shownWhen`, against the library's defaults. */
-export function isParamShown(
-  entry: Pick<FxLibraryEntry, 'parameters'>,
-  param: FxParameterDef,
-  parameters: Record<string, string>,
-): boolean {
-  const when = param.shownWhen
-  if (when == null) return true
-  const other = entry.parameters.find((p) => p.name === when.param)
-  if (other == null) return true
-  const value = (parameters[other.name] || other.defaultValue).trim().toUpperCase()
-  return when.values.some((v) => v.toUpperCase() === value)
 }
 
 export function clampByte(n: number): number {

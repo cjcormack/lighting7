@@ -38,7 +38,7 @@ class StepBoundaryTest {
             programmerStore = store,
             layerResolver = LayerResolver(CueAssignmentResolver(), store),
         )
-        val params = mapOf("colours" to "#ff0000,#00ff00,#0000ff", "fadeRatio" to "0")
+        val params = mapOf("colours" to "#ff0000,#00ff00,#0000ff", "between" to "CUT")
         val cycle = FxInstance(
             registry.createFx("ColourCycle", params),
             ColourTarget(FxTargetRef.fixture("sh")),

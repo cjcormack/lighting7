@@ -240,7 +240,7 @@ class FxSamplerParityTest {
     fun `a Circle Around a programmer position`() {
         val rig = rig()
         rig.store.put(ProgrammerOwner.WEB, "vary", "position", CueAssignmentResolver.AttributeValue.Position(100u, 150u))
-        val circle = fx("Circle", PositionTarget("vary"), blend = BlendMode.ADDITIVE) {
+        val circle = fx("Path", PositionTarget("vary"), blend = BlendMode.ADDITIVE) {
             priority = FxEngine.localFxPriority(0)
         }
         val samples = assertParity(rig, listOf(circle))
@@ -391,7 +391,7 @@ class FxSamplerParityTest {
         fun running(rig: Rig): List<FxInstance> {
             val beat = fx("Wave", SliderTarget.forGroup("hexes", "dimmer")).dynamics { it.copy(runs = 3) }
             val candle = fx("CandleFlicker", SliderTarget.forGroup("hexes", "uv"), division = 1.0)
-            val wall = fx("Circle", PositionTarget("vary"), division = 2.0) {
+            val wall = fx("Path", PositionTarget("vary"), division = 2.0) {
                 applyTimingChoice(TimingSource.BEAT, seconds = true)
             }.dynamics { it.copy(runs = 2) }
             return listOf(beat, candle, wall).onEach { rig.engine.addFx(it) }
