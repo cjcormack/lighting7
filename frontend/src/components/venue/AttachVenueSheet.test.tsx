@@ -291,6 +291,18 @@ describe('the review', () => {
     expect(within(output).getByText('The venue re-addressed Shehds 1 to 2-001')).toBeInTheDocument()
   })
 
+  it('lists a group that differs only in order as a drawing change, asking nothing (group-order plan call B)', () => {
+    reviewFor = (args) => ({
+      ...BASE,
+      venueId: args.venueId,
+      drawing: [{ kind: 'GROUP', detail: "Your group Front wash becomes the venue's, chased in your order" }],
+    })
+    draw()
+    const drawing = screen.getByRole('group', { name: 'Drawing only' })
+    expect(within(drawing).getByText("Your group Front wash becomes the venue's, chased in your order")).toBeInTheDocument()
+    expect(attachButton()).toBeEnabled()
+  })
+
   it('says a show attached behind on output runs against its pin while it is on the rig', () => {
     reviewFor = (args) => ({ ...BASE, venueId: args.venueId, to: 7, installed: 8, behind: 'OUTPUT', runAgainst: true })
     draw()

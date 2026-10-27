@@ -98,3 +98,36 @@ describe("EditGroupSheet's colour (tables-colours plan D7, D9)", () => {
     expect(screen.queryByRole('button', { name: 'None' })).toBeNull()
   })
 })
+
+describe("EditGroupSheet's order on a venue group in a show (group-order plan D14)", () => {
+  const TWO = [MEMBERS[0], { patchId: 2, fixtureKey: 'hex-2', fixtureName: 'Hex 2', fixtureTypeKey: 'hex', sortOrder: 1 }]
+
+  it('locks the name and members and leaves the order to drag', () => {
+    draw({ members: TWO, orderOwner: 'VENUE' }, 'VENUE')
+    expect(screen.getByLabelText('Group Name')).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: /^Move / })).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
+    expect(screen.queryByText('Add Fixtures')).toBeNull()
+    expect(screen.getByText(/Drag to reorder it for this show/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.queryByText('Your order')).toBeNull()
+  })
+
+  it("marks the show's order, and Take venue's sends a null order alone, named apart from the colour's", () => {
+    draw({ members: TWO, colour: 'pink', colourOwner: 'SHOW', orderOwner: 'SHOW' }, 'VENUE')
+    expect(screen.getByText('Your order')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Take venue’s order' }))
+    expect(updateGroup).toHaveBeenCalledWith({ projectId: 1, groupId: 7, memberOrder: null })
+    fireEvent.click(screen.getByRole('button', { name: 'Take venue’s' }))
+    expect(updateGroup).toHaveBeenLastCalledWith({ projectId: 1, groupId: 7, colour: null })
+  })
+
+  it('lets an operator looking at a venue neither drag nor save the order', () => {
+    detail.current = { id: 7, name: 'Front wash', members: TWO, owner: 'SHOW' }
+    render(
+      <EditGroupSheet open onOpenChange={() => {}} groupId={7} groupName="Front wash" projectId={1} patches={[]} readOnly />,
+    )
+    expect(screen.queryAllByRole('button', { name: /^Move / })).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
+  })
+})

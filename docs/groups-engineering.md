@@ -232,9 +232,10 @@ function of the group's size alone, so the group sheet shows it without mirrorin
 moves with an optimistic reorder. `RANDOM` is seed 0, the seed a group FX gets by name. The
 group sheet's *Members* view is where a group is reordered from the Groups views. It is a numbered
 list in that order, dragged, with each member's step under the Order *Runs as* picks (the group's
-own Order first). A venue's group in a show (until group-order plan session 2), and a venue's rig for
-an operator, are read-only and say why. Patches' *Edit Group* sheet does the same (lighting7 `frontend/CLAUDE.md` §"The fixture
-sheet").
+own Order first). On a venue's group in a show the drag writes the show's order of it, marked *Your
+order* with *Take venue's* beside it (`memberOrder: null`); Patches' *Edit Group* sheet drags it too,
+its name and members still the venue's. A venue's rig for an operator is read-only in both and says why
+(lighting7 `frontend/CLAUDE.md` §"The fixture sheet").
 
 ## Group FX Extensions
 

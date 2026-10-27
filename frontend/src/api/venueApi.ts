@@ -82,7 +82,7 @@ export type UpdateAnswer = 'KEEP_BOTH' | 'READDRESS_MINE' | 'HIDE_VENUES' | 'REM
 
 /** One line of the review: a record carried over, dropped, or blocking. */
 export interface UpdateItem {
-  /** `OVERRIDE | HIDE | COLOUR | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
+  /** `OVERRIDE | HIDE | COLOUR | ORDER | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
   kind: string
   name: string
   detail: string
@@ -99,6 +99,19 @@ export interface UpdateDrift {
   value?: Record<string, unknown> | null
   venue?: Record<string, unknown> | null
   base?: Record<string, unknown> | null
+  answer?: UpdateAnswer
+}
+
+/** A venue group the venue reordered under the show's order of it (group-order plan D12): kept unless answered `TAKE_VENUES`. */
+export interface UpdateOrder {
+  /** `order:<groupUuid>`. */
+  id: string
+  groupUuid: string
+  groupName: string
+  /** The members, by key, in the show's order at the target version. */
+  mine: string[]
+  /** The target version's order. */
+  venue: string[]
   answer?: UpdateAnswer
 }
 
@@ -149,6 +162,7 @@ export interface VenueUpdateReview {
   drawing?: VenueChange[]
   carryOver?: UpdateItem[]
   drift?: UpdateDrift[]
+  orders?: UpdateOrder[]
   dropped?: UpdateItem[]
   decisions?: UpdateDecision[]
   blockers?: UpdateItem[]
@@ -343,6 +357,8 @@ export interface DetachResult {
   hidesDropped: number
   /** The show's recolours of venue patches and groups, written into the copies' own colour. */
   coloursApplied?: number
+  /** The show's orders of venue groups, written into the copies' member order. */
+  ordersApplied?: number
   /** The show's releases of venue parks, gone with the venue; absent when none. */
   parkReleasesDropped?: number
   relinked: Record<string, number>

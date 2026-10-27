@@ -90,6 +90,16 @@ export const groupsApi = restApi.injectEndpoints({
       invalidatesTags: ['Patch', 'Fixture', 'GroupList'],
     }),
 
+    // *Take venue's* on a show's order of a venue group (group-order plan D5)
+    takeVenueGroupOrder: build.mutation<PatchGroupDetail, { projectId: number; groupId: number }>({
+      query: ({ projectId, groupId }) => ({
+        url: `projects/${projectId}/patch-groups/${groupId}`,
+        method: 'PUT',
+        body: { memberOrder: null },
+      }),
+      invalidatesTags: ['Patch', 'Fixture', 'GroupList'],
+    }),
+
     // Get active effects for a group
     groupActiveFx: build.query<GroupActiveFx[], string>({
       query: (groupName) => `groups/${encodeURIComponent(groupName)}/fx/active`,
@@ -166,4 +176,5 @@ export const {
   useResumeGroupFxMutation,
   useRemoveGroupFxMutation,
   useReorderGroupMembersMutation,
+  useTakeVenueGroupOrderMutation,
 } = groupsApi

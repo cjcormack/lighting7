@@ -16,7 +16,7 @@ import { EditorLabel } from '@/components/editor/EditorLabel'
 import { formatError } from '@/lib/formatError'
 import { FACET_LABELS } from '@/lib/venue'
 import { useUpdateVenueMutation, useVenueUpdateReviewQuery } from '@/store/venueHold'
-import type { UpdateAnswer, UpdateDrift } from '@/api/venueApi'
+import type { UpdateAnswer, UpdateDrift, UpdateOrder } from '@/api/venueApi'
 import { VenueChangeList } from './VenueChangeList'
 import { facetValueOf, OverlapDecisionRow, ReviewGroup as Group, ReviewItemRow } from './VenueReviewParts'
 
@@ -30,9 +30,10 @@ import { facetValueOf, OverlapDecisionRow, ReviewGroup as Group, ReviewItemRow }
  * An address overlap the update introduces needs an answer before *Update* is enabled; a key clash is
  * a blocker that cannot be kept, and the show must change first. A drifted override is kept unless
  * answered *Take venue's*, and after the update its drift lights the Patch list's chip as session 5
- * draws it. A refusal is drawn here (`updateVenue` is in `SILENT_ENDPOINTS`) and the answers are kept
- * for a retry. A sheet rather than the board's centred modal, because the decisions are a form
- * (CLAUDE.md §Sheets vs Dialogs).
+ * draws it; so is the show's order of a venue group the venue reordered (group-order plan D12). A
+ * refusal is drawn here (`updateVenue` is in `SILENT_ENDPOINTS`) and the answers are kept for a retry.
+ * A sheet rather than the board's centred modal, because the decisions are a form (CLAUDE.md §Sheets
+ * vs Dialogs).
  */
 export function VenueUpdateSheet({
   open,
@@ -70,7 +71,8 @@ export function VenueUpdateSheet({
 
   // Only the answers to what this review asks: a refetch (another window's edit, a newer version) can
   // drop a decision, and an answer to one the desk no longer has is refused as a whole.
-  const asked = new Set([...decisions.map((d) => d.id), ...(review?.drift ?? []).map((d) => d.id)])
+  const kept = [...(review?.drift ?? []), ...(review?.orders ?? [])]
+  const asked = new Set([...decisions.map((d) => d.id), ...kept.map((d) => d.id)])
   const live = Object.entries(answers).filter(([id]) => asked.has(id))
   if (review != null && answeredFor !== review.to) {
     // A review of another version is another set of questions.
@@ -171,15 +173,24 @@ export function VenueUpdateSheet({
                   </Group>
                 )}
 
-                {(review.drift?.length ?? 0) > 0 && (
-                  <Group label="Kept — the venue changed underneath" count={review.drift!.length} tone="amber">
-                    {review.drift!.map((d) => (
+                {kept.length > 0 && (
+                  <Group label="Kept — the venue changed underneath" count={kept.length} tone="amber">
+                    {(review.drift ?? []).map((d) => (
                       <DriftRow
                         key={d.id}
                         drift={d}
                         to={review.to}
                         taken={answers[d.id] === 'TAKE_VENUES'}
                         onToggle={() => answer(d.id, answers[d.id] === 'TAKE_VENUES' ? null : 'TAKE_VENUES')}
+                      />
+                    ))}
+                    {(review.orders ?? []).map((o) => (
+                      <OrderRow
+                        key={o.id}
+                        order={o}
+                        to={review.to}
+                        taken={answers[o.id] === 'TAKE_VENUES'}
+                        onToggle={() => answer(o.id, answers[o.id] === 'TAKE_VENUES' ? null : 'TAKE_VENUES')}
                       />
                     ))}
                   </Group>
@@ -239,6 +250,41 @@ function DriftRow({ drift, to, taken, onToggle }: { drift: UpdateDrift; to: numb
           {taken
             ? `v${to}'s ${facet.toLowerCase()}${theirs ? ` (${theirs})` : ''} will replace yours`
             : `v${to} changed it${theirs ? ` (${theirs})` : ''}; yours${mine ? ` (${mine})` : ''} is kept`}
+        </span>
+      </span>
+      <Button size="sm" variant={taken ? 'default' : 'outline'} className="h-7 shrink-0" aria-pressed={taken} onClick={onToggle}>
+        Take venue&apos;s
+      </Button>
+    </li>
+  )
+}
+
+/**
+ * Both orders by key, each from the first place they differ so the change is in view, cut short past
+ * [shown] so a big group stays one line.
+ */
+function orderLines(mine: readonly string[], venue: readonly string[], shown = 6): [string, string] {
+  let from = 0
+  while (from < mine.length && from < venue.length && mine[from] === venue[from]) from++
+  if (from >= Math.max(mine.length, venue.length)) from = 0
+  const line = (keys: readonly string[]) => {
+    const rest = keys.length - from - shown
+    return `${from > 0 ? `from ${from + 1}: ` : ''}${keys.slice(from, from + shown).join(', ')}${rest > 0 ? ` +${rest}` : ''}`
+  }
+  return [line(mine), line(venue)]
+}
+
+function OrderRow({ order, to, taken, onToggle }: { order: UpdateOrder; to: number; taken: boolean; onToggle: () => void }) {
+  const [mine, venue] = orderLines(order.mine, order.venue)
+  return (
+    <li className="flex items-start gap-2 rounded-md border bg-card px-2.5 py-1.5 text-sm">
+      <span aria-hidden className="w-3 shrink-0 text-center font-mono font-bold text-amber-600 dark:text-amber-400">~</span>
+      <span className="min-w-0 flex-1">
+        <span className="block">{order.groupName} · Order</span>
+        <span className="block text-xs text-muted-foreground">
+          {taken
+            ? `v${to}'s order (${venue}) will replace yours`
+            : `v${to} reordered it (${venue}); yours (${mine}) is kept`}
         </span>
       </span>
       <Button size="sm" variant={taken ? 'default' : 'outline'} className="h-7 shrink-0" aria-pressed={taken} onClick={onToggle}>

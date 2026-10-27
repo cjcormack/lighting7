@@ -1,6 +1,6 @@
 # A show's order for a venue group
 
-> **Document status: READY — calls decided 2026-10-27 (§3).** Session 1 in review.
+> **Document status: READY — calls decided 2026-10-27 (§3).** Sessions 1 and 2 in review.
 
 ## 1. Context
 
@@ -123,8 +123,8 @@ session's PR is titled *Group order: session N — title*. Never merge session 2
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The overlay on the desk | in review | claude/zealous-fermi-lcmwzb | | |
-| 2 | The sheets and the reviews | planned | | | |
+| 1 | The overlay on the desk | in review | claude/zealous-fermi-lcmwzb | [#311](https://github.com/cjcormack/lighting7/pull/311) | 6d325b03 |
+| 2 | The sheets and the reviews | in review | claude/wonderful-pascal-kdttrl | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -176,6 +176,21 @@ the next; whoever merges the last fills its own.
 - The Update dialog's `order:` decisions (D12) and the `ORDER` dropped row; the Attach review's
   order line.
 - Tests beside the existing `GroupMembersSection.test.tsx` and `memberOrder.test.ts`.
+
+**Where session 2 followed the code over the plan.**
+
+- The Attach review needed no new code: an order-only pair reaches it as a line of `drawing`, which its
+  *Drawing only* list already draws, and it asks nothing (call B). `AttachVenueSheet.test.tsx` pins the
+  line. Update's `order:` rows read session 1's `VenueUpdateDto.orders`, listed in *Kept — the venue
+  changed underneath* beside facet drift; the `ORDER` dropped row is the generic dropped line.
+- *Take venue's* on the group sheet is `useTakeVenueGroupOrderMutation` (`memberOrder: null`, no
+  optimistic move: the client cannot know the venue's order). The Edit Group sheet sends the same
+  body through its own `updatePatchGroup`.
+- `lib/memberOrder.ts` is unchanged: the optimistic move is the same on a venue group, the desk's merge
+  being `placeInOrder`'s rule. The tests sit beside the sheets (`EditGroupSheet.test.tsx`,
+  `VenueUpdateSheet.test.tsx`) rather than in `memberOrder.test.ts`.
+- §6's manual check is one row for both sessions, `FU-MANUAL-GROUP-ORDER-S2`: session 1 added none,
+  and the UI is how the operator checks it.
 
 ## 6. Operator checks
 

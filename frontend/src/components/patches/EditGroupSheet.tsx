@@ -54,8 +54,11 @@ interface EditGroupSheetProps {
   owner?: RigOwner
 }
 
-/** Why a venue's group cannot be changed from a show (its PUT and DELETE would be 409 `VENUE_OWNED`). */
-const VENUE_GROUP_REASON = 'The venue’s group: change it, its members and its order in the venue.'
+/**
+ * A venue's group in a show: its name and members are the venue's (a PUT naming them, and the DELETE,
+ * would be 409 `VENUE_OWNED`), its order the show's to set (group-order plan D5).
+ */
+const VENUE_GROUP_REASON = 'The venue’s group: its name and members are set in the venue. Drag to reorder it for this show.'
 
 export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initialName, projectId, patches, readOnly = false, owner }: EditGroupSheetProps) {
   const { data: groupDetail } = usePatchGroupDetailQuery(
@@ -97,17 +100,21 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
 
   if (!groupId) return null
 
-  // Read-only, with the reason (venue-visit plan S7): a venue's group seen from a show, and a venue's
-  // rig for an operator. The group and its order are still shown. The owner comes from the list the
-  // sheet was opened from, so nothing is editable for a moment before the detail says whose it is;
-  // with neither, the sheet stays locked until the detail loads.
+  // Locked, with the reason (venue-visit plan S7): a venue's group seen from a show, whose order alone
+  // is the show's to change (group-order plan D14), and a venue's rig for an operator, where nothing
+  // is. The owner comes from the list the sheet was opened from, so nothing is editable for a moment
+  // before the detail says whose it is; with neither, the sheet stays locked until the detail loads.
   const groupOwner = groupDetail?.owner ?? owner
-  const lockedReason = groupOwner === 'VENUE'
-    ? VENUE_GROUP_REASON
-    : readOnly
-      ? VENUE_ADMIN_ORDER_REASON
+  const venueGroup = groupOwner === 'VENUE'
+  const lockedReason = readOnly
+    ? VENUE_ADMIN_ORDER_REASON
+    : venueGroup
+      ? VENUE_GROUP_REASON
       : null
-  const locked = lockedReason != null || (groupDetail == null && owner == null)
+  const unknownOwner = groupDetail == null && owner == null
+  const locked = lockedReason != null || unknownOwner
+  const orderLocked = readOnly || unknownOwner
+  const orderYours = venueGroup && groupDetail?.orderOwner === 'SHOW'
 
   const originalOrder = stored.map((m) => m.patchId)
   const currentOrder = members.map(m => m.patchId)
@@ -138,6 +145,11 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
   const setColour = (colour: FixtureColour | null) => {
     if (colour === readColour(groupDetail?.colour)) return
     void updateGroup({ projectId, groupId, colour }).unwrap().catch(ignoreReportedError)
+  }
+
+  const takeVenueOrder = () => {
+    setOrderDraft(null)
+    void updateGroup({ projectId, groupId, memberOrder: null }).unwrap().catch(ignoreReportedError)
   }
 
   const handleDelete = async () => {
@@ -179,7 +191,16 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
           <Separator />
 
           <div className="space-y-1.5">
-            <Label>Members ({members.length})</Label>
+            <div className="flex items-center gap-2">
+              <Label>Members ({members.length})</Label>
+              {orderYours && <span className="text-[10px] text-primary">Your order</span>}
+              <span className="flex-1" />
+              {orderYours && !orderLocked && (
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" aria-label="Take venue’s order" onClick={takeVenueOrder}>
+                  Take venue’s
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               {lockedReason ?? 'FX and a fan over the group run in this order. Drag to reorder.'}
             </p>
@@ -193,7 +214,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
             <SortableContext
               items={members.map((m) => m.patchId)}
               strategy={verticalListSortingStrategy}
-              disabled={locked}
+              disabled={orderLocked}
             >
               <div className="space-y-1">
                 {members.map((member, index) => (
@@ -201,7 +222,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
                     key={member.patchId}
                     member={member}
                     position={index + 1}
-                    locked={locked}
+                    locked={orderLocked}
                     onRemove={groupId && !locked ? async () => {
                       await updatePatch({ projectId, patchId: member.patchId, removeFromGroupId: groupId })
                         .unwrap()
@@ -243,9 +264,9 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
           </Button>}
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isUpdating}>
-              {locked ? 'Close' : 'Cancel'}
+              {orderLocked ? 'Close' : 'Cancel'}
             </Button>
-            {!locked && (
+            {!orderLocked && (
               <Button onClick={handleSave} disabled={!isValid || !hasChanges || isUpdating}>
                 {isUpdating ? 'Saving...' : 'Save'}
               </Button>

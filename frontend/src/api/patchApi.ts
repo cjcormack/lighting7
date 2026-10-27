@@ -125,6 +125,9 @@ export interface FixturePatch extends LanternFocus {
 /** Whose a venue record's colour is in a show (tables-colours plan D10). */
 export type ColourOwner = 'SHOW' | 'VENUE';
 
+/** Whose a venue group's member order is in a show (group-order plan D8). */
+export type OrderOwner = 'SHOW' | 'VENUE';
+
 /** The four parts of a venue patch a show can make its own (venue plan D4), each whole. */
 export type PatchFacet = 'ADDRESS' | 'POSITION' | 'FOCUS' | 'MEDIA';
 
@@ -378,6 +381,8 @@ export interface PatchGroup {
   /** The group's colour as this rig draws it; never its members'. Absent from an older desk. */
   colour?: string | null;
   colourOwner?: ColourOwner | null;
+  /** On a venue group in a show: whether its member order is the show's or the venue's. */
+  orderOwner?: OrderOwner | null;
 }
 
 export interface PatchGroupDetail {
@@ -387,6 +392,7 @@ export interface PatchGroupDetail {
   owner?: RigOwner;
   colour?: string | null;
   colourOwner?: ColourOwner | null;
+  orderOwner?: OrderOwner | null;
 }
 
 export interface PatchGroupMember {
@@ -399,7 +405,11 @@ export interface PatchGroupMember {
 
 export interface UpdatePatchGroupRequest {
   name?: string;
-  memberOrder?: number[]; // list of patch IDs in desired order
+  /**
+   * Patch ids in the order wanted. On a venue group in a show, sent without a name it is the show's
+   * order of it, and null takes the venue's back.
+   */
+  memberOrder?: number[] | null;
   /** A colour key; null clears it. On a venue group in a show, sent alone it is the show's recolour. */
   colour?: string | null;
 }

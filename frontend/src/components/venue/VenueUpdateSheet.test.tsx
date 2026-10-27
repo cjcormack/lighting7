@@ -91,4 +91,29 @@ describe('VenueUpdateSheet (venue plan session 6)', () => {
     expect(screen.getByText(/which v5's SMOKE takes/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Update to v5' })).toBeDisabled()
   })
+
+  it('keeps the show’s order of a group the venue reordered unless Take venue’s is answered (group-order plan D12)', () => {
+    draw({
+      ...REVIEW,
+      decisions: [],
+      drift: [],
+      orders: [{ id: 'order:g', groupUuid: 'g', groupName: 'Front wash', mine: ['hex-3', 'hex-2', 'hex-1'], venue: ['hex-2', 'hex-1', 'hex-3'] }],
+      dropped: [{ kind: 'ORDER', name: 'Back wash', detail: 'Your order of group Back wash: v5 has no such group' }],
+    })
+    const kept = screen.getByRole('group', { name: /^Kept/ })
+    expect(within(kept).getByText('Front wash · Order')).toBeTruthy()
+    expect(within(kept).getByText('v5 reordered it (hex-2, hex-1, hex-3); yours (hex-3, hex-2, hex-1) is kept')).toBeTruthy()
+    expect(screen.getByText(/Your order of group Back wash/)).toBeTruthy()
+    fireEvent.click(within(kept).getByRole('button', { name: "Take venue's" }))
+    expect(within(kept).getByText(/will replace yours/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Update to v5' }))
+    expect(update).toHaveBeenCalledWith({ projectId: 4, to: 5, decisions: [{ id: 'order:g', answer: 'TAKE_VENUES' }] })
+  })
+
+  it('shows a long group’s orders from where they first differ', () => {
+    const keys = Array.from({ length: 12 }, (_, i) => `h${i + 1}`)
+    const venue = [...keys.slice(0, 8), 'h10', 'h9', 'h11', 'h12']
+    draw({ ...REVIEW, decisions: [], drift: [], orders: [{ id: 'order:g', groupUuid: 'g', groupName: 'Pixels', mine: keys, venue }] })
+    expect(screen.getByText('v5 reordered it (from 9: h10, h9, h11, h12); yours (from 9: h9, h10, h11, h12) is kept')).toBeTruthy()
+  })
 })

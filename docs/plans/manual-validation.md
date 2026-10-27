@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-GROUP-ORDER-S2`](#fu-manual-group-order-s2) | a venue group reordered from a show chases in the show's order on the rig and is taken back, the venue's order unchanged in a second show on it, and an Update across a venue reorder asks and keeps the show's | Group order S1–S2, 2026-10-27 |
 | [`FU-MANUAL-TABLES-COLOURS-S5`](#fu-manual-tables-colours-s5) | colour everywhere else at the desk: the busk rig's tile bands and the Stage view's labels and *Bodies · By colour* in a blacked-out room, a second screen set to *By colour* from the Screens sheet, the DMX footprints and a surface's labels, and whether cyan reads as a cue on the rig | Tables and colours S5, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S4`](#fu-manual-tables-colours-s4) | colour in the tables at the desk: the Colour column's keymap and popover on the desk and the iPad, the name mark readable on the desk's two screens and the iPad in a dark room and in light, *Colour from group*, and a venue patch recoloured from a show and taken back | Tables and colours S4, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S3`](#fu-manual-tables-colours-s3) | a colour set on a venue patch and group from a show is the show's recolour, survives a publish of the venue's own recolour, and is taken back; a venue colour change holds no show | Tables and colours S3, 2026-10-19 |
@@ -58,7 +59,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R1-1`](#fu-manual-venue-visit-r1-1) | the cue model's startup migration converts the desk's real database — first on a copy, then the desk itself with its backup kept — every stack listing the same cues with the same numbers and follows, the markers where they were, the prompt book's anchors where they sat, and a second start doing nothing | Venue visit R1.1, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-1`](#fu-manual-venue-visit-r2-1) | Blind holds a busked Pulse on the rig — the pulse stops, the reporters say FX are held — and Blind off paints it in step with a second pulse that ran unblinded | Venue visit R2.1, 2026-10-15 |
 | [`FU-MANUAL-S9-WHITES`](#fu-manual-s9-whites) | the blinder takes a colour as the warm/cold mix the desk says — its whites' estimated 3000 K and 6500 K read right beside a known white, a red palette goes full warm and a white one lands both, and the Colour cell's warmth moves the elements as the Stage view draws them | Venue visit S9, 2026-10-15 |
-| [`FU-MANUAL-VENUE-VISIT-S7`](#fu-manual-venue-visit-s7) | a group dragged into a new order in its sheet runs its chases and its fans in that order on the rig, and a venue's group in a show cannot be reordered from there | Venue visit S7, 2026-10-15 |
+| [`FU-MANUAL-VENUE-VISIT-S7`](#fu-manual-venue-visit-s7) | a group dragged into a new order in its sheet runs its chases and its fans in that order on the rig, and a venue's group in a show reorders as the show's own (`FU-MANUAL-GROUP-ORDER-S2`) | Venue visit S7, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S15`](#fu-manual-venue-visit-s15) | an FX on *Seconds* holds its speed through a tempo change on the rig, keeps its speed as it moves on and off a master, records and replays as it ran, and a new FX starts one bar on its family's master | Venue visit S15, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-S11`](#fu-manual-venue-visit-s11) | position reads and types centre-relative everywhere on the rig — 0 is the centre of travel on every mover, a generic `pos:` palette lands two models at the same share of travel, and an old degree palette still lands where it did until it is edited | Venue visit S11, 2026-10-15 |
 | [`FU-MANUAL-VENUE-VISIT-R2-2`](#fu-manual-venue-visit-r2-2) | a one-value edit to a real show's cue reaches its repo as one changed record — the sync status, the working tree's diff and the history all naming the one row | Venue visit R2.2, 2026-10-15 |
@@ -137,6 +138,33 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-GROUP-ORDER-S2`
+
+**What it proves**: *a show's order of a venue group* — group-order plan D5, D12, D14: a drag of a
+venue group's members in a show is the show's order of it (`show_group_orders`), the venue's group and
+every other show on it untouched; *Take venue's* gives it back; and an Update across a venue reorder
+asks, keeping the show's order unless answered. Sessions 1 and 2 together.
+
+**Why it is here**: the tests run each path on a seeded venue and a mocked sheet. Only the rig shows a
+chase running the way the numbers say, and only a real publish under a running show shows the Update
+review asking about it.
+
+**Test**, on two shows on TCH venue, the first live, with a chase (a Wave in Normal order) on a venue
+group, `front-wash`:
+
+1. **Reorder.** Open the group sheet's *Members*, drag the last member to the top: the chase on the rig
+   now starts there, and the list reads *Your order* with *Take venue's*. Patches' *Edit Group* sheet
+   shows the same order, its name and members locked, its order draggable.
+2. **The other show.** Switch to the second show: `front-wash` chases in the venue's order and reads no
+   *Your order*. Switch back.
+3. **Take it back.** *Take venue's*: the chase runs in the venue's order again and the mark goes.
+4. **Update across a reorder.** Reorder `front-wash` in the show again. In the venue's draft, as an admin,
+   reorder its `front-wash` and publish. In the show, *Review update*: *Kept — the venue changed
+   underneath* lists *front-wash · Order* with both orders; update without answering, and the chase
+   keeps the show's order. Repeat with *Take venue's* answered: the chase takes the venue's new order.
 
 ---
 
@@ -1448,8 +1476,8 @@ drag.
 3. **A fan.** Select the group alone, Fan Dimmer 0 → 100 % at *Normal*. The dragged member gets
    0 %. Add a fixture from outside the group to the selection: the fan follows the busk rig's order
    again.
-4. **A venue's group.** In a show on the hall, a venue group's *Members* view has no drag handles and
-   says its order is set in the venue. Patches' *Edit Group* sheet is read-only with the same reason.
+4. **A venue's group.** In a show on the hall, a venue group's *Members* view drags, and the order it
+   writes is the show's alone; `FU-MANUAL-GROUP-ORDER-S2` checks it.
 
 If an FX runs in an order the sheet does not show, promote it to a `FU-` item in `followups.md`.
 
