@@ -8,7 +8,6 @@ import {
   stepCountOf,
   spreadOffsets,
   spreadShapeOf,
-  spreadSummary,
 } from './spreadShape'
 import { ELEMENT_MODE_OPTIONS } from '@/components/fx/fxConstants'
 import { spreadHeadCount } from '@/components/fx/fxEditorModel'
@@ -111,25 +110,5 @@ describe('a spread in steps', () => {
   it('starts a new step FX one step behind and anything else as it was', () => {
     expect(newFxSpread('colours')).toEqual({ spread: 1, spreadUnit: 'STEP' })
     expect(newFxSpread(undefined)).toEqual({})
-  })
-
-  it('says the spread in steps', () => {
-    expect(spreadSummary('NORMAL', { ...DEFAULT_SPREAD_SHAPE, spreadUnit: 'STEP' })).toEqual(['1 step'])
-    expect(spreadSummary('NORMAL', { ...DEFAULT_SPREAD_SHAPE, spread: 2, spreadUnit: 'STEP' })).toEqual(['2 steps'])
-  })
-})
-
-describe('spreadSummary', () => {
-  it('says every non-default field, the order apart', () => {
-    expect(spreadSummary('NORMAL', DEFAULT_SPREAD_SHAPE)).toEqual([])
-    expect(spreadSummary('NORMAL', { ...DEFAULT_SPREAD_SHAPE, spread: 0.5, wings: 2 })).toEqual(['50 %', '2 wings'])
-    expect(spreadSummary('REVERSE', { ...DEFAULT_SPREAD_SHAPE, segments: 3, parts: 2 })).toEqual([
-      'segments of 3',
-      'parts of 2',
-    ])
-  })
-
-  it('leaves wings under a mirrored order unsaid', () => {
-    expect(spreadSummary('CENTRE_OUT', { ...DEFAULT_SPREAD_SHAPE, wings: 2 })).toEqual([])
   })
 })

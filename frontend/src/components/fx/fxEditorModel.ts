@@ -374,7 +374,7 @@ export interface FxDraft {
   runs: number | null
   /**
    * The spread's shape (effects plan D4): Spread 0–2, Wings and Segments at least 1, Parts 0 (off) or
-   * more. The desk shapes the heads from them (P2); the editor's dials only preview it
+   * more. The desk shapes the heads from them (P2); the editor's head ladder only previews it
    * (`lib/spreadShape.ts`).
    */
   spread: number
@@ -433,8 +433,8 @@ export interface FxScope {
    */
   timing?: boolean
   /**
-   * How many heads the effect runs over, for the Spread section's dials — a live effect's own (they
-   * draw up to sixteen, then *+n*). Absent on an effect palette, which has no target: the dials draw
+   * How many heads the effect runs over, for *Across the heads* — a live effect's own (the ladder
+   * draws up to sixteen, then *+n*). Absent on an effect palette, which has no target: it is drawn on
    * eight notional heads (effects plan §4.1).
    */
   headCount?: number
@@ -592,7 +592,7 @@ export function carriesFxAttribute(attributes: readonly CarrierAttribute[] | nul
 }
 
 /**
- * How many heads a live effect's distribution runs over, for the Spread section's dials — the desk's
+ * How many heads a live effect's distribution runs over, for *Across the heads* — the desk's
  * `FxEngine.buildExpansion`, counted. The first fixture stands for a group, as on the desk: where it
  * carries the effect's property itself ([carriesFxAttribute]) the effect runs once per fixture —
  * a group's members, unfiltered, or the one fixture — whatever heads it has (a pixel bar's master

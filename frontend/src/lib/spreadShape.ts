@@ -1,12 +1,13 @@
 import { javaRandom } from '@/components/editor/spreadPlans'
 
 /**
- * The spread's shape (effects plan D4, §3.3) — the editor's copy, for the Spread section's **dial
- * preview only** (P2: the desk owns the rule, `fx/SpreadShape.kt`'s `SpreadShaping` and
- * `fx/group/SpreadOrder.kt`'s ranks). Nothing here is ever sent: the editor writes the four
- * fields and the Order, and the desk shapes the running effect from them. A shared vector,
+ * The spread's shape (effects plan D4, §3.3) — the editor's copy, for what *Across the heads* draws
+ * and says where the desk's preview has not answered: the head ladder, the patterns' drawings and the
+ * words under them (P2: the desk owns the rule, `fx/SpreadShape.kt`'s `SpreadShaping` and
+ * `fx/group/SpreadOrder.kt`'s ranks). Nothing here is ever sent: the editor writes the fields and the
+ * Order, and the desk shapes the running effect from them. A shared vector,
  * `src/test/resources/fx/spreadShape.fixture.json`, pins this file and the desk's to the same offsets
- * (`spreadShape.test.ts` beside `SpreadShapeTest.kt`), so the dials cannot draw a spread the rig does
+ * (`spreadShape.test.ts` beside `SpreadShapeTest.kt`), so the editor cannot draw a spread the rig does
  * not run.
  */
 
@@ -80,7 +81,7 @@ export function newFxSpread(stepsFrom: string | undefined | null): Pick<SpreadSh
 }
 
 /**
- * How many steps an FX runs through, for the dials only: the entries of the list parameter its
+ * How many steps an FX runs through, for what *Across the heads* draws and says: the entries of the list parameter its
  * library entry names (`stepsFrom`) — a blank list its declared default, as the desk reads one, a
  * blank entry no step and, in a colour list, a `pal:` reference none. The desk also drops a colour it
  * cannot parse and a palette that does not resolve, which this cannot see. Null for an FX with no steps.
@@ -217,19 +218,4 @@ export function spreadOffsets(
   }
   const over = shape.spreadUnit === 'STEP' && steps != null ? Math.max(steps, 1) : count
   return { offsets: r.map((x) => (shape.spread * x) / over), slots: count }
-}
-
-/**
- * The Spread section's summary line, each non-default field — *50 % · 2 wings*. The Order sits above
- * the section, so it is not repeated. Wings under a mirrored Order are left unsaid, as the desk
- * leaves them unrun.
- */
-export function spreadSummary(order: string, shape: SpreadShape): string[] {
-  const parts: string[] = []
-  if (shape.spreadUnit === 'STEP') parts.push(shape.spread === 1 ? '1 step' : `${shape.spread} steps`)
-  else if (shape.spread !== 1) parts.push(`${Math.round(shape.spread * 100)} %`)
-  if (shape.wings > 1 && !isMirroredOrder(order)) parts.push(`${shape.wings} wings`)
-  if (shape.segments > 1) parts.push(`segments of ${shape.segments}`)
-  if (shape.parts > 0) parts.push(`parts of ${shape.parts}`)
-  return parts
 }

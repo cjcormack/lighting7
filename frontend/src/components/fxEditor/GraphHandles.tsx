@@ -4,6 +4,7 @@ import { getCycleLabel } from '@/components/fx/fxConstants'
 import type { GraphMark, LinkedEditor } from '@/components/fx/fxGraphLink'
 import type { FxPreviewFx, FxPreviewRow } from '@/store/fxPreview'
 import { SAMPLES_PER_CYCLE, levelScale, rowStarts, rungRow, sampleX, type LaidSection, type LaneLayout } from './fxGraphModel'
+import { laterByPhrase, neighbourGap } from '@/components/fx/acrossHeads'
 import { cycleFromDrag, spreadFromDrag, spreadShareOf } from './fxGraphHandles'
 
 /** How far the pointer goes before a press is a drag: a click with a jitter in it edits nothing. */
@@ -340,11 +341,7 @@ export function GraphHandles({
             name="spread"
             x={knob.x}
             y={top + knob.y}
-            tip={
-              inSteps
-                ? `Spread ${Math.round(editor.draft.spread * 100) / 100} ${editor.draft.spread === 1 ? 'step' : 'steps'}`
-                : `Spread ${Math.round(editor.draft.spread * 100)}%`
-            }
+            tip={laterByPhrase(neighbourGap(fx.ladder.spread), editor.steps ?? null)}
             cursor="ew-resize"
             mark="starts"
             onHighlight={onHighlight}

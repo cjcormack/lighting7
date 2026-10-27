@@ -2022,9 +2022,10 @@ palette that stops resolving re-plans. A `STEP` FX with no count (a stored row w
   spreads over (`SpreadShaping.cycleSpread`, `FxEngine.spreadSlots`), capped at 200 %; a swap onto
   another FX that steps keeps `STEP`. The palette editor, which has no heads, swaps onto the cycle's
   own spread.
-- The editor draws the Spread field in steps under `STEP`, its dials count the FX's steps
-  (`lib/spreadShape.ts`'s `stepCountOf`), and the graph's Spread knob drags in them; choosing the unit is
-  the FX settings plan's session 6.
+- The editor chooses the unit with *Each head later by* (fx-settings plan D10): *1 step* writes `STEP`
+  1, *Fit the cycle* `CYCLE` 1, and *Free* is a slider in the unit the FX is on. The head ladder and the
+  readout count the FX's steps (`lib/spreadShape.ts`'s `stepCountOf`), and the graph's Spread knob drags
+  in them.
 - **`stepsFrom` is kept by the FX.** A script's `registerFx` naming one is refused unless the FX its
   factory builds answers `stepCount` (a copied built-in's does), and a stored `STEP` on an FX with no
   steps spawns as `CYCLE` in the cycle's range. MCP's reads always say a step FX's spread and unit,
@@ -2055,13 +2056,14 @@ to the same offsets, Random's shuffle included.
   off). `FxDto` and the group and indirect DTOs report them. The MCP FX schemas take the four
   (`AiToolSchemas.putFxDynamics`), and `describe_rig` and `get_current_state` say them where they
   are not the default.
-- **The editor** (D11, §4.1): a *Spread* disclosure in `FxFields` — the Shapes (FX editor plan
-  D11: nine chips, each setting Order, Spread, Wings, Segments and Parts at once), Spread %, Wings
-  (hidden under a mirrored Order, and set back to 1 when one is chosen), Segments, Parts, and a row of
-  phase dials over eight notional heads on an FX palette and the FX's own heads live (up to sixteen,
-  then *+n*) — the FX editor's inspector draws the offset ladder from the preview in their place. The
-  Order select sits above it, under *Over* in *Across the heads* (fx-settings plan D9). Its summary says the Shape, else *Custom*, then the
-  non-defaults: *Custom · 50 % · 2 wings*.
+- **The editor** (D11, §4.1; fx-settings plan D10): *Across the heads* in `FxFields`, under *Over* — the head
+  ladder (each head numbered by when it starts, from the preview's `ladder.spread` in the FX editor's inspector,
+  else `lib/spreadShape.ts` over the FX's own heads or eight notional ones on a palette), the nine patterns (FX
+  editor plan D11: each setting Order, Wings, Segments and Parts at once, drawn on those heads; *Custom* opens the
+  Order select), *Each head later by* (*Fit the cycle* `CYCLE` 1, *1 step* `STEP` 1 on an FX with `stepsFrom`,
+  *Free* a slider in the unit the FX is on) with the offset between neighbours in cycles, steps, beats and degrees
+  and, under `STEP`, the spread the desk runs, then Segments · Parts · Wings as segments with typed counts and one
+  line saying what they do. Wings is hidden under a mirrored Order and set back to 1 when one is chosen.
 
 **Order interface properties:**
 

@@ -751,7 +751,7 @@ function attributesInFamily(entry: FxLibraryEntry, family: AttributeFamily): str
 }
 
 /**
- * The Spread section (Order, Spread %, Wings, Segments, Parts) over eight notional heads — no
+ * *Across the heads* (the patterns, Each head later by, Segments, Parts, Wings) over eight notional heads — no
  * `headCount`, since a palette has no target — and *Over*, which a pad's press reads on whatever
  * heads it lands; nothing else that needs a head.
  */

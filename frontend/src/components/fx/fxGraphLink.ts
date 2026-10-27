@@ -8,7 +8,7 @@ import type { FxDraft } from './fxEditorModel'
  * **What ties the FX editor's inspector to its graph** (FX editor plan D9, D12, D13, §4.5): the
  * FX editor provides it around its columns — not the sheets it opens — so the live editor in the
  * inspector lights the graph's marks,
- * draws the offset ladder from the desk's answer, offers *Same as…* over the list's other FX, and
+ * draws the head ladder from the desk's answer, offers *Same as…* over the list's other FX, and
  * lends its draft and its write to the graph's handles. Every other host of the live editor has no
  * graph and provides nothing, so none of this is drawn there.
  */
@@ -36,7 +36,7 @@ export interface LinkedEditor {
 
 /**
  * The row the graph's pointer rests on, by key: a store rather than state, so a pointer crossing
- * the rows redraws the ladder's dots and nothing else.
+ * the rows redraws the head ladder and nothing else.
  */
 export interface HoveredRowStore {
   get: () => string | null
@@ -78,9 +78,9 @@ export interface MatchSource {
 export interface FxGraphLink {
   /** The picked FX as the desk's preview answered it, and the answer's rows: what the ladder draws. */
   ladder: { fx: FxPreviewFx; rows: readonly FxPreviewRow[] } | null
-  /** The row the graph's pointer rests on, which lights its dots. */
+  /** The row the graph's pointer rests on, which rings its head on the ladder. */
   hoveredRow: HoveredRowStore
-  /** A dot the pointer rests on, linking it to its graph row. */
+  /** A ladder head the pointer rests on, linking it to its graph row. */
   setLadderRow: (key: string | null) => void
   setHighlight: (mark: GraphMark | null) => void
   others: readonly MatchSource[]
