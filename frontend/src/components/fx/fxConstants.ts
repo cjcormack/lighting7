@@ -3,8 +3,8 @@ import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
 import type { ElementMode } from '@/api/groupsApi'
 
 /**
- * The heads an FX palette is drawn on with nothing to count (FX editor plan D15): its phase dials
- * and its graph strip's notional heads. [NOTIONAL_HEADS_WORD] is the number in the strip's copy.
+ * The heads an FX palette is drawn on with nothing to count (FX editor plan D15): its head ladder
+ * and patterns, and its graph strip's notional heads. [NOTIONAL_HEADS_WORD] is the number in the strip's copy.
  */
 export const NOTIONAL_HEADS = 8
 export const NOTIONAL_HEADS_WORD = 'eight'

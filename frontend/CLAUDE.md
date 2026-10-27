@@ -803,8 +803,8 @@ Release folds to its glyph and the scope line drops the fade.
   family's question** (effects plan D11; terminology plan D3): Amount a slider and a percent field — how
   much of the FX reaches the stage over what is underneath, which the desk weighs after the
   blend (a Replace at 50 % sits halfway over the level underneath) — and, for an FX that asks no
-  question, a line saying what its blend does. **Across the heads** holds *Over*, *Order* on a group or a fixture with
-  heads, and the Spread disclosure (the Order, worded *Normal · Reverse · Centre out…* by `lib/orderLabels.ts` — the one
+  question, a line saying what its blend does. **Across the heads** holds *Over*, then on a group or a fixture with
+  heads the spread's questions (below; the Order, worded *Normal · Reverse · Centre out…* by `lib/orderLabels.ts` — the one
   vocabulary, which `fxConstants.ts`' `ORDER_OPTION_ENTRIES` / `getOrderLabel` (a
   Look's or cue's summary, a group's *Runs as*) and the Fan's `SPREAD_ORDERS` read too, keyed by the
   stored names `NORMAL`, `CENTRE_OUT`, `CENTRE_IN` and the rest). Amount and Direction are dynamics fields on the desk, so a write keeps
@@ -839,28 +839,39 @@ Release folds to its glyph and the scope line drops the fade.
   library entry names `stepsFrom` (Colour Cycle, Palette Steps, Slot Steps) **one step behind** — `spreadUnit:
   'STEP'`, `spread: 1` (fx-settings plan D7, `newFxSpread`) — and a preview's draft says its stored unit, `CYCLE`
   where it names none, for the same reason. **The
-  spread's shape is the *Spread* section's** (effects plan D11, §4.1; `SpreadSection`), a disclosure under Order on a group or a
-  fixture with heads, and always on an FX palette: the **Shapes** (FX editor plan D11, below), *Spread* %,
-  *Wings* (hidden under a mirrored Order — Centre out, Centre in — and set back to 1 in the same
-  write when one is chosen, `orderPatch`, since the desk refuses wings there), *Segments* and *Parts*
-  (0 off), and — in every host but the FX editor's inspector, which draws the offset ladder in their
-  place — a row of **phase dials**: eight notional heads on a palette, the FX's own live
-  (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion` counted: one per fixture
-  where the first fixture carries the FX's attribute itself (`carriesFxAttribute`: a slider or
-  setting by name, a colour or position by type, the desk's traits), else its heads: one unit a fixture
-  under `WHOLE`, a `FLAT` group's head filter across the whole strip on its global index, a
-  `PER_FIXTURE` one's within each fixture;
-  sixteen dials, then *+n*). Under Segments, Wings or Parts Position's continuous rank snaps to its
-  nearest slot first, as the desk's `wholeRanks` does. Its summary says the Shape, else *Custom*, then the non-defaults: *Custom · 50 % · 2 wings*.
-  The four ride `updateFx` once touched (`OPTIONAL_FIELDS`), `parts: 0` turning them off. Under `spreadUnit: 'STEP'`
-  (fx-settings plan D6) *Spread* reads in steps (0–16) and the dials count the FX's own steps (`stepCountOf`); a
-  Shape keeps the unit, *Same spread as* copies it and refuses a step spread onto an FX with none, the graph's
-  Spread knob drags in steps (`spreadShareOf` over the editor's `steps`), and the unit rides `updateFx` once
-  touched too. Choosing the unit is session 6's. **The
-  dials are the one client copy of the desk's rule** (P2): `lib/spreadShape.ts` mirrors
-  `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
-  `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
-  so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
+  spread's shape is *Across the heads*'s** (fx-settings plan D10; `AcrossHeads` in `FxFields.tsx`) on a group or a
+  fixture with heads, and always on an FX palette, in this order under *Over*: the **head ladder** (`HeadLadder.tsx`),
+  each head numbered by when it starts — 1 first, heads starting together sharing a number and a colour — in rig
+  order: the desk's preview in the FX editor's inspector (`previewLadderHeads`, its rows sorted back by `rigIndex`,
+  a head hovering its graph row), elsewhere
+  `spreadOffsets` on the FX's own heads (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion`
+  counted: one per fixture where the first fixture carries the FX's attribute itself (`carriesFxAttribute`: a slider
+  or setting by name, a colour or position by type, the desk's traits), else its heads: one unit a fixture under
+  `WHOLE`, a `FLAT` group's head filter across the whole strip on its global index, a `PER_FIXTURE` one's within each
+  fixture), or eight notional heads on a palette or a group not yet loaded, *Drawn on eight heads* — sixteen, then
+  *+n*; then the **patterns** (FX editor plan D11, below), each drawn on those heads, up to sixteen, and *Custom*,
+  under which alone the Order select shows; then **Each head later by** — *Fit the cycle* (`CYCLE`, 1), *1 step*
+  (`STEP`, 1, only where the library entry names `stepsFrom`) or *Free*, a slider in the unit the FX is on (steps
+  0–16 under `STEP`, a percentage of the cycle 0–200 under `CYCLE`; it holds while its slider passes through 1, and
+  a spread written from outside reads afresh) — with a readout of the gap between neighbouring starts as the ladder
+  has them (`neighbourGap`) as a share of the cycle, in steps where the FX has them, in beats (seconds on Seconds or
+  the wall clock; a head's own cycle under *One cycle for: Each head*) and degrees, and under `STEP` on known heads
+  the spread the desk runs: *⅓ cycle · 1 step · 1⅓ beats · 120° · spread 133 %* (`acrossHeads.ts`'
+  `laterByReadout`, over `stepCountOf`; *on eight heads* where a `CYCLE` gap is the notional heads'); then **Segments · Parts · Wings**, each
+  a segment `1 · 2 · 3 · 4` (*off* for Parts and Wings) ending in a typed count lit while it is none of them, with
+  one line saying what they do (`groupingSentence`: *Segments 2: neighbours move in pairs · Parts off: one pattern
+  across all four · Wings off: no mirror*). *Wings* is hidden under a mirrored Order — Centre out, Centre in, the line
+  saying so — and set back to 1 in the same write when one is chosen (`orderPatch`, since the desk refuses wings
+  there); under Unison only the ladder and the patterns show. Under Segments, Wings or Parts Position's continuous rank
+  snaps to its nearest slot first, as the desk's `wholeRanks` does. The four and the unit ride `updateFx` once
+  touched (`OPTIONAL_FIELDS`), `parts: 0` turning them off. *Same spread as* copies the four, Spread and its unit,
+  and refuses a step spread onto an FX with none; the graph's Spread knob drags in steps under `STEP`
+  (`spreadShareOf` over the editor's `steps`) and its hover says *Later by ⅓ cycle · 1 step* (`laterByPhrase`, over
+  the preview's offsets). **The ladder, the drawings and the words are the one client copy of the desk's
+  rule** (P2): `lib/spreadShape.ts` mirrors `fx/SpreadShape.kt` and the strategies' ranks — Random through
+  `spreadPlans.ts`' `javaRandom` — and `spreadShape.test.ts` reads the desk's vector,
+  `src/test/resources/fx/spreadShape.fixture.json`, so a head's number is the start the rig runs. The rules are
+  pure, in `fxEditorModel.ts` and `acrossHeads.ts`.
   The Values grid's lens chips and a cell popup's FX band open the same editor in
   `EditorSurface` (`FxEditorPopover`), the FX editor draws it in its inspector, and the busk FX tab
   draws it inline under a row — `SplitFxEditor` (`components/fx/SplitFxEditor.tsx`), which the
@@ -5254,7 +5265,7 @@ popover and row C's Fan — and `AppliedTables.test.tsx` pins what the tables ca
 **The FX editor** (FX editor plan D1–D6, session 4) is the FX tab's *Selection* view
 (`components/fxEditor/`): list · graph · inspector over the window's pair (`useWindowFxPair` — the
 desk's selection while the window follows it, else the programmer list's rows). The graph (session 5)
-draws the preview's answer; Shapes, the offset ladder, Match, hover lights and the graph's handles
+draws the preview's answer; the patterns, the head ladder, Match, hover lights and the graph's handles
 (session 6) tie the inspector to it; the FX palette editor, the cue editor's FX tab and the busk FX
 tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Things that will bite:
 
@@ -5325,8 +5336,8 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
 - **The inspector is the live editor** (`SplitFxEditor`, so the split, the 50 ms floor, Revert,
   *Update palette* and *Reset to palette* are unchanged) with `layout="inspector"`: `FxFields` in the
   four questions every host draws (fx-settings plan D9) — the Timing strip, the FX's own section, Across
-  the heads (Over, Order, Spread with the offset ladder), Mix — and Advanced, at the inspector's wider
-  spacing. Every other host draws the phase dials in place of the ladder. The Timing strip's one row of
+  the heads (Over, the head ladder from the preview, the patterns, Each head later by, Segments · Parts · Wings),
+  Mix — and Advanced, at the inspector's wider spacing. Every other host draws the ladder from `lib/spreadShape.ts`. The Timing strip's one row of
   chips is what lets the inspector fit the editor's three bands without the old two-row Cycle grid.
 - **Widths are the editor's own** (`useContainerBand`, `FX_EDITOR_BAND_FLOORS`): from 1100 three
   columns, list 248 · graph · inspector 340; from 760 list · graph, the inspector over the graph's
@@ -5413,7 +5424,7 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
 - **The inspector and the graph meet through one context** (`components/fx/fxGraphLink.ts`'s
   `FxGraphLink`), which `FxEditorSelection` provides around its three columns only — never the sheets
   it opens (a cue's editor, *+ FX*'s sheet), whose editors have no graph — and only the live editor and
-  `FxFields` read, so every other host draws none of what follows and keeps its dials. The live editor
+  `FxFields` read, so every other host draws none of what follows and draws its head ladder from `lib/spreadShape.ts`. The live editor
   **lends the graph its draft and its write** (`attach`; `detach` takes back only the editor it names,
   so one editor going never takes another's handles), its parameters filled from the library where
   the FX carries none, and tells it every move before the floor (`preview`): the editor holds it as
@@ -5424,33 +5435,34 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   ignores the draft), the ask behind it bringing the latest. A held split edit is never previewed, and
   lends no handles. The trigger subscriptions key on whether there is an ask, not its content, so a
   drag does not resubscribe them each move. The graph's hovered row is a store
-  (`HoveredRowStore`), read by the ladder alone, so a pointer crossing the rows redraws only its dots.
-- **Shapes** (D11, `fx/fxShapes.ts`) are chips at the head of Spread, in every host: one tap writes
-  Order, Spread, Wings, Segments and Parts in one `updateFx`; a chip is lit only while all five
-  match, else a lit *Custom* follows them, and the Spread summary leads with the name. A chip's 40 ×
-  16 drawing is `lib/spreadShape.ts` over eight notional heads — the one client rule, allowed where
-  the desk has not answered (P2), since a Shape is drawn before it runs.
-- **The offset ladder** (D9, `fx/OffsetLadder.tsx`) replaces the dials in the inspector: five dot rows
-  — Order, Segments, Wings, Parts, Spread — read from the answer's `ladder`, never computed: a rung's
-  dot at rank over that step's count, Spread's at its offset over the largest offset or one cycle. A
-  split-off copy has no rungs, so only its Spread row draws. Hovering a dot marks its graph row in the
-  gutter (`linkedRow`); hovering a graph row rings its dots (`onHoverRow`).
-- **Match** (D13) is *Same as…* in the Cycle chip's popover and on Spread, over the list's other FX: one write of the
-  source's cycle and what it follows (master 1 named by its uuid, since an absent master keeps), or
-  its five spread fields. A source on a master of the other clock — read from its library entry,
+  (`HoveredRowStore`), read by the head ladder alone, so a pointer crossing the rows redraws only its heads.
+- **Patterns** (D11, `fx/fxShapes.ts`; fx-settings plan D10) are chips under the head ladder, in every host: one
+  tap writes Order, Wings, Segments and Parts in one `updateFx` and leaves Spread and its unit to *Each head later
+  by*; a chip is lit only while all four match, else *Custom* is, which opens the Order select — and stays lit, once
+  pressed, for the fields it was pressed on and those its Order select writes, so Revert lights the pattern again. A chip's 40 × 16
+  drawing is `lib/spreadShape.ts` over the FX's own heads, up to sixteen, else eight notional — the one client rule,
+  allowed where the desk has not answered (P2), since a pattern is drawn before it runs.
+- **The head ladder** (fx-settings plan D10, `fx/HeadLadder.tsx`) heads *Across the heads*: in the inspector each row
+  the FX paints, numbered by its start in the answer's `ladder.spread`, never computed — the five-row offset ladder it
+  replaced drew each step of the spread, which the line under Segments · Parts · Wings now says in words. A split-off
+  copy keeps its start. Hovering a head marks its graph row in the gutter (`linkedRow`); hovering a graph row rings
+  its head (`onHoverRow`).
+- **Match** (D13) is *Same as…* in the Cycle chip's popover and beside the patterns, over the list's other FX: one
+  write of the source's cycle and what it follows (master 1 named by its uuid, since an absent master keeps), or
+  its four pattern fields with Spread and its unit. A source on a master of the other clock — read from its library entry,
   since a beat FX on *Seconds* reports the wall clock — is offered disabled (one on *Seconds* copies
   onto either), and so is a spread source on one head, which says no Order. Nothing links them
   afterwards (`FU-FX-LINKED-TIMING`).
 - **Hover lights** (§4.5): `FxFields` wraps each control in `Lights`, which sets the link's `highlight`
   while the pointer rests there, and `drawLane` lights that mark (`LaneDrawOptions.highlight`,
   `palette.highlight` / `highlightArea`): Cycle shades the first cycle (over the rows, so a colour
-  strip does not hide it), Spread, Order, the Shapes and Phase the start ticks, Wings the mirror,
+  strip does not hide it), Each head later by, Order, the patterns and Phase the start ticks, Wings the mirror,
   Segments and Parts the brackets, Runs the hatching, Amount the gap between *This FX* and *Result*.
   A light whose control unmounts under the pointer puts itself out. A knob lights the same way, run the
   other way (`FxGraph`'s `onHighlight`): the Cycle tab the first cycle, Spread's knob the start ticks,
   a max or min knob the level lines (`levels`).
 - **The handles** (D12, `GraphHandles.tsx`, `fxGraphHandles.ts`; follow-ups D4) are knobs — a violet
-  disc, named on hover (*Spread 100%*) — and a mark is a tick or a thin line. Only while the inspector
+  disc, named on hover (*Later by ¼ cycle*, *High 100%*) — and a mark is a tick or a thin line. Only while the inspector
   edits the picked FX, never under a coarse pointer (`hooks/useCoarsePointer.ts`) or read-only: the
   **Cycle tab** on the ruler at the first cycle's end (always sample 48, the desk's rate), labelled
   with the cycle (*1 bar ⇔*), snapped to `SPEED_STEPS` by ratio — the cycle the drag began on counting as

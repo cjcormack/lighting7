@@ -479,9 +479,11 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
 
   it('names a knob on hover and lights what it changes', () => {
     const onHighlight = vi.fn()
-    draw(handleAnswer(), { editor: editorOf({ spread: 0.5 }), onHighlight })
+    const ladder = { ...previewFx(2).ladder, spread: [0, 0.25] }
+    draw(handleAnswer({ fx: [previewFx(2, { starts: [[0, 48], [12, 60]], ladder })] }), { editor: editorOf({ spread: 0.5 }), onHighlight })
     fireEvent.pointerEnter(handle('spread')!)
-    expect(document.querySelector('[data-fx-knob-tip]')).toHaveTextContent('Spread 50%')
+    // Spread 50 % over Hex 1 and Hex 2: Hex 2 a quarter of a cycle after Hex 1 (fx-settings plan §4).
+    expect(document.querySelector('[data-fx-knob-tip]')).toHaveTextContent('Later by ¼ cycle')
     expect(onHighlight).toHaveBeenLastCalledWith('starts')
     fireEvent.pointerLeave(handle('spread')!)
     expect(onHighlight).toHaveBeenLastCalledWith(null)
@@ -490,6 +492,24 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
     expect(onHighlight).toHaveBeenLastCalledWith('levels')
     fireEvent.pointerEnter(handle('cycle')!)
     expect(onHighlight).toHaveBeenLastCalledWith('cycle')
+  })
+
+  it('says Spread’s knob in the FX’s own steps under STEP, and drags it in steps', () => {
+    const editor = { ...editorOf({ fxType: 'Colour Cycle', spread: 1, spreadUnit: 'STEP' }), steps: 3 }
+    draw(handleAnswer({ fx: [previewFx(2, { starts: [[0, 48], [16, 64]], ladder: { ...previewFx(2).ladder, spread: [0, 1 / 3] } })] }), { editor })
+    fireEvent.pointerEnter(handle('spread')!)
+    expect(document.querySelector('[data-fx-knob-tip]')).toHaveTextContent('Later by ⅓ cycle · 1 step')
+    fireEvent.pointerLeave(handle('spread')!)
+    // Hex 2 moves a third of a cycle a step: 20px is 24 samples, half a cycle, so 1½ steps more.
+    const knob = handle('spread')!
+    drag(knob, { x: Number.parseFloat(knob.style.left), y: 2 }, { x: Number.parseFloat(knob.style.left) + 20, y: 2 })
+    expect(editor.set).toHaveBeenLastCalledWith({ spread: 2.5 }, true)
+  })
+
+  it('says every head starts together when the desk’s offsets are all one', () => {
+    draw(handleAnswer(), { editor: editorOf({ spread: 0 }) })
+    fireEvent.pointerEnter(handle('spread')!)
+    expect(document.querySelector('[data-fx-knob-tip]')).toHaveTextContent('Every head together')
   })
 
   it('drags a row block sideways for Phase', () => {

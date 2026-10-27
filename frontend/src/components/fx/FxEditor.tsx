@@ -98,7 +98,7 @@ export function FxEditor({
    */
   alsoIds?: readonly number[]
   className?: string
-  /** `FxFields`' spacing and the inspector's offset ladder (FX editor plan §4.5). */
+  /** `FxFields`' spacing and the inspector's head ladder, from the desk's preview (fx-settings plan D10). */
   layout?: 'editor' | 'inspector'
 }) {
   const { data: library } = useFxLibraryQuery()
@@ -120,7 +120,7 @@ export function FxEditor({
   linkRef.current = link
   // A gesture is running: moves pushed, the release not yet sent.
   const gesture = useRef(false)
-  // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
+  // Across the heads is drawn over the effect's own heads, as the head filter and element
   // mode the draft now says narrow them.
   const { scope: spreadScope, extendedChannels, settingAttribute } = useFxScope({
     target: effect,

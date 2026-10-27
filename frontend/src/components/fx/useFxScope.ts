@@ -10,7 +10,7 @@ import { carriesFxAttribute, selectionHeadCount, spreadHeadCount, type FxScope }
 /**
  * What an effect's **target** says about its editor (fixture-fx-sheets plan D11): which optional
  * fields `FxFields` draws (`FxScope` — the distribution and step timing over heads, the
- * element mode and filter), how many heads the Spread section's dials run over, the extended
+ * element mode and filter), how many heads *Across the heads* is drawn on, the extended
  * channels a colour effect may name, and the setting a setting effect drives. One derivation for the
  * live editor's running effect and the cue editor's stored one, read off the target through
  * `lib/fxTargets.ts` — a selection by its items, never its key.
@@ -73,7 +73,7 @@ export function useFxScope({
     return undefined
   }, [targetFixtures, attribute])
 
-  // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
+  // Across the heads is drawn over the effect's own heads, as the head filter and element
   // mode the draft now says narrow them.
   const scope = useMemo((): FxScope => {
     const name = attribute ?? ''

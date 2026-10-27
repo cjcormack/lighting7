@@ -100,9 +100,9 @@ export interface FxGraphProps {
   highlight?: GraphMark | null
   /** A knob the pointer rests on lights what it changes, as the inspector's hover does (follow-ups D4). */
   onHighlight?: (mark: GraphMark | null) => void
-  /** A row a ladder dot links to, by key, marked in the gutter. */
+  /** A row a ladder head links to, by key, marked in the gutter. */
   linkedRow?: string | null
-  /** The row the pointer rests on, by key, as it moves: the ladder lights its dots. */
+  /** The row the pointer rests on, by key, as it moves: the ladder rings its head. */
   onHoverRow?: (key: string | null) => void
   /** The inspector's editor, while it edits the picked FX: the handles write through it (D12). */
   editor?: LinkedEditor | null
