@@ -204,7 +204,7 @@ class RigSafetyService(private val state: State) {
             val lamped = unitsFor(current, null, CommandRole.LAMP_OFF).first
             state.scalerHolderFor(projectId).setSafeBlackout(true)
             val now = clock()
-            // This run's lamp-offs may end before the ledger hears of them, so each is also counted from now.
+            // This run's lamp-offs are also counted from now, so one the ledger missed still cools.
             val doused = off.mapTo(HashSet()) { it.unit.fixtureKey } - alreadyOff
             val coolAt = lamped.filter { it.fixtureKey in knownOff }.maxOfOrNull { unit ->
                 val ledger = lampOffs[projectId to unit.fixtureKey]?.coolAtMs ?: 0L
