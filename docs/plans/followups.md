@@ -451,8 +451,8 @@ Every desk surveyed (`completed/effects-design/survey.md`) has a *width* (how mu
 *softness* (how hard the edges are) that read the same on every waveform. Ours are each FX's own
 parameter under its own name — Wave's `width` (Square) and `attack` / `hold` (Pulse), which since the
 fx-settings plan's session 2 stand for Square Wave's `dutyCycle`, Dimmer Strobe's `onRatio` and Pulse's
-`attackRatio` / `holdRatio`, and Colour Cycle's `fadeRatio` — and the editor labels them as such (*Width*,
-*Attack*, *Hold*, *Fade*). Amount (D2) and direction (D5) became fields of every FX in session 1; width and softness
+`attackRatio` / `holdRatio`, Colour Strobe's `width` (its `onRatio` until session 3) and Colour Cycle's
+`fade` (its `fadeRatio`) — and the editor labels them as such (*Width*, *Attack*, *Hold*, *Fade*). Amount (D2) and direction (D5) became fields of every FX in session 1; width and softness
 did not, because each built-in means something slightly different by them and a common field would
 change what a stored FX plays (P6).
 
@@ -598,7 +598,7 @@ The terminology survey matched MagicQ's waveform library against lighting7's bui
 shapes have no FX here: *square* (a position square), *diamond* (a position diamond) and *TiltDim*
 (tilt and dimmer moving together, a two-attribute FX — see `FU-SPEED-PER-ATTRIBUTE`).
 
-The shape: square and diamond are `.fx.kts` files beside Circle and Figure 8; TiltDim needs one FX to
+The shape: square and diamond are two more of Path's shapes beside Circle and Figure 8 (fx-settings plan D2); TiltDim needs one FX to
 drive two attributes first.
 
 **Trigger**: an operator reaches for one of the three.

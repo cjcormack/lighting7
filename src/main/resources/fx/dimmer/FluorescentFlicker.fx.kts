@@ -7,7 +7,7 @@ fxMode: STATEFUL
 timingSource: WALL_CLOCK
 compatibleAttributes: [dimmer, uv]
 parameters:
-  - name: onLevel
+  - name: high
     type: ubyte
     default: "255"
     description: Normal on brightness
@@ -16,7 +16,7 @@ parameters:
     max: 255
     step: 1
     unit: %
-  - name: offLevel
+  - name: low
     type: ubyte
     default: "0"
     description: Off/flicker brightness
@@ -25,8 +25,8 @@ parameters:
     max: 255
     step: 1
     unit: %
-    pair: onLevel
-  - name: flickerDurationMs
+    pair: high
+  - name: burstMs
     type: int
     default: "800"
     description: Total duration of the flicker burst in milliseconds
@@ -35,7 +35,7 @@ parameters:
     max: 5000
     step: 10
     unit: ms
-  - name: flickerSpeed
+  - name: speed
     type: double
     default: "0.3"
     description: How fast the on/off cycles are during a flicker (lower = faster)
@@ -47,10 +47,10 @@ parameters:
     role: detail
 ---*/
 
-val onLevel = params.ubyte("onLevel")
-val offLevel = params.ubyte("offLevel")
-val flickerDurationMs = params.int("flickerDurationMs")
-val flickerSpeed = params.double("flickerSpeed").coerceIn(0.05, 0.95)
+val onLevel = params.ubyte("high")
+val offLevel = params.ubyte("low")
+val flickerDurationMs = params.int("burstMs")
+val flickerSpeed = params.double("speed").coerceIn(0.05, 0.95)
 
 // State machine: IDLE (on) or FLICKERING
 var elapsedMs = (state.getOrPut("elapsedMs") { 0L } as Number).toLong()

@@ -108,6 +108,21 @@ fun choiceProblem(schema: List<ParameterInfo>, parameters: Map<String, String>):
     return null
 }
 
+/**
+ * The names of [schema]'s parameters an FX holding [values] draws — each whose `shownWhen` its other
+ * parameter's value meets, a blank or absent one read at its default — as the editor's `isParamShown`
+ * reads them: a Path's centres on a Circle, its ends on a Line.
+ */
+fun shownParameters(schema: List<ParameterInfo>, values: Map<String, String>): Set<String> {
+    val byName = schema.associateBy { it.name }
+    return schema.filter { p ->
+        val condition = p.shownWhen ?: return@filter true
+        val other = byName[condition.param] ?: return@filter true
+        val value = values[other.name]?.takeIf { it.isNotBlank() } ?: other.defaultValue
+        condition.values.any { it.equals(value.trim(), ignoreCase = true) }
+    }.mapTo(HashSet()) { it.name }
+}
+
 /** [choiceProblem] for the effect type [fxType] names; null for a type this desk lacks. */
 fun FxRegistry.choiceProblem(fxType: String, parameters: Map<String, String>): String? =
     getRegistration(fxType)?.let { choiceProblem(it.parameters, parameters) }

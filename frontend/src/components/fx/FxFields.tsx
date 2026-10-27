@@ -51,6 +51,7 @@ import {
 } from './fxConstants'
 import {
   blendForLevelMode,
+  centreFlip,
   centreModeOf,
   clampByte,
   defaultParameters,
@@ -176,7 +177,7 @@ export function FxFields({
    */
   layout?: 'editor' | 'inspector'
 }) {
-  const centred = hasCentre(entry)
+  const centred = hasCentre(entry, draft.parameters)
   // An absent centre is the library's default (128 on every built-in) — a script or a cue may store a
   // Circle without spelling it, and that is still Around.
   const centreMode = centred ? centreModeOf(draft.blendMode, { ...defaultParameters(entry), ...draft.parameters }) : null
@@ -227,7 +228,11 @@ export function FxFields({
         paletteFamily={paletteFamily}
         slotsFromRig={slotsFromRig}
         readOnly={readOnly}
-        onChange={(value, release) => setParam(item.param.name, value, release)}
+        onChange={(value, release) => {
+          const flip = centreFlip(entry, draft, item.param.name, value)
+          if (flip != null) set(flip, release)
+          else setParam(item.param.name, value, release)
+        }}
       />
     )
 

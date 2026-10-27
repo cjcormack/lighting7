@@ -118,12 +118,12 @@ class BuiltInFxBehaviourTest {
         )
 
         val circle = registry.createFx(
-            "Circle",
-            mapOf("panCentre" to "", "tiltCentre" to "", "panRadius" to "", "tiltRadius" to ""),
+            "Path",
+            mapOf("shape" to "", "panCentre" to "", "tiltCentre" to "", "panSize" to "", "tiltSize" to ""),
         )
         assertEquals(
-            fx("Circle").calculate(0.0).position(), circle.calculate(0.0).position(),
-            "a Circle rehydrated from blank params should use its declared centre and radius",
+            fx("Path").calculate(0.0).position(), circle.calculate(0.0).position(),
+            "a Path rehydrated from blank params should use its declared shape, centre and size",
         )
     }
 
@@ -207,7 +207,7 @@ class BuiltInFxBehaviourTest {
     fun `a built-in a script makes reports its registry id, not its display name`() {
         // A script's `effect(id)` builds through the registry but never sets the instance's own
         // registrationId, so what a Record stores comes from the effect itself.
-        for (id in listOf("Wave", "Flicker", "ColourWave", "Circle")) {
+        for (id in listOf("Wave", "Flicker", "ColourWave", "Path")) {
             val effect = registry.createFx(id)
             assertEquals(id, effect.registrationId, "$id's effect should carry its registry id")
             val instance = FxInstance(effect, SliderTarget("hex-a", "dimmer"), FxTiming(cycle = 1.0))
@@ -286,7 +286,7 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `Flicker produces varying values within range`() {
-        val effect = fx("Flicker", "min" to "50", "max" to "200")
+        val effect = fx("Flicker", "low" to "50", "high" to "200")
         val values = mutableSetOf<UByte>()
         for (i in 0..100) {
             val phase = i / 100.0
@@ -327,7 +327,7 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `ColourCycle steps through colours`() {
-        val effect = fx("ColourCycle", "colours" to "#ff0000,#00ff00,#0000ff", "fadeRatio" to "0.0")
+        val effect = fx("ColourCycle", "colours" to "#ff0000,#00ff00,#0000ff", "between" to "CUT")
         assertEquals(Color.RED, effect.calculate(0.0).colour())
         assertEquals(Color.GREEN, effect.calculate(0.4).colour())
         assertEquals(Color.BLUE, effect.calculate(0.7).colour())
@@ -335,7 +335,7 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `ColourCycle with fade produces intermediate colours`() {
-        val effect = fx("ColourCycle", "colours" to "#ff0000,#0000ff", "fadeRatio" to "1.0")
+        val effect = fx("ColourCycle", "colours" to "#ff0000,#0000ff", "between" to "FADE", "fade" to "1.0")
         val midFade = effect.calculate(0.25).colour()
         assertTrue(midFade.red > 0, "Should have some red, was $midFade")
         assertTrue(midFade.blue > 0, "Should have some blue, was $midFade")
@@ -345,7 +345,7 @@ class BuiltInFxBehaviourTest {
     fun `ColourStrobe alternates between on and off colours`() {
         val effect = fx(
             "ColourStrobe",
-            "onColour" to "#ffffff", "offColour" to "#000000", "onRatio" to "0.5",
+            "onColour" to "#ffffff", "offColour" to "#000000", "width" to "0.5",
         )
         assertEquals(Color.WHITE, effect.calculate(0.0).colour())
         assertEquals(Color.WHITE, effect.calculate(0.25).colour())
@@ -394,12 +394,18 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `the FX that bounced by pingPong bounce by Direction at half the cycle`() {
-        for (id in listOf("ColourFade", "Sweep", "PanSweep", "TiltSweep")) {
-            val registration = registry.getRegistration(id)!!
-            assertTrue(registration.parameters.none { it.name == "pingPong" }, "$id should take no pingPong")
-            assertEquals(FxDirection.BOUNCE, registration.defaultDirection, id)
-            assertEquals(CycleLength.TWO_BEATS, registration.defaultCycle, id)
-            assertEquals(FxDirection.BOUNCE, registry.createFx(id).defaultDirection, id)
+        val fade = registry.getRegistration("ColourFade")!!
+        assertTrue(fade.parameters.none { it.name == "pingPong" }, "ColourFade should take no pingPong")
+        assertEquals(FxDirection.BOUNCE, fade.defaultDirection)
+        assertEquals(CycleLength.TWO_BEATS, fade.defaultCycle)
+        assertEquals(FxDirection.BOUNCE, registry.createFx("ColourFade").defaultDirection)
+        // The sweeps are Path's presets now, each bouncing at half a bar as the sweep it names did.
+        val path = registry.getRegistration("Path")!!
+        assertTrue(path.parameters.none { it.name == "pingPong" })
+        val sweeps = path.presets.filter { it.name.endsWith("Sweep") }
+        assertEquals(listOf("Sweep", "Pan Sweep", "Tilt Sweep"), sweeps.map { it.name })
+        for (preset in sweeps) {
+            assertEquals(FxDirection.BOUNCE.name to CycleLength.TWO_BEATS, preset.direction to preset.cycle, preset.name)
         }
         val forward = registry.getRegistration("Wave")!!
         assertEquals(FxDirection.FORWARD, forward.defaultDirection)
@@ -436,10 +442,10 @@ class BuiltInFxBehaviourTest {
     // --- Position ---
 
     @Test
-    fun `Circle produces circular movement`() {
+    fun `Path on Circle produces circular movement`() {
         val effect = fx(
-            "Circle",
-            "panCentre" to "128", "tiltCentre" to "128", "panRadius" to "50", "tiltRadius" to "50",
+            "Path",
+            "shape" to "CIRCLE", "panCentre" to "128", "tiltCentre" to "128", "panSize" to "50", "tiltSize" to "50",
         )
         // cos(0) = 1, sin(0) = 0
         assertEquals(178.toUByte() to 128.toUByte(), effect.calculate(0.0).position())
@@ -450,11 +456,11 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `Circle stays within valid DMX range`() {
+    fun `Path on Circle stays within valid DMX range`() {
         // Centre plus radius overruns 255 — the effect must clamp, not wrap.
         val effect = fx(
-            "Circle",
-            "panCentre" to "250", "tiltCentre" to "250", "panRadius" to "50", "tiltRadius" to "50",
+            "Path",
+            "shape" to "CIRCLE", "panCentre" to "250", "tiltCentre" to "250", "panSize" to "50", "tiltSize" to "50",
         )
         for (i in 0..100) {
             val (pan, tilt) = effect.calculate(i / 100.0).position()
@@ -464,10 +470,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `Figure8 sweeps both axes`() {
+    fun `Path on Figure 8 sweeps both axes`() {
         val effect = fx(
-            "Figure8",
-            "panCentre" to "128", "tiltCentre" to "128", "panRadius" to "50", "tiltRadius" to "30",
+            "Path",
+            "shape" to "FIGURE_8", "panCentre" to "128", "tiltCentre" to "128", "panSize" to "50", "tiltSize" to "30",
         )
         val positions = (0..20).map { effect.calculate(it / 20.0).position() }
         val pans = positions.map { it.first.toInt() }
@@ -477,10 +483,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `Sweep moves from start to end over one cycle`() {
+    fun `Path on a Line moves from start to end over one cycle`() {
         val effect = fx(
-            "Sweep",
-            "startPan" to "0", "startTilt" to "0", "endPan" to "255", "endTilt" to "255",
+            "Path",
+            "shape" to "LINE", "startPan" to "0", "startTilt" to "0", "endPan" to "255", "endTilt" to "255",
             "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(0.toUByte() to 0.toUByte(), effect.calculate(0.0).position())
@@ -489,10 +495,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `PanSweep only changes pan`() {
+    fun `Path on a level Line only changes pan`() {
         val effect = fx(
-            "PanSweep",
-            "startPan" to "50", "endPan" to "200", "tilt" to "100",
+            "Path",
+            "shape" to "LINE", "startPan" to "50", "endPan" to "200", "startTilt" to "100", "endTilt" to "100",
             "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(50.toUByte() to 100.toUByte(), effect.calculate(0.0).position())
@@ -500,10 +506,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `TiltSweep only changes tilt`() {
+    fun `Path on an upright Line only changes tilt`() {
         val effect = fx(
-            "TiltSweep",
-            "startTilt" to "50", "endTilt" to "200", "pan" to "100",
+            "Path",
+            "shape" to "LINE", "startTilt" to "50", "endTilt" to "200", "startPan" to "100", "endPan" to "100",
             "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(100.toUByte() to 50.toUByte(), effect.calculate(0.0).position())
@@ -511,10 +517,10 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `RandomPosition stays within range`() {
+    fun `Path on Random stays within range`() {
         val effect = fx(
-            "RandomPosition",
-            "panCentre" to "128", "tiltCentre" to "128", "panRange" to "50", "tiltRange" to "50",
+            "Path",
+            "shape" to "RANDOM", "panCentre" to "128", "tiltCentre" to "128", "panSize" to "50", "tiltSize" to "50",
         )
         for (i in 0..100) {
             val (pan, tilt) = effect.calculate(i / 100.0).position()
@@ -604,7 +610,7 @@ class BuiltInFxBehaviourTest {
 
     @Test
     fun `LightningStrike flashes then decays then goes dark`() {
-        val effect = fx("LightningStrike", "maxBrightness" to "255", "minBrightness" to "10")
+        val effect = fx("LightningStrike", "high" to "255", "low" to "10")
 
         val flash = effect.calculate(0.02).slider()
         val decay = effect.calculate(0.15).slider()
@@ -618,7 +624,7 @@ class BuiltInFxBehaviourTest {
     /** The decay curve the composite computed, `min + range × (1 − t)²` over 0.05–0.3, unchanged. */
     @Test
     fun `LightningStrike decays on the curve it always had`() {
-        val effect = fx("LightningStrike", "maxBrightness" to "200", "minBrightness" to "20")
+        val effect = fx("LightningStrike", "high" to "200", "low" to "20")
         for (phase in listOf(0.05, 0.1, 0.175, 0.25, 0.299)) {
             val t = (phase - 0.05) / 0.25
             val expected = (20 + 180 * (1.0 - t) * (1.0 - t)).toInt().toUByte()
@@ -641,7 +647,7 @@ class BuiltInFxBehaviourTest {
     fun `CandleFlicker stays within bounds over many ticks`() {
         val effect = fx(
             "CandleFlicker",
-            "baseLevel" to "180", "min" to "100", "max" to "230",
+            "base" to "180", "low" to "100", "high" to "230",
         ) as StatefulFx
         effect.initialize()
 
@@ -656,7 +662,7 @@ class BuiltInFxBehaviourTest {
     fun `CandleFlicker respects custom bounds`() {
         val effect = fx(
             "CandleFlicker",
-            "baseLevel" to "50", "min" to "20", "max" to "80",
+            "base" to "50", "low" to "20", "high" to "80",
         ) as StatefulFx
         effect.initialize()
 
@@ -671,7 +677,7 @@ class BuiltInFxBehaviourTest {
     fun `CandleFlicker initialize resets towards the base level`() {
         val effect = fx(
             "CandleFlicker",
-            "baseLevel" to "180", "min" to "100", "max" to "230",
+            "base" to "180", "low" to "100", "high" to "230",
         ) as StatefulFx
         effect.initialize()
         for (i in 0L..100L) {
@@ -690,7 +696,7 @@ class BuiltInFxBehaviourTest {
     fun `CandleFlicker produces varying output over time`() {
         val effect = fx(
             "CandleFlicker",
-            "baseLevel" to "180", "min" to "100", "max" to "230", "smoothing" to "0.5",
+            "base" to "180", "low" to "100", "high" to "230", "settle" to "0.5",
         ) as StatefulFx
         effect.initialize()
 

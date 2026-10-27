@@ -92,8 +92,9 @@ abstract class FxApplicationScript(
 
     /**
      * Build an effect by registered type name, e.g. `effect("Wave", "shape" to "PULSE", "low" to "40")`.
-     * A level wave Wave replaced still runs, as Wave with its parameters: `effect("SineWave", "min" to "40")`
-     * (fx-settings plan D3).
+     * An old name still runs as today's (fx-settings plan D3): a level wave as Wave and a movement as Path,
+     * with their parameters (`effect("SineWave", "min" to "40")`, `effect("Circle")`), and a renamed
+     * parameter at its new name (`effect("Flicker", "min" to "40")`, Colour Cycle's `fadeRatio`).
      *
      * Type names are matched case-insensitively, ignoring spaces and underscores, against
      * built-in effects and any user effect in `fx_definitions`. Parameter names and their string

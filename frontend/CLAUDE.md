@@ -749,14 +749,19 @@ Release folds to its glyph and the scope line drops the fade.
   patched head's options of the setting it names, `rigSettingUnion`, with typed names besides). **A tap is the start**: the FX runs at once with its
   defaults, on that row's attribute where the FX can take it, as a **programmer FX**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
-  it), a movement FX starting *Around*, every FX starting on its type's own cycle and Direction
-  — **one bar**, Forward, but half a bar and Bounce for Colour Fade, the sweeps and Wave's *Focus
+  it), a movement FX starting *Around* (a Path on a shape with a centre; a Line has none and starts
+  on Override), every FX starting on its type's own cycle and Direction
+  — **one bar**, Forward, but half a bar and Bounce for Path's sweep presets and Wave's *Focus
   Pull* (`newFxDivision`, `newFxDirection`, `presetDefaults`) — on the master tagged for its family
   on that attribute (venue-visit plan D16, fx-settings plan D5; a wall-clock FX on four seconds).
   **Presets** (fx-settings plan D4) sit beside the types: Wave's *Strobe* under Intensity, and *Zoom
   Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* under Beam where the head has the attribute,
   each a Wave starting with its parameters, cycle and Direction; the bare Wave is listed under Beam
-  too, on the head's beam attribute, starting at that attribute's `attributeDefaults`. **Another tap swaps it** through `updateFx` — the new
+  too, on the head's beam attribute, starting at that attribute's `attributeDefaults`. Colour Cycle's
+  *Colour Fade* and *Colour Wave* sit under Colour and Path's *Sweep*, *Pan Sweep* and *Tilt Sweep*
+  under Position (fx-settings plan session 3). A **legacy** FX (the library's `legacy`: Colour Fade
+  and Colour Wave themselves) is offered by no picker, the palette editor's FX list (but the one a
+  palette already holds) or the FX Library page (`compatibleFxFor`), yet edits as any FX. **Another tap swaps it** through `updateFx` — the new
   type with its own defaults and starting blend, id and phase kept — so the operator auditions by
   tapping down the list; a tap that lands on another *attribute* cannot be a swap (an instance keeps
   its target), so it stops the auditioned FX and starts afresh. An FX offered through a
@@ -5252,7 +5257,7 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   where a new Local FX lands. A card's family is the answer's, else its attribute's family on a
   head that carries it. A card names its attribute in words where the lane's family has several
   (`paletteAttributeFor`'s label — *UV*, *Zoom*), and its Direction only where it is not the FX
-  type's own (`newFxDirection`; the sweeps bounce by default). A layer's card has pause and no ×,
+  type's own (`newFxDirection`; Path's sweep presets bounce, by their own Direction). A layer's card has pause and no ×,
   as the busk FX tab's pad FX has none: stopping the instance alone, the layer respawns it on
   its next recook, so the layer is what lets it go.
 - **Nothing selected** (follow-ups D1, `fxEditorHead.ts`' `runningCards`): one line, then every

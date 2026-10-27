@@ -53,6 +53,8 @@ const LIBRARY = [
   entry('RandomFlicker', { source: 'USER', sourceDefinitionId: 7, timingSource: 'WALL_CLOCK' }),
   entry('WarmFlicker', { family: 'colour', outputType: 'COLOUR', compatibleAttributes: ['rgbColour'], source: 'USER', sourceDefinitionId: 12 }),
   entry('ColourChase', { family: 'colour', outputType: 'COLOUR', compatibleAttributes: ['rgbColour'] }),
+  // Kept for stored FX only (fx-settings plan D3): never a row, always a taken id.
+  entry('ColourWave', { family: 'colour', outputType: 'COLOUR', compatibleAttributes: ['rgbColour'], legacy: true }),
 ]
 
 function definition(id: number, fxId: string, name: string): FxDefinition {
@@ -97,7 +99,13 @@ vi.mock('../components/fxLibrary/EditFxDefinitionSheet', () => ({
     </div>
   ),
 }))
-vi.mock('../components/fxLibrary/NewFxDefinitionSheet', () => ({ NewFxDefinitionSheet: () => <div data-testid="new" /> }))
+const newSheet = vi.hoisted(() => ({ takenIds: [] as string[] }))
+vi.mock('../components/fxLibrary/NewFxDefinitionSheet', () => ({
+  NewFxDefinitionSheet: ({ takenIds }: { takenIds: string[] }) => {
+    newSheet.takenIds = takenIds
+    return <div data-testid="new" />
+  },
+}))
 
 import { ProjectFxLibrary } from './FxLibrary'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
@@ -154,6 +162,14 @@ afterEach(() => {
 })
 
 describe('FX Library sheet', () => {
+  it('lists no legacy FX, yet keeps its id from a new definition', () => {
+    draw()
+    expect(row('ColourWave')).toBeNull()
+    expect(screen.getByText(/5 FX ·/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /New FX/ }))
+    expect(newSheet.takenIds).toContain('ColourWave')
+  })
+
   it('reads each row’s source off the definition list — Built-in, Custom, Script', () => {
     draw()
     expect(row('Pulse').querySelector('[data-source]')).toHaveAttribute('data-source', 'builtIn')

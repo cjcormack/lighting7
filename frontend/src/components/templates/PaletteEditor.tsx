@@ -59,6 +59,7 @@ import { NEW_FX_ELEMENT_MODE } from '@/components/fx/fxConstants'
 import { FxFields } from '@/components/fx/FxFields'
 import { startingSpec, paletteDraftOf, withPaletteDraft, type FxDraft, type FxScope } from '@/components/fx/fxEditorModel'
 import { swappedTiming } from '@/lib/fxTiming'
+import { offeredFx } from '@/lib/fxTargetAttributes'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { findFxEntry } from '@/components/busking/buskingTypes'
 import { useFxLibraryQuery, type FxLibraryEntry } from '@/store/fixtureFx'
@@ -587,12 +588,13 @@ function FxControls({
   // that *Save as template…* would happily bank under this very family.
   const offered = useMemo(
     () =>
-      (library ?? []).filter((e) =>
+      // The FX a palette already holds stays in its own list, a legacy one included.
+      [...offeredFx(library ?? []), ...(entry?.legacy ? [entry] : [])].filter((e) =>
         isPaletteSteps(e.name)
           ? stepOffer != null
           : attributeFamilyForFxFamily(drivenCategoryOf(e)) === family || attributesInFamily(e, family).length > 0,
       ),
-    [library, family, stepOffer],
+    [library, family, stepOffer, entry],
   )
   // A Wave in a Beam palette names the beam attribute it drives (fx-settings plan D5).
   const beamAttributes = entry != null ? attributesInFamily(entry, family) : []

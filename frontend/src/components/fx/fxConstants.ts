@@ -127,12 +127,7 @@ export const FX_DESCRIPTIONS: Record<string, string> = {
   colourwave: 'Wave between two colours',
   colourfade: 'Crossfade between two colours',
   colourflicker: 'Random colour variation',
-  circle: 'Circular movement pattern',
-  figure8: 'Figure-8 movement pattern',
-  sweep: 'Sweep between two positions',
-  pansweep: 'Horizontal pan back and forth',
-  tiltsweep: 'Vertical tilt up and down',
-  randomposition: 'Random position jumps',
+  path: 'A movement — circle, figure 8, random, or a line between two positions',
   palettesteps: 'Steps through palettes of one family — each head goes to its own value for each',
   slotsteps: 'Steps a gobo or colour wheel through named slots — each head to its own level for each',
 }

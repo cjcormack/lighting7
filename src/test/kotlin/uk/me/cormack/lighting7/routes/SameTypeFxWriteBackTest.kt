@@ -262,7 +262,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         val swapped = client.put("/api/rest/fx/${included("MULTIPLY").id}") {
             contentType(ContentType.Application.Json)
-            setBody(UpdateFxRequest(fxType = "Flicker", parameters = mapOf("min" to "128", "max" to "128")))
+            setBody(UpdateFxRequest(fxType = "Flicker", parameters = mapOf("low" to "128", "high" to "128")))
         }
         assertEquals(HttpStatusCode.OK, swapped.status, swapped.bodyAsText())
 

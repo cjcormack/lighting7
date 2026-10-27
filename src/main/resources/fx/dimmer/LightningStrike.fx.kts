@@ -6,7 +6,7 @@ outputType: SLIDER
 fxMode: STANDARD
 compatibleAttributes: [dimmer]
 parameters:
-  - name: maxBrightness
+  - name: high
     type: ubyte
     default: "255"
     description: Peak brightness during flash
@@ -15,7 +15,7 @@ parameters:
     max: 255
     step: 1
     unit: %
-  - name: minBrightness
+  - name: low
     type: ubyte
     default: "0"
     description: Base brightness between strikes
@@ -24,11 +24,11 @@ parameters:
     max: 255
     step: 1
     unit: %
-    pair: maxBrightness
+    pair: high
 ---*/
 
-val maxBrightness = params.ubyte("maxBrightness")
-val minBrightness = params.ubyte("minBrightness")
+val maxBrightness = params.ubyte("high")
+val minBrightness = params.ubyte("low")
 
 val FLASH_END = 0.05
 val DECAY_END = 0.3

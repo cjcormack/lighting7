@@ -31,7 +31,7 @@ class GlossaryVocabularyTest {
         val index = loader.getResource("fx/index.txt")!!.readText().lines()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertTrue(index.size >= 19, "fx/index.txt should list at least 19 effects, got ${index.size}")
+        assertTrue(index.size >= 14, "fx/index.txt should list at least 14 effects, got ${index.size}")
 
         index.map { path -> FxFileLoader.parseFxFile(loader.getResource("fx/$path")!!.readText()).first }
     }

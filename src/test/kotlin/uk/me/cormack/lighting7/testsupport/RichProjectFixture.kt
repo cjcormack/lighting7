@@ -698,9 +698,16 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoLookFxEntity.new {
         look = swirlLook; targetType = "fixture"; targetKey = "hex-2"
-        fxType = "Circle"; family = "position"; attribute = "position"
-        parameters = mapOf("panCentre" to "100", "tiltCentre" to "140", "panRadius" to "30")
+        fxType = "Path"; family = "position"; attribute = "position"
+        parameters = mapOf("shape" to "CIRCLE", "panCentre" to "100", "tiltCentre" to "140", "panSize" to "30")
         cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
+    }
+    // A Path's Line (fx-settings plan session 3), whose two ends a round trip must keep.
+    DaoLookFxEntity.new {
+        look = swirlLook; targetType = "fixture"; targetKey = "hex-2"
+        fxType = "Path"; family = "position"; attribute = "position"
+        parameters = mapOf("shape" to "LINE", "startPan" to "20", "startTilt" to "40", "endPan" to "230", "endTilt" to "90", "curve" to "QUAD_IN")
+        cycle = 2.0; blendMode = "OVERRIDE"; order = "NORMAL"; direction = "BOUNCE"; sortOrder = 1
     }
 
     // A **generic** template: one deferred row, one family, an intent rather than a literal. This is

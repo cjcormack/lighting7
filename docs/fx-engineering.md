@@ -234,8 +234,10 @@ Since the terminology plan's session 3 each id is its name without the spaces (D
 was `ColourPulse`, and `Breathe` is gone, a stored one now a Sine Wave a quarter-cycle on. Since the
 fx-settings plan's session 2, **Wave** is the eleven level waves (D2): Sine Wave, Ramp Up, Ramp Down,
 Ramp, Square Wave, Pulse, Dimmer Strobe, Zoom Wave, Iris Pulse, Frost Pulse and Focus Pull, which were
-`Triangle`, `Strobe` and `ZoomBreathe` before that. `sync/LegacyNames.kt` reads every old name
-(§"Old names" in `sync-engineering.md`, and §"Wave" below).
+`Triangle`, `Strobe` and `ZoomBreathe` before that; since its session 3, **Path** is the six
+movements and Colour Cycle draws Colour Fade's and Colour Wave's colours, which stay registered as
+**legacy** (§"Path, Colour Cycle and the renamed parameters"). That leaves twelve built-ins to offer.
+`sync/LegacyNames.kt` reads every old name (§"Old names" in `sync-engineering.md`, and §"Wave" below).
 
 ### Intensity FX (`FxOutput.Slider`)
 
@@ -244,10 +246,10 @@ FX that produce single 0-255 values for dimmer/slider attributes.
 | FX | Description | Parameters |
 |----|-------------|------------|
 | `Wave` | A level wave of one `shape`: Sine, Ramp up, Ramp down, Triangle, Square or Pulse; on the dimmer, UV and the beam attributes (§"Wave") | `shape`, `low`, `high`, `width` (Square), `attack` and `hold` (Pulse), `curve` (the ramps, Triangle and Pulse) |
-| `Flicker` | Random variation | `min`, `max` |
-| `CandleFlicker` | Organic candle or fire flicker by random walk; stateful, on the wall clock | `baseLevel`, `min`, `max`, `smoothing` |
-| `FluorescentFlicker` | A tube striking: a burst of on/off flicker, then on; stateful, on the wall clock | `onLevel`, `offLevel`, `flickerDurationMs`, `flickerSpeed` |
-| `LightningStrike` | A flash that decays | `maxBrightness`, `minBrightness` |
+| `Flicker` | Random variation | `low`, `high` |
+| `CandleFlicker` | Organic candle or fire flicker by random walk; stateful, on the wall clock | `base`, `low`, `high`, `settle` |
+| `FluorescentFlicker` | A tube striking: a burst of on/off flicker, then on; stateful, on the wall clock | `high`, `low`, `burstMs`, `speed` |
+| `LightningStrike` | A flash that decays | `high`, `low` |
 
 ### Colour FX (`FxOutput.Colour`)
 
@@ -255,11 +257,11 @@ FX that produce RGB colour values.
 
 | FX | Description | Parameters |
 |----|-------------|------------|
-| `ColourCycle` | Step through a list of literal colours | `colours`, `fadeRatio` |
+| `ColourCycle` | Step through a list of literal colours, each giving way to the next by `between`: Cut, Fade (over `fade` of its step) or Smooth (a cosine across it) | `colours`, `between`, `fade` |
 | `RainbowCycle` | Hue rotation | `saturation`, `brightness` |
-| `ColourStrobe` | Flash colour | `onColour`, `offColour`, `onRatio` |
-| `ColourWave` | Sine between two | `colourA`, `colourB` |
-| `ColourFade` | Linear fade, bouncing by default | `fromColour`, `toColour` |
+| `ColourStrobe` | Flash colour | `onColour`, `offColour`, `width` |
+| `ColourWave` | Sine between two — **legacy**: runs and edits stored ones, offered nowhere | `colourA`, `colourB` |
+| `ColourFade` | Linear fade, bouncing by default — **legacy**, likewise | `fromColour`, `toColour` |
 | `ColourFlicker` | Random variation | `baseColour`, `variation` |
 
 Colour Cycle takes **literal colours only** (terminology plan D14): a `colourList` parameter — its
@@ -275,12 +277,7 @@ FX that produce pan/tilt values for moving heads.
 
 | FX | Description | Parameters |
 |----|-------------|------------|
-| `Circle` | Circular movement | `panCentre`, `tiltCentre`, `panRadius`, `tiltRadius` |
-| `Figure8` | Figure-8 pattern | `panCentre`, `tiltCentre`, `panRadius`, `tiltRadius` |
-| `Sweep` | Linear movement, bouncing by default | `startPan`, `startTilt`, `endPan`, `endTilt`, `curve` |
-| `PanSweep` | Horizontal sweep, bouncing by default | `startPan`, `endPan`, `tilt`, `curve` |
-| `TiltSweep` | Vertical sweep, bouncing by default | `startTilt`, `endTilt`, `pan`, `curve` |
-| `RandomPosition` | Random movement | `panCentre`, `tiltCentre`, `panRange`, `tiltRange` |
+| `Path` | A movement of one `shape`: Circle, Figure 8, Random about a centre, or a Line between two ends (§"Path, Colour Cycle and the renamed parameters") | `shape`; `panCentre`, `tiltCentre`, `panSize`, `tiltSize` (Circle, Figure 8, Random); `startPan`, `startTilt`, `endPan`, `endTilt`, `curve` (Line) |
 
 ### Wave (fx-settings plan session 2)
 
@@ -334,12 +331,12 @@ presets:
     direction: BOUNCE
 ```
 
-**The old ids** (D3). `LegacyNames.waveParameters` is each old FX as Wave: its shape, and every
+**The old ids** (D3). `LegacyNames.consolidatedParameters` is each old FX as Wave: its shape, and every
 parameter it declared under Wave's name at the value its script read — absent or blank at its old
 default, a level clamped as `TypedParams.ubyte` reads one, an unknown curve `LINEAR` — and a beam FX
 that named no attribute the one it drove. Database step 7 (`state/FxConsolidationMigration.kt`) and
 the importer store that (`consolidateFx`); a script's `effect("SineWave", "min" to "40")` and MCP's
-FX tools run it (`runnableFx`, `asWave`, which also start an old Focus Pull at its half-bar Bounce);
+FX tools run it (`runnableFx`, `asToday`, which also start an old Focus Pull at its half-bar Bounce);
 every other write boundary refuses an old id, naming its shape (`writeProblem`). The registry does
 not resolve one, so a script or FX definition that looks an old id up — `fxRegistry.getRegistration
 ("Pulse")`, the way a definition builds on a built-in — finds nothing; step 7 names each stored script
@@ -348,11 +345,68 @@ warning, and rewrites none. The old scripts live
 on as test resources, `src/test/resources/fx/legacy/`, and `LegacyEquivalenceTest` runs each beside
 Wave over every head's phase — the clock at 1/96 of a cycle, a spread over four heads, each
 Direction on an even and an odd cycle — and a grid of its parameters, blank and unparsable ones
-included, and finds the same output exactly. No old id failed, so none stays registered as legacy
-(P3). One thing moves, and the log says so by owner: a beam wave stored with no attribute (a Beam FX
+included, and finds the same output exactly. No level wave failed, so none stays registered as legacy
+(P3; two colour FX do, §"Path, Colour Cycle and the renamed parameters"). One thing moves, and the log says so by owner: a beam wave stored with no attribute (a Beam FX
 palette the UI made) ran on a group only where every head had its attribute, and on none of a mixed
 group; migrated, it names the attribute and runs on the heads that have it, as a Wave authored there
 does — the plan's one recorded exception to D3.
+
+### Path, Colour Cycle and the renamed parameters (fx-settings plan session 3)
+
+**Path** (`position/Path.fx.kts`, family `position`) is the six movements (D2): `shape` `CIRCLE`,
+`FIGURE_8`, `RANDOM` about `panCentre` / `tiltCentre` at `panSize` / `tiltSize`, or `LINE` from
+`startPan` / `startTilt` to `endPan` / `endTilt` along `curve` — each shape the old FX's maths line
+for line. A Line's ends and a centred shape's centre and size are each `shownWhen` the other's
+shapes, so the editor draws only what the shape reads. Its defaults are Circle's and Sweep's; its
+presets are *Sweep*, *Pan Sweep* and *Tilt Sweep*, each a Line that bounces at half a bar as the
+sweeps did. **The Centre question** (D12) is asked only of a shape whose centre is drawn: the client's
+`hasCentre(entry, parameters)` reads the centres through their `shownWhen` (`isParamShown`), so a Line
+asks nothing, starts on Override and, when the shape moves to or from a Line, the blend moves with it
+(`centreFlip`: out of an *Around* shape Override; into a centred shape *Around* while the centres are
+still the pinned 128, else the blend and centres it held, so an *Absolute* circle taken through a Line
+comes back Absolute); a pad face never reads a Line as *around* (`isAroundSpelling`); the desk's stacking
+start does the same through `shownParameters` (`routes/programmerFx.kt`).
+
+**Colour Cycle** gains `between`, a `choice` of `CUT`, `FADE` and `SMOOTH`, and `fade`, the share of
+each colour's step a Fade crosses over — the old `fadeRatio`, computed exactly as it was, so even a
+ratio outside 0–1 runs as it ran. Smooth eases from each colour to the next on a cosine across the
+whole step. Its presets are *Colour Fade* (two colours, Fade 100 %, a four-beat cycle Forward: the old
+two-beat bounce one way in four) and *Colour Wave* (black to white, Smooth).
+
+**Legacy.** P3 refused two mappings, so **Colour Wave** and **Colour Fade** stay registered with
+`legacy: true` in their frontmatter (`FxRegistration.legacy`, the library's `legacy`): a stored one
+runs and edits as before and is still written back under its own id, but the picker, the palette
+editor's FX list, the FX Library page and `describe_rig` leave a legacy FX out, so nothing new is made
+of one. Colour Cycle draws each a DMX step apart: Smooth a quarter-cycle on is Colour Wave's sine, but
+the cosine and the sine floor either side of a byte at some phases (4 of 97 on a mixed pair), and
+Fade at twice the cycle is Colour Fade's bounce but for the turn, where the bounce's reversed phase
+reads 2ε short of the end and floors a step below Colour Cycle's own fall.
+
+**Renamed parameters** (§3 of the plan): Flicker's `min` / `max` are `low` / `high`; Candle Flicker's
+`baseLevel`, `min`, `max`, `smoothing` are `base`, `low`, `high`, `settle`; Fluorescent Flicker's
+`offLevel`, `onLevel`, `flickerDurationMs`, `flickerSpeed` are `low`, `high`, `burstMs`, `speed`;
+Lightning Strike's `minBrightness` / `maxBrightness` are `low` / `high`; Colour Strobe's `onRatio` is
+`width`. Each reads its value as before; only the key moved.
+
+**The old names.** `LegacyNames.absorbFx` is session 3's rewrite: a movement as Path through
+`consolidatedParameters` (the old parameters at the values their scripts read, written out, a Pan
+Sweep's `tilt` as both ends' tilt), a renamed parameter at its new name, Colour Cycle's `fadeRatio`
+as `between` and `fade` (0 a cut). A row written before the renames that already holds a key under a
+new name its old FX never declared — a Flicker's `low`, a Colour Cycle's `between` — loses it, since
+the new script would start reading it (`writtenBefore`: database step 8, and the importer below
+`formatVersion` 42); a tool's call today means it and keeps it. A movement's centre under its US
+spelling is read as its centre. Database step 8 (`state/FxSiblingsMigration.kt`, `user_version`
+8, backed up to `<db>.pre-fx-siblings-<utc>.db` when anything moves) and the importer store it, after
+step 7's `consolidateFx`; a script's `effect("Circle", …)` and MCP's FX tools run it (`runnableFx`,
+`asToday`, which start an old sweep at its half-bar Bounce, `consolidatedTiming`); every other write
+boundary refuses an old id or parameter name (`writeProblem`). Step 8 names each stored script and
+definition that quotes a movement's old id outside `effect(…)`, and any definition with the id `Path`,
+as step 7 does, and one quoting a renamed parameter's distinctive old name (`baseLevel`, `onRatio`,
+…, or a `fadeRatio` beside a Colour Cycle — Palette Steps still reads its own). Steps 7 and 8 are one `state/FxRewriteStep.kt`, configured. No FX definition may take Wave's or
+Path's id (`LegacyNames.consolidatedTypeNamed`), and the FX Library page still reserves a legacy FX's
+id, though it lists none (`offeredFx`). The old scripts are under `src/test/resources/fx/legacy/` with session 2's, and
+`LegacyEquivalenceTest` runs each beside its new form — the stateful flickers tick for tick over 400
+ticks — and finds the same output exactly, except the two above, which it pins as refused.
 
 ### Beam FX (`FxOutput.Slider`)
 
@@ -635,7 +689,7 @@ string parameters according to the schema:
 // TypedParams methods:
 params.ubyte("min")          → UByte (default from schema)
 params.int("count")          → Int
-params.double("fadeRatio")   → Double
+params.double("fade")        → Double
 params.boolean("enabled")    → Boolean
 params.colour("baseColor")   → ExtendedColour (resolves a palette reference, "pal:{uuid}")
 params.colourList("colours") → List<ExtendedColour> (literal colours only; a palette is dropped)
@@ -660,8 +714,7 @@ src/main/resources/fx/
 │   ├── RainbowCycle.fx.kts
 │   └── ...
 ├── position/
-│   ├── Circle.fx.kts
-│   └── ...
+│   └── Path.fx.kts
 └── steps/
     ├── PaletteSteps.fx.kts
     └── SlotSteps.fx.kts
@@ -678,18 +731,18 @@ outputType: SLIDER
 fxMode: STANDARD
 compatibleAttributes: [dimmer, uv]
 parameters:
-  - name: min
+  - name: low
     type: ubyte
-    default: "0"
-    description: Minimum value
-  - name: max
+    default: "100"
+    description: The lowest level it flickers to
+  - name: high
     type: ubyte
     default: "255"
-    description: Maximum value
+    description: The highest level it flickers to
 ---*/
 
-val min = params.ubyte("min")
-val max = params.ubyte("max")
+val low = params.ubyte("low")
+val high = params.ubyte("high")
 …
 FxOutput.Slider(value)
 ```
@@ -703,8 +756,8 @@ the FX in the FxRegistry with `source = BUILT_IN`.
 
 Two optional frontmatter keys say what a **new** instance runs at, read as `defaultTiming` is:
 `defaultDirection` (`FORWARD`, `BACKWARD` or `BOUNCE`; `FxInstance` starts its dynamics on it) and
-`defaultCycle` (beats a cycle, one bar when absent). Colour Fade and the sweeps
-declare `BOUNCE` at `2.0` (terminology plan D24), as Wave's *Focus Pull* preset does: they once
+`defaultCycle` (beats a cycle, one bar when absent). Colour Fade (legacy) declares `BOUNCE` at
+`2.0` (terminology plan D24), as Wave's *Focus Pull* and Path's sweep presets do: they once
 bounced by a `pingPong` parameter over a one-bar cycle, so a new one looks as it did. The library answers both (`FxTypeInfo`), and every
 door that makes an FX without naming them takes them: the add routes, the programmer's bare press,
 the MCP tools, the picker and the palette editor. A swap to another type in the picker or the
@@ -977,8 +1030,8 @@ The live FX editor (`FxEditor`, fixture-fx-sheets plan D12, D12a) never shows th
 `ADDITIVE` or `MULTIPLY` for the two FX where the choice is the whole point; it asks a question
 in the desk's words and sends an existing spelling (plan P2 — no new field, no `formatVersion`):
 
-- **Movement — *Centre: Around current position | Absolute*.** A position FX with a centre pair
-  (Circle, Figure 8, Random position). **Around** is `ADDITIVE` with `panCentre` and `tiltCentre` at
+- **Movement — *Centre: Around current position | Absolute*.** A position FX with a centre pair it
+  draws: a Path on Circle, Figure 8 or Random, never a Line. **Around** is `ADDITIVE` with `panCentre` and `tiltCentre` at
   **128**: the position blend is `base + FX − 128`, so a shape centred on 128 orbits whatever the
   reset pass put underneath — the programmer's value, else the cue's, else the base. That is the only
   way a Circle orbits a set position; under `OVERRIDE` it circles its own 128/128. **Absolute** is
@@ -2245,7 +2298,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/SpreadOrder.kt` | The Orders |
 | `fx/group/GroupFxExtensions.kt` | Group FX extension functions |
-| `resources/fx/**/*.fx.kts` | Every built-in FX's metadata + calculate body (30 files) |
+| `resources/fx/**/*.fx.kts` | Every built-in FX's metadata + calculate body (14 files) |
 | `fx/PaletteColourSource.kt` | Colour-palette resolution, `PaletteSource` (also Palette Steps' palette lookup), and `createFxWithPalettes` — the one spawn helper every string-named FX goes through |
 | `fx/StepList.kt` | The step FX's lists, resolved per head (`SlotStepList`, `PaletteStepList`), `stepsAt` and `paletteStepsShape` |
 | `fx/PaletteRegistry.kt` | Palette snapshots cached by uuid — rows, or the one FX an FX palette holds; the scoped version a running FX's colour cache watches |

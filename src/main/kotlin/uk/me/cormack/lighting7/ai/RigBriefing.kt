@@ -178,7 +178,8 @@ class RigBriefing(private val state: State) {
 
         // Effect library summary
         sb.appendLine("## FX Library (for create_look)")
-        for (effect in state.show.fxRegistry.getLibrary()) {
+        // A legacy FX runs what is stored and is never offered (fx-settings plan D3).
+        for (effect in state.show.fxRegistry.getLibrary().filterNot { it.legacy }) {
             val params = effect.parameters.joinToString(", ") { parameterBrief(it) }
             val defaults = (if (effect.defaultCycle != CycleLength.ONE_BAR) ", cycle=${effect.defaultCycle}" else "") +
                 (if (effect.defaultDirection != FxDirection.FORWARD.name) ", direction=${effect.defaultDirection}" else "")
@@ -205,6 +206,13 @@ class RigBriefing(private val state: State) {
                 "focus it is a Beam FX: name the attribute, and store its family as intensity, the " +
                 "library's — a Beam palette of it names the attribute it drives. Without levels there it " +
                 "starts at its attribute's own (zoom and focus 64–192, iris and frost 0–160).",
+        )
+        sb.appendLine(
+            "Path is every movement (Circle, Figure 8, Random, and a Line for Sweep, Pan Sweep and Tilt " +
+                "Sweep), its `shape` saying which; a Line has two ends and no centre. Colour Cycle's " +
+                "`between` is Cut, Fade (over `fade` of each step) or Smooth; its presets Colour Fade and " +
+                "Colour Wave start one that looks like the old FX of those names, which stay on the desk only " +
+                "for the shows that hold them.",
         )
         // The two step effects take references rather than values (effects plan §3.6), which
         // neither the parameter type nor the category says on its own.

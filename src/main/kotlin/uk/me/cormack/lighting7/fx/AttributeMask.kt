@@ -161,6 +161,12 @@ const val WAVE_ID = "Wave"
 /** The library family Wave is filed under, and stored with, on every attribute it drives. */
 const val WAVE_FAMILY = "intensity"
 
+/** Path's registry id (fx-settings plan D2): the movements as one FX. */
+const val PATH_ID = "Path"
+
+/** The library family Path is filed under. */
+const val PATH_FAMILY = "position"
+
 /**
  * The attribute family an FX of library [fxFamily] is in while it drives [attribute] (fx-settings
  * plan D5): Beam on a beam attribute — Wave, an Intensity FX, on zoom, iris, frost or focus — else

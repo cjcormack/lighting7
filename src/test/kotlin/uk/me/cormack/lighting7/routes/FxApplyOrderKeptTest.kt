@@ -67,11 +67,10 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
     /** One level whatever the phase: a Wave or a Flicker whose two levels agree. */
     private fun level(fxType: String, value: Int, blendMode: String, stack: Boolean) = ProgrammerFxRequest(
         fxType = fxType, attribute = "dimmer", targets = hex,
-        parameters = flat(fxType, value), blendMode = blendMode, stack = stack,
+        parameters = flat(value), blendMode = blendMode, stack = stack,
     )
 
-    private fun flat(fxType: String, value: Int) =
-        if (fxType == "Wave") mapOf("low" to "$value", "high" to "$value") else mapOf("min" to "$value", "max" to "$value")
+    private fun flat(value: Int) = mapOf("low" to "$value", "high" to "$value")
 
     private suspend fun HttpClient.press(request: ProgrammerFxRequest): FxInstance {
         val response = post("/api/rest/projects/$projectId/programmer/fx") {
@@ -374,7 +373,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
     private fun lookFx(fxType: String, value: Int, blendMode: String) = LookFxDto(
         targetType = TargetRef.Fixture.TYPE, targetKey = "hex-1", fxType = fxType, family = "intensity",
         attribute = "dimmer", cycle = 4.0, blendMode = blendMode, order = "NORMAL",
-        parameters = flat(fxType, value),
+        parameters = flat(value),
     )
 
     @Test

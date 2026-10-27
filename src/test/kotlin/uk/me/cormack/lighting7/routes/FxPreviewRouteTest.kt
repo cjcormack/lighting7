@@ -495,7 +495,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
         val keys = seedHexes(2)
         val answer = preview(
             FxPreviewRequest(
-                fx = listOf(FxPreviewEntry(draft = draft("fxType" to "Circle", "attribute" to "position"))),
+                fx = listOf(FxPreviewEntry(draft = draft("fxType" to "Path", "attribute" to "position"))),
                 include = "ONLY",
                 notional = 8,
             ),
@@ -534,7 +534,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
             state,
             FxPreviewRequest(
                 targets = group("quad"),
-                fx = listOf(FxPreviewEntry(fxId = sine.id), FxPreviewEntry(draft = draft("fxType" to "Circle", "attribute" to "position"))),
+                fx = listOf(FxPreviewEntry(fxId = sine.id), FxPreviewEntry(draft = draft("fxType" to "Path", "attribute" to "position"))),
                 include = "STACK",
                 notional = 200,
             ),

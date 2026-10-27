@@ -147,8 +147,8 @@ class FxAmountDirectionRunsTest {
     @Test
     fun `an Around circle at 50 percent has half the radius about the position underneath`() {
         val circle = registry.createFx(
-            "Circle",
-            mapOf("panCentre" to "128", "tiltCentre" to "128", "panRadius" to "64", "tiltRadius" to "64"),
+            "Path",
+            mapOf("shape" to "CIRCLE", "panCentre" to "128", "tiltCentre" to "128", "panSize" to "64", "tiltSize" to "64"),
         )
         fun positionAt(size: Double, n: Long): Pair<Int, Int> {
             val rig = newRig()
@@ -207,7 +207,7 @@ class FxAmountDirectionRunsTest {
 
     @Test
     fun `Colour Cycle backward runs blue, green, red`() {
-        val cycle = registry.createFx("ColourCycle", mapOf("colours" to "#ff0000,#00ff00,#0000ff", "fadeRatio" to "0"))
+        val cycle = registry.createFx("ColourCycle", mapOf("colours" to "#ff0000,#00ff00,#0000ff", "between" to "CUT"))
         fun coloursAt(direction: FxDirection): List<Color> {
             val instance = FxInstance(cycle, ColourTarget("hex-a"), FxTiming(cycle = 3.0))
             instance.updateDynamics { it.copy(direction = direction) }

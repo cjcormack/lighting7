@@ -7,7 +7,7 @@ fxMode: STATEFUL
 timingSource: WALL_CLOCK
 compatibleAttributes: [dimmer, uv]
 parameters:
-  - name: baseLevel
+  - name: base
     type: ubyte
     default: "180"
     description: The average brightness level
@@ -16,7 +16,7 @@ parameters:
     max: 255
     step: 1
     unit: %
-  - name: min
+  - name: low
     type: ubyte
     default: "100"
     description: Minimum value floor
@@ -25,8 +25,8 @@ parameters:
     max: 255
     step: 1
     unit: %
-    pair: max
-  - name: max
+    pair: high
+  - name: high
     type: ubyte
     default: "230"
     description: Maximum value ceiling
@@ -35,7 +35,7 @@ parameters:
     max: 255
     step: 1
     unit: %
-  - name: smoothing
+  - name: settle
     type: double
     default: "0.85"
     description: Smoothing factor - higher values give slower, smoother drift
@@ -47,10 +47,10 @@ parameters:
     role: detail
 ---*/
 
-val baseLevel = params.ubyte("baseLevel").toDouble()
-val min = params.ubyte("min")
-val max = params.ubyte("max")
-val smoothing = params.double("smoothing").coerceIn(0.0, 0.99)
+val baseLevel = params.ubyte("base").toDouble()
+val low = params.ubyte("low")
+val high = params.ubyte("high")
+val smoothing = params.double("settle").coerceIn(0.0, 0.99)
 
 var currentLevel = state.getOrPut("currentLevel") { baseLevel } as Double
 var target = state.getOrPut("target") { baseLevel } as Double
@@ -65,7 +65,7 @@ if (ticksSinceTargetChange >= changeThreshold) {
     ticksSinceTargetChange = 0
     // Pseudo-random target biased toward baseLevel
     val noise = sin(tick.tickNumber * 127.0) * cos(tick.tickNumber * 311.0)
-    val range = max.toInt() - min.toInt()
+    val range = high.toInt() - low.toInt()
     target = baseLevel + noise * range * 0.4
 }
 
@@ -76,5 +76,5 @@ state["currentLevel"] = currentLevel
 state["target"] = target
 state["ticksSinceTargetChange"] = ticksSinceTargetChange
 
-val value = currentLevel.toInt().coerceIn(min.toInt(), max.toInt()).toUByte()
+val value = currentLevel.toInt().coerceIn(low.toInt(), high.toInt()).toUByte()
 FxOutput.Slider(value)

@@ -70,6 +70,11 @@ data class FxRegistration(
     val presets: List<FxPreset> = emptyList(),
     /** Parameters a new FX on an attribute starts with, by attribute — Wave's zoom at 64–192. */
     val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
+    /**
+     * A built-in kept only for what is already stored (fx-settings plan D3): one no consolidated type
+     * reproduces exactly. It runs and is edited as any FX, but no picker or listing offers it.
+     */
+    val legacy: Boolean = false,
     /** Factory to create an Effect instance from string parameters */
     val factory: FxFactory,
 )
@@ -95,6 +100,8 @@ data class FxTypeInfo(
     val defaultCycle: Double = CycleLength.ONE_BAR,
     val presets: List<FxPreset> = emptyList(),
     val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
+    /** Kept for stored FX only, never offered ([FxRegistration.legacy]); absent is false. */
+    val legacy: Boolean = false,
 )
 
 /**
@@ -243,6 +250,7 @@ class FxRegistry {
                     defaultCycle = reg.defaultCycle,
                     presets = reg.presets,
                     attributeDefaults = reg.attributeDefaults,
+                    legacy = reg.legacy,
                 )
             }
     }

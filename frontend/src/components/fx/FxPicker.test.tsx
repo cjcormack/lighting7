@@ -926,3 +926,69 @@ describe('FxPicker on the bare effect press', () => {
     expect(onLanding).toHaveBeenLastCalledWith(['position'])
   })
 })
+
+describe('Path and the legacy colour FX (fx-settings plan session 3)', () => {
+  const centred = { param: 'shape', values: ['CIRCLE', 'FIGURE_8', 'RANDOM'] }
+  const line = { param: 'shape', values: ['LINE'] }
+  const PATH: FxLibraryEntry = {
+    name: 'Path',
+    family: 'position',
+    outputType: 'POSITION',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleAttributes: ['position'],
+    parameters: [
+      { name: 'shape', type: 'choice', defaultValue: 'CIRCLE', description: '' },
+      { name: 'panCentre', type: 'ubyte', defaultValue: '128', description: '', shownWhen: centred },
+      { name: 'tiltCentre', type: 'ubyte', defaultValue: '128', description: '', shownWhen: centred },
+      { name: 'panSize', type: 'ubyte', defaultValue: '64', description: '', shownWhen: centred },
+      { name: 'tiltSize', type: 'ubyte', defaultValue: '64', description: '', shownWhen: centred },
+      { name: 'startPan', type: 'ubyte', defaultValue: '64', description: '', shownWhen: line },
+      { name: 'endPan', type: 'ubyte', defaultValue: '192', description: '', shownWhen: line },
+    ],
+    presets: [{ name: 'Sweep', attribute: 'position', parameters: { shape: 'LINE' }, cycle: 2, direction: 'BOUNCE' }],
+  }
+  const legacyColour = (name: string): FxLibraryEntry => ({
+    name,
+    family: 'colour',
+    outputType: 'COLOUR',
+    fxMode: 'STANDARD',
+    compatibleAttributes: ['position'],
+    parameters: [],
+    legacy: true,
+  })
+
+  beforeEach(() => {
+    wire.library = [PATH, legacyColour('ColourFade')]
+  })
+
+  it('starts the Sweep preset as a Line on Bounce at half a bar, on Override: a line has no centre to go Around', async () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sweep' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      fxType: 'Path',
+      attribute: 'position',
+      cycle: 2,
+      direction: 'BOUNCE',
+      blendMode: 'OVERRIDE',
+      parameters: { shape: 'LINE' },
+    })
+  })
+
+  it('starts the bare Path, a Circle, Around with both centres pinned', async () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Path' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
+      fxType: 'Path',
+      blendMode: 'ADDITIVE',
+      parameters: { shape: 'CIRCLE', panCentre: '128', tiltCentre: '128' },
+    })
+  })
+
+  it('offers no legacy FX', () => {
+    render(<Harness />)
+    expect(document.querySelector('[data-effect-pick="ColourFade"]')).toBeNull()
+  })
+})

@@ -141,7 +141,7 @@ class FxLibraryMigrationTest {
     fun `a fresh database is already past the step`() {
         startDesk()
         stopDesk()
-        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion())
+        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion())
     }
 
     @Test
@@ -155,7 +155,12 @@ class FxLibraryMigrationTest {
         assertEquals(
             listOf(
                 listOf("Wave", "intensity", 4.0, "NORMAL", 0.0, """{"shape":"SINE","low":"0","high":"255"}""", "FORWARD", null, 1.0),
-                listOf("Sweep", "position", 2.0, "NORMAL", 0.5, "{}", "BOUNCE", 4, 1.5),
+                // Step 8 then stores the Sweep as Path, its old defaults written out.
+                listOf(
+                    "Path", "position", 2.0, "NORMAL", 0.5,
+                    """{"shape":"LINE","startPan":"64","startTilt":"128","endPan":"192","endTilt":"128","curve":"SINE_IN_OUT"}""",
+                    "BOUNCE", 4, 1.5,
+                ),
                 listOf("PaletteSteps", "colour", 4.0, "NORMAL", 0.25, """{"palettes":"pal:$red,pal:$blue"}""", "FORWARD", null, 1.0),
             ),
             stored("look_fx"),
@@ -176,7 +181,7 @@ class FxLibraryMigrationTest {
             stored("cue_ad_hoc_fx"),
         )
         assertEquals(
-            listOf(listOf("LightningStrike", "intensity", 4.0, "NORMAL", 0.0, """{"maxBrightness":"200"}""", "FORWARD", null, 1.0)),
+            listOf(listOf("LightningStrike", "intensity", 4.0, "NORMAL", 0.0, """{"high":"200"}""", "FORWARD", null, 1.0)),
             stored("palette_fx", order = "id"),
         )
         assertEquals(
@@ -185,7 +190,7 @@ class FxLibraryMigrationTest {
             "a composite is filed under the family of the output it applied",
         )
         assertEquals(listOf("FX_CALC", "GENERAL"), query("SELECT script_type FROM scripts ORDER BY name") { it.getString(1) })
-        assertEquals(FX_CONSOLIDATED_USER_VERSION, userVersion())
+        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion())
 
         fun logged(vararg words: String) = assertTrue(logs.any { line -> words.all { it in line } }, "${words.toList()} in $logs")
         logged("Look 'S3 Old FX' in 'Experiment'", "Breathe is now Sine Wave")

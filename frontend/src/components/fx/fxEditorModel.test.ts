@@ -6,7 +6,11 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import { makeActiveFx } from '@/test/fixtureFactories'
 import {
+  centreFlip,
   centreModeOf,
+  hasCentre,
+  isAroundSpelling,
+  storedCentreMode,
   differsFromPalette,
   filteredElementCount,
   orderPatch,
@@ -398,3 +402,70 @@ describe('paramView (fx-settings plan D1)', () => {
   })
 })
 
+
+describe('the Centre question on a Path (fx-settings plan session 3)', () => {
+  const centred = { param: 'shape', values: ['CIRCLE', 'FIGURE_8', 'RANDOM'] }
+  const PATH: FxLibraryEntry = {
+    name: 'Path',
+    family: 'position',
+    outputType: 'POSITION',
+    fxMode: 'STANDARD',
+    compatibleAttributes: ['position'],
+    parameters: [
+      { name: 'shape', type: 'choice', defaultValue: 'CIRCLE', description: '' },
+      { name: 'panCentre', type: 'ubyte', defaultValue: '128', description: '', shownWhen: centred },
+      { name: 'tiltCentre', type: 'ubyte', defaultValue: '128', description: '', shownWhen: centred },
+      { name: 'startPan', type: 'ubyte', defaultValue: '64', description: '', shownWhen: { param: 'shape', values: ['LINE'] } },
+    ],
+  }
+
+  it('asks it of a shape whose centre is drawn, and never of a Line', () => {
+    expect(hasCentre(PATH)).toBe(true)
+    expect(hasCentre(PATH, { shape: 'FIGURE_8' })).toBe(true)
+    expect(hasCentre(PATH, { shape: 'LINE' })).toBe(false)
+    expect(hasCentre(PATH, { shape: 'line' })).toBe(false)
+  })
+
+  it('starts a Circle Around, both centres pinned, and a Line on Override', () => {
+    expect(startingSpec(PATH)).toEqual({
+      blendMode: 'ADDITIVE',
+      parameters: { shape: 'CIRCLE', panCentre: '128', tiltCentre: '128', startPan: '64' },
+    })
+    expect(startingSpec(PATH, { preset: { parameters: { shape: 'LINE' } } }).blendMode).toBe('OVERRIDE')
+  })
+
+  it('reads a stored Line as asking nothing', () => {
+    expect(storedCentreMode({ blendMode: 'ADDITIVE', parameters: { shape: 'LINE', panCentre: '128', tiltCentre: '128' } }, PATH)).toBeNull()
+    expect(storedCentreMode({ blendMode: 'ADDITIVE', parameters: { shape: 'CIRCLE' } }, PATH)).toBe('around')
+  })
+
+  it('moves the blend with a shape change across a Line, and leaves any other change alone', () => {
+    const around = { blendMode: 'ADDITIVE', parameters: { shape: 'CIRCLE', panCentre: '128', tiltCentre: '128' } }
+    expect(centreFlip(PATH, around, 'shape', 'LINE')).toEqual({ blendMode: 'OVERRIDE', parameters: { ...around.parameters, shape: 'LINE' } })
+    const line = { blendMode: 'OVERRIDE', parameters: { shape: 'LINE' } }
+    expect(centreFlip(PATH, line, 'shape', 'CIRCLE')).toEqual({
+      blendMode: 'ADDITIVE',
+      parameters: { shape: 'CIRCLE', panCentre: '128', tiltCentre: '128' },
+    })
+    // An Absolute circle taken through a Line comes back Absolute, where it was.
+    const absoluteCircle = { blendMode: 'OVERRIDE', parameters: { shape: 'CIRCLE', panCentre: '40', tiltCentre: '200' } }
+    const throughLine = centreFlip(PATH, absoluteCircle, 'shape', 'LINE')!
+    expect(throughLine).toEqual({ blendMode: 'OVERRIDE', parameters: { shape: 'LINE', panCentre: '40', tiltCentre: '200' } })
+    expect(centreFlip(PATH, throughLine, 'shape', 'CIRCLE')).toEqual({
+      blendMode: 'OVERRIDE',
+      parameters: { shape: 'CIRCLE', panCentre: '40', tiltCentre: '200' },
+    })
+    expect(centreFlip(PATH, around, 'shape', 'FIGURE_8')).toBeNull()
+    expect(centreFlip(PATH, around, 'panCentre', '40')).toBeNull()
+    const absolute = { blendMode: 'MAX', parameters: { shape: 'CIRCLE' } }
+    expect(centreFlip(PATH, absolute, 'shape', 'LINE')?.blendMode).toBe('MAX')
+  })
+})
+
+describe('isAroundSpelling on a Path (fx-settings plan session 3)', () => {
+  it('reads a Circle on Additive at 128 as around, and a Line never', () => {
+    const at128 = { panCentre: '128', tiltCentre: '128' }
+    expect(isAroundSpelling({ family: 'position', blendMode: 'ADDITIVE', parameters: { shape: 'CIRCLE', ...at128 } })).toBe(true)
+    expect(isAroundSpelling({ family: 'position', blendMode: 'ADDITIVE', parameters: { shape: 'LINE', ...at128 } })).toBe(false)
+  })
+})
