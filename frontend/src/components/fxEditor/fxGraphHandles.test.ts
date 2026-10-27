@@ -50,6 +50,14 @@ describe('the graph’s handles', () => {
     expect(spreadFromDrag(1, 12, 0)).toBe(1)
   })
 
+  it('counts a STEP spread in the FX’s own steps, up to 16 (fx-settings plan D6)', () => {
+    const fx = previewFx(4)
+    // Three colours: each unit of Spread moves a row by its rank over three, not over the four ranks.
+    expect([0, 1, 2, 3].map((r) => spreadShareOf(fx, r, 3))).toEqual([0, 1 / 3, 2 / 3, 1])
+    expect(spreadFromDrag(1, 480, 0.5, true)).toBe(16)
+    expect(spreadFromDrag(1, 480, 0.5)).toBe(2)
+  })
+
   it('reads a row’s share of Spread off the desk’s Parts rung', () => {
     const fx = previewFx(4)
     expect([0, 1, 2, 3].map((r) => spreadShareOf(fx, r))).toEqual([0, 0.25, 0.5, 0.75])

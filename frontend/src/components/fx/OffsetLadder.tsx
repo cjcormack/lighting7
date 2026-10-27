@@ -4,6 +4,7 @@ import type { FxPreviewFx, FxPreviewRow, FxPreviewRung } from '@/store/fxPreview
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { useHoveredRow, type HoveredRowStore } from './fxGraphLink'
+import type { SpreadUnit } from '@/lib/spreadShape'
 
 /** The ladder's five rows, one per step of the spread, in the order the desk takes them (§3.3). */
 const STEPS = [
@@ -80,11 +81,14 @@ function countOf(fx: FxPreviewFx, rows: readonly FxPreviewRow[], step: Exclude<L
 export function OffsetLadder({
   ladder,
   spread,
+  spreadUnit = 'CYCLE',
   hoveredRow,
   onHoverRow,
 }: {
   ladder: { fx: FxPreviewFx; rows: readonly FxPreviewRow[] } | null
   spread: number
+  /** What [spread] counts (fx-settings plan D6): its last rung reads in steps under `STEP`. */
+  spreadUnit?: SpreadUnit
   /** The graph's hovered row, read here alone so the pointer crossing rows redraws only the dots. */
   hoveredRow: HoveredRowStore | null
   onHoverRow: (key: string | null) => void
@@ -109,7 +113,12 @@ export function OffsetLadder({
         <div className="grid grid-cols-[58px_minmax(0,1fr)_38px] items-center gap-x-2 gap-y-1 text-[10.5px] text-muted-foreground">
           {STEPS.map(({ step, label }) => {
             const dots = ladderDots(ladder.fx, ladder.rows, step)
-            const count = step === 'spread' ? `${Math.round(spread * 100)} %` : countOf(ladder.fx, ladder.rows, step)
+            const count =
+              step !== 'spread'
+                ? countOf(ladder.fx, ladder.rows, step)
+                : spreadUnit === 'STEP'
+                  ? `${Math.round(spread * 100) / 100} ${spread === 1 ? 'step' : 'steps'}`
+                  : `${Math.round(spread * 100)} %`
             return [
               <span key={`${step}-label`}>{label}</span>,
               <div key={`${step}-track`} data-ladder-step={step} className="relative h-3 border-b">

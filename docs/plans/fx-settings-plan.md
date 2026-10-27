@@ -148,8 +148,8 @@ is titled *FX settings: session N — title*. Never merge a later session's PR b
 |---|---|---|---|---|---|
 | 1 | Parameter metadata: the desk declares, the editor reads | merged | `claude/fx-settings-s1` | [#299](https://github.com/cjcormack/lighting7/pull/299) | `dc33373d` |
 | 2 | Wave: one FX for the level waves | merged | `claude/fx-settings-s2` | [#302](https://github.com/cjcormack/lighting7/pull/302) | `5ad80802` |
-| 3 | Colour Cycle and Path absorb their siblings | in review | `claude/fx-settings-s3` | | |
-| 4 | Each head later by: spread in steps, and Width one head | planned | | | |
+| 3 | Colour Cycle and Path absorb their siblings | merged | `claude/fx-settings-s3` | [#304](https://github.com/cjcormack/lighting7/pull/304) | `01b2f45a` |
+| 4 | Each head later by: spread in steps, and Width one head | in review | `claude/fx-settings-s4` | | |
 | 5 | The inspector in four questions | planned | | | |
 | 6 | Across the heads | planned | | | |
 
@@ -355,6 +355,46 @@ the next; whoever merges the last fills its own.
   `head` over 3, 4 and 8 heads.
 - **Docs:** `docs/fx-engineering.md` §"The spread's shape", `docs/sync-engineering.md` (43),
   `docs/glossary.md` (a row for the unit).
+
+- **What landed, and where it differs from the above:**
+  - **`STEP` resolves in step 5 of `SpreadShaping.shape`**, which `FxDistributionPlan` calls with the
+    FX's step count: `offset = spread × r / steps` on the ranks Segments, Wings and Parts left. The
+    count is `Fx.stepCount`, which a script FX answers from the parameter its registration's
+    `stepsFrom` names, parsed as the FX reads it (`TypedParams.stepCount`); the plan cache is keyed on
+    the unit and the count, asked only under `STEP`. A `STEP` FX with no count runs as `CYCLE`.
+  - **`stepsFrom` is a built-in's frontmatter key only**: it must name a `colourList`, `paletteList` or
+    `slotList` parameter, and a project FX definition declares none (its table has no column for it).
+  - **D7's default needs no unit and no spread.** `POST /fx/add`, `POST /programmer/fx`, the group
+    route and MCP's FX tools write `STEP` 1 for a step FX only when the author names neither, so a
+    spread sent without a unit keeps the meaning it always had; `AddFxRequest.spread` became nullable
+    for it. The client's doors write `STEP` 1 explicitly (`newFxSpread`), and a preview's draft of a
+    stored FX names `CYCLE` where the row names none, as it does Over.
+  - **A swap off a step FX** converts on the desk at the running offsets over the most slots the FX
+    spreads over (`FxEngine.spreadSlots`, `SpreadShaping.cycleSpread`); the palette editor, with no
+    heads, swaps onto `CYCLE` 1. A Shape chip keeps the unit; *Same spread as* copies it with the
+    number and refuses a step spread onto an FX with none. Until session 6 the editor's Spread field
+    reads in steps under `STEP` and offers no way to choose the unit. Because every new step FX now
+    starts in steps, the graph's Spread knob already counts them (its share a row's rank over the
+    steps, up to 16, its hover *Spread 1 step*); session 6 still owns its words.
+  - **`stepsFrom` is a promise the FX keeps.** A script's `registerFx` naming one is refused unless the
+    FX its factory builds counts steps (`Fx.stepCount`) — a copied built-in's does — so the registry's
+    `stepsFrom` (the stored boundaries, MCP, the library) and the instance's count (`POST /fx/add`, the
+    runtime) never disagree. A stored `STEP` on an FX with no steps spawns as `CYCLE`, clamped to
+    200 % (`Lenient.spreadShape`).
+  - **MCP reads always say a step FX's spread and unit** (`get_current_state`, `describe_rig`'s running
+    FX), since a write naming neither starts one step behind: a model copying a running `CYCLE` Colour
+    Cycle into a Look keeps it on the cycle.
+  - **D7 reaches Colour Cycle's presets too.** *Colour Fade* and *Colour Wave* name two colours, so at
+    `STEP` 1 alternate heads match rather than a wave travelling across them; a preset cannot name a
+    spread (D4 gives it a name, an attribute, parameters, a cycle and a direction). Left for Chris.
+  - **One head** (`widthUnit: HEAD`) is a Square high for `1 / numDistinctSlots` and a Pulse whose
+    attack, hold and release play within that share, low for the rest; on one head it is on the
+    whole cycle. Its preset *Chase* names only the shape and the unit.
+  - **There is no `FxSamplerTest`.** The §1 case (four heads and five, three colours at `STEP` 1, every
+    head changing on each boundary), a colour-list swap re-planning, and one head on at a time over 3,
+    4 and 8 heads for Square and Pulse are `fx/SpreadUnitStepTest.kt`, through the sampler; the doors and
+    the refusals are `routes/SpreadUnitDoorsRoutesTest.kt`. `RichProjectFixture`'s *Steps chase* names
+    only its colours, because a round-trip test re-reads the archive as v23, which drops a `between`.
 
 ### Session 5 — The inspector in four questions
 

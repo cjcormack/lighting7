@@ -75,6 +75,7 @@ data class StoredFx(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    val spreadUnit: String? = null,
     /**
      * The stored row's uuid — a Look effect's or a palette effect's — or null for one built from no
      * row: what a GO matches a continuing effect on (effects plan P4, [FxInstance.layerFxUuid]).
@@ -367,6 +368,7 @@ private fun DaoLookFxEntity.toStoredFx(): StoredFx =
         wings = wings,
         segments = segments,
         parts = parts,
+        spreadUnit = spreadUnit,
         uuid = uuid,
     )
 
@@ -402,4 +404,5 @@ internal fun StoredFx.toFxSpec() = uk.me.cormack.lighting7.models.LookFxSpec(
     wings = wings,
     segments = segments,
     parts = parts,
+    spreadUnit = spreadUnit,
 )

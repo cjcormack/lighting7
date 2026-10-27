@@ -245,7 +245,7 @@ FX that produce single 0-255 values for dimmer/slider attributes.
 
 | FX | Description | Parameters |
 |----|-------------|------------|
-| `Wave` | A level wave of one `shape`: Sine, Ramp up, Ramp down, Triangle, Square or Pulse; on the dimmer, UV and the beam attributes (§"Wave") | `shape`, `low`, `high`, `width` (Square), `attack` and `hold` (Pulse), `curve` (the ramps, Triangle and Pulse) |
+| `Wave` | A level wave of one `shape`: Sine, Ramp up, Ramp down, Triangle, Square or Pulse; on the dimmer, UV and the beam attributes (§"Wave") | `shape`, `low`, `high`, `width` (Square), `widthUnit` (Square and Pulse: Width, or One head), `attack` and `hold` (Pulse), `curve` (the ramps, Triangle and Pulse) |
 | `Flicker` | Random variation | `low`, `high` |
 | `CandleFlicker` | Organic candle or fire flicker by random walk; stateful, on the wall clock | `base`, `low`, `high`, `settle` |
 | `FluorescentFlicker` | A tube striking: a burst of on/off flicker, then on; stateful, on the wall clock | `high`, `low`, `burstMs`, `speed` |
@@ -290,6 +290,14 @@ Square's share of the cycle high, `attack` and `hold` a Pulse's, `curve` the ram
 Pulse's easing, each shown only for its shapes (`shownWhen`). The curve's default is `LINEAR`, which
 Pulse's was not (`QUAD_OUT`): a stored Pulse is written with its curve, and the presets name theirs.
 
+**Width: One head** (D8, session 4). `widthUnit`, a `choice` of `RATIO` (*Width*, the default) and
+`HEAD` (*One head*), shown for Square and Pulse: under `HEAD` a Square is high for `1 /
+numDistinctSlots` of the cycle and a Pulse plays its attack, hold and release within that share and
+rests low for the rest, so with the heads spread over the cycle exactly one is on at a time whatever
+the selection (grandMA3's Adaptive Width). It reads the context the FX already gets — the slots left
+after Segments, Wings and Parts — so it is a parameter, not an engine field; on one head it is on the
+whole cycle. Its preset *Chase* (Square, `HEAD`) sits with *Strobe*.
+
 **On an attribute.** The frontmatter's `attributeDefaults` are the parameters a Wave on that attribute
 starts with where its own name none — `zoom` and `focus` 64–192, `iris` and `frost` 0–160, the old
 beam FX's ranges. `createFxWithPalettes` lays them under the parameters on every spawn that names
@@ -312,7 +320,7 @@ running Wave drives. A project FX definition may not take the id `Wave` (`retire
 
 **Presets** (D4) keep the familiar names in the picker: frontmatter `presets`, each a `name`, an
 `attribute`, `parameters` over the FX's defaults and, where they differ from the FX's, a `cycle` and
-`direction`. Wave's are *Strobe* (Square at 10 %, on the dimmer), *Zoom Wave*, *Iris Pulse*, *Frost
+`direction`. Wave's are *Strobe* (Square at 10 %, on the dimmer), *Chase* (Square on for one head), *Zoom Wave*, *Iris Pulse*, *Frost
 Pulse* and *Focus Pull* (Ramp up, `SINE_IN_OUT`, bouncing at half a bar). The library answers them
 (`FxTypeInfo.presets`, `FxPreset`), `describe_rig` lists them beside each FX's attributes, and the picker draws each under the
 family its attribute gives, on a head that has the attribute (`FxPicker`); a tap starts Wave with the
@@ -781,6 +789,10 @@ everything, for a script FX's that declares none (`paramView` in
 | `role` | `main`, drawn with the FX, or `detail`, folded under *More* |
 | `shownWhen` | Drawn only while another parameter holds one of the values named |
 | `pair` | On a low, the high it is drawn with as one two-thumb range |
+
+One frontmatter key is the FX's rather than a parameter's: `stepsFrom: colours` names the list
+parameter whose entries are its steps, which a `STEP` spread counts (§"The spread's shape"). It must
+name a `colourList`, `paletteList` or `slotList` parameter, else the FX fails to load.
 
 In frontmatter, under the parameter's other keys:
 
@@ -1960,7 +1972,8 @@ synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
 4. **Parts** `G`: `r ← r mod G` over `G` ranks — when `G` is below the rank count; otherwise the
    ranks stand, so the slot count never exceeds what the members fill. `G = 0` is off.
 5. **Spread** `s`, 0–2: `offset = s × r / R`. 100 % is the Order's own; 50 % packs the heads into
-   half a cycle (a tighter ripple); 200 % runs them over two.
+   half a cycle (a tighter ripple); 200 % runs them over two. Under `spreadUnit: STEP` (below) it is
+   `s × r / steps` instead, `s` 0–16.
 
 `distinctSlots` is the rank count after step 4 (`DistributionPlan.slots`, each context's
 `numDistinctSlots`, and `FxDynamics.distinctSlots` — the same count in constant time, for the
@@ -1970,6 +1983,52 @@ are two slots, the odd heads and the even heads taking turns a step each. `PING_
 the offsets. At the default shape (100 %, 1, 1, 0) the
 plan does not run the shaping at all, so an FX that names no shape keeps its offsets bit for
 bit (P6). The plan cache (`FxDistributionPlans`) is keyed on the shape as on the Order.
+
+**Each head later by a step** (fx-settings plan D6, session 4). `SpreadShape.unit`, a
+`SpreadUnit`, says what `spread` counts: `CYCLE`, the share of the cycle over every slot, as above, or
+`STEP`, how many of the FX's **own steps** each slot starts after the one before — `offset = s × r /
+steps`, on the ranks steps 2–4 left. Colour Cycle with three colours over four heads at `CYCLE` 1
+starts them a quarter of a cycle apart and its colours change every third, so the edges stagger; at
+`STEP` 1 they start a third apart, each head one colour behind the last, and every colour changes on
+one boundary — and still does when a fifth head joins, because the desk resolves the step count at
+expansion rather than the client storing a spread worked out for four heads. `STEP` may run past
+`MAX_SPREAD` (eight heads over three colours is 8⁄3 of a cycle); 200 % caps only a stored `CYCLE` value.
+
+An FX steps when its frontmatter names the list parameter its steps come from — `stepsFrom: colours`
+on Colour Cycle, `palettes` on Palette Steps, `slots` on Slot Steps (`FxRegistration.stepsFrom`,
+`FxTypeInfo.stepsFrom` on `GET /fx/library`) — and `Fx.stepCount` counts that list as the FX reads it
+(`TypedParams.stepCount`: a colour the colour list drops is no step). `FxInstance.planSteps` asks for it
+only under `STEP`, and the plan cache is keyed on the unit and the count, so a colour-list edit or a
+palette that stops resolving re-plans. A `STEP` FX with no count (a stored row whose type lost its
+`stepsFrom`) runs as `CYCLE`. A project FX definition declares no `stepsFrom`.
+
+- **The unit's homes.** An `FxDynamics` field edited in place, phase kept; `spread_unit` on `look_fx`,
+  `cue_ad_hoc_fx` and `palette_fx`, nullable, `STEP` or null for `CYCLE` (`SpreadUnit.STORED_DEFAULT`,
+  so no row written before it changes meaning, and `SpreadUnit.canonical` writes `CYCLE` as null);
+  `LookFxSpec`, `StoredFx`, `LookFxSettings` (so Record, Include, Update and the Timeline's
+  `comparableFxSettings` keep it), every FX DTO, `POST /fx/add`, `PUT /fx/{id}`, the `updateFx` frame,
+  `POST /programmer/fx`, the group route, the sync DTOs from `formatVersion` 43
+  (`docs/sync-engineering.md` §"Version 43") and MCP's FX schemas.
+- **A new step FX starts one step behind** (D7): every door that starts or creates an FX writes `STEP`
+  and 1 for an FX with `stepsFrom` when the author names neither a spread nor a unit — `POST /fx/add`,
+  `POST /programmer/fx` and the group route (`requestedSpreadShape`), MCP's FX tools, and on the client
+  the picker, a cue's draft FX and a new FX palette (`newFxSpread`). A spread sent without a unit is
+  the cycle's, as it always was.
+- **Refused** at the write boundary: `STEP` on an FX with no steps (by the FX's name) and a `STEP`
+  spread outside 0–16 (`spreadProblem`'s `unit` and `fxSteps`; the stored homes ask the registry,
+  `FxRegistry.steps`). A stored `STEP` spread above 16 clamps on spawn.
+- **A swap off a step FX** (`PUT /fx/{id}` with a new `fxType` and no unit) leaves `STEP` for the
+  `CYCLE` spread that runs the heads' offsets, `spread × slots / steps` over the most slots the FX
+  spreads over (`SpreadShaping.cycleSpread`, `FxEngine.spreadSlots`), capped at 200 %; a swap onto
+  another FX that steps keeps `STEP`. The palette editor, which has no heads, swaps onto the cycle's
+  own spread.
+- The editor draws the Spread field in steps under `STEP`, its dials count the FX's steps
+  (`lib/spreadShape.ts`'s `stepCountOf`), and the graph's Spread knob drags in them; choosing the unit is
+  the FX settings plan's session 6.
+- **`stepsFrom` is kept by the FX.** A script's `registerFx` naming one is refused unless the FX its
+  factory builds answers `stepCount` (a copied built-in's does), and a stored `STEP` on an FX with no
+  steps spawns as `CYCLE` in the cycle's range. MCP's reads always say a step FX's spread and unit,
+  since a write naming neither starts it one step behind.
 
 **Runs end N cycles past the largest member offset — the shaped one.** A member's own clock is
 the FX's less its offset, so under Spread 50 % two runs over four heads (offsets 0, ⅛, ¼, ⅜)
@@ -1992,7 +2051,7 @@ to the same offsets, Random's shuffle included.
   clamped with a warn on spawn (`Lenient.spreadShape`), and stored wings under a mirrored Order are
   left as stored and not run.
 - **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `spread`, `wings`, `segments` and
-  `parts`; `PUT /fx/{id}` and `updateFx` take each with null meaning keep (`parts: 0` turns them
+  `parts` (and `spreadUnit`, above); `PUT /fx/{id}` and `updateFx` take each with null meaning keep (`parts: 0` turns them
   off). `FxDto` and the group and indirect DTOs report them. The MCP FX schemas take the four
   (`AiToolSchemas.putFxDynamics`), and `describe_rig` and `get_current_state` say them where they
   are not the default.

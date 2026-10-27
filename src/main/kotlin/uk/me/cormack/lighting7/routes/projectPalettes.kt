@@ -580,6 +580,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                         this.wings = effect.wings
                         this.segments = effect.segments
                         this.parts = effect.parts
+                        this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(effect.spreadUnit)
                     }
                 }
                 CopyPaletteOutcome.Copied(
@@ -1289,6 +1290,9 @@ private fun validatePaletteFx(
         wings = effect.wings,
         segments = effect.segments,
         parts = effect.parts,
+        spreadUnit = effect.spreadUnit,
+        fxType = effect.fxType,
+        fxSteps = registry.steps(effect.fxType),
     )?.let { return it }
 
     registry.fxWriteProblem(effect.fxType, effect.parameters, effect.family)?.let { return it }
@@ -1403,6 +1407,7 @@ private fun createPaletteFx(template: DaoPalette, effect: PaletteFxDto, uuid: ja
         this.wings = effect.wings
         this.segments = effect.segments
         this.parts = effect.parts
+        this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(effect.spreadUnit)
     }
 }
 
@@ -1550,6 +1555,7 @@ internal fun DaoPaletteFxEntity.toDto(registry: FxRegistry) = PaletteFxDto(
     wings = wings,
     segments = segments,
     parts = parts,
+    spreadUnit = spreadUnit,
     // The registry is the authority, exactly as it is for `category` — which the write boundary
     // checks rather than trusts. Unlike `category` this one is not stored at all: an effect's
     // timing source is a property of the *effect type*, so a column would be a second copy that a

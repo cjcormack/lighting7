@@ -1,5 +1,5 @@
 import { SPEED_STEPS } from '@/components/fx/fxConstants'
-import { MAX_SPREAD } from '@/lib/spreadShape'
+import { MAX_SPREAD, MAX_STEP_SPREAD } from '@/lib/spreadShape'
 import type { FxPreviewFx } from '@/store/fxPreview'
 import { SAMPLES_PER_CYCLE } from './fxGraphModel'
 
@@ -47,23 +47,25 @@ export function cycleFromDrag(startCycle: number, plotLeft: number, edgeX: numbe
 
 /**
  * How far a row's offset moves for each unit of Spread: its rank over the rank count once Parts has
- * acted, from the desk's ladder (offset = Spread × that share). Null where the row has no rung.
+ * acted, from the desk's ladder (offset = Spread × that share) — over the FX's own [steps] instead
+ * under a `STEP` spread (fx-settings plan D6), as the desk divides. Null where the row has no rung.
  */
-export function spreadShareOf(fx: Pick<FxPreviewFx, 'ladder'>, row: number): number | null {
+export function spreadShareOf(fx: Pick<FxPreviewFx, 'ladder'>, row: number, steps: number | null = null): number | null {
   const rank = fx.ladder.parts.ranks[row]
   const count = fx.ladder.parts.counts[row]
-  return rank == null || count == null || count <= 0 ? null : rank / count
+  if (rank == null || count == null || count <= 0) return null
+  return rank / (steps != null ? Math.max(steps, 1) : count)
 }
 
 /**
  * Spread from the chase line, a row's start tick dragged [dxSamples] to the right: the row's start
  * follows the finger, so Spread moves by the drag over the row's share of a cycle. Clamped to the
- * desk's range, to a whole percent.
+ * desk's range — 0–2, or 0–16 when it counts steps — to a hundredth.
  */
-export function spreadFromDrag(startSpread: number, dxSamples: number, share: number): number {
+export function spreadFromDrag(startSpread: number, dxSamples: number, share: number, inSteps = false): number {
   if (!(share > 0)) return startSpread
   const next = startSpread + dxSamples / (SAMPLES_PER_CYCLE * share)
-  return Math.round(Math.max(0, Math.min(MAX_SPREAD, next)) * 100) / 100
+  return Math.round(Math.max(0, Math.min(inSteps ? MAX_STEP_SPREAD : MAX_SPREAD, next)) * 100) / 100
 }
 
 /**

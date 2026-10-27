@@ -32,4 +32,25 @@ class RegisterFxMetadataTest : RouteIntegrationTest() {
         assertNotNull(state.show.fxRegistry.getRegistration("SoundProbe"))
         state.show.fxRegistry.unregister("SoundProbe")
     }
+
+    @Test
+    fun `a script FX naming stepsFrom must count its steps, as a copied built-in does`() {
+        val script = object : FxDefinitionScript(state.show, "probe") {}
+        val plain = object : uk.me.cormack.lighting7.fx.Fx {
+            override val name = "Plain"
+            override val outputType = FxOutputType.SLIDER
+            override fun calculate(phase: Double, context: uk.me.cormack.lighting7.fx.FxContext) =
+                uk.me.cormack.lighting7.fx.FxOutput.Slider(0u)
+        }
+        val error = assertFailsWith<IllegalArgumentException> {
+            script.registerFx(registration("StepProbe").copy(stepsFrom = "colours", factory = { _, _, _ -> plain }))
+        }
+        assertTrue("stepCount" in error.message.orEmpty(), error.message)
+        assertNull(state.show.fxRegistry.getRegistration("StepProbe"))
+
+        val cycle = assertNotNull(state.show.fxRegistry.getRegistration("ColourCycle"))
+        script.registerFx(cycle.copy(id = "my-cycle", name = "My Cycle", aliases = emptySet()))
+        assertTrue(state.show.fxRegistry.steps("my-cycle") == true)
+        state.show.fxRegistry.unregister("my-cycle")
+    }
 }

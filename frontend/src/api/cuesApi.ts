@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import type { SceneryChange, TrackedScenery } from './sceneryApi'
 import type { CueType } from './cueStacksApi'
 import type { FxDirection, Timing } from './fxApi'
@@ -143,6 +144,8 @@ export interface CueAdHocFx {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * The stored effect's uuid, on read only: a cue write keeps the uuid of every effect it keeps, so
    * this names one effect across writes. The desk ignores it on write and `buildCueInput` strips it.

@@ -197,6 +197,8 @@ data class CueAdHocFxDto(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** What [spread] counts (fx-settings plan D6): `STEP`, the FX's own steps; null is `CYCLE`. */
+    val spreadUnit: String? = null,
     /**
      * The stored effect's uuid, on read only, so a client can name one effect across writes
      * (show-cue-editing plan §3.4): a write keeps the uuid of every effect it keeps. Ignored by a
@@ -325,6 +327,8 @@ object DaoCueAdHocFx : IntIdTable("cue_ad_hoc_fx") {
     val wings = integer("spread_wings").default(1)
     val segments = integer("spread_segments").default(1)
     val parts = integer("spread_parts").default(0)
+    /** [LookFxSpec.spreadUnit]: `STEP`, or null for `CYCLE` — every row written before it existed. */
+    val spreadUnit = varchar("spread_unit", 8).nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     /** The run key (stack-timeline plan D7), null for an effect in no run; see [CueAdHocFxDto.runUuid]. */
@@ -371,6 +375,7 @@ class DaoCueAdHocFxEntity(id: EntityID<Int>) : IntEntity(id) {
     var wings by DaoCueAdHocFx.wings
     var segments by DaoCueAdHocFx.segments
     var parts by DaoCueAdHocFx.parts
+    var spreadUnit by DaoCueAdHocFx.spreadUnit
     var uuid by DaoCueAdHocFx.uuid
     var runUuid by DaoCueAdHocFx.runUuid
 }
@@ -671,6 +676,7 @@ internal fun DaoCueAdHocFxEntity.toDto() = CueAdHocFxDto(
     wings = wings,
     segments = segments,
     parts = parts,
+    spreadUnit = spreadUnit,
     uuid = uuid.toString(),
     runUuid = runUuid?.toString(),
 )

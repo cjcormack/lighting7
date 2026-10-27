@@ -147,6 +147,7 @@ export function NewPaletteFromFxSheet({
       ...(effect.wings != null && effect.wings !== 1 ? { wings: effect.wings } : {}),
       ...(effect.segments != null && effect.segments !== 1 ? { segments: effect.segments } : {}),
       ...(effect.parts != null && effect.parts !== 0 ? { parts: effect.parts } : {}),
+      ...(effect.spreadUnit === 'STEP' ? { spreadUnit: effect.spreadUnit } : {}),
     }
     try {
       const created = await create({ projectId: projectIdNum, name: name.trim(), fx: body }).unwrap()

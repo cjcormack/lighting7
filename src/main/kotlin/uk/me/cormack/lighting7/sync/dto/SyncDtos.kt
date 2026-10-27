@@ -34,6 +34,10 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v43: a stored FX's `spreadUnit` may be `STEP` (fx-settings plan session 4): its `spread` counts the
+    // FX's own steps, not the cycle. `minReader` moves to **43**: a v42 reader would run each such FX's
+    // spread as a share of the cycle, staggering the chase. See `docs/sync-engineering.md`
+    // §"Version 43 — Each head later by".
     // v42: Path replaces Circle, Figure 8, Sweep, Pan Sweep, Tilt Sweep and Random Position; Colour
     // Cycle's `fadeRatio` is `between` and `fade`; the Flicker family's, Lightning Strike's and Colour
     // Strobe's parameters take their normalised names (fx-settings plan session 3). Read through
@@ -337,9 +341,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 42,
+    val formatVersion: Int = 43,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 42,
+    val minReader: Int = 43,
 )
 
 /**
@@ -552,6 +556,8 @@ data class LookFxJson(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** v43: `STEP` when [spread] counts the FX's own steps; absent is `CYCLE`. */
+    val spreadUnit: String? = null,
     val sortOrder: Int = 0,
 ) : StoredFxFields
 
@@ -643,6 +649,8 @@ data class PaletteFxJson(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** v43: `STEP` when [spread] counts the FX's own steps; absent is `CYCLE`. */
+    val spreadUnit: String? = null,
 ) : StoredFxFields
 
 /**
@@ -1036,6 +1044,8 @@ data class CueAdHocFxJson(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** v43: `STEP` when [spread] counts the FX's own steps; absent is `CYCLE`. */
+    val spreadUnit: String? = null,
     /**
      * The run key (stack-timeline plan D7, formatVersion 37): rows of neighbouring cues sharing one
      * are one run. Omitted when null. Not an identity, so a clone's remap leaves it as it is.

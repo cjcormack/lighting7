@@ -325,6 +325,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         this.wings = effect.wings
                         this.segments = effect.segments
                         this.parts = effect.parts
+                        this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(effect.spreadUnit)
                         sortOrder = effect.sortOrder
                     }
                 }
@@ -895,6 +896,9 @@ internal fun validateLookFx(effects: List<LookFxDto>, registry: FxRegistry): Str
                 wings = effect.wings,
                 segments = effect.segments,
                 parts = effect.parts,
+                spreadUnit = effect.spreadUnit,
+                fxType = effect.fxType,
+                fxSteps = registry.steps(effect.fxType),
             ),
             registry.fxWriteProblem(effect.fxType, effect.parameters, effect.family),
         ).map { "fx[$index]: $it" }
@@ -1045,6 +1049,7 @@ private fun DaoLookFxEntity.take(effect: LookFxDto) {
     this.wings = effect.wings
     this.segments = effect.segments
     this.parts = effect.parts
+    this.spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.canonical(effect.spreadUnit)
     sortOrder = effect.sortOrder
 }
 
@@ -1196,6 +1201,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     wings = it.wings,
                     segments = it.segments,
                     parts = it.parts,
+                    spreadUnit = it.spreadUnit,
                     sortOrder = it.sortOrder,
                 )
             },

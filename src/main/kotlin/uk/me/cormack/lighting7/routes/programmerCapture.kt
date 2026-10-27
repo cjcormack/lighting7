@@ -613,6 +613,7 @@ internal fun fxInstancesToCueChildren(
                     wings = dyn.wings,
                     segments = dyn.segments,
                     parts = dyn.parts,
+                    spreadUnit = uk.me.cormack.lighting7.fx.SpreadUnit.toStored(dyn.spreadUnit),
                 )
         )
     }

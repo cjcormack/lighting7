@@ -95,6 +95,7 @@ const draft = (over: Partial<FxDraft> = {}): FxDraft => ({
   wings: 1,
   segments: 1,
   parts: 0,
+  spreadUnit: 'CYCLE',
   ...over,
 })
 

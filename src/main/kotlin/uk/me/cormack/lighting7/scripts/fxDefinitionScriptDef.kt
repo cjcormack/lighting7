@@ -74,6 +74,15 @@ abstract class FxDefinitionScript(
             throw IllegalArgumentException("'${registration.id}' is the built-in $it's id; register the FX under another id")
         }
         LegacyNames.familyProblem(registration.family)?.let { throw IllegalArgumentException("'${registration.id}': $it") }
+        // A STEP spread counts the steps the FX answers (`Fx.stepCount`, fx-settings plan D6). Naming
+        // `stepsFrom` is a promise the FX keeps — a copied built-in's factory does, an `Fx` a script
+        // builds says none — or the FX would be offered STEP and run it as CYCLE.
+        registration.stepsFrom?.let {
+            val defaults = registration.parameters.associate { p -> p.name to p.defaultValue }
+            require(registration.factory(defaults, null, null).stepCount != null) {
+                "'${registration.id}': stepsFrom names '$it', but the FX its factory builds counts no steps (Fx.stepCount)"
+            }
+        }
         parameterMetadataProblems(registration.parameters).takeIf { it.isNotEmpty() }?.let {
             throw IllegalArgumentException("'${registration.id}': ${it.joinToString("; ")}")
         }

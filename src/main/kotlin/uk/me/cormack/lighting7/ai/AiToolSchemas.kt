@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import uk.me.cormack.lighting7.fx.ElementMode
 import uk.me.cormack.lighting7.fx.SpreadShape
+import uk.me.cormack.lighting7.fx.SpreadUnit
 
 /** What `get_current_state` can `include`; anything else is refused by name. */
 internal val CURRENT_STATE_PARTS: Set<String> = linkedSetOf(
@@ -125,13 +126,25 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putFxDynamics() {
     put("spread", buildJsonObject {
         put("type", "number")
         put("minimum", 0)
-        put("maximum", 2)
+        put("maximum", SpreadShape.MAX_STEP_SPREAD)
         put(
             "description",
             "How much of the cycle the heads cover, 0.0–2.0, over the order: 1.0 spreads them over one " +
-                "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Omit for 1.0. Spread, wings, " +
+                "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Under spreadUnit STEP it is " +
+                "instead how many of the FX's own steps each head starts after the one before, 0–16. Omit for 1.0. Spread, wings, " +
                 "segments and parts shape a spreading order only — send one (NORMAL for a chase), since an omitted " +
                 "order is UNIFIED, under which every head is in step and the shape does nothing.",
+        )
+    })
+    put("spreadUnit", buildJsonObject {
+        put("type", "string")
+        put("enum", buildJsonArray { SpreadUnit.entries.forEach { add(it.name) } })
+        put(
+            "description",
+            "What spread counts. CYCLE: a share of the cycle. STEP: the FX's own steps — Colour Cycle's colours, " +
+                "Palette Steps' palettes, Slot Steps' slots — so spread 1 puts each head one colour behind the last, " +
+                "changing together on each step whatever the head count. STEP is refused on an FX with no steps. " +
+                "Omit both spread and spreadUnit and an FX that steps starts one step behind; anything else is CYCLE.",
         )
     })
     put("wings", buildJsonObject {

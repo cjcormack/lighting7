@@ -1,3 +1,4 @@
+import type { SpreadUnit } from '@/lib/spreadShape'
 import type { ChannelRef } from '../store/fixtures'
 import type { FxDirection, Timing } from './fxApi'
 
@@ -98,6 +99,8 @@ export interface ApplyFxRequest {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -142,6 +145,8 @@ export interface GroupActiveFx {
   wings?: number
   segments?: number
   parts?: number
+  /** What `spread` counts (fx-settings plan D6): `STEP`, the FX's own steps; absent is `CYCLE`. */
+  spreadUnit?: SpreadUnit
   /** A programmer layer's N-shot that has run its count, kept painting nothing until its layer goes. */
   spent?: boolean
 }

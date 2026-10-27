@@ -61,6 +61,7 @@ import {
   startingSpec,
   type PickerFamily,
 } from './fxEditorModel'
+import { newFxSpread, type SpreadUnit } from '@/lib/spreadShape'
 
 /**
  * What an effect is started on: one fixture, a group, or a **selection** — several fixtures and
@@ -88,6 +89,9 @@ export interface DraftFxPick {
   blendMode: string
   parameters: Record<string, string>
   elementFilter?: string
+  /** One step behind for an FX that steps (fx-settings plan D7); absent otherwise. */
+  spread?: number
+  spreadUnit?: SpreadUnit
 }
 
 /**
@@ -388,6 +392,7 @@ export function FxPicker({
         blendMode: spec.blendMode,
         parameters: spec.parameters,
         ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
+        ...newFxSpread(entry.stepsFrom),
       })
       setPickedPreset(preset?.name ?? null)
       return
@@ -447,6 +452,7 @@ export function FxPicker({
         parameters: spec.parameters,
         elementMode: NEW_FX_ELEMENT_MODE,
         ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
+        ...newFxSpread(entry.stepsFrom),
       }
       const created = await (
         press != null

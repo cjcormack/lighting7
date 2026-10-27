@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fx.FxDirection
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.fx.SpreadUnit
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.GelLibrary
 import uk.me.cormack.lighting7.fixture.FixtureCommands
@@ -33,6 +34,8 @@ import uk.me.cormack.lighting7.venue.ShowOverrides
  * Every section reads the *current* project, so the text is only true for the moment it is built.
  */
 class RigBriefing(private val state: State) {
+    /** Whether [effect]'s type steps ([uk.me.cormack.lighting7.fx.FxRegistry.steps]). */
+    private fun stepping(effect: FxInstance): Boolean = state.show.fxRegistry.steps(effect.fxTypeId) == true
 
     /** `, one-shot triggers=output1 (A),output2 (B)` for a fixture with one-shot triggers — what a cue's events name. */
     private fun triggerLabel(fixture: uk.me.cormack.lighting7.fixture.Fixture): String {
@@ -182,7 +185,8 @@ class RigBriefing(private val state: State) {
         for (effect in state.show.fxRegistry.getLibrary().filterNot { it.legacy }) {
             val params = effect.parameters.joinToString(", ") { parameterBrief(it) }
             val defaults = (if (effect.defaultCycle != CycleLength.ONE_BAR) ", cycle=${effect.defaultCycle}" else "") +
-                (if (effect.defaultDirection != FxDirection.FORWARD.name) ", direction=${effect.defaultDirection}" else "")
+                (if (effect.defaultDirection != FxDirection.FORWARD.name) ", direction=${effect.defaultDirection}" else "") +
+                (effect.stepsFrom?.let { ", steps=$it" } ?: "")
             sb.appendLine(
                 "- **${effect.name}** (family=${effect.family}, output=${effect.outputType}$defaults, " +
                     "on=${effect.compatibleAttributes.joinToString("/")}) params: $params",
@@ -248,8 +252,10 @@ class RigBriefing(private val state: State) {
                             (if (dyn.amount != 1.0) ", amount=${dyn.amount}" else "") +
                                 (if (dyn.direction != FxDirection.FORWARD) ", direction=${dyn.direction}" else "") +
                                 (dyn.runs?.let { ", runs=$it" } ?: "") +
-                                // D4's shape, likewise.
-                                (if (dyn.spread != 1.0) ", spread=${dyn.spread}" else "") +
+                                // D4's shape, likewise — but an FX that steps always says its spread
+                                // and unit, since one naming neither is written back one step behind (D7).
+                                (if (stepping(effect) || dyn.spread != 1.0) ", spread=${dyn.spread}" else "") +
+                                (if (stepping(effect) || dyn.spreadUnit != SpreadUnit.CYCLE) ", spreadUnit=${dyn.spreadUnit}" else "") +
                                 (if (dyn.wings != 1) ", wings=${dyn.wings}" else "") +
                                 (if (dyn.segments != 1) ", segments=${dyn.segments}" else "") +
                                 (if (dyn.parts != 0) ", parts=${dyn.parts}" else "")
@@ -407,7 +413,7 @@ class RigBriefing(private val state: State) {
         sb.appendLine("## Key Concepts")
         sb.appendLine("- A cycle is a length in beats: 0.125, 0.25, 0.5, 1.0 (one beat), 2.0, 4.0 (one bar), 8.0 (two bars). A new FX is one bar unless asked otherwise, or unless the library names its own default.")
         sb.appendLine("- **Amount, direction and runs**: every FX takes `amount` (0–1, how much of it reaches the stage over what is underneath — 0.5 sits halfway; a movement FX's radius halves about the position underneath), `direction` (`FORWARD`, `BACKWARD` or `BOUNCE`) and `runs` (stop after that many cycles — a flash on cue is 1; omit for forever).")
-        sb.appendLine("- **The spread's shape**: an FX over several heads also takes `spread` (0–2, how much of the cycle the heads cover over the order; 0.5 is a tighter ripple), `wings` (mirrored wings, not with CENTRE_OUT or CENTRE_IN, which are two wings already), `segments` (neighbouring heads moving as one) and `parts` (the spread repeating every N heads; 0 is off). These shape a spreading `order` only — send one, since an omitted order is UNIFIED and every head runs in step.")
+        sb.appendLine("- **The spread's shape**: an FX over several heads also takes `spread` (0–2, how much of the cycle the heads cover over the order; 0.5 is a tighter ripple), `wings` (mirrored wings, not with CENTRE_OUT or CENTRE_IN, which are two wings already), `segments` (neighbouring heads moving as one) and `parts` (the spread repeating every N heads; 0 is off). These shape a spreading `order` only — send one, since an omitted order is UNIFIED and every head runs in step. An FX that steps (Colour Cycle, Palette Steps, Slot Steps) also takes `spreadUnit: STEP`, which makes `spread` the number of its own steps each head starts after the one before, so a chase stays on its steps whatever the head count; one that names neither spread nor unit starts one step behind.")
         sb.appendLine("- **Seconds**: an FX may run on its own cycle instead of following a master — `seconds: true`, with `cycle` the cycle in seconds and no `speedMasterUuid`. Use it for a slow breathe or drift that must not change speed when the tempo does.")
         sb.appendLine("- Blend modes: OVERRIDE (replace), ADDITIVE (add), MULTIPLY, MAX, MIN")
         sb.appendLine("- Orders: NORMAL (sequential chase), UNIFIED (all same), CENTRE_OUT, CENTRE_IN (from both ends to the centre), PING_PONG, REVERSE, RANDOM, POSITIONAL")

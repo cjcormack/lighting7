@@ -39,6 +39,8 @@ import {
   spreadSummary,
   MAX_SPREAD,
   MAX_SPREAD_COUNT,
+  MAX_STEP_SPREAD,
+  stepCountOf,
   type SpreadShape,
 } from '@/lib/spreadShape'
 import {
@@ -285,7 +287,14 @@ export function FxFields({
     />
   )
   const spread = scope.heads && (
-    <SpreadSection draft={draft} headCount={scope.headCount} readOnly={readOnly} set={set} ladder={layout === 'inspector'} />
+    <SpreadSection
+      draft={draft}
+      entry={entry}
+      headCount={scope.headCount}
+      readOnly={readOnly}
+      set={set}
+      ladder={layout === 'inspector'}
+    />
   )
   const shapeSummaries = shape.map((item) =>
     item.kind === 'pair'
@@ -557,12 +566,14 @@ const MAX_DIALS = 16
  */
 function SpreadSection({
   draft,
+  entry,
   headCount,
   readOnly,
   set,
   ladder,
 }: {
   draft: FxDraft
+  entry: FxLibraryEntry
   headCount: number | undefined
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
@@ -571,7 +582,16 @@ function SpreadSection({
 }) {
   const link = useFxGraphLink()
   const order = draft.order
-  const shape: SpreadShape = { spread: draft.spread, wings: draft.wings, segments: draft.segments, parts: draft.parts }
+  const shape: SpreadShape = {
+    spread: draft.spread,
+    wings: draft.wings,
+    segments: draft.segments,
+    parts: draft.parts,
+    spreadUnit: draft.spreadUnit,
+  }
+  // Under STEP the spread counts the FX's own steps (fx-settings plan D6); the choice is session 6's.
+  const inSteps = draft.spreadUnit === 'STEP'
+  const steps = stepCountOf(entry, draft.parameters)
   const mirrored = isMirroredOrder(order)
   const unison = order === 'UNIFIED'
   const named = shapeOf(draft)
@@ -586,8 +606,17 @@ function SpreadSection({
           others={link.others}
           readOnly={readOnly}
           // An FX on one head says no Order, so its spread is the defaults and copying it would say Chase.
-          refuse={({ effect }) => (effect.order == null ? 'That FX runs on one head, so it has no spread to copy' : null)}
-          onPick={(effect) => set(spreadFieldsOf(draftOf(effect)))}
+          refuse={({ effect }) =>
+            effect.order == null
+              ? 'That FX runs on one head, so it has no spread to copy'
+              : effect.spreadUnit === 'STEP' && !entry.stepsFrom
+                ? 'That FX starts each head some of its steps later, and this FX has no steps'
+                : null
+          }
+          onPick={(effect) => {
+            const from = draftOf(effect)
+            set({ ...spreadFieldsOf(from), spreadUnit: from.spreadUnit })
+          }}
         />
       )}
       {unison ? (
@@ -595,20 +624,34 @@ function SpreadSection({
       ) : (
         <>
           <Lights mark="starts">
-            <SliderRow
-              label="Spread"
-              unit="%"
-              value={draft.spread}
-              min={0}
-              max={MAX_SPREAD}
-              step={0.01}
-              display={(v) => Math.round(v * 100)}
-              fromDisplay={(d) => d / 100}
-              displayMin={0}
-              displayMax={MAX_SPREAD * 100}
-              readOnly={readOnly}
-              onChange={(spread, release) => set({ spread }, release)}
-            />
+            {inSteps ? (
+              <SliderRow
+                label="Spread"
+                unit="steps"
+                value={draft.spread}
+                min={0}
+                max={MAX_STEP_SPREAD}
+                step={0.05}
+                display={(v) => Math.round(v * 100) / 100}
+                readOnly={readOnly}
+                onChange={(spread, release) => set({ spread }, release)}
+              />
+            ) : (
+              <SliderRow
+                label="Spread"
+                unit="%"
+                value={draft.spread}
+                min={0}
+                max={MAX_SPREAD}
+                step={0.01}
+                display={(v) => Math.round(v * 100)}
+                fromDisplay={(d) => d / 100}
+                displayMin={0}
+                displayMax={MAX_SPREAD * 100}
+                readOnly={readOnly}
+                onChange={(spread, release) => set({ spread }, release)}
+              />
+            )}
           </Lights>
           <div className="grid grid-cols-3 gap-2">
             {mirrored ? (
@@ -636,9 +679,15 @@ function SpreadSection({
         </>
       )}
       {ladder && link != null ? (
-        <OffsetLadder ladder={link.ladder} spread={draft.spread} hoveredRow={link.hoveredRow} onHoverRow={link.setLadderRow} />
+        <OffsetLadder
+          ladder={link.ladder}
+          spread={draft.spread}
+          spreadUnit={draft.spreadUnit}
+          hoveredRow={link.hoveredRow}
+          onHoverRow={link.setLadderRow}
+        />
       ) : (
-        <SpreadDials order={order} shape={shape} headCount={headCount} />
+        <SpreadDials order={order} shape={shape} steps={steps} headCount={headCount} />
       )}
     </Disclosure>
   )
@@ -694,7 +743,7 @@ function ShapeChips({ draft, readOnly, onPick }: { draft: FxDraft; readOnly: boo
 
 /** A Shape's offsets over eight notional heads: a dot a head, left to right, higher the later in the cycle. */
 function ShapeDrawing({ shape }: { shape: FxShape }) {
-  const { offsets } = spreadOffsets(shape.fields.order, SHAPE_HEADS, shape.fields)
+  const { offsets } = spreadOffsets(shape.fields.order, SHAPE_HEADS, { ...shape.fields, spreadUnit: 'CYCLE' })
   return (
     <svg viewBox="0 0 40 16" width={40} height={16} aria-hidden data-shape-drawing className="shrink-0 text-primary">
       {offsets.map((o, i) => (
@@ -743,9 +792,19 @@ function CountRow({
  * palette, the FX's own heads live, up to sixteen and then *+n* — each hand at the head's offset
  * through the cycle, as the desk will run it. A preview: nothing here is sent.
  */
-function SpreadDials({ order, shape, headCount }: { order: string; shape: SpreadShape; headCount: number | undefined }) {
+function SpreadDials({
+  order,
+  shape,
+  steps,
+  headCount,
+}: {
+  order: string
+  shape: SpreadShape
+  steps: number | null
+  headCount: number | undefined
+}) {
   const heads = headCount ?? NOTIONAL_HEADS
-  const { offsets } = spreadOffsets(order, heads, shape)
+  const { offsets } = spreadOffsets(order, heads, shape, steps)
   const shown = offsets.slice(0, MAX_DIALS)
   const more = offsets.length - shown.length
   const degrees = shown.map((o) => Math.round((((o % 1) + 1) % 1) * 360))

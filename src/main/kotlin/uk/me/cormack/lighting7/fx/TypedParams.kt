@@ -206,6 +206,17 @@ class TypedParams(
         if (names.isEmpty()) StepList.EMPTY else SlotStepList(names)
     }
 
+    /**
+     * How many steps list parameter [name] holds, as its own reader parses it — so a colour the
+     * colour list drops is no step — for a `stepsFrom` declaration ([Fx.stepCount]).
+     */
+    fun stepCount(name: String): Int = when (schema.firstOrNull { it.name == name }?.type) {
+        "colourList" -> colourList(name).size
+        "paletteList" -> paletteSteps(name).size
+        "slotList" -> slotSteps(name).size
+        else -> raw(name).split(",").count { it.isNotBlank() }
+    }
+
     /** Parse an EasingCurve parameter. */
     fun easingCurve(name: String): EasingCurve = easingCurveCache.getOrPut(name) {
         raw(name).toEasingCurveParam() ?: EasingCurve.LINEAR

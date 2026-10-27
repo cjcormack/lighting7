@@ -43,11 +43,13 @@ internal class DistributionPlan private constructor(
          * Plan for a real member list ([FxTargetExpansion.members]): the Order's offsets (§3.3 step
          * 1), shaped by [shape] (steps 2–5, [SpreadShaping]). At [SpreadShape.DEFAULT] the shaping is
          * not run at all, so an effect that names no shape keeps its offsets bit for bit (P6).
+         * [steps] is the FX's step count, which a [SpreadUnit.STEP] spread counts in.
          */
         fun of(
             order: SpreadOrder,
             members: List<DistributionMemberInfo>,
             shape: SpreadShape = SpreadShape.DEFAULT,
+            steps: Int? = null,
         ): DistributionPlan {
             val size = members.size
             if (size == 0) return EMPTY
@@ -57,7 +59,7 @@ internal class DistributionPlan private constructor(
                 offsets = order.offsets(members, size)
                 distinctSlots = order.distinctSlots(size)
             } else {
-                val shaped = shaped(order, members, shape, ladder = null)
+                val shaped = shaped(order, members, shape, ladder = null, steps)
                 offsets = shaped.offsets
                 distinctSlots = shaped.slots
             }
@@ -100,6 +102,7 @@ internal class DistributionPlan private constructor(
             members: List<DistributionMemberInfo>,
             shape: SpreadShape,
             ladder: SpreadShaping.Ladder?,
+            steps: Int? = null,
         ): SpreadShaping.Result {
             val size = members.size
             val rankCount = order.distinctSlots(size)
@@ -111,7 +114,7 @@ internal class DistributionPlan private constructor(
             } else {
                 order.ranks(members, size)
             }
-            return SpreadShaping.shape(ranks, rankCount, shape, wingsApply, ladder)
+            return SpreadShaping.shape(ranks, rankCount, shape, wingsApply, ladder, steps)
         }
 
         private fun elementSlots(count: Int): List<DistributionMemberInfo> =
@@ -126,9 +129,10 @@ internal class DistributionPlan private constructor(
             order: SpreadOrder,
             count: Int,
             shape: SpreadShape = SpreadShape.DEFAULT,
+            steps: Int? = null,
         ): DistributionPlan {
             if (count == 0) return EMPTY
-            return of(order, elementSlots(count), shape)
+            return of(order, elementSlots(count), shape, steps)
         }
     }
 }
@@ -149,6 +153,8 @@ internal class FxDistributionPlans private constructor(
     val order: SpreadOrder,
     /** The [FxDynamics.spreadShape] these were built for. */
     val shape: SpreadShape,
+    /** The FX's step count these were built for ([Fx.stepCount]); read only under [SpreadUnit.STEP]. */
+    val steps: Int?,
     /** [FxTargetExpansion.Kind.GROUP_MEMBERS]. */
     val members: DistributionPlan,
     /** [FxTargetExpansion.flat]. */
@@ -163,39 +169,40 @@ internal class FxDistributionPlans private constructor(
             expansion: FxTargetExpansion,
             order: SpreadOrder,
             shape: SpreadShape = SpreadShape.DEFAULT,
+            steps: Int? = null,
         ): FxDistributionPlans =
             when (expansion.kind) {
                 FxTargetExpansion.Kind.GROUP_MEMBERS -> FxDistributionPlans(
-                    expansion, order, shape,
-                    members = DistributionPlan.of(order, expansion.members, shape),
+                    expansion, order, shape, steps,
+                    members = DistributionPlan.of(order, expansion.members, shape, steps),
                     flat = DistributionPlan.EMPTY,
                     perFixture = emptyList(),
                     whole = DistributionPlan.EMPTY,
                 )
 
                 FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> FxDistributionPlans(
-                    expansion, order, shape,
+                    expansion, order, shape, steps,
                     members = DistributionPlan.EMPTY,
-                    flat = DistributionPlan.forElements(order, expansion.flat.size, shape),
+                    flat = DistributionPlan.forElements(order, expansion.flat.size, shape, steps),
                     perFixture = emptyList(),
-                    whole = DistributionPlan.forElements(order, expansion.whole.size, shape),
+                    whole = DistributionPlan.forElements(order, expansion.whole.size, shape, steps),
                 )
 
                 FxTargetExpansion.Kind.GROUP_ELEMENTS -> FxDistributionPlans(
-                    expansion, order, shape,
+                    expansion, order, shape, steps,
                     members = DistributionPlan.EMPTY,
-                    flat = DistributionPlan.forElements(order, expansion.flat.size, shape),
+                    flat = DistributionPlan.forElements(order, expansion.flat.size, shape, steps),
                     perFixture = expansion.perFixture.map {
-                        DistributionPlan.forElements(order, it.size, shape)
+                        DistributionPlan.forElements(order, it.size, shape, steps)
                     },
-                    whole = DistributionPlan.forElements(order, expansion.whole.size, shape),
+                    whole = DistributionPlan.forElements(order, expansion.whole.size, shape, steps),
                 )
 
                 // DIRECT_FIXTURE uses FxContext.SINGLE; NONE applies nothing.
                 FxTargetExpansion.Kind.DIRECT_FIXTURE,
                 FxTargetExpansion.Kind.NONE,
                 -> FxDistributionPlans(
-                    expansion, order, shape,
+                    expansion, order, shape, steps,
                     members = DistributionPlan.EMPTY,
                     flat = DistributionPlan.EMPTY,
                     perFixture = emptyList(),

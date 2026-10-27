@@ -75,6 +75,11 @@ data class FxRegistration(
      * reproduces exactly. It runs and is edited as any FX, but no picker or listing offers it.
      */
     val legacy: Boolean = false,
+    /**
+     * The list parameter whose entries are this FX's steps (fx-settings plan D6) — Colour Cycle's
+     * `colours` — or null: only an FX that names one takes a [SpreadUnit.STEP] spread.
+     */
+    val stepsFrom: String? = null,
     /** Factory to create an Effect instance from string parameters */
     val factory: FxFactory,
 )
@@ -102,6 +107,8 @@ data class FxTypeInfo(
     val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
     /** Kept for stored FX only, never offered ([FxRegistration.legacy]); absent is false. */
     val legacy: Boolean = false,
+    /** [FxRegistration.stepsFrom]; absent for an FX with no steps. */
+    val stepsFrom: String? = null,
 )
 
 /**
@@ -229,6 +236,12 @@ class FxRegistry {
     }
 
     /**
+     * Whether [fxType] runs through steps a [SpreadUnit.STEP] spread can count ([FxRegistration.stepsFrom]),
+     * or null for a type the registry does not know.
+     */
+    fun steps(fxType: String): Boolean? = getRegistration(fxType)?.let { it.stepsFrom != null }
+
+    /**
      * Get the effect library as DTOs for the API.
      */
     fun getLibrary(): List<FxTypeInfo> {
@@ -251,6 +264,7 @@ class FxRegistry {
                     presets = reg.presets,
                     attributeDefaults = reg.attributeDefaults,
                     legacy = reg.legacy,
+                    stepsFrom = reg.stepsFrom,
                 )
             }
     }

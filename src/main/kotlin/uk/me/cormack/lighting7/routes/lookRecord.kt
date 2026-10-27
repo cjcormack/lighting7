@@ -624,6 +624,7 @@ private fun DaoLookFxEntity.takeSettings(settings: LookFxSettings) {
     this.wings = settings.wings
     this.segments = settings.segments
     this.parts = settings.parts
+    this.spreadUnit = settings.spreadUnit
 }
 
 /**
@@ -656,6 +657,7 @@ private fun DaoLookFxEntity.takeChanges(baseline: LookFxSettings, edited: LookFx
     if (edited.wings != baseline.wings) wings = edited.wings
     if (edited.segments != baseline.segments) segments = edited.segments
     if (edited.parts != baseline.parts) parts = edited.parts
+    if (edited.spreadUnit != baseline.spreadUnit) spreadUnit = edited.spreadUnit
     // The timing is one choice (D7) — Seconds or a master — so it is written whole when any part of it
     // moved: a wall-clock row stored with the flag keeps reading Seconds after a rate master is named
     // unless the flag is cleared with it, and an edit onto Seconds nulls the masters beside it.

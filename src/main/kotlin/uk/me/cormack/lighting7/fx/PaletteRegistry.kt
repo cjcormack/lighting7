@@ -336,6 +336,7 @@ internal fun loadPaletteSnapshot(database: Database, paletteUuid: UUID): Palette
                     wings = fx.wings,
                     segments = fx.segments,
                     parts = fx.parts,
+                    spreadUnit = fx.spreadUnit,
                     uuid = fx.uuid,
                 )
             },

@@ -5,7 +5,8 @@
     "Read by fx/SpreadShapeTest.kt (DistributionPlan.forElements) and frontend/src/lib/spreadShape.test.ts.",
     "An absent spread, wings, segments or parts is its default: 1.0, 1, 1, 0 (off). Offsets compare to 1e-9.",
     "Random is SpreadOrder.RANDOM's default seed 0.",
-    "A case with `over` is one element mode over `fixtures` fixtures of `elementsEach` elements: `heads` is the units the spread counts (the dials), and SpreadShapeTest checks every element takes its unit's offset."
+    "A case with `over` is one element mode over `fixtures` fixtures of `elementsEach` elements: `heads` is the units the spread counts (the dials), and SpreadShapeTest checks every element takes its unit's offset.",
+    "A case with `spreadUnit: STEP` counts `spread` in the FX's own `steps` (fx-settings plan D6): offset = spread x rank / steps, on the ranks Segments, Wings and Parts leave."
   ],
   "cases": [
     {
@@ -596,6 +597,137 @@
         0.666666666667
       ],
       "slots": 3
+    },
+    {
+      "name": "STEP 1 over 4 heads, 3 colours: each one colour behind",
+      "order": "NORMAL",
+      "heads": 4,
+      "spreadUnit": "STEP",
+      "steps": 3,
+      "offsets": [
+        0.0,
+        0.3333333333333333,
+        0.6666666666666666,
+        1.0
+      ],
+      "slots": 4
+    },
+    {
+      "name": "STEP 1 over 5 heads, 3 colours: a head joins and the chase stays on its steps",
+      "order": "NORMAL",
+      "heads": 5,
+      "spreadUnit": "STEP",
+      "steps": 3,
+      "offsets": [
+        0.0,
+        0.3333333333333333,
+        0.6666666666666666,
+        1.0,
+        1.3333333333333333
+      ],
+      "slots": 5
+    },
+    {
+      "name": "STEP 1 over 8 heads, 3 colours: above MAX_SPREAD",
+      "order": "NORMAL",
+      "heads": 8,
+      "spreadUnit": "STEP",
+      "steps": 3,
+      "offsets": [
+        0.0,
+        0.3333333333333333,
+        0.6666666666666666,
+        1.0,
+        1.3333333333333333,
+        1.6666666666666667,
+        2.0,
+        2.3333333333333335
+      ],
+      "slots": 8
+    },
+    {
+      "name": "STEP 2 over 4 heads, 5 steps",
+      "order": "NORMAL",
+      "heads": 4,
+      "spread": 2.0,
+      "spreadUnit": "STEP",
+      "steps": 5,
+      "offsets": [
+        0.0,
+        0.4,
+        0.8,
+        1.2
+      ],
+      "slots": 4
+    },
+    {
+      "name": "STEP 1 after Segments of 2 over 8 heads, 3 steps",
+      "order": "NORMAL",
+      "heads": 8,
+      "segments": 2,
+      "spreadUnit": "STEP",
+      "steps": 3,
+      "offsets": [
+        0.0,
+        0.0,
+        0.3333333333333333,
+        0.3333333333333333,
+        0.6666666666666666,
+        0.6666666666666666,
+        1.0,
+        1.0
+      ],
+      "slots": 4
+    },
+    {
+      "name": "STEP 1 after 2 Wings over 8 heads, 4 steps",
+      "order": "NORMAL",
+      "heads": 8,
+      "wings": 2,
+      "spreadUnit": "STEP",
+      "steps": 4,
+      "offsets": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        0.75,
+        0.5,
+        0.25,
+        0.0
+      ],
+      "slots": 4
+    },
+    {
+      "name": "STEP 1 after Parts of 2 over 6 heads, 3 steps",
+      "order": "NORMAL",
+      "heads": 6,
+      "parts": 2,
+      "spreadUnit": "STEP",
+      "steps": 3,
+      "offsets": [
+        0.0,
+        0.3333333333333333,
+        0.0,
+        0.3333333333333333,
+        0.0,
+        0.3333333333333333
+      ],
+      "slots": 2
+    },
+    {
+      "name": "STEP 1 under Unified over 4 heads, 3 steps",
+      "order": "UNIFIED",
+      "heads": 4,
+      "spreadUnit": "STEP",
+      "steps": 3,
+      "offsets": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "slots": 1
     }
   ]
 }

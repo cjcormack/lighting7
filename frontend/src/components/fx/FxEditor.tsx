@@ -32,6 +32,7 @@ import {
 } from './fxEditorModel'
 import { useFxScope } from './useFxScope'
 import { useFxGraphLink } from './fxGraphLink'
+import { stepCountOf } from '@/lib/spreadShape'
 
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
@@ -224,6 +225,7 @@ export function FxEditor({
   const levels = levelPair != null
   const libraryDefaults = useMemo(() => (entry ? defaultParameters(entry) : {}), [entry])
   const holding = hold != null
+  const steps = useMemo(() => stepCountOf(entry, draft.parameters), [entry, draft.parameters])
   useEffect(() => {
     const target = linkRef.current
     if (target == null) return
@@ -234,12 +236,13 @@ export function FxEditor({
       levels,
       ...(levelPair != null ? { levelParams: levelPair } : {}),
       wallClock: (entry?.timingSource ?? effect.timingSource) === 'WALL_CLOCK',
+      steps,
       readOnly: !connected || holding,
       set: (patch, release) => write({ ...draftRef.current, ...patch }, release, OPTIONAL_FIELDS.filter((field) => field in patch)),
       setParam: (name, value, release) =>
         write({ ...draftRef.current, parameters: { ...draftRef.current.parameters, [name]: value } }, release),
     })
-  }, [connected, draft, effect.id, effect.timingSource, entry?.timingSource, holding, levels, levelPair, libraryDefaults, write])
+  }, [connected, draft, effect.id, effect.timingSource, entry?.timingSource, holding, levels, levelPair, libraryDefaults, steps, write])
   useEffect(
     () => () => {
       linkRef.current?.detach(effect.id)

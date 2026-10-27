@@ -165,7 +165,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 42, minReader = 42), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 43, minReader = 43), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -213,7 +213,7 @@ class ProjectRoundTripTest {
             stream.toList().map { canonicalDecode(PaletteJson.serializer(), Files.readString(it)) }
         }
 
-        val fxPalette = templates.single { it.fx != null }
+        val fxPalette = templates.single { it.name == "amber-breathe" }
         assertEquals("amber-breathe", fxPalette.name)
         assertTrue(fxPalette.rows.isEmpty(), "an effect template holds no rows (D1)")
         val effect = fxPalette.fx!!
@@ -228,12 +228,12 @@ class ProjectRoundTripTest {
         assertEquals("CYCLE", effect.timing)
         assertTrue(effect.parameters.getValue("colours").startsWith("pal:"))
 
-        // The other two palettes hold values, and `explicitNulls = false` must keep the key out
+        // The other two palettes but the step chase hold values, and `explicitNulls = false` must keep the key out
         // of their documents entirely rather than writing `"fx": null`.
         val valueDocs = Files.list(exportDirA.resolve("palettes")).use { stream ->
             stream.toList()
                 .map { Files.readString(it) }
-                .filter { !it.contains("amber-breathe") }
+                .filter { !it.contains("amber-breathe") && !it.contains("steps-chase") }
         }
         assertEquals(2, valueDocs.size)
         assertTrue(
@@ -261,7 +261,7 @@ class ProjectRoundTripTest {
         val lookFx = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
             .single { it.name == "warm-pulse" }.fx.single()
         assertTrue(lookFx.seconds, "a Look's effect keeps Seconds")
-        val paletteFx = docs("palettes", PaletteJson.serializer()).single { it.fx != null }.fx!!
+        val paletteFx = docs("palettes", PaletteJson.serializer()).single { it.name == "amber-breathe" }.fx!!
         assertTrue(paletteFx.seconds, "a palette's effect keeps Seconds")
         val adHoc = openPulse(exportDirA)
         assertTrue(adHoc.seconds, "a cue's ad-hoc effect keeps Seconds")
@@ -293,7 +293,7 @@ class ProjectRoundTripTest {
         val lookFx = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
             .single { it.name == "warm-pulse" }.fx.single()
         assertEquals(Triple(0.4, "BACKWARD", 2), Triple(lookFx.amount, lookFx.direction, lookFx.runs))
-        val paletteFx = docs("palettes", PaletteJson.serializer()).single { it.fx != null }.fx!!
+        val paletteFx = docs("palettes", PaletteJson.serializer()).single { it.name == "amber-breathe" }.fx!!
         assertEquals(Triple(0.75, "BOUNCE", 3), Triple(paletteFx.amount, paletteFx.direction, paletteFx.runs))
         val adHoc = openPulse(exportDirA)
         assertEquals(Triple(0.6, "BACKWARD", 1), Triple(adHoc.amount, adHoc.direction, adHoc.runs))
@@ -325,7 +325,7 @@ class ProjectRoundTripTest {
         val lookFx = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
             .single { it.name == "warm-pulse" }.fx.single()
         assertEquals(Shape(0.5, 2, 3, 4), Shape(lookFx.spread, lookFx.wings, lookFx.segments, lookFx.parts))
-        val paletteFx = docs("palettes", PaletteJson.serializer()).single { it.fx != null }.fx!!
+        val paletteFx = docs("palettes", PaletteJson.serializer()).single { it.name == "amber-breathe" }.fx!!
         assertEquals(
             Shape(1.5, 3, 2, 2),
             Shape(paletteFx.spread, paletteFx.wings, paletteFx.segments, paletteFx.parts),
@@ -346,6 +346,51 @@ class ProjectRoundTripTest {
         }
         assertTrue(lookText.size > 1, "the fixture has more than the one shaped Look")
         assertEquals(1, lookText.count { "\"wings\"" in it }, "only the shaped Look carries the keys")
+    }
+
+    /** A stored FX whose spread counts its steps (fx-settings plan D6) exports `spreadUnit`, and only it. */
+    @Test
+    fun `a STEP spread exports its unit and round-trips`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val looks = exportDocs(exportDirA, "looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
+        val chase = looks.single { it.name == "Steps chase" }.fx.single()
+        assertEquals("STEP", chase.spreadUnit)
+        assertEquals(2.0, chase.spread)
+        assertTrue(looks.filter { it.name != "Steps chase" }.flatMap { it.fx }.all { it.spreadUnit == null }, "a CYCLE spread writes no key")
+        val paletteFx = exportDocs(exportDirA, "palettes", PaletteJson.serializer()).single { it.name == "steps-chase" }.fx!!
+        assertEquals("STEP" to 1.5, paletteFx.spreadUnit to paletteFx.spread)
+        val cueFx = exportDocs(exportDirA, "cueAdHocFx", CueAdHocFxJson.serializer()).single { it.spreadUnit != null }
+        assertEquals("STEP" to 3.0, cueFx.spreadUnit to cueFx.spread)
+
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertEquals(43, format.minReader, "a v42 reader would run the chase on the cycle")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 43)
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        val stored = transaction(state.database) {
+            uk.me.cormack.lighting7.models.DaoLook.find {
+                (uk.me.cormack.lighting7.models.DaoLooks.project eq imported.projectId) and
+                    (uk.me.cormack.lighting7.models.DaoLooks.name eq "Steps chase")
+            }.single().effects.single().spreadUnit
+        }
+        assertEquals("STEP", stored)
+        val importedUnits = transaction(state.database) {
+            val palette = uk.me.cormack.lighting7.models.DaoPalette.find {
+                (uk.me.cormack.lighting7.models.DaoPalettes.project eq imported.projectId) and
+                    (uk.me.cormack.lighting7.models.DaoPalettes.name eq "steps-chase")
+            }.single()
+            val paletteUnit = uk.me.cormack.lighting7.models.DaoPaletteFxEntity.find {
+                uk.me.cormack.lighting7.models.DaoPaletteFx.palette eq palette.id
+            }.single().spreadUnit
+            val cueUnits = DaoCueAdHocFxEntity.all().mapNotNull { it.spreadUnit }
+            paletteUnit to cueUnits
+        }
+        assertEquals("STEP" to listOf("STEP"), importedUnits)
     }
 
     /**
@@ -1370,7 +1415,7 @@ class ProjectRoundTripTest {
         val keyed = effects.filter { it.runUuid != null }
         assertEquals(setOf("open", "build"), keyed.map { cueNames.getValue(it.cueUuid) }.toSet(), "one row in each neighbour")
         assertEquals(setOf(RICH_PROJECT_PULSE_RUN.toString()), keyed.map { it.runUuid }.toSet(), "under one key")
-        val unkeyed = effects.single { it.runUuid == null }
+        val unkeyed = effects.single { it.runUuid == null && it.spreadUnit == null }
         val unkeyedText = Files.readString(exportDirA.resolve("cueAdHocFx/${unkeyed.uuid}.json"))
         assertFalse(unkeyedText.contains("runUuid"), "a row in no run writes no key: $unkeyedText")
         assertTrue(SUPPORTED_FORMAT_VERSION >= 37, "run keys sync from v37")
@@ -1407,7 +1452,7 @@ class ProjectRoundTripTest {
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
         transaction(state.database) {
             val effects = DaoCue.find { DaoCues.project eq imported.projectId }.flatMap { it.adHocFx }
-            assertEquals(3, effects.size)
+            assertEquals(4, effects.size)
             assertTrue(effects.all { it.runUuid == null }, "an archive before v37 names no run")
         }
     }

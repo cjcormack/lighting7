@@ -754,7 +754,7 @@ Release folds to its glyph and the scope line drops the fade.
   — **one bar**, Forward, but half a bar and Bounce for Path's sweep presets and Wave's *Focus
   Pull* (`newFxDivision`, `newFxDirection`, `presetDefaults`) — on the master tagged for its family
   on that attribute (venue-visit plan D16, fx-settings plan D5; a wall-clock FX on four seconds).
-  **Presets** (fx-settings plan D4) sit beside the types: Wave's *Strobe* under Intensity, and *Zoom
+  **Presets** (fx-settings plan D4) sit beside the types: Wave's *Strobe* and *Chase* under Intensity, and *Zoom
   Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* under Beam where the head has the attribute,
   each a Wave starting with its parameters, cycle and Direction; the bare Wave is listed under Beam
   too, on the head's beam attribute, starting at that attribute's `attributeDefaults`. Colour Cycle's
@@ -816,7 +816,10 @@ Release folds to its glyph and the scope line drops the fade.
   the FX lands on fixtures' elements — sits under Direction and Order wherever a target fixture has elements, and every
   door that starts or creates an FX writes `WHOLE` (D8: the picker, a cue's draft FX, a new FX palette), while a stored
   FX naming none is Each fixture (`NEW_FX_ELEMENT_MODE` / `STORED_ELEMENT_MODE`, `fxConstants.ts`; a preview's draft says
-  the stored one, since the add route reads an absent one as Fixtures). **The
+  the stored one, since the add route reads an absent one as Fixtures). The same doors start an FX whose
+  library entry names `stepsFrom` (Colour Cycle, Palette Steps, Slot Steps) **one step behind** — `spreadUnit:
+  'STEP'`, `spread: 1` (fx-settings plan D7, `newFxSpread`) — and a preview's draft says its stored unit, `CYCLE`
+  where it names none, for the same reason. **The
   spread's shape is the *Spread* section's** (effects plan D11, §4.1; `SpreadSection`), a disclosure above Shape on a group or a
   fixture with heads, and always on an FX palette: the **Shapes** (FX editor plan D11, below), *Spread* %,
   *Wings* (hidden under a mirrored Order — Centre out, Centre in — and set back to 1 in the same
@@ -830,7 +833,11 @@ Release folds to its glyph and the scope line drops the fade.
   `PER_FIXTURE` one's within each fixture;
   sixteen dials, then *+n*). Under Segments, Wings or Parts Position's continuous rank snaps to its
   nearest slot first, as the desk's `wholeRanks` does. Its summary says the Shape, else *Custom*, then the non-defaults: *Custom · 50 % · 2 wings*.
-  The four ride `updateFx` once touched (`OPTIONAL_FIELDS`), `parts: 0` turning them off. **The
+  The four ride `updateFx` once touched (`OPTIONAL_FIELDS`), `parts: 0` turning them off. Under `spreadUnit: 'STEP'`
+  (fx-settings plan D6) *Spread* reads in steps (0–16) and the dials count the FX's own steps (`stepCountOf`); a
+  Shape keeps the unit, *Same spread as* copies it and refuses a step spread onto an FX with none, the graph's
+  Spread knob drags in steps (`spreadShareOf` over the editor's `steps`), and the unit rides `updateFx` once
+  touched too. Choosing the unit is session 6's. **The
   dials are the one client copy of the desk's rule** (P2): `lib/spreadShape.ts` mirrors
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
   `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,

@@ -127,6 +127,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         wings = instance.dynamics.wings,
                         segments = instance.dynamics.segments,
                         parts = instance.dynamics.parts,
+                        spreadUnit = instance.dynamics.spreadUnit.name,
                         spent = instance.spent,
                     )
                 }
@@ -235,11 +236,12 @@ data class AddGroupFxRequest(
     val direction: String? = null,
     /** Runs (D9) — see [AddFxRequest.runs]. */
     val runs: Int? = null,
-    /** The spread's shape (D4) — see [AddFxRequest.spread]. */
-    val spread: Double = 1.0,
+    /** The spread's shape (D4) and what it counts (fx-settings plan D6) — see [AddFxRequest.spread], [AddFxRequest.spreadUnit]. */
+    val spread: Double? = null,
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    val spreadUnit: String? = null,
     /**
      * Create this effect in the programmer's reserved priority band
      * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddFxRequest.programmerOwned].
@@ -288,6 +290,8 @@ data class GroupFxDto(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    /** See [uk.me.cormack.lighting7.fx.FxDto.spreadUnit]. */
+    val spreadUnit: String = uk.me.cormack.lighting7.fx.SpreadUnit.CYCLE.name,
 )
 
 @Serializable
@@ -410,7 +414,9 @@ private fun applyGroupFx(
         this.elementFilter = elFilter
         applyRequestedDynamics(
             request.amount, request.direction, request.runs,
-            SpreadShape(request.spread, request.wings, request.segments, request.parts),
+            requestedSpreadShape(
+                request.spread, request.wings, request.segments, request.parts, request.spreadUnit, effect.stepCount != null,
+            ),
         )
         request.timing?.let { t -> updateDynamics { it.copy(timing = t) } }
         speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)

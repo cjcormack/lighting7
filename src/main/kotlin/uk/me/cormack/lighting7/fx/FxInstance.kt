@@ -264,6 +264,7 @@ data class LookFxSettings(
     val wings: Int = 1,
     val segments: Int = 1,
     val parts: Int = 0,
+    val spreadUnit: String? = null,
 )
 
 /**
@@ -302,6 +303,7 @@ fun FxInstance.lookFxSettings(): LookFxSettings {
         wings = dyn.wings,
         segments = dyn.segments,
         parts = dyn.parts,
+        spreadUnit = SpreadUnit.toStored(dyn.spreadUnit),
     )
 }
 
@@ -514,9 +516,15 @@ data class FxDynamics(
 
     /** Parts (D4, step 4): the spread repeats every this many members; 0 is off. */
     val parts: Int = 0,
+
+    /**
+     * What [spread] counts (fx-settings plan D6): a share of the cycle, or the FX's own steps
+     * ([Fx.stepCount]), resolved at expansion so a head joining keeps a chase on its boundaries.
+     */
+    val spreadUnit: SpreadUnit = SpreadUnit.CYCLE,
 ) {
-    /** The four shape fields as one value, for the plan cache and [DistributionPlan.of]. Cold path. */
-    val spreadShape: SpreadShape get() = SpreadShape(spread, wings, segments, parts)
+    /** The shape fields as one value, for the plan cache and [DistributionPlan.of]. Cold path. */
+    val spreadShape: SpreadShape get() = SpreadShape(spread, wings, segments, parts, spreadUnit)
 
     /**
      * The rank count left after the spread's shape over [groupSize] members — [DistributionPlan.slots]
@@ -945,6 +953,13 @@ class FxInstance internal constructor(
      */
     @Volatile
     internal var distributionPlans: FxDistributionPlans? = null
+
+    /**
+     * The step count [dyn]'s spread counts in: the FX's own ([Fx.stepCount]) under
+     * [SpreadUnit.STEP], else null, so a `CYCLE` FX never reads its parameters for it.
+     */
+    internal fun planSteps(dyn: FxDynamics): Int? =
+        if (dyn.spreadUnit == SpreadUnit.STEP) effect.stepCount else null
 
     /**
      * Timing source for this effect.

@@ -137,6 +137,13 @@ interface Fx {
     val defaultDirection: FxDirection get() = FxDirection.FORWARD
 
     /**
+     * How many steps this FX runs through, from the parameter its registration's `stepsFrom` names —
+     * Colour Cycle's colours, Palette Steps' palettes, Slot Steps' slots — or null for an FX that
+     * declares none. A [SpreadUnit.STEP] spread counts in these (fx-settings plan D6).
+     */
+    val stepCount: Int? get() = null
+
+    /**
      * Calculate the output value for the given phase.
      *
      * @param phase Position in the effect cycle, from 0.0 (start) to 1.0 (end)

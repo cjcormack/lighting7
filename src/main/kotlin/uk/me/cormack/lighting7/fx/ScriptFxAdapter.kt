@@ -25,6 +25,7 @@ object ScriptFxAdapter {
         defaultTiming: Timing = Timing.CYCLE,
         registrationId: String? = null,
         defaultDirection: FxDirection = FxDirection.FORWARD,
+        stepsFrom: String? = null,
     ): FxFactory {
         return { params, resolveColourSource, colourSourceVersion ->
             val typedParams = TypedParams(params, schema, resolveColourSource, colourSourceVersion)
@@ -33,12 +34,12 @@ object ScriptFxAdapter {
                 FxMode.STANDARD -> {
                     val fn = compiled.standardFn
                         ?: throw IllegalStateException("No standard lambda in compiled script for '$fxName'")
-                    StandardScriptFx(fn, typedParams, fxName, outputType, params, defaultTiming, defaultDirection, registrationId)
+                    StandardScriptFx(fn, typedParams, fxName, outputType, params, defaultTiming, defaultDirection, registrationId, stepsFrom)
                 }
                 FxMode.STATEFUL -> {
                     val fn = compiled.statefulFn
                         ?: throw IllegalStateException("No stateful lambda in compiled script for '$fxName'")
-                    StatefulScriptFx(fn, typedParams, fxName, outputType, params, defaultTiming, defaultDirection, registrationId)
+                    StatefulScriptFx(fn, typedParams, fxName, outputType, params, defaultTiming, defaultDirection, registrationId, stepsFrom)
                 }
             }
         }
@@ -57,11 +58,13 @@ private class StandardScriptFx(
     private val fxDefaultTiming: Timing,
     override val defaultDirection: FxDirection,
     override val registrationId: String?,
+    private val stepsFrom: String?,
 ) : Fx {
     override val name: String get() = fxName
     override val outputType: FxOutputType get() = fxOutputType
     override val parameters: Map<String, String> get() = rawParams
     override val defaultTiming: Timing get() = fxDefaultTiming
+    override val stepCount: Int? get() = stepsFrom?.let(typedParams::stepCount)
 
     override fun calculate(phase: Double, context: FxContext): FxOutput {
         return fn(phase, context, typedParams)
@@ -80,11 +83,13 @@ private class StatefulScriptFx(
     private val fxDefaultTiming: Timing,
     override val defaultDirection: FxDirection,
     override val registrationId: String?,
+    private val stepsFrom: String?,
 ) : StatefulFx {
     override val name: String get() = fxName
     override val outputType: FxOutputType get() = fxOutputType
     override val parameters: Map<String, String> get() = rawParams
     override val defaultTiming: Timing get() = fxDefaultTiming
+    override val stepCount: Int? get() = stepsFrom?.let(typedParams::stepCount)
 
     private val state = mutableMapOf<String, Any>()
 

@@ -207,6 +207,7 @@ class FxFileLoader(
                     defaultTiming = p.metadata.defaultTiming,
                     registrationId = p.metadata.id,
                     defaultDirection = p.metadata.defaultDirection,
+                    stepsFrom = p.metadata.stepsFrom,
                 )
 
                 val timingSource = try {
@@ -233,6 +234,7 @@ class FxFileLoader(
                     presets = p.metadata.presets,
                     attributeDefaults = p.metadata.attributeDefaults,
                     legacy = p.metadata.legacy,
+                    stepsFrom = p.metadata.stepsFrom,
                     factory = factory,
                 ))
 
@@ -268,6 +270,9 @@ class FxFileLoader(
             "label", "min", "max", "step", "unit", "options", "role", "shownWhen", "pair",
         )
 
+        /** The list parameter types a `stepsFrom` may name: each entry one step ([TypedParams.stepCount]). */
+        private val STEP_LIST_TYPES = listOf("colourList", "paletteList", "slotList")
+
         /** The keys a `presets:` list item may carry. */
         private val PRESET_KEYS = setOf("name", "attribute", "parameters", "cycle", "direction")
 
@@ -278,6 +283,7 @@ class FxFileLoader(
         private val TOP_LEVEL_KEYS = setOf(
             "id", "name", "family", "outputType", "fxMode", "defaultTiming", "defaultDirection", "defaultCycle",
             "timingSource", "compatibleAttributes", "aliases", "parameters", "presets", "attributeDefaults", "legacy",
+            "stepsFrom",
         )
 
         /** The frontmatter's three lists, each item a map of one of these key sets. */
@@ -326,6 +332,7 @@ class FxFileLoader(
             var compatibleAttributes = listOf<String>()
             var aliases: List<String>? = null
             var legacy = false
+            var stepsFrom: String? = null
             val items = LIST_KEYS.keys.associateWith { mutableListOf<Map<String, String>>() }
 
             // The list whose items the lines below belong to, and the item being read.
@@ -417,6 +424,7 @@ class FxFileLoader(
                     "aliases" -> aliases = parseYamlArray(value)
                     "legacy" -> legacy = value.toBooleanStrictOrNull()
                         ?: throw IllegalArgumentException("legacy must be true or false, got '$value'")
+                    "stepsFrom" -> stepsFrom = value.takeIf { it.isNotEmpty() }
                     "parameters", "presets", "attributeDefaults" -> {
                         // An inline empty array opens no list
                         inList = key.takeUnless { value == "[]" }
@@ -444,6 +452,11 @@ class FxFileLoader(
                         listOfNotNull(choiceProblem(schema, values)?.let { "$at: $it" })
                 } + presets.filter { it.attribute !in compatibleAttributes }.map { "preset '${it.name}': '${it.attribute}' is not a compatible attribute" }
             require(namesProblems.isEmpty()) { "FX '$id': ${namesProblems.joinToString("; ")}" }
+            stepsFrom?.let { from ->
+                require(schema.any { it.name == from && it.type in STEP_LIST_TYPES }) {
+                    "FX '$id': stepsFrom names '$from', which is no ${STEP_LIST_TYPES.joinToString(" or ")} parameter"
+                }
+            }
 
             return FxFileMetadata(
                 id = id,
@@ -461,6 +474,7 @@ class FxFileLoader(
                 presets = presets,
                 attributeDefaults = attributeDefaults,
                 legacy = legacy,
+                stepsFrom = stepsFrom,
             )
         }
 
@@ -603,6 +617,8 @@ data class FxFileMetadata(
     val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
     /** Kept for stored FX only (fx-settings plan D3): `legacy: true`. */
     val legacy: Boolean = false,
+    /** The list parameter whose entries are this FX's steps (fx-settings plan D6): `stepsFrom: colours`. */
+    val stepsFrom: String? = null,
 )
 
 data class FxFileParameter(

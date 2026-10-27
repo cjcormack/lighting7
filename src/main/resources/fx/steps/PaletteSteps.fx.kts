@@ -4,6 +4,7 @@ name: Palette Steps
 family: steps
 outputType: STEPS
 fxMode: STANDARD
+stepsFrom: palettes
 compatibleAttributes: [dimmer, strobe, rgbColour, position, zoom, focus, iris, frost, prism]
 parameters:
   - name: palettes
