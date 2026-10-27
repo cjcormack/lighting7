@@ -40,6 +40,7 @@ parameters:
     max: 1
     step: 0.01
     unit: ratio
+    role: main
     shownWhen: shape = [SQUARE]
   - name: widthUnit
     type: choice

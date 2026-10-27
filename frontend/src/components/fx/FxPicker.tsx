@@ -294,17 +294,34 @@ export function FxPicker({
   const [justStarted, setJustStarted] = useState<number | null>(null)
   const runningFx = current != null ? (active ?? []).find((e) => e.id === current?.fxId) : undefined
   const masterForCategory = useSpeedMasterForFamily()
+  // This picker's own swap, sent and not yet in the running list: until it is, the list's older type
+  // is no swap made elsewhere.
+  const [ownSwap, setOwnSwap] = useState<{ fxId: number; from: string } | null>(null)
+  const listedType = runningFx != null ? normalizeFxName(runningFx.fxType) : null
+  const awaitingOwn = ownSwap != null && ownSwap.fxId === current?.fxId && listedType === normalizeFxName(ownSwap.from)
+  // Swapped by the editor's header (fx-settings plan D9): the type the desk now runs is the one a tap
+  // swaps from, and no preset of the type it left is picked.
+  const swappedElsewhere =
+    current != null && runningFx != null && !awaitingOwn && listedType !== normalizeFxName(current.fxType)
   const running =
-    current != null && (runningFx != null || justStarted === current.fxId) ? current : null
+    current != null && (runningFx != null || justStarted === current.fxId)
+      ? swappedElsewhere && runningFx != null
+        ? { ...current, fxType: runningFx.fxType }
+        : current
+      : null
   /** What the rows mark as picked: the auditioned effect, or in draft the one the host stored. */
   const shown = draft != null ? draft.current : running
   useEffect(() => {
     if (justStarted != null && (active ?? []).some((e) => e.id === justStarted)) setJustStarted(null)
   }, [active, justStarted])
+  useEffect(() => {
+    if (ownSwap != null && !awaitingOwn) setOwnSwap(null)
+  }, [ownSwap, awaitingOwn])
 
   const [chosen, setChosen] = useState<{ setting?: string; slider?: string }>({})
   /** The preset this session last started or swapped to, by name; null for a type's own row. */
-  const [pickedPreset, setPickedPreset] = useState<string | null>(null)
+  const [chosenPreset, setPickedPreset] = useState<string | null>(null)
+  const pickedPreset = swappedElsewhere ? null : chosenPreset
   const busy = useRef(false)
   const [pending, setPending] = useState(false)
 
@@ -417,6 +434,7 @@ export function FxPicker({
       const { blendMode, ...unblended } = spec
       const swapped = running.stacked === true ? unblended : { ...unblended, blendMode }
       if (lightingApi.fx.updateFx(running.fxId, { fxType: entry.name, ...swapped, ...speed, ...direction })) {
+        setOwnSwap({ fxId: running.fxId, from: running.fxType })
         onCurrent?.({ ...running, fxType: entry.name })
         setPickedPreset(preset?.name ?? null)
       }

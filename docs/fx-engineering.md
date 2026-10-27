@@ -1488,7 +1488,7 @@ start, its tick count starting at 0 so the same request answers the same, and ma
 object too (`freshFx`, `createFxWithPalettes` in production), so a sample never shares one
 with the pass.
 
-**Caps.** 48 samples to a cycle of the first FX asked for (its whole cycle, Timing *Per head*
+**Caps.** 48 samples to a cycle of the first FX asked for (its whole cycle, *One cycle for: Each head*
 included), at most 1024 a row; at most 96 rows and 8 FX a request. Past a cap the answer is cut and
 `truncated` names which. A row is a head; its samples are a byte a sample per plane — a slider or a
 setting's level, RGB plus each bundled W, A and UV the head has, or pan and tilt — and a Steps FX's
@@ -1498,7 +1498,7 @@ own output carries the step it shows beside the steps' labels.
 envelope or `lastPhase`, or its expansion and plan caches, and never writes DMX: the one transaction it makes is
 a staging one it never applies, to read a paused FX's frame off a head. `FxSamplerParityTest`
 drives the engine a pass at a time and holds *Result* to the committed DMX at every sampled tick —
-every Order with Spread, Wings, Segments and Parts set, Runs with Bounce, Timing *Per head*, *Replace*
+every Order with Spread, Wings, Segments and Parts set, Runs with Bounce, *One cycle for: Each head*, *Replace*
 under *Within*, a Circle *Around* a programmer position, Amount, Palette Steps, a Seconds FX, each
 element mode and filter, a held-back FX, a Local FX over a layer's, and a beat FX with a wall-clock FX
 *Within* it — and checks that sampling leaves every instance field and the controller as they were.
@@ -1717,7 +1717,7 @@ an element filter's left-out elements paint nothing and are not counted):
 **Each copy starts where its head was** (`SplitMember`, on `FxInstance.splitMember`). A copy is the
 member it was: its phase is computed by the same member call the parent's pass made for that head —
 the member's distribution offset, the size of the list it was spread over and its `FxContext` —
-so a copy on Timing *Per head* keeps its set's `distinctSlots`-scaled cycle and a ping-pong copy its sweep
+so a copy on *One cycle for: Each head* keeps its set's `distinctSlots`-scaled cycle and a ping-pong copy its sweep
 (Chris chose to carry them rather than refuse those splits), a copy with a run count runs its window from its
 own offset and Bounce counts its cycles from it, and an FX reading its place in the spread still
 sees it. `FxSplitTest` runs an FX on two rigs, splits one mid-run and compares every channel
@@ -1977,7 +1977,7 @@ synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
 
 `distinctSlots` is the rank count after step 4 (`DistributionPlan.slots`, each context's
 `numDistinctSlots`, and `FxDynamics.distinctSlots` — the same count in constant time, for the
-per-pass reads), so a step chase's window and Timing *Per head* stay gap-free: Parts of 2 over eight heads
+per-pass reads), so a step chase's window and *One cycle for: Each head* stay gap-free: Parts of 2 over eight heads
 are two slots, the odd heads and the even heads taking turns a step each. `PING_PONG`'s turnaround is
 **not** shaped: its sweep is the Order's own `(N − 1) / N` (§"Phase Calculation"), the shape setting only
 the offsets. At the default shape (100 %, 1, 1, 0) the
@@ -2060,7 +2060,7 @@ to the same offsets, Random's shuffle included.
   (hidden under a mirrored Order, and set back to 1 when one is chosen), Segments, Parts, and a row of
   phase dials over eight notional heads on an FX palette and the FX's own heads live (up to sixteen,
   then *+n*) — the FX editor's inspector draws the offset ladder from the preview in their place. The
-  Order select sits above it, beside Direction. Its summary says the Shape, else *Custom*, then the
+  Order select sits above it, under *Over* in *Across the heads* (fx-settings plan D9). Its summary says the Shape, else *Custom*, then the
   non-defaults: *Custom · 50 % · 2 wings*.
 
 **Order interface properties:**

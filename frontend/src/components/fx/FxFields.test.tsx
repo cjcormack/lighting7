@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
@@ -59,6 +60,7 @@ vi.mock('./FxColourPicker', () => ({ FxColourPicker: () => null }))
 vi.mock('./FxColourListPicker', () => ({ FxColourListPicker: () => null }))
 
 import { FxFields } from './FxFields'
+import { FxChipSheetContext } from './fxChipSheet'
 import type { FxDraft, FxScope } from './fxEditorModel'
 
 const FLICKER: FxLibraryEntry = {
@@ -99,7 +101,12 @@ const draft = (over: Partial<FxDraft> = {}): FxDraft => ({
   ...over,
 })
 
-function fields(entry: FxLibraryEntry, d: FxDraft, scope: FxScope = SCOPE) {
+function fields(
+  entry: FxLibraryEntry,
+  d: FxDraft,
+  scope: FxScope = SCOPE,
+  more: Pick<ComponentProps<typeof FxFields>, 'attribute' | 'layout' | 'swap'> = {},
+) {
   const set = vi.fn()
   const setParam = vi.fn()
   render(
@@ -113,6 +120,7 @@ function fields(entry: FxLibraryEntry, d: FxDraft, scope: FxScope = SCOPE) {
       readOnly={false}
       set={set}
       setParam={setParam}
+      {...more}
     />,
   )
   return { set, setParam }
@@ -120,14 +128,21 @@ function fields(entry: FxLibraryEntry, d: FxDraft, scope: FxScope = SCOPE) {
 
 afterEach(cleanup)
 
+/** The Cycle chip's popover: its steps, its typed field and *Same cycle as…*. */
+function openCycle() {
+  fireEvent.click(screen.getByRole('button', { name: /^Cycle: / }))
+}
+
 describe('FxFields', () => {
   it('gives a wall-clock effect with no rate master Seconds, and a beat effect beats and its speed master', () => {
     fields(FLICKER, draft())
+    openCycle()
     expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ }).closest('div')).toBeTruthy()
     expect(screen.queryByRole('radiogroup', { name: 'Cycle' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
     cleanup()
     fields(PULSE, draft())
+    openCycle()
     expect(screen.getByRole('radiogroup', { name: 'Cycle' })).toBeTruthy()
     expect(screen.queryByRole('spinbutton', { name: /Cycle seconds/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Timing: M1 · 120' })).toBeTruthy()
@@ -135,6 +150,8 @@ describe('FxFields', () => {
 
   it('types a beat effect on Seconds in seconds, with no master named', () => {
     fields(PULSE, draft({ seconds: true, cycle: 10 }))
+    expect(screen.getByRole('button', { name: 'Cycle: 10 s' })).toBeTruthy()
+    openCycle()
     expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ })).toBeTruthy()
     expect(screen.queryByRole('radiogroup', { name: 'Cycle' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
@@ -148,6 +165,8 @@ describe('FxFields', () => {
 
   it('speaks the segment in the one spelling the chips use — beats a cycle, bars from four', () => {
     fields(PULSE, draft({ cycle: 4 }))
+    expect(screen.getByRole('button', { name: 'Cycle: 1 bar' })).toBeTruthy()
+    openCycle()
     const segment = screen.getByRole('radiogroup', { name: 'Cycle' })
     const labels = Array.from(segment.querySelectorAll('button')).map((b) => b.textContent)
     expect(labels).toEqual(['⅛ beat', '¼ beat', '½ beat', '1 beat', '2 beats', '1 bar', '2 bars', '4 bars'])
@@ -164,14 +183,16 @@ describe('FxFields', () => {
     expect(setParam).toHaveBeenLastCalledWith('flickerDurationMs', '400', true)
   })
 
-  it('puts Amount in percent and Direction as three glyphs beside Cycle (effects plan D11)', () => {
+  it('puts Amount in percent under Mix and Direction as three glyphs in the Timing strip', () => {
     const { set } = fields(PULSE, draft({ amount: 0.6, direction: 'BACKWARD' }))
     const size = screen.getByRole('spinbutton', { name: /Amount/ }) as HTMLInputElement
     expect(size.value).toBe('60')
     fireEvent.change(size, { target: { value: '40' } })
     fireEvent.keyDown(size, { key: 'Enter' })
     expect(set).toHaveBeenLastCalledWith({ amount: 0.4 }, true)
+    expect(screen.getByRole('region', { name: 'Mix' }).contains(size)).toBe(true)
     const direction = screen.getByRole('radiogroup', { name: 'Direction' })
+    expect(screen.getByRole('region', { name: 'Timing' }).contains(direction)).toBe(true)
     expect(Array.from(direction.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))).toEqual([
       'Forward',
       'Backward',
@@ -182,24 +203,37 @@ describe('FxFields', () => {
     expect(set).toHaveBeenLastCalledWith({ direction: 'BOUNCE' })
   })
 
-  it('keeps Runs under Advanced: Forever, or a count (effects plan D9)', () => {
+  it('chips Runs in the Timing strip: forever, ×1 to ×4, or a typed count lit when it is none of them', () => {
     const { set } = fields(PULSE, draft())
-    expect(screen.queryByRole('radiogroup', { name: 'Runs' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    expect(screen.getByRole('button', { name: 'Runs: forever' }).textContent).toContain('∞')
+    fireEvent.click(screen.getByRole('button', { name: 'Runs: forever' }))
     expect(screen.getByRole('radio', { name: 'Forever' }).getAttribute('aria-checked')).toBe('true')
-    fireEvent.click(screen.getByRole('radio', { name: 'Count' }))
-    expect(set).toHaveBeenLastCalledWith({ runs: 1 })
+    expect(document.querySelector('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(false)
+    fireEvent.click(screen.getByRole('radio', { name: '2 runs' }))
+    expect(set).toHaveBeenLastCalledWith({ runs: 2 })
     cleanup()
-    const second = fields(PULSE, draft({ runs: 3 }))
-    // Folded, the summary says the count.
-    expect(screen.getByRole('button', { name: /Advanced.*3 runs/ })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
-    const count = screen.getByRole('spinbutton', { name: 'Runs' })
-    fireEvent.change(count, { target: { value: '2' } })
+    const second = fields(PULSE, draft({ runs: 7 }))
+    fireEvent.click(screen.getByRole('button', { name: 'Runs: 7 runs' }))
+    expect(document.querySelector('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(true)
+    const count = screen.getByRole('spinbutton', { name: 'Runs count' })
+    fireEvent.change(count, { target: { value: '9' } })
     fireEvent.keyDown(count, { key: 'Enter' })
-    expect(second.set).toHaveBeenLastCalledWith({ runs: 2 })
+    expect(second.set).toHaveBeenLastCalledWith({ runs: 9 })
     fireEvent.click(screen.getByRole('radio', { name: 'Forever' }))
     expect(second.set).toHaveBeenLastCalledWith({ runs: null })
+  })
+
+  it('opens the eight steps from the Cycle chip, the typed division lit only off them', () => {
+    const { set } = fields(PULSE, draft({ cycle: 1 / 3 }))
+    expect(screen.getByRole('button', { name: 'Cycle: ⅓ beat' })).toBeTruthy()
+    openCycle()
+    expect(screen.getByRole('spinbutton', { name: 'Beats a cycle' }).closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: '2 beats a cycle' }))
+    expect(set).toHaveBeenLastCalledWith({ cycle: 2 })
+    cleanup()
+    fields(PULSE, draft({ cycle: 2 }))
+    openCycle()
+    expect(screen.getByRole('spinbutton', { name: 'Beats a cycle' }).closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(false)
   })
 
   it("draws a parameter's own sentence under its control", () => {
@@ -212,7 +246,7 @@ describe('FxFields', () => {
 
   const HEADS: FxScope = { heads: true, elementMode: false, elementFilter: false }
 
-  it('draws Spread and Order only where there are heads, with the Order always visible beside Direction', () => {
+  it('draws Spread and Order only where there are heads, with the Order always visible under Across the heads', () => {
     fields(PULSE, draft())
     expect(screen.queryByRole('button', { name: /^Spread/ })).toBeNull()
     expect(screen.queryByRole('combobox', { name: 'Order' })).toBeNull()
@@ -405,6 +439,7 @@ describe('FxFields', () => {
     const SCRIPT: FxLibraryEntry = {
       ...PULSE,
       name: 'Mine',
+      source: 'USER',
       parameters: [
         { name: 'min', type: 'ubyte', defaultValue: '0', description: '' },
         { name: 'max', type: 'ubyte', defaultValue: '255', description: '' },
@@ -415,7 +450,172 @@ describe('FxFields', () => {
     expect(screen.getByRole('spinbutton', { name: 'Low percent' })).toBeTruthy()
     expect(screen.getByRole('spinbutton', { name: 'High percent' })).toBeTruthy()
     expect(screen.queryByText('Low – High')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /^Shape/ }))
+    // A guessed detail folds under More, as a declared one does.
+    expect(screen.queryByRole('button', { name: /^Shape/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^More/ }))
     expect(screen.getByRole('spinbutton', { name: 'Attack percent' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Parameters' })).toBeTruthy()
+  })
+})
+
+describe('FxFields in four questions (fx-settings plan D9)', () => {
+  const HEADS: FxScope = { heads: true, elementMode: true, elementFilter: false }
+  const WAVE: FxLibraryEntry = {
+    ...PULSE,
+    name: 'Wave',
+    source: 'BUILT_IN',
+    parameters: [
+      {
+        name: 'shape',
+        type: 'choice',
+        defaultValue: 'SINE',
+        description: '',
+        label: 'Shape',
+        options: [
+          { value: 'SINE', label: 'Sine' },
+          { value: 'SQUARE', label: 'Square' },
+          { value: 'PULSE', label: 'Pulse' },
+        ],
+      },
+      {
+        name: 'width',
+        type: 'double',
+        defaultValue: '0.5',
+        description: '',
+        label: 'Width',
+        min: 0,
+        max: 1,
+        step: 0.01,
+        unit: 'ratio',
+        shownWhen: { param: 'shape', values: ['SQUARE'] },
+      },
+      {
+        name: 'widthUnit',
+        type: 'choice',
+        defaultValue: 'RATIO',
+        description: '',
+        label: 'On for',
+        options: [
+          { value: 'RATIO', label: 'Width' },
+          { value: 'HEAD', label: 'One head' },
+        ],
+        shownWhen: { param: 'shape', values: ['SQUARE', 'PULSE'] },
+      },
+    ],
+  }
+  const sections = () => [...document.querySelectorAll('section')].map((el) => el.getAttribute('aria-label'))
+
+  it.each(['editor', 'inspector'] as const)('draws Timing, the FX’s own section, Across the heads, Mix and then Advanced in the %s layout', (layout) => {
+    fields(WAVE, draft({ parameters: { shape: 'SINE' } }), HEADS, { layout, attribute: 'dimmer' })
+    expect(sections()).toEqual(['Timing', 'Levels', 'Across the heads', 'Mix'])
+    const advanced = screen.getByRole('button', { name: /^Advanced/ })
+    const mix = screen.getByRole('region', { name: 'Mix' })
+    expect(mix.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The raw blend is Advanced's, in both layouts.
+    expect(screen.queryByRole('combobox', { name: 'Blend' })).toBeNull()
+    expect(advanced.textContent).toContain('override')
+    fireEvent.click(advanced)
+    expect(screen.getByRole('combobox', { name: 'Blend' })).toBeTruthy()
+    expect(screen.getByRole('slider', { name: 'Phase' })).toBeTruthy()
+    // Over and Order are the heads' question.
+    const across = screen.getByRole('region', { name: 'Across the heads' })
+    expect(across.contains(screen.getByRole('radiogroup', { name: 'Over' }))).toBe(true)
+    expect(across.contains(screen.getByRole('combobox', { name: 'Order' }))).toBe(true)
+  })
+
+  it('names the FX’s own section for what it holds', () => {
+    const named = (entry: Partial<FxLibraryEntry>, attribute: string) => {
+      fields({ ...PULSE, parameters: [], ...entry }, draft(), SCOPE, { attribute })
+      const name = sections()[1]
+      cleanup()
+      return name
+    }
+    expect(named({ name: 'Wave', family: 'intensity' }, 'dimmer')).toBe('Levels')
+    expect(named({ name: 'Wave', family: 'intensity' }, 'zoom')).toBe('Levels')
+    expect(named({ name: 'Colour Cycle', family: 'colour' }, 'rgbColour')).toBe('Colours')
+    expect(named({ name: 'Path', family: 'position' }, 'position')).toBe('Path')
+    expect(named({ name: 'Slot Steps', family: 'steps' }, 'gobo')).toBe('Steps')
+    expect(named({ name: 'CandleFlicker', family: 'intensity' }, 'dimmer')).toBe('Flicker')
+    expect(named({ name: 'Mine', family: 'intensity', source: 'USER' }, 'dimmer')).toBe('Parameters')
+  })
+
+  it('reads One cycle for: All heads · Each head, writing the same timing values', () => {
+    const { set } = fields(PULSE, draft({ timing: 'HEAD' }), HEADS)
+    const advanced = screen.getByRole('button', { name: /^Advanced/ })
+    expect(advanced.textContent).toContain('one cycle for each head')
+    fireEvent.click(advanced)
+    expect(screen.queryByText('Per head')).toBeNull()
+    expect(screen.getByRole('radio', { name: 'Each head' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('radio', { name: 'All heads' }))
+    expect(set).toHaveBeenLastCalledWith({ timing: 'CYCLE' })
+  })
+
+  it('swaps the FX from its section’s header, and draws the name alone with nothing to swap to', () => {
+    const onSwap = vi.fn()
+    const OTHER: FxLibraryEntry = { ...PULSE, name: 'Flicker', parameters: [] }
+    fields(WAVE, draft({ parameters: { shape: 'SINE' } }), SCOPE, { attribute: 'dimmer', swap: { options: [WAVE, OTHER], onSwap } })
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'FX type: Wave' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Flicker' }))
+    expect(onSwap).toHaveBeenCalledWith(OTHER)
+    cleanup()
+    fields(WAVE, draft({ parameters: { shape: 'SINE' } }), SCOPE, { attribute: 'dimmer' })
+    expect(screen.queryByRole('button', { name: /^FX type/ })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Levels' }).textContent).toContain('Wave')
+  })
+
+  it('draws each shape option’s picture over its word', () => {
+    fields(WAVE, draft({ parameters: { shape: 'SINE' } }))
+    const pictures = [...screen.getByRole('radiogroup', { name: 'Shape' }).querySelectorAll('[data-shape-icon]')]
+    expect(pictures.map((p) => p.getAttribute('data-shape-icon'))).toEqual(['SINE', 'SQUARE', 'PULSE'])
+  })
+
+  it('ends Width’s presets in a typed percentage, lit when the width matches none, with One head among them', () => {
+    const { set } = fields(WAVE, draft({ parameters: { shape: 'SQUARE', width: '0.35', widthUnit: 'RATIO' } }))
+    const segment = screen.getByRole('radiogroup', { name: 'Width' })
+    expect([...segment.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['10 %', '50 %', 'One head'])
+    // The choice is inside the segment rather than a row of its own.
+    expect(screen.queryByRole('radiogroup', { name: 'On for' })).toBeNull()
+    const typed = screen.getByRole('spinbutton', { name: 'Width percent' }) as HTMLInputElement
+    expect(typed.value).toBe('35')
+    expect(typed.closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: 'One head' }))
+    expect(set).toHaveBeenLastCalledWith({ parameters: { shape: 'SQUARE', width: '0.35', widthUnit: 'HEAD' } }, true)
+    fireEvent.click(screen.getByRole('radio', { name: '10 %' }))
+    expect(set).toHaveBeenLastCalledWith({ parameters: { shape: 'SQUARE', width: '0.1', widthUnit: 'RATIO' } }, true)
+    fireEvent.change(typed, { target: { value: '20' } })
+    fireEvent.keyDown(typed, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ parameters: { shape: 'SQUARE', width: '0.2', widthUnit: 'RATIO' } }, true)
+    cleanup()
+    fields(WAVE, draft({ parameters: { shape: 'SQUARE', width: '0.5', widthUnit: 'HEAD' } }))
+    expect(screen.getByRole('radio', { name: 'One head' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: '50 %' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('spinbutton', { name: 'Width percent' }).closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(false)
+    cleanup()
+    // A Pulse has no width to type: On for stays a choice of its own.
+    fields(WAVE, draft({ parameters: { shape: 'PULSE' } }))
+    expect(screen.getByRole('radiogroup', { name: 'On for' })).toBeTruthy()
+    expect(screen.queryByRole('radiogroup', { name: 'Width' })).toBeNull()
+  })
+
+  it('opens a chip as a bottom sheet below the FX editor’s 760 arm', () => {
+    render(
+      <FxChipSheetContext.Provider value={true}>
+        <FxFields
+          entry={PULSE}
+          timingSource="BEAT"
+          draft={draft()}
+          scope={SCOPE}
+          extendedChannels={undefined}
+          settingAttribute={undefined}
+          readOnly={false}
+          set={vi.fn()}
+          setParam={vi.fn()}
+        />
+      </FxChipSheetContext.Provider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Cycle: / }))
+    const sheet = screen.getByRole('dialog', { name: 'Cycle' })
+    expect(sheet.querySelector('[data-chip-sheet]')).toBeTruthy()
+    expect(sheet.contains(screen.getByRole('radiogroup', { name: 'Cycle' }))).toBe(true)
   })
 })

@@ -29,6 +29,7 @@ import type { CueTarget } from '@/api/cuesApi'
 import type { UpdateFxRequest } from '@/api/fxApi'
 import { fxTargetOf, useWindowFxPair } from '@/components/fx/selectionFxTarget'
 import { useStopFx, useToggleFxPause } from '@/components/fx/useFxControls'
+import { FxChipSheetContext } from '@/components/fx/fxChipSheet'
 import { useCueLabel, useFxDetail } from '@/components/fixtureSheet/fxLabels'
 import { selectWindowHeads } from '@/components/fixtures-list/programmerSelectRequest'
 import { findFxEntry } from '@/components/busking/buskingTypes'
@@ -334,7 +335,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
             )}
             {form === 'stacked' && (
               <aside data-fx-inspector="stacked" aria-label="Inspector" className="border-t p-3">
-                {inspector}
+                <FxChipSheetContext.Provider value={true}>{inspector}</FxChipSheetContext.Provider>
               </aside>
             )}
           </div>

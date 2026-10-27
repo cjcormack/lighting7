@@ -149,8 +149,8 @@ is titled *FX settings: session N — title*. Never merge a later session's PR b
 | 1 | Parameter metadata: the desk declares, the editor reads | merged | `claude/fx-settings-s1` | [#299](https://github.com/cjcormack/lighting7/pull/299) | `dc33373d` |
 | 2 | Wave: one FX for the level waves | merged | `claude/fx-settings-s2` | [#302](https://github.com/cjcormack/lighting7/pull/302) | `5ad80802` |
 | 3 | Colour Cycle and Path absorb their siblings | merged | `claude/fx-settings-s3` | [#304](https://github.com/cjcormack/lighting7/pull/304) | `01b2f45a` |
-| 4 | Each head later by: spread in steps, and Width one head | in review | `claude/fx-settings-s4` | | |
-| 5 | The inspector in four questions | planned | | | |
+| 4 | Each head later by: spread in steps, and Width one head | merged | `claude/fx-settings-s4` | [#305](https://github.com/cjcormack/lighting7/pull/305) | `f64856a1` |
+| 5 | The inspector in four questions | in review | `claude/fx-settings-s5` | | |
 | 6 | Across the heads | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -415,6 +415,33 @@ the next; whoever merges the last fills its own.
   unchanged; `PaletteEditor.test.tsx` and the cue FX tab still saving every field.
 - **Docs:** `frontend/CLAUDE.md` §"The fixture sheet" (the live editor bullet), the FX editor's
   inspector bullets; `docs/glossary.md`.
+
+- **What landed, and where it differs from the above:**
+  - **One order in both layouts**: Timing, the FX's own section, *Across the heads*, *Mix*, then
+    Advanced; `layout` now sets only the spacing and the ladder in place of the dials. Until session 6,
+    *Across the heads* holds Over, Order (moved from beside Direction) and the Spread disclosure as it
+    was.
+  - **Every Timing chip opens a popover**, a bottom sheet with 44px rows on the phone host and under
+    the FX editor's one-column band (`fxChipSheet.ts`) — the master chip's a list of *Seconds* and the
+    masters, no longer a menu. *Same cycle as…* moved into the Cycle chip's popover.
+  - **The presets are a client table** (`fxParamPresets.ts`, keyed by FX and parameter), not
+    frontmatter: which values are common is the editor's word, not a rule the desk runs. Wave's Width is
+    *10 % · 50 % · One head · typed*, its `widthUnit` drawn inside the segment while Width shows (a Pulse
+    keeps *On for: Width · One head* as a choice of its own); Colour Strobe's Width *10 · 25 · 50 %*.
+    Wave's `width` now declares `role: main`, which the editor's guess had folded under *More*.
+  - **The type switcher** is the live editor's and the cue FX tab's: the FX that list the attribute,
+    less Palette Steps (which needs palettes only the picker offers; `fxSwapOptions`), both through
+    `swappedDraft` — the new type's starting parameters and blend, a blend changed from the old type's
+    start kept, the timing as `swappedTiming` carries it, a `STEP` spread onto an FX with no steps kept
+    at its offsets over the row's heads as the desk's `cycleSpread` keeps a running one's (§3). The
+    picker's own swap and the palette editor's are unchanged. A pad's instance offers none: its palette
+    names its type, which *Update palette* would not change. A swap draws the new type at once, and the
+    picker takes the type the desk runs as the one it swaps from. The palette editor's FX select, just
+    above the fields, stays its switcher, so its header names the FX alone.
+  - **The old Shape fold is gone everywhere**: a script FX's guessed detail folds under *More* too. An
+    FX that asks no question says in Mix what its blend does.
+  - **One cycle for** replaced *Per cycle · Per head* on the FX Library's definition sheet too, where a
+    definition's default is set.
 
 ### Session 6 — Across the heads
 
