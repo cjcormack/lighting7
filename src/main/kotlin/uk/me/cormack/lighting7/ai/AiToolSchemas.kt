@@ -300,7 +300,7 @@ internal val createLookTool = ToolDef(
             put("scenery", buildJsonObject {
                 put("type", "array")
                 put("items", sceneryItemSchema(forCue = false))
-                put("description", "Scene elements this Look shows while it is live — layered in a live cue, or pressed on a busk pad — above every cue (the Night look flies the moon in).")
+                put("description", "Scene elements this Look shows while it is live — layered in a live cue, or pressed on a busk pad — above every cue but the one layering it, whose own changes win (the Night look flies the moon in).")
             })
             put("apply", buildJsonObject {
                 put("type", "boolean")
@@ -1186,7 +1186,7 @@ internal val setCueEventsTool = ToolDef(
 internal val setSceneryTool = ToolDef(
     name = "set_scenery",
     description = "Set the scenery of one cue, cue stack or Look — the scene elements it moves (tabs open or close, a flown piece flies, a piece appears). " +
-        "A cue's changes move on GO into it, each on its own clock; a stack's are its set, held while the stack is live, under its cues; a Look's show while it is live (layered in a live cue, or pressed), above every cue. " +
+        "A cue's changes move on GO into it, each on its own clock; a stack's are its set, held while the stack is live, under its cues; a Look's show while it is live (layered in a live cue, or pressed), above every cue but the one layering it, whose own changes win. " +
         SCENERY_TRACKS_NOTE + " Replaces the whole list: send [] to clear it. Everything is checked against each element's kind before anything is written. Palettes carry no scenery.",
     inputSchema = buildJsonObject {
         put("type", "object")

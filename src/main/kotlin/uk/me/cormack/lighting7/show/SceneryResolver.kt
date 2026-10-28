@@ -20,15 +20,18 @@ import java.util.UUID
  * 2. each live stack's **set**, then its **cues** from the top of the list down to the live cue —
  *    stacks folded oldest GO first, so with two stacks live the most recently GO'd wins (not the
  *    lighting resolver's database-id order);
- * 3. the **Looks layered in the live cues**, stack by stack in the same order, in layer order;
+ * 3. the **Looks layered in the live cues**, stack by stack in the same order, in layer order — each
+ *    leaving alone the states its own live cue's changes still hold after 2;
  * 4. the **Looks live in the programmer** — pressed, or on a busk pad — in layer order;
  * 5. the **programmer's own scenery** ([Held], `state/ProgrammerScenery.kt`; scenery-programmer
  *    plan D1, D2) — what the operator's hands hold, above everything.
  *
  * "Live Looks win over the stack's cues and its set" is the design's rule (`StacksLooks.dc.html`),
  * so 3 and 4 sit above every cue; the programmer's hands sit above its Looks as its local values
- * sit above its layers. A state an element's kind cannot take (a drape no longer drawn) is
- * ignored, so an element edited after its scenery was written never moves wrongly.
+ * sit above its layers. The one exception is 3's: a cue's own change beats the Looks that cue
+ * layers, as its local rows beat its layers on DMX. A state an element's kind cannot take (a drape
+ * no longer drawn) is ignored, so an element edited after its scenery was written never moves
+ * wrongly.
  */
 object SceneryResolver {
     /** One element as the resolver needs it: which states it takes, and its base values for them. */
@@ -127,9 +130,17 @@ object SceneryResolver {
                 }
             }
         }
+        val cuePass = folds.mapValues { it.value.sources.toMap() }
         for (stack in ordered) {
+            val liveCueId = stack.cues.lastOrNull()?.cueId
+            // By cue, not by stack: a cue live on two tracks (a stack and a loose press) owns its rows on both.
+            fun liveOwns(elementId: Int): Set<String> =
+                cuePass[elementId].orEmpty().filterValues { it is Source.CueRow && it.cueId == liveCueId }.keys
             for (lookId in stack.layeredLookIds) {
-                lookScenery[lookId].orEmpty().forEach { apply(it, Source.CueLook(stack.stackId, lookId)) }
+                lookScenery[lookId].orEmpty().forEach {
+                    val keys = keysOf(it.state) - liveOwns(it.elementId)
+                    apply(Change(it.elementId, only(it.state, keys)), Source.CueLook(stack.stackId, lookId))
+                }
             }
         }
         for (lookId in programmerLookIds) {
