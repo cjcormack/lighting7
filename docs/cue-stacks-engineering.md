@@ -804,7 +804,10 @@ stays closed at Q15. `show/SceneryResolver.kt` resolves each element, per state,
    (cue entries only), the last change winning — computed from the list, not from history, so
    GO TO Q20 lands the set as if the list had been run. With two stacks live they fold in GO order,
    so the most recently GO'd wins — not the lighting resolver's database-id order;
-3. the Looks the live cues **layer** (enabled, `amount > 0`, not timed), in layer order;
+3. the Looks the live cues **layer** (enabled, `amount > 0`, not timed), in layer order, each leaving
+   alone the states its own live cue's changes still hold after 2 — a cue's own row beats the Looks
+   it layers, as its local rows beat its layers on DMX; a row it only tracks, and a row another
+   stack's Look sets over, do not;
 4. the Looks **live in the programmer** — pressed, or on a busk pad — in layer order;
 5. the **programmer's own scenery** (`state/ProgrammerScenery.kt`, scenery-programmer plan D1, D2):
    a sparse overlay, element → the states held and the fade they were moved on, one per desk,

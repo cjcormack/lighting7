@@ -1374,7 +1374,10 @@ not be a virtual fixture"):
   over its *set*.
 - **Live Looks win**, programmer and busk layers above the Looks a live cue layers, and both above
   every cue and set — the cook's "local rows last" turned round, because a Look pressed for "the
-  sofa is only there in this Look" has to be there whatever the cues said.
+  sofa is only there in this Look" has to be there whatever the cues said. The one exception is the
+  cook's own rule: a live cue's own scenery row beats the Looks *that cue* layers, as its local rows
+  beat its layers. A row it only tracks from an earlier cue still loses to its Looks, and its own
+  row still loses to any other live cue's Looks.
 - **The programmer's hands win over everything** (scenery-programmer plan D1, D2). The programmer
   holds scenery of its own — a sparse, runtime-only overlay, element → the states held
   (`state/ProgrammerScenery.kt`) — and it is the resolver's top rank, above its own Looks, as its

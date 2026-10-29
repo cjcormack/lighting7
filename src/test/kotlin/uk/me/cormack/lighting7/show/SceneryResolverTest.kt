@@ -13,8 +13,8 @@ import kotlin.test.assertTrue
 
 /**
  * Scenery resolution (stage-view plan session 8): base, then each live stack's set and its cues
- * tracked down to the live one (stacks oldest GO first), then the Looks the live cues layer, then the
- * programmer's Looks — per element and per state.
+ * tracked down to the live one (stacks oldest GO first), then the Looks the live cues layer under each
+ * live cue's own changes, then the programmer's Looks — per element and per state.
  */
 class SceneryResolverTest {
     private val tabs = SceneryResolver.Element(1, UUID.randomUUID(), "House tabs", setOf("visible", "open"), ElementStates(true, 1.0, null))
@@ -67,7 +67,7 @@ class SceneryResolverTest {
     }
 
     @Test
-    fun `live Looks win over every cue — the programmer's above the ones a cue layers`() {
+    fun `a cue's Looks sit over earlier cues, and the programmer's over everything a cue holds`() {
         val looks = mapOf(
             100 to listOf(Change(2, trim(3.0)), Change(1, open(0.2))),
             200 to listOf(Change(1, open(0.8))),
@@ -77,6 +77,69 @@ class SceneryResolverTest {
         assertEquals(0.8, r.getValue(1).state.open, "the programmer's Look is on top")
         assertEquals(Source.ProgrammerLook(200), r.getValue(1).sources["open"])
         assertEquals(Source.CueLook(1, 100), r.getValue(2).sources["trimM"])
+    }
+
+    @Test
+    fun `the live cue's own change beats the Looks it layers, on the states it sets`() {
+        val looks = mapOf(100 to listOf(Change(1, ElementStates(visible = false, open = 0.2)), Change(2, trim(5.0))))
+        val r = SceneryResolver.resolve(elements, listOf(liveAt(12, looks = listOf(100))), looks, emptyList())
+        assertEquals(1.0, r.getValue(1).state.open, "Q2's own row, not its Look")
+        assertEquals(Source.CueRow(1, 12, "2", 4000), r.getValue(1).sources["open"])
+        assertEquals(false, r.getValue(1).state.visible, "a state Q2 does not set is still the Look's")
+        assertEquals(Source.CueLook(1, 100), r.getValue(1).sources["visible"])
+        assertEquals(5.0, r.getValue(2).state.trimM, "the Look flies the moon in")
+    }
+
+    @Test
+    fun `a cue's Look still beats what earlier cues left`() {
+        val looks = mapOf(100 to listOf(Change(1, open(0.2)), Change(2, trim(5.0))))
+        val r = SceneryResolver.resolve(elements, listOf(liveAt(13, looks = listOf(100))), looks, emptyList())
+        assertEquals(0.2, r.getValue(1).state.open, "Q2's row is only tracked at Q3")
+        assertEquals(Source.CueLook(1, 100), r.getValue(1).sources["open"])
+        assertEquals(3.0, r.getValue(2).state.trimM, "Q3's own row")
+        assertEquals(Source.CueRow(1, 13, "3", 6000), r.getValue(2).sources["trimM"])
+    }
+
+    @Test
+    fun `a newer stack's Look beats an older stack's live cue`() {
+        val looks = mapOf(100 to listOf(Change(1, open(0.2))))
+        val other = LiveStack(stackId = 0, goSeq = 5, set = emptyList(), cues = emptyList(), layeredLookIds = listOf(100))
+        val r = SceneryResolver.resolve(elements, listOf(liveAt(12, stackId = 1, goSeq = 2, looks = listOf(100)), other), looks, emptyList())
+        assertEquals(0.2, r.getValue(1).state.open, "stack 0 went last and layers the Look")
+        assertEquals(Source.CueLook(0, 100), r.getValue(1).sources["open"])
+    }
+
+    @Test
+    fun `a cue whose own change a newer stack displaced does not hold back its Look`() {
+        val looks = mapOf(100 to listOf(Change(1, open(0.2))))
+        val newer = LiveStack(stackId = 0, goSeq = 5, set = emptyList(), cues = listOf(Cue(90, "Loose", listOf(CueChange(1, open(0.0), 0)))), layeredLookIds = emptyList())
+        val r = SceneryResolver.resolve(elements, listOf(liveAt(12, stackId = 1, goSeq = 2, looks = listOf(100)), newer), looks, emptyList())
+        assertEquals(0.2, r.getValue(1).state.open, "Q2's Look over the newer cue, as a live Look always was")
+        assertEquals(Source.CueLook(1, 100), r.getValue(1).sources["open"])
+    }
+
+    @Test
+    fun `a cue live on two tracks keeps its own change over the Looks it layers`() {
+        val looks = mapOf(100 to listOf(Change(1, open(0.2))))
+        val q2 = act1[1]
+        val loose = LiveStack(stackId = -12, goSeq = 5, set = emptyList(), cues = listOf(q2), layeredLookIds = listOf(100))
+        val alsoInStack2 = LiveStack(stackId = 2, goSeq = 5, set = emptyList(), cues = listOf(q2), layeredLookIds = listOf(100))
+        for (other in listOf(loose, alsoInStack2)) {
+            val r = SceneryResolver.resolve(elements, listOf(liveAt(12, stackId = 1, goSeq = 2, looks = listOf(100)), other), looks, emptyList())
+            assertEquals(1.0, r.getValue(1).state.open, "Q2 also live on stack ${other.stackId}")
+            assertEquals(Source.CueRow(other.stackId, 12, "2", 4000), r.getValue(1).sources["open"])
+        }
+    }
+
+    @Test
+    fun `an older stack's Look beats a newer cue's own change, whatever that cue layers`() {
+        val looks = mapOf(100 to listOf(Change(1, open(0.2))), 101 to listOf(Change(1, open(0.9))))
+        val older = LiveStack(stackId = 0, goSeq = 1, set = emptyList(), cues = emptyList(), layeredLookIds = listOf(100))
+        for (own in listOf(emptyList(), listOf(101))) {
+            val r = SceneryResolver.resolve(elements, listOf(older, liveAt(12, stackId = 1, goSeq = 5, looks = own)), looks, emptyList())
+            assertEquals(0.2, r.getValue(1).state.open, "Q2 layering $own")
+            assertEquals(Source.CueLook(0, 100), r.getValue(1).sources["open"])
+        }
     }
 
     @Test

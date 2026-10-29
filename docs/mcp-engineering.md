@@ -517,7 +517,7 @@ with the cue's fade). Each is checked against the element's kind exactly as the 
 …/scenery` routes check it (`parseToolSceneryList` beside `parseSceneryList`, `models/scenery.kt`):
 `open` only on a drawn drape, `trimM` only on a flown piece, an element named twice refused, every
 problem at once and nothing written. The schema text says scenery **tracks** — list only what
-changes — and that a Look's scenery shows while it is live, above every cue; palettes carry none.
+changes — and that a Look's scenery shows while it is live, above every cue but the one layering it; palettes carry none.
 
 **Moving scenery now** (scenery-programmer plan D15). `move_scenery` is the live counterpart: `{element,
 visible?, open?, trimM?, fadeSeconds?, release?}` holds one element's states in the **programmer's
