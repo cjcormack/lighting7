@@ -33,6 +33,7 @@ import type { FxDirection } from '@/api/fxApi'
 import type { StoredExtraColumn } from '@/lib/stackTimeline/columnOrder'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { SceneryControl } from '@/components/scenery/SceneryControl'
+import { TIMELINE_LAST_FOLD_CLASS } from './timelineFolds'
 
 /**
  * Each stack's Undo steps, last first, kept while the window lives (§4.4): one step per gesture,
@@ -197,10 +198,11 @@ export function TimelineVerbs({
       disabled={refused || ops.length === 0}
       title={refused ? lockedReason : ops.length === 0 ? `${label} would change nothing` : `${hint}${shortcut ? ` (${shortcut})` : ''}`}
       onClick={press(ops, label)}
+      aria-label={label}
       data-timeline-verb={label}
     >
       {icon}
-      <span className="hidden @[760px]:inline">{label}</span>
+      <span className={TIMELINE_LAST_FOLD_CLASS}>{label}</span>
     </Button>
   )
   const replaceTrigger = (
@@ -209,11 +211,12 @@ export function TimelineVerbs({
       size="sm"
       disabled={refused || state.replace == null}
       title={refused ? lockedReason : state.replace == null ? 'Select filled cells in one Look or palette column' : 'Replace this record over the selected cues'}
+      aria-label="Replace with…"
       data-timeline-verb="Replace"
       onClick={locked ? (e) => (e.preventDefault(), onRefused?.()) : undefined}
     >
       <Replace className="size-3.5" />
-      <span className="hidden @[760px]:inline">Replace with…</span>
+      <span className={TIMELINE_LAST_FOLD_CLASS}>Replace with…</span>
     </Button>
   )
   const settingsTrigger = (
@@ -222,11 +225,12 @@ export function TimelineVerbs({
       size="sm"
       disabled={refused || state.layers.length === 0}
       title={refused ? lockedReason : state.layers.length === 0 ? 'Select a filled Look or palette cell' : "The selected layers' settings"}
+      aria-label="Settings…"
       data-timeline-verb="Settings"
       onClick={locked ? (e) => (e.preventDefault(), onRefused?.()) : undefined}
     >
       <Settings2 className="size-3.5" />
-      <span className="hidden @[760px]:inline">Settings…</span>
+      <span className={TIMELINE_LAST_FOLD_CLASS}>Settings…</span>
     </Button>
   )
   return (

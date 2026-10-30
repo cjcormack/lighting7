@@ -25,7 +25,14 @@ vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [{ name: 'w
 vi.mock('@/store/palettes', () => ({
   usePaletteListQuery: () => ({ data: [{ id: 7, isGeneric: true, rows: [{ attribute: 'rgbColour', value: '#8f7bff' }] }] }),
 }))
-vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [{ uuid: 'tabs', name: 'House tabs', kind: 'DRAPE' }] }) }))
+vi.mock('@/store/stageElements', () => ({
+  useStageElementListQuery: () => ({
+    data: [
+      { uuid: 'tabs', name: 'House tabs', kind: 'DRAPE' },
+      { uuid: 'moon', name: 'Moon', kind: 'OBJECT' },
+    ],
+  }),
+}))
 let DESK_SELECTION: { type: 'fixture' | 'group'; key: string }[] = []
 vi.mock('@/store/selection', () => ({ useDeskSelection: () => DESK_SELECTION }))
 vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => false }))
@@ -36,6 +43,14 @@ vi.mock('@/components/cues/editor/CueEditor', () => ({
   CueEditor: (props: { cueId: number; tabRequest?: { tab: string } | null }) => (
     <div data-cue-editor={props.cueId} data-tab={props.tabRequest?.tab ?? ''} />
   ),
+}))
+/** What the bar hands the cue action set — the actions themselves are `CueActions.test.tsx`'s. */
+const cueActions: { last?: Record<string, unknown> } = {}
+vi.mock('./CueActions', () => ({
+  CueActions: (props: Record<string, unknown>) => {
+    cueActions.last = props
+    return <div data-testid="cue-actions" />
+  },
 }))
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
@@ -90,6 +105,7 @@ function entry(entryId: number, over: Partial<TimelineEntry> = {}): TimelineEntr
 
 beforeEach(() => {
   edit.mockReset()
+  cueActions.last = undefined
   timelineFiltersStore.reset()
   sessionStorage.clear()
   DESK_SELECTION = []
@@ -215,8 +231,70 @@ describe('StackTimeline', () => {
     // Lavender on Hex 1 reaches no selected head; scenery is no head's and stays.
     expect(cell(101, PALETTE)).toBeNull()
     expect(cell(101, SCENERY)).not.toBeNull()
-    act(() => timelineFiltersStore.set({ kinds: ['palette'], family: null, selectionOnly: false }))
+    act(() => timelineFiltersStore.set({ kinds: ['palette'], family: null, selectionOnly: false, hiddenScenery: [] }))
     expect(cell(101, PALETTE)).not.toBeNull()
     expect(cell(101, SCENERY)).toBeNull()
+  })
+
+  it('hands the bar’s cue action set the selected cues, as the Table does', () => {
+    stubLayout()
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} locked onRequestUnlock={() => {}} />)
+    expect(screen.queryByTestId('cue-actions')).toBeNull()
+    pressCell(cell(102, PALETTE).firstElementChild as HTMLElement, 400, 1)
+    expect(screen.getByTestId('cue-actions')).toBeTruthy()
+    expect(cueActions.last).toMatchObject({
+      projectId: 1,
+      host: 'timeline',
+      rows: [{ cueId: 2, name: 'Ballroom', entryId: 102, stackId: 10 }],
+      locked: true,
+      fromShowView: true,
+    })
+    // A range over two cues hands both, in row order; a marker is no cue.
+    fireEvent.keyDown(window, { key: 'ArrowDown', shiftKey: true })
+    fireEvent.keyDown(window, { key: 'ArrowDown', shiftKey: true })
+    expect((cueActions.last!.rows as { cueId: number }[]).map((r) => r.cueId)).toEqual([2, 3])
+  })
+
+  it('shows the scenery the operator picks, one element at a time', () => {
+    TIMELINE!.entries[1].scenery.push({ elementUuid: 'moon', state: { visible: true }, transitionMs: null })
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    // Read off the DOM: the open menu hides the rest of the page from the accessibility tree.
+    const chip = () => document.querySelector('[data-timeline-scenery-filter] button[aria-pressed]') as HTMLElement
+    const open = () => fireEvent.pointerDown(screen.getByRole('button', { name: 'Choose the scenery shown' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    expect(cell(101, 'scenery:moon')).not.toBeNull()
+    open()
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /House tabs/ }))
+    expect(cell(101, SCENERY)).toBeNull()
+    expect(cell(101, 'scenery:moon')).not.toBeNull()
+    expect(chip().textContent).toContain('1/2')
+    expect(timelineFiltersStore.getSnapshot().hiddenScenery).toEqual(['tabs'])
+    // The menu stays open, so a second element is one more click; Show all brings both back.
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Moon/ }))
+    expect(cell(101, 'scenery:moon')).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Show all' }))
+    expect(cell(101, SCENERY)).not.toBeNull()
+    expect(cell(101, 'scenery:moon')).not.toBeNull()
+    expect(chip().textContent).not.toContain('/')
+  })
+
+  it('lets go of a selected cell its column is hidden from', () => {
+    stubLayout()
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    pressCell(cell(101, SCENERY).firstElementChild as HTMLElement, 500, 0)
+    expect(screen.getByTestId('cue-actions')).toBeTruthy()
+    act(() => timelineFiltersStore.set({ ...timelineFiltersStore.getSnapshot(), hiddenScenery: ['tabs'] }))
+    // Nothing selected is left, so the bar holds no cue and ⏎ writes nothing.
+    expect(screen.queryByTestId('cue-actions')).toBeNull()
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(edit).not.toHaveBeenCalled()
+  })
+
+  it('keeps another stack’s hidden scenery when this one shows all', () => {
+    timelineFiltersStore.set({ ...timelineFiltersStore.getSnapshot(), hiddenScenery: ['elsewhere', 'tabs'] })
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    expect(cell(101, SCENERY)).toBeNull()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Choose the scenery shown' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Show all' }))
+    expect(timelineFiltersStore.getSnapshot().hiddenScenery).toEqual(['elsewhere'])
   })
 })

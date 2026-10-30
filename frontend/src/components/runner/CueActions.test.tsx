@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation } from 'react-router'
 import type { CueUses } from '@/api/cuesApi'
 
 /**
@@ -125,6 +125,24 @@ describe('CueActions', () => {
       { projectId: 1, cueId: 1, stackId: 7 },
       { projectId: 1, cueId: 2, stackId: 7 },
     ])
+  })
+
+  it('opens one copy on the Timeline from the Timeline, and on the stack’s sticky view elsewhere', async () => {
+    const Where = () => <span data-testid="where">{useLocation().pathname + useLocation().search}</span>
+    for (const [host, path] of [
+      ['timeline', '/projects/1/show/stacks/7/timeline?cue=51&entry=151'],
+      ['bar', '/projects/1/show/stacks/7?cue=51&entry=151'],
+    ] as const) {
+      render(
+        <MemoryRouter>
+          <CueActions projectId={1} host={host} rows={[ROWS[0]]} locked={false} />
+          <Where />
+        </MemoryRouter>,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+      await waitFor(() => expect(screen.getByTestId('where').textContent).toBe(path))
+      cleanup()
+    }
   })
 
   it('removes each entry from its stack — never the cue — and asks nothing', () => {

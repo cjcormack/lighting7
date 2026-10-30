@@ -64,6 +64,7 @@ const navigate = vi.fn()
 vi.mock('react-router', async (original) => ({ ...(await original<typeof import('react-router')>()), useNavigate: () => navigate }))
 const openUpdateStage = vi.fn()
 vi.mock('./cueActionDialogsContext', () => ({ useSharedCueActionDialogs: () => ({ openUpdateStage }) }))
+vi.mock('./CueActions', () => ({ CueActions: () => <div data-testid="cue-actions" /> }))
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
@@ -297,6 +298,8 @@ describe('a range', () => {
   it('disables a verb that would change nothing', () => {
     mount()
     fireEvent.click(cell(101, PALETTE))
+    // Named by their words, which fold to glyphs on a narrow bar.
+    expect(['On', 'Off', 'Fill ↓', 'Replace with…', 'Settings…'].every((name) => screen.queryByRole('button', { name }))).toBe(true)
     expect(document.querySelector<HTMLButtonElement>('[data-timeline-verb="On"]')!.disabled).toBe(true)
     expect(document.querySelector<HTMLButtonElement>('[data-timeline-verb="Off"]')!.disabled).toBe(false)
   })

@@ -6493,11 +6493,12 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
 
 #### The cue action set
 
-**One component, four hosts** (show-cue-editing plan §5, D6, D8, D9, D12, D16;
+**One component, five hosts** (show-cue-editing plan §5, D6, D8, D9, D12, D16;
 `components/runner/CueActions.tsx`): the card's strip directly under its collapsed row, the cue
 sheet's selection bar (after Set · Clear · Fan, before Deselect), the phone card's ⋯ menu in
 `CueCardBody`'s header (`actions`; `RunMobile` on the phone Show and the busk Show tab, and the
-Prompt Book's rail card), and the Cues table's selection bar (`host="table"`, §"The Cues table"). It takes the rows (a cue and the entry it was opened from, several from
+Prompt Book's rail card), the Cues table's selection bar (`host="table"`, §"The Cues table"), and
+the Timeline's bar (`host="timeline"`, §"The Timeline"). It takes the rows (a cue and the entry it was opened from, several from
 the sheet), the lock and `onRequestUnlock`, and reads the run state and the stacks itself, so a host
 hands in nothing else. **Its Record sheet, delete confirm, Update stage confirm
 (`UpdateStageDialog`) and unlock question live above every host** — `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`), mounted once in `Layout` around
@@ -6874,8 +6875,10 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   columns, FX, Scenery); a range over several cues folds it (C2). A layer cell's rank is the desk's
   `rank`, which counts a layer whose source is gone, so the ranks above it do not shift.
 - **Row B** is the filters, per window (`sessionStorage timeline.filters`): the kind chips with
-  their counts under the other two filters (`kindCounts`), the family segment (scenery always
-  kept), and *Selection only*, the columns whose `heads` meet the desk selection expanded through the
+  their counts under the other filters (`kindCounts`), the family segment (scenery always
+  kept), the Scenery chip's ▾ (`TimelineSceneryPick`), which ticks each element the stack moves in
+  or out — stored as the hidden uuids (`hiddenScenery`), so an element the stack starts to move
+  shows, and *Show all* here keeps another stack's — the chip then counting *2/3*, and *Selection only*, the columns whose `heads` meet the desk selection expanded through the
   cached group list and met by the desk's parent↔element rule both ways, a selected fixture reaching its
   elements and a selected element a layer on its parent (scenery kept too). **Column order** is per window and never stored on the desk
   (C7): `sessionStorage timeline.columns.<stackId>`, moved within its kind by the header's ‹ ›,
@@ -6927,7 +6930,12 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
     which is one request. The pointer's row is read with `elementFromPoint`, markers skipped.
   - **The bar's verbs** (`TimelineVerbs`): *On* (empty cells filled, each from its nearest filled
     cell), *Off*, *Fill ↓* (each column's top row copied down, ⌘D), *Replace with…* and *Settings…*,
-    then *Update stage…* when the live row is selected and edited since GO, then *Deselect*. **A verb
+    then *Update stage…* when the live row is selected and edited since GO, then the **cue action
+    set** over the selected cues (§"The cue action set": *Edit in programmer*, *Load into
+    programmer*, *Record…*, *Duplicate*, … — a copy reopens on the Timeline), then *Deselect*. Its
+    rungs are its own (`FOLDS.timeline`), and below the last the verbs' words fold with it
+    (`TIMELINE_LAST_FOLD_CLASS`, `timelineFolds.ts`), since the Timeline draws from 1100 px. A
+    filter that hides a column lets go of its selected cells, which would read as empty. **A verb
     that would change nothing is disabled** — its op list is empty. *Replace with…*
     (`TimelineReplacePopover`) takes a selection in one Look or palette column: the replacement
     record and its target (the desk selection's first by default), *Keep each layer's rank and
