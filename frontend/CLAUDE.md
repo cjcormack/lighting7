@@ -1096,13 +1096,13 @@ pressed — a busk pad, a cue slot, a surface button, the hand — and `LookSumm
 **A Look is an absolute state** (absolute-looks plan D1): pressed, it lands its own rows, FX and
 scenery, never narrower and never wider, and its layer names no targets. To apply something to the
 selection, use a palette. So no sender puts a Look's press on the selection — `usePress`,
-`ApplyPicker`, `CueRowStore.pressLayer`, `MakeLayerSheet` and the hand send no targets and no mask
+`ApplyPicker`, `CueRowStore.pressLayer`, `record-look`'s `asLayer` and the hand send no targets and no mask
 for one — and the desk refuses a stored write that would give a Look's layer targets by name,
 `LOOK_LAYER_TARGETED` (P2; a cue's layers, `programmer.addLayer` / `patchLayer`, the Timeline's ops,
 MCP's cue layers). A Look layer draws no target chips (`LookStack`, the Stack table's Targets
 column) and has no *Targets* button, and a focused Look layer has **no write guard**: every write in
 the grid lands in the Look (`LookRowStore`). Its mask is still a layer setting (D3) — the layer
-popover, the cue editor's Looks tab, the Timeline's *Settings…* and *Make layer*'s promotion mask.
+popover, the cue editor's Looks tab and the Timeline's *Settings…*.
 
 **A palette stores an intent, not a literal**, resolved per head at cook: a colour plus a
 white/amber policy, a level or beam role as a percentage of each head's own range, a position
@@ -1339,8 +1339,9 @@ cue, since a Look of scenery alone pressed over a loaded cue adds a layer and no
 a layer holds is not counted as a value (`snapshotEntries` leaves `layers`-owned entries out), so a
 Look pressed over a cue is one change, not one per row. **Record look retargets the include target**
 to the Look it wrote, as Record into a cue does, so the source strip names it and Update writes back
-there — except from *Make layer*, which sends `retarget: false`, since the Look it makes is a layer of
-whatever is loaded and Update still writes that layer into the loaded cue. The Include sheet's Looks tab lists a **Scenery** group after the families, so a Look of
+there — except for a new Look used here as a programmer layer (`asLayer`, on by default for *A new
+Look* and always from *Make layer*), which leaves the target where it was, since the Look it makes
+is a layer of whatever is loaded and Update still writes that layer into the loaded cue. The Include sheet's Looks tab lists a **Scenery** group after the families, so a Look of
 scenery alone (no family) can be included. `UpdateDialog`'s toast adds *, 1 scenery change* where one
 was written, so a scenery-only Update does not read as *0 values written* and nothing else; the
 Include sheet's toast counts `sceneryIncluded` the same way, Record's menu heading names held
@@ -2763,8 +2764,7 @@ answers `null` when refused — already toasted by `errorToastMiddleware` — so
 the record held and stays quiet. A press can also take the record **off** (it was already on every
 selected head) or write it **into** a focused Look, and the place's toast says which
 (`HandPlacement.describe`). Answering `true` regardless dropped the hand and toasted success
-**beside** the error, on the one place with no Undo to recover through. (`programmerAddLayer` still
-returns `sendGesture`'s verdict for its remaining caller, the Make layer sheet.)
+**beside** the error, on the one place with no Undo to recover through.
 
 **The four places, and the three Undos.** A **bank** is `useAddBuskPadMutation` — it answers the
 whole page, so the busk view's commit queue needs nothing — and its inverse goes back through the
@@ -5150,9 +5150,12 @@ the row stays out of the flow until something is selected, as before (`selection
 `POST /looks/{id}/absorb-fx`, which *moves* the running instance); Local → the bare FX
 press (`POST /programmer/fx`), one Local FX over the selection under its mask, which Record
 writes onto the cue; Output → disabled, naming the two places that can take one.
-**Make layer** promotes a Local selection into a named Look applied here — record-look, then
-`addLayer`, then `clearEntry` per row taken, so what you promoted leaves Local and the rest stays
-yours. It is a sequence, so a failure part-way leaves the Look and says so.
+**Make layer** opens `RecordLookSheet` as *Make layer* (`makeLayer`: its own title, on the
+selection's mask, no Mode and no option, and nothing to record until heads are selected): a new
+Look over the selection, which is one `record-look` call with `asLayer` — the desk writes the Look,
+puts it on top of the stack, and takes what it recorded out of Local, the rest staying yours, and
+changes nothing when the write fails. *Record → A new Look* is the same sheet, opening on every
+attribute, with *Use it here as a programmer layer* on and its own to untick.
 
 **Clear counts held scenery** (`ProgrammerActionBar`): it is enabled for a programmer holding only
 scenery, and its tooltip (`clearSentence`) says *Release … and 2 pieces of held scenery over 2s* —

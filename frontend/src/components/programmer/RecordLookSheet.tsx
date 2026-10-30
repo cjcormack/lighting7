@@ -32,7 +32,8 @@ import type {
   RecordMode,
   RecordSource,
 } from '@/store/programmerOps'
-import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
+import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } from './maskPicker'
+import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import { RecordSceneryRow } from './RecordSceneryRow'
 import { announceWrite, recordLookNote } from './writeToasts'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
@@ -56,6 +57,13 @@ export interface RecordLookSheetProps {
   initialMask?: AttributeFamily[] | null
   /** FX to open ticked — the FX editor's list. Only the programmer's own are offered. */
   initialFxIds?: readonly number[]
+  /**
+   * Opened as the Stack tab's *Make layer*: titled for it, on the selection's mask
+   * (`useWindowMaskReader`) rather than every attribute, since what is promoted is what is picked,
+   * and always a new look used here as a layer, over the selected heads only — no Mode, no option,
+   * and nothing to record until heads are selected.
+   */
+  makeLayer?: boolean
 }
 
 const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
@@ -104,6 +112,11 @@ const MODES: { value: RecordMode; label: string; hint: string }[] = [
  * And the **selection is the recommended path, not the exception**. A Look recorded from the whole
  * programmer names every head the programmer happens to hold, which is almost never what "Warm
  * Amber" means; a cue, by contrast, usually does want everything you busked.
+ *
+ * A new look is **used here as a programmer layer** unless the operator unticks it (`asLayer`): one
+ * desk call writes it, puts it on top of the stack, and takes what it recorded out of Local, so a
+ * Record into a cue afterwards layers the look rather than copying its values. Writing into an
+ * existing look never adds a layer.
  */
 export function RecordLookSheet({
   open,
@@ -113,6 +126,7 @@ export function RecordLookSheet({
   targets,
   initialMask,
   initialFxIds,
+  makeLayer = false,
 }: RecordLookSheetProps) {
   const { data: looks } = useLookListQuery({ projectId }, { skip: !projectId })
   const [record, { isLoading, error, reset }] = useRecordLookMutation()
@@ -133,6 +147,10 @@ export function RecordLookSheet({
   const [mode, setMode] = useState<RecordMode>(targetLookId ? 'MERGE' : 'CREATE')
   const [source, setSource] = useState<RecordSource>('TOUCHED')
   const [mask, setMask] = useState<MaskValue>(null)
+  // What the sheet opened on, so only a move away from it is an unsaved change.
+  const [openingMask, setOpeningMask] = useState<MaskValue>(null)
+  const readSelectionMask = useWindowMaskReader()
+  const [asLayer, setAsLayer] = useState(true)
   const [selectedOnly, setSelectedOnly] = useState(true)
   const [fxIds, setFxIds] = useState<number[]>([])
   const [includeScenery, setIncludeScenery] = useState(true)
@@ -148,8 +166,8 @@ export function RecordLookSheet({
   // the instant a Record failed.
   const openedRef = useRef(false)
   // Read once per open: a host re-rendering meanwhile changes nothing.
-  const initialRef = useRef({ initialMask, initialFxIds })
-  initialRef.current = { initialMask, initialFxIds }
+  const initialRef = useRef({ initialMask, initialFxIds, makeLayer })
+  initialRef.current = { initialMask, initialFxIds, makeLayer }
   useEffect(() => {
     if (!open) {
       openedRef.current = false
@@ -160,7 +178,10 @@ export function RecordLookSheet({
     setMode(targetLookId ? 'MERGE' : 'CREATE')
     setSource('TOUCHED')
     const initial = initialRef.current
-    setMask(initial.initialMask ?? null)
+    const opening = initial.makeLayer ? readSelectionMask() : (initial.initialMask ?? null)
+    setMask(opening)
+    setOpeningMask(opening)
+    setAsLayer(true)
     // On by default here, unlike `RecordSheet`: see the class doc. Still guarded by `scoped`, so
     // an empty selection falls back to the whole programmer rather than sending a 400.
     setSelectedOnly(true)
@@ -176,13 +197,14 @@ export function RecordLookSheet({
     setNotes('')
     setDone(false)
     reset()
-  }, [open, targetLookId, reset])
+  }, [open, targetLookId, reset, readSelectionMask])
 
   const creating = mode === 'CREATE'
-  const canSubmit = (creating ? name.trim() !== '' : lookId !== '') && !maskIsEmpty(mask)
+  const canSubmit =
+    (creating ? name.trim() !== '' : lookId !== '') && !maskIsEmpty(mask) && (!makeLayer || selection.length > 0)
   // Guarded on the selection as well as the checkbox: the list can unmount (or be deselected) while
   // this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
-  const scoped = selectedOnly && selection.length > 0
+  const scoped = (makeLayer || selectedOnly) && selection.length > 0
 
   const submit = async () => {
     if (done) return
@@ -198,6 +220,7 @@ export function RecordLookSheet({
         targets: scoped ? selection : undefined,
         fxIds: fxIds.length > 0 ? fxIds : undefined,
         scenery: includeScenery,
+        asLayer: creating && (makeLayer || asLayer) ? true : undefined,
       }).unwrap()
       setDone(true)
       announceWrite(recordLookNote(response))
@@ -208,34 +231,44 @@ export function RecordLookSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !isLoading && onOpenChange(next)}>
+    // `unsavedChanges` on the Sheet, not `useUnsavedChanges` here: that hook reads a context `Sheet`
+    // itself provides, so it would look up the tree past the provider and silently no-op.
+    <Sheet
+      open={open}
+      onOpenChange={(next) => !isLoading && onOpenChange(next)}
+      unsavedChanges={!done && (name.trim() !== '' || notes.trim() !== '' || maskValueKey(mask) !== maskValueKey(openingMask))}
+    >
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Record look</SheetTitle>
+          <SheetTitle>{makeLayer ? 'Make a layer from your values' : 'Record look'}</SheetTitle>
           <SheetDescription>
-            Write the programmer into a look that names its own fixtures.
+            {makeLayer
+              ? 'Save what you busked as a look that names its own fixtures, and use it here as a layer.'
+              : 'Write the programmer into a look that names its own fixtures.'}
           </SheetDescription>
         </SheetHeader>
 
         <SheetBody>
-          <div className="space-y-2">
-            <Label>Mode</Label>
-            <ToggleGroup
-              type="single"
-              value={mode}
-              onValueChange={(next) => next && setMode(next as RecordMode)}
-              className="flex-wrap justify-start"
-            >
-              {MODES.map((m) => (
-                <ToggleGroupItem key={m.value} value={m.value} className="text-xs">
-                  {m.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <p className="text-xs text-muted-foreground">
-              {MODES.find((m) => m.value === mode)?.hint}
-            </p>
-          </div>
+          {!makeLayer && (
+            <div className="space-y-2">
+              <Label>Mode</Label>
+              <ToggleGroup
+                type="single"
+                value={mode}
+                onValueChange={(next) => next && setMode(next as RecordMode)}
+                className="flex-wrap justify-start"
+              >
+                {MODES.map((m) => (
+                  <ToggleGroupItem key={m.value} value={m.value} className="text-xs">
+                    {m.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p className="text-xs text-muted-foreground">
+                {MODES.find((m) => m.value === mode)?.hint}
+              </p>
+            </div>
+          )}
 
           {creating ? (
             <>
@@ -257,6 +290,25 @@ export function RecordLookSheet({
                   rows={2}
                 />
               </div>
+              {!makeLayer && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={asLayer}
+                      onChange={(e) => setAsLayer(e.target.checked)}
+                      className="size-4"
+                    />
+                    Use it here as a programmer layer
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    {asLayer
+                      ? 'The look goes on top of your layers and what it records leaves your values, ' +
+                        'so a Record into a cue layers the look instead of copying it.'
+                      : 'What it records stays in your values, and a Record into a cue copies them.'}
+                  </p>
+                </div>
+              )}
             </>
           ) : (
             <div className="space-y-2">
@@ -300,7 +352,7 @@ export function RecordLookSheet({
               <input
                 type="checkbox"
                 checked={scoped}
-                disabled={selection.length === 0}
+                disabled={selection.length === 0 || makeLayer}
                 onChange={(e) => setSelectedOnly(e.target.checked)}
                 className="size-4"
               />
@@ -315,7 +367,9 @@ export function RecordLookSheet({
             </label>
             <p className="text-xs text-muted-foreground">
               {selection.length === 0
-                ? targets != null
+                ? makeLayer
+                  ? 'Select the heads this look is about first. A look over named heads is what makes it reusable across cues.'
+                  : targets != null
                   ? 'Select targets on the rig band to record just those heads — recommended, ' +
                     'or the look names every head the programmer is holding.'
                   : 'Select fixtures on the values sheet to record just those heads — recommended, ' +
@@ -327,7 +381,7 @@ export function RecordLookSheet({
 
           <MaskedAttributes value={mask} onChange={setMask} />
 
-          <RecordableFx value={fxIds} onChange={setFxIds} />
+          <RecordableFx value={fxIds} onChange={setFxIds} layer={creating && (makeLayer || asLayer)} />
 
           <RecordSceneryRow
             projectId={projectId}
@@ -350,7 +404,7 @@ export function RecordLookSheet({
           </Button>
           <Button onClick={submit} disabled={!canSubmit || isLoading || done}>
             {isLoading && <Loader2 className="size-4 animate-spin" />}
-            {isLoading ? 'Recording…' : 'Record'}
+            {isLoading ? 'Recording…' : makeLayer ? 'Make layer' : 'Record'}
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -392,8 +446,9 @@ function MaskedAttributes({
  * - **the tempo travels, the timing does not**. `LookFx` has speed-master fields and no
  *   delay/interval, so a busked "fire after 3s" becomes the *layer's* delay — per-use rather than
  *   baked in;
- * - a ticked effect is **moved**, not copied: the server takes it out of the band, because the
- *   layer applying this look starts running it and two copies would beat against each other.
+ * - a ticked effect is **moved**, not copied: the server takes it out of the band, because a layer
+ *   applying this look runs it and two copies would beat against each other — the one *Use it here*
+ *   adds takes the very instance over, phase and all.
  *
  * Only loose band effects are offered. One already owned by a layer belongs to that Look already,
  * and recording it into a second would duplicate a running instance rather than move it.
@@ -401,9 +456,12 @@ function MaskedAttributes({
 function RecordableFx({
   value,
   onChange,
+  layer,
 }: {
   value: number[]
   onChange: (next: number[]) => void
+  /** The look goes on as a programmer layer, which takes a ticked FX over, still running. */
+  layer: boolean
 }) {
   const { data: effects } = useActiveFxQuery()
   const candidates = (effects ?? []).filter(
@@ -441,6 +499,9 @@ function RecordableFx({
         </label>
       ))}
       <p className="text-xs text-muted-foreground">
+        {layer
+          ? 'A ticked FX keeps running, as the layer’s. '
+          : 'A ticked FX moves into the look and stops here, until the look is next pressed or GO’d. '}
         An FX you leave out keeps running in the programmer — leaving it out is not stopping it.
       </p>
     </div>

@@ -409,28 +409,6 @@ interface ProgrammerStateOutgoing {
   type: 'programmer.state'
 }
 
-/**
- * Put a Look **or a template** on the stack as a layer, on top.
- *
- * No uuid: the backend resolves the record itself from the id, and reads its name and uuid in the
- * same breath — a client that supplied both could make the two disagree. Unlike the retired preset
- * toggle this carries the whole source, so a Look's **bound** row lands on the fixture it names — a
- * layer has somewhere to put a target set, which is what the old path lacked.
- */
-interface ProgrammerAddLayerOutgoing {
-  type: 'programmer.addLayer'
-  /** Exactly one of these. The server refuses both and neither. */
-  lookId?: number
-  paletteId?: number
-  targets: CueTarget[]
-  attributeMask?: string
-  blendMode?: string
-  amount?: number
-  speedMasterUuid?: string
-  rateSpeedMasterUuid?: string
-  fadeMs?: number
-}
-
 interface ProgrammerRemoveLayerOutgoing {
   type: 'programmer.removeLayer'
   layerId: number
@@ -510,7 +488,6 @@ export type ProgrammerOutgoingMessage =
   | ProgrammerClearAllOutgoing
   | ProgrammerSetBlindOutgoing
   | ProgrammerStateOutgoing
-  | ProgrammerAddLayerOutgoing
   | ProgrammerRemoveLayerOutgoing
   | ProgrammerDetachLayerOutgoing
   | ProgrammerMoveLayerOutgoing
@@ -586,19 +563,6 @@ interface ProgrammerErrorIncoming {
   message: string
   /** A refusal named for a client to branch on — `LOOK_LAYER_TARGETED`; absent for the rest. */
   code?: string
-}
-
-/**
- * `programmer.addLayer`: a Look's layer or a palette's. Only a palette's names targets — a Look's
- * lands whole, and the desk refuses one naming any (`LOOK_LAYER_TARGETED`, absolute-looks plan P2).
- */
-export type AddLayerInput = ({ lookId: number; paletteId?: never; targets?: never } | { paletteId: number; lookId?: never; targets?: CueTarget[] }) & {
-  attributeMask?: string
-  blendMode?: string
-  amount?: number
-  speedMasterUuid?: string
-  rateSpeedMasterUuid?: string
-  fadeMs?: number
 }
 
 /** The programmer's scenery, whole: a `StateFlow` on the desk, so a broadcast and the connect snapshot. */
@@ -725,15 +689,6 @@ export interface ProgrammerApi {
   /** Let one element go, or — with no uuid — every one the programmer holds. */
   clearScenery(elementUuid?: string, fadeMs?: number): void
 
-  /**
-   * Add a layer. Answered by the whole `programmer.layerState` broadcast, so there is no reply and
-   * no layer id — but the **send itself** has a synchronous verdict, which this returns: false
-   * means `sendGesture` found the socket closed, toasted, and put nothing on the wire.
-   *
-   * Its one reader is the hand's place (`HandProgrammerLayerStrip`), which must not let go of the
-   * held record for a frame that never left. Every other caller ignores it, as they always did.
-   */
-  addLayer(input: AddLayerInput): boolean
   removeLayer(layerId: number, fadeMs?: number): void
   /** Detach: the layer's values and effects become Local, and nothing on stage moves. */
   detachLayer(layerId: number): boolean
@@ -1295,20 +1250,6 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       send({ type: 'programmer.clearScenery', elementUuid, fadeMs })
     },
 
-    addLayer({ lookId, paletteId, targets, attributeMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
-      return send({
-        type: 'programmer.addLayer',
-        lookId,
-        paletteId,
-        targets: targets ?? [],
-        attributeMask,
-        blendMode,
-        amount,
-        speedMasterUuid,
-        rateSpeedMasterUuid,
-        fadeMs,
-      })
-    },
     removeLayer(layerId, fadeMs) {
       send({ type: 'programmer.removeLayer', layerId, fadeMs })
     },

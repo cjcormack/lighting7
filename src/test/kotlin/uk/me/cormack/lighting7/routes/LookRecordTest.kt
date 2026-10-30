@@ -92,7 +92,7 @@ class LookRecordTest : RouteIntegrationTest() {
         }
 
     @Test
-    fun `record-look with retarget false leaves the include target where it was, as Make layer needs`() =
+    fun `record-look with retarget false leaves the include target where it was`() =
         testApplication {
             mountTestApp(state)
             val client = jsonClient()

@@ -137,9 +137,9 @@ export interface RecordLookRequest {
    * Look is a per-effect judgement ("the colour chase is the look; the tilt sine was me looking at
    * it"), and a boolean cannot say that.
    *
-   * A ticked effect is **moved**: the server removes it from the programmer band, because the layer
-   * this Look is applied through starts running it immediately and two copies would beat against
-   * each other. An unticked effect **keeps running** — leaving one out of a Look is not the same as
+   * A ticked effect is **moved**: the server removes it from the programmer band, because a layer
+   * applying this Look runs it and two copies would beat against each other — under `asLayer` the
+   * new layer takes the very instance over. An unticked effect **keeps running** — leaving one out of a Look is not the same as
    * stopping it, which is exactly why these are checkboxes.
    *
    * Timing does not travel: `LookFx` has no delay/interval fields, so a busked "fire after 3s"
@@ -153,9 +153,15 @@ export interface RecordLookRequest {
   scenery?: boolean
   /**
    * Point the include target at the Look written, as Record into a cue does. Defaults on at the
-   * desk; Make layer sends false, since it applies the Look as a layer of whatever is loaded.
+   * desk; `asLayer` implies false, since the Look is then a layer of whatever is loaded.
    */
   retarget?: boolean
+  /**
+   * Use the new Look here as a programmer layer, in the same call: on top of the stack, what it
+   * recorded out of Local, the ticked FX running on as the layer's, the held scenery it took handed
+   * to it. CREATE only (400 otherwise); nothing in the programmer changes when the write fails.
+   */
+  asLayer?: boolean
 }
 
 export interface RecordLookResponse {
@@ -174,6 +180,12 @@ export interface RecordLookResponse {
   sceneryWritten?: number
   /** Scenery rows deleted from the Look (REMOVE). */
   sceneryRemoved?: number
+  /** The programmer layer it went on as, under `asLayer`. */
+  layerId?: number | null
+  /** Programmer values released from Local to that layer. */
+  keysReleased?: number
+  /** Taken-over FX that now apply under a Local FX they were over (a layer's FX apply under every one). */
+  warnings?: string[]
 }
 
 export interface IncludeRequest {

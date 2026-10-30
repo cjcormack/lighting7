@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-RECORD-LOOK-AS-LAYER`](#fu-manual-record-look-as-layer) | *Record → A new Look* and *Make layer* leave the rig still: the new Look goes on top of the programmer's layers, what it took leaves *Your values*, a ticked chase keeps running without a jump, held scenery stays where it is, and a Record into a cue afterwards layers the Look | Record look as a layer, 2026-10-30 |
 | [`FU-MANUAL-GROUP-ORDER-S2`](#fu-manual-group-order-s2) | a venue group reordered from a show chases in the show's order on the rig and is taken back, the venue's order unchanged in a second show on it, and an Update across a venue reorder asks and keeps the show's | Group order S1–S2, 2026-10-27 |
 | [`FU-MANUAL-TABLES-COLOURS-S5`](#fu-manual-tables-colours-s5) | colour everywhere else at the desk: the busk rig's tile bands and the Stage view's labels and *Bodies · By colour* in a blacked-out room, a second screen set to *By colour* from the Screens sheet, the DMX footprints and a surface's labels, and whether cyan reads as a cue on the rig | Tables and colours S5, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S4`](#fu-manual-tables-colours-s4) | colour in the tables at the desk: the Colour column's keymap and popover on the desk and the iPad, the name mark readable on the desk's two screens and the iPad in a dark room and in light, *Colour from group*, and a venue patch recoloured from a show and taken back | Tables and colours S4, 2026-10-19 |
@@ -138,6 +139,35 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-RECORD-LOOK-AS-LAYER`
+
+**What it proves**: *a new Look used here as a layer* — `record-look`'s `asLayer`, the one call
+behind *Record → A new Look* and the Stack tab's *Make layer*: nothing on the rig moves while the
+busked values, FX and held scenery become the Look's layer.
+
+**Why it is here**: the tests compare channel values and the FX instance id against a mock
+controller; only the rig shows that a chase taken over by the layer carries on without a stutter,
+and that the Stage view's moon does not flicker as the layer takes it.
+
+**Test**, on the dev rig, Hex 1–4 at a busked level and colour, a Local chase on their dimmers and the
+moon held in:
+
+1. **Record → A new Look.** Select Hex 1–4, *Record ▾ → A new Look*, name it *Warm*, tick the chase,
+   leave *Use it here as a programmer layer* ticked, Record. The rig does not move and the chase
+   keeps its place in the cycle. The toast reads *… on here as a layer*. Stack: *Warm* on top, *Your
+   values* holding nothing for Hex 1–4. FX: the chase is *Warm*'s. The moon stays in, and the
+   Scenery tab shows it held by *Warm*.
+2. **Into a cue.** *Record ▾ → A new cue*: the cue holds *Warm* as a layer, not Hex 1–4's rows.
+   Edit *Warm*'s colour in the library and GO the cue: it shows the new colour.
+3. **Make layer.** Busk Hex 5–8, pick *Colour* on the selection's pill, *Make layer* on *Your
+   values*: the sheet is titled *Make a layer from your values*, opens on *Colour* and offers no
+   Mode. Make it: the colour goes into the layer and the level stays in *Your values*. Deselect
+   everything and open it again: *Make layer* stays disabled until heads are selected.
+4. **Option off.** *A new Look* with the option unticked: the values stay in *Your values* and no
+   layer is added.
 
 ---
 
@@ -689,7 +719,7 @@ of scenery:
 2. **Stack.** *Your values* is on top, then every layer as the rail lists it, top first. Drag the
    bottom layer to the top: the rig changes as if dragged on the rail, and the rail follows. Pick the
    *Looks* chip: the grips go and the footer says why. ⏎ on a layer: Values, focused on that layer.
-   *Make layer* on *Your values* makes one.
+   *Make layer* on *Your values* makes one: the new Look on top, its values gone from *Your values*.
 3. **FX and Scenery.** *+ FX* over the selection starts a Local FX, listed at once. Pause,
    *Edit…* and *Stop* act on it. On Scenery, move a held drape from its row's sliders and release it
    with its ×; the Stage view follows.

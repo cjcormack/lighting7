@@ -128,7 +128,7 @@ Clients that fan a group-scoped gesture out *themselves* — a group virtual dim
 
 ### The include target
 
-`ProgrammerStore.lastIncludedTarget` records what Include last loaded, and is what a bare Update writes back to. It is set by Include and by any Record — into a cue or a Look; `record-look`'s `retarget: false`, which Make layer sends, leaves it where it was — (record-then-tweak-then-Update being the obvious next gesture), carries the stack entry a cue was included from (`entryId`, for the indicator's number — a shared cue has one per stack; Update writes the cue, whichever), cleared by Clear and by deleting the cue (removing its entry drops only the `entryId`), and left alone by `clearEntry`, `setBlind`, and a successful Update — Update is repeatable.
+`ProgrammerStore.lastIncludedTarget` records what Include last loaded, and is what a bare Update writes back to. It is set by Include and by any Record — into a cue or a Look; `record-look`'s `retarget: false` — which `asLayer`, *Record → A new Look* and *Make layer*, implies, since the new Look is a layer of whatever is loaded and Update must still write that layer into it — leaves it where it was — (record-then-tweak-then-Update being the obvious next gesture), carries the stack entry a cue was included from (`entryId`, for the indicator's number — a shared cue has one per stack; Update writes the cue, whichever), cleared by Clear and by deleting the cue (removing its entry drops only the `entryId`), and left alone by `clearEntry`, `setBlind`, and a successful Update — Update is repeatable.
 
 It reaches the client two ways: on `programmer.state` as `lastIncluded`, and as a `programmer.includeTarget` push. That push is a **broadcast**, unlike every other programmer reply, because the programmer is shared: a second tab's Update button must offer the same target.
 
@@ -196,6 +196,26 @@ silently miss heads. Omitting the mask, or naming all four families, means "ever
   MARKER records none and warns. `routes/programmerSceneryRecord.kt` holds the rules. Recording a
   **Look** (`record-look`) writes **every** held state, since a Look asserts rather than tracks — so
   a Look recorded with only the moon held is a scenery Look, the busk pad that flies it.
+
+**`record-look { mode: CREATE, asLayer: true, ... }`** is *Record → A new Look* and the Stack tab's
+*Make layer*, one call: the Look is written, then goes on top of the programmer's layer stack
+(`ProgrammerLayerStack.add`'s `adopt`), then every key its rows name leaves Local — each owner's slot,
+fine halves and raw channel slots included; a group row its members, a cell row its cell — and the
+held scenery it took leaves the programmer's own (`ProgrammerScenery.handToLayer`, `holdUnder` in
+reverse). Each step lands what the stage already showed, so nothing moves, and the ticked `fxIds` are
+**taken over** by the layer, the same instances with their phase, matched to the Look FX rows they
+were written as (`FxEngine.adoptIntoProgrammerLayer`, Detach's `detachProgrammerLayerFx` in reverse).
+Two things still move, as two do on Detach: a taken-over FX now applies under every Local FX, so one
+that was over an unticked Local FX on the same attribute goes under it (the response's `warnings`
+names each), and of two identical ticked FX the layer runs one — the other stays Local, still
+running. A Record into a cue afterwards layers the Look rather than copying its values. The layer
+names no mask: the Look holds only what was recorded. Include's baseline follows the keys: an
+included cue's own rows for them — staged or, under a masked Include, not — are what Update deletes
+as it writes the layer into the cue, and a cue FX the layer took over is retired from the cue then
+too (`splitIncludedChildren`); an included Look keeps its rows, since a Look cannot hold a layer. A
+failed write changes nothing in the programmer; `asLayer` is refused under any other mode (400) and
+implies `retarget: false`. Without it, a ticked FX leaves the programmer band and runs again wherever
+the Look is next pressed or GO'd.
 
 **`include { cueId, mask? }`** loads a cue's assignments and immediate FX into the programmer as
 `INCLUDE`-owned slots and programmer-band FX, and returns the fixture keys for the sheet to

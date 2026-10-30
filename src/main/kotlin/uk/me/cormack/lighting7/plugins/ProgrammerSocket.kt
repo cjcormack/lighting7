@@ -297,8 +297,9 @@ data class IncludedTargetDto(
 )
 
 /**
- * Apply a Look or a palette to the programmer as a **layer**, on top of the stack — the Make layer
- * sheet's gesture. A Look's layer carries the whole Look: every row lands on the fixture it names.
+ * Apply a Look or a palette to the programmer as a **layer**, on top of the stack. A Look's layer
+ * carries the whole Look: every row lands on the fixture it names. The desk's own windows make one
+ * through a press or `record-look`'s `asLayer`, not this frame.
  */
 @Serializable
 @SerialName("programmer.addLayer")
@@ -1103,8 +1104,6 @@ object ProgrammerHandler {
         attribute: String,
         fadeMs: Long,
     ): OutMessage {
-        val engine = state.show.fxEngine
-        val store = state.show.programmerStore
         val fixtures: List<GroupableFixture> = when (target) {
             is TargetRef.Fixture -> {
                 val fixture = try {
@@ -1124,16 +1123,32 @@ object ProgrammerHandler {
             }
         }
 
+        releaseLocal(state, fixtures.map { it to attribute }, fadeMs)
+        return ProgrammerEntryClearedOutMessage(target.discriminator, target.key, attribute)
+    }
+
+    /**
+     * Release every local owner's slot on each (fixture, attribute) pair, its fine halves with it,
+     * in one sweep and one publish — [clearEntry] for many keys at once. [withSideband] takes the raw
+     * channel slots under them too ([uk.me.cormack.lighting7.fx.ProgrammerWriter.clearEntries]).
+     */
+    fun releaseLocal(
+        state: State,
+        pairs: List<Pair<GroupableFixture, String>>,
+        fadeMs: Long = 0,
+        withSideband: Boolean = false,
+    ) {
+        val store = state.show.programmerStore
         // Snapshot the owners being released before the sweep — the toggle subsystems'
         // bookkeeping must be pruned for the LOCATE / preset slots this clear removes,
         // or their state would keep claiming writes that are gone (a "located" fixture
         // that is no longer located).
-        val keys = fixtures.flatMap { f -> (listOf(attribute) + fineHalvesOf(f, attribute)).map { f to it } }
+        val keys = pairs.flatMap { (f, attribute) -> (listOf(attribute) + fineHalvesOf(f, attribute)).map { f to it } }.distinct()
         val released = keys.flatMap { (f, key) ->
             store.slotsFor(f.targetKey, key).map { Triple(f.targetKey, key, it.owner) }
         }
 
-        engine.programmer.clearEntries(keys, fadeMs)
+        state.show.fxEngine.programmer.clearEntries(keys, fadeMs, withSideband)
 
         // Locate is the only owner left with bookkeeping to prune. The `preset:{id}` owners went
         // with the toggle machinery: a Look now reaches the programmer as a layer, and
@@ -1144,7 +1159,6 @@ object ProgrammerHandler {
                 state.show.locateManager.pruneWrite(fixtureKey, key)
             }
         }
-        return ProgrammerEntryClearedOutMessage(target.discriminator, target.key, attribute)
     }
 
     /**

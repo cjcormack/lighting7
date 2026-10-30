@@ -245,7 +245,14 @@ class ProgrammerLayerStack(
 
     // ── Mutations ───────────────────────────────────────────────────────────
 
-    /** Append a layer to the top of the stack. A Look's names no targets ([layerTargets]). */
+    /**
+     * Append a layer to the top of the stack. A Look's names no targets ([layerTargets]).
+     *
+     * [adopt] is for a Look the programmer's own effects were just recorded into (`asLayer` on
+     * Record → A new Look): each of the layer's effects realising a Look effect row in it, by the
+     * row's uuid, takes over that running instance rather than spawning a twin, so its phase is
+     * kept. One the layer does not run — a twin of another, which shares its key — is left as it was.
+     */
     fun add(
         source: LayerSource,
         targets: List<CueTargetDto> = emptyList(),
@@ -257,6 +264,7 @@ class ProgrammerLayerStack(
         sourceCueLayerId: Int? = null,
         cycleOverride: Double? = null,
         fadeMs: Long = 0,
+        adopt: Map<UUID, FxInstance> = emptyMap(),
     ): Pair<ProgrammerLayer, ProgrammerLayerOutcome> {
         val layer = ProgrammerLayer(
             layerId = store.mintLayerId(),
@@ -272,8 +280,11 @@ class ProgrammerLayerStack(
             cycleOverride = cycleOverride,
         )
         val (next, _) = store.mutateLayers { current -> renumber(current + layer) to Unit }
-        return layer to recook(next, fadeMs, arrival = true)
+        return layer to recook(next, fadeMs, arrival = true, adopt = adopt.takeIf { it.isNotEmpty() }?.let { Adopt(layer.layerId, it) })
     }
+
+    /** The instances one arriving layer takes over: see [add]. */
+    private data class Adopt(val layerId: Int, val byRowUuid: Map<UUID, FxInstance>)
 
     /**
      * The busking pad's gesture: put this Look or template on, or take it off again. The rule itself
@@ -945,13 +956,14 @@ class ProgrammerLayerStack(
         layers: List<ProgrammerLayer>,
         fadeMs: Long = 0,
         arrival: Boolean = false,
+        adopt: Adopt? = null,
     ): ProgrammerLayerOutcome {
         // One cook for the whole recook (sweep item C8): the rows and the effect triples come out
         // of a single pass over the stack, so the layers resolve once and both halves see the same
         // Look snapshots.
         val cooked = cookStack(layers, withFx = true)
         val (moved, rowFades) = materialise(cooked.values)
-        val fx = syncFx(layers, cooked, fadeMs, moved)
+        val fx = syncFx(layers, cooked, fadeMs, moved, adopt)
         if (moved.isNotEmpty()) {
             val eng = engine()
             if (!arrival || rowFades.isEmpty() || fadeMs > 0) {
@@ -1061,6 +1073,7 @@ class ProgrammerLayerStack(
         cooked: CueComposer.FullCook,
         fadeMs: Long,
         moved: Set<CueAssignmentResolver.Key>,
+        adopt: Adopt? = null,
     ): FxSync = synchronized(fxLock) {
         val eng = engine()
         // The engine's record *is* the band: anything removed by another surface (the FX sheet's
@@ -1081,6 +1094,7 @@ class ProgrammerLayerStack(
         // is O(N²) over a stack of any size (sweep item C7). Build order is add order, so the
         // layer-rank priorities still decide composition exactly as before.
         val spawning = mutableListOf<FxInstance>()
+        val adopting = mutableListOf<FxEngine.LayerFxAdoption>()
 
         for ((layer, effect, target) in desired) {
             val key = ProgrammerLayerFxKey.of(layer.layerId, effect, target)
@@ -1092,6 +1106,12 @@ class ProgrammerLayerStack(
             val existing = live[key]
             if (existing != null) {
                 repriorities[existing.id] = priority
+                continue
+            }
+            val adoptee = adopt?.takeIf { it.layerId == layer.layerId }?.let { a -> effect.uuid?.let { a.byRowUuid[it] } }
+                ?.takeIf { eng.getFx(it.id) === it && !it.leaving }
+            if (adoptee != null && adopting.none { it.instance === adoptee }) {
+                adopting += FxEngine.LayerFxAdoption(adoptee, key, priority)
                 continue
             }
             val override = byLayerId[layer.layerId]?.cycleOverride
@@ -1108,6 +1128,7 @@ class ProgrammerLayerStack(
             }
         }
         val spawned = eng.addFxBatch(spawning).size
+        adopt?.let { byLayerId[it.layerId] }?.let { eng.adoptIntoProgrammerLayer(adopting, it.source) }
 
         val retracted = eng.releaseFx(live.filterKeys { it !in wanted }.values, fadeMs, valueMoves)
 

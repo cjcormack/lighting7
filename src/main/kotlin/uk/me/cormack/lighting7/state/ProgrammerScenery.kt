@@ -158,6 +158,34 @@ class ProgrammerScenery(
         changed
     }
 
+    /**
+     * [holdUnder] in reverse, for a Look the programmer's scenery was just recorded into and that is
+     * now on as a layer: each held state equal to [rows]' is let go, without a clock, since the
+     * layer shows the same. A state moved since the Look read it stays held. Answers how many
+     * elements lost a state.
+     */
+    fun handToLayer(projectId: Int, rows: Map<UUID, ElementStates>): Int = synchronized(lock) {
+        val current = _flow.value
+        if (current.projectId != projectId) return 0
+        val elements = LinkedHashMap(current.elements)
+        var changed = 0
+        for ((uuid, taken) in rows) {
+            val held = elements[uuid] ?: continue
+            val kept = ElementStates(
+                visible = held.state.visible.takeUnless { it == taken.visible },
+                open = held.state.open.takeUnless { it == taken.open },
+                trimM = held.state.trimM.takeUnless { it == taken.trimM },
+            )
+            if (kept == held.state) continue
+            releases.remove(uuid)
+            if (kept.visible == null && kept.open == null && kept.trimM == null) elements.remove(uuid)
+            else elements[uuid] = held.copy(state = kept)
+            changed++
+        }
+        if (changed > 0) _flow.value = current.copy(elements = elements)
+        changed
+    }
+
     /** One element as Include loads it: the source's own states for it, and a cue row's clock. */
     data class Included(val elementUuid: UUID, val state: ElementStates, val transitionMs: Long?)
 

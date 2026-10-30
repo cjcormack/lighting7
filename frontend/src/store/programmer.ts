@@ -4,7 +4,6 @@ import { lightingApi } from '../api/lightingApi'
 import { Status } from '../api/statusApi'
 import type { CueTarget } from '../api/cuesApi'
 import type {
-  AddLayerInput,
   IncludedTarget,
   ProgrammerAppliedSource,
   ProgrammerLayer,
@@ -345,19 +344,14 @@ export function programmerClearScenery(elementUuid?: string, fadeMs?: number) {
 // answers every one of these with the whole `programmer.layerState` broadcast, so there is no
 // per-call reply for a mutation to await. `patchLayer` is also on a drag/typing path.
 
-export function programmerAddLayer(input: AddLayerInput): boolean {
-  // The verdict is the **send's**, not the desk's: true means the frame went out, never that a
-  // layer exists. That is all a caller can know here — the op is answered by a broadcast — but it
-  // is enough to tell "the socket was closed and `sendGesture` already said so" from "it landed",
-  // which is the difference between the hand letting go of a record and keeping it.
-  return lightingApi.programmer.addLayer(input)
-}
-
 export function programmerRemoveLayer(layerId: number, fadeMs?: number) {
   lightingApi.programmer.removeLayer(layerId, fadeMs)
 }
 
-/** *Detach*: the layer becomes Local. The send's verdict, as [programmerAddLayer]'s is. */
+/**
+ * *Detach*: the layer becomes Local. The verdict is the **send's**, not the desk's: true means the
+ * frame went out, never that the layer went — the op is answered by a broadcast.
+ */
 export function programmerDetachLayer(layerId: number): boolean {
   return lightingApi.programmer.detachLayer(layerId)
 }

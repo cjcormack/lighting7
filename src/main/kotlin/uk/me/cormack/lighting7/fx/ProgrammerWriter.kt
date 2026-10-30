@@ -255,10 +255,14 @@ class ProgrammerWriter internal constructor(
      * clear having been ignored. "Clear this entry" means *release the local writes on it*; removing
      * a layer's contribution is done by removing the layer. Nothing is lost by skipping it, because
      * with local writes gone the layer slot is what should be showing.
+     *
+     * [withSideband] also drops the raw channel slots on each pair's channels, for a caller handing
+     * the whole value to a layer — a pan drag in the Channels view is part of the position it took.
      */
     fun clearEntries(
         clears: List<Pair<GroupableFixture, String>>,
         fadeMs: Long = 0,
+        withSideband: Boolean = false,
     ): List<AttributeChannelResolver.ChannelWrite> {
         val all = mutableListOf<AttributeChannelResolver.ChannelWrite>()
         val keys = HashSet<CueAssignmentResolver.Key>()
@@ -273,6 +277,14 @@ class ProgrammerWriter internal constructor(
             if (channels.isEmpty()) continue
             keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, attribute)
             all += channels
+        }
+        if (withSideband) {
+            val held = all.filter { programmerStore.getChannelSlot(it.universe.universe, it.channel) != null }
+                .map { packChannelKey(it.universe.universe, it.channel) }
+            if (held.isNotEmpty()) {
+                programmerStore.clearChannelsAbsorbedBy(held)
+                clearedAny = true
+            }
         }
         if (keys.isNotEmpty()) {
             publisher.publishCascadeForKeys(keys, fadeMs)

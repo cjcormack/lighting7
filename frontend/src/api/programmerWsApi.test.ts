@@ -527,33 +527,15 @@ describe('createProgrammerApi', () => {
     const { conn, sent } = fakeWsConnection()
     const api = createProgrammerApi(conn)
 
-    api.addLayer({ paletteId: 7, targets: [{ type: 'group', key: 'front-wash' }], amount: 0.5 })
-    api.addLayer({ lookId: 8 })
     api.removeLayer(3, 500)
     api.moveLayer(3, 0)
     api.patchLayer(3, { enabled: false, amount: 0.25 })
 
     expect(sent).toEqual([
-      {
-        type: 'programmer.addLayer',
-        paletteId: 7,
-        targets: [{ type: 'group', key: 'front-wash' }],
-        amount: 0.5,
-      },
-      // Targets default to `[]` rather than being omitted — a Look's layer names none.
-      { type: 'programmer.addLayer', lookId: 8, targets: [] },
       { type: 'programmer.removeLayer', layerId: 3, fadeMs: 500 },
       { type: 'programmer.moveLayer', layerId: 3, toIndex: 0 },
       { type: 'programmer.patchLayer', layerId: 3, enabled: false, amount: 0.25 },
     ])
-  })
-
-  it('never sends a look uuid on addLayer', () => {
-    // The backend resolves the Look from its int id. A uuid here would be a second address for the
-    // same thing, and the two are minted differently across a sync import.
-    const { conn, sent } = fakeWsConnection()
-    createProgrammerApi(conn).addLayer({ lookId: 7 })
-    expect(JSON.stringify(sent[0])).not.toMatch(/uuid/i)
   })
 
   it('carries an optional sourceGroup on the set ops', () => {

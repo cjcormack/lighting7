@@ -67,8 +67,13 @@ export function recordNote(result: RecordResponse): WriteNote {
   }
 }
 
+/** A Look used here as a layer (`asLayer`) says so in the title, and what left Local under it. */
 export function recordLookNote(result: RecordLookResponse): WriteNote {
+  const layered = result.layerId != null
   const notes: string[] = []
+  if (layered && (result.keysReleased ?? 0) > 0) {
+    notes.push(`${plural(result.keysReleased ?? 0, 'value')} moved from your values into the layer`)
+  }
   if (result.groupRowsEmitted > 0) notes.push(plural(result.groupRowsEmitted, 'group row'))
   if (result.programmerKeysRefreshed > 0) {
     notes.push(`${result.programmerKeysRefreshed} live programmer value(s) re-resolved`)
@@ -85,9 +90,10 @@ export function recordLookNote(result: RecordLookResponse): WriteNote {
       `${plural(result.rowsWritten, 'row')} written` +
       (result.rowsRemoved > 0 ? `, ${result.rowsRemoved} removed` : '') +
       (result.fxWritten ? `, ${result.fxWritten} FX moved in` : '') +
+      (layered ? ', on here as a layer' : '') +
       '.',
-    description: joined([joined(notes, ' · '), skipNote], ' — '),
-    warn: skipNote != null,
+    description: joined([joined(notes, ' · '), skipNote, ...(result.warnings ?? [])], ' — '),
+    warn: skipNote != null || (result.warnings ?? []).length > 0,
   }
 }
 

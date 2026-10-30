@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.group.SpreadOrder
+import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.show.Fixtures
@@ -1694,6 +1695,36 @@ class FxEngine(
         if (spent.isNotEmpty()) removeFxBatch(spent.map { it.id }) else emitStateUpdate()
         return running.size
     }
+
+    /**
+     * [detachProgrammerLayerFx] in reverse: each running instance becomes the programmer layer
+     * effect its key names, at its priority, keeping its id and phase, so a layer that takes over an
+     * effect the programmer was already running does not restart it. It stops being Local, so it now
+     * applies under every Local FX. A Look's Include no longer owns it; a cue's still does, so Update
+     * retires the cue's own copy when it writes the layer (`splitIncludedChildren`). Answers the ids
+     * adopted; one that has stopped or is leaving is not.
+     */
+    fun adoptIntoProgrammerLayer(adoptions: List<LayerFxAdoption>, source: LayerSource): Set<Long> {
+        val adopted = HashSet<Long>()
+        synchronized(localRankLock) {
+            for ((effect, key, priority) in adoptions) {
+                if (activeFx[effect.id] !== effect || effect.leaving) continue
+                effect.programmerLayerFxKey = key
+                effect.source = source
+                effect.includedLookFx = null
+                effect.priority = priority
+                adopted += effect.id
+            }
+        }
+        if (adopted.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            emitStateUpdate()
+        }
+        return adopted
+    }
+
+    /** One instance [adoptIntoProgrammerLayer] hands to a layer: the key it takes and its priority. */
+    data class LayerFxAdoption(val instance: FxInstance, val key: ProgrammerLayerFxKey, val priority: Int)
 
     /** What [moveLocalFx] did. */
     sealed interface LocalMoveOutcome {

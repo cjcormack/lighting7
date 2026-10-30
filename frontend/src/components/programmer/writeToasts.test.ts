@@ -41,6 +41,25 @@ describe('recordLookNote', () => {
     } as unknown as RecordLookResponse)
     expect(note).toEqual({ title: 'Created “Night” — 1 row written, 2 FX moved in.', description: undefined, warn: false })
   })
+
+  it('says the look went on as a layer, and what left your values for it', () => {
+    const note = recordLookNote({
+      look: { name: 'Night' }, created: true, rowsWritten: 2, rowsRemoved: 0, fxWritten: 0, groupRowsEmitted: 1,
+      skipped: [], programmerKeysRefreshed: 0, cuesRepublished: [], sceneryWritten: 0, layerId: 4, keysReleased: 3,
+    } as unknown as RecordLookResponse)
+    expect(note).toEqual({
+      title: 'Created “Night” — 2 rows written, on here as a layer.',
+      description: '3 values moved from your values into the layer · 1 group row',
+      warn: false,
+    })
+    const warned = recordLookNote({
+      look: { name: 'Night' }, created: true, rowsWritten: 1, rowsRemoved: 0, fxWritten: 1, groupRowsEmitted: 0,
+      skipped: [], programmerKeysRefreshed: 0, cuesRepublished: [], layerId: 4, keysReleased: 0,
+      warnings: ['Wave on dimmer now applies under Flicker'],
+    } as unknown as RecordLookResponse)
+    expect(warned.description).toBe('Wave on dimmer now applies under Flicker')
+    expect(warned.warn).toBe(true)
+  })
 })
 
 describe('includeNote', () => {
