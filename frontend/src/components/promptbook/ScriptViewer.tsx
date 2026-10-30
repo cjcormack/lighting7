@@ -181,6 +181,11 @@ interface ScriptViewerProps {
   onPlaceAnchor: (region: Region) => void
   /** Open the cue picker to anchor the given selection region to a chosen cue. */
   onAnchorRequest: (region: Region) => void
+  /**
+   * Open the cue picker on its create form, recording the programmer into a new cue anchored to
+   * the given region. Absent while there is nothing to record, which hides the toolbar's button.
+   */
+  onRecordRequest?: (region: Region) => void
   /** Create a free annotation over a selected/drawn region. */
   onCreateAnnotation: (kind: AnnotationKind, region: Region) => void
   onAnnotationClick: (annotation: AnnotationDto) => void
@@ -229,6 +234,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     onMoveAnchor,
     onPlaceAnchor,
     onAnchorRequest,
+    onRecordRequest,
     onCreateAnnotation,
     onAnnotationClick,
     onDocumentError,
@@ -964,6 +970,14 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
             onAnchorRequest(selection.region)
             clearSelection()
           }}
+          onRecord={
+            onRecordRequest
+              ? () => {
+                  onRecordRequest(selection.region)
+                  clearSelection()
+                }
+              : undefined
+          }
           onCut={() => {
             onCreateAnnotation('STRIKETHROUGH', selection.region)
             clearSelection()

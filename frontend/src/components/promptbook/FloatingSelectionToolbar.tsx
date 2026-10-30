@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Highlighter, Scissors, StickyNote } from 'lucide-react'
+import { CircleDot, Highlighter, Scissors, StickyNote } from 'lucide-react'
 import { clamp } from '@/lib/utils'
 
 /** Gap kept between the bar and the viewport edge when the anchor is near it. */
@@ -10,6 +10,8 @@ interface FloatingSelectionToolbarProps {
   /** Client-space top-centre of the current selection; the bar floats just above it. */
   anchor: { x: number; y: number }
   onAnchor: () => void
+  /** Record the programmer into a new cue anchored here; absent while there is nothing to record. */
+  onRecord?: () => void
   onCut: () => void
   onNote: () => void
 }
@@ -18,19 +20,20 @@ interface FloatingSelectionToolbarProps {
  * A small action bar that floats above a live text selection in edit mode. It is
  * the annotation-creation surface: select the script text, then choose what it
  * becomes. "Anchor cue" opens a picker to choose which cue the selection belongs
- * to (anchoring a new cue or re-anchoring an existing one).
+ * to (anchoring a new cue or re-anchoring an existing one); "Record cue" opens the
+ * same picker on its create form, recording the programmer into the new cue.
  *
  * Rendered through a portal with fixed positioning so page transforms / the scroll
  * container can't clip it. `onMouseDown` is prevented on the bar so clicking a
  * button doesn't collapse the selection before its handler runs.
  *
  * Width is `max-content` and the labels never wrap, so the bar is always as wide as
- * its three actions need — a fixed-position box sized by the space to the right of
+ * its actions need — a fixed-position box sized by the space to the right of
  * `left` would otherwise squeeze "Anchor cue" onto two lines near the right edge.
  * The centring is then clamped by the bar's *measured* half-width so it stays fully
  * on screen instead of hanging off the side.
  */
-export function FloatingSelectionToolbar({ anchor, onAnchor, onCut, onNote }: FloatingSelectionToolbarProps) {
+export function FloatingSelectionToolbar({ anchor, onAnchor, onRecord, onCut, onNote }: FloatingSelectionToolbarProps) {
   const barRef = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState<{ half: number; viewport: number } | null>(null)
 
@@ -81,6 +84,11 @@ export function FloatingSelectionToolbar({ anchor, onAnchor, onCut, onNote }: Fl
       <button type="button" onClick={onAnchor} className={`${btn} text-amber-600`}>
         <Highlighter className="size-3.5" /> Anchor cue
       </button>
+      {onRecord && (
+        <button type="button" onClick={onRecord} className={`${btn} text-amber-600`}>
+          <CircleDot className="size-3.5" /> Record cue
+        </button>
+      )}
       <span className="mx-0.5 h-5 w-px bg-border" />
       <button type="button" onClick={onCut} className={`${btn} text-red-500`}>
         <Scissors className="size-3.5" /> Mark cut

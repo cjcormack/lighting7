@@ -60,7 +60,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // A refused attach (an overlap left open, a blocker, a version gone) is drawn in its review sheet,
   // which keeps the answers for the retry.
   'attachVenue', // src/components/venue/AttachVenueSheet.tsx
-  'recordProgrammer', // src/components/programmer/RecordSheet.tsx
+  'recordProgrammer', // src/components/programmer/RecordSheet.tsx, and src/lib/promptBook/useBookAnchors.ts (toasts its own)
   'recordLook', // src/components/programmer/RecordLookSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx
   'updateProgrammer', // src/components/programmer/UpdateDialog.tsx

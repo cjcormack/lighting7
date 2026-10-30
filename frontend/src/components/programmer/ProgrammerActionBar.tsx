@@ -24,15 +24,13 @@ import { setProgrammerFade, useProgrammerFade } from '@/lib/programmerFade'
 import {
   programmerClearAll,
   programmerSetBlind,
-  useProgrammerLayersQuery,
   useProgrammerSummaryQuery,
 } from '@/store/programmer'
 import { useIsDeskConnected } from '@/store/status'
-import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { includedCueEntry, includedCueId, includedTargetParts } from '@/lib/includedTarget'
 import { useProgrammerSheets } from './ProgrammerSheets'
-import { useHeldSceneryCount } from './ProgrammerSceneryList'
+import { useProgrammerContent } from './useProgrammerContent'
 import { NewPaletteFromSelectionSheet } from './NewPaletteFromSelectionSheet'
 import { AddLookAndInclude } from './AddLook'
 import { useMarquee } from '@/components/fixtures-list/marqueeContext'
@@ -122,7 +120,6 @@ const MINOR_WORD_CLASS = 'hidden @[1100px]:inline'
  */
 export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const { data: summary } = useProgrammerSummaryQuery()
-  const { data: activeFx } = useActiveFxQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const fadeMs = useProgrammerFade()
   const sheets = useProgrammerSheets()
@@ -140,19 +137,11 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // anyway, and Clear and Blind reading one variable is what keeps them fading by the same amount.
   const fade = Number(fadeMs) || 0
 
-  // Clear releases programmer values *and* programmer-band FX, and the two are independent:
-  // applying a busking effect creates a band FX with no value entry behind it. Gating the button on
+  // Clear releases programmer values, programmer-band FX, held scenery and layers alike: gating it on
   // the entry count alone would leave the documented escape hatch disabled in exactly the case an
   // operator most needs it.
-  const programmerFxCount = activeFx?.filter((e) => e.programmerOwned).length ?? 0
-  // And held scenery (scenery-programmer plan D1): Clear drops it on the same fade, and a programmer
-  // holding only a flown moon must still be clearable. Counted from `programmer.sceneryState`, since
-  // the desk's `programmer.cleared` reply counts values and effects only.
-  const sceneryCount = useHeldSceneryCount(projectId)
-  // And layers: a Look of only scenery puts no value on the programmer, yet Clear takes it off and
-  // Record writes it.
-  const layerCount = useProgrammerLayersQuery().data?.length ?? 0
-  const hasSomethingToClear = entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0 || layerCount > 0
+  const { programmerFxCount, sceneryCount, layerCount, hasContent: hasSomethingToClear } =
+    useProgrammerContent(projectId)
 
   // Record reads the programmer, so it is meaningless when the programmer is empty. Include is
   // not: it is how you *fill* the programmer. Held scenery is content: Record writes it into a cue

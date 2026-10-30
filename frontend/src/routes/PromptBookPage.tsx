@@ -21,7 +21,9 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
-import { useProjectQuery } from '../store/projects'
+import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useVenueMode } from '../store/venues'
+import { useProgrammerContent } from '../components/programmer/useProgrammerContent'
 import {
   useProjectProgramStateQuery,
   useActivateProgramMutation,
@@ -127,6 +129,7 @@ export function PromptBookViewerPage() {
     anchorPicker,
     overlapEntryId,
     requestAnchor,
+    requestRecord,
     closePicker,
     undoSnapshot,
     undo,
@@ -141,6 +144,19 @@ export function PromptBookViewerPage() {
   const ann = useAnnotationEditor(projectIdNum)
 
   const canEdit = book?.canEdit ?? false
+
+  // Record writes the current project's programmer, and is off in a venue (venue plan D11).
+  const { data: currentProject } = useCurrentProjectQuery()
+  const { isVenue } = useVenueMode(projectIdNum)
+  const { hasContent: programmerHasContent } = useProgrammerContent(projectIdNum)
+  const recordUnavailable =
+    currentProject?.id !== projectIdNum
+      ? 'Only the current project’s programmer can be recorded.'
+      : isVenue
+        ? 'Record is off in a venue.'
+        : !programmerHasContent
+          ? 'The programmer is empty.'
+          : null
 
   /**
    * The shared show-editing lock. `onLock` stands the annotation tools down with it — a selected
@@ -648,6 +664,7 @@ export function PromptBookViewerPage() {
               onMoveAnchor={moveAnchor}
               onPlaceAnchor={placeAnchor}
               onAnchorRequest={requestAnchor}
+              onRecordRequest={recordUnavailable == null ? requestRecord : undefined}
               onCreateAnnotation={ann.create}
               onAnnotationClick={ann.open}
               onDocumentError={doc.onDocumentError}
@@ -775,6 +792,8 @@ export function PromptBookViewerPage() {
         defaultStackId={defaultStackId}
         existingCueNames={existingCueNames}
         preselectEntryId={placingEntryId ?? overlapEntryId}
+        openOnRecord={anchorPicker?.record ?? false}
+        recordUnavailable={recordUnavailable}
         onPick={(entryId) => {
           if (anchorPicker) anchorCue(entryId, anchorPicker.region)
         }}
