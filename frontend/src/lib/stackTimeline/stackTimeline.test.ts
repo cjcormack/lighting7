@@ -329,6 +329,13 @@ describe('filter', () => {
     ])
   })
 
+  it('leaves out the scenery elements the window hides, and counts what it shows', () => {
+    const hiddenScenery = new Set(['tabs'])
+    expect(filter(cols, { kinds: all, family: null, selectionHeads: null, hiddenScenery }).some((c) => c.kind === 'scenery')).toBe(false)
+    expect(filter(cols, { kinds: all, family: null, selectionHeads: null, hiddenScenery: new Set(['moon']) }).some((c) => c.id === 'scenery:tabs')).toBe(true)
+    expect(kindCounts(cols, { family: null, selectionHeads: null, hiddenScenery }).scenery).toBe(0)
+  })
+
   it('counts each kind under the other two filters', () => {
     expect(kindCounts(cols, { family: 'COLOUR', selectionHeads: null })).toEqual({ look: 1, palette: 3, fx: 0, scenery: 1 })
     expect(kindCounts(cols, { family: null, selectionHeads: null })).toEqual({ look: 1, palette: 3, fx: 2, scenery: 1 })

@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Crosshair, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Crosshair, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import type { CueStack, CueStackCueEntry, CueStackCueRow } from '@/api/cueStacksApi'
 import { isCueRow } from '@/api/cueStacksApi'
@@ -77,6 +86,7 @@ import { editorIsOpen } from '@/components/editor/EditorSurface'
 import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
 import { CueEditorPane } from './CueEditorPane'
 import { UnlockShowDialog } from './UnlockShowDialog'
+import { CueActions, type CueActionRow } from './CueActions'
 import { useSharedCueActionDialogs } from './cueActionDialogsContext'
 import {
   describeEdit,
@@ -159,7 +169,7 @@ export interface StackTimelineProps {
  * asks to unlock.
  *
  * One selected cell opens `CueEditorPane` on its cue at its column's tab; a range over several cues
- * folds it (C2).
+ * folds it (C2). The bar carries the cue action set over the selected cues, as the Table's does.
  */
 export function StackTimeline({
   stack,
@@ -249,10 +259,12 @@ export function StackTimeline({
     const kept = extras.filter((e) => !derived.has(extraColumnId(e)))
     if (kept.length !== extras.length) extraStore.set(kept)
   }, [derivedColumns, extraStore, extras, stack.id, timeline])
+  const hiddenScenery = useMemo(() => new Set(filters.hiddenScenery), [filters.hiddenScenery])
   const facet = useMemo(
-    () => ({ family: filters.family, selectionHeads: selectionOn ? selectionHeads : null }),
-    [filters.family, selectionHeads, selectionOn],
+    () => ({ family: filters.family, selectionHeads: selectionOn ? selectionHeads : null, hiddenScenery }),
+    [filters.family, hiddenScenery, selectionHeads, selectionOn],
   )
+  const sceneryColumns = useMemo(() => allColumns.filter((c) => c.kind === 'scenery'), [allColumns])
   const kinds = useMemo(() => new Set(filters.kinds), [filters.kinds])
   const shown = useMemo(() => filterColumns(allColumns, { kinds, ...facet }), [allColumns, facet, kinds])
   const counts = useMemo(() => kindCounts(allColumns, facet), [allColumns, facet])
@@ -457,6 +469,15 @@ export function StackTimeline({
   })
   const { selectedRows, cellCount, setRows, scrollTo, cellSelection } = sheet
 
+  // A filter that hides a column lets go of its selected cells, which would otherwise read as empty.
+  const shownIds = useMemo(() => new Set(shown.map((c) => c.id)), [shown])
+  useEffect(() => {
+    const kept = cellSelection.cells.filter((cell) => !byId.has(cell.col) || shownIds.has(cell.col))
+    if (kept.length === cellSelection.cells.length) return
+    if (kept.length === 0) cellSelection.clear()
+    else cellSelection.place(kept, { anchor: kept[0], head: kept[kept.length - 1] })
+  }, [byId, cellSelection, shownIds])
+
   /** The selected cells the verbs edit — Look, palette, FX and scenery cells of cue rows. */
   const addresses = useMemo<TimelineCellAddress[]>(
     () =>
@@ -643,6 +664,18 @@ export function StackTimeline({
   const liveRow = activeEntryId == null ? null : (selectedRows.find((r) => isCueRow(r.entry) && r.entry.entryId === activeEntryId) ?? null)
   const liveCue = liveRow == null ? null : cueOf(liveRow)
   const liveEdited = useCueEdited(projectId, liveCue?.id ?? -1)
+  /** The selected cue rows, in row order — what the cue action set acts on; a marker is no cue. */
+  const actionRows = useMemo<CueActionRow[]>(
+    () =>
+      selectedRows.filter((row) => isCueRow(row.entry)).map((row) => ({
+        cueId: cueOf(row).id,
+        name: cueOf(row).name,
+        cueNumber: cueOf(row).cueNumber ?? null,
+        entryId: row.entry.entryId,
+        stackId: stack.id,
+      })),
+    [selectedRows, stack.id],
+  )
 
   const setFilters = (patch: Partial<typeof filters>) => timelineFiltersStore.set({ ...filters, ...patch })
   const toggleKind = (kind: TimelineKind) =>
@@ -658,6 +691,10 @@ export function StackTimeline({
   const sceneryCue = sceneryEdit == null ? undefined : cueOrder.find((c) => c.entryId === sceneryEdit.entryId)
   const sceneryCell = sceneryEdit == null ? null : cellAt(grid, sceneryEdit.entryId, sceneryEdit.columnId)
   const sceneryChange = sceneryCell?.filled?.kind === 'scenery' ? sceneryCell.filled : null
+  const sceneryGone = sceneryEdit != null && !shown.some((c) => c.id === sceneryEdit.columnId)
+  useEffect(() => {
+    if (sceneryGone) setSceneryEdit(null)
+  }, [sceneryGone])
 
   const fxColumn = fxEdit == null ? null : (byId.get(fxEdit.columnId) ?? null)
   const fxRun = fxEdit == null || fxColumn == null ? [] : fxRunAt(cueOrder, grid, marks, fxColumn, fxEdit.entryId)
@@ -679,20 +716,39 @@ export function StackTimeline({
       {/* Row B: the filters (§4.3), per window, and + Column. */}
       <div className={cn(CHROME_ROW_CLASS, 'overflow-x-auto')} data-timeline-filters>
         <span className="shrink-0 text-[11px] uppercase tracking-wider text-muted-foreground">Show</span>
-        {TIMELINE_KINDS.map((kind) => (
-          <Button
-            key={kind}
-            variant="outline"
-            size="sm"
-            aria-pressed={filters.kinds.includes(kind)}
-            className={cn('h-7 shrink-0 gap-1.5 px-2 text-xs', !filters.kinds.includes(kind) && 'text-muted-foreground opacity-60')}
-            onClick={() => toggleKind(kind)}
-          >
-            <i aria-hidden className={cn('size-2 rounded-[2px]', KIND_SWATCH[kind])} />
-            {KIND_LABEL[kind]}
-            <span className="font-mono tabular-nums text-muted-foreground">{counts[kind]}</span>
-          </Button>
-        ))}
+        {TIMELINE_KINDS.map((kind) => {
+          const chip = (
+            <Button
+              key={kind}
+              variant="outline"
+              size="sm"
+              aria-pressed={filters.kinds.includes(kind)}
+              className={cn(
+                'h-7 shrink-0 gap-1.5 px-2 text-xs',
+                !filters.kinds.includes(kind) && 'text-muted-foreground opacity-60',
+                kind === 'scenery' && 'rounded-r-none',
+              )}
+              onClick={() => toggleKind(kind)}
+            >
+              <i aria-hidden className={cn('size-2 rounded-[2px]', KIND_SWATCH[kind])} />
+              {KIND_LABEL[kind]}
+              <span className="font-mono tabular-nums text-muted-foreground">
+                {kind === 'scenery' && counts.scenery < sceneryColumns.length ? `${counts.scenery}/${sceneryColumns.length}` : counts[kind]}
+              </span>
+            </Button>
+          )
+          if (kind !== 'scenery') return chip
+          return (
+            <div key={kind} className="inline-flex shrink-0" data-timeline-scenery-filter>
+              {chip}
+              <TimelineSceneryPick
+                columns={sceneryColumns}
+                hidden={hiddenScenery}
+                onChange={(next) => setFilters({ hiddenScenery: next })}
+              />
+            </div>
+          )
+        })}
         <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
         <div role="group" aria-label="Family" className="inline-flex shrink-0 items-center gap-0.5 rounded-md border bg-card p-0.5">
           {[null, ...FAMILY_ORDER].map((family) => (
@@ -797,6 +853,17 @@ export function StackTimeline({
                   >
                     Update stage…
                   </Button>
+                )}
+                {actionRows.length > 0 && (
+                  <CueActions
+                    projectId={projectId}
+                    host="timeline"
+                    rows={actionRows}
+                    locked={locked}
+                    onRequestUnlock={onRequestUnlock}
+                    lockedReason={LOCKED_REASON}
+                    fromShowView
+                  />
                 )}
                 <Button variant="ghost" size="sm" onClick={sheet.clearByLadder} title="Deselect all">
                   <X className="size-3.5" />
@@ -1159,6 +1226,74 @@ function cellTitle(column: TimelineColumn, cell: TimelineCell, cue: CueStackCueR
   }
   if (filled.kind === 'fx') return `${column.name} · ${column.sub} in ${at}${filled.effect.runUuid ? '' : ' — in no run'}`
   return `${column.name} in ${at} — ${sceneryWords(filled.state, filled.transitionMs)}`
+}
+
+/**
+ * The Scenery chip's menu: which of the stack's scenery elements this window shows. It writes the
+ * hidden uuids, keeping those of elements this stack does not move, so another stack's pick stands.
+ */
+function TimelineSceneryPick({
+  columns,
+  hidden,
+  onChange,
+}: {
+  columns: readonly TimelineColumn[]
+  hidden: ReadonlySet<string>
+  onChange: (hidden: string[]) => void
+}) {
+  const uuids = columns.flatMap((c) => (c.elementUuid == null ? [] : [c.elementUuid]))
+  const hiddenHere = uuids.filter((u) => hidden.has(u)).length
+  const set = (uuid: string, shown: boolean) =>
+    onChange(shown ? [...hidden].filter((u) => u !== uuid) : [...hidden, uuid])
+  const others = [...hidden].filter((u) => !uuids.includes(u))
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 w-6 shrink-0 rounded-l-none border-l-0 px-0"
+          aria-label="Choose the scenery shown"
+          disabled={uuids.length === 0}
+          title={
+            uuids.length === 0
+              ? 'This stack moves no scenery'
+              : hiddenHere === 0
+                ? 'Choose the scenery shown'
+                : `${hiddenHere} of ${uuids.length} scenery hidden`
+          }
+        >
+          <ChevronDown className="size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+        <DropdownMenuLabel className="text-xs">Scenery shown</DropdownMenuLabel>
+        {columns.map((column) =>
+          column.elementUuid == null ? null : (
+            <DropdownMenuCheckboxItem
+              key={column.id}
+              checked={!hidden.has(column.elementUuid)}
+              onCheckedChange={(checked) => set(column.elementUuid!, checked === true)}
+              onSelect={(e) => e.preventDefault()}
+            >
+              <span className="truncate">{column.name}</span>
+              <span className="ml-auto pl-3 text-xs text-muted-foreground">{column.sub}</span>
+            </DropdownMenuCheckboxItem>
+          ),
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={hiddenHere === 0} onSelect={(e) => (e.preventDefault(), onChange(others))}>
+          Show all
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={hiddenHere === uuids.length}
+          onSelect={(e) => (e.preventDefault(), onChange([...others, ...uuids]))}
+        >
+          Hide all
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 function TimelineLegend({ cues, markers, columns }: { cues: number; markers: number; columns: number }) {

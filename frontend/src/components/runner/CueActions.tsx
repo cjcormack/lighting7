@@ -47,6 +47,7 @@ import { setShowInclude } from '@/lib/showInclude'
 import { useInclude } from '@/components/programmer/useInclude'
 import type { CueToDelete } from '@/components/cues/CueDeleteDialog'
 import { useCueActionDialogs } from './cueActionDialogs'
+import { TIMELINE_LAST_FOLD_CLASS } from './timelineFolds'
 
 /** One row the actions act on: a cue, and the entry it was opened from (null for a loose cue). */
 export interface CueActionRow {
@@ -64,9 +65,9 @@ export interface CueActionRow {
 
 /**
  * Where the set is drawn: the card's strip under its collapsed row, the cue sheet's selection bar,
- * the phone card's ⋯ menu, or the Cues table's selection bar.
+ * the phone card's ⋯ menu, the Cues table's selection bar, or the Timeline's.
  */
-export type CueActionsHost = 'strip' | 'bar' | 'menu' | 'table'
+export type CueActionsHost = 'strip' | 'bar' | 'menu' | 'table' | 'timeline'
 
 /** A one-record action over several rows says why it is off. */
 export const ONE_CUE_REASON = 'One cue at a time — select a single cue'
@@ -103,6 +104,15 @@ const FOLDS: Record<Exclude<CueActionsHost, 'menu'>, { stack: string; programmer
     programmer: 'hidden @[848px]:inline',
     split: 'hidden @[672px]:inline',
   },
+  // The Timeline's bar, measured with a cell selected — the counts, the hints and On · Off · Fill ↓ ·
+  // Replace with… · Settings… beside the set: worded the set fits from 1611, stack-folded from 1386,
+  // and Load and Record folded from 1199, each rung with room for *Update stage…*. Below the split's
+  // rung the Timeline's own verbs fold too, leaving 818 (2026-10-30).
+  timeline: {
+    stack: 'hidden @[1728px]:inline',
+    programmer: 'hidden @[1504px]:inline',
+    split: TIMELINE_LAST_FOLD_CLASS,
+  },
 }
 
 interface CueActionsProps {
@@ -127,9 +137,9 @@ interface CueActionsProps {
 }
 
 /**
- * **One cue action set, four hosts** (show-cue-editing plan §5, D6, D8, D9): the card's strip, the
- * cue sheet's selection bar, the phone card's ⋯ menu and the Cues table's bar all draw this, so the
- * four cannot drift.
+ * **One cue action set, five hosts** (show-cue-editing plan §5, D6, D8, D9): the card's strip, the
+ * cue sheet's selection bar, the phone card's ⋯ menu, the Cues table's bar and the Timeline's bar
+ * all draw this, so they cannot drift.
  *
  * - **The split button follows the show** (D6). Stopped, its face is *Edit in programmer* — Include,
  *   then the programmer — with *Blind edit in programmer* in its menu; running, the two swap, and the
@@ -246,7 +256,9 @@ export function CueActions({
       else if (copies.length > 1) toast.success(`Duplicated ${copies.length} cues`)
     } else if (rows.length === 1 && copy != null) {
       if (copy.entryId != null && copy.stackId != null) {
-        navigate(`/projects/${projectId}/show/stacks/${copy.stackId}?cue=${copy.cueId}&entry=${copy.entryId}`)
+        // The Timeline opens its copy on itself; the bare path lands on the window's sticky view.
+        const view = host === 'timeline' ? '/timeline' : ''
+        navigate(`/projects/${projectId}/show/stacks/${copy.stackId}${view}?cue=${copy.cueId}&entry=${copy.entryId}`)
       } else {
         toast.success(`Duplicated as “${copy.name}”, in no stack`)
       }

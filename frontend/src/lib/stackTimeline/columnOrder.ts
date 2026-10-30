@@ -31,9 +31,11 @@ export interface StoredTimelineFilters {
   kinds: TimelineKind[]
   family: string | null
   selectionOnly: boolean
+  /** The scenery elements' uuids hidden, so an element the stack starts to move shows. */
+  hiddenScenery: string[]
 }
 
-const ALL_KINDS: StoredTimelineFilters = { kinds: [...TIMELINE_KINDS], family: null, selectionOnly: false }
+const ALL_KINDS: StoredTimelineFilters = { kinds: [...TIMELINE_KINDS], family: null, selectionOnly: false, hiddenScenery: [] }
 
 /** Row B's filters, per window (§4.3): `sessionStorage timeline.filters`. */
 export const timelineFiltersStore = createSyncStore<StoredTimelineFilters>({
@@ -47,6 +49,7 @@ export const timelineFiltersStore = createSyncStore<StoredTimelineFilters>({
       kinds,
       family: typeof p.family === 'string' ? p.family : null,
       selectionOnly: p.selectionOnly === true,
+      hiddenScenery: parseIds(p.hiddenScenery) ?? [],
     }
   },
   storage: sessionStorageArea,
