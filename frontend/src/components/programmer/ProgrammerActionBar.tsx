@@ -28,7 +28,7 @@ import {
 } from '@/store/programmer'
 import { useIsDeskConnected } from '@/store/status'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
-import { includedCueEntry, includedCueId, includedTargetParts } from '@/lib/includedTarget'
+import { includedCueEntry, includedTargetParts } from '@/lib/includedTarget'
 import { useProgrammerSheets } from './ProgrammerSheets'
 import { useProgrammerContent } from './useProgrammerContent'
 import { NewPaletteFromSelectionSheet } from './NewPaletteFromSelectionSheet'
@@ -162,7 +162,6 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const canNewPalette = !isVenue && paletteTargets.length > 0
   const [newPaletteOpen, setNewPaletteOpen] = useState(false)
 
-  const cueId = includedCueId(target)
   const includedEntry = includedCueEntry(target, stacks)
   const includedParts = target?.kind === 'CUE' ? includedTargetParts(target) : null
   // The number shown is the entry's the cue was included from, where the stack list has it.
@@ -177,6 +176,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const contents = contentsOf(entryCount, sceneryCount, layerCount, programmerFxCount)
   const over = fade > 0 ? `over ${fade / 1000}s` : 'snap'
   const includedLabel = [includedCue?.number, includedCue?.name].filter(Boolean).join(' ')
+  const includedLookName = target?.kind === 'LOOK' ? includedTargetParts(target).name : undefined
   useCommandDoor('record', () => [
     {
       id: 'programmer.record',
@@ -190,12 +190,15 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
     {
       id: 'programmer.recordIncluded',
       group: 'programmer',
-      label: `Record into ${includedLabel || 'the included cue'}`,
-      hint: 'the cue you are editing',
-      keywords: ['record', 'merge', 'update', 'cue'],
-      canAct: canRecord && cueId != null,
+      label:
+        target?.kind === 'LOOK'
+          ? `Record into ${includedLookName}`
+          : `Record into ${includedLabel || 'the included cue'}`,
+      hint: target?.kind === 'LOOK' ? 'the Look you are editing' : 'the cue you are editing',
+      keywords: ['record', 'merge', 'update', 'cue', 'look'],
+      canAct: canRecord && target != null,
       run: () => {
-        if (cueId != null) sheets.openRecord({ targetCueId: cueId, targetCueName: includedCue?.name })
+        if (target != null) sheets.openRecordInto(target)
       },
     },
     {
@@ -370,15 +373,13 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
             <DropdownMenuLabel className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
               {canRecord ? recordMenuLabel(entryCount, sceneryCount, layerCount) : 'The programmer is empty'}
             </DropdownMenuLabel>
-            {cueId != null && (
+            {target != null && (
               <MenuItem
                 disabled={!canRecord}
                 icon={<Upload className="size-3.5" />}
-                title={[includedCue?.number, includedCue?.name].filter(Boolean).join(' ')}
-                sub="Update the cue you are editing"
-                onSelect={() =>
-                  sheets.openRecord({ targetCueId: cueId, targetCueName: includedCue?.name })
-                }
+                title={target.kind === 'LOOK' ? (includedLookName ?? '') : includedLabel}
+                sub={target.kind === 'LOOK' ? 'Update the Look you are editing' : 'Update the cue you are editing'}
+                onSelect={() => sheets.openRecordInto(target)}
               />
             )}
             {includedStack && (

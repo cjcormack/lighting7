@@ -1349,6 +1349,18 @@ scenery (`recordMenuLabel`), and a busk pad's face counts a Look's scenery (`pad
 that wrote scenery invalidates every `Cue` entry, as `setCueScenery` does, since a row moves what
 every later cue tracks.
 
+**Update also writes the values the source does not hold** — what a masked or scoped Record left
+out, which *in sync* cannot show: it means nothing moved since the Include or Record, and the desk
+takes a Record's every touched value as that baseline, mask or not. The desk counts them,
+`heldOutsideSource` on `programmer.state` (`ProgrammerSummary.heldOutsideSource`): the programmer's
+touched values against the keys the source stores, as the desk last read its rows
+(`ProgrammerStore.sourceKeys`, after each Include, Record and Update), and Mode A writes them, changed or not, under the dialog's
+mask. So the source strip keeps the *in sync* chip and leaves **Update enabled while that count is
+above 0** (never in a venue), its hover and ⌘K's hint saying how many; it is the desk's, so it
+survives a reload where *in sync* cannot. FX and scenery are not counted. Record ▾'s first item (and
+⌘K's *Record into …*) opens Record on Merge into the included cue or Look
+(`useProgrammerSheets().openRecordInto`).
+
 **All three Make Hard routes are gone, and nothing replaced them.** They existed to swap
 value-level `ref:` references (the old named-palette sense) for the literals they resolved to, and the `ref:` grammar retired,
 so there is nothing left to harden. A successor gesture — "promote a layer's *cooked* values into
@@ -1374,14 +1386,15 @@ usually does want everything you busked, a Look named "Warm Amber" almost never 
 **Every mask a sheet takes is one picker with an *All attributes* switch** (venue-visit plan S10):
 `MaskPicker` in `programmer/maskPicker.tsx` — a label, `MaskToggles`, and a sentence under them — on
 Record, Record Look (the busk Fan sheet's *Save as Look…* included), Include, Make layer, Update and
-a layer's popover in `LookStack`. **The five sheets open on the selection's mask** (apply-model plan
-D3), read once on open by `useWindowMaskReader` — the desk's while the window follows it; unlinked, the
+a layer's popover in `LookStack`. **Record, Record Look and Update open on every attribute** — a
+write that quietly left a family out is only found when the cue is fired — Record Look on the opener's
+mask where it names one (the FX editor's lanes). **Include and Make layer open on the selection's mask**
+(apply-model plan D3), read once on open by `useWindowMaskReader` — the desk's while the window follows it; unlinked, the
 programmer's marquee (the marquee store is provided above `ProgrammerSheetsProvider` for this) or the
 busk tab's own copy — and **a change in a sheet is that sheet's own**: it never writes the selection,
-and a selection moved while the sheet is open never moves it. Read, not subscribed, because four of
-the five stay mounted while closed and a subscription would re-render them per marquee frame. Make
-layer's unsaved-changes guard compares against the mask it opened on, and Update's Mode B asks for its
-checklist once, under the opening mask, rather than first under the closed dialog's. **The switch is on for every attribute and hides the four family
+and a selection moved while the sheet is open never moves it. Read, not subscribed, because the
+sheets stay mounted while closed and a subscription would re-render them per marquee frame. Make
+layer's unsaved-changes guard compares against the mask it opened on. **The switch is on for every attribute and hides the four family
 checkboxes**; switching it off shows them **all ticked**, which is not yet a narrowing — the operator
 unticks what the write should leave alone. The switch moves only when pressed: unticking the last
 family leaves it off with nothing ticked, and ticking all four back leaves it off too, so nothing
@@ -1404,8 +1417,9 @@ selection — which is how `SelectionMaskPill` mounts it in a popover, through `
 the selection's mask with its targets kept. `UpdateDialog` gained the picker with
 S10: Mode A sends the mask on the write; in Mode B the mask also decides which cues the programmer is
 over, so a change re-fetches the checklist under it (keyed on `maskValueKey`, a stale answer dropped by
-a request counter, the operator's unticks kept across it, nothing asked while nothing is ticked), and
-its hint says held scenery goes back whole, which the mask never narrows.
+a request counter, the operator's unticks kept across it, nothing asked while nothing is ticked). Held
+scenery goes back whole, which the mask never narrows. The dialog explains none of this on screen: an
+operator is expected to know what Update does.
 
 **Record writes into any cue, or into a stack it makes, or into none** (S10; cue model plan §10,
 19). After the stacks and a separator the stack select offers ***New stack…***: a required name

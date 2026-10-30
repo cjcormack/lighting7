@@ -15,6 +15,8 @@ import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
+import uk.me.cormack.lighting7.fx.buildCueApplyData
+import uk.me.cormack.lighting7.fx.buildCueAssignmentsForCue
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.TargetRef
@@ -93,7 +95,9 @@ private const val CHECKLIST_SAMPLE_SIZE = 8
  * the first Update after any Include would silently harden every ref in the cue into a literal.
  *
  * Values that are new since the Include (no INCLUDE slot) are always written: that is the
- * operator adding a fixture to the cue.
+ * operator adding a fixture to the cue. So is any value the source does not store
+ * ([ProgrammerStore.sourceHolds], read afresh here), changed or not — what a masked or scoped
+ * Record left out.
  */
 internal fun changedSinceInclude(
     state: State,
@@ -104,7 +108,9 @@ internal fun changedSinceInclude(
     // an element row — so a nudged head comes back through Update as the row it was included as.
     val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
     val recorded = store.recordedValues
+    store.lastIncludedTarget?.let { refreshSourceKeys(state, it) }
     val changed = entries.filterTo(LinkedHashSet()) { entry ->
+        if (!store.sourceHolds(entry.key())) return@filterTo true
         // Since a Record, what was recorded is the baseline; a key it did not see is new.
         if (recorded != null) {
             return@filterTo recorded[ProgrammerStore.IncludedKey(entry.fixtureKey, entry.attribute)] !=
@@ -154,6 +160,51 @@ internal fun foldUpdateIntoRecorded(
     val recorded = store.recordedValues ?: return
     store.recordedValues = recorded - cleared.toSet() +
         written.associate { ProgrammerStore.IncludedKey(it.fixtureKey, it.attribute) to (it.reconciledFrom ?: it.value) }
+}
+
+/** The programmer key [this] entry was collected from. */
+internal fun RecordEntry.key() = ProgrammerStore.IncludedKey(fixtureKey, attribute)
+
+/**
+ * The keys [target]'s source stores, unmasked and through Include's own expansion — a cue's rows
+ * fanned out to members and cells, a Look's through the [uk.me.cormack.lighting7.fx.LookRegistry].
+ */
+internal fun sourceRowKeys(state: State, target: IncludedTarget): Set<ProgrammerStore.IncludedKey> {
+    val fixtures = state.show.fixtures
+    return when (target.kind) {
+        IncludedTarget.Kind.CUE -> {
+            val data = transaction(state.database) {
+                DaoCue.findById(target.targetId)?.let { buildCueApplyData(it, null) }
+            } ?: return emptySet()
+            buildCueAssignmentsForCue(fixtures, data)
+                .mapTo(HashSet()) { ProgrammerStore.IncludedKey(it.targetKey, canonicalAttributeName(it.attribute)) }
+        }
+        IncludedTarget.Kind.LOOK -> {
+            val uuid = target.sourceUuid
+                ?: transaction(state.database) { DaoLook.findById(target.targetId)?.uuid }
+                ?: return emptySet()
+            val expanded = state.show.lookRegistry.expanded(uuid) ?: return emptySet()
+            expanded.byFixture.flatMapTo(HashSet()) { (fixtureKey, byAttribute) ->
+                byAttribute.keys.map { ProgrammerStore.IncludedKey(fixtureKey, canonicalAttributeName(it)) }
+            }
+        }
+    }
+}
+
+/** Read what [target]'s source now stores into [ProgrammerStore.sourceKeys]. */
+internal fun refreshSourceKeys(state: State, target: IncludedTarget) {
+    state.show.programmerStore.sourceKeys = ProgrammerStore.IncludedKeys(target, sourceRowKeys(state, target))
+}
+
+/**
+ * How many of the programmer's touched values the include target's source does not store — what
+ * Update writes though nothing has changed since. 0 with nothing included.
+ */
+internal fun heldOutsideSource(state: State): Int {
+    val store = state.show.programmerStore
+    if (store.lastIncludedTarget == null) return 0
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask = null, allowElements = true)
+    return entries.count { !store.sourceHolds(it.key()) }
 }
 
 /** A Record made the include target agree with the programmer: its touched values become Update's baseline. */

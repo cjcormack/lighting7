@@ -71,12 +71,12 @@ describe('CueAnchorPickerSheet · recording the programmer', () => {
     expect(onCreateCue).toHaveBeenLastCalledWith(expect.objectContaining({ record: true }))
   })
 
-  it('opens on the selection’s mask and records under it', () => {
+  it('opens on every attribute over a masked selection', () => {
     selection.mask = ['COLOUR']
     const { onCreateCue } = renderSheet({ openOnRecord: true })
-    expect(screen.getByText('Only Colour.')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Record & anchor' }))
-    expect(onCreateCue).toHaveBeenCalledWith(expect.objectContaining({ record: true, mask: ['COLOUR'] }))
+    expect(onCreateCue).toHaveBeenCalledWith(expect.objectContaining({ record: true, mask: undefined }))
   })
 
   it('says why the programmer cannot be recorded, and creates an empty cue', () => {

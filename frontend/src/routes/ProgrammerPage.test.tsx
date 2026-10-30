@@ -100,6 +100,7 @@ vi.mock('@/components/programmer/ProgrammerSheets', () => ({
     openRecordLook: vi.fn(),
     openInclude: vi.fn(),
     openUpdate: vi.fn(),
+    openRecordInto: vi.fn(),
     openMakeLayer: vi.fn(),
   }),
 }))

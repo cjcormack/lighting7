@@ -236,6 +236,11 @@ export interface ProgrammerState {
    */
   layersChangedSinceInclude?: number
   /**
+   * How many of the programmer's own values the included cue or Look does not hold — the desk's
+   * count, which a masked Record leaves above 0 while Update is in sync. 0 with nothing included.
+   */
+  heldOutsideSource: number
+  /**
    * How many `programmer.state` frames have landed. Only such a frame carries the entries and the
    * include target from one moment; `programmer.includeTarget` arrives without the entries.
    */
@@ -531,6 +536,8 @@ interface ProgrammerStateIncoming {
   applied?: ProgrammerAppliedSource[]
   /** As [ProgrammerState.layersChangedSinceInclude]. */
   layersChangedSinceInclude?: number
+  /** As [ProgrammerState.heldOutsideSource]. */
+  heldOutsideSource?: number
 }
 
 interface ProgrammerIncludeTargetIncoming {
@@ -916,6 +923,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   let layers: readonly ProgrammerLayer[] = []
   let applied: readonly ProgrammerAppliedSource[] = []
   let layersChangedSinceInclude: number | undefined
+  let heldOutsideSource = 0
   let scenery: ProgrammerScenery = NO_PROGRAMMER_SCENERY
   let sceneryKnown = false
   let snapshotSeq = 0
@@ -929,6 +937,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     layers,
     applied,
     layersChangedSinceInclude,
+    heldOutsideSource,
     snapshotSeq,
   })
   let snapshot: ProgrammerState = buildSnapshot()
@@ -997,6 +1006,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // empty programmer after a desk restart, with the press meant to clear one adding a layer.
     applied = message.applied ?? []
     layersChangedSinceInclude = message.layersChangedSinceInclude
+    heldOutsideSource = message.heldOutsideSource ?? 0
     snapshotSeq++
     notifyKeys(touched)
     notifyState()
@@ -1176,6 +1186,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         channels = []
         // Clear releases everything Include staged, so the server drops the target too.
         lastIncluded = null
+        heldOutsideSource = 0
         notifyKeys(touched)
         notifyState()
         break

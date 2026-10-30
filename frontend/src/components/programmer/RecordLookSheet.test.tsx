@@ -76,4 +76,19 @@ describe('Record look', () => {
     expect(toast.success).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Name')).toHaveValue('Night')
   })
+
+  it('opens on every attribute, and sends no mask', async () => {
+    recordNight(() => {})
+    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'true')
+    await waitFor(() => expect(recordLook).toHaveBeenCalled())
+    expect(recordLook.mock.calls[0][0]).toMatchObject({ mask: undefined, mode: 'CREATE' })
+  })
+
+  it('opens on Merge into the Look it is given', async () => {
+    render(<RecordLookSheet open onOpenChange={() => {}} projectId={6} targetLookId={12} />)
+    expect(screen.getByRole('radio', { name: 'Merge' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Record' }))
+    await waitFor(() => expect(recordLook).toHaveBeenCalled())
+    expect(recordLook.mock.calls[0][0]).toMatchObject({ mode: 'MERGE', lookId: 12, mask: undefined })
+  })
 })

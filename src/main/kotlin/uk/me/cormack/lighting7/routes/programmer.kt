@@ -75,6 +75,7 @@ internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Programm
     state.show.programmerStore.lastIncludedTarget = null
     state.show.programmerStore.includedLayerSnapshot = emptyList()
     state.show.programmerStore.includedKeys = null
+    state.show.programmerStore.sourceKeys = null
     state.show.programmerStore.recordedValues = null
     return ProgrammerClearOutcome(entryCount, fxCleared)
 }

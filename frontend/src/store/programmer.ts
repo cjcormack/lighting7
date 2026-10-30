@@ -40,6 +40,8 @@ export interface ProgrammerSummary {
   entryCount: number
   /** What Include last loaded — drives the Update button's target and label. */
   lastIncluded: IncludedTarget | null
+  /** As [ProgrammerState.heldOutsideSource]: what keeps Update enabled while in sync. */
+  heldOutsideSource: number
 }
 
 function currentSummary(): ProgrammerSummary {
@@ -48,6 +50,7 @@ function currentSummary(): ProgrammerSummary {
     blind: state.blind,
     entryCount: state.entries.size,
     lastIncluded: state.lastIncluded,
+    heldOutsideSource: state.heldOutsideSource,
   }
 }
 
@@ -64,6 +67,7 @@ export const programmerApi = restApi.injectEndpoints({
             draft.blind = state.blind
             draft.entryCount = state.entries.size
             draft.lastIncluded = state.lastIncluded
+            draft.heldOutsideSource = state.heldOutsideSource
           })
         })
         await cacheEntryRemoved

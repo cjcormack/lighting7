@@ -7,7 +7,8 @@ import { normaliseFamilies } from '@/lib/selectionMask'
 
 /**
  * Read **this window's selection mask once** — what a sheet that takes a mask opens on (apply-model
- * plan D3): Record, Record Look, Include, Make layer and Update. `null` is every attribute.
+ * plan D3): Include and Make layer. `null` is every attribute. Record and Update open on every
+ * attribute instead.
  *
  * The same answer as `useWindowPressPair`'s `families` — the desk's while this tab follows it; once
  * unlinked, the programmer's marquee where there is one and the tab's own copy elsewhere — but read

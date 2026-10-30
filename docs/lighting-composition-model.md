@@ -224,10 +224,15 @@ seen nor changed.
   It is also what keeps a cue row in the *exact form it was authored*: a row stored as `"red"` is
   parsed to a colour at include time, and because the operator didn't touch it, it is not written
   back — so it stays `"red"` rather than being re-serialised as `"#ff0000"`. Writing everything back
-  would rewrite every untouched row in the cue on the first Update after any Include.
+  would rewrite every untouched row in the cue on the first Update after any Include. **A value the
+  source does not hold is written too**, changed or not: the store keeps the keys the source stores,
+  read from its rows after each Include, Record and Update into it and again as Update runs
+  (`ProgrammerStore.sourceKeys`), so what a masked or scoped Record left out goes in on the next
+  Update, under its mask. `programmer.state`'s `heldOutsideSource` counts them, which keeps Update
+  enabled while the strip says *in sync*.
 - **Mode B** — with nothing included, the server answers with the cues the programmer is currently
   overriding, grouped by stack, and the client confirms which to write. Keys with no cue underneath
-  are bucketed separately ("record a new cue instead"). A commit writes each cue only the keys it
+  are bucketed separately ("Not from any cue"). A commit writes each cue only the keys it
   was actually underneath.
 - Update applies MERGE semantics. In Mode A it also **deletes the row of a value Include staged that the
   operator has since cleared** (⌫, a Release; clearing a position or a pan or tilt clears its fine
@@ -821,9 +826,9 @@ heads and clears the mask, each a `selection.set` of the whole fact, and the sel
 pill is its picker** — the programmer's row C while the window follows the desk, and every busk row
 that carries the selection — an *All attributes* switch over the four families, whose write is
 `selection.setFamilies`: the mask alone, the desk keeping its heads. A window that has unlinked masks its own copy instead (the busk tab's), or, on the
-programmer, keeps the marquee's columns as its only mask. The sheets that take a mask — Record,
-Record Look, Include, Make layer and Update — **open on it**, and stay editable there: a sheet's
-change is that write's own and never moves the selection, so narrowing one Record never narrows the
+programmer, keeps the marquee's columns as its only mask. Include and Make layer **open on it**;
+Record, Record Look and Update open on every attribute, since a family a write leaves out is only
+found when the cue is fired. Every sheet's mask stays editable there: a sheet's change is that write's own and never moves the selection, so narrowing one Record never narrows the
 next press. On the desk this added one write, `selection.setFamilies` (`DeskSelection.setFamilies`,
 the mask replaced and the heads kept); the press doors already read `families`, and the record
 routes already took a `mask`.

@@ -1072,7 +1072,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 
 | Message | Payload | Cast |
 |---|---|---|
-| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]`, `layersChangedSinceInclude: Int` | Connect snapshot, again on every project switch and reload, + reply |
+| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]`, `layersChangedSinceInclude: Int`, `heldOutsideSource: Int` | Connect snapshot, again on every project switch and reload, + reply |
 | `programmer.entryChanged` | `targetType`, `targetKey`, `attribute`, `value` | Unicast reply |
 | `programmer.entryCleared` | `targetType`, `targetKey`, `attribute` | Unicast reply |
 | `programmer.cleared` | `cleared: Int`, `fxCleared: Int` | Unicast reply |

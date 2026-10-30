@@ -47,6 +47,7 @@ vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: venue.isVenue
 const sheets = {
   openRecord: vi.fn(),
   openRecordLook: vi.fn(),
+  openRecordInto: vi.fn(),
   openInclude: vi.fn(),
   openUpdate: vi.fn(),
 }
@@ -216,6 +217,16 @@ describe('ProgrammerActionBar', () => {
     expect(screen.getByText('An existing cue…')).toBeTruthy()
     // NOT a predicted "becomes Q4.5" — the server assigns the number.
     expect(screen.queryByText(/Q4\.5/)).toBeNull()
+  })
+
+  it('offers the included Look as a destination, opening Record look on it', () => {
+    const look = { kind: 'LOOK', lookId: 12, lookName: 'Warm Amber' } as const
+    summary = { ...summary, entryCount: 3, lastIncluded: look }
+    render(<ProgrammerActionBar projectId={1} />)
+    openRecordMenu()
+    expect(screen.getByText('Update the Look you are editing')).toBeTruthy()
+    fireEvent.click(screen.getByText('Warm Amber'))
+    expect(sheets.openRecordInto).toHaveBeenCalledWith(look)
   })
 
   it('omits the update-this-cue destination when nothing is included', () => {
@@ -405,7 +416,7 @@ describe('ProgrammerActionBar', () => {
       ])
 
       command('programmer.recordIncluded')!.run!()
-      expect(sheets.openRecord).toHaveBeenLastCalledWith({ targetCueId: 5, targetCueName: 'Warm Wash' })
+      expect(sheets.openRecordInto).toHaveBeenLastCalledWith(CUE)
       command('programmer.clear')!.run!()
       expect(programmerClearAll).toHaveBeenCalledWith(1000)
       command('programmer.blind')!.run!()

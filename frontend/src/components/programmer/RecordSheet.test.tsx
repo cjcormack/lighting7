@@ -239,37 +239,32 @@ describe('the mask', () => {
   })
 
   /**
-   * The sheet opens on the selection's mask (apply-model plan D3) — the desk's while this window
-   * follows it — and from then on the mask is this Record's own: a change here writes nothing to the
-   * selection, and a selection that moves while the sheet is open does not move the sheet's.
+   * The sheet opens on every attribute whatever the selection's mask, and the mask is this Record's
+   * own: a change here writes nothing to the selection.
    */
-  it('opens on the selection’s mask, and a change here leaves the selection alone', async () => {
+  it('opens on All attributes over a masked selection, and a change here leaves the selection alone', async () => {
     // Every write that could move the selection: the whole fact, and the mask alone.
     const writes = (['set', 'setFamilies', 'toggle', 'clear'] as const).map((name) => vi.spyOn(lightingApi.selection, name))
     selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
     render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
-    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByRole('checkbox', { name: 'Colour' })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'Position' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'true')
 
+    fireEvent.click(screen.getByRole('switch', { name: 'All attributes' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Position' }))
-    // The selection moving under the open sheet does not move the sheet's mask either.
-    selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['BEAM'], source: null }
     fireEvent.click(recordButton())
     await waitFor(() => expect(record).toHaveBeenCalled())
-    expect(record.mock.calls[0][0]).toMatchObject({ mask: ['POSITION', 'COLOUR'] })
+    expect(record.mock.calls[0][0]).toMatchObject({ mask: ['INTENSITY', 'COLOUR', 'BEAM'] })
     for (const write of writes) expect(write).not.toHaveBeenCalled()
   })
 
-  it('opens on All attributes over an unmasked selection, and on the new mask the next time it opens', () => {
-    selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: null, source: null }
-    const { rerender } = render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
-    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'true')
-    rerender(<RecordSheet open={false} onOpenChange={() => {}} projectId={6} />)
+  it('opens on All attributes again the next time it opens, whatever was picked here', () => {
     selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['INTENSITY'], source: null }
+    const { rerender } = render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    fireEvent.click(screen.getByRole('switch', { name: 'All attributes' }))
+    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'false')
+    rerender(<RecordSheet open={false} onOpenChange={() => {}} projectId={6} />)
     rerender(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
-    expect(screen.getByRole('checkbox', { name: 'Intensity' })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'Colour' })).not.toBeChecked()
+    expect(screen.getByRole('switch', { name: 'All attributes' })).toHaveAttribute('aria-checked', 'true')
   })
 })
 

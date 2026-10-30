@@ -138,6 +138,9 @@ data class IncludedTarget(
     /** The Look id, or null when something else is included. */
     val lookId: Int? get() = targetId.takeIf { kind == Kind.LOOK }
 
+    /** Whether [other] names the same cue or Look, whatever entry or baseline it carries. */
+    fun sameSource(other: IncludedTarget): Boolean = kind == other.kind && targetId == other.targetId
+
     companion object {
         fun cue(cueId: Int, entryId: Int?) = IncludedTarget(Kind.CUE, cueId, entryId)
 
@@ -418,9 +421,9 @@ class ProgrammerStore {
     /**
      * Every touched value as it stood when a Record last made the include target say what the
      * programmer holds — Update's value baseline from then on, in place of the `INCLUDE` slots, which
-     * still describe whatever was included before. An Update after a masked or scoped Record therefore
-     * writes only what changed since it, not every busked value outside its remit. Null after an
-     * Include, and cleared with the target.
+     * still describe whatever was included before. A value a masked or scoped Record left out matches
+     * it too, so Update writes it as one the source lacks ([sourceHolds]), not as a change. Null after
+     * an Include, and cleared with the target.
      */
     @Volatile
     var recordedValues: Map<IncludedKey, CueAssignmentResolver.AttributeValue>? = null
@@ -443,9 +446,23 @@ class ProgrammerStore {
     /** [includedKeys] when they were staged from [target]'s source (the entry it was placed from aside). */
     fun includedKeysFor(target: IncludedTarget): Set<IncludedKey> =
         includedKeys
-            ?.takeIf { it.target.kind == target.kind && it.target.targetId == target.targetId }
+            ?.takeIf { it.target.sameSource(target) }
             ?.keys
             .orEmpty()
+
+    /**
+     * The keys the include target's source stores, attributes canonical — read from its rows after
+     * each Include, Record and Update into it, and again as Update runs (`refreshSourceKeys`).
+     */
+    @Volatile
+    var sourceKeys: IncludedKeys? = null
+
+    /** Whether the include target's source stores [key], as [sourceKeys] last read it. */
+    fun sourceHolds(key: IncludedKey): Boolean {
+        val target = lastIncludedTarget ?: return false
+        val keys = sourceKeys?.takeIf { it.target.sameSource(target) } ?: return false
+        return IncludedKey(key.fixtureKey, canonicalAttributeName(key.attribute)) in keys.keys
+    }
 
     /** Forget [keys]: their rows have been dealt with, so a later Update must not delete them again. */
     fun forgetIncludedKeys(keys: Collection<IncludedKey>) {
@@ -878,6 +895,7 @@ class ProgrammerStore {
         synchronized(layersLock) { layers = emptyList() }
         includedLayerSnapshot = emptyList()
         includedKeys = null
+        sourceKeys = null
         recordedValues = null
         bumpEpoch()
         bumpCoverage()

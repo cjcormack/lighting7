@@ -488,7 +488,9 @@ internal fun performProgrammerRecordLook(
 
     // As a Record into a cue does: what was just written is what Update writes back to.
     if (retarget) {
-        state.show.programmerStore.lastIncludedTarget = IncludedTarget.look(outcome.lookId, outcome.lookUuid)
+        val recordedInto = IncludedTarget.look(outcome.lookId, outcome.lookUuid)
+        refreshSourceKeys(state, recordedInto)
+        state.show.programmerStore.lastIncludedTarget = recordedInto
         stampRecordedValues(state)
         state.programmerScenery.rebaseline(
             project.id.value,
@@ -818,6 +820,9 @@ internal fun updateIncludedLook(
         )
     }
     foldUpdateIntoRecorded(state, changed, cleared)
+    // Before the read: the registry still caches the rows from before this write.
+    state.show.lookRegistry.invalidate(outcome.lookUuid)
+    refreshSourceKeys(state, includeTarget)
     state.show.programmerStore.forgetIncludedKeys(cleared)
     state.show.programmerStore.rebaseIncludeTarget()
     // What was written is the new baseline: a second Update writes nothing it already wrote.

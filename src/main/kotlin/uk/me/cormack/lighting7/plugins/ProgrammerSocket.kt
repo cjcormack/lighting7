@@ -37,6 +37,7 @@ import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
+import uk.me.cormack.lighting7.routes.heldOutsideSource
 import uk.me.cormack.lighting7.routes.resolveLayerSource
 import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.ProgrammerScenery
@@ -462,6 +463,13 @@ data class ProgrammerStateOutMessage(
     /** As [ProgrammerLayerStateOutMessage.changedSinceInclude]. */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val layersChangedSinceInclude: Int = 0,
+    /**
+     * The programmer's touched values the include target's source does not store
+     * ([uk.me.cormack.lighting7.routes.heldOutsideSource]) — what Update writes though unchanged, as
+     * after a masked Record.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val heldOutsideSource: Int = 0,
 ) : ProgrammerOutMessage()
 
 /**
@@ -1364,6 +1372,7 @@ object ProgrammerHandler {
             layers = layers.map { it.toDto() },
             applied = state.show.programmerLayerStack.appliedState(layers).map { it.toDto() },
             layersChangedSinceInclude = store.layerChangesSinceInclude(layers),
+            heldOutsideSource = heldOutsideSource(state),
         )
     }
 
