@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { IncludeSheet } from './IncludeSheet'
-import { MakeLayerSheet } from './MakeLayerSheet'
 import { RecordLookSheet } from './RecordLookSheet'
 import { RecordSheet } from './RecordSheet'
 import { UpdateDialog } from './UpdateDialog'
@@ -26,7 +25,7 @@ interface ProgrammerSheetsValue {
   openRecordInto: (target: IncludedTarget) => void
   openInclude: () => void
   openUpdate: () => void
-  /** Promote a Local selection into a shared Look, applied here as a layer. */
+  /** Promote a Local selection into a shared Look, applied here as a layer — `RecordLookSheet` as *Make layer*. */
   openMakeLayer: () => void
 }
 
@@ -51,9 +50,9 @@ export function ProgrammerSheetsProvider({
   const [record, setRecord] = useState<RecordPreset | null>(null)
   const [recordLook, setRecordLook] = useState(false)
   const [recordLookTarget, setRecordLookTarget] = useState<number | undefined>(undefined)
+  const [makeLayer, setMakeLayer] = useState(false)
   const [include, setInclude] = useState(false)
   const [update, setUpdate] = useState(false)
-  const [makeLayer, setMakeLayer] = useState(false)
   const { data: summary } = useProgrammerSummaryQuery()
 
   const openRecord = useCallback((preset?: RecordPreset) => setRecord(preset ?? {}), [])
@@ -62,6 +61,7 @@ export function ProgrammerSheetsProvider({
       openRecord,
       openRecordLook: () => {
         setRecordLookTarget(undefined)
+        setMakeLayer(false)
         setRecordLook(true)
       },
       openRecordInto: (target) => {
@@ -69,12 +69,17 @@ export function ProgrammerSheetsProvider({
           openRecord({ targetCueId: target.cueId, targetCueName: includedTargetParts(target).name })
         } else {
           setRecordLookTarget(target.lookId)
+          setMakeLayer(false)
           setRecordLook(true)
         }
       },
       openInclude: () => setInclude(true),
       openUpdate: () => setUpdate(true),
-      openMakeLayer: () => setMakeLayer(true),
+      openMakeLayer: () => {
+        setRecordLookTarget(undefined)
+        setMakeLayer(true)
+        setRecordLook(true)
+      },
     }),
     [openRecord],
   )
@@ -112,8 +117,8 @@ export function ProgrammerSheetsProvider({
         onOpenChange={setRecordLook}
         projectId={projectId}
         targetLookId={recordLookTarget}
+        makeLayer={makeLayer}
       />
-      <MakeLayerSheet open={makeLayer} onOpenChange={setMakeLayer} projectId={projectId} />
       <IncludeSheet open={include} onOpenChange={setInclude} projectId={projectId} />
       <UpdateDialog
         open={update}

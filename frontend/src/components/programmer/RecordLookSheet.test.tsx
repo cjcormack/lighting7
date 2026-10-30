@@ -12,6 +12,7 @@ const RESULT = {
   skipped: [], programmerKeysRefreshed: 0, cuesRepublished: [], sceneryWritten: 0, sceneryRemoved: 0,
 } as unknown as RecordLookResponse
 const recordLook = vi.fn((_: unknown) => ({ unwrap: () => Promise.resolve(RESULT) }))
+const readSelectionMask = vi.fn((): string[] | null => null)
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
@@ -21,6 +22,7 @@ vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ dat
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: [] }) }))
 vi.mock('./useLocalFamilyCounts', () => ({ useLocalFamilyCounts: () => undefined }))
+vi.mock('@/hooks/useWindowMaskReader', () => ({ useWindowMaskReader: () => readSelectionMask }))
 vi.mock('@/store/programmerOps', () => ({
   useRecordLookMutation: () => [recordLook, { isLoading: false, error: undefined, reset: () => {} }],
 }))
@@ -32,6 +34,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   recordLook.mockImplementation(() => ({ unwrap: () => Promise.resolve(RESULT) }))
+  readSelectionMask.mockImplementation(() => null)
 })
 
 function recordNight(onOpenChange: (open: boolean) => void) {
@@ -90,5 +93,41 @@ describe('Record look', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Record' }))
     await waitFor(() => expect(recordLook).toHaveBeenCalled())
     expect(recordLook.mock.calls[0][0]).toMatchObject({ mode: 'MERGE', lookId: 12, mask: undefined })
+    expect(recordLook.mock.calls[0][0]).not.toHaveProperty('asLayer', true)
+    expect(screen.queryByLabelText('Use it here as a programmer layer')).toBeNull()
+  })
+
+  it('uses a new look here as a programmer layer unless told not to', async () => {
+    recordNight(() => {})
+    await waitFor(() => expect(recordLook).toHaveBeenCalledTimes(1))
+    expect(recordLook.mock.calls[0][0]).toMatchObject({ mode: 'CREATE', asLayer: true })
+    cleanup()
+
+    render(<RecordLookSheet open onOpenChange={() => {}} projectId={6} />)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Night' } })
+    fireEvent.click(screen.getByLabelText('Use it here as a programmer layer'))
+    fireEvent.click(screen.getByRole('button', { name: 'Record' }))
+    await waitFor(() => expect(recordLook).toHaveBeenCalledTimes(2))
+    expect(recordLook.mock.calls[1][0]).toMatchObject({ asLayer: undefined })
+  })
+
+  it('opens as Make layer: a new look as a layer, over the selection, on its mask', async () => {
+    readSelectionMask.mockImplementation(() => ['COLOUR'])
+    const targets = [{ type: 'fixture' as const, key: 'hex-1' }]
+    render(<RecordLookSheet open onOpenChange={() => {}} projectId={6} targets={targets} makeLayer />)
+    expect(screen.getByText('Make a layer from your values')).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: 'Merge' })).toBeNull()
+    expect(screen.queryByLabelText('Use it here as a programmer layer')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Night' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Make layer' }))
+    await waitFor(() => expect(recordLook).toHaveBeenCalled())
+    expect(recordLook.mock.calls[0][0]).toMatchObject({ mode: 'CREATE', mask: ['COLOUR'], asLayer: true, targets })
+  })
+
+  it('has nothing to make as a layer until heads are selected', () => {
+    render(<RecordLookSheet open onOpenChange={() => {}} projectId={6} makeLayer />)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Night' } })
+    expect(screen.getByRole('button', { name: 'Make layer' })).toBeDisabled()
+    expect(screen.getByText(/Select the heads this look is about first/)).toBeTruthy()
   })
 })

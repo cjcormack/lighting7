@@ -540,14 +540,19 @@ internal fun recordingForUpdate(
  * copies (apply-model plan §3.4). Update writes the copies as children of their own, one per head,
  * so the child they stand for is retired, or the cue would play the effect twice. A child a copy
  * was already written as is on that copy's own head, and is kept.
+ *
+ * So is one whose instance a programmer layer took over (`asLayer` on Record → A new Look): Update
+ * writes that layer into the cue, and the layer plays the effect.
  */
 internal fun splitIncludedChildren(state: State, cueId: Int): Set<String> {
-    val copies = state.show.fxEngine.getActiveFx()
+    val byChild = state.show.fxEngine.getActiveFx()
         .filter { FxEngine.isProgrammerFxPriority(it.priority) && it.programmerOrigin?.cueId == cueId && !it.leaving }
         .groupBy { it.programmerOrigin!!.childUuid }
-        .filterValues { instances -> instances.all { it.splitMember != null } }
         .filterKeys { it != null }
-    if (copies.isEmpty()) return emptySet()
+    val layered = byChild.filterValues { instances -> instances.all { it.programmerLayerId != null } }
+        .keys.filterNotNullTo(HashSet())
+    val copies = byChild.filterValues { instances -> instances.all { it.splitMember != null } }
+    if (copies.isEmpty()) return layered
     val targets = transaction(state.database) {
         DaoCue.findById(cueId)?.adHocFx?.associate {
             it.uuid.toString() to FxTargetsRef.canonical(it.targetType, it.targetKey)
@@ -555,7 +560,7 @@ internal fun splitIncludedChildren(state: State, cueId: Int): Set<String> {
     }
     return copies.filter { (uuid, instances) ->
         instances.none { FxTargetsRef.canonical(it.target.targetRef.discriminator, it.target.targetKey) == targets[uuid] }
-    }.keys.filterNotNullTo(HashSet())
+    }.keys.filterNotNullTo(layered)
 }
 
 private fun DaoCueLayer.cueFields() =

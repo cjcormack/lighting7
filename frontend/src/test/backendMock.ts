@@ -563,7 +563,6 @@ export function lightingApiMock() {
         clearAll: () => {},
         setBlind: () => {},
         requestState: () => {},
-        addLayer: () => {},
         removeLayer: () => {},
         moveLayer: () => {},
         patchLayer: () => {},

@@ -11,10 +11,12 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
+import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.LookFxSettings
 import uk.me.cormack.lighting7.fx.lookFxSettings
@@ -31,9 +33,12 @@ import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.lookSceneryOf
 import java.util.UUID
 
 private val logger = LoggerFactory.getLogger("lookRecord")
@@ -318,9 +323,10 @@ internal data class ProgrammerRecordLookRequest(
      * effect is a thing an operator ticks: "the colour chase belongs in this look, the tilt sine
      * was just me looking at it" is a per-effect judgement, and a boolean cannot express it.
      *
-     * A ticked effect is **moved**, not copied — it is removed from the programmer band, because
-     * the layer this Look is applied through starts running it immediately and two copies would
-     * beat against each other. An effect left out keeps running exactly as it was: leaving one out
+     * A ticked effect is **moved**, not copied — it leaves the programmer band, because a layer
+     * applying this Look runs it and two copies would beat against each other. Under [asLayer] the
+     * new layer takes the instance over, phase kept; without it, the effect stops here and runs
+     * wherever the Look is next pressed or GO'd. An effect left out keeps running exactly as it was: leaving one out
      * of a Look is not the same as stopping it.
      *
      * Timing does not travel. `DaoLookFx` has no delay/interval columns by design — timing
@@ -334,11 +340,23 @@ internal data class ProgrammerRecordLookRequest(
      */
     val scenery: Boolean = true,
     /**
-     * Point the include target at the Look written, as a Record into a cue does. False from Make
-     * layer, which applies the new Look as a layer of whatever is loaded: Update must still write
-     * that layer into the loaded cue.
+     * Point the include target at the Look written, as a Record into a cue does. [asLayer] implies
+     * false: the new Look is then a layer of whatever is loaded, and Update must still write that
+     * layer into the loaded cue.
      */
     val retarget: Boolean = true,
+    /**
+     * Use the new Look here as a layer, in this one call: it goes on top of the programmer's layer
+     * stack, the values it took leave Local (every owner's slot on each key its rows name, a group
+     * row's members, a cell row's cell), the ticked [fxIds] run on as the layer's with their phase
+     * kept, and the held scenery it took passes to it. Nothing on stage moves — except that a
+     * taken-over effect now applies under every Local FX, which [ProgrammerRecordLookResponse.warnings]
+     * names where it was over one on the same attribute — and nothing in the programmer changes when
+     * the write fails. CREATE only; implies [retarget] false. Include's bookkeeping follows the keys:
+     * an included cue's own rows for them are what Update replaces with the layer, and an included
+     * Look's are left alone, since a Look cannot hold a layer.
+     */
+    val asLayer: Boolean = false,
 )
 
 @Serializable
@@ -358,6 +376,12 @@ internal data class ProgrammerRecordLookResponse(
     val sceneryWritten: Int = 0,
     /** Scenery rows deleted from the Look (REMOVE). */
     val sceneryRemoved: Int = 0,
+    /** The programmer layer the Look went on as, under `asLayer`. */
+    val layerId: Int? = null,
+    /** Programmer keys released from Local to that layer. */
+    val keysReleased: Int = 0,
+    /** Taken-over effects that now apply under a Local FX they were over. */
+    val warnings: List<String> = emptyList(),
 )
 
 /**
@@ -382,7 +406,7 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
-    recordLookShapeProblem(mode, request.name, request.lookId)?.let {
+    recordLookShapeProblem(mode, request.name, request.lookId, request.asLayer)?.let {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
     }
 
@@ -401,6 +425,7 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
             fxIds = request.fxIds,
             scenery = request.scenery,
             retarget = request.retarget,
+            asLayer = request.asLayer,
         )
         when (result) {
             is RecordLookCoreResult.Failure -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.message))
@@ -415,8 +440,9 @@ internal sealed interface RecordLookCoreResult {
 }
 
 /** What is wrong with a record-look request's shape, before anything is read or written. */
-internal fun recordLookShapeProblem(mode: RecordMode, name: String?, lookId: Int?): String? = when {
+internal fun recordLookShapeProblem(mode: RecordMode, name: String?, lookId: Int?, asLayer: Boolean = false): String? = when {
     mode == RecordMode.CREATE && name.isNullOrBlank() -> "CREATE requires a name"
+    mode != RecordMode.CREATE && asLayer -> "asLayer makes a new Look a layer, so it needs mode CREATE, not ${mode.name}"
     mode != RecordMode.CREATE && lookId == null -> "${mode.name} requires lookId"
     else -> null
 }
@@ -439,8 +465,9 @@ internal fun performProgrammerRecordLook(
     fxIds: List<Long>,
     scenery: Boolean,
     retarget: Boolean = true,
+    asLayer: Boolean = false,
 ): RecordLookCoreResult {
-    recordLookShapeProblem(mode, name, lookId)?.let { return RecordLookCoreResult.Failure(it) }
+    recordLookShapeProblem(mode, name, lookId, asLayer)?.let { return RecordLookCoreResult.Failure(it) }
 
     val resolved = transaction(state.database) { resolveLookTarget(project, mode, name, lookId) }
     resolved.second?.let { return RecordLookCoreResult.Failure(it) }
@@ -465,29 +492,34 @@ internal fun performProgrammerRecordLook(
     val bandFx = programmerBandFxById(state, fxIds)
     val held = if (scenery) heldSceneryOf(state, project.id.value) else emptyMap()
 
-    val (outcome, sceneryOutcome) = transaction(state.database) {
+    val (outcome, sceneryOutcome, fxRows) = transaction(state.database) {
         val look = existing ?: DaoLook.new {
             this.project = project
             this.name = name!!.trim()
             this.notes = notes?.trim()?.takeIf { it.isNotEmpty() }
         }
         val written = writeRecordingIntoLook(look, collapsed, mode, inRemit, elementParents)
-        writeLookFx(look, bandFx, mode)
-        written to writeHeldSceneryIntoLook(look, held, mode)
+        val fxRows = writeLookFx(look, bandFx, mode)
+        Triple(written, writeHeldSceneryIntoLook(look, held, mode), fxRows)
     }
 
-    // Only once the rows are committed: the layer applying this Look starts running these the
-    // moment it is added, so removing them first would leave a gap, and removing them after a
-    // failed write would stop an effect the operator still has.
-    for (effect in bandFx) state.show.fxEngine.removeFx(effect.id)
+    // Only once the rows are committed: removing them after a failed write would stop an effect
+    // the operator still has. A layer applying this Look runs them from now on — the one `asLayer`
+    // adds takes these very instances over; without it, only a layer already applying the Look does.
+    val layered = if (asLayer) {
+        takeAsLayer(state, project.id.value, outcome, collapsed, bandFx.associateBy { fxRows.getValue(it.id) }, name!!.trim())
+    } else {
+        for (effect in bandFx) state.show.fxEngine.removeFx(effect.id)
+        null
+    }
 
     // Re-resolve and republish: a re-record of a layered Look must move its consumers, exactly
-    // as an edit does.
-    val republish = republishForLookEdit(state, outcome.lookUuid)
+    // as an edit does. A new Look has none but the layer `asLayer` just cooked.
+    val republish = if (existing == null) LookRepublishOutcome(0, emptyList()) else republishForLookEdit(state, outcome.lookUuid)
     state.show.fixtures.lookListChanged()
 
     // As a Record into a cue does: what was just written is what Update writes back to.
-    if (retarget) {
+    if (retarget && !asLayer) {
         val recordedInto = IncludedTarget.look(outcome.lookId, outcome.lookUuid)
         refreshSourceKeys(state, recordedInto)
         state.show.programmerStore.lastIncludedTarget = recordedInto
@@ -519,8 +551,86 @@ internal fun performProgrammerRecordLook(
             cuesRepublished = republish.cuesRepublished,
             sceneryWritten = sceneryOutcome.written,
             sceneryRemoved = sceneryOutcome.removed,
+            layerId = layered?.layerId,
+            keysReleased = layered?.keysReleased ?: 0,
+            warnings = layered?.warnings.orEmpty(),
         )
     )
+}
+
+/** What [takeAsLayer] did. */
+private data class TakenAsLayer(val layerId: Int, val keysReleased: Int, val warnings: List<String>)
+
+/**
+ * `asLayer`'s half after the write: the new Look on top of the programmer's layer stack, taking over
+ * [adopt]'s running effects, then every key its rows name released from Local and the held scenery
+ * it took handed over — in that order, so each key shows the layer's value, which is the one it was
+ * showing, the moment Local lets it go. A group row names its members, as the cook expands it.
+ *
+ * The released keys then leave Include's baseline as the include target needs: an included Look
+ * keeps its rows for them (Update would otherwise read them as cleared and delete rows a Look cannot
+ * get back as a layer), and an included cue's rows for them — staged or, under a masked Include,
+ * not — are Update's to delete, as it writes the layer that now holds them.
+ */
+private fun takeAsLayer(
+    state: State,
+    projectId: Int,
+    outcome: LookRecordOutcome,
+    collapsed: CollapsedAssignments,
+    adopt: Map<UUID, FxInstance>,
+    name: String,
+): TakenAsLayer {
+    val warnings = fxOverLocalFx(state, adopt.values)
+    val (layer, _) = state.show.programmerLayerStack.add(
+        LayerSource.look(outcome.lookId, outcome.lookUuid, name),
+        adopt = adopt,
+    )
+    val fixtures = state.show.fixtures
+    val keys = collapsed.rows.flatMap { row ->
+        val heads = when (row.targetType) {
+            TargetRef.Group.TYPE -> runCatching { fixtures.untypedGroup(row.targetKey).fixtures.filterIsInstance<Fixture>() }.getOrDefault(emptyList())
+            else -> listOfNotNull(runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull())
+        }
+        heads.map { it to canonicalAttributeName(row.attribute) }
+    }.distinct()
+    ProgrammerHandler.releaseLocal(state, keys, withSideband = true)
+    val store = state.show.programmerStore
+    val target = store.lastIncludedTarget
+    if (target != null) {
+        val taken = keys.map { (head, attribute) -> ProgrammerStore.IncludedKey(head.targetKey, attribute) }
+        if (target.lookId != null) {
+            store.forgetIncludedKeys(taken)
+        } else {
+            val current = store.includedKeys?.takeIf { it.target.sameSource(target) }
+            store.includedKeys = ProgrammerStore.IncludedKeys(
+                current?.target ?: target,
+                current?.keys.orEmpty() + taken.filter(store::sourceHolds),
+            )
+        }
+    }
+    val scenery = lookSceneryOf(state.database, listOf(outcome.lookId))[outcome.lookId].orEmpty()
+    if (scenery.isNotEmpty()) state.programmerScenery.handToLayer(projectId, scenery)
+    return TakenAsLayer(layer.layerId, keys.size, warnings)
+}
+
+/**
+ * Each of [taking] that applies over a Local FX it is not taking, on the same attribute of a shared
+ * head, said in words: as a layer's it will apply under that one. Read before the layer takes them.
+ */
+private fun fxOverLocalFx(state: State, taking: Collection<FxInstance>): List<String> {
+    val engine = state.show.fxEngine
+    val taken = taking.mapTo(HashSet()) { it.id }
+    val staying = engine.getActiveFx().filter { it.isLocalFx && it.id !in taken }
+    return taking.mapNotNull { effect ->
+        val heads = engine.fixtureKeysCoveredBy(effect).toSet()
+        val attribute = canonicalAttributeName(effect.target.attribute)
+        val under = staying.firstOrNull { other ->
+            canonicalAttributeName(other.target.attribute) == attribute &&
+                compareValuesBy(effect, other, { it.priority }, { it.composeOrder }, { it.id }) > 0 &&
+                engine.fixtureKeysCoveredBy(other).any { it in heads }
+        } ?: return@mapNotNull null
+        "${effect.effect.name} on $attribute now applies under ${under.effect.name}, which stays in your FX: a layer's FX applies under every one of yours"
+    }
 }
 
 /**
@@ -567,8 +677,11 @@ internal fun programmerBandFxById(state: State, ids: List<Long>): List<FxInstanc
  *
  * The effects are written bottom first in the order given, which [programmerBandFxById] makes
  * their stored apply order, so a press spawns them in the order they applied (FX editor plan §3.5).
+ *
+ * Answers each effect's row uuid by [FxInstance.id], which is how a layer applying the Look takes
+ * over the running instances (`adopt` on [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.add]).
  */
-internal fun writeLookFx(look: DaoLook, effects: List<FxInstance>, mode: RecordMode) {
+internal fun writeLookFx(look: DaoLook, effects: List<FxInstance>, mode: RecordMode): Map<Long, UUID> {
     fun targetTypeOf(effect: FxInstance) = effect.target.targetRef.discriminator
 
     fun DaoLookFxEntity.take(effect: FxInstance, sortOrder: Int) {
@@ -588,12 +701,13 @@ internal fun writeLookFx(look: DaoLook, effects: List<FxInstance>, mode: RecordM
         { lookFxKey(targetTypeOf(it), it.target.targetKey, it.target.attribute, it.lookFxSettings().fxType) },
     )
     pairing.unmatched.forEach { it.delete() }
-    if (effects.isEmpty()) return
+    if (effects.isEmpty()) return emptyMap()
     var nextSort = if (replace) 0 else (look.effects.maxOfOrNull { it.sortOrder } ?: -1) + 1
+    val rows = HashMap<Long, UUID>()
     for ((effect, stored) in pairing.pairs) {
         val sortOrder = nextSort++
-        if (stored != null) {
-            stored.take(effect, sortOrder)
+        val row = if (stored != null) {
+            stored.apply { take(effect, sortOrder) }
         } else {
             DaoLookFxEntity.new {
                 this.look = look
@@ -602,7 +716,9 @@ internal fun writeLookFx(look: DaoLook, effects: List<FxInstance>, mode: RecordM
                 take(effect, sortOrder)
             }
         }
+        rows[effect.id] = row.uuid
     }
+    return rows
 }
 
 /** [settings] onto this row — everything but where the effect runs and its place in the Look. */
