@@ -22,13 +22,19 @@ let layers: unknown[] = []
 
 const programmerClearAll = vi.fn()
 const programmerSetBlind = vi.fn()
+// A query hook as RTK Query answers it, `selectFromResult` included: `useProgrammerContent` narrows.
+type QueryOptions = { selectFromResult?: (result: { data: unknown }) => unknown }
+const queryOf = vi.hoisted(
+  () => (data: () => unknown) => (_arg?: unknown, options?: QueryOptions) =>
+    options?.selectFromResult ? options.selectFromResult({ data: data() }) : { data: data() },
+)
 vi.mock('@/store/programmer', () => ({
-  useProgrammerSummaryQuery: () => ({ data: summary }),
-  useProgrammerLayersQuery: () => ({ data: layers }),
+  useProgrammerSummaryQuery: queryOf(() => summary),
+  useProgrammerLayersQuery: queryOf(() => layers),
   programmerClearAll: (...a: unknown[]) => programmerClearAll(...a),
   programmerSetBlind: (...a: unknown[]) => programmerSetBlind(...a),
 }))
-vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: effects }) }))
+vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: queryOf(() => effects) }))
 const desk = { connected: true }
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
 vi.mock('@/store/cueStacks', () => ({

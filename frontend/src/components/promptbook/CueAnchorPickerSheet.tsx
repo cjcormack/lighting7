@@ -12,6 +12,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from '@/components/programmer/maskPicker'
+import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import {
   Select,
   SelectContent,
@@ -38,7 +42,8 @@ const NEW_STACK = 'new'
  * toolbar's "Anchor cue" action, it does this without leaving the book:
  *
  *  • Create a brand-new cue and anchor it to the selection — into an existing stack
- *    (slotted in reading order) or a new stack named inline (covering an empty show).
+ *    (slotted in reading order) or a new stack named inline (covering an empty show). It is
+ *    either empty or recorded from the programmer; the toolbar's "Record cue" opens here.
  *  • Anchor (or re-anchor) an existing cue to the selection — cues are grouped by stack
  *    since a prompt-book spans the whole show; already-anchored cues are marked.
  *  • Jump to an anchored cue's editor in Program (deep authoring stays there).
@@ -51,6 +56,8 @@ export function CueAnchorPickerSheet({
   defaultStackId,
   existingCueNames,
   preselectEntryId,
+  openOnRecord,
+  recordUnavailable,
   onPick,
   onCreateCue,
   onEditCue,
@@ -68,12 +75,19 @@ export function CueAnchorPickerSheet({
   existingCueNames: Set<string>
   /** Entry to highlight as the likely pick (armed from the rail, or overlapping the selection). */
   preselectEntryId: number | null
+  /** Open on the create form, recording the programmer — the toolbar's "Record cue". */
+  openOnRecord: boolean
+  /** Why the programmer cannot be recorded here, or null when it can. */
+  recordUnavailable: string | null
   onPick: (entryId: number) => void
   onCreateCue: (input: {
     name: string
     cueNumber: string | null
     notes: string | null
     stack: NewCueStackChoice
+    record: boolean
+    /** The attributes to record; absent for every attribute. */
+    mask: AttributeFamily[] | undefined
   }) => void | Promise<void>
   onEditCue: (entryId: number) => void
   onClose: () => void
@@ -89,11 +103,18 @@ export function CueAnchorPickerSheet({
   // Chosen stack: an existing id, or NEW_STACK to create one named `newStackName`.
   const [stackChoice, setStackChoice] = useState<number | typeof NEW_STACK>(NEW_STACK)
   const [newStackName, setNewStackName] = useState('')
+  // Recorded from the programmer, or empty.
+  const [record, setRecord] = useState(false)
+  // Opens on the selection's mask, as every Record does (apply-model plan D3), and is this sheet's own.
+  const [mask, setMask] = useState<MaskValue>(null)
+  const readSelectionMask = useWindowMaskReader()
   // Guards the multi-step create (stack → cue → anchor → reorder) against a double-submit
   // while those requests are in flight — otherwise a second click spawns duplicates.
   const [submitting, setSubmitting] = useState(false)
 
-  const initCreate = () => {
+  const initCreate = (recording: boolean) => {
+    setRecord(recording && recordUnavailable == null)
+    setMask(readSelectionMask())
     setName(nextAvailableName('New Cue', existingCueNames))
     setCueNumber('')
     setNotes('')
@@ -104,11 +125,11 @@ export function CueAnchorPickerSheet({
     setMode('create')
   }
 
-  // On each open: with no cues yet, the create form is the point — jump straight to it
-  // (naming a stack inline when there are none); otherwise show the list.
+  // On each open: from "Record cue", or with no cues yet, the create form is the point — jump
+  // straight to it (naming a stack inline when there are none); otherwise show the list.
   useEffect(() => {
     if (!open) return
-    if (cueOrder.length === 0) initCreate()
+    if (openOnRecord || cueOrder.length === 0) initCreate(openOnRecord)
     else setMode('pick')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -122,7 +143,11 @@ export function CueAnchorPickerSheet({
   }, [open, mode, preselectEntryId])
 
   const creatingStack = stackChoice === NEW_STACK
-  const canCreate = name.trim() !== '' && (creatingStack ? newStackName.trim() !== '' : true)
+  const recording = record && recordUnavailable == null
+  const canCreate =
+    name.trim() !== '' &&
+    (creatingStack ? newStackName.trim() !== '' : true) &&
+    !(recording && maskIsEmpty(mask))
   const handleCreate = async () => {
     if (!canCreate || submitting) return
     const stack: NewCueStackChoice = creatingStack
@@ -135,6 +160,8 @@ export function CueAnchorPickerSheet({
         cueNumber: cueNumber.trim() || null,
         notes: notes.trim() || null,
         stack,
+        record: recording,
+        mask: recording ? maskToWire(mask) : undefined,
       })
     } finally {
       setSubmitting(false)
@@ -145,12 +172,41 @@ export function CueAnchorPickerSheet({
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>{mode === 'create' ? 'New cue for this selection' : 'Cue for this selection'}</SheetTitle>
+          <SheetTitle>
+            {mode === 'create'
+              ? recording
+                ? 'Record a cue for this selection'
+                : 'New cue for this selection'
+              : 'Cue for this selection'}
+          </SheetTitle>
         </SheetHeader>
 
         {mode === 'create' ? (
           <>
             <SheetBody>
+              <div className="space-y-1.5">
+                <Label>Contents</Label>
+                <ToggleGroup
+                  type="single"
+                  value={recording ? 'record' : 'empty'}
+                  onValueChange={(v) => v && setRecord(v === 'record')}
+                  className="justify-start"
+                >
+                  <ToggleGroupItem value="record" className="text-xs" disabled={recordUnavailable != null}>
+                    The programmer
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="empty" className="text-xs">
+                    Empty
+                  </ToggleGroupItem>
+                </ToggleGroup>
+                <p className="text-xs text-muted-foreground">
+                  {recordUnavailable ??
+                    (recording
+                      ? 'Records what the programmer holds — values, layers, FX and scenery.'
+                      : 'A cue with nothing in it, to fill in later.')}
+                </p>
+              </div>
+              {recording && <MaskPicker value={mask} onChange={setMask} />}
               <div className="space-y-1.5">
                 <Label htmlFor="new-cue-name">Name</Label>
                 <Input
@@ -222,7 +278,7 @@ export function CueAnchorPickerSheet({
                 Back
               </Button>
               <Button onClick={handleCreate} disabled={!canCreate || submitting}>
-                Create &amp; anchor
+                {recording ? 'Record & anchor' : 'Create & anchor'}
               </Button>
             </SheetFooter>
           </>
@@ -230,7 +286,7 @@ export function CueAnchorPickerSheet({
           <SheetBody className="space-y-0.5 px-2">
             <button
               type="button"
-              onClick={initCreate}
+              onClick={() => initCreate(false)}
               className="mb-1 flex w-full items-center gap-2 rounded-md border border-dashed border-amber-500/60 px-3 py-2 text-sm font-semibold text-amber-600 hover:bg-amber-400/10"
             >
               <Plus className="size-4" />

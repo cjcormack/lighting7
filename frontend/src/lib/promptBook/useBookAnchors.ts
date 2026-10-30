@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import type { RefObject } from 'react'
 import type { CueStack } from '../../api/cueStacksApi'
 import type { PromptBookDetails, Region } from '../../api/promptBooksApi'
@@ -10,11 +11,15 @@ import {
   useUpsertAnchorMutation,
   useDeleteAnchorMutation,
 } from '../../store/promptBooks'
-import { useCreateProjectCueMutation } from '../../store/cues'
+import { useCreateProjectCueMutation, usePatchProjectCueMutation } from '../../store/cues'
 import {
   useCreateProjectCueStackMutation,
   useReorderCueStackCuesMutation,
 } from '../../store/cueStacks'
+import { useRecordProgrammerMutation } from '../../store/programmerOps'
+import { formatError } from '../formatError'
+import type { AttributeFamily } from '../attributeFamily'
+import { announceWrite, recordNote } from '../../components/programmer/writeToasts'
 
 /** The one-deep undo slot a re-anchor fills: where the anchor was, and the label it wore. */
 interface AnchorUndoSnapshot {
@@ -65,12 +70,15 @@ export function useBookAnchors({
   const [upsertAnchor] = useUpsertAnchorMutation()
   const [deleteAnchor] = useDeleteAnchorMutation()
   const [createCue] = useCreateProjectCueMutation()
+  const [patchCue] = usePatchProjectCueMutation()
   const [createStack] = useCreateProjectCueStackMutation()
   const [reorderCues] = useReorderCueStackCuesMutation()
+  const [recordProgrammer] = useRecordProgrammerMutation()
 
   const [placingEntryId, setPlacingEntryId] = useState<number | null>(null)
-  // Region awaiting a cue choice — set when "Anchor cue" is clicked on a selection.
-  const [anchorPicker, setAnchorPicker] = useState<{ region: Region } | null>(null)
+  // Region awaiting a cue choice — set when "Anchor cue" or "Record cue" is clicked on a selection.
+  // `record` opens the picker on its create form, recording the programmer.
+  const [anchorPicker, setAnchorPicker] = useState<{ region: Region; record: boolean } | null>(null)
   const [undoSnapshot, setUndoSnapshot] = useState<AnchorUndoSnapshot | null>(null)
 
   const anchorByEntry = useMemo(
@@ -199,27 +207,52 @@ export function useBookAnchors({
   )
 
   // Stable identity so the memoized ScriptViewer isn't re-rendered every fade frame.
-  const requestAnchor = useCallback((region: Region) => setAnchorPicker({ region }), [])
+  const requestAnchor = useCallback((region: Region) => setAnchorPicker({ region, record: false }), [])
+  const requestRecord = useCallback((region: Region) => setAnchorPicker({ region, record: true }), [])
   const closePicker = useCallback(() => setAnchorPicker(null), [])
 
   // Create a brand-new cue from the current selection: resolve the target stack (creating
-  // one inline when asked), make the cue, anchor its entry to the region, then slot it into an
-  // existing stack in reading order. Reused create-stack/create-cue/anchor/reorder mutations
-  // — no new backend surface. The sheet stays open on failure to retry.
+  // one inline when asked), make the cue — empty, or recorded from the programmer — anchor its
+  // entry to the region, then slot it into an existing stack in reading order. The sheet stays
+  // open on failure to retry.
   const createCueFromSelection = useCallback(
     async ({
       name,
       cueNumber,
       notes,
       stack,
+      record,
+      mask,
     }: {
       name: string
       cueNumber: string | null
       notes: string | null
       stack: NewCueStackChoice
+      record: boolean
+      mask?: AttributeFamily[]
     }) => {
       if (!anchorPicker) return
       const region = anchorPicker.region
+      // Record is a silent endpoint (its own sheet draws the refusal), so this door says both
+      // outcomes itself.
+      const recordIntoNewCue = async (cueStackId: number) => {
+        const response = await recordProgrammer({
+          projectId,
+          mode: 'CREATE',
+          cueStackId,
+          name,
+          cueNumber: cueNumber ?? undefined,
+          mask,
+          includeFx: true,
+          scenery: true,
+        })
+        if ('error' in response) {
+          toast.error('Couldn’t record the cue', { description: formatError(response.error) })
+          return null
+        }
+        announceWrite(recordNote(response.data))
+        return response.data.cue
+      }
       try {
         // A brand-new stack has no other cues, so there's nothing to reorder against.
         let stackId: number
@@ -234,18 +267,21 @@ export function useBookAnchors({
         } else {
           stackId = stack.id
         }
-        const newCue = await createCue({
-          projectId,
-          name,
-          cueNumber,
-          notes,
-          layers: [],
-          adHocFx: [],
-          triggers: [],
-          fadeDurationMs: 3000,
-          fadeCurve: 'LINEAR',
-          cueStackId: stackId,
-        }).unwrap()
+        const newCue = record
+          ? await recordIntoNewCue(stackId)
+          : await createCue({
+              projectId,
+              name,
+              cueNumber,
+              notes,
+              layers: [],
+              adHocFx: [],
+              triggers: [],
+              fadeDurationMs: 3000,
+              fadeCurve: 'LINEAR',
+              cueStackId: stackId,
+            }).unwrap()
+        if (newCue == null) return
         // The new cue's one entry is what is anchored and what moves; a desk that predates
         // entries sends none, and there is nothing to anchor by.
         const newEntryId = newCue.entryId
@@ -269,12 +305,26 @@ export function useBookAnchors({
             if (!isAppend) await reorderCues({ projectId, stackId, entryIds }).unwrap()
           }
         }
+        // Record takes no notes, so they are a write of their own — last, and not awaited: the cue
+        // is made and anchored by now, and a retry from the still-open sheet would make a second.
+        if (record && notes != null) patchCue({ projectId, cueId: newCue.id, notes })
         setAnchorPicker(null)
       } catch {
         // Leave the sheet open so the operator can retry.
       }
     },
-    [anchorPicker, createStack, createCue, upsertAnchor, reorderCues, projectId, stacks, anchorByEntry],
+    [
+      anchorPicker,
+      createStack,
+      createCue,
+      recordProgrammer,
+      patchCue,
+      upsertAnchor,
+      reorderCues,
+      projectId,
+      stacks,
+      anchorByEntry,
+    ],
   )
 
   return {
@@ -287,6 +337,7 @@ export function useBookAnchors({
     anchorPicker,
     overlapEntryId,
     requestAnchor,
+    requestRecord,
     closePicker,
     undoSnapshot,
     undo,
