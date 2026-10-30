@@ -32,7 +32,6 @@ import type {
   RecordSource,
 } from '@/store/programmerOps'
 import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
-import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import { RecordSceneryRow } from './RecordSceneryRow'
 import { announceWrite, recordNote } from './writeToasts'
 import { RecordCuePicker, usePickedCueName } from './RecordCuePicker'
@@ -128,9 +127,6 @@ export function RecordSheet({
   const [mode, setMode] = useState<RecordMode>(openingMode)
   const [source, setSource] = useState<RecordSource>('TOUCHED')
   const [mask, setMask] = useState<MaskValue>(null)
-  // The selection's mask, read once on open (apply-model plan D3): the sheet opens on it, and from
-  // then on the mask is this Record's own — a change here never moves the selection.
-  const readSelectionMask = useWindowMaskReader()
   const [includeFx, setIncludeFx] = useState(true)
   const [includeScenery, setIncludeScenery] = useState(true)
   const [selectedOnly, setSelectedOnly] = useState(false)
@@ -165,7 +161,8 @@ export function RecordSheet({
     setMode(openingMode)
     setCueId(targetCueId ?? null)
     setSource('TOUCHED')
-    setMask(readSelectionMask())
+    // A Record that quietly left a family out is only found when the cue is fired.
+    setMask(null)
     setIncludeFx(true)
     // On whenever anything is held (the row is absent otherwise): held scenery is part of what the
     // operator busked, and the cue writes only the pieces it would not already show (D7).

@@ -169,6 +169,9 @@ export function ProgrammerSourceStrip({
   const valuesDirty = useIncludeBaseline()
 
   const target = summary?.lastIncluded ?? null
+  // Values the source lacks — what a masked or scoped Record left out. Update writes them, so it
+  // stays enabled for them while *in sync*.
+  const lacking = summary?.heldOutsideSource ?? 0
   const lookId = target?.kind === 'LOOK' ? target.lookId : null
   // An included Look's effects that have been changed since Include — Update writes those back too,
   // so an effect edit alone must un-grey it. The desk says which (`editedSinceInclude`) against the
@@ -242,11 +245,13 @@ export function ProgrammerSourceStrip({
         group: 'programmer',
         label: `Update ${name}`,
         hint:
-          editing?.dirty == null
-            ? 'writes the edits back'
-            : `${editing.dirty} change${editing.dirty === 1 ? '' : 's'} not written back`,
+          editing != null && inSync && lacking > 0
+            ? lackingSentence(lacking, editing.kind)
+            : editing?.dirty == null
+              ? 'writes the edits back'
+              : `${editing.dirty} change${editing.dirty === 1 ? '' : 's'} not written back`,
         keywords: ['update', 'write back', 'save'],
-        canAct: !inSync && !isVenue,
+        canAct: editing != null && (!inSync || lacking > 0) && !isVenue,
         run: onUpdate,
       },
       {
@@ -406,7 +411,7 @@ export function ProgrammerSourceStrip({
               className="h-7 @max-[600px]:w-7 @max-[600px]:px-0"
               // Update writes the source back, and in a venue Record and Update are off (venue plan
               // D11; the desk answers `VENUE_RECORD_OFF`).
-              disabled={inSync || isVenue}
+              disabled={(inSync && lacking === 0) || isVenue}
               onClick={onUpdate}
               // The full label whatever the width: below `@[800px]` the cue number is dropped from
               // the *visible* text and this is the only thing still carrying it.
@@ -433,7 +438,9 @@ export function ProgrammerSourceStrip({
         </TooltipTrigger>
         <TooltipContent>
           {inSync
-            ? 'Nothing has changed since Include'
+            ? lacking > 0
+              ? lackingSentence(lacking, source.kind)
+              : 'Nothing has changed since Include'
             : source.dirty == null
               ? "This tab didn't see the Include, so it can't count your changes — Update writes whatever changed on the server."
               : `${source.dirty} change${source.dirty === 1 ? '' : 's'} not written back — write them back`}
@@ -457,6 +464,12 @@ export function ProgrammerSourceStrip({
       )}
     </Strip>
   )
+}
+
+/** Update's hover while in sync but the programmer holds values the source does not. */
+function lackingSentence(count: number, kind: 'cue' | 'look'): string {
+  const values = `${count} value${count === 1 ? '' : 's'}`
+  return `Nothing has changed, but ${values} the ${kind === 'cue' ? 'cue' : 'Look'} does not hold — Update writes ${count === 1 ? 'it' : 'them'}`
 }
 
 /** "Act 1 · cue 4 of 14" — the reassurance that you are editing the cue you think you are. */
@@ -498,7 +511,7 @@ function CueLocation({ source }: { source: Extract<ProgrammerSource, { kind: 'cu
  *
  * Hidden below `@[600px]` in both arms — the phone's box is `Q4 · Update · Revert` and nothing
  * else. The dirty state is an amber dot on Update there, with the count on its tooltip; "in sync"
- * is Update being disabled, which it already is.
+ * is Update being disabled, unless the programmer holds values the source lacks.
  */
 function DirtyBadge({ dirty, inSync }: { dirty: number | null; inSync: boolean }) {
   if (inSync) {

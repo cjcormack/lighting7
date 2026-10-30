@@ -1021,7 +1021,7 @@ internal val updateFromProgrammerTool = ToolDef(
     name = "update_from_programmer",
     description = "Write the programmer back into what it came from — the desk's Update. With no targets it " +
             "writes into the cue or look last loaded by include_into_programmer or written by record_cue / record_look, " +
-            "only what changed since then, and " +
+            "what changed since then plus any value the cue or look does not store, and " +
             "deletes the rows of any value an include staged and the programmer has since cleared. " +
             "With targets it writes each named cue exactly the keys the programmer is currently overriding it " +
             "on. With preview=true it writes nothing and returns the checklist of which cues the programmer is " +

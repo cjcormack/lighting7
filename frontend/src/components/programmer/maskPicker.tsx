@@ -215,7 +215,7 @@ export interface MaskPickerProps {
  * sheet that takes a mask mounts this — Record, Record Look (the busk Spread sheet's *Save as
  * Look…* included), Include, Make layer, Update — and a layer's popover in `LookStack`, through
  * [useMaskDraft]. Each holds a [MaskValue], opens on the selection's mask (`useWindowMaskReader`;
- * `LookStack`'s on the layer's own), sends [maskToWire] and refuses to act while [maskIsEmpty]. A
+ * Record, Record Look and Update on every attribute, `LookStack`'s on the layer's own), sends [maskToWire] and refuses to act while [maskIsEmpty]. A
  * change there is the sheet's own and never moves the selection.
  */
 export function MaskPicker({ value, onChange, counts, hint }: MaskPickerProps) {

@@ -259,6 +259,7 @@ internal fun includeExpandedIntoProgrammer(
         )
     }
     state.show.programmerStore.recordedValues = null
+    refreshSourceKeys(state, includedTarget)
     state.show.programmerStore.lastIncludedTarget = includedTarget
     state.show.programmerStore.includedKeys = uk.me.cormack.lighting7.fx.ProgrammerStore.IncludedKeys(
         includedTarget,

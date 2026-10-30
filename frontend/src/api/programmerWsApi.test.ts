@@ -400,6 +400,16 @@ describe('createProgrammerApi', () => {
     expect(api.getKeyState('hex-1', 'dimmer').entry?.value).toBe('200')
   })
 
+  it('carries the desk’s count of values outside the source, and drops it on a clear', () => {
+    const { conn, frame } = fakeWsConnection()
+    const api = createProgrammerApi(conn)
+    expect(api.getState().heldOutsideSource).toBe(0)
+    frame({ ...stateFrame(), heldOutsideSource: 2 })
+    expect(api.getState().heldOutsideSource).toBe(2)
+    frame({ type: 'programmer.cleared', cleared: 1, fxCleared: 0 })
+    expect(api.getState().heldOutsideSource).toBe(0)
+  })
+
   it('wakes the cell when a snapshot restores an entry clear-all removed', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createProgrammerApi(conn)

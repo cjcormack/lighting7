@@ -354,8 +354,8 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
         onOpenChange={setRecording}
         projectId={projectId}
         targets={[...targets]}
-        // The lanes' families; with none, the window's own mask.
-        initialMask={recordFamilies.length === 0 ? undefined : recordFamilies.length === 4 ? null : recordFamilies}
+        // The lanes' families; with none, every attribute.
+        initialMask={recordFamilies.length === 0 || recordFamilies.length === 4 ? null : recordFamilies}
         initialFxIds={recordable}
       />
       {lookFocused && adding != null && (

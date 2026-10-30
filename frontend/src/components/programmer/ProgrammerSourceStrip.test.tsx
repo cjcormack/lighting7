@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 
-let summary = { blind: false, entryCount: 0, lastIncluded: null as IncludedTarget | null }
+let summary = { blind: false, entryCount: 0, lastIncluded: null as IncludedTarget | null, heldOutsideSource: 0 }
 let dirty: number | null = null
 let stacks: unknown[] = []
 let looks: unknown[] = []
@@ -62,7 +62,7 @@ afterEach(() => {
   cleanup()
   sessionStorage.clear()
   resetShowIncludeForTests()
-  summary = { blind: false, entryCount: 0, lastIncluded: null }
+  summary = { blind: false, entryCount: 0, lastIncluded: null, heldOutsideSource: 0 }
   dirty = null
   stacks = []
   looks = []
@@ -264,6 +264,20 @@ describe('ProgrammerSourceStrip', () => {
     expect(screen.getByRole('button', { name: 'Update Q4' })).toBeDisabled()
   })
 
+  /**
+   * A masked or scoped Record leaves values out of the source while nothing has changed since: the
+   * strip still says *in sync*, and Update stays enabled for them, since Update writes them.
+   */
+  it('keeps "in sync" but enables Update while the programmer holds values the source lacks', () => {
+    summary = { ...summary, entryCount: 9, lastIncluded: CUE, heldOutsideSource: 2 }
+    dirty = 0
+    stacks = [STACK]
+    draw()
+    expect(screen.getByText('in sync')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Update Q4' })).not.toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Revert' })).toBeNull()
+  })
+
   it('NEVER claims "in sync" without a baseline, and leaves Update enabled', () => {
     // The rule of this band. A reloaded tab, or one opened after the Include, has no baseline. A
     // false "in sync" tells an operator their work is written when it is not, and costs the cue —
@@ -446,6 +460,16 @@ describe('ProgrammerSourceStrip', () => {
       expect(command('programmer.update')?.canAct).toBe(false)
       expect(command('programmer.revert')?.canAct).toBe(false)
       cleanup()
+
+      summary = { ...summary, heldOutsideSource: 1 }
+      draw()
+      expect(command('programmer.update')).toMatchObject({
+        canAct: true,
+        hint: 'Nothing has changed, but 1 value the cue does not hold — Update writes it',
+      })
+      expect(command('programmer.revert')?.canAct).toBe(false)
+      cleanup()
+      summary = { ...summary, heldOutsideSource: 0 }
 
       summary = { ...summary, lastIncluded: null }
       draw()

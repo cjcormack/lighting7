@@ -490,7 +490,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `after a Record into a cue, Update writes only what changed since, not what the Record left out`() =
+    fun `after a scoped Record into a cue, Update writes what changed and what the Record left out`() =
         testApplication {
             mountTestApp(state)
             val client = jsonClient()
@@ -510,8 +510,124 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
             setProgrammer("hex-1", "dimmer", "255")
             client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
 
-            assertEquals(mapOf("hex-1" to "255"), client.cueRows(cueId), "hex-2 was outside the Record")
+            assertEquals(mapOf("hex-1" to "255", "hex-2" to "120"), client.cueRows(cueId), "the cue lacked hex-2")
         }
+
+    @Test
+    fun `an Update in sync writes what a masked Record left out, and only under its mask`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val cueId = createCue(client, "c", rows = emptyList())
+        setProgrammer("hex-1", "dimmer", "200")
+        setProgrammer("hex-1", "rgbColour", "#ff0000")
+
+        client.post("/api/rest/programmer/record") {
+            contentType(ContentType.Application.Json)
+            setBody(ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "MERGE", cueId = cueId, mask = listOf("COLOUR"),
+            ))
+        }
+        assertEquals(1, heldOutsideSource(state), "the dimmer the mask left out")
+
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString(), mask = listOf("COLOUR")))
+        assertEquals(1, heldOutsideSource(state), "a Colour Update leaves the dimmer out")
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+        assertEquals(0, heldOutsideSource(state))
+        assertEquals("200", client.cueRowsByAttribute(cueId).getValue("dimmer"))
+    }
+
+    @Test
+    fun `values a Record left out are held outside the cue until a Record into it takes them`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            seedHex("hex-2", 13)
+            val cueId = createCue(client, "c", rows = listOf(assignment("fixture", "hex-1", "dimmer", "10")))
+            setProgrammer("hex-1", "dimmer", "200")
+            setProgrammer("hex-2", "dimmer", "120")
+
+            client.post("/api/rest/programmer/record") {
+                contentType(ContentType.Application.Json)
+                setBody(ProgrammerRecordRequest(
+                    projectId = projectId.toString(), mode = "MERGE", cueId = cueId,
+                    targets = listOf(CueTargetDto("fixture", "hex-1")),
+                ))
+            }
+            assertEquals(1, heldOutsideSource(state), "hex-2 is the programmer's, not the cue's")
+
+            client.post("/api/rest/programmer/record") {
+                contentType(ContentType.Application.Json)
+                setBody(ProgrammerRecordRequest(projectId = projectId.toString(), mode = "MERGE", cueId = cueId))
+            }
+            assertEquals(0, heldOutsideSource(state))
+            assertEquals(mapOf("hex-1" to "200", "hex-2" to "120"), client.cueRows(cueId))
+        }
+
+    @Test
+    fun `a scoped Merge into a cue that already stores a value leaves Update writing nothing to it`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            seedHex("hex-2", 13)
+            val cueId = createCue(client, "q7", rows = listOf(assignment("fixture", "hex-2", "dimmer", "50")))
+            setProgrammer("hex-1", "dimmer", "200")
+            setProgrammer("hex-2", "dimmer", "120")
+
+            client.post("/api/rest/programmer/record") {
+                contentType(ContentType.Application.Json)
+                setBody(ProgrammerRecordRequest(
+                    projectId = projectId.toString(), mode = "MERGE", cueId = cueId,
+                    targets = listOf(CueTargetDto("fixture", "hex-1")),
+                ))
+            }
+            assertEquals(0, heldOutsideSource(state), "the cue stores hex-2 already")
+            setProgrammer("hex-1", "dimmer", "255")
+            client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+            assertEquals(mapOf("hex-1" to "255", "hex-2" to "50"), client.cueRows(cueId))
+        }
+
+    @Test
+    fun `including the same cue again under a narrower mask still counts what it stores`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val cueId = createCue(
+            client, "c",
+            rows = listOf(
+                assignment("fixture", "hex-1", "dimmer", "10"),
+                assignment("fixture", "hex-1", "rgbColour", "#ff0000"),
+            ),
+        )
+        client.include(cueId)
+        client.post("/api/rest/programmer/include") {
+            contentType(ContentType.Application.Json)
+            setBody(ProgrammerIncludeRequest(projectId = projectId.toString(), cueId = cueId, mask = listOf("COLOUR")))
+        }
+        assertEquals(0, heldOutsideSource(state))
+    }
+
+    @Test
+    fun `a value added after Include is held outside the cue until Update writes it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val cueId = createCue(client, "c", rows = listOf(assignment("fixture", "hex-1", "dimmer", "10")))
+
+        client.include(cueId)
+        assertEquals(0, heldOutsideSource(state), "everything held came from the cue")
+        setProgrammer("hex-2", "dimmer", "120")
+        assertEquals(1, heldOutsideSource(state))
+
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+        assertEquals(0, heldOutsideSource(state))
+
+        clearProgrammerCompletely(state)
+        assertEquals(0, heldOutsideSource(state), "nothing included, nothing outside it")
+    }
 
     @Test
     fun `moving one layer is one change`() = testApplication {

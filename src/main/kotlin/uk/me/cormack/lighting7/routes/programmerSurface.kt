@@ -174,8 +174,9 @@ internal fun performProgrammerRecord(
     }
     state.show.programmerStore.rebaseLayers(recordedLayerIds) { rowOfLayer[it.layerId] }
     stampWrittenFxOrigins(state, written.outcome, recording)
-    state.show.programmerStore.lastIncludedTarget =
-        IncludedTarget.cue(written.outcome.cueId, written.entry?.id?.value)
+    val recordedInto = IncludedTarget.cue(written.outcome.cueId, written.entry?.id?.value)
+    refreshSourceKeys(state, recordedInto)
+    state.show.programmerStore.lastIncludedTarget = recordedInto
     stampRecordedValues(state)
     // And the scenery half of that pointer: what the cue now says is the baseline Update's dirty
     // count reads — all of the held scenery, unless this Record left it out or took it away.
@@ -321,6 +322,7 @@ internal fun performProgrammerInclude(
     if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0 || outcome.layersInstalled > 0 || sceneryIncluded > 0) {
         val target = includedTargetFor(cueData, entryId)
         state.show.programmerStore.recordedValues = null
+        refreshSourceKeys(state, target)
         state.show.programmerStore.lastIncludedTarget = target
         state.show.programmerStore.includedKeys = ProgrammerStore.IncludedKeys(target, outcome.staged)
         // The scenery baseline follows the target: an Include that staged nothing leaves both on
@@ -496,6 +498,9 @@ internal fun performProgrammerUpdate(
         if (modeLabel == "A" && written.scenery.warnings.isEmpty()) state.programmerScenery.rebaseline(project.id.value, written = true)
     }
 
+    if (results.isNotEmpty()) {
+        state.show.programmerStore.lastIncludedTarget?.takeIf { it.cueId in cueIds }?.let { refreshSourceKeys(state, it) }
+    }
     if (results.isNotEmpty() && modeLabel == "A") {
         foldUpdateIntoRecorded(state, plans.values.flatten(), cleared)
         state.show.programmerStore.forgetIncludedKeys(cleared)

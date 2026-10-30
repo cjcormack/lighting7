@@ -14,7 +14,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from '@/components/programmer/maskPicker'
-import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import {
   Select,
@@ -105,16 +104,15 @@ export function CueAnchorPickerSheet({
   const [newStackName, setNewStackName] = useState('')
   // Recorded from the programmer, or empty.
   const [record, setRecord] = useState(false)
-  // Opens on the selection's mask, as every Record does (apply-model plan D3), and is this sheet's own.
+  // Opens on every attribute, as every Record does, and is this sheet's own.
   const [mask, setMask] = useState<MaskValue>(null)
-  const readSelectionMask = useWindowMaskReader()
   // Guards the multi-step create (stack → cue → anchor → reorder) against a double-submit
   // while those requests are in flight — otherwise a second click spawns duplicates.
   const [submitting, setSubmitting] = useState(false)
 
   const initCreate = (recording: boolean) => {
     setRecord(recording && recordUnavailable == null)
-    setMask(readSelectionMask())
+    setMask(null)
     setName(nextAvailableName('New Cue', existingCueNames))
     setCueNumber('')
     setNotes('')

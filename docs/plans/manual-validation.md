@@ -38,7 +38,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R3-5`](#fu-manual-venue-visit-r3-5) | the palette popup and the one picker at the desk — a dimmer, zoom and colour cell each offer their family's palettes round the editor on the desk and in the iPad's bottom sheet, a band press lands on the cells under the cell's family, a press from the picker leaves it open, and the Stack table's *+ Look or palette* presses onto the selection | Venue-visit R3.5, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | *superseded by `FU-MANUAL-TABLES-COLOURS-S1`, which runs its checks on the programmer's tabs* — the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
-| [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Include opens on it (Record and Update on every attribute) while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-8`](#fu-manual-venue-visit-r2-8) | the Stage view pointed at Q7 by its editor's *Show on stage* while Q1 is live draws Q7's state, levels and scenery, follows an edit to Q7 within a moment, moves to Q9 on Q9's toggle and back to Output on a second press, and nothing on the rig moves throughout | Venue visit R2.8, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-7`](#fu-manual-venue-visit-r2-7) | a dimmer edited in Q4's Values grid while Q4 is live marks it *Edited since GO* and moves nothing, and *Update stage* fades the rig to the edit over Q4's own fade — an edited FX running on in phase — and clears the mark | Venue visit R2.7, 2026-10-17 |
@@ -865,8 +865,8 @@ Colour, Beam (one with a zoom row, one with a frost row) and Position palettes, 
 
 **What it proves**: *one mask* — venue-visit R3.4, apply-model plan session 4 (§4.4, D3): the
 selection's family pill is the mask's picker on the programmer and on the busk view, every change a
-`selection.setFamilies` that keeps the heads, and Record, Record Look, Include, Make layer and Update open on
-that mask without ever writing it back.
+`selection.setFamilies` that keeps the heads, and Include and Make layer open on that mask
+without ever writing it back, while Record, Record Look and Update open on every attribute.
 
 **Why it is here**: the tests drive the popover, the draft and each write against mocks; nothing
 opened the popover on the desk's two screens and the iPad, watched the other screen's pill and
@@ -884,9 +884,9 @@ both following the desk, and a Colour and a Position palette:
    The selection stays Colour.* Switch *All attributes* on: both pills read *All*.
 4. **Marquee and rows.** Drag a marquee over the Position column of Hex 1–2 on the programmer: both
    pills read *Position*, and the busk popover's draft follows. Click a row: both read *All*.
-5. **Into a sheet.** Pick *Colour* on the programmer's pill, then open Record: it opens with Colour
-   ticked. Tick Beam there: the pills still read *Colour*. Close and open Record Look, Include, Make
-   layer and Update in turn: each opens on *Colour*.
+5. **Into a sheet.** Pick *Colour* on the programmer's pill, then open Include: it opens with Colour
+   ticked. Tick Beam there: the pills still read *Colour*. Close and open Make layer: it opens on
+   *Colour*. Record, Record Look and Update open on *All attributes*.
 6. **On the iPad.** Open the pill in Pads focus and pick *Intensity*: the popover is reachable, the
    toggles take a finger, and the desk screens' pills follow.
 7. **Unlinked.** Unlink the busk window and pick *Position* there: the programmer's pill stays as it

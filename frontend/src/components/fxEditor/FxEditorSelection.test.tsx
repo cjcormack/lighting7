@@ -101,7 +101,7 @@ vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => n
 vi.mock('@/components/desk/DeskChip', () => ({ DeskChip: () => null }))
 vi.mock('@/components/programmer/RecordLookSheet', () => ({
   RecordLookSheet: ({ open, targets, initialMask, initialFxIds }: { open: boolean; targets: unknown; initialMask: unknown; initialFxIds: number[] }) =>
-    open ? <div data-testid="record-look">{JSON.stringify({ targets, initialMask: initialMask === undefined ? 'window' : initialMask, initialFxIds })}</div> : null,
+    open ? <div data-testid="record-look">{JSON.stringify({ targets, initialMask: initialMask === undefined ? 'unset' : initialMask, initialFxIds })}</div> : null,
 }))
 vi.mock('@/components/stage/OwnerEditor', () => ({
   OwnerEditor: ({ entry }: { entry: { kind: string; id: number } }) => <div data-testid="cue-editor">{`${entry.kind}:${entry.id}`}</div>,
@@ -305,11 +305,11 @@ describe('the list', () => {
     })
   })
 
-  it('records over the window’s own mask when no FX reaches the selection', () => {
+  it('records over every attribute when no FX reaches the selection', () => {
     mocks.effects = []
     draw()
     fireEvent.click(screen.getByRole('button', { name: 'Record as Look…' }))
-    expect(JSON.parse(screen.getByTestId('record-look').textContent!)).toMatchObject({ targets: FRONT, initialMask: 'window' })
+    expect(JSON.parse(screen.getByTestId('record-look').textContent!)).toMatchObject({ targets: FRONT, initialMask: null })
   })
 
   it('previews over the picked FX, else the list’s top card', () => {

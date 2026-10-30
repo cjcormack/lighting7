@@ -108,7 +108,7 @@ class LookRecordTest : RouteIntegrationTest() {
         }
 
     @Test
-    fun `after record-look, Update writes only what changed since, not what the Record left out`() =
+    fun `after a scoped record-look, Update writes what changed and what the Record left out`() =
         testApplication {
             mountTestApp(state)
             val client = jsonClient()
@@ -126,7 +126,12 @@ class LookRecordTest : RouteIntegrationTest() {
             setProgrammer("hex-1", "dimmer", "255")
             client.update()
 
-            assertEquals(mapOf(("hex-1" to "dimmer") to "255"), client.lookRows(recorded.look.id), "hex-2 was outside the Record")
+            assertEquals(
+                mapOf(("hex-1" to "dimmer") to "255", ("hex-2" to "dimmer") to "120"),
+                client.lookRows(recorded.look.id),
+                "the Look lacked hex-2",
+            )
+            assertEquals(0, heldOutsideSource(state), "the Look now stores both")
         }
 
     @Test

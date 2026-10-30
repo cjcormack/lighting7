@@ -20,7 +20,6 @@ import type {
   UpdateChecklist,
 } from '@/store/programmerOps'
 import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } from './maskPicker'
-import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 import { describeIncludedTarget, includedTargetKey } from '@/lib/includedTarget'
 import { announceWrite, updateNote } from './writeToasts'
@@ -40,8 +39,8 @@ export interface UpdateDialogProps {
  *
  * - **Mode A** — a cue was Included, so this is a confirmation naming it. Only the values the
  *   operator actually changed since Include are written, which is what leaves palette
- *   references the operator didn't touch as references; a value cleared since Include has its row
- *   deleted.
+ *   references the operator didn't touch as references, and those the cue does not hold — what a
+ *   masked or scoped Record left out; a value cleared since Include has its row deleted.
  * - **Mode B** — nothing was Included, so the server answers with the provenance-derived list
  *   of cues the programmer is currently sitting on top of, grouped by stack, and the operator
  *   picks which to write.
@@ -49,8 +48,9 @@ export interface UpdateDialogProps {
  * A Dialog rather than a Sheet: both shapes are "confirm what this will overwrite".
  *
  * **It takes a mask, like Record and Include** (venue-visit plan S10): the families the write may
- * touch, sent as `mask`, absent for every attribute. In Mode B the mask also decides which cues the
- * programmer is over, so changing it fetches the checklist again under the new one.
+ * touch, sent as `mask`, absent for every attribute, which it opens on as Record does. In Mode B the
+ * mask also decides which cues the programmer is over, so changing it fetches the checklist again
+ * under the new one.
  */
 export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: UpdateDialogProps) {
   const [update, { isLoading, error, reset }] = useUpdateProgrammerMutation()
@@ -62,9 +62,6 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   const [done, setDone] = useState(false)
   const [mask, setMask] = useState<MaskValue>(null)
   const maskKey = maskValueKey(mask)
-  // The selection's mask, read once on open (apply-model plan D3). A change here is this Update's
-  // own and never moves the selection.
-  const readSelectionMask = useWindowMaskReader()
   // Cues the operator unticked, kept across a checklist re-fetched under a new mask so narrowing
   // the mask does not tick them again behind their back.
   const untickedRef = useRef<Set<number>>(new Set())
@@ -131,27 +128,15 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
       return
     }
     if (appliedRunKeyRef.current === runKey) return
-    // Opening, as against a mode flip while open: the dialog starts on the selection's mask. The
-    // checklist fetch below runs in this same commit, still under the closed dialog's mask, so when
-    // the seed moves it the fetch is told the closed mask's checklist is already asked — it then
-    // waits one render and asks under the seed, rather than asking twice.
-    if (appliedRunKeyRef.current === null) {
-      setDone(false)
-      const seed = readSelectionMask()
-      setMask(seed)
-      checklistMaskKeyRef.current = maskValueKey(seed) === maskKey ? null : maskKey
-    } else {
-      checklistMaskKeyRef.current = null
-    }
+    if (appliedRunKeyRef.current === null) setDone(false)
+    checklistMaskKeyRef.current = null
     appliedRunKeyRef.current = runKey
     setChecklist(null)
     setSelected(new Set())
     setConflict(null)
     untickedRef.current = new Set()
     reset()
-    // `maskKey` is read as the mask the closed dialog holds, never a reason to re-run.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runKey, reset, readSelectionMask])
+  }, [runKey, reset])
 
   // With no include target there is nothing to confirm yet — fetch the checklist so the dialog
   // opens onto the actual decision rather than a spinner behind a button press. Fetched again when
@@ -202,36 +187,20 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
           <DialogTitle>Update</DialogTitle>
           <DialogDescription>
             {includeTarget
-              ? `Write your changes back into ${describeIncludedTarget(includeTarget)}.`
-              : 'Nothing is included, so these are the cues the programmer is currently overriding.'}
+              ? `Write back into ${describeIncludedTarget(includeTarget)}.`
+              : 'The cues the programmer is overriding.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[50vh] space-y-4 overflow-y-auto">
-          <MaskPicker
-            value={mask}
-            onChange={setMask}
-            hint="It narrows the values written back; held scenery goes back whole."
-          />
-
-          {includeTarget && (
-            <p className="text-sm text-muted-foreground">
-              Only the values you changed since including are written — anything you left alone
-              keeps whatever the cue already stored, palette references included. A value you
-              cleared since including is deleted from it. Scenery the programmer holds goes back
-              too, a cue’s own clock kept.
-            </p>
-          )}
+          <MaskPicker value={mask} onChange={setMask} />
 
           {modeB && checklist && <ChecklistView checklist={checklist} selected={selected} onToggle={toggle} />}
 
-          {/* Only when there is genuinely nothing to say. With unattributed keys the
-              checklist's own "Not from any cue" block already explains the situation, and
-              repeating it underneath reads as two different findings. */}
+          {/* Only when there is genuinely nothing to say: with unattributed keys the checklist's
+              own "Not from any cue" block already lists them. */}
           {modeB && checklist && checklist.stacks.length === 0 && checklist.unattributed.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              The programmer isn’t overriding any cue. Use Record to make a new cue instead.
-            </p>
+            <p className="text-sm text-muted-foreground">The programmer isn’t overriding any cue.</p>
           )}
 
           {conflict && (
@@ -296,12 +265,12 @@ function ChecklistView({
           <p className="text-xs font-medium text-muted-foreground">Not from any cue</p>
           <p className="text-xs text-muted-foreground">
             {checklist.unattributed.length} value
-            {checklist.unattributed.length === 1 ? '' : 's'} sitting over the baseline (
+            {checklist.unattributed.length === 1 ? '' : 's'} ·{' '}
             {checklist.unattributed
               .slice(0, 4)
               .map((key) => `${key.targetKey}.${key.attribute}`)
               .join(', ')}
-            {checklist.unattributed.length > 4 ? '…' : ''}). Record these into a new cue instead.
+            {checklist.unattributed.length > 4 ? '…' : ''}
           </p>
         </div>
       )}
@@ -343,8 +312,7 @@ function ChecklistRow({
         </span>
         {cue.viaFxKeyCount > 0 && (
           <span className="block text-xs text-amber-600 dark:text-amber-500">
-            {cue.viaFxKeyCount} of these are driven by an FX in this cue — a stored value
-            will be masked by that FX on the next GO.
+            {cue.viaFxKeyCount} under an FX in this cue
           </span>
         )}
       </span>

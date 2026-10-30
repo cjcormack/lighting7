@@ -33,7 +33,6 @@ import type {
   RecordSource,
 } from '@/store/programmerOps'
 import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
-import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import { RecordSceneryRow } from './RecordSceneryRow'
 import { announceWrite, recordLookNote } from './writeToasts'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
@@ -53,7 +52,7 @@ export interface RecordLookSheetProps {
    * the sheet reads the programmer scope's row selection as it always has.
    */
   targets?: CueTarget[]
-  /** The mask to open on, in place of the window's — the FX editor's lanes' families. */
+  /** The mask to open on, in place of every attribute — the FX editor's lanes' families. */
   initialMask?: AttributeFamily[] | null
   /** FX to open ticked — the FX editor's list. Only the programmer's own are offered. */
   initialFxIds?: readonly number[]
@@ -134,10 +133,6 @@ export function RecordLookSheet({
   const [mode, setMode] = useState<RecordMode>(targetLookId ? 'MERGE' : 'CREATE')
   const [source, setSource] = useState<RecordSource>('TOUCHED')
   const [mask, setMask] = useState<MaskValue>(null)
-  // The window's mask, read once on open (apply-model plan D3, `useWindowMaskReader`): the desk's
-  // while following; once unlinked, the marquee on the programmer and the tab's own copy elsewhere
-  // (the busk Spread tab, `/looks`). A change here is the sheet's own.
-  const readSelectionMask = useWindowMaskReader()
   const [selectedOnly, setSelectedOnly] = useState(true)
   const [fxIds, setFxIds] = useState<number[]>([])
   const [includeScenery, setIncludeScenery] = useState(true)
@@ -152,7 +147,7 @@ export function RecordLookSheet({
   // effect depending on it *and* calling it re-fires — here that would wipe the operator's form
   // the instant a Record failed.
   const openedRef = useRef(false)
-  // Read once per open, as the window's mask is: a host re-rendering meanwhile changes nothing.
+  // Read once per open: a host re-rendering meanwhile changes nothing.
   const initialRef = useRef({ initialMask, initialFxIds })
   initialRef.current = { initialMask, initialFxIds }
   useEffect(() => {
@@ -165,7 +160,7 @@ export function RecordLookSheet({
     setMode(targetLookId ? 'MERGE' : 'CREATE')
     setSource('TOUCHED')
     const initial = initialRef.current
-    setMask(initial.initialMask !== undefined ? initial.initialMask : readSelectionMask())
+    setMask(initial.initialMask ?? null)
     // On by default here, unlike `RecordSheet`: see the class doc. Still guarded by `scoped`, so
     // an empty selection falls back to the whole programmer rather than sending a 400.
     setSelectedOnly(true)
@@ -181,7 +176,7 @@ export function RecordLookSheet({
     setNotes('')
     setDone(false)
     reset()
-  }, [open, targetLookId, reset, readSelectionMask])
+  }, [open, targetLookId, reset])
 
   const creating = mode === 'CREATE'
   const canSubmit = (creating ? name.trim() !== '' : lookId !== '') && !maskIsEmpty(mask)

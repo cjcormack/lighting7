@@ -5,6 +5,8 @@ import { RecordLookSheet } from './RecordLookSheet'
 import { RecordSheet } from './RecordSheet'
 import { UpdateDialog } from './UpdateDialog'
 import { useProgrammerSummaryQuery } from '@/store/programmer'
+import type { IncludedTarget } from '@/api/programmerWsApi'
+import { includedTargetParts } from '@/lib/includedTarget'
 
 /** Which cue (if any) a Record opens preselected. */
 export interface RecordPreset {
@@ -20,6 +22,8 @@ export interface RecordPreset {
 interface ProgrammerSheetsValue {
   openRecord: (preset?: RecordPreset) => void
   openRecordLook: () => void
+  /** Record into what Include loaded, on Merge — `RecordSheet` on a cue, `RecordLookSheet` on a Look. */
+  openRecordInto: (target: IncludedTarget) => void
   openInclude: () => void
   openUpdate: () => void
   /** Promote a Local selection into a shared Look, applied here as a layer. */
@@ -46,6 +50,7 @@ export function ProgrammerSheetsProvider({
 }) {
   const [record, setRecord] = useState<RecordPreset | null>(null)
   const [recordLook, setRecordLook] = useState(false)
+  const [recordLookTarget, setRecordLookTarget] = useState<number | undefined>(undefined)
   const [include, setInclude] = useState(false)
   const [update, setUpdate] = useState(false)
   const [makeLayer, setMakeLayer] = useState(false)
@@ -55,7 +60,18 @@ export function ProgrammerSheetsProvider({
   const value = useMemo<ProgrammerSheetsValue>(
     () => ({
       openRecord,
-      openRecordLook: () => setRecordLook(true),
+      openRecordLook: () => {
+        setRecordLookTarget(undefined)
+        setRecordLook(true)
+      },
+      openRecordInto: (target) => {
+        if (target.kind === 'CUE') {
+          openRecord({ targetCueId: target.cueId, targetCueName: includedTargetParts(target).name })
+        } else {
+          setRecordLookTarget(target.lookId)
+          setRecordLook(true)
+        }
+      },
       openInclude: () => setInclude(true),
       openUpdate: () => setUpdate(true),
       openMakeLayer: () => setMakeLayer(true),
@@ -91,7 +107,12 @@ export function ProgrammerSheetsProvider({
           existingCue={record.existingCue}
         />
       )}
-      <RecordLookSheet open={recordLook} onOpenChange={setRecordLook} projectId={projectId} />
+      <RecordLookSheet
+        open={recordLook}
+        onOpenChange={setRecordLook}
+        projectId={projectId}
+        targetLookId={recordLookTarget}
+      />
       <MakeLayerSheet open={makeLayer} onOpenChange={setMakeLayer} projectId={projectId} />
       <IncludeSheet open={include} onOpenChange={setInclude} projectId={projectId} />
       <UpdateDialog

@@ -147,26 +147,26 @@ describe('UpdateDialog mask', () => {
   })
 
   /**
-   * It opens on the selection's mask (apply-model plan D3), and in Mode B asks for the checklist
-   * once, under that mask — never first under the closed dialog's and then again. A change here is
-   * the dialog's own and writes nothing to the selection.
+   * It opens on every attribute whatever the selection's mask, as Record does, and in Mode B asks for
+   * the checklist once. A change here is the dialog's own and writes nothing to the selection.
    */
-  it('opens on the selection’s mask and fetches the checklist once, under it (Mode B)', async () => {
+  it('opens on every attribute and fetches the checklist once (Mode B)', async () => {
     // Every write that could move the selection: the whole fact, and the mask alone.
     const writes = (['set', 'setFamilies', 'toggle', 'clear'] as const).map((name) => vi.spyOn(lightingApi.selection, name))
     selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
     render(<UpdateDialog open onOpenChange={() => {}} projectId={6} includeTarget={null} />)
     await screen.findByText('Cue 2')
     expect(update).toHaveBeenCalledTimes(1)
-    expect(update.mock.calls[0][0]).toEqual({ projectId: 6, preview: true, mask: ['COLOUR'] })
-    expect(box('Colour').checked).toBe(true)
-    fireEvent.click(box('Beam'))
-    await waitFor(() => expect(update).toHaveBeenCalledTimes(2))
-    expect(update.mock.calls[1][0]).toEqual({ projectId: 6, preview: true, mask: ['COLOUR', 'BEAM'] })
+    expect(update.mock.calls[0][0]).toEqual({ projectId: 6, preview: true, mask: undefined })
+    expect(allSwitch()).toHaveAttribute('aria-checked', 'true')
+    narrowTo('Colour')
+    await waitFor(() =>
+      expect(update).toHaveBeenLastCalledWith({ projectId: 6, preview: true, mask: ['COLOUR'] }),
+    )
     for (const write of writes) expect(write).not.toHaveBeenCalled()
   })
 
-  it('opens on the selection’s mask again after a close, whatever was picked here', async () => {
+  it('opens on every attribute again after a close, whatever was picked here', async () => {
     answer.current = () => ({ applied: false, mode: 'A', results: [], warnings: [] })
     const { rerender } = render(<UpdateDialog open onOpenChange={() => {}} projectId={6} includeTarget={cueTarget} />)
     narrowTo('Beam')
