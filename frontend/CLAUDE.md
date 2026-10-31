@@ -6342,7 +6342,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   set and own rows removed, keyed by target type, key and canonical attribute (`colour` and
   `rgbColour` are one row), notifying per key. A write schedules a flush — 400 ms quiet, 2 s ceiling
   — that rebuilds the **whole** `attributeAssignments` list from the cue as it stands then
-  (`applyCueRowEntries`: every kept row's `fadeDurationMs`, `moveInDark` and `sortOrder` kept, a new
+  (`applyCueRowEntries`: every kept row's `fadeDurationMs` and `sortOrder` kept, a new
   row appended after the last order, read-only fields such as `health` dropped) and PATCHes it. An
   entry retires only once the cue agrees **and** a cook read after its save has landed (`markSaved`
   / `reconcile`), since the two queries refetch apart and retiring on the details alone flashes the
@@ -6516,7 +6516,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   moves it, and a press while lit goes back to Output. It works locked, and is withheld with the
   reason for another project's cue. The Screens row and the View menu offer *Cue in edit* only while
   the window shows one. See `docs/stage-vis-engineering.md` §"The fifth source: Cue in edit".
-- **Not yet**: a row's own fade and move-in-dark are kept on every write but not edited here
+- **Not yet**: a row's own fade is kept on every write but not edited here
   (`FU-CUE-ROW-TIMING`).
 
 #### The cue action set

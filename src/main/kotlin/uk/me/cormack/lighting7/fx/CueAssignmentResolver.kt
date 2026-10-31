@@ -32,11 +32,6 @@ class CueAssignmentResolver {
      * @property compositionOverride per-property override from `@FixtureAttribute(composition = …)`.
      *   Use [CompositionRule.UNSET] to inherit from [category].
      * @property value the asserted value, type tagged.
-     * @property moveInDark if true and this is a position property, the resolver pre-applies
-     *   this value across the entire crossfade (instead of linearly blending pan/tilt) when an
-     *   outgoing-or-parallel cue from a different [cueId] asserts a [AttributeCategory.DIMMER]
-     *   contributor with value 0 on the same target. Ignored for non-position properties. See
-     *   [computeMoveInDarkArmed] / `docs/lighting-composition-model.md` §"Crossfade behaviour".
      */
     data class Assignment(
         val cueId: Int,
@@ -48,7 +43,6 @@ class CueAssignmentResolver {
         val category: AttributeCategory,
         val compositionOverride: CompositionRule = CompositionRule.UNSET,
         val value: AttributeValue,
-        val moveInDark: Boolean = false,
         /**
          * Which Look layer produced [value], when a layer did — see [CookWinner].
          *
@@ -139,7 +133,7 @@ class CueAssignmentResolver {
 
     companion object {
         /** No rows — composes to nothing at any weights. */
-        val EMPTY_COOK = Cook(emptyList(), emptySet())
+        val EMPTY_COOK = Cook(emptyList())
 
         /**
          * Flatten a [resolveIndexed]-shaped map to per-[Key] entries. The one place the
@@ -257,18 +251,16 @@ class CueAssignmentResolver {
 
     /**
      * The weight-independent half of [resolveIndexed]: the specificity-filtered, per-target,
-     * per-property contributor buckets with their composition rule already chosen, plus the
-     * moveInDark armed set.
+     * per-property contributor buckets with their composition rule already chosen.
      *
-     * Every input to all three is the row set alone — `targetIsGroup`, `category`,
-     * `compositionOverride`, `moveInDark`, `bundleRole`, and the asserted values — so a crossfade can cook
+     * Every input to both is the row set alone — `targetIsGroup`, `category`,
+     * `compositionOverride`, `bundleRole`, and the asserted values — so a crossfade can cook
      * once when the rows change and recompose per frame at new [FadeWeights]. See
      * [LayerResolver.reweightAssignments], which owns the cached instance and the invariant
      * that keeps it valid.
      */
     class Cook internal constructor(
         internal val targets: List<CookedTarget>,
-        internal val moveInDarkArmed: Set<String>,
     )
 
     /** One target's buckets — the outer level of [resolveIndexed]'s output. */
@@ -304,10 +296,6 @@ class CueAssignmentResolver {
     fun cook(assignments: List<Assignment>): Cook {
         if (assignments.isEmpty()) return EMPTY_COOK
 
-        // Pre-pass: determine which fixture targets have a moveInDark Position assignment
-        // armed by an outgoing dimmer asserting value 0. See [computeMoveInDarkArmed].
-        val moveInDarkArmed = computeMoveInDarkArmed(assignments)
-
         val grouped = HashMap<String, HashMap<String, MutableList<Assignment>>>()
         for (a in assignments) {
             grouped.getOrPut(a.targetKey) { HashMap() }
@@ -329,7 +317,7 @@ class CueAssignmentResolver {
             }
             if (buckets.isNotEmpty()) targets.add(CookedTarget(targetKey, buckets, bundleOf(buckets)))
         }
-        return Cook(targets, moveInDarkArmed)
+        return Cook(targets)
     }
 
     /**
@@ -373,9 +361,8 @@ class CueAssignmentResolver {
             for (bucket in target.attributes) {
                 composed[bucket.attribute] = when (bucket.rule) {
                     CompositionRule.HTP -> composeHtp(bucket.contributors, weights)
-                    CompositionRule.LTP -> composeLtp(bucket.contributors, weights, cook.moveInDarkArmed)
-                    CompositionRule.UNSET ->
-                        composeLtp(bucket.contributors, weights, cook.moveInDarkArmed) // defensive
+                    CompositionRule.LTP -> composeLtp(bucket.contributors, weights)
+                    CompositionRule.UNSET -> composeLtp(bucket.contributors, weights) // defensive
                 }
             }
             target.bundle?.let { reconcileBundledEmitters(composed, it) }
@@ -463,39 +450,6 @@ class CueAssignmentResolver {
      */
     fun resolve(assignments: List<Assignment>): Map<Key, AttributeValue> =
         flattenIndexed(resolveIndexed(assignments))
-
-    /**
-     * Returns the fixture targets for which a `moveInDark`-flagged `position` row should snap
-     * to the incoming value across the whole crossfade. A target arms when the flagged row is
-     * accompanied by a *different* cue's [AttributeCategory.DIMMER] contributor with value 0
-     * on the same target; the different-cue requirement excludes self-arming, which the LTP
-     * fallback already handles. Empty set is the common case (no flagged rows).
-     */
-    private fun computeMoveInDarkArmed(assignments: List<Assignment>): Set<String> {
-        // Collect candidate fixture targets: those with at least one moveInDark position row.
-        // Tracks per-target the set of cueIds that asserted the flag, so we can exclude them
-        // when scanning for an outgoing dark dimmer.
-        var candidates: HashMap<String, MutableSet<Int>>? = null
-        for (a in assignments) {
-            if (a.moveInDark && a.attribute.equals("position", ignoreCase = true)) {
-                val map = candidates ?: HashMap<String, MutableSet<Int>>().also { candidates = it }
-                map.getOrPut(a.targetKey) { HashSet() }.add(a.cueId)
-            }
-        }
-        val candidateMap = candidates ?: return emptySet()
-
-        val armed = HashSet<String>()
-        for (a in assignments) {
-            if (a.category != AttributeCategory.DIMMER) continue
-            val candidateCueIds = candidateMap[a.targetKey] ?: continue
-            if (a.cueId in candidateCueIds) continue
-            val slider = a.value as? AttributeValue.Slider ?: continue
-            if (slider.value.toInt() == 0) {
-                armed.add(a.targetKey)
-            }
-        }
-        return armed
-    }
 
     /**
      * Key for a ([target], [attribute]) pair. Resolver output is always
@@ -602,11 +556,8 @@ class CueAssignmentResolver {
      * - Sliders: linear interpolation.
      * - Colour: RGB-linear via [blendExtendedColours].
      * - Settings: snap at 50% fade progress.
-     * - Position: linear pan/tilt by default. When the bucket's targetKey is in
-     *   [moveInDarkArmed], snap directly to the [Assignment.moveInDark] contributor's
-     *   value across the entire crossfade — the head moves while dark and is already
-     *   aimed when the incoming cue's dimmer comes up. Arming is precomputed by
-     *   [computeMoveInDarkArmed] from cross-property dimmer-category contributors.
+     * - Position: linear pan/tilt. A head moved in the dark is already where the incoming cue
+     *   puts it, held there by its stack's Move in dark contributor (`MoveInDarkService`).
      *
      * When only one contributor is present, its value is returned unchanged regardless of
      * fadeWeight — the incoming-cue fade-in is handled at the caller / cue-apply level, not here.
@@ -614,21 +565,8 @@ class CueAssignmentResolver {
     private fun composeLtp(
         contributors: List<Assignment>,
         weights: FadeWeights,
-        moveInDarkArmed: Set<String> = emptySet(),
     ): AttributeValue {
-        // Snap before the winner-by-priority logic: at fade start the outgoing cue wins on
-        // fadeWeight tie-break and would short-circuit to outgoing.value, but moveInDark
-        // wants the incoming position immediately.
         val firstContributor = contributors.first()
-        if (firstContributor.value is AttributeValue.Position &&
-            firstContributor.targetKey in moveInDarkArmed
-        ) {
-            val moveInDark = contributors
-                .filter { it.moveInDark && it.value is AttributeValue.Position }
-                .maxByOrNull { it.priority }
-            if (moveInDark != null) return moveInDark.value
-        }
-
         // Winner = highest priority; tie-break = highest fade weight (more recent). Hand-rolled
         // rather than `maxWithOrNull(compareBy(…))`: this runs per composed key per crossfade
         // frame, and the comparator would be a fresh capture of [weights] each time.

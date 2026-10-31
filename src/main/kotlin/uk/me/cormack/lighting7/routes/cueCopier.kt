@@ -87,6 +87,8 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
             notes = cue.notes
             stomp = cue.stomp
             speedMasters = cueSpeedMasters(cue.speedMasters, by)
+            // Its live heads are kept by key, as its rows' targets are, and read as missing where the rig lacks them.
+            moveInDarkSettings = cue.moveInDarkSettings
         }
         // Both referent columns are written: a layer names exactly one of a Look and a palette.
         for (layer in cue.layers.sortedBy { it.sortOrder }) {
@@ -121,7 +123,6 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 value = assignment.value
                 fadeDuration = assignment.fadeDuration
                 sortOrder = assignment.sortOrder
-                moveInDark = assignment.moveInDark
             }
         }
         for (effect in cue.adHocFxInOrder()) {

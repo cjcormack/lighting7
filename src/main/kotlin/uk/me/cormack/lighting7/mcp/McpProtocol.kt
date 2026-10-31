@@ -280,7 +280,7 @@ class McpProtocol(private val state: State) {
         private val PROJECT_SCOPED_TOOLS: Map<String, String> = listOf(
             "get_patch", "patch_fixtures", "delete_groups", "unpatch_fixtures", "rename_fixtures", "edit_groups", "set_stage", "set_scene", "get_scene", "upload_scene_image",
             "place_fixtures", "override_venue_fixtures", "get_prompt_book", "build_cue_stack", "delete_cue_stacks", "set_scenery",
-            "delete_cues", "copy_cues", "attach_to_venue",
+            "delete_cues", "copy_cues", "attach_to_venue", "set_move_in_dark",
         ).associateWith { "projectId" } + ("copy_to_project" to "toProjectId")
 
         /** The programmer's Record and Update, off in a venue (venue plan D11). */
@@ -296,7 +296,7 @@ class McpProtocol(private val state: State) {
             "patch_fixtures", "delete_groups", "unpatch_fixtures", "rename_fixtures", "edit_groups", "set_stage", "set_scene",
             "upload_scene_image",
             "place_fixtures", "override_venue_fixtures", "build_cue_stack", "mark_up_prompt_book", "copy_to_project",
-            "delete_cue_stacks", "delete_cues", "copy_cues", "attach_to_venue",
+            "delete_cue_stacks", "delete_cues", "copy_cues", "attach_to_venue", "set_move_in_dark",
         )
 
         /**

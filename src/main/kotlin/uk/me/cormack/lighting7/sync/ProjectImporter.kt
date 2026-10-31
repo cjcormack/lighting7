@@ -14,6 +14,8 @@ import uk.me.cormack.lighting7.fx.normalizeFxType
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.models.CueMoveInDarkMode
+import uk.me.cormack.lighting7.models.CueMoveInDarkSettings
 import uk.me.cormack.lighting7.models.MoveInDarkSettings
 import uk.me.cormack.lighting7.models.MoveInDarkWhen
 import uk.me.cormack.lighting7.models.moveInDarkSettings
@@ -324,7 +326,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 45
+internal const val SUPPORTED_FORMAT_VERSION = 46
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1487,6 +1489,7 @@ class ProjectImporter(private val state: State) {
             notes = c.notes
             stomp = c.stomp
             speedMasters = c.speedMasters.map { CueSpeedMasterDto(it.speedMasterUuid, it.bpm) }
+            moveInDarkSettings = c.moveInDarkSettings()
             this.uuid = uuid
         }
         if (place != null && stack != null) {
@@ -1649,8 +1652,11 @@ class ProjectImporter(private val state: State) {
                 value = a.value
                 fadeDuration = a.fadeDurationMs.asDuration()
                 sortOrder = a.sortOrder
-                moveInDark = a.moveInDark
                 this.uuid = uuid
+            }
+            // The retired row flag (v45 and older): its cue moves its heads Early (move-in-dark plan D13).
+            if (a.moveInDark && cue.moveInDarkSettings.mode == CueMoveInDarkMode.STACK) {
+                cue.moveInDarkSettings = cue.moveInDarkSettings.copy(mode = CueMoveInDarkMode.EARLY)
             }
             uuid to Unit
         }
@@ -2340,5 +2346,16 @@ private fun CueStackJson.moveInDarkSettings(): MoveInDarkSettings {
         delay = clamp(moveInDarkDelayMs),
         time = clamp(moveInDarkTimeMs),
         families = families.ifEmpty { MoveInDarkSettings.MOVABLE },
+    )
+}
+
+/** [this] cue's *Move in dark* setting (v46), an unknown mode read as *Stack* and timings clamped to 0–30 s. */
+private fun CueJson.moveInDarkSettings(): CueMoveInDarkSettings {
+    fun clamp(ms: Long?) = ms?.let { java.time.Duration.ofMillis(it.coerceIn(0, MoveInDarkSettings.MAX.toMillis())) }
+    return CueMoveInDarkSettings(
+        mode = CueMoveInDarkMode.entries.firstOrNull { it.name == moveInDarkMode } ?: CueMoveInDarkMode.STACK,
+        delay = clamp(moveInDarkDelayMs),
+        time = clamp(moveInDarkTimeMs),
+        live = moveInDarkLive.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(CueMoveInDarkSettings.MAX_LIVE),
     )
 }

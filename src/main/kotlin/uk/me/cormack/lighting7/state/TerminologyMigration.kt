@@ -100,6 +100,11 @@ internal object TerminologyMigration {
         val table: Table,
         val columns: Map<String, String>,
         val exactlyOne: List<String> = emptyList(),
+        /**
+         * Columns the model no longer has but a later step still reads, by name with their DDL: added
+         * back and copied when the old table has them. The rebuild would otherwise drop them first.
+         */
+        val carried: Map<String, String> = emptyMap(),
     )
 
     private val FX_COLUMNS = mapOf(
@@ -128,7 +133,11 @@ internal object TerminologyMigration {
         Rebuild("template_effects", DaoPaletteFx, FX_COLUMNS + ("palette_id" to "template_id")),
         Rebuild("look_effects", DaoLookFx, FX_COLUMNS),
         Rebuild("cue_ad_hoc_effects", DaoCueAdHocFx, FX_COLUMNS),
-        Rebuild("cue_property_assignments", DaoCueAttributeAssignments, mapOf("attribute" to "property_name")),
+        // Step 9 lifts the retired move-in-dark flag into its cue's setting, so it must survive this one.
+        Rebuild(
+            "cue_property_assignments", DaoCueAttributeAssignments, mapOf("attribute" to "property_name"),
+            carried = mapOf("move_in_dark" to "BOOLEAN DEFAULT 0 NOT NULL"),
+        ),
         Rebuild("look_rows", DaoLookRows, mapOf("attribute" to "property_name")),
         Rebuild(
             "cue_layers", DaoCueLayers, mapOf("palette_id" to "template_id", "attribute_mask" to "property_mask"),
@@ -201,10 +210,12 @@ internal object TerminologyMigration {
                 setAside += retired
             }
             rebuildFromModel(rebuild.old, rebuild.table, "pre_terminology") { aside ->
+                val carried = rebuild.carried.filterKeys { it in oldColumns }
+                carried.forEach { (column, ddl) -> exec("ALTER TABLE $name ADD COLUMN \"$column\" $ddl") }
                 val copied = rebuild.table.columns.map { it.name }.mapNotNull { column ->
                     val source = rebuild.columns[column]?.takeIf { it in oldColumns } ?: column.takeIf { it in oldColumns }
                     source?.let { column to if (column in TIMINGS) timing(it) else "\"$it\"" }
-                }
+                } + carried.keys.map { it to "\"$it\"" }
                 val filter = rebuild.exactlyOne.filter { it in oldColumns }
                     .takeIf { it.isNotEmpty() }
                     ?.joinToString(" + ", prefix = " WHERE ", postfix = " = 1") { "(\"$it\" IS NOT NULL)" }

@@ -180,13 +180,6 @@ export interface CueAttributeAssignment {
   fadeDurationMs?: number | null
   sortOrder?: number
   /**
-   * Move-in-dark: only meaningful on `attribute === 'position'`. When true and the
-   * outgoing cue ends with intensity 0 on the same fixture, the resolver pre-applies the
-   * incoming pan/tilt across the whole crossfade rather than blending — the head moves
-   * while dark and is already aimed when the dimmer comes up. Defaults to false.
-   */
-  moveInDark?: boolean
-  /**
    * Phase 6 dead-reference diagnostic. Absent on client-side drafts / pre-Phase-6 payloads
    * (treated as `{ type: 'ok' }`). Populated by the server when the cue is read back.
    */
@@ -293,6 +286,21 @@ export interface Cue {
    * Optional: the desk omits an empty list, and an older desk sends none.
    */
   speedMasters?: CueSpeedMaster[]
+  /** Move in dark on the heads this cue lights (move-in-dark plan D3). Absent from an older desk. */
+  moveInDark?: CueMoveInDark
+}
+
+/**
+ * A cue's own Move in dark: `STACK` follows its stack, `EARLY` and `LATE` apply on a stack that is
+ * off, `OFF` moves its heads in its fade, lit. A null delay or move time is the stack's; `live` keeps
+ * heads lit as they move, and `unknownLive` (read only) names those the rig lacks.
+ */
+export interface CueMoveInDark {
+  mode: 'STACK' | 'EARLY' | 'LATE' | 'OFF'
+  delayMs?: number | null
+  timeMs?: number | null
+  live: string[]
+  unknownLive?: string[]
 }
 
 /** One entry naming a cue — one place it sits in a stack's list. */

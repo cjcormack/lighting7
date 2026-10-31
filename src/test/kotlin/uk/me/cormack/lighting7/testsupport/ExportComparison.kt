@@ -150,3 +150,27 @@ fun consolidatedRecord(json: String): String {
     val out = consolidate(record)
     return if (out == record) json else canonicalEncode(JsonElement.serializer(), out)
 }
+
+/**
+ * [archive], an expected export tree, with the retired per-row move-in-dark flag lifted as the
+ * importer lifts it (move-in-dark plan D13, sync v46): every `cueAttributeAssignments` record loses
+ * its `moveInDark`, and the cue of each that carried it `true` gains `moveInDarkMode: EARLY`.
+ */
+fun liftRowMoveInDark(archive: Path) {
+    val rows = archive.resolve("cueAttributeAssignments")
+    if (!Files.isDirectory(rows)) return
+    val flagged = HashSet<String>()
+    Files.list(rows).use { it.toList() }.forEach { file ->
+        val row = canonicalJson.parseToJsonElement(Files.readString(file)) as JsonObject
+        val flag = row["moveInDark"] ?: return@forEach
+        if ((flag as? JsonPrimitive)?.contentOrNull == "true") flagged += (row["cueUuid"] as JsonPrimitive).content
+        Files.writeString(file, canonicalEncode(JsonElement.serializer(), JsonObject(row - "moveInDark")))
+    }
+    val cues = archive.resolve("cues")
+    if (flagged.isEmpty() || !Files.isDirectory(cues)) return
+    Files.list(cues).use { it.toList() }.forEach { file ->
+        val cue = canonicalJson.parseToJsonElement(Files.readString(file)) as JsonObject
+        if ((cue["uuid"] as? JsonPrimitive)?.content !in flagged) return@forEach
+        Files.writeString(file, canonicalEncode(JsonElement.serializer(), JsonObject(cue + ("moveInDarkMode" to JsonPrimitive("EARLY")))))
+    }
+}

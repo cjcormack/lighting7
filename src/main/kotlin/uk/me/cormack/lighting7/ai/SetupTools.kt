@@ -117,6 +117,7 @@ class SetupTools(
     private val venues = VenueSetupTools(state)
     private val venueFixtures = VenueFixtureTools(state)
     private val patchEdits = PatchEditTools(state)
+    private val moveInDark = MoveInDarkSetupTool(state)
 
     fun handles(name: String): Boolean = toolDefs.any { it.name == name }
 
@@ -151,6 +152,7 @@ class SetupTools(
             overrideVenueFixturesTool.name -> venueFixtures.overrideVenueFixtures(input, state.toolProject(input))
             getPromptBookTool.name -> getPromptBook(state.toolProject(input))
             buildCueStackTool.name -> buildCueStack(input, state.toolProject(input))
+            setMoveInDarkTool.name -> moveInDark.setMoveInDark(input, state.toolProject(input))
             markUpPromptBookTool.name -> markUpPromptBook(input)
             else -> failure("Unknown tool: $name")
         }
@@ -1609,6 +1611,7 @@ class SetupTools(
         val events: List<CueEventWrite>,
         val speedMasters: List<CueSpeedMasterDto>,
         val shareCueId: Int? = null,
+        val moveInDark: CueMoveInDarkSettings = CueMoveInDarkSettings.DEFAULT,
     )
 
     private fun buildCueStack(input: JsonObject, target: ToolProject): ToolExecutionResult {
@@ -1727,11 +1730,18 @@ class SetupTools(
                 if (marker) rowProblems += "a marker cannot set speed masters: it is never gone to"
                 parseCueSpeedMasters(it, context.speedMasters, emptyList(), "speedMasters", rowProblems, byIndex = true)
             }.orEmpty()
+            val cueMoveInDark = row["moveInDark"]?.takeIf { it !is JsonNull }?.let { raw ->
+                if (marker) rowProblems += "a marker cannot carry moveInDark: it lights nothing"
+                parseToolCueMoveInDark(raw, CueMoveInDarkSettings.DEFAULT).getOrElse { rowProblems += it.message!!; null }
+            } ?: CueMoveInDarkSettings.DEFAULT
             val place = rowPlace(row, target, context.pageCount, rowProblems)
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
-            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, values, place, scenery, events, speedMasters)
+            } else ShowCue(
+                number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker,
+                layers, values, place, scenery, events, speedMasters, moveInDark = cueMoveInDark,
+            )
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
@@ -1769,6 +1779,7 @@ class SetupTools(
                     fadeDuration = spec.fade
                     fadeCurve = spec.fadeCurve
                     speedMasters = spec.speedMasters
+                    moveInDarkSettings = spec.moveInDark
                 }.also { cue ->
                     writeCueChildren(cue, attributeAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true, registry = state.show.fxRegistry)
                     replaceCueScenery(cue, spec.scenery)
@@ -1865,7 +1876,7 @@ class SetupTools(
         row.string("name")?.trim()?.takeIf { it.isNotEmpty() && it != cueName }?.let {
             rowProblems += "a shared cue keeps its own name ('$cueName'): leave name out"
         }
-        val content = listOf("notes", "fadeSeconds", "fadeCurve", "marker", "layers", "values", "scenery", "events", "speedMasters")
+        val content = listOf("notes", "fadeSeconds", "fadeCurve", "marker", "layers", "values", "scenery", "events", "speedMasters", "moveInDark")
             .filter { row[it]?.let(::saysNothing) == false }
         if (content.isNotEmpty()) {
             rowProblems += "${content.joinToString()} would change the cue in every place it plays: a shared row takes only number, " +

@@ -126,15 +126,6 @@ data class CueAttributeAssignmentDto(
     val fadeDurationMs: Long? = null,
     val sortOrder: Int = 0,
     /**
-     * Move-in-dark: only meaningful when [attribute] is `"position"`. When true and the
-     * outgoing cue ends with intensity 0 on the same fixture, the resolver pre-applies this
-     * position across the whole crossfade rather than linearly blending pan/tilt — the head
-     * moves while dark and is already aimed when the incoming dimmer comes up. Ignored for
-     * all other property categories. See `docs/lighting-composition-model.md` §"Crossfade
-     * behaviour".
-     */
-    val moveInDark: Boolean = false,
-    /**
      * Validation status of this row against the live patch. Populated server-side on read
      * (see Phase 6 dead-reference diagnostics); ignored on write — the server never trusts
      * client-supplied health. Defaults to [AssignmentHealth.Ok] so snapshots and apply-path
@@ -258,6 +249,14 @@ object DaoCues : IntIdTable("cues") {
     val speedMasters = json<List<CueSpeedMasterDto>>("speed_masters", Json).default(emptyList())
     val uuid = javaUUID("uuid").autoGenerate()
 
+    /** *Move in dark* on the cue that lights a head (move-in-dark plan D3), read through [moveInDarkSettings]. */
+    val moveInDarkMode = varchar("move_in_dark_mode", 10).default(CueMoveInDarkMode.STACK.name)
+    /** Null is the stack's. */
+    val moveInDarkDelay = duration("move_in_dark_delay").nullable()
+    val moveInDarkTime = duration("move_in_dark_time").nullable()
+    /** The heads kept live, by key. */
+    val moveInDarkLive = json<List<String>>("move_in_dark_live", Json).default(emptyList())
+
     // Cue names are deliberately *not* unique: two stacks may both hold a "Blackout". Cues are
     // identified by id (and by uuid across sync); numbers are an entry's, unique per stack through
     // `uq_entry_number_per_stack`.
@@ -274,6 +273,10 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var stomp by DaoCues.stomp
     var speedMasters by DaoCues.speedMasters
     var uuid by DaoCues.uuid
+    internal var moveInDarkMode by DaoCues.moveInDarkMode
+    internal var moveInDarkDelay by DaoCues.moveInDarkDelay
+    internal var moveInDarkTime by DaoCues.moveInDarkTime
+    internal var moveInDarkLive by DaoCues.moveInDarkLive
     val layers by DaoCueLayer referrersOn DaoCueLayers.cue
     val adHocFx by DaoCueAdHocFxEntity referrersOn DaoCueAdHocFx.cue
     val attributeAssignments by DaoCueAttributeAssignment referrersOn DaoCueAttributeAssignments.cue
@@ -390,7 +393,6 @@ object DaoCueAttributeAssignments : IntIdTable("cue_attribute_assignments") {
     val value = text("value")
     val fadeDuration = duration("fade_duration").nullable()
     val sortOrder = integer("sort_order").default(0)
-    val moveInDark = bool("move_in_dark").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
@@ -404,7 +406,6 @@ class DaoCueAttributeAssignment(id: EntityID<Int>) : IntEntity(id) {
     var value by DaoCueAttributeAssignments.value
     var fadeDuration by DaoCueAttributeAssignments.fadeDuration
     var sortOrder by DaoCueAttributeAssignments.sortOrder
-    var moveInDark by DaoCueAttributeAssignments.moveInDark
     var uuid by DaoCueAttributeAssignments.uuid
 
     var target: TargetRef
@@ -426,9 +427,9 @@ class DaoCueAttributeAssignment(id: EntityID<Int>) : IntEntity(id) {
  * extension of that table rather than a new concept beside it.
  *
  * The cue's own [DaoCueAttributeAssignments] / [DaoCueAdHocFx] are **the local layer** —
- * always exactly one, always last, so it needs no identity row here. Keeping them separate is
- * deliberate on two counts: they carry `moveInDark`, and they give a Record / Update write an
- * unambiguous destination — `(targetType, targetKey, attribute)` with no layer dimension.
+ * always exactly one, always last, so it needs no identity row here. Keeping them separate gives a
+ * Record / Update write an unambiguous destination — `(targetType, targetKey, attribute)` with no
+ * layer dimension.
  *
  * See `docs/plans/completed/looks-and-layers-plan.md` §3.2 and `fx/CueComposer.kt` for how a stack of these
  * is flattened to one contributor per (fixture, property) before the resolver sees it.
@@ -644,7 +645,6 @@ internal fun DaoCueAttributeAssignment.toDto() = CueAttributeAssignmentDto(
     value = value,
     fadeDurationMs = fadeDuration?.toMillis(),
     sortOrder = sortOrder,
-    moveInDark = moveInDark,
 )
 
 /** Convert a DaoCueAdHocFxEntity entity to its DTO form. */

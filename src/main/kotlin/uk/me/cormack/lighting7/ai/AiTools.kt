@@ -699,6 +699,22 @@ class AiTools(private val state: State) {
                                 put("isActive", activeCueId != null)
                                 manager.getActiveEntryId(stack.id.value)?.let { put("activeEntryId", it) }
                                 activeCueId?.let { put("activeCueId", it) }
+                                if (stack.type == CueStackType.STACK.name) {
+                                    // The setting, and what the stored list does with it (the static plan).
+                                    val summary = stackMoveInDarkPlan(state, stack, rigLoaded = true).summary
+                                    put("moveInDark", buildJsonObject {
+                                        val settings = stack.moveInDarkSettings
+                                        put("on", settings.on)
+                                        put("when", settings.whenMode.name)
+                                        put("delayMs", settings.delay.toMillis())
+                                        put("timeMs", settings.time.toMillis())
+                                        putJsonArray("families") { settings.families.sortedBy { it.ordinal }.forEach { add(it.name) } }
+                                        put("headsMovedInDark", summary.heads)
+                                        put("cuesWithMoves", summary.cues)
+                                        put("headsMovingLit", summary.live)
+                                        put("cuesOff", summary.off)
+                                    })
+                                }
                             }
                         }
                 }
@@ -731,6 +747,18 @@ class AiTools(private val state: State) {
                             frame.fadeElapsedMs?.let { put("fadeElapsedMs", it) }
                             put("autoAdvance", frame.autoAdvance)
                             frame.autoAdvanceDelayMs?.let { put("autoAdvanceDelayMs", it) }
+                            // The heads Move in dark is watching or holding now, for which entry.
+                            val dark = state.show.moveInDark.statusOf(frame.stackId).values
+                            if (dark.isNotEmpty()) putJsonArray("movesInDark") {
+                                for (head in dark) addJsonObject {
+                                    put("target", head.head)
+                                    put("entryId", head.targetEntryId)
+                                    put("cueId", head.targetCueId)
+                                    put("state", head.state.name)
+                                    head.remainingMs?.let { put("remainingMs", it) }
+                                    putJsonArray("families") { head.families.sortedBy { it.ordinal }.forEach { add(it.name) } }
+                                }
+                            }
                         }
                     }
                 })
@@ -1219,6 +1247,8 @@ class AiTools(private val state: State) {
             if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
             parsed
         }.orEmpty()
+        val moveInDark = parseToolCueMoveInDark(input["moveInDark"], CueMoveInDarkSettings.DEFAULT)
+            .getOrElse { return errorResult(it.message ?: "Invalid moveInDark") }
         var refusal: String? = null
         var priorities = emptyMap<Int, Int>()
         val created = transaction(state.database) {
@@ -1229,6 +1259,7 @@ class AiTools(private val state: State) {
                 this.name = name
                 this.project = project
                 this.speedMasters = speedMasters
+                moveInDarkSettings = moveInDark
             }
             writeCueChildren(newCue, adHocFx, assignments, layers = layers, created = true, registry = state.show.fxRegistry)
             replaceCueScenery(newCue, scenery)

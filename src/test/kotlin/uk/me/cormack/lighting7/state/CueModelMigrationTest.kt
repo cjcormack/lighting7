@@ -347,6 +347,22 @@ class CueModelMigrationTest {
             .associate { it["name"] as String to (it["sql"] as String).replace(Regex("\\s+"), " ").trim() }
 
     @Test
+    fun `a flagged row survives steps 0 and 5, so step 9 sets its cue Early`() {
+        assertEquals(
+            listOf(1),
+            rows("SELECT DISTINCT cue_id FROM cue_property_assignments WHERE move_in_dark <> 0").map { (it["cue_id"] as Number).toInt() },
+            "the fixture's cue 1 flags its position row",
+        )
+        startDesk()
+        stopDesk()
+        assertFalse("move_in_dark" in columns("cue_attribute_assignments"), "step 9 drops the column")
+        assertEquals(
+            mapOf(1 to "EARLY", 2 to "STACK"),
+            rows("SELECT id, move_in_dark_mode FROM cues WHERE id IN (1, 2)").associate { (it["id"] as Number).toInt() to it["move_in_dark_mode"] as String },
+        )
+    }
+
+    @Test
     fun `a second start is a no-op`() {
         startDesk()
         stopDesk()

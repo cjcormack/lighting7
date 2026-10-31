@@ -253,7 +253,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 45`, `minReader = 43`. Rules for future
+Current writer emits `formatVersion = 46`, `minReader = 43`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -440,6 +440,19 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 46 — Move in dark on a cue
+
+Move-in-dark plan session 3 (D3, D13; `docs/cue-stacks-engineering.md` §"Move in dark"): a cue's own
+setting travels on its record, `CueJson`'s `moveInDarkMode`, `moveInDarkDelayMs`, `moveInDarkTimeMs`
+(absent the stack's) and `moveInDarkLive`, and `CueAttributeAssignmentJson.moveInDark`, the per-row
+flag the setting retires, is no longer written. Every field defaults to what an older cue reads as, so
+a cue on *Stack* exports byte-for-byte as at v45. The importer gives a cue whose older archive flags a
+row the mode `EARLY`, as database step 9 does, clamps a delay or time into 0–30 s, reads an unknown
+mode as *Stack* and drops blank and repeated live keys. `SUPPORTED_FORMAT_VERSION = 46`;
+`MIN_SUPPORTED_FORMAT_VERSION` stays 5 and **`minReader` stays 43**. The writer's number moves by the
+sharp-edge rule: a v45 reader would import every cue on *Stack* and its next push would write the
+setting away for every peer. No table was added: the columns are on `cues`, already portable.
 
 ### Version 45 — Move in dark on a stack
 
