@@ -235,6 +235,7 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 | FX | `FxSocket.kt` | 6 | 3 | `handleFx` | `setupFxSubscriptions` |
 | Grand master | `GrandMasterSocket.kt` | 1 | 1 | `handleGrandMaster` | `setupGrandMasterSubscriptions` |
 | Stack FX amount | `StackFxAmountSocket.kt` | 1 | 1 | `handleStackFxAmount` | `setupStackFxAmountSubscriptions` |
+| Move in dark | `MoveInDarkSocket.kt` | — | 1 | — | `setupMoveInDarkSubscriptions` |
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
@@ -248,8 +249,8 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 | Surfaces | `SurfaceSocket.kt` | 11 | 14 | `handleSurface` | `setupSurfaceSubscriptions` |
 | Windows | `WindowsSocket.kt` | 4 | 4 | `handleWindows` | `setupWindowsSubscriptions` |
 
-Eight families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
-Broadcast, Cloud sync, Effects, Machine, Rig safety, Scenery and Stage render. Channel is the odd one: its three messages are declared in
+Nine families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
+Broadcast, Cloud sync, Effects, Machine, Move in dark, Rig safety, Scenery and Stage render. Channel is the odd one: its three messages are declared in
 `ChannelSocket.kt` and answered there on request, but every *unsolicited* one is fired from
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
@@ -658,7 +659,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (83)
+## Server → Client (84)
 
 ### Boot — `BootSocket.kt`
 
@@ -1004,6 +1005,25 @@ direction and runs"): a stack absent is at 100 %, so a fresh project's frame is 
 frame rather than a field of `cueRunStateChanged`, which a fader drag would flood (§11, question 20).
 Nothing is persisted; a same-project reload carries the amounts (`ShowCarry`).
 
+### Move in dark — `MoveInDarkSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `moveInDark.state` | `projectId: Int`, `stacks: [{stackId, heads: [{target, entryId, cueId, label, state, remainingMs?, families, position?: {pan, tilt}}]}]` | Connect snapshot + broadcast |
+
+What the live show's stacks move in the dark (move-in-dark plan D11; `docs/cue-stacks-engineering.md`
+§"Move in dark"): every head a stack is moving, or waiting to, with the entry and cue it is moved
+for and that cue as a GO labels it (`Q12`). `state` is `WAITING` (dark, counting the delay),
+`MOVING`, `SET` or `LIT_EARLY` (lit before its GO and let go, D8); `remainingMs` is the delay or move
+time left at send, absent for the other two, for a client to count down from receipt; `families`
+the families its move carries; `position` the target's pan and tilt bytes when it carries Position
+(the Stage view's ring). A stack absent moves nothing, so a fresh desk's frame is an empty list.
+`StateFlow`-backed (`MoveInDarkService.state`), subscribed through `SocketScope.subscribeShow`,
+because the service is the show's. Republished when a head's state, target
+or move changes, **at most every 100 ms** (`FRAME_MS`), and never for the time left alone, so a head
+counting down its delay sends one frame, not ten a second. There is no inbound frame: the settings
+are stored writes over REST, so `FU-AUTH-WS-PER-MESSAGE` stays unfired.
+
 ### Speed masters — `SpeedMasterSocket.kt`
 
 | Message | Payload | When |
@@ -1127,7 +1147,10 @@ beats the colour's copy").
 **`KeyStackLayerDto`** is one layer of an attribute's stack (`ProvenanceService.keyStack`), listed
 top first: `PARK` (its `parkedChannels`), `PROGRAMMER_FX` (an FX in the programmer band),
 `PROGRAMMER` (one owner's slot: `owner`, `value`, `ageMs`, and `universe`/`channel` on a raw
-sideband slot), `FX` (any other FX, cue or manual), `CUE` (what the cues compose to, with
+sideband slot), `FX` (any other FX, cue or manual), `MOVE_IN_DARK` (a stack's Move in dark holding a
+dark head ahead of its GO, move-in-dark plan D11: the stack as `cueStackId`, the `targetEntryId`,
+`targetCueId` and `label` it is moved for, its `value` and `onStage` where a `CUE` row would have
+them — the `CUE` row under it is then what the cues alone compose, never on stage), `CUE` (what the cues compose to, with
 the winning `cueId`, `cueStackId`, `layerId`, `layerSource` — from `underlyingSources` against the
 one Tier 4 snapshot the read takes) and `BASE` (`LayerResolver.baselineFor`). Every layer carries
 `onStage` — contributing to what the rig shows now, walked in output order (park, FX by
@@ -1366,6 +1389,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/FxSocket.kt` | Active-FX state, the six FX writes and their `fxError` refusal |
 | `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
 | `plugins/StackFxAmountSocket.kt` | Each stack's FX amount: `stackFxAmount.state` and `stackFxAmount.set` |
+| `plugins/MoveInDarkSocket.kt` | What the live show moves in the dark: `moveInDark.state` |
 | `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |

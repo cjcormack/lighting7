@@ -236,14 +236,20 @@ class Show(
     /**
      * Move in dark (move-in-dark plan D1, D6): dark heads moved ahead of the cue that lights them, as
      * one contributor per live stack in the cue tier. Watched from [start] to [close]; the stack
-     * manager tells it of every GO, standby change and stop.
+     * manager tells it of every GO, standby change and stop, and the fixtures' announcements of every
+     * list and cue edit.
      */
     val moveInDark = MoveInDarkService(
         fixtures = fixtures,
         cueLayer = fxEngine.cueLayer,
         runningFx = fxEngine::runningFxCoverage,
         planFor = { stackId, heads -> planMoveInDark(state, cueStackManager, stackId, heads) },
-    ).also { cueStackManager.moveInDark = it }
+    ).also {
+        cueStackManager.moveInDark = it
+        fxEngine.provenance.moveInDarkHolding = it::holdingOf
+        // Every write that moves a stack's list or a cue's rows announces it here (D9).
+        fixtures.registerListener(it)
+    }
 
     /**
      * Global transmit-time scalers (Blackout, Grand Master) — Phase 3 of
@@ -461,6 +467,10 @@ class Show(
                 runCatching { cueStackManager.holds.takeLooseCue(state, cueId, fireEvents = false, setTempo = false) }
                     .onFailure { logger.warn("Reload could not bring back loose cue {}: {}", cueId, it.message) }
             }
+
+            // After the GOs and standbys, which say what each stack moves for, and before the rig is
+            // republished, so a head already in place stays there through the crossfade below.
+            step("carry the moves in dark") { moveInDark.resume(carry.values) }
 
             step("re-cook the programmer's layers") { programmerLayerStack.reinstate() }
             step("republish the programmer") { fxEngine.programmer.republishAll() }

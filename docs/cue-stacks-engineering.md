@@ -615,38 +615,74 @@ DIMMER, STROBE, UV, an LED ring or macro, a colour carrying UV, Colour on a head
 intensity.
 
 **The service** (`fx/MoveInDarkService.kt`) is one per `Show`, started in `start` and stopped in
-`close`. A 50 ms tick re-plans each stack marked since the last tick (a GO, a standby armed or cleared,
-the stack's settings — `CueStackManager.moveInDark`, `CueRunStateTracker.onNextMayHaveMoved`; a GO
-wakes it at once) and watches each planned head: dark since *t* it is `WAITING`; at *t* + delay
-`MOVING`, its rows joining the stack's contributor; after the move time `SET`. A head that lights is
-let go at once and starts again once dark — while waiting, while moving or set, or because the stack's
-live cue lights it (a GO back onto a cue that lights it, `MoveInDarkPlanner.Plan.litByLive`). That
-release snaps; session 2 fades it (D8). `statusOf(stackId)` reports them. Plans are made outside the
-service's lock and dropped when a GO lands while one is made, so nothing in the GO path waits on one.
+`close`. A 50 ms tick re-plans each stack marked since the last tick and watches each planned head:
+dark since *t* it is `WAITING`; at *t* + delay `MOVING`, its rows joining the stack's contributor and
+ramping over the move time; after it `SET`. `statusOf(stackId)` reports them. Plans are made outside
+the service's lock and dropped when a GO lands while one is made, so nothing in the GO path waits on
+one.
+
+**Re-planning** (D9). Anything that may move "next" or what a cue sets marks every live stack: a GO
+(GO TO and GO BACK go through the same `activate`), a standby armed or cleared
+(`CueRunStateTracker.onNextMayHaveMoved`), a stack `PUT` (`onStackSettingsChanged`), and every
+announcement the service hears as a `FixturesChangeListener` — `cueStackListChanged` (an entry placed,
+moved or removed: `announceEntriesPlaced`, `announceEntryMoved`, `afterEntriesRemoved`),
+`cueListChanged` (a cue `PUT`/`PATCH`, Record, Update), `cuesRecomposed` (a Look or palette
+republish), a Look or palette list change and a repatch. It hooks the announcement, never the
+route, so a new write that announces is covered. A plan applied over the heads keeps a head heading
+for the same target as it was; a head moving or set that is given another target moves there over
+the move time; one given none, or that the stack's live cue now lights, goes back to what the live
+cues say over the move time; a head not yet held simply takes its new move.
+
+**Lit early** (D8). A head that lights while moving or set reads `LIT_EARLY`: its rows go, ramping
+back to the live cues' values over the move time, and once dark again it waits the delay and moves
+again. One that lights while waiting goes back to idle.
 
 **The contributor** is one entry per stack in `CueAssignmentLayer`, keyed `-stackId`
 (`MoveInDarkService.contributorId`): cue ids are row ids and never negative. It composes at the
 stack's live priority + 500 — above the stack's live cue (`+1`), below its next entry (`+1 000`), a
-higher stack, the programmer, park and FX (D6, D12). Its priority follows the live entry's through a
-GO and through `CueHolds.restampEntries` when the list's order changes (`onEntriesRestamped`). Its rows
-are its own: the target's group origin (which specificity would drop beside any direct row) and its
-legacy row flag are not copied. Provenance names its stack and no cue (`CueAssignmentLayer.cueIdOf`,
-`cueStackIdFor`), and the readers of `activeCueIds` that look cues up by id find nothing for it. **One contributor serves every head of a stack**, its rows carrying
-the move time as their row fade and published with `honourRowFades`: `publishCueLayerToControllers`
-writes only keys whose composed value changed, so the head that just joined ramps over its own move
-time from wherever it stands while a head already moving keeps its ramp. A contributor per head would
-have said the same thing with more Layer 4 entries to cook. Letting a head go releases its keys, which
-snap to what lies underneath.
+higher stack, the programmer, park and FX (D6, D12: two stacks on one head, the higher stack's
+contributor wins as LTP decides). Its priority follows the live entry's through a GO and through
+`CueHolds.restampEntries` when the list's order changes (`onEntriesRestamped`). Its rows are its own:
+the target's group origin (which specificity would drop beside any direct row) and its legacy row
+flag are not copied. Provenance names its stack and no cue (`CueAssignmentLayer.cueIdOf`,
+`cueStackIdFor`), and the readers of `activeCueIds` that look cues up by id find nothing for it.
+**It is published head by head** (`CueAssignmentLayer.setContributorAssignments`, a `TransmitFade`
+for every key the publish moves, released keys included): each head whose rows changed is published
+on its own fade — a join, a retarget and a release over the head's move time, a hand-over's end, a
+catch-up, a stop or a project switch at once. `publishCueLayerToControllers` writes only keys whose
+composed value changed, so a head already moving keeps its ramp. Record and Update read the cues
+alone (`cuesOnly`), since nothing about a move is recorded (D1).
 
-**At a GO** (D7): `CueStackManager.activate` calls `beforeGo` with the incoming hold's priority before
-the cue arrives, ending a hand-over an earlier GO left running and restamping the contributor above it, so a cue walked through on the way to a head's
-target never wins the head back for a frame; then `afterGo`: a head moving or set for that entry holds
-its rows — which equal the cue's — until the GO's crossfade ends, then lets go, so nothing moves while
-it comes up. `deactivateStack` and the show's close let every move go.
+**At a GO** (D7): `CueStackManager.activate` calls `beforeGo` with the incoming hold's priority
+before the cue arrives. It ends a hand-over an earlier GO left running, notes every head dark at that
+moment (on the output, no Intensity FX on it), and restamps the contributor above the incoming cue —
+and above the outgoing cue, which outranks it on a GO back — until the GO's fade is over, when it
+settles to the live priority. Then `afterGo`, once the cue's rows are published: a head moving or set
+for that entry holds its rows — which equal the cue's — until the crossfade ends, then lets go, so
+nothing moves while it comes up. And every head dark as the GO began that the incoming cue lights,
+but that is not already set for it, **catches up**: a head still waiting or moving for it (the GO came
+too soon), one set for a later cue, one never planned (a GO TO, a standby armed late) takes the
+incoming cue's own rows in its moving families into the contributor at once, a ramp in progress ended
+(`CueAssignmentLayer.snapKeys`), held to the end of the fade. A head the incoming cue lights that sets
+nothing to move, but held for another cue, is let go at once while it is still dark. This is the same
+contributor and the same hand-over; the resolver's row-flag arming is untouched beside it until
+session 3 retires the flag. A stack that is off catches nothing up (P4).
 
-Session 1 of the plan: re-planning on every other change to "next", catch-up at a GO that comes too
-soon, a head lit early, the key stack row and the `moveInDark.state` frame are session 2's; the cue's
-own setting, the static plan and MCP's `set_move_in_dark` session 3's.
+**Stop, switch, reload.** `deactivateStack` and the show's close let every move go at once. A
+same-project reload carries nothing of the service: `Show.resume` calls `MoveInDarkService.resume`
+with the carried frame after the GOs and standbys, which plans each live stack and starts set every
+head that frame shows dark whose planned rows it already shows on their channels, so nothing moves;
+any other head starts idle and moves as usual.
+
+**What it reports.** `MoveInDarkService.state` is the `moveInDark.state` frame's source
+(`docs/websocket-engineering.md` §"Move in dark"): every reported head with its state, target, label,
+families, the target's pan and tilt, and the delay or move time left, republished on a change of
+state at most every 100 ms. The key stack's `MOVE_IN_DARK` row (`ProvenanceService.keyStack`,
+`holdingOf`) names the move on a key the contributor wins (`docs/lighting-composition-model.md`
+§"Reading one attribute's stack").
+
+Sessions 3–5 of the plan: the cue's own setting, the static plan and MCP's `set_move_in_dark`, then
+the screens.
 
 ## REST API
 

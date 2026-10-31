@@ -57,7 +57,9 @@ export function useUnderneath(head: string | null, attribute: string | null): Ke
  */
 export function topValue(layers: readonly KeyStackLayer[], blind = false): KeyStackLayer | null {
   return (
-    layers.find((l) => l.kind === 'PARK' || (l.kind === 'PROGRAMMER' && !blind) || l.kind === 'CUE' || l.kind === 'BASE') ?? null
+    layers.find(
+      (l) => l.kind === 'PARK' || (l.kind === 'PROGRAMMER' && !blind) || l.kind === 'MOVE_IN_DARK' || l.kind === 'CUE' || l.kind === 'BASE',
+    ) ?? null
   )
 }
 
@@ -73,9 +75,11 @@ export function underneathLabel(layer: KeyStackLayer | null, cueLabel: (cueId: n
       ? layer.owner === 'layers'
         ? (layer.layerSource?.name ?? 'A layer')
         : 'Local'
-      : layer.kind === 'CUE'
-        ? ((layer.cueId != null ? cueLabel(layer.cueId) : undefined) ?? 'Cue')
-        : 'Base'
+      : layer.kind === 'MOVE_IN_DARK'
+        ? 'Move in dark'
+        : layer.kind === 'CUE'
+          ? ((layer.cueId != null ? cueLabel(layer.cueId) : undefined) ?? 'Cue')
+          : 'Base'
   const value = layer.value != null ? valueWords(layer.value) : null
   return value != null ? `${who} ${value}` : who
 }

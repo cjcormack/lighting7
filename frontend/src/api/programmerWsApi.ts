@@ -254,7 +254,7 @@ export interface ProgrammerKeyState {
 }
 
 /** Which layer of a property's stack a `programmer.keyStack` entry is. */
-export type KeyStackLayerKind = 'PARK' | 'PROGRAMMER_FX' | 'PROGRAMMER' | 'FX' | 'CUE' | 'BASE'
+export type KeyStackLayerKind = 'PARK' | 'PROGRAMMER_FX' | 'PROGRAMMER' | 'FX' | 'MOVE_IN_DARK' | 'CUE' | 'BASE'
 
 /**
  * One layer under a property, as `programmer.keyStack` reports it (lighting7's `KeyStackLayerDto`,
@@ -302,6 +302,14 @@ export interface KeyStackLayer {
   /** A programmer layer's id or a cue layer's, whichever produced this one. */
   layerId?: number | null
   layerSource?: LayerSource | null
+  /**
+   * `MOVE_IN_DARK` (lighting7 move-in-dark plan D11): a stack (`cueStackId`) holding a dark head where
+   * the cue that lights it next puts it — that entry and cue, and the label a GO gives it (`Q12`).
+   * The `CUE` row under it is what the cues alone say.
+   */
+  targetEntryId?: number | null
+  targetCueId?: number | null
+  label?: string | null
 }
 
 /** One fixture's (or one member's) stack, top first. */

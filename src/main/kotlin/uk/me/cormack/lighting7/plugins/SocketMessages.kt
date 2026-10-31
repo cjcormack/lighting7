@@ -51,6 +51,7 @@ sealed class InMessage
     GrandMasterOutMessage::class,
     HandOutMessage::class,
     MachineOutMessage::class,
+    MoveInDarkOutMessage::class,
     ParkOutMessage::class,
     ProgrammerOutMessage::class,
     ProjectOutMessage::class,

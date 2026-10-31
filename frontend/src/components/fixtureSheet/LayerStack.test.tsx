@@ -30,6 +30,16 @@ describe('describeStackLayer', () => {
     expect(describeStackLayer(layer({ kind: 'BASE', value: '0' }), cueLabel).title).toBe('Base')
   })
 
+  it('names a move in the dark by the cue it is for, the desk’s label where the sheet has no name (D11)', () => {
+    const layer = (over: Partial<KeyStackLayer>): KeyStackLayer => ({ kind: 'MOVE_IN_DARK', onStage: true, ...over })
+    expect(describeStackLayer(layer({ targetCueId: 12, cueStackId: 2, label: 'Q12', value: '200,100' }), cueLabel)).toEqual({
+      title: 'Move in dark · for Q12',
+      detail: 'moved while dark, ready for its GO',
+      value: '200,100',
+    })
+    expect(describeStackLayer(layer({ targetCueId: 40, label: 'Singer' }), cueLabel).title).toBe('Move in dark · for Singer')
+  })
+
   it('says why an effect is held back, by the desk’s reason — Blind, a stomp, your value (D7)', () => {
     const layer = (over: Partial<KeyStackLayer>): KeyStackLayer => ({ kind: 'PROGRAMMER_FX', onStage: false, fxType: 'Pulse', ...over })
     expect(describeStackLayer(layer({ heldBack: true, heldBackReason: 'BLIND' }), cueLabel).detail).toBe(

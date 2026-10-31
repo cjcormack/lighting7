@@ -5309,7 +5309,7 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   take, each FX reaching a selected head (`fxPaintedHeads`) a card. Top first: Local FX, then the
   programmer's layers' FX, then cue FX (read-only, *on Q12*, opening the cue editor through
   `OwnerEditor`), then *Underneath* (`useUnderneath`: `programmer.keyStack`'s top value — park, the
-  programmer's slot, the cue's, the base, passing over the programmer's slot while it is blind, as
+  programmer's slot, a stack's Move in dark hold, the cue's, the base, passing over the programmer's slot while it is blind, as
   `LayerResolver.fallbackFor` does — for the lane's first FX's attribute on the first selected head
   carrying it, re-asked on that key's provenance), then *+ FX*. `fx/active` carries no priority,
   so the bands are read from each FX's home and the order within a band from the preview's answer,
@@ -6275,6 +6275,17 @@ through `useLiveFader` (`components/editor/`), the grand master fader's drag-and
 so the two cannot differ. A project switch starts every stack at full and a reload keeps it. The MIDI
 `stackFxAmount` target is mirrored in `lib/surfaceDrop.ts`, the binding picker (*Cue stack — FX
 amount*) and an *FX amount* chip on each stack's library row.
+
+### Move in dark
+
+**What a stack moves in the dark is the desk's** (lighting7 move-in-dark plan D11; its
+`docs/cue-stacks-engineering.md` §"Move in dark"). `api/moveInDarkApi.ts` reads `moveInDark.state`
+— every head a live stack is moving or waiting to move, with its state (`WAITING · MOVING · SET ·
+LIT_EARLY`), the entry and cue it is for and their label, its families and the target's pan and
+tilt — and anchors the delay or move time left to this browser's clock on receipt (`endsAtMs`);
+`store/moveInDark.ts` is form 3, `useMoveInDarkHeads(stackId)` narrowed to one stack. No screen reads
+it yet (the plan's sessions 4 and 5). The key stack's `MOVE_IN_DARK` row is drawn by `LayerStack`
+as *Move in dark · for Q12*, above the cue it beats.
 
 ### Make rig safe and Quit desk
 
