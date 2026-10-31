@@ -424,10 +424,11 @@ class Show(
      * GO'd again without its events or its speed masters (a GO into a cue, not this: a tap since
      * wins) — its auto-advance timer starting again from now — and each armed standby re-armed; each
      * loose hold taken again in press order, its events unfired and its masters unset; the programmer's layers and values, from the
-     * store [ShowCarry] handed over. Then every patched property is published from what now composes
-     * it — so a property nothing drives any more (its cue changed, its stack's cue is gone) releases
-     * to its base, as it would have had the change been made live — and every channel no fixture
-     * covers, and no programmer channel holds, goes to zero.
+     * store [ShowCarry] handed over. Then every patched channel is published from what now composes
+     * it — the programmer's keys over the cue's over the rest, so a channel two keys share takes the
+     * higher tier's value, and a channel nothing drives any more (its cue changed, its stack's cue is
+     * gone) releases to its own key's base — and every channel no fixture covers, and no programmer
+     * channel holds, goes to zero.
      */
     fun resume(carry: ShowCarry) {
         val logger = org.slf4j.LoggerFactory.getLogger("Show")
@@ -481,11 +482,25 @@ class Show(
             step("re-cook the programmer's layers") { programmerLayerStack.reinstate() }
             step("republish the programmer") { fxEngine.programmer.republishAll() }
 
-            // Every patched property, from what composes it now. Effect-covered and parked keys are
-            // skipped by the publish itself — an effect repaints its own on the next tick.
+            // Every patched channel, from what composes it now. Effect-covered and parked keys are
+            // skipped by the publish itself — an effect repaints its own on the next tick. Keys that
+            // share a channel (a pan channel is `pan` and `position`) each write it and the last
+            // wins, so the tiers go up in order: what nothing holds, then the cue's, then the
+            // programmer's. A channel nothing holds is released through its covering key alone, so a
+            // mover nothing positions goes to its sliders' base, as a fresh start leaves it, and
+            // never half to `position`'s centre.
             step("republish the rig") {
-                val keys = AttributeChannelWriter.channelKeyIndex(fixtures).attributeKeys.values.flatten().toSet()
-                fxEngine.programmer.republishKeys(keys)
+                val index = AttributeChannelWriter.channelKeyIndex(fixtures)
+                val cue = layerResolver.currentCueLayerState
+                val (programmer, rest) = index.attributeKeys.values.flatten().toSet().partition {
+                    !programmerStore.blind && programmerStore.get(it.targetKey, it.attribute) != null
+                }
+                val cueHeld = rest.filter { it in cue }
+                val held = (programmer + cueHeld).toHashSet()
+                val released = index.attributeKeys
+                    .filterValues { keys -> keys.none { it in held } }
+                    .keys.mapNotNullTo(LinkedHashSet()) { index.coveringKeys[it] }
+                for (tier in listOf(released, cueHeld.toSet(), programmer.toSet())) fxEngine.programmer.republishKeys(tier)
             }
 
             step("release the channels no fixture covers") {
