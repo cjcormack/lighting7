@@ -142,7 +142,8 @@ class CascadePublisher internal constructor(
      *   publish — see `CueAssignmentLayer.republishAssignments` for who may pass true.
      * @param restage one fade for every key this publish moves, released keys included, in place
      *   of the rows' own: *Update stage* taking a live cue to its new cook over the cue's fade
-     *   ([CueAssignmentLayer.restageAssignments]). Null for every other publish.
+     *   ([CueAssignmentLayer.restageAssignments]), and Move in dark moving or releasing a head over
+     *   its move time ([CueAssignmentLayer.setContributorAssignments]). Null for every other publish.
      */
     internal fun publishCueLayerToControllers(
         before: LayerResolver.CueLayerSnapshot,

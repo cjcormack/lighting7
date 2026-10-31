@@ -44,6 +44,7 @@ import {createCueHoldsWsApi, CueHoldsWsApi} from "./cueHoldsApi";
 import {createGrandMasterWsApi, GrandMasterWsApi} from "./grandMasterApi";
 import {createLocateWsApi, LocateWsApi} from "./locateWsApi";
 import {createStackFxAmountWsApi, StackFxAmountWsApi} from "./stackFxAmountApi";
+import {createMoveInDarkWsApi, MoveInDarkWsApi} from "./moveInDarkApi";
 import {createRigSafetyWsApi, RigSafetyWsApi} from "./rigSafetyApi";
 import {createStageRenderWsApi, StageRenderWsApi} from "./stageRenderApi";
 
@@ -89,6 +90,7 @@ interface LightingApi {
   grandMaster: GrandMasterWsApi
   locate: LocateWsApi
   stackFxAmount: StackFxAmountWsApi
+  moveInDark: MoveInDarkWsApi
   rigSafety: RigSafetyWsApi
   stageRender: StageRenderWsApi
   cloudSync: CloudSyncWsApi
@@ -162,6 +164,7 @@ function createLightingApi(): LightingApi {
   const grandMasterWsApi = createGrandMasterWsApi(connection)
   const locateWsApi = createLocateWsApi(connection)
   const stackFxAmountWsApi = createStackFxAmountWsApi(connection)
+  const moveInDarkWsApi = createMoveInDarkWsApi(connection)
   const rigSafetyWsApi = createRigSafetyWsApi(connection)
   const stageRenderWsApi = createStageRenderWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
@@ -210,6 +213,7 @@ function createLightingApi(): LightingApi {
     grandMaster: grandMasterWsApi,
     locate: locateWsApi,
     stackFxAmount: stackFxAmountWsApi,
+    moveInDark: moveInDarkWsApi,
     rigSafety: rigSafetyWsApi,
     stageRender: stageRenderWsApi,
     cloudSync: cloudSyncWsApi,

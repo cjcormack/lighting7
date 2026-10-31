@@ -30,4 +30,12 @@ describe('Underneath', () => {
     const layer: KeyStackLayer = { kind: 'PROGRAMMER', onStage: true, owner: 'layers', value: '102', layerSource: { name: 'Night' } as never }
     expect(underneathLabel(topValue([layer]), cueLabel)).toBe('Night 40 %')
   })
+
+  it('reads a move in the dark over the cue it beats', () => {
+    const moved: KeyStackLayer[] = [
+      { kind: 'MOVE_IN_DARK', onStage: true, targetCueId: 12, value: '200,100' },
+      { kind: 'CUE', onStage: false, cueId: 11, value: '50,50' },
+    ]
+    expect(underneathLabel(topValue(moved), cueLabel)).toBe('Move in dark 200,100')
+  })
 })

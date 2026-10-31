@@ -140,8 +140,8 @@ is titled *Move in dark: session N — title*. Never merge a later session's PR 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Stack settings and the look-ahead engine | planned | | | |
-| 2 | Every edge: re-planning, catch-up, lit early, the key stack and the frame | planned | | | |
+| 1 | Stack settings and the look-ahead engine | in review | `claude/brave-bardeen-l724t1` | [#321](https://github.com/cjcormack/lighting7/pull/321) | f161d5f |
+| 2 | Every edge: re-planning, catch-up, lit early, the key stack and the frame | in review | `claude/admiring-cannon-azpr8e` | | |
 | 3 | The cue's setting, the static plan, MCP, and the row flag retired | planned | | | |
 | 4 | Screens: stack settings, the Cue tab and the cue list | planned | | | |
 | 5 | Screens: the Stage view, the Timeline, and the docs closed | planned | | | |
@@ -199,6 +199,29 @@ the next; whoever merges the last fills its own.
   §"Crossfade behaviour" (the look-ahead beside the row flag, which session 3 removes);
   `docs/sync-engineering.md` §"Version 45"; root `CLAUDE.md` §"Cue Stack Run Endpoints" (one line
   on the stack's `moveInDark`).
+- **Recorded in session 1:**
+  - *One contributor per stack, row fades.* `setAssignments(honourRowFades = true)` ramps only keys
+    whose composed value changed (`publishCueLayerToControllers` skips equal ones), so each head's rows
+    carry the move time as their `fadeDurationMs` and the head that just joined ramps from wherever it
+    stands while one already moving keeps its ramp. A contributor per (stack, head) was not needed. Its
+    id is `-stackId`: nothing reads a cue tier id as positive except by looking it up, which finds
+    nothing; provenance now names the stack and no cue for it.
+  - *Restamped before the GO.* The contributor's priority follows the live entry, so `activate` calls
+    `beforeGo` with the incoming hold's priority before the cue arrives; otherwise a cue walked
+    through on the way to the target would beat the old priority and blend the head back for a frame.
+  - *Corrections to this section.* There is no stack `PATCH`: the wire is `POST` and `PUT`, and a `PUT`
+    without `moveInDark` (or a field of it) keeps what is stored. An open strobe needs no rule of its
+    own: a strobe on a lit dimmer is lit because the dimmer reads above 0, so STROBE and RING are only
+    the grand master's cuts, but an LED ring's effect channel lights the ring and counts. A head that
+    lights while moving or set, or that the live cue lights after a GO back, is let go at once — a
+    snap, which session 2's D8 makes a fade. The contributor's priority also follows
+    `CueHolds.restampEntries`, and a GO ends a hand-over an earlier GO left running. RING, RING_SPEED
+    and LED_MACRO rows never move, nor a colour carrying UV. The stack `PUT` already re-plans (D2's "at
+    once"), which session 2's list also names.
+  - *P5, `[crossfade]`, 2026-10-31, same sitting, alternating:* this branch p50 920 / 788 / 585 /
+    655 µs, alloc 733 / 763 / 728 / 735 kB/frame; `main` (a66660a) p50 588 / 851 / 956 / 647 µs,
+    alloc 728 / 740 / 730 / 730 kB/frame. No measurable change: the compose path gained no work, only
+    a sign test where provenance names a cue.
 
 ### Session 2 — Every edge: re-planning, catch-up, lit early, the key stack and the frame
 
@@ -235,6 +258,39 @@ the next; whoever merges the last fills its own.
 - **Docs:** `docs/cue-stacks-engineering.md` §"Move in dark" (re-planning, catch-up, lit early,
   reload); `docs/websocket-engineering.md` §"Move in dark"; `docs/lighting-composition-model.md`
   §"Reading one attribute's stack"; root `CLAUDE.md` §"WebSocket Messages" (one bullet).
+- **Recorded in session 2:**
+  - *Catch-up goes through the contributor, not the resolver.* A head dark at a GO's start that the
+    incoming cue lights, and not already set for it, takes that cue's published rows in its moving
+    families into the stack's contributor at once (`afterGo`), a ramp in progress ended
+    (`CueAssignmentLayer.snapKeys`), and holds them to the end of the fade: the hand-over's own
+    mechanism, so `composeLtp` and the crossfade's per-frame compose gained no work and no armed set.
+    The row flag's arming is untouched beside it, for session 3 to delete. The heads dark at the
+    GO's start are read in `beforeGo`, before the cue's FX spawn, so an incoming Intensity FX cannot
+    be mistaken for one that was already running.
+  - *Fades through one publish per head.* A join, a retarget and a release each ramp over the head's
+    move time; a hand-over's end, a catch-up and a stop snap. That needed a release to fade, which a
+    row's own fade cannot do (a released key snaps), so the contributor is published by
+    `CueAssignmentLayer.setContributorAssignments` with a `TransmitFade` for every key it moves,
+    grouped by fade, and the rows' own `fadeDurationMs` is no longer used.
+  - *A GO back outranked the contributor.* Restamped to the incoming priority + 500, it fell below the
+    outgoing cue on a GO back, which then blended a held head back over the crossfade. It is now
+    restamped above both for the GO and settles to the live priority once the fade is over.
+  - *The triggers.* GO TO and GO BACK already went through `activate`, so `afterGo` re-plans them.
+    Every other trigger is a `FixturesChangeListener` announcement the service hears —
+    `cueStackListChanged`, `cueListChanged` (cue `PUT`/`PATCH`, Record and Update all fire it),
+    `cuesRecomposed` — and it also re-plans on `lookListChanged`, `paletteListChanged` and
+    `fixturesChanged`. A head the live cue lights is let go idle, not *lit early*.
+  - *Reload.* "Already in place" is read off the carried frame: a head dark on it whose planned rows'
+    channels it shows (the new show's buffer once the rows are published) starts `SET`.
+  - *Found, not fixed:* a same-project reload zeroes a Fusion 100 Spot's tilt channel with Move in dark
+    off too, while pan and the composed position survive (queued as its own task). The reload test
+    asserts pan, the dimmer and the held position, and leaves tilt out. The test controller has no
+    ramps, so the fade tests read its change log's `fadeMs`.
+  - *P5, `[crossfade]`, 2026-10-31, same sitting, alternating (a review agent sharing the machine):*
+    this branch p50 966 / 1099 / 793 / 1141 µs, alloc 745 / 755 / 736 / 756 kB/frame; session 1's
+    head (f161d5f) p50 1538 / 856 / 1253 / 899 µs, alloc 751 / 741 / 736 / 752 kB/frame. No
+    measurable change: the crossfade's per-frame compose gained no work, since catch-up and the
+    fades go through the contributor's own publishes.
 
 ### Session 3 — The cue's setting, the static plan, MCP, and the row flag retired
 
@@ -290,6 +346,9 @@ the next; whoever merges the last fills its own.
   (`☾ n`, `▲ n` with its reason, *Off · n live*, and on the live row what is moving now), its glyph on
   the card view (`CueCardEditor.tsx`), the stack-row chip (`ShowOverview.tsx`) and the phone runner's
   *Up next* chip (`runner/mobile/`). A tap on a Dark cell opens the Cue tab at the section.
+- **The fixture sheet's source chip:** while Move in dark holds a key, its row's chip reads a
+  generic *Cue* (provenance names the stack and no cue). It reads *Move in dark · Q12* instead,
+  from a provenance entry that carries the move (Chris, 2026-10-31, at session 2's review).
 - **Glossary (D14):** a *Move in dark* row in `docs/glossary.md`, `done`, MagicQ's *Move when dark*,
   keyed `src:components/cues/CueStackForm.tsx`; `glossary.test.ts` and `GlossaryVocabularyTest`
   green.

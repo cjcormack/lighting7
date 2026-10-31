@@ -159,6 +159,9 @@ class CueRunStateTracker internal constructor(
         }
     }
 
+    /** Told when an armed standby changes what a stack's next GO fires — Move in dark re-plans. */
+    @Volatile internal var onNextMayHaveMoved: (stackId: Int) -> Unit = {}
+
     /** The entry an operator has explicitly armed on [stackId], if any. */
     fun getStandbyEntryId(stackId: Int): Int? = standbys[stackId]?.entryId
 
@@ -226,12 +229,14 @@ class CueRunStateTracker internal constructor(
             CueEntryRef(entryId, entry.cueId ?: throw IllegalArgumentException("Entry $entryId is a marker, which cannot be armed"))
         }
         standbys[stackId] = ref
+        onNextMayHaveMoved(stackId)
         publishRunState(state, stackId)
     }
 
     /** Disarm [stackId]'s standby, leaving the positional next on deck. */
     fun clearStandby(state: State, stackId: Int) {
         if (standbys.remove(stackId) == null) return
+        onNextMayHaveMoved(stackId)
         publishRunState(state, stackId)
     }
 

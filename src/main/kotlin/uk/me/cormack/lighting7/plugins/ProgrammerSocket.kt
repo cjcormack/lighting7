@@ -524,7 +524,7 @@ data class KeyStackParkedChannelDto(val universe: Int, val channel: Int, val val
 
 /**
  * One layer of a property's stack — see `ProvenanceService.keyStack`. [kind] is `PARK`,
- * `PROGRAMMER_FX`, `PROGRAMMER`, `FX`, `CUE` or `BASE`, and decides which of the optional
+ * `PROGRAMMER_FX`, `PROGRAMMER`, `FX`, `MOVE_IN_DARK`, `CUE` or `BASE`, and decides which of the optional
  * fields are present; every layer carries [onStage]. Absent fields are null (the socket's Json
  * encodes no default), so a client reads absent as "not this kind's".
  */
@@ -578,6 +578,13 @@ data class KeyStackLayerDto(
     /** A programmer layer's id or a cue layer's — whichever produced this layer. */
     val layerId: Int? = null,
     val layerSource: LayerSourceDto? = null,
+    /**
+     * `MOVE_IN_DARK` (move-in-dark plan D11): the entry and cue the head is moved for, and the label
+     * a GO gives that cue (`Q12`, else its name); [cueStackId] is the stack moving it.
+     */
+    val targetEntryId: Int? = null,
+    val targetCueId: Int? = null,
+    val label: String? = null,
 )
 
 /** One member's (or the one fixture's) stack in a `programmer.keyStack` answer. */
@@ -1488,6 +1495,9 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
             cueStackId = layer.cueStackId,
             layerId = layer.layerId,
             layerSource = layer.layerSource?.toDto(),
+            targetEntryId = layer.targetEntryId,
+            targetCueId = layer.targetCueId,
+            label = layer.label,
         )
     },
 )

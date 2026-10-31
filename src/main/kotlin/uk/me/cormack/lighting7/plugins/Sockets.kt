@@ -158,6 +158,7 @@ fun Application.configureSockets(state: State) {
             setupGrandMasterSubscriptions(scope)
             setupLocateSubscriptions(scope)
             setupStackFxAmountSubscriptions(scope)
+            setupMoveInDarkSubscriptions(scope)
             setupSelectionSubscriptions(scope)
             setupBuskSubscriptions(scope)
             setupCloudSyncSubscriptions(scope)

@@ -57,6 +57,9 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         ) { project ->
             val input = call.receive<NewCueStack>()
             val manager = state.show.cueStackManager
+            val moveInDark = input.moveInDark?.resolve(MoveInDarkSettings.NEW_STACK)?.getOrElse {
+                return@withCurrentProject call.respondMoveInDarkInvalid(it)
+            } ?: MoveInDarkSettings.NEW_STACK
             val details = transaction(state.database) {
                 val stackType = input.type ?: CueStackType.STACK.name
                 val resolvedName = if (stackType == CueStackType.SEPARATOR.name) {
@@ -72,6 +75,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     type = stackType
                     label = input.label
                     sortOrder = nextSort
+                    if (stackType != CueStackType.SEPARATOR.name) moveInDarkSettings = moveInDark
                 }
                 stack.toCueStackDetails(isCurrentProject = true, manager)
             }
@@ -136,16 +140,21 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     stack.label = newLabel
                     if (newLabel.isNotBlank()) stack.name = newLabel
                 } else {
+                    val moveInDark = input.moveInDark?.resolve(stack.moveInDarkSettings)?.getOrElse {
+                        return@transaction Result.failure<CueStackDetails>(it)
+                    }
                     stack.name = input.name
                     stack.loop = input.loop
+                    if (moveInDark != null) stack.moveInDarkSettings = moveInDark
                 }
 
-                stack.toCueStackDetails(isCurrentProject = true, manager)
-            }
+                Result.success(stack.toCueStackDetails(isCurrentProject = true, manager))
+            }?.getOrElse { return@withCurrentProject call.respondMoveInDarkInvalid(it) }
 
             if (details != null) {
                 // Looping decides what follows the last entry.
                 if (manager.isStackActive(resource.stackId)) manager.runState.publishRunState(state, resource.stackId)
+                state.show.moveInDark.onStackSettingsChanged(resource.stackId)
                 state.show.fixtures.cueStackListChanged()
                 call.respond(details)
             } else {
@@ -697,6 +706,11 @@ data class NewCueStack(
     val label: String? = null,
     /** Explicit position; when null the row is appended to the end of the project's order. */
     val sortOrder: Int? = null,
+    /**
+     * *Move in dark* (move-in-dark plan D2). Absent on a create is on at the defaults; absent on a
+     * `PUT` keeps what is stored, and a field left out of it keeps that field. Ignored for a separator.
+     */
+    val moveInDark: MoveInDarkDto? = null,
 )
 
 @Serializable
@@ -727,6 +741,9 @@ data class CueStackDetails(
     val canDelete: Boolean,
     /** The stack's *set* (stage-view plan session 8): held while it is live, under its cues. */
     val scenery: List<SceneryChangeDto> = emptyList(),
+    /** *Move in dark* (move-in-dark plan D2), every field present — sent for a stack that is off too. */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val moveInDark: MoveInDarkDto = MoveInDarkSettings.OFF.toDto(),
 )
 
 /**
@@ -912,8 +929,13 @@ private fun DaoCueStack.toCueStackDetails(
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
         scenery = stackSceneryOf(id).map { it.toDto() },
+        moveInDark = moveInDarkSettings.toDto(),
     )
 }
+
+/** 400 `MOVE_IN_DARK_INVALID`, naming every problem. */
+private suspend fun io.ktor.server.application.ApplicationCall.respondMoveInDarkInvalid(error: Throwable) =
+    respond(HttpStatusCode.BadRequest, ErrorResponse(error.message ?: "Invalid moveInDark", CODE_MOVE_IN_DARK_INVALID))
 
 /**
  * One entry as a row of its stack's list. [position] is its index in the list, read once by the

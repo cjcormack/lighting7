@@ -116,9 +116,13 @@ internal fun buildCueApplyData(cue: DaoCue, entry: DaoCueStackEntry?): CueApplyD
  */
 internal fun buildCueGoData(cue: DaoCue, entry: DaoCueStackEntry?): CueApplyData = buildCueApplyData(cue, entry).copy(
     goEvents = cueEventsOf(cue.id).map { EffectsService.CueEventFire(it.patch.key, it.trigger, it.offset.toMillis()) },
-    cueLabel = entry?.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } ?: cue.name,
+    cueLabel = cueGoLabel(entry, cue),
     goSpeedMasters = cue.speedMasters,
 )
+
+/** How a GO labels its cue: the entry's number, `Q12`, else the cue's name. */
+internal fun cueGoLabel(entry: DaoCueStackEntry?, cue: DaoCue): String =
+    entry?.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } ?: cue.name
 
 /**
  * Where an entry puts its cue, as [CueApplyData] carries it: the stack, the entry's position in it

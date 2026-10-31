@@ -161,14 +161,16 @@ internal fun captureCurrentState(state: State): CapturedState {
 private fun captureCueAssignments(state: State): List<CueAttributeAssignmentDto> {
     val engine = state.show.fxEngine
     val programmerOverlay = programmerOverlayForSnapshot(state)
+    // The cues alone: a head Move in dark has moved is captured where its cues put it (D1).
+    val cuesOnly = engine.cueLayer.cuesOnly().state
     val cueLayerSnapshot = if (programmerOverlay.values.isEmpty()) {
-        engine.layerResolver.currentCueLayerState
+        cuesOnly
     } else {
         // The programmer sits above the cue layer, so what's on stage is the cue snapshot with
         // the programmer's entries laid over it. Reading Layer 4 alone is precisely the
         // "Record is lossy" bug: everything busked through a fader, Locate, or the programmer
         // sheet was invisible to the capture.
-        HashMap(engine.layerResolver.currentCueLayerState).apply { putAll(programmerOverlay.values) }
+        HashMap(cuesOnly).apply { putAll(programmerOverlay.values) }
     }
     if (cueLayerSnapshot.isEmpty()) return emptyList()
 

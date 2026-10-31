@@ -50,7 +50,7 @@ interface LayerLine {
   value: string | null
 }
 
-/** One stack entry in the Layers board's words. Pure, so the six kinds read as a table. */
+/** One stack entry in the Layers board's words. Pure, so the kinds read as a table. */
 export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: number) => string | undefined): LayerLine {
   const fxName = layer.fxName ?? layer.fxType ?? 'FX'
   // On Seconds, or a wall-clock effect, the division is seconds (venue-visit plan D7).
@@ -105,6 +105,14 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
         value: null,
       }
     }
+    case 'MOVE_IN_DARK': {
+      const target = (layer.targetCueId != null ? cueLabel(layer.targetCueId) : undefined) ?? (layer.label || 'the next cue')
+      return {
+        title: `Move in dark · for ${target}`,
+        detail: 'moved while dark, ready for its GO',
+        value: layer.value ?? null,
+      }
+    }
     case 'CUE':
       return {
         title: (layer.cueId != null ? cueLabel(layer.cueId) : undefined) ?? 'Cue',
@@ -121,6 +129,7 @@ const EDGE: Record<KeyStackLayer['kind'], string> = {
   PROGRAMMER_FX: 'before:bg-violet-500',
   PROGRAMMER: 'before:bg-primary',
   FX: 'before:bg-violet-500',
+  MOVE_IN_DARK: 'before:bg-indigo-400',
   CUE: 'before:bg-sky-500',
   BASE: 'before:bg-transparent',
 }

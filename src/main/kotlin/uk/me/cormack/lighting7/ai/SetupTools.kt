@@ -1621,6 +1621,8 @@ class SetupTools(
 
         if (stackId == null && stackName.isNullOrEmpty()) problems += "give stackName for a new stack, or stackId to append to one"
         if (stackName != null && stackName.length > 255) problems += "stackName must be at most 255 characters"
+        val moveInDark = if (stackId != null) null else parseToolMoveInDark(input["moveInDark"], MoveInDarkSettings.NEW_STACK)
+            .getOrElse { problems += it.message!!; null }
 
         data class Context(
             val stackError: String?,
@@ -1743,6 +1745,7 @@ class SetupTools(
                 loop = input.boolean("loop") == true
                 type = CueStackType.STACK.name
                 sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
+                moveInDarkSettings = moveInDark ?: MoveInDarkSettings.NEW_STACK
             }
             // Each row is an entry appended to the stack: a marker entry labelled with its name (a
             // marker is no cue — cue model plan D12), or a new cue placed by `placeCueInStack`, which

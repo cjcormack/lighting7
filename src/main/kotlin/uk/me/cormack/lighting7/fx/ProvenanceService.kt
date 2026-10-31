@@ -148,6 +148,10 @@ data class KeyStackLayer(
     /** The layer that produced this one: a programmer layer's id, or a cue layer's (`DaoCueLayer`). */
     val layerId: Int? = null,
     val layerSource: LayerSource? = null,
+    /** [Kind.MOVE_IN_DARK]: the entry and cue the head is moved for, and how a person names it (`Q12`). */
+    val targetEntryId: Int? = null,
+    val targetCueId: Int? = null,
+    val label: String? = null,
 ) {
     /**
      * Why a running effect is not painting a key, in the order they are asked: a layer's
@@ -171,6 +175,13 @@ data class KeyStackLayer(
 
         /** Any other effect — a cue's, a manual one. Held back while the programmer holds the key. */
         FX,
+
+        /**
+         * A stack's Move in dark holding a dark head where the cue that lights it next puts it
+         * (move-in-dark plan D11), [cueStackId] the stack. The [CUE] row below it is what the cues
+         * alone say.
+         */
+        MOVE_IN_DARK,
 
         /** What the cues compose to on this key. */
         CUE,
@@ -214,7 +225,16 @@ class ProvenanceService internal constructor(
     private val programmerSuppression: () -> Map<String, Set<String>>,
     /** An effect's weight now, its stack's size included — [FxEngine.weightOf]. */
     private val fxWeight: (FxInstance) -> Double = { it.weight(it.dynamics) },
+    /** Layer 4 as the cues alone compose it — [CueAssignmentLayer.cuesOnly]. */
+    private val cuesOnly: () -> LayerResolver.CueLayerSnapshot = { LayerResolver.CueLayerSnapshot.EMPTY },
 ) {
+    /**
+     * What a Move in dark contributor holds a key for (`MoveInDarkService.holdingOf`): set by the
+     * show once the service exists, so the key stack can name the move rather than the live cue.
+     */
+    @Volatile internal var moveInDarkHolding: (contributorId: Int, targetKey: String, attribute: String) -> MoveInDarkService.Holding? =
+        { _, _, _ -> null }
+
     // Conflated: recomputed on layer events only (programmer mutation, cue republish,
     // effect lifecycle, park change) — never per frame. Full-state snapshots rather than
     // diffs: the entry set is small (the union of active keys) and event-rate, so diffing
@@ -432,7 +452,7 @@ class ProvenanceService internal constructor(
                     val layer = cueLayerLayerWinners[key]
                     ProvenanceEntry(
                         key.targetKey, key.attribute, ProvenanceSource.CUE,
-                        cueId = winningCueId,
+                        cueId = CueAssignmentLayer.cueIdOf(winningCueId),
                         cueStackId = winningCueId?.let { cueStackIdFor(it) },
                         layerId = layer?.layerId,
                         layerSource = layer?.source,
@@ -530,7 +550,7 @@ class ProvenanceService internal constructor(
             val layer = cueLayer.layerWinners[emitterKey]
             BundledProvenance(
                 attribute = emitter.name,
-                cueId = cueId,
+                cueId = CueAssignmentLayer.cueIdOf(cueId),
                 cueStackId = cueId?.let { cueStackIdFor(it) },
                 layerId = layer?.layerId,
                 layerSource = layer?.source,
@@ -610,7 +630,7 @@ class ProvenanceService internal constructor(
         return keys.map { key ->
             val cueId = cueLayerWinners[key]
             if (cueId != null) {
-                UnderlyingSource(key, cueId, cueStackIdFor(cueId), viaFxId = null)
+                UnderlyingSource(key, CueAssignmentLayer.cueIdOf(cueId), cueStackIdFor(cueId), viaFxId = null)
             } else {
                 val effect = fxByKey[key.targetKey to key.attribute]
                     ?.takeIf { it.cueId != null }
@@ -621,7 +641,8 @@ class ProvenanceService internal constructor(
 
     /**
      * Every layer under one property, top first: park, programmer-band effects, programmer slots,
-     * other effects (each with `heldBack`), the cue contributor, the base — the read behind the
+     * other effects (each with `heldBack`), the cue contributor — or, where a stack's Move in dark
+     * wins the key, its row with the cues-alone contributor under it, never on stage — the base — the read behind the
      * fixture sheet's stack (fixture-fx-sheets plan W1, D5). Null for a key that names no fixture.
      *
      * Each part is asked of the code that decides it, against **one** snapshot of each input:
@@ -635,7 +656,7 @@ class ProvenanceService internal constructor(
      * - the base is [LayerResolver.baselineFor].
      *
      * [KeyStackLayer.onStage] walks the output order — park, effects by priority, the programmer,
-     * the cue, the base — with an on-stage full-weight OVERRIDE effect, a programmer value, a cue
+     * the cue tier (Move in dark's row standing in for the cue's where it wins), the base — with an on-stage full-weight OVERRIDE effect, a programmer value, a cue
      * value or a full park covering everything below it. An effect weighted to nothing (a 0 % Size, a
      * spent N-shot) is not on stage; one under full weight is, beside what it mixes with. The layers are then *listed* in the plan's order,
      * which puts the programmer's own effects above its slots and the others below: on a key the
@@ -682,6 +703,9 @@ class ProvenanceService internal constructor(
         val programmerLayers: List<ProgrammerLayer>,
     ) {
         private val painted = HashMap<Pair<String, String>, Set<Pair<Int, Int>>>()
+
+        /** Layer 4 without Move in dark, read once for the request and only when a key needs it. */
+        val cuesOnly: LayerResolver.CueLayerSnapshot by lazy { this@ProvenanceService.cuesOnly() }
 
         /** The channels (fixture/element key, property) drives — memoised for the request. */
         fun channelsOf(fixtureKey: String, attribute: String): Set<Pair<Int, Int>> =
@@ -750,6 +774,12 @@ class ProvenanceService internal constructor(
         // ── The cue contributor, from the request's one Layer 4 snapshot ──
         val cueValue = cueLayer.index[fixtureKey]?.get(attribute)
         val cueLayerWinner = cueLayer.layerWinners[key]
+        // A Move in dark contributor winning the key: its row, then what the cues alone say (D11).
+        val holding = cueLayer.winners[key]
+            ?.takeIf { MoveInDarkService.stackOfContributor(it) != null }
+            ?.let { moveInDarkHolding(it, fixtureKey, attribute) }
+        val cuesAlone = holding?.let { read.cuesOnly }
+        val cuesAloneValue = cuesAlone?.index?.get(fixtureKey)?.get(attribute)
 
         // ── Base ──
         val base = target?.let { layerResolver.baselineFor(it, fixture).asAttributeValueFor(it) }
@@ -834,7 +864,30 @@ class ProvenanceService internal constructor(
                 layers += fxLayer(KeyStackLayer.Kind.FX, effect)
             }
         }
-        if (cueValue != null) {
+        if (holding != null && cueValue != null) {
+            layers += KeyStackLayer(
+                kind = KeyStackLayer.Kind.MOVE_IN_DARK,
+                onStage = cueOnStage,
+                value = cueValue,
+                cueStackId = holding.stackId,
+                targetEntryId = holding.targetEntryId,
+                targetCueId = holding.targetCueId,
+                label = holding.label,
+            )
+            if (cuesAlone != null && cuesAloneValue != null) {
+                val alone = underlyingSources(listOf(key), cuesAlone).single()
+                val aloneLayer = cuesAlone.layerWinners[key]
+                layers += KeyStackLayer(
+                    kind = KeyStackLayer.Kind.CUE,
+                    onStage = false,
+                    value = cuesAloneValue,
+                    cueId = alone.cueId,
+                    cueStackId = alone.cueStackId,
+                    layerId = aloneLayer?.layerId,
+                    layerSource = aloneLayer?.source,
+                )
+            }
+        } else if (cueValue != null) {
             layers += KeyStackLayer(
                 kind = KeyStackLayer.Kind.CUE,
                 onStage = cueOnStage,

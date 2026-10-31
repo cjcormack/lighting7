@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.ai
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -772,6 +774,7 @@ internal val buildCueStackTool = ToolDef(
         prop("stackName", "string", "Name for a new stack (e.g. 'Act 1', or the show's name). Required unless stackId is given.")
         prop("stackId", "integer", "Append to this existing stack instead of creating one.")
         prop("loop", "boolean", "New stack only: wrap to the first cue after the last. Default false.")
+        put("moveInDark", JsonObject(moveInDarkSchema + ("description" to JsonPrimitive("New stack only. " + moveInDarkSchema["description"]!!.jsonPrimitive.content))))
         arrayProp("scenery", sceneryItemSchema(forCue = false), "The stack's set: the states its elements hold while it is live, under its cues ('the Act 2 set appears with Act 2'). Replaces the stack's set when given.")
         arrayProp("cues", showCueSchema, "In running order.")
         prop("projectId", "integer", "$PROJECT_ID_DESCRIPTION Cues built in a project that is not current cannot carry 'at' or 'values': anchor them with mark_up_prompt_book, and give values, once it is current.")

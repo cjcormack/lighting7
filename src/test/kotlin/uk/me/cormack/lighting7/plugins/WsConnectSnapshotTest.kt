@@ -74,6 +74,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // Each stack's FX amount (effects plan D10), a StateFlow following the live show: on a fresh
         // desk no stack is below full, and that empty frame is still what every FX size slider starts from.
         StackFxAmountStateOutMessage::class,
+        // Move in dark (move-in-dark plan session 2), a StateFlow following the live show: on a fresh
+        // desk no head moves, and that empty frame is still what every Dark chip starts from.
+        MoveInDarkStateOutMessage::class,
         // The cue holds (cue model plan §3.4), a StateFlow hosted on State: on a fresh desk nothing
         // is held, and that empty frame is still what every cue pad's and cue slot's ring starts from.
         CueHoldsStateOutMessage::class,
