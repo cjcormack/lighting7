@@ -8,6 +8,7 @@ import { usePatchProjectCueMutation } from '@/store/cues'
 import { usePatchCueStackEntryMutation } from '@/store/cueStacks'
 import type { CuePlace } from '@/lib/cuePlaces'
 import { SharedCueChip } from './SharedCueChip'
+import { CueDarkGlyph } from '@/components/cues/CueDarkGlyph'
 import { CueActions } from './CueActions'
 import { InlineEditField } from '@/components/InlineEditField'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
@@ -251,6 +252,7 @@ export function CueCardEditor({
               )}
             />
             <SharedCueChip places={places} entryId={cue.entryId} />
+            <CueDarkGlyph projectId={projectId} stackId={stackId} entryId={cue.entryId} />
           </div>
 
           <div className="flex items-center gap-1 flex-nowrap @max-[1000px]:hidden">

@@ -24,11 +24,14 @@ export function OwnerEditor({
   projectId,
   entry,
   onClose,
+  onShowDarkCues,
 }: {
   projectId: number
   /** What is open, or null for nothing. */
   entry: Pick<MovesWithEntry, 'kind' | 'id'> | null
   onClose: () => void
+  /** A stack's Move in dark read-out opens its cue table on the cues it counts — where a host can. */
+  onShowDarkCues?: (stackId: number) => void
 }) {
   const onOpenChange = useCallback(
     (open: boolean) => {
@@ -39,7 +42,12 @@ export function OwnerEditor({
   return (
     <>
       <CueEditorSheet projectId={projectId} cueId={entry?.kind === 'cue' ? entry.id : null} onOpenChange={onOpenChange} />
-      <StackEditor projectId={projectId} stackId={entry?.kind === 'set' ? entry.id : null} onOpenChange={onOpenChange} />
+      <StackEditor
+        projectId={projectId}
+        stackId={entry?.kind === 'set' ? entry.id : null}
+        onOpenChange={onOpenChange}
+        onShowDarkCues={onShowDarkCues}
+      />
       <LookEditor projectId={projectId} lookId={entry?.kind === 'look' ? entry.id : null} onOpenChange={onOpenChange} />
     </>
   )
@@ -85,7 +93,17 @@ export function CueEditorSheet({
   )
 }
 
-function StackEditor({ projectId, stackId, onOpenChange }: { projectId: number; stackId: number | null; onOpenChange: (open: boolean) => void }) {
+function StackEditor({
+  projectId,
+  stackId,
+  onOpenChange,
+  onShowDarkCues,
+}: {
+  projectId: number
+  stackId: number | null
+  onOpenChange: (open: boolean) => void
+  onShowDarkCues?: (stackId: number) => void
+}) {
   const { data: stacks } = useProjectCueStackListQuery(projectId, { skip: stackId == null })
   const [saveStack, { isLoading }] = useSaveProjectCueStackMutation()
   const stack = stackId == null ? null : ((stacks ?? []).find((s) => s.id === stackId) ?? null)
@@ -106,6 +124,7 @@ function StackEditor({ projectId, stackId, onOpenChange }: { projectId: number; 
       scenery={stack?.scenery}
       onSave={onSave}
       isSaving={isLoading}
+      onShowDarkCues={onShowDarkCues}
     />
   )
 }

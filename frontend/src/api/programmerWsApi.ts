@@ -116,6 +116,19 @@ export interface ProvenanceEntry {
    * second. Absent when empty.
    */
   bundled?: BundledProvenance[]
+  /**
+   * A `CUE` key a stack's Move in dark holds (lighting7 move-in-dark plan D11): the cue the head is
+   * moved for, so the sheet's chip reads *Move in dark · Q12* rather than a bare *Cue*. Absent
+   * otherwise, and from an older desk.
+   */
+  moveInDark?: MoveInDarkProvenance
+}
+
+export interface MoveInDarkProvenance {
+  stackId: number
+  targetEntryId: number
+  targetCueId: number
+  label: string
 }
 
 /** One entry of `ProvenanceEntry.bundled`. */
@@ -795,6 +808,9 @@ const provenanceSignature = (p: ProvenanceEntry) =>
     p.layerSource?.kind ?? null,
     p.layerSource?.id ?? null,
     p.layerSource?.name ?? null,
+    // A key moves from the live cue to a move in the dark with `source` still `CUE`.
+    p.moveInDark?.targetEntryId ?? null,
+    p.moveInDark?.label ?? null,
   ])
 
 /**

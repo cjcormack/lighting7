@@ -65,6 +65,17 @@ describe('rowSourceOf — one chip per source kind (D4)', () => {
     expect(s).toMatchObject({ kind: 'cue', label: 'Q12 · Night', holds: false })
   })
 
+  it('names the cue a stack moves the head for in the dark, not a bare Cue', () => {
+    const s = source({
+      provenance: prov({ source: 'CUE', cueStackId: 7, moveInDark: { stackId: 7, targetEntryId: 112, targetCueId: 12, label: 'Q12' } }),
+    })
+    expect(s).toMatchObject({ kind: 'cue', label: 'Move in dark · Q12' })
+    // An older desk's empty label falls back to the cue's own.
+    expect(
+      source({ provenance: prov({ source: 'CUE', moveInDark: { stackId: 7, targetEntryId: 112, targetCueId: 12, label: '' } }) }).label,
+    ).toBe('Move in dark · Q12')
+  })
+
   it('says Parked, and Base where nothing asserts the key', () => {
     expect(source({ provenance: prov({ source: 'PARKED' }) }).label).toBe('Parked')
     expect(source({})).toMatchObject({ kind: 'base', label: 'Base', holds: false })

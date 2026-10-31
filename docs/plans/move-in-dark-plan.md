@@ -142,8 +142,8 @@ is titled *Move in dark: session N — title*. Never merge a later session's PR 
 |---|---|---|---|---|---|
 | 1 | Stack settings and the look-ahead engine | merged | `claude/brave-bardeen-l724t1` | [#321](https://github.com/cjcormack/lighting7/pull/321) | f161d5f |
 | 2 | Every edge: re-planning, catch-up, lit early, the key stack and the frame | merged | `claude/admiring-cannon-azpr8e` | [#322](https://github.com/cjcormack/lighting7/pull/322) | 1069003 |
-| 3 | The cue's setting, the static plan, MCP, and the row flag retired | in review | `claude/move-in-dark-s3` | | |
-| 4 | Screens: stack settings, the Cue tab and the cue list | planned | | | |
+| 3 | The cue's setting, the static plan, MCP, and the row flag retired | merged | `claude/move-in-dark-s3` | [#324](https://github.com/cjcormack/lighting7/pull/324) | 3a67358 |
+| 4 | Screens: stack settings, the Cue tab and the cue list | in review | `claude/vigilant-noether-zvy1cy` | | |
 | 5 | Screens: the Stage view, the Timeline, and the docs closed | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -393,6 +393,38 @@ the next; whoever merges the last fills its own.
   overrides, toggles, locked), the Dark column's cells for each reason and live state, the chips.
 - **Docs:** `frontend/CLAUDE.md` §Cues, Stacks & Triggers (the block, the section, the column and
   where each reads from).
+- **Recorded in session 4:**
+  - *The chip needed the wire.* Provenance named the stack and no cue for a held key, so
+    `ProvenanceEntry` gained `moveInDark` `{stackId, targetEntryId, targetCueId, label}` from the key
+    stack's own `holdingOf` (`provenanceState`, `docs/websocket-engineering.md`), and the client's
+    `provenanceSignature` carries it.
+  - *The read-out's filter.* The cue table had no filter to open, so it gained one: the read-out
+    closes the sheet and the Show page opens `/show/stacks/{id}/table?dark=1`, which shows only the
+    cues the *Dark* column says something about, with *Show all*.
+  - *What the plan carries.* Its heads name families, not attributes, so *Moves* reads
+    `Position · Colour` where the page drew `Position · Gobo`. Each entry now also carries its cue's
+    own `mode`, so a cue set *Off* reads *Off* in the *Dark* column and passes its filter whatever it
+    lights, as the read-out's `off` already counted it; without the field the read-out counted cues
+    its own filter hid.
+  - *The lit heads say what and where.* Each `live` entry carries the families it moves too, so the
+    Cue tab's *Move while lit* rows fill *Moves*; a head lit before reads *Lit in Q11*, the entry
+    played before (round to the last on a loop), as the page draws it. The drilled stack's header
+    carries the moving chip the page draws beside *Stack settings…*.
+  - *Where the docs went.* `frontend/CLAUDE.md`'s §"Move in dark" (session 2's) holds the screens,
+    and §"Cues, Stacks & Triggers" points to it.
+  - *The filter guards itself.* Row drag is off while it filters (a reorder naming only the shown
+    rows would put every other entry after them), and it filters nothing until the plan has loaded
+    on the current project, saying so.
+  - *Locked and narrow.* The stack sheet is never open locked (its doors are unlocked gestures), so
+    the block has no locked arm. The Scenery column does not fold; the *Dark* column's words fold to
+    its glyphs at a 900px container on the sheet body. The cue editor has no phone host (the phone
+    runner draws `CueDetailContent`), so there is no *Moves* column to drop there.
+  - *The stack row.* Only a stack moving something shows a chip; the page's *Move in dark off* on a
+    stopped row is left out, as its own words say a stopped stack shows nothing.
+  - *Tenths.* The block's and the Cue tab's time fields show tenths of a second, so a Save or a blur
+    that leaves a time untouched writes it as stored rather than rounding a stored 1.25 s.
+  - *The glossary key* is `src:components/cues/MoveInDarkStackBlock.tsx`, the file that says the word,
+    rather than `CueStackForm.tsx`, which mounts it.
 
 ### Session 5 — Screens: the Stage view, the Timeline, and the docs closed
 

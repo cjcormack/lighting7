@@ -687,6 +687,17 @@ data class ProvenanceEntryDto(
      * `ProvenanceEntry.bundled`.
      */
     val bundled: List<BundledProvenanceDto> = emptyList(),
+    /** A `CUE` key a stack's Move in dark holds: the cue the head is moved for. Omitted otherwise. */
+    val moveInDark: MoveInDarkProvenanceDto? = null,
+)
+
+/** [ProvenanceEntryDto.moveInDark]: the stack, and the entry and cue it moves the head for (`Q12`). */
+@Serializable
+data class MoveInDarkProvenanceDto(
+    val stackId: Int,
+    val targetEntryId: Int,
+    val targetCueId: Int,
+    val label: String,
 )
 
 /** One entry of [ProvenanceEntryDto.bundled]. */
@@ -877,6 +888,9 @@ private fun buildProvenanceStateMessage(entries: List<ProvenanceEntry>, programm
                         layerId = b.layerId,
                         layerSource = b.layerSource?.toDto(),
                     )
+                },
+                moveInDark = it.moveInDark?.let { m ->
+                    MoveInDarkProvenanceDto(m.stackId, m.targetEntryId, m.targetCueId, m.label)
                 },
             )
         },

@@ -49,6 +49,11 @@ interface ShowViewProps {
   view?: CardsListView
   onOpenBook?: (cueId: number) => void
   onRequestUnlock?: () => void
+  /** Open a stack's cue table on the cues its Move in dark read-out counts (`?dark=1`). */
+  onShowDarkCues?: (stackId: number) => void
+  /** The drilled stack's cue table shows only those cues; [onShowAllCues] lifts it. */
+  darkOnly?: boolean
+  onShowAllCues?: () => void
 }
 
 // Memoized: `ShowPage` subscribes to the runner slice (via `useShowTransport` for the Row 3 show
@@ -81,6 +86,9 @@ export const ShowView = memo(function ShowView({
   view,
   onOpenBook,
   onRequestUnlock,
+  onShowDarkCues,
+  darkOnly,
+  onShowAllCues,
 }: ShowViewProps) {
   const [createMarker] = useCreateMarkerEntryMutation()
   const [renameMarker] = useRenameMarkerEntryMutation()
@@ -158,6 +166,9 @@ export const ShowView = memo(function ShowView({
         view={view}
         onOpenBook={onOpenBook}
         onRequestUnlock={onRequestUnlock}
+        onShowDarkCues={onShowDarkCues}
+        darkOnly={darkOnly}
+        onShowAllCues={onShowAllCues}
       />
     )
   }
@@ -171,6 +182,7 @@ export const ShowView = memo(function ShowView({
       onDrillStack={(id) => onDrillStack(id)}
       locked={locked}
       unlockedWarning={unlockedWarning}
+      onShowDarkCues={onShowDarkCues}
     />
   )
 })

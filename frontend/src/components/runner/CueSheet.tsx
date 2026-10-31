@@ -27,6 +27,11 @@ import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { ReadOutButton } from '@/components/sheet/ReadOutButton'
 import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
+import { useCueStackMoveInDarkQuery } from '@/store/cueStacks'
+import { useMoveInDarkHeads } from '@/store/moveInDark'
+import { darkCellOf, darkCellSentence, darkCellShows, movingNow } from '@/lib/moveInDark'
+import { DarkCellFace, DarkChip } from '@/components/cues/moveInDarkMarks'
+import type { MoveInDarkPlanEntry } from '@/api/cueStacksApi'
 
 /**
  * The live and standby rows' tints — one constant each, worn by the row *and* by its legend
@@ -43,7 +48,7 @@ import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { firstColumnCellProps, listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import { isCueRow, type CueStack, type CueStackCueEntry, type CueStackCueRow } from '@/api/cueStacksApi'
 
-export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'book' | 'layers' | 'fx' | 'scenery' | 'notes'
+export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'dark' | 'book' | 'layers' | 'fx' | 'scenery' | 'notes'
 
 /**
  * One row of the stack's list — an **entry**: a cue, or a marker drawn as a divider. Keyed by the
@@ -68,6 +73,9 @@ function cueOf(row: CueSheetRow): CueStackCueRow {
 }
 
 const CURVE_OPTIONS: SheetOption[] = [...CUE_CURVE_OPTIONS]
+
+/** The *Dark* cell's words, folded to its glyphs and counts on a narrow sheet (plan §4). */
+const DARK_WORD_CLASS = 'hidden @[900px]/cuesheet:inline'
 
 /** Deselect's word beside the cue action set — measured with it, on the bar's container. */
 const DESELECT_WORD_CLASS = 'hidden @[760px]:inline'
@@ -108,6 +116,12 @@ export interface CueSheetProps {
   onReorder?: (entryIds: number[]) => void
   /** Every cue's places across the show — the shared chip on a cue in more than one. */
   placesByCue?: ReadonlyMap<number, readonly CuePlace[]>
+  /**
+   * Show only the cues the *Dark* column says something about — the stack sheet's read-out opens the
+   * sheet so (`?dark=1`). [onShowAll] lifts it.
+   */
+  darkOnly?: boolean
+  onShowAll?: () => void
 }
 
 /**
@@ -165,6 +179,8 @@ export function CueSheet({
   onRequestUnlock,
   onReorder,
   placesByCue,
+  darkOnly = false,
+  onShowAll,
 }: CueSheetProps) {
   const [patchCue] = usePatchProjectCueMutation()
   const [patchEntryMutation] = usePatchCueStackEntryMutation()
@@ -217,19 +233,34 @@ export function CueSheet({
    * plain click on another row opens the pane on the window's own tab rather than this one. Reached
    * through a ref because the columns are built before the sheet that selects.
    */
-  const [tabRequest, setTabRequest] = useState<{ entryId: number; tab: CueEditorTab; seq: number } | null>(null)
-  const openPaneRef = useRef<(row: CueSheetRow, tab: CueEditorTab) => void>(() => {})
+  const [tabRequest, setTabRequest] = useState<{ entryId: number; tab: CueEditorTab; section?: 'moveInDark'; seq: number } | null>(null)
+  const openPaneRef = useRef<(row: CueSheetRow, tab: CueEditorTab, section?: 'moveInDark') => void>(() => {})
   const columnRef = useRef<HTMLDivElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
 
+  /** The stack's Move in dark plan by entry — the *Dark* column — and what it is moving now. */
+  const { data: darkPlan } = useCueStackMoveInDarkQuery({ projectId, stackId: stack.id })
+  const darkByEntry = useMemo(
+    () => new Map<number, MoveInDarkPlanEntry>((darkPlan?.entries ?? []).map((e) => [e.entryId, e])),
+    [darkPlan],
+  )
+  const darkHeads = useMoveInDarkHeads(stack.id)
+  const darkNow = useMemo(() => movingNow(darkHeads), [darkHeads])
+  /** Whether any cue's *Dark* cell says something — the footer's legend. */
+  const darkSays = useMemo(() => (darkPlan?.entries ?? []).some((e) => darkCellShows(darkCellOf(e))), [darkPlan])
+  /** `darkOnly` filters once there is a plan to filter by; before that, or off the current project, it says why not. */
+  const darkFilterReady = darkPlan != null && darkPlan.rigLoaded
+
+  // The plan reaches the rows only through the filter, so a refetch of it re-mints none otherwise.
+  const darkFilter = darkOnly && darkFilterReady ? darkByEntry : null
   const rows = useMemo<CueSheetRow[]>(
     () =>
-      stack.cues.map((entry) =>
-        isCueRow(entry)
-          ? { id: entryRowId(entry.entryId), entry }
-          : { id: entryRowId(entry.entryId), entry, divider: entry.name },
-      ),
-    [stack.cues],
+      stack.cues.flatMap((entry): CueSheetRow[] => {
+        if (!isCueRow(entry)) return darkFilter ? [] : [{ id: entryRowId(entry.entryId), entry, divider: entry.name }]
+        if (darkFilter && !darkCellShows(darkCellOf(darkFilter.get(entry.entryId)))) return []
+        return [{ id: entryRowId(entry.entryId), entry }]
+      }),
+    [darkFilter, stack.cues],
   )
   const completedSet = useMemo(() => new Set(completedCueIds), [completedCueIds])
 
@@ -388,6 +419,42 @@ export function CueSheet({
         },
       },
       {
+        key: 'dark',
+        label: 'Dark',
+        width: '112px',
+        value: () => undefined,
+        display: (row) => {
+          const cell = darkCellOf(darkByEntry.get(row.entry.entryId))
+          const live = row.entry.entryId === activeEntryId && darkNow.moving + darkNow.litEarly > 0
+          if (!live && !darkCellShows(cell)) return null
+          const said = live
+            ? `${darkNow.moving} moving${darkNow.label ? ` for ${darkNow.label}` : ''}${darkNow.litEarly > 0 ? `, ${darkNow.litEarly} lit early` : ''}`
+            : darkCellSentence(cell)
+          return (
+            <ReadOutButton
+              data-dark-entry={row.entry.entryId}
+              onClick={() => openPaneRef.current(row, 'cue', 'moveInDark')}
+              title={`${said} — open this cue's Move in dark`}
+              aria-label={`Move in dark of ${cueRowName(row)}: ${said}`}
+            >
+              {live ? (
+                <span className="inline-flex items-center gap-1">
+                  {darkNow.moving > 0 && (
+                    <DarkChip>
+                      {darkNow.moving}
+                      <span className={DARK_WORD_CLASS}> moving{darkNow.label ? ` → ${darkNow.label}` : ''}</span>
+                    </DarkChip>
+                  )}
+                  {darkNow.litEarly > 0 && <DarkChip lit>{darkNow.litEarly}</DarkChip>}
+                </span>
+              ) : (
+                <DarkCellFace cell={cell} wordClass={DARK_WORD_CLASS} />
+              )}
+            </ReadOutButton>
+          )
+        },
+      },
+      {
         key: 'book',
         // Wider than the design's 76px, and not in the mono face: the mockup's value was `p1`,
         // and a real one is a sentence — `bottom of p. 12`, up to 85px of proportional 11px text.
@@ -509,7 +576,7 @@ export function CueSheet({
         },
       },
     ],
-    [activeEntryId, elementsByUuid, locationByCue, locked, onOpenBook, onRequestUnlock, patch, patchEntry, placesByCue, projectId, standbyEntryId, tracksScenery],
+    [activeEntryId, darkByEntry, darkNow, elementsByUuid, locationByCue, locked, onOpenBook, onRequestUnlock, patch, patchEntry, placesByCue, projectId, standbyEntryId, tracksScenery],
   )
 
   const copy = useCallback(
@@ -568,9 +635,9 @@ export function CueSheet({
     rowName: cueRowName,
   })
   const { selectedRows, cellCount, setRows, scrollTo } = sheet
-  openPaneRef.current = (row, tab) => {
+  openPaneRef.current = (row, tab, section) => {
     setRows([row.id])
-    setTabRequest((prev) => ({ entryId: row.entry.entryId, tab, seq: (prev?.seq ?? 0) + 1 }))
+    setTabRequest((prev) => ({ entryId: row.entry.entryId, tab, section, seq: (prev?.seq ?? 0) + 1 }))
   }
   /** The one selected cue row the pane edits — none, several or a marker fold it (D5). */
   const paneRow = selectedRows.length === 1 && isCueRow(selectedRows[0].entry) ? selectedRows[0] : null
@@ -729,7 +796,23 @@ export function CueSheet({
           foldForStrip={actionRows.length > 0}
         />
       </div>
-      <div ref={sheetRef} className="flex min-h-0 flex-1 flex-col" data-cue-sheet-body>
+      {darkOnly && (
+        <div className="flex shrink-0 items-center gap-2 border-b px-3 py-1 text-xs text-muted-foreground" data-dark-filter>
+          <span>
+            {darkFilterReady
+              ? 'The cues Move in dark moves heads for, or that move heads lit'
+              : darkPlan == null
+                ? 'Reading what Move in dark moves… every cue is shown until then'
+                : 'What Move in dark moves is counted once this project is current, so every cue is shown'}
+          </span>
+          {onShowAll && (
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onShowAll}>
+              Show all
+            </Button>
+          )}
+        </div>
+      )}
+      <div ref={sheetRef} className="@container/cuesheet flex min-h-0 flex-1 flex-col" data-cue-sheet-body>
       <SheetTable<CueSheetRow, CueColumnKey>
         {...sheet.tableProps}
         onRowClick={onRowClick}
@@ -740,7 +823,8 @@ export function CueSheet({
         rowDrag={
           onReorder
             ? {
-                enabled: !locked,
+                // A drag over the filtered rows would name only them, and the desk puts the rest after.
+                enabled: !locked && darkFilter == null,
                 onReorder: (ids) =>
                   onReorder(ids.map((id) => Number(id.slice('entry:'.length))).filter(Number.isFinite)),
               }
@@ -868,6 +952,14 @@ export function CueSheet({
         <span className="inline-flex items-center gap-1.5">
           <LegendSwatch className={cn(STANDBY_ROW_CLASS, 'ring-1 ring-inset ring-blue-500/40')} />
           Next
+        </span>
+        <span className={cn('items-center gap-1.5', darkSays ? 'inline-flex' : 'hidden')}>
+          <DarkChip>n</DarkChip>
+          set in dark for this cue
+        </span>
+        <span className={cn('items-center gap-1.5', darkSays ? 'inline-flex' : 'hidden')}>
+          <DarkChip lit>n</DarkChip>
+          will move while lit
         </span>
       </SheetPage.Footer>
     </div>

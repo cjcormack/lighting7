@@ -29,6 +29,8 @@ interface RunMobileCueCardProps {
   location?: string | null
   /** The cue's ⋯ action menu, when the host offers one. */
   actions?: ReactNode
+  /** Under the cue's identity — the *Up next* card's Move in dark chip. */
+  afterIdentity?: ReactNode
 }
 
 /**
@@ -48,6 +50,7 @@ export function RunMobileCueCard({
   fadeStackId = null,
   location,
   actions,
+  afterIdentity,
 }: RunMobileCueCardProps) {
   const mode = expansion?.card === kind ? expansion.mode : null
   // A sentinel cueId when there's no cue (pre-show, or nothing on deck): no real cue has id -1,
@@ -94,6 +97,7 @@ export function RunMobileCueCard({
       location={location}
       headerTrailing={headerTrailing}
       actions={actions}
+      afterIdentity={afterIdentity}
       fadeProgress={fadeProgress}
       fadeRemainMs={fadeRemainMs}
     />

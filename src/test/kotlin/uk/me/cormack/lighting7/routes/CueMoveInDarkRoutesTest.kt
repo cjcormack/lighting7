@@ -162,7 +162,9 @@ class CueMoveInDarkRoutesTest : RouteIntegrationTest() {
         val q3 = plan.entries[2]
         assertEquals(listOf(MoveInDarkHeadPlanDto("spot", entries[1], listOf("POSITION"))), q3.heads)
         val q4 = plan.entries[4]
-        assertEquals(listOf(MoveInDarkLiveHeadDto("spot", "CUE_OFF")), q4.live)
+        assertEquals(listOf(MoveInDarkLiveHeadDto("spot", "CUE_OFF", listOf("POSITION"))), q4.live)
+        assertEquals("OFF", q4.mode)
+        assertEquals("STACK", q3.mode)
         assertEquals(MoveInDarkSummaryDto(heads = 1, cues = 1, live = 1, off = 1), plan.summary)
     }
 
@@ -172,7 +174,7 @@ class CueMoveInDarkRoutesTest : RouteIntegrationTest() {
         // Delay 1 s + move 2 s; Q2's 500 ms fade comes off its follow.
         val (stackId, _) = seedStack(follow = 3_499)
         val quick = jsonClient().get("/api/rest/projects/$projectId/cue-stacks/$stackId/move-in-dark").body<StackMoveInDarkPlanDto>()
-        assertEquals(listOf(MoveInDarkLiveHeadDto("spot", "TOO_QUICK")), quick.entries[2].live)
+        assertEquals(listOf(MoveInDarkLiveHeadDto("spot", "TOO_QUICK", listOf("POSITION"))), quick.entries[2].live)
         assertTrue(quick.entries[2].heads.isEmpty())
     }
 

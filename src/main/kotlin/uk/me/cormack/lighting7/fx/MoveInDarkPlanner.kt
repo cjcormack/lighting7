@@ -154,8 +154,8 @@ object MoveInDarkPlanner {
     /** A head moved in the dark for an entry: the entry its move happens in, and what it moves. */
     data class StaticMove(val head: String, val fromEntryId: Int, val families: Set<AttributeFamily>)
 
-    /** A head that will move lit into an entry, and why. */
-    data class StaticLive(val head: String, val reason: LiveReason)
+    /** A head that will move lit into an entry, why, and what moves. */
+    data class StaticLive(val head: String, val reason: LiveReason, val families: Set<AttributeFamily> = emptySet())
 
     /** One cue entry of the static plan: the heads moved in the dark for it, and the ones that move lit. */
     data class StaticEntry(val entryId: Int, val cueId: Int, val moves: List<StaticMove>, val live: List<StaticLive>)
@@ -208,15 +208,16 @@ object MoveInDarkPlanner {
                 val head = input.heads.getValue(key)
                 val rows = byHead[key].orEmpty().filter { moves(it, head, families) }
                 if (rows.isEmpty()) continue
+                val moving = rows.mapTo(LinkedHashSet()) { familyOf(it) }
                 val previousCue = ordered[previous].cueId
                 if (key in litBy(previousCue)) {
                     val there = input.content(previousCue).rows.filter { it.targetKey == key }.associate { it.attribute to it.value }
-                    if (rows.any { there[it.attribute] != it.value }) live += StaticLive(key, LiveReason.LIT_BEFORE)
+                    if (rows.any { there[it.attribute] != it.value }) live += StaticLive(key, LiveReason.LIT_BEFORE, moving)
                     continue
                 }
                 when {
-                    effective == null -> live += StaticLive(key, LiveReason.CUE_OFF)
-                    setting.keepsLive(key, head.parentKey) -> live += StaticLive(key, LiveReason.KEPT_LIVE)
+                    effective == null -> live += StaticLive(key, LiveReason.CUE_OFF, moving)
+                    setting.keepsLive(key, head.parentKey) -> live += StaticLive(key, LiveReason.KEPT_LIVE, moving)
                     else -> {
                         // The first entry it is dark in, walking back to the last one that lights it —
                         // round to the target itself on a loop, which lights it too.
@@ -230,7 +231,7 @@ object MoveInDarkPlanner {
                         val from = if (effective.whenMode == MoveInDarkWhen.LATE) previous else first
                         val dark = darkMs(input, ordered, from, t, takenOut && from == first)
                         if (dark != null && dark < (effective.delay + effective.time).toMillis()) {
-                            live += StaticLive(key, LiveReason.TOO_QUICK)
+                            live += StaticLive(key, LiveReason.TOO_QUICK, moving)
                         } else {
                             moves += StaticMove(key, ordered[from].entryId, rows.mapTo(LinkedHashSet()) { familyOf(it) })
                         }

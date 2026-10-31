@@ -347,6 +347,22 @@ class MoveInDarkService internal constructor(
         statusesOf(run, clock()).associateBy { it.head }
     }
 
+    /**
+     * Every key a held head's rows cover, `(stackId, targetKey, attribute)`, and the move it is held
+     * for — [holdingOf] for a whole provenance pass, under the lock once.
+     */
+    fun holdings(): Map<Triple<Int, String, String>, Holding> = synchronized(lock) {
+        val out = HashMap<Triple<Int, String, String>, Holding>()
+        for ((stackId, run) in stacks) {
+            for (head in run.heads.values) {
+                if (!head.held) continue
+                val holding = Holding(stackId, head.move.targetEntryId, head.move.targetCueId, head.move.label)
+                for (row in head.move.rows) out.putIfAbsent(Triple(stackId, row.targetKey, row.attribute), holding)
+            }
+        }
+        out
+    }
+
     /** The move [targetKey]'s [attribute] is held for by [contributorCueId], or null. */
     fun holdingOf(contributorCueId: Int, targetKey: String, attribute: String): Holding? = synchronized(lock) {
         val stackId = stackOfContributor(contributorCueId) ?: return@synchronized null

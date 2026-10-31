@@ -6283,9 +6283,56 @@ amount*) and an *FX amount* chip on each stack's library row.
 — every head a live stack is moving or waiting to move, with its state (`WAITING · MOVING · SET ·
 LIT_EARLY`), the entry and cue it is for and their label, its families and the target's pan and
 tilt — and anchors the delay or move time left to this browser's clock on receipt (`endsAtMs`);
-`store/moveInDark.ts` is form 3, `useMoveInDarkHeads(stackId)` narrowed to one stack. No screen reads
-it yet (the plan's sessions 4 and 5). The key stack's `MOVE_IN_DARK` row is drawn by `LayerStack`
-as *Move in dark · for Q12*, above the cue it beats.
+`store/moveInDark.ts` is form 3, `useMoveInDarkHeads(stackId)` narrowed to one stack. The key stack's
+`MOVE_IN_DARK` row is drawn by `LayerStack` as *Move in dark · for Q12*, above the cue it beats, and a
+fixture sheet row the move holds reads *Move in dark · Q12* (`rowSource.ts`, off `provenanceState`'s
+`moveInDark`, which `provenanceSignature` carries so a key moving from the live cue to a move wakes).
+
+The stored half is the desk's static plan, `GET cue-stacks/{id}/move-in-dark` (`StackMoveInDarkPlan`,
+`useCueStackMoveInDarkQuery` in `store/cueStacks.ts`): per cue entry its cue's own mode, the heads moved
+in the dark for it and the entry each move happens in, and the heads that move lit and why (`LIT_BEFORE · TOO_QUICK ·
+KEPT_LIVE · CUE_OFF`). No frame of its own: it rides the stack list, the cue list, the cue
+(`cuesRecomposed`), the Looks, palettes and the rig. Off the current project it answers `rigLoaded:
+false` and every surface says the count waits for it. `lib/moveInDark.ts` is the pure read-out —
+the words, a cue's cell (`darkCellOf`: set, lit and its reasons; *Off* off the entry's own `mode`, else
+a `CUE_OFF` reason from an older desk), what a stack moves now (`movingNow`) and the stack
+block's draft — and `cues/moveInDarkMarks.tsx` its one look: indigo, a dashed edge and a moon for
+*moved in dark*, amber ▲ for *moves while lit*. Four screens read them:
+
+- **The stack sheet** (`CueStackForm`'s `MoveInDarkStackBlock`, under Loop): the switch, *When*,
+  Delay and Move time in seconds, *Moves* as three chips, saved with the name and Loop. A new stack
+  opens on at the defaults, one from a desk that sends no setting reads off, and a Save that leaves
+  the block — or one of its times — alone sends it as stored, since the fields show tenths. Its
+  read-out (`☾ 38 heads in 14 cues · ▲ 3 move lit · 2 cues off`) is the stored list's; pressed, the
+  sheet closes and the host opens the stack's cue table on those cues (`onShowDarkCues`: the Show
+  page's `/show/stacks/{id}/table?dark=1`, threaded through `ShowOverview` and `OwnerEditor`). The
+  fields start afresh on open or another stack, never on a re-read of the same one (a host passing
+  the live list hands a new copy on every GO); switched off, the hidden times neither hold Save back
+  nor are written. The sheet has no locked arm: every door to it is an unlocked gesture.
+- **The Cue tab** (`CueMoveInDarkSection`, between Notes and Speed masters): the segment, its first
+  option the stack's setting (*Stack · Early*), Delay and Move time showing the stack's until typed
+  over (blank gives it back), and the heads this cue lights in the stack it was opened from (else its
+  first place) — *From*, *Moves*, *Now* from `moveInDark.state` (*Set*, a bar while moving, *Waiting*,
+  *Lit early*) and *In dark · Live*, which writes `moveInDark.live` (a head live with its whole
+  fixture goes dark alone, the fixture's other heads written live), built on the list as last written
+  until the cue reads back, so two quick toggles both land. The list sits under *Heads this cue
+  lights* and over the page's legend line; the heads that move lit follow it, each with its families
+  and why (*Lit in Q11*, the entry played before, for a head lit there; the reason's sentence
+  otherwise). Each gesture is one cue `PATCH` of the one
+  field (`CuePatchInput.moveInDark`, partial); locked, the controls go and the list stays.
+- **The cue table's *Dark* column** (`CueSheet`, after Follow): `☾ 6 ▲ 1 lit before`, `Off · 4
+  live`, and on the live row what is moving now (`4 moving → Q12`); the words fold to the glyphs
+  below the sheet's `@container/cuesheet` 900px. A press selects the row and opens the pane on the
+  Cue tab at that section (`CueEditorTabRequest.section`). `darkOnly` (`?dark=1`) shows only the
+  cues the column says something about, with *Show all*; it turns row drag off (a reorder naming only
+  the shown rows would put the rest after them) and filters nothing until the plan has loaded on the
+  current project, saying why. A cue card carries the folded cell
+  (`CueDarkGlyph`, which selects its entry, never a fresh cell, so a card re-renders only when it moves).
+- **The stack row, the stack's header and the phone runner** (`StackMovingChip`): `☾ 4 moving` (and an
+  amber *lit early*) on the Show view's row while the stack moves anything, nothing otherwise; in the
+  drilled stack's header (`StackDetail`, locked or not) and on the phone's *Up next* card, for the
+  playhead's stack, `☾ 4 moving for Q12 · 1.4s`, the cue named being the one the heads
+  move for, which under Early may be past the next.
 
 ### Make rig safe and Quit desk
 
@@ -6327,6 +6374,9 @@ the descriptor) inside its restrike time says *Still cooling — restrike in 5:5
 confirm, and is still offered.
 
 ### Cues, Stacks & Triggers
+What a stack moves in the dark — the stack sheet's block, the Cue tab's section, the cue table's
+*Dark* column and the chips — is §"Move in dark" above.
+
 Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own attribute assignments, ad-hoc FX, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). *Remove from stack* deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, and *Move to stack…* moves the entry whole — number, follow and anchor with it — through its own route (§"The cue action set" below); a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in the cue editor's Scenery tab, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
 
 #### The cue editor

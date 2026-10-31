@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +14,9 @@ import {
 import { Blinds, Loader2 } from 'lucide-react'
 import { SceneryEditor } from '@/components/scenery/SceneryEditor'
 import { useSetStackSceneryMutation } from '@/store/scenery'
+import { useCueStackMoveInDarkQuery } from '@/store/cueStacks'
+import { MOVE_IN_DARK_OFF, NEW_STACK_MOVE_IN_DARK, stackDraftOf, stackDraftResult, type StackMoveInDarkDraft } from '@/lib/moveInDark'
+import { MoveInDarkStackBlock } from './MoveInDarkStackBlock'
 import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
 import type { SceneryChange } from '@/api/sceneryApi'
 
@@ -28,6 +31,11 @@ interface CueStackFormProps {
   scenery?: SceneryChange[]
   onSave: (input: CueStackInput) => Promise<void>
   isSaving: boolean
+  /**
+   * Open the cue table on the cues Move in dark's read-out counts (the sheet closes first). Absent,
+   * the read-out only reads out.
+   */
+  onShowDarkCues?: (stackId: number) => void
 }
 
 export function CueStackForm({
@@ -38,12 +46,31 @@ export function CueStackForm({
   scenery,
   onSave,
   isSaving,
+  onShowDarkCues,
 }: CueStackFormProps) {
   const [name, setName] = useState('')
   const [loop, setLoop] = useState(false)
   const [setStackScenery] = useSetStackSceneryMutation()
+  const runnable = stack == null || stack.type === 'STACK'
+  // What the block opened on, so a Save that left it alone writes nothing, and one that left a time
+  // alone writes it as stored: the fields show tenths of a second, and would round a stored 1.25 s.
+  const [darkOpened, setDarkOpened] = useState<StackMoveInDarkDraft>(() => stackDraftOf(NEW_STACK_MOVE_IN_DARK))
+  const [dark, setDark] = useState<StackMoveInDarkDraft>(darkOpened)
+  const darkId = useId()
+  const { data: darkPlan } = useCueStackMoveInDarkQuery(
+    { projectId, stackId: stack?.id ?? 0 },
+    { skip: !open || stack == null || !runnable },
+  )
 
+  // The fields start afresh when the sheet opens or names another stack, never when the same stack
+  // is re-read: a host passing the live list's copy hands a new one on every GO.
+  const latestStack = useRef(stack)
   useEffect(() => {
+    latestStack.current = stack
+  })
+  const stackId = stack?.id ?? null
+  useEffect(() => {
+    const stack = latestStack.current
     if (open) {
       if (stack) {
         setName(stack.name)
@@ -52,13 +79,34 @@ export function CueStackForm({
         setName('')
         setLoop(false)
       }
+      // A new stack starts on (Q2); one from a desk that sends no setting reads off.
+      const opened = stackDraftOf(stack == null ? NEW_STACK_MOVE_IN_DARK : (stack.moveInDark ?? MOVE_IN_DARK_OFF))
+      setDarkOpened(opened)
+      setDark(opened)
     }
-  }, [open, stack])
+  }, [open, stackId])
+
+  const darkResult = stackDraftResult(dark)
+  const darkTouched = JSON.stringify(dark) !== JSON.stringify(darkOpened)
 
   const handleSave = async () => {
     const input: CueStackInput = {
       name: name.trim(),
       loop,
+    }
+    if (runnable && (stack == null || darkTouched)) {
+      if (darkResult.value != null) {
+        // A time the operator did not type over keeps its stored value, not its tenths-of-a-second face.
+        const stored = stack?.moveInDark
+        input.moveInDark = {
+          ...darkResult.value,
+          delayMs: stored != null && dark.delay === darkOpened.delay ? stored.delayMs : darkResult.value.delayMs,
+          timeMs: stored != null && dark.time === darkOpened.time ? stored.timeMs : darkResult.value.timeMs,
+        }
+      } else if (!dark.on) {
+        // Switched off over fields it now hides: off, and the stored rest kept.
+        input.moveInDark = { on: false }
+      }
     }
     // Keep the sheet open if the save failed — errorToastMiddleware says what went wrong, and
     // closing would discard the operator's edits behind the toast.
@@ -70,7 +118,8 @@ export function CueStackForm({
     onOpenChange(false)
   }
 
-  const isValid = name.trim().length > 0
+  // Only fields on screen can hold Save back: switched off, the block hides them.
+  const isValid = name.trim().length > 0 && !(runnable && dark.on && darkResult.value == null)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -122,6 +171,23 @@ export function CueStackForm({
               />
             </button>
           </div>
+
+          {runnable && (
+            <MoveInDarkStackBlock
+              draft={dark}
+              onChange={setDark}
+              plan={darkPlan}
+              idBase={darkId}
+              onShowCues={
+                stack != null && onShowDarkCues
+                  ? () => {
+                      onOpenChange(false)
+                      onShowDarkCues(stack.id)
+                    }
+                  : undefined
+              }
+            />
+          )}
 
           {/* Set for this stack (stage-view plan session 8). Saves itself, like the cue editor's Scenery tab, rather
               than waiting for Save — a new stack has no id to hang one on, so it appears once the

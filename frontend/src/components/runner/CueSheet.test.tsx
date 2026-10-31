@@ -2,7 +2,8 @@
 import { cueRow, markerRow } from '@/test/cueEntries'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow } from '@/api/cueStacksApi'
+import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow, StackMoveInDarkPlan } from '@/api/cueStacksApi'
+import type { MoveInDarkHead } from '@/api/moveInDarkApi'
 
 /**
  * The cue sheet's own rules on the kit (CLAUDE.md §Sheet kit), and above all **the lock as the
@@ -16,7 +17,13 @@ const patchCue = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => false }))
 vi.mock('@/store/cues', () => ({ usePatchProjectCueMutation: () => [patchCue] }))
 const patchEntry = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
-vi.mock('@/store/cueStacks', () => ({ usePatchCueStackEntryMutation: () => [patchEntry] }))
+// The stack's Move in dark plan and what it is moving now — the *Dark* column's two sources.
+const dark: { plan: StackMoveInDarkPlan | undefined; heads: MoveInDarkHead[] } = { plan: undefined, heads: [] }
+vi.mock('@/store/cueStacks', () => ({
+  usePatchCueStackEntryMutation: () => [patchEntry],
+  useCueStackMoveInDarkQuery: () => ({ data: dark.plan }),
+}))
+vi.mock('@/store/moveInDark', () => ({ useMoveInDarkHeads: () => dark.heads }))
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 /** What the bar hands the cue action set — the actions themselves are `CueActions.test.tsx`'s. */
@@ -40,13 +47,14 @@ vi.mock('@/components/scenery/CueSceneryEditor', () => ({
 }))
 // The pane's editor — `CueEditor.test.tsx`'s; here it says which cue and entry it was opened on.
 vi.mock('@/components/cues/editor/CueEditor', () => ({
-  CueEditor: (props: { cueId: number; entryId: number; host: string; locked: boolean; tabRequest?: { tab: string } | null }) => (
+  CueEditor: (props: { cueId: number; entryId: number; host: string; locked: boolean; tabRequest?: { tab: string; section?: string } | null }) => (
     <div
       data-cue-editor={props.cueId}
       data-cue-editor-host={props.host}
       data-entry={props.entryId}
       data-locked={String(props.locked)}
       data-tab={props.tabRequest?.tab ?? ''}
+      data-section={props.tabRequest?.section ?? ''}
     >
       <button type="button" data-testid="pane-control">a control in the editor</button>
     </div>
@@ -118,6 +126,8 @@ function stubFlatLayout() {
     layers: [678, 754],
     fx: [754, 810],
     notes: [810, 1010],
+    dark: [1010, 1122],
+    scenery: [1122, 1318],
   }
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     if (this.hasAttribute('data-grid-name-header')) return rect(0, 100)
@@ -749,5 +759,124 @@ describe('CueSheet — the bottom pane', () => {
     // Locked, the marquee still selects; one cell is one row.
     dragFade(1, 1)
     expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-locked', 'true')
+  })
+})
+
+describe('CueSheet · Dark (move-in-dark plan session 4)', () => {
+  const STACK_D: CueStack = { ...STACK, cues: [cue(1), cue(2), cue(3, { cueType: 'MARKER', name: 'Interval' }), cue(4), cue(5)] }
+  const plan = (entries: StackMoveInDarkPlan['entries']): StackMoveInDarkPlan => ({
+    stackId: 10,
+    rigLoaded: true,
+    entries,
+    summary: { heads: 0, cues: 0, live: 0, off: 0 },
+  })
+  const darkCell = (cueId: number) => row(cueId).querySelector('[data-cell="dark"]') ?? row(cueId).querySelector('[data-dark-entry]')
+  const darkButton = (cueId: number) => row(cueId).querySelector<HTMLElement>(`[data-dark-entry="${cueId + 100}"]`)
+
+  beforeEach(() => {
+    stubFlatLayout()
+    dark.heads = []
+    dark.plan = plan([
+      { entryId: 101, cueId: 1, heads: [], live: [] },
+      {
+        entryId: 102,
+        cueId: 2,
+        heads: [
+          { target: 'spot-1', fromEntryId: 101, families: ['POSITION'] },
+          { target: 'spot-2', fromEntryId: 101, families: ['POSITION', 'COLOUR'] },
+        ],
+        live: [{ target: 'spot-3', reason: 'LIT_BEFORE' }],
+      },
+      { entryId: 104, cueId: 4, heads: [{ target: 'spot-1', fromEntryId: 102, families: ['POSITION'] }], live: [{ target: 'spot-2', reason: 'TOO_QUICK' }, { target: 'spot-3', reason: 'TOO_QUICK' }] },
+      { entryId: 105, cueId: 5, heads: [], live: [{ target: 'spot-1', reason: 'CUE_OFF' }, { target: 'spot-2', reason: 'CUE_OFF' }] },
+    ])
+  })
+  afterEach(() => {
+    dark.plan = undefined
+    dark.heads = []
+  })
+
+  it('counts the heads set in the dark for a cue, and those that will move lit, with the reason when there is one', () => {
+    draw({ stack: STACK_D })
+    expect(darkButton(1)).toBeNull()
+    expect(darkButton(2)).toHaveAttribute('aria-label', expect.stringContaining('2 heads set in the dark for this cue'))
+    expect(darkButton(2)).toHaveTextContent('2')
+    expect(darkButton(2)).toHaveTextContent('1')
+    expect(darkButton(2)).toHaveTextContent('lit before')
+    expect(darkButton(4)).toHaveTextContent('too quick')
+    expect(darkButton(4)).toHaveAttribute('aria-label', expect.stringContaining('2 heads move while lit (too quick)'))
+  })
+
+  it('reads a cue set Off as Off with the heads it moves lit', () => {
+    draw({ stack: STACK_D })
+    expect(darkButton(5)).toHaveTextContent('Off · 2 live')
+  })
+
+  it('on the live row says what is moving now', () => {
+    dark.heads = [
+      { target: 'spot-1', entryId: 104, cueId: 4, label: 'Q4', state: 'MOVING', endsAtMs: Date.now() + 1000, families: ['POSITION'], position: null },
+      { target: 'spot-2', entryId: 104, cueId: 4, label: 'Q4', state: 'WAITING', endsAtMs: Date.now() + 500, families: ['POSITION'], position: null },
+      { target: 'spot-3', entryId: 104, cueId: 4, label: 'Q4', state: 'LIT_EARLY', endsAtMs: null, families: ['POSITION'], position: null },
+    ]
+    draw({ stack: STACK_D, activeEntryId: 101 })
+    expect(darkButton(1)).toHaveTextContent('2 moving → Q4')
+    expect(darkButton(1)).toHaveAttribute('aria-label', expect.stringContaining('1 lit early'))
+    // The rest still read the plan.
+    expect(darkButton(2)).toHaveTextContent('lit before')
+  })
+
+  it('a tap opens the cue editor on the Cue tab, at Move in dark', () => {
+    draw({ stack: STACK_D })
+    fireEvent.click(darkButton(2)!)
+    expect(row(2)).toHaveAttribute('data-state', 'selected')
+    const editor = document.querySelector('[data-cue-editor]')!
+    expect(editor).toHaveAttribute('data-tab', 'cue')
+    expect(editor).toHaveAttribute('data-section', 'moveInDark')
+  })
+
+  it('darkOnly shows only the cues it has something to say about, and Show all lifts it', () => {
+    const onShowAll = vi.fn()
+    draw({ stack: STACK_D, darkOnly: true, onShowAll, onReorder: vi.fn() })
+    // A drag would name only the rows shown, and the desk would put every other entry after them.
+    expect(screen.queryAllByRole('button', { name: 'Reorder row' })).toHaveLength(0)
+    expect(row(1)).toBeNull()
+    expect(row(3)).toBeNull()
+    expect(row(2)).not.toBeNull()
+    expect(row(4)).not.toBeNull()
+    expect(row(5)).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
+    expect(onShowAll).toHaveBeenCalled()
+  })
+
+  it('without a plan draws nothing in the column, and darkOnly shows every cue and says why', () => {
+    dark.plan = undefined
+    draw({ stack: STACK_D, darkOnly: true })
+    expect(darkCell(2)).toBeNull()
+    expect(row(1)).not.toBeNull()
+    expect(screen.getByText(/every cue is shown until then/)).toBeInTheDocument()
+  })
+
+  it('off the current project darkOnly filters nothing and says so', () => {
+    dark.plan = { ...plan([]), rigLoaded: false }
+    draw({ stack: STACK_D, darkOnly: true })
+    expect(row(1)).not.toBeNull()
+    expect(screen.getByText(/counted once this project is current/)).toBeInTheDocument()
+  })
+
+  it('a cue set Off reads Off though it lights no head that would move, and passes the filter', () => {
+    dark.plan = plan([{ entryId: 101, cueId: 1, mode: 'OFF', heads: [], live: [] }, { entryId: 102, cueId: 2, heads: [], live: [] }])
+    draw({ stack: STACK_D, darkOnly: true })
+    expect(darkButton(1)).toHaveTextContent(/^Off$/)
+    expect(row(2)).toBeNull()
+  })
+
+  it('the legend shows only while some cue has something to say', () => {
+    dark.plan = plan([{ entryId: 101, cueId: 1, heads: [], live: [] }])
+    const { unmount } = draw({ stack: STACK_D })
+    expect(screen.getByText('set in dark for this cue').closest('span')).toHaveClass('hidden')
+    unmount()
+    dark.plan = plan([{ entryId: 102, cueId: 2, heads: [{ target: 'a', fromEntryId: 101, families: ['POSITION'] }], live: [] }])
+    draw({ stack: STACK_D })
+    expect(screen.getByText('set in dark for this cue').closest('span')).toHaveClass('inline-flex')
   })
 })

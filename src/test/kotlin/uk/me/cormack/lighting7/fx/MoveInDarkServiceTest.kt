@@ -25,6 +25,7 @@ import uk.me.cormack.lighting7.testsupport.mountTestApp
 import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -468,6 +469,20 @@ class MoveInDarkServiceTest : RouteIntegrationTest() {
         assertEquals(rig.q11Cue, cue.cueId)
         assertEquals(CueAssignmentResolver.AttributeValue.Position(50u, 50u), cue.value)
         assertTrue(kinds.indexOf(KeyStackLayer.Kind.MOVE_IN_DARK) < kinds.indexOf(KeyStackLayer.Kind.CUE))
+    }
+
+    @Test
+    fun `provenance names the cue a held key is moved for, and no cue`() = testApplication {
+        mountTestApp(state)
+        val rig = seed(on = true)
+        setAtQ12(rig)
+        val entry = state.show.fxEngine.provenance.compute().single { it.targetKey == "spot" && it.attribute == "position" }
+        assertEquals(ProvenanceSource.CUE, entry.source)
+        assertNull(entry.cueId)
+        assertEquals(rig.stackId, entry.cueStackId)
+        assertEquals(MoveInDarkService.Holding(rig.stackId, rig.q12, rig.q12Cue, "Q12"), entry.moveInDark)
+        val dimmer = state.show.fxEngine.provenance.compute().single { it.targetKey == "spot" && it.attribute == "dimmer" }
+        assertNull(dimmer.moveInDark, "the live cue's dimmer is no move")
     }
 
     @Test
