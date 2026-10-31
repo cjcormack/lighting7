@@ -1,0 +1,687 @@
+<title>Move in Dark</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,800;1,400&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column of proposal sections; each mock-up is a dark desk screen that scrolls in its own box.
+     Colour carries meaning: indigo = moved in dark, green = live, blue = next, amber = a move the audience sees. */
+  :root {
+    --bg:#f1f2f4; --panel:#ffffff; --fg:#16181d; --muted:#5b616c; --line:#d5d8de; --soft:#e7e9ee;
+    --dark:#4b55c8; --live:#1f8a45; --next:#2b62d6; --warn:#a86400; --fx:#7a45c2;
+    --sans:"Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"Martian Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#0f1115; --panel:#171a20; --fg:#eceef2; --muted:#9aa0ab; --line:#2a2f38; --soft:#1e222a;
+    --dark:#a3b3ff; --live:#5fd38a; --next:#86a9ff; --warn:#f2bd4f; --fx:#c39cf5; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#0f1115; --panel:#171a20; --fg:#eceef2; --muted:#9aa0ab; --line:#2a2f38; --soft:#1e222a;
+    --dark:#a3b3ff; --live:#5fd38a; --next:#86a9ff; --warn:#f2bd4f; --fx:#c39cf5; color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15px; line-height:1.55; }
+  .wrap { max-width:1080px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:46px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .eyebrow .status { color:var(--warn); }
+  h1 { margin:0; font-size:clamp(30px, 5.2vw, 48px); line-height:1.05; font-weight:800; letter-spacing:-0.025em; text-wrap:balance; max-width:20ch; }
+  h1 em { font-style:normal; color:var(--dark); }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:16.5px; }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-22px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--dark); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:24px; line-height:1.2; font-weight:800; letter-spacing:-0.01em; text-wrap:balance; }
+  h2 small { font:500 11px var(--mono); color:var(--muted); margin-left:10px; letter-spacing:0.04em; }
+  h3 { margin:10px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:72ch; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); font-size:0.8em; background:var(--soft); border-radius:4px; padding:1px 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:74ch; display:flex; flex-direction:column; gap:6px; }
+
+  .k { display:inline-block; font:500 11px var(--mono); border-radius:4px; padding:0 6px; vertical-align:1px; border:1px solid currentColor; }
+  .k.dark { color:var(--dark); border-style:dashed; } .k.live { color:var(--live); } .k.next { color:var(--next); } .k.warn { color:var(--warn); }
+
+  .findings { display:grid; grid-template-columns:repeat(auto-fit, minmax(290px, 1fr)); gap:12px; }
+  .finding { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14px; }
+  .finding b { display:block; margin-bottom:3px; }
+  .finding .where { display:block; margin-top:6px; font:11px var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 11px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.n { font:500 12px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.d { min-width:280px; }
+  td.w { min-width:160px; }
+  .rec { color:var(--dark); font-weight:600; }
+
+  .cols2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; }
+  .cols2 > div { min-width:0; display:flex; flex-direction:column; gap:8px; }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:74ch; }
+
+  /* ── simulator ── */
+  .sim { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; display:flex; flex-direction:column; gap:12px; }
+  .simctl { display:flex; flex-wrap:wrap; gap:10px 22px; align-items:center; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:7px; padding:2px; background:var(--soft); flex-wrap:wrap; }
+  .seg button { font:500 13px var(--sans); color:var(--fg); background:transparent; border:0; border-radius:5px; padding:4px 10px; cursor:pointer; }
+  .seg button[aria-pressed="true"] { background:var(--panel); box-shadow:0 0 0 1px var(--line); font-weight:600; }
+  .seg button:focus-visible { outline:2px solid var(--dark); outline-offset:1px; }
+  .range { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); }
+  .range input { width:120px; accent-color:var(--dark); }
+  .range output { font:500 12px var(--mono); color:var(--fg); min-width:3.5em; }
+  .simplot { overflow-x:auto; }
+  .simplot svg { display:block; width:100%; min-width:680px; height:auto; font-family:var(--sans); }
+  .simnote { font-size:14px; max-width:78ch; min-height:3em; }
+  .simnote b { color:var(--fg); }
+
+  /* ── mock-ups: the desk is dark, so the screens are dark in both page themes. Tokens are the app's (frontend/src/index.css, Tailwind v4). ── */
+  .screenbox { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  .screen { --s-bg:#09090b; --s-card:#18181b; --s-mut:#27272a; --s-bd:#27272a; --s-fg:#fafafa; --s-mfg:#9f9fa9; --s-pri:#2b7fff;
+    --s-g3:#7bf1a8; --s-g4:#05df72; --s-g5:#00c950; --s-g9:#0d542b; --s-g95:#032e15;
+    --s-b3:#8ec5ff; --s-b4:#51a2ff; --s-b5:#2b7fff; --s-b9:#1c398e; --s-b95:#162456;
+    --s-a3:#ffd230; --s-a4:#ffb900; --s-a5:#fe9a00; --s-a95:#461901;
+    --s-i3:#a3b3ff; --s-i4:#7c86ff; --s-i5:#615fff; --s-i9:#312c85; --s-i95:#1e1a4d;
+    --s-v4:#c27aff; --s-t3:#46ecd5;
+    background:var(--s-bg); color:var(--s-fg); font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:13px; line-height:1.35; padding:0; display:flex; flex-direction:column; }
+  .screen .m { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+  .screen .mf { color:var(--s-mfg); }
+  .screen .chrome { display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border-bottom:1px solid var(--s-bd); background:rgba(39,39,42,0.2); font-size:12px; flex-wrap:nowrap; white-space:nowrap; }
+  .screen .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--s-mfg); }
+  .screen .btn { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px; border:1px solid var(--s-bd); border-radius:6px; background:var(--s-card); color:var(--s-fg); font-size:12px; }
+  .screen .btn.pri { background:var(--s-pri); border-color:var(--s-pri); color:#fff; }
+  .screen .inp { display:inline-flex; align-items:center; height:28px; padding:0 8px; border:1px solid var(--s-bd); border-radius:6px; background:transparent; font-size:12px; }
+  .screen .sw { display:inline-block; width:36px; height:20px; border-radius:999px; background:var(--s-mut); position:relative; flex:none; }
+  .screen .sw::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--s-bg); }
+  .screen .sw.on { background:var(--s-pri); } .screen .sw.on::after { left:18px; }
+  .screen .sseg { display:inline-flex; border:1px solid var(--s-bd); border-radius:6px; padding:2px; background:var(--s-card); }
+  .screen .sseg span { padding:2px 9px; border-radius:4px; font-size:12px; color:var(--s-mfg); }
+  .screen .sseg span.on { background:var(--s-mut); color:var(--s-fg); font-weight:600; }
+  .screen .chip { display:inline-flex; align-items:center; gap:4px; border-radius:999px; border:1px solid; padding:0 7px; font-size:10.5px; line-height:17px; white-space:nowrap; }
+  .screen .chip.dark { border:1px dashed rgba(124,134,255,0.6); background:rgba(97,95,255,0.12); color:var(--s-i3); }
+  .screen .chip.warn { border-color:rgba(254,154,0,0.55); background:rgba(254,154,0,0.1); color:var(--s-a3); }
+  .screen .chip.off { border-color:var(--s-bd); color:var(--s-mfg); }
+  .screen .chip.live { border-color:rgba(0,201,80,0.4); color:var(--s-g4); background:rgba(0,201,80,0.1); }
+  .screen .chip.fam { border-color:var(--s-bd); background:var(--s-card); color:var(--s-fg); border-radius:6px; padding:1px 8px; font-size:11.5px; }
+  .screen .chip.fam.on { border-color:rgba(43,127,255,0.6); background:rgba(43,127,255,0.14); color:var(--s-b3); }
+  .screen .pulse { width:6px; height:6px; border-radius:50%; background:currentColor; animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:0.25; } }
+  @media (prefers-reduced-motion: reduce) { .screen .pulse { animation:none; } }
+  .screen svg.ic { width:12px; height:12px; flex:none; }
+
+  /* sheet */
+  .sheetwrap { display:grid; grid-template-columns:minmax(260px, 1fr) 420px; min-width:760px; }
+  .sheetwrap .behind { background:#0c0c0e; border-right:1px solid var(--s-bd); padding:14px; opacity:0.45; display:flex; flex-direction:column; gap:8px; }
+  .sheetwrap .behind div { height:30px; border-radius:6px; background:var(--s-card); }
+  .sheet { background:var(--s-bg); padding:18px 20px; display:flex; flex-direction:column; gap:16px; }
+  .sheet h4 { margin:0; font-size:16px; font-weight:600; }
+  .fieldrow { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .fieldrow .hint { font-size:12px; color:var(--s-mfg); }
+  .block { border:1px solid var(--s-bd); border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:12px; background:rgba(24,24,27,0.6); }
+  .readout { font-size:11.5px; color:var(--s-mfg); display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+
+  /* cue table */
+  .ctable { min-width:980px; }
+  .crow { display:grid; grid-template-columns:28px 64px minmax(150px,1fr) 64px 84px 210px 70px 50px 150px; align-items:center; height:36px; border-bottom:1px solid var(--s-bd); font-size:13px; padding-right:8px; }
+  .crow > div { padding:0 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .crow.head { height:30px; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.06em; color:var(--s-mfg); }
+  .crow.live { background:rgba(0,201,80,0.08); box-shadow:inset 3px 0 0 rgb(34,197,94); }
+  .crow.live .nm { color:var(--s-g3); font-weight:600; }
+  .crow.next { background:rgba(43,127,255,0.06); box-shadow:inset 3px 0 0 rgb(59,130,246); }
+  .crow.next .nm { color:var(--s-b3); font-weight:600; }
+  .crow.played { opacity:0.45; }
+  .crow.divider { background:rgba(39,39,42,0.3); height:26px; font-size:11px; color:var(--s-mfg); }
+  .crow.divider > div { grid-column:1 / -1; padding-left:14px; }
+  .pip { width:20px; height:20px; border-radius:50%; border:1px solid var(--s-bd); background:var(--s-mut); display:grid; place-items:center; margin-left:4px; }
+  .pip.live { background:var(--s-g95); border-color:var(--s-g9); color:var(--s-g4); box-shadow:0 0 8px rgba(74,222,128,0.4); }
+  .pip.next { background:var(--s-b95); border-color:var(--s-b9); color:var(--s-b3); }
+  .pip i { width:4px; height:4px; border-radius:50%; background:currentColor; opacity:0.6; display:block; }
+  .tfoot { height:24px; display:flex; align-items:center; gap:14px; padding:0 12px; font-size:10.5px; color:var(--s-mfg); border-top:1px solid var(--s-bd); }
+  .sw-l { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:-1px; margin-right:4px; }
+
+  /* editor */
+  .editor { min-width:900px; }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--s-bd); padding:0 8px; }
+  .tabs span { height:34px; display:flex; align-items:center; gap:5px; padding:0 10px; font-size:12px; color:var(--s-mfg); border-bottom:2px solid transparent; }
+  .tabs span.on { color:var(--s-fg); border-bottom-color:var(--s-pri); }
+  .tabs span small { font-size:10px; opacity:0.8; font-family:ui-monospace, Menlo, monospace; }
+  .cuetab { padding:14px 16px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.25fr); gap:18px; }
+  .cuetab .col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+  .heads { border:1px solid var(--s-bd); border-radius:8px; overflow:hidden; }
+  .hrow { display:grid; grid-template-columns:minmax(90px,1fr) 52px minmax(110px,1fr) 110px 92px; align-items:center; gap:6px; height:32px; padding:0 10px; border-bottom:1px solid var(--s-bd); font-size:12px; }
+  .hrow:last-child { border-bottom:0; }
+  .hrow.head { height:26px; font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--s-mfg); background:rgba(39,39,42,0.35); }
+  .hrow.sub { height:26px; font-size:11px; color:var(--s-mfg); background:rgba(39,39,42,0.2); grid-template-columns:1fr; }
+  .tgl { display:inline-flex; border:1px solid var(--s-bd); border-radius:5px; overflow:hidden; font-size:10.5px; }
+  .tgl span { padding:1px 6px; color:var(--s-mfg); }
+  .tgl span.on { background:var(--s-mut); color:var(--s-fg); }
+  .bar { height:3px; border-radius:2px; background:var(--s-mut); overflow:hidden; width:56px; display:inline-block; vertical-align:middle; }
+  .bar i { display:block; height:100%; background:var(--s-i4); }
+
+  /* overview + phone */
+  .duo { display:grid; grid-template-columns:minmax(520px, 1.5fr) 300px; gap:0; min-width:840px; }
+  .overview { padding:14px; display:flex; flex-direction:column; gap:8px; border-right:1px solid var(--s-bd); }
+  .stackrow { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--s-mut); border:1px solid var(--s-bd); border-left:3px solid transparent; border-radius:6px; flex-wrap:nowrap; white-space:nowrap; }
+  .stackrow.live { border-left-color:var(--s-g5); background:rgba(0,201,80,0.08); }
+  .stackrow .name { font-weight:600; font-size:14px; }
+  .slider { width:80px; height:6px; border-radius:3px; background:var(--s-mut); position:relative; display:inline-block; }
+  .slider i { position:absolute; inset:0 0 0 0; border-radius:3px; background:var(--s-pri); }
+  .phone { padding:12px; display:flex; flex-direction:column; gap:10px; background:#060607; }
+  .pcard { border-radius:12px; border:1px solid var(--s-bd); background:var(--s-card); overflow:hidden; }
+  .pcard .ph { padding:5px 10px; font:700 10px ui-monospace, Menlo, monospace; letter-spacing:0.12em; text-transform:uppercase; }
+  .pcard.now { border-color:var(--s-g9); } .pcard.now .ph { background:rgba(3,46,21,0.4); color:var(--s-g4); }
+  .pcard.nx { border-color:rgba(28,57,142,0.7); } .pcard.nx .ph { background:rgba(22,36,86,0.4); color:var(--s-b4); }
+  .pcard .pb { padding:8px 10px 10px; display:flex; flex-direction:column; gap:6px; }
+  .pcard .qn { font:800 40px/1 ui-monospace, Menlo, monospace; }
+  .pcard.now .qn { color:var(--s-g4); }
+  .gofoot { display:grid; grid-template-columns:1fr 2fr; gap:8px; }
+  .gofoot span { height:44px; border-radius:10px; display:grid; place-items:center; font-weight:700; letter-spacing:0.16em; border:1px solid var(--s-bd); }
+  .gofoot span.go { background:var(--s-g5); color:#03140a; border-color:var(--s-g5); font-size:20px; }
+
+  /* stage */
+  .stagewrap { min-width:860px; display:grid; grid-template-columns:1fr 250px; }
+  .stagewrap svg { display:block; width:100%; height:auto; background:#050507; }
+  .viewmenu { border-left:1px solid var(--s-bd); background:var(--s-card); padding:12px; display:flex; flex-direction:column; gap:10px; font-size:12px; }
+
+  /* timeline */
+  .tl { min-width:820px; }
+  .tlrow { display:grid; grid-template-columns:120px 56px 84px 84px 92px 160px; height:34px; border-bottom:1px solid var(--s-bd); align-items:stretch; font-size:12px; }
+  .tlrow > div { display:flex; align-items:center; padding:0 8px; position:relative; border-right:1px solid rgba(39,39,42,0.6); }
+  .tlrow.head { height:28px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--s-mfg); }
+  .tlrow.live { background:rgba(0,201,80,0.07); box-shadow:inset 3px 0 0 rgb(34,197,94); }
+  .tlrow.next { background:rgba(43,127,255,0.05); box-shadow:inset 3px 0 0 rgb(59,130,246); }
+  .run { position:absolute; left:8px; right:8px; top:0; bottom:0; background:rgba(45,212,191,0.2); }
+  .run.fx { background:rgba(194,122,255,0.22); }
+  .run.start { top:4px; border-radius:6px 6px 0 0; } .run.end { bottom:4px; border-radius:0 0 6px 6px; }
+  .run.mid { background-image:repeating-linear-gradient(135deg, rgba(124,134,255,0.28) 0 4px, rgba(124,134,255,0.08) 4px 8px); background-color:transparent; border-left:1px dashed rgba(124,134,255,0.7); border-right:1px dashed rgba(124,134,255,0.7); }
+  .run.mid.start { border-top:1px dashed rgba(124,134,255,0.7); } .run.mid.end { border-bottom:1px dashed rgba(124,134,255,0.7); }
+  .run span { position:relative; z-index:1; padding:0 6px; font-size:10px; color:var(--s-i3); line-height:26px; }
+
+  /* key stack */
+  .ks { min-width:520px; max-width:560px; margin:14px; border:1px solid var(--s-bd); border-radius:8px; background:var(--s-card); }
+  .ksrow { display:grid; grid-template-columns:22px 1fr 110px 70px; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--s-bd); font-size:12px; }
+  .ksrow:last-child { border-bottom:0; }
+  .ksrow.top { background:rgba(97,95,255,0.1); }
+  .ksrow .st { font-size:10.5px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><span>lighting7 · design proposal</span><span>2026-10-31</span><span class="status">Agreed 2026-10-31</span><span>main at ade1846</span></div>
+    <h1>Move in dark, <em>ahead of the GO</em></h1>
+    <p class="lede">When a moving head goes dark, the desk looks down the cue stack, finds the cue that lights it next, and moves its position, colour and beam there while nobody can see. By the time GO brings it up, it is already in place. Nothing is written into the cues: it is worked out live from the list and from what the rig is sending.</p>
+  </header>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#today">Today</a><a href="#desks">Other desks</a><a href="#rules">The proposal</a><a href="#sim">How a move runs</a><a href="#screens">Screens</a><a href="#where">What changes where</a><a href="#questions">Questions</a><a href="#sessions">Sessions</a>
+  </nav>
+
+  <!-- ─────────────────────────── today ─────────────────────────── -->
+  <section id="today">
+    <h2>What the desk does today <small>§1</small></h2>
+    <p>There is a move-in-dark flag already, but it acts at the GO, not before it, and no screen or tool can turn it on.</p>
+    <div class="findings">
+      <div class="finding"><b>A per-row flag that snaps at GO</b>A cue's own <code>position</code> row may carry <code>moveInDark</code>. When the outgoing cue asserts dimmer 0 on that fixture, the incoming position holds for the whole crossfade instead of blending. The head starts moving at GO, while its dimmer is already rising.<span class="where">fx/CueAssignmentResolver.kt:474 computeMoveInDarkArmed · :617 composeLtp</span></div>
+      <div class="finding"><b>Nothing sets it</b>The Values grid keeps the flag but has no control for it (<code>FU-CUE-ROW-TIMING</code>). Record and Update build rows without it, so their MERGE writes <code>false</code> over a row that had it. No MCP tool names it.<span class="where">routes/programmerRecord.kt:203 · routes/programmerRecordShape.kt:81</span></div>
+      <div class="finding"><b>"Dark" is read from one cue's rows</b>Arming needs a different cue to store dimmer 0. It ignores FX on the dimmer, the programmer, other stacks, park, dimmerless heads and a head whose dimmer is on its parent.<span class="where">fx/CueAssignmentResolver.kt:487–497</span></div>
+      <div class="finding"><b>The cue tier is keyed by cue</b>One contribution per cue id, replaced on <code>setAssignments</code>. A pre-move filed under the next cue's id would be overwritten at that cue's GO, so it needs a contributor of its own.<span class="where">fx/CueAssignmentLayer.kt:31, :77</span></div>
+      <div class="finding"><b>"Next" already has one definition</b><code>effectiveNext</code> is the armed standby, else the positional next, with loop. Markers are skipped. The Next GO preview builds its rows with <code>buildCombinedCueLayerRows</code>, which a look-ahead can reuse.<span class="where">fx/CueRunStateTracker.kt:190, :203 · routes/cuePreview.kt:83 · fx/CueApply.kt:523</span></div>
+      <div class="finding"><b>Intensity is classified per head</b>The grand master already knows which channels are a head's intensity: dimmer, UV, and colour mix on a head with no dimmer. That classification answers "is it dark?". The grand master and Make rig safe's blackout run at transmit, after the composed value.<span class="where">midi/GlobalScalerState.kt:118 refreshClassification · :185</span></div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── desks ─────────────────────────── -->
+  <section id="desks">
+    <h2>What other desks do <small>§2</small></h2>
+    <p class="muted">Sourced from search extracts of each vendor's manual and forums; this session's network policy blocked the vendor sites themselves, so details marked "not confirmed" could not be checked against the full text.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Desk</th><th>Feature</th><th>Automatic?</th><th>Set where</th><th>When it moves</th><th>Timing</th><th>Opt-out</th></tr></thead>
+      <tbody>
+        <tr><td><b>Eos</b></td><td>AutoMark, Referenced Marks</td><td>AutoMark: yes, one cue ahead. Referenced: explicit</td><td>Show setting; a per-cue <i>D</i> flag on the cue being marked for</td><td>In the cue before the one that lights it, once intensity has reached 0</td><td>The cue's time, else a show-wide Mark Time; added to the cue's duration</td><td>The D flag; a multipart cue</td></tr>
+        <tr><td><b>grandMA3</b></td><td>Move In Black (MIB)</td><td>Yes</td><td>Sequence (Never, Force Early, UponGo, Late) and the cue part where the dimmer opens</td><td>Early (as soon as dark), UponGo, Late (the last cue before), or a target cue</td><td>MIB Delay and MIB Fade: global, per cue part, per attribute</td><td>Store <i>Hold</i> on the dimmer: 0 that blocks MIB</td></tr>
+        <tr><td><b>MagicQ</b></td><td>Move When Dark; Mark Cues</td><td>Per stack</td><td>Cue stack options</td><td>After each cue, for heads at 0 % now that the next cue uses</td><td>One global mark time (3 s in older manuals)</td><td>Hold the head at 1 %</td></tr>
+        <tr><td><b>Titan</b></td><td>Move In Dark</td><td>Yes</td><td>List and cue: Early, Late, a cue number or offset; <i>Inhibit</i> per cue</td><td>Early or Late; falls back to the nearest cue it can use</td><td>Delay and fade, per list or cue</td><td>Inhibit, Disabled; 0.1 % per fixture</td></tr>
+        <tr><td><b>Hog 4</b></td><td>Mark cues</td><td>No</td><td>A flag on the target cue; new-cue defaults</td><td>After the previous cue completes, for heads at 0</td><td>Fade mark (the cue's times) or time mark (2 s default)</td><td>Don't mark</td></tr>
+        <tr><td><b>Onyx</b></td><td>Auto Mark</td><td>Yes, non-destructive</td><td>Cuelist or cue</td><td>Heads at an explicit 0 %; one cuelist only</td><td>Delay and fade</td><td>A null intensity is not marked</td></tr>
+      </tbody>
+    </table></div>
+    <div class="cols2">
+      <div>
+        <h3>Worth borrowing</h3>
+        <ul class="plain">
+          <li><b>Work it out live, write nothing</b> (Onyx, MagicQ), but still show it in the cue list (Eos's M and x flags).</li>
+          <li><b>Early and Late</b> (MA3, Titan), set on the cue where the head comes up (MA3's cue part, Eos's D flag).</li>
+          <li><b>Its own delay and move time</b>, separate from the cue's fade (MA3, Titan), never silently added to the cue's duration (Eos).</li>
+          <li><b>Fall back</b> to the latest cue it can still use when the planned one is lit (Titan, Eos's broken-mark fallback).</li>
+          <li><b>Out of order, land at once</b>: a cue reached by GO TO fades marked heads to their marks immediately (Eos).</li>
+        </ul>
+      </div>
+      <div>
+        <h3>To avoid</h3>
+        <ul class="plain">
+          <li>Reading "dark" too narrowly: Onyx misses a null intensity; MA counts a dimmer phaser as lit even when both of its steps are closed.</li>
+          <li>Starting the next cue's FX early because the dimmer is at 0 (an MA complaint).</li>
+          <li>A whole-list switch with no per-cue way to keep a deliberate fly-in (MagicQ users hold heads at 1 %).</li>
+          <li>Having to release a stack before a setting takes effect (MagicQ, Onyx).</li>
+          <li>Not re-asserting after another playback takes over, or on a stack's first cue (MagicQ).</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── rules ─────────────────────────── -->
+  <section id="rules">
+    <h2>The proposal <small>§3</small></h2>
+    <p>Each cue stack gets a <b>Move in dark</b> setting. While a stack runs, the desk watches every head the stack's upcoming cues light. A head that has been dark on the output for the stack's <i>delay</i> moves to its next cue's values over the stack's <i>move time</i>, and holds them until that cue's GO takes over. The decisions, numbered so the plan can cite them:</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="n">D1</td><td class="d"><b>Live, never stored.</b> A move in dark is computed from the stack's list, the run state and the output. No cue is written, nothing is recorded, turning it off undoes it at once.</td><td class="w">Onyx and MagicQ. Our cues don't track, so a look-ahead needs no tracking sheet to stay right.</td></tr>
+        <tr><td class="n">D2</td><td class="d"><b>A stack setting.</b> On or off, <i>When</i> Early or Late, a <i>delay</i> (default 1 s) and a <i>move time</i> (default 2 s), and which families move (Position, Colour, Beam; all three by default). A change applies at once, without releasing the stack.</td><td class="w">Every desk sets it per list. Stacks differ: a busk stack may want it off.</td></tr>
+        <tr><td class="n">D3</td><td class="d"><b>A cue setting, on the cue that lights the head.</b> <i>Stack</i> (the default), <i>Early</i>, <i>Late</i> or <i>Off</i>, with its own delay and move time when set. Per head, a cue can keep a head <b>live</b>: it fades up while moving, as a fly-in.</td><td class="w">MA3 and Eos put it here: it is the arrival that matters. The per-head choice is MagicQ's missing "deliberate live move".</td></tr>
+        <tr><td class="n">D4</td><td class="d"><b>Dark means dark on the output.</b> Every intensity channel of the head (its dimmer, its parent's master dimmer, UV, a dimmerless head's colour mix) is at 0 after cues, FX, the programmer and park, and before the grand master, Make rig safe's blackout and the venue hold. An intensity FX that can lift it counts as lit, as does an open strobe channel on a lit dimmer.</td><td class="w">One reading for every source. The grand master and a safe blackout must never set the whole rig moving.</td></tr>
+        <tr><td class="n">D5</td><td class="d"><b>The target.</b> <i>Early</i>: the first cue ahead in play order (standby, then positional, with loop, at most one pass) whose own rows light the head, through any cues that keep it dark. <i>Late</i>: only the next cue. Only attributes that cue sets move; intensity and strobe never do, and colour stays put on a head whose colour is its intensity.</td><td class="w">MA3's Early and Late. A dark head's position in the cues between does not matter.</td></tr>
+        <tr><td class="n">D6</td><td class="d"><b>Its own contributor in the cue tier</b>, one per stack, just above that stack's live cue (live priority + 500). The programmer, a higher stack, park and FX all still win over it. It fades in over the move time on the existing fade weights.</td><td class="w">The cue tier is keyed by cue id (§1), and a priority just above the live cue survives a loop wrap or an armed earlier standby.</td></tr>
+        <tr><td class="n">D7</td><td class="d"><b>At GO it hands over without a step.</b> The target cue's rows equal the pre-moved values, so the contributor holds until that GO's crossfade ends, then goes. A head dark at a GO but not yet in place (GO came too soon, or GO TO) lands at once rather than over the fade. This replaces the per-row flag.</td><td class="w">Eos asserts marks immediately out of order. It is today's snap, generalised to every family and every head.</td></tr>
+        <tr><td class="n">D8</td><td class="d"><b>A head that lights early is let go.</b> If anything lights a moved head before its cue (a busk press, the programmer, another stack), the move releases and the head returns to what the live cue says, over the move time. Once dark again, it waits the delay and moves again.</td><td class="w">Move in dark only ever acts on a dark head. The return is seen; it is shown as <i>lit early</i> (Q5).</td></tr>
+        <tr><td class="n">D9</td><td class="d"><b>Anything that changes "next" re-plans</b>: standby armed or cleared, GO TO, GO BACK, an entry added, moved or removed, a cue, Look or palette edit, loop toggled. A dark head heading for the wrong target moves to the right one, in the dark. Stopping the stack lets every move go.</td><td class="w">MagicQ fails to re-assert after jumps; ours should be a pure function of state.</td></tr>
+        <tr><td class="n">D10</td><td class="d"><b>FX wait for their GO.</b> A cue's FX start at GO as now. A pre-move sets the base values an incoming position FX moves around, but never starts the FX.</td><td class="w">MA users complain about effects starting early.</td></tr>
+        <tr><td class="n">D11</td><td class="d"><b>It is shown wherever a head's value is explained</b>: the cue table, the cue editor, the stack row, the phone runner, the Stage view, the Timeline, and the attribute's key stack as its own row, <i>Move in dark · for Q12</i>.</td><td class="w">"Why is that head pointing there?" must have an answer.</td></tr>
+        <tr><td class="n">D12</td><td class="d"><b>Two stacks, one head</b>: the higher stack's move wins, as LTP already decides between them.</td><td class="w">No new rule.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─────────────────────────── simulator ─────────────────────────── -->
+  <section id="sim">
+    <h2>How a move runs <small>§4</small></h2>
+    <p>One head, Spot 4, through three cues. Q10 lights it at the drum riser; Q11 takes it out over 3 s; Q12 brings it up on the singer. Pick a case and change the stack's timing. Amber marks time the head moves while it can be seen.</p>
+    <div class="sim">
+      <div class="simctl">
+        <div class="seg" role="group" aria-label="Case">
+          <button type="button" id="case-set" aria-pressed="true">Set in dark</button>
+          <button type="button" id="case-soon" aria-pressed="false">GO too soon</button>
+          <button type="button" id="case-lit" aria-pressed="false">Lit before GO</button>
+          <button type="button" id="case-late" aria-pressed="false">Late</button>
+          <button type="button" id="case-off" aria-pressed="false">Off for Q12</button>
+        </div>
+        <label class="range" for="delay">Delay <input id="delay" type="range" min="0" max="4" step="0.5" value="1"><output id="delay-o">1 s</output></label>
+        <label class="range" for="move">Move time <input id="move" type="range" min="0" max="5" step="0.5" value="2"><output id="move-o">2 s</output></label>
+      </div>
+      <div class="simplot"><svg id="plot" viewBox="0 0 760 270" role="img" aria-label="Intensity and position of Spot 4 over 20 seconds"></svg></div>
+      <p class="simnote" id="note"></p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── screens ─────────────────────────── -->
+  <section id="screens">
+    <h2>Screens <small>§5</small></h2>
+    <p>Drawn in the desk's own tokens, in dark as the desk runs. Indigo with a dashed edge and a moon is <span class="k dark">moved in dark</span>; it never stands for anything else, so it reads beside live green, next blue and the amber the desk already uses for warnings.</p>
+
+    <h3>5.1 Stack settings</h3>
+    <figure>
+      <div class="screenbox"><div class="screen"><div class="sheetwrap">
+        <div class="behind"><div></div><div></div><div></div><div></div><div></div></div>
+        <div class="sheet">
+          <h4>Edit Cue Stack</h4>
+          <div style="display:flex;flex-direction:column;gap:6px"><span class="lbl">Name</span><span class="inp" style="width:100%">Main</span></div>
+          <div class="fieldrow"><div><div>Loop</div><div class="hint">Wrap from last cue to first</div></div><span class="sw"></span></div>
+          <div class="block">
+            <div class="fieldrow"><div><div style="display:flex;align-items:center;gap:6px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#a3b3ff" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>Move in dark</div><div class="hint">Move dark heads to the cue that lights them next</div></div><span class="sw on"></span></div>
+            <div class="fieldrow"><span class="lbl">When</span><span class="sseg"><span class="on">Early</span><span>Late</span></span></div>
+            <div class="fieldrow"><span class="lbl">Delay</span><span class="inp m" style="width:72px">1s</span></div>
+            <div class="fieldrow"><span class="lbl">Move time</span><span class="inp m" style="width:72px">2s</span></div>
+            <div class="fieldrow"><span class="lbl">Moves</span><span style="display:flex;gap:5px"><span class="chip fam on">Position</span><span class="chip fam on">Colour</span><span class="chip fam on">Beam</span></span></div>
+            <div class="readout"><span class="chip dark">☾ 38 heads in 14 cues</span><span class="chip warn">▲ 3 move lit</span><span class="chip off">2 cues off</span></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px"><span class="btn">Cancel</span><span class="btn pri">Save</span></div>
+        </div>
+      </div></div></div>
+      <figcaption>A block under Loop in the existing sheet (<code>CueStackForm.tsx</code>). When and the timings use the stack's own wording; the read-out counts what the list will do and opens the cue table filtered to those cues.</figcaption>
+    </figure>
+
+    <h3>5.2 The cue table's Dark column</h3>
+    <figure>
+      <div class="screenbox"><div class="screen ctable">
+        <div class="chrome"><b>Main</b><span class="mf">· 18 cues</span><span style="flex:1"></span><span class="chip dark"><span class="pulse"></span>Moving 4 for Q12 · 1.4s</span><span class="btn">Stack settings…</span></div>
+        <div class="crow head"><div></div><div>Cue</div><div>Name</div><div>Fade</div><div>Follow</div><div>Dark</div><div>Layers</div><div>FX</div><div>Scenery</div></div>
+        <div class="crow played"><div><span class="pip"><i></i></span></div><div class="m">9</div><div class="nm">Preshow</div><div class="m">5s</div><div class="mf">—</div><div class="mf">—</div><div class="m mf">2</div><div class="mf">—</div><div class="mf">House tabs → open</div></div>
+        <div class="crow live"><div><span class="pip live">▶</span></div><div class="m">10</div><div class="nm">Drum intro</div><div class="m">3s</div><div class="mf">—</div><div><span class="chip dark"><span class="pulse"></span>4 moving → Q12</span></div><div class="m mf">3</div><div class="m" style="color:var(--s-v4)">1</div><div class="mf">—</div></div>
+        <div class="crow next"><div><span class="pip next"><i></i></span></div><div class="m">11</div><div class="nm">Spots out</div><div class="m">3s</div><div class="mf">—</div><div class="mf">—</div><div class="m mf">2</div><div class="mf">—</div><div class="mf">—</div></div>
+        <div class="crow"><div><span class="pip"><i></i></span></div><div class="m">12</div><div class="nm">Singer special</div><div class="m">3s</div><div class="mf">—</div><div style="display:flex;gap:4px"><span class="chip dark">☾ 6</span><span class="chip warn">▲ 1</span></div><div class="m mf">2</div><div class="mf">—</div><div class="mf">—</div></div>
+        <div class="crow"><div><span class="pip"><i></i></span></div><div class="m">13</div><div class="nm">Fly-in</div><div class="m">4s</div><div class="mf">—</div><div><span class="chip off">Off · 4 live</span></div><div class="m mf">1</div><div class="m" style="color:var(--s-v4)">2</div><div class="mf">—</div></div>
+        <div class="crow divider"><div>— Act 1 finale —</div></div>
+        <div class="crow"><div><span class="pip"><i></i></span></div><div class="m">14</div><div class="nm">Hit</div><div class="m">SNAP</div><div class="m" style="color:var(--s-b4)">auto 0.5s</div><div style="display:flex;gap:4px"><span class="chip dark">☾ 3</span><span class="chip warn">▲ 2 too quick</span></div><div class="m mf">2</div><div class="mf">—</div><div class="mf">—</div></div>
+        <div class="crow"><div><span class="pip"><i></i></span></div><div class="m">15</div><div class="nm">Blackout</div><div class="m">2s</div><div class="mf">—</div><div class="mf">—</div><div class="m mf">0</div><div class="mf">—</div><div class="mf">Main curtain → closed</div></div>
+        <div class="tfoot"><span><span class="sw-l" style="background:rgba(0,201,80,0.3);box-shadow:inset 3px 0 0 rgb(34,197,94)"></span>Live</span><span><span class="sw-l" style="background:rgba(43,127,255,0.25);box-shadow:inset 3px 0 0 rgb(59,130,246)"></span>Next</span><span style="color:#a3b3ff">☾ heads set in dark for this cue</span><span style="color:#ffd230">▲ heads that will move while lit</span></div>
+      </div></div>
+      <figcaption>The column sits on the cue the heads are moved <b>for</b>: Q12 will find 6 heads already in place. On the live row it says what is moving now. <span class="k warn">▲</span> counts heads whose move the audience will see: dark too briefly for the delay and move time before a follow (<i>too quick</i>), lit in every cue before, or kept live. A tap opens the cue's Cue tab at its Move in dark section.</figcaption>
+    </figure>
+
+    <h3>5.3 The cue editor's Cue tab</h3>
+    <figure>
+      <div class="screenbox"><div class="screen editor">
+        <div class="chrome"><span class="mf">Main</span><span class="m" style="font-size:14px;font-weight:600">Q12</span><span style="width:1px;height:20px;background:var(--s-bd)"></span><span class="inp" style="width:150px">Singer special</span><span class="inp m" style="width:56px">3s</span><span class="inp" style="width:110px">Sine In/Out</span><span style="flex:1"></span><span class="mf" style="font-size:11px">Saved</span></div>
+        <div class="tabs"><span>Values <small>12</small></span><span>Looks <small>2</small></span><span>FX <small>0</small></span><span>Scenery <small>0</small></span><span>Events <small>0</small></span><span class="on">Cue</span></div>
+        <div class="cuetab">
+          <div class="col">
+            <div style="display:flex;flex-direction:column;gap:6px"><span class="lbl">Notes</span><div class="inp" style="height:54px;align-items:flex-start;padding-top:6px;width:100%">On "she walks"</div></div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span class="lbl">Move in dark</span>
+              <span class="sseg" style="align-self:flex-start"><span class="on">Stack · Early</span><span>Early</span><span>Late</span><span>Off</span></span>
+              <div class="fieldrow"><span class="mf" style="font-size:12px">Delay</span><span class="inp m mf" style="width:90px">Stack · 1s</span></div>
+              <div class="fieldrow"><span class="mf" style="font-size:12px">Move time</span><span class="inp m mf" style="width:90px">Stack · 2s</span></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px"><span class="lbl">Speed masters</span><span class="mf" style="font-size:11px">Sets none.</span></div>
+          </div>
+          <div class="col">
+            <span class="lbl">Heads this cue lights</span>
+            <div class="heads">
+              <div class="hrow head"><div>Head</div><div>From</div><div>Moves</div><div>Now</div><div>In dark</div></div>
+              <div class="hrow"><div>Spot 1</div><div class="m">Q10</div><div class="mf">Position · Gobo</div><div><span class="chip dark">Set</span></div><div><span class="tgl"><span class="on">In dark</span><span>Live</span></span></div></div>
+              <div class="hrow"><div>Spot 2</div><div class="m">Q10</div><div class="mf">Position</div><div><span class="chip dark">Set</span></div><div><span class="tgl"><span class="on">In dark</span><span>Live</span></span></div></div>
+              <div class="hrow"><div>Spot 3</div><div class="m">Q10</div><div class="mf">Position · Colour</div><div style="display:flex;gap:5px;align-items:center"><span class="bar"><i style="width:60%"></i></span><span class="m" style="font-size:11px;color:#a3b3ff">1.4s</span></div><div><span class="tgl"><span class="on">In dark</span><span>Live</span></span></div></div>
+              <div class="hrow"><div>Spot 4</div><div class="m">Q11</div><div class="mf">Position</div><div><span class="chip off">Waiting</span></div><div><span class="tgl"><span class="on">In dark</span><span>Live</span></span></div></div>
+              <div class="hrow"><div>Wash 2</div><div class="m">Q10</div><div class="mf">Colour · Zoom</div><div><span class="chip dark">Set</span></div><div><span class="tgl"><span class="on">In dark</span><span>Live</span></span></div></div>
+              <div class="hrow"><div>Wash 5</div><div class="m">Q10</div><div class="mf">Colour</div><div><span class="chip dark">Set</span></div><div><span class="tgl"><span class="on">In dark</span><span>Live</span></span></div></div>
+              <div class="hrow sub"><div>Move while lit</div></div>
+              <div class="hrow"><div>Spot 5</div><div class="m mf">—</div><div class="mf">Position</div><div><span class="chip warn">Lit in Q11</span></div><div><span class="tgl"><span>In dark</span><span class="on">Live</span></span></div></div>
+            </div>
+            <span class="mf" style="font-size:11px">From: the cue the move happens in. Now: Set, a bar while moving, Waiting while the delay counts, Lit early when something lit it first.</span>
+          </div>
+        </div>
+      </div></div>
+      <figcaption>A section in the Cue tab beside Notes and Speed masters. The cue's choice is a segment whose first option reads the stack's setting; delay and move time show the stack's values until typed over. The list is a read-out of D5 for this cue, live while the stack runs: each head, where it moves, what moves, and how it stands now. <i>Live</i> keeps one head as a fly-in (D3). Locked, the segment and toggles hide and the list stays.</figcaption>
+    </figure>
+
+    <h3>5.4 The Show view's stack row, and the phone runner</h3>
+    <figure>
+      <div class="screenbox"><div class="screen"><div class="duo">
+        <div class="overview">
+          <div class="stackrow live"><span class="name">Main</span><span class="chip live"><span class="pulse"></span>Live</span><span class="mf" style="font-size:12px">18 cues · Sequential</span><span style="flex:1"></span><span class="chip dark"><span class="pulse"></span>☾ 4 moving</span><span class="lbl">FX amount</span><span class="slider"><i></i></span><span class="m" style="font-size:12px;font-weight:600">100%</span><span class="mf">⋮</span></div>
+          <div class="stackrow"><span class="name">Busk</span><span class="mf" style="font-size:12px">6 cues · Loop</span><span style="flex:1"></span><span class="chip off">Move in dark off</span><span class="lbl">FX amount</span><span class="slider"><i></i></span><span class="m" style="font-size:12px;font-weight:600">100%</span><span class="mf">⋮</span></div>
+          <div class="stackrow"><span class="name">Act 2</span><span class="mf" style="font-size:12px">22 cues · Sequential</span><span style="flex:1"></span><span class="lbl">FX amount</span><span class="slider"><i></i></span><span class="m" style="font-size:12px;font-weight:600">100%</span><span class="mf">⋮</span></div>
+          <p class="mf" style="font-size:12px;margin-top:6px;max-width:52ch">A running stack shows its moves while any run; <i>lit early</i> appears as an amber chip until the head is set again. A stopped stack shows nothing.</p>
+        </div>
+        <div class="phone">
+          <div class="pcard now"><div class="ph">Now playing</div><div class="pb"><span class="qn">10</span><span>Drum intro</span></div></div>
+          <div class="pcard nx"><div class="ph">Up next</div><div class="pb"><span class="m" style="font:800 28px ui-monospace,Menlo,monospace">11</span><span>Spots out</span><span class="chip dark" style="align-self:flex-start">☾ 4 moving for Q12 · 1.4s</span></div></div>
+          <div class="gofoot"><span>BACK</span><span class="go">GO</span></div>
+        </div>
+      </div></div></div>
+      <figcaption>One chip each, no controls. On the phone it rides the Up next card, since that is what an operator checks before pressing GO; it names the cue the heads are moving for, which may be past the next one under Early.</figcaption>
+    </figure>
+
+    <h3>5.5 The Stage view</h3>
+    <figure>
+      <div class="screenbox"><div class="screen"><div class="stagewrap">
+        <svg viewBox="0 0 620 300" aria-label="Stage view with two lit heads and two heads moved in dark">
+          <defs>
+            <linearGradient id="beamA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6d8" stop-opacity="0.55"/><stop offset="1" stop-color="#fff6d8" stop-opacity="0.05"/></linearGradient>
+          </defs>
+          <rect x="0" y="0" width="620" height="300" fill="#050507"/>
+          <polygon points="60,250 560,250 610,296 10,296" fill="#121216"/>
+          <rect x="250" y="210" width="120" height="40" fill="#1b1b22" stroke="#2a2a31"/>
+          <text x="310" y="234" text-anchor="middle" font-size="10" fill="#6b6b75">Drum riser</text>
+          <line x1="70" y1="40" x2="550" y2="40" stroke="#3a3a44" stroke-width="4"/>
+          <!-- lit beams -->
+          <polygon points="200,46 214,46 330,226 286,226" fill="url(#beamA)"/>
+          <polygon points="412,46 426,46 340,226 296,226" fill="url(#beamA)"/>
+          <ellipse cx="312" cy="226" rx="34" ry="7" fill="#fff6d8" fill-opacity="0.35"/>
+          <!-- dark heads aim lines -->
+          <line x1="120" y1="48" x2="160" y2="268" stroke="#7c86ff" stroke-width="1.2" stroke-dasharray="4 4"/>
+          <ellipse cx="160" cy="268" rx="16" ry="4" fill="none" stroke="#7c86ff" stroke-dasharray="3 3"/>
+          <line x1="500" y1="48" x2="470" y2="268" stroke="#7c86ff" stroke-width="1.2" stroke-dasharray="4 4" stroke-opacity="0.55"/>
+          <ellipse cx="455" cy="262" rx="16" ry="4" fill="none" stroke="#7c86ff" stroke-dasharray="3 3" stroke-opacity="0.55"/>
+          <path d="M 470 268 Q 466 266 455 262" stroke="#7c86ff" stroke-width="1" fill="none" stroke-dasharray="2 3"/>
+          <!-- heads -->
+          <g fill="#2a2a33" stroke="#4a4a55"><rect x="110" y="42" width="20" height="14" rx="3"/><rect x="197" y="42" width="20" height="14" rx="3"/><rect x="409" y="42" width="20" height="14" rx="3"/><rect x="490" y="42" width="20" height="14" rx="3"/></g>
+          <g font-size="10" fill="#9f9fa9"><text x="120" y="30" text-anchor="middle">Spot 1</text><text x="207" y="30" text-anchor="middle">Spot 4</text><text x="419" y="30" text-anchor="middle">Spot 5</text><text x="500" y="30" text-anchor="middle">Spot 3</text></g>
+          <!-- badges -->
+          <g><rect x="134" y="58" width="42" height="15" rx="7.5" fill="#1e1a4d" stroke="#7c86ff" stroke-dasharray="2 2"/><text x="155" y="69" text-anchor="middle" font-size="9.5" fill="#a3b3ff">☾ Q12</text></g>
+          <g><rect x="514" y="58" width="58" height="15" rx="7.5" fill="#1e1a4d" stroke="#7c86ff" stroke-dasharray="2 2"/><text x="543" y="69" text-anchor="middle" font-size="9.5" fill="#a3b3ff">☾ Q12 · 1.4s</text></g>
+          <text x="160" y="290" text-anchor="middle" font-size="9.5" fill="#a3b3ff">Singer DSL</text>
+        </svg>
+        <div class="viewmenu">
+          <span class="lbl">Source</span>
+          <span class="sseg" style="flex-wrap:wrap"><span class="on">Output</span><span>Next GO</span><span>Programmer</span></span>
+          <span class="lbl">Show</span>
+          <div class="fieldrow"><span>Work lights</span><span class="sw"></span></div>
+          <div class="fieldrow"><span style="display:flex;gap:6px;align-items:center"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#a3b3ff" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>Moves in dark</span><span class="sw on"></span></div>
+          <span class="mf" style="font-size:11px">Spot 1 is set for Q12. Spot 3 is still travelling: its line is drawn where the head points now, its ring where it is going.</span>
+        </div>
+      </div></div></div>
+      <figcaption>A dark head draws no beam, so the view draws a dashed aim line and a ring where the move lands, with the cue it is for. The head itself already travels in the Output source at its declared speed (<code>lib/travel.ts</code>), so nothing new drives the motion; only the overlay is new, behind a per-window <i>Moves in dark</i> switch in the View menu, on by default.</figcaption>
+    </figure>
+
+    <h3>5.6 The Timeline</h3>
+    <figure>
+      <div class="screenbox"><div class="screen tl">
+        <div class="tlrow head"><div>Cue</div><div>Fade</div><div>Looks</div><div>Palettes</div><div>FX</div><div>Dark</div></div>
+        <div class="tlrow live"><div class="m">10 Drum intro</div><div class="m mf">3s</div><div><div class="run start"></div></div><div></div><div><div class="run fx start end"></div></div><div><div class="run mid start"><span>☾ 4 → Q12</span></div></div></div>
+        <div class="tlrow next"><div class="m">11 Spots out</div><div class="m mf">3s</div><div><div class="run end"></div></div><div></div><div></div><div><div class="run mid"><span></span></div></div></div>
+        <div class="tlrow"><div class="m">12 Singer special</div><div class="m mf">3s</div><div><div class="run start end"></div></div><div></div><div></div><div><div class="run mid end"><span>☾ 6 set · ▲ 1</span></div></div></div>
+        <div class="tlrow"><div class="m">13 Fly-in</div><div class="m mf">4s</div><div></div><div></div><div><div class="run fx start"></div></div><div class="mf" style="font-size:10.5px">Off · 4 live</div></div>
+        <div class="tlrow"><div class="m">14 Hit</div><div class="m mf">SNAP</div><div></div><div></div><div><div class="run fx end"></div></div><div><div class="run mid start end"><span>☾ 3 · ▲ 2</span></div></div></div>
+      </div></div>
+      <figcaption>A <i>Dark</i> column after the kinds: one hatched span per move, from the cue it happens in to the cue it is for, drawn in the Timeline's run-bar idiom. A span is read-only; tapping it opens the target cue's Cue tab. Only the stack's Early or Late changes where a span starts.</figcaption>
+    </figure>
+
+    <h3>5.7 Why is that head pointing there?</h3>
+    <figure>
+      <div class="screenbox"><div class="screen">
+        <div class="ks">
+          <div class="chrome"><b>Spot 3</b><span class="mf">· Position</span><span style="flex:1"></span><span class="m mf">pan 142 · tilt 88</span></div>
+          <div class="ksrow"><span class="mf">○</span><span>Park</span><span class="mf">—</span><span class="st mf">none</span></div>
+          <div class="ksrow"><span class="mf">○</span><span>Programmer</span><span class="mf">—</span><span class="st mf">none</span></div>
+          <div class="ksrow top"><span style="color:#a3b3ff">☾</span><span>Move in dark · for Q12</span><span class="m" style="color:#a3b3ff">142, 88</span><span class="st" style="color:#a3b3ff">on stage</span></div>
+          <div class="ksrow"><span class="mf">○</span><span>Q10 Drum intro · Main</span><span class="m mf">96, 120</span><span class="st mf">under</span></div>
+          <div class="ksrow"><span class="mf">○</span><span>Base</span><span class="m mf">128, 128</span><span class="st mf">under</span></div>
+        </div>
+      </div></div>
+      <figcaption>The attribute's key stack (<code>programmer.keyStack</code>) gains a row kind, so the programmer's resolve panel and provenance name the move rather than blaming Q10.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ─────────────────────────── where ─────────────────────────── -->
+  <section id="where">
+    <h2>What changes where <small>§6</small></h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>Layer</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td class="n">Engine</td><td class="d">A <code>MoveInDarkService</code> per show: on every run-state change and every output frame it plans targets per stack (D5, D9), tracks each head's dark time against the output's intensity classification (D4), and drives one contributor per stack in the cue tier with its own id space and fade weight (D6, D7). Hooks into <code>CueStackManager.activate</code>, <code>CueRunStateTracker</code>'s standby changes, the list-edit announcers, the Look and palette republish, and a stack stop.</td></tr>
+        <tr><td class="n">Storage</td><td class="d"><code>cue_stacks</code>: <code>move_in_dark</code>, <code>move_in_dark_when</code>, <code>move_in_dark_delay</code>, <code>move_in_dark_time</code> (durations, nanoseconds), <code>move_in_dark_families</code>. <code>cues</code>: <code>move_in_dark_mode</code>, optional delay and time, and a list of heads kept live. The row flag <code>cue_attribute_assignments.move_in_dark</code> is retired (Q6).</td></tr>
+        <tr><td class="n">Sync</td><td class="d">The new fields on <code>CueStackJson</code> and <code>CueJson</code>, defaulted, at <code>formatVersion</code> 45 with <code>minReader</code> unchanged; the rich fixture sets non-default values. The row flag is read by the importer into its cue's setting, then dropped.</td></tr>
+        <tr><td class="n">REST</td><td class="d">The stack and cue PUT/PATCH and DTOs carry the settings. <code>GET …/cue-stacks/{id}/move-in-dark</code> answers the plan per cue (heads, from, families, live heads and why) for the table, the editor and the Timeline.</td></tr>
+        <tr><td class="n">WebSocket</td><td class="d"><code>moveInDark.state</code>, outbound and <code>StateFlow</code>-backed: per running stack, each head being moved, its target entry, its state (waiting, moving, set, lit early) and time left. No inbound frame: settings are stored writes.</td></tr>
+        <tr><td class="n">MCP</td><td class="d">The stack and cue tools take and report the settings; <code>describe_rig</code>'s stack read says what moves in dark.</td></tr>
+        <tr><td class="n">Frontend</td><td class="d">Stack sheet block, Cue tab section, the Dark column, stack-row and phone chips, the Stage view overlay and switch, the Timeline column, the key stack row. A glossary row for <i>Move in dark</i>.</td></tr>
+        <tr><td class="n">Docs</td><td class="d"><code>docs/cue-stacks-engineering.md</code> §"Move in dark"; <code>lighting-composition-model.md</code> §"Crossfade behaviour" rewritten; <code>websocket-engineering.md</code>; followups: <code>FU-CUE-ROW-TIMING</code> narrowed to the row fade, <code>FU-STAGE-SETTING-SHUTTER</code> noted (a shutter modelled as a setting cannot be read as dark).</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─────────────────────────── questions ─────────────────────────── -->
+  <section id="questions">
+    <h2>Questions, answered <small>§7</small></h2>
+    <p>Chris took the recommended answer to each on 2026-10-31; the rules above already assume them. The plan is <code>docs/plans/move-in-dark-plan.md</code>.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Question</th><th>Answer</th><th>Declined</th></tr></thead>
+      <tbody>
+        <tr><td class="n">Q1</td><td class="d">The word on screen?</td><td class="rec w">Move in dark</td><td class="w">Move in black (MA), Mark (Eos, Hog). The code and docs already say move-in-dark.</td></tr>
+        <tr><td class="n">Q2</td><td class="d">Is it on for stacks that already exist?</td><td class="rec w">New stacks on; existing stacks off until turned on</td><td class="w">On everywhere; off everywhere.</td></tr>
+        <tr><td class="n">Q3</td><td class="d">Offer Late as well as Early?</td><td class="rec w">Yes, Early by default</td><td class="w">Early only; MA3's UponGo and a named target cue too.</td></tr>
+        <tr><td class="n">Q4</td><td class="d">Which families move by default?</td><td class="rec w">Position, Colour and Beam</td><td class="w">Position only, as today's flag.</td></tr>
+        <tr><td class="n">Q5</td><td class="d">A moved head something lights before its GO?</td><td class="rec w">Let go: it returns to the live cue's values, shown as lit early</td><td class="w">Hold it at the target until the GO, lit where the audience may see it in the wrong place.</td></tr>
+        <tr><td class="n">Q6</td><td class="d">The per-row flag?</td><td class="rec w">Retire it: the importer lifts it into the cue's setting, and D7's catch-up covers what it did</td><td class="w">Keep both.</td></tr>
+        <tr><td class="n">Q7</td><td class="d">Keep one head live per cue (the fly-in)?</td><td class="rec w">Yes, in the Cue tab's list</td><td class="w">Cue-wide Off only; a per-patch "never moves in dark" setting as well.</td></tr>
+        <tr><td class="n">Q8</td><td class="d">The defaults?</td><td class="rec w">Delay 1 s, move time 2 s</td><td class="w">MagicQ's 3 s; Hog's 2 s; 0 s delay.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ─────────────────────────── sessions ─────────────────────────── -->
+  <section id="sessions">
+    <h2>Roughly how it would be built <small>§8</small></h2>
+    <p>Five sessions, each its own PR stacked on the last; <code>docs/plans/move-in-dark-plan.md</code> holds the detail.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Session</th><th>Lands</th></tr></thead>
+      <tbody>
+        <tr><td class="n">S1</td><td class="d">Stack settings stored and synced (v45), and the engine for the common case: dark on the output, Early targets, the contributor, the hand-over at GO.</td></tr>
+        <tr><td class="n">S2</td><td class="d">Every edge: re-planning on standby, jumps and edits; GO too soon and catch-up; lit early; two stacks; reload carry; the key stack row; <code>moveInDark.state</code>. Benchmarked against the crossfade baseline.</td></tr>
+        <tr><td class="n">S3</td><td class="d">The cue's setting and live heads, Late, the plan read route, MCP, and retiring the row flag.</td></tr>
+        <tr><td class="n">S4</td><td class="d">Frontend: the stack sheet, the Cue tab section, the Dark column, the stack-row and phone chips.</td></tr>
+        <tr><td class="n">S5</td><td class="d">Frontend: the Stage view overlay and the Timeline column; glossary row and docs.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const svg = document.getElementById('plot');
+  const note = document.getElementById('note');
+  const dIn = document.getElementById('delay'), mIn = document.getElementById('move');
+  const dOut = document.getElementById('delay-o'), mOut = document.getElementById('move-o');
+  const cases = ['set', 'soon', 'lit', 'late', 'off'];
+  let cur = 'set';
+
+  const W = 760, X0 = 54, X1 = 744, T = 20;
+  const x = t => X0 + (t / T) * (X1 - X0);
+  const IY0 = 30, IY1 = 110, PY0 = 160, PY1 = 236;
+  const iy = v => IY1 - (v / 100) * (IY1 - IY0);
+  const py = v => PY1 - v * (PY1 - PY0);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmt = v => (v % 1 ? v.toFixed(1) : v) + ' s';
+
+  function scenario(c, d, m) {
+    // GO times; Q11 fades the head out over 3 s from t=2.
+    const q11 = 2, out = 3, darkAt = q11 + out;
+    let q12 = 13, fade = 3, flash = null, q11b = null;
+    if (c === 'soon') q12 = darkAt + d + Math.min(m, 4) * 0.4 + 0.2;
+    if (c === 'lit') { flash = [8.5, 10.5]; q12 = 15.5; }
+    if (c === 'late') { q11b = 9; q12 = 15; }
+    const I = t => {
+      if (flash && t >= flash[0] && t < flash[1]) return 60;
+      if (t < q11) return 100;
+      if (t < darkAt) return 100 * (1 - (t - q11) / out);
+      if (t < q12) return 0;
+      return Math.min(100, 100 * (t - q12) / Math.max(fade, 0.01));
+    };
+    // Position 0 = drum riser (Q10), 1 = singer (Q12).
+    const travel = 0.5; // a head's own fastest move, for a snap
+    let segs = []; // [t0, t1, p0, p1]
+    let text = '';
+    if (c === 'off') {
+      segs = [[q12, q12 + fade, 0, 1]];
+      text = '<b>Off for Q12.</b> Nothing moves early. The head travels during Q12’s 3 s fade, lit: the fly-in, chosen on purpose.';
+    } else if (c === 'late') {
+      const s = q11b + Math.max(0, d), e = s + m;
+      segs = [[s, e, 0, 1]];
+      text = '<b>Late.</b> The head is dark from 5 s, but it waits for the last cue before Q12 (here a follow-on cue at 9 s) and moves there, after the delay. Early would have moved it at ' + fmt(darkAt + d) + '.';
+    } else if (c === 'lit') {
+      const s = darkAt + d, e = s + m;
+      const back = flash[0];
+      const pAt = t => t <= s ? 0 : t >= e ? 1 : (t - s) / Math.max(m, 0.01);
+      const pb = pAt(back);
+      segs = [[s, Math.min(e, back), 0, pb], [back, back + Math.max(m, travel), pb, 0]];
+      const s2 = flash[1] + d, e2 = s2 + m;
+      if (e2 <= q12) segs.push([s2, e2, 0, 1]); else segs.push([s2, q12, 0, (q12 - s2) / m], [q12, q12 + travel, (q12 - s2) / m, 1]);
+      text = '<b>Lit before GO.</b> A busk press lights Spot 4 at 8.5 s. The move lets go and the head returns to Q10’s position while lit (amber), shown as <i>lit early</i>. Dark again at 10.5 s, it waits ' + fmt(d) + ', moves again, and is set before GO.';
+    } else {
+      const s = darkAt + d, e = s + m;
+      if (e <= q12) {
+        segs = [[s, e, 0, 1]];
+        text = c === 'set'
+          ? '<b>Set in dark.</b> Dark at 5 s; after the ' + fmt(d) + ' delay it moves over ' + fmt(m) + ' and is set at ' + fmt(e) + '. Q12’s GO only brings the dimmer up.'
+          : '<b>GO too soon.</b> This GO was late enough. Lengthen the move time to see the catch-up.';
+      } else {
+        const pg = q12 <= s ? 0 : (q12 - s) / Math.max(m, 0.01);
+        if (q12 > s) segs.push([s, q12, 0, pg]);
+        segs.push([q12, q12 + travel, pg, 1]);
+        text = '<b>GO too soon.</b> Q12 comes at ' + fmt(+q12.toFixed(1)) + ', before the move is done. The rest lands at once (D7): the head finishes at its own speed while the dimmer is still low, rather than over the 3 s fade. The table would have flagged Q12 as <i>too quick</i>.';
+      }
+    }
+    const P = t => {
+      let p = 0;
+      for (const [t0, t1, p0, p1] of segs) {
+        if (t >= t1) p = p1;
+        else if (t > t0) { p = p0 + (p1 - p0) * (t - t0) / Math.max(t1 - t0, 0.001); break; }
+        else break;
+      }
+      return p;
+    };
+    return { I, P, q11, q12, darkAt, flash, q11b, text, d, m };
+  }
+
+  function draw() {
+    const d = +dIn.value, m = +mIn.value;
+    dOut.textContent = fmt(d); mOut.textContent = fmt(m);
+    const s = scenario(cur, d, m);
+    const fg = css('--fg'), mu = css('--muted'), ln = css('--line'), dk = css('--dark'), wn = css('--warn'), lv = css('--live'), nx = css('--next');
+    let h = '';
+    // lanes
+    h += `<text x="8" y="${IY0 + 4}" font-size="11" fill="${mu}">100</text><text x="8" y="${IY1 + 4}" font-size="11" fill="${mu}">0</text>`;
+    h += `<text x="8" y="${(IY0 + IY1) / 2 + 4}" font-size="11" fill="${fg}" font-weight="600">Int.</text>`;
+    h += `<text x="8" y="${PY0 + 4}" font-size="11" fill="${mu}">singer</text><text x="8" y="${PY1 + 4}" font-size="11" fill="${mu}">riser</text>`;
+    h += `<line x1="${X0}" y1="${IY1}" x2="${X1}" y2="${IY1}" stroke="${ln}"/><line x1="${X0}" y1="${PY1}" x2="${X1}" y2="${PY1}" stroke="${ln}"/>`;
+    for (let t = 0; t <= T; t += 2) h += `<text x="${x(t)}" y="262" font-size="10.5" fill="${mu}" text-anchor="middle">${t}s</text>`;
+    // lit-move highlight
+    const step = 0.05;
+    let band = null;
+    const bands = [];
+    for (let t = 0; t < T; t += step) {
+      const moving = Math.abs(s.P(t + step) - s.P(t)) > 1e-4;
+      const lit = s.I(t) > 0.5 || s.I(t + step) > 0.5;
+      if (moving && lit) { if (!band) band = [t, t + step]; else band[1] = t + step; }
+      else if (band) { bands.push(band); band = null; }
+    }
+    if (band) bands.push(band);
+    for (const [a, b] of bands) h += `<rect x="${x(a)}" y="${IY0 - 8}" width="${Math.max(2, x(b) - x(a))}" height="${PY1 - IY0 + 8}" fill="${wn}" fill-opacity="0.16"/>`;
+    // dark-move highlight
+    let dband = null; const dbands = [];
+    for (let t = 0; t < T; t += step) {
+      const moving = Math.abs(s.P(t + step) - s.P(t)) > 1e-4;
+      const dark = s.I(t) <= 0.5 && s.I(t + step) <= 0.5;
+      if (moving && dark) { if (!dband) dband = [t, t + step]; else dband[1] = t + step; }
+      else if (dband) { dbands.push(dband); dband = null; }
+    }
+    if (dband) dbands.push(dband);
+    for (const [a, b] of dbands) h += `<rect x="${x(a)}" y="${PY0 - 8}" width="${Math.max(2, x(b) - x(a))}" height="${PY1 - PY0 + 16}" fill="${dk}" fill-opacity="0.14" stroke="${dk}" stroke-dasharray="3 3" stroke-opacity="0.6"/>`;
+    // cue markers
+    const marks = [[0, 'Q10'], [s.q11, 'Q11'], [s.q12, 'Q12 GO']];
+    if (s.q11b) marks.push([s.q11b, 'Q11.5']);
+    for (const [t, l] of marks) h += `<line x1="${x(t)}" y1="16" x2="${x(t)}" y2="${PY1}" stroke="${l.startsWith('Q12') ? nx : mu}" stroke-dasharray="2 3" stroke-opacity="0.8"/><text x="${x(t) + 4}" y="14" font-size="11" fill="${l.startsWith('Q12') ? nx : mu}" font-weight="600">${l}</text>`;
+    if (s.flash) h += `<text x="${x(s.flash[0]) + 3}" y="${IY0 + 30}" font-size="10.5" fill="${wn}">busk press</text>`;
+    // curves
+    let pi = '', pp = '';
+    for (let t = 0; t <= T + 1e-9; t += step) {
+      pi += (pi ? 'L' : 'M') + x(t).toFixed(1) + ' ' + iy(s.I(t)).toFixed(1);
+      pp += (pp ? 'L' : 'M') + x(t).toFixed(1) + ' ' + py(s.P(t)).toFixed(1);
+    }
+    h += `<path d="${pi}" fill="none" stroke="${lv}" stroke-width="2"/>`;
+    h += `<path d="${pp}" fill="none" stroke="${fg}" stroke-width="2"/>`;
+    h += `<text x="${X1}" y="${PY0 - 12}" font-size="10.5" fill="${dk}" text-anchor="end">dashed: moved in dark</text>`;
+    h += `<text x="${X1}" y="${IY0 - 12}" font-size="10.5" fill="${wn}" text-anchor="end">amber: moving while lit</text>`;
+    svg.innerHTML = h;
+    note.innerHTML = s.text;
+  }
+
+  for (const c of cases) {
+    const b = document.getElementById('case-' + c);
+    b.addEventListener('click', () => {
+      cur = c;
+      for (const o of cases) document.getElementById('case-' + o).setAttribute('aria-pressed', o === c ? 'true' : 'false');
+      draw();
+    });
+  }
+  dIn.addEventListener('input', draw); mIn.addEventListener('input', draw);
+  try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw); } catch (e) {}
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  draw();
+})();
+</script>
