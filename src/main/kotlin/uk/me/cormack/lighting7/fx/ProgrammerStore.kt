@@ -770,6 +770,38 @@ class ProgrammerStore {
         if (removedLast) bumpCoverage()
     }
 
+    /**
+     * Hand [from]'s slot at (fixtureKey, attribute) to [to] where it stands — same value, `seq`, age
+     * and place in the stack, now touched — so nothing on stage moves and the sideband's recency
+     * arbitration answers as before. A slot [to] already held there is dropped, unless it is the newer
+     * of the two, in which case [from]'s is dropped instead. Returns whether [from] held one.
+     */
+    fun reown(from: ProgrammerOwner, to: ProgrammerOwner, fixtureKey: String, attribute: String): Boolean {
+        val byAttribute = attributes[fixtureKey] ?: return false
+        var moved = false
+        byAttribute.computeIfPresent(attribute) { _, holder ->
+            val slots = holder.all()
+            val fromIndex = slots.indexOfFirst { it.owner == from }
+            if (fromIndex < 0) return@computeIfPresent holder
+            moved = true
+            val toIndex = slots.indexOfFirst { it.owner == to }
+            val next = if (toIndex in 0 until fromIndex) {
+                slots.filterIndexed { i, _ -> i != fromIndex }
+            } else {
+                slots.mapIndexedNotNull { i, s ->
+                    when (i) {
+                        fromIndex -> Slot(to, s.value, touched = true, s.sourceGroup, s.seq, s.writtenAtMs)
+                        toIndex -> null
+                        else -> s
+                    }
+                }
+            }
+            if (next.size == 1) Single(next[0]) else Stack(next)
+        }
+        if (moved) bumpEpoch()
+        return moved
+    }
+
     /** [owner]'s own slot at (fixtureKey, attribute), whether or not it is on top. */
     fun valueFor(owner: ProgrammerOwner, fixtureKey: String, attribute: String): ProgrammerValue? =
         attributes[fixtureKey]?.get(attribute)?.all()?.firstOrNull { it.owner == owner }?.value

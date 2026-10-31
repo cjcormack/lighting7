@@ -211,6 +211,13 @@ class ProgrammerLayerStack(
      * a database.
      */
     private val state: () -> State?,
+    /**
+     * Told the keys a layer has just landed a value on — the keys it wins after an [add], an on press, a
+     * [patch] or a [move] — once they are in the store and before anything is published, and answering
+     * the keys whose value it let go so the layer shows, which this recook then publishes with the rest.
+     * How an edit onto a located fixture ends its Locate (`show/LocateCommit.kt`). It must store only.
+     */
+    private val onLanded: (Set<CueAssignmentResolver.Key>) -> Set<CueAssignmentResolver.Key> = { emptySet() },
 ) {
     private val targetCoverage = TargetCoverage { fixtures() }
     private val pressRules = LayerPressRules(paletteRegistry, targetCoverage)
@@ -280,7 +287,13 @@ class ProgrammerLayerStack(
             cycleOverride = cycleOverride,
         )
         val (next, _) = store.mutateLayers { current -> renumber(current + layer) to Unit }
-        return layer to recook(next, fadeMs, arrival = true, adopt = adopt.takeIf { it.isNotEmpty() }?.let { Adopt(layer.layerId, it) })
+        return layer to recook(
+            next,
+            fadeMs,
+            arrival = true,
+            adopt = adopt.takeIf { it.isNotEmpty() }?.let { Adopt(layer.layerId, it) },
+            landing = Landing(layer.layerId),
+        )
     }
 
     /** The instances one arriving layer takes over: see [add]. */
@@ -376,14 +389,22 @@ class ProgrammerLayerStack(
         val replaces = pressRules.familyReplacements(source.isPalette, source.uuid, paletteUuids(store.layers))
         val replacesOn = if (replaces.isEmpty()) null else pressRules.paletteHeads(source.uuid, pressTargets)
         val ops = layerOps(store.layers)
+        val heldBefore = store.layers.mapTo(HashSet()) { it.layerId }
+        val before = layerValues()
         val (next, result) = store.mutateLayers { current ->
             val result = LayerPress.press(current, arriving, ops, targetCoverage, releaseSiblings, replaces, replacesOn)
             renumber(result.layers) to result
         }
         return when (result) {
             is LayerPress.Result.Removed -> ToggleOutcome("removed", recook(next, fade).fxRetracted)
-            is LayerPress.Result.Applied ->
-                ToggleOutcome("applied", recook(next, fade, arrival = true).fxSpawned, result.released)
+            is LayerPress.Result.Applied -> {
+                // The press's layer is this record's top one: the arrival, or the layer it widened —
+                // which lands only where its value moved, not on the heads it already held.
+                val pressed = next.lastOrNull { it.source.uuid == source.uuid }
+                val landing = pressed?.let { Landing(it.layerId, before.takeIf { _ -> it.layerId in heldBefore }) }
+                val outcome = recook(next, fade, arrival = true, landing = landing)
+                ToggleOutcome("applied", outcome.fxSpawned, result.released)
+            }
         }
     }
 
@@ -715,7 +736,7 @@ class ProgrammerLayerStack(
             rest.add(toIndex.coerceIn(0, rest.size), moving)
             renumber(rest) to Unit
         }
-        return recook(next)
+        return recook(next, landing = Landing(layerId, layerValues()))
     }
 
     /**
@@ -732,6 +753,7 @@ class ProgrammerLayerStack(
         stomp: Boolean? = null,
         fadeMs: Long = 0,
     ): ProgrammerLayerOutcome {
+        val before = layerValues()
         val (next, _) = store.mutateLayers { current ->
             current.map {
                 if (it.layerId != layerId) it
@@ -745,7 +767,7 @@ class ProgrammerLayerStack(
                 )
             } to Unit
         }
-        return recook(next, fadeMs)
+        return recook(next, fadeMs, landing = Landing(layerId, before))
     }
 
     /**
@@ -957,26 +979,63 @@ class ProgrammerLayerStack(
         fadeMs: Long = 0,
         arrival: Boolean = false,
         adopt: Adopt? = null,
+        landing: Landing? = null,
     ): ProgrammerLayerOutcome {
         // One cook for the whole recook (sweep item C8): the rows and the effect triples come out
         // of a single pass over the stack, so the layers resolve once and both halves see the same
         // Look snapshots.
         val cooked = cookStack(layers, withFx = true)
-        val (moved, rowFades) = materialise(cooked.values)
+        val (moved, movedFades) = materialise(cooked.values)
+        val released = landing?.let { landed(it, cooked.values) }.orEmpty()
+        val publish = if (released.isEmpty()) moved else moved + released
+        val rowFades = if (released.isEmpty()) movedFades else movedFades + rowFadesFor(cooked.values, released)
         val fx = syncFx(layers, cooked, fadeMs, moved, adopt)
-        if (moved.isNotEmpty()) {
+        if (publish.isNotEmpty()) {
             val eng = engine()
             if (!arrival || rowFades.isEmpty() || fadeMs > 0) {
                 // A caller-supplied `fadeMs` covers every key and wins outright: an explicit fade on
                 // Include is the operator's instruction, and it overrides the source's stored
                 // default exactly as `POST /palettes/{id}/apply` does with `request.fadeMs`.
-                eng.programmer.republishKeys(moved, fadeMs)
+                eng.programmer.republishKeys(publish, fadeMs)
             } else {
-                eng.programmer.republishKeys(moved, rowFades)
+                eng.programmer.republishKeys(publish, rowFades)
             }
         }
         return ProgrammerLayerOutcome(moved.size, fx.spawned, fx.retracted, fx.repriorised)
     }
+
+    /**
+     * The layer a recook reports to [onLanded]: the keys [layerId] wins, less those whose value is the
+     * one [before] held there — null for an arrival, where every key it wins is new.
+     */
+    private data class Landing(
+        val layerId: Int,
+        val before: Map<CueAssignmentResolver.Key, CueAssignmentResolver.AttributeValue>? = null,
+    )
+
+    private fun landed(landing: Landing, cooked: CookResult): Set<CueAssignmentResolver.Key> {
+        val keys = cooked.rows.mapNotNullTo(HashSet()) { row ->
+            if (row.layerWinner?.layerId != landing.layerId) return@mapNotNullTo null
+            val key = CueAssignmentResolver.Key.fixture(row.targetKey, row.attribute)
+            key.takeUnless { landing.before?.get(key) == row.value }
+        }
+        return if (keys.isEmpty()) keys else onLanded(keys)
+    }
+
+    /** The stack's cooked value on every key it holds, for a [Landing] to compare against. */
+    private fun layerValues(): Map<CueAssignmentResolver.Key, CueAssignmentResolver.AttributeValue> = buildMap {
+        for (entry in store.entries()) {
+            val slot = entry.slots.firstOrNull { it.owner == ProgrammerOwner.LAYERS } ?: continue
+            put(CueAssignmentResolver.Key.fixture(entry.fixtureKey, entry.attribute), slot.value.resolved)
+        }
+    }
+
+    /** The fade each of [keys]' winning rows asks for, where it asks for one. */
+    private fun rowFadesFor(cooked: CookResult, keys: Set<CueAssignmentResolver.Key>): Map<CueAssignmentResolver.Key, Long> =
+        cooked.rows.mapNotNull { row ->
+            val fade = row.fadeDurationMs?.takeIf { it > 0 } ?: return@mapNotNull null
+            CueAssignmentResolver.Key.fixture(row.targetKey, row.attribute).takeIf { it in keys }?.let { it to fade }
+        }.toMap()
 
     /**
      * What one [materialise] moved: the keys to publish, and the per-key fade the winning row asked
@@ -1040,16 +1099,7 @@ class ProgrammerLayerStack(
         )
         // Only the keys that actually moved need a fade: a slot the cook left where it was is not
         // republished, so timing it would be timing nothing.
-        val rowFades = if (moved.isEmpty()) {
-            emptyMap()
-        } else {
-            cooked.rows.mapNotNull { row ->
-                val fade = row.fadeDurationMs?.takeIf { it > 0 } ?: return@mapNotNull null
-                CueAssignmentResolver.Key.fixture(row.targetKey, row.attribute)
-                    .takeIf { it in moved }
-                    ?.let { it to fade }
-            }.toMap()
-        }
+        val rowFades = if (moved.isEmpty()) emptyMap() else rowFadesFor(cooked, moved)
         return Materialised(moved, rowFades)
     }
 

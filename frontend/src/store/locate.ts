@@ -1,14 +1,12 @@
 import { restApi } from "./restApi"
+import { lightingApi } from '../api/lightingApi'
+import type { LocateTarget } from '../api/locateWsApi'
 import type { UnitLocate } from '@/api/patchApi'
 
 // === Types ===
 
-export type LocateTargetType = 'fixture' | 'group'
-
-export interface LocateTarget {
-  type: LocateTargetType
-  key: string
-}
+export type { LocateTarget } from '../api/locateWsApi'
+export type LocateTargetType = LocateTarget['type']
 
 export interface LocateState {
   targets: LocateTarget[]
@@ -52,10 +50,28 @@ export interface StoredLocateRequest {
 
 export const locateApi = restApi.injectEndpoints({
   endpoints: (build) => ({
-    /** All currently-located fixtures and groups. */
+    /**
+     * All currently-located fixtures and groups — a stream, form 3 (CLAUDE.md §"Where a WS bridge
+     * subscribes"): `locate.state` feeds it, seeded from the WS layer's last frame, because a Locate also
+     * ends when the located fixture is edited, which no toggle here sent, and a REST read racing the
+     * stream could land after a newer frame. The toggle patches it from its own answer only while no
+     * frame has overtaken that answer.
+     */
     locateState: build.query<LocateState, void>({
-      query: () => 'locate',
+      queryFn: () => ({ data: { targets: lightingApi.locate.get() } }),
       providesTags: ['Locate'],
+      async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
+        try {
+          await cacheDataLoaded
+        } catch {
+          return
+        }
+        const subscription = lightingApi.locate.subscribe((targets) => {
+          updateCachedData(() => ({ targets }))
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
     }),
 
     /**
@@ -72,7 +88,22 @@ export const locateApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['Locate'],
+      async onQueryStarted(target, { dispatch, queryFulfilled }) {
+        const framesBefore = lightingApi.locate.frames()
+        try {
+          const { data } = await queryFulfilled
+          // A frame since the press is newer than this answer, and already in the cache.
+          if (lightingApi.locate.frames() !== framesBefore) return
+          dispatch(
+            locateApi.util.updateQueryData('locateState', undefined, (draft) => {
+              draft.targets = draft.targets.filter((t) => t.type !== target.type || t.key !== target.key)
+              if (data.active) draft.targets.push({ type: target.type, key: target.key })
+            }),
+          )
+        } catch {
+          // A refused toggle changed nothing.
+        }
+      },
     }),
 
     /**

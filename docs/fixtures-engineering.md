@@ -1719,8 +1719,10 @@ no fine byte stored locates with fine 0, as the default does.
   target list (400 `LOCATE_NEEDS_SELECTION`), are current-project only (the store reads the live
   output) and are stored writes, so an operator's on a venue is 403 `VENUE_ADMIN_ONLY` and a version's
   409 `VENUE_VERSION_READ_ONLY` (`projectWriteGuard.kt`). A unit located while its stored locate
-  changes is re-asserted at once (`LocateManager.reassert`), so releasing the programmer value that
-  held the head where it was focused does not snap it back to the old point. The live rig's patch
+  changes — `patch_fixtures` or the patch sheet's Locate box while it sits located, untouched — is
+  re-asserted at once (`LocateManager.reassert`). A head the operator nudged to focus it is no longer
+  located (an edit ends a Locate, `docs/fx-engineering.md` §"Locate as a starting point"), so the nudge
+  holds it where it was set as the operator's own value. The live rig's patch
   metadata is refreshed in place (`refreshStoredLocate`); a locate change never rebuilds a fixture.
 - **On a venue it is the venue's, and a show overrides it as Focus** (D6). It is a field of the Focus
   facet (`FocusFacet.locate`, the patch's alone — no placement carries one), so `RigScope.effective`

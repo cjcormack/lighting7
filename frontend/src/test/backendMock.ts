@@ -721,6 +721,13 @@ export function lightingApiMock() {
           windowsWs.sent.push({ type: 'windows.follow', targetId, on })
         },
       },
+      // Spelled out for `status`'s reason: `store/locate.ts` seeds its entry from `get()`, which the
+      // Proxy would answer with a Subscription.
+      locate: {
+        subscribe: noopSub,
+        get: () => [],
+        frames: () => 0,
+      },
       cueHolds: {
         subscribe: (fn: (s: unknown) => void) => {
           cueHoldsWs.callback = fn

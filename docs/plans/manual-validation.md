@@ -1280,8 +1280,9 @@ mode patched:
    its pan and tilt on the centre scale.
 2. **A head of a bar.** Aim head 2 of the bar elsewhere, set its locate from the head's own row, then
    Locate the whole bar: head 2 lands on its point and the other three centre.
-3. **Located while focused.** Locate the MAC, nudge it with the programmer, *Set locate from current*,
-   then release the programmer value: the head stays where it was set rather than snapping back.
+3. **Located while focused.** Locate the MAC, then nudge it with the programmer: Locate goes out on
+   every window and the head stays where it was nudged, now the programmer's value. *Set locate from
+   current*, clear the programmer and press Locate: the head lands on the nudged point.
 4. **Clear.** *Clear locate* on the MAC: Locate centres it again.
 5. **A show on a venue.** In the venue (as an admin) set the MAC's locate and publish; in a show on it,
    update, Locate: the venue's point. Set the show's own: the patch's Focus reads *This show*, the

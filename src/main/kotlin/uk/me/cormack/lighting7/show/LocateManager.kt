@@ -21,6 +21,9 @@ import uk.me.cormack.lighting7.models.TargetRef
  * between two locates — this re-assert loop is what does, and it additionally re-resolves
  * values and drops stale targets, which a stored-value fallback could not. Locates number
  * in single digits, so cross-key work under one lock is simple and plenty fast.
+ *
+ * A target stays located only until it is edited: [commit] hands its writes over to be the
+ * operator's values (`LocateCommit.kt`).
  */
 class LocateManager {
     /** One recorded Layer-4 assertion: which target key and property name were written. */
@@ -33,7 +36,7 @@ class LocateManager {
 
     private val _activeTargets = MutableStateFlow<Set<TargetRef>>(emptySet())
 
-    /** Currently-located targets. REST reads [kotlinx.coroutines.flow.StateFlow.value]; a future locate WebSocket can collect it. */
+    /** Currently-located targets: `GET /locate` reads it, and `locate.state` streams it. */
     val activeTargets: StateFlow<Set<TargetRef>> = _activeTargets.asStateFlow()
 
     /**
@@ -100,6 +103,32 @@ class LocateManager {
         }
         if (changed) _activeTargets.value = active.keys.toSet()
     }
+
+    /**
+     * Stop locating every target whose writes [reaches] says an edit touched, handing their writes to
+     * [commit] to become the operator's own values. Any other located target sharing one of those writes
+     * goes with them: they share the one `LOCATE` slot, so it would otherwise stay located over values
+     * that are no longer Locate's. Returns the targets let go. [commit] runs with the lock held and must
+     * not throw, as [toggle]'s callbacks.
+     */
+    fun commit(reaches: (List<LocateWrite>) -> Boolean, commit: (List<LocateWrite>) -> Unit): Set<TargetRef> =
+        synchronized(lock) {
+            val committed = active.filterValues(reaches).keys.toMutableSet()
+            if (committed.isEmpty()) return@synchronized emptySet()
+            val writes = committed.flatMapTo(LinkedHashSet()) { active.getValue(it) }
+            do {
+                val overlapping = active.filter { (t, w) -> t !in committed && w.any { it in writes } }
+                committed += overlapping.keys
+                overlapping.values.forEach { writes += it }
+            } while (overlapping.isNotEmpty())
+            committed.forEach { active.remove(it) }
+            commit(writes.toList())
+            _activeTargets.value = active.keys.toSet()
+            committed
+        }
+
+    /** Every write the located targets hold, for a caller watching what an edit lands on them. */
+    fun writes(): Set<LocateWrite> = synchronized(lock) { active.values.flatMapTo(HashSet()) { it } }
 
     /**
      * Drop all locate bookkeeping without running any release callbacks. Used by

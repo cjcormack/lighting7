@@ -218,11 +218,17 @@ class Show(
         engine = { fxEngine },
         store = programmerStore,
         state = { state },
+        onLanded = { keys -> landOnLocates(keys) },
     )
 
     /** The show's speed-master clocks; slot 0 is master 1 (the global tempo). */
     val speedMasterBank: SpeedMasterBank get() = fxEngine.speedMasters
     val locateManager = carried?.locateManager ?: LocateManager()
+
+    init {
+        fxEngine.programmer.beforeOperatorWrite = { keys -> commitLocates(keys) }
+    }
+
     val cueStackManager = CueStackManager(
         fxEngine,
         projectId = project.id.value,

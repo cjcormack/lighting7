@@ -13,10 +13,9 @@ import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.LocateValueResolver
-import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.LocateManager
+import uk.me.cormack.lighting7.show.patchKeyOf
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -192,10 +191,6 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
     return LocateApplyResult(writes.distinct())
 }
 
-/** The key of the patch [fixture] is — its parent's for a head. */
-internal fun patchKeyOf(fixture: GroupableFixture): String =
-    (fixture as? FixtureElement<*>)?.parentFixture?.key ?: fixture.targetKey
-
 /**
  * Re-assert every active locate that reaches a unit of the patches keyed [patchKeys] — after their
  * stored locate changed (`locateStore.kt`), so a head located while the operator focused it points at
@@ -247,7 +242,7 @@ private class LocateStateResource
 private class LocateToggleResource
 
 @Serializable
-internal data class LocateTargetDto(val type: String, val key: String)
+data class LocateTargetDto(val type: String, val key: String)
 
 @Serializable
 internal data class LocateStateResponse(val targets: List<LocateTargetDto>)

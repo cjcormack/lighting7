@@ -1275,6 +1275,40 @@ Consequences:
 
 Covered by `routes/LocateParkInteractionTest.kt`.
 
+### Locate as a starting point
+
+A Locate is a toggle only until the located fixture is edited (`show/LocateCommit.kt`). Locate is how
+an operator puts a moving head somewhere useful before programming it, so the first edit makes the
+Locate the operator's: every `LOCATE` slot the located target holds is **re-owned in place** as `WEB`
+(`ProgrammerStore.reown` — same value, `seq`, age and place in the stack, so nothing on stage moves and
+the sideband's recency arbitration answers as before), the target leaves `LocateManager`, and Record,
+Release and Clear treat the values as any busked value. A value the operator busked *before* locating,
+hidden under the Locate since, is dropped: the Locate's value is what was on stage. `locate.state`
+tells every window.
+
+- **What counts as an edit**: a write by an operator owner, `WEB` or `SURFACE`
+  (`ProgrammerWriter.OPERATOR_OWNERS`) — a busked value, a fader, a fan, an aim, *Focus here*, *Apply
+  as values*, a raw channel write a fixture attribute covers — through `ProgrammerWriter`'s
+  `beforeOperatorWrite` hook, which runs before the write is stored, so the edit lands on top of the
+  committed values. And a programmer layer landing a value on a located fixture, on any of its
+  attributes: the keys a layer **wins**
+  in the cook (`CookWinner.layerId`) after it arrives (a palette or Look press, `add` — Record into a
+  new Look as a layer among them) or after a `patch` or `move` of it changes what it lands there
+  (`ProgrammerLayerStack`'s `onLanded`); a press that widens a layer lands only on the keys whose value
+  it moved, never on the heads the layer already held. A layer whose value on a key changes because
+  another was pressed or released is not an edit of that key. A flash, Include, an unpark hand-down and a Local FX
+  are not edits.
+- **What the edit sets wins.** On each key a layer landed, Locate's slot is dropped, with any operator
+  value it was hiding, and the rest commits; those keys are published in the layer's own recook, at
+  each row's fade: a layer sits under every Local value, so committing those keys as `WEB` would leave
+  the press invisible — a position palette pressed over a located head would not move it.
+- **Reach is by patch**: an edit to a head commits its fixture's Locate and the reverse. A group
+  Locate commits whole when any member is edited, and so does every other located target sharing one
+  of its writes (`LocateManager.commit`) — they share the one `LOCATE` slot per key, and one left
+  located would toggle off values that are no longer Locate's. A commit that leaves nothing located
+  sweeps any stray `LOCATE` slot, as a toggle-off does.
+- Until the first edit, toggling Locate off still puts back what was there.
+
 ### FX iteration order
 
 FX are folded in **apply order** — `priority` ascending, then `composeOrder`, then `id` —

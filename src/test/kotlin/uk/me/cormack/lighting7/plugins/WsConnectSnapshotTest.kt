@@ -80,6 +80,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The cue holds (cue model plan §3.4), a StateFlow hosted on State: on a fresh desk nothing
         // is held, and that empty frame is still what every cue pad's and cue slot's ring starts from.
         CueHoldsStateOutMessage::class,
+        // The located targets, a StateFlow following the live show: on a fresh desk nothing is
+        // located, and that empty frame is still what every Locate button starts from.
+        LocateStateOutMessage::class,
     )
 
     @Test
