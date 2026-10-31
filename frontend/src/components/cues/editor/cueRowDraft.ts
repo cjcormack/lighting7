@@ -214,7 +214,7 @@ export class CueRowDraft {
  * from the cue **as it stands at flush time**, never from a snapshot taken when the edit began:
  * the PATCH replaces the list, so a stale base would resend another desk's rows as we last saw them.
  *
- * Every kept row keeps its `fadeDurationMs`, `moveInDark` and `sortOrder` (`FU-CUE-ROW-TIMING`: the
+ * Every kept row keeps its `fadeDurationMs` and `sortOrder` (`FU-CUE-ROW-TIMING`: the
  * grid edits values only). A set lands on every stored row of its key — a key held twice is drawn as
  * one cell, and the cell must show what was typed — and a removal drops them all. A new row is
  * appended after the highest `sortOrder`.
@@ -258,7 +258,6 @@ function stripRow(row: CueAttributeAssignment): CueAttributeAssignment {
   }
   if (row.fadeDurationMs !== undefined) out.fadeDurationMs = row.fadeDurationMs
   if (row.sortOrder !== undefined) out.sortOrder = row.sortOrder
-  if (row.moveInDark !== undefined) out.moveInDark = row.moveInDark
   return out
 }
 

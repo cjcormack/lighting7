@@ -9,18 +9,18 @@ import type { CueAttributeAssignment } from '@/api/cuesApi'
 const STORED: CueAttributeAssignment[] = [
   { targetType: 'fixture', targetKey: 'a', attribute: 'colour', value: '#ff0000', fadeDurationMs: 1200, sortOrder: 2 },
   { targetType: 'group', targetKey: 'Front', attribute: 'dimmer', value: '100', sortOrder: 0 },
-  { targetType: 'fixture', targetKey: 'a', attribute: 'position', value: '10,20', moveInDark: true, sortOrder: 5, health: { type: 'ok' } },
+  { targetType: 'fixture', targetKey: 'a', attribute: 'position', value: '10,20', sortOrder: 5, health: { type: 'ok' } },
 ]
 
 describe('applyCueRowEntries', () => {
-  it('rewrites a row in place, keeping its fade, move-in-dark and order, and drops read-only fields', () => {
+  it('rewrites a row in place, keeping its fade and order, and drops read-only fields', () => {
     const draft = new CueRowDraft()
     // The grid writes `rgbColour`; the row is stored as `colour` — one row, not two.
     draft.set('fixture', 'a', 'rgbColour', '#00FF00')
     expect(applyCueRowEntries(STORED, draft.snapshot())).toEqual([
       { targetType: 'fixture', targetKey: 'a', attribute: 'colour', value: '#00FF00', fadeDurationMs: 1200, sortOrder: 2 },
       { targetType: 'group', targetKey: 'Front', attribute: 'dimmer', value: '100', sortOrder: 0 },
-      { targetType: 'fixture', targetKey: 'a', attribute: 'position', value: '10,20', moveInDark: true, sortOrder: 5 },
+      { targetType: 'fixture', targetKey: 'a', attribute: 'position', value: '10,20', sortOrder: 5 },
     ])
   })
 

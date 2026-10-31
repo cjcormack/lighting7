@@ -141,8 +141,7 @@ internal data class CookResult(
  * What it buys:
  * - **Within-cue** = strict ordered override (plus blend / amount), independent of
  *   [AttributeCategory], explainable in one sentence.
- * - **Cross-cue** = untouched. All existing HTP/LTP, crossfade weighting and `moveInDark` logic
- *   keeps working, because the resolver still sees one contributor per cue per key — which is what
+ * - **Cross-cue** = untouched. All existing HTP/LTP and crossfade weighting keeps working, because the resolver still sees one contributor per cue per key — which is what
  *   it was written for.
  *
  * ### The constraint that cannot be layered away
@@ -174,7 +173,6 @@ internal object CueComposer {
         val category: AttributeCategory,
         val compositionOverride: CompositionRule,
         val value: CueAssignmentResolver.AttributeValue,
-        val moveInDark: Boolean = false,
         /** Which layer last wrote this key. Null once a local row has overlaid it. */
         val winner: CookWinner? = null,
         /**
@@ -223,7 +221,7 @@ internal object CueComposer {
      * Cook [layers] and [localRows] into one contributor per (fixture, property).
      *
      * [localRows] are the cue's own Layer 4 rows, already built by `buildCueAssignmentsForCue` —
-     * so they arrive with `moveInDark` and group expansion already applied. They are overlaid **last and unconditionally**: the local layer
+     * so they arrive with group expansion already applied. They are overlaid **last and unconditionally**: the local layer
      * always wins.
      *
      * Timed layers ([CookLayer.isTimed]) are excluded here and contribute at fire time, matching
@@ -379,7 +377,6 @@ internal object CueComposer {
                 category = row.category,
                 compositionOverride = row.compositionOverride,
                 value = row.value,
-                moveInDark = row.moveInDark,
                 // Explicitly null: a local row belongs to no layer, and leaving a layer's winner
                 // in place here would report the overwritten layer as the reason for the value.
                 winner = null,
@@ -404,7 +401,6 @@ internal object CueComposer {
                 category = c.category,
                 compositionOverride = c.compositionOverride,
                 value = c.value,
-                moveInDark = c.moveInDark,
                 layerWinner = c.winner,
                 fadeDurationMs = c.fadeDurationMs,
                 bundleRole = c.bundleRole,

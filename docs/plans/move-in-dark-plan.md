@@ -140,9 +140,9 @@ is titled *Move in dark: session N — title*. Never merge a later session's PR 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Stack settings and the look-ahead engine | in review | `claude/brave-bardeen-l724t1` | [#321](https://github.com/cjcormack/lighting7/pull/321) | f161d5f |
-| 2 | Every edge: re-planning, catch-up, lit early, the key stack and the frame | in review | `claude/admiring-cannon-azpr8e` | | |
-| 3 | The cue's setting, the static plan, MCP, and the row flag retired | planned | | | |
+| 1 | Stack settings and the look-ahead engine | merged | `claude/brave-bardeen-l724t1` | [#321](https://github.com/cjcormack/lighting7/pull/321) | f161d5f |
+| 2 | Every edge: re-planning, catch-up, lit early, the key stack and the frame | merged | `claude/admiring-cannon-azpr8e` | [#322](https://github.com/cjcormack/lighting7/pull/322) | 1069003 |
+| 3 | The cue's setting, the static plan, MCP, and the row flag retired | in review | `claude/move-in-dark-s3` | | |
 | 4 | Screens: stack settings, the Cue tab and the cue list | planned | | | |
 | 5 | Screens: the Stage view, the Timeline, and the docs closed | planned | | | |
 
@@ -330,6 +330,43 @@ the next; whoever merges the last fills its own.
   `docs/lighting-composition-model.md` §"Crossfade behaviour" (the row flag gone);
   `docs/sync-engineering.md` §"Version 46"; root `CLAUDE.md` (§"Database" step 9, §"Cue Stack Run
   Endpoints"); `docs/mcp-engineering.md` (the tool).
+- **Recorded in session 3:**
+  - *The walk is always whole.* A target's own *Early* reaches past the next GO on a *Late* stack, so
+    `candidates` no longer stops at the effective next under *Late*; a head lit first by a cue on
+    *Late* (its own or the stack's) moves only while that cue is the effective next. A stack that is
+    off still plans while a cue of its list sets *Early* or *Late* (`anyCueMovesOnItsOwn`, also read
+    by the GO for `MoveInDarkService.Go.active`).
+  - *The catch-up reads the incoming cue.* `activate` reads the incoming cue's setting with the
+    stack's, and `beforeGo` takes both: a cue set *Off*, or on *Stack* in a stack that is off, catches
+    nothing up, and a head it keeps live is skipped (and a move held for another cue let go), so it
+    flies in. `Plan.settings` went: the catch-up no longer reads the plan's settings.
+  - *The cue's write.* Each field of `moveInDark` absent keeps what is stored, and `null` for a delay
+    or a move time is the stack's, which kotlinx cannot tell from absent, so the cue routes parse the
+    object by hand (`parseCueMoveInDark`); the whole object `null` on a `PATCH` resets the cue, and a
+    `PUT` without it keeps it, as the stack's `PUT` does. A fixture's key in `live` keeps its elements
+    live too. `unknownLive` on the read is how a live key the rig lacks is reported.
+  - *The static plan, as built.* A head moves from the first entry it is dark in (the entry before
+    the target under *Late*); `LIT_BEFORE` is only a head whose moving rows differ from the entry
+    before's, since one lit there at the same values does not move at all; `TOO_QUICK` sums every follow from
+    that first dark entry to the target, less its fade where it takes the head out, and is null —
+    never too quick — once one GO in the span is manual (a generalisation of "the entry before" that
+    agrees with it for a one-entry dark span). The first entry of a list that does not loop moves
+    nothing. The plan needs the running rig, so a project that is not current answers every entry
+    empty with `rigLoaded: false`, as the Timeline answers its targets unexpanded.
+  - *The migration.* Step 9 runs after the reconciliation, beside steps 6–8, since it needs the cue's
+    new column; a database flagging no row drops the column without a backup (the plan's "only
+    marked" applies to one without the column). Step 5 rebuilds the assignments table from the model,
+    which no longer has the column, so it now carries `move_in_dark` across (`Rebuild.carried`) for
+    step 9 to lift: a database older than step 5 would otherwise lose its flags first.
+  - *Found at review.* A GO onto a cue that moves nothing in the dark — *Off*, or on *Stack* in a
+    stack that is off — still lets go, at once and while dark, of a head held for another cue that it
+    lights; before, the head came up in the later cue's place and went back over the move time, lit.
+    `RigKeyReferences` walks a cue's live list, so a rename rewrites it and an unpatch, Attach's
+    renames and Update's dead references name the cue. On a looping stack the static plan's walk back
+    round to the target counts the first dark entry as taking the head out, so its fade comes off.
+  - *Loose fires (Chris, 2026-10-31).* The flag snapped a position whatever fired its cue; Move in dark
+    acts on stack GOs only, so a migrated cue fired loose over a dark cue crossfades its position lit.
+    Accepted and documented; `FU-MOVE-IN-DARK-LOOSE` holds the catch-up on a loose hold.
 
 ### Session 4 — Screens: stack settings, the Cue tab and the cue list
 

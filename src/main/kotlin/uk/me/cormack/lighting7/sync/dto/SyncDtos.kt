@@ -34,6 +34,14 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v46: a cue's own *Move in dark* setting travels on `CueJson` (`moveInDarkMode`,
+    // `moveInDarkDelayMs`, `moveInDarkTimeMs`, `moveInDarkLive`; move-in-dark plan D3), and
+    // `CueAttributeAssignmentJson.moveInDark`, the per-row flag it retires (D13), is no longer written:
+    // the importer gives a cue whose older archive flags a row the mode `EARLY`. Every field defaults,
+    // so a cue on *Stack* exports byte-for-byte as at v45. The writer's number moves by the sharp-edge
+    // rule: a v45 reader would import every cue on *Stack* and its next push would write the setting
+    // away for every peer. `minReader` stays at **43** — an older archive's cues read *Stack*, but for
+    // a flagged row's. See `docs/sync-engineering.md` §"Version 46 — Move in dark on a cue".
     // v45: a stack's *Move in dark* setting travels on `CueStackJson` (`moveInDark`, `moveInDarkWhen`,
     // `moveInDarkDelayMs`, `moveInDarkTimeMs`, `moveInDarkFamilies`; move-in-dark plan D2). Every field
     // defaults to off at the defaults, so a stack left off exports byte-for-byte as at v44. The writer's
@@ -353,7 +361,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 45,
+    val formatVersion: Int = 46,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 43,
 )
@@ -1001,6 +1009,10 @@ data class CueAttributeAssignmentJson(
     val value: String,
     val fadeDurationMs: Long? = null,
     val sortOrder: Int = 0,
+    /**
+     * **Read only, never written since v46**: the retired per-row flag (move-in-dark plan D13). A row
+     * of an older archive carrying it gives its cue the mode `EARLY`.
+     */
     val moveInDark: Boolean = false,
 )
 
@@ -1118,6 +1130,11 @@ data class CueJson(
     val events: List<CueEventJson> = emptyList(),
     /** v35: the masters the cue sets on every GO into it, in order. */
     val speedMasters: List<CueSpeedMasterJson> = emptyList(),
+    /** v46: *Move in dark* on the cue (`STACK | EARLY | LATE | OFF`), its own delay and move time (absent the stack's), and the heads it keeps live. */
+    val moveInDarkMode: String = "STACK",
+    val moveInDarkDelayMs: Long? = null,
+    val moveInDarkTimeMs: Long? = null,
+    val moveInDarkLive: List<String> = emptyList(),
 )
 
 /**

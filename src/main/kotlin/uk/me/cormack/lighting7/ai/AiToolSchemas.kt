@@ -777,6 +777,7 @@ internal val createCueTool = ToolDef(
                 put("items", cueSpeedMasterItemSchema)
                 put("description", CUE_SPEED_MASTERS_NOTE)
             })
+            put("moveInDark", cueMoveInDarkSchema)
             put("stackId", buildJsonObject { put("type", "integer"); put("description", "Also place the new cue in this stack, as an entry. Omit for a loose cue.") })
             put("number", buildJsonObject { put("type", "string"); put("description", NEW_ENTRY_NUMBER_NOTE) })
             put("after", afterEntrySchema)

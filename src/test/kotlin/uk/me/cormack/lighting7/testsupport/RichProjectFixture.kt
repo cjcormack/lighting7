@@ -842,6 +842,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         fadeCurve = "SINE_IN_OUT"
         // v35: the masters it sets on GO — master 1, and a follower, which a GO skips.
         speedMasters = listOf(CueSpeedMasterDto(houseMaster.uuid.toString(), 132.0), CueSpeedMasterDto(slowMaster.uuid.toString(), 96.5))
+        // v46: its own Move in dark — Late, a delay and a move time of its own, one head kept live.
+        moveInDarkSettings = uk.me.cormack.lighting7.models.CueMoveInDarkSettings(
+            mode = uk.me.cormack.lighting7.models.CueMoveInDarkMode.LATE,
+            delay = Duration.ofMillis(1500),
+            time = Duration.ofMillis(800),
+            live = listOf("hex-2"),
+        )
     }
     // Its place in show-1 is its entry's (cue model plan session 1): every optional entry field
     // set too — an explicit number and a follow.
@@ -891,7 +898,6 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueAttributeAssignment.new {
         cue = cue1; targetType = "group"; targetKey = "front-wash"
         attribute = "position"; value = "120,64"; sortOrder = 1
-        moveInDark = true
     }
     // There used to be a third row here holding `ref:{boundLook.uuid}`, seeded to prove
     // ExportUuidRemapper rewrote the reference on a clone. The `ref:` value grammar retired in

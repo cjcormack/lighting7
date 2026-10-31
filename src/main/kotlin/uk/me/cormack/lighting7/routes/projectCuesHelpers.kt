@@ -409,9 +409,14 @@ internal fun DaoCue.toCueDetails(
         trackedScenery = entry?.let(::trackedSceneryAt).orEmpty(),
         events = cueEventsOf(this.id).map { it.toDto() },
         speedMasters = this.speedMasters,
+        moveInDark = moveInDarkSettings.let { setting -> setting.toDto(unknownLive = setting.live.filterNot { fixtures.hasHead(it) }) },
         entries = slots.map { it.toPlaceDto() },
     )
 }
+
+/** Whether [key] names a fixture or an element of the running rig. */
+private fun uk.me.cormack.lighting7.show.Fixtures.hasHead(key: String): Boolean =
+    runCatching { untypedGroupableFixture(key) }.isSuccess
 
 internal fun EntrySlot.toPlaceDto() = CueEntryPlaceDto(
     entryId = entry.id.value,
@@ -609,7 +614,7 @@ internal val DaoCueTrigger.hookKey get() = CueHookKey(triggerType, script.id.val
 /**
  * What *Update stage* sends of a cue — its own rows' values, its untimed layers and its untimed
  * effects, in their order — compared across a write to tell whether it leaves a held cue *Edited
- * since GO* (show-cue-editing plan §3.5). A row's own fade and move-in-dark, a timed layer or effect,
+ * since GO* (show-cue-editing plan §3.5). A row's own fade, a timed layer or effect,
  * scenery and events are not in it: Update stage sends none of them. Nor is an effect's run key
  * (stack-timeline plan P4): breaking or joining a run changes nothing on stage now.
  */
@@ -889,7 +894,6 @@ internal fun DaoCueAttributeAssignment.take(row: CueAttributeAssignmentDto) {
     value = row.value
     fadeDuration = row.fadeDurationMs.asDuration()
     sortOrder = row.sortOrder
-    moveInDark = row.moveInDark
 }
 
 /** [trigger]'s timing onto this hook; its type and script are what [writeCueChildren] matched it on. */

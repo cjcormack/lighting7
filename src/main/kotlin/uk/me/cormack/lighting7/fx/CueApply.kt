@@ -443,7 +443,6 @@ internal fun buildCueAssignmentsForCue(
             category = category,
             compositionOverride = override,
             value = value,
-            moveInDark = assignment.moveInDark,
             // The stored row's own fade. Dropped here until sweep item B1: the column, the DTO, the
             // exporter and the cue routes all carried it, and the one hop into the composition
             // layer did not — so a cue's local row snapped while a template applied as values faded.

@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.assertExportsEqual
 import uk.me.cormack.lighting7.testsupport.consolidatedRecord
+import uk.me.cormack.lighting7.testsupport.liftRowMoveInDark
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -106,6 +107,7 @@ class LegacyV38ArchiveTest {
             }
         }
 
+        liftRowMoveInDark(expected)
         assertExportsEqual(expected, exported, installsShapeOnly = true)
     }
 }

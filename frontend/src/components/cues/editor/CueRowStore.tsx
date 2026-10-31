@@ -82,7 +82,7 @@ export type CueRowSaveState = 'clean' | 'dirty' | 'saving' | 'error'
  * Writes go to the draft and schedule a flush — 400 ms of quiet, 2 s at most (D10) — which builds
  * the whole `attributeAssignments` list from the cue **as the desk holds it at flush time** — read
  * past the cache (`fetchLatestCue`), since another client's edit does not invalidate it — keeping
- * each row's fade, move-in-dark and sort order, and PATCHes it. A flush sends only the entries no
+ * each row's fade and sort order, and PATCHes it. A flush sends only the entries no
  * save has carried, and saves run one after another. The PATCH is a stored write and sends nothing
  * to the stage (P2): a live cue lands it on its next first hold.
  *

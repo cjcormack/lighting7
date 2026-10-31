@@ -1231,7 +1231,7 @@ layers in sortOrder → local rows → cook → ONE contributor per (fixture,att
 layer wins over every layer. This holds for *every* attribute, intensity included.
 
 **Across cues**, nothing changed. The resolver still sees one contributor per cue per key, which is
-what it was written for, so all the HTP/LTP, crossfade-weighting and `moveInDark` logic described
+what it was written for, so all the HTP/LTP and crossfade-weighting logic described
 above keeps working unaltered.
 
 **Why cook rather than per-layer priorities.** The obvious alternative is to give each layer its own
@@ -1435,16 +1435,18 @@ When a cue transitions (outgoing → incoming), each attribute's Tier 4 contribu
 - **Sliders** (`DIMMER`, `UV`, `STROBE`, `PAN`, `TILT`, `PAN_FINE`, `TILT_FINE`, `AMBER`, `WHITE`, `SPEED`): linear interpolation between outgoing and incoming values, weighted by fade progress.
 - **Colour** (`COLOUR`): linear interpolation in RGB space. HSV / LAB modes reserved for future.
 - **Settings** (`SETTING`, `OTHER`): snap at 50% fade progress. Discrete enums don't interpolate.
-- **Position** (pan / tilt pair) with `moveInDark = true` on the incoming cue: if the outgoing cue ends with intensity 0, pre-apply the new position during the outgoing fade-out rather than waiting for the incoming fade-in. Otherwise behave as a slider.
+- **Position** (pan / tilt pair): linear pan / tilt, as a slider.
 
-A stack's **Move in dark** sits beside the row flag (which move-in-dark plan session 3 retires):
-dark heads on the output are moved ahead of the cue that lights them, by a contributor of the stack's
+A stack's **Move in dark** is how a head arrives already in place: dark heads on the output are moved ahead of the cue that lights them, by a contributor of the stack's
 own in Tier 4, at its live priority + 500, which holds the target cue's rows while the head is dark and
 through that cue's GO until its crossfade ends — so the crossfade has nothing to blend on the moved
 keys. A head dark as any GO begins but not yet in place, that the incoming cue lights, catches up at
 once: the contributor takes the incoming cue's moving families, a ramp in progress ended, and holds
 them to the end of the fade. It is restamped above the outgoing cue too for the length of a GO back,
-which would otherwise outrank it. See `docs/cue-stacks-engineering.md` §"Move in dark".
+which would otherwise outrank it. Whether a head moves is its target cue's setting — *Stack*, *Early*,
+*Late* or *Off*, and the heads it keeps live. The per-row `moveInDark` flag that snapped a position
+inside the resolver is gone (move-in-dark plan D13). See `docs/cue-stacks-engineering.md` §"Move in
+dark".
 
 For `HTP` categories across multiple contributors, each contributor's value is scaled by its own fade weight before being folded with `max`.
 

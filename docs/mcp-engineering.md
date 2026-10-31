@@ -505,6 +505,7 @@ prompt-book markup from a script and lighting notes.
 | `override_venue_fixtures` | A show's venue fixtures by key: each facet `SHOW` / `VENUE` / `KEEP_MINE`, an `address` override, `colour` (the show's recolour; `null` takes the venue's back) and `hidden`; `dryRun`. The fixture sheet's switches (§"Tools on a show on a venue") |
 | `get_prompt_book` | Page count, cover pages, anchors (each its `entryId`, cue, number and stack) and notes; with no book, where to import one |
 | `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look or palette layers, its own `values` (current project only), `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A row naming an existing `cueId` **shares** that cue instead, taking only the entry's own `number`, `followSeconds` and `at` (the cue's content fields are refused by name, since they would change it everywhere). A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
+| `set_move_in_dark` | A stack's or a cue's stored *Move in dark* (move-in-dark plan D2, D3; `ai/MoveInDarkSetupTool.kt`): `{stackId \| cueId, moveInDark, projectId?}`, a stack's fields `on`, `when`, `delayMs`, `timeMs`, `families`, a cue's `mode` (`STACK \| EARLY \| LATE \| OFF`), `delayMs` and `timeMs` (`null` the stack's) and `live`, each field left out keeping what is stored and a field of the other kind refused by name. The same parsers as the REST writes, so it refuses what they refuse. `create_cue` and each `build_cue_stack` cue take a cue's `moveInDark` too; `get_current_state`'s `cue_stacks` reports each stack's setting with the static plan's summary, and `cue_run` the heads moving or set in the dark. **No remote-access gate**: it moves only dark heads, as scenery is drawn |
 | `mark_up_prompt_book` | Cover pages, anchor upserts for existing entries (`entryId`, or `stackId` and `number`; a `cueId` alone is refused, naming no place), and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
 
 **Scenery** (stage-view plan session 8). The cue and Look authoring tools carry a `scenery` list —
@@ -618,7 +619,7 @@ head on its side (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 The setup tools that read or store data take an optional **`projectId`** — `get_patch`,
 `patch_fixtures`, `delete_groups`, `unpatch_fixtures`, `rename_fixtures`, `edit_groups`, `set_stage`, `place_fixtures`,
 `override_venue_fixtures`, `set_scene`, `get_scene`,
-`upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `delete_cue_stacks`, `delete_cues`,
+`upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `set_move_in_dark`, `delete_cue_stacks`, `delete_cues`,
 `copy_cues` (its target), and the
 show-running `set_scenery` — so a project can be prepared while another runs, as the REST routes'
 `withProject` writes allow. `ai/ToolProject.kt`'s `State.toolProject` resolves it (absent is the

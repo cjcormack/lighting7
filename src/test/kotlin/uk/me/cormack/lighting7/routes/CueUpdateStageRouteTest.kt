@@ -337,9 +337,9 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         client.setFx(rig.q, timed)
         manager.activateEntry(state, rig.a, rig.aQ)
 
-        val timing = """{"attributeAssignments":[{"targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"100","fadeDurationMs":900,"moveInDark":true}]}"""
+        val timing = """{"attributeAssignments":[{"targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"100","fadeDurationMs":900}]}"""
         assertEquals(HttpStatusCode.OK, client.patchCue(rig.q, timing).status)
-        assertFalse(holds.isEdited(rig.q), "a row's own fade and move-in-dark are not sent")
+        assertFalse(holds.isEdited(rig.q), "a row's own fade is not sent")
         client.setFx(rig.q, timed.copy(delayMs = 1_500, cycle = 1.0))
         assertFalse(holds.isEdited(rig.q), "a timed effect is left to the next GO")
 

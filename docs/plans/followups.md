@@ -161,7 +161,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-AI-RIG-SAFE`](#fu-ai-rig-safe) | Trigger | AI | an operator asks Claude to make the rig safe, or to strike or douse every lamp |
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
-| [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
+| [`FU-MOVE-IN-DARK-LOOSE`](#fu-move-in-dark-loose) | Trigger | Cues | an operator needs a loose cue fire to land its dark heads in place |
+| [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade set from the Show view |
 | [`FU-UPDATE-STAGE-TIMED`](#fu-update-stage-timed) | Trigger | Cues | an operator edits a live cue's timed FX or timed layer and expects *Update stage* to send it |
 | [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running FX jump on *Update stage* rather than fade |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
@@ -289,8 +290,9 @@ inheriting this note.
 
 ### `FU-FE-HEALTH-BADGE`
 
-**Shared `<HealthBadge>` for `AssignmentHealth`** · Trigger · `moveInDark` row-list editor,
-2026-04-25
+**Shared `<HealthBadge>` for `AssignmentHealth`** · Trigger · a second `AssignmentHealth` renderer,
+2026-04-25 (restated by move-in-dark plan session 3: it was filed against a `moveInDark` row-list
+editor, which will never exist now the row flag is retired)
 
 `AssignmentHealth` used to render in three places. Two of the three named here never survived:
 `DeadPresetAssignmentsBanner.tsx` did not exist, and `DeadAssignmentsBanner.tsx` rendered nowhere
@@ -3085,18 +3087,33 @@ was told. **Trigger**: an operator finds a dead binding left this way confusing.
 `FireCue` rows `cueUsesOf` already finds inside the forced delete's transaction, and reload the
 binding service's project.
 
+### `FU-MOVE-IN-DARK-LOOSE`
+
+**Move in dark acts on stack GOs, never on a loose cue fire** · Trigger · Move-in-dark plan session 3,
+2026-10-31
+
+The retired per-row flag snapped a position in the resolver whatever fired its cue. Move in dark
+(`fx/MoveInDarkService.kt`) runs on a stack's GO only: its catch-up is `beforeGo` / `afterGo`, which
+only `CueStackManager.activate` calls. A loose hold (a busk cue pad, `apply_cue`, a cue slot, MIDI
+`FireCue`, the hand) crossfades a dark head's position lit, as any value does. Chris accepted this at
+session 3's review. **Trigger**: an operator needs a cue fired loose to land its dark heads in place.
+**Then**: a catch-up on a loose hold's acquire (`CueHolds.acquire`'s loose arm) that reads the cue's
+setting against no stack (*Stack* reading as off), snapping the dark heads it lights in their moving
+families into a contributor of the hold's own, held to the end of its fade.
+
 ### `FU-CUE-ROW-TIMING`
 
-**The cue editor's Values grid cannot set an own row's fade or move-in-dark** · Trigger ·
+**The cue editor's Values grid cannot set an own row's fade** · Trigger ·
 Show-cue-editing plan session 5 (venue-visit R2.5), 2026-10-16
 
 The Values grid (`components/cues/editor/CueValuesGrid.tsx`) writes a cue's own rows' **values**, and
-its flush keeps every row's `fadeDurationMs`, `moveInDark` and `sortOrder` as they are
-(`applyCueRowEntries`); a row it creates has neither. Record and the MCP tools still set both.
-Deliberately out of the session (plan §8). **Trigger**: an operator needs a per-row fade or a
-move-in-dark set from the Show view rather than by re-recording. **Then**: the two as fields in the
-cell editor's read-out area for an own row (a fade in seconds, a move-in-dark switch on a position
-cell), written through the same `CueRowStore` flush as a third kind of draft entry.
+its flush keeps every row's `fadeDurationMs` and `sortOrder` as they are (`applyCueRowEntries`); a row
+it creates has none. Record and the MCP tools still set a fade. Deliberately out of the session (plan
+§8). The row's move-in-dark flag this item also named is gone: Move in dark is a stack's and a cue's
+setting now (move-in-dark plan D3, D13), set in the Cue tab. **Trigger**: an operator needs a per-row
+fade set from the Show view rather than by re-recording. **Then**: a fade in seconds in the cell
+editor's read-out area for an own row, written through the same `CueRowStore` flush as a third kind of
+draft entry.
 
 ### `FU-UPDATE-STAGE-TIMED`
 
