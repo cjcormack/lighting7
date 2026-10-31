@@ -99,6 +99,17 @@ class CueStackManager(
      */
     val runState: CueRunStateTracker = CueRunStateTracker(liveStacks)
 
+    /**
+     * The show's Move in dark ([MoveInDarkService]), told of every GO, standby change and stop. Set
+     * by `Show` once both exist; null in a manager built without a show.
+     */
+    @Volatile var moveInDark: MoveInDarkService? = null
+        set(value) {
+            field = value
+            runState.onNextMayHaveMoved = { stackId -> value?.replan(stackId) }
+            holds.onEntriesRestamped = { priorities -> value?.onEntriesRestamped(priorities) }
+        }
+
     /** Layer 4 crossfade envelopes. Owns its own per-stack table — see [CueCrossfadeDriver]. */
     private val crossfades = CueCrossfadeDriver(fxEngine)
 
@@ -250,10 +261,13 @@ class CueStackManager(
             ?.takeIf { holds.holdsOf(it.activeCueId) == listOf(CueHold.Stack(stackId, it.activeEntryId)) }
             ?.activeCueId
 
+        // Move in dark's contributor goes above the incoming cue before it arrives.
+        val goPriority = cueDerivedPriority(cueData)
+        moveInDark?.beforeGo(stackId, entryId, goPriority)
         // The incoming entry's hold first, then the outgoing's: a GO between two entries of one cue
         // then never lets it go, and nothing on stage moves.
         val incoming = holds.acquire(
-            state, cueData, CueHold.Stack(stackId, entryId), cueDerivedPriority(cueData),
+            state, cueData, CueHold.Stack(stackId, entryId), goPriority,
             arrival = if (useCrossfade) CueHolds.Arrival.FADE_IN else CueHolds.Arrival.SNAP,
             scope = scope, fireEvents = fireEvents, stackTag = stackId,
             fadeMs = fadeDurationMs, curve = easingCurve, adoptFrom = leavingCueId,
@@ -291,6 +305,7 @@ class CueStackManager(
             fadeStartedAtMs = if (incomingFades || outgoingFades) System.currentTimeMillis() else null,
         )
         runState.consumeStandby(stackId)
+        moveInDark?.afterGo(stackId, entryId, if (incomingFades || outgoingFades) fadeDurationMs else 0L)
 
         if (incomingFades || outgoingFades) {
             crossfades.start(
@@ -455,6 +470,7 @@ class CueStackManager(
             holds.release(appState, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId), CueHolds.Departure.SNAP).fxRemoved
         } ?: 0
         removed += fxEngine.removeFxForCueStack(stackId)
+        moveInDark?.onStackStopped(stackId)
         // A stopped stack has nothing on deck: the standby went with it. Published after the
         // teardown so the frame describes the stack as it now is.
         runState.consumeStandby(stackId)

@@ -373,8 +373,28 @@ class CueAssignmentLayer internal constructor(
         return layerStomp?.get(fixtureKey)?.contains(attribute) == true
     }
 
-    /** Which stack [cueId]'s published assignments belong to — its highest hold's ([holdStackOf]). */
-    fun cueStackIdFor(cueId: Int): Int? = holdStackOf(cueId)
+    /**
+     * Which stack [cueId]'s published assignments belong to — its highest hold's ([holdStackOf]), or
+     * for a Move in dark contributor the stack it moves for.
+     */
+    fun cueStackIdFor(cueId: Int): Int? = MoveInDarkService.stackOfContributor(cueId) ?: holdStackOf(cueId)
+
+    companion object {
+        /** A Layer 4 contributor's id as a cue's, or null when it is no cue (a Move in dark contributor). */
+        fun cueIdOf(contributorId: Int?): Int? = contributorId?.takeIf { MoveInDarkService.stackOfContributor(it) == null }
+    }
+
+    /**
+     * Layer 4 as the cues alone compose it, Move in dark's contributors left out: what Record captures
+     * and what Update attributes a key to, since a move in the dark is never recorded (move-in-dark plan
+     * D1). The live snapshot itself while no contributor is published.
+     */
+    fun cuesOnly(): LayerResolver.CueLayerSnapshot = publisher.locked {
+        if (cueAssignments.keys.none { MoveInDarkService.stackOfContributor(it) != null }) return@locked layerResolver.current
+        val rows = ArrayList<CueAssignmentResolver.Assignment>()
+        for ((cueId, list) in cueAssignments) if (MoveInDarkService.stackOfContributor(cueId) == null) rows.addAll(list)
+        layerResolver.snapshotOf(rows, CueAssignmentResolver.FadeWeights(HashMap(cueFadeWeights)))
+    }
 
     /** Whether [cueId] has Layer 4 rows published. */
     fun hasAssignments(cueId: Int): Boolean = publisher.locked { cueId in cueAssignments }

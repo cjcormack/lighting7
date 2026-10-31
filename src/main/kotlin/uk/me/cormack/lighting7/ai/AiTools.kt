@@ -1567,6 +1567,8 @@ class AiTools(private val state: State) {
     private fun executeCreateCueStack(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
         val loop = input["loop"]?.jsonPrimitive?.booleanOrNull ?: false
+        val moveInDark = parseToolMoveInDark(input["moveInDark"], MoveInDarkSettings.NEW_STACK)
+            .getOrElse { return errorResult(it.message!!) }
 
         val project = state.projectManager.currentProject
         val stack = transaction(state.database) {
@@ -1574,6 +1576,7 @@ class AiTools(private val state: State) {
                 this.name = name
                 this.project = project
                 this.loop = loop
+                moveInDarkSettings = moveInDark
             }
         }
         state.show.fixtures.cueStackListChanged()

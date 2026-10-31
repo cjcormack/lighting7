@@ -295,6 +295,9 @@ class FxEngine(
         FxCoverageSnapshot(emptySet(), fxListEpoch = -1L, structureVersion = -1L)
     private val fxListEpoch = java.util.concurrent.atomic.AtomicLong(0L)
 
+    /** The (fixtureKey, attribute) pairs running effects cover, for Move in dark's "lit by an FX" (D4). */
+    fun runningFxCoverage(): Set<Pair<String, String>> = coveredByRunningFx()
+
     /** The (fixtureKey, attribute) pairs running effects cover — see [fxCoverageCache]. */
     private fun coveredByRunningFx(): Set<Pair<String, String>> {
         // Read the stamps BEFORE the scan they cover, so a mutation landing mid-scan leaves

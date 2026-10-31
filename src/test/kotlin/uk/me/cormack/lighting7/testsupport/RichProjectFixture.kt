@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.testsupport
 
 import uk.me.cormack.lighting7.models.TIMING_CYCLE
+import uk.me.cormack.lighting7.models.moveInDarkSettings
 import uk.me.cormack.lighting7.models.TIMING_HEAD
 import uk.me.cormack.lighting7.fixture.locate.UnitLocate
 import uk.me.cormack.lighting7.fixture.locate.storedLocate
@@ -823,6 +824,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val stack2 = DaoCueStack.new {
         this.project = project; name = "show-2"; loop = true
         type = CueStackType.STACK.name; sortOrder = 2
+        // Move in dark (v45), every field off its default; show-1 keeps the column defaults (off).
+        moveInDarkSettings = uk.me.cormack.lighting7.models.MoveInDarkSettings(
+            on = true,
+            whenMode = uk.me.cormack.lighting7.models.MoveInDarkWhen.LATE,
+            delay = Duration.ofMillis(2500),
+            time = Duration.ofMillis(500),
+            families = setOf(uk.me.cormack.lighting7.fx.AttributeFamily.POSITION),
+        )
     }
     val cue1 = DaoCue.new {
         this.project = project; name = "open"

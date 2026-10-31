@@ -461,6 +461,9 @@ class CueHolds internal constructor(
         }
     }
 
+    /** Told of every [restampEntries] first: Move in dark's contributor follows its stack's live entry. */
+    @Volatile internal var onEntriesRestamped: (entryPriorities: Map<Int, Int>) -> Unit = {}
+
     /**
      * Restamp the stack holds on the entries in [entryPriorities] (`entryId → stackBand + position`),
      * after a write shifted positions — a reorder, an add, a sort, a delete or insert mid-list, a
@@ -472,6 +475,7 @@ class CueHolds internal constructor(
      */
     fun restampEntries(entryPriorities: Map<Int, Int>) {
         if (entryPriorities.isEmpty()) return
+        onEntriesRestamped(entryPriorities)
         val changed = synchronized(lock) {
             val out = HashMap<Int, Int>()
             for ((cueId, cue) in live) {

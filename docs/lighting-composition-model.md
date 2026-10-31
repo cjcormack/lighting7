@@ -1437,6 +1437,12 @@ When a cue transitions (outgoing → incoming), each attribute's Tier 4 contribu
 - **Settings** (`SETTING`, `OTHER`): snap at 50% fade progress. Discrete enums don't interpolate.
 - **Position** (pan / tilt pair) with `moveInDark = true` on the incoming cue: if the outgoing cue ends with intensity 0, pre-apply the new position during the outgoing fade-out rather than waiting for the incoming fade-in. Otherwise behave as a slider.
 
+A stack's **Move in dark** sits beside the row flag (which move-in-dark plan session 3 retires):
+dark heads on the output are moved ahead of the cue that lights them, by a contributor of the stack's
+own in Tier 4, at its live priority + 500, which holds the target cue's rows while the head is dark and
+through that cue's GO until its crossfade ends — so the crossfade has nothing to blend on the moved
+keys. See `docs/cue-stacks-engineering.md` §"Move in dark".
+
 For `HTP` categories across multiple contributors, each contributor's value is scaled by its own fade weight before being folded with `max`.
 
 ### Per-row fade time

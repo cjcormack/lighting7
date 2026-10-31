@@ -9,6 +9,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoInstall
+import uk.me.cormack.lighting7.models.MoveInDarkSettings
+import uk.me.cormack.lighting7.models.moveInDarkSettings
 import uk.me.cormack.lighting7.models.DaoCueSceneryRow
 import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
@@ -289,7 +291,7 @@ class ProjectExporter(private val state: State) {
                     type = s.type,
                     label = s.label,
                     scenery = stackSceneryOf(s.id).map { it.toJson() },
-                )
+                ).withMoveInDark(s.moveInDarkSettings)
             }
 
             // v32: a cue is what a state is, never where it sits (cue model plan D2, §3.9).
@@ -1040,4 +1042,13 @@ private fun DaoLookSceneryRow.toJson() = SceneryChangeJson(
     elementUuid = element.uuid.toString(),
     state = storedParamsObject(stateJson),
     sortOrder = sortOrder,
+)
+
+/** [this] stack's record carrying [settings] (v45). */
+private fun CueStackJson.withMoveInDark(settings: MoveInDarkSettings) = copy(
+    moveInDark = settings.on,
+    moveInDarkWhen = settings.whenMode.name,
+    moveInDarkDelayMs = settings.delay.toMillis(),
+    moveInDarkTimeMs = settings.time.toMillis(),
+    moveInDarkFamilies = settings.families.map { it.name }.sorted(),
 )

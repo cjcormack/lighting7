@@ -595,6 +595,7 @@ internal class VenueSetupTools(private val state: State) {
                 type = CueStackType.STACK.name
                 label = s.label
                 sortOrder = stackOrder++
+                moveInDarkSettings = s.moveInDarkSettings
             }
             DaoCueStackSceneryRow.find { DaoCueStackScenery.stack eq s.id }.forEach { row ->
                 val el = copier.element(row.element, "stack '${s.name}'") ?: return@forEach

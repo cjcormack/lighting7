@@ -234,6 +234,18 @@ class Show(
     )
 
     /**
+     * Move in dark (move-in-dark plan D1, D6): dark heads moved ahead of the cue that lights them, as
+     * one contributor per live stack in the cue tier. Watched from [start] to [close]; the stack
+     * manager tells it of every GO, standby change and stop.
+     */
+    val moveInDark = MoveInDarkService(
+        fixtures = fixtures,
+        cueLayer = fxEngine.cueLayer,
+        runningFx = fxEngine::runningFxCoverage,
+        planFor = { stackId, heads -> planMoveInDark(state, cueStackManager, stackId, heads) },
+    ).also { cueStackManager.moveInDark = it }
+
+    /**
      * Global transmit-time scalers (Blackout, Grand Master) — Phase 3 of
      * [docs/plans/completed/control-surface-plan.md]. Attached to every registered DMX controller on
      * show start so toggles take effect immediately without a show-wide restart.
@@ -372,6 +384,7 @@ class Show(
         // (ArtNetController's transmit loop, the MIDI registry). If any of them grows a real
         // lifecycle owner, this should move onto it too.
         fxEngine.start(GlobalScope)
+        moveInDark.start(GlobalScope)
 
         // Load user-created FX definitions from the database into the registry
         loadUserFxDefinitions()
@@ -526,6 +539,7 @@ class Show(
         // The holds go with the show, and the shared `cueHolds.state` frame with them, unless the
         // next show has already written its own (`CueHolds.close`).
         cueStackManager.holds.close()
+        moveInDark.stop()
         fxEngine.stop()
         // Stop transmitting last, after the FX engine has stopped writing. `State.shutdown()`
         // calls this directly rather than going through `Fixtures.register(removeUnused)`,

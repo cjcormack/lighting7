@@ -14,6 +14,9 @@ import uk.me.cormack.lighting7.fx.normalizeFxType
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.models.MoveInDarkSettings
+import uk.me.cormack.lighting7.models.MoveInDarkWhen
+import uk.me.cormack.lighting7.models.moveInDarkSettings
 import uk.me.cormack.lighting7.models.CueSpeedMasterDto
 import uk.me.cormack.lighting7.models.DaoBuskBank
 import uk.me.cormack.lighting7.models.DaoBuskColumn
@@ -254,6 +257,12 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // 5: a missing key is no run. Imported as stored: nothing checks that a key's rows are neighbours, or
 // that a cue holds it once.
 //
+// v45 added a stack's *Move in dark* setting to `CueStackJson` (move-in-dark plan D2). SUPPORTED moved
+// for v14's reason — a v44 reader would import every stack off and write the setting away on its next
+// push. MIN stays at 5: every field defaults to off, which is what an older stack reads as. Imported as
+// stored, except that a delay or time outside 0–30 s is clamped into it and an unknown `when` or family
+// is dropped (no family left is all three), so a stored stack always satisfies the write boundary.
+//
 // v44 added `showGroupOrders/`, a show's orders of its venue's groups' members (group-order plan D9).
 // SUPPORTED moved for v14's reason — a v43 reader would import the show without them and write them away
 // on its next push. MIN stays at 5: a missing folder is no orders. Imported as stored, as a recolour is.
@@ -315,7 +324,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 44
+internal const val SUPPORTED_FORMAT_VERSION = 45
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1409,6 +1418,7 @@ class ProjectImporter(private val state: State) {
                 type = s.type
                 label = s.label
                 this.uuid = uuid
+                moveInDarkSettings = s.moveInDarkSettings()
             }
             importScenery(s.scenery, elementMap, "Cue stack ${s.uuid}") { element, change ->
                 DaoCueStackSceneryRow.new {
@@ -2318,4 +2328,17 @@ class ProjectImporter(private val state: State) {
         }
         return out
     }
+}
+
+/** [CueStackJson]'s *Move in dark* fields as a setting, brought inside the write boundary's limits. */
+private fun CueStackJson.moveInDarkSettings(): MoveInDarkSettings {
+    fun clamp(ms: Long) = java.time.Duration.ofMillis(ms.coerceIn(0, MoveInDarkSettings.MAX.toMillis()))
+    val families = MoveInDarkSettings.parseFamilies(moveInDarkFamilies.joinToString(","))
+    return MoveInDarkSettings(
+        on = moveInDark,
+        whenMode = MoveInDarkWhen.entries.firstOrNull { it.name == moveInDarkWhen } ?: MoveInDarkWhen.EARLY,
+        delay = clamp(moveInDarkDelayMs),
+        time = clamp(moveInDarkTimeMs),
+        families = families.ifEmpty { MoveInDarkSettings.MOVABLE },
+    )
 }

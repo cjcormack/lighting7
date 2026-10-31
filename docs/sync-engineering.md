@@ -253,7 +253,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 44`, `minReader = 43`. Rules for future
+Current writer emits `formatVersion = 45`, `minReader = 43`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -440,6 +440,19 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 45 — Move in dark on a stack
+
+Move-in-dark plan session 1 (D2; `docs/cue-stacks-engineering.md` §"Move in dark"): a stack's setting
+travels on its own record, `CueStackJson`'s `moveInDark`, `moveInDarkWhen`, `moveInDarkDelayMs`,
+`moveInDarkTimeMs` and `moveInDarkFamilies` (sorted by name). Every field defaults to what an older
+stack reads as — off, Early, 1 s, 2 s, all three families — so a stack left there exports
+byte-for-byte as at v44, and an older archive's stacks import off. `SUPPORTED_FORMAT_VERSION = 45`;
+`MIN_SUPPORTED_FORMAT_VERSION` stays 5 and **`minReader` stays 43**. The writer's number moves by the
+sharp-edge rule: a v44 reader would import every stack off and its next push would write the setting
+away for every peer. The importer clamps a delay or time into 0–30 s and drops an unknown `when` or
+family (none left is all three), so a stored stack always passes the write boundary. No table was
+added: the columns are on `cue_stacks`, already portable.
 
 ### Version 44 — a show's order of a venue group
 
