@@ -5,15 +5,7 @@ import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.TransmitModifier
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
-import uk.me.cormack.lighting7.fixture.DmxFixture
-import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
-import uk.me.cormack.lighting7.fixture.AttributeCategory
-import uk.me.cormack.lighting7.fixture.dmx.DmxColour
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
-import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
-import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
-import uk.me.cormack.lighting7.fixture.group.FixtureElement
-import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fx.HeadIntensity
 import uk.me.cormack.lighting7.models.GRAND_MASTER_FULL
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
@@ -114,71 +106,19 @@ class GlobalScalerState(
         }
     }
 
-    /** Rebuild the channel classification from the current fixtures registry. */
+    /**
+     * Rebuild the channel classification from the current fixtures registry: every head's own
+     * levels are scaled, its strobe and ring channels cut. Read from [HeadIntensity.classify], which
+     * Move in dark reads too, so the two never disagree about what lights a head.
+     */
     fun refreshClassification() {
         val scaled = HashSet<Long>()
         val strobe = HashSet<Long>()
-        for (fixture in fixtures.fixtures) {
-            if (fixture !is DmxFixture) continue
-            val universe = fixture.universe.universe
-            val own = fixture.fixtureAttributes.map { attribute ->
-                attribute.category to runCatching { attribute.classProperty.call(fixture) }.getOrNull()
-            }
-            val fixtureDimmed = own.any { (category, _) -> category == AttributeCategory.DIMMER }
-            classify(universe, own, dimmerless = !fixtureDimmed, scaled, strobe)
-            if (fixture is MultiElementFixture<*>) {
-                for (element in fixture.elements) {
-                    val elementOwn = elementAttributes(element)
-                    val elementDimmed = elementOwn.any { (category, _) -> category == AttributeCategory.DIMMER }
-                    classify(universe, elementOwn, dimmerless = !fixtureDimmed && !elementDimmed, scaled, strobe)
-                }
-            }
+        for (head in HeadIntensity.classify(fixtures).values) {
+            for (channel in head.ownLevels) scaled += packChannelKey(head.universe, channel)
+            for (channel in head.cuts) strobe += packChannelKey(head.universe, channel)
         }
         classification.set(Classification(scaled, strobe))
-    }
-
-    private fun elementAttributes(element: FixtureElement<*>): List<Pair<AttributeCategory, Any?>> =
-        FixtureAttributeCatalogue.of(element::class).all.map { attribute ->
-            @Suppress("UNCHECKED_CAST")
-            val read = attribute.classProperty as kotlin.reflect.KProperty1<Any, *>
-            attribute.category to runCatching { read.call(element) }.getOrNull()
-        }
-
-    private fun classify(
-        universe: Int,
-        attributes: List<Pair<AttributeCategory, Any?>>,
-        dimmerless: Boolean,
-        scaled: MutableSet<Long>,
-        strobe: MutableSet<Long>,
-    ) {
-        for ((category, value) in attributes) {
-            if (value == null) continue
-            when (category) {
-                AttributeCategory.DIMMER, AttributeCategory.UV -> addValueChannels(universe, value, scaled)
-                AttributeCategory.STROBE, AttributeCategory.RING -> addValueChannels(universe, value, strobe)
-                AttributeCategory.COLOUR ->
-                    if (dimmerless && (value is DmxColour || value is DmxWhiteMixColour)) addValueChannels(universe, value, scaled)
-                AttributeCategory.WHITE, AttributeCategory.AMBER ->
-                    if (dimmerless && value is DmxSlider) addValueChannels(universe, value, scaled)
-                else -> Unit
-            }
-        }
-    }
-
-    private fun addValueChannels(universe: Int, value: Any, into: MutableSet<Long>) {
-        when (value) {
-            is DmxSlider -> into += packChannelKey(universe, value.channelNo)
-            is DmxFixtureSetting<*> -> into += packChannelKey(universe, value.channelNo)
-            is DmxColour -> {
-                into += packChannelKey(universe, value.redSlider.channelNo)
-                into += packChannelKey(universe, value.greenSlider.channelNo)
-                into += packChannelKey(universe, value.blueSlider.channelNo)
-            }
-            is DmxWhiteMixColour -> {
-                into += packChannelKey(universe, value.warm.channelNo)
-                into += packChannelKey(universe, value.cold.channelNo)
-            }
-        }
     }
 
     override fun modify(universe: Universe, channel: Int, value: UByte): UByte {

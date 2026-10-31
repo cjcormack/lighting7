@@ -178,6 +178,26 @@ class LayerResolver(
         )
     }
 
+    /**
+     * What [assignments] compose to at [weights], as a snapshot that is never published: Layer 4
+     * read without some of its rows ([CueAssignmentLayer.cuesOnly]). Same cook, composition and
+     * winner rules as [applyAssignments].
+     */
+    internal fun snapshotOf(
+        assignments: List<CueAssignmentResolver.Assignment>,
+        weights: CueAssignmentResolver.FadeWeights,
+    ): CueLayerSnapshot {
+        if (assignments.isEmpty()) return CueLayerSnapshot.EMPTY
+        val cooked = cueAssignmentResolver.cook(assignments)
+        val winners = selectWinners(assignments, weights)
+        return CueLayerSnapshot(
+            index = cueAssignmentResolver.compose(cooked, weights),
+            winners = winners.mapValues { (_, a) -> a.cueId },
+            layerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap(),
+            fadeDurations = cueAssignmentResolver.fadeDurationsFor(cooked, winners),
+        )
+    }
+
     private fun selectWinners(
         assignments: List<CueAssignmentResolver.Assignment>,
         weights: CueAssignmentResolver.FadeWeights,

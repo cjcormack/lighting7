@@ -140,7 +140,7 @@ is titled *Move in dark: session N — title*. Never merge a later session's PR 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Stack settings and the look-ahead engine | planned | | | |
+| 1 | Stack settings and the look-ahead engine | in review | `claude/brave-bardeen-l724t1` | | |
 | 2 | Every edge: re-planning, catch-up, lit early, the key stack and the frame | planned | | | |
 | 3 | The cue's setting, the static plan, MCP, and the row flag retired | planned | | | |
 | 4 | Screens: stack settings, the Cue tab and the cue list | planned | | | |
@@ -199,6 +199,29 @@ the next; whoever merges the last fills its own.
   §"Crossfade behaviour" (the look-ahead beside the row flag, which session 3 removes);
   `docs/sync-engineering.md` §"Version 45"; root `CLAUDE.md` §"Cue Stack Run Endpoints" (one line
   on the stack's `moveInDark`).
+- **Recorded in session 1:**
+  - *One contributor per stack, row fades.* `setAssignments(honourRowFades = true)` ramps only keys
+    whose composed value changed (`publishCueLayerToControllers` skips equal ones), so each head's rows
+    carry the move time as their `fadeDurationMs` and the head that just joined ramps from wherever it
+    stands while one already moving keeps its ramp. A contributor per (stack, head) was not needed. Its
+    id is `-stackId`: nothing reads a cue tier id as positive except by looking it up, which finds
+    nothing; provenance now names the stack and no cue for it.
+  - *Restamped before the GO.* The contributor's priority follows the live entry, so `activate` calls
+    `beforeGo` with the incoming hold's priority before the cue arrives; otherwise a cue walked
+    through on the way to the target would beat the old priority and blend the head back for a frame.
+  - *Corrections to this section.* There is no stack `PATCH`: the wire is `POST` and `PUT`, and a `PUT`
+    without `moveInDark` (or a field of it) keeps what is stored. An open strobe needs no rule of its
+    own: a strobe on a lit dimmer is lit because the dimmer reads above 0, so STROBE and RING are only
+    the grand master's cuts, but an LED ring's effect channel lights the ring and counts. A head that
+    lights while moving or set, or that the live cue lights after a GO back, is let go at once — a
+    snap, which session 2's D8 makes a fade. The contributor's priority also follows
+    `CueHolds.restampEntries`, and a GO ends a hand-over an earlier GO left running. RING, RING_SPEED
+    and LED_MACRO rows never move, nor a colour carrying UV. The stack `PUT` already re-plans (D2's "at
+    once"), which session 2's list also names.
+  - *P5, `[crossfade]`, 2026-10-31, same sitting, alternating:* this branch p50 920 / 788 / 585 /
+    655 µs, alloc 733 / 763 / 728 / 735 kB/frame; `main` (a66660a) p50 588 / 851 / 956 / 647 µs,
+    alloc 728 / 740 / 730 / 730 kB/frame. No measurable change: the compose path gained no work, only
+    a sign test where provenance names a cue.
 
 ### Session 2 — Every edge: re-planning, catch-up, lit early, the key stack and the frame
 

@@ -824,6 +824,7 @@ internal val createCueStackTool = ToolDef(
                 put("type", "boolean")
                 put("description", "Loop back to start after last cue. Default false.")
             })
+            put("moveInDark", moveInDarkSchema)
         })
         put("required", buildJsonArray { add("name") })
     }

@@ -432,7 +432,7 @@ class ProvenanceService internal constructor(
                     val layer = cueLayerLayerWinners[key]
                     ProvenanceEntry(
                         key.targetKey, key.attribute, ProvenanceSource.CUE,
-                        cueId = winningCueId,
+                        cueId = CueAssignmentLayer.cueIdOf(winningCueId),
                         cueStackId = winningCueId?.let { cueStackIdFor(it) },
                         layerId = layer?.layerId,
                         layerSource = layer?.source,
@@ -530,7 +530,7 @@ class ProvenanceService internal constructor(
             val layer = cueLayer.layerWinners[emitterKey]
             BundledProvenance(
                 attribute = emitter.name,
-                cueId = cueId,
+                cueId = CueAssignmentLayer.cueIdOf(cueId),
                 cueStackId = cueId?.let { cueStackIdFor(it) },
                 layerId = layer?.layerId,
                 layerSource = layer?.source,
@@ -610,7 +610,7 @@ class ProvenanceService internal constructor(
         return keys.map { key ->
             val cueId = cueLayerWinners[key]
             if (cueId != null) {
-                UnderlyingSource(key, cueId, cueStackIdFor(cueId), viaFxId = null)
+                UnderlyingSource(key, CueAssignmentLayer.cueIdOf(cueId), cueStackIdFor(cueId), viaFxId = null)
             } else {
                 val effect = fxByKey[key.targetKey to key.attribute]
                     ?.takeIf { it.cueId != null }

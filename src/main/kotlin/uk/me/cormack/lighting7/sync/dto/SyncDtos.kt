@@ -34,6 +34,12 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v45: a stack's *Move in dark* setting travels on `CueStackJson` (`moveInDark`, `moveInDarkWhen`,
+    // `moveInDarkDelayMs`, `moveInDarkTimeMs`, `moveInDarkFamilies`; move-in-dark plan D2). Every field
+    // defaults to off at the defaults, so a stack left off exports byte-for-byte as at v44. The writer's
+    // number moves by the sharp-edge rule: a v44 reader would import every stack off and its next push
+    // would write the setting away for every peer. `minReader` stays at **43** — an older archive's
+    // stacks read off. See `docs/sync-engineering.md` §"Version 45 — Move in dark on a stack".
     // v44: a show's order of a venue group's members travels as `showGroupOrders/{uuid}.json`
     // ([ShowGroupOrderJson], group-order plan D9). A show with none exports byte-for-byte as at v43. The
     // writer's number moves by the sharp-edge rule: a v43 reader would import the show without them and
@@ -347,7 +353,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 44,
+    val formatVersion: Int = 45,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 43,
 )
@@ -956,6 +962,16 @@ data class CueStackJson(
     val label: String? = null,
     /** v20: the stack's *set* — the states its elements hold while it is live. */
     val scenery: List<SceneryChangeJson> = emptyList(),
+    /**
+     * v45: *Move in dark* (move-in-dark plan D2). Each field defaults to what a stack without it
+     * reads as — off, at the defaults — so an older archive's stacks import off.
+     */
+    val moveInDark: Boolean = false,
+    val moveInDarkWhen: String = "EARLY",
+    val moveInDarkDelayMs: Long = 1000,
+    val moveInDarkTimeMs: Long = 2000,
+    /** The families that move, sorted by name. */
+    val moveInDarkFamilies: List<String> = listOf("BEAM", "COLOUR", "POSITION"),
 )
 
 /**

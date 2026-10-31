@@ -60,6 +60,7 @@ import uk.me.cormack.lighting7.sync.dto.BuskRigRowJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
+import uk.me.cormack.lighting7.models.moveInDarkSettings
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
@@ -165,7 +166,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 44, minReader = 43), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 45, minReader = 43), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -530,6 +531,77 @@ class ProjectRoundTripTest {
                 (uk.me.cormack.lighting7.models.DaoCues.project eq project.id) and (uk.me.cormack.lighting7.models.DaoCues.name eq "open")
             }.single()
             assertEquals(listOf(cloneMasters.getValue(1), cloneMasters.getValue(2)), copied.speedMasters.map { it.speedMasterUuid })
+        }
+    }
+
+    @Test
+    fun `a stack's Move in dark exports on its stack and round-trips, and a stack left off writes nothing`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val texts = Files.list(exportDirA.resolve("cueStacks")).use { stream -> stream.toList().map { Files.readString(it) } }
+        val stacks = texts.map { canonicalDecode(CueStackJson.serializer(), it) }.associateBy { it.name }
+        val moved = stacks.getValue("show-2")
+        assertEquals(true, moved.moveInDark)
+        assertEquals("LATE", moved.moveInDarkWhen)
+        assertEquals(2500L, moved.moveInDarkDelayMs)
+        assertEquals(500L, moved.moveInDarkTimeMs)
+        assertEquals(listOf("POSITION"), moved.moveInDarkFamilies)
+        assertEquals(1, texts.count { "moveInDark" in it }, "a stack left off at the defaults writes no key")
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertEquals(45, format.formatVersion)
+        assertEquals(45, SUPPORTED_FORMAT_VERSION)
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val byName = uk.me.cormack.lighting7.models.DaoCueStack.find {
+                uk.me.cormack.lighting7.models.DaoCueStacks.project eq imported.projectId
+            }.associateBy { it.name }
+            val settings = byName.getValue("show-2").moveInDarkSettings
+            assertEquals(
+                uk.me.cormack.lighting7.models.MoveInDarkSettings(
+                    true, uk.me.cormack.lighting7.models.MoveInDarkWhen.LATE,
+                    java.time.Duration.ofMillis(2500), java.time.Duration.ofMillis(500),
+                    setOf(uk.me.cormack.lighting7.fx.AttributeFamily.POSITION),
+                ),
+                settings,
+            )
+            assertEquals(uk.me.cormack.lighting7.models.MoveInDarkSettings.OFF, byName.getValue("show-1").moveInDarkSettings)
+        }
+
+        val clone = uk.me.cormack.lighting7.sync.ProjectCloner(state).clone(imported.projectId, "Clone", null)
+        transaction(state.database) {
+            val copied = uk.me.cormack.lighting7.models.DaoCueStack.find {
+                (uk.me.cormack.lighting7.models.DaoCueStacks.project eq clone.projectId) and
+                    (uk.me.cormack.lighting7.models.DaoCueStacks.name eq "show-2")
+            }.single()
+            assertEquals(true, copied.moveInDarkSettings.on, "a clone keeps what is stored")
+        }
+    }
+
+    /** An archive written before v45 carries no Move in dark: its stacks import off. */
+    @Test
+    fun `a stack from an older archive imports with Move in dark off`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        Files.list(exportDirA.resolve("cueStacks")).use { stream ->
+            stream.toList().forEach { file ->
+                val json = kotlinx.serialization.json.Json.parseToJsonElement(Files.readString(file)) as kotlinx.serialization.json.JsonObject
+                Files.writeString(file, kotlinx.serialization.json.JsonObject(json.filterKeys { !it.startsWith("moveInDark") }).toString())
+            }
+        }
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val stacks = uk.me.cormack.lighting7.models.DaoCueStack.find {
+                uk.me.cormack.lighting7.models.DaoCueStacks.project eq imported.projectId
+            }.toList()
+            assertTrue(stacks.isNotEmpty())
+            assertTrue(stacks.all { it.moveInDarkSettings == uk.me.cormack.lighting7.models.MoveInDarkSettings.OFF })
         }
     }
 

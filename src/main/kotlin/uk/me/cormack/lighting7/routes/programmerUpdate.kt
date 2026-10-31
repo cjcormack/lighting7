@@ -385,7 +385,8 @@ internal fun buildUpdateChecklist(
     val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.attribute) }
     // One snapshot for both the cueValue reads and the attribution, so a cue apply landing
     // mid-request cannot pair one cue's value with another cue's name in the checklist.
-    val cueLayer = engine.layerResolver.current
+    // Move in dark's contributors left out: a key under one belongs to the live cue beneath (D1).
+    val cueLayer = engine.cueLayer.cuesOnly()
     val cueLayerState = cueLayer.state
     val sources = engine.provenance.underlyingSources(byKey.keys, cueLayer)
 
@@ -498,7 +499,7 @@ internal fun entriesUnderlyingCue(
     val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
     if (entries.isEmpty()) return emptyList()
     val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.attribute) }
-    return engine.provenance.underlyingSources(byKey.keys)
+    return engine.provenance.underlyingSources(byKey.keys, engine.cueLayer.cuesOnly())
         .filter { it.cueId == cueId }
         .mapNotNull { byKey[it.key] }
 }
