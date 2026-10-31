@@ -152,26 +152,47 @@ describe('the cue in edit vis source', () => {
   })
 
   it('asks again once a slow preview settles, when an edit lands while it is in flight', async () => {
-    const pause = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)))
-    const recording = fetchMock
-    const slow = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const answer = recording(input, init)
-      const url = input instanceof Request ? input.url : String(input)
-      return url.includes('/preview') ? answer.then((r) => new Promise<Response>((done) => setTimeout(() => done(r), 400))) : answer
-    })
-    vi.stubGlobal('fetch', slow)
-    showCueOnStage({ kind: 'entry', entryId: 170 })
-    renderHook(() => useEditCueSourceState(true), { wrapper })
-    await waitFor(() => expect(requests('/cue-stacks/7/preview')).toHaveLength(1))
-    await pause(450)
+    // On the fake clock, and with each preview answered only when the test lets it go, so the
+    // second edit's timer is certain to fire while the request it should wait for is pending.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+      const held: (() => void)[] = []
+      const recording = fetchMock
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const answer = recording(input, init)
+          const url = input instanceof Request ? input.url : String(input)
+          if (!url.includes('/preview')) return answer
+          return answer.then((r) => new Promise<Response>((done) => held.push(() => done(r))))
+        }),
+      )
+      const release = () => act(async () => held.splice(0).forEach((done) => done()))
+      const previews = () => requests('/cue-stacks/7/preview')
 
-    act(() => cuesWs.listChanged())
-    await waitFor(() => expect(requests('/cue-stacks/7/preview')).toHaveLength(2), { timeout: 1000 })
-    // The second edit's timer fires while that request is still on its way.
-    act(() => cuesWs.listChanged())
-    await pause(EDIT_REFETCH_DEBOUNCE_MS + 50)
-    expect(requests('/cue-stacks/7/preview')).toHaveLength(2)
-    await waitFor(() => expect(requests('/cue-stacks/7/preview')).toHaveLength(3), { timeout: 1500 })
+      showCueOnStage({ kind: 'entry', entryId: 170 })
+      renderHook(() => useEditCueSourceState(true), { wrapper })
+      await advance(50)
+      expect(previews()).toHaveLength(1)
+      await release()
+      await advance(10)
+
+      act(() => cuesWs.listChanged())
+      await advance(EDIT_REFETCH_DEBOUNCE_MS + 10)
+      expect(previews()).toHaveLength(2)
+
+      act(() => cuesWs.listChanged())
+      await advance(EDIT_REFETCH_DEBOUNCE_MS + 10)
+      expect(held).toHaveLength(1)
+      expect(previews()).toHaveLength(2)
+
+      await release()
+      await advance(10)
+      expect(previews()).toHaveLength(3)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('says the preview is unavailable when the stack list cannot be read, not that the cue is gone', async () => {
