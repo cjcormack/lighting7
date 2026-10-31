@@ -282,10 +282,11 @@ the next; whoever merges the last fills its own.
     `fixturesChanged`. A head the live cue lights is let go idle, not *lit early*.
   - *Reload.* "Already in place" is read off the carried frame: a head dark on it whose planned rows'
     channels it shows (the new show's buffer once the rows are published) starts `SET`.
-  - *Found, not fixed:* a same-project reload zeroes a Fusion 100 Spot's tilt channel with Move in dark
-    off too, while pan and the composed position survive (queued as its own task). The reload test
-    asserts pan, the dimmer and the held position, and leaves tilt out. The test controller has no
-    ramps, so the fade tests read its change log's `fadeMs`.
+  - *Found, fixed since:* a same-project reload zeroed a Fusion 100 Spot's tilt channel with Move in
+    dark off too, while pan and the composed position survived: the reload republished `tilt`, which
+    nothing held, after `position`. Fixed in its own change (`Show.resume` republishes by tier); the
+    reload test asserts tilt again. The test controller has no ramps, so the fade tests read its
+    change log's `fadeMs`.
   - *P5, `[crossfade]`, 2026-10-31, same sitting, alternating (a review agent sharing the machine):*
     this branch p50 966 / 1099 / 793 / 1141 µs, alloc 745 / 755 / 736 / 756 kB/frame; session 1's
     head (f161d5f) p50 1538 / 856 / 1253 / 899 µs, alloc 751 / 741 / 736 / 752 kB/frame. No

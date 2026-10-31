@@ -405,9 +405,8 @@ class MoveInDarkServiceTest : RouteIntegrationTest() {
         setAtQ12(rig)
 
         runBlocking { state.projectManager.switchProject(projectId, reload = true) }
-        // Tilt is left out: a reload zeroes this spot's tilt channel with Move in dark off too.
         val samples = sample(800)
-        assertEquals(setOf(200 to 0), samples.map { it.first to it.third }.toSet(), "the head stayed where it was, dark")
+        assertEquals(setOf(Triple(200, 100, 0)), samples.toSet(), "the head stayed where it was, dark")
         assertEquals(
             CueAssignmentResolver.AttributeValue.Position(200u, 100u),
             state.show.fxEngine.layerResolver.currentCueLayerState[CueAssignmentResolver.Key.fixture("spot", "position")],
