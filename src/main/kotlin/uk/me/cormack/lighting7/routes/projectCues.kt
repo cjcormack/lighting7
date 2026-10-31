@@ -87,6 +87,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem.message!!))
                 return@withCurrentProject
             }
+            val moveInDark = parseCueMoveInDark(newCue.moveInDark, CueMoveInDarkSettings.DEFAULT).getOrElse {
+                return@withCurrentProject call.respondCueMoveInDarkInvalid(it)
+            }
             // An insert shifts the positions after it, and a live cue's priority is its position.
             var priorities = emptyMap<Int, Int>()
             var numberTaken = false
@@ -110,6 +113,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     notes = newCue.notes
                     stomp = newCue.stomp
                     this.speedMasters = speedMasters
+                    moveInDarkSettings = moveInDark
                 }
                 writeCueChildren(
                     cue,
@@ -191,9 +195,14 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem.message!!))
                 return@withCurrentProject
             }
+            var moveInDarkProblem: Throwable? = null
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
+                val moveInDark = parseCueMoveInDark(updatedData.moveInDark, cue.moveInDarkSettings).getOrElse {
+                    moveInDarkProblem = it
+                    return@transaction null
+                }
                 val stageBefore = if (held) cue.stageContent() else null
 
                 // Its number and follow are its entries' (cue model plan D2), written on the entry
@@ -204,6 +213,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.notes = updatedData.notes
                 cue.stomp = updatedData.stomp
                 cue.speedMasters = speedMasters
+                cue.moveInDarkSettings = moveInDark
 
                 // Replace children, keeping the uuid of every child the write keeps.
                 writeCueChildren(
@@ -219,6 +229,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
+            moveInDarkProblem?.let { return@withCurrentProject call.respondCueMoveInDarkInvalid(it) }
             if (cueDetails != null) {
                 if (stageChanged) state.show.cueStackManager.holds.markEdited(resource.cueId)
                 state.show.fixtures.cueListChanged()
@@ -305,9 +316,16 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
             val writesStage = (hasLayers || hasFx || hasAssignments) && state.show.cueStackManager.holds.isHeld(resource.cueId)
             var stageChanged = false
+            var moveInDarkProblem: Throwable? = null
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
+                val moveInDark = if ("moveInDark" in body) {
+                    parseCueMoveInDark(body["moveInDark"], cue.moveInDarkSettings).getOrElse {
+                        moveInDarkProblem = it
+                        return@transaction null
+                    }
+                } else null
                 val stageBefore = if (writesStage) cue.stageContent() else null
 
                 // Scalar fields. Number and follow are the entry's, on the entry route.
@@ -317,6 +335,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if ("notes" in body) cue.notes = body["notes"].nullableString()
                 if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
                 if (speedMasters != null) cue.speedMasters = speedMasters
+                if (moveInDark != null) cue.moveInDarkSettings = moveInDark
 
                 // Only the lists present are replaced; a null one is left alone.
                 writeCueChildren(cue, effects, assignments, triggers, layers, registry = state.show.fxRegistry)
@@ -325,6 +344,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
+            moveInDarkProblem?.let { return@withCurrentProject call.respondCueMoveInDarkInvalid(it) }
             if (cueDetails != null) {
                 if (stageChanged) state.show.cueStackManager.holds.markEdited(resource.cueId)
                 state.show.fixtures.cueListChanged()
@@ -629,6 +649,11 @@ data class NewCue(
     val stomp: Boolean = false,
     /** The masters the cue sets on GO, `[{speedMasterUuid, bpm}]` — the whole list (S16). */
     val speedMasters: List<JsonElement> = emptyList(),
+    /**
+     * *Move in dark* on this cue (move-in-dark plan D3): `{mode, delayMs, timeMs, live}`, each field
+     * absent keeping what is stored (the default on a create). Absent, a PUT keeps the stored setting.
+     */
+    val moveInDark: JsonElement? = null,
 )
 
 @Serializable
@@ -679,6 +704,8 @@ data class CueDetails(
      * the cue's POST, PUT and PATCH.
      */
     val speedMasters: List<CueSpeedMasterDto> = emptyList(),
+    /** *Move in dark* on this cue (D3); `unknownLive` names the live heads the running rig lacks. */
+    val moveInDark: CueMoveInDarkDto = CueMoveInDarkDto(),
     /** Every entry naming the cue, in show order (stacks in show order, then position); empty when loose. */
     val entries: List<CueEntryPlaceDto> = emptyList(),
     /** The busk pads, cue slots and `FireCue` bindings naming the cue — the list's alone, null on one cue's read. */
@@ -739,6 +766,9 @@ data class StopCueResponse(
 
 /** Every field the cue PATCH reads; anything else is refused by name. */
 private val CUE_PATCH_FIELDS = setOf(
-    "name", "fadeDurationMs", "fadeCurve", "notes", "stomp", "speedMasters",
+    "name", "fadeDurationMs", "fadeCurve", "notes", "stomp", "speedMasters", "moveInDark",
     "adHocFx", "attributeAssignments", "triggers", "layers",
 )
+
+private suspend fun io.ktor.server.application.ApplicationCall.respondCueMoveInDarkInvalid(error: Throwable) =
+    respond(HttpStatusCode.BadRequest, ErrorResponse(error.message ?: "Invalid moveInDark", CODE_MOVE_IN_DARK_INVALID))

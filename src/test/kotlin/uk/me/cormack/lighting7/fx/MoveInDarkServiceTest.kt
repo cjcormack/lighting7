@@ -543,4 +543,77 @@ class MoveInDarkServiceTest : RouteIntegrationTest() {
         assertTrue(manager.moveInDark!!.statusOf(rig.stackId).isEmpty(), "nothing waits to move it")
         assertFalse(contributorPublished(rig.stackId))
     }
+
+    // ─── The cue's own setting (D3) ─────────────────────────────────────────────────────────
+
+    private fun setQ12(rig: Rig, setting: uk.me.cormack.lighting7.models.CueMoveInDarkSettings) = transaction(state.database) {
+        DaoCue[rig.q12Cue].moveInDarkSettings = setting
+    }
+
+    @Test
+    fun `a cue's Early moves its heads on a stack that is off`() = testApplication {
+        mountTestApp(state)
+        val rig = seed(on = false)
+        setQ12(rig, uk.me.cormack.lighting7.models.CueMoveInDarkSettings(uk.me.cormack.lighting7.models.CueMoveInDarkMode.EARLY))
+
+        manager.activateEntry(state, rig.stackId, rig.q10)
+        awaitUntil("Q10 lit") { value(dimmer) == 255 && value(pan) == 10 }
+        manager.activateEntry(state, rig.stackId, rig.q11)
+        awaitUntil("the head in Q12's place") { value(pan) == 200 && value(tilt) == 100 }
+        assertEquals(0, value(dimmer), "it moved in the dark")
+    }
+
+    @Test
+    fun `a cue set Off leaves its heads to move in its fade, lit`() = testApplication {
+        mountTestApp(state)
+        val rig = seed(on = true)
+        setQ12(rig, uk.me.cormack.lighting7.models.CueMoveInDarkSettings(uk.me.cormack.lighting7.models.CueMoveInDarkMode.OFF))
+
+        manager.activateEntry(state, rig.stackId, rig.q10)
+        awaitUntil("Q10 lit") { value(dimmer) == 255 }
+        manager.activateEntry(state, rig.stackId, rig.q11)
+        awaitUntil("Q11 faded the head out") { value(dimmer) == 0 }
+        assertTrue(sample(800).all { it.first == 50 }, "past the delay and the move time it stays in Q11's place")
+        assertTrue(manager.moveInDark!!.statusOf(rig.stackId).isEmpty())
+        assertFalse(contributorPublished(rig.stackId))
+    }
+
+    @Test
+    fun `a head the target keeps live is neither moved nor caught up at its GO, so it flies in`() = testApplication {
+        mountTestApp(state)
+        val rig = seed(on = true)
+        setQ12(rig, uk.me.cormack.lighting7.models.CueMoveInDarkSettings(live = listOf("spot")))
+
+        manager.activateEntry(state, rig.stackId, rig.q10)
+        awaitUntil("Q10 lit") { value(dimmer) == 255 }
+        manager.activateEntry(state, rig.stackId, rig.q11)
+        awaitUntil("Q11 faded the head out") { value(dimmer) == 0 && value(pan) == 50 }
+        assertTrue(sample(600).all { it.first == 50 }, "kept live: not moved in the dark")
+
+        manager.activateEntry(state, rig.stackId, rig.q12)
+        val pans = sample(800).map { it.first }
+        assertTrue(pans.any { it in 51..199 }, "it moves across Q12's fade, not at once: $pans")
+        assertEquals(200, value(pan))
+    }
+
+    @Test
+    fun `a GO onto a cue that moves nothing lets a held head go at once, while it is still dark`() = testApplication {
+        mountTestApp(state)
+        val rig = seed(on = false)
+        setQ12(rig, uk.me.cormack.lighting7.models.CueMoveInDarkSettings(uk.me.cormack.lighting7.models.CueMoveInDarkMode.EARLY))
+
+        manager.activateEntry(state, rig.stackId, rig.q10)
+        awaitUntil("Q10 lit") { value(dimmer) == 255 && value(pan) == 10 }
+        manager.activateEntry(state, rig.stackId, rig.q11)
+        awaitUntil("the head set in Q12's place") {
+            value(pan) == 200 && manager.moveInDark!!.statusOf(rig.stackId)["spot"]?.state == MoveInDarkService.HeadState.SET
+        }
+
+        // Back to Q10, on Stack in a stack that is off: it moves nothing, and lights the head.
+        val from = changeCount()
+        manager.activateEntry(state, rig.stackId, rig.q10)
+        awaitUntil("Q10's place again") { value(pan) == 10 && !contributorPublished(rig.stackId) }
+        assertTrue(changesTo(pan, from).none { it.fadeMs > 0 }, "let go at once, not ramped lit: ${changesTo(pan, from)}")
+    }
 }
+

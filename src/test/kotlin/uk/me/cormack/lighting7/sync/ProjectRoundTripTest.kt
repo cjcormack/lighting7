@@ -166,7 +166,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 45, minReader = 43), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 46, minReader = 43), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -548,12 +548,6 @@ class ProjectRoundTripTest {
         assertEquals(500L, moved.moveInDarkTimeMs)
         assertEquals(listOf("POSITION"), moved.moveInDarkFamilies)
         assertEquals(1, texts.count { "moveInDark" in it }, "a stack left off at the defaults writes no key")
-        val format = canonicalDecode(
-            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
-            Files.readString(exportDirA.resolve("formatVersion.json")),
-        )
-        assertEquals(45, format.formatVersion)
-        assertEquals(45, SUPPORTED_FORMAT_VERSION)
 
         wipeDatabase()
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
@@ -580,6 +574,74 @@ class ProjectRoundTripTest {
                     (uk.me.cormack.lighting7.models.DaoCueStacks.name eq "show-2")
             }.single()
             assertEquals(true, copied.moveInDarkSettings.on, "a clone keeps what is stored")
+        }
+    }
+
+    @Test
+    fun `a cue's Move in dark exports on its cue and round-trips, and no row writes the retired flag`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val texts = Files.list(exportDirA.resolve("cues")).use { stream -> stream.toList().map { Files.readString(it) } }
+        val open = texts.map { canonicalDecode(uk.me.cormack.lighting7.sync.dto.CueJson.serializer(), it) }.single { it.name == "open" }
+        assertEquals("LATE", open.moveInDarkMode)
+        assertEquals(1500L, open.moveInDarkDelayMs)
+        assertEquals(800L, open.moveInDarkTimeMs)
+        assertEquals(listOf("hex-2"), open.moveInDarkLive)
+        assertEquals(1, texts.count { "moveInDark" in it }, "a cue on Stack writes no key")
+        val rows = Files.list(exportDirA.resolve("cueAttributeAssignments")).use { stream -> stream.toList().map { Files.readString(it) } }
+        assertTrue(rows.none { "moveInDark" in it }, "the row flag is retired (v46)")
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertEquals(46, format.formatVersion)
+        assertEquals(46, SUPPORTED_FORMAT_VERSION)
+
+        val expected = uk.me.cormack.lighting7.models.CueMoveInDarkSettings(
+            uk.me.cormack.lighting7.models.CueMoveInDarkMode.LATE, java.time.Duration.ofMillis(1500), java.time.Duration.ofMillis(800), listOf("hex-2"),
+        )
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val cue = uk.me.cormack.lighting7.models.DaoCue.find {
+                (uk.me.cormack.lighting7.models.DaoCues.project eq imported.projectId) and (uk.me.cormack.lighting7.models.DaoCues.name eq "open")
+            }.single()
+            assertEquals(expected, cue.moveInDarkSettings)
+        }
+        val clone = uk.me.cormack.lighting7.sync.ProjectCloner(state).clone(imported.projectId, "Clone", null)
+        transaction(state.database) {
+            val copied = uk.me.cormack.lighting7.models.DaoCue.find {
+                (uk.me.cormack.lighting7.models.DaoCues.project eq clone.projectId) and (uk.me.cormack.lighting7.models.DaoCues.name eq "open")
+            }.single()
+            assertEquals(expected, copied.moveInDarkSettings, "a clone keeps what is stored")
+        }
+    }
+
+    /** An archive written before v46 flags rows, not cues: a cue with a flagged row imports Early (D13). */
+    @Test
+    fun `an older archive's flagged row gives its cue Early`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        fun rewrite(folder: String, change: (kotlinx.serialization.json.JsonObject) -> kotlinx.serialization.json.JsonObject) =
+            Files.list(exportDirA.resolve(folder)).use { stream ->
+                stream.toList().forEach { file ->
+                    val json = kotlinx.serialization.json.Json.parseToJsonElement(Files.readString(file)) as kotlinx.serialization.json.JsonObject
+                    Files.writeString(file, change(json).toString())
+                }
+            }
+        rewrite("cues") { kotlinx.serialization.json.JsonObject(it.filterKeys { key -> !key.startsWith("moveInDark") }) }
+        rewrite("cueAttributeAssignments") { row ->
+            if (row["attribute"]?.toString() == "\"position\"") kotlinx.serialization.json.JsonObject(row + ("moveInDark" to kotlinx.serialization.json.JsonPrimitive(true))) else row
+        }
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val modes = uk.me.cormack.lighting7.models.DaoCue.find {
+                uk.me.cormack.lighting7.models.DaoCues.project eq imported.projectId
+            }.associate { it.name to it.moveInDarkSettings.mode }
+            assertEquals(uk.me.cormack.lighting7.models.CueMoveInDarkMode.EARLY, modes.getValue("open"))
+            assertTrue(modes.filterKeys { it != "open" }.values.all { it == uk.me.cormack.lighting7.models.CueMoveInDarkMode.STACK }, modes.toString())
         }
     }
 

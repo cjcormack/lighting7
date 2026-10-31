@@ -324,7 +324,7 @@ it as `edited: true`.
 - **What sets it**: the cue's `PUT` and `PATCH` when the write changes what *Update stage* would
   send — `DaoCue.stageContent()`, its own rows' values and its untimed layers and ad-hoc FX,
   compared across the write — and only while something holds the cue. A name, fade, notes, scenery
-  or events write does not, nor a row's own fade or move-in-dark, nor a timed layer or FX: Update
+  or events write does not, nor a row's own fade, nor a timed layer or FX: Update
   stage sends none of them (Chris's call, 2026-10-17, narrowing plan §3.5). **A Look or palette edit
   that moves its FX** marks every live cue layering it (Chris's call, 2026-10-17, amending §3.5):
   `republishForSourceEdit` republishes those cues' rows, never their FX, and
@@ -593,6 +593,22 @@ is stored. The wire's `moveInDark {on, when, delayMs, timeMs, families}` is on `
 `MOVE_IN_DARK_INVALID` names every problem at once (a delay or time outside 0–30 s, an unknown `when`,
 an empty or unknown family). A `PUT` applies at once, without releasing the stack.
 
+**The cue that lights a head has a setting of its own** (D3): `cues.move_in_dark_mode` (`STACK | EARLY
+| LATE | OFF`, default `STACK`), `move_in_dark_delay` and `move_in_dark_time` (nullable `duration()`,
+null the stack's) and `move_in_dark_live` (a JSON list of head keys), read through
+`DaoCue.moveInDarkSettings`. Whether, when and how fast a head moves is its **target** cue's
+(`CueMoveInDarkSettings.effective`): *Stack* follows the stack's setting; *Early* and *Late* apply even
+on a stack that is off; *Off* — and a head the cue keeps live, a fixture's key covering its elements —
+moves in the GO's fade, lit, and is neither moved ahead nor caught up at that GO. A delay or a move
+time the cue sets is its own; the families are always the stack's. The cue `POST`, `PUT` and `PATCH`
+take `moveInDark {mode, delayMs, timeMs, live}`, each field absent keeping what is stored (the default
+on a create; a `PUT` or `PATCH` without the object keeps it, a `PATCH` naming `null` resets it), and
+`CueDetails.moveInDark` reads it back with `unknownLive`, the live keys the running rig lacks — kept, as
+a row's dead target is. `parseCueMoveInDark` refuses an unknown mode or field, a delay or time outside
+0–30 s, a live key that is not a string, as 400 `MOVE_IN_DARK_INVALID`, every problem at once.
+*Duplicate*, `POST /cues/copy-from` and MCP's `copy_to_project` carry it (`CueCopier`). A stack that is
+off still plans while a cue of its list sets *Early* or *Late* (`anyCueMovesOnItsOwn`).
+
 **Dark** is read on the output (D4, `fx/HeadIntensity.kt`): every channel that lights a head — its
 own DIMMER and UV, an LED ring's effect channel, its parent's master dimmer for an element, and on a
 dimmerless head its colour mix —
@@ -607,7 +623,10 @@ reads each head's `ownLevels`), so the two cannot disagree about what lights a h
 effective next (`CueRunStateTracker.effectiveNext`: the armed standby, else positional), then on,
 wrapping a looping stack, at most once round and never back onto the live entry — and gives each head
 the first entry whose cue lights it: an intensity row above 0 on it (or a DIMMER above 0 on its
-parent), or an Intensity FX on it. *Late* reads the effective next alone. A cue's content is what a GO
+parent), or an Intensity FX on it, and the target's setting decides: nothing for *Off*, a head kept
+live, or a stack that is off under *Stack*; under *Late* only when the target is the effective next.
+The walk is always the whole one, since a target's own *Early* reaches past the next GO on a *Late*
+stack. A cue's content is what a GO
 would cook (`buildCombinedCueLayerCook`: Looks, palettes, own rows, groups expanded), read by
 `fx/MoveInDarkPlans.kt`, which loads only the live cue and the entries the walk can reach. What moves
 is only what the target sets on the head, in the stack's families. Nothing that lights a head moves:
@@ -665,8 +684,9 @@ too soon), one set for a later cue, one never planned (a GO TO, a standby armed 
 incoming cue's own rows in its moving families into the contributor at once, a ramp in progress ended
 (`CueAssignmentLayer.snapKeys`), held to the end of the fade. A head the incoming cue lights that sets
 nothing to move, but held for another cue, is let go at once while it is still dark. This is the same
-contributor and the same hand-over; the resolver's row-flag arming is untouched beside it until
-session 3 retires the flag. A stack that is off catches nothing up (P4).
+contributor and the same hand-over. The catch-up reads the **incoming** cue's setting, which
+`activate` reads in its own transaction (`MoveInDarkService.Go`): a cue set *Off*, or on *Stack* in a
+stack that is off, catches nothing up (P4), and a head the cue keeps live is skipped, so it flies in.
 
 **Stop, switch, reload.** `deactivateStack` and the show's close let every move go at once. A
 same-project reload carries nothing of the service: `Show.resume` calls `MoveInDarkService.resume`
@@ -681,8 +701,35 @@ state at most every 100 ms. The key stack's `MOVE_IN_DARK` row (`ProvenanceServi
 `holdingOf`) names the move on a key the contributor wins (`docs/lighting-composition-model.md`
 §"Reading one attribute's stack").
 
-Sessions 3–5 of the plan: the cue's own setting, the static plan and MCP's `set_move_in_dark`, then
-the screens.
+**The static plan** (`GET /cue-stacks/{id}/move-in-dark`, `routes/cueStackMoveInDark.kt`,
+`MoveInDarkPlanner.staticPlan`) is what the stored list does with no other stack running, entry by
+entry in play order, markers left out: `{entryId, cueId, heads: [{target, fromEntryId, families}],
+live: [{target, reason}]}`, and a summary `{heads, cues, live, off}` — the moves in the dark, the cues
+they are for, the heads that move lit, the entries set *Off*. A head the target lights that would move
+something is moved from the **first entry it is dark in** (walking back to the last entry that lights
+it; the entry before the target under *Late*), or listed with a reason: `LIT_BEFORE` (the entry before
+lights it and sets something else), `CUE_OFF`, `KEPT_LIVE`, `TOO_QUICK` (every GO from that first dark
+entry to the target is a follow, and their delays — less the first entry's fade where it takes the
+head out — add up to less than the delay plus the move time; exactly that is enough, and a manual GO
+is never too quick). A head lit by the entry before at the same values is in neither list, nor is
+anything of a cue on *Stack* in a stack that is off, or the first entry of a list that does not loop.
+Stored data, so any project and both roles; the plan reads the running rig, so a project that is not
+current answers every entry empty with `rigLoaded: false`. MCP's `get_current_state` `cue_stacks`
+reports each stack's setting with this summary, and `cue_run` the heads the service is watching or
+holding; `set_move_in_dark` writes a stack's or a cue's setting (`docs/mcp-engineering.md`).
+
+**The per-row flag is gone** (D13): `cue_attribute_assignments.move_in_dark` snapped a flagged
+position at GO when another cue's dimmer row stored 0, read the cue tier alone, and nothing could set
+it. Database step 9 (`state/MoveInDarkRowFlagMigration.kt`) gave every cue with a flagged row the mode
+*Early* and dropped the column; the importer does the same for an archive below v46. The catch-up
+above does what the flag did, on the output rather than on stored rows, **for a stack GO only**: the
+flag snapped in the resolver whatever fired the cue, and a loose hold (a busk cue pad, `apply_cue`, a
+cue slot, MIDI `FireCue`) has no Move in dark, so a migrated cue fired loose over a dark cue now
+crossfades its position lit, as any value does (Chris's call, 2026-10-31; `FU-MOVE-IN-DARK-LOOSE`).
+A GO whose incoming cue moves nothing in the dark — *Off*, or on *Stack* in a stack that is off —
+still lets go, at once and while it is dark, of a head held for another cue that it lights.
+
+Sessions 4 and 5 of the plan: the screens.
 
 ## REST API
 

@@ -39,11 +39,12 @@ import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import java.util.UUID
 import uk.me.cormack.lighting7.models.entrySlotsOf
+import uk.me.cormack.lighting7.models.moveInDarkSettings
 import uk.me.cormack.lighting7.models.placeLabel
 
 /**
  * Where a project's own stored records name a fixture by key or a group by name — cue rows, ad-hoc
- * effects and palette-layer targets, Look rows and effects, template rows and surface bindings — for MCP's
+ * effects, palette-layer targets and the heads a cue keeps live, Look rows and effects, template rows and surface bindings — for MCP's
  * patch edits: who still names a key `unpatch_fixtures` removes, and the rewrite `rename_fixtures`
  * and `edit_groups` make. A cell is named `<fixture key>.<cell>`, so a fixture key also matches its
  * cells. Scripts are Kotlin source, so they are only ever reported. Inside a transaction.
@@ -200,6 +201,16 @@ internal object RigKeyReferences {
                     visit(cueUser(cueId), t.type, t.key)?.let { changed = true; t.copy(key = it) } ?: t
                 }
                 if (changed) { layer.targets = targets; touch(cueId) }
+            }
+            // The heads a cue keeps live through Move in dark, by key (move-in-dark plan D3).
+            for ((cueId, cue) in cues) {
+                val setting = cue.moveInDarkSettings
+                if (setting.live.isEmpty()) continue
+                var changed = false
+                val live = setting.live.map { key ->
+                    visit(cueUser(cueId), TargetRef.Fixture.TYPE, key)?.also { changed = true } ?: key
+                }
+                if (changed) { cue.moveInDarkSettings = setting.copy(live = live.distinct()); touch(cueId) }
             }
         }
 

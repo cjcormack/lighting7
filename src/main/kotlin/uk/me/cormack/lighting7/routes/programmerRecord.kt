@@ -200,7 +200,6 @@ internal fun writeRecordingIntoCue(
                 if (match != null) {
                     match.value = row.value
                     match.fadeDuration = row.fadeDurationMs.asDuration()
-                    match.moveInDark = row.moveInDark
                 } else {
                     DaoCueAttributeAssignment.new {
                         this.cue = cue
@@ -210,7 +209,6 @@ internal fun writeRecordingIntoCue(
                         value = row.value
                         fadeDuration = row.fadeDurationMs.asDuration()
                         sortOrder = row.sortOrder
-                        moveInDark = row.moveInDark
                     }
                 }
                 written++

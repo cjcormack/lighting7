@@ -33,6 +33,7 @@ import uk.me.cormack.lighting7.state.State
 internal fun Route.routeApiRestProjectCueStacks(state: State) {
     routeApiRestCueStackTimeline(state)
     routeApiRestCueStackTimelineEdit(state)
+    routeApiRestCueStackMoveInDark(state)
 
     // GET /{projectId}/cue-stacks - List stacks + separators in show order, with cues + active cue info
     get<ProjectCueStacksResource> { resource ->

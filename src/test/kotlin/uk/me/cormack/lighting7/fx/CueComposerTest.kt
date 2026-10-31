@@ -105,7 +105,6 @@ class CueComposerTest {
         attribute: String = "dimmer",
         value: UByte,
         targetIsGroup: Boolean = false,
-        moveInDark: Boolean = false,
     ) = CueAssignmentResolver.Assignment(
         cueId = cueId,
         priority = priority,
@@ -116,7 +115,6 @@ class CueComposerTest {
         category = AttributeCategory.DIMMER,
         compositionOverride = CompositionRule.UNSET,
         value = CueAssignmentResolver.AttributeValue.Slider(value),
-        moveInDark = moveInDark,
     )
 
     private fun cook(
@@ -496,24 +494,6 @@ class CueComposerTest {
     }
 
     // ─── What the local pass must carry through ─────────────────────────
-
-    @Test
-    fun `cook preserves moveInDark on local rows`() {
-        // Cook must not launder this: moveInDark drives the resolver's cross-cue arming pre-pass and
-        // is invisible to composition, so only a test keeps it alive. It used to check `paletteUuid`
-        // alongside — the field that let Include lift a row back as a reference rather than
-        // hardening it — which retired with the `ref:` grammar in session 4.
-        val fixtures = fixturesWithTwoHexesInAGroup()
-        val rows = cook(
-            fixtures,
-            registryOf(fixtures),
-            layers = emptyList(),
-            localRows = listOf(localSlider("hex-1", value = 0u, moveInDark = true)),
-        )
-        val row = rows.single()
-        assertEquals(true, row.moveInDark)
-        assertEquals(0u.toUByte(), assertIs<CueAssignmentResolver.AttributeValue.Slider>(row.value).value)
-    }
 
     @Test
     fun `cook preserves the cue id, priority and a fade weight of 1`() {

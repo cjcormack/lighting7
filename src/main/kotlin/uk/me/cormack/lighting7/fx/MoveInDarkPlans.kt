@@ -1,8 +1,15 @@
 package uk.me.cormack.lighting7.fx
 
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.models.CueMoveInDarkSettings
+import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.moveInDarkSettings
@@ -12,8 +19,9 @@ import uk.me.cormack.lighting7.state.State
  * [stackId]'s Move in dark plan from its live entry, for [MoveInDarkService]: the stack's settings, list
  * and next read in one transaction with the apply data of the live cue and of the entries the walk may
  * reach ([MoveInDarkPlanner.candidates]), each cooked as a GO would cook it (Looks, palettes and own
- * rows, groups expanded — `buildCombinedCueLayerCook`) and its FX read for Intensity ones. Null when
- * the stack is not live or no longer exists.
+ * rows, groups expanded — `buildCombinedCueLayerCook`) and its FX read for Intensity ones, with each
+ * cue's own setting. Null when the stack is not live or no longer exists; `off` when neither the stack
+ * nor any cue of its list moves a head.
  */
 internal fun planMoveInDark(
     state: State,
@@ -27,11 +35,12 @@ internal fun planMoveInDark(
     val loaded = transaction(state.database) {
         val stack = DaoCueStack.findById(stackId) ?: return@transaction null
         val settings = stack.moveInDarkSettings
-        if (!settings.on) return@transaction Loaded(null)
         val ordered = manager.runState.orderedCueEntries(stackId)
+        if (!settings.on && !anyCueMovesOnItsOwn(ordered.map { it.cueId })) return@transaction Loaded(null)
         val next = manager.runState.effectiveNext(stackId, ordered, stack.loop)
         val contents = HashMap<Int, MoveInDarkPlanner.CueContent>()
         lateinit var applyData: Map<Int, CueApplyData>
+        lateinit var cueSettings: Map<Int, CueMoveInDarkSettings>
         val input = MoveInDarkPlanner.Input(
             settings = settings,
             ordered = ordered,
@@ -42,20 +51,39 @@ internal fun planMoveInDark(
             content = { cueId ->
                 contents.getOrPut(cueId) {
                     val data = applyData[cueId] ?: return@getOrPut MoveInDarkPlanner.CueContent(emptyList())
-                    cueContent(state, cueId, data, heads)
+                    cueContent(state, cueId, data, heads, cueSettings[cueId] ?: CueMoveInDarkSettings.DEFAULT)
                 }
             },
         )
         val candidates = MoveInDarkPlanner.candidates(input)
-        applyData = buildCueApplyDataForCues(candidates.map { it.cueId }.toSet() + liveCueId)
+        val cueIds = candidates.map { it.cueId }.toSet() + liveCueId
+        applyData = buildCueApplyDataForCues(cueIds)
+        cueSettings = cueMoveInDarkSettingsOf(cueIds)
         Loaded(input, candidates.associate { it.entryId to entryLabel(it.entryId) })
     } ?: return null
     val input = loaded.input ?: return MoveInDarkPlanner.Plan(emptyMap(), emptySet(), off = true)
     return MoveInDarkPlanner.Plan(
         moves = MoveInDarkPlanner.plan(input).mapValues { (_, move) -> move.copy(label = loaded.labels[move.targetEntryId].orEmpty()) },
         litByLive = MoveInDarkPlanner.litHeads(input.content(liveCueId), heads),
-        settings = input.settings,
     )
+}
+
+/** Each of [cueIds]' own setting. Must run inside a transaction. */
+internal fun cueMoveInDarkSettingsOf(cueIds: Collection<Int>): Map<Int, CueMoveInDarkSettings> {
+    if (cueIds.isEmpty()) return emptyMap()
+    return DaoCue.find { DaoCues.id inList cueIds.distinct().map { EntityID(it, DaoCues) } }
+        .associate { it.id.value to it.moveInDarkSettings }
+}
+
+/**
+ * Whether any of [cueIds] sets *Early* or *Late* of its own, which moves its heads on a stack that is
+ * off (D3). Must run inside a transaction.
+ */
+internal fun anyCueMovesOnItsOwn(cueIds: Collection<Int>): Boolean {
+    if (cueIds.isEmpty()) return false
+    val ids = cueIds.distinct().map { EntityID(it, DaoCues) }
+    val modes = CueMoveInDarkSettings.OWN_TIMING_MODES.map { it.name }
+    return DaoCues.select(DaoCues.id).where { (DaoCues.id inList ids) and (DaoCues.moveInDarkMode inList modes) }.limit(1).any()
 }
 
 /** An entry as a GO labels its cue ([cueGoLabel]). Must run inside a transaction. */
@@ -64,12 +92,13 @@ private fun entryLabel(entryId: Int): String {
     return entry.cue?.let { cueGoLabel(entry, it) }.orEmpty()
 }
 
-/** One cue's rows and the heads its Intensity FX drive, as the planner reads them. */
-private fun cueContent(
+/** One cue's rows and the heads its Intensity FX drive, as the planner reads them, with its [setting]. */
+internal fun cueContent(
     state: State,
     cueId: Int,
     data: CueApplyData,
     heads: Map<String, HeadIntensity>,
+    setting: CueMoveInDarkSettings,
 ): MoveInDarkPlanner.CueContent {
     val cook = buildCombinedCueLayerCook(state, cueId, data, firedTimedLayerIds = emptySet(), priority = 0)
     val fxHeads = HashSet<String>()
@@ -83,7 +112,7 @@ private fun cueContent(
     }
     for ((_, fx, targets) in cook.effects) addFx(targets, fx.attribute, fx.family)
     for (fx in data.adHocFx) addFx(FxTargetsRef.ofOrNull(fx.targetType, fx.targetKey), fx.attribute, fx.family)
-    return MoveInDarkPlanner.CueContent(cook.values.rows, fxHeads)
+    return MoveInDarkPlanner.CueContent(cook.values.rows, fxHeads, setting)
 }
 
 /** The fixture and element keys [targets] names, groups expanded to their members. */

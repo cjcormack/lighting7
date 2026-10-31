@@ -131,7 +131,7 @@ class TerminologyMigrationTest {
 
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         assertTrue(logs.any { "templates → palettes" in it && "look_effects → look_fx" in it }, "$logs")
-        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion())
+        assertEquals(MOVE_IN_DARK_ROW_FLAG_USER_VERSION, userVersion())
 
         val tables = strings("SELECT name FROM sqlite_master WHERE type = 'table'").toSet()
         for (old in listOf("templates", "template_rows", "template_effects", "look_effects", "cue_ad_hoc_effects", "cue_property_assignments")) {
@@ -205,14 +205,14 @@ class TerminologyMigrationTest {
             listOf(listOf("Wave", "intensity", "CENTRE_IN")),
             query("SELECT fx_type, family, spread_order FROM look_fx WHERE sort_order = 9") { listOf(it.getString(1), it.getString(2), it.getString(3)) },
         )
-        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion())
+        assertEquals(MOVE_IN_DARK_ROW_FLAG_USER_VERSION, userVersion())
     }
 
     @Test
     fun `a fresh database is born in the glossary's words, with no backup`() {
         startDesk()
         stopDesk()
-        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion())
+        assertEquals(MOVE_IN_DARK_ROW_FLAG_USER_VERSION, userVersion())
         assertEquals(emptyList(), backups())
         assertTrue("palettes" in strings("SELECT name FROM sqlite_master WHERE type = 'table'"))
     }
@@ -267,7 +267,7 @@ class TerminologyMigrationTest {
         assertEquals(listOf("old colours"), strings("SELECT name FROM palettes_retired"))
         assertEquals(names, strings("SELECT name FROM palettes ORDER BY id"))
         assertTrue(logs.any { "palettes_retired" in it }, "$logs")
-        assertEquals(FX_SIBLINGS_USER_VERSION, userVersion())
+        assertEquals(MOVE_IN_DARK_ROW_FLAG_USER_VERSION, userVersion())
     }
 
     @Test

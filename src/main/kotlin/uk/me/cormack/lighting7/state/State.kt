@@ -1394,6 +1394,11 @@ class State(val config: ApplicationConfig) {
         // parameters, backed up first when anything moves. After step 7. `FxSiblingsMigration.kt`.
         FxSiblingsMigration.runIfNeeded(ds, database, dbPath)
 
+        // move-in-dark plan step 9: the per-row move-in-dark flag lifted into its cue's setting and
+        // dropped, backed up first when a row carries it. After step 8, once the schema has the cue's
+        // column. `MoveInDarkRowFlagMigration.kt`.
+        MoveInDarkRowFlagMigration.runIfNeeded(ds, database, dbPath)
+
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database
     }

@@ -342,7 +342,6 @@ internal fun removeClearedFromCue(
             value = group.value
             fadeDuration = group.fadeDuration
             sortOrder = nextSort++
-            moveInDark = group.moveInDark
         }
     }
     plan.delete.forEach { it.delete() }

@@ -9,6 +9,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoInstall
+import uk.me.cormack.lighting7.models.CueMoveInDarkSettings
 import uk.me.cormack.lighting7.models.MoveInDarkSettings
 import uk.me.cormack.lighting7.models.moveInDarkSettings
 import uk.me.cormack.lighting7.models.DaoCueSceneryRow
@@ -306,7 +307,7 @@ class ProjectExporter(private val state: State) {
                     scenery = cueSceneryOf(c.id).map { it.toJson() },
                     events = cueEventsOf(c.id).map { it.toJson() },
                     speedMasters = c.speedMasters.map { CueSpeedMasterJson(it.speedMasterUuid, it.bpm) },
-                )
+                ).withMoveInDark(c.moveInDarkSettings)
             }
 
             // v32: each place in a stack's list is its own record, written from the entry itself, so a
@@ -866,7 +867,6 @@ class ProjectExporter(private val state: State) {
                         value = a.value,
                         fadeDurationMs = a.fadeDuration?.toMillis(),
                         sortOrder = a.sortOrder,
-                        moveInDark = a.moveInDark,
                     ),
                 )
                 liveKeys.add(RecordKey("cueAttributeAssignments", a.uuid))
@@ -1051,4 +1051,12 @@ private fun CueStackJson.withMoveInDark(settings: MoveInDarkSettings) = copy(
     moveInDarkDelayMs = settings.delay.toMillis(),
     moveInDarkTimeMs = settings.time.toMillis(),
     moveInDarkFamilies = settings.families.map { it.name }.sorted(),
+)
+
+/** [this] cue carrying its *Move in dark* setting (v46). */
+private fun CueJson.withMoveInDark(settings: CueMoveInDarkSettings): CueJson = copy(
+    moveInDarkMode = settings.mode.name,
+    moveInDarkDelayMs = settings.delay?.toMillis(),
+    moveInDarkTimeMs = settings.time?.toMillis(),
+    moveInDarkLive = settings.live,
 )

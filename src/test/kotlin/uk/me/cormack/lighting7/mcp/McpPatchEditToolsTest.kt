@@ -149,6 +149,23 @@ class McpPatchEditToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `rename_fixtures rewrites the heads a cue keeps live, and unpatch_fixtures names the cue`() {
+        patchRig()
+        val cueId = transaction(state.database) {
+            val cue = DaoCue.new { this.project = DaoProject[projectId]; name = "Fly in" }
+            cue.moveInDarkSettings = CueMoveInDarkSettings(live = listOf("foh-1", "foh-10"))
+            cue.id.value
+        }
+        val done = call("rename_fixtures", """{"fixtures":[{"key":"foh-1","newKey":"wash-1"}]}""")
+        assertTrue(done.success, done.result)
+        assertEquals(listOf("wash-1", "foh-10"), transaction(state.database) { DaoCue[cueId].moveInDarkSettings.live })
+
+        val dry = call("unpatch_fixtures", """{"keys":["foh-10"],"dryRun":true}""")
+        assertTrue(dry.success, dry.result)
+        assertTrue("Fly in" in dry.result, dry.result)
+    }
+
+    @Test
     fun `rename_fixtures rewrites what names the key, cells included, and not a key that only shares its prefix`() {
         patchRig()
         val seeded = seedReferences()

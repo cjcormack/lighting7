@@ -323,11 +323,11 @@ describe('CueValuesGrid', () => {
     expect(await saved(2)).toEqual([])
   })
 
-  it('keeps every row’s fade, move-in-dark and order through an edit', async () => {
+  it('keeps every row’s fade and order through an edit', async () => {
     data.cues.set(
       1,
       cue(1, [
-        { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'position', value: '100,150', fadeDurationMs: 1500, moveInDark: true, sortOrder: 3 },
+        { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'position', value: '100,150', fadeDurationMs: 1500, sortOrder: 3 },
         { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', fadeDurationMs: 800, sortOrder: 1 },
       ]),
     )
@@ -339,7 +339,7 @@ describe('CueValuesGrid', () => {
     selectCell(1, 'fixture:orbit-sr', 'dimmer')
     await typeLevel('80')
     expect(await saved(1)).toEqual([
-      { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'position', value: '100,150', fadeDurationMs: 1500, moveInDark: true, sortOrder: 3 },
+      { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'position', value: '100,150', fadeDurationMs: 1500, sortOrder: 3 },
       { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '204', fadeDurationMs: 800, sortOrder: 1 },
     ])
   })

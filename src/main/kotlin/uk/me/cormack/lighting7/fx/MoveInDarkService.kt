@@ -13,6 +13,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.models.CueMoveInDarkSettings
 import uk.me.cormack.lighting7.models.MoveInDarkSettings
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
@@ -100,6 +101,13 @@ class MoveInDarkService internal constructor(
         }
     }
 
+    /**
+     * What a GO reads of Move in dark, in its own transaction: the stack's [settings], the incoming
+     * [cue]'s own, and whether the stack moves any head at all ([active]: it is on, or a cue of its
+     * list sets *Early* or *Late* of its own).
+     */
+    data class Go(val settings: MoveInDarkSettings, val cue: CueMoveInDarkSettings, val active: Boolean)
+
     /** The move a contributor key carries, for the key stack's *Move in dark · for Q12* row (D11). */
     data class Holding(val stackId: Int, val targetEntryId: Int, val targetCueId: Int, val label: String)
 
@@ -125,9 +133,11 @@ class MoveInDarkService internal constructor(
         @Volatile var dirty = true
         /** Bumped by every GO and re-plan request: a plan made across one is stale and made again. */
         var generation = 0L
-        /** Its Move in dark is off: a GO or a standby re-plans nothing until the settings change. */
+        /** Nothing in it moves a head: a GO or a standby re-plans nothing until a setting changes. */
         var off = false
-        var settings: MoveInDarkSettings? = null
+        /** How the GO in progress catches up its incoming cue's heads ([beforeGo]); read and cleared by [afterGo]. */
+        var catchUp: MoveInDarkSettings? = null
+        var catchUpCue: CueMoveInDarkSettings = CueMoveInDarkSettings.DEFAULT
         /** The heads the live cue lights, as the last plan read them. */
         var litByLive: Set<String> = emptySet()
         /** The live entry's own priority; [priority] rises above it during a GO back, then settles. */
@@ -207,18 +217,21 @@ class MoveInDarkService internal constructor(
      * above the incoming cue — and above the outgoing one, which outranks it on a GO back — so neither
      * wins a held head back for a frame.
      */
-    fun beforeGo(stackId: Int, entryId: Int, priority: Int, settings: MoveInDarkSettings) = guarded("before a GO on stack $stackId") {
+    fun beforeGo(stackId: Int, entryId: Int, priority: Int, go: Go) = guarded("before a GO on stack $stackId") {
         synchronized(lock) {
             val run = stacks.getOrPut(stackId) { StackRun(stackId, priority, entryId) }
             val stamped = maxOf(run.priority, priority)
             run.livePriority = priority
             run.liveEntryId = entryId
             run.generation++
-            // The GO read the stack's settings, so its catch-up never waits on a first plan.
-            run.settings = settings.takeIf { it.on }
-            run.off = !settings.on
+            // The GO read the settings, so its catch-up never waits on a first plan.
+            val catchUp = go.cue.effective(go.settings)
+            run.catchUp = catchUp
+            run.catchUpCue = go.cue
+            run.off = !go.active
             run.heads.entries.removeIf { it.value.handOverUntil != null }
-            run.darkAtGo = if (settings.on) darkHeads() else emptySet()
+            // A GO that moves nothing still lets go of a head held for another cue that it lights.
+            run.darkAtGo = if (catchUp != null || run.heads.values.any { it.held }) darkHeads() else emptySet()
             restamp(run, stamped)
             publish(run)
         }
@@ -238,10 +251,13 @@ class MoveInDarkService internal constructor(
             for (head in run.heads.values) {
                 if (head.held && head.move.targetEntryId == entryId) head.handOverUntil = until
             }
-            val settings = run.settings
+            val settings = run.catchUp
+            val cueSetting = run.catchUpCue
             val dark = run.darkAtGo
+            run.catchUp = null
+            run.catchUpCue = CueMoveInDarkSettings.DEFAULT
             run.darkAtGo = emptySet()
-            if (settings != null && dark.isNotEmpty()) catchUp(run, entryId, cueId, label, settings, dark, until)
+            if (dark.isNotEmpty()) catchUp(run, entryId, cueId, label, settings, cueSetting, dark, until)
             publish(run)
             run.generation++
             if (run.off) return@guarded
@@ -423,7 +439,6 @@ class MoveInDarkService internal constructor(
      */
     private fun apply(run: StackRun, plan: MoveInDarkPlanner.Plan) {
         run.off = plan.off
-        run.settings = plan.settings
         run.litByLive = plan.litByLive
         val now = clock()
         val kept = LinkedHashMap<String, HeadRun>()
@@ -492,14 +507,17 @@ class MoveInDarkService internal constructor(
 
     /**
      * D7's catch-up: every head in [dark] that [cueId]'s published rows light and that is not already
-     * set for this entry takes those rows' moving families at once, held to [until].
+     * set for this entry takes those rows' moving families at once, held to [until] — but a head the
+     * cue keeps live ([cueSetting]), which flies in lit. With no [settings] (the cue moves nothing in
+     * the dark) nothing catches up, and a head held for another cue that it lights is let go at once.
      */
     private fun catchUp(
         run: StackRun,
         entryId: Int,
         cueId: Int,
         label: String,
-        settings: MoveInDarkSettings,
+        settings: MoveInDarkSettings?,
+        cueSetting: CueMoveInDarkSettings,
         dark: Set<String>,
         until: Long,
     ) {
@@ -513,19 +531,23 @@ class MoveInDarkService internal constructor(
             if (key !in lit) continue
             val existing = run.heads[key]
             val head = heads[key] ?: continue
-            val moving = byHead[key].orEmpty().filter { MoveInDarkPlanner.moves(it, head, settings) }
+            // Handing over for this entry: its rows are the cue's own.
+            if (settings == null && existing?.handOverUntil != null && existing.move.targetEntryId == entryId) continue
+            val moving = if (settings == null || cueSetting.keepsLive(key, head.parentKey)) emptyList()
+            else byHead[key].orEmpty().filter { MoveInDarkPlanner.moves(it, head, settings) }
             // Set for this entry with what it now publishes: the plain hand-over. An edit not yet
             // re-planned leaves it holding old rows, which the cue's own replace at once.
             if (existing?.state == HeadState.SET && existing.move.targetEntryId == entryId && sameValues(existing.move.rows, moving)) continue
             if (moving.isEmpty()) {
-                // Coming up with nothing to move: a move held for another cue goes now, while it is dark.
+                // Coming up with nothing to move, or kept live: a move held for another cue goes now, while it is dark.
                 if (existing?.held == true) {
                     run.heads.remove(key)
                     run.pendingFade[key] = 0L
                 }
                 continue
             }
-            val move = MoveInDarkPlanner.HeadMove(key, entryId, cueId, moving, settings.delay, settings.time, label)
+            val timing = settings ?: continue
+            val move = MoveInDarkPlanner.HeadMove(key, entryId, cueId, moving, timing.delay, timing.time, label)
             run.heads[key] = HeadRun(move).also {
                 it.state = HeadState.SET
                 it.handOverUntil = until
@@ -610,7 +632,7 @@ class MoveInDarkService internal constructor(
             state = state,
             remainingMs = endsAt?.let { (it - now).coerceAtLeast(0) },
             endsAtMs = endsAt,
-            families = head.move.rows.mapTo(LinkedHashSet()) { familyOf(it) },
+            families = head.move.rows.mapTo(LinkedHashSet()) { MoveInDarkPlanner.familyOf(it) },
             position = head.move.rows.firstNotNullOfOrNull { it.value as? CueAssignmentResolver.AttributeValue.Position },
             label = head.move.label,
         )
@@ -667,9 +689,6 @@ class MoveInDarkService internal constructor(
         private fun sameValues(a: List<CueAssignmentResolver.Assignment>, b: List<CueAssignmentResolver.Assignment>): Boolean =
             a.associate { (it.targetKey to it.attribute) to it.value } == b.associate { (it.targetKey to it.attribute) to it.value }
 
-        private fun familyOf(row: CueAssignmentResolver.Assignment): AttributeFamily =
-            if (row.attribute.equals("position", ignoreCase = true)) AttributeFamily.POSITION else row.category.family()
-
         /**
          * A cue's published rows with one per (head, attribute): a direct row over the group row it
          * beats ([CueAssignmentResolver]'s specificity).
@@ -677,13 +696,10 @@ class MoveInDarkService internal constructor(
         private fun effectiveRows(rows: List<CueAssignmentResolver.Assignment>): List<CueAssignmentResolver.Assignment> =
             rows.groupBy { it.targetKey to it.attribute }.values.map { same -> same.firstOrNull { !it.targetIsGroup } ?: same.first() }
 
-        /**
-         * A row of its own: neither the target's group origin (which specificity would drop beside any
-         * direct row) nor its legacy row flag (which would arm the head over a higher stack) comes with it.
-         */
+        /** A row of its own: the target's group origin, which specificity would drop beside any direct row, stays behind. */
         private fun CueAssignmentResolver.Assignment.asContributorRow(id: Int, priority: Int) = copy(
             cueId = id, priority = priority, fadeWeight = 1.0, fadeDurationMs = null,
-            targetIsGroup = false, moveInDark = false, layerWinner = null,
+            targetIsGroup = false, layerWinner = null,
         )
     }
 }
