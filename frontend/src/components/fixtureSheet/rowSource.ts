@@ -11,7 +11,7 @@ export type RowSourceKind = 'parked' | 'programmer' | 'fx' | 'cue' | 'base'
 
 export interface RowSource {
   kind: RowSourceKind
-  /** The chip's words: *Programmer*, *Pulse · ¼ · M2*, *Q12 · Night*, *Parked*, *Base*. */
+  /** The chip's words: *Programmer*, *Pulse · ¼ · M2*, *Q12 · Night*, *Move in dark · Q12*, *Parked*, *Base*. */
   label: string
   /** The effect on stage, for an `fx` row. */
   effect?: ActiveFx
@@ -107,6 +107,10 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, fxDetai
       break
     }
     case 'cue': {
+      if (provenance?.moveInDark) {
+        label = `Move in dark · ${provenance.moveInDark.label || cueLabel(provenance.moveInDark.targetCueId) || 'Cue'}`
+        break
+      }
       const cue = provenance?.cueId != null ? cueLabel(provenance.cueId) : undefined
       const layer = provenance?.layerSource?.name
       label = [cue, layer].filter(Boolean).join(' · ') || 'Cue'

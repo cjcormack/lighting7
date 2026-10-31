@@ -699,12 +699,13 @@ any other head starts idle and moves as usual.
 families, the target's pan and tilt, and the delay or move time left, republished on a change of
 state at most every 100 ms. The key stack's `MOVE_IN_DARK` row (`ProvenanceService.keyStack`,
 `holdingOf`) names the move on a key the contributor wins (`docs/lighting-composition-model.md`
-§"Reading one attribute's stack").
+§"Reading one attribute's stack"), and so does `provenanceState`'s entry for that key, as
+`moveInDark` (`docs/websocket-engineering.md` §"Programmer — `ProgrammerSocket.kt`"), from the same `holdingOf`.
 
 **The static plan** (`GET /cue-stacks/{id}/move-in-dark`, `routes/cueStackMoveInDark.kt`,
 `MoveInDarkPlanner.staticPlan`) is what the stored list does with no other stack running, entry by
-entry in play order, markers left out: `{entryId, cueId, heads: [{target, fromEntryId, families}],
-live: [{target, reason}]}`, and a summary `{heads, cues, live, off}` — the moves in the dark, the cues
+entry in play order, markers left out: `{entryId, cueId, mode, heads: [{target, fromEntryId, families}],
+live: [{target, reason, families}]}`, and a summary `{heads, cues, live, off}` — the moves in the dark, the cues
 they are for, the heads that move lit, the entries set *Off*. A head the target lights that would move
 something is moved from the **first entry it is dark in** (walking back to the last entry that lights
 it; the entry before the target under *Late*), or listed with a reason: `LIT_BEFORE` (the entry before

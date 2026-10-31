@@ -16,6 +16,10 @@ vi.mock('@/store/cues', () => ({
 vi.mock('@/components/cues/CueDetailContent', () => ({
   CueDetailContent: () => <div data-testid="details" />,
 }))
+// The Up next card's Move in dark chip reads the store; its words are `StackMovingChip.test.tsx`'s.
+vi.mock('@/components/cues/StackMovingChip', () => ({
+  StackMovingChip: ({ stackId }: { stackId: number }) => <span data-testid="moving-chip" data-stack={stackId} />,
+}))
 vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: null, fadeRemainMs: null }) }))
 vi.mock('../../SpeedMasters', () => ({ SpeedMastersChip: () => null }))
 vi.mock('../StackPickerSheet', () => ({ StackPickerSheet: () => null }))

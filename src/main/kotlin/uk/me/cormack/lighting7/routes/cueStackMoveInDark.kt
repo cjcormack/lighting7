@@ -84,8 +84,11 @@ internal fun stackMoveInDarkPlan(state: State, stack: DaoCueStack, rigLoaded: Bo
         StackMoveInDarkEntryDto(
             entryId = entry.entryId,
             cueId = entry.cueId,
+            mode = (settings[entry.cueId]?.mode ?: CueMoveInDarkMode.STACK).name,
             heads = entry.moves.map { MoveInDarkHeadPlanDto(it.head, it.fromEntryId, it.families.sortedBy { f -> f.ordinal }.map { f -> f.name }) },
-            live = entry.live.map { MoveInDarkLiveHeadDto(it.head, it.reason.name) },
+            live = entry.live.map { live ->
+                MoveInDarkLiveHeadDto(live.head, live.reason.name, live.families.sortedBy { f -> f.ordinal }.map { f -> f.name })
+            },
         )
     }
     return StackMoveInDarkPlanDto(
@@ -120,6 +123,8 @@ data class StackMoveInDarkPlanDto(
 data class StackMoveInDarkEntryDto(
     val entryId: Int,
     val cueId: Int,
+    /** The cue's own setting, `STACK | EARLY | LATE | OFF`: a cue set *Off* is one whatever it lights. */
+    val mode: String = CueMoveInDarkMode.STACK.name,
     val heads: List<MoveInDarkHeadPlanDto>,
     val live: List<MoveInDarkLiveHeadDto>,
 )
@@ -128,9 +133,9 @@ data class StackMoveInDarkEntryDto(
 @Serializable
 data class MoveInDarkHeadPlanDto(val target: String, val fromEntryId: Int, val families: List<String>)
 
-/** A head that moves lit, and why: `LIT_BEFORE | TOO_QUICK | KEPT_LIVE | CUE_OFF`. */
+/** A head that moves lit, why (`LIT_BEFORE | TOO_QUICK | KEPT_LIVE | CUE_OFF`), and the families it moves. */
 @Serializable
-data class MoveInDarkLiveHeadDto(val target: String, val reason: String)
+data class MoveInDarkLiveHeadDto(val target: String, val reason: String, val families: List<String> = emptyList())
 
 /**
  * The stack sheet's read-out: [heads] moves in the dark across [cues] cues, [live] heads that move

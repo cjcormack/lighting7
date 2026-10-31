@@ -40,6 +40,9 @@ vi.mock('../store/cueStacks', () => ({
   useRemoveCueStackEntryMutation: () => mutation(),
   useAddCueToStackMutation: () => mutation(),
   useMoveCueStackEntryMutation: () => mutation(),
+  // The Move in dark plan: none here (its cells are `CueSheet.test.tsx`'s).
+  useCueStackMoveInDarkQuery: (_arg: unknown, opts?: { selectFromResult?: (r: { data: undefined }) => unknown }) =>
+    opts?.selectFromResult ? opts.selectFromResult({ data: undefined }) : { data: undefined },
 }))
 const duplicateCue = vi.fn((_arg: Record<string, unknown>) => ({
   unwrap: () => Promise.resolve({ cueId: 77, name: 'Q2 (copy)', stackId: 10, entryId: 177 }),

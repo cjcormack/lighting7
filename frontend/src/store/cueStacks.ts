@@ -24,6 +24,7 @@ import type {
   SortByCueNumberResponse,
   CueEntryPatch,
   DeleteCueStackResponse,
+  StackMoveInDarkPlan,
 } from '../api/cueStacksApi'
 import type { StackTimeline, TimelineEditOp, TimelineEditResponse } from '../api/stackTimelineApi'
 export type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
@@ -65,6 +66,30 @@ export const cueStacksApi = restApi.injectEndpoints({
         { type: 'PaletteList', id: projectId },
         'PaletteList',
         'StageElement',
+        'Fixture',
+        'GroupList',
+        'Patch',
+      ],
+    }),
+
+    /**
+     * A stack's static Move in dark plan (lighting7 move-in-dark plan §3): the stack sheet's
+     * read-out, the cue table's *Dark* column and the Cue tab's head list. No frame of its own: it
+     * is re-read on whatever moves the list or a cue's rows — the stack list, the cue list, a cue
+     * (`cuesRecomposed` names one), the Looks and palettes — and the rig its heads are read off.
+     */
+    cueStackMoveInDark: build.query<StackMoveInDarkPlan, { projectId: number; stackId: number }>({
+      query: ({ projectId, stackId }) => `projects/${projectId}/cue-stacks/${stackId}/move-in-dark`,
+      providesTags: (result, _error, { projectId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+        { type: 'CueList', id: projectId },
+        'CueList',
+        ...(result?.entries ?? []).map((e) => ({ type: 'Cue' as const, id: e.cueId })),
+        { type: 'LookList', id: projectId },
+        'LookList',
+        { type: 'PaletteList', id: projectId },
+        'PaletteList',
         'Fixture',
         'GroupList',
         'Patch',
@@ -734,6 +759,7 @@ export const {
   useDeleteMarkerEntryMutation,
   usePreviewCueLookQuery,
   useCueStackTimelineQuery,
+  useCueStackMoveInDarkQuery,
   useEditCueStackTimelineMutation,
   usePreviewLooseCueQuery,
   useSortCueStackByCueNumberMutation,

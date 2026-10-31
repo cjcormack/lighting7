@@ -49,6 +49,7 @@ import {
 import { CueStackForm } from '@/components/cues/CueStackForm'
 import { DeleteStackDialog } from './DeleteStackDialog'
 import { StackFxAmountControl } from './StackFxAmountControl'
+import { StackMovingChip } from '@/components/cues/StackMovingChip'
 import { InlineEditField } from '@/components/InlineEditField'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { isCueRow, type CueStack, type CueStackInput } from '@/api/cueStacksApi'
@@ -152,6 +153,7 @@ function SortableStackEntry({
       <span className="hidden @[560px]:block text-xs text-muted-foreground shrink-0">
         {cueCount} cues &middot; {stack.loop ? 'Loop' : 'Sequential'}
       </span>
+      <StackMovingChip stackId={stack.id} className="hidden @[480px]:inline-flex" />
       <StackFxAmountControl
         stackId={stack.id}
         stackName={stack.name}
@@ -328,6 +330,8 @@ interface ShowOverviewProps {
    * is the same row as the drill-down's navigation row, one level up.
    */
   unlockedWarning?: boolean
+  /** Open a stack's cue table on the cues its Move in dark read-out counts. */
+  onShowDarkCues?: (stackId: number) => void
 }
 
 export function ShowOverview({
@@ -337,6 +341,7 @@ export function ShowOverview({
   onDrillStack,
   locked = false,
   unlockedWarning = false,
+  onShowDarkCues,
 }: ShowOverviewProps) {
   const stackRows = stacks.filter((s) => s.type === 'STACK')
   // Distinct cues: a cue shared by two stacks is one cue in two places.
@@ -516,6 +521,7 @@ export function ShowOverview({
         scenery={editingStack == null ? undefined : (stacks.find((s) => s.id === editingStack.id)?.scenery ?? NO_SCENERY)}
         onSave={handleSaveStack}
         isSaving={creating || saving}
+        onShowDarkCues={onShowDarkCues}
       />
 
       <DeleteStackDialog

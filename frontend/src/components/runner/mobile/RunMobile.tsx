@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { SpeedMastersChip } from '../../SpeedMasters'
 import { StackPickerSheet } from '../StackPickerSheet'
 import { MobileCueListSheet } from '../MobileCueListSheet'
+import { StackMovingChip } from '@/components/cues/StackMovingChip'
 import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
 import { CueActions } from '../CueActions'
 import { MobileStackFxAmount } from '../StackFxAmountControl'
@@ -226,6 +227,13 @@ export function RunMobile({
           onChange={() => setCueListOpen(true)}
           location={standbyLocation}
           actions={actionsFor(standbyCue, display.standbyEntryId)}
+          // What the running stack is moving in the dark, before this GO (move-in-dark design §5.4):
+          // the cue named may be past this one under Early.
+          afterIdentity={
+            standbyCue && fadeStackId != null ? (
+              <StackMovingChip stackId={fadeStackId} detail className="mx-3 mt-1 self-start" />
+            ) : null
+          }
         />
 
         {!standbyCue && nextStack && (

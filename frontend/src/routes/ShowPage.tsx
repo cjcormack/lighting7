@@ -102,6 +102,22 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
    * is an entry.
    */
   const entryParam = searchParams.get('entry')
+  /** `?dark=1`: the cue table shows only what Move in dark counts — the stack sheet's read-out opens it so. */
+  const darkOnly = searchParams.get('dark') === '1'
+  const handleShowDarkCues = useCallback(
+    (id: number) => navigate(`/projects/${projectIdNum}/show/stacks/${id}/table?dark=1`),
+    [navigate, projectIdNum],
+  )
+  const handleShowAllCues = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('dark')
+        return next
+      },
+      { replace: true },
+    )
+  }, [setSearchParams])
   const openedEntryId = useMemo(() => {
     if (openedCueId == null || drillStack == null) return null
     const rows = drillStack.cues.filter((c) => c.id === openedCueId)
@@ -586,6 +602,9 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
               // current cannot be edited at all, and offering an unlock that changes nothing is
               // worse than the disabled verbs, which at least say why.
               onRequestUnlock={editLock.lockRelevant ? editLock.toggleLock : undefined}
+              onShowDarkCues={handleShowDarkCues}
+              darkOnly={darkOnly}
+              onShowAllCues={handleShowAllCues}
             />
           </div>
         </div>

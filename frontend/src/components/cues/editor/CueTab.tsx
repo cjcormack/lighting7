@@ -9,16 +9,30 @@ import { TriggerSummary } from '@/components/cues/TriggerSummary'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { CueSpeedMasters } from './CueSpeedMasters'
+import { CueMoveInDarkSection } from './CueMoveInDarkSection'
 import { usePatchProjectCueMutation } from '@/store/cues'
 import type { Cue, CueSpeedMaster, CueTrigger, CueTriggerDetail } from '@/api/cuesApi'
 
 /**
- * The editor's **Cue** tab: the cue's notes, the speed masters it sets on GO, its script hooks and
- * the busk-page append — what the header's name, number, fade, curve and follow leave
+ * The editor's **Cue** tab: the cue's notes, its Move in dark, the speed masters it sets on GO, its
+ * script hooks and the busk-page append — what the header's name, number, fade, curve and follow leave
  * (show-cue-editing plan D15). Every field writes the cue as it is left; locked, the tab is a
  * read-out (§4.6).
  */
-export function CueTab({ cue, projectId, locked, idBase }: { cue: Cue; projectId: number; locked: boolean; idBase: string }) {
+export function CueTab({
+  cue,
+  projectId,
+  locked,
+  idBase,
+  sectionRequest,
+}: {
+  cue: Cue
+  projectId: number
+  locked: boolean
+  idBase: string
+  /** A section asked for by a host — the cue sheet's *Dark* cell asks for Move in dark. */
+  sectionRequest?: { section?: 'moveInDark'; seq: number } | null
+}) {
   const [patchCue] = usePatchProjectCueMutation()
   const [notes, setNotes] = useState(cue.notes ?? '')
   const notesId = `${idBase}-notes`
@@ -88,6 +102,16 @@ export function CueTab({ cue, projectId, locked, idBase }: { cue: Cue; projectId
           />
         )}
       </div>
+
+      {cue.cueType !== 'MARKER' && (
+        <CueMoveInDarkSection
+          cue={cue}
+          projectId={projectId}
+          locked={locked}
+          idBase={idBase}
+          scrollRequest={sectionRequest?.section === 'moveInDark' ? sectionRequest : null}
+        />
+      )}
 
       <CueSpeedMasters
         projectId={projectId}
