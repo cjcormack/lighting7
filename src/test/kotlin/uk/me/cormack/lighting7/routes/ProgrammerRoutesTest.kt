@@ -87,12 +87,8 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         seedHex("hex-clr", startChannel = 1)
 
-        // One of everything: a busked value, an active locate, an applied preset.
+        // One of everything: a busked value, an applied preset, an active locate.
         busk(0, 1, 120u)
-        assertTrue(
-            LocateTestSupport.toggleLocate(client, "fixture", "hex-clr")
-                .body<ToggleLocateResponse>().active,
-        )
         // A Look applied as a programmer layer, which is what the pads now do.
         val look = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
@@ -107,6 +103,12 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         state.show.programmerLayerStack.toggle(
             LayerSource.look(look.id, java.util.UUID.fromString(look.uuid), look.name), targets,
         )
+        // Locate last: a layer landing on a located fixture would end its Locate.
+        assertTrue(
+            LocateTestSupport.toggleLocate(client, "fixture", "hex-clr")
+                .body<ToggleLocateResponse>().active,
+        )
+        assertTrue(state.show.locateManager.activeTargets.value.isNotEmpty())
 
         assertTrue(state.show.programmerStore.size > 0)
         assertEquals(1, state.show.programmerStore.layers.size)

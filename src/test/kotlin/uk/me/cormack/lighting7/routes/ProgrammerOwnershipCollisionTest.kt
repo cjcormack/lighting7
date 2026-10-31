@@ -79,10 +79,14 @@ class ProgrammerOwnershipCollisionTest : RouteIntegrationTest() {
 
         assertTrue(toggle(client, "fixture", "hex-live").body<ToggleLocateResponse>().active)
 
-        // Operator busks the dimmer down while the fixture is located: most recent write wins.
+        // Operator busks the dimmer down while the fixture is located: most recent write wins, and the
+        // busk ends the locate, whose values become the operator's.
         busk(0, 1, 60u)
         assertEquals(60u.toUByte(), programmerChannel(state, 0, 1))
+        assertTrue(state.show.locateManager.activeTargets.value.isEmpty())
 
+        // A locate pressed now is a fresh one over the busk, and letting it go reveals the busk.
+        assertTrue(toggle(client, "fixture", "hex-live").body<ToggleLocateResponse>().active)
         assertFalse(toggle(client, "fixture", "hex-live").body<ToggleLocateResponse>().active)
         assertEquals(60u.toUByte(), programmerChannel(state, 0, 1), "busk-during-locate survives the release")
     }

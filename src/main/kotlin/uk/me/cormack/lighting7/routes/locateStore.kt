@@ -29,6 +29,7 @@ import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.venueFacetOf
+import uk.me.cormack.lighting7.show.patchKeyOf
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.venue.ShowOverrides
 

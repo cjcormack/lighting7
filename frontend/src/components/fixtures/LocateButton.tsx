@@ -69,7 +69,7 @@ export function LocateTargetsButton({
   targets: readonly { type: LocateTargetType; key: string }[]
   name: string
 }) {
-  const { data, isFetching } = useLocateStateQuery()
+  const { data } = useLocateStateQuery()
   const [toggleLocate, { isLoading }] = useToggleLocateMutation()
   const located = (t: { type: LocateTargetType; key: string }) =>
     data?.targets.some((l) => l.type === t.type && l.key === t.key) ?? false
@@ -91,9 +91,7 @@ export function LocateTargetsButton({
           <Button
             variant={isActive ? "default" : "outline"}
             size="icon"
-            // Busy until the invalidated refetch lands, as `useLocate` is, so a quick second press
-            // does not toggle against a stale state.
-            disabled={isLoading || isFetching || targets.length === 0}
+            disabled={isLoading || targets.length === 0}
             aria-label={tooltip}
             className={[isActive ? "bg-sky-500 hover:bg-sky-600 text-white" : "", "size-8"].filter(Boolean).join(" ")}
             onClick={toggle}

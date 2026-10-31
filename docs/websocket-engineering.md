@@ -236,6 +236,7 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 | Grand master | `GrandMasterSocket.kt` | 1 | 1 | `handleGrandMaster` | `setupGrandMasterSubscriptions` |
 | Stack FX amount | `StackFxAmountSocket.kt` | 1 | 1 | `handleStackFxAmount` | `setupStackFxAmountSubscriptions` |
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
+| Locate | `LocateSocket.kt` | — | 1 | — | `setupLocateSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
 | Programmer | `ProgrammerSocket.kt` | 15 | 12 | `handleProgrammer` | `setupProgrammerSubscriptions` |
@@ -248,8 +249,8 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 | Surfaces | `SurfaceSocket.kt` | 11 | 14 | `handleSurface` | `setupSurfaceSubscriptions` |
 | Windows | `WindowsSocket.kt` | 4 | 4 | `handleWindows` | `setupWindowsSubscriptions` |
 
-Eight families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
-Broadcast, Cloud sync, Effects, Machine, Rig safety, Scenery and Stage render. Channel is the odd one: its three messages are declared in
+Nine families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
+Broadcast, Cloud sync, Effects, Locate, Machine, Rig safety, Scenery and Stage render. Channel is the odd one: its three messages are declared in
 `ChannelSocket.kt` and answered there on request, but every *unsolicited* one is fired from
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
@@ -658,7 +659,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (83)
+## Server → Client (84)
 
 ### Boot — `BootSocket.kt`
 
@@ -989,6 +990,19 @@ every DIMMER and UV channel, and the colour mix (a `DmxColour`'s RGB, WHITE and 
 with no dimmer; a STROBE channel and an LED ring's RING channel are cut only at 0 (`midi/GlobalScalerState.kt`). Every listener
 sees the scaled output, so `channelState` and the Stage view draw the rig as the grand master
 leaves it.
+
+### Locate — `LocateSocket.kt`
+
+| Message | Fields | Cadence |
+|---|---|---|
+| `locate.state` | `projectId: Int`, `targets: [{type, key}]` | Connect snapshot + broadcast |
+
+Every located fixture and group in the live show (`LocateManager.activeTargets`), `StateFlow`-backed
+and following the live show through `SocketScope.subscribeShow`. **Outbound only**:
+the toggle is `POST /locate/toggle` and the surface's `LocateSelection`. It exists because a Locate can
+end with no toggle — an edit to a located fixture makes its Locate the operator's values
+(`show/LocateCommit.kt`, `docs/fx-engineering.md` §"Locate as a starting point") — and every window's
+Locate button has to hear it. `targets` has no default, so an empty list is sent as `[]`.
 
 ### Stack FX amount — `StackFxAmountSocket.kt`
 
@@ -1365,6 +1379,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
 | `plugins/FxSocket.kt` | Active-FX state, the six FX writes and their `fxError` refusal |
 | `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
+| `plugins/LocateSocket.kt` | The located targets: `locate.state` |
 | `plugins/StackFxAmountSocket.kt` | Each stack's FX amount: `stackFxAmount.state` and `stackFxAmount.set` |
 | `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |

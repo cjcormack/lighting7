@@ -156,6 +156,7 @@ fun Application.configureSockets(state: State) {
             setupProjectSubscriptions(scope)
             setupSurfaceSubscriptions(scope)
             setupGrandMasterSubscriptions(scope)
+            setupLocateSubscriptions(scope)
             setupStackFxAmountSubscriptions(scope)
             setupSelectionSubscriptions(scope)
             setupBuskSubscriptions(scope)

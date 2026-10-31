@@ -11,7 +11,7 @@ import {
  * cascade back to the show on release).
  */
 export function useLocate(type: LocateTargetType, targetKey: string) {
-  const { data, isFetching } = useLocateStateQuery()
+  const { data } = useLocateStateQuery()
   const [toggleLocate, { isLoading }] = useToggleLocateMutation()
 
   const isActive =
@@ -23,8 +23,7 @@ export function useLocate(type: LocateTargetType, targetKey: string) {
       .catch((err) => console.error(`Locate toggle failed for ${type} '${targetKey}'`, err))
   }, [toggleLocate, type, targetKey])
 
-  // Stay "busy" until the invalidated locate-state refetch lands, not just until the
-  // POST resolves — otherwise the button re-enables showing the stale state and a fast
-  // second click toggles the locate straight back off.
-  return { isActive, toggle, isToggling: isLoading || isFetching }
+  // The toggle writes its answer into the locate state as it resolves, so a second click never
+  // acts on the state from before the first.
+  return { isActive, toggle, isToggling: isLoading }
 }

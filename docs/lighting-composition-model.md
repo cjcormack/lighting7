@@ -75,7 +75,7 @@ Each (fixture, attribute) holds a small **recency-ordered stack** of per-owner s
 
 Owners: `web` (busking UI + `updateChannel` shim), `surface` (MIDI faders), `flash` (flash press/release — separate from `surface` so releasing a flash restores the fader or busked level underneath), `preset:{id}` (one per preset, previews use a synthetic negative id), `locate`, `unpark` (park-release hand-down), and `include` (cue contents loaded by [Include](#record--include--update); its slot survives underneath a later operator write, which is how Update tells an edit from an untouched include).
 
-One deliberate exception: **all Locate targets share the single `locate` owner**, so locate-vs-locate overlap (releasing a group locate while a member is individually located) is *not* resolved by the store's fallback — same-owner writes overwrite each other. `LocateManager` keeps its own re-assert loop for that case, which also re-resolves locate values and drops stale targets on the way.
+One deliberate exception: **all Locate targets share the single `locate` owner**, so locate-vs-locate overlap (releasing a group locate while a member is individually located) is *not* resolved by the store's fallback — same-owner writes overwrite each other. `LocateManager` keeps its own re-assert loop for that case, which also re-resolves locate values and drops stale targets on the way. An operator edit to a located fixture ends its Locate, re-owning its `locate` slots as `web` in place (`docs/fx-engineering.md` §"Locate as a starting point").
 
 ### Touched flag
 

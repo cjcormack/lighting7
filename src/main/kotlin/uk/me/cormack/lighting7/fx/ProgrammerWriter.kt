@@ -36,6 +36,18 @@ class ProgrammerWriter internal constructor(
     /** Provenance hook — programmer moves change provenance winners. */
     private val onProgrammerChanged: () -> Unit,
 ) {
+    /**
+     * Called with the fixture keys an operator write ([OPERATOR_OWNERS]) is about to land on, before
+     * anything is stored, and answering whether it changed the programmer. It is how a located
+     * fixture's Locate becomes its programmer values the moment it is edited (`Show`'s
+     * `commitLocates`), so it must store without publishing, and must not write through this writer.
+     */
+    @Volatile
+    var beforeOperatorWrite: (Set<String>) -> Boolean = { false }
+
+    private fun operatorWriting(owner: ProgrammerOwner, fixtureKeys: () -> Set<String>): Boolean =
+        owner in OPERATOR_OWNERS && fixtureKeys().let { it.isNotEmpty() && beforeOperatorWrite(it) }
+
     /** One entry of a [writeAttributes] batch. */
     data class AttributeWrite(
         val fixture: GroupableFixture,
@@ -70,6 +82,7 @@ class ProgrammerWriter internal constructor(
     ): List<AttributeChannelResolver.ChannelWrite> {
         val writes = AttributeChannelWriter.resolve(fixture, attribute, value)
         if (writes.isEmpty()) return writes
+        operatorWriting(owner) { setOf(fixture.targetKey) }
         programmerStore.putValue(
             owner, fixture.targetKey, attribute, ProgrammerValue.Hard(value), touched, sourceGroup,
         )
@@ -159,6 +172,9 @@ class ProgrammerWriter internal constructor(
         fadeMs: Long = 0,
     ): List<List<AttributeChannelResolver.ChannelWrite>> {
         val resolved = writes.map { AttributeChannelWriter.resolve(it.fixture, it.attribute, it.value) }
+        operatorWriting(owner) {
+            writes.indices.filter { resolved[it].isNotEmpty() }.mapTo(HashSet()) { writes[it].fixture.targetKey }
+        }
         val keys = HashSet<CueAssignmentResolver.Key>()
         for (index in emittersLast(writes)) {
             val channelWrites = resolved[index]
@@ -389,6 +405,9 @@ class ProgrammerWriter internal constructor(
         touched: Boolean = true,
         fadeMs: Long = 0,
     ) {
+        if (coveringKey != null && coveringKey.target is TargetRef.Fixture) {
+            operatorWriting(owner) { setOf(coveringKey.targetKey) }
+        }
         programmerStore.putChannel(owner, universe, channel, value, touched)
         if (coveringKey != null) {
             publisher.publishCascadeForKeys(setOf(coveringKey), fadeMs)
@@ -589,6 +608,11 @@ class ProgrammerWriter internal constructor(
         } else {
             Publishability.PUBLISHABLE
         }
+    }
+
+    companion object {
+        /** The owners whose writes are the operator editing a fixture — what lets go of its Locate. */
+        val OPERATOR_OWNERS = setOf(ProgrammerOwner.WEB, ProgrammerOwner.SURFACE)
     }
 }
 
