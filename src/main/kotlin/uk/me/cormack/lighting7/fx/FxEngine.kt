@@ -486,6 +486,7 @@ class FxEngine(
         fxOrder = sortedFxComparator,
         programmerSuppression = ::programmerSuppression,
         fxWeight = { weightOf(it, it.dynamics) },
+        cuesOnly = cueLayer::cuesOnly,
     )
 
     /** PROGRAMMER-layer write delegation. */

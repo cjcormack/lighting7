@@ -214,7 +214,7 @@ class CueStackManager(
         fireEvents: Boolean,
         setTempo: Boolean,
     ): ActivateResult {
-        val cueData = transaction(state.database) {
+        val (cueData, moveInDarkSettings) = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
             if (stack.type == CueStackType.SEPARATOR.name) {
@@ -227,7 +227,7 @@ class CueStackManager(
             val cue = entry.cue
                 ?: throw IllegalArgumentException("Entry $entryId is a marker, which cannot be gone to")
             // The one builder — see `buildCueApplyData`.
-            buildCueGoData(cue, entry)
+            buildCueGoData(cue, entry) to stack.moveInDarkSettings
         }
 
         // Cancel any in-progress crossfade for this stack — the driver drops the abandoned
@@ -263,7 +263,7 @@ class CueStackManager(
 
         // Move in dark's contributor goes above the incoming cue before it arrives.
         val goPriority = cueDerivedPriority(cueData)
-        moveInDark?.beforeGo(stackId, entryId, goPriority)
+        moveInDark?.beforeGo(stackId, entryId, goPriority, moveInDarkSettings)
         // The incoming entry's hold first, then the outgoing's: a GO between two entries of one cue
         // then never lets it go, and nothing on stage moves.
         val incoming = holds.acquire(
@@ -305,7 +305,7 @@ class CueStackManager(
             fadeStartedAtMs = if (incomingFades || outgoingFades) System.currentTimeMillis() else null,
         )
         runState.consumeStandby(stackId)
-        moveInDark?.afterGo(stackId, entryId, if (incomingFades || outgoingFades) fadeDurationMs else 0L)
+        moveInDark?.afterGo(stackId, entryId, cueData.cueId, if (incomingFades || outgoingFades) fadeDurationMs else 0L, cueData.cueLabel)
 
         if (incomingFades || outgoingFades) {
             crossfades.start(

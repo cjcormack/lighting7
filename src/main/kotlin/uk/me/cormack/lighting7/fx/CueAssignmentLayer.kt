@@ -214,6 +214,31 @@ class CueAssignmentLayer internal constructor(
         true
     }
 
+    /**
+     * Move in dark's publish ([MoveInDarkService]): replace contributor [id]'s rows with
+     * [assignments], every key the change moves — a released one included — ramping over [fade]. A
+     * contributor has no crossfade weight, so none is kept; empty [assignments] removes it.
+     */
+    internal fun setContributorAssignments(
+        id: Int,
+        assignments: List<CueAssignmentResolver.Assignment>,
+        fade: TransmitFade,
+    ) = publisher.locked {
+        if (assignments.isEmpty()) {
+            if (cueAssignments.remove(id) == null) return@locked
+        } else {
+            cueAssignments[id] = assignments
+        }
+        cueFadeWeights.remove(id)
+        republishAssignments(restage = fade)
+    }
+
+    /** [cueId]'s crossfade weight, 1.0 once its fade is over (or it has none). */
+    internal fun fadeWeightOf(cueId: Int): Double = publisher.locked { cueFadeWeights[cueId] ?: 1.0 }
+
+    /** Write [keys] from what the layers compose now, at once — a ramp in progress on any of them ends. */
+    internal fun snapKeys(keys: Set<CueAssignmentResolver.Key>) = publisher.publishCascadeForKeys(keys)
+
     /** [cueId]'s published Layer 4 rows, empty with none. */
     fun assignmentsOf(cueId: Int): List<CueAssignmentResolver.Assignment> = publisher.locked { cueAssignments[cueId].orEmpty() }
 

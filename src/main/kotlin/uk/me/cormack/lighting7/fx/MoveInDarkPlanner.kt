@@ -53,6 +53,8 @@ object MoveInDarkPlanner {
         val rows: List<CueAssignmentResolver.Assignment>,
         val delay: Duration,
         val time: Duration,
+        /** How a person names the target: `Q12`, or the cue's name where its entry has no number. */
+        val label: String = "",
     )
 
     /**
@@ -64,6 +66,8 @@ object MoveInDarkPlanner {
         val litByLive: Set<String>,
         /** The stack's Move in dark is off: nothing to plan until its settings change. */
         val off: Boolean = false,
+        /** The settings the plan was made under, which a GO's catch-up reads (D7); null when off. */
+        val settings: MoveInDarkSettings? = null,
     )
 
     /** The heads [content] lights. */

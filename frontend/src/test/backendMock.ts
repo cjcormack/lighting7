@@ -267,6 +267,24 @@ export const selectionWs: {
 }
 
 /**
+ * `moveInDark.state`, parsed: `fire` delivers a state to the store entry's subscriber and remembers
+ * it as the snapshot `get` seeds. Spelled out because the store seeds from `get()`, which the
+ * fallback Proxy would answer with a Subscription.
+ */
+export const moveInDarkWs: {
+  callback: null | ((state: unknown) => void)
+  last: unknown
+  fire: (state: unknown) => void
+} = {
+  callback: null,
+  last: { projectId: null, stacks: {} },
+  fire: (state) => {
+    moveInDarkWs.last = state
+    moveInDarkWs.callback?.(state)
+  },
+}
+
+/**
  * `busk.pageState` frames, so a test can move the **desk's** showing page: `fire` delivers a page id
  * to the entry's subscriber and remembers it as the connect snapshot `getState` seeds. `sent` is
  * every `busk.setPage` the code under test made, and `landed` is what `setPage` answers — a test
@@ -574,6 +592,17 @@ export function lightingApiMock() {
           Promise.resolve({ targetType, targetKey, attribute, blind: false, stacks: [] }),
         clearTarget: (targetType: string, targetKey: string) =>
           Promise.resolve({ targetType, targetKey, values: 0, fx: 0, partial: [] }),
+      },
+      moveInDark: {
+        get: () => moveInDarkWs.last,
+        subscribe: (fn: (state: unknown) => void) => {
+          moveInDarkWs.callback = fn
+          return {
+            unsubscribe: () => {
+              moveInDarkWs.callback = null
+            },
+          }
+        },
       },
       // Spelled out for the reason `status` is: `store/selection.ts`'s `queryFn` seeds its cache
       // entry from `getState()`, and the fallback Proxy would hand it back a Subscription — which

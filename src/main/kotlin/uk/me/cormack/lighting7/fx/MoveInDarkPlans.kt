@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoCueStack
+import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.moveInDarkSettings
@@ -22,7 +23,7 @@ internal fun planMoveInDark(
 ): MoveInDarkPlanner.Plan? {
     val liveEntryId = manager.getActiveEntryId(stackId) ?: return null
     val liveCueId = manager.getActiveCueId(stackId) ?: return null
-    class Loaded(val input: MoveInDarkPlanner.Input?)
+    class Loaded(val input: MoveInDarkPlanner.Input?, val labels: Map<Int, String> = emptyMap())
     val loaded = transaction(state.database) {
         val stack = DaoCueStack.findById(stackId) ?: return@transaction null
         val settings = stack.moveInDarkSettings
@@ -45,14 +46,22 @@ internal fun planMoveInDark(
                 }
             },
         )
-        applyData = buildCueApplyDataForCues(MoveInDarkPlanner.candidates(input).map { it.cueId }.toSet() + liveCueId)
-        Loaded(input)
+        val candidates = MoveInDarkPlanner.candidates(input)
+        applyData = buildCueApplyDataForCues(candidates.map { it.cueId }.toSet() + liveCueId)
+        Loaded(input, candidates.associate { it.entryId to entryLabel(it.entryId) })
     } ?: return null
     val input = loaded.input ?: return MoveInDarkPlanner.Plan(emptyMap(), emptySet(), off = true)
     return MoveInDarkPlanner.Plan(
-        moves = MoveInDarkPlanner.plan(input),
+        moves = MoveInDarkPlanner.plan(input).mapValues { (_, move) -> move.copy(label = loaded.labels[move.targetEntryId].orEmpty()) },
         litByLive = MoveInDarkPlanner.litHeads(input.content(liveCueId), heads),
+        settings = input.settings,
     )
+}
+
+/** An entry as a GO labels its cue ([cueGoLabel]). Must run inside a transaction. */
+private fun entryLabel(entryId: Int): String {
+    val entry = DaoCueStackEntry.findById(entryId) ?: return ""
+    return entry.cue?.let { cueGoLabel(entry, it) }.orEmpty()
 }
 
 /** One cue's rows and the heads its Intensity FX drive, as the planner reads them. */
