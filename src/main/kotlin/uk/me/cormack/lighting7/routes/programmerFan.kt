@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.history.historyGesture
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.request.receive
@@ -111,6 +112,7 @@ internal fun Route.routeApiRestProgrammerFan(state: State) {
     post<ProgrammerFanResource> { resource ->
         withCurrentProject(state, resource.projectId) { project ->
             val request = call.receive<FanRequest>()
+            historyGesture("fan|${request.attribute}|${request.targets.joinToString(",") { "${it.type}:${it.key}" }}")
             val families = try {
                 parseFamilies(request.families)
             } catch (e: IllegalArgumentException) {

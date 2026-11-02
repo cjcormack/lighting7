@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.show
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ProgrammerStore
+import uk.me.cormack.lighting7.history.ProgrammerHistory
 
 /**
  * What a **same-project reload** carries from the show being replaced into its successor
@@ -39,6 +40,8 @@ class ShowCarry internal constructor(
      * slots, so they travel together and the next Locate press releases rather than re-asserts.
      */
     val locateManager: LocateManager,
+    /** The programmer's steps to undo and redo, which describe the store and Locate carried with them. */
+    val programmerHistory: ProgrammerHistory,
     /**
      * The effects nothing else will bring back: neither a cue's (its GO respawns it) nor a programmer
      * layer's (the layer's recook does). What the operator ran by hand, Include's ad-hoc children, a
@@ -62,6 +65,7 @@ class ShowCarry internal constructor(
             looseCues = show.cueStackManager.holds.looseCueIdsInPressOrder(),
             programmerStore = show.programmerStore,
             locateManager = show.locateManager,
+            programmerHistory = show.programmerHistory,
             // A leaving instance is on its way out, and the successor has no fade to finish it.
             effects = show.fxEngine.getActiveFx().filter {
                 it.cueId == null && it.cueStackId == null && it.programmerLayerFxKey == null && !it.leaving

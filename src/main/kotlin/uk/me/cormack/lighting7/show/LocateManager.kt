@@ -64,6 +64,7 @@ class LocateManager {
         assert: (TargetRef) -> List<LocateWrite>?,
         clear: (List<LocateWrite>) -> Unit,
     ): ToggleOutcome = synchronized(lock) {
+        beforeMutation()
         val existing = active.remove(target)
         val outcome = if (existing != null) {
             clear(existing)
@@ -115,6 +116,7 @@ class LocateManager {
         synchronized(lock) {
             val committed = active.filterValues(reaches).keys.toMutableSet()
             if (committed.isEmpty()) return@synchronized emptySet()
+            beforeMutation()
             val writes = committed.flatMapTo(LinkedHashSet()) { active.getValue(it) }
             do {
                 val overlapping = active.filter { (t, w) -> t !in committed && w.any { it in writes } }
@@ -127,6 +129,29 @@ class LocateManager {
             committed
         }
 
+    /**
+     * Called before a gesture changes which targets are located — a toggle, a commit, a reset, a
+     * prune — so the programmer's history steps from the bookkeeping as it stood (undo plan §3.6). A
+     * [reassert] re-derives what a located target holds and is no gesture of its own.
+     */
+    @Volatile
+    var beforeMutation: () -> Unit = {}
+
+    /** The located targets and what each asserted, for a programmer step. */
+    data class Snapshot(val active: Map<TargetRef, List<LocateWrite>>)
+
+    fun snapshot(): Snapshot = synchronized(lock) { Snapshot(LinkedHashMap(active)) }
+
+    /**
+     * Put the bookkeeping back as [snapshot] holds it. The LOCATE slots it describes are the store's,
+     * restored with it, so this runs no callback.
+     */
+    fun restore(snapshot: Snapshot) = synchronized(lock) {
+        active.clear()
+        active.putAll(snapshot.active)
+        _activeTargets.value = active.keys.toSet()
+    }
+
     /** Every write the located targets hold, for a caller watching what an edit lands on them. */
     fun writes(): Set<LocateWrite> = synchronized(lock) { active.values.flatMapTo(HashSet()) { it } }
 
@@ -137,6 +162,7 @@ class LocateManager {
      * desync the toggles (a "located" fixture whose writes are long gone).
      */
     fun reset() = synchronized(lock) {
+        if (active.isNotEmpty()) beforeMutation()
         active.clear()
         _activeTargets.value = emptySet()
     }
@@ -150,6 +176,7 @@ class LocateManager {
      */
     fun pruneWrite(targetKey: String, attribute: String) = synchronized(lock) {
         val write = LocateWrite(targetKey, attribute)
+        if (active.values.any { write in it }) beforeMutation()
         var changed = false
         val iterator = active.entries.iterator()
         while (iterator.hasNext()) {

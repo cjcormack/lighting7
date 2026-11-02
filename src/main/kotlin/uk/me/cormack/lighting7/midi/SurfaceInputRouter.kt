@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.midi
 
+import uk.me.cormack.lighting7.history.HistorySource
+import uk.me.cormack.lighting7.history.WriteOrigin
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -163,6 +165,24 @@ class SurfaceInputRouter(
     private fun route(displayKey: String, deviceTypeKey: String, event: MidiInputEvent) {
         val profile = types().firstOrNull { it.typeKey == deviceTypeKey } ?: return
         val match = matchEvent(profile, event) ?: return
+        // Each input is one step of the programmer's history, the surface's own; a fader or encoder
+        // moved on one control folds into one (undo plan §3.2, §3.6).
+        val origin = WriteOrigin(HistorySource.surface(displayKey)).apply {
+            label = "$displayKey ${match.historyControl ?: "input"}"
+            if (match is ResolvedInput.Continuous) coalesceKey = "surface|$displayKey|${match.controlId}"
+        }
+        WriteOrigin.with(origin) { routeMatched(deviceTypeKey, displayKey, match) }
+    }
+
+    private val ResolvedInput.historyControl: String?
+        get() = when (this) {
+            is ResolvedInput.Continuous -> controlId
+            is ResolvedInput.ButtonPress -> controlId
+            is ResolvedInput.ButtonRelease -> controlId
+            else -> null
+        }
+
+    private fun routeMatched(deviceTypeKey: String, displayKey: String, match: ResolvedInput) {
         when (match) {
             is ResolvedInput.BankButton -> {
                 // Bank buttons short-circuit binding resolution — they're never user-bindable.

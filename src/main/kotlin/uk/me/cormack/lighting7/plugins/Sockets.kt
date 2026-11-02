@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.plugins
 
+import kotlinx.coroutines.withContext
 import io.ktor.serialization.*
 import io.ktor.serialization.kotlinx.*
 import io.ktor.server.application.*
@@ -163,6 +164,7 @@ fun Application.configureSockets(state: State) {
             setupBuskSubscriptions(scope)
             setupCloudSyncSubscriptions(scope)
             setupProgrammerSubscriptions(scope)
+            setupHistorySubscriptions(scope)
             setupSpeedMasterSubscriptions(scope)
             setupHandSubscriptions(scope)
             setupScenerySubscriptions(scope)
@@ -179,7 +181,7 @@ fun Application.configureSockets(state: State) {
                     try {
                         when (val message = converter?.deserialize<InMessage>(frame)) {
                             null -> System.err.println("WS /api: undeserializable frame ignored")
-                            else -> scope.traceMessage(message) { dispatch(scope, message) }
+                            else -> scope.traceMessage(message) { withContext(scope.writeOrigin(message)) { dispatch(scope, message) } }
                         }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e

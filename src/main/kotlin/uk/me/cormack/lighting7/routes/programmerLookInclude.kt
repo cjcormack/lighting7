@@ -196,6 +196,8 @@ internal fun includeExpandedIntoProgrammer(
 ): LookIncludeOutcome {
     val expanded = state.show.lookRegistry.expanded(sourceUuid)
         ?: return LookIncludeOutcome(0, emptyList(), emptyList())
+    // The step is taken here, ahead of the bookkeeping below that its hooks do not see.
+    state.show.programmerStore.beforeGesture()
 
     val writes = ArrayList<uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite>()
     val skips = ArrayList<RecordSkip>()

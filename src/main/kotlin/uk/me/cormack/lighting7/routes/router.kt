@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.plugins.installHistoryOrigin
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -56,6 +57,8 @@ fun Application.configureRouting(state: State) {
                 installAuthGate(state)
 
                 route("/rest") {
+                    // Every write below runs under its caller's origin (undo plan §3.2).
+                    installHistoryOrigin()
                     routeApiRestAuth(state)
                     routeApiRestStatus(state)
                     routeApiRestProjects(state)

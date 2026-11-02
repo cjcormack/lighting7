@@ -587,6 +587,7 @@ class FxEngine(
         nowMs: Long = System.currentTimeMillis(),
     ): Int {
         if (effects.isEmpty()) return 0
+        touchLocal(effects)
         if (durationMs <= 0) return removeInstances(effects)
         val leaving = effects.count { effect ->
             effect.updateEnvelope { FxEnvelope.ramp(it.at(nowMs), 0.0, durationMs, curve, nowMs, leaving = true) }
@@ -620,6 +621,7 @@ class FxEngine(
         valueMoves: (fixtureKey: String, attribute: String) -> Boolean,
     ): Int {
         if (fadeMs <= 0) return fadeOutFx(effects, 0)
+        touchLocal(effects)
         val (stop, shrink) = effects.partition { paintsMovingValue(it, valueMoves) }
         return removeInstances(stop) + fadeOutFx(shrink, fadeMs)
     }
@@ -869,6 +871,7 @@ class FxEngine(
      * @return The assigned effect ID
      */
     fun addFx(effect: FxInstance): Long {
+        touchLocal(listOf(effect))
         val id = insert(effect)
         rebuildSortedSnapshots()
         emitStateUpdate()
@@ -891,6 +894,7 @@ class FxEngine(
      */
     fun addFxBatch(effects: List<FxInstance>): List<Long> {
         if (effects.isEmpty()) return emptyList()
+        touchLocal(effects)
         val ids = effects.map { insert(it) }
         rebuildSortedSnapshots()
         emitStateUpdate()
@@ -953,6 +957,7 @@ class FxEngine(
      * @return true if an effect was removed
      */
     fun removeFx(fxId: Long): Boolean {
+        activeFx[fxId]?.let { touchLocal(listOf(it)) }
         val removed = activeFx.remove(fxId)
         if (removed != null) {
             rebuildSortedSnapshots()
@@ -968,6 +973,7 @@ class FxEngine(
      * half; [removeFx] in a loop would rebuild and broadcast the whole list once per effect.
      */
     fun removeFxBatch(fxIds: Collection<Long>): Int {
+        touchLocal(fxIds.mapNotNull { activeFx[it] })
         val removed = fxIds.mapNotNull { activeFx.remove(it) }
         if (removed.isNotEmpty()) {
             rebuildSortedSnapshots()
@@ -991,6 +997,7 @@ class FxEngine(
         replace: Map<FxInstance, List<FxInstance>>,
         fresh: List<FxInstance> = emptyList(),
     ): Set<Long> {
+        touchLocal(replace.keys + fresh)
         // By identity, so a copy is only ever added for a parent this call took out. The compose
         // pass keeps painting the parent from the sorted snapshot until the one rebuild below.
         // Under the rank lock, so a move between building the copies and this swap reaches them.
@@ -1433,6 +1440,7 @@ class FxEngine(
         // Again from the top when another request swapped or split the instance under this one.
         while (true) {
             val existing = activeFx[fxId] ?: return null
+            touchLocal(listOf(existing))
             val runsChanged = edit.movesRuns(existing)
 
             // One atomic dynamics update covering both branches: the cell is shared across the
@@ -1521,58 +1529,18 @@ class FxEngine(
             // The envelope too, so a fade or a retirement racing the swap reaches both.
             envelopeRef = envelopeRef,
         ).apply {
-            id = existing.id
-            composeOrder = existing.composeOrder
-            registrationId = edit.newRegistrationId ?: existing.registrationId
-            source = existing.source
-            // The layer ids are what `isSuppressed` looks a stomp mask up by, and what
-            // Record reads to tell a layer's effect from a loose one. Dropping them here
-            // un-stomps an edited layer effect and makes Record write it back a second
-            // time as an ad-hoc child.
-            cueLayerId = existing.cueLayerId
-            programmerLayerFxKey = existing.programmerLayerFxKey
-            programmerOrigin = existing.programmerOrigin
-            includedLookFx = existing.includedLookFx
-            cueId = existing.cueId
-            cueStackId = existing.cueStackId
-            priority = existing.priority
-            layerFxUuid = existing.layerFxUuid
-            runUuid = existing.runUuid
-            startedAtMs = existing.startedAtMs
-            startedAtBeat = existing.startedAtBeat
-            lastPhase = existing.lastPhase
-            // Wall-clock phase derives from this and nothing else, so dropping it here
-            // would snap an edited wall-clock effect back to the start of its cycle —
-            // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
-            accumulatedScaledMs = existing.accumulatedScaledMs
-            // An N-shot's count runs on across an edit, as its phase does.
-            runsStartTick = existing.runsStartTick
-            runsStartScaledMs = existing.runsStartScaledMs
-            spent = existing.spent
-            timingSource = existing.timingSource
-            seconds = existing.seconds
-            // A split-off copy's member (apply-model plan §3.4): without it an edited copy
-            // loses its set's step cycle, sweep and N-shot lag.
-            splitMember = existing.splitMember
-            // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
-            // it on first read, which costs one walk and is the safe direction. Carrying it
-            // would survive a future `updateFx` that learns to retarget, and the effect
-            // would silently keep painting the old fixtures.
-            //
-            // Master assignment must survive the swap: this block hand-enumerates every
-            // carried field, and missing one silently yanks an edited effect back to
-            // master 1 the moment its beat division or blend mode is tweaked.
-            speedMasterUuid = edit.newSpeedMasterUuid ?: existing.speedMasterUuid
-            rateSpeedMasterUuid = edit.newRateSpeedMasterUuid ?: existing.rateSpeedMasterUuid
-            speedMasterSlot = if (edit.newSpeedMasterUuid != null) {
-                speedMasters.slotFor(edit.newSpeedMasterUuid)
-            } else {
-                existing.speedMasterSlot
+            carryFrom(existing, existing)
+            edit.newRegistrationId?.let { registrationId = it }
+            // Master assignment must survive the swap: [carryFrom] keeps both, and an edit moves
+            // only the one it names — dropping one silently yanks an edited effect back to master 1
+            // the moment its beat division or blend mode is tweaked.
+            edit.newSpeedMasterUuid?.let {
+                speedMasterUuid = it
+                speedMasterSlot = speedMasters.slotFor(it)
             }
-            rateMasterSlot = if (edit.newRateSpeedMasterUuid != null) {
-                rateSlotFor(edit.newRateSpeedMasterUuid)
-            } else {
-                existing.rateMasterSlot
+            edit.newRateSpeedMasterUuid?.let {
+                rateSpeedMasterUuid = it
+                rateMasterSlot = rateSlotFor(it)
             }
             edit.replaceMasters?.let { assignMasters(this, it) }
             // After the masters: Seconds clears whichever master its kind cannot have, and the
@@ -1583,6 +1551,48 @@ class FxEngine(
                 rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
             }
         }
+    }
+
+    /**
+     * Everything an instance standing in for another carries: [config]'s id, ownership and settings, and
+     * [running]'s place in its run — start, phase, the wall-clock accumulator (wall-clock phase derives
+     * from it alone, so dropping it snaps an edited effect to the start of its cycle) and an N-shot's
+     * count. [swapFor] and a programmer restore both stand one instance in for another; one list, so a
+     * field added to [FxInstance] reaches both. `expansion` is deliberately not carried: the new
+     * instance rebuilds it on first read, which is the safe direction.
+     */
+    private fun FxInstance.carryFrom(config: FxInstance, running: FxInstance) {
+        id = config.id
+        composeOrder = config.composeOrder
+        registrationId = config.registrationId
+        source = config.source
+        // The layer ids are what `isSuppressed` looks a stomp mask up by, and what Record reads to
+        // tell a layer's effect from a loose one.
+        cueLayerId = config.cueLayerId
+        programmerLayerFxKey = config.programmerLayerFxKey
+        programmerOrigin = config.programmerOrigin
+        includedLookFx = config.includedLookFx
+        cueId = config.cueId
+        cueStackId = config.cueStackId
+        priority = config.priority
+        layerFxUuid = config.layerFxUuid
+        runUuid = config.runUuid
+        timingSource = config.timingSource
+        seconds = config.seconds
+        // A split-off copy's member: without it an edited copy loses its set's step cycle, sweep
+        // and N-shot lag.
+        splitMember = config.splitMember
+        speedMasterUuid = config.speedMasterUuid
+        rateSpeedMasterUuid = config.rateSpeedMasterUuid
+        speedMasterSlot = config.speedMasterSlot
+        rateMasterSlot = config.rateMasterSlot
+        startedAtMs = running.startedAtMs
+        startedAtBeat = running.startedAtBeat
+        lastPhase = running.lastPhase
+        accumulatedScaledMs = running.accumulatedScaledMs
+        runsStartTick = running.runsStartTick
+        runsStartScaledMs = running.runsStartScaledMs
+        spent = running.spent
     }
 
     /** Both of an effect's master assignments, as [updateFx]'s `replaceMasters` sets them. */
@@ -1599,6 +1609,7 @@ class FxEngine(
      * Pause an effect by ID.
      */
     fun pauseFx(fxId: Long) {
+        activeFx[fxId]?.takeIf { it.isRunning }?.let { touchLocal(listOf(it)) }
         activeFx[fxId]?.pause()
         // isRunning is part of effect coverage; see [rebuildSortedSnapshots].
         fxListEpoch.incrementAndGet()
@@ -1609,6 +1620,7 @@ class FxEngine(
      * Resume a paused effect by ID.
      */
     fun resumeFx(fxId: Long) {
+        activeFx[fxId]?.takeUnless { it.isRunning }?.let { touchLocal(listOf(it)) }
         activeFx[fxId]?.resume()
         // isRunning is part of effect coverage; see [rebuildSortedSnapshots].
         fxListEpoch.incrementAndGet()
@@ -1625,6 +1637,7 @@ class FxEngine(
         val toRemove = activeFx.values.filter {
             !it.isGroupFx && it.target.targetKey == fixtureKey
         }
+        touchLocal(toRemove)
         toRemove.forEach { activeFx.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()
@@ -1644,6 +1657,7 @@ class FxEngine(
         val toRemove = activeFx.values.filter {
             it.isGroupFx && it.target.targetKey == groupName
         }
+        touchLocal(toRemove)
         toRemove.forEach { activeFx.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()
@@ -1665,6 +1679,7 @@ class FxEngine(
             val items = (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items ?: return@filter false
             items.all { it in named }
         }
+        touchLocal(toRemove)
         toRemove.forEach { activeFx.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()
@@ -1685,6 +1700,7 @@ class FxEngine(
     fun detachProgrammerLayerFx(layerId: Int): Int {
         val spawned = activeFx.values.filter { it.programmerLayerFxKey?.layerId == layerId && !it.leaving }
         if (spawned.isEmpty()) return 0
+        beforeLocalFxMutation()
         val (spent, running) = spawned.partition { it.spent }
         synchronized(localRankLock) {
             val detached = running.sortedWith(sortedFxComparator)
@@ -1709,6 +1725,7 @@ class FxEngine(
      * adopted; one that has stopped or is leaving is not.
      */
     fun adoptIntoProgrammerLayer(adoptions: List<LayerFxAdoption>, source: LayerSource): Set<Long> {
+        if (adoptions.isNotEmpty()) beforeLocalFxMutation()
         val adopted = HashSet<Long>()
         synchronized(localRankLock) {
             for ((effect, key, priority) in adoptions) {
@@ -1750,6 +1767,7 @@ class FxEngine(
      */
     fun moveLocalFx(fxId: Long, aboveId: Long?): LocalMoveOutcome {
         val changed = ArrayList<Long>()
+        if (aboveId != fxId) activeFx[fxId]?.let { touchLocal(listOf(it)) }
         synchronized(localRankLock) {
             val moved = activeFx[fxId] ?: return LocalMoveOutcome.NotFound(fxId)
             if (!moved.isLocalFx) return LocalMoveOutcome.NotLocal(fxId)
@@ -1860,6 +1878,7 @@ class FxEngine(
      */
     fun removeProgrammerBandFx(): Int {
         val toRemove = activeFx.values.filter { isProgrammerFxPriority(it.priority) }
+        touchLocal(toRemove)
         toRemove.forEach { activeFx.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()
@@ -1902,11 +1921,153 @@ class FxEngine(
         return toRemove.size
     }
 
+    // ── Programmer history (undo plan §3.6) ─────────────────────────────────
+
+    /**
+     * Called before a mutation adds, stops, edits or re-ranks a Local FX ([FxInstance.isLocalFx]), so
+     * the programmer's history steps from the band as it stood. Not called for a cue's or a layer's
+     * effects, which the history does not keep.
+     */
+    @Volatile
+    var beforeLocalFxMutation: () -> Unit = {}
+
+    private fun touchLocal(effects: Collection<FxInstance>) {
+        if (effects.any { it.isLocalFx }) beforeLocalFxMutation()
+    }
+
+    /**
+     * One Local FX as a programmer step keeps it: [original] the live instance, by identity, so the
+     * same object carried across a reload under a new id is still found; [id] the id this engine gave
+     * it, which names it only in the engine that took the step; and a frozen copy of what it ran with
+     * at that moment, never added.
+     */
+    class LocalFxSpec internal constructor(
+        val id: Long,
+        internal val engineToken: Any,
+        internal val original: FxInstance,
+        internal val frozen: FxInstance,
+    ) {
+        /** What the copy runs with, for a test to compare. */
+        val fxTypeId: String get() = frozen.fxTypeId
+        val dynamics: FxDynamics get() = frozen.dynamics
+        val priority: Int get() = frozen.priority
+        val targetKey: String get() = frozen.target.targetKey
+        val attribute: String get() = frozen.target.attribute
+    }
+
+    /** Which engine a [LocalFxSpec]'s id belongs to: a reload's new engine numbers from 1 again. */
+    private val engineToken = Any()
+
+    /** Every Local FX as it runs now, oldest first. */
+    fun localFxSnapshot(): List<LocalFxSpec> =
+        activeFx.values.filter { it.isLocalFx }.sortedBy { it.id }.map { effect ->
+            val frozen = restoredInstance(effect, effect, AtomicReference(effect.dynamics), AtomicReference(FxEnvelope.FULL))
+            LocalFxSpec(effect.id, engineToken, effect, frozen)
+        }
+
+    /** What a programmer restore did to the Local FX. */
+    data class LocalFxRestore(val respawned: Int, val edited: Int, val released: Int)
+
+    /**
+     * Make the Local FX what [specs] say (undo plan §3.6): one running that no spec names shrinks out
+     * at [fadeMs] by [releaseFx]' rule, one a spec names that has gone grows back in at its phase and
+     * under its id (a leaving one is taken back instead), and one running with other settings takes
+     * the spec's, its phase and envelope kept. Layer and cue effects are left alone.
+     *
+     * A spec finds its instance by identity first, then by id only in the engine that took the step,
+     * each instance answering one spec: a reload numbers its instances afresh, so an old id may name
+     * another FX.
+     */
+    fun restoreLocalFx(
+        specs: List<LocalFxSpec>,
+        fadeMs: Long,
+        valueMoves: (fixtureKey: String, attribute: String) -> Boolean,
+    ): LocalFxRestore {
+        val now = System.currentTimeMillis()
+        val live = activeFx.values.filter { it.isLocalFx }
+        val candidates = live + activeFx.values.filter { it.leaving && it.ownedAsLocal }
+        val matched = HashMap<LocalFxSpec, FxInstance>()
+        val taken = HashSet<FxInstance>()
+        for (spec in specs) {
+            candidates.firstOrNull { it === spec.original }?.let { matched[spec] = it; taken += it }
+        }
+        for (spec in specs) {
+            if (spec in matched || spec.engineToken !== engineToken) continue
+            candidates.firstOrNull { it !in taken && it.id == spec.id }?.let { matched[spec] = it; taken += it }
+        }
+        val kept = HashSet<FxInstance>()
+        val swaps = LinkedHashMap<FxInstance, LocalFxSpec>()
+        val fresh = ArrayList<FxInstance>()
+        for (spec in specs) {
+            val running = matched[spec]?.let { found ->
+                if (!found.leaving) found
+                else reclaimFx(listOf(found), now).firstOrNull()?.also { fadeInFx(listOf(it), fadeMs, nowMs = now) }
+            }
+            if (running != null) {
+                kept += running
+                if (!sameRun(running, spec.frozen)) swaps[running] = spec
+            } else {
+                val envelope = FxEnvelope.ramp(0.0, 1.0, fadeMs, EasingCurve.LINEAR, now)
+                fresh += restoredInstance(spec.frozen, spec.frozen, AtomicReference(spec.frozen.dynamics), AtomicReference(envelope))
+                    .also { it.id = spec.id }
+            }
+        }
+        var edited = 0
+        synchronized(localRankLock) {
+            for ((running, spec) in swaps) {
+                // The running instance's own cells, as `updateFx` hands them on, so a pause or a fade
+                // racing this swap reaches the replacement.
+                running.dynamicsRef.set(spec.frozen.dynamics)
+                val replacement = restoredInstance(spec.frozen, running, running.dynamicsRef, running.envelopeCell)
+                    .also { it.id = running.id }
+                if (activeFx.replace(running.id, running, replacement)) edited++
+            }
+            for (effect in fresh) {
+                // An id from before a reload may be above this engine's counter: move the counter past
+                // it, so no later insert hands the same id out and replaces this FX.
+                if (activeFx.containsKey(effect.id)) effect.id = nextFxId.incrementAndGet()
+                else nextFxId.accumulateAndGet(effect.id, ::maxOf)
+                activeFx[effect.id] = effect
+            }
+        }
+        if (swaps.isNotEmpty() || fresh.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            emitStateUpdate()
+        }
+        val gone = live.filter { it !in kept }
+        val released = if (gone.isEmpty()) 0 else releaseFx(gone, fadeMs, valueMoves)
+        return LocalFxRestore(fresh.size, edited, released)
+    }
+
+    /** Whether [a] runs with exactly [b]'s settings, whatever its phase. */
+    private fun sameRun(a: FxInstance, b: FxInstance): Boolean =
+        a.effect === b.effect && a.timing == b.timing && a.blendMode == b.blendMode &&
+            a.dynamics == b.dynamics && a.priority == b.priority && a.registrationId == b.registrationId &&
+            a.speedMasterUuid == b.speedMasterUuid && a.rateSpeedMasterUuid == b.rateSpeedMasterUuid &&
+            a.seconds == b.seconds && a.timingSource == b.timingSource && a.splitMember == b.splitMember
+
+    /**
+     * An instance with [config]'s settings and ownership and [running]'s place in its run, in the cells
+     * given, its masters bound to this engine's bank; its id is the caller's to set.
+     */
+    private fun restoredInstance(
+        config: FxInstance,
+        running: FxInstance,
+        dynamicsRef: AtomicReference<FxDynamics>,
+        envelopeRef: AtomicReference<FxEnvelope>,
+    ): FxInstance =
+        FxInstance(config.effect, config.target, config.timing, config.blendMode, dynamicsRef, envelopeRef).apply {
+            carryFrom(config, running)
+            speedMasterSlot = speedMasters.slotFor(speedMasterUuid)
+            rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
+        }
+
     /**
      * Remove all active effects.
      */
     fun clearAllFx() {
         val allFx = activeFx.values.toList()
+        touchLocal(allFx)
         activeFx.clear()
         rebuildSortedSnapshots()
         cueLayer.clearAll()

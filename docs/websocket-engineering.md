@@ -237,6 +237,7 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 | Stack FX amount | `StackFxAmountSocket.kt` | 1 | 1 | `handleStackFxAmount` | `setupStackFxAmountSubscriptions` |
 | Move in dark | `MoveInDarkSocket.kt` | — | 1 | — | `setupMoveInDarkSubscriptions` |
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
+| History | `HistorySocket.kt` | — | 1 | — | `setupHistorySubscriptions` |
 | Locate | `LocateSocket.kt` | — | 1 | — | `setupLocateSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
@@ -250,8 +251,8 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 | Surfaces | `SurfaceSocket.kt` | 11 | 14 | `handleSurface` | `setupSurfaceSubscriptions` |
 | Windows | `WindowsSocket.kt` | 4 | 4 | `handleWindows` | `setupWindowsSubscriptions` |
 
-Ten families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
-Broadcast, Cloud sync, Effects, Locate, Machine, Move in dark, Rig safety, Scenery and Stage render. Channel is the odd one: its three messages are declared in
+Eleven families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
+Broadcast, Cloud sync, Effects, History, Locate, Machine, Move in dark, Rig safety, Scenery and Stage render. Channel is the odd one: its three messages are declared in
 `ChannelSocket.kt` and answered there on request, but every *unsolicited* one is fired from
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
@@ -661,7 +662,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (85)
+## Server → Client (86)
 
 ### Boot — `BootSocket.kt`
 
@@ -993,6 +994,20 @@ with no dimmer; a STROBE channel and an LED ring's RING channel are cut only at 
 sees the scaled output, so `channelState` and the Stage view draw the rig as the grand master
 leaves it.
 
+### History — `HistorySocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `history.state` | `projectId: Int?`, `revision: Long`, `undo?` / `redo?` `{id, label, kind}`, `programmer: {undo, redo: [{id, label, at, source: {kind, name, window?}}]}` | Connect snapshot + broadcast |
+
+What ⌘Z and ⇧⌘Z take (undo plan §3.7, D13): the programmer's steps newest first and its redo next
+first. `StateFlow`-backed on `State` (`programmerHistoryFrame`), so the subscription is the snapshot
+and it outlives a project switch; each show's history publishes into it, a switch's new show an
+empty one. Published when a step is taken (a drag that folds into its step publishes nothing) and on
+every undo and redo. Undo and redo are REST (`POST /projects/{id}/history/undo|redo`), so the family
+has no inbound frame. Every socket reads the same frame while the history holds programmer steps
+alone; session 3 of the plan makes it per source.
+
 ### Locate — `LocateSocket.kt`
 
 | Message | Fields | Cadence |
@@ -1262,11 +1277,15 @@ for (frame in incoming) {
     try {
         when (val message = converter?.deserialize<InMessage>(frame)) {
             null -> System.err.println("WS /api: undeserializable frame ignored")
-            else -> scope.traceMessage(message) { dispatch(scope, message) }
+            else -> scope.traceMessage(message) { withContext(scope.writeOrigin(message)) { dispatch(scope, message) } }
         }
     } catch (e: CancellationException) { throw e } catch (e: Exception) { /* logged */ }
 }
 ```
+
+Each frame runs under its own `WriteOrigin` (`plugins/HistoryOrigin.kt`): the socket's account and
+announced window, a label, and for a frame sent at drag rate a key that folds its repeats into one
+programmer step (`docs/lighting-composition-model.md` §"Programmer history").
 
 `dispatch` is the `when` over the domains (`is ChannelInMessage -> handleChannel(scope, message)`,
 …). `traceMessage` (`plugins/SentryTracing.kt`) makes a gesture frame a Sentry transaction and
@@ -1405,6 +1424,8 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
 | `plugins/FxSocket.kt` | Active-FX state, the six FX writes and their `fxError` refusal |
 | `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
+| `plugins/HistorySocket.kt` | The programmer's history: `history.state` |
+| `plugins/HistoryOrigin.kt` | The write origin the socket, REST, MCP and surface doors run each request under |
 | `plugins/LocateSocket.kt` | The located targets: `locate.state` |
 | `plugins/StackFxAmountSocket.kt` | Each stack's FX amount: `stackFxAmount.state` and `stackFxAmount.set` |
 | `plugins/MoveInDarkSocket.kt` | What the live show moves in the dark: `moveInDark.state` |

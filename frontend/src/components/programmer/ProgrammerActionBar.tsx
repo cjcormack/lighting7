@@ -35,6 +35,12 @@ import { NewPaletteFromSelectionSheet } from './NewPaletteFromSelectionSheet'
 import { AddLookAndInclude } from './AddLook'
 import { useMarquee } from '@/components/fixtures-list/marqueeContext'
 import { useCommandDoor } from './commandDoors'
+import { toast } from 'sonner'
+import { awaitHistoryStep } from '@/store/history'
+import { ProgrammerUndoRedo, useProgrammerUndo } from './ProgrammerUndoRedo'
+
+/** One Clear toast at a time: a second Clear replaces the first's Undo. */
+const CLEAR_TOAST_ID = 'programmer-cleared'
 
 /** Fade options for Clear and for entering/leaving Blind, in milliseconds. */
 const FADE_OPTIONS = [
@@ -100,7 +106,7 @@ const MINOR_WORD_CLASS = 'hidden @[1100px]:inline'
  * iconic in — the verb that had to change was `Update`, in the source box next door. What the
  * chrome tidy-up added below 600 is the fade trigger dropping its **chevron**, and only that: the
  * value stays, because the fade has to be read before Clear is pressed. That takes the trigger
- * from 86 to 48px and the bar from 285 to 247, and those 38px are what pay for the source box's
+ * from 86 to 48px and the bar from 325 to 287, and those 38px are what pay for the source box's
  * `Q4 · Update · Revert` on a portrait phone (`ProgrammerSourceStrip` has the row's arithmetic).
  *
  * The container queried is **row A's**, declared by the wrapper in `ProgrammerPage`; this
@@ -108,15 +114,13 @@ const MINOR_WORD_CLASS = 'hidden @[1100px]:inline'
  * the short-height arm there is no row A and this pair leads row B instead, inside an `@container`
  * `ProgrammerGrid` puts around the two of them — so the queries here measure the ~420px the folded
  * row gives the pair rather than the row's own ~750px, and these four stay icons on an 852×393
- * phone by measurement rather than by luck. Measured with Blind back in the bar
- * (`PD-BLIND-ON-PROGRAMMER`): the bar is 285px iconic (247 below `@[600px]`, once the fade's
- * chevron goes) and the leading container 419px; the first fixture row still lands at the same y
- * it did before. The source box took the remaining 117px
- * back when it filled in every state, and it no longer does: with nothing included it is as wide
- * as its words (102px for `No source`) and the rest goes to the row's filter field. So 117 is the
- * ceiling that arithmetic leaves it rather than the width it takes. The two figures that still
- * hold unconditionally are this bar's 285 and the container's 419 — `ProgrammerGrid`'s floor for
- * the pair is derived from them.
+ * phone by measurement rather than by luck. Measured with Blind in the bar
+ * (`PD-BLIND-ON-PROGRAMMER`) and Undo ahead of Clear (`ProgrammerUndoRedo`): the bar is 325px
+ * iconic, and the bar is 287px iconic below `@[600px]` once the fade's chevron goes, which the
+ * folded block always is (its container is 419px). The source box could take the remaining 115px,
+ * and does not: with nothing included it is as wide as its words (102px for `No source`) and the
+ * rest goes to the row's filter field. The two figures that hold unconditionally are this bar's
+ * 287 and the container's 419 — `ProgrammerGrid`'s floor for the pair is derived from them.
  */
 export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const { data: summary } = useProgrammerSummaryQuery()
@@ -136,6 +140,18 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // The picker's value, subscribed: this component owns the picker, so it re-renders on every move
   // anyway, and Clear and Blind reading one variable is what keeps them fading by the same amount.
   const fade = Number(fadeMs) || 0
+
+  // Clear's toast carries Undo (undo plan §4.3), naming the Clear's own step once the history has it,
+  // so it undoes the Clear however many steps come after.
+  const { revision, undo } = useProgrammerUndo(projectId)
+  const clear = () => {
+    const step = awaitHistoryStep(revision, 'Clear')
+    programmerClearAll(fade)
+    void step.then((id) => {
+      if (id == null) return
+      toast('Programmer cleared', { id: CLEAR_TOAST_ID, action: { label: 'Undo', onClick: () => undo(id) } })
+    })
+  }
 
   // Clear releases programmer values, programmer-band FX, held scenery and layers alike: gating it on
   // the entry count alone would leave the documented escape hatch disabled in exactly the case an
@@ -228,7 +244,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
       hint: `${contents} · ${over}`,
       keywords: ['clear', 'release', 'empty', 'reset'],
       canAct: hasSomethingToClear,
-      run: () => programmerClearAll(fade),
+      run: clear,
     },
   ])
   useCommandDoor('blind', () => [
@@ -256,6 +272,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
 
   return (
     <div className="flex shrink-0 items-center gap-2">
+      <ProgrammerUndoRedo projectId={projectId} />
       <Tooltip>
         <TooltipTrigger asChild>
           {/* Wrapped so the disabled state can still explain itself. */}
@@ -263,7 +280,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
             <button
               type="button"
               disabled={!hasSomethingToClear}
-              onClick={() => programmerClearAll(fade)}
+              onClick={clear}
               aria-label="Clear"
               className="inline-flex items-center gap-1.5 px-2.5 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
             >

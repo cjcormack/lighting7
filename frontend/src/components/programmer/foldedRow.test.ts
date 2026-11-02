@@ -79,7 +79,7 @@ describe("the folded row's layout contract", () => {
   it('keeps the floor tied to the width it was derived from', () => {
     // The one number in this mechanism that lives in another file. The floor is the pair at its
     // legible minimum — the iconic action bar, the divider and two gaps, and the source box's own
-    // 102px — so it is only right for as long as that bar is 285px wide, and the bar is measured
+    // 102px — so it is only right for as long as that bar is 287px wide, and the bar is measured
     // in `ProgrammerActionBar`'s doc comment rather than shared as a constant (it cannot be
     // shared: Tailwind scans source text, so a floor composed at runtime would generate no CSS).
     //
@@ -87,8 +87,8 @@ describe("the folded row's layout contract", () => {
     // to 285px when Blind came back into it (`PD-BLIND-ON-PROGRAMMER`), and nothing pointed at the
     // arithmetic downstream of it. So pin the two together — re-measure the bar and this fails,
     // naming the floor that has to move with it.
-    expect(programmerActionBarSrc).toContain('the bar is 285px iconic')
-    expect(programmerGridSrc).toContain('285 + 17 + 102 = 404')
+    expect(programmerActionBarSrc).toContain('the bar is 287px iconic')
+    expect(programmerGridSrc).toContain('287 + 17 + 102 = 406')
     expect(programmerGridSrc).toContain('min-w-[min(410px,100%)]')
   })
 

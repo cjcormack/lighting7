@@ -52,6 +52,16 @@ const sheets = {
   openUpdate: vi.fn(),
 }
 vi.mock('./ProgrammerSheets', () => ({ useProgrammerSheets: () => sheets }))
+// The programmer's undo: its control is `ProgrammerUndoRedo.test.tsx`'s; here, only what Clear's toast undoes.
+const undo = vi.fn()
+vi.mock('./ProgrammerUndoRedo', () => ({
+  ProgrammerUndoRedo: () => null,
+  useProgrammerUndo: () => ({ revision: 4, steps: [], redoSteps: [], undo, redo: vi.fn() }),
+}))
+const awaitHistoryStep = vi.fn((_revision: number, _label: string) => Promise.resolve('p-9' as string | null))
+vi.mock('@/store/history', () => ({ awaitHistoryStep: (r: number, l: string) => awaitHistoryStep(r, l) }))
+const toastSpy = vi.hoisted(() => vi.fn())
+vi.mock('sonner', () => ({ toast: toastSpy }))
 // *A new palette*'s sheet: what it is opened with is the assertion, not what it records.
 const newPalette = vi.hoisted(() => ({ last: null as null | { open: boolean; families: unknown; targets: unknown } }))
 vi.mock('./NewPaletteFromSelectionSheet', () => ({
@@ -189,6 +199,19 @@ describe('ProgrammerActionBar', () => {
     expect(clear).not.toBeDisabled()
     fireEvent.click(clear)
     expect(programmerClearAll).toHaveBeenCalled()
+  })
+
+  it("toasts Clear with an Undo that undoes the Clear's own step", async () => {
+    summary = { ...summary, entryCount: 2 }
+    render(<ProgrammerActionBar projectId={1} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(awaitHistoryStep).toHaveBeenCalledWith(4, 'Clear')
+    await vi.waitFor(() => expect(toastSpy).toHaveBeenCalled())
+    const [message, options] = toastSpy.mock.calls[0] as [string, { action: { label: string; onClick: () => void } }]
+    expect(message).toBe('Programmer cleared')
+    expect(options.action.label).toBe('Undo')
+    options.action.onClick()
+    expect(undo).toHaveBeenCalledWith('p-9')
   })
 
   it('disables Clear only when there is neither a value nor an effect', () => {

@@ -848,8 +848,12 @@ class ProgrammerLayerStack(
      * successor, whose engine runs none of the layers' effects yet. Every layer's effects spawn
      * afresh (their phase restarts); the values republish with the rest of the programmer through
      * `ProgrammerWriter.republishAll`, which the caller runs after this.
+     *
+     * Also a programmer undo's (undo plan §3.6), with the restore's [fadeMs]: the store already holds
+     * the step's layers, so this spawns the effects of a layer that came back, retracts those of one
+     * that went, and moves what a Look edited since then changed.
      */
-    fun reinstate(): ProgrammerLayerOutcome = recook(store.layers)
+    fun reinstate(fadeMs: Long = 0): ProgrammerLayerOutcome = recook(store.layers, fadeMs)
 
     /**
      * Re-cook if any layer names [lookUuid] — the programmer's half of a Look edit.

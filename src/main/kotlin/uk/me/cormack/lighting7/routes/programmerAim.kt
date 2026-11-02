@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.history.historyGesture
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.request.receive
@@ -79,7 +80,10 @@ internal fun Route.routeApiRestProgrammerAim(state: State) {
                         else -> aimIntoProgrammer(state, project, request.targets, x, y, z, request.fadeMs, request.write)
                     }
                 }
-                AIM_MODE_JOG -> jogIntoProgrammer(state, project, request)
+                AIM_MODE_JOG -> {
+                    historyGesture("aim-jog|${request.targets.joinToString(",") { "${it.type}:${it.key}" }}")
+                    jogIntoProgrammer(state, project, request)
+                }
                 else -> AimOutcome.Invalid("Mode '${request.mode}' is not one of [$AIM_MODE_POINT, $AIM_MODE_JOG]")
             }
             when (outcome) {
