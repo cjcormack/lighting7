@@ -26,6 +26,7 @@ function withSteps(undo: HistoryStep[], redo: HistoryStep[] = [], projectId = 1)
   history = {
     projectId,
     revision: 3,
+    showRevision: 0,
     undo: undo[0] ? { id: undo[0].id, label: undo[0].label, kind: 'PROGRAMMER' } : null,
     redo: redo[0] ? { id: redo[0].id, label: redo[0].label, kind: 'PROGRAMMER' } : null,
     programmer: { undo, redo },

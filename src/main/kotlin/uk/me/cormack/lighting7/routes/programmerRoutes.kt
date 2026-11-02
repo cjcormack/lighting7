@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.plugins.historyLabel
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.application.call
@@ -151,6 +153,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
     withCurrentProject(state, request.projectId, { p ->
         "Cannot record into project '${p.name}' — only the current project can be modified"
     }) { project ->
+        call.historyLabel(recordHistoryLabel(state, mode, request.cueId, request.name))
         when (
             val result = performProgrammerRecord(
                 state, project,
@@ -192,6 +195,18 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                 ),
             )
         }
+    }
+}
+
+/** A Record's show-history entry: *Record into “Rose garden”*, or *Record “Rose garden”* for a new cue. */
+private fun recordHistoryLabel(state: State, mode: RecordMode, cueId: Int?, name: String?): String {
+    val into = cueId?.let { id -> transaction(state.database) { uk.me.cormack.lighting7.models.DaoCue.findById(id)?.name } }
+    return when {
+        into != null && mode == RecordMode.REMOVE -> "Remove from “$into”"
+        into != null && mode == RecordMode.UPDATE_EXISTING -> "Record over “$into”"
+        into != null -> "Record into “$into”"
+        !name.isNullOrBlank() -> "Record “$name”"
+        else -> "Record"
     }
 }
 

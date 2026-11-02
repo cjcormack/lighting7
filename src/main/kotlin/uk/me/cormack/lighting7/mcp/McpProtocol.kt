@@ -200,14 +200,21 @@ class McpProtocol(private val state: State) {
             return toolResult(FIXTURE_COMMANDS_REMOTE_REFUSAL, isError = true)
         }
 
-        // One tool call is one step of the programmer's history, Claude's own (undo plan D7).
-        val origin = WriteOrigin(historySourceOf(user)).apply { label = "Claude: $name" }
+        // One tool call is one step of the programmer's history and one show entry, Claude's own (undo
+        // plan D7). The project a tool names is journaled as well as the current one (§3.4).
+        val origin = WriteOrigin(historySourceOf(state, user)).apply { label = "Claude: $name" }
+        state.ensureHistory()
+        namedProjectOf(name, arguments)?.let { state.ensureHistory(it) }
         val outcome = withContext(origin) {
             if (setupTools.handles(name)) setupTools.executeTool(name, arguments, caller = user.displayName)
             else tools.executeTool(name, arguments)
         }
         return toolResult(outcome.result, isError = !outcome.success, images = outcome.images)
     }
+
+    /** The project a project-scoped tool names, by its argument, or null for the live one. */
+    private fun namedProjectOf(name: String, arguments: JsonObject): Int? =
+        PROJECT_SCOPED_TOOLS[name]?.let { field -> (arguments[field] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull }
 
     /**
      * Why [name] may not run on the project it writes when that is a venue, or null (venue plan D3,
@@ -218,8 +225,7 @@ class McpProtocol(private val state: State) {
      */
     private fun venueToolRefusal(name: String, arguments: JsonObject, user: AuthenticatedUser): String? {
         if (name in VENUE_ADMIN_TOOLS && user.role != UserRole.ADMIN) return "Only an admin can make or publish a venue."
-        val field = PROJECT_SCOPED_TOOLS[name]
-        val named = field?.let { (arguments[it] as? JsonPrimitive)?.takeIf { p -> !p.isString }?.intOrNull }
+        val named = namedProjectOf(name, arguments)
         val kind = transaction(state.database) {
             if (named != null) DaoProject.findById(named)?.kind else state.projectManager.currentProject.kind
         }

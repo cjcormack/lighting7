@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CircleUser, LogOut, Maximize2, MessageSquareWarning, Minimize2, MonitorSmartphone, Power } from "lucide-react"
+import { CircleUser, History, LogOut, Maximize2, MessageSquareWarning, Minimize2, MonitorSmartphone, Power } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +19,7 @@ import { canFullscreen, enterFullscreen, exitFullscreen, useFullscreenState } fr
 import { useWindowName } from "@/lib/windowIdentity"
 import { useDeskWindows } from "@/store/windows"
 import { openScreensSheet } from "@/components/screens/screensSheetState"
+import { openHistorySheet } from "@/components/history/historySheetState"
 import { useReportProblem } from "@/lib/reportProblem"
 import { useRigSafety } from "@/store/rigSafety"
 import { QuitDeskDialog } from "@/components/rigSafety/QuitDeskDialog"
@@ -140,6 +141,10 @@ export function UserMenu() {
               <DropdownMenuShortcut>⇧F</DropdownMenuShortcut>
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem onSelect={openHistorySheet}>
+            <History className="size-4" />
+            History…
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={openScreensSheet}>
             <MonitorSmartphone className="size-4" />
             Screens…

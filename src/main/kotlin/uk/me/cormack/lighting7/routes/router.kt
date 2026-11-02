@@ -58,7 +58,7 @@ fun Application.configureRouting(state: State) {
 
                 route("/rest") {
                     // Every write below runs under its caller's origin (undo plan §3.2).
-                    installHistoryOrigin()
+                    installHistoryOrigin(state)
                     routeApiRestAuth(state)
                     routeApiRestStatus(state)
                     routeApiRestProjects(state)

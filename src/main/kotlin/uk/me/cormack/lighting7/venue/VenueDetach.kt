@@ -116,7 +116,7 @@ class VenueDetach(private val state: State) {
         Tracing.transactionSuspending("venue.detach", "venue.detach") { span ->
             span?.setData("venue.dry_run", dryRun)
             detachTraced(projectId, dryRun)
-        }
+        }.also { if (!dryRun) state.history.clear(projectId, "Detached from its venue") }
 
     private suspend fun detachTraced(projectId: Int, dryRun: Boolean): DetachResultDto = withContext(Dispatchers.IO) {
         // Refused before anything is judged, so a project that is not a show on a venue is answered by name.

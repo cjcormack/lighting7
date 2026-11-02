@@ -108,7 +108,7 @@ class VenueUpdate(private val state: State) {
      * without keeping anything. The caller reloads a live show.
      */
     suspend fun update(projectId: Int, to: Int?, decisions: List<UpdateDecisionAnswer>, dryRun: Boolean): VenueUpdateDto =
-        run(projectId, to, decisions, dryRun)
+        run(projectId, to, decisions, dryRun).also { if (!dryRun) state.history.clear(projectId, "Venue updated") }
 
     private suspend fun run(projectId: Int, toRequested: Int?, decisions: List<UpdateDecisionAnswer>, dryRun: Boolean): VenueUpdateDto =
         Tracing.transactionSuspending("venue.update", "venue.update") { span ->

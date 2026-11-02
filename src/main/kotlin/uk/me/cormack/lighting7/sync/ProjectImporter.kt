@@ -523,10 +523,11 @@ class ProjectImporter(private val state: State) {
      *
      * Runs in a single transaction — partial pulls can't leave the DB inconsistent.
      */
-    fun replaceFromWorkingTree(projectId: Int, sourceDir: Path): Result {
+    fun replaceFromWorkingTree(projectId: Int, sourceDir: Path, historyReason: String = "Pulled from the sync repo"): Result {
         val (format, projectJson) = loadAndValidateArchive(sourceDir)
         val incomingUuid = UUID.fromString(projectJson.uuid)
 
+        // A whole-project replace mints new row ids, so no entry before it can be put back (D5).
         return transaction(state.database) {
             val project = DaoProject.findById(projectId)
                 ?: throw ImportError.invalidArchive("Project $projectId not found")
@@ -639,7 +640,7 @@ class ProjectImporter(private val state: State) {
                 name = project.name,
                 numberClashes = clashes,
             )
-        }
+        }.also { state.history.clear(projectId, historyReason) }
     }
 
     /**

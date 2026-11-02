@@ -110,6 +110,7 @@ class McpAuthService(
         val accessHash: String,
         val accessExpiresAt: Instant,
         val lastPersistedMs: AtomicLong,
+        val clientName: String,
     )
 
     private data class IssuedCode(
@@ -162,7 +163,7 @@ class McpAuthService(
         redirectUris.firstOrNull { !isAllowedRedirectUri(it) }?.let {
             throw McpOAuthError("invalid_redirect_uri", "Redirect URI not allowed by this desk: $it")
         }
-        val name = clientName?.trim()?.take(200)?.takeIf { it.isNotEmpty() } ?: "MCP client"
+        val name = clientName?.trim()?.take(200)?.takeIf { it.isNotEmpty() } ?: UNNAMED_CLIENT
         val clientId = UUID.randomUUID().toString()
         val now = clock()
         transaction(database) {
@@ -498,6 +499,9 @@ class McpAuthService(
         )
     }
 
+    /** The client a live grant was given to, by the grant's id — how the History names Claude (undo plan D7). */
+    fun clientNameOf(grantId: Int): String? = grants.values.firstOrNull { it.id == grantId }?.clientName
+
     fun grantsFor(userId: Int): List<ConnectedAppDto> = transaction(database) {
         val now = clock()
         DaoMcpOAuthGrant.find {
@@ -551,9 +555,13 @@ class McpAuthService(
         accessHash = accessTokenHash,
         accessExpiresAt = accessExpiresAt,
         lastPersistedMs = AtomicLong(lastUsedAt.toEpochMilli()),
+        clientName = clientName,
     )
 
     companion object {
+        /** What a client that registers with no name is called. */
+        const val UNNAMED_CLIENT = "MCP client"
+
         /** Where claude.ai (and so the Claude iOS, Android and desktop apps) sends the code back. */
         val BUILT_IN_REDIRECT_URIS = setOf(
             "https://claude.ai/api/mcp/auth_callback",
