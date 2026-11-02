@@ -1,9 +1,7 @@
 # Licensing
 
-The desk is meant to be MIT (cloud-p0 plan D1). It is not yet: `ch.bildspur:artnet4j` is under the
-GPL v3, and an MIT binary cannot bundle it. Cloud P0 session 2 replaces it, then adds `LICENSE`.
-Until `LICENSE` exists the repository carries no licence grant, public or not; the `license` field
-in the frontend's `package.json` files records the intent ahead of it.
+The desk is MIT ([LICENSE](../LICENSE), cloud-p0 plan D1): the code the project wrote, frontend
+included. The licence covers the code, not the name of the hosted Lighting7 Cloud.
 
 Everything else the desk ships is under its own licence, listed in
 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md), which a gate in CI keeps true.
@@ -64,9 +62,11 @@ allowlist passes, and it keeps `LICENSE` out of the tree while it stands.
 
 ## The audit (2026-11-02, cloud-p0 session 1)
 
-- **artnet4j blocks MIT.** Its POM and its upstream `LICENSE` are the GPL v3. The desk uses it only to
-  send ArtDMX (`dmx/ArtNetTransport.kt`). jaxb-core and jaxb-impl (CDDL 1.1 or GPL 2 with the
-  Classpath exception) are there only for artnet4j and leave with it.
+- **artnet4j blocked MIT.** Its POM and its upstream `LICENSE` are the GPL v3. The desk used it only to
+  send ArtDMX, and jaxb-core and jaxb-impl (CDDL 1.1 or GPL 2 with the Classpath exception) only for
+  artnet4j. Session 2 replaced it with the desk's own ArtDMX sender (`dmx/ArtNetTransport.kt`,
+  `docs/dmx-engineering.md` §"The Art-Net transport"), and the three left the build; then `LICENSE`
+  went in.
 - **CoreMIDI4J is EPL-1.0**, its native library included, and allowed as a separate library.
 - **Dual licences** are taken under their allowed side: logback (EPL-2.0), JNA, JavaCPP, Jetty ALPN
   and the java-json-tools modules (Apache-2.0).

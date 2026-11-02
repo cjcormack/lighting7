@@ -13,7 +13,7 @@ Agent sessions use the words in [docs/glossary.md](docs/glossary.md). A `planned
   `io.ktor.plugin` declaration in `build.gradle.kts`; the artifacts are versionless
   and resolved from its BOM
 - **SQLite** (embedded, via `sqlite-jdbc`) with Exposed ORM and HikariCP
-- **ArtNet4j** for DMX protocol
+- **Art-Net** for DMX output, sent by the desk's own ArtDMX transport (`dmx/ArtNetTransport.kt`)
 - **Kotlin Scripting** for embedded lighting DSL
 
 ## Building and Running
@@ -72,7 +72,7 @@ contain "—". The script exports it; a bare `./gradlew test` needs it too.
 **The desk is usually running as `./gradlew run` in the operator's own terminal —
 the app *is* a Gradle daemon.** `gradle --stop` is registry-wide: it stops every
 daemon for that Gradle version, so "just clearing a wedged daemon" kills the live
-show. The app's non-daemon threads (Ktor, ArtNet, the sync engine) then keep the
+show. The app's non-daemon threads (Ktor, the sync engine) then keep the
 JVM alive after Gradle's services are torn down, so the registry keeps a stale
 **busy** entry — `./gradlew run` afterwards reports "1 busy Daemon could not be
 reused" and the operator has to kill the process by hand.
@@ -132,8 +132,8 @@ full.
 **A dependency needs a licence entry.** `./gradlew check` (its `licenceCheck`) fails on a Java module
 missing from `licences/jvm.json`; it and `npm run licences` both fail on a licence outside
 `licences/allowed.json` or a stale `THIRD-PARTY-NOTICES.md`. [docs/licensing.md](docs/licensing.md)
-says how to add one. The desk becomes
-MIT, and gains `LICENSE`, once artnet4j (GPL v3) is replaced (cloud-p0 plan, session 2).
+says how to add one. The desk is MIT
+(`LICENSE`); nothing GPL may join its runtime classpath, which the gate enforces.
 
 `tasks.test` pins `-Dlighting7.dataDir` at `build/test-data`, because `State`
 resolves the script cache, prompt-book PDF store, sync working tree and export
@@ -1080,7 +1080,7 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 For deeper technical details, see the docs in `docs/`:
 
 - [Glossary](docs/glossary.md) - One word per idea, its old names and MagicQ's word; `GlossaryVocabularyTest` and `glossary.test.ts` hold the label tables to its `done` rows
-- [Licensing](docs/licensing.md) - The licence gate, what it allows, how to add a dependency, and the audit that found artnet4j blocking MIT
+- [Licensing](docs/licensing.md) - The desk's MIT licence, the licence gate, what it allows, how to add a dependency, and the audit that found artnet4j blocking MIT
 - [API Conventions](docs/api-conventions.md) - Kebab-case paths, plural collections with the list GET on the collection, one spelling for vocabulary enumerations, `?force=true` as the guard-override, and why unbounded lists are deliberate at desk scale
 - [Testing](docs/testing-engineering.md) - What makes the suite ~1 min rather than ~14 (the four changes, each load-bearing), the warm/cold script-cache regimes, why `build/test-data` is pinned, the tests that assert real elapsed time, and the order-dependence detector
 - [DMX Subsystem](docs/dmx-engineering.md) - Low-level DMX control architecture, ArtNet implementation, fading, transactions

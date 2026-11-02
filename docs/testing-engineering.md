@@ -176,7 +176,7 @@ Known latent coupling, currently harmless but worth knowing when a test starts b
   why it has not bitten yet.
 - No test currently seeds `controllerType = "ARTNET"`, and it should stay that way: that path
   builds a real `ArtNetController`, which binds UDP 6454 and spawns `GlobalScope` coroutines in
-  its constructor, and only the first client in a process wins that port. `seedMinimalProject`
+  its constructor, and sends real datagrams to the network. `seedMinimalProject`
   seeds `MOCK` deliberately; use `RecordingTransport` (`testsupport/ArtNetTestSupport.kt`) to
   assert on what would have been transmitted.
 

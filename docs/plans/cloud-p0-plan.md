@@ -160,8 +160,8 @@ or more, now means session *N* + 1.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | MIT and the licence gate | in review | `claude/cloud-p0-img1pv` | | |
-| 2 | Replace artnet4j | planned | | | |
+| 1 | MIT and the licence gate | in review | `claude/cloud-p0-img1pv` | [#334](https://github.com/cjcormack/lighting7/pull/334) | 42ce8c3 |
+| 2 | Replace artnet4j | in review | `claude/amazing-einstein-f1ektw` | | |
 | 3 | The protocol module | planned | | | |
 | 4 | Adoption on the desk | planned | | | |
 | 5 | The control channel | planned | | | |
@@ -249,6 +249,28 @@ notice now kept beside it; the gel and lantern libraries are the project's own.
   `npm run licences`.
 - **Docs:** `docs/dmx-engineering.md`'s ArtNet section; an operator check in
   `docs/plans/manual-validation.md` that a real Art-Net node lights from the new transport as it did.
+
+**Outcome (2026-11-02).** `DefaultArtNetTransport` is an ArtDMX sender over a `DatagramSocket` with no
+dependency, and `ArtDmxGoldenTest` holds it to 15 frames and a 300-frame Sequence trace captured from
+artnet4j 0.6.2 on a loopback receiver (`src/test/resources/dmx/artdmx/`); a changed Physical byte
+fails it. artnet4j, jaxb-core and jaxb-impl left the build, nothing else needed
+`javax.xml.bind:jaxb-api`, so its exclude went too, and `LICENSE` went in.
+
+- **Where artnet4j and the specification disagree**, the transport matches artnet4j: Sequence counts
+  every packet from 1 and wraps 255 to 0, not to 1; Physical is always 2; the port-address is
+  `subnet shl 4 or universe` unmasked, which is the flat universe number a universe of 16 or more
+  needs; Length is the data's rounded up to even, and 0 for an empty frame. artnet4j failed a frame
+  over 512 channels after spending a Sequence number; the new transport refuses one before, the one
+  place it departs from artnet4j on purpose.
+- **Errors are artnet4j's too.** It caught a failed send and an unresolvable address and logged them;
+  the new transport does the same (logged once until it recovers), so a network blip costs frames,
+  not the universe: the controller's loop gives up after 20 consecutive errors.
+- **The plan was wrong about port 6454**, and so was the transport's old KDoc it quoted. artnet4j
+  bound every client to the port with `SO_REUSEADDR`, so every universe's client shared 6454; only a
+  socket holding it without reuse sent a client to an ephemeral port. The new transport does the same.
+- **artnet4j answered no ArtPoll** (an ArtPoll sent to its port got no reply), so a transport that only
+  sends drops nothing the desk did.
+- The operator check `FU-MANUAL-ARTNET-TRANSPORT` is the real node.
 
 ### Session 3 — The protocol module
 

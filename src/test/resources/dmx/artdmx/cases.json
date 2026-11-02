@@ -1,0 +1,19 @@
+{
+  "cases": [
+    { "name": "01-broadcast-s0-u0-full", "send": "broadcast", "subnet": 0, "universe": 0, "length": 512, "seed": 0 },
+    { "name": "02-broadcast-s0-u1-full", "send": "broadcast", "subnet": 0, "universe": 1, "length": 512, "seed": 11 },
+    { "name": "03-broadcast-s3-u9-full", "send": "broadcast", "subnet": 3, "universe": 9, "length": 512, "seed": 23 },
+    { "name": "04-broadcast-s15-u15-full", "send": "broadcast", "subnet": 15, "universe": 15, "length": 512, "seed": 101 },
+    { "name": "05-unicast-s0-u0-full", "send": "unicast", "subnet": 0, "universe": 0, "length": 512, "seed": 200 },
+    { "name": "06-unicast-s1-u2-full", "send": "unicast", "subnet": 1, "universe": 2, "length": 512, "seed": 57 },
+    { "name": "07-unicast-s15-u15-full", "send": "unicast", "subnet": 15, "universe": 15, "length": 512, "seed": 3 },
+    { "name": "08-broadcast-s0-u4-short", "send": "broadcast", "subnet": 0, "universe": 4, "length": 24, "seed": 9 },
+    { "name": "09-broadcast-s0-u4-odd", "send": "broadcast", "subnet": 0, "universe": 4, "length": 7, "seed": 5 },
+    { "name": "10-unicast-s2-u5-odd-511", "send": "unicast", "subnet": 2, "universe": 5, "length": 511, "seed": 77 },
+    { "name": "11-unicast-s0-u3-one", "send": "unicast", "subnet": 0, "universe": 3, "length": 1, "seed": 42 },
+    { "name": "12-broadcast-s1-u0-empty", "send": "broadcast", "subnet": 1, "universe": 0, "length": 0, "seed": 0 },
+    { "name": "13-broadcast-s0-u16-flat", "send": "broadcast", "subnet": 0, "universe": 16, "length": 2, "seed": 1 },
+    { "name": "14-unicast-s16-u0-out-of-range", "send": "unicast", "subnet": 16, "universe": 0, "length": 2, "seed": 2 },
+    { "name": "15-unicast-s7-u300-out-of-range", "send": "unicast", "subnet": 7, "universe": 300, "length": 2, "seed": 3 }
+  ]
+}
