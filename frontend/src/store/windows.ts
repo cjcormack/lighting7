@@ -1,4 +1,4 @@
-import { restApi } from './restApi'
+import { restApi, setDeskWindowSource } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import type { DeskWindow, WindowAnnounce } from '../api/windowsApi'
 import { useMemo } from 'react'
@@ -71,6 +71,9 @@ export function useThisWindow(): DeskWindow | null {
 export function thisWindowRowId(): string | null {
   return thisWindowRow(lightingApi.windows.getState() ?? NO_WINDOWS)?.id ?? null
 }
+
+// Every REST call names this window, for the desk's history.
+setDeskWindowSource(thisWindowRowId)
 
 /**
  * The other open windows **paged with the desk**, by name, in announce order (desk-follow plan D7):

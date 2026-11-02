@@ -3,7 +3,28 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolk
 
 // Same-origin is fetch's default, but the session cookie is the whole auth mechanism
 // here, so state it rather than leaving it to a default someone could change.
-const rawBaseQuery = fetchBaseQuery({ baseUrl: '/api/rest', credentials: 'same-origin' })
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: '/api/rest',
+  credentials: 'same-origin',
+  prepareHeaders: (headers) => {
+    const window = deskWindowOf()
+    if (window) headers.set(DESK_WINDOW_HEADER, window)
+    return headers
+  },
+})
+
+/**
+ * The desk window a REST call comes from (undo plan §3.2): this window's `windows.state` row id, which
+ * the desk's history shows beside the source (*You · Desk left*). `store/windows.ts` supplies it, since
+ * this module is below the WS layer and must not import it.
+ */
+export const DESK_WINDOW_HEADER = 'X-Desk-Window'
+
+let deskWindowOf: () => string | null = () => null
+
+export function setDeskWindowSource(source: () => string | null): void {
+  deskWindowOf = source
+}
 
 // Endpoints whose 401 means "wrong password", not "your session died". All three
 // take a password the user typed: `login`/`setup` answer 401 for bad credentials,
@@ -51,7 +72,7 @@ const baseQueryWithAuthCheck: BaseQueryFn<string | FetchArgs, unknown, FetchBase
  * these, leaving twenty tags — `ProgramState` and `Patch` among them — with no path back to the
  * server after a laptop sleep or a lighting7 restart.
  */
-export const REST_TAG_TYPES = ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveFxList', 'FixtureFx', 'FxLibrary', 'Look', 'LookList', 'PaletteList', 'SpeedMaster', 'SpeedMasterList', 'Cue', 'CueList', 'CueStackList', 'CueStackTimeline', 'CueSlotList', 'BuskPage', 'BuskRig', 'Patch', 'UniverseConfig', 'ProgramState', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'Telemetry', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos', 'Rigging', 'StageRegion', 'StageElement', 'SceneImage', 'StageViewpoint', 'PromptBook', 'BootStatus', 'Locate', 'Auth', 'AuthSessions', 'AuthConnectedApps', 'UserList', 'User', 'ResetToken', 'ResetTokenList', 'DeviceLogin', 'Update', 'RemoteAccess', 'Venue', 'VenueUpdate'] as const
+export const REST_TAG_TYPES = ['Channel', 'Fixture', 'Script', 'Project', 'ProjectList', 'GroupList', 'GroupActiveFxList', 'FixtureFx', 'FxLibrary', 'Look', 'LookList', 'PaletteList', 'SpeedMaster', 'SpeedMasterList', 'Cue', 'CueList', 'CueStackList', 'CueStackTimeline', 'CueSlotList', 'BuskPage', 'BuskRig', 'Patch', 'UniverseConfig', 'ProgramState', 'ControlSurfaceType', 'SurfaceBinding', 'PerfMidi', 'Install', 'Telemetry', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'CloudSyncConflicts', 'OAuthIdentity', 'OAuthRepos', 'Rigging', 'StageRegion', 'StageElement', 'SceneImage', 'StageViewpoint', 'PromptBook', 'BootStatus', 'Locate', 'Auth', 'AuthSessions', 'AuthConnectedApps', 'UserList', 'User', 'ResetToken', 'ResetTokenList', 'DeviceLogin', 'Update', 'RemoteAccess', 'Venue', 'VenueUpdate', 'History'] as const
 
 export type RestTagType = (typeof REST_TAG_TYPES)[number]
 

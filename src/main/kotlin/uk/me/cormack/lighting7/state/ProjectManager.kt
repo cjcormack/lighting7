@@ -36,6 +36,9 @@ class ProjectManager(
     val currentProject: DaoProject
         get() = checkNotNull(_currentProject) { "No current project set" }
 
+    /** The current project, or null before one is set. */
+    val currentProjectOrNull: DaoProject? get() = _currentProject
+
     // `@Volatile`: written by the background boot coroutine (Dispatchers.IO) but read from Netty
     // request threads (readiness gate, WS warm-up) with no other happens-before edge, so a plain
     // field could let a reader keep observing a stale null after the show is available.

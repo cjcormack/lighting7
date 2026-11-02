@@ -3,12 +3,14 @@ package uk.me.cormack.lighting7.plugins
 import io.ktor.http.HttpMethod
 import io.ktor.server.application.*
 import io.ktor.server.request.*
+import io.ktor.server.response.header
 import io.ktor.server.routing.*
 import kotlinx.coroutines.withContext
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
 import uk.me.cormack.lighting7.history.HistorySource
 import uk.me.cormack.lighting7.history.WriteOrigin
+import uk.me.cormack.lighting7.state.State
 
 /**
  * The write origin's doors (undo plan §3.2): REST here, the socket in `Sockets.kt`, MCP in
@@ -16,30 +18,71 @@ import uk.me.cormack.lighting7.history.WriteOrigin
  * input under one [WriteOrigin], so every write it makes is one step of the programmer's history.
  */
 
-/** The source a signed-in caller writes as: their account, Claude's grant, or the desk with no accounts. */
-internal fun historySourceOf(user: AuthenticatedUser?): HistorySource = when {
+/**
+ * The source a signed-in caller writes as: their account, Claude's grant (named by its client through
+ * [clientName], given the grant's id), or the desk with no accounts.
+ */
+internal fun historySourceOf(user: AuthenticatedUser?, clientName: (Int) -> String? = { null }): HistorySource = when {
     user == null -> HistorySource.DESK
-    user.sessionTokenHash.startsWith("mcp-grant:") -> HistorySource.mcp(user.sessionTokenHash)
+    user.sessionTokenHash.startsWith(MCP_GRANT_PREFIX) -> HistorySource.mcp(
+        user.sessionTokenHash,
+        user.sessionTokenHash.removePrefix(MCP_GRANT_PREFIX).toIntOrNull()?.let(clientName),
+    )
     else -> HistorySource.account(user.uuid, user.displayName)
 }
 
+/** [historySourceOf] with Claude's client named from [state]'s grants. */
+internal fun historySourceOf(state: State, user: AuthenticatedUser?): HistorySource =
+    historySourceOf(user) { state.mcpAuthService.clientNameOf(it) }
+
+private const val MCP_GRANT_PREFIX = "mcp-grant:"
+
+/** The request header naming the desk window a REST call comes from: its `windows.state` row id. */
+const val DESK_WINDOW_HEADER = "X-Desk-Window"
+
 /**
- * Run every REST call that is not a read under an origin of its caller's, labelled from its path; a
- * route that knows better names its step with `historyLabel`. Session 3 of the undo plan adds the
- * window header and answers the entry id.
+ * The response header carrying a REST write's request id. The show entry that holds its writes lists it
+ * in `requestIds` (`GET /projects/{id}/history`); a write that changed no record is in none.
+ */
+const val HISTORY_ENTRY_HEADER = "X-History-Entry"
+
+private val PROJECT_PATH = Regex("^/api/rest/projects/(\\d+)(/|$)")
+
+/** The project a REST path names, if it is under `/projects/{id}`. */
+internal fun projectIdOfPath(path: String): Int? = PROJECT_PATH.find(path)?.groupValues?.get(1)?.toIntOrNull()
+
+/**
+ * Run every REST call that is not a read under an origin of its caller's and the window its
+ * [DESK_WINDOW_HEADER] names, labelled from its path for the programmer's history; a route that knows
+ * better names its show entry with [historyLabel]. The answer carries the request's id as
+ * [HISTORY_ENTRY_HEADER] whether or not it writes anything, and the project the path names — else the
+ * current one — has a record cache before the handler runs, so its writes are journaled (§3.2).
  */
 // Route.intercept is deprecated in favour of route-scoped plugins, whose `onCall` cannot wrap the rest
 // of the pipeline in a coroutine context — the same trade-off as `installProjectWriteGuard`.
 @Suppress("DEPRECATION")
-internal fun Route.installHistoryOrigin() {
+internal fun Route.installHistoryOrigin(state: State) {
     intercept(ApplicationCallPipeline.Plugins) {
         val method = call.request.httpMethod
         if (method == HttpMethod.Get || method == HttpMethod.Head || method == HttpMethod.Options) return@intercept
-        val origin = WriteOrigin(historySourceOf(call.authenticatedUserOrNull))
-        origin.label = restHistoryLabel(call.request.path(), method)
+        val path = call.request.path()
+        val window = call.request.headers[DESK_WINDOW_HEADER]?.takeIf { it.isNotBlank() && it.length <= MAX_WINDOW_ID }
+        val origin = WriteOrigin(historySourceOf(state, call.authenticatedUserOrNull), window = window)
+        origin.label = restHistoryLabel(path, method)
+        call.response.header(HISTORY_ENTRY_HEADER, origin.requestId)
+        state.ensureHistory()
+        projectIdOfPath(path)?.let { state.ensureHistory(it) }
         withContext(origin) { proceed() }
     }
 }
+
+private const val MAX_WINDOW_ID = 64
+
+/**
+ * Name the show-history entry this request makes, in place of one read from the records it changed.
+ * Before the write commits: the entry takes its name then.
+ */
+fun ApplicationCall.historyLabel(label: String) = uk.me.cormack.lighting7.history.historyLabel(label)
 
 /** A REST write's step name, from its method and the last words of its path. */
 internal fun restHistoryLabel(path: String, method: HttpMethod = HttpMethod.Post): String {
@@ -76,12 +119,17 @@ internal fun restHistoryLabel(path: String, method: HttpMethod = HttpMethod.Post
     }
 }
 
-/** A socket frame's origin: the socket's account and announced window, its label and, for a drag, its gesture. */
-internal fun SocketScope.writeOrigin(message: InMessage): WriteOrigin =
-    WriteOrigin(historySourceOf(user), window = window?.id).apply {
+/**
+ * A socket frame's origin: the socket's account and announced window, its label and, for a drag, its
+ * gesture. The current project has a record cache before the frame writes, so its writes are journaled.
+ */
+internal fun SocketScope.writeOrigin(message: InMessage): WriteOrigin {
+    state.ensureHistory()
+    return WriteOrigin(historySourceOf(state, user), window = window?.id).apply {
         label = socketHistoryLabel(message)
         coalesceKey = socketCoalesceKey(message)
     }
+}
 
 private fun target(type: String, key: String) = if (type == "group") "group $key" else key
 

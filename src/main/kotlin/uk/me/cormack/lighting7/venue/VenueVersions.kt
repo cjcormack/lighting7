@@ -211,7 +211,7 @@ class VenueVersions(private val state: State) {
                 val venue = DaoProject[venueId]
                 val name = venue.name
                 val description = venue.description
-                ProjectImporter(state).replaceFromWorkingTree(venueId, staging)
+                ProjectImporter(state).replaceFromWorkingTree(venueId, staging, historyReason = "Venue draft discarded")
                 venue.name = name
                 venue.description = description
                 true

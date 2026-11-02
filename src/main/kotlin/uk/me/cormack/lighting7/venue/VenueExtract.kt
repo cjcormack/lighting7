@@ -97,7 +97,7 @@ class VenueExtract(private val state: State) {
     ): ExtractResultDto = Tracing.transactionSuspending("venue.extract", "venue.extract") { span ->
         span?.setData("venue.dry_run", dryRun)
         extractTraced(showId, name, include, dryRun, publishedBy)
-    }
+    }.also { if (!dryRun) state.history.clear(showId, "Venue extracted") }
 
     private suspend fun extractTraced(
         showId: Int,

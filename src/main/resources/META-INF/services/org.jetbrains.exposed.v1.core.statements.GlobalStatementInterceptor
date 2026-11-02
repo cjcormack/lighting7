@@ -1,1 +1,2 @@
 uk.me.cormack.lighting7.telemetry.DbTracing$StatementSpans
+uk.me.cormack.lighting7.history.JournalInterceptor

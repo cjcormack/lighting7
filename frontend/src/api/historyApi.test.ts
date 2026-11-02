@@ -17,7 +17,14 @@ describe('historyApi', () => {
     expect(parsed.redo).toBeNull()
     expect(parsed.programmer.undo[0].source).toEqual({ kind: 'ACCOUNT', name: 'Chris', window: 'w-1' })
     expect(parsed.programmer.redo).toEqual([])
+    expect(parsed.showRevision).toBe(0)
+    expect(parseHistoryFrame({ type: 'history.state', revision: 1, showRevision: 9 }).showRevision).toBe(9)
     expect(parseHistoryFrame(null)).toEqual(EMPTY_HISTORY)
+  })
+
+  it('reads a show entry as the top when it is the newer', () => {
+    const parsed = parseHistoryFrame({ type: 'history.state', undo: { id: 'e-4', label: 'Look “Warm wash” added', kind: 'SHOW' } })
+    expect(parsed.undo).toEqual({ id: 'e-4', label: 'Look “Warm wash” added', kind: 'SHOW' })
   })
 
   it('streams the history to a late subscriber', () => {
