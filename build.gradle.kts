@@ -76,19 +76,17 @@ repositories {
     mavenCentral()
 }
 
-// Two legacy API jars ship the same `javax.*` packages as their maintained `jakarta.*`
-// successors, which already resolve here — so the fat jar would contain two byte-different
-// copies of ~220 classes and the winner would be decided by classpath order:
+// A legacy API jar ships the same `javax.*` packages as its maintained `jakarta.*` successor,
+// which already resolves here — so the fat jar would contain two byte-different copies of its
+// classes and the winner would be decided by classpath order:
 //
 //   javax.validation:validation-api:1.1.0.Final  (via io.swagger:swagger-core, from
 //       io.github.smiley4:ktor-openapi)  is superseded by jakarta.validation-api:2.0.2
-//   javax.xml.bind:jaxb-api:2.3.0  (via ch.bildspur:artnet4j)  is superseded by
-//       jakarta.xml.bind:jakarta.xml.bind-api:2.3.3
 //
-// Both jakarta artifacts still use the `javax.*` namespace and are API-compatible supersets
-// (2.0.2 adds valueextraction, ClockProvider, @NotEmpty/@Email), so the consumers above keep
-// linking. Dropping the legacy pair is what makes shadowJar's `failOnDuplicateEntries`
-// achievable — see the fat-jar section below.
+// The jakarta artifact still uses the `javax.*` namespace and is an API-compatible superset
+// (it adds valueextraction, ClockProvider, @NotEmpty/@Email), so swagger-core keeps linking.
+// Dropping the legacy jar is what makes shadowJar's `failOnDuplicateEntries` achievable — see
+// the fat-jar section below.
 //
 // Ktor 3.6's Netty engine also depends on Netty's HTTP/3 codec, which drags in
 // `netty-codec-native-quic` — quiche binaries for five platforms, each jar carrying the same
@@ -98,7 +96,6 @@ repositories {
 // rather than shipped and then filtered through the `nativePayloads` table below.
 configurations.configureEach {
     exclude(group = "javax.validation", module = "validation-api")
-    exclude(group = "javax.xml.bind", module = "jaxb-api")
     exclude(group = "io.netty", module = "netty-codec-http3")
     exclude(group = "io.netty", module = "netty-codec-native-quic")
     exclude(group = "io.netty", module = "netty-codec-classes-quic")
@@ -141,7 +138,6 @@ dependencies {
     // launcher's UpdateMarker reader. They are two independently written parsers of the same
     // file format, and agreeing only by inspection is precisely how that breaks in the field.
     testImplementation(project(":launcher"))
-    implementation("ch.bildspur:artnet4j:0.6.2")
 
     // MIDI control-surface transport (Phase 0 of plans/completed/control-surface-plan.md).
     // ktmidi-jvm-desktop brings LibreMidiAccess (native libremidi via Panama FFM).

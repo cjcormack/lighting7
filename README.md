@@ -250,10 +250,14 @@ See the Swagger UI at `/openapi` for full API documentation.
 - **Ktor 3.3** - Web framework
 - **Exposed** - Database ORM
 - **SQLite** - Persistence (single-file, auto-created in app data dir)
-- **artnet4j** - ArtNet protocol
+- **Art-Net** - ArtDMX output, sent by the desk's own transport (`dmx/ArtNetTransport.kt`)
 - **JmDNS** - Bonjour / DNS-SD advertisement
 - **Kotlin Scripting** - Embedded DSL
 
 ## License
 
-Private project.
+MIT; see [LICENSE](LICENSE). The third-party components the desk ships keep their own licences,
+listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+The licence covers the code, not the name. "Lighting7 Cloud" is the name of the hosted service the
+desk can connect to, and the MIT licence grants no right to use it for another service.

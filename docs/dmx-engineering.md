@@ -60,8 +60,8 @@ The DMX subsystem provides an abstraction layer for controlling DMX512 lighting 
                                     │
                                     ▼
                           ┌─────────────────┐
-                          │  ArtNetClient   │
-                          │  (artnet4j)     │
+                          │ ArtNetTransport │
+                          │ (ArtDMX sender) │
                           └────────┬────────┘
                                    │
                                    ▼
@@ -457,6 +457,47 @@ calling `restoreState` afterwards: the loop starts transmitting immediately, so 
 post-construction restore races the bootstrap frame and can let one all-zero frame reach the
 rig.
 
+## The Art-Net transport
+
+`ArtNetController` sends through the `ArtNetTransport` seam (`dmx/ArtNetTransport.kt`): `start`,
+`stop`, `broadcastDmx` and `unicastDmx`. Tests inject `RecordingTransport`; production is
+`DefaultArtNetTransport`, an ArtDMX sender over a `DatagramSocket` written from Artistic Licence's
+Art-Net 4 specification with no dependency. It replaced artnet4j, whose GPL v3 kept the desk from
+being MIT (cloud-p0 plan, session 2).
+
+It only sends. Nothing reads the socket, so the desk answers no ArtPoll, which artnet4j did not
+either. A broadcast goes to `255.255.255.255:6454`, a unicast to the configured address on 6454.
+
+A failed send, or a unicast address that does not resolve, costs that frame and nothing else: the
+transport logs it once, drops frames until a send succeeds, and logs the recovery. It never throws
+an I/O error to the controller, whose loop gives up after 20 consecutive errors (§"Error Handling"),
+so a node rebooting or a cable pulled does not end a universe's output.
+
+Each controller's transport binds the wildcard address on 6454 with `SO_REUSEADDR` and
+`SO_BROADCAST`, so every universe's transport shares the port with the others, and with any other
+program on the machine that also binds it for reuse. If 6454 cannot be bound (a socket holds it
+without reuse), the transport sends from an ephemeral port instead, logged as a warning. `stop`
+closes whichever it bound.
+
+**The datagrams are artnet4j's, byte for byte.** `ArtDmxGoldenTest` holds the transport to frames
+captured from artnet4j 0.6.2 before it left the build (`src/test/resources/dmx/artdmx/`, whose README
+says how). Where those differ from the specification they are kept, because the rig's nodes accept
+them:
+
+| Field | Specification | What the desk sends |
+|---|---|---|
+| Sequence | 1 to 255, wrapping to 1; 0 means "not sequenced" | Every packet the transport sends, from 1, wrapping from 255 to **0** |
+| Physical | The input port the data came from | Always 2 |
+| SubUni, Net | Sub-Net and Universe nibbles; Net 7 bits | `subnet shl 4 or universe` as one number, unmasked, its low byte SubUni and its high byte Net |
+| Length | Even, 2 to 512 | The data's length rounded up to even and zero-padded; an empty frame is Length 0 |
+
+The port-address is load-bearing, not a quirk: a universe the desk numbers 16 or above with subnet
+0 (as `patch_fixtures` and the universe routes allow, up to 32767) goes out as that flat number,
+Net and Sub-Net included, which is how a node past the first sixteen universes is reached. Splitting
+it into nibbles to follow the specification would re-address every one of them. The controller
+always sends 512 channels, so Length never departs. A frame over 512 channels is refused with
+`IllegalArgumentException`.
+
 ## The hold
 
 A show on a venue whose pinned version is behind the installed one **on output** is **held** (venue
@@ -634,6 +675,7 @@ when the attribute category is a slider (see
 |------|---------|
 | `DmxController.kt` | Sealed interface definition |
 | `ArtNetController.kt` | ArtNet implementation with coroutine architecture |
+| `ArtNetTransport.kt` | The transport seam and `DefaultArtNetTransport`, the ArtDMX sender |
 | `MockDmxController.kt` | In-memory fake for tests; `getEffectiveValue()` for asserting modifier chain |
 | `Universe.kt` | Universe addressing data class |
 | `ChannelChange.kt` | Value change request data class (with easing curve) |
@@ -646,5 +688,4 @@ when the attribute category is a slider (see
 
 ## Dependencies
 
-- **artnet4j 0.6.2**: Java ArtNet client library
 - **kotlinx-coroutines**: Async channel and ticker APIs

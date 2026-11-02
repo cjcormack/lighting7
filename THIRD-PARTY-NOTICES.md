@@ -16,7 +16,6 @@ In `lighting7.jar` (the desk) and `launcher.jar`.
 | `at.favre.lib:bcrypt` | Apache-2.0 |
 | `at.favre.lib:bytes` | Apache-2.0 |
 | `at.favre.lib:hkdf` | Apache-2.0 |
-| `ch.bildspur:artnet4j` | GPL-3.0-only (being removed) |
 | `ch.qos.logback:logback-classic` | EPL-2.0 OR LGPL-2.1-only |
 | `ch.qos.logback:logback-core` | EPL-2.0 OR LGPL-2.1-only |
 | `com.charleskorn.kaml:kaml-jvm` | Apache-2.0 |
@@ -45,8 +44,6 @@ In `lighting7.jar` (the desk) and `launcher.jar`.
 | `com.googlecode.javaewah:JavaEWAH` | Apache-2.0 |
 | `com.googlecode.libphonenumber:libphonenumber` | Apache-2.0 |
 | `com.squareup.okio:okio-jvm` | Apache-2.0 |
-| `com.sun.xml.bind:jaxb-core` | CDDL-1.1 OR GPL-2.0-only WITH Classpath-exception-2.0 (being removed) |
-| `com.sun.xml.bind:jaxb-impl` | CDDL-1.1 OR GPL-2.0-only WITH Classpath-exception-2.0 (being removed) |
 | `com.typesafe:config` | Apache-2.0 |
 | `com.zaxxer:HikariCP` | Apache-2.0 |
 | `commons-codec:commons-codec` | Apache-2.0 |

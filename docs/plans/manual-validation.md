@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-ARTNET-TRANSPORT`](#fu-manual-artnet-transport) | a real Art-Net node lights from the desk's own ArtDMX transport as it did from artnet4j: broadcast and unicast universes, a node's status page showing the frames arriving, and a second program on the desk machine still hearing them | Cloud P0 S2, 2026-11-02 |
 | [`FU-MANUAL-MOVE-IN-DARK`](#fu-manual-move-in-dark) | movers moved in the dark on the rig: a head moves a second after it goes dark and is in place before the GO, a GO too soon and a GO TO land dark heads at once, a busk press lights a moved head and it returns, a cue *Off* and a head kept live move lit, an older show's flagged cues import on *Early*, and the stack sheet, the Cue tab, the *Dark* columns and the Stage view's rings agree with where the heads come up | Move in dark S1–S5, 2026-11-02 |
 | [`FU-MANUAL-RECORD-LOOK-AS-LAYER`](#fu-manual-record-look-as-layer) | *Record → A new Look* and *Make layer* leave the rig still: the new Look goes on top of the programmer's layers, what it took leaves *Your values*, a ticked chase keeps running without a jump, held scenery stays where it is, and a Record into a cue afterwards layers the Look | Record look as a layer, 2026-10-30 |
 | [`FU-MANUAL-GROUP-ORDER-S2`](#fu-manual-group-order-s2) | a venue group reordered from a show chases in the show's order on the rig and is taken back, the venue's order unchanged in a second show on it, and an Update across a venue reorder asks and keeps the show's | Group order S1–S2, 2026-10-27 |
@@ -140,6 +141,34 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-ARTNET-TRANSPORT`
+
+**What it proves**: the desk's own ArtDMX sender (`dmx/ArtNetTransport.kt`, cloud-p0 plan session 2)
+drives real nodes as artnet4j did, so dropping artnet4j for the MIT licence changed nothing on the
+rig.
+
+**Why it is here**: `ArtDmxGoldenTest` proves the new transport sends artnet4j's bytes, but only on
+loopback. A real node, a real network interface and the real broadcast address are not in any test,
+and neither is another program on the machine sharing port 6454.
+
+**Test**, on the dev rig, with the rig's node or nodes powered and the desk on the build that carries
+session 2:
+
+1. **Broadcast.** A universe with no address set: bring a fixture on it up and down, run a chase on
+   it. It follows with no flicker or hold, as before.
+2. **Unicast.** Set that universe's address to the node's IP: the same, and the node's status page
+   (or its LEDs) shows frames arriving from the desk at the universe's rate.
+3. **Every universe.** With two or more universes patched, each node lights its own; a blackout and a
+   restore reach all of them.
+4. **Sharing 6454.** If a visualiser or second Art-Net program runs on the desk machine, it still sees
+   the desk's output with the desk running, as it did with artnet4j. The desk log shows no
+   "Art-Net port 6454 is unavailable" warning unless that program holds the port exclusively.
+5. **A dropped network.** Pull the desk's network cable (or turn its Wi-Fi off) for ten seconds
+   mid-chase, then restore it: output resumes by itself, and the log shows one "failed" warning and
+   one "resumed" line per universe, not one per frame.
 
 ---
 

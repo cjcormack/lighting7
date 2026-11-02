@@ -3,11 +3,6 @@
     "at.favre.lib:bcrypt": "Apache-2.0",
     "at.favre.lib:bytes": "Apache-2.0",
     "at.favre.lib:hkdf": "Apache-2.0",
-    "ch.bildspur:artnet4j": {
-      "licence": "GPL-3.0-only",
-      "pendingRemoval": "cloud-p0 session 2",
-      "why": "Its POM and its upstream LICENSE (github.com/cansik/artnet4j) are the GPL v3, so a binary that bundles it is GPL and cannot be MIT. The desk uses it only to send ArtDMX (dmx/ArtNetTransport.kt)."
-    },
     "ch.qos.logback:logback-classic": {
       "licence": "EPL-2.0 OR LGPL-2.1-only",
       "why": "Dual-licensed; taken under the EPL 2.0."
@@ -69,16 +64,6 @@
     "com.googlecode.javaewah:JavaEWAH": "Apache-2.0",
     "com.googlecode.libphonenumber:libphonenumber": "Apache-2.0",
     "com.squareup.okio:okio-jvm": "Apache-2.0",
-    "com.sun.xml.bind:jaxb-core": {
-      "licence": "CDDL-1.1 OR GPL-2.0-only WITH Classpath-exception-2.0",
-      "pendingRemoval": "cloud-p0 session 2",
-      "why": "POM: \"CDDL+GPL License\". Only artnet4j depends on it, so it leaves the classpath with artnet4j."
-    },
-    "com.sun.xml.bind:jaxb-impl": {
-      "licence": "CDDL-1.1 OR GPL-2.0-only WITH Classpath-exception-2.0",
-      "pendingRemoval": "cloud-p0 session 2",
-      "why": "POM: \"CDDL+GPL License\". Only artnet4j depends on it, so it leaves the classpath with artnet4j."
-    },
     "com.typesafe:config": "Apache-2.0",
     "com.zaxxer:HikariCP": "Apache-2.0",
     "commons-codec:commons-codec": "Apache-2.0",
