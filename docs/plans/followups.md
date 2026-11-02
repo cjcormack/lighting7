@@ -172,6 +172,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LICENCE-TEXTS`](#fu-licence-texts) | Ready | Dist | — |
 | [`FU-LICENCE-POM-DRIFT`](#fu-licence-pom-drift) | Ready | Dist | — |
 | [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
+| [`FU-HISTORY-EMBEDDED-CHILD-IDS`](#fu-history-embedded-child-ids) | Trigger | History | something names an embedded child (a busk pad, a rig tile, a scenery row) by its integer id across an undo |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -3247,6 +3248,22 @@ a `get_timeline` tool answering `GET …/cue-stacks/{sid}/timeline` (entries by 
 with its `runUuid`), and an `edit_timeline` tool taking the same op batch as `timeline/edit` with
 cues named by stack number (`ai/CueEntryRefs.kt`), a `dryRun` first, through `editTimeline` — not a
 second writer of run keys.
+
+## History
+
+### `FU-HISTORY-EMBEDDED-CHILD-IDS`
+
+**Keep an embedded child's row id across an undo** · Trigger: something names an embedded child (a
+busk pad, a rig tile, a scenery row) by its integer id across an undo · undo plan session 4, 2026-11-02
+
+An undo puts a record back with its own row id (`ProjectImporter.restore`, `docs/undo-engineering.md`
+§"Restore"), and a Look's or palette's rows and FX with theirs, matched by uuid, since an included Look's
+FX is named by its row id. Its other embedded children — a stack's, cue's or Look's scenery, a cue's
+events, a busk page's columns, banks and pads, a rig row's tiles — are deleted and inserted again from
+the image, uuids kept and ids new. The busk view reads a pad's id from the page it re-reads on
+`busk.layoutChanged`, and every binding names a pad or bank by uuid. If a client or a binding ever
+holds one across an undo, match that kind by uuid as the Look's rows are (`Run.children`), or export the
+child ids into the image (outside the canonical JSON, as the record's own `rowId` is).
 
 ## Completed
 

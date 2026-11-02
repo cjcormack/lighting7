@@ -176,6 +176,9 @@ object RecordLabeler {
         return if (universe != null && channel != null) "$capital $universe/$channel" else capital
     }
 
+    /** One record by its kind and name, *Look “Warm wash”*, read from [image]. */
+    fun name(key: RecordKey, image: RecordImage?): String = title(kindOf(key.tableName).noun, image)
+
     private fun kindOf(folder: String): Kind = KINDS[folder] ?: OWNED[folder]?.kind ?: Kind(folder)
 
     private fun count(n: Int, kind: Kind) = "$n ${if (n == 1) kind.noun else kind.plural}"

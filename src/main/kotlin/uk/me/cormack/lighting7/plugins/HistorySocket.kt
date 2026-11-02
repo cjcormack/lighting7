@@ -75,16 +75,27 @@ internal fun ProgrammerHistory.Frame.toMessage(
         projectId = projectId,
         revision = revision,
         showRevision = history?.revision?.value ?: 0,
-        undo = newer(stepUndo, showUndo),
-        redo = newer(stepRedo, showRedo),
+        undo = when {
+            showTakes(stepUndo, showUndo, redo = false) -> HistoryTopDto(showUndo!!.id, showUndo.label, SHOW_KIND)
+            else -> stepUndo?.let { HistoryTopDto(it.id, it.label, PROGRAMMER_KIND) }
+        },
+        redo = when {
+            showTakes(stepRedo, showRedo, redo = true) -> HistoryTopDto(showRedo!!.id, showRedo.label, SHOW_KIND)
+            else -> stepRedo?.let { HistoryTopDto(it.id, it.label, PROGRAMMER_KIND) }
+        },
         programmer = ProgrammerHistoryDto(undo.map { it.toDto() }, redo.map { it.toDto() }),
     )
 }
 
-private fun newer(step: ProgrammerHistory.StepInfo?, entry: HistoryEntry?): HistoryTopDto? = when {
-    entry != null && (step == null || entry.lastAt >= step.at) -> HistoryTopDto(entry.id, entry.label, SHOW_KIND)
-    step != null -> HistoryTopDto(step.id, step.label, PROGRAMMER_KIND)
-    else -> null
+/**
+ * Whether the key takes the show [entry] rather than the programmer [step] (D2): for undo the one
+ * written last, for redo the one undone last (§3.5).
+ */
+internal fun showTakes(step: ProgrammerHistory.StepInfo?, entry: HistoryEntry?, redo: Boolean): Boolean = when {
+    entry == null -> false
+    step == null -> true
+    redo -> entry.undoneAt >= (step.undoneAt ?: Long.MIN_VALUE)
+    else -> entry.lastAt >= step.at
 }
 
 private const val PROGRAMMER_KIND = "PROGRAMMER"

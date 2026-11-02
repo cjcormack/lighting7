@@ -5,8 +5,9 @@ The desk keeps two histories behind one key (undo plan, `docs/plans/undo-plan.md
 `docs/lighting-composition-model.md` §"Programmer history"), and the **show history**, a journal of
 every stored record a request, frame, tool call or surface input changed. This document is the show
 history: who a change belongs to, the record cache it is measured against, how the journal captures a
-commit, and what happens to a write that belongs to no one. Putting records back is the plan's
-sessions 4 and 5; until then the show history is read-only, an activity log in the History sheet.
+commit, what happens to a write that belongs to no one, and how an undo puts records back. The cue side
+is restorable (plan session 4); the patch, the stage, parks, scripts and the rest are session 5's, and
+an undo holding one is refused until then.
 
 Both are runtime state (D15): no table, no column, nothing synced. A restart starts empty.
 
@@ -143,3 +144,79 @@ programmer's steps follow their own rules (a reload keeps them, a switch drops t
   the key would take for its source; `revision` is the programmer's, `showRevision` the show history's.
 - The History sheet (`frontend/src/components/history/`): the header's History icon (the user menu on
   a phone), filters *All · Mine · Show · Programmer · Claude*, a row's records on a click.
+
+## Restore
+
+`POST /projects/{id}/history/undo` and `…/redo` (`routes/projectHistory.kt`) take `{entryId?,
+backToHere?, programmerOnly?, confirm?, fadeMs?}`. With no `entryId` the key takes, for the caller's
+source, the newer of the live programmer's top step and its own newest show entry (D1, D2); an id is a
+step's (`p-…`) or an entry's (`e-…`). A step goes back through the programmer's history, on the current
+project only. An entry goes back through `history/RecordRestorer.kt` on any project; on a venue an
+operator is refused 403 `VENUE_ADMIN_ONLY` here, since the write guard passes the history path as the
+programmer's. Both answers carry the caller's `history.state` frame for the project.
+
+**Planning** (`HistoryService.planUndo` / `planRedo`) reads the record cache inside the transaction that
+will write, after a first statement has taken the pool's one connection, so no commit lands between.
+
+- **Undo** needs every record the entry holds to stand as it left it, nothing to have come to link to a
+  record it takes away, and nothing it puts back to link to a record gone since. A later entry, not
+  undone, collides when it touches one of the records, when a record it wrote carries the uuid of one the
+  undo takes away, or when it took away a record one the undo puts back carries the uuid of — and so does
+  any later entry that collides with a collider, until none does. Only the restorable folders' records
+  count as links: a binding's payload tolerates a record gone (sync v11). With collisions the answer is
+  409 `HISTORY_CONFLICT` naming them newest first (`later`); `backToHere` takes them too, and on the
+  caller's own entry also every later entry of its source. Each record goes back to the oldest taken
+  entry's `before`, and must stand as the newest left it, checked by hash; a record moved by something
+  the history does not hold is a conflict with no `later`. A record the undo would take away that a
+  standing record still links to (one written before the history began) is 409 `HISTORY_UNDO_BLOCKED`
+  naming both.
+- **Redo** takes the source's most recently undone entry (`undoneSeq`), or the one named, and needs
+  every record as the entry found it; otherwise 409 `HISTORY_CONFLICT` names the later entries still
+  standing and the earlier ones still undone that touch them. It is held to the same links.
+
+With no `entryId`, undo takes whichever of the programmer's top step and the caller's show entry was
+written last, and redo whichever was undone last (`HistoryEntry.undoneAt`, `StepInfo.undoneAt`); the
+route and `history.state` decide it with one function, `showTakes`.
+
+**Confirm (D6).** On the live project, while any cue is held, an undo that puts back a Look or palette a
+held cue's stored layer or a programmer layer uses answers 409 `HISTORY_CONFIRM` with `moves` (*Live cue
+“Q11” uses Look “Warm wash”*) until it is resent with `confirm`: those republish. A layer the undo itself
+puts back is not on stage, so it asks nothing; its cue is marked edited since GO.
+
+**Writing.** The transaction runs under an `UNDO` or `REDO` origin carrying the entries' ids, which its
+commit marks undone or standing in the same step that moves the cache (`HistoryService.commit`), so a
+reader never sees the records moved and the entry not; one whose records already stood where it put
+them writes nothing, and is marked after (`HistoryService.mark`). Entries it takes away leave their
+stacks through `removeEntries`, as *Remove from stack* does, so a live one is detached and its stack plays
+on from where it stood. `ProjectImporter.restore` then deletes, in reverse foreign-key order, each other
+record whose target is absent, with its embedded children; then it upserts the rest through the
+importer's own per-kind code in `UPSERT` mode (sync-engineering.md §"Importer modes"), freeing the
+explicit numbers it writes first. Each stack it touched is then renumbered as its records say: an
+entry whose image carries a number keeps it, and every other auto entry is derived as an import derives
+it, which a renumber by position, run backwards, would not give. A stack the undo takes away is stopped on the live project, and stops
+being any project's playhead, once nothing can refuse the undo.
+
+Before the commit the restorer exports the folders it wrote and holds them to the cache with the
+targets laid over it: every record as its target says, with its row id, and no other record in those
+folders moved. A difference rolls the undo back as 409 `HISTORY_UNDO_BLOCKED` (*It could not be put back
+exactly*), and so does a constraint the database holds, a name someone has taken since among them
+(*Something else has taken its name or its place since*), and a record that names one gone since outside
+the history (*Something it names has gone since*), with `record` naming it. An entry holding a folder no
+restore yet covers is refused the same way before anything is written.
+
+**What it sets off** (`history/KindEffects.kt`, §5 of the plan) runs after the commit, under an origin of
+the undo's kind, so the programmer takes no step for it and no entry is made. It goes through the routes'
+own after-commit helpers. Every folder sends the list frames its writes send. On the live project also:
+a Look or palette is republished (`republishForLookEdit` / `republishForPaletteEdit`); one taken away is
+released from the programmer's layers, and a Look's layering cues republished as a Look delete does
+(`republishForLookDelete`); a cue taken away is let go (`afterCuesDeleted`); entries taken away go through
+`afterEntriesRemoved`; a held cue whose *Update stage* content (`stageContent`, read before and after in
+the transaction) moved is marked edited since GO, as a cue PATCH marks it; every stack an entry joined or
+left, and every stack put back, has its holds restamped and its run state published
+(`announceEntriesPlaced`). `RecordRestoreTest` holds the table to `RESTORABLE_FOLDERS`.
+
+A Look's and a palette's rows and FX that still exist are matched by uuid in an upsert and keep their
+row ids — an included Look's FX is named by its row id; one the undo inserts again takes a new one. Every other embedded child — scenery, a cue's events, a busk
+page's columns, banks and pads, a rig row's tiles — comes back with its uuid and a new row id: an image
+does not carry them, and nothing that outlives a re-read names them (`FU-HISTORY-EMBEDDED-CHILD-IDS`). A stack entry whose number the export carried as a held auto number
+comes back explicit, as an import makes it.

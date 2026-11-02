@@ -276,7 +276,7 @@ history with the programmer.
 | `X-Desk-Window` request header | 3 | The registry row id, on every REST call. |
 | `X-History-Entry` response header | 3 | The request's entry id, on every REST answer. |
 | `GET /projects/{id}/history?limit=&before=` | 3 | Entries and steps newest first with clear points; each `{id, kind: SHOW \| PROGRAMMER, at, label, source: {kind, name, window?}, counts, records?, undone, redoable, moves}`. Both roles. |
-| `POST /projects/{id}/history/undo` `{entryId?, backToHere?, programmerOnly?, confirm?, fadeMs?}` | 1, 4 | Answers `{undone: [{id, label}], history}`. 409 `HISTORY_EMPTY`, `HISTORY_CONFLICT {later}`, `HISTORY_CONFIRM {moves}`, `HISTORY_UNDO_BLOCKED {record, reason}`, `HISTORY_NOT_YOURS` (MCP only); a programmer step on a project that is not current is `withCurrentProject`'s 409. Session 1 ships the programmer half. |
+| `POST /projects/{id}/history/undo` `{entryId?, backToHere?, programmerOnly?, confirm?, fadeMs?}` | 1, 4 | Answers `{undone: [{id, label}], history}`. 409 `HISTORY_EMPTY`, `HISTORY_CONFLICT {later}`, `HISTORY_CONFIRM {moves}`, `HISTORY_UNDO_BLOCKED {record, reason}`, `HISTORY_NOT_YOURS` (MCP only); a programmer step on a project that is not current is a 409. Session 1 shipped the programmer half, session 4 the show half. |
 | `POST /projects/{id}/history/redo` `{entryId?, programmerOnly?, confirm?, fadeMs?}` | 1, 4 | The mirror. |
 | `history.state` | 1, 3 | Outbound, per socket, `StateFlow`-backed: `{projectId, undo: {id, label, kind}?, redo: {…}?, revision}` for the socket's source. A client refetches the sheet when `revision` moves. |
 | Binding targets `undo`, `redo`, `programmerUndo` | 6 | Buttons, acting as the surface's source. |
@@ -389,8 +389,8 @@ names written, and its row marked *in review* with its branch. A session's PR is
 |---|---|---|---|---|---|
 | 1 | programmer history (backend + programmer UI) | merged | `claude/nice-hypatia-xf5tk7` | [#330](https://github.com/cjcormack/lighting7/pull/330) | `5ac9ce0` |
 | 2 | records in memory (backend, no behaviour change) | merged | `claude/admiring-gauss-1m7xs5` | [#331](https://github.com/cjcormack/lighting7/pull/331) | `36a577c` |
-| 3 | origin and journal, read-only (backend + sheet) | in review | `claude/gracious-wozniak-i6mim5` | | |
-| 4 | putting records back: the cue side (backend) | planned | | | |
+| 3 | origin and journal, read-only (backend + sheet) | merged | `claude/gracious-wozniak-i6mim5` | [#333](https://github.com/cjcormack/lighting7/pull/333) | `0b1ac3f` |
+| 4 | putting records back: the cue side (backend) | in review | `claude/pensive-curie-096obw` | | |
 | 5 | putting records back: the rest (backend) | planned | | | |
 | 6 | the controls (frontend + MCP + surfaces) | planned | | | |
 
@@ -546,12 +546,68 @@ the next; whoever merges the last fills its own.
 - **Docs:** `undo-engineering.md` §"Restore"; `sync-engineering.md` (the importer's two modes).
 - **Locally:** the full `./gradlew test`: the importer gains a mode that sync, clone and the venue
   flows share. Frontend untouched.
+- **As built**, where it differs from §3 or binds a later session:
+  - `promptBookAnchors` is restorable here, not in session 5: a forced cue delete removes the anchors on
+    its entries, and the session's own test puts one back. Session 5 takes `promptBooks` and
+    `promptBookAnnotations`.
+  - Only the cue side's import functions read a `RecordSource` and take the `Run` (`DirSource` or
+    `ImageSource`, insert or upsert); the rest still read their folder directly. Session 5 moves each it
+    restores onto the `Run`, places its rows through `Run.row`, adds its deletes to
+    `ProjectImporter.deleteRecord`, its folder to `RESTORE_ORDER` and its row to `KindEffects`.
+    `RecordRestoreTest`'s identity test then covers it with no change.
+  - Against §3.5, a Look's and a palette's rows and FX that still exist are matched by uuid in an upsert
+    and keep their row ids: an included Look's FX is named by its row id (`IncludedLookFx.lookFxId`). One
+    the undo inserts again takes a new id, and every other embedded child is deleted and inserted again
+    from the image, uuid kept and id new (`FU-HISTORY-EMBEDDED-CHILD-IDS`).
+  - A cue's entry from before the cue model's entries took its cue's uuid (`CueEntryUuidMigration`), so
+    the link check can read the two as linked when they are not: an undo then asks or refuses, never
+    writes wrongly.
+  - Before it commits, the restore exports the folders it wrote and holds them to the cache with the
+    targets over it — every record exact, with its row id, and nothing else in those folders moved —
+    else the undo rolls back as `HISTORY_UNDO_BLOCKED`. A constraint failure (a name taken since) and an
+    image naming a record gone outside the history are the same refusal, `record` naming the most likely
+    record. Session 5's venue key checks go before the commit, beside it.
+  - Records link by uuid, and collisions follow the links (D3): a later entry collides when it touches
+    a record the undo puts back, when a record it wrote links to one the undo takes away (a stack entry
+    another source added for a cue whose creation is undone), or when it took away a record one the undo
+    puts back links to. The closure repeats until nothing more collides, so back-to-here's newest-first
+    undo never meets a record moved by an entry it left; the 409's `later` is that set. Only the
+    restorable folders count as links: a binding's payload tolerates a record gone. A record the undo
+    would take away that a standing record outside every entry links to is refused as in use.
+  - An entry holding a folder no restore covers yet is refused whole, before any write, as
+    `HISTORY_UNDO_BLOCKED` *Undoing this kind of change is not available yet*.
+  - Redo takes the source's most recently *undone* entry (`HistoryEntry.undoneSeq`), so redo after
+    undoing E3 then E2 brings E2 back first. Its conflict names the later entries still standing and
+    the earlier ones still undone that touch the same records; it has no back-to-here. Between the
+    programmer and the show the key's undo takes whichever was written last and its redo whichever was
+    undone last (`undoneAt` on both; `showTakes`, shared by the route and `history.state`).
+  - The undo or redo's commit marks its entries (`WriteOrigin.entryIds`, a property set once the plan is
+    made) in the same locked step that moves the cache; one that writes nothing, its records already
+    where it puts them, is marked after the transaction.
+  - Entries the undo takes away leave through `removeEntries`, so a live one is detached as *Remove from
+    stack* leaves it. A stack it takes away is stopped only once nothing can refuse the undo, and stops
+    being any project's playhead. What it sets off runs through the routes' own after-commit helpers,
+    under an origin of the undo's kind, so the programmer takes no step for it.
+  - The confirm counts a held cue's stored layers and the programmer's, which republish; a layer the undo
+    itself puts back is not on stage and asks nothing, its cue marked edited since GO. A `pal:` reference
+    in an FX parameter is not counted. Its `moves` are sentences (*Live cue “Q11” uses Look “Warm wash”*,
+    *The programmer uses …*).
+  - A held cue is marked edited since GO when its `stageContent` moved, read before and after the restore,
+    as a cue PATCH marks it.
+  - A stack entry whose number the export carried as a held auto number comes back explicit, as an
+    import makes it; the export is identical. The explicit numbers an upsert writes are freed first, from
+    an auto neighbour that took one and between entries that trade them. After the restore every stack
+    it touched is renumbered as its records say: an entry whose image carries a number keeps it, every
+    other auto entry is derived as an import derives it. The renumber by position the write itself ran
+    cannot be replayed backwards, and left a label no reader would derive.
+  - The undo and redo routes resolve the project with `withProject`; a step still needs the current
+    project, answered as before.
 
 ### Session 5 — putting records back: the rest (backend)
 
 - Codecs and effects for `fixturePatches`, `fixtureGroups`, `universeConfigs`, `showHides`,
   `showOverrides`, `showColours`, `riggings`, `stageRegions`, `stageElements`, `stageViewpoints`,
-  `promptBooks`, `promptBookAnchors`, `promptBookAnnotations`, `scripts`, `fxDefinitions`,
+  `promptBooks`, `promptBookAnnotations`, `scripts`, `fxDefinitions`,
   `speedMasters`, `parkedChannels`, `showParkReleases`, `controlSurfaceBindings`; venue key checks;
   `SceneImageStore`'s prune skips a hash any journal image names.
 - The coverage test (§5's last paragraph).

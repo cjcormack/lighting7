@@ -181,6 +181,9 @@ class CueHolds internal constructor(
 
     fun isHeld(cueId: Int): Boolean = cueId in view
 
+    /** Every cue something holds. */
+    fun heldCueIds(): Set<Int> = view.keys
+
     fun looseHeld(cueId: Int): Boolean = view[cueId]?.looseHeld == true
 
     /** The priority [cueId] composes at, or null when nothing holds it. */
