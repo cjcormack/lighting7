@@ -1156,7 +1156,9 @@ either, and other tabs kept a stale layer list indefinitely.
 W / A / UV a bundled emitter's own row supplied, one `{attribute, cueId?, cueStackId?, layerId?,
 layerSource?}` per emitter, because that colour's bytes came from two contributors (see
 [`lighting-composition-model.md`](lighting-composition-model.md) §"A bundled emitter's own row
-beats the colour's copy").
+beats the colour's copy"). A `CUE` key a stack's Move in dark holds carries `moveInDark`
+`{stackId, targetEntryId, targetCueId, label}` (omitted otherwise), the cue the head is moved for, and
+no `cueId`, so the fixture sheet's chip reads *Move in dark · Q12*.
 
 **`KeyStackLayerDto`** is one layer of an attribute's stack (`ProvenanceService.keyStack`), listed
 top first: `PARK` (its `parkedChannels`), `PROGRAMMER_FX` (an FX in the programmer band),

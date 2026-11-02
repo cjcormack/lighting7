@@ -33,6 +33,7 @@ import { useContainerBand } from '@/hooks/useContainerBand'
 import { CueSheet } from './CueSheet'
 import { StackTimeline } from './StackTimeline'
 import { OwnerEditor } from '@/components/stage/OwnerEditor'
+import { StackMovingChip } from '@/components/cues/StackMovingChip'
 
 const TIMELINE_WIDTH_FLOORS = [TIMELINE_MIN_WIDTH, 0] as const
 /** `useContainerBand`'s band before the first measurement: no band of the floors. */
@@ -98,6 +99,11 @@ interface StackDetailProps {
   onOpenBook?: (cueId: number) => void
   /** Lift the show-editing lock, where it is the operator's to lift. */
   onRequestUnlock?: () => void
+  /** Open the cue table on the cues the stack's Move in dark read-out counts. */
+  onShowDarkCues?: (stackId: number) => void
+  /** The cue table shows only those cues (`CueSheet.darkOnly`); [onShowAllCues] lifts it. */
+  darkOnly?: boolean
+  onShowAllCues?: () => void
 }
 
 export function StackDetail({
@@ -123,6 +129,9 @@ export function StackDetail({
   view = 'cards',
   onOpenBook,
   onRequestUnlock,
+  onShowDarkCues,
+  darkOnly = false,
+  onShowAllCues,
 }: StackDetailProps) {
   const [reorderCues] = useReorderCueStackCuesMutation()
   // Band 0 is room for the Timeline. Until the stack is measured neither view of a remembered
@@ -250,6 +259,7 @@ export function StackDetail({
         <span className="text-xs text-muted-foreground shrink-0">
           {standardCount} cues
         </span>
+        <StackMovingChip stackId={stack.id} detail className="hidden @[520px]:inline-flex" />
         <div className="flex-1" />
         <ShowStackViewSwitcher current={shownView} projectId={projectId} stackId={stack.id} timelineOffered={timelineOffered} />
 
@@ -331,6 +341,8 @@ export function StackDetail({
           onOpenBook={onOpenBook}
           onRequestUnlock={onRequestUnlock}
           onReorder={handleSheetReorder}
+          darkOnly={darkOnly}
+          onShowAll={onShowAllCues}
         />
       ) : (
       /* Cue list — scrolls within the recessed Row 4 surface set on the root above. */
@@ -387,7 +399,12 @@ export function StackDetail({
       )}
       {/* Mounted only while open: the stack form reads the store, and a closed one is nothing. */}
       {settingsOpen && !locked && (
-        <OwnerEditor projectId={projectId} entry={{ kind: 'set', id: stack.id }} onClose={() => setSettingsOpen(false)} />
+        <OwnerEditor
+          projectId={projectId}
+          entry={{ kind: 'set', id: stack.id }}
+          onClose={() => setSettingsOpen(false)}
+          onShowDarkCues={onShowDarkCues}
+        />
       )}
     </div>
   )

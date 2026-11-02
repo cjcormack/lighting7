@@ -469,7 +469,13 @@ export interface CueInput {
 // refuses them here.
 export type CuePatchInput = Partial<
   Omit<CueInput, 'cueStackId' | 'sortOrder' | 'cueType' | 'cueNumber' | 'autoAdvance' | 'autoAdvanceDelayMs'>
->
+> & {
+  /**
+   * The cue's Move in dark: each field present is written and an absent one kept; a null delay or
+   * move time is the stack's, and the whole object null resets the cue to *Stack*.
+   */
+  moveInDark?: Partial<Omit<CueMoveInDark, 'unknownLive'>> | null
+}
 
 // Apply response
 export interface ApplyCueResponse {

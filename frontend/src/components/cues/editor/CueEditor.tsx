@@ -37,6 +37,8 @@ export type CueEditorHost = 'card' | 'pane' | 'sheet'
 /** A host asking the editor to show a tab — the cue sheet's Layers and FX read-outs do. */
 export interface CueEditorTabRequest {
   tab: CueEditorTab
+  /** A section of that tab to bring into view — the cue sheet's *Dark* cell asks for Move in dark. */
+  section?: 'moveInDark'
   /** Bumped per request, so asking again for the tab already asked for still lands. */
   seq: number
 }
@@ -190,7 +192,13 @@ export function CueEditor({
                 <EventsTab cue={cue} projectId={projectId} locked={readOnly} idBase={idBase} />
               </TabsContent>
               <TabsContent value="cue" className="p-3">
-                <CueTab cue={cue} projectId={projectId} locked={readOnly} idBase={idBase} />
+                <CueTab
+                  cue={cue}
+                  projectId={projectId}
+                  locked={readOnly}
+                  idBase={idBase}
+                  sectionRequest={tabRequest?.tab === 'cue' && tabRequest.section != null ? tabRequest : null}
+                />
               </TabsContent>
             </div>
           </Tabs>

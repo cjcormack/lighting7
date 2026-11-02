@@ -26,6 +26,10 @@ const rowProps = new Map<
   number,
   { isStandby?: boolean; isActive?: boolean; expanded?: boolean; locked?: boolean; onSetStandby?: () => void }
 >()
+// The header's Move in dark chip reads the store; its words are `StackMovingChip.test.tsx`'s.
+vi.mock('@/components/cues/StackMovingChip', () => ({
+  StackMovingChip: ({ stackId }: { stackId: number }) => <span data-testid="moving-chip" data-stack={stackId} />,
+}))
 vi.mock('./CueCardEditor', () => ({
   CueCardEditor: (p: {
     cue: CueStackCueRow
@@ -200,6 +204,11 @@ describe('StackDetail', () => {
     expect(screen.queryByLabelText(/Record the programmer into/)).toBeNull()
     expect(screen.queryByLabelText('Add separator')).toBeNull()
     expect(screen.queryByLabelText('Stack settings…')).toBeNull()
+  })
+
+  it('draws what the stack moves in the dark in its header, locked or not — a read-out', () => {
+    render(view({ locked: true }))
+    expect(screen.getByTestId('moving-chip')).toHaveAttribute('data-stack', '10')
   })
 
   it('passes the lock down to every row', () => {

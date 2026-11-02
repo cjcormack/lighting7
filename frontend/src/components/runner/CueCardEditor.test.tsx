@@ -41,6 +41,9 @@ vi.mock('@/store/cues', () => ({
 }))
 vi.mock('@/store/cueStacks', () => ({
   usePatchCueStackEntryMutation: () => [patchEntry],
+  // The Move in dark plan: none here (its cells are `CueSheet.test.tsx`'s).
+  useCueStackMoveInDarkQuery: (_arg: unknown, opts?: { selectFromResult?: (r: { data: undefined }) => unknown }) =>
+    opts?.selectFromResult ? opts.selectFromResult({ data: undefined }) : { data: undefined },
 }))
 vi.mock('@/components/cues/CueRowParts', () => ({
   CueStatePip: () => <div data-testid="pip" />,

@@ -253,6 +253,7 @@ class Show(
     ).also {
         cueStackManager.moveInDark = it
         fxEngine.provenance.moveInDarkHolding = it::holdingOf
+        fxEngine.provenance.moveInDarkHoldings = it::holdings
         // Every write that moves a stack's list or a cue's rows announces it here (D9).
         fixtures.registerListener(it)
     }

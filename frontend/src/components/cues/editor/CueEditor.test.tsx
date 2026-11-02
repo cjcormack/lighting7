@@ -21,6 +21,9 @@ vi.mock('@/store/cues', () => ({
   useProjectCueCookedQuery: () => ({ data: { cueId: 1, rows: [{}, {}, {}] } }),
 }))
 vi.mock('@/store/cueStacks', () => ({ usePatchCueStackEntryMutation: () => [patchEntry] }))
+// The Cue tab's Move in dark section is `CueMoveInDarkSection.test.tsx`'s.
+vi.mock('./CueMoveInDarkSection', () => ({ CueMoveInDarkSection: () => <div data-testid="move-in-dark-section" /> }))
+vi.mock('@/components/cues/CueDarkGlyph', () => ({ CueDarkGlyph: () => null }))
 vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => edited }))
 vi.mock('@/store/effects', () => ({ useSetCueEventsMutation: () => [vi.fn()] }))
 const masters: Array<Record<string, unknown>> = [

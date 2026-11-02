@@ -57,6 +57,11 @@ data class ProvenanceEntry(
      * credit the colour's cue with a white it never asserted.
      */
     val bundled: List<BundledProvenance> = emptyList(),
+    /**
+     * A [ProvenanceSource.CUE] key a stack's Move in dark holds (move-in-dark plan D11): the cue the
+     * head is moved for, so the fixture sheet's chip names it rather than a bare *Cue*.
+     */
+    val moveInDark: MoveInDarkService.Holding? = null,
 )
 
 /** One bundled emitter's contribution to a reconciled colour — see [ProvenanceEntry.bundled]. */
@@ -235,6 +240,9 @@ class ProvenanceService internal constructor(
     @Volatile internal var moveInDarkHolding: (contributorId: Int, targetKey: String, attribute: String) -> MoveInDarkService.Holding? =
         { _, _, _ -> null }
 
+    /** Every held key's move at once (`MoveInDarkService.holdings`), for [compute]'s pass over every key. */
+    @Volatile internal var moveInDarkHoldings: () -> Map<Triple<Int, String, String>, MoveInDarkService.Holding> = { emptyMap() }
+
     // Conflated: recomputed on layer events only (programmer mutation, cue republish,
     // effect lifecycle, park change) — never per frame. Full-state snapshots rather than
     // diffs: the entry set is small (the union of active keys) and event-rate, so diffing
@@ -412,6 +420,7 @@ class ProvenanceService internal constructor(
 
         val siblings = siblingPaintings(programmerKeys, attributeKeys, sidebandChannels, fxByKey)
 
+        val holdings by lazy(LazyThreadSafetyMode.NONE) { moveInDarkHoldings() }
         val entries = ArrayList<ProvenanceEntry>(keys.size)
         for (key in keys) {
             val fixture = try {
@@ -457,6 +466,9 @@ class ProvenanceService internal constructor(
                         layerId = layer?.layerId,
                         layerSource = layer?.source,
                         bundled = bundledProvenance(fixture, key, cueLayer),
+                        moveInDark = winningCueId
+                            ?.let { MoveInDarkService.stackOfContributor(it) }
+                            ?.let { holdings[Triple(it, key.targetKey, key.attribute)] },
                     )
                 }
                 else -> continue

@@ -275,7 +275,7 @@ class MoveInDarkPlannerTest {
     @Test
     fun `a head lit by the entry before moves lit, unless it stays where it is`() {
         val plan = static(mapOf(q1Lit, 2 to content(*lit)))
-        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.LIT_BEFORE)), plan.getValue(11).live)
+        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.LIT_BEFORE, setOf(AttributeFamily.POSITION))), plan.getValue(11).live)
         val same = static(mapOf(q1Lit, 2 to content(dimmer("hex", 128), position("hex", 1, 1))))
         assertTrue(same.getValue(11).live.isEmpty() && same.getValue(11).moves.isEmpty(), "nothing to move")
     }
@@ -283,9 +283,9 @@ class MoveInDarkPlannerTest {
     @Test
     fun `a cue set Off or keeping a head live lists it, and a stack off with cues on Stack lists nothing`() {
         val off = static(mapOf(q1Lit, q2Out, 3 to content(cue(CueMoveInDarkMode.OFF), *lit)))
-        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.CUE_OFF)), off.getValue(12).live)
+        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.CUE_OFF, setOf(AttributeFamily.POSITION))), off.getValue(12).live)
         val kept = static(mapOf(q1Lit, q2Out, 3 to content(cue(CueMoveInDarkMode.STACK, live = listOf("hex")), *lit)))
-        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.KEPT_LIVE)), kept.getValue(12).live)
+        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.KEPT_LIVE, setOf(AttributeFamily.POSITION))), kept.getValue(12).live)
         val stackOff = static(mapOf(q1Lit, q2Out, 3 to content(*lit)), settings = MoveInDarkSettings.OFF)
         assertTrue(stackOff.values.all { it.moves.isEmpty() && it.live.isEmpty() })
     }
@@ -296,7 +296,7 @@ class MoveInDarkPlannerTest {
         val cues = mapOf(q1Lit, q2Out, 3 to content(*lit))
         val fades = mapOf(2 to 500L)
         val quick = static(cues, follows = mapOf(11 to 3_499L), fades = fades)
-        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.TOO_QUICK)), quick.getValue(12).live)
+        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.TOO_QUICK, setOf(AttributeFamily.POSITION))), quick.getValue(12).live)
         val enough = static(cues, follows = mapOf(11 to 3_500L), fades = fades)
         assertEquals(11, enough.getValue(12).moves.single().fromEntryId)
         assertEquals(1, static(cues).getValue(12).moves.size, "a manual GO is never too quick")
@@ -323,7 +323,7 @@ class MoveInDarkPlannerTest {
         val cues = mapOf(1 to content(*lit), q2Out, 3 to content(), 4 to content())
         val follows = mapOf(11 to 1_000L, 12 to 1_000L, 13 to 1_000L)
         val plan = static(cues, loop = true, follows = follows, fades = mapOf(2 to 500L))
-        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.TOO_QUICK)), plan.getValue(10).live, "3 s less the 500 ms fade")
+        assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.TOO_QUICK, setOf(AttributeFamily.POSITION))), plan.getValue(10).live, "3 s less the 500 ms fade")
         val enough = static(cues, loop = true, follows = follows + (13 to 1_500L), fades = mapOf(2 to 500L))
         assertEquals(11, enough.getValue(10).moves.single().fromEntryId)
     }

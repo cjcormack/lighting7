@@ -1,5 +1,6 @@
 // Type definitions for cue stacks API
 import type { PreviewScenery, SceneryChange } from './sceneryApi'
+import type { MoveInDarkFamily } from './moveInDarkApi'
 
 export type CueType = 'STANDARD' | 'MARKER'
 
@@ -119,11 +120,54 @@ export interface CueStack {
   canDelete: boolean
   /** The stack's *set* (stage-view plan session 8): held while it is live, under its cues. Omitted when empty. */
   scenery?: SceneryChange[]
+  /** Move in dark (lighting7 move-in-dark plan D2). Absent from an older desk, which reads as off. */
+  moveInDark?: StackMoveInDark
+}
+
+/**
+ * A stack's *Move in dark*: whether dark heads move ahead of the cue that lights them, *Early* (the
+ * first cue ahead that lights the head) or *Late* (the next GO's only), after `delayMs` dark, over
+ * `timeMs`, in `families`.
+ */
+export interface StackMoveInDark {
+  on: boolean
+  when: 'EARLY' | 'LATE'
+  delayMs: number
+  timeMs: number
+  families: MoveInDarkFamily[]
+}
+
+/** Why a head moves lit into a cue: lit in every cue before it, a follow too quick, kept live, or its cue set *Off*. */
+export type MoveInDarkLiveReason = 'LIT_BEFORE' | 'TOO_QUICK' | 'KEPT_LIVE' | 'CUE_OFF'
+
+/**
+ * `GET cue-stacks/{id}/move-in-dark` — the stack's static plan (lighting7 move-in-dark plan §3): per
+ * cue entry, in play order, the heads moved in the dark for it (and the entry each move happens in)
+ * and the heads that move lit into it. `rigLoaded` false — the project is not current — answers every
+ * entry empty.
+ */
+export interface StackMoveInDarkPlan {
+  stackId: number
+  rigLoaded: boolean
+  entries: MoveInDarkPlanEntry[]
+  summary: { heads: number; cues: number; live: number; off: number }
+}
+
+export interface MoveInDarkPlanEntry {
+  entryId: number
+  cueId: number
+  /** The cue's own setting; absent is `STACK`, and from a desk before it. */
+  mode?: 'STACK' | 'EARLY' | 'LATE' | 'OFF'
+  heads: { target: string; fromEntryId: number; families: MoveInDarkFamily[] }[]
+  /** `families` is absent from a desk before it. */
+  live: { target: string; reason: MoveInDarkLiveReason; families?: MoveInDarkFamily[] }[]
 }
 
 export interface CueStackInput {
   name: string
   loop: boolean
+  /** Absent on a `PUT` keeps what is stored; absent on a create starts it on, at the defaults. */
+  moveInDark?: Partial<StackMoveInDark>
   /** `SEPARATOR` to create a divider row; omit/`STACK` for a runnable stack. */
   type?: StackType
   label?: string | null
