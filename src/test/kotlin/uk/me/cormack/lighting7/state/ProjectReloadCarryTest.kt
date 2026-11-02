@@ -216,6 +216,46 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a reload keeps a mover's pan and tilt where a cue or the programmer puts them, and an idle mover's at its base`() = runBlocking {
+        // Fusion 100 Spots, 15-channel: pan at +0, tilt at +2.
+        LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-15ch", "cue-spot", 1)
+        LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-15ch", "programmer-spot", 16)
+        LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-15ch", "idle-spot", 31)
+        val (stackId, cueId) = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project
+                name = "stack"; loop = false
+                type = CueStackType.STACK.name; sortOrder = 0
+            }
+            val cue = DaoCue.new { this.project = project; name = "cue" }.inStack(stack, sortOrder = 0)
+            DaoCueAttributeAssignment.new {
+                this.cue = cue
+                targetType = "fixture"; targetKey = "cue-spot"
+                attribute = "position"; value = "50,70"; sortOrder = 0
+            }
+            stack.id.value to cue.id.value
+        }
+        state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
+        state.show.fxEngine.programmer.writeAttribute(
+            ProgrammerOwner.WEB,
+            state.show.fixtures.untypedGroupableFixture("programmer-spot"),
+            "position",
+            CueAssignmentResolver.AttributeValue.Position(30u, 40u),
+        )
+        val expected = mapOf(1 to 50, 3 to 70, 16 to 30, 18 to 40, 31 to 0, 33 to 0)
+        assertEquals(expected, expected.mapValues { (channel, _) -> mock().getEffectiveValue(channel).toInt() })
+
+        state.projectManager.switchProject(projectId, reload = true)
+
+        val fresh = mock()
+        assertEquals(expected, expected.mapValues { (channel, _) -> fresh.getEffectiveValue(channel).toInt() })
+        for (channel in listOf(1, 3, 16, 18)) {
+            assertTrue(fresh.writesTo(channel).none { it == 0u.toUByte() }, "channel $channel never went to zero: ${fresh.writesTo(channel)}")
+        }
+    }
+
+    @Test
     fun `a reload re-arms each stack's standby`() = runBlocking {
         LocateTestSupport.seedHex(state, projectId, "hex-1", startChannel = 1)
         val (stackId, cueId) = seedStackWithDimmerCue("hex-1", 200)

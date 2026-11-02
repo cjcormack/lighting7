@@ -40,6 +40,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-AMPLITUDE`](#fu-fx-amplitude) | Trigger | FX | an operator wants an FX bigger than it was written (absorbs `FU-FX-SIZE-OVER-100`) |
 | [`FU-FX-PER-STEP-TIMING`](#fu-fx-per-step-timing) | Trigger | FX | an operator expects a longer list to run slower |
 | [`FU-FX-PREVIEW-SHARED-CHANNELS`](#fu-fx-preview-shared-channels) | Trigger | FX | an FX graph disagrees with the rig where two attributes share a channel |
+| [`FU-PROG-SHARED-CHANNEL-RELEASE`](#fu-prog-shared-channel-release) | Trigger | Prog | a Clear, Release or Blind toggle drops a mover's pan or tilt under a cue's `position` |
 | [`FU-FX-STAGE-SCRUB`](#fu-fx-stage-scrub) | Trigger | FX | an operator scrubs the FX graph and looks at the stage |
 | [`FU-FX-PREVIEW-FADES`](#fu-fx-preview-fades) | Trigger | FX | an operator reads the FX graph across a GO |
 | [`FU-FX-LINKED-TIMING`](#fu-fx-linked-timing) | Trigger | FX | an operator matches the same pair again after changing one |
@@ -521,6 +522,30 @@ with the slider rows of those emitters, `position` with `pan` and `tilt` — in 
 add a parity case for each pairing.
 
 **Trigger**: an FX graph disagrees with the rig where two attributes share a channel.
+
+---
+
+### `FU-PROG-SHARED-CHANNEL-RELEASE`
+
+**A pan or tilt key's fallback never reads `position`** · Trigger · reload tilt fix, 2026-10-31
+
+A mover's pan channel is driven by two keys, `pan` and `position` (tilt likewise), and
+`CascadePublisher.publishCascadeForKeys` repaints each key on its own from
+`LayerResolver.fallbackFor`. A `pan` key's fallback reads only a cue's or the programmer's `pan`
+(`SliderTarget.composeProgrammerOver`), never their `position`, and `PositionTarget`'s reads only
+`position` and the sideband; the two bases differ too (`SliderTarget` 0, `PositionTarget` 128/128).
+So a publish that includes the slider key without its `position` partner writes the base over what
+`position` composes. `ProgrammerWriter.clearAll`, `releaseFixtures`, `clearEntries` and `setBlind` all
+do: a cue holding `position` with a raw pan write in the sideband, then Clear All, publishes `pan`
+(the sideband's covering key) alone and sends pan to 0. Within the programmer, a newer `pan` entry
+loses to an older `position` one wherever both are published, whatever their recency.
+
+`Show.resume` works round it for a reload (tiers, then each channel nothing holds through its
+covering key alone). The shape for the rest: make a position-axis slider's fallback read the cue's
+and the programmer's `position` (recency deciding within the programmer), in `fallbackFor` or the
+targets' `composeProgrammerOver`, which is on the FX tick's path, so with a perf check.
+
+**Trigger**: a Clear, Release or Blind toggle drops a mover's pan or tilt under a cue's `position`.
 
 ---
 

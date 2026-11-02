@@ -546,8 +546,10 @@ a frame at zero** unless zero is where the next show puts it.
   with its LOCATE slots, and every FX no cue or programmer layer owns. The successor's controllers are seeded with the frame and **frozen on it**
   (`Show.start(seedValues)`) while `Show.resume` puts the FX back, GOes each entry again (events not
   re-fired; its auto-advance timer starts again from the reload), re-arms each standby, takes each
-  loose hold again in press order (events not re-fired), re-cooks the programmer's layers and republishes it, publishes every patched attribute from
-  whatever now composes it (so an attribute nothing drives any more releases to its base), and zeroes
+  loose hold again in press order (events not re-fired), re-cooks the programmer's layers and republishes it, publishes every patched channel from
+  whatever now composes it — the programmer's keys over the cue's over the rest, since two keys can
+  share a channel (a pan channel is `pan` and `position`) and the last written wins it, and a channel
+  nothing drives any more through its covering key alone, releasing to that key's base — and zeroes
   every channel no fixture covers and no programmer channel holds. Then it unfreezes, ramping every
   channel the rebuild moved from its carried value to its new one over `RESUME_FADE_MS` (2 s). A
   universe the reloaded project no longer has is left dark. Each resume step is guarded on its own, so
