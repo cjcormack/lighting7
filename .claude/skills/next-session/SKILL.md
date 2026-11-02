@@ -67,6 +67,15 @@ row. *Status* is `planned`, `in progress`, `in review` or `merged`.
 4. Read the whole plan **at the base §2 picks** (the previous session's branch when stacking: it may
    have corrected the plan), its design record (the `*-design/INDEX.md` it links) and the root and
    `frontend/` `CLAUDE.md`s.
+5. **Check the session's Needs.** A session whose work waits on something outside its plan opens its
+   section with a `**Needs:**` line (`docs/plans/cloud-design/INDEX.md` R2). Check every item before
+   going on:
+   - `<owner/repo> <plan path> session N merged`: read that plan on that repo's `main` (the GitHub
+     MCP's `get_file_contents`; in a cloud session, attach the repo for read with `add_repo` first)
+     and apply §1.3's test to its row *N*: `merged`, or its PR merged or an ancestor of that `main`.
+   - `operator: <step>`: done only if the plan records it as done; otherwise ask the operator.
+
+   Any item not met stops the run: name it, say what the session waits for, and ship nothing.
 
 ## 1a. Draft a session for a standing plan
 
