@@ -81,8 +81,8 @@ internal fun projectWriteRefusal(kind: ProjectKind, isAdmin: Boolean, rest: List
  */
 private fun isRuntimeGesture(rest: List<String>): Boolean = when (rest.firstOrNull()) {
     "set-current", "programmer", "effects", "grand-master", "commands", "rig-safe" -> true
-    // Every step the history holds is the programmer's until show entries arrive (undo plan session 4),
-    // which must then refuse an operator's undo onto a venue in the route: the path cannot tell them apart.
+    // The path cannot tell a programmer step from a show entry, so the history route refuses an
+    // operator's show undo onto a venue itself (undo plan D12).
     "history" -> true
     "patches" -> rest.size >= 3 && rest[2] in setOf("fire", "reload", "commands")
     "cue-stacks" -> rest.getOrNull(2) == "fx-amount"

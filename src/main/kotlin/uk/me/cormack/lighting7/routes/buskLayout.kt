@@ -46,6 +46,12 @@ internal data class BuskPageContents(
 
 /** Delete [page] and everything under it: pads → banks → columns → page. */
 internal fun deleteBuskPage(page: DaoBuskPage) {
+    deleteBuskPageContents(page)
+    page.delete()
+}
+
+/** Delete everything under [page], leaving the page: pads → banks → columns. */
+internal fun deleteBuskPageContents(page: DaoBuskPage) {
     page.columns.forEach { column ->
         column.banks.forEach { bank ->
             bank.pads.forEach { it.delete() }
@@ -53,7 +59,6 @@ internal fun deleteBuskPage(page: DaoBuskPage) {
         }
         column.delete()
     }
-    page.delete()
 }
 
 /**

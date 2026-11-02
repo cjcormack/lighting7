@@ -60,6 +60,10 @@ class WriteOrigin(
     /** [UNTRACKED] marks code that must take no step whoever set it off — a project switch or reload. */
     enum class Kind { TRACKED, UNDO, REDO, UNTRACKED }
 
+    /** The show entries an [Kind.UNDO] or [Kind.REDO] write puts back, which its commit marks. */
+    @Volatile
+    var entryIds: List<String> = emptyList()
+
     /** What the programmer step this origin makes is called, when the door or the route says. */
     @Volatile
     var label: String? = null

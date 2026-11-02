@@ -7,7 +7,6 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
@@ -15,11 +14,12 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.sync.MapSink
 import uk.me.cormack.lighting7.sync.ProjectExporter
+import uk.me.cormack.lighting7.sync.RESTORABLE_FOLDERS
 import uk.me.cormack.lighting7.sync.RecordHasher
 import uk.me.cormack.lighting7.sync.RecordImage
 import uk.me.cormack.lighting7.sync.RecordKey
 import uk.me.cormack.lighting7.sync.canonicalEncode
-import uk.me.cormack.lighting7.sync.canonicalJson
+import uk.me.cormack.lighting7.sync.jsonObjectOrNull
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -54,6 +54,7 @@ class HistoryService(
     private val projects = ConcurrentHashMap<Int, ProjectHistory>()
     private val lock = Any()
     private val ids = AtomicLong()
+    private var undoSeq = 0L
     private val _revision = MutableStateFlow(0L)
 
     /** Moves with every change to any project's history; `history.state` and the sheet refetch on it. */
@@ -131,8 +132,7 @@ class HistoryService(
 
     /**
      * Apply a committed [staged] diff: the cache takes it, and it becomes an entry (a tracked origin),
-     * is rebased into the journal (no origin, D14), or only moves the cache (an undo or redo's own
-     * write, whose entries session 4 marks).
+     * is rebased into the journal (no origin, D14), or marks the entries an undo or redo put back.
      */
     internal fun commit(staged: Staged) {
         val origin = staged.origin
@@ -162,7 +162,10 @@ class HistoryService(
                         moved = true
                         append(projectId, history, origin, changes)
                     }
-                    else -> Unit
+                    else -> {
+                        moved = true
+                        markLocked(history, origin.entryIds, origin.kind == WriteOrigin.Kind.UNDO)
+                    }
                 }
             }
             if (moved) bump()
@@ -231,8 +234,8 @@ class HistoryService(
             return
         }
         for (change in changes) {
-            val from = change.before!!.jsonObject() ?: continue
-            val to = change.after!!.jsonObject() ?: continue
+            val from = change.before!!.jsonObjectOrNull() ?: continue
+            val to = change.after!!.jsonObjectOrNull() ?: continue
             val fields = (from.keys + to.keys).filterTo(mutableSetOf()) { from[it] != to[it] }
             if (fields.isEmpty()) continue
             for (entry in history.entries) {
@@ -254,7 +257,7 @@ class HistoryService(
 
     /** [image] with [fields] taken from [to], or null when an array field held something other than [from]'s. */
     private fun patch(image: RecordImage, folder: String, from: JsonObject, to: JsonObject, fields: Set<String>): RecordImage? {
-        val held = image.jsonObject() ?: return image
+        val held = image.jsonObjectOrNull() ?: return image
         for (field in fields) {
             val mine = held[field]
             if ((mine is JsonArray || from[field] is JsonArray || to[field] is JsonArray) && mine != from[field]) return null
@@ -326,7 +329,169 @@ class HistoryService(
 
     /** What [sourceKey]'s ⇧⌘Z would take: its most recently undone entry. */
     fun redoFor(projectId: Int, sourceKey: String): HistoryEntry? = synchronized(lock) {
-        projects[projectId]?.entries?.lastOrNull { it.undone && it.source.key == sourceKey }
+        projects[projectId]?.entries?.filter { it.undone && it.source.key == sourceKey }?.maxByOrNull { it.undoneSeq }
+    }
+
+    /** What an undo or a redo of a project's show history would do, read against its record cache. */
+    internal sealed interface Plan {
+        /** Nothing of the caller's to take, or the entry named is already where it was asked to go. */
+        data class Empty(val already: Boolean = false) : Plan
+
+        /** The entry named is not in the history. */
+        data object Unknown : Plan
+
+        /**
+         * The entry's records have moved since (D3): [later] are the entries that moved them, which
+         * back-to-here would take too. Empty when something the history does not hold moved them.
+         */
+        data class Conflict(val entry: HistoryEntry, val later: List<HistoryEntry>) : Plan
+
+        /** It would take away [record] while [by], which no entry it takes holds, still names it. */
+        data class InUse(val record: String, val by: String) : Plan
+
+        /** [entries], newest first, and the image each record goes back to — null for one that goes. */
+        data class Ready(val entries: List<HistoryEntry>, val targets: Map<RecordKey, RecordImage?>) : Plan
+    }
+
+    /**
+     * Plan an undo (§3.5): [entryId], or else [caller]'s newest entry not undone. Every record it holds
+     * must stand as it left it, and nothing may come to name a record it takes away or be gone from under
+     * one it puts back; otherwise the later entries that did so answer a [Plan.Conflict] — unless
+     * [backToHere], which takes them too, newest first: on the caller's own entry every later one of the
+     * caller's, and on anyone's the ones that collide, each with the entries that collide with it.
+     * Call inside the transaction that applies it, so no commit lands between the two.
+     */
+    internal fun planUndo(projectId: Int, entryId: String?, caller: String, backToHere: Boolean): Plan = synchronized(lock) {
+        val history = projects[projectId]
+        val records = history?.records ?: return if (entryId == null) Plan.Empty() else Plan.Unknown
+        val entries = history.entries.toList()
+        val entry = when (entryId) {
+            null -> entries.lastOrNull { !it.undone && it.source.key == caller } ?: return Plan.Empty()
+            else -> entries.firstOrNull { it.id == entryId } ?: return Plan.Unknown
+        }
+        if (entry.undone) return Plan.Empty(already = true)
+        val from = entries.indexOf(entry)
+        val later = entries.subList(from + 1, entries.size).filter { !it.undone }
+        val taken = LinkedHashSet<HistoryEntry>().apply { add(entry) }
+        if (backToHere && entry.source.key == caller) later.filterTo(taken) { it.source.key == caller }
+        // Every later entry that collides with what is taken, until none does.
+        do {
+            val targets = undoTargets(taken, entries)
+            val grown = later.filter { it !in taken && collides(it, targets) }
+            taken += grown
+        } while (grown.isNotEmpty())
+        val colliding = later.filter { it in taken }
+        if (colliding.isNotEmpty() && !backToHere) return Plan.Conflict(entry, colliding.asReversed())
+        val newestFirst = taken.sortedByDescending { entries.indexOf(it) }
+        val targets = undoTargets(taken, entries)
+        // Each record must stand as the newest taken entry left it.
+        val standing = HashMap<RecordKey, RecordImage?>()
+        for (e in newestFirst.asReversed()) for (change in e.changes.values) standing[change.key] = change.after
+        if (standing.any { (key, image) -> records[key]?.hash != image?.hash }) return Plan.Conflict(entry, colliding.asReversed())
+        inUse(records, targets)?.let { return it }
+        Plan.Ready(newestFirst, targets)
+    }
+
+    /** Where [taken]'s records go back to: each to the oldest taken entry's `before`. */
+    private fun undoTargets(taken: Set<HistoryEntry>, entries: List<HistoryEntry>): LinkedHashMap<RecordKey, RecordImage?> {
+        val targets = LinkedHashMap<RecordKey, RecordImage?>()
+        for (e in taken.sortedBy { entries.indexOf(it) }) for (change in e.changes.values) targets.putIfAbsent(change.key, change.before)
+        return targets
+    }
+
+    /**
+     * Whether [later] collides with an undo putting [targets] back: it touches one of their records, a
+     * record it wrote links to one the undo takes away, or it took away a record one the undo puts back
+     * links to. A record links to another by carrying its uuid; only the [LINKING_FOLDERS] do, a binding's
+     * payload being tolerant of a record gone (sync v11).
+     */
+    private fun collides(later: HistoryEntry, targets: Map<RecordKey, RecordImage?>): Boolean {
+        if (later.changes.keys.any(targets::containsKey)) return true
+        val leaving = targets.filterValues { it == null }.keys.map { it.uuid.toString() }
+        val back = targets.filterKeys { it.tableName in LINKING_FOLDERS }.values.filterNotNull()
+        return later.changes.values.any { change ->
+            val after = change.after
+            when {
+                after != null -> change.key.tableName in LINKING_FOLDERS && leaving.any(after.json::contains)
+                else -> back.any { it.json.contains(change.key.uuid.toString()) }
+            }
+        }
+    }
+
+    /**
+     * A record [targets] take away that a record they leave standing still links to, by uuid — one
+     * written outside the history, or before it began — or null when there is none.
+     */
+    private fun inUse(records: Map<RecordKey, RecordImage>, targets: Map<RecordKey, RecordImage?>): Plan.InUse? {
+        val leaving = targets.filterValues { it == null }.keys
+        if (leaving.isEmpty()) return null
+        for ((key, image) in records) {
+            if (key in leaving || key.tableName !in LINKING_FOLDERS) continue
+            val json = (if (key in targets) targets[key] else image)?.json ?: continue
+            val named = leaving.firstOrNull { json.contains(it.uuid.toString()) } ?: continue
+            return Plan.InUse(RecordLabeler.name(named, records[named]), RecordLabeler.name(key, targets[key] ?: image))
+        }
+        for ((key, image) in targets) {
+            if (key in records || image == null || key.tableName !in LINKING_FOLDERS) continue
+            val named = leaving.firstOrNull { image.json.contains(it.uuid.toString()) } ?: continue
+            return Plan.InUse(RecordLabeler.name(named, records[named]), RecordLabeler.name(key, image))
+        }
+        return null
+    }
+
+    /**
+     * Plan a redo (§3.5, D10): [entryId], or else [caller]'s most recently undone entry. The mirror of
+     * [planUndo]: every record it holds must stand as it found it, or the entries that moved it since
+     * answer a [Plan.Conflict] — the ones after it still standing, and the ones before it still undone.
+     */
+    internal fun planRedo(projectId: Int, entryId: String?, caller: String): Plan = synchronized(lock) {
+        val history = projects[projectId]
+        val records = history?.records ?: return if (entryId == null) Plan.Empty() else Plan.Unknown
+        val entries = history.entries.toList()
+        val entry = when (entryId) {
+            null -> entries.filter { it.undone && it.source.key == caller }.maxByOrNull { it.undoneSeq } ?: return Plan.Empty()
+            else -> entries.firstOrNull { it.id == entryId } ?: return Plan.Unknown
+        }
+        if (!entry.undone) return Plan.Empty(already = true)
+        val moved = entry.changes.values.any { records[it.key]?.hash != it.before?.hash }
+        if (moved) {
+            val at = entries.indexOf(entry)
+            val keys = entry.changes.keys
+            val colliding = entries.withIndex().filter { (i, e) ->
+                e !== entry && e.changes.keys.any(keys::contains) && (if (i > at) !e.undone else e.undone)
+            }.map { it.value }
+            return Plan.Conflict(entry, colliding.asReversed())
+        }
+        val targets = entry.changes.values.associateTo(LinkedHashMap()) { it.key to it.after }
+        inUse(records, targets)?.let { return it }
+        Plan.Ready(listOf(entry), targets)
+    }
+
+    /**
+     * Mark [ids] of [projectId] undone or standing, as an undo's or redo's commit does; idempotent, for one
+     * whose records already stood where it put them, so its commit wrote nothing.
+     */
+    internal fun mark(projectId: Int, ids: List<String>, undone: Boolean) {
+        synchronized(lock) {
+            val history = projects[projectId] ?: return
+            if (markLocked(history, ids, undone)) bump()
+        }
+    }
+
+    private fun markLocked(history: ProjectHistory, ids: List<String>, undone: Boolean): Boolean {
+        var moved = false
+        // Newest first, so redo's latest-undone is the oldest of them: it goes back first.
+        for (id in ids) {
+            val entry = history.entries.firstOrNull { it.id == id } ?: continue
+            if (entry.undone == undone) continue
+            entry.undone = undone
+            if (undone) {
+                entry.undoneSeq = ++undoSeq
+                entry.undoneAt = clock()
+            }
+            moved = true
+        }
+        return moved
     }
 
     /** One record's change named for the History sheet, its owner read from [projectId]'s cache. */
@@ -334,6 +499,16 @@ class HistoryService(
 
     /** The record cache's image of [key] in [projectId], for a label or a test. */
     fun recordOf(projectId: Int, key: RecordKey): RecordImage? = synchronized(lock) { projects[projectId]?.records?.get(key) }
+
+    /** The entries of any project with [ids], as copies. */
+    internal fun entriesById(ids: Collection<String>): List<HistoryEntry> = synchronized(lock) {
+        projects.values.flatMap { history -> history.entries.filter { it.id in ids } }.map { it.detached() }
+    }
+
+    /** The record cache's images of [folders] in [projectId], as a copy. */
+    internal fun recordsIn(projectId: Int, folders: Set<String>): Map<RecordKey, RecordImage> = synchronized(lock) {
+        projects[projectId]?.records?.filterKeys { it.tableName in folders }.orEmpty()
+    }
 
     /** Whether [projectId] has a record cache. */
     fun isJournaled(projectId: Int): Boolean = projects[projectId]?.records != null
@@ -359,18 +534,18 @@ class HistoryService(
         private const val MAX_CLEARS = 20
 
         const val BACKGROUND_REASON = "Changed outside the history"
+
+        /** The folders whose records link to others by uuid, as foreign keys do: the restorable ones. */
+        private val LINKING_FOLDERS: Set<String> get() = RESTORABLE_FOLDERS
     }
 }
-
-private fun RecordImage.jsonObject(): JsonObject? =
-    runCatching { canonicalJson.parseToJsonElement(json).jsonObject }.getOrNull()
 
 /**
  * This image with [fields] set to their values in [to] (absent there, removed here), its hash taken
  * again as [MapSink] would: a script's over its meta, a newline and its body.
  */
 private fun RecordImage.patched(folder: String, to: JsonObject, fields: Set<String>): RecordImage {
-    val held = jsonObject() ?: return this
+    val held = jsonObjectOrNull() ?: return this
     val next = LinkedHashMap<String, JsonElement>(held)
     for (field in fields) {
         val value = to[field]

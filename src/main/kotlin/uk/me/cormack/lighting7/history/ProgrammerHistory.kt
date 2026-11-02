@@ -51,13 +51,27 @@ class ProgrammerHistory(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     /** One step: the programmer as it stood before [origin]'s gesture, or after it on the redo side. */
-    class Step internal constructor(val id: String, val origin: WriteOrigin, val at: Long, val snapshot: ProgrammerSnapshot) {
+    class Step internal constructor(
+        val id: String,
+        val origin: WriteOrigin,
+        val at: Long,
+        val snapshot: ProgrammerSnapshot,
+        /** When it was undone, while it waits to be redone: ⇧⌘Z takes whichever was undone last (§3.5). */
+        val undoneAt: Long? = null,
+    ) {
         val label: String get() = origin.label ?: DEFAULT_LABEL
 
-        fun info() = StepInfo(id, label, at, origin.source, origin.window)
+        fun info() = StepInfo(id, label, at, origin.source, origin.window, undoneAt)
     }
 
-    data class StepInfo(val id: String, val label: String, val at: Long, val source: HistorySource, val window: String?)
+    data class StepInfo(
+        val id: String,
+        val label: String,
+        val at: Long,
+        val source: HistorySource,
+        val window: String?,
+        val undoneAt: Long? = null,
+    )
 
     /** What `history.state` says: the steps to undo, newest first, and those to redo, next first. */
     data class Frame(val projectId: Int?, val revision: Long, val undo: List<StepInfo>, val redo: List<StepInfo>) {
@@ -168,8 +182,9 @@ class ProgrammerHistory(
                 throw e
             }
             // Each step's redo side is the programmer as the next newer step found it.
+            val undoneAt = clock()
             val redone = picked.mapIndexed { i, step ->
-                Step(step.id, step.origin, step.at, if (i == picked.lastIndex) current else picked[i + 1].snapshot)
+                Step(step.id, step.origin, step.at, if (i == picked.lastIndex) current else picked[i + 1].snapshot, undoneAt)
             }
             try {
                 restoreAs(holders, picked.first().snapshot, fadeMs, WriteOrigin(by, kind = WriteOrigin.Kind.UNDO))

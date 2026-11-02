@@ -109,6 +109,9 @@ import uk.me.cormack.lighting7.models.DaoStageViewpoint
 import uk.me.cormack.lighting7.models.storedParamsText
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.routes.deleteBuskPage
+import uk.me.cormack.lighting7.routes.deleteBuskPageContents
+import uk.me.cormack.lighting7.routes.releaseAutoNumber
+import uk.me.cormack.lighting7.routes.flushPendingEntryWrites
 import uk.me.cormack.lighting7.routes.deleteBuskRig
 import uk.me.cormack.lighting7.routes.deleteCueChildren
 import uk.me.cormack.lighting7.state.State
@@ -159,6 +162,27 @@ import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
+import uk.me.cormack.lighting7.routes.cueEntryIds
+import uk.me.cormack.lighting7.models.entriesOf
+import uk.me.cormack.lighting7.models.DaoLooks
+import uk.me.cormack.lighting7.models.DaoLookRows
+import uk.me.cormack.lighting7.models.DaoLookFx
+import uk.me.cormack.lighting7.models.DaoPalettes
+import uk.me.cormack.lighting7.models.DaoPaletteRows
+import uk.me.cormack.lighting7.models.DaoPaletteFx
+import uk.me.cormack.lighting7.models.DaoCueStacks
+import uk.me.cormack.lighting7.models.DaoCues
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
+import uk.me.cormack.lighting7.models.DaoCueLayers
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
+import uk.me.cormack.lighting7.models.DaoCueTriggers
+import uk.me.cormack.lighting7.models.DaoCueSlots
+import uk.me.cormack.lighting7.models.DaoBuskPages
+import uk.me.cormack.lighting7.models.DaoBuskRigRows
+import uk.me.cormack.lighting7.models.DaoBuskRigTiles
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.dao.IntEntity
+import org.jetbrains.exposed.v1.dao.IntEntityClass
 
 // v12 added `buskRig/` — one document per rig row, tiles nested, naming groups and patches by uuid
 // (busk-further plan §3.7). MIN stays at 5: a missing folder reads as an empty rig.
@@ -328,6 +352,23 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // PDFs, reverting them onto peers).
 internal const val SUPPORTED_FORMAT_VERSION = 46
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
+
+/** The restorable folders in the order [ProjectImporter.restore] upserts them, parents first; it deletes in reverse. */
+private val RESTORE_ORDER = with(RecordFolders) {
+    listOf(
+        SyncDispositions.PROJECT_FOLDER, LOOKS, PALETTES, BUSK_RIG, CUE_STACKS, CUES, CUE_STACK_ENTRIES,
+        CUE_ATTRIBUTE_ASSIGNMENTS, CUE_LAYERS, CUE_AD_HOC_FX, CUE_TRIGGERS, PROMPT_BOOK_ANCHORS, CUE_SLOTS, BUSK_PAGES,
+    )
+}
+
+/**
+ * The folders [ProjectImporter.restore] can put back (undo plan session 4): the cue side. The rest are
+ * session 5's; an undo naming one is refused before it starts.
+ */
+internal val RESTORABLE_FOLDERS: Set<String> = RESTORE_ORDER.toSet()
+
+private const val CUE_STACK_ENTRIES = RecordFolders.CUE_STACK_ENTRIES
+private const val PROMPT_BOOK_ANCHORS = RecordFolders.PROMPT_BOOK_ANCHORS
 
 /**
  * The first `formatVersion` whose stacks' lists are `cueStackEntries/` records (cue model plan
@@ -644,6 +685,131 @@ class ProjectImporter(private val state: State) {
     }
 
     /**
+     * Put [targets] back into [project] (undo plan §3.5, D9), inside the caller's transaction: every
+     * record whose target is null deleted, in reverse foreign-key order, then every other one upserted
+     * in the importer's order — found by uuid and updated in place, its embedded children replaced, or
+     * inserted with the row id its image keeps. What a restored record names resolves against the
+     * project's rows as they then stand, the venue's under them for a show on one. Only the folders in
+     * [RESTORABLE_FOLDERS].
+     */
+    internal fun restore(project: DaoProject, targets: Map<RecordKey, RecordImage?>) {
+        val unknown = targets.keys.mapTo(HashSet()) { it.tableName } - RESTORABLE_FOLDERS
+        require(unknown.isEmpty()) { "No restore for folder(s) $unknown" }
+
+        val leaving = targets.filterValues { it == null }.keys
+        // A stack that loses an entry renumbers from its order before, as the write that added it did.
+        val shrunk = leaving.filter { it.tableName == CUE_STACK_ENTRIES }
+            .mapNotNull { findEntry(project, it.uuid)?.stack }
+            .distinctBy { it.id.value }
+            .associateWith { cueEntryIds(it) }
+        for (folder in RESTORE_ORDER.asReversed()) {
+            leaving.filter { it.tableName == folder }.forEach { deleteRecord(project, it) }
+        }
+        shrunk.forEach { (stack, before) -> renumberAutoEntries(stack, before) }
+
+        val images = targets.mapNotNull { (key, image) -> image?.let { key to it } }.toMap()
+        if (images.isEmpty()) return
+        val run = Run(ImageSource(images), upsert = true, rowIds = images.mapValues { it.value.rowId })
+        val folders = images.keys.mapTo(HashSet()) { it.tableName }
+        fun has(vararg folder: String) = folder.any { it in folders }
+        // Each map is read only by a folder the undo restores, and built from the rows as they then stand,
+        // each restored one overlaid in case its insert has not reached the table yet.
+        val venue by lazy { VenueSeed.of(project) }
+        val elementMap by lazy { venue.elements + project.stageElements.associateBy { it.uuid } }
+        val patchMap by lazy { venue.patches + project.fixturePatches.associateBy { it.uuid } }
+        val groupMap by lazy { venue.groups + project.fixtureGroups.associateBy { it.uuid } }
+        val legacy by lazy { legacyContext(run.source, project.fxDefinitions.toList(), SUPPORTED_FORMAT_VERSION, null) }
+
+        val looks = if (has(RecordFolders.LOOKS)) importLooks(run, project, elementMap, legacy) else emptyMap()
+        val palettes = if (has(RecordFolders.PALETTES)) importPalettes(run, project, legacy) else emptyMap()
+        if (has(RecordFolders.BUSK_RIG)) importBuskRig(run, project, groupMap, patchMap)
+        val stacks = if (has(RecordFolders.CUE_STACKS)) importCueStacks(run, project, elementMap) else emptyMap()
+        val lookMap by lazy { project.looks.associateBy { it.uuid } + looks }
+        val paletteMap by lazy { project.palettes.associateBy { it.uuid } + palettes }
+        val cueStackMap by lazy { project.cueStacks.associateBy { it.uuid } + stacks }
+        val cues = if (has(RecordFolders.CUES)) {
+            importCues(run, project, cueStackMap, elementMap, patchMap, SUPPORTED_FORMAT_VERSION, ArrayList())
+        } else {
+            emptyMap()
+        }
+        val cueMap by lazy { project.cues.associateBy { it.uuid } + cues }
+        val entries = if (has(CUE_STACK_ENTRIES)) importCueStackEntries(run, cueStackMap, cueMap, emptyList()).first else emptyMap()
+        if (has(RecordFolders.CUE_ATTRIBUTE_ASSIGNMENTS)) importCueAttributeAssignments(run, cueMap)
+        if (has(RecordFolders.CUE_LAYERS)) importCueLayers(run, cueMap, lookMap, paletteMap)
+        if (has(RecordFolders.CUE_AD_HOC_FX)) importCueAdHocFx(run, cueMap, legacy)
+        if (has(RecordFolders.CUE_TRIGGERS)) importCueTriggers(run, cueMap, project.scripts.associateBy { it.uuid })
+        if (has(PROMPT_BOOK_ANCHORS)) {
+            val entryMap = cueStackMap.values.flatMap { entriesOf(it) }.associateBy { it.uuid } + entries
+            importPromptBookAnchors(run, project.promptBook, entryMap)
+        }
+        if (has(RecordFolders.CUE_SLOTS)) importCueSlots(run, project, cueMap, lookMap)
+        if (has(RecordFolders.BUSK_PAGES)) importBuskPages(run, project, paletteMap, lookMap, cueMap)
+        images[RecordKey(SyncDispositions.PROJECT_FOLDER, project.uuid)]?.let { restoreProjectRow(project, it) }
+    }
+
+    /** `project.json`'s own fields put back; its kind, pin and origin move only through a clear point. */
+    private fun restoreProjectRow(project: DaoProject, image: RecordImage) {
+        val json = canonicalDecode(ProjectJson.serializer(), image.json)
+        project.name = json.name
+        project.description = json.description
+        project.stageWidthM = json.stageWidthM
+        project.stageDepthM = json.stageDepthM
+        project.stageHeightM = json.stageHeightM
+    }
+
+    private fun findEntry(project: DaoProject, uuid: UUID): DaoCueStackEntry? =
+        DaoCueStackEntry.find { DaoCueStackEntries.uuid eq uuid }.firstOrNull { it.stack.project.id == project.id }
+
+    /** Delete one record of [project] with its embedded children; one already gone is nothing to do. */
+    private fun deleteRecord(project: DaoProject, key: RecordKey) {
+        val uuid = key.uuid
+        when (key.tableName) {
+            RecordFolders.LOOKS -> DaoLook.find { (DaoLooks.uuid eq uuid) and (DaoLooks.project eq project.id) }.firstOrNull()
+                ?.let { deleteLookChildren(it); it.delete() }
+            RecordFolders.PALETTES -> DaoPalette.find { (DaoPalettes.uuid eq uuid) and (DaoPalettes.project eq project.id) }.firstOrNull()
+                ?.let { deletePaletteChildren(it); it.delete() }
+            RecordFolders.CUE_STACKS -> DaoCueStack.find { (DaoCueStacks.uuid eq uuid) and (DaoCueStacks.project eq project.id) }.firstOrNull()
+                ?.let { deleteStackScenery(it.id); it.delete() }
+            RecordFolders.CUES -> DaoCue.find { (DaoCues.uuid eq uuid) and (DaoCues.project eq project.id) }.firstOrNull()
+                ?.let { deleteCueScenery(it.id); deleteCueEvents(it.id); it.delete() }
+            CUE_STACK_ENTRIES -> findEntry(project, uuid)?.delete()
+            RecordFolders.CUE_ATTRIBUTE_ASSIGNMENTS -> DaoCueAttributeAssignment.find { DaoCueAttributeAssignments.uuid eq uuid }
+                .firstOrNull { it.cue.project.id == project.id }?.delete()
+            RecordFolders.CUE_LAYERS -> DaoCueLayer.find { DaoCueLayers.uuid eq uuid }.firstOrNull { it.cue.project.id == project.id }?.delete()
+            RecordFolders.CUE_AD_HOC_FX -> DaoCueAdHocFxEntity.find { DaoCueAdHocFx.uuid eq uuid }.firstOrNull { it.cue.project.id == project.id }?.delete()
+            RecordFolders.CUE_TRIGGERS -> DaoCueTrigger.find { DaoCueTriggers.uuid eq uuid }.firstOrNull { it.cue.project.id == project.id }?.delete()
+            RecordFolders.CUE_SLOTS -> DaoCueSlot.find { (DaoCueSlots.uuid eq uuid) and (DaoCueSlots.project eq project.id) }.firstOrNull()?.delete()
+            RecordFolders.BUSK_PAGES -> DaoBuskPage.find { (DaoBuskPages.uuid eq uuid) and (DaoBuskPages.project eq project.id) }.firstOrNull()
+                ?.let { deleteBuskPage(it) }
+            RecordFolders.BUSK_RIG -> DaoBuskRigRow.find { (DaoBuskRigRows.uuid eq uuid) and (DaoBuskRigRows.project eq project.id) }.firstOrNull()
+                ?.let { deleteBuskRigRow(it) }
+            PROMPT_BOOK_ANCHORS -> DaoPromptBookAnchor.find { DaoPromptBookAnchors.uuid eq uuid }
+                .firstOrNull { it.promptBook.project.id == project.id }?.delete()
+            else -> error("An undo never deletes a ${key.tableName} record")
+        }
+    }
+
+    private fun deleteLookChildren(look: DaoLook) {
+        DaoLookRows.deleteWhere { DaoLookRows.look eq look.id }
+        DaoLookFx.deleteWhere { DaoLookFx.look eq look.id }
+        deleteLookScenery(look.id)
+    }
+
+    private fun deletePaletteChildren(palette: DaoPalette) {
+        DaoPaletteRows.deleteWhere { DaoPaletteRows.palette eq palette.id }
+        DaoPaletteFx.deleteWhere { DaoPaletteFx.palette eq palette.id }
+    }
+
+    private fun deleteBuskRigTiles(row: DaoBuskRigRow) {
+        DaoBuskRigTiles.deleteWhere { DaoBuskRigTiles.row eq row.id }
+    }
+
+    private fun deleteBuskRigRow(row: DaoBuskRigRow) {
+        deleteBuskRigTiles(row)
+        row.delete()
+    }
+
+    /**
      * Common up-front validation for both [import] and [replaceFromWorkingTree]. Reads
      * `formatVersion.json` and `project.json`, version-checks, and returns the parsed
      * pair. Done before opening a DB transaction so a malformed archive never
@@ -724,6 +890,7 @@ class ProjectImporter(private val state: State) {
      * dereference them through the maps returned by each step.
      */
     private fun populateProject(sourceDir: Path, project: DaoProject, formatVersion: Int, fxLibrary: Int?): List<CueNumberClash> {
+        val run = Run(DirSource(sourceDir))
         // v24: a show on a venue links into the pinned snapshot's rows, which its archive does not
         // carry. Every map starts from them, and the archive's own rows are laid over the top — so a
         // link resolves to the show's own row where it has one (a Preset seating it copied keeps the
@@ -738,9 +905,9 @@ class ProjectImporter(private val state: State) {
         // names nothing that needs importing before it (a platform's region is a uuid in its params).
         val elementMap = venue.elements + importStageElements(sourceDir, project)
         val scriptMap = importScripts(sourceDir, project)
-        val legacy = legacyContext(sourceDir, importFxDefinitions(sourceDir, project).values, formatVersion, fxLibrary)
-        val lookMap = importLooks(sourceDir, project, elementMap, legacy)
-        val paletteMap = importPalettes(sourceDir, project, legacy)
+        val legacy = legacyContext(run.source, importFxDefinitions(sourceDir, project).values, formatVersion, fxLibrary)
+        val lookMap = importLooks(run, project, elementMap, legacy)
+        val paletteMap = importPalettes(run, project, legacy)
         importSpeedMasters(sourceDir, project)
         val universeMap = venue.universes + importUniverseConfigs(sourceDir, project)
         val riggingMap = venue.riggings + importRiggings(sourceDir, project)
@@ -750,22 +917,22 @@ class ProjectImporter(private val state: State) {
         val patchMap = venue.patches + importFixturePatches(sourceDir, project, universeMap, riggingMap)
         val groupMap = venue.groups + importFixtureGroups(sourceDir, project, patchMap)
         // The rig after the groups and patches its tiles name (v12).
-        importBuskRig(sourceDir, project, groupMap, patchMap)
-        val cueStackMap = importCueStacks(sourceDir, project, elementMap)
+        importBuskRig(run, project, groupMap, patchMap)
+        val cueStackMap = importCueStacks(run, project, elementMap)
         val legacyPlaces = ArrayList<PendingEntry>()
-        val cueMap = importCues(sourceDir, project, cueStackMap, elementMap, patchMap, formatVersion, legacyPlaces)
-        val (entryMap, numberClashes) = importCueStackEntries(sourceDir, cueStackMap, cueMap, legacyPlaces)
-        importCueAttributeAssignments(sourceDir, cueMap)
-        importCueLayers(sourceDir, cueMap, lookMap, paletteMap)
-        importCueAdHocFx(sourceDir, cueMap, legacy)
-        importCueTriggers(sourceDir, cueMap, scriptMap)
+        val cueMap = importCues(run, project, cueStackMap, elementMap, patchMap, formatVersion, legacyPlaces)
+        val (entryMap, numberClashes) = importCueStackEntries(run, cueStackMap, cueMap, legacyPlaces)
+        importCueAttributeAssignments(run, cueMap)
+        importCueLayers(run, cueMap, lookMap, paletteMap)
+        importCueAdHocFx(run, cueMap, legacy)
+        importCueTriggers(run, cueMap, scriptMap)
         importLegacyShowOrder(sourceDir, project, cueStackMap)
         val promptBook = importPromptBook(sourceDir, project)
-        importPromptBookAnchors(sourceDir, promptBook, entryMap)
+        importPromptBookAnchors(run, promptBook, entryMap)
         importPromptBookAnnotations(sourceDir, promptBook)
-        importCueSlots(sourceDir, project, cueMap, lookMap)
+        importCueSlots(run, project, cueMap, lookMap)
         // Pages after every record a pad can name.
-        importBuskPages(sourceDir, project, paletteMap, lookMap, cueMap)
+        importBuskPages(run, project, paletteMap, lookMap, cueMap)
         importParkedChannels(sourceDir, project)
         importShowParkReleases(sourceDir, project)
         importControlSurfaceBindings(sourceDir, project)
@@ -1005,22 +1172,28 @@ class ProjectImporter(private val state: State) {
      * string inside an opaque `value` column and so needed no map.
      */
     private fun importLooks(
-        dir: Path,
+        run: Run,
         project: DaoProject,
         elementMap: Map<UUID, DaoStageElement>,
         legacy: LegacyNames.Context,
     ): Map<UUID, DaoLook> =
-        readDir(dir.resolve("looks")) { json ->
+        run.read("looks") { json ->
             val l = canonicalDecode(LookJson.serializer(), json)
             val uuid = UUID.fromString(l.uuid)
-            val dao = DaoLook.new {
+            val dao = run.row(
+                DaoLook, "looks", uuid,
+                find = { DaoLook.find { (DaoLooks.uuid eq uuid) and (DaoLooks.project eq project.id) }.firstOrNull() },
+                clear = { deleteLookScenery(it.id) },
+            ) {
                 this.project = project
                 name = l.name
                 notes = l.notes
                 this.uuid = uuid
             }
+            val rows = run.children(dao.rows, { it.uuid }, l.rows.mapTo(HashSet()) { UUID.fromString(it.uuid) })
+            val fxRows = run.children(dao.effects, { it.uuid }, l.fx.mapTo(HashSet()) { UUID.fromString(it.uuid) })
             l.rows.forEach { r ->
-                DaoLookRow.new {
+                rows.row(DaoLookRow, UUID.fromString(r.uuid)) {
                     look = dao
                     targetType = r.targetType
                     targetKey = r.targetKey
@@ -1045,7 +1218,7 @@ class ProjectImporter(private val state: State) {
                     return@forEach
                 }
                 val e = legacyFx("Look '${l.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
-                DaoLookFxEntity.new {
+                fxRows.row(DaoLookFxEntity, UUID.fromString(e.uuid)) {
                     look = dao
                     targetType = e.targetType
                     targetKey = e.targetKey
@@ -1406,14 +1579,18 @@ class ProjectImporter(private val state: State) {
     }
 
     private fun importCueStacks(
-        dir: Path,
+        run: Run,
         project: DaoProject,
         elementMap: Map<UUID, DaoStageElement>,
     ): Map<UUID, DaoCueStack> =
-        readDir(dir.resolve("cueStacks")) { json ->
+        run.read("cueStacks") { json ->
             val s = canonicalDecode(CueStackJson.serializer(), json)
             val uuid = UUID.fromString(s.uuid)
-            val dao = DaoCueStack.new {
+            val dao = run.row(
+                DaoCueStack, "cueStacks", uuid,
+                find = { DaoCueStack.find { (DaoCueStacks.uuid eq uuid) and (DaoCueStacks.project eq project.id) }.firstOrNull() },
+                clear = { deleteStackScenery(it.id) },
+            ) {
                 name = s.name
                 this.project = project
                 loop = s.loop
@@ -1450,14 +1627,14 @@ class ProjectImporter(private val state: State) {
      * keys the entries already on a desk the same way).
      */
     private fun importCues(
-        dir: Path,
+        run: Run,
         project: DaoProject,
         cueStackMap: Map<UUID, DaoCueStack>,
         elementMap: Map<UUID, DaoStageElement>,
         patchMap: Map<UUID, DaoFixturePatch>,
         formatVersion: Int,
         legacyPlaces: MutableList<PendingEntry>,
-    ): Map<UUID, DaoCue> = readDir(dir.resolve("cues")) { json ->
+    ): Map<UUID, DaoCue> = run.read("cues") { json ->
         val c = canonicalDecode(CueJson.serializer(), json)
         val uuid = UUID.fromString(c.uuid)
         val place = if (formatVersion < CUE_ENTRIES_FORMAT_VERSION) {
@@ -1480,9 +1657,13 @@ class ProjectImporter(private val state: State) {
             } else {
                 logger.warn("Import: marker {} names no stack; left out", c.uuid)
             }
-            return@readDir null
+            return@read null
         }
-        val dao = DaoCue.new {
+        val dao = run.row(
+            DaoCue, "cues", uuid,
+            find = { DaoCue.find { (DaoCues.uuid eq uuid) and (DaoCues.project eq project.id) }.firstOrNull() },
+            clear = { deleteCueScenery(it.id); deleteCueEvents(it.id) },
+        ) {
             name = c.name
             this.project = project
             fadeDuration = c.fadeDurationMs.asDuration()
@@ -1547,25 +1728,25 @@ class ProjectImporter(private val state: State) {
      *    as auto but a reader could not derive (`heldAutoNumbers`).
      */
     private fun importCueStackEntries(
-        dir: Path,
+        run: Run,
         cueStackMap: Map<UUID, DaoCueStack>,
         cueMap: Map<UUID, DaoCue>,
         legacyPlaces: List<PendingEntry>,
     ): Pair<Map<UUID, DaoCueStackEntry>, List<CueNumberClash>> {
         val pending = LinkedHashMap<UUID, PendingEntry>()
-        readDir<Unit>(dir.resolve("cueStackEntries")) { json ->
+        run.read<Unit>("cueStackEntries") { json ->
             val e = canonicalDecode(CueStackEntryJson.serializer(), json)
             val uuid = UUID.fromString(e.uuid)
             val stack = cueStackMap[UUID.fromString(e.cueStackUuid)]
             if (stack == null) {
                 logger.warn("Import: entry {} names cue stack {}, which the archive lacks; left out", e.uuid, e.cueStackUuid)
-                return@readDir null
+                return@read null
             }
             val marker = e.kind == CueStackEntryKind.MARKER.name
             val cue = if (marker) null else e.cueUuid?.let { cueMap[UUID.fromString(it)] }
             if (!marker && cue == null) {
                 logger.warn("Import: entry {} names cue {}, which the archive lacks; left out", e.uuid, e.cueUuid)
-                return@readDir null
+                return@read null
             }
             if (!e.ordinal.isFinite()) throw ImportError.invalidArchive("Entry ${e.uuid} has no usable ordinal: ${e.ordinal}")
             pending[uuid] = PendingEntry(
@@ -1590,8 +1771,31 @@ class ProjectImporter(private val state: State) {
         legacyPlaces.forEach { pending.putIfAbsent(it.uuid, it) }
 
         val clashes = resolveNumberClashes(pending.values)
+        // An upsert renumbers only the stacks it touched — the ones an entry joins or leaves — from
+        // their order before it, so an auto number elsewhere in the list stays where it was.
+        val existing = if (run.upsert) {
+            pending.values.associate { p ->
+                p.uuid to DaoCueStackEntry.find { DaoCueStackEntries.uuid eq p.uuid }.firstOrNull { it.stack.project.id == p.stack.project.id }
+            }
+        } else {
+            emptyMap()
+        }
+        val renumber = if (run.upsert) {
+            (pending.values.map { it.stack } + existing.values.mapNotNull { it?.stack })
+                .distinctBy { it.id.value }
+                .associateWith { cueEntryIds(it) }
+        } else {
+            cueStackMap.values.associateWith { emptyList() }
+        }
+        if (run.upsert) {
+            // Free every number the upsert writes before it writes one, as `renumberAutoEntries` does: two
+            // entries may trade explicit numbers, and an auto number a neighbour took when one left gives way.
+            existing.values.filterNotNull().forEach { it.cueNumber = null }
+            flushPendingEntryWrites()
+            pending.values.forEach { p -> p.cueNumber?.let { releaseAutoNumber(p.stack, it, existing[p.uuid]?.id?.value ?: -1) } }
+        }
         val entries = pending.values.associate { p ->
-            p.uuid to DaoCueStackEntry.new {
+            p.uuid to run.row(DaoCueStackEntry, "cueStackEntries", p.uuid, find = { existing[p.uuid] }) {
                 stack = p.stack
                 cue = p.cue
                 kind = if (p.marker) CueStackEntryKind.MARKER.name else CueStackEntryKind.CUE.name
@@ -1604,7 +1808,7 @@ class ProjectImporter(private val state: State) {
                 uuid = p.uuid
             }
         }
-        cueStackMap.values.forEach { renumberAutoEntries(it, emptyList()) }
+        renumber.forEach { (stack, before) -> renumberAutoEntries(stack, before) }
         clashes.forEach { logger.warn("Import: {}", it.describe()) }
         return entries to clashes
     }
@@ -1638,14 +1842,17 @@ class ProjectImporter(private val state: State) {
         return clashes.sortedWith(compareBy({ it.stack }, { it.number }, { it.entryUuid }))
     }
 
-    private fun importCueAttributeAssignments(dir: Path, cueMap: Map<UUID, DaoCue>) {
-        readDir(dir.resolve("cueAttributeAssignments")) { json ->
+    private fun importCueAttributeAssignments(run: Run, cueMap: Map<UUID, DaoCue>) {
+        run.read("cueAttributeAssignments") { json ->
             val a = canonicalDecode(CueAttributeAssignmentJson.serializer(), json)
             val cueUuid = UUID.fromString(a.cueUuid)
             val cue = cueMap[cueUuid]
                 ?: throw ImportError.invalidArchive("Attribute assignment ${a.uuid} references unknown cue $cueUuid")
             val uuid = UUID.fromString(a.uuid)
-            DaoCueAttributeAssignment.new {
+            run.row(
+                DaoCueAttributeAssignment, "cueAttributeAssignments", uuid,
+                find = { DaoCueAttributeAssignment.find { DaoCueAttributeAssignments.uuid eq uuid }.firstOrNull { it.cue.project.id == cue.project.id } },
+            ) {
                 this.cue = cue
                 targetType = a.targetType
                 targetKey = a.targetKey
@@ -1664,22 +1871,27 @@ class ProjectImporter(private val state: State) {
     }
 
     private fun importPalettes(
-        dir: Path,
+        run: Run,
         project: DaoProject,
         legacy: LegacyNames.Context,
     ): Map<UUID, DaoPalette> =
-        readDir(dir.resolve("palettes")) { json ->
+        run.read("palettes") { json ->
             val t = canonicalDecode(PaletteJson.serializer(), json)
             val uuid = UUID.fromString(t.uuid)
-            val dao = DaoPalette.new {
+            val dao = run.row(
+                DaoPalette, "palettes", uuid,
+                find = { DaoPalette.find { (DaoPalettes.uuid eq uuid) and (DaoPalettes.project eq project.id) }.firstOrNull() },
+            ) {
                 this.project = project
                 name = t.name
                 notes = t.notes
                 fadeDuration = t.fadeDurationMs.asDuration()
                 this.uuid = uuid
             }
+            val rows = run.children(dao.rows, { it.uuid }, t.rows.mapTo(HashSet()) { UUID.fromString(it.uuid) })
+            val fxRows = run.children(dao.effects, { it.uuid }, listOfNotNull(t.fx?.uuid).mapTo(HashSet()) { UUID.fromString(it) })
             t.rows.forEach { r ->
-                DaoPaletteRow.new {
+                rows.row(DaoPaletteRow, UUID.fromString(r.uuid)) {
                     palette = dao
                     targetType = r.targetType
                     targetKey = r.targetKey
@@ -1695,7 +1907,7 @@ class ProjectImporter(private val state: State) {
             // the pull. `FxSpecCoercion.Lenient` warns if it eventually fails to spawn.
             t.fx?.let { stored ->
                 val e = legacyFx("Palette '${t.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
-                DaoPaletteFxEntity.new {
+                fxRows.row(DaoPaletteFxEntity, UUID.fromString(e.uuid)) {
                     palette = dao
                     fxType = e.fxType
                     family = e.family
@@ -1726,12 +1938,12 @@ class ProjectImporter(private val state: State) {
         }
 
     private fun importCueLayers(
-        dir: Path,
+        run: Run,
         cueMap: Map<UUID, DaoCue>,
         lookMap: Map<UUID, DaoLook>,
         paletteMap: Map<UUID, DaoPalette>,
     ) {
-        readDir(dir.resolve("cueLayers")) { json ->
+        run.read("cueLayers") { json ->
             val l = canonicalDecode(CueLayerJson.serializer(), json)
             val cueUuid = UUID.fromString(l.cueUuid)
             val cue = cueMap[cueUuid]
@@ -1775,7 +1987,10 @@ class ProjectImporter(private val state: State) {
                 )
             }
             val uuid = UUID.fromString(l.uuid)
-            DaoCueLayer.new {
+            run.row(
+                DaoCueLayer, "cueLayers", uuid,
+                find = { DaoCueLayer.find { DaoCueLayers.uuid eq uuid }.firstOrNull { it.cue.project.id == cue.project.id } },
+            ) {
                 this.cue = cue
                 this.look = look
                 this.palette = template
@@ -1797,15 +2012,18 @@ class ProjectImporter(private val state: State) {
         }
     }
 
-    private fun importCueAdHocFx(dir: Path, cueMap: Map<UUID, DaoCue>, legacy: LegacyNames.Context) {
-        readDir(dir.resolve("cueAdHocFx")) { json ->
+    private fun importCueAdHocFx(run: Run, cueMap: Map<UUID, DaoCue>, legacy: LegacyNames.Context) {
+        run.read("cueAdHocFx") { json ->
             val stored = canonicalDecode(CueAdHocFxJson.serializer(), json)
             val cueUuid = UUID.fromString(stored.cueUuid)
             val cue = cueMap[cueUuid]
                 ?: throw ImportError.invalidArchive("Ad-hoc FX ${stored.uuid} references unknown cue $cueUuid")
             val e = legacyFx("Cue '${cue.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
             val uuid = UUID.fromString(e.uuid)
-            DaoCueAdHocFxEntity.new {
+            run.row(
+                DaoCueAdHocFxEntity, "cueAdHocFx", uuid,
+                find = { DaoCueAdHocFxEntity.find { DaoCueAdHocFx.uuid eq uuid }.firstOrNull { it.cue.project.id == cue.project.id } },
+            ) {
                 this.cue = cue
                 targetType = e.targetType
                 targetKey = e.targetKey
@@ -1843,11 +2061,11 @@ class ProjectImporter(private val state: State) {
     }
 
     private fun importCueTriggers(
-        dir: Path,
+        run: Run,
         cueMap: Map<UUID, DaoCue>,
         scriptMap: Map<UUID, DaoScript>,
     ) {
-        readDir(dir.resolve("cueTriggers")) { json ->
+        run.read("cueTriggers") { json ->
             val t = canonicalDecode(CueTriggerJson.serializer(), json)
             val cueUuid = UUID.fromString(t.cueUuid)
             val scriptUuid = UUID.fromString(t.scriptUuid)
@@ -1856,7 +2074,10 @@ class ProjectImporter(private val state: State) {
             val script = scriptMap[scriptUuid]
                 ?: throw ImportError.invalidArchive("Trigger ${t.uuid} references unknown script $scriptUuid")
             val uuid = UUID.fromString(t.uuid)
-            DaoCueTrigger.new {
+            run.row(
+                DaoCueTrigger, "cueTriggers", uuid,
+                find = { DaoCueTrigger.find { DaoCueTriggers.uuid eq uuid }.firstOrNull { it.cue.project.id == cue.project.id } },
+            ) {
                 this.cue = cue
                 triggerType = t.triggerType
                 this.script = script
@@ -1903,12 +2124,12 @@ class ProjectImporter(private val state: State) {
     }
 
     private fun importCueSlots(
-        dir: Path,
+        run: Run,
         project: DaoProject,
         cueMap: Map<UUID, DaoCue>,
         lookMap: Map<UUID, DaoLook>,
     ) {
-        readDir(dir.resolve("cueSlots")) { json ->
+        run.read("cueSlots") { json ->
             val s = canonicalDecode(CueSlotJson.serializer(), json)
             val uuid = UUID.fromString(s.uuid)
             val named = listOfNotNull(s.cueUuid, s.lookUuid)
@@ -1928,7 +2149,7 @@ class ProjectImporter(private val state: State) {
                     "Cue slot {} names neither a cue nor a Look (a pre-v10 stack slot?); dropping it",
                     s.uuid,
                 )
-                return@readDir uuid to Unit
+                return@read uuid to Unit
             }
             val cue = s.cueUuid?.let {
                 val cueUuid = UUID.fromString(it)
@@ -1940,7 +2161,10 @@ class ProjectImporter(private val state: State) {
                 lookMap[lookUuid]
                     ?: throw ImportError.invalidArchive("Cue slot ${s.uuid} references unknown look $lookUuid")
             }
-            DaoCueSlot.new {
+            run.row(
+                DaoCueSlot, "cueSlots", uuid,
+                find = { DaoCueSlot.find { (DaoCueSlots.uuid eq uuid) and (DaoCueSlots.project eq project.id) }.firstOrNull() },
+            ) {
                 this.project = project
                 page = s.page
                 slotIndex = s.slotIndex
@@ -1964,16 +2188,20 @@ class ProjectImporter(private val state: State) {
      * not know is not a reason to lose the page, and the layout route refuses it on the next write.
      */
     private fun importBuskPages(
-        dir: Path,
+        run: Run,
         project: DaoProject,
         paletteMap: Map<UUID, DaoPalette>,
         lookMap: Map<UUID, DaoLook>,
         cueMap: Map<UUID, DaoCue>,
     ) {
-        readDir(dir.resolve("buskPages")) { json ->
+        run.read("buskPages") { json ->
             val p = canonicalDecode(BuskPageJson.serializer(), json)
             val uuid = UUID.fromString(p.uuid)
-            val page = DaoBuskPage.new {
+            val page = run.row(
+                DaoBuskPage, "buskPages", uuid,
+                find = { DaoBuskPage.find { (DaoBuskPages.uuid eq uuid) and (DaoBuskPages.project eq project.id) }.firstOrNull() },
+                clear = ::deleteBuskPageContents,
+            ) {
                 this.project = project
                 name = p.name
                 sortOrder = p.sortOrder
@@ -2036,12 +2264,12 @@ class ProjectImporter(private val state: State) {
      * mode only as far as the enum goes. A v11 archive has no folder and imports as an empty rig.
      */
     private fun importBuskRig(
-        dir: Path,
+        run: Run,
         project: DaoProject,
         groupMap: Map<UUID, DaoFixtureGroup>,
         patchMap: Map<UUID, DaoFixturePatch>,
     ) {
-        readDir(dir.resolve("buskRig")) { json ->
+        run.read("buskRig") { json ->
             val r = canonicalDecode(BuskRigRowJson.serializer(), json)
             val uuid = UUID.fromString(r.uuid)
             val tiles = r.tiles.mapNotNull { t ->
@@ -2060,11 +2288,17 @@ class ProjectImporter(private val state: State) {
                 }
                 Triple(t, group, patch)
             }
+            val existing = if (run.upsert) {
+                DaoBuskRigRow.find { (DaoBuskRigRows.uuid eq uuid) and (DaoBuskRigRows.project eq project.id) }.firstOrNull()
+            } else {
+                null
+            }
             if (tiles.isEmpty()) {
                 logger.warn("Busk rig row {} ('{}') has no tiles left; dropping the row", r.uuid, r.name)
-                return@readDir uuid to Unit
+                existing?.let { deleteBuskRigRow(it) }
+                return@read uuid to Unit
             }
-            val row = DaoBuskRigRow.new {
+            val row = run.row(DaoBuskRigRow, "buskRig", uuid, find = { existing }, clear = { deleteBuskRigTiles(it) }) {
                 this.project = project
                 name = r.name
                 sortOrder = r.sortOrder
@@ -2190,11 +2424,11 @@ class ProjectImporter(private val state: State) {
      * each marked it — the lower uuid is kept: the one-per-entry index must never abort a pull.
      */
     private fun importPromptBookAnchors(
-        dir: Path,
+        run: Run,
         promptBook: DaoPromptBook?,
         entryMap: Map<UUID, DaoCueStackEntry>,
     ) {
-        val parsed = readDir(dir.resolve("promptBookAnchors")) { json ->
+        val parsed = run.read("promptBookAnchors") { json ->
             val a = canonicalDecode(PromptBookAnchorJson.serializer(), json)
             UUID.fromString(a.uuid) to a
         }
@@ -2222,7 +2456,10 @@ class ProjectImporter(private val state: State) {
                 logger.warn("Import: prompt book anchor {} marks an entry another anchor already marks; left out", a.uuid)
                 return@forEach
             }
-            DaoPromptBookAnchor.new {
+            run.row(
+                DaoPromptBookAnchor, "promptBookAnchors", uuid,
+                find = { DaoPromptBookAnchor.find { DaoPromptBookAnchors.uuid eq uuid }.firstOrNull { it.promptBook.id == book.id } },
+            ) {
                 this.promptBook = book
                 this.entry = entry
                 region = a.region
@@ -2259,9 +2496,9 @@ class ProjectImporter(private val state: State) {
      * names one; its script FX definitions; and whether an FX naming no `pingPong` predates it
      * ([LegacyNames.absentPingPongIsOn]).
      */
-    private fun legacyContext(dir: Path, definitions: Collection<DaoFxDefinition>, formatVersion: Int, fxLibrary: Int?): LegacyNames.Context {
+    private fun legacyContext(source: RecordSource, definitions: Collection<DaoFxDefinition>, formatVersion: Int, fxLibrary: Int?): LegacyNames.Context {
         val palettes by lazy {
-            readDir(dir.resolve("palettes")) { json ->
+            Run(source).read("palettes") { json ->
                 val t = canonicalDecode(PaletteJson.serializer(), json)
                 UUID.fromString(t.uuid) to LegacyNames.Palette(
                     name = t.name,
@@ -2311,29 +2548,66 @@ class ProjectImporter(private val state: State) {
     }
 
     /**
-     * Read every record file under [dir], and under the folder's old names ([LegacyNames.oldFolders]),
-     * each in today's words ([LegacyNames.record]), applying [block] inside the existing transaction;
-     * a null answer from [block] reads the file but keeps nothing. Returns a UUID-keyed map of whatever
-     * [block] produces, empty when no folder exists — every section is optional. A merged tree can hold
-     * one record in both, so a file in today's folder is read and its namesake in an old one is not.
+     * Read every record file under [dir] through [DirSource], applying [block] inside the existing
+     * transaction; a null answer from [block] reads the file but keeps nothing. Returns a UUID-keyed map
+     * of whatever [block] produces, empty when no folder exists — every section is optional.
      */
-    private fun <T> readDir(dir: Path, block: (String) -> Pair<UUID, T>?): Map<UUID, T> {
-        val folder = dir.fileName.toString()
-        val files = LinkedHashMap<String, Path>()
-        for (source in listOf(dir) + LegacyNames.oldFolders(folder).map(dir::resolveSibling)) {
-            if (!source.exists() || !source.isDirectory()) continue
-            Files.list(source).use { stream ->
-                stream.filter { it.fileName.toString().endsWith(".json") && !it.fileName.toString().endsWith(".meta.json") }
-                    .sorted()
-                    .forEach { files.putIfAbsent(it.fileName.toString(), it) }
+    private fun <T> readDir(dir: Path, block: (String) -> Pair<UUID, T>?): Map<UUID, T> =
+        Run(DirSource(dir.parent)).read(dir.fileName.toString(), block)
+
+    /**
+     * One pass of the importer over [source]: an archive's, which inserts every record, or an undo's
+     * ([restore]), which **upserts** them — a record found by uuid is updated in place, its embedded
+     * children replaced, and one not found is inserted with the row id the journal kept for it
+     * ([rowIds]), so everything naming it by id still does (undo plan §3.5, D9).
+     */
+    private class Run(val source: RecordSource, val upsert: Boolean = false, private val rowIds: Map<RecordKey, Int> = emptyMap()) {
+        fun <T> read(folder: String, block: (String) -> Pair<UUID, T>?): Map<UUID, T> {
+            val out = mutableMapOf<UUID, T>()
+            for (json in source.records(folder)) {
+                val (uuid, value) = block(json) ?: continue
+                out[uuid] = value
             }
+            return out
         }
-        val out = mutableMapOf<UUID, T>()
-        for (file in files.values) {
-            val (uuid, value) = block(LegacyNames.record(folder, Files.readString(file))) ?: continue
-            out[uuid] = value
+
+        /**
+         * An upserted record's embedded rows of one kind, matched by uuid so their row ids hold — a Look's
+         * FX is named by its id while it is included. Of [existing], those [keep] does not name are deleted
+         * now; [Children.row] updates each other one in place and inserts a new one. In an insert every
+         * row is new, and [existing] is never read.
+         */
+        fun <E : IntEntity> children(existing: Iterable<E>, uuidOf: (E) -> UUID, keep: Set<UUID>): Children<E> {
+            if (!upsert) return Children(emptyMap())
+            val rows = existing.toList()
+            rows.filter { uuidOf(it) !in keep }.forEach { it.delete() }
+            return Children(rows.filter { uuidOf(it) in keep }.associateBy(uuidOf))
         }
-        return out
+
+        class Children<E : IntEntity>(private val held: Map<UUID, E>) {
+            fun row(cls: IntEntityClass<E>, uuid: UUID, init: E.() -> Unit): E = held[uuid]?.apply(init) ?: cls.new(init)
+        }
+
+        /**
+         * The row for record [uuid] of [folder]: in an upsert the one [find] answers, [clear]ed of its
+         * embedded children and updated by [init]; else a new one, with its kept id when it has one.
+         */
+        fun <E : IntEntity> row(
+            cls: IntEntityClass<E>,
+            folder: String,
+            uuid: UUID,
+            find: () -> E?,
+            clear: (E) -> Unit = {},
+            init: E.() -> Unit,
+        ): E {
+            val existing = if (upsert) find() else null
+            if (existing != null) {
+                clear(existing)
+                return existing.apply(init)
+            }
+            val id = rowIds[RecordKey(folder, uuid)]
+            return if (id != null) cls.new(id, init) else cls.new(init)
+        }
     }
 }
 

@@ -57,6 +57,16 @@ class HistoryEntry internal constructor(
     var undone: Boolean = false
         internal set
 
+    /** When it was last undone, in the history's order of undos: redo takes the latest first (D10). */
+    @Volatile
+    var undoneSeq: Long = 0
+        internal set
+
+    /** When it was last undone, against a programmer step's: ⇧⌘Z takes whichever was undone last. */
+    @Volatile
+    var undoneAt: Long = 0
+        internal set
+
     val records: Collection<Change> get() = changes.values
 
     /** What the entry's images cost, counted against the 32 MB cap (D5). */
@@ -80,6 +90,8 @@ class HistoryEntry internal constructor(
         copy.givenLabel = givenLabel
         copy.label = label
         copy.undone = undone
+        copy.undoneSeq = undoneSeq
+        copy.undoneAt = undoneAt
     }
 }
 

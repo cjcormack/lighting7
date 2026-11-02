@@ -1670,6 +1670,30 @@ case, not multi-master sync. Import:
    `transaction(state.database) { … }` — any FK or validation failure
    rolls back atomically.
 
+### Importer modes
+
+The importer's per-kind functions read a `RecordSource` (`sync/RecordSource.kt`) and run in one of two
+modes (undo plan §3.5):
+
+- **Insert**, every import, pull and clone: a `DirSource` over the archive's folders (old folder names
+  and old words read through `LegacyNames`), every record a new row.
+- **Upsert**, an undo or redo (`ProjectImporter.restore`, `docs/undo-engineering.md` §"Restore"): an
+  `ImageSource` over the record images the journal holds, already in today's words. A record found by
+  uuid within the project is updated in place — a Look's and a palette's rows and FX matched by uuid and
+  kept, its other embedded children deleted and inserted again from the image — and one not found is
+  inserted with the row id its image kept (`DaoX.new(rowId)`; the tables are
+  `AUTOINCREMENT`, so an id is never reused). The uuid → row maps start from the project's rows, the
+  pinned venue's under them for a show on one, so a restored record links to whatever it names as it now
+  stands. A stack's entries are renumbered only in the stacks the upsert touched, from their order
+  before it, and the explicit numbers it writes are freed first. Each folder is read only when the undo
+  restores one of its records.
+
+Only the cue side runs in both modes so far — `looks`, `palettes`, `cueStacks`, `cueStackEntries`,
+`cues` and their four child folders, `cueSlots`, `buskPages`, `buskRig`, `promptBookAnchors` and the
+project's own fields (`RESTORABLE_FOLDERS`); the rest read a `DirSource` alone. A new portable folder's
+import function should take the `Run` and place its rows through `Run.row`, which is what makes it
+restorable.
+
 ## Project cloning
 
 `POST /project/{id}/clone` is implemented **on top of this export format**, in
