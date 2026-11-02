@@ -387,8 +387,8 @@ names written, and its row marked *in review* with its branch. A session's PR is
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | programmer history (backend + programmer UI) | in review | `claude/nice-hypatia-xf5tk7` | | |
-| 2 | records in memory (backend, no behaviour change) | planned | | | |
+| 1 | programmer history (backend + programmer UI) | merged | `claude/nice-hypatia-xf5tk7` | [#330](https://github.com/cjcormack/lighting7/pull/330) | `5ac9ce0` |
+| 2 | records in memory (backend, no behaviour change) | in review | `claude/admiring-gauss-1m7xs5` | | |
 | 3 | origin and journal, read-only (backend + sheet) | planned | | | |
 | 4 | putting records back: the cue side (backend) | planned | | | |
 | 5 | putting records back: the rest (backend) | planned | | | |
@@ -454,6 +454,23 @@ the next; whoever merges the last fills its own.
 - **Docs:** `sync-engineering.md` §"How to add a new table" (where dispositions live now).
 - **Locally:** the full `./gradlew test`: a refactor of the exporter that every sync, clone, venue
   and round-trip test goes through. Frontend untouched.
+- **As built**, where it differs from §3.3 or binds a later session:
+  - The fixtures mint random uuids, so the golden is not a plain hash: `ExportGoldenTest` hashes each
+    export with every uuid replaced by a token derived from where it appears, and pins the file
+    count. Both were recorded from `main` at `7d0a768` before the refactor.
+  - A `RecordKind` is `(folder, write)`; its `tables` are read from `SyncDispositions`, not listed
+    per kind. `ProjectExporter.KINDS` and `FOLDERS` are the list; `RecordKindsTest` holds them to
+    `SyncDispositions.folders`, `project` included.
+  - `formatVersion.json` and `installs.json` are not records, so `export` writes them itself and no
+    kind does. A `RecordImage`'s `hash` is the SHA-256 of the file `DirSink` would write, a
+    script's over its meta, a newline and its body — `RecordHasher`'s for a record in today's names,
+    without its `LegacyNames` parse, which the journal comparing images to images has no use for; its `json` for a script is the meta with the body as `body`, as
+    `VenueDiff` read one from the folder before it moved onto `MapSink`.
+  - `exportKinds` refuses a folder no kind writes and runs in the caller's transaction when there is
+    one, which session 3's `beforeCommit` relies on. `exportRecords(projectId)` is every kind into a
+    `MapSink`.
+  - §5's table and session 5's list leave out `showGroupOrders`, which is a portable folder; the
+    coverage test session 5 adds will name it.
 
 ### Session 3 — origin and journal, read-only (backend + sheet)
 

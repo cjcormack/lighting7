@@ -10,13 +10,10 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import uk.me.cormack.lighting7.models.ParkAddress
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.MapSink
 import uk.me.cormack.lighting7.sync.ProjectExporter
+import uk.me.cormack.lighting7.sync.SyncDispositions
 import uk.me.cormack.lighting7.sync.canonicalJson
-import java.nio.file.Files
-import java.nio.file.Path
-import kotlin.io.path.extension
-import kotlin.io.path.isDirectory
-import kotlin.io.path.name
 
 /**
  * What changed between two states of one venue — two versions, or a version and the draft — and
@@ -56,42 +53,16 @@ object VenueDiff {
         }
     }
 
-    /** Export [projectId]'s records (no blobs) and read them back. */
+    /** [projectId]'s records but [IGNORED_FOLDERS], exported in memory. */
     fun recordsOf(state: State, projectId: Int): Records {
-        val staging = Files.createTempDirectory("venue-diff-")
-        try {
-            ProjectExporter(state).export(projectId, staging, blobs = false)
-            return read(staging)
-        } finally {
-            staging.toFile().deleteRecursively()
-        }
-    }
-
-    /**
-     * Every record under an export folder [dir] — its `project.json`, and each folder but
-     * [IGNORED_FOLDERS] — scripts' bodies folded into their meta.
-     */
-    fun read(dir: Path): Records {
-        val out = mutableMapOf<Key, JsonObject>()
-        out[Key(PROJECT, PROJECT)] = canonicalJson.parseToJsonElement(Files.readString(dir.resolve("project.json"))) as JsonObject
-        Files.list(dir).use { it.toList() }.filter { it.isDirectory() && it.name !in IGNORED_FOLDERS }.forEach { sub ->
-            val folder = sub.name
-            Files.list(sub).use { it.toList() }.forEach { file ->
-                val fileName = file.name
-                when {
-                    folder == "scripts" && fileName.endsWith(".meta.json") -> {
-                        val uuid = fileName.removeSuffix(".meta.json")
-                        val meta = canonicalJson.parseToJsonElement(Files.readString(file)) as JsonObject
-                        val body = sub.resolve("$uuid.kts").takeIf { Files.exists(it) }?.let { Files.readString(it) }
-                        out[Key(folder, uuid)] = JsonObject(meta + ("body" to JsonPrimitive(body)))
-                    }
-                    folder != "scripts" && file.extension == "json" ->
-                        out[Key(folder, fileName.removeSuffix(".json"))] =
-                            canonicalJson.parseToJsonElement(Files.readString(file)) as JsonObject
-                }
-            }
-        }
-        return Records(out)
+        val sink = MapSink()
+        ProjectExporter(state).exportKinds(projectId, ProjectExporter.FOLDERS - IGNORED_FOLDERS, sink)
+        return Records(
+            sink.images.entries.associate { (key, image) ->
+                val uuid = if (key.tableName == PROJECT) PROJECT else key.uuid.toString()
+                Key(key.tableName, uuid) to canonicalJson.parseToJsonElement(image.json) as JsonObject
+            },
+        )
     }
 
     /** What changed from [before] to [after], output first, each list in a stable order. */
@@ -319,7 +290,7 @@ object VenueDiff {
     private fun JsonObject.text(name: String): String? = (this[name] as? JsonPrimitive)?.contentOrNull
     private fun JsonObject.int(name: String): Int? = (this[name] as? JsonPrimitive)?.intOrNull
 
-    private const val PROJECT = "project"
+    private const val PROJECT = SyncDispositions.PROJECT_FOLDER
     private const val PARKS = "parkedChannels"
 
     /**

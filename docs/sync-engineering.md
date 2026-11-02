@@ -153,6 +153,14 @@ for the full contract. The legacy "PDF missing on this install" re-import card
 (re-attach by hash) survives as a fallback for books whose bytes reached no peer
 (e.g. created before v4).
 
+The exporter writes this layout one **record kind** at a time: `ProjectExporter.KINDS` holds one
+`RecordKind(folder, write)` per folder, `project.json` the record `project` keyed by the project's
+uuid, a script its body and meta together. A kind writes to a `RecordSink` — `DirSink`, the files
+above, or `MapSink`, each record's canonical JSON, row id and sync hash in memory (`RecordImage`).
+`export` runs every kind into a `DirSink`; `exportKinds(projectId, folders, sink)` runs some, inside
+the caller's transaction when there is one, and is how `VenueDiff` reads a project's records without
+a temp folder. Which tables make up a folder is `SyncDispositions` (§"How to add a new table").
+
 A future phase may re-nest cue children under their parent stack folder
 (`cueStacks/{stackUuid}/cues/{cueUuid}/...`) so `git diff` scopes to the
 edited stack — that's a `formatVersion` bump when it lands.
@@ -428,7 +436,7 @@ with `stripCommandRows` beside `stripTriggerRows`, dropping a row that names a c
 command's band on an attribute sharing its channel, and logging how many went. An older reader that
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
-column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+column on a machine-local table, so the dispositions in `SyncDispositions` are unchanged.
 
 **FX editor session 3b is the worked example of an order that needed no version.** A Look's FX
 already carried `sortOrder` (`LookFxJson.sortOrder`, omitted at 0), the exporter wrote them by
@@ -1033,7 +1041,7 @@ mask, made per machine on first request) and an element's *Full detail* switch, 
 `machine_overrides` row (§"Machine-local data"). `RichProjectFixture` paints a muslin drape front
 (a PNG with holes) and back (a JPEG) and a flat front, the images made in code; `ProjectRoundTripTest`
 asserts the images' bytes survive an export, a wiped store and an import, and that a v22 archive
-still imports. No table is added, so `SyncCoverageTest`'s dispositions are unchanged.
+still imports. No table is added, so the dispositions in `SyncDispositions` are unchanged.
 
 ### Version 22 — fitted media
 
@@ -1061,7 +1069,7 @@ writes, not what an archive carries.
 key, imports every unit with the type's stock string, and its next wipe-then-export push rewrites the
 patch files without it — reloading every peer's scrollers with ETC's stock string. `minReader` stays
 at 5: missing media is the stock. No table is added (`media` is a column on two portable tables), so
-`SyncCoverageTest`'s dispositions are unchanged; cloning carries it because the exporter does.
+the dispositions in `SyncDispositions` are unchanged; cloning carries it because the exporter does.
 
 ### Version 21 — cue events
 
@@ -1733,6 +1741,8 @@ and non-default values in the interesting nullable columns:
 | `ProjectRoundTripTest` | importer → exporter | importer drops a field the exporter writes |
 | `ProjectCloneTest` | clone → exporter | clone drops a table, field, or mis-wires an FK |
 | `SyncCoverageTest` | exporter → schema | a new table has no recorded disposition, or is declared portable but produces no export output |
+| `RecordKindsTest` | `MapSink` → `DirSink`, kind → folder | a record kind missing for a disposition's folder; the in-memory records differing from the files, or one kind's output from its folder of a whole export |
+| `ExportGoldenTest` | exporter → its own past bytes | any change to what the exporter writes, intended or not |
 
 `SyncCoverageTest` exists because the round-trip test has a blind spot worth
 naming: it compares two *exports*, so a field missing from both the exporter
@@ -1746,6 +1756,11 @@ partly missing from the exporter still satisfies it. Field-level fidelity is
 the fixture's job, which is why the fixture sets non-default values — a column
 left at its default is omitted from canonical JSON, so a copier that drops it
 looks correct.
+
+`ExportGoldenTest` hashes the rich fixture's export, and a show on a venue's, with every uuid
+replaced by a token taken from where the uuid appears (colour refinement over the files that name
+it), since the fixtures mint random uuids. The hashes were recorded before the exporter was cut into
+record kinds; a deliberate format change records new ones in the same commit.
 
 `ProjectCloneTest` compares source and clone by inverting the clone's UUID
 mapping and demanding byte-identical exports. That's stronger than normalising
@@ -2982,11 +2997,15 @@ draft, a pull-only desk, and a show's pull refused until its venue is synced.
    portable.
 2. Add it to `ALL_TABLES` in `models/Schema.kt`. `SyncCoverageTest` now fails
    until step 3 is done — that's the forcing function.
-3. Record its disposition in `SyncCoverageTest.dispositions`: `Portable` (with
-   its export folder, and the parent's field name if the rows are embedded),
-   `MachineLocal`, or `Excluded`. The last two need a stated reason.
+3. Record its disposition in `SyncDispositions.byTable` (`sync/SyncDispositions.kt`):
+   `Portable` (with its record folder, and the parent's field name if the rows are
+   embedded), `MachineLocal`, or `Excluded`. The last two need a stated reason. The
+   map is main code, not the test's, because it is also the table → folder map
+   anything that reads records by folder goes through (the undo journal).
 4. **Portable only**: add a DTO to `sync/dto/SyncDtos.kt`, write it in
-   `ProjectExporter`, read it in `ProjectImporter`, seed rows in
+   `ProjectExporter` — a new folder is a new `RecordKind` in `ProjectExporter.KINDS`,
+   which `RecordKindsTest` holds to the dispositions' folders; a table embedded in
+   an existing folder's documents goes in that folder's kind — read it in `ProjectImporter`, seed rows in
    `testsupport/RichProjectFixture.kt` **with a non-default value on every
    optional field** (canonical JSON omits defaults, so a field left at its
    default is invisible to the round-trip and clone tests), and add the

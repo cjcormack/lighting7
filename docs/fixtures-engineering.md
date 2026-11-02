@@ -2442,7 +2442,7 @@ stay. A live venue reloads.
 ### The diff rule: output or drawing
 
 `venue/VenueDiff.kt` compares two states of a venue — two versions, or a version and the draft — by
-exporting each (`ProjectExporter.export(…, blobs = false)`; a snapshot's is read once and cached) and
+exporting each in memory (`ProjectExporter.exportKinds` into a `MapSink`; a snapshot's is read once and cached) and
 matching records by uuid, field by field. It reads **every table the export carries**, so whatever a
 publish would freeze and a discard would undo is counted: the rig — universes, patches and their
 extra placements, groups, riggings, regions, scene elements, viewpoints, and the stage's size from

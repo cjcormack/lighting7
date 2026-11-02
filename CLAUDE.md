@@ -934,7 +934,7 @@ encrypted-file fallback). OAuth requires `sync.oauth.github.clientId` /
 
 **Enforcement:** the decision above is not optional bookkeeping — every table
 in `models/Schema.kt`'s `ALL_TABLES` must have a recorded disposition in
-`SyncCoverageTest.dispositions`, and every table declared portable must
+`sync/SyncDispositions.kt` (which `SyncCoverageTest` checks), and every table declared portable must
 actually produce export output when `testsupport/RichProjectFixture.kt` is
 exported. Add a table without answering the question and `./gradlew test`
 fails. See `docs/sync-engineering.md` §"How to add a new table".

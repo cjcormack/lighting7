@@ -7,6 +7,8 @@ import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.dao.IntEntity
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.CueMoveInDarkSettings
@@ -16,6 +18,7 @@ import uk.me.cormack.lighting7.models.DaoCueSceneryRow
 import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoShowColour
 import uk.me.cormack.lighting7.models.DaoShowColours
 import uk.me.cormack.lighting7.models.DaoShowGroupOrder
@@ -100,7 +103,9 @@ import uk.me.cormack.lighting7.models.entriesOf
 import uk.me.cormack.lighting7.routes.heldAutoNumbers
 
 /**
- * Exports a project's portable graph to a folder of canonical JSON files.
+ * Exports a project's portable graph as canonical JSON: to a folder of files ([export]), or any of
+ * its record folders to a [RecordSink] ([exportKinds]) — a [MapSink] for a reader that wants the
+ * records in memory. Each folder is one [RecordKind] in [KINDS].
  *
  * Layout (Phase 1, flatter than the eventual git-repo layout in `docs/plans/cloud-sync.md` —
  * future phases may re-nest cues under their stack folder for diff scoping):
@@ -148,8 +153,6 @@ import uk.me.cormack.lighting7.routes.heldAutoNumbers
  */
 class ProjectExporter(private val state: State) {
 
-    private val logger = LoggerFactory.getLogger(ProjectExporter::class.java)
-
     /**
      * `liveKeys` is every record the exporter wrote as a live record (i.e. not a
      * tombstone — the snapshot engine writes those separately). Returning them lets
@@ -170,20 +173,19 @@ class ProjectExporter(private val state: State) {
         knownInstalls: Map<String, String> = emptyMap(),
         /**
          * Copy the referenced prompt-book PDFs and scene images into the folder too. Only a reader
-         * of the records alone passes false — the venue diff (`venue/VenueDiff.kt`), which exports
-         * on every read and has no use for up to a hundred megabytes of bytes it never looks at.
+         * of the records alone passes false, which has no use for up to a hundred megabytes of bytes
+         * it never looks at.
          */
         blobs: Boolean = true,
     ): Result {
-        val liveKeys = mutableSetOf<RecordKey>()
+        val sink = DirSink(targetDir)
         var reconcileProjectUuid: UUID? = null
         var referencedScriptHashes: Set<String> = emptySet()
         var referencedImageHashes: Set<String> = emptySet()
-        val fileCount = transaction(state.database) {
+        transaction(state.database) {
             val project = DaoProject.findById(projectId)
                 ?: throw IllegalArgumentException("Project not found: $projectId")
-            val projectUuid = project.uuid
-            reconcileProjectUuid = projectUuid
+            reconcileProjectUuid = project.uuid
 
             Files.createDirectories(targetDir)
 
@@ -200,57 +202,160 @@ class ProjectExporter(private val state: State) {
                 InstallsJson.serializer(),
                 InstallsJson(installs = installs),
             )
-            val origin = project.detachedFrom()
-            writeJson(
-                targetDir.resolve("project.json"),
-                ProjectJson.serializer(),
-                ProjectJson(
-                    uuid = projectUuid.toString(),
-                    name = project.name,
-                    description = project.description,
-                    stageWidthM = project.stageWidthM,
-                    stageDepthM = project.stageDepthM,
-                    stageHeightM = project.stageHeightM,
-                    // v24: what the project is, and a show's pin with the hint naming where its venue
-                    // syncs. The hint the show arrived with wins, so every desk that imported it writes
-                    // the same bytes whatever it has attached; a show made here, with none, names the
-                    // venue's own attached repo when this desk has one.
-                    kind = project.kind,
-                    venueUuid = project.venueUuid?.takeIf { project.isVenueBound }?.toString(),
-                    venueVersion = project.venueVersion?.takeIf { project.isVenueBound },
-                    venueRepo = project.venueUuid?.takeIf { project.isVenueBound }?.let { venueUuid ->
-                        project.venueRepo ?: VenuePins.venueOf(venueUuid)?.let { VenuePins.repoHintOf(it.id.value) }
-                    },
-                    // A standalone show's origin (venue-attach plan D1), both or neither.
-                    detachedFromVenueUuid = origin?.first?.toString(),
-                    detachedFromVersion = origin?.second,
-                ),
-            )
-            var count = 3
+
+            KINDS.forEach { it.write(project, sink) }
+
+            // Capture the referenced script-PDF hashes; the actual (up-to-100MB) copy
+            // happens AFTER the transaction commits so it never holds the DB write lock.
+            referencedScriptHashes = listOfNotNull(project.promptBook).map { it.scriptHash }.toSet()
+            // Likewise the images the scene's cloths are painted with (v23).
+            referencedImageHashes = SceneImageRepoSync.referencedHashes(projectId)
+        }
+        // Copy the referenced script PDF(s) into `promptScripts/{hash}.pdf` (raw bytes)
+        // and remove orphaned ones — outside the transaction so the copy never blocks the
+        // DB writer. PDFs are not records; they ride the repo as content-addressed blobs.
+        reconcileProjectUuid?.takeIf { blobs }?.let {
+            PromptScriptRepoSync.reconcileTree(state, it, referencedScriptHashes, targetDir)
+            // And the referenced scene images into `sceneImages/{hash}.{png|jpg}`, the same way.
+            SceneImageRepoSync.reconcileTree(state, it, referencedImageHashes, targetDir)
+        }
+        // formatVersion.json and installs.json, which are not records.
+        return Result(targetDir, sink.fileCount + 2, sink.liveKeys)
+    }
+
+    /**
+     * Write [projectId]'s records of [folders] — each a [RecordKind.folder] — to [sink], in one
+     * transaction (the caller's, when there is one). [export] is every folder into a [DirSink].
+     */
+    fun exportKinds(projectId: Int, folders: Set<String>, sink: RecordSink) {
+        val unknown = folders - FOLDERS
+        require(unknown.isEmpty()) { "No record kind for folder(s) $unknown" }
+        transaction(state.database) {
+            val project = DaoProject.findById(projectId)
+                ?: throw IllegalArgumentException("Project not found: $projectId")
+            KINDS.filter { it.folder in folders }.forEach { it.write(project, sink) }
+        }
+    }
+
+    /** Every record of [projectId], in memory. */
+    fun exportRecords(projectId: Int): MapSink = MapSink().also { exportKinds(projectId, FOLDERS, it) }
+
+    private fun <T> writeJson(path: Path, serializer: KSerializer<T>, value: T) {
+        Files.writeString(path, canonicalEncode(serializer, value))
+    }
+
+    /**
+     * Write a tombstone marker for each [keys] entry under
+     * `[targetDir]/tombstones/{tableName}/{uuid}.json`. The body is intentionally minimal
+     * and timestamp-free so the file's hash stays stable across re-snapshots — see
+     * [TombstoneJson].
+     */
+    fun writeTombstones(targetDir: Path, keys: Collection<RecordKey>): Int {
+        if (keys.isEmpty()) return 0
+        val body = canonicalEncode(TombstoneJson.serializer(), TombstoneJson())
+        val byTable = keys.groupBy { it.tableName }
+        var count = 0
+        for ((tableName, recordKeys) in byTable) {
+            val sub = targetDir.resolve(RecordHasher.TOMBSTONES_DIR).resolve(tableName)
+            Files.createDirectories(sub)
+            for (key in recordKeys) {
+                Files.writeString(sub.resolve("${key.uuid}.json"), body)
+                count++
+            }
+        }
+        return count
+    }
+
+    /**
+     * One record folder of the export: [folder], and how [write] puts a project's records of it to a
+     * sink. [tables] are the tables its records are made of, from [SyncDispositions].
+     */
+    class RecordKind(val folder: String, val write: (DaoProject, RecordSink) -> Unit) {
+        val tables: Set<Table> get() = SyncDispositions.tablesOf(folder)
+    }
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(ProjectExporter::class.java)
+
+        /** A kind writing one record per entity [entities] lists, each through [mapper]. */
+        private fun <E : IntEntity, J> kind(
+            folder: String,
+            serializer: KSerializer<J>,
+            entities: (DaoProject) -> List<E>,
+            uuidOf: (E) -> UUID,
+            mapper: (E) -> J,
+        ) = RecordKind(folder) { project, sink ->
+            entities(project).forEach { e -> sink.record(folder, uuidOf(e), e.id.value, serializer, mapper(e)) }
+        }
+
+        /** A kind writing each cue's children [children] lists, each through [mapper] with its cue's uuid. */
+        private fun <E : IntEntity, J> cueChildKind(
+            folder: String,
+            serializer: KSerializer<J>,
+            children: (DaoCue) -> Iterable<E>,
+            uuidOf: (E) -> UUID,
+            mapper: (E, String) -> J,
+        ) = RecordKind(folder) { project, sink ->
+            project.cues.forEach { c ->
+                val cueUuid = c.uuid.toString()
+                children(c).forEach { e -> sink.record(folder, uuidOf(e), e.id.value, serializer, mapper(e, cueUuid)) }
+            }
+        }
+
+        /** Every record folder, in the order [export] writes them. */
+        val KINDS: List<RecordKind> = listOf(
+            RecordKind(SyncDispositions.PROJECT_FOLDER) { project, sink ->
+                val origin = project.detachedFrom()
+                sink.record(
+                    SyncDispositions.PROJECT_FOLDER, project.uuid, project.id.value, ProjectJson.serializer(),
+                    ProjectJson(
+                        uuid = project.uuid.toString(),
+                        name = project.name,
+                        description = project.description,
+                        stageWidthM = project.stageWidthM,
+                        stageDepthM = project.stageDepthM,
+                        stageHeightM = project.stageHeightM,
+                        // v24: what the project is, and a show's pin with the hint naming where its venue
+                        // syncs. The hint the show arrived with wins, so every desk that imported it writes
+                        // the same bytes whatever it has attached; a show made here, with none, names the
+                        // venue's own attached repo when this desk has one.
+                        kind = project.kind,
+                        venueUuid = project.venueUuid?.takeIf { project.isVenueBound }?.toString(),
+                        venueVersion = project.venueVersion?.takeIf { project.isVenueBound },
+                        venueRepo = project.venueUuid?.takeIf { project.isVenueBound }?.let { venueUuid ->
+                            project.venueRepo ?: VenuePins.venueOf(venueUuid)?.let { VenuePins.repoHintOf(it.id.value) }
+                        },
+                        // A standalone show's origin (venue-attach plan D1), both or neither.
+                        detachedFromVenueUuid = origin?.first?.toString(),
+                        detachedFromVersion = origin?.second,
+                    ),
+                )
+            },
 
             // v24: a show's hides of its venue's records. Only the show's own rows travel in its
             // archive (every table below reads the project's own rows, never `RigScope`'s effective
             // rig); the hides are what it subtracts from the venue's.
-            count += writeAll(
-                targetDir, "showHides",
-                DaoShowHide.find { DaoShowHides.project eq project.id }.toList(),
-                ShowHideJson.serializer(), { it.uuid }, liveKeys,
+            kind(
+                "showHides", ShowHideJson.serializer(),
+                { project -> DaoShowHide.find { DaoShowHides.project eq project.id }.toList() }, { it.uuid },
             ) { h ->
                 ShowHideJson(uuid = h.uuid.toString(), recordKind = h.recordKind, recordUuid = h.recordUuid.toString())
-            }
+            },
 
             // v24, session 5: a show's facet overrides of venue patches. The value and base travel as the
             // facet's fields; a row whose stored text no longer parses is left out rather than written
             // as something another desk would refuse.
-            count += writeAll(
-                targetDir, "showOverrides",
-                DaoShowOverride.find { DaoShowOverrides.project eq project.id }.toList()
-                    .filter { o ->
-                        (decodeFacet(o.facet, o.value) != null && decodeFacet(o.facet, o.base) != null).also { ok ->
-                            if (!ok) logger.warn("Export: override {} ({} of {}) does not parse as its facet; leaving it out", o.uuid, o.facet, o.recordUuid)
+            kind(
+                "showOverrides", ShowOverrideJson.serializer(),
+                { project ->
+                    DaoShowOverride.find { DaoShowOverrides.project eq project.id }.toList()
+                        .filter { o ->
+                            (decodeFacet(o.facet, o.value) != null && decodeFacet(o.facet, o.base) != null).also { ok ->
+                                if (!ok) logger.warn("Export: override {} ({} of {}) does not parse as its facet; leaving it out", o.uuid, o.facet, o.recordUuid)
+                            }
                         }
-                    },
-                ShowOverrideJson.serializer(), { it.uuid }, liveKeys,
+                },
+                { it.uuid },
             ) { o ->
                 ShowOverrideJson(
                     uuid = o.uuid.toString(),
@@ -259,31 +364,29 @@ class ProjectExporter(private val state: State) {
                     value = facetElement(decodeFacet(o.facet, o.value)!!),
                     base = facetElement(decodeFacet(o.facet, o.base)!!),
                 )
-            }
+            },
 
             // v36: a show's recolours of venue patches and groups, as stored.
-            count += writeAll(
-                targetDir, "showColours",
-                DaoShowColour.find { DaoShowColours.project eq project.id }.toList(),
-                ShowColourJson.serializer(), { it.uuid }, liveKeys,
+            kind(
+                "showColours", ShowColourJson.serializer(),
+                { project -> DaoShowColour.find { DaoShowColours.project eq project.id }.toList() }, { it.uuid },
             ) { c ->
                 ShowColourJson(uuid = c.uuid.toString(), recordUuid = c.recordUuid.toString(), colour = c.colour)
-            }
+            },
 
             // v44: a show's orders of venue groups, as stored.
-            count += writeAll(
-                targetDir, "showGroupOrders",
-                DaoShowGroupOrder.find { DaoShowGroupOrders.project eq project.id }.toList(),
-                ShowGroupOrderJson.serializer(), { it.uuid }, liveKeys,
+            kind(
+                "showGroupOrders", ShowGroupOrderJson.serializer(),
+                { project -> DaoShowGroupOrder.find { DaoShowGroupOrders.project eq project.id }.toList() }, { it.uuid },
             ) { o ->
                 ShowGroupOrderJson(
                     uuid = o.uuid.toString(),
                     groupUuid = o.groupUuid.toString(),
                     members = ShowGroupOrders.decode(o.members).map { it.toString() },
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "cueStacks", project.cueStacks.toList(), CueStackJson.serializer(), { it.uuid }, liveKeys) { s ->
+            kind("cueStacks", CueStackJson.serializer(), { project -> project.cueStacks.toList() }, { it.uuid }) { s ->
                 CueStackJson(
                     uuid = s.uuid.toString(),
                     name = s.name,
@@ -293,10 +396,10 @@ class ProjectExporter(private val state: State) {
                     label = s.label,
                     scenery = stackSceneryOf(s.id).map { it.toJson() },
                 ).withMoveInDark(s.moveInDarkSettings)
-            }
+            },
 
             // v32: a cue is what a state is, never where it sits (cue model plan D2, §3.9).
-            count += writeAll(targetDir, "cues", project.cues.toList(), CueJson.serializer(), { it.uuid }, liveKeys) { c ->
+            kind("cues", CueJson.serializer(), { project -> project.cues.toList() }, { it.uuid }) { c ->
                 CueJson(
                     uuid = c.uuid.toString(),
                     name = c.name,
@@ -308,41 +411,123 @@ class ProjectExporter(private val state: State) {
                     events = cueEventsOf(c.id).map { it.toJson() },
                     speedMasters = c.speedMasters.map { CueSpeedMasterJson(it.speedMasterUuid, it.bpm) },
                 ).withMoveInDark(c.moveInDarkSettings)
-            }
+            },
 
             // v32: each place in a stack's list is its own record, written from the entry itself, so a
             // shared or loose cue travels as it is. The
             // number when explicit, and an auto one only where a reader deriving from position could
             // not give it (P5, as amended 2026-10-16: `heldAutoNumbers`).
-            val heldNumbers = project.cueStacks.flatMap { heldAutoNumbers(it).entries }.associate { it.key to it.value }
-            count += writeAll(
-                targetDir, "cueStackEntries",
-                project.cueStacks.flatMap { entriesOf(it) },
-                CueStackEntryJson.serializer(), { it.uuid }, liveKeys,
-            ) { e ->
-                CueStackEntryJson(
-                    uuid = e.uuid.toString(),
-                    cueStackUuid = e.stack.uuid.toString(),
-                    cueUuid = e.cue?.uuid?.toString(),
-                    kind = CueStackEntryKind.MARKER.name.takeIf { e.isMarker },
-                    label = e.label.takeIf { e.isMarker },
-                    ordinal = e.ordinal,
-                    cueNumber = when {
-                        e.isMarker -> null
-                        !e.cueNumberAuto && !e.cueNumber.isNullOrEmpty() -> e.cueNumber
-                        else -> heldNumbers[e.id.value]
-                    },
-                    autoAdvance = e.autoAdvance && !e.isMarker,
-                    autoAdvanceDelayMs = e.autoAdvanceDelay?.toMillis()?.takeIf { !e.isMarker },
+            RecordKind("cueStackEntries") { project, sink ->
+                val heldNumbers = project.cueStacks.flatMap { heldAutoNumbers(it).entries }.associate { it.key to it.value }
+                project.cueStacks.flatMap { entriesOf(it) }.forEach { e ->
+                    val json = CueStackEntryJson(
+                        uuid = e.uuid.toString(),
+                        cueStackUuid = e.stack.uuid.toString(),
+                        cueUuid = e.cue?.uuid?.toString(),
+                        kind = CueStackEntryKind.MARKER.name.takeIf { e.isMarker },
+                        label = e.label.takeIf { e.isMarker },
+                        ordinal = e.ordinal,
+                        cueNumber = when {
+                            e.isMarker -> null
+                            !e.cueNumberAuto && !e.cueNumber.isNullOrEmpty() -> e.cueNumber
+                            else -> heldNumbers[e.id.value]
+                        },
+                        autoAdvance = e.autoAdvance && !e.isMarker,
+                        autoAdvanceDelayMs = e.autoAdvanceDelay?.toMillis()?.takeIf { !e.isMarker },
+                    )
+                    sink.record("cueStackEntries", e.uuid, e.id.value, CueStackEntryJson.serializer(), json)
+                }
+            },
+
+            // A cue's children, each its own folder.
+            cueChildKind(
+                "cueAttributeAssignments", CueAttributeAssignmentJson.serializer(),
+                { it.attributeAssignments }, { it.uuid },
+            ) { a, cueUuid ->
+                CueAttributeAssignmentJson(
+                    uuid = a.uuid.toString(),
+                    cueUuid = cueUuid,
+                    targetType = a.targetType,
+                    targetKey = a.targetKey,
+                    attribute = a.attribute,
+                    value = a.value,
+                    fadeDurationMs = a.fadeDuration?.toMillis(),
+                    sortOrder = a.sortOrder,
                 )
-            }
+            },
 
-            count += writeCueChildren(targetDir, project, liveKeys)
+            cueChildKind("cueLayers", CueLayerJson.serializer(), { it.layers }, { it.uuid }) { l, cueUuid ->
+                CueLayerJson(
+                    uuid = l.uuid.toString(),
+                    cueUuid = cueUuid,
+                    lookUuid = l.look?.uuid?.toString(),
+                    paletteUuid = l.palette?.uuid?.toString(),
+                    sortOrder = l.sortOrder,
+                    enabled = l.enabled,
+                    targets = l.targets,
+                    attributeMask = l.attributeMask,
+                    blendMode = l.blendMode,
+                    amount = l.amount,
+                    stomp = l.stomp,
+                    speedMasterUuid = l.speedMasterUuid?.toString(),
+                    rateSpeedMasterUuid = l.rateSpeedMasterUuid?.toString(),
+                    delayMs = l.delay?.toMillis(),
+                    intervalMs = l.interval?.toMillis(),
+                    randomWindowMs = l.randomWindow?.toMillis(),
+                )
+            },
 
-            // A project has at most one prompt book; keep it as a 0-or-1 list so the
-            // anchor/annotation flatMap below is unchanged.
-            val promptBooks = listOfNotNull(project.promptBook)
-            count += writeAll(targetDir, "promptBooks", promptBooks, PromptBookJson.serializer(), { it.uuid }, liveKeys) { b ->
+            cueChildKind("cueAdHocFx", CueAdHocFxJson.serializer(), { it.adHocFx }, { it.uuid }) { e, cueUuid ->
+                CueAdHocFxJson(
+                    uuid = e.uuid.toString(),
+                    cueUuid = cueUuid,
+                    targetType = e.targetType,
+                    targetKey = e.targetKey,
+                    fxType = e.fxType,
+                    family = e.family,
+                    attribute = e.attribute,
+                    cycle = e.cycle,
+                    blendMode = e.blendMode,
+                    order = e.order,
+                    phaseOffset = e.phaseOffset,
+                    elementMode = e.elementMode,
+                    elementFilter = e.elementFilter,
+                    timing = e.timing,
+                    parameters = e.parameters,
+                    delayMs = e.delay?.toMillis(),
+                    intervalMs = e.interval?.toMillis(),
+                    randomWindowMs = e.randomWindow?.toMillis(),
+                    sortOrder = e.sortOrder,
+                    speedMasterUuid = e.speedMasterUuid?.toString(),
+                    rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
+                    seconds = e.seconds,
+                    amount = e.amount,
+                    direction = e.direction,
+                    runs = e.runs,
+                    spread = e.spread,
+                    wings = e.wings,
+                    segments = e.segments,
+                    parts = e.parts,
+                    spreadUnit = e.spreadUnit,
+                    runUuid = e.runUuid?.toString(),
+                )
+            },
+
+            cueChildKind("cueTriggers", CueTriggerJson.serializer(), { it.triggers }, { it.uuid }) { t, cueUuid ->
+                CueTriggerJson(
+                    uuid = t.uuid.toString(),
+                    cueUuid = cueUuid,
+                    triggerType = t.triggerType,
+                    scriptUuid = t.script.uuid.toString(),
+                    delayMs = t.delay?.toMillis(),
+                    intervalMs = t.interval?.toMillis(),
+                    randomWindowMs = t.randomWindow?.toMillis(),
+                    sortOrder = t.sortOrder,
+                )
+            },
+
+            // A project has at most one prompt book.
+            kind("promptBooks", PromptBookJson.serializer(), { project -> listOfNotNull(project.promptBook) }, { it.uuid }) { b ->
                 PromptBookJson(
                     uuid = b.uuid.toString(),
                     scriptHash = b.scriptHash,
@@ -350,8 +535,11 @@ class ProjectExporter(private val state: State) {
                     pageCount = b.pageCount,
                     coverPages = b.coverPages,
                 )
-            }
-            count += writeAll(targetDir, "promptBookAnchors", promptBooks.flatMap { it.anchors.toList() }, PromptBookAnchorJson.serializer(), { it.uuid }, liveKeys) { a ->
+            },
+            kind(
+                "promptBookAnchors", PromptBookAnchorJson.serializer(),
+                { project -> project.promptBook?.anchors?.toList().orEmpty() }, { it.uuid },
+            ) { a ->
                 PromptBookAnchorJson(
                     uuid = a.uuid.toString(),
                     // v32: the entry it marks (cue model plan D4).
@@ -359,8 +547,11 @@ class ProjectExporter(private val state: State) {
                     region = a.region,
                     label = a.label,
                 )
-            }
-            count += writeAll(targetDir, "promptBookAnnotations", promptBooks.flatMap { it.annotations.toList() }, PromptBookAnnotationJson.serializer(), { it.uuid }, liveKeys) { n ->
+            },
+            kind(
+                "promptBookAnnotations", PromptBookAnnotationJson.serializer(),
+                { project -> project.promptBook?.annotations?.toList().orEmpty() }, { it.uuid },
+            ) { n ->
                 PromptBookAnnotationJson(
                     uuid = n.uuid.toString(),
                     kind = n.kind,
@@ -369,20 +560,14 @@ class ProjectExporter(private val state: State) {
                     color = n.color,
                     tone = n.tone,
                 )
-            }
+            },
 
-            // Capture the referenced script-PDF hashes; the actual (up-to-100MB) copy
-            // happens AFTER the transaction commits so it never holds the DB write lock.
-            referencedScriptHashes = promptBooks.map { it.scriptHash }.toSet()
-            // Likewise the images the scene's cloths are painted with (v23).
-            referencedImageHashes = SceneImageRepoSync.referencedHashes(projectId)
-
-            count += writeAll(targetDir, "universeConfigs", project.universeConfigs.toList(), UniverseConfigJson.serializer(), { it.uuid }, liveKeys) { u ->
+            kind("universeConfigs", UniverseConfigJson.serializer(), { project -> project.universeConfigs.toList() }, { it.uuid }) { u ->
                 // `address` deliberately omitted — machine-local per cloud-sync design.
                 UniverseConfigJson(u.uuid.toString(), u.subnet, u.universe, u.controllerType)
-            }
+            },
 
-            count += writeAll(targetDir, "riggings", project.riggings.toList(), RiggingJson.serializer(), { it.uuid }, liveKeys) { r ->
+            kind("riggings", RiggingJson.serializer(), { project -> project.riggings.toList() }, { it.uuid }) { r ->
                 RiggingJson(
                     uuid = r.uuid.toString(),
                     name = r.name,
@@ -396,9 +581,9 @@ class ProjectExporter(private val state: State) {
                     lengthM = r.lengthM,
                     sortOrder = r.sortOrder,
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "stageRegions", project.stageRegions.toList(), StageRegionJson.serializer(), { it.uuid }, liveKeys) { s ->
+            kind("stageRegions", StageRegionJson.serializer(), { project -> project.stageRegions.toList() }, { it.uuid }) { s ->
                 StageRegionJson(
                     uuid = s.uuid.toString(),
                     name = s.name,
@@ -411,11 +596,11 @@ class ProjectExporter(private val state: State) {
                     yawDeg = s.yawDeg,
                     sortOrder = s.sortOrder,
                 )
-            }
+            },
 
             // v18: the scene document. Params travel as a nested object, so the canonical encoder
             // sorts them and the clone remapper reaches a platform's `regionUuid`.
-            count += writeAll(targetDir, "stageElements", project.stageElements.toList(), StageElementJson.serializer(), { it.uuid }, liveKeys) { e ->
+            kind("stageElements", StageElementJson.serializer(), { project -> project.stageElements.toList() }, { it.uuid }) { e ->
                 StageElementJson(
                     uuid = e.uuid.toString(),
                     name = e.name,
@@ -435,9 +620,9 @@ class ProjectExporter(private val state: State) {
                     hidden = e.hidden,
                     sortOrder = e.sortOrder,
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "stageViewpoints", project.stageViewpoints.toList(), StageViewpointJson.serializer(), { it.uuid }, liveKeys) { v ->
+            kind("stageViewpoints", StageViewpointJson.serializer(), { project -> project.stageViewpoints.toList() }, { it.uuid }) { v ->
                 StageViewpointJson(
                     uuid = v.uuid.toString(),
                     name = v.name,
@@ -453,9 +638,9 @@ class ProjectExporter(private val state: State) {
                     seatId = v.seatId,
                     sortOrder = v.sortOrder,
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "fixturePatches", project.fixturePatches.toList(), FixturePatchJson.serializer(), { it.uuid }, liveKeys) { p ->
+            kind("fixturePatches", FixturePatchJson.serializer(), { project -> project.fixturePatches.toList() }, { it.uuid }) { p ->
                 FixturePatchJson(
                     uuid = p.uuid.toString(),
                     universeConfigUuid = p.universeConfig.uuid.toString(),
@@ -513,9 +698,9 @@ class ProjectExporter(private val state: State) {
                         )
                     },
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "fixtureGroups", project.fixtureGroups.toList(), FixtureGroupJson.serializer(), { it.uuid }, liveKeys) { g ->
+            kind("fixtureGroups", FixtureGroupJson.serializer(), { project -> project.fixtureGroups.toList() }, { it.uuid }) { g ->
                 val members = g.members
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                     .map { m ->
@@ -528,9 +713,9 @@ class ProjectExporter(private val state: State) {
                         )
                     }
                 FixtureGroupJson(g.uuid.toString(), g.name, members, g.colour)
-            }
+            },
 
-            count += writeAll(targetDir, "buskRig", project.buskRigRows.toList(), BuskRigRowJson.serializer(), { it.uuid }, liveKeys) { row ->
+            kind("buskRig", BuskRigRowJson.serializer(), { project -> project.buskRigRows.toList() }, { it.uuid }) { row ->
                 BuskRigRowJson(
                     uuid = row.uuid.toString(),
                     name = row.name,
@@ -555,13 +740,13 @@ class ProjectExporter(private val state: State) {
                             )
                         },
                 )
-            }
+            },
 
             // FX presets and named palettes are no longer exported: v5 collapsed both into looks,
             // and the startup migration converts any local rows. Writing either alongside `looks/`
             // would put two representations of one entity in the repo, and an import would
             // materialise both.
-            count += writeAll(targetDir, "looks", project.looks.toList(), LookJson.serializer(), { it.uuid }, liveKeys) { l ->
+            kind("looks", LookJson.serializer(), { project -> project.looks.toList() }, { it.uuid }) { l ->
                 val rows = l.rows
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                     .map { r ->
@@ -616,9 +801,9 @@ class ProjectExporter(private val state: State) {
                     fx = effects,
                     scenery = lookSceneryOf(l.id).map { it.toJson() },
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "palettes", project.palettes.toList(), PaletteJson.serializer(), { it.uuid }, liveKeys) { t ->
+            kind("palettes", PaletteJson.serializer(), { project -> project.palettes.toList() }, { it.uuid }) { t ->
                 PaletteJson(
                     uuid = t.uuid.toString(),
                     name = t.name,
@@ -665,9 +850,9 @@ class ProjectExporter(private val state: State) {
                         )
                     },
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "speedMasters", project.speedMasters.toList(), SpeedMasterJson.serializer(), { it.uuid }, liveKeys) { m ->
+            kind("speedMasters", SpeedMasterJson.serializer(), { project -> project.speedMasters.toList() }, { it.uuid }) { m ->
                 SpeedMasterJson(
                     uuid = m.uuid.toString(),
                     masterIndex = m.masterIndex,
@@ -683,9 +868,9 @@ class ProjectExporter(private val state: State) {
                     followDen = m.followRatio?.second,
                     followTargetUuid = m.followTarget?.toString(),
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "fxDefinitions", project.fxDefinitions.toList(), FxDefinitionJson.serializer(), { it.uuid }, liveKeys) { d ->
+            kind("fxDefinitions", FxDefinitionJson.serializer(), { project -> project.fxDefinitions.toList() }, { it.uuid }) { d ->
                 // Encode ParameterInfo through the canonical JSON instance so nested defaults/nulls
                 // follow the same omission rules as the parent document.
                 val parametersJson = canonicalJson.encodeToJsonElement(
@@ -705,9 +890,9 @@ class ProjectExporter(private val state: State) {
                     defaultTiming = d.defaultTiming,
                     timingSource = d.timingSource,
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "cueSlots", project.cueSlots.toList(), CueSlotJson.serializer(), { it.uuid }, liveKeys) { s ->
+            kind("cueSlots", CueSlotJson.serializer(), { project -> project.cueSlots.toList() }, { it.uuid }) { s ->
                 CueSlotJson(
                     uuid = s.uuid.toString(),
                     page = s.page,
@@ -715,9 +900,9 @@ class ProjectExporter(private val state: State) {
                     cueUuid = s.cue?.uuid?.toString(),
                     lookUuid = s.look?.uuid?.toString(),
                 )
-            }
+            },
 
-            count += writeAll(targetDir, "buskPages", project.buskPages.toList(), BuskPageJson.serializer(), { it.uuid }, liveKeys) { page ->
+            kind("buskPages", BuskPageJson.serializer(), { project -> project.buskPages.toList() }, { it.uuid }) { page ->
                 BuskPageJson(
                     uuid = page.uuid.toString(),
                     name = page.name,
@@ -761,32 +946,28 @@ class ProjectExporter(private val state: State) {
                             )
                         },
                 )
-            }
+            },
 
-            count += writeAll(
-                targetDir, "parkedChannels", project.parkedChannels.toList(),
-                ParkedChannelJson.serializer(), { it.uuid }, liveKeys,
-            ) { p ->
+            kind("parkedChannels", ParkedChannelJson.serializer(), { project -> project.parkedChannels.toList() }, { it.uuid }) { p ->
                 ParkedChannelJson(
                     uuid = p.uuid.toString(),
                     universe = p.universe,
                     channel = p.channel,
                     value = p.value,
                 )
-            }
+            },
 
             // v27: a show's releases of its venue's parks, by channel.
-            count += writeAll(
-                targetDir, "showParkReleases",
-                DaoShowParkRelease.find { DaoShowParkReleases.project eq project.id }.toList(),
-                ShowParkReleaseJson.serializer(), { it.uuid }, liveKeys,
+            kind(
+                "showParkReleases", ShowParkReleaseJson.serializer(),
+                { project -> DaoShowParkRelease.find { DaoShowParkReleases.project eq project.id }.toList() }, { it.uuid },
             ) { r ->
                 ShowParkReleaseJson(uuid = r.uuid.toString(), universe = r.universe, channel = r.channel)
-            }
+            },
 
-            count += writeAll(
-                targetDir, "controlSurfaceBindings", project.controlSurfaceBindings.toList(),
-                ControlSurfaceBindingJson.serializer(), { it.uuid }, liveKeys,
+            kind(
+                "controlSurfaceBindings", ControlSurfaceBindingJson.serializer(),
+                { project -> project.controlSurfaceBindings.toList() }, { it.uuid },
             ) { b ->
                 ControlSurfaceBindingJson(
                     uuid = b.uuid.toString(),
@@ -798,217 +979,17 @@ class ProjectExporter(private val state: State) {
                     takeoverPolicy = b.takeoverPolicy,
                     sortOrder = b.sortOrder,
                 )
-            }
+            },
 
-            count += writeScripts(targetDir, project, liveKeys)
-            count
-        }
-        // Copy the referenced script PDF(s) into `promptScripts/{hash}.pdf` (raw bytes)
-        // and remove orphaned ones — outside the transaction so the copy never blocks the
-        // DB writer. PDFs are not records; they ride the repo as content-addressed blobs.
-        reconcileProjectUuid?.takeIf { blobs }?.let {
-            PromptScriptRepoSync.reconcileTree(state, it, referencedScriptHashes, targetDir)
-            // And the referenced scene images into `sceneImages/{hash}.{png|jpg}`, the same way.
-            SceneImageRepoSync.reconcileTree(state, it, referencedImageHashes, targetDir)
-        }
-        return Result(targetDir, fileCount, liveKeys)
-    }
 
-    /**
-     * Writes one canonical-JSON file per entity under `[targetDir]/[subdir]/{uuid}.json`. The
-     * subdirectory is created lazily — projects with no rows in [entities] produce no folder.
-     * Each written record's [RecordKey] is added to [liveKeys] so the snapshot pipeline can
-     * derive deletions without re-walking the export folder.
-     */
-    private fun <E, J> writeAll(
-        targetDir: Path,
-        subdir: String,
-        entities: List<E>,
-        serializer: KSerializer<J>,
-        uuidOf: (E) -> UUID,
-        liveKeys: MutableSet<RecordKey>,
-        mapper: (E) -> J,
-    ): Int {
-        if (entities.isEmpty()) return 0
-        val sub = targetDir.resolve(subdir)
-        Files.createDirectories(sub)
-        entities.forEach { e ->
-            val uuid = uuidOf(e)
-            writeJson(sub.resolve("$uuid.json"), serializer, mapper(e))
-            liveKeys.add(RecordKey(subdir, uuid))
-        }
-        return entities.size
-    }
+            RecordKind("scripts") { project, sink ->
+                project.scripts.forEach { s ->
+                    sink.script(s.uuid, s.id.value, ScriptMetaJson(s.uuid.toString(), s.name, s.scriptType.name), s.script)
+                }
+            },
+        )
 
-    private fun writeCueChildren(dir: Path, project: DaoProject, liveKeys: MutableSet<RecordKey>): Int {
-        val cues = project.cues.toList()
-        if (cues.isEmpty()) return 0
-
-        val propAssignDir = dir.resolve("cueAttributeAssignments")
-        val cueLayerDir = dir.resolve("cueLayers")
-        val adHocDir = dir.resolve("cueAdHocFx")
-        val triggerDir = dir.resolve("cueTriggers")
-        var count = 0
-
-        cues.forEach { c ->
-            val cueUuid = c.uuid.toString()
-
-            c.attributeAssignments.forEach { a ->
-                Files.createDirectories(propAssignDir)
-                writeJson(
-                    propAssignDir.resolve("${a.uuid}.json"),
-                    CueAttributeAssignmentJson.serializer(),
-                    CueAttributeAssignmentJson(
-                        uuid = a.uuid.toString(),
-                        cueUuid = cueUuid,
-                        targetType = a.targetType,
-                        targetKey = a.targetKey,
-                        attribute = a.attribute,
-                        value = a.value,
-                        fadeDurationMs = a.fadeDuration?.toMillis(),
-                        sortOrder = a.sortOrder,
-                    ),
-                )
-                liveKeys.add(RecordKey("cueAttributeAssignments", a.uuid))
-                count++
-            }
-
-            c.layers.forEach { l ->
-                Files.createDirectories(cueLayerDir)
-                writeJson(
-                    cueLayerDir.resolve("${l.uuid}.json"),
-                    CueLayerJson.serializer(),
-                    CueLayerJson(
-                        uuid = l.uuid.toString(),
-                        cueUuid = cueUuid,
-                        lookUuid = l.look?.uuid?.toString(),
-                        paletteUuid = l.palette?.uuid?.toString(),
-                        sortOrder = l.sortOrder,
-                        enabled = l.enabled,
-                        targets = l.targets,
-                        attributeMask = l.attributeMask,
-                        blendMode = l.blendMode,
-                        amount = l.amount,
-                        stomp = l.stomp,
-                        speedMasterUuid = l.speedMasterUuid?.toString(),
-                        rateSpeedMasterUuid = l.rateSpeedMasterUuid?.toString(),
-                        delayMs = l.delay?.toMillis(),
-                        intervalMs = l.interval?.toMillis(),
-                        randomWindowMs = l.randomWindow?.toMillis(),
-                    ),
-                )
-                liveKeys.add(RecordKey("cueLayers", l.uuid))
-                count++
-            }
-
-            c.adHocFx.forEach { e ->
-                Files.createDirectories(adHocDir)
-                writeJson(
-                    adHocDir.resolve("${e.uuid}.json"),
-                    CueAdHocFxJson.serializer(),
-                    CueAdHocFxJson(
-                        uuid = e.uuid.toString(),
-                        cueUuid = cueUuid,
-                        targetType = e.targetType,
-                        targetKey = e.targetKey,
-                        fxType = e.fxType,
-                        family = e.family,
-                        attribute = e.attribute,
-                        cycle = e.cycle,
-                        blendMode = e.blendMode,
-                        order = e.order,
-                        phaseOffset = e.phaseOffset,
-                        elementMode = e.elementMode,
-                        elementFilter = e.elementFilter,
-                        timing = e.timing,
-                        parameters = e.parameters,
-                        delayMs = e.delay?.toMillis(),
-                        intervalMs = e.interval?.toMillis(),
-                        randomWindowMs = e.randomWindow?.toMillis(),
-                        sortOrder = e.sortOrder,
-                        speedMasterUuid = e.speedMasterUuid?.toString(),
-                        rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
-                        seconds = e.seconds,
-                        amount = e.amount,
-                        direction = e.direction,
-                        runs = e.runs,
-                        spread = e.spread,
-                        wings = e.wings,
-                        segments = e.segments,
-                        parts = e.parts,
-                        spreadUnit = e.spreadUnit,
-                        runUuid = e.runUuid?.toString(),
-                    ),
-                )
-                liveKeys.add(RecordKey("cueAdHocFx", e.uuid))
-                count++
-            }
-
-            c.triggers.forEach { t ->
-                Files.createDirectories(triggerDir)
-                writeJson(
-                    triggerDir.resolve("${t.uuid}.json"),
-                    CueTriggerJson.serializer(),
-                    CueTriggerJson(
-                        uuid = t.uuid.toString(),
-                        cueUuid = cueUuid,
-                        triggerType = t.triggerType,
-                        scriptUuid = t.script.uuid.toString(),
-                        delayMs = t.delay?.toMillis(),
-                        intervalMs = t.interval?.toMillis(),
-                        randomWindowMs = t.randomWindow?.toMillis(),
-                        sortOrder = t.sortOrder,
-                    ),
-                )
-                liveKeys.add(RecordKey("cueTriggers", t.uuid))
-                count++
-            }
-        }
-        return count
-    }
-
-    private fun writeScripts(dir: Path, project: DaoProject, liveKeys: MutableSet<RecordKey>): Int {
-        val scripts = project.scripts.toList()
-        if (scripts.isEmpty()) return 0
-        val sub = dir.resolve("scripts")
-        Files.createDirectories(sub)
-        scripts.forEach { s ->
-            // Body as raw .kts so git diffs read like normal Kotlin.
-            Files.writeString(sub.resolve("${s.uuid}.kts"), s.script)
-            writeJson(
-                sub.resolve("${s.uuid}.meta.json"),
-                ScriptMetaJson.serializer(),
-                ScriptMetaJson(s.uuid.toString(), s.name, s.scriptType.name),
-            )
-            liveKeys.add(RecordKey("scripts", s.uuid))
-        }
-        return scripts.size * 2
-    }
-
-    private fun <T> writeJson(path: Path, serializer: KSerializer<T>, value: T) {
-        Files.writeString(path, canonicalEncode(serializer, value))
-    }
-
-    /**
-     * Write a tombstone marker for each [keys] entry under
-     * `[targetDir]/tombstones/{tableName}/{uuid}.json`. The body is intentionally minimal
-     * and timestamp-free so the file's hash stays stable across re-snapshots — see
-     * [TombstoneJson].
-     */
-    fun writeTombstones(targetDir: Path, keys: Collection<RecordKey>): Int {
-        if (keys.isEmpty()) return 0
-        val body = canonicalEncode(TombstoneJson.serializer(), TombstoneJson())
-        val byTable = keys.groupBy { it.tableName }
-        var count = 0
-        for ((tableName, recordKeys) in byTable) {
-            val sub = targetDir.resolve(RecordHasher.TOMBSTONES_DIR).resolve(tableName)
-            Files.createDirectories(sub)
-            for (key in recordKeys) {
-                Files.writeString(sub.resolve("${key.uuid}.json"), body)
-                count++
-            }
-        }
-        return count
+        val FOLDERS: Set<String> = KINDS.mapTo(linkedSetOf()) { it.folder }
     }
 }
 
