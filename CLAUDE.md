@@ -104,7 +104,8 @@ PR (`.github/workflows/ci.yml`, see §"Git workflow"). A full local run before p
 repeats CI, and the desktop app's Auto-fix wakes the session if CI fails.
 
 - **Backend:** `./gradlew compileTestKotlin`, then `./gradlew test --tests '<package>.*'` for
-  each package the change touches and each package that calls into it.
+  each package the change touches and each package that calls into it. A change to
+  `cloud-protocol/` is `./gradlew :cloud-protocol:check`: the root `test` does not reach it.
 - **Frontend:** `npm run check:quick` in `frontend/`: the full `tsc` and build, lint (cached, so
   seconds when warm), the Vitest files affected by changes since `origin/main`, and the licence gate
   (`npm run licences`). `.githooks/pre-commit` runs it when anything buildable under `frontend/`, or
@@ -204,7 +205,13 @@ src/main/kotlin/uk/me/cormack/lighting7/
 ├── routes/                 # REST API endpoints
 ├── plugins/                # Ktor plugins (HTTP, WebSockets, Routing)
 └── scripts/                # LightingScript DSL definition
+
+cloud-protocol/             # The desk–cloud wire contract, its own Gradle build (includeBuild)
 ```
+
+`cloud-protocol/` is MIT, builds alone from a sparse checkout with the root files (the cloud consumes
+it that way), and reads its Kotlin and serialization versions from the root `gradle.properties`; the
+root `check` runs its tests. See [docs/cloud-protocol.md](docs/cloud-protocol.md).
 
 ## Key Concepts
 
@@ -1080,6 +1087,7 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 For deeper technical details, see the docs in `docs/`:
 
 - [Glossary](docs/glossary.md) - One word per idea, its old names and MagicQ's word; `GlossaryVocabularyTest` and `glossary.test.ts` hold the label tables to its `done` rows
+- [Cloud Protocol](docs/cloud-protocol.md) - `cloud-protocol/`: the control channel's envelope and messages, the adoption API's bodies, close and error codes, the install key's signing, the golden fixtures both repos test against, and the versioning rule
 - [Licensing](docs/licensing.md) - The desk's MIT licence, the licence gate, what it allows, how to add a dependency, and the audit that found artnet4j blocking MIT
 - [API Conventions](docs/api-conventions.md) - Kebab-case paths, plural collections with the list GET on the collection, one spelling for vocabulary enumerations, `?force=true` as the guard-override, and why unbounded lists are deliberate at desk scale
 - [Testing](docs/testing-engineering.md) - What makes the suite ~1 min rather than ~14 (the four changes, each load-bearing), the warm/cold script-cache regimes, why `build/test-data` is pinned, the tests that assert real elapsed time, and the order-dependence detector

@@ -188,6 +188,9 @@ dependencies {
     // plan session 1). Cost 12 (~250 ms/verify) is a deliberate login throttle; tests pin
     // `auth.bcryptCost=4`. One transitive: at.favre.lib:bytes.
     implementation("at.favre.lib:bcrypt:0.10.2")
+
+    // The desk–cloud wire contract: the included build in cloud-protocol/ (docs/cloud-protocol.md).
+    implementation("uk.me.cormack.lighting7:cloud-protocol")
 }
 
 // ─── Frontend bundling ─────────────────────────────────────────────────
@@ -1138,4 +1141,5 @@ val licenceCheck = tasks.register<com.github.gradle.node.task.NodeTask>("licence
 
 tasks.named("check") {
     dependsOn(licenceCheck)
+    dependsOn(gradle.includedBuild("cloud-protocol").task(":check"))
 }

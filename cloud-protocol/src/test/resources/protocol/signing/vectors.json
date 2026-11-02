@@ -1,0 +1,36 @@
+{
+  "key": "test-key.json",
+  "vectors": [
+    {
+      "payload": "auth",
+      "domain": "lighting7-cloud/auth/v1",
+      "fields": {
+        "installId": "inst_01JBX3Q5Z8",
+        "nonce": "oN6s1kZlqH0tq3fWb2pQe8Yd4VxCjR7uTgMa9LzK5wI",
+        "timestamp": "2026-11-02T22:18:03.000Z"
+      },
+      "canonicalBytesHex": "000000176c69676874696e67372d636c6f75642f617574682f76310000000f696e73745f30314a42583351355a380000002b6f4e3673316b5a6c71483074713366576232705165385964345678436a52377554674d61394c7a4b35774900000018323032362d31312d30325432323a31383a30332e3030305a",
+      "signature": "pywOheIKHXnb67KQokXxaAntdoy26DnwVTqh9u9oKqBF6KS4fPXeCeeVEAr9yxXfcWaSvMk4iN3D4HOjQBn1CQ"
+    },
+    {
+      "payload": "adoptionPoll",
+      "domain": "lighting7-cloud/adoption-poll/v1",
+      "fields": {
+        "adoptionId": "adp_7Kq2Vx9mT4",
+        "timestamp": "2026-11-02T22:18:03.000Z"
+      },
+      "canonicalBytesHex": "000000206c69676874696e67372d636c6f75642f61646f7074696f6e2d706f6c6c2f76310000000e6164705f374b71325678396d543400000018323032362d31312d30325432323a31383a30332e3030305a",
+      "signature": "2eB-Ax0YVpHp5VeRptVUf1IJBgaVyGoMEcnkw7uDvmAnUqETKykxROMSnpbF5hyWv8F4GPQOPkmJ0DV9M-bzBQ"
+    },
+    {
+      "payload": "unadopt",
+      "domain": "lighting7-cloud/unadopt/v1",
+      "fields": {
+        "installId": "inst_01JBX3Q5Z8",
+        "timestamp": "2026-11-02T22:18:03.000Z"
+      },
+      "canonicalBytesHex": "0000001a6c69676874696e67372d636c6f75642f756e61646f70742f76310000000f696e73745f30314a42583351355a3800000018323032362d31312d30325432323a31383a30332e3030305a",
+      "signature": "v3V0lMuv3jxeJT8TYZWmq91XWUKAXPommwPghukOftVnCqbGI4qkvVeOMrS8pZybeI0ZdIoeq23J1CVzYcgYAg"
+    }
+  ]
+}

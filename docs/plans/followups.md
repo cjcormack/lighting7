@@ -171,6 +171,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TIMELINE-MCP`](#fu-timeline-mcp) | Trigger | AI | an operator asks Claude to make an FX continue across cues |
 | [`FU-LICENCE-TEXTS`](#fu-licence-texts) | Ready | Dist | — |
 | [`FU-LICENCE-POM-DRIFT`](#fu-licence-pom-drift) | Ready | Dist | — |
+| [`FU-CLOUD-PROTOCOL-PUBLISH`](#fu-cloud-protocol-publish) | Trigger | Dist | a third party builds against the cloud protocol |
 | [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -1945,6 +1946,21 @@ name, `shadowJar` keeps only the first.
 
 **Fix**: generate the texts and copyright lines from the jars, POMs and
 `node_modules` into a notices file the installers carry, and extend the gate's drift check to it.
+
+### `FU-CLOUD-PROTOCOL-PUBLISH`
+
+**`cloud-protocol` is consumed from a pinned desk commit, not a registry** · Trigger · cloud-p0 session 3, 2026-11-02
+
+The cloud builds `cloud-protocol/` from a sparse checkout of the desk at the commit its `desk.ref`
+names (`docs/cloud-protocol.md` §"How the cloud consumes it"). That serves two repos with one owner. A
+third party, such as a community tool speaking to the cloud or a desk-side plugin, could not depend on
+it without checking out the desk.
+
+**Trigger**: someone outside the two repos needs to build against the protocol.
+
+**Fix**: publish the module, versioned by desk release, to Maven Central (or GitHub Packages), with its
+golden fixtures as a test-fixtures artifact, and say in `docs/cloud-protocol.md` which version speaks
+which `PROTOCOL_VERSION`.
 
 ### `FU-DIST-ICONS`
 

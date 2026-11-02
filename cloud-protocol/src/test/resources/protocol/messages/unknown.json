@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "type": "rtc.offer",
+  "id": "c-0005",
+  "body": {
+    "sdp": "v=0",
+    "nested": {"candidates": [1, 2, 3], "trickle": true}
+  }
+}

@@ -69,6 +69,7 @@ jobs:
           path: |
             build/reports/tests/
             launcher/build/reports/tests/
+            cloud-protocol/build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore
 

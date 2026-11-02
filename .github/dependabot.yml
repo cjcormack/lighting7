@@ -4,8 +4,9 @@
 # share one PR per ecosystem, majors come one at a time because each is its own migration.
 #
 # Watch for what it misses. The Node distribution pinned in build.gradle.kts's `node {}` block is
-# a plain string Dependabot never sees, and `kotlin_version` / `shadow_version` reach the plugins
-# through gradle.properties and pluginManagement, which it may not follow — check those by hand.
+# a plain string Dependabot never sees, `kotlin_version` / `shadow_version` reach the plugins
+# through gradle.properties and pluginManagement, which it may not follow, and
+# `serialization_version` is read only by cloud-protocol/, a build it does not scan — check those by hand.
 
 version: 2
 updates:

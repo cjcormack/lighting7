@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "type": "health",
+  "id": "d-0003",
+  "body": {
+    "uptimeS": 3600,
+    "deskVersion": "1.4.0"
+  }
+}
