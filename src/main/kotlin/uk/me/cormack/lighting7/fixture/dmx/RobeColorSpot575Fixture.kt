@@ -17,10 +17,9 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  * patch; the other modes remain as `// TODO` enum entries per the locked
  * decision.
  *
- * Authoritative channel map:
- * `Manuals/personalities/Robe_ColorSpot575AT_Mode2.md`. The MagicQ
- * `EDIT HEAD` capture there was spot-checked against the bundled DMX chart
- * (`Manuals/ColorSpot_575_AT_DMX_charts.pdf`) and they agree.
+ * Authoritative channel map: the ChamSys MagicQ personality
+ * `Robe_Spot575_Mode 2.hed`, read from MagicQ's `EDIT HEAD` screens and
+ * spot-checked against Robe's *ColorSpot 575 AT DMX charts*; they agree.
  *
  * Discharge-lamp safety: lamp on/off and the seven reset bands all live on
  * **channel 6 (Control)** — not the shutter channel as on the MAC 250.
@@ -247,10 +246,10 @@ sealed class RobeColorSpot575Fixture(
     }
 
     /**
-     * Channel 16 — Zoom: three fixed angles, each with and without focus correction (DMX chart v1.0;
-     * `Manuals/personalities/Robe_ColorSpot575AT_Mode2.md`). A **stepped zoom** (fixture-optics plan
-     * D2): the chart's bands are positions, not a sweep, so it is a setting whose options carry their
-     * angle — a slider would draw every DMX value between them as an angle the lens never takes.
+     * Channel 16 — Zoom: three fixed angles, each with and without focus correction (Robe's DMX chart
+     * v1.0). A **stepped zoom** (fixture-optics plan D2): the chart's bands are positions, not a
+     * sweep, so it is a setting whose options carry their angle — a slider would draw every DMX value
+     * between them as an angle the lens never takes.
      * Levels are the band starts.
      */
     enum class Zoom(

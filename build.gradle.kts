@@ -1068,3 +1068,78 @@ tasks.test {
         }
     }
 }
+
+// ─── Licence gate ──────────────────────────────────────────────────────
+// docs/licensing.md. Every module on the desk's and the launcher's runtime classpaths must be
+// listed in licences/jvm.json under a licence licences/allowed.json allows. scripts/licences.mjs
+// is the one check: this task hands it the resolved modules, and `npm run licences` in frontend/
+// runs it for the npm half and the notices.
+val launcherRuntimeModules = configurations.create("launcherRuntimeModules") {
+    description = "The launcher's runtime classpath, resolved here only to list its modules."
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+        attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+        attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, objects.named(TargetJvmEnvironment.STANDARD_JVM))
+    }
+}
+
+dependencies {
+    launcherRuntimeModules(project(":launcher"))
+}
+
+// The modules whose artifacts ship, so a BOM (a platform, with no jar) is not one. The component
+// filter keeps the launcher's own jar out of the resolution, which would otherwise build it. A file
+// dependency has no coordinates, so it is listed by its file name and needs an entry of that name.
+fun Configuration.shippedModules(): Provider<List<String>> =
+    incoming.artifactView { componentFilter { it !is ProjectComponentIdentifier } }
+        .artifacts.resolvedArtifacts.map { artifacts ->
+            artifacts.map {
+                when (val id = it.id.componentIdentifier) {
+                    is ModuleComponentIdentifier -> "${id.group}:${id.module}"
+                    else -> "file:${it.file.name}"
+                }
+            }
+        }
+
+val runtimeModulesFile = layout.buildDirectory.file("licences/runtime-modules.txt")
+
+val writeRuntimeModules = tasks.register("writeRuntimeModules") {
+    description = "List the group:name of every module on the desk's and the launcher's runtime classpaths."
+    group = "verification"
+    val modules = configurations.runtimeClasspath.flatMap { it.shippedModules() }
+        .zip(launcherRuntimeModules.shippedModules()) { desk, launcher -> (desk + launcher).distinct().sorted() }
+    inputs.property("modules", modules)
+    // A local, so the action captures the provider rather than the script.
+    val out = runtimeModulesFile
+    outputs.file(out)
+    doLast {
+        out.get().asFile.writeText(modules.get().joinToString("\n", postfix = "\n"))
+    }
+}
+
+val licenceCheck = tasks.register<com.github.gradle.node.task.NodeTask>("licenceCheck") {
+    description = "Fail on a runtime dependency licence outside licences/allowed.json, or a stale THIRD-PARTY-NOTICES.md."
+    group = "verification"
+    dependsOn(writeRuntimeModules)
+    // npmInstall may rewrite the lock file this reads, so read it after.
+    mustRunAfter(tasks.named("npmInstall"))
+    script.set(layout.projectDirectory.file("scripts/licences.mjs"))
+    args.set(listOf("--check", "--jvm-modules", runtimeModulesFile.get().asFile.absolutePath))
+    workingDir.set(layout.projectDirectory)
+    inputs.file(runtimeModulesFile).withPropertyName("runtimeModules")
+    inputs.dir(layout.projectDirectory.dir("licences")).withPropertyName("licenceData")
+    inputs.file(layout.projectDirectory.file("frontend/package-lock.json")).withPropertyName("npmLock")
+    inputs.files(layout.projectDirectory.file("THIRD-PARTY-NOTICES.md")).withPropertyName("notices")
+    inputs.files(layout.projectDirectory.file("LICENSE")).withPropertyName("licence")
+    val stamp = layout.buildDirectory.file("licences/check.stamp")
+    outputs.file(stamp)
+    doLast { stamp.get().asFile.writeText("passed\n") }
+}
+
+tasks.named("check") {
+    dependsOn(licenceCheck)
+}

@@ -1,6 +1,7 @@
 {
   "name": "lighting-desk-ui",
   "private": true,
+  "license": "MIT",
   "version": "0.1.0",
   "type": "module",
   "description": "Library build of the desk's UI primitives and standalone app components, consumed by the design-sync converter (see .design-sync/). Not published.",

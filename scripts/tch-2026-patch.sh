@@ -8,7 +8,7 @@
 # Idempotent: a 409 Conflict on duplicate keys is treated as "already patched"
 # and the row is skipped. Re-running the script is safe.
 #
-# Source: Manuals/TCH_2026_.pdf (ChamSys MagicVis export 2026-04-19).
+# Source: TCH_2026_.pdf (ChamSys MagicVis export 2026-04-19).
 # Plan: docs/plans/tch-2026-fixture-patch-plan.md (Tier 9).
 
 set -euo pipefail
