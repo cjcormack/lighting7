@@ -12,3 +12,9 @@ package uk.me.cormack.lighting7.dmx
  */
 fun packChannelKey(universe: Int, channel: Int): Long =
     (universe.toLong() shl 20) or (channel.toLong() and 0xFFFFFL)
+
+/** The universe a [packChannelKey] key names. */
+fun unpackChannelUniverse(packed: Long): Int = (packed shr 20).toInt()
+
+/** The channel a [packChannelKey] key names. */
+fun unpackChannelNumber(packed: Long): Int = (packed and 0xFFFFF).toInt()

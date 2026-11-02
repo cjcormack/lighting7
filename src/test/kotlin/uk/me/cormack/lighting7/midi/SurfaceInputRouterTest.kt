@@ -12,6 +12,8 @@ import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -83,6 +85,22 @@ class SurfaceInputRouterTest {
         )
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(channel = 0, cc = 1, value = 100u))
         assertEquals(listOf<RecordedCall>(RecordedCall.WriteFixture("hex-1", "dimmer", 100u)), actions.calls.toList())
+    }
+
+    @Test
+    fun `each input runs under the surface's own origin, a fader's moves keyed to fold into one step`() {
+        val actions = RecordingActions()
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"))),
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(channel = 0, cc = 1, value = 100u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(channel = 0, cc = 1, value = 90u))
+        val (first, second) = actions.origins.map { assertNotNull(it) }
+        assertEquals(uk.me.cormack.lighting7.history.HistorySource.surface(deviceTypeKey), first.source)
+        assertTrue(first.requestId != second.requestId, "each input is its own request")
+        assertEquals(first.coalesceKey, second.coalesceKey, "but one gesture")
+        assertNull(uk.me.cormack.lighting7.history.WriteOrigin.current(), "and the origin ends with the input")
     }
 
     @Test
@@ -936,8 +954,12 @@ class SurfaceInputRouterTest {
 /** Recording fake of [SurfaceActions] for tests. Every call appends to [calls]. */
 private class RecordingActions : SurfaceActions {
     val calls = mutableListOf<RecordedCall>()
+
+    /** The write origin each fixture write ran under. */
+    val origins = mutableListOf<uk.me.cormack.lighting7.history.WriteOrigin?>()
     override fun writeFixtureAttribute(fixtureKey: String, attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
         calls += RecordedCall.WriteFixture(fixtureKey, attribute, midiValue7Bit, colourAxis)
+        origins += uk.me.cormack.lighting7.history.WriteOrigin.current()
     }
     override fun writeGroupAttribute(groupName: String, attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
         calls += RecordedCall.WriteGroup(groupName, attribute, midiValue7Bit, colourAxis)

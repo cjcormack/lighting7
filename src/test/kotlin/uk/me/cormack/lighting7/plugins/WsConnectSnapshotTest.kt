@@ -71,6 +71,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The grand master (venue-visit S5), a StateFlow following the live show: at full on a fresh
         // desk, which is still the level every Grand Master panel starts from.
         GrandMasterStateOutMessage::class,
+        // The programmer's history (undo plan §3.7), a StateFlow hosted on State: empty on a fresh desk,
+        // which is still what the action bar's Undo and Redo start from.
+        HistoryStateOutMessage::class,
         // Each stack's FX amount (effects plan D10), a StateFlow following the live show: on a fresh
         // desk no stack is below full, and that empty frame is still what every FX size slider starts from.
         StackFxAmountStateOutMessage::class,

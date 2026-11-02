@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.mcp
 
+import kotlinx.coroutines.withContext
+import uk.me.cormack.lighting7.history.WriteOrigin
+import uk.me.cormack.lighting7.plugins.historySourceOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -197,8 +200,12 @@ class McpProtocol(private val state: State) {
             return toolResult(FIXTURE_COMMANDS_REMOTE_REFUSAL, isError = true)
         }
 
-        val outcome = if (setupTools.handles(name)) setupTools.executeTool(name, arguments, caller = user.displayName)
-        else tools.executeTool(name, arguments)
+        // One tool call is one step of the programmer's history, Claude's own (undo plan D7).
+        val origin = WriteOrigin(historySourceOf(user)).apply { label = "Claude: $name" }
+        val outcome = withContext(origin) {
+            if (setupTools.handles(name)) setupTools.executeTool(name, arguments, caller = user.displayName)
+            else tools.executeTool(name, arguments)
+        }
         return toolResult(outcome.result, isError = !outcome.success, images = outcome.images)
     }
 

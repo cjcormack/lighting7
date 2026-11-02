@@ -810,8 +810,14 @@ class State(val config: ApplicationConfig) {
     val programmerScenery: ProgrammerScenery by lazy {
         ProgrammerScenery { projectId ->
             transaction(database) { DaoProject.findById(projectId)?.let(::sceneryElementsOf).orEmpty() }
-        }
+        }.also { scenery -> scenery.beforeMutation = { showOrNull?.programmerHistory?.beforeMutation() } }
     }
+
+    /**
+     * The live show's programmer history (`history.state`, undo plan §3.7): here rather than on the show
+     * so a socket's one subscription outlives a project switch; each show's history publishes into it.
+     */
+    val programmerHistoryFrame = kotlinx.coroutines.flow.MutableStateFlow(uk.me.cormack.lighting7.history.ProgrammerHistory.Frame.EMPTY)
 
     /**
      * The desk's one-shot effects (stage-view plan session 9): the arm, every fire, the spent tubes

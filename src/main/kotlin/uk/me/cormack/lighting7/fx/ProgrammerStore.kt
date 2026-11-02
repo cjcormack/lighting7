@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import uk.me.cormack.lighting7.dmx.packChannelKey
+import uk.me.cormack.lighting7.dmx.unpackChannelNumber
+import uk.me.cormack.lighting7.dmx.unpackChannelUniverse
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -275,6 +277,7 @@ class ProgrammerStore {
     var lastIncludedTarget: IncludedTarget?
         get() = _lastIncludedTarget.value
         set(value) {
+            if (value != null || _lastIncludedTarget.value != null) mutating()
             _lastIncludedTarget.value = value?.copy(baseline = baselineCounter.incrementAndGet())
             // The layer count is measured against the target, so the layer frame says it again.
             announceLayers()
@@ -498,6 +501,9 @@ class ProgrammerStore {
         val result = synchronized(layersLock) {
             val previous = layers
             val (next, extra) = transform(previous)
+            // The step is taken only for a list that moves, and before it does: [snapshot] reads
+            // [layers] without this lock, and nothing that holds Locate's lock waits for this one.
+            if (next !== previous) mutating()
             layers = next
             changed = next !== previous
             next to extra
@@ -610,6 +616,7 @@ class ProgrammerStore {
         touched: Boolean = true,
         sourceGroup: String? = null,
     ) {
+        mutating(owner)
         val slot = Slot(owner, value, touched, sourceGroup, seq = bumpEpoch())
         val byAttribute = attributes.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
         var covered = false
@@ -634,6 +641,7 @@ class ProgrammerStore {
         touched: Boolean = true,
         sourceGroup: String? = null,
     ) {
+        mutating(owner)
         val slot = Slot(owner, ProgrammerValue.Hard(value), touched, sourceGroup, seq = bumpEpoch())
         val byAttribute = attributes.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
         var covered = false
@@ -758,6 +766,7 @@ class ProgrammerStore {
      */
     fun clear(owner: ProgrammerOwner, fixtureKey: String, attribute: String) {
         val byAttribute = attributes[fixtureKey] ?: return
+        if (byAttribute[attribute]?.all()?.any { it.owner == owner } == true) mutating(owner)
         var changed = false
         var removedLast = false
         byAttribute.computeIfPresent(attribute) { _, holder ->
@@ -778,6 +787,7 @@ class ProgrammerStore {
      */
     fun reown(from: ProgrammerOwner, to: ProgrammerOwner, fixtureKey: String, attribute: String): Boolean {
         val byAttribute = attributes[fixtureKey] ?: return false
+        if (byAttribute[attribute]?.all()?.any { it.owner == from } == true) mutating()
         var moved = false
         byAttribute.computeIfPresent(attribute) { _, holder ->
             val slots = holder.all()
@@ -821,6 +831,7 @@ class ProgrammerStore {
         value: UByte,
         touched: Boolean = true,
     ) {
+        mutating(owner)
         val slot = Slot(
             owner,
             ProgrammerValue.Hard(CueAssignmentResolver.AttributeValue.Slider(value)),
@@ -843,6 +854,7 @@ class ProgrammerStore {
 
     /** Remove [owner]'s sideband slot at (universe, channel). */
     fun clearChannel(owner: ProgrammerOwner, universe: Int, channel: Int) {
+        if (channels[packChannelKey(universe, channel)]?.all()?.any { it.owner == owner } == true) mutating(owner)
         var changed = false
         channels.computeIfPresent(packChannelKey(universe, channel)) { _, holder ->
             val next = withoutOwner(holder, owner)
@@ -866,6 +878,7 @@ class ProgrammerStore {
      * entries absorb the sideband beneath them rather than stacking across granularities.
      */
     fun clearChannelsAbsorbedBy(channelKeys: Iterable<Long>) {
+        if (channelKeys.any { channels.containsKey(it) }) mutating()
         var removed = false
         for (key in channelKeys) {
             if (channels.remove(key) != null) removed = true
@@ -885,6 +898,7 @@ class ProgrammerStore {
      * together, which holds for every current owner with a release path.
      */
     fun clearOwner(owner: ProgrammerOwner): Int {
+        if (holds(owner)) mutating(owner)
         var swept = 0
         var coverageChanged = false
         // Emptied inner maps are left in place — see [clear] for the race a
@@ -919,6 +933,7 @@ class ProgrammerStore {
      * did nothing.
      */
     fun clearAll() {
+        if (holdsTrackedContent()) mutating()
         attributes.clear()
         channels.clear()
         _lastIncludedTarget.value = null
@@ -932,6 +947,126 @@ class ProgrammerStore {
         bumpEpoch()
         bumpCoverage()
     }
+
+    // ── History (undo plan §3.6) ───────────────────────────────────────────
+
+    /**
+     * Called at the head of every mutation an operator's gesture can make — the slot writes and
+     * clears, the layer list, the include target — before anything moves, so the programmer's history
+     * can take its step from the store as it stood. Not called for [putLayerSlots], which only
+     * re-derives the layers' values (a Look edit's recook), nor for the [UNTRACKED_OWNERS].
+     */
+    @Volatile
+    var beforeMutation: () -> Unit = {}
+
+    private fun mutating(owner: ProgrammerOwner? = null) {
+        if (owner == null || owner !in UNTRACKED_OWNERS) beforeMutation()
+    }
+
+    /** Whether [owner] holds any slot, a property's or the sideband's. */
+    private fun holds(owner: ProgrammerOwner): Boolean =
+        attributes.values.any { byAttribute -> byAttribute.values.any { holder -> holder.all().any { it.owner == owner } } } ||
+            channels.values.any { holder -> holder.all().any { it.owner == owner } }
+
+    /** Whether Clear would change anything a programmer step keeps. */
+    private fun holdsTrackedContent(): Boolean =
+        layers.isNotEmpty() || _lastIncludedTarget.value != null || includedLayerSnapshot.isNotEmpty() || includedKeys != null ||
+            attributes.values.any { byAttribute -> byAttribute.values.any { holder -> holder.all().any { it.owner !in UNTRACKED_OWNERS } } } ||
+            channels.values.any { holder -> holder.all().any { it.owner !in UNTRACKED_OWNERS } }
+
+    /**
+     * What a programmer step keeps of the store: each key's slots but the [UNTRACKED_OWNERS]' (immutable,
+     * so shared rather than copied), the layer list, and the Include bookkeeping §3.6 names. Not Blind
+     * or the epochs, and not [sourceKeys] or [recordedValues], which describe the stored source as the
+     * last Include, Record or Update read it, and so stay as they are on a restore.
+     */
+    data class StoreSnapshot(
+        val attributes: Map<String, Map<String, List<Slot>>>,
+        val channels: Map<Long, List<Slot>>,
+        val layers: List<ProgrammerLayer>,
+        val includedLayerSnapshot: List<ProgrammerLayer>,
+        val lastIncludedTarget: IncludedTarget?,
+        val includedKeys: IncludedKeys?,
+    ) {
+        /** The (fixture, property) keys this snapshot holds a slot on. */
+        fun activeKeys(): Set<CueAssignmentResolver.Key> = buildSet {
+            for ((fixtureKey, byAttribute) in attributes) {
+                for (attribute in byAttribute.keys) add(CueAssignmentResolver.Key.fixture(fixtureKey, attribute))
+            }
+        }
+
+        /** The winning value on [key], or null. */
+        fun topValue(key: CueAssignmentResolver.Key): CueAssignmentResolver.AttributeValue? =
+            attributes[key.targetKey]?.get(key.attribute)?.firstOrNull()?.value?.resolved
+    }
+
+    fun snapshot(): StoreSnapshot = StoreSnapshot(
+        attributes = buildMap {
+            for ((fixtureKey, byAttribute) in attributes) {
+                val held = buildMap {
+                    for ((attribute, holder) in byAttribute) tracked(holder.all())?.let { put(attribute, it) }
+                }
+                if (held.isNotEmpty()) put(fixtureKey, held)
+            }
+        },
+        channels = buildMap { for ((key, holder) in channels) tracked(holder.all())?.let { put(key, it) } },
+        layers = layers,
+        includedLayerSnapshot = includedLayerSnapshot,
+        lastIncludedTarget = _lastIncludedTarget.value,
+        includedKeys = includedKeys,
+    )
+
+    private fun tracked(slots: List<Slot>): List<Slot>? =
+        slots.filter { it.owner !in UNTRACKED_OWNERS }.ifEmpty { null }
+
+    /**
+     * Put the store back as [snapshot] holds it, publishing nothing — `ProgrammerWriter.restore` does
+     * that. Each key takes its slots before any key the snapshot lacks is dropped, so no key held in
+     * both is uncovered for a pass. What the [UNTRACKED_OWNERS] hold now stays, in recency order among
+     * the restored slots: a held flash, an unpark's hand-down. A layer still in the stack keeps the cue
+     * row an Update since tied it to. Blind is left as it is.
+     */
+    fun restore(snapshot: StoreSnapshot) {
+        fun holderOf(slots: List<Slot>): Holder? = when (slots.size) {
+            0 -> null
+            1 -> Single(slots[0])
+            else -> Stack(slots)
+        }
+        fun withUntracked(restored: List<Slot>, current: Holder?): Holder? {
+            val untracked = current?.all().orEmpty().filter { it.owner in UNTRACKED_OWNERS }
+            return holderOf(if (untracked.isEmpty()) restored else (restored + untracked).sortedByDescending { it.seq })
+        }
+        for ((fixtureKey, held) in snapshot.attributes) {
+            val byAttribute = attributes.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
+            for ((attribute, slots) in held) byAttribute.compute(attribute) { _, current -> withUntracked(slots, current) }
+        }
+        for ((fixtureKey, byAttribute) in attributes) {
+            val held = snapshot.attributes[fixtureKey]
+            for (attribute in byAttribute.keys) {
+                if (held?.containsKey(attribute) != true) byAttribute.computeIfPresent(attribute) { _, current -> withUntracked(emptyList(), current) }
+            }
+        }
+        for ((key, slots) in snapshot.channels) channels.compute(key) { _, current -> withUntracked(slots, current) }
+        for (key in channels.keys) {
+            if (!snapshot.channels.containsKey(key)) channels.computeIfPresent(key) { _, current -> withUntracked(emptyList(), current) }
+        }
+        synchronized(layersLock) {
+            val now = layers.associateBy { it.layerId }
+            layers = snapshot.layers.map { layer ->
+                val row = now[layer.layerId]?.sourceCueLayerId ?: return@map layer
+                if (row == layer.sourceCueLayerId) layer else layer.copy(sourceCueLayerId = row)
+            }
+        }
+        _lastIncludedTarget.value = snapshot.lastIncludedTarget
+        includedKeys = snapshot.includedKeys
+        bumpEpoch()
+        bumpCoverage()
+        // Its setter says the stack again, which every tab redraws the layer list from.
+        includedLayerSnapshot = snapshot.includedLayerSnapshot
+    }
+
+    /** A step's head for a gesture whose first write is bookkeeping the hooks do not see — Look Include. */
+    fun beforeGesture() = mutating()
 
     // ── Enumeration (cold path: Record, blind republish, state broadcast) ───
 
@@ -1001,7 +1136,7 @@ class ProgrammerStore {
     /** Snapshot of every sideband entry. Cold path. */
     fun channelEntries(): List<ChannelEntryView> = buildList {
         for ((packed, holder) in channels) {
-            add(ChannelEntryView(unpackUniverse(packed), unpackChannel(packed), holder.all()))
+            add(ChannelEntryView(unpackChannelUniverse(packed), unpackChannelNumber(packed), holder.all()))
         }
     }
 
@@ -1106,8 +1241,6 @@ class ProgrammerStore {
         }
     }
 
-    private fun unpackUniverse(packed: Long): Int = (packed shr 20).toInt()
-    private fun unpackChannel(packed: Long): Int = (packed and 0xFFFFF).toInt()
 
     companion object {
         /**
@@ -1133,5 +1266,11 @@ class ProgrammerStore {
          * sentinel. A slot stamped with it would be read as absent and lose to any sideband value.
          */
         const val LAYER_SEQ_BASE: Long = Long.MIN_VALUE / 2
+
+        /**
+         * Owners whose writes are no operator's gesture and so take no programmer step: an unpark's
+         * hand-down (the park belongs to the show's history, D4) and a flash, which lets go on release.
+         */
+        val UNTRACKED_OWNERS = setOf(ProgrammerOwner.UNPARK, ProgrammerOwner.FLASH)
     }
 }

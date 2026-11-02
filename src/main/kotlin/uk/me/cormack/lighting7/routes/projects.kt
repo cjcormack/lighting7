@@ -352,6 +352,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectBusk(state)
         routeApiRestProjectBuskRig(state)
         routeApiRestProgrammerFan(state)
+        routeApiRestProjectHistory(state)
         routeApiRestProgrammerFx(state)
         routeApiRestFxPreview(state)
         routeApiRestProgrammerAim(state)

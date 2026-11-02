@@ -4785,6 +4785,27 @@ and the picker do — *Apply a palette…* offering the picker's set through the
 `COMMAND_DOORS`' order; Set and Fan bring the Values table back first, since the grid is hidden under
 the others, and Fan opens through an `{open: true}` seed (`SpreadSeed`) so its refusal is the trigger's.
 
+### The programmer's undo
+
+**Undo and Redo lead row A, ahead of Clear** (`components/programmer/ProgrammerUndoRedo.tsx`, undo
+plan session 1, §4.3), programmer-only and at the programmer fade. They read `history.state`
+(`api/historyApi.ts`, form 3 in `store/history.ts`) and write `POST projects/{id}/history/undo|redo`;
+a step belongs to whoever's gesture made it but is anyone's to take, since there is one programmer.
+Undo carries the step it takes in muted text where the row has words (`Undo · Clear`); a right-click
+or a hold (`useLongPress`, so the release does not also undo) lists the last 12 steps, and picking one
+goes back to before it. **Redo folds into that menu below `@[800px]`**, where every control on the
+row is its icon, so the pair costs the iconic row one 32px button (40px with its gap); measured at
+852×393, 945×457, 1024×457 and 612×457, rows A and B break where they did without it.
+
+**Clear's toast carries Undo** naming the Clear's own step (`awaitHistoryStep`: the newest step after
+the revision Clear was pressed at, labelled `Clear`), so it undoes the Clear and whatever came after
+it, never whatever happens to be newest when it is clicked.
+
+**⌘Z and ⇧⌘Z** (Ctrl on Windows and Linux) take the steps while the programmer view is mounted
+(`useProgrammerUndoKeys`), skipped in a text field, a contenteditable or with a dialog open, and for a
+key another handler has `preventDefault()`ed. The cue editor's ⌘Z is its own and unchanged; session 6
+of the plan makes both global.
+
 ### One selection, two shapes
 
 **Rows and cells are one selection**, and either clears the other — on every sheet; `useSheet`

@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.state
 
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.withContext
+import uk.me.cormack.lighting7.history.WriteOrigin
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -101,7 +103,9 @@ class ProjectManager(
      * and only the parks hold their level.
      */
     suspend fun switchProject(projectId: Int, reload: Boolean = false): Show = Tracing.transactionSuspending("project.switch", "project.switch") {
-        switchProjectTraced(projectId, reload)
+        // Untracked whatever request set it off: tearing a show down and resuming its successor moves
+        // the programmer, but is no gesture to undo (undo plan D14).
+        withContext(WriteOrigin.untracked()) { switchProjectTraced(projectId, reload) }
     }
 
     private suspend fun switchProjectTraced(projectId: Int, reload: Boolean): Show {

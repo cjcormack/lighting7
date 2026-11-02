@@ -744,8 +744,12 @@ class FxInstance internal constructor(
      * A [leaving] instance is nobody's: a release has already let it go, and only its fade holds it.
      */
     val isLocalFx: Boolean
+        get() = ownedAsLocal && !leaving
+
+    /** [isLocalFx] whether or not it is [leaving]: one a release let go of while it was the operator's own. */
+    internal val ownedAsLocal: Boolean
         get() = FxEngine.isProgrammerFxPriority(priority) &&
-            source == null && programmerLayerFxKey == null && cueId == null && !leaving
+            source == null && programmerLayerFxKey == null && cueId == null
 
     /**
      * Composition priority. Effects with lower priority compose first; higher priority effects

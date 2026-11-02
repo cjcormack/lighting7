@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.history.WriteOrigin
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.application.*
@@ -198,6 +199,12 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
  */
 internal fun reassertLocates(state: State, patchKeys: Set<String>) {
     if (patchKeys.isEmpty()) return
+    // Untracked: it follows a stored locate that moved, and a programmer step restoring the old point
+    // would put the head where nothing stores it (undo plan D14).
+    WriteOrigin.with(WriteOrigin.untracked()) { reassertUntracked(state, patchKeys) }
+}
+
+private fun reassertUntracked(state: State, patchKeys: Set<String>) {
     state.show.locateManager.reassert(
         affects = { target ->
             runCatching {

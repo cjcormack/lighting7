@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
+import uk.me.cormack.lighting7.dmx.unpackChannelNumber
+import uk.me.cormack.lighting7.dmx.unpackChannelUniverse
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
@@ -439,11 +441,7 @@ class ProgrammerWriter internal constructor(
 
         // Map each sideband channel to the property that covers it (so it releases through
         // the cascade) or remember it as unbacked (released to 0 below).
-        val unbacked = mutableListOf<Pair<Int, Int>>()
-        for (entry in channelEntries) {
-            val key = publisher.resolveChannelCoveringKey(entry.universe, entry.channel)
-            if (key != null) keys += key else unbacked += entry.universe to entry.channel
-        }
+        val unbacked = coverSideband(channelEntries.map { it.universe to it.channel }, keys)
 
         programmerStore.clearAll()
 
@@ -521,6 +519,43 @@ class ProgrammerWriter internal constructor(
             }
         }
         onProgrammerChanged()
+    }
+
+    /**
+     * Put the store back as [snapshot] holds it — a programmer undo or redo (undo plan §3.6) — and
+     * publish every key and sideband channel either side holds at [fadeMs], through the routes
+     * [clearAll] and [setBlind] take. Blind, the cascade publish leaves the programmer out, so the
+     * restore is staged; an unbacked channel is left alone.
+     */
+    fun restore(snapshot: ProgrammerStore.StoreSnapshot, fadeMs: Long = 0) {
+        val keys = HashSet(programmerStore.activeKeys())
+        keys += snapshot.activeKeys()
+        val channels = LinkedHashSet<Pair<Int, Int>>()
+        programmerStore.channelEntries().forEach { channels += it.universe to it.channel }
+        snapshot.channels.keys.forEach { channels += unpackChannelUniverse(it) to unpackChannelNumber(it) }
+        programmerStore.restore(snapshot)
+        val unbacked = coverSideband(channels, keys)
+        if (keys.isNotEmpty()) publisher.publishCascadeForKeys(keys, fadeMs)
+        if (!programmerStore.blind) {
+            for ((universe, channel) in unbacked) {
+                fixtures.controllerOrNull(Universe(0, universe))
+                    ?.setValue(channel, programmerStore.getChannel(universe, channel) ?: 0u, fadeMs)
+            }
+        }
+        onProgrammerChanged()
+    }
+
+    /**
+     * Add to [keys] the property covering each sideband channel in [channels], so it publishes through
+     * the cascade, and answer the channels no property covers, which have nothing below them.
+     */
+    private fun coverSideband(
+        channels: Collection<Pair<Int, Int>>,
+        keys: MutableSet<CueAssignmentResolver.Key>,
+    ): List<Pair<Int, Int>> = channels.filter { (universe, channel) ->
+        val key = publisher.resolveChannelCoveringKey(universe, channel)
+        if (key != null) keys += key
+        key == null
     }
 
     /** Drop all sideband slots under the given channel writes — see [writeAttribute]. */

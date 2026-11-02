@@ -191,9 +191,9 @@ function ProgrammerGridBody({
                     `PhoneLandscape` draws. It is not decoration: the tools' three words are 130px,
                     and the leading block is what pays for them. Without it the source box, a
                     `flex-1` sharing its block with a 230px action bar, rendered four pixels wide
-                    on an 852×393 phone. (The bar is 285px since Blind came back into it —
-                    `PD-BLIND-ON-PROGRAMMER` — and the source box measures 117px beside it in the
-                    419px this container gets there.)
+                    on an 852×393 phone. (The bar is 287px there, with Blind and Undo in it —
+                    `PD-BLIND-ON-PROGRAMMER`, `ProgrammerUndoRedo` — which leaves the source box
+                    115px of the 419px this container gets there.)
 
                     **An explicit `min-width` floor is what stops the action bar painting over these tools**, and
                     it cannot be zero or be left to the intrinsic minimum. (Written as a
@@ -204,21 +204,21 @@ function ProgrammerGridBody({
                     rule for container queries; it is the same hazard here.) `container-type:
                     inline-size` brings size containment, so this block's min-content size is
                     **zero** whatever it holds — the trap that also cost the source box its rungs, and with
-                    them its `flex-1`. Its contents are not zero: the action bar is `shrink-0` and 285px
-                    wide once iconic, so the flex squeezed this block to 283px on a 612×457 window
-                    while the bar kept its size and drew its Record button across the scope pills
-                    and the search icon beside it. An explicit floor makes the block push back, and
+                    them its `flex-1`. Its contents are not zero: the action bar is `shrink-0` and 287px
+                    wide here, so without a floor the flex squeezes this block below that on a
+                    612×457 window while the bar keeps its size and draws its Record button across
+                    the scope pills and the search icon beside it. An explicit floor makes the block push back, and
                     the row's `flex-wrap` turns that push into a second line instead of an overlap.
 
                     **The number is the pair's *legible* minimum, not its absolute one**, and that
-                    is a second decision on top of the first. 285 (the iconic bar) + 17 (the
-                    divider and two gaps) + 36 (the source box as a bare glyph) is 338, and a floor
+                    is a second decision on top of the first. 287 (the iconic bar) + 17 (the
+                    divider and two gaps) + 36 (the source box as a bare glyph) is 340, and a floor
                     there does stop the overlap — but it also leaves a band, about 700 to 800px of
                     row, where the row still fits on one line and the box in it is too narrow to
                     say `No source`. The words then vanished between 612 and 945 and came back
                     either side, which reads as a bug however well it is explained.
 
-                    So the floor is the box at its 102px full size instead: 285 + 17 + 102 = 404,
+                    So the floor is the box at its 102px full size instead: 287 + 17 + 102 = 406,
                     and **410** is that with a few pixels of slack — deliberately the same number as
                     the box's own rung in `ProgrammerSourceStrip`, because they are the same
                     question asked from the two ends. Wherever the row is on one line the box has
@@ -232,7 +232,7 @@ function ProgrammerGridBody({
 
                     **And it is a floor rather than a share**, which is the second half of the same
                     fix. `flex-1` here meant this block took every spare pixel of the row while its
-                    own contents stayed a fixed 404px — so the slack pooled *inside* it, behind the
+                    own contents stayed a fixed 406px — so the slack pooled *inside* it, behind the
                     verbs, and drew a 204px hole at 1024×457 wherever there was room to spare.
                     `flex-initial` under size containment resolves its base to zero, so the block
                     now sits at exactly its floor and the slack goes past it to the tools, where
@@ -246,14 +246,12 @@ function ProgrammerGridBody({
                     fold and under ~393px wide is an ordinary desktop resize away. Clamped, the
                     block fills its line instead, which is the most it could have had.
 
-                    **The 285 is the bar above `@[600px]` of the pair's own container.** Below it
-                    the fade trigger drops its chevron (`ProgrammerActionBar`), and the bar is
-                    247 — so on the 852×393 phone, where the pair's container is 419, this floor
-                    and the two measured numbers derived from the same 285 (`@max-[739px]` and
-                    `@[840px]` below) carry ~38px of slack they did not have when they were
-                    measured. They still hold, and they were left where they are rather than
-                    re-derived: move all three together, against 852×393 and 945×457, the way
-                    their notes prescribe, or none of them. */}
+                    **The 287 is the bar below `@[600px]` of the pair's own container**, where the
+                    fade trigger has dropped its chevron (`ProgrammerActionBar`); the folded block's
+                    container is always that narrow, 419px on the 852×393 phone. This floor and the
+                    two measured numbers below (`@max-[739px]` and `@[840px]`) are measured against
+                    that bar: move all three together, against 852×393 and 945×457, the way their
+                    notes prescribe, or none of them. */}
                 {leading && (
                   <>
                     <div className="@container flex min-w-[min(410px,100%)] flex-initial items-center gap-2 has-[[data-fills]]:flex-1">

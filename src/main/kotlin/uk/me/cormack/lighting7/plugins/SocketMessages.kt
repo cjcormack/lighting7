@@ -50,6 +50,7 @@ sealed class InMessage
     FxOutMessage::class,
     GrandMasterOutMessage::class,
     HandOutMessage::class,
+    HistoryOutMessage::class,
     LocateOutMessage::class,
     MachineOutMessage::class,
     MoveInDarkOutMessage::class,

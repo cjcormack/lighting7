@@ -68,6 +68,45 @@ class ProgrammerScenery(
 
     private val lock = Any()
     private val _flow = MutableStateFlow(Snapshot(null, emptyMap()))
+
+    /**
+     * Called before an operator's write changes what the programmer holds — a move, a release, an
+     * Include, a Look handed down or up — so the programmer's history steps from the overlay as it
+     * stood (undo plan §3.6). [forget] (an element deleted) and [attach] are no gesture.
+     */
+    @Volatile
+    var beforeMutation: () -> Unit = {}
+
+    /** The overlay as a programmer step keeps it. */
+    fun snapshot(): Snapshot = _flow.value
+
+    /**
+     * Put the overlay back as [snapshot] holds it, for the project it still belongs to: a piece it
+     * does not hold flies home on [fadeMs] (above 0) or its own travel, and a piece that moves takes
+     * [fadeMs] as its clock. An element deleted since is not held again. Answers whether anything changed.
+     */
+    fun restore(snapshot: Snapshot, fadeMs: Long = 0): Boolean {
+        val projectId = snapshot.projectId ?: return false
+        val known = runCatching { elementsOf(projectId).keys }.getOrNull() ?: return false
+        return restoreKnown(snapshot.copy(elements = snapshot.elements.filterKeys { it in known }), fadeMs)
+    }
+
+    private fun restoreKnown(snapshot: Snapshot, fadeMs: Long): Boolean = synchronized(lock) {
+        val current = _flow.value
+        if (current.projectId != snapshot.projectId || current == snapshot) return false
+        val fade = fadeMs.takeIf { it > 0 }?.coerceAtMost(MAX_SCENERY_TRANSITION.toMillis())
+        for (uuid in current.elements.keys - snapshot.elements.keys) {
+            if (fade != null) releases[uuid] = fade else releases.remove(uuid)
+        }
+        val elements = LinkedHashMap<UUID, Held>()
+        for ((uuid, held) in snapshot.elements) {
+            releases.remove(uuid)
+            val moves = current.elements[uuid]?.state != held.state
+            elements[uuid] = if (moves && fade != null) held.copy(fadeMs = fade) else held
+        }
+        _flow.value = snapshot.copy(elements = elements)
+        true
+    }
     val flow: StateFlow<Snapshot> = _flow.asStateFlow()
 
     /**
@@ -114,6 +153,7 @@ class ProgrammerScenery(
         val label = element?.let { "state ('${it.name}')" } ?: "state"
         val parsed = parseSceneryState(state, element, label, problems)
         if (problems.isNotEmpty() || parsed == null) return problems
+        beforeMutation()
         synchronized(lock) {
             val current = _flow.value
             // A switch landed between the read above and here: the element is the old project's.
@@ -140,6 +180,7 @@ class ProgrammerScenery(
     fun holdUnder(projectId: Int, rows: Map<UUID, ElementStates>): Int = synchronized(lock) {
         val current = _flow.value
         if (current.projectId != projectId) return 0
+        if (rows.isNotEmpty()) beforeMutation()
         val elements = LinkedHashMap(current.elements)
         var changed = 0
         for ((uuid, state) in rows) {
@@ -167,6 +208,7 @@ class ProgrammerScenery(
     fun handToLayer(projectId: Int, rows: Map<UUID, ElementStates>): Int = synchronized(lock) {
         val current = _flow.value
         if (current.projectId != projectId) return 0
+        if (rows.keys.any { it in current.elements }) beforeMutation()
         val elements = LinkedHashMap(current.elements)
         var changed = 0
         for ((uuid, taken) in rows) {
@@ -201,6 +243,7 @@ class ProgrammerScenery(
     fun include(projectId: Int, rows: List<Included>, fadeMs: Long?): Int = synchronized(lock) {
         val current = _flow.value
         if (current.projectId != projectId) return 0
+        if (rows.isNotEmpty()) beforeMutation()
         val fade = fadeMs?.takeIf { it > 0 }?.coerceAtMost(MAX_SCENERY_TRANSITION.toMillis())
         val elements = LinkedHashMap(current.elements)
         for (row in rows) {
@@ -243,6 +286,7 @@ class ProgrammerScenery(
         val current = _flow.value
         val gone = if (elementUuid == null) current.elements.keys.toList() else listOfNotNull(elementUuid.takeIf { it in current.elements })
         if (gone.isEmpty()) return 0
+        beforeMutation()
         val fade = fadeMs?.takeIf { it > 0 }?.coerceAtMost(MAX_SCENERY_TRANSITION.toMillis())
         for (uuid in gone) if (fade != null) releases[uuid] = fade else releases.remove(uuid)
         _flow.value = current.copy(elements = current.elements.filterKeys { it !in gone })

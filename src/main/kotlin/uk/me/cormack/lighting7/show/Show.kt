@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.show
 
+import uk.me.cormack.lighting7.history.ProgrammerHistory
+import uk.me.cormack.lighting7.history.ProgrammerHolders
+import uk.me.cormack.lighting7.history.ProgrammerSnapshot
 import uk.me.cormack.lighting7.telemetry.LiveSentryContext
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.v1.core.and
@@ -227,6 +230,19 @@ class Show(
 
     init {
         fxEngine.programmer.beforeOperatorWrite = { keys -> commitLocates(keys) }
+    }
+
+    /**
+     * The programmer's steps to undo and redo (undo plan §3.6), carried with the store across a
+     * same-project reload; a switch to another project starts an empty one. Every holder asks it for a
+     * step before an operator's gesture moves it — the scenery's hook is [State]'s, since the overlay
+     * outlives a show.
+     */
+    val programmerHistory: ProgrammerHistory = (carried?.programmerHistory ?: ProgrammerHistory()).also { history ->
+        programmerStore.beforeMutation = history::beforeMutation
+        fxEngine.beforeLocalFxMutation = history::beforeMutation
+        locateManager.beforeMutation = history::beforeMutation
+        history.bind(project.id.value, ShowProgrammerHolders(this), state.programmerHistoryFrame)
     }
 
     val cueStackManager = CueStackManager(
@@ -906,3 +922,37 @@ data class ScriptResult(
      */
     val lineOffset: Int = 0,
 )
+
+/**
+ * A show's programmer holders, as its history snapshots and restores them. Top level rather than an
+ * inner class of [Show]: the script editor completes `show.` by walking its members, and the Kotlin
+ * completer fails on an inner class's constructor.
+ */
+private class ShowProgrammerHolders(private val show: Show) : ProgrammerHolders {
+    override fun snapshot() = ProgrammerSnapshot(
+        store = show.programmerStore.snapshot(),
+        localFx = show.fxEngine.localFxSnapshot(),
+        locate = show.locateManager.snapshot(),
+        scenery = show.state.programmerScenery.snapshot(),
+    )
+
+    override fun restore(snapshot: ProgrammerSnapshot, fadeMs: Long) {
+        val before = show.programmerStore.snapshot()
+        // A Local FX over a value the restore moves stops at once, so the value ramps.
+        val moving = (before.activeKeys() + snapshot.store.activeKeys())
+            .filterTo(HashSet()) { before.topValue(it) != snapshot.store.topValue(it) }
+        // A layer whose Look or palette has been deleted since is not brought back: it would name nothing.
+        val layers = snapshot.store.layers.filter { layer ->
+            if (layer.source.isPalette) show.paletteRegistry.snapshot(layer.source.uuid) != null
+            else show.lookRegistry.snapshot(layer.source.uuid) != null
+        }
+        val store = if (layers.size == snapshot.store.layers.size) snapshot.store else snapshot.store.copy(layers = layers)
+        show.locateManager.restore(snapshot.locate)
+        show.fxEngine.restoreLocalFx(snapshot.localFx, fadeMs) { key, attribute ->
+            CueAssignmentResolver.Key.fixture(key, attribute) in moving
+        }
+        show.fxEngine.programmer.restore(store, fadeMs)
+        show.programmerLayerStack.reinstate(fadeMs)
+        show.state.programmerScenery.restore(snapshot.scenery, fadeMs)
+    }
+}

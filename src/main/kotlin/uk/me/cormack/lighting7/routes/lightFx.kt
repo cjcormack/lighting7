@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.history.historyGesture
 import io.ktor.http.*
 import uk.me.cormack.lighting7.models.Timing
 import io.ktor.resources.*
@@ -71,6 +72,7 @@ internal fun Route.routeApiRestFx(state: State) {
         // splitting those heads off (apply-model plan §3.4). The parsing is [applyFxUpdate]'s,
         // shared with the `updateFx` socket frame so the two doors cannot drift.
         put<FxId> { resource ->
+            historyGesture("updateFx|${resource.id}")
             val request = call.receive<UpdateFxRequest>()
             val engine = state.show.fxEngine
             when (val outcome = applyFxUpdate(state, resource.id, request)) {

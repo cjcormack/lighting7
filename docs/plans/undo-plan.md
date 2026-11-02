@@ -375,7 +375,28 @@ and a row in this table's `KindEffects`, or the build fails.
 
 ## 6. Implementation — six sessions
 
-Each session is one PR. Sessions 1 and 2 need nothing from each other and can land in either order.
+Each session is one PR. Each is run by `/next-session`, which cuts the branch, stacks it on the
+previous session's branch while that PR is open (on `main` once merged), records the previous
+session's PR and head SHA in the table below, and hands the session to `/verified-ship`. Sessions 1
+and 2 need nothing from each other, but they run in order like the rest. A session ends with the
+checks its **Locally** line names green (§"Pre-commit checks" in the root `CLAUDE.md`), the docs it
+names written, and its row marked *in review* with its branch. A session's PR is titled
+*Undo: session N — title*. Never merge a later session's PR before an earlier one.
+
+## Sessions
+
+| Session | Title | Status | Branch | PR | Head SHA |
+|---|---|---|---|---|---|
+| 1 | programmer history (backend + programmer UI) | in review | `claude/nice-hypatia-xf5tk7` | | |
+| 2 | records in memory (backend, no behaviour change) | planned | | | |
+| 3 | origin and journal, read-only (backend + sheet) | planned | | | |
+| 4 | putting records back: the cue side (backend) | planned | | | |
+| 5 | putting records back: the rest (backend) | planned | | | |
+| 6 | the controls (frontend + MCP + surfaces) | planned | | | |
+
+*Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
+fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
+the next; whoever merges the last fills its own.
 
 ### Session 1 — programmer history (backend + programmer UI)
 
@@ -392,6 +413,36 @@ Each session is one PR. Sessions 1 and 2 need nothing from each other and can la
   dropped by a new step.
 - **Docs:** `lighting-composition-model.md` §"Programmer history"; CLAUDE.md's endpoints and WS
   frames; the frontend CLAUDE.md's programmer section.
+- **Locally:** the quick checks — `compileTestKotlin`, the tests of every package it touches (`fx`,
+  `state`, `routes`, `ai`, `midi`) and `npm run check:quick`. The full suites are CI's.
+- **As built**, where it differs from §3 or binds a later session:
+  - `LocalFxSpec` is a frozen copy of the instance (settings, ownership, start, accumulator, N-shot
+    count) rather than the add request's fields. A spec finds its instance by identity, then by id
+    only in the engine that took the step (a reload numbers its FX afresh); a respawn keeps its old id
+    where it is free and moves the engine's counter past it.
+  - The REST origin plugin already covers every write under `/api/rest` (§3.2's door); session 3 adds
+    the window header, `X-History-Entry` and the project. Only the programmer's holders react to it so
+    far. `ProjectManager.switchProject` runs under a fourth origin kind, `UNTRACKED`, so a reload set
+    off by a request takes no step.
+  - Never a step: `putLayerSlots` (a Look edit's recook), a stored locate's re-assert (run under the
+    untracked origin), the scenery's `forget` and `attach`, a call that changes nothing, and the
+    `UNPARK` and `FLASH` owners' writes — whose slots a step does not keep either, so a restore leaves
+    them as they are.
+  - The store's snapshot keeps the include target, `includedLayerSnapshot` and `includedKeys`, as §3.6
+    says, but not `sourceKeys` or `recordedValues`: they describe the stored source as the last
+    Include, Record or Update read it, which an undo does not change. A restored layer keeps the cue
+    row an Update since tied it to.
+  - A step belongs to its `WriteOrigin` (it records that it has one), not to the last request id, so
+    a Claude tool call interleaved with a drag is still one step. A restore drops its layers whose
+    Look or palette is gone and its scenery whose element is gone. A step taken while an undo restores
+    drops redo, and a restore that throws puts its steps back.
+  - `history.state` is one frame for every socket while it holds programmer steps alone; session 3
+    makes it per source. It also carries the programmer's step lists, which the steps menu reads.
+  - An `entryId` naming no step is 404 `HISTORY_UNKNOWN`.
+  - The venue write guard passes `history` as a runtime gesture, since its path cannot tell a
+    programmer step from a show entry. **Session 4 must refuse an operator's show-entry undo onto a
+    venue in the route** (D12).
+  - Redo folds into Undo's menu below `@[800px]` of row A, so the folded phone row keeps one line.
 
 ### Session 2 — records in memory (backend, no behaviour change)
 
@@ -401,6 +452,8 @@ Each session is one PR. Sessions 1 and 2 need nothing from each other and can la
   hash recorded before the refactor); `MapSink` equals the folder read back; `exportKinds` of each
   folder equals that folder of a whole export; `SyncCoverageTest` reads the moved table unchanged.
 - **Docs:** `sync-engineering.md` §"How to add a new table" (where dispositions live now).
+- **Locally:** the full `./gradlew test`: a refactor of the exporter that every sync, clone, venue
+  and round-trip test goes through. Frontend untouched.
 
 ### Session 3 — origin and journal, read-only (backend + sheet)
 
@@ -417,6 +470,8 @@ Each session is one PR. Sessions 1 and 2 need nothing from each other and can la
   history; a write to another project by MCP journals there.
 - **Docs:** new `docs/undo-engineering.md` (origin, cache, journal, untracked writes); CLAUDE.md's
   §"Engineering Documentation" row; `websocket-engineering.md` §"History".
+- **Locally:** the full `./gradlew test` (the interceptor sits under every stored write, in every
+  package) and `npm run check:quick` for the sheet.
 
 ### Session 4 — putting records back: the cue side (backend)
 
@@ -430,6 +485,8 @@ Each session is one PR. Sessions 1 and 2 need nothing from each other and can la
   the cue's id; a conflict answers the colliding entries, back-to-here takes them; a Look undo while a
   cue uses it republishes and needs `confirm`; a key clash rolls back whole.
 - **Docs:** `undo-engineering.md` §"Restore"; `sync-engineering.md` (the importer's two modes).
+- **Locally:** the full `./gradlew test`: the importer gains a mode that sync, clone and the venue
+  flows share. Frontend untouched.
 
 ### Session 5 — putting records back: the rest (backend)
 
@@ -443,6 +500,8 @@ Each session is one PR. Sessions 1 and 2 need nothing from each other and can la
   running; a park undo restores output; undo onto a venue as an operator is 403; a show-on-venue undo
   that would clash with a venue key is blocked.
 - **Docs:** `fixtures-engineering.md` (an undo of a patch, hide or facet), `undo-engineering.md`.
+- **Locally:** the full `./gradlew test`: the coverage test reads every portable folder, and patch,
+  venue and park restores reach the loader. Frontend untouched.
 
 ### Session 6 — the controls (frontend + MCP + surfaces)
 
@@ -453,13 +512,10 @@ Each session is one PR. Sessions 1 and 2 need nothing from each other and can la
   flows from each 409; the binding targets' kinds; MCP refusing another source's entry.
 - **Docs:** the frontend CLAUDE.md (§"Undo"), `midi-control-surface-engineering.md`,
   `mcp-engineering.md`, CLAUDE.md's endpoints and MCP paragraph.
+- **Locally:** the full `npm run check` (the header, keys and toasts reach most views), and the
+  quick backend checks for `ai` and `midi`.
 
-## 7. Migration
-
-None (D15). No table, no column, no `formatVersion`. Session 2 changes how the exporter is
-structured, not one byte of what it writes.
-
-## 8. Explicitly out of scope
+## 7. Explicitly out of scope
 
 - Undoing playback; recovering a last GO is the Show view's BACK.
 - A history that survives a restart or travels with sync.
@@ -467,6 +523,11 @@ structured, not one byte of what it writes.
 - The Stage editor's in-drag undo; its committed placements are journaled like any patch write.
 - Selective programmer undo (taking back one step without the ones after it): a step is a snapshot
   of the shared programmer.
+
+## 8. Migration
+
+None (D15). No table, no column, no `formatVersion`. Session 2 changes how the exporter is
+structured, not one byte of what it writes.
 
 ## 9. Follow-ups to record
 
