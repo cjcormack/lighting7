@@ -122,7 +122,7 @@ P0 is done when the operator check `FU-MANUAL-CLOUD-P0` (§6) passes against the
 ## 3. Rules for every session
 
 - **P1 — Cloud down, desk unchanged.** Each session's review asks R6's question of every line it adds.
-- **P2 — No real cloud.** Tests use `FakeCloud` (session 3), never a network (R5).
+- **P2 — No real cloud.** Tests use `FakeCloud` (session 4), never a network (R5).
 - **P3 — Additive within v1.** A message or field this plan adds is in `cloud-protocol` with a golden
   fixture before either side uses it (R3).
 - **P4 — Nothing about ngrok, the desk's OAuth server or GitHub sync changes in P0.** Those are P1's and
@@ -133,34 +133,39 @@ P0 is done when the operator check `FU-MANUAL-CLOUD-P0` (§6) passes against the
 - **The licence audit finds a blocker** (RISK-9). An artnet4j under the GPL would block an MIT binary.
   Session 1 is written so that it ships the audit and the gate either way, and adds `LICENSE` only when
   nothing blocks; a blocker becomes its own session (§5).
-- **A timing test that flakes.** The safety test (session 4) measures wall clock. It compares against a
+- **A timing test that flakes.** The safety test (session 5) measures wall clock. It compares against a
   baseline it takes itself, with generous bounds, joins the table in `docs/testing-engineering.md`
   §"Tests that assert real elapsed time", and follows `flaky-tests-plan.md` if it fails on CI.
 - **The included build drifts from the desk's build settings.** Warnings-as-errors and the Kotlin
-  version have to reach `cloud-protocol/`; session 2 checks both by introducing a warning and a version
+  version have to reach `cloud-protocol/`; session 3 checks both by introducing a warning and a version
   mismatch once, locally, and seeing each fail.
 
-## 5. Implementation — five sessions
+## 5. Implementation — six sessions
 
 Each session is one PR, run by `/next-session`; sessions run in order. The cloud plan's sessions say
 which of these they need (R2); nothing here needs the cloud. A session's PR is titled *Cloud P0:
-session N — title*. Sessions 1 and 2 change the build, so they run the full `./gradlew check` (and
-session 1 `npm run check`) locally; sessions 3 to 5 run the packages they touch, as root `CLAUDE.md`
+session N — title*. Sessions 1 to 3 change the build, so they run the full `./gradlew check` (and
+session 1 `npm run check`) locally; sessions 4 to 6 run the packages they touch, as root `CLAUDE.md`
 §"Pre-commit checks" says.
 
 If session 1's audit finds a dependency that blocks MIT, session 1 adds a session after itself for the
 replacement (its row `planned`, its section saying what to replace and how to prove the desk's output
 unchanged), and the later sessions renumber.
 
+It did (artnet4j, under the GPL v3), and added session 2 on 2026-11-02. Every session after it moved up
+one, so a cloud plan *Needs* line written before then that names this plan's session *N*, for *N* of 2
+or more, now means session *N* + 1.
+
 ## Sessions
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | MIT and the licence gate | planned | | | |
-| 2 | The protocol module | planned | | | |
-| 3 | Adoption on the desk | planned | | | |
-| 4 | The control channel | planned | | | |
-| 5 | Install settings → Cloud | planned | | | |
+| 1 | MIT and the licence gate | in review | `claude/cloud-p0-img1pv` | | |
+| 2 | Replace artnet4j | planned | | | |
+| 3 | The protocol module | planned | | | |
+| 4 | Adoption on the desk | planned | | | |
+| 5 | The control channel | planned | | | |
+| 6 | Install settings → Cloud | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
 *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts the
@@ -191,7 +196,61 @@ next; whoever merges the last fills its own.
 - **Docs:** `THIRD-PARTY-NOTICES.md`; a short `docs/licensing.md` saying how to add a dependency and
   what the gate allows, which later phases extend.
 
-### Session 2 — The protocol module
+**Outcome (2026-11-02).** The audit found one blocker: `ch.bildspur:artnet4j` is under the GPL v3 (its
+POM and its upstream `LICENSE`), and the jaxb-core and jaxb-impl it alone pulls in are CDDL 1.1 or GPL 2.
+So the session shipped everything but `LICENSE` and the README change, and added session 2. Nothing
+else blocks: CoreMIDI4J is EPL-1.0; the dual licences (logback, JNA, JavaCPP, Jetty ALPN,
+java-json-tools) are taken under their allowed side; libremidi and alsa-javacpp link the system's ALSA
+and JACK rather than bundle them; the vendored react-kotlin-playground and shadcn/ui code is MIT, its
+notice now kept beside it; the gel and lantern libraries are the project's own.
+
+- **The manuals:** asked where they should go, the owner answered "just remove them". The PDFs under
+  `Manuals/` and the Laserworld PDF at the root left the tree with no private home; the owner keeps
+  copies, and git history is the owner's call (§7).
+- **The personality transcriptions** left too: they reproduce ChamSys's MagicQ head files, whose terms
+  grant no redistribution. The fixture KDocs cite each by its `.hed` file name.
+- **The gate** is `scripts/licences.mjs` over the data in `licences/`, run by `./gradlew licenceCheck`
+  (in `check`, handed the resolved runtime modules) and `npm run licences` (in `check`, `check:quick`
+  and CI's Frontend job). Two additions to the starting allowlist: `0BSD` (two npm packages) and
+  `blessing` (SQLite's public domain). artnet4j and the two jaxb modules pass only as `pendingRemoval`,
+  which also fails the gate if `LICENSE` exists while they stand.
+- **Found outside the gate:** the installers' jlink runtime is Temurin under `GPL-2.0-only WITH
+  Classpath-exception-2.0`, which the exception keeps from reaching the desk's code; the notices name
+  it. The notices name each licence but carry no texts (`FU-LICENCE-TEXTS`), and a bump that relicenses
+  a Java module is not caught, since `jvm.json` is keyed by name, not version; the owner chose to
+  record that and leave it to `FU-LICENCE-POM-DRIFT`.
+
+### Session 2 — Replace artnet4j
+
+- **What goes:** `ch.bildspur:artnet4j`, and with it `com.sun.xml.bind:jaxb-core` and `jaxb-impl`;
+  `build.gradle.kts`'s `javax.xml.bind:jaxb-api` exclude and the part of its comment that names
+  artnet4j (`jakarta.xml.bind-api` stays: swagger-core needs it). The jvm.json rows and their
+  `pendingRemoval` go, and the notices are regenerated.
+- **What replaces it:** `DefaultArtNetTransport` (`dmx/ArtNetTransport.kt`) is artnet4j's only user, and
+  the `ArtNetTransport` seam asks for four calls: `start`, `stop`, `broadcastDmx(subnet, universe,
+  data)` and `unicastDmx(address, subnet, universe, data)`. Write an ArtDMX sender over a
+  `DatagramSocket` from Artistic Licence's published Art-Net 4 specification, with no new dependency:
+  the `Art-Net\0` ID, OpCode 0x5000 little-endian, ProtVer 14, Sequence, Physical, the port-address from
+  the desk's (subnet, universe), Length big-endian and even, then the data. Write it from the
+  specification, not from artnet4j's source, since the new code is MIT. Keep the behaviour the
+  transport's KDoc relies on: only one socket in the process gets port 6454, later ones send from an
+  ephemeral port, and `stop` closes whichever was bound.
+- **Prove the output unchanged.** Before artnet4j goes, a test captures the datagrams it sends on a
+  loopback receiver for a fixed set of inputs: several subnets and universes, a full 512-channel
+  frame, a short and an odd-length one, broadcast and unicast. The captured bytes are committed under
+  `src/test/resources/dmx/artdmx/` with what produced each, and the new transport must send exactly
+  those bytes for the same inputs, Sequence included. Where the specification and artnet4j disagree,
+  match artnet4j and say so in the test: the rig's nodes accept what it sends today. The existing
+  `RecordingTransport` tests stay as they are.
+- **Then the licence:** `LICENSE` (MIT, copyright Chris Cormack); the README's "Private project" text
+  replaced by the licence and a short trademark note (the cloud's name is not covered by MIT, §9.10);
+  `docs/licensing.md`'s opening and root `CLAUDE.md`'s licence line say the desk is MIT.
+- **Tests:** the golden comparison; `./gradlew check shadowJar` locally, since the build changes;
+  `npm run licences`.
+- **Docs:** `docs/dmx-engineering.md`'s ArtNet section; an operator check in
+  `docs/plans/manual-validation.md` that a real Art-Net node lights from the new transport as it did.
+
+### Session 3 — The protocol module
 
 - **The build** (D3): `cloud-protocol/` with `settings.gradle.kts`, `build.gradle.kts` and its own
   `gradle.properties` only where the root's cannot reach; `includeBuild` in the root settings; the
@@ -214,7 +273,7 @@ next; whoever merges the last fills its own.
   and fixture, close codes, the versioning rule (R3), and how the cloud consumes the module (R4). Root
   `CLAUDE.md` gains the module in its structure list and a line pointing at the doc.
 
-### Session 3 — Adoption on the desk
+### Session 4 — Adoption on the desk
 
 - **Package `cloud/`**: `CloudConfig` (D13), `InstallKeyStore` over `CredentialStore` (D4),
   `models/cloudConnection.kt` and `models/cloudIdentityLinks.kt` (D7) in `ALL_TABLES` with their
@@ -224,7 +283,7 @@ next; whoever merges the last fills its own.
   the database, on D11's scope.
 - **Routes** (D14) in `routes/installCloud.kt`, mounted with the admin routes; D5's two refusals.
 - **`FakeCloud`** in `src/test/kotlin/.../testsupport/`: a Ktor test server built on `cloud-protocol`
-  that implements the adoption API and, in session 4, the control channel, with switches to approve,
+  that implements the adoption API and, in session 5, the control channel, with switches to approve,
   deny, expire, `slow_down`, refuse, stall and drop. It verifies every signature, so a desk that signs
   the wrong bytes fails here before it fails against the cloud.
 - **Tests:** adopt approved, denied, expired and slowed; a poll whose signature is wrong is refused;
@@ -235,12 +294,12 @@ next; whoever merges the last fills its own.
   the key, and §"Show safety" stating D11 as rules. `example.local.conf`'s `cloud` block. Glossary rows
   for *adopt*, *install key* and *link* (PRD §17). Follow-up row `FU-CLOUD-DEFAULT-URL`.
 
-### Session 4 — The control channel
+### Session 5 — The control channel
 
 - **`CloudChannel`** (D9, D10, D12): `ktor-client-websockets` moves from `testImplementation` to
   `implementation`; connect while `ADOPTED` and enabled; the handshake; heartbeats from `welcome`'s
   interval; reconnect with capped full jitter; `4004` and `unadopted` clear local state through
-  session 3's path and set `notice`; every other close reconnects; inbound frames over 8 MB close
+  session 4's path and set `notice`; every other close reconnects; inbound frames over 8 MB close
   `4000`. Connection status in `cloud.state` with `retryAt` and `lastError`.
 - **Isolation** (D11): the scope, the bounded outbound channel, no database write outside a
   transition, and a test that runs the connector against a `FakeCloud` that stalls and asserts the
@@ -259,7 +318,7 @@ next; whoever merges the last fills its own.
   `cloud.state`; root `CLAUDE.md` gains a short **Lighting7 Cloud** section under External
   Integrations and a `cloud.state` line under WebSocket Messages, with R6's review question.
 
-### Session 5 — Install settings → Cloud
+### Session 6 — Install settings → Cloud
 
 - **The tab**, admin only, beside *Remote access* in `frontend/src/routes/InstallSettings.tsx` (`settingsTabs`
   updated), reading `GET /install/cloud` and `cloud.state` through RTK Query and the socket store, in
@@ -305,9 +364,9 @@ It is the PRD's P0 exit:
 
 Recorded in `docs/plans/followups.md` by the session that finds them:
 
-- `FU-CLOUD-DEFAULT-URL` (session 3): set `cloud.baseUrl`'s default once OQ-1 picks the domain.
-- `FU-CLOUD-PROTOCOL-PUBLISH` (session 2): publish `cloud-protocol` when a third party builds against it.
-- `FU-MANUAL-CLOUD-P0` (session 5): §6.
+- `FU-CLOUD-DEFAULT-URL` (session 4): set `cloud.baseUrl`'s default once OQ-1 picks the domain.
+- `FU-CLOUD-PROTOCOL-PUBLISH` (session 3): publish `cloud-protocol` when a third party builds against it.
+- `FU-MANUAL-CLOUD-P0` (session 6): §6.
 
 ## 9. Building on this: P1 onwards
 

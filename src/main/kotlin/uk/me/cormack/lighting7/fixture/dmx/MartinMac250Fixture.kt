@@ -20,10 +20,10 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  * implemented for the TCH 2026 patch; the other modes remain as `// TODO`
  * enum entries.
  *
- * Authoritative channel map:
- * `Manuals/personalities/Martin_Mac250_Mode4.md` (transcribed from MagicQ
- * `EDIT HEAD` — the on-disk `.hed` files are obfuscated). The bundled
- * `UM_MAC250_EN_D.PDF` is the **wrong manual** (it's the Krypton variant).
+ * Authoritative channel map: the ChamSys MagicQ personality
+ * `Martin_Mac250_Mode 4.hed`, read from MagicQ's `EDIT HEAD` screens (the on-disk
+ * `.hed` files are obfuscated). Martin's manual `UM_MAC250_EN_D` is the **wrong
+ * manual** (it's the Krypton variant).
  *
  * Discharge-lamp safety: lamp-on/off and reset bands live on the shutter
  * channel and must not be addressable from FX targeting. The shutter is

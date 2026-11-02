@@ -11,9 +11,9 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
  * Gear4Music SOL Party 12B — single-section RGB LED party bar.
  *
  * Reverse-engineered from the ChamSys library since no manual is bundled.
- * Authoritative channel map:
- * `Manuals/personalities/Gear4Music_SOLParty12B_8ch.md` (transcribed from
- * MagicQ `EDIT HEAD` — the on-disk `.hed` files are obfuscated).
+ * Authoritative channel map: the ChamSys MagicQ personality
+ * `Gear4Music_SOLParty12B_8ch.hed`, read from MagicQ's `EDIT HEAD` screens (the
+ * on-disk `.hed` files are obfuscated).
  *
  * Single global RGB only — no per-cell channels. The colour wheel on ch 2
  * is a self-contained band-based effect; manual RGB on ch 5/6/7 is

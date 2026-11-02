@@ -40,12 +40,12 @@ fi
 # core.quotePath=false keeps non-ASCII paths raw; the default escapes them into
 # a "…"-wrapped form that would slip past the patterns below and skip the gate.
 STAGED=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)
-if ! printf '%s\n' "$STAGED" | grep -qE '^frontend/(src/|index\.html$|package(-lock)?\.json$|tsconfig[^/]*\.json$|vite\.config\.|vitest\.config\.|eslint\.config\.|postcss\.config\.|tailwind\.config\.)'; then
+if ! printf '%s\n' "$STAGED" | grep -qE '^frontend/(src/|index\.html$|package(-lock)?\.json$|tsconfig[^/]*\.json$|vite\.config\.|vitest\.config\.|eslint\.config\.|postcss\.config\.|tailwind\.config\.)|^licences/|^scripts/licences|^THIRD-PARTY-NOTICES\.md$'; then
   echo "pre-commit: nothing buildable staged — skipping gate."
   exit 0
 fi
 
-echo "pre-commit: build + affected tests + lint (npm run check:quick in frontend/)…"
+echo "pre-commit: build + affected tests + lint + licences (npm run check:quick in frontend/)…"
 # Hooks run from the top of the work tree.
 cd frontend
 npm run check:quick

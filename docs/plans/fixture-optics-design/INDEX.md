@@ -20,12 +20,12 @@ the HTML version for human readers is [`fixture-optics.html`](fixture-optics.htm
 
 ## Sources
 
-- **ETC, *Source Four Revolution User Manual*, 7160M1200 Rev E** — `Manuals/S4_Revolution_User_Manual_RevE.pdf`.
+- **ETC, *Source Four Revolution User Manual*, 7160M1200 Rev E**, a PDF from ETC.
   It covers units built before May 2007 (7160A1002); later units have manual 7160M1210. Page
   numbers below are the PDF's, with the printed page in brackets.
-- **The ChamSys capture** — `Manuals/personalities/ETC_Source4Rev_BaseFrame.md`, taken from MagicQ's
-  head editor on 2026-04-26.
-- **The TCH patch export** — `Manuals/TCH_2026_.pdf`, a one-page MagicVis patch. It names the
+- **The ChamSys capture** — the MagicQ personality `ETC_Source4Rev_Base Frame.hed`, transcribed from
+  MagicQ's head editor on 2026-04-26.
+- **The TCH patch export** — `TCH_2026_.pdf`, a one-page MagicVis patch. It names the
   two Revolutions (heads 39 and 40, "Pipe 1FOH", mode Base Frame) and nothing about their gels,
   gobos or modules.
 - **The desk** — project 15's patch and scene through MCP, and its database (read-only).

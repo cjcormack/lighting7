@@ -106,9 +106,9 @@ repeats CI, and the desktop app's Auto-fix wakes the session if CI fails.
 - **Backend:** `./gradlew compileTestKotlin`, then `./gradlew test --tests '<package>.*'` for
   each package the change touches and each package that calls into it.
 - **Frontend:** `npm run check:quick` in `frontend/`: the full `tsc` and build, lint (cached, so
-  seconds when warm), and the Vitest files affected by changes since `origin/main`.
-  `.githooks/pre-commit` runs it when anything buildable under `frontend/` is staged (enable it
-  with `git config core.hooksPath .githooks`).
+  seconds when warm), the Vitest files affected by changes since `origin/main`, and the licence gate
+  (`npm run licences`). `.githooks/pre-commit` runs it when anything buildable under `frontend/`, or
+  the licence data, is staged (enable it with `git config core.hooksPath .githooks`).
 
 **Run the full suites locally** (`./gradlew test`, `npm run check`) when CI is a slow place to
 find out: a Gradle or build-config change, a sync `formatVersion` bump, a schema migration, or a
@@ -128,6 +128,12 @@ are all errors — the last two are in `gradle.properties`. Fix the cause; where
 be fixed, `@Suppress`/`@OptIn` it at the site with a comment, never globally. Kotlin compiles
 incrementally, so a warning in an untouched file only shows on a full recompile — CI's is always
 full.
+
+**A dependency needs a licence entry.** `./gradlew check` (its `licenceCheck`) fails on a Java module
+missing from `licences/jvm.json`; it and `npm run licences` both fail on a licence outside
+`licences/allowed.json` or a stale `THIRD-PARTY-NOTICES.md`. [docs/licensing.md](docs/licensing.md)
+says how to add one. The desk becomes
+MIT, and gains `LICENSE`, once artnet4j (GPL v3) is replaced (cloud-p0 plan, session 2).
 
 `tasks.test` pins `-Dlighting7.dataDir` at `build/test-data`, because `State`
 resolves the script cache, prompt-book PDF store, sync working tree and export
@@ -1073,6 +1079,7 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 For deeper technical details, see the docs in `docs/`:
 
 - [Glossary](docs/glossary.md) - One word per idea, its old names and MagicQ's word; `GlossaryVocabularyTest` and `glossary.test.ts` hold the label tables to its `done` rows
+- [Licensing](docs/licensing.md) - The licence gate, what it allows, how to add a dependency, and the audit that found artnet4j blocking MIT
 - [API Conventions](docs/api-conventions.md) - Kebab-case paths, plural collections with the list GET on the collection, one spelling for vocabulary enumerations, `?force=true` as the guard-override, and why unbounded lists are deliberate at desk scale
 - [Testing](docs/testing-engineering.md) - What makes the suite ~1 min rather than ~14 (the four changes, each load-bearing), the warm/cold script-cache regimes, why `build/test-data` is pinned, the tests that assert real elapsed time, and the order-dependence detector
 - [DMX Subsystem](docs/dmx-engineering.md) - Low-level DMX control architecture, ArtNet implementation, fading, transactions

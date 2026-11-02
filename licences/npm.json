@@ -1,0 +1,8 @@
+{
+  "overrides": {
+    "webgl-constants": {
+      "licence": "MIT",
+      "why": "Its package.json has no license field; the LICENSE file it ships is MIT (Tim van Scherpenzeel, 2019). Reached through @react-three/drei and detect-gpu."
+    }
+  }
+}

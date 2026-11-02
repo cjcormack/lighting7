@@ -26,7 +26,8 @@ the root's, in `../CLAUDE.md` §"Git workflow". Two points bear repeating from t
 npm run check:quick
 ```
 
-That's `build` + the Vitest files affected by changes since `origin/main` + `lint`. The full
+That's `build` + the Vitest files affected by changes since `origin/main` + `lint` + `licences`
+(the licence gate, `../docs/licensing.md`). The full
 suite, `npm run check`, runs in CI on every PR; run it locally only for a change CI is a slow
 place to find out about (see `../CLAUDE.md` §"Pre-commit checks"). A change to `package.json`
 or the Vite/Vitest config makes `--changed` run every test file (Vitest's `forceRerunTriggers`).
@@ -37,7 +38,7 @@ a cached file can keep a stale result; a new cycle is still caught, because the 
 closes it is in an edited file, which is re-linted. After changing `tsconfig` path aliases,
 delete the cache. CI's run on `main` lints without it.
 
-`check` is `build` + `test` + `lint`. There's no separate `type-check` step in it:
+`check` is `build` + `test` + `lint` + `licences`. There's no separate `type-check` step in it:
 `build` is `tsc && vite build`, so the standalone `npm run type-check` would run
 the same full `tsc` a second time for ~9s of nothing. Use `type-check` on its
 own during development when you want types without a build.

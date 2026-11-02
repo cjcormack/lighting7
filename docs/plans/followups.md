@@ -169,6 +169,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 | [`FU-TIMELINE-VALUES`](#fu-timeline-values) | Trigger | Cues | the Timeline is used to find where a hand-set value changes |
 | [`FU-TIMELINE-MCP`](#fu-timeline-mcp) | Trigger | AI | an operator asks Claude to make an FX continue across cues |
+| [`FU-LICENCE-TEXTS`](#fu-licence-texts) | Ready | Dist | — |
+| [`FU-LICENCE-POM-DRIFT`](#fu-licence-pom-drift) | Ready | Dist | — |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -1898,6 +1900,34 @@ already on the LAN.
 ---
 
 ## Distribution
+
+### `FU-LICENCE-POM-DRIFT`
+
+**A dependency bump that changes a Java module's licence passes the licence gate** · Ready · cloud-p0 session 1, 2026-11-02
+
+`licences/jvm.json` names each shipped module by `group:name` with the licence its POM named when it
+was added, and `licenceCheck` compares names only (`docs/licensing.md` §"Not judged by the gate"). A
+bump to a version under another licence keeps the name, so the gate stays green. Recording versions
+would fail every weekly Dependabot `gradle-minor` PR and teach rubber-stamping.
+
+**Fix**: have `writeRuntimeModules` also write each module's POM `<licenses>` (following `<parent>`
+where the POM has none), resolved in a way the configuration cache accepts, and record that observed
+licence beside the SPDX one in `jvm.json`, so the gate fails when the POM's licence changes rather
+than when the version does.
+
+### `FU-LICENCE-TEXTS`
+
+**The shipped notices name each licence but do not reproduce it** · Ready · cloud-p0 session 1, 2026-11-02
+
+`THIRD-PARTY-NOTICES.md` lists every shipped component with its SPDX id (`docs/licensing.md`). MIT,
+BSD and Apache-2.0 also ask a binary distribution to carry the licence text and each library's
+copyright notice, and Apache-2.0 the library's `NOTICE` file, whatever the desk's own licence: the
+installers already built owe them. Neither the installers nor the fat jar
+carry the notices file yet, and where several jars ship a `META-INF/LICENSE*` or `NOTICE*` of the same
+name, `shadowJar` keeps only the first.
+
+**Fix**: generate the texts and copyright lines from the jars, POMs and
+`node_modules` into a notices file the installers carry, and extend the gate's drift check to it.
 
 ### `FU-DIST-ICONS`
 
