@@ -20,3 +20,6 @@ plugins {
 rootProject.name = "Lighting7"
 
 include("launcher")
+
+// The desk–cloud wire contract, its own build so the cloud can build it alone (docs/cloud-protocol.md).
+includeBuild("cloud-protocol")

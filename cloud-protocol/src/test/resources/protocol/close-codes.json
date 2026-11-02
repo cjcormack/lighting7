@@ -1,0 +1,14 @@
+{
+  "closeCodes": {
+    "PROTOCOL_ERROR": 4000,
+    "PROTOCOL_UNSUPPORTED": 4001,
+    "AUTH_FAILED": 4003,
+    "INSTALL_REVOKED": 4004,
+    "REPLACED": 4009
+  },
+  "authFailures": ["BAD_SIGNATURE", "CLOCK_SKEW", "MALFORMED", "TIMEOUT"],
+  "errorCodes": ["BAD_SIGNATURE", "CLOCK_SKEW", "MALFORMED", "NOT_FOUND", "PROTOCOL_ERROR"],
+  "maxFrameBytes": 8388608,
+  "protocolVersion": 1,
+  "clockSkewToleranceS": 300
+}

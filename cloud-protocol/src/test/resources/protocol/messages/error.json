@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "type": "error",
+  "id": "c-0004",
+  "replyTo": "d-0002",
+  "body": {
+    "code": "PROTOCOL_ERROR",
+    "message": "hello came before welcome"
+  }
+}

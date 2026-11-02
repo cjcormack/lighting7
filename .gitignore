@@ -36,7 +36,7 @@ out/
 src/main/resources/static/
 # Kotlin compiler scratch dir. Was two named error logs; it emits a fresh timestamped one on
 # every daemon hiccup, so match the directory rather than chasing filenames.
-/.kotlin/
+.kotlin/
 /.claude/worktrees/charming-stonebraker-fea630/
 /.claude/worktrees/jovial-shtern-bc737f/
 /.claude/worktrees/quizzical-satoshi-7db80b/

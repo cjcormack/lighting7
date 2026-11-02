@@ -160,9 +160,9 @@ or more, now means session *N* + 1.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | MIT and the licence gate | in review | `claude/cloud-p0-img1pv` | [#334](https://github.com/cjcormack/lighting7/pull/334) | 42ce8c3 |
-| 2 | Replace artnet4j | in review | `claude/amazing-einstein-f1ektw` | | |
-| 3 | The protocol module | planned | | | |
+| 1 | MIT and the licence gate | merged | `claude/cloud-p0-img1pv` | [#334](https://github.com/cjcormack/lighting7/pull/334) | 42ce8c3 |
+| 2 | Replace artnet4j | merged | `claude/amazing-einstein-f1ektw` | [#336](https://github.com/cjcormack/lighting7/pull/336) | b7c659d |
+| 3 | The protocol module | in review | `claude/friendly-clarke-kzokhd` | | |
 | 4 | Adoption on the desk | planned | | | |
 | 5 | The control channel | planned | | | |
 | 6 | Install settings → Cloud | planned | | | |
@@ -294,6 +294,31 @@ fails it. artnet4j, jaxb-core and jaxb-impl left the build, nothing else needed
 - **Docs:** `docs/cloud-protocol.md` — the envelope, the handshake, every message with its direction
   and fixture, close codes, the versioning rule (R3), and how the cloud consumes the module (R4). Root
   `CLAUDE.md` gains the module in its structure list and a line pointing at the doc.
+
+**Outcome (2026-11-02).** `cloud-protocol/` builds inside the desk (`./gradlew :cloud-protocol:check`,
+and the root `check`) and alone from a copy of just itself and the root files; with the root files
+missing it stops at configuration and says why. Its golden fixtures' signing vectors were computed with
+Python's `cryptography` from RFC 8032's TEST 1 key, so the desk's signing is checked against another
+Ed25519 implementation, not against itself.
+
+- **§4's drift check**, run once each by hand: a deprecated call planted in the module's source failed
+  `compileKotlin` (`warnings found and -Werror specified`), and one in its `build.gradle.kts` failed
+  script compilation; the plugins pinned to Kotlin 2.4.0 in its settings failed `ProtocolBuildTest`,
+  which holds the module's Kotlin to the root `kotlin_version`. An unused variable, the first warning
+  tried, is no warning in Kotlin 2.4.
+- **The module needs its own `gradle.properties` for the script warning.** Without it the planted
+  build-script warning passed from the desk as well as standalone: `org.gradle.kotlin.dsl.allWarningsAsErrors`
+  is read per build. Source warnings need nothing extra.
+- **D3 was wrong that the root `gradle.properties` had a serialization version**: the desk took
+  kotlinx-serialization (1.11.0) from Ktor's dependencies. `serialization_version=1.11.0` is new there,
+  and the desk still resolves the highest of it and what its dependencies ask for.
+- **Decided here:** a signed HTTP request (poll, unadopt) carries its timestamp and signature in two
+  headers, `Lighting7-Timestamp` and `Lighting7-Signature`, so the `DELETE` needs no body. Each signed
+  payload is its domain string and fields, each length-prefixed. The public key travels as its 32 raw
+  bytes in base64url, not as X.509. `AdoptionStarted` answers `expiresInS`, as RFC 8628 does, and the
+  desk derives D14's `expiresAt`. `unadopted` has an empty body. A close's detail (4001's minimum
+  version, 4003's reason) is the close reason text. An unknown adoption-poll status fails to decode, so
+  adding one is a new protocol version.
 
 ### Session 4 — Adoption on the desk
 
