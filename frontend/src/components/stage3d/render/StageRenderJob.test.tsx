@@ -127,6 +127,8 @@ describe('StageRenderJob', () => {
     // No frame-rate readout and nothing fed to a window's Performance tab, whatever this window has on.
     expect(props.stats).toBeUndefined()
     expect(props.frameRateReadout).toBeFalsy()
+    // A capture draws the room as lit: no Move in dark marks.
+    expect(props.movesInDark ?? null).toBeNull()
     // Offscreen, and out of the way of every pointer and screen reader.
     const box = container.querySelector<HTMLElement>('[data-stage-render="r-1"]')!
     expect(box.getAttribute('aria-hidden')).toBe('true')

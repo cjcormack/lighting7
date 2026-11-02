@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-MOVE-IN-DARK`](#fu-manual-move-in-dark) | movers moved in the dark on the rig: a head moves a second after it goes dark and is in place before the GO, a GO too soon and a GO TO land dark heads at once, a busk press lights a moved head and it returns, a cue *Off* and a head kept live move lit, an older show's flagged cues import on *Early*, and the stack sheet, the Cue tab, the *Dark* columns and the Stage view's rings agree with where the heads come up | Move in dark S1–S5, 2026-11-02 |
 | [`FU-MANUAL-RECORD-LOOK-AS-LAYER`](#fu-manual-record-look-as-layer) | *Record → A new Look* and *Make layer* leave the rig still: the new Look goes on top of the programmer's layers, what it took leaves *Your values*, a ticked chase keeps running without a jump, held scenery stays where it is, and a Record into a cue afterwards layers the Look | Record look as a layer, 2026-10-30 |
 | [`FU-MANUAL-GROUP-ORDER-S2`](#fu-manual-group-order-s2) | a venue group reordered from a show chases in the show's order on the rig and is taken back, the venue's order unchanged in a second show on it, and an Update across a venue reorder asks and keeps the show's | Group order S1–S2, 2026-10-27 |
 | [`FU-MANUAL-TABLES-COLOURS-S5`](#fu-manual-tables-colours-s5) | colour everywhere else at the desk: the busk rig's tile bands and the Stage view's labels and *Bodies · By colour* in a blacked-out room, a second screen set to *By colour* from the Screens sheet, the DMX footprints and a surface's labels, and whether cyan reads as a cue on the rig | Tables and colours S5, 2026-10-19 |
@@ -139,6 +140,38 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-MOVE-IN-DARK`
+
+**What it proves**: *Move in dark* (`docs/plans/completed/move-in-dark-plan.md` §9) — dark heads moved
+to the cue that lights them next, before its GO, and every screen that says so telling the truth.
+
+**Why it is here**: the tests drive the planner, the watcher and the contributor against a mock
+controller, and the screens against fixed frames; only movers on the rig show that a head arrives
+before it is lit, and only the Stage view in the hall shows whether its rings land where the beams
+come up.
+
+**Test**, on the dev rig, a stack *MiD* with Move in dark on at its defaults (Early, 1 s, 2 s) and
+three cues — Q1 Spot 1–4 lit at one position, Q2 them faded out, Q3 them lit at another position:
+
+1. **The move.** GO Q1, then Q2. About a second after the spots go dark they move, and they are at
+   Q3's position before GO; Q3 only brings them up. Turn the stack's Move in dark off mid-move:
+   nothing moves in view.
+2. **Every edge.** GO Q3 quickly after Q2's fade: the heads finish moving while their dimmers are
+   still low. Press a busk pad that lights a moved head: it returns to the live position, then moves
+   again once released. GO TO Q3 from Q1: the dark heads land at once.
+3. **The cue's setting.** Set Q3 *Off*: its heads fade up while they move. Back on *Stack*, keep
+   Spot 4 live in Q3's Cue tab: it flies in while the others are pre-set. Import a show exported
+   before session 3 with a flagged row: its cue reads *Early*.
+4. **The sheets.** The stack sheet's read-out, Q3's Cue tab and the Table's *Dark* column agree with
+   what the rig does, including a follow set *too quick* (Q2 on a 0.5 s follow).
+5. **The Stage view and the Timeline.** On Output with *Moves in dark* on, each dark spot draws its
+   dashed line and a ring; the rings sit where the beams come up on Q3, the badge counts down while
+   they travel and reads *☾ Q3* once set. *Moves in dark · Off*, Next GO and a `render_view` capture
+   draw none. The Timeline's *Dark* column spans Q2 to Q3 for Early (from Q2 alone under Late), and a
+   tap opens Q3's Cue tab at Move in dark.
 
 ---
 

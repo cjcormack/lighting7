@@ -32,6 +32,12 @@ describe('label mode', () => {
     expect(wantsLabel('none', 'fixture', true)).toBe(false)
   })
 
+  it('shows a Move in dark badge whatever the Labels mode, after a hovered or selected label and before the rest', () => {
+    for (const mode of ['positions', 'all', 'none'] as const) expect(wantsLabel(mode, 'moveInDark', false)).toBe(true)
+    expect(labelPriority('fixture', true)).toBeGreaterThan(labelPriority('moveInDark', false))
+    expect(labelPriority('moveInDark', false)).toBeGreaterThan(labelPriority('position', false))
+  })
+
   it('ranks the hovered or selected label first, then positions, then fixtures', () => {
     expect(labelPriority('fixture', true)).toBeGreaterThan(labelPriority('position', false))
     expect(labelPriority('position', false)).toBeGreaterThan(labelPriority('fixture', false))

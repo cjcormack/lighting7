@@ -410,7 +410,8 @@ row offers Output and Next GO, and *Cue in edit* only while the window shows one
 cue rides beside it as `editEntry` or `editCue`, applied only with one (show-cue-editing plan §3.7) —
 its `workLights` — `off` | `on` (stage-view menu plan D8; the
 Screens row's *Work lights · Off | On*) — and its `bodies` — `plain` | `colour` (tables-colours plan
-D12; the Screens row's *Bodies · Plain | By colour*); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
+D12; the Screens row's *Bodies · Plain | By colour*) — and its `movesInDark` — `on` | `off` (move-in-dark plan
+D11; the View menu's *Moves in dark*, no Screens segment); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
 verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own
 tab facts if it is showing `view` and ignores the frame otherwise, then re-announces, which is how

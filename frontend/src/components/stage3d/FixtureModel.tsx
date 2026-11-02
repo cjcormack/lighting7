@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCursor } from '@react-three/drei'
 import { useFrame, type RootState } from '@react-three/fiber'
 import { StageLabel } from './StageLabel'
@@ -147,6 +147,8 @@ import { REACH_EPS_M } from './scene/landing'
 import { makeLightRow, type LightRow } from './scene/lightTable'
 import { useStageInvalidate } from './stageInvalidate'
 import { forgetLanding, recordLanding } from './landedPoints'
+import { MoveInDarkMarker, type MarkLand, type MarkUpdater } from './MoveInDarkMarker'
+import type { MoveInDarkMark } from './moveInDarkOverlay'
 import { bodySpecOf } from './emitterNeeds'
 import { FOCUS_SPREAD_MAX, packBlades } from './beamMask'
 import { MAX_GOBO_LAYERS } from './goboLayers'
@@ -631,6 +633,12 @@ interface FixtureModelProps {
    * a `render_view` capture does not — a one-shot render has no history, so it lands on the DMX.
    */
   travel?: boolean
+  /**
+   * What the desk is moving this head to in the dark (lighting7 move-in-dark plan D11): drawn as an
+   * aim line, a ring and a badge (`MoveInDarkMarker.tsx`). A mover's only; the Stage view's, in the
+   * Output sources, never a capture's.
+   */
+  moveInDark?: MoveInDarkMark | null
 }
 
 /**
@@ -665,6 +673,7 @@ export function FixtureModel({
   reportLanding = false,
   goboOnSurfaces = true,
   travel = true,
+  moveInDark = null,
 }: FixtureModelProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!onClick && hovered)
@@ -952,6 +961,33 @@ export function FixtureModel({
   const colourTicker = useMemo(() => createColourTicker(invalidate), [invalidate])
   useFrame((state) => colourTicker.frame(state.clock.elapsedTime))
 
+  // Move in dark's mark (`MoveInDarkMarker.tsx`): the director calls it once it has turned the head.
+  const markRef = useRef<MarkUpdater | null>(null)
+  const registerMark = useCallback((updater: MarkUpdater | null) => {
+    markRef.current = updater
+  }, [])
+  const landMark = useCallback<MarkLand>(
+    (origin, dir, out) => {
+      if (emitters) {
+        const { hit, length } = landBeam(emitters, origin, dir, true)
+        if (hit == null) return false
+        out.point.set(hit.px, hit.py, hit.pz)
+        out.normal.set(hit.nx, hit.ny, hit.nz)
+        out.length = length
+        return true
+      }
+      // No Light drawn, so nothing to cast against: the deck.
+      if (dir.y > -1e-6 || origin.y <= 0) return false
+      out.length = -origin.y / dir.y
+      out.point.copy(origin).addScaledVector(dir, out.length)
+      out.normal.set(0, 1, 0)
+      return true
+    },
+    [emitters],
+  )
+  const markCell = spec.cells[0]
+  const marked = moveInDark != null && isMover && markCell != null && panProp != null && tiltProp != null
+
   useBeamDirector({
     spec,
     reportKey: reportLanding ? patch.key : null,
@@ -981,6 +1017,7 @@ export function FixtureModel({
     groupRef,
     yokeRef,
     headRef,
+    markRef,
     slot,
     emitters: showCone ? emitters : null,
     regionGeometry,
@@ -1056,6 +1093,20 @@ export function FixtureModel({
           slot={slot}
           drawn={ringDrawn}
           ticker={colourTicker}
+        />
+      )}
+      {marked && (
+        <MoveInDarkMarker
+          mark={moveInDark}
+          rootRef={groupRef}
+          mountRef={mountRef}
+          aperture={markCell}
+          emitAxis={spec.emitAxis}
+          panRad={MathUtils.degToRad(dmxToSignedDegrees(moveInDark.pan, panProp) ?? 0)}
+          tiltRad={MathUtils.degToRad(dmxToSignedDegrees(moveInDark.tilt, tiltProp) ?? 0)}
+          beamDeg={baseBeamDeg}
+          land={landMark}
+          register={registerMark}
         />
       )}
     </group>
@@ -1220,6 +1271,8 @@ interface BeamDirectorOpts {
   groupRef: React.RefObject<Group | null>
   yokeRef: React.RefObject<Group | null>
   headRef: React.RefObject<Group | null>
+  /** Move in dark's mark, called with the head once it is turned this frame (`MoveInDarkMarker.tsx`). */
+  markRef?: React.RefObject<MarkUpdater | null>
   slot: number
   emitters: EmittersHandle | null
   regionGeometry: ReadonlyArray<RegionGeometry>
@@ -1492,6 +1545,7 @@ function useBeamDirector({
   groupRef,
   yokeRef,
   headRef,
+  markRef,
   slot,
   emitters,
   regionGeometry,
@@ -1710,6 +1764,7 @@ function useBeamDirector({
         // stageCoords.test asserts so the two drive paths can't drift.
         yoke.rotation.set(0, MathUtils.degToRad(panDeg), 0)
         head.rotation.set(MathUtils.degToRad(tiltDeg), 0, 0)
+        markRef?.current?.(head)
       }
     }
 

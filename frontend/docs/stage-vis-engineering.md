@@ -11,8 +11,9 @@ survives losing its graphics context — §"The 3D renderer"; since session 1, i
 window's viewpoint and the Positions panel — §"Cameras and viewpoints"; since session 4, how a
 window draws a viewpoint offscreen for Claude — §"Rendering for `render_view`"; since session 5,
 editing on the Plan, Front and Side sections, which retired the SVG plot — §"Editing on the
-sections"; and since session 6, the fixture bodies, their cells and beams that leave the aperture —
-§"Fixture bodies" at the end.
+sections"; since session 6, the fixture bodies, their cells and beams that leave the aperture —
+§"Fixture bodies"; and since the move-in-dark plan, what a dark head is moving to — §"Moves in dark"
+at the end.
 
 ## The vis source
 
@@ -2745,3 +2746,44 @@ matrix write, measured in Node on the same code — is a mean of **0.04 ms** a f
 **0.07 ms** for two and **0.18 ms** for five (1900 flakes) once V8 has warmed up; a flight lasts
 ~5.2 s (≈315 frames at 60 Hz) whatever the count. The buffers are 128 KB of matrices and 24 KB of
 colours, allocated once. Not measured: Safari on the operator's Mac, and an iPad.
+
+## Moves in dark
+
+**A dark head the desk is moving shows where it is going** (lighting7 move-in-dark plan D11, session
+5; the desk's half is lighting7 `docs/cue-stacks-engineering.md` §"Move in dark"). A dark head draws
+no beam, so the view draws three things for each head `moveInDark.state` reports with a position: a
+**dashed aim line** from the head's aperture along where it points **now**, to the first surface it
+meets; a **ring** where the move's pan and tilt land; and a **badge** naming the cue it is for —
+*☾ Q12* once set, *☾ Q12 · 1.4s* while it travels, *☾ Q12 · in 0.6s* while it waits out the delay.
+Nothing new drives the motion: the head swings at its declared speed already (§"Travel time"), so the
+line follows the head and meets the ring when the head arrives.
+
+**The desk owns the plan** (P2). `moveInDarkOverlay.ts` (pure) turns the frame into a mark per head
+key — the live show's only; none for a head **lit early**, which the desk has let go and which draws
+its own beam, or for a move that carries no Position; where two stacks move one head, the lower
+stack id's — and answers the badge's words. The only thing worked out here is where the target's pan and
+tilt land, and that is the beam's own landing: `markTargetMatrix` turns the head as the beam director
+does (the mount's world matrix, the yoke's pan about y, the head's pivot, its tilt about x), and both
+casts go through `FixtureModel`'s `landBeam` on the axis, as *Focus here* does (`landedPoints.ts`).
+With *Light* off there are no emitters to cast against, and the landing is the deck. The ring is the
+pool's size at that throw (`markRingRadiusM`, from the patch's beam angle), kept between 15 cm and 1.5 m.
+
+**Drawn by the beam director, in the frame that turns the head.** `MoveInDarkMarker` registers an
+updater that the director calls right after it sets the yoke and head for the frame, so the line is
+the head as drawn, travel included, never a frame behind it. The line and ring are unlit
+(`LineDashedMaterial`, `MeshBasicMaterial`), never raycast, and drawn in the fixture's placement group;
+a ring that moved asks for one more frame, so the badge — a `moveInDark` label in the label layer,
+shown whatever the Labels mode, placed after a hovered or selected label and before the rest — is laid out where the ring is. The badge's countdown
+re-renders it every 100 ms while a time is left, and nothing else asks for a frame.
+
+**Where it is drawn.** Per window, behind the View menu's *Moves in dark · On | Off*
+(`scene/movesInDark.ts`, `sessionStorage stage.movesInDark`, on by default), announced as `movesInDark`
+in `viewOptions` and carried by a Screens row's *Copy link* only while off. Only in the two Output
+sources (`drawsMovesInDark`): Next GO, the programmer and a cue in edit draw other pictures. Never in a
+`render_view` capture (`markFor`), which draws the room as lit, and not on the Positions plan. A
+mover's only: a static lantern has no pan and tilt to move.
+
+Tests: `moveInDarkOverlay.test.ts` (the sources and the switch, the marks, a capture's none, the badge,
+the ring, and the target matrix against the director's own rig), `StageViewMenu.test.tsx`,
+`stageLabels.test.ts`, `stageViewpoint.test.ts` (the announce and arrival), `screens.test.ts` (Copy
+link) and `StageRenderJob.test.tsx` (no marks handed to a capture).

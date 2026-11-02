@@ -26,6 +26,7 @@ const edit = vi.fn((arg: { ops: TimelineEditOp[] }) => {
 })
 vi.mock('@/store/cueStacks', () => ({
   useCueStackTimelineQuery: () => ({ data: TIMELINE }),
+  useCueStackMoveInDarkQuery: () => ({ data: undefined }),
   useEditCueStackTimelineMutation: () => [edit, { isLoading: false }],
 }))
 vi.mock('@/store/fixtures', () => ({ useVisibleFixtureListQuery: () => ({ data: [{ key: 'hex-1', name: 'Hex 1' }] }) }))

@@ -18,6 +18,7 @@ import { applyStageViewOptions, stageViewOptions, useStageViewpoint } from '@/li
 import { VIEW_OPTION_PROGRAMMER_TABLE, applyProgrammerViewOptions, useProgrammerTable } from '@/lib/programmerTables'
 import { useWorkLights } from '@/components/stage3d/scene/workLights'
 import { useBodyColours } from '@/components/stage3d/scene/bodyColours'
+import { useMovesInDark } from '@/components/stage3d/scene/movesInDark'
 import { useEditTarget, useVisSource } from '@/hooks/useVisSource'
 import { lightingApi } from '@/api/lightingApi'
 import { announceThisWindow, thisWindowRowId } from '@/store/windows'
@@ -101,12 +102,13 @@ export function useWindowsBridge(): void {
   const stageEditTarget = useEditTarget()
   const stageWorkLights = useWorkLights()
   const stageBodies = useBodyColours()
+  const stageMovesInDark = useMovesInDark()
   const programmerTable = useProgrammerTable()
   const announced = announcedViewOptions(
     windowViewOf(view),
     buskOptions,
     immersive ? 'on' : 'off',
-    stageViewOptions(stageViewpoint, stageSource, stageWorkLights, stageEditTarget, stageBodies),
+    stageViewOptions(stageViewpoint, stageSource, stageWorkLights, stageEditTarget, stageBodies, stageMovesInDark),
     { [VIEW_OPTION_PROGRAMMER_TABLE]: programmerTable },
   )
   // A string key rather than the object: the hook mints a fresh map per render, and the effect
