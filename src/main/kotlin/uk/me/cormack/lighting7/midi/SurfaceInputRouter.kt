@@ -57,6 +57,8 @@ class SurfaceInputRouter(
     private val latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
     /** How long a select button must be held before it replaces the selection. See [SELECT_HOLD_MS]. */
     private val selectHoldMs: Long = SELECT_HOLD_MS,
+    /** Gives the project a record cache before an input writes to it, so the write is journaled (undo plan §3.2). */
+    private val ensureHistory: (Int) -> Unit = {},
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(SurfaceInputRouter::class.java)
@@ -171,6 +173,7 @@ class SurfaceInputRouter(
             label = "$displayKey ${match.historyControl ?: "input"}"
             if (match is ResolvedInput.Continuous) coalesceKey = "surface|$displayKey|${match.controlId}"
         }
+        runCatching { ensureHistory(projectIdProvider()) }
         WriteOrigin.with(origin) { routeMatched(deviceTypeKey, displayKey, match) }
     }
 

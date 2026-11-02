@@ -998,15 +998,20 @@ leaves it.
 
 | Message | Payload | Cast |
 |---|---|---|
-| `history.state` | `projectId: Int?`, `revision: Long`, `undo?` / `redo?` `{id, label, kind}`, `programmer: {undo, redo: [{id, label, at, source: {kind, name, window?}}]}` | Connect snapshot + broadcast |
+| `history.state` | `projectId: Int?`, `revision: Long`, `showRevision: Long`, `undo?` / `redo?` `{id, label, kind: PROGRAMMER \| SHOW}`, `programmer: {undo, redo: [{id, label, at, source: {kind, name, window?}}]}` | Connect snapshot + per-socket broadcast |
 
-What ⌘Z and ⇧⌘Z take (undo plan §3.7, D13): the programmer's steps newest first and its redo next
-first. `StateFlow`-backed on `State` (`programmerHistoryFrame`), so the subscription is the snapshot
-and it outlives a project switch; each show's history publishes into it, a switch's new show an
-empty one. Published when a step is taken (a drag that folds into its step publishes nothing) and on
-every undo and redo. Undo and redo are REST (`POST /projects/{id}/history/undo|redo`), so the family
-has no inbound frame. Every socket reads the same frame while the history holds programmer steps
-alone; session 3 of the plan makes it per source.
+What ⌘Z and ⇧⌘Z take (undo plan §3.7, D1, D2, D13), **for the socket's source**: `undo` is the newer
+of the programmer's top step, which is anyone's, and the source's own newest show entry on the
+programmer frame's project (`HistoryService.topFor`), so the two are one project's even mid-switch;
+`redo` likewise. `programmer` is the programmer's steps newest
+first and its redo next first, the same on every socket. The subscription combines two `StateFlow`s —
+`State.programmerHistoryFrame` and `HistoryService.revision` — and builds each socket's frame from its
+account (read once: a socket never changes who it is signed in as), so the subscription is the
+snapshot and it outlives a project switch. `revision` is the programmer's, restarting with each show
+(the Clear toast's `awaitHistoryStep` reads it); `showRevision` is the show history's, which only ever
+moves. The History sheet refetches its page when either does. Undo and redo
+are REST (`POST /projects/{id}/history/undo|redo`), the sheet's page is `GET /projects/{id}/history`,
+so the family has no inbound frame. See `docs/undo-engineering.md`.
 
 ### Locate — `LocateSocket.kt`
 
@@ -1285,7 +1290,9 @@ for (frame in incoming) {
 
 Each frame runs under its own `WriteOrigin` (`plugins/HistoryOrigin.kt`): the socket's account and
 announced window, a label, and for a frame sent at drag rate a key that folds its repeats into one
-programmer step (`docs/lighting-composition-model.md` §"Programmer history").
+programmer step (`docs/lighting-composition-model.md` §"Programmer history"). The stored records a
+frame changes — a park, a learn — are one show-history entry of the same origin's, and the current
+project has its record cache before the frame runs (`docs/undo-engineering.md`).
 
 `dispatch` is the `when` over the domains (`is ChannelInMessage -> handleChannel(scope, message)`,
 …). `traceMessage` (`plugins/SentryTracing.kt`) makes a gesture frame a Sentry transaction and
@@ -1424,7 +1431,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
 | `plugins/FxSocket.kt` | Active-FX state, the six FX writes and their `fxError` refusal |
 | `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
-| `plugins/HistorySocket.kt` | The programmer's history: `history.state` |
+| `plugins/HistorySocket.kt` | What the key takes, per socket: `history.state` |
 | `plugins/HistoryOrigin.kt` | The write origin the socket, REST, MCP and surface doors run each request under |
 | `plugins/LocateSocket.kt` | The located targets: `locate.state` |
 | `plugins/StackFxAmountSocket.kt` | Each stack's FX amount: `stackFxAmount.state` and `stackFxAmount.set` |

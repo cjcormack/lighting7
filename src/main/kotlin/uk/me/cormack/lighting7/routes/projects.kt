@@ -683,6 +683,7 @@ internal const val CODE_VENUE_IN_USE = "VENUE_IN_USE"
  * commit. Shared by a project's delete and its venue's, which takes its versions with it.
  */
 internal fun deleteProjectRows(state: State, project: DaoProject) {
+    state.history.forget(project.id.value)
     // Clear the show playhead before tearing down the stacks it may point at.
     project.activeStackId = null
 

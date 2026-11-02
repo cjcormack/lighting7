@@ -5,8 +5,10 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
 /**
  * The desk's **history** (undo plan §3.7; lighting7 `plugins/HistorySocket.kt` is the wire contract):
  * `history.state`, outbound only and a `StateFlow`, so the subscription is the connect snapshot. Undo
- * and redo are REST (`store/history.ts`). Session 1 of the plan holds programmer steps alone, so
- * `undo` and `redo` — what ⌘Z and ⇧⌘Z take — are the programmer's newest step and next redo.
+ * and redo are REST (`store/history.ts`). `undo` and `redo` — what ⌘Z and ⇧⌘Z take — are the newer
+ * of the programmer's top step and this window's source's newest show entry (D1, D2). `revision` is
+ * the programmer's and `showRevision` the show history's; the History sheet reads its page again when
+ * either moves.
  */
 export interface HistorySource {
   kind: 'ACCOUNT' | 'MCP' | 'SURFACE' | 'DESK'
@@ -22,16 +24,19 @@ export interface HistoryStep {
   source: HistorySource
 }
 
-/** What the key would take. */
+/** What the key would take: a programmer step, or a show entry of this window's source. */
 export interface HistoryTop {
   id: string
   label: string
-  kind: 'PROGRAMMER'
+  kind: 'PROGRAMMER' | 'SHOW'
 }
 
 export interface HistoryState {
   projectId: number | null
+  /** The programmer's revision: it restarts with each show. */
   revision: number
+  /** The show history's revision, on every project: it only ever moves. */
+  showRevision: number
   undo: HistoryTop | null
   redo: HistoryTop | null
   programmer: { undo: HistoryStep[]; redo: HistoryStep[] }
@@ -40,6 +45,7 @@ export interface HistoryState {
 export const EMPTY_HISTORY: HistoryState = {
   projectId: null,
   revision: 0,
+  showRevision: 0,
   undo: null,
   redo: null,
   programmer: { undo: [], redo: [] },
@@ -49,7 +55,7 @@ function parseTop(raw: unknown): HistoryTop | null {
   if (raw == null || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   if (typeof r.id !== 'string' || typeof r.label !== 'string') return null
-  return { id: r.id, label: r.label, kind: 'PROGRAMMER' }
+  return { id: r.id, label: r.label, kind: r.kind === 'SHOW' ? 'SHOW' : 'PROGRAMMER' }
 }
 
 function parseSteps(raw: unknown): HistoryStep[] {
@@ -82,6 +88,7 @@ export function parseHistoryFrame(raw: unknown): HistoryState {
   return {
     projectId: typeof r.projectId === 'number' ? r.projectId : null,
     revision: typeof r.revision === 'number' ? r.revision : 0,
+    showRevision: typeof r.showRevision === 'number' ? r.showRevision : 0,
     undo: parseTop(r.undo),
     redo: parseTop(r.redo),
     programmer: { undo: parseSteps(programmer.undo), redo: parseSteps(programmer.redo) },

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.history
 
+import uk.me.cormack.lighting7.mcp.McpAuthService
 import kotlinx.coroutines.ThreadContextElement
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.AbstractCoroutineContextElement
@@ -26,9 +27,16 @@ data class HistorySource(val kind: Kind, val id: String?, val name: String) {
 
         fun account(uuid: java.util.UUID, name: String) = HistorySource(Kind.ACCOUNT, uuid.toString(), name)
 
-        /** A Claude grant, by its `mcp-grant:<id>` session hash; session 3 names it by its client. */
-        fun mcp(sessionTokenHash: String) =
-            HistorySource(Kind.MCP, sessionTokenHash.removePrefix("mcp-grant:"), "Claude")
+        /**
+         * A Claude grant, by its `mcp-grant:<id>` session hash, named by the client it was granted to (D7):
+         * *Claude · Cursor*. A client that calls itself Claude, or gives no name, is plain *Claude*.
+         */
+        fun mcp(sessionTokenHash: String, clientName: String? = null) = HistorySource(
+            Kind.MCP,
+            sessionTokenHash.removePrefix("mcp-grant:"),
+            clientName?.trim()?.takeUnless { it.isEmpty() || it.equals("Claude", ignoreCase = true) || it == McpAuthService.UNNAMED_CLIENT }
+                ?.let { "Claude · $it" } ?: "Claude",
+        )
 
         fun surface(deviceKey: String) = HistorySource(Kind.SURFACE, deviceKey, deviceKey)
     }
@@ -52,9 +60,16 @@ class WriteOrigin(
     /** [UNTRACKED] marks code that must take no step whoever set it off — a project switch or reload. */
     enum class Kind { TRACKED, UNDO, REDO, UNTRACKED }
 
-    /** What the step this origin makes is called, when the door or the route says. */
+    /** What the programmer step this origin makes is called, when the door or the route says. */
     @Volatile
     var label: String? = null
+
+    /**
+     * What the show-history entry this origin makes is called, when the route or tool says
+     * ([historyLabel]); otherwise the entry is named from the records it changed ([RecordLabeler]).
+     */
+    @Volatile
+    var entryLabel: String? = null
 
     /**
      * A continuous gesture's identity — the frame type, its targets and its attribute — so a fader
@@ -108,4 +123,9 @@ class WriteOrigin(
  */
 fun historyGesture(key: String) {
     WriteOrigin.current()?.coalesceKey = key
+}
+
+/** Name the show-history entry the running request, frame or tool call makes (undo plan §3.2). */
+fun historyLabel(label: String) {
+    WriteOrigin.current()?.entryLabel = label
 }

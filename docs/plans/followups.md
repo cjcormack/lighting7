@@ -169,6 +169,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 | [`FU-TIMELINE-VALUES`](#fu-timeline-values) | Trigger | Cues | the Timeline is used to find where a hand-set value changes |
 | [`FU-TIMELINE-MCP`](#fu-timeline-mcp) | Trigger | AI | an operator asks Claude to make an FX continue across cues |
+| [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -178,6 +179,22 @@ rather than in a new doc.
 ---
 
 ## Performance
+
+### `FU-HISTORY-RESTAGE-COST`
+
+**Re-export only what a commit can have changed** · Trigger: a write on the desk visibly lags while
+several projects have show history · found in undo plan session 3's review, 2026-11-02
+
+The journal (`history/JournalInterceptor.kt`, `docs/undo-engineering.md`) re-exports the folders a
+commit touched for every project with a record cache, inside the commit, on the pool's one
+connection, as undo plan §3.4 prescribes. A project keeps its cache from the first door that names it
+until a clear point, so after an evening across several shows each write pays once per show. And a
+touched table is a touched folder whatever columns moved: a palette press stamps
+`palettes.last_pressed_at`, which no export writes, and re-exports every journaled project's palettes.
+
+Kept as planned (Chris, 2026-11-02): usually one project has a cache, and the cost is a folder's
+export. If it bites, two shapes: drop a non-current project's cache on a switch (its entries stay; a
+door rebuilds it before the next write), or skip an `UPDATE` whose columns no export reads.
 
 ### `FU-TMPL-REWARM-BOUND`
 

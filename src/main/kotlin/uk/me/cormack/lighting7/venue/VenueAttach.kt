@@ -87,7 +87,7 @@ class VenueAttach(private val state: State) {
 
     /** Attach [projectId] with [decisions]; [dryRun] answers without keeping anything. The caller reloads a live show. */
     internal suspend fun attach(projectId: Int, venueId: Int, to: Int?, decisions: List<UpdateDecisionAnswer>, dryRun: Boolean): Result =
-        run(projectId, venueId, to, decisions, dryRun)
+        run(projectId, venueId, to, decisions, dryRun).also { if (!dryRun) state.history.clear(projectId, "Attached to a venue") }
 
     private suspend fun run(projectId: Int, venueId: Int, to: Int?, decisions: List<UpdateDecisionAnswer>, dryRun: Boolean): Result =
         Tracing.transactionSuspending("venue.attach", "venue.attach") { span ->

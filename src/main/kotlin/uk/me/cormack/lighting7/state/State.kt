@@ -820,6 +820,21 @@ class State(val config: ApplicationConfig) {
     val programmerHistoryFrame = kotlinx.coroutines.flow.MutableStateFlow(uk.me.cormack.lighting7.history.ProgrammerHistory.Frame.EMPTY)
 
     /**
+     * The show history (undo plan §3.3–§3.4): each project's record cache and its journal of entries,
+     * fed by the [uk.me.cormack.lighting7.history.JournalInterceptor] from every commit. Runtime only.
+     */
+    val history: uk.me.cormack.lighting7.history.HistoryService by lazy {
+        uk.me.cormack.lighting7.history.HistoryService(database, uk.me.cormack.lighting7.sync.ProjectExporter(this))
+            .also { uk.me.cormack.lighting7.history.JournalInterceptor.register(database, it) }
+    }
+
+    /** Give [projectId] a record cache, else the current project, so its next writes are journaled (§3.2). */
+    fun ensureHistory(projectId: Int? = null) {
+        val id = projectId ?: projectManager.currentProjectOrNull?.id?.value ?: return
+        history.ensure(id)
+    }
+
+    /**
      * The desk's one-shot effects (stage-view plan session 9): the arm, every fire, the spent tubes
      * and the cue events a GO schedules — `effects.armed`, `effects.fired`, `effects.skipped`.
      * Re-attached to the new show on a switch, which disarms; see [EffectsService].
@@ -1006,6 +1021,7 @@ class State(val config: ApplicationConfig) {
             actions = DefaultSurfaceActions(this),
             feedbackHooks = surfaceFeedbackPublisher,
             latencyTracker = midiLatencyTracker,
+            ensureHistory = { history.ensure(it) },
         )
     }
 
@@ -1104,6 +1120,7 @@ class State(val config: ApplicationConfig) {
         dataSource = null
 
         runCatching { autoSyncScheduler.stop() }
+        uk.me.cormack.lighting7.history.JournalInterceptor.unregister(database)
         runCatching { projectChangedJob?.cancel() }
         projectChangedJob = null
         // The one job this State owns that is not a poller: an armed hand has a five-minute timer

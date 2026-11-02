@@ -388,8 +388,8 @@ names written, and its row marked *in review* with its branch. A session's PR is
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | programmer history (backend + programmer UI) | merged | `claude/nice-hypatia-xf5tk7` | [#330](https://github.com/cjcormack/lighting7/pull/330) | `5ac9ce0` |
-| 2 | records in memory (backend, no behaviour change) | in review | `claude/admiring-gauss-1m7xs5` | | |
-| 3 | origin and journal, read-only (backend + sheet) | planned | | | |
+| 2 | records in memory (backend, no behaviour change) | merged | `claude/admiring-gauss-1m7xs5` | [#331](https://github.com/cjcormack/lighting7/pull/331) | `36a577c` |
+| 3 | origin and journal, read-only (backend + sheet) | in review | `claude/gracious-wozniak-i6mim5` | | |
 | 4 | putting records back: the cue side (backend) | planned | | | |
 | 5 | putting records back: the rest (backend) | planned | | | |
 | 6 | the controls (frontend + MCP + surfaces) | planned | | | |
@@ -489,6 +489,48 @@ the next; whoever merges the last fills its own.
   §"Engineering Documentation" row; `websocket-engineering.md` §"History".
 - **Locally:** the full `./gradlew test` (the interceptor sits under every stored write, in every
   package) and `npm run check:quick` for the sheet.
+- **As built**, where it differs from §3 or binds a later session:
+  - The spike held: `beforeCommit` exports inside the committing transaction, so no
+    `writeTransaction` helper exists. Two things it needed: the hook flushes the DAO's entity cache
+    itself (the DAO's interceptor may run after it in `ServiceLoader` order), and the staged diff is
+    held by transaction, since Exposed clears a transaction's user data on commit. A failure in the
+    hook clears the journaled projects' history rather than failing the write.
+  - The cache is built lazily: each door calls `State.ensureHistory` for the current project and the
+    one it names (a REST path's, an MCP tool's `projectId` through `PROJECT_SCOPED_TOOLS`), and a
+    project gets one on its first write after a clear point. Only the touched tables' folders are
+    re-exported: the desk runs with SQLite's foreign keys off, so no delete cascades.
+  - `X-History-Entry` is on every write's answer, not a read's: a read has no origin. It is the request
+    id; an entry keeps every request id folded into it and the page lists them as `requestIds`, which
+    is how session 6's toasts find their entry.
+  - The entry's name is `WriteOrigin.entryLabel`, set by `historyLabel` before the write commits; the
+    door's `label` stays the programmer step's, since the REST door fills it from the path for every
+    call. Record names its entry (*Record “Rose garden”*, *Record into “Rose garden”*); MCP tools do
+    not yet, so their entries are named from the records, and the source chip says Claude.
+  - D8's merge also folds a create and the rename that follows it within 1.5 s: they touch the same
+    record.
+  - Clear points drop show entries only. The programmer's steps keep session 1's rules (a reload keeps
+    them, a switch drops them), so a sync pull leaves them. Two clear points with nothing between
+    them within 5 s are one rule. A project delete forgets the project's history outright.
+  - An untracked add or delete clears the project's history as *Changed outside the history*.
+  - `moves` is read from the folders alone (patch, group, universe, hide, override, colour, order,
+    park). Whether a Look or palette edit moves a live cue is session 4's confirm.
+  - `history.state` keeps `revision` as the programmer's, which the Clear toast's step wait reads, and
+    adds `showRevision`, the show history's; its show half is the programmer frame's project, so the two
+    agree mid-switch. The undo and redo routes' answers still carry the programmer-only frame; session 4
+    makes them the caller's.
+  - A rebase sets an array field (a Look's rows) only in an image that held the value it replaced; one
+    an entry changed too clears the project's history. A change a rebase leaves as it began drops out.
+  - A project whose cache build fails is not tried again for a minute.
+  - A grant whose client calls itself Claude, or gives no name, is plain *Claude*, not *Claude ·
+    Claude* (Chris, 2026-11-02).
+  - Every commit re-exports its folders for every project with a cache, as §3.4 says; Chris kept it
+    (2026-11-02), and `FU-HISTORY-RESTAGE-COST` is the trigger to revisit.
+  - The History icon sits after `ProgrammerIndicator` from `sm` up; on a phone it is *History…* in the
+    user menu. ⌘K's *Show history* is session 6's, with the rest of ⌘K.
+  - A row's expanded records are plain text; §4.2's links to each record are session 6's, with the
+    sheet's actions.
+  - The full suite took 8 min 39 s in a cloud container, dominated by the migration tests, which no
+    door touches; route tests are unchanged in cost (`PaletteRoutesTest`, 76 tests, 9.7 s).
 
 ### Session 4 — putting records back: the cue side (backend)
 
