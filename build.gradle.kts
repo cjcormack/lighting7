@@ -27,7 +27,7 @@ plugins {
     // rejected every Lighting7 symbol. The editor is now served in-process by the same compiler
     // that runs the scripts, so that constraint is gone: there is only one Kotlin version.
     kotlin("jvm")
-    id("io.ktor.plugin") version "3.6.0"
+    id("io.ktor.plugin") version "3.6.1"
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.github.node-gradle.node") version "7.1.0"
     id("com.gradleup.shadow")
@@ -126,7 +126,7 @@ dependencies {
     // Errors, logs and traces to Sentry — docs/observability-engineering.md. No Sentry Gradle
     // plugin: it auto-adds integrations and touches the build
     // (docs/plans/completed/sentry-plan.md D2).
-    implementation(platform("io.sentry:sentry-bom:8.61.1"))
+    implementation(platform("io.sentry:sentry-bom:8.62.0"))
     implementation("io.sentry:sentry")
     implementation("io.sentry:sentry-logback")
     implementation("io.sentry:sentry-kotlin-extensions")
