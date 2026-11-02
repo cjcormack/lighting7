@@ -596,7 +596,10 @@ the next; whoever merges the last fills its own.
     as a cue PATCH marks it.
   - A stack entry whose number the export carried as a held auto number comes back explicit, as an
     import makes it; the export is identical. The explicit numbers an upsert writes are freed first, from
-    an auto neighbour that took one and between entries that trade them.
+    an auto neighbour that took one and between entries that trade them. After the restore every stack
+    it touched is renumbered as its records say: an entry whose image carries a number keeps it, every
+    other auto entry is derived as an import derives it. The renumber by position the write itself ran
+    cannot be replayed backwards, and left a label no reader would derive.
   - The undo and redo routes resolve the project with `withProject`; a step still needs the current
     project, answered as before.
 

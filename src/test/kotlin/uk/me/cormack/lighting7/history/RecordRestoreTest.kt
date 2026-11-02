@@ -102,10 +102,9 @@ class RecordRestoreTest : RouteIntegrationTest() {
         state.history.ensure(rich)
         val original = snapshot(rich)
         val all = images(rich)
-        for (folder in RESTORABLE_FOLDERS.sorted()) {
-            val key = all.keys.filter { it.tableName == folder }.minByOrNull { it.uuid.toString() }
-            assertTrue(key != null, "the fixture holds a $folder record")
-
+        // Every record, not one: the fixture's uuids are random, so a choice by uuid differs run to run.
+        for (folder in RESTORABLE_FOLDERS.sorted()) for (key in all.keys.filter { it.tableName == folder }.sortedBy { it.uuid.toString() }
+            .ifEmpty { error("the fixture holds no $folder record") }) {
             if (folder != SyncDispositions.PROJECT_FOLDER) {
                 val taken = withDependents(all, key)
                 write(rich, taken.associateWith { null })

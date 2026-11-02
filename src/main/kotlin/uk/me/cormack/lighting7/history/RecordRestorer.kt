@@ -9,7 +9,11 @@ import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntries
+import uk.me.cormack.lighting7.models.DaoCueStacks
+import uk.me.cormack.lighting7.routes.cueEntriesInOrder
+import uk.me.cormack.lighting7.routes.renumberAutoEntries
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.routes.EntryRemoval
@@ -106,6 +110,7 @@ internal class RecordRestorer(private val state: State) {
                             .mapNotNull { key -> DaoCueStackEntry.find { DaoCueStackEntries.uuid eq key.uuid }.firstOrNull { it.stack.project.id == project.id } },
                     )
                     ProjectImporter(state).restore(project, ready.targets)
+                    renumberAsWritten(project, ready.targets)
                     TransactionManager.current().flushCache()
                     verify(projectId, ready.targets)?.let { throw BlockedException(it) }
                     // Nothing below can refuse the undo, so a stack is stopped only once it surely goes.
@@ -134,6 +139,29 @@ internal class RecordRestorer(private val state: State) {
             }
         }
         return outcome
+    }
+
+    /**
+     * Every stack whose entries [targets] touch, renumbered so each auto entry holds the number its
+     * export says: one whose image carries a number (an auto number no reader could derive) keeps it,
+     * and every other is derived from its neighbours, as an import derives it. The write being undone
+     * renumbered by position, which a restore cannot replay.
+     */
+    private fun renumberAsWritten(project: DaoProject, targets: Map<RecordKey, RecordImage?>) {
+        val entryKeys = targets.keys.filter { it.tableName == RecordFolders.CUE_STACK_ENTRIES }
+        val stackUuids = entryKeys.flatMap { listOfNotNull(targets[it], state.history.recordOf(project.id.value, it)) }
+            .mapNotNull { it.jsonObjectOrNull()?.string("cueStackUuid")?.let(::uuidOrNull) }
+            .toSet() + targets.keys.filter { it.tableName == RecordFolders.CUE_STACKS && targets[it] != null }.map { it.uuid }
+        for (uuid in stackUuids) {
+            val stack = DaoCueStack.find { DaoCueStacks.uuid eq uuid }.firstOrNull { it.project.id == project.id } ?: continue
+            val entries = cueEntriesInOrder(stack)
+            val keep = entries.map { entry ->
+                val key = RecordKey(RecordFolders.CUE_STACK_ENTRIES, entry.uuid)
+                val image = if (key in targets) targets[key] else state.history.recordOf(project.id.value, key)
+                if (image?.jsonObjectOrNull()?.containsKey("cueNumber") == true) entry.id.value else -1
+            }
+            renumberAutoEntries(stack, keep)
+        }
     }
 
     /** What a committed restore did, for [KindEffects]. */

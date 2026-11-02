@@ -191,7 +191,9 @@ stacks through `removeEntries`, as *Remove from stack* does, so a live one is de
 on from where it stood. `ProjectImporter.restore` then deletes, in reverse foreign-key order, each other
 record whose target is absent, with its embedded children; then it upserts the rest through the
 importer's own per-kind code in `UPSERT` mode (sync-engineering.md §"Importer modes"), freeing the
-explicit numbers it writes first. A stack the undo takes away is stopped on the live project, and stops
+explicit numbers it writes first. Each stack it touched is then renumbered as its records say: an
+entry whose image carries a number keeps it, and every other auto entry is derived as an import derives
+it, which a renumber by position, run backwards, would not give. A stack the undo takes away is stopped on the live project, and stops
 being any project's playhead, once nothing can refuse the undo.
 
 Before the commit the restorer exports the folders it wrote and holds them to the cache with the
