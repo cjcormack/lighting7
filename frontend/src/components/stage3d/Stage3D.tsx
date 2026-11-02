@@ -22,6 +22,7 @@ import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageE
 import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLighting'
 import { DEFAULT_WORK_LIGHTS, type WorkLights } from './scene/workLights'
 import { DEFAULT_BODY_COLOURS, type BodyColours } from './scene/bodyColours'
+import { markFor, type MoveInDarkMark } from './moveInDarkOverlay'
 import { FINISH_LOBES, type PartFinish } from './scene/sceneParts'
 import { SCENE_ELEMENT_UUID, StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
 import { SceneryPopover } from './SceneryPopover'
@@ -245,6 +246,11 @@ interface Stage3DProps {
    * for the Stage view and the Positions plan; plain for a capture.
    */
   bodies?: BodyColours
+  /**
+   * What the desk is moving in the dark, by head key (`moveInDarkOverlay.ts`), when this window
+   * draws it — the Stage view's, in an Output source with *Moves in dark* on. Never drawn in a capture.
+   */
+  movesInDark?: ReadonlyMap<string, MoveInDarkMark> | null
   /** *Sit in a seat…* while it is armed: the seats take the pointer and answer a click. */
   seatPicking?: SeatPicking | null
   /**
@@ -304,6 +310,7 @@ export function Stage3D({
   boxShadows = DEFAULT_BOX_SHADOWS,
   workLights = DEFAULT_WORK_LIGHTS,
   bodies = DEFAULT_BODY_COLOURS,
+  movesInDark = null,
   seatPicking = null,
   planAim = null,
   framingRef,
@@ -763,6 +770,7 @@ export function Stage3D({
         reportLanding={capture == null && isSelected({ kind: 'patch', patchKey: patch.key })}
         goboOnSurfaces={goboLandsOnSurfaces(goboSurfaces, isSelected({ kind: 'patch', patchKey: patch.key }))}
         travel={capture == null}
+        moveInDark={markFor(movesInDark, patch.key, capture != null)}
       />
     )
   })

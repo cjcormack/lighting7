@@ -170,6 +170,26 @@ describe('the View tab', () => {
     expect(props.setBodies).toHaveBeenCalledWith('colour')
   })
 
+  it('shows Moves in dark after Bodies, on by default, and switches it; no Screens row sets it (move-in-dark plan D11)', () => {
+    const props = setup({
+      workLights: 'off',
+      setWorkLights: vi.fn(),
+      bodies: 'plain',
+      setBodies: vi.fn(),
+      movesInDark: 'on',
+      setMovesInDark: vi.fn(),
+    })
+    open()
+    const regions = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+    expect(regions.slice(-2)).toEqual(['Bodies', 'Moves in dark'])
+    const moves = group('Moves in dark')
+    expect(within(moves).getByText('this window')).toBeInTheDocument()
+    expect(within(moves).queryByText('Screens')).toBeNull()
+    expect(within(moves).getAllByRole('radio').filter(isOn).map((i) => i.textContent)).toEqual(['On'])
+    fireEvent.click(within(moves).getByRole('radio', { name: 'Off' }))
+    expect(props.setMovesInDark).toHaveBeenCalledWith('off')
+  })
+
   it('draws no Work lights group where the host has none to set', () => {
     setup({ workLights: undefined, setWorkLights: undefined })
     open()

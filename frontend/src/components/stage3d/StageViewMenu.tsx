@@ -36,6 +36,7 @@ import {
 import { LIGHT_BUDGETS } from './scene/lightTable'
 import { isWorkLights, type WorkLights } from './scene/workLights'
 import { BODY_COLOURS, BODY_COLOURS_LABELS, isBodyColours, type BodyColours } from './scene/bodyColours'
+import { isMovesInDark, MOVES_IN_DARK, MOVES_IN_DARK_LABELS, type MovesInDark } from './scene/movesInDark'
 import { HAZE_TIERS } from './scene/hazeGovernor'
 import { isSlowReading } from './scene/frameRate'
 import { useStageStats, type StageStatsStore } from './scene/stageStats'
@@ -73,6 +74,12 @@ const WORK_LIGHT_ITEMS: ReadonlyArray<{ value: WorkLights; label: string; icon: 
 const BODY_COLOUR_HINTS: Record<BodyColours, string> = {
   plain: 'Housings matt black. Labels still carry each fixture’s colour.',
   colour: 'Each housing in its fixture’s colour. A selected one is still blue.',
+}
+
+/** Moves in dark (move-in-dark plan D11), with the chosen value's hint. */
+const MOVES_IN_DARK_HINTS: Record<MovesInDark, string> = {
+  on: 'A dark head the desk is moving shows where it points and a ring where it lands, with its cue. Output only.',
+  off: 'Dark heads draw nothing, moving or not.',
 }
 
 /** The rig's four toggles, then (on a second row) the scene's three. */
@@ -132,6 +139,9 @@ interface StageViewMenuProps {
   /** Whether this window tints its housings by colour (`scene/bodyColours.ts`), per window and announced. */
   bodies?: BodyColours
   setBodies?: (next: BodyColours) => void
+  /** Whether this window draws the heads the desk moves in the dark (`scene/movesInDark.ts`), per window and announced. */
+  movesInDark?: MovesInDark
+  setMovesInDark?: (next: MovesInDark) => void
   /** What this window's canvas is doing (`scene/stageStats.ts`), for Performance's live block. */
   stats?: StageStatsStore | null
   /** Whether this window draws the frame-rate readout over its canvas. */
@@ -229,6 +239,8 @@ function ViewTab({
   setWorkLights,
   bodies,
   setBodies,
+  movesInDark,
+  setMovesInDark,
 }: StageViewMenuProps) {
   const status = sourceStatus?.[visSource]
   return (
@@ -324,6 +336,20 @@ function ViewTab({
             items={BODY_COLOURS.map((value) => ({ value, label: BODY_COLOURS_LABELS[value] }))}
           />
           <Hint>{BODY_COLOUR_HINTS[bodies]}</Hint>
+        </Group>
+      )}
+
+      {movesInDark != null && setMovesInDark != null && (
+        <Group label="Moves in dark" scope="window">
+          <Segments
+            label="Moves in dark"
+            value={movesInDark}
+            onChange={(v) => {
+              if (isMovesInDark(v)) setMovesInDark(v)
+            }}
+            items={MOVES_IN_DARK.map((value) => ({ value, label: MOVES_IN_DARK_LABELS[value] }))}
+          />
+          <Hint>{MOVES_IN_DARK_HINTS[movesInDark]}</Hint>
         </Group>
       )}
     </div>

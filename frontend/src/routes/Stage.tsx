@@ -90,6 +90,9 @@ import {
 import { createStageStats } from '../components/stage3d/scene/stageStats'
 import { setWorkLights, useWorkLights } from '../components/stage3d/scene/workLights'
 import { setBodyColours, useBodyColours } from '../components/stage3d/scene/bodyColours'
+import { setMovesInDark, useMovesInDark } from '../components/stage3d/scene/movesInDark'
+import { drawsMovesInDark, moveInDarkMarks } from '../components/stage3d/moveInDarkOverlay'
+import { useMoveInDarkQuery } from '../store/moveInDark'
 import type { SeatPicking } from '../components/stage3d/scene/StageSceneElements'
 import { isElementShown } from '../components/stage3d/scene/sceneParts'
 import { defaultOrbitPose } from '../components/stage3d/stageCameras'
@@ -289,6 +292,16 @@ export function Stage() {
   const workLights = useWorkLights()
   // Bodies · Plain | By colour (tables-colours plan D12): this window's, announced like work lights.
   const bodies = useBodyColours()
+  // Moves in dark (move-in-dark plan D11): this window's switch, announced like the bodies, and what
+  // the desk is moving — drawn in the Output sources only.
+  const movesInDarkOn = useMovesInDark()
+  const drawMovesInDark = drawsMovesInDark(visSource, movesInDarkOn)
+  // Unsubscribed while nothing is drawn, so the route does not re-render on a frame it would not draw.
+  const { data: moveInDarkState } = useMoveInDarkQuery(undefined, { skip: !drawMovesInDark })
+  const movesInDark = useMemo(
+    () => (!drawMovesInDark || moveInDarkState == null || projectId == null ? null : moveInDarkMarks(moveInDarkState, projectId)),
+    [drawMovesInDark, moveInDarkState, projectId],
+  )
   // What the canvas is doing, for the View popover's Performance tab. Never read here: a route that
   // re-rendered on it would hand the canvas new props and ask for the frames it measures.
   const [stageStats] = useState(createStageStats)
@@ -1385,6 +1398,8 @@ export function Stage() {
             setWorkLights={setWorkLights}
             bodies={bodies}
             setBodies={setBodyColours}
+            movesInDark={movesInDarkOn}
+            setMovesInDark={setMovesInDark}
             stats={stageStats}
             frameRateReadout={frameRateReadout}
             setFrameRateReadout={setFrameRateReadout}
@@ -1432,6 +1447,7 @@ export function Stage() {
                 boxShadows={boxShadows}
                 workLights={workLights}
                 bodies={bodies}
+                movesInDark={movesInDark}
                 seatPicking={seatPicking}
                 planAim={planAimCanvas}
                 framingRef={framingRef}

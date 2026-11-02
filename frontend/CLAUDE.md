@@ -275,7 +275,7 @@ the region, wall and floor cookie instances are gone. The haze governor gives up
 
 **The View button opens a 320 px popover with two tabs** (stage-view menu plan D1–D5, D10, D11;
 `stage3d/StageViewMenu.tsx`, the boards in `../docs/plans/stage-view-menu-design/`). **View** is
-this window's: Source, Show, Haze, Labels, Work lights, Bodies. **Performance** is what it costs: a live block (fps and ms
+this window's: Source, Show, Haze, Labels, Work lights, Bodies, Moves in dark. **Performance** is what it costs: a live block (fps and ms
 a frame, the lights packed of lit, the haze tier), then the machine's light budget, *Gobos on
 surfaces* and *Box shadows* (their `localStorage` keys unchanged), then Test recovery. Every group
 says whose it is, *this window* or *this machine*. The button names a source that is not Output
@@ -6029,14 +6029,14 @@ GO*, an `enum` segment, with *Cue in edit* while the window shows one) and since
 (`STAGE_WORK_LIGHTS_OPTION`, *Work lights · Off | On*), and since the tables-colours plan's session 5
 `bodies` (`STAGE_BODIES_OPTION`, *Bodies · Plain | By colour*) — and **no immersive** — it is a window view,
 not a live view, so it has no `ShowHeader` to leave standing. `announcedViewOptions` takes the Stage
-options (`stageViewOptions`: the viewpoint, the source, the work lights and the bodies) as its fourth argument
+options (`stageViewOptions`: the viewpoint, the source, the work lights, the bodies and the moves in dark) as its fourth argument
 and sends them only under Stage; `applyViewOptionsFor` applies `immersive` only on a view whose
-descriptor carries it and the four only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`,
+descriptor carries it and the Stage keys — the four and `movesInDark` — only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`,
 which ignores a value outside each vocabulary — a camera, a saved view's uuid since session 2 or an
 unsaved seat since session 3; one of the five vis sources, `edit` only beside a positive `editEntry`
-or `editCue`; `off | on`; `plain | colour`). ⌘K gains *Show Stage on <window>* and *Open Stage on another display* from
+or `editCue`; `off | on`; `plain | colour`; `on | off` for `movesInDark`, which has no Screens segment). ⌘K gains *Show Stage on <window>* and *Open Stage on another display* from
 the same list, and `windowSetupUrl` carries `viewpoint=`, `source=` (with `editEntry=` or `editCue=`
-under `edit`), `workLights=` and `bodies=`, which the Stage route applies on arrival and strips
+under `edit`), `workLights=`, `bodies=` and `movesInDark=off`, which the Stage route applies on arrival and strips
 (`consumeLaunchStageOptions`). **Since
 session 2 the option is a `picker`**, a third `WindowViewOption` kind whose control the *view*
 supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (`controls`, today
@@ -6297,7 +6297,7 @@ false` and every surface says the count waits for it. `lib/moveInDark.ts` is the
 the words, a cue's cell (`darkCellOf`: set, lit and its reasons; *Off* off the entry's own `mode`, else
 a `CUE_OFF` reason from an older desk), what a stack moves now (`movingNow`) and the stack
 block's draft — and `cues/moveInDarkMarks.tsx` its one look: indigo, a dashed edge and a moon for
-*moved in dark*, amber ▲ for *moves while lit*. Four screens read them:
+*moved in dark*, amber ▲ for *moves while lit*. Six screens read them:
 
 - **The stack sheet** (`CueStackForm`'s `MoveInDarkStackBlock`, under Loop): the switch, *When*,
   Delay and Move time in seconds, *Moves* as three chips, saved with the name and Loop. A new stack
@@ -6333,6 +6333,18 @@ block's draft — and `cues/moveInDarkMarks.tsx` its one look: indigo, a dashed 
   drilled stack's header (`StackDetail`, locked or not) and on the phone's *Up next* card, for the
   playhead's stack, `☾ 4 moving for Q12 · 1.4s`, the cue named being the one the heads
   move for, which under Early may be past the next.
+- **The Stage view** (`stage3d/MoveInDarkMarker.tsx` over the pure `moveInDarkOverlay.ts`): for each
+  head `moveInDark.state` moves with a position, a dashed aim line along where the head points now, a
+  ring where the move lands — the beam's own landing, cast at the target's pan and tilt — and a badge,
+  `☾ Q12 · 1.4s`. Behind the View menu's per-window *Moves in dark* (`scene/movesInDark.ts`, on by
+  default, announced as `movesInDark`), in the two Output sources only, never in a `render_view`
+  capture. See `docs/stage-vis-engineering.md` §"Moves in dark".
+- **The Timeline's *Dark* column** (`StackTimeline`, after the kinds, drawn while the plan has
+  anything to show): one hatched span per move from the entry it happens in to the entry it is for,
+  across markers and round the end of a loop, side by side in lanes where spans share a row
+  (`lib/stackTimeline/darkSpans.ts`); `☾ 4 → Q12` where a move starts and the cue's own cell where
+  moves land. Read-only: a tap selects the cue the move is for and opens the pane on its Cue tab at
+  Move in dark.
 
 ### Make rig safe and Quit desk
 
@@ -6375,7 +6387,7 @@ confirm, and is still offered.
 
 ### Cues, Stacks & Triggers
 What a stack moves in the dark — the stack sheet's block, the Cue tab's section, the cue table's
-*Dark* column and the chips — is §"Move in dark" above.
+and the Timeline's *Dark* columns, the chips and the Stage view's marks — is §"Move in dark" above.
 
 Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own attribute assignments, ad-hoc FX, and **script hooks** into named snapshots. A cue is a project record, and a stack's list is **entries** naming cues (lighting7 cue model plan): a cue may sit in several stacks, twice in one, or in none (*loose*). A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of entries. **A place's number and follow are the entry's** — written through `patchCueStackEntry`, never the cue's PATCH, which ignores them — and so is a prompt-book anchor (`/prompt-book/anchors/{entryId}`; the book keys everything on entry, and a shared cue is a card and an anchor per entry). *Remove from stack* deletes the entry, never the cue, and asks nothing; *Add to stack…* shares the cue, and *Move to stack…* moves the entry whole — number, follow and anchor with it — through its own route (§"The cue action set" below); a cue in two or more places wears the `in N stacks` chip (`SharedCueChip`, from `lib/cuePlaces.ts` over the stack list). Deleting a stack keeps its cues, its confirm (`DeleteStackDialog`) offering, unticked, to delete the ones no other stack uses after listing what names them from a dry run. A drawn row is an entry, so the Show view's cards, the cue sheet and the phone list are lit from the transport's entry cursors (`serverActiveEntryId`, `standbyEntryId`), a card opens per entry (`?entry=` beside `?cue=` where the cue sits twice in the stack), and arming names the entry. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in the cue editor's Scenery tab, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
 

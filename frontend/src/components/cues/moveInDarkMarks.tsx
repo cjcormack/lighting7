@@ -8,8 +8,8 @@ import { LIVE_REASON_LABEL, remainingLabel, type DarkCell, type MovingNow } from
  * means *moved in dark* and nothing else, beside the live green, next blue and warning amber the desk
  * already draws. ▲ in amber is a head that moves while it is lit.
  */
-export const MOVE_IN_DARK_CHIP_CLASS = 'border border-dashed border-indigo-400/60 bg-indigo-500/10 text-indigo-300'
-export const MOVES_LIT_CHIP_CLASS = 'border border-amber-500/50 bg-amber-500/10 text-amber-300'
+export const MOVE_IN_DARK_CHIP_CLASS = 'border border-dashed border-indigo-400/60 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
+export const MOVES_LIT_CHIP_CLASS = 'border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300'
 
 export function DarkChip({ children, lit = false, className, title }: { children: ReactNode; lit?: boolean; className?: string; title?: string }) {
   return (

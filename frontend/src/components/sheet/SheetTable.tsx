@@ -892,7 +892,8 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
               // (the cue sheet's "top of p. 8"). It cannot go on the *row* — an `overflow` there
               // makes it a scroll container and the sticky first column would stick to it.
               className={cn(
-                'flex h-full min-w-0 items-center overflow-hidden',
+                'flex h-full min-w-0 items-center',
+                column.bleed ? 'relative' : 'overflow-hidden',
                 column.align === 'right' && 'justify-end',
                 bandStarts.has(column.key) && 'border-l border-border',
               )}

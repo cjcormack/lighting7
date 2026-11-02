@@ -184,6 +184,11 @@ export interface SheetColumn<Row extends SheetRow, C extends string = string, V 
   /** Right-align the content — numbers. */
   align?: 'left' | 'right'
   /**
+   * A read-out drawn edge to edge that may cross the row's rule (the Timeline's *Dark* spans): its
+   * wrapper does not clip. Its display must never wrap, which is what the clip otherwise guards.
+   */
+  bleed?: boolean
+  /**
    * The header band this column sits under: consecutive columns sharing a [SheetColumnGroup.key]
    * draw one band above the header row, labelled once, with a rule on the left of the first. A
    * sheet with no grouped column draws no band.

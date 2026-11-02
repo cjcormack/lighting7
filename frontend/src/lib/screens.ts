@@ -31,8 +31,9 @@ export function newWindowUrl(name: string, view: string = '/', origin: string = 
  * `?sheet=` set its shape, `?immersive=on` hides the app around it. A Stage row adds its
  * `viewpoint` (stage-view plan session 1), its `source` (session 3) — with its `editEntry` or
  * `editCue` while that is *Cue in edit* (show-cue-editing plan §3.7) — its `workLights`
- * (stage-view menu plan D8) and its `bodies` (tables-colours plan D12), which the Stage view applies
- * on arrival and strips. A view whose options
+ * (stage-view menu plan D8), its `bodies` (tables-colours plan D12) and its `movesInDark` while off,
+ * on being a fresh tab's (move-in-dark plan D11), which the Stage view applies on arrival and strips.
+ * A view whose options
  * carry none of them copies the plain link.
  */
 export function windowSetupUrl(
@@ -42,10 +43,11 @@ export function windowSetupUrl(
   origin: string = window.location.origin,
 ): string {
   let url = newWindowUrl(name, view, origin)
-  for (const key of ['page', 'focus', 'sheet', 'viewpoint', 'source', 'editEntry', 'editCue', 'workLights', 'bodies', 'table', 'immersive']) {
+  for (const key of ['page', 'focus', 'sheet', 'viewpoint', 'source', 'editEntry', 'editCue', 'workLights', 'bodies', 'movesInDark', 'table', 'immersive']) {
     const value = options?.[key]
     if (value == null || value === '') continue
     if (key === 'immersive' && value !== 'on') continue
+    if (key === 'movesInDark' && value !== 'off') continue
     url += `&${key}=${encodeURIComponent(value)}`
   }
   return url

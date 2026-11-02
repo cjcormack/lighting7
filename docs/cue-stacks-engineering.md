@@ -579,7 +579,7 @@ side with FX and no rows too, so that a cancel can find them; its tick moves onl
 ## Move in dark
 
 When a moving head goes dark, the desk moves its position, colour and beam to the cue that lights it
-next, so that cue's GO only brings it up (move-in-dark plan, `docs/plans/move-in-dark-plan.md`). It
+next, so that cue's GO only brings it up (move-in-dark plan, `docs/plans/completed/move-in-dark-plan.md`). It
 is live, never stored: nothing is written to a cue, and turning it off undoes it at once (D1).
 
 **The setting is the stack's** (D2): `cue_stacks.move_in_dark`, `move_in_dark_when` (`EARLY | LATE`),

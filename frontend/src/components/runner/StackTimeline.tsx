@@ -15,7 +15,10 @@ import type { CueStack, CueStackCueEntry, CueStackCueRow } from '@/api/cueStacks
 import { isCueRow } from '@/api/cueStacksApi'
 import type { CueTarget } from '@/api/cuesApi'
 import type { SceneryState } from '@/api/sceneryApi'
-import { useCueStackTimelineQuery } from '@/store/cueStacks'
+import { useCueStackMoveInDarkQuery, useCueStackTimelineQuery } from '@/store/cueStacks'
+import type { MoveInDarkPlanEntry } from '@/api/cueStacksApi'
+import { darkCellOf, darkCellSentence, darkCellShows } from '@/lib/moveInDark'
+import { DarkCellFace } from '@/components/cues/moveInDarkMarks'
 import { useCueEdited } from '@/store/cueHolds'
 import type { TimelineEditOp } from '@/api/stackTimelineApi'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
@@ -37,6 +40,8 @@ import {
   cells as deriveCells,
   columns as deriveColumns,
   cueRangeWords,
+  darkColumn,
+  darkSpanStartWords,
   dragOps,
   dragPlan,
   editsColumn,
@@ -60,6 +65,8 @@ import {
   TIMELINE_KINDS,
   toggleOps,
   withExtraColumns,
+  type DarkColumn,
+  type DarkSpanMark,
   type TimelineCellAddress,
   type TimelineCueRef,
   type TimelineCell,
@@ -129,6 +136,13 @@ const PANE_TAB: Record<TimelineKind, CueEditorTab> = { look: 'looks', palette: '
 
 const FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
 
+/** The *Dark* column (move-in-dark plan D11): after the kinds, read-only. */
+const DARK_COLUMN = '__dark'
+const DARK_COLUMN_PX = 128
+/** A move's span: Move in dark's indigo, hatched, in the run-bar idiom. */
+const DARK_SPAN_CLASS =
+  'border border-dashed border-indigo-400/60 bg-[repeating-linear-gradient(135deg,rgb(129_140_248/0.3)_0_3px,transparent_3px_7px)]'
+
 export interface TimelineRow extends SheetRow {
   entry: CueStackCueEntry
 }
@@ -185,6 +199,8 @@ export function StackTimeline({
   placesByCue,
 }: StackTimelineProps) {
   const { data: timeline } = useCueStackTimelineQuery({ projectId, stackId: stack.id })
+  /** The stack's Move in dark plan — the *Dark* column's spans and each target's read-out. */
+  const { data: darkPlan } = useCueStackMoveInDarkQuery({ projectId, stackId: stack.id })
   const { data: fixtures } = useVisibleFixtureListQuery()
   const { data: groups } = useGroupListQuery()
   const { data: elements } = useStageElementListQuery(projectId)
@@ -289,6 +305,14 @@ export function StackTimeline({
     [stack.cues],
   )
 
+  const dark = useMemo(() => darkColumn(darkPlan, stack.cues.map((e) => e.entryId)), [darkPlan, stack.cues])
+  const darkByEntry = useMemo(
+    () => new Map<number, MoveInDarkPlanEntry>((darkPlan?.rigLoaded ? darkPlan.entries : []).map((e) => [e.entryId, e])),
+    [darkPlan],
+  )
+  /** Drawn while the plan has a span or a read-out to show. */
+  const darkShown = dark.spans.length > 0 || [...darkByEntry.values()].some((e) => darkCellShows(darkCellOf(e)))
+
   // ── Editing (§4.4) ────────────────────────────────────────────────────────────────────────────
   const cueOrder = useMemo<TimelineCueRef[]>(() => stack.cues.filter(isCueRow).map((c) => ({ entryId: c.entryId, cueId: c.id })), [stack.cues])
   const byId = useMemo(() => new Map(allColumns.map((c) => [c.id, c])), [allColumns])
@@ -296,6 +320,14 @@ export function StackTimeline({
     (cueId: number) => {
       const cue = stack.cues.find((c): c is CueStackCueRow => isCueRow(c) && c.id === cueId)
       return cue == null ? `cue ${cueId}` : cue.cueNumber ? `Q${cue.cueNumber}` : cue.name
+    },
+    [stack.cues],
+  )
+  /** One place's label — a cue placed twice in the stack is two places. */
+  const entryLabel = useCallback(
+    (entryId: number) => {
+      const cue = stack.cues.find((c): c is CueStackCueRow => isCueRow(c) && c.entryId === entryId)
+      return cue == null ? `entry ${entryId}` : cue.cueNumber ? `Q${cue.cueNumber}` : cue.name
     },
     [stack.cues],
   )
@@ -343,6 +375,8 @@ export function StackTimeline({
   /** A cell's click: select it, or — when it is already the one selected cell — toggle it. */
   const clickCellRef = useRef<(row: TimelineRow, column: TimelineColumn, select: () => void, extend: boolean) => void>(() => {})
   const startDragRef = useRef<(column: TimelineColumn, entryId: number, e: React.PointerEvent) => void>(() => {})
+  /** A tap on the *Dark* column: the cue its move is for, opened at its Cue tab's Move in dark. */
+  const openDarkRef = useRef<(entryId: number) => void>(() => {})
 
   const move = useCallback(
     (id: string, direction: -1 | 1) => orderStore.set(moveColumn(allColumns, id, direction, shown)),
@@ -428,8 +462,30 @@ export function StackTimeline({
         cellTitle: (row) => cellTitle(column, cellAt(grid, row.entry.entryId, column.id), cueOf(row)),
         }
       }),
+      ...(darkShown
+        ? [
+            {
+              key: DARK_COLUMN,
+              label: 'Dark',
+              width: `${DARK_COLUMN_PX}px`,
+              group: { key: DARK_COLUMN, label: 'Move in dark' },
+              bleed: true,
+              value: () => undefined,
+              display: (row: TimelineRow) => (
+                <TimelineDarkCell
+                  row={row}
+                  dark={dark}
+                  entry={darkByEntry.get(row.entry.entryId)}
+                  entryLabel={entryLabel}
+                  onOpen={(entryId) => openDarkRef.current(entryId)}
+                />
+              ),
+              dividerCell: (row: TimelineRow) => <TimelineDarkSegments marks={dark.byEntry.get(row.entry.entryId)} lanes={dark.lanes} />,
+            } satisfies SheetColumn<TimelineRow, string>,
+          ]
+        : []),
     ]
-  }, [drag?.columnId, dragGhosts, grid, locked, marks, move, previousEntry, shown, swatches])
+  }, [dark, darkByEntry, darkShown, drag?.columnId, entryLabel, dragGhosts, grid, locked, marks, move, previousEntry, shown, swatches])
 
   const permission = useMemo(() => ({ entry: !locked, clear: !locked }), [locked])
   const copy = useCallback(
@@ -617,14 +673,27 @@ export function StackTimeline({
   const paneRow = selectedRows.length === 1 && isCueRow(selectedRows[0].entry) ? selectedRows[0] : null
   const singleCell = cellCount === 1 ? cellSelection.cells[0] : null
   const cellKind = singleCell == null ? null : (shown.find((c) => c.id === singleCell.col)?.kind ?? null)
-  const [tabRequest, setTabRequest] = useState<{ key: string; tab: CueEditorTab; seq: number } | null>(null)
+  const [tabRequest, setTabRequest] = useState<{ key: string; tab: CueEditorTab; section?: 'moveInDark'; seq: number } | null>(null)
   const cellKey = singleCell == null || cellKind == null ? null : `${singleCell.rowId}|${singleCell.col}`
   useEffect(() => {
     if (cellKey == null || cellKind == null) return
     setTabRequest((prev) => (prev?.key === cellKey ? prev : { key: cellKey, tab: PANE_TAB[cellKind], seq: (prev?.seq ?? 0) + 1 }))
   }, [cellKey, cellKind])
 
+  openDarkRef.current = (entryId) => {
+    const rowId = entryRowId(entryId)
+    setRows([rowId])
+    scrollTo(rowId)
+    setTabRequest((prev) => ({ key: `${rowId}|${DARK_COLUMN}`, tab: 'cue', section: 'moveInDark', seq: (prev?.seq ?? 0) + 1 }))
+  }
+
   const paneRowId = paneRow?.id ?? null
+  // A Dark tap's tab request is for the row it opened; once the pane leaves that row it lapses.
+  useEffect(() => {
+    setTabRequest((request) =>
+      request != null && request.key.endsWith(`|${DARK_COLUMN}`) && request.key !== `${paneRowId}|${DARK_COLUMN}` ? null : request,
+    )
+  }, [paneRowId])
   const keepPaneRowInView = useCallback(() => {
     if (paneRowId == null) return
     sheetRef.current?.querySelector(`[data-row-id="${paneRowId}"]`)?.scrollIntoView?.({ block: 'nearest' })
@@ -887,7 +956,7 @@ export function StackTimeline({
                 }
               : undefined
           }
-          minWidth={`${260 + 116 + shown.reduce((n, c) => n + (c.kind === 'fx' || c.kind === 'scenery' ? 92 : 84), 0)}px`}
+          minWidth={`${260 + 116 + shown.reduce((n, c) => n + (c.kind === 'fx' || c.kind === 'scenery' ? 92 : 84), 0) + (darkShown ? DARK_COLUMN_PX : 0)}px`}
           rowClass={(row) =>
             !isCueRow(row.entry)
               ? undefined
@@ -920,13 +989,17 @@ export function StackTimeline({
           entryId={paneRow.entry.entryId}
           locked={locked}
           onRequestUnlock={onRequestUnlock}
-          tabRequest={tabRequest != null && singleCell?.rowId === paneRow.id ? tabRequest : null}
+          tabRequest={
+            tabRequest != null && (singleCell?.rowId === paneRow.id || tabRequest.key === `${paneRow.id}|${DARK_COLUMN}`)
+              ? tabRequest
+              : null
+          }
           columnRef={columnRef}
           sheetRef={sheetRef}
           onResized={keepPaneRowInView}
         />
       )}
-      <TimelineLegend cues={standardCount} markers={markerCount} columns={shown.length} />
+      <TimelineLegend cues={standardCount} markers={markerCount} columns={shown.length} dark={darkShown} />
       {sceneryEdit != null && sceneryElement != null && sceneryCue != null && sceneryColumn?.elementUuid != null && (
         <TimelineSceneryPopover
           key={`${sceneryEdit.entryId}|${sceneryEdit.columnId}`}
@@ -1208,6 +1281,84 @@ function TimelineMarkerCell({ column, entryId, marks }: { column: TimelineColumn
   return <span aria-hidden data-timeline-through className={runSegmentClass(column.kind, { start: false, end: false })} />
 }
 
+/**
+ * One row of the *Dark* column (design §5.6): each move crossing it as a hatched segment in its
+ * lane, the cue's own read-out where moves land (`☾ 6 · ▲ 1`, *Off · 4 live*), else `☾ 4 → Q12`
+ * where a move starts. Read-only: a tap opens the cue the move is for at its Move in dark.
+ */
+function TimelineDarkCell({
+  row,
+  dark,
+  entry,
+  entryLabel,
+  onOpen,
+}: {
+  row: TimelineRow
+  dark: DarkColumn
+  entry: MoveInDarkPlanEntry | undefined
+  entryLabel: (entryId: number) => string
+  onOpen: (entryId: number) => void
+}) {
+  const marks = dark.byEntry.get(row.entry.entryId)
+  const cell = darkCellOf(entry)
+  const face = darkCellShows(cell)
+  const starts = (marks ?? []).filter((m) => m.start)
+  if (!face && (marks == null || marks.length === 0)) return null
+  // Where moves land here, this cue; else the move starting here, else the one passing through.
+  const opens = face ? row.entry.entryId : (starts[0] ?? marks![0]).span.toEntryId
+  const words = [
+    face ? darkCellSentence(cell) : null,
+    ...starts.map((m) => `${m.span.heads} head${m.span.heads === 1 ? '' : 's'} moved in the dark here for ${entryLabel(m.span.toEntryId)}`),
+  ].filter((w) => w != null)
+  const said = words.length > 0 ? words.join('; ') : `Moving in the dark for ${entryLabel(opens)}`
+  return (
+    <span className="relative block h-full w-full" data-timeline-dark={row.entry.entryId}>
+      <TimelineDarkSegments marks={marks} lanes={dark.lanes} />
+      <button
+        type="button"
+        className="absolute inset-0 z-[2] flex items-center gap-1 overflow-hidden whitespace-nowrap px-2 text-[10px] text-indigo-700 dark:text-indigo-200"
+        onClick={() => onOpen(opens)}
+        title={`${said} — open ${entryLabel(opens)}'s Move in dark`}
+        aria-label={`Move in dark at ${entryLabel(row.entry.entryId)}: ${said}`}
+      >
+        {face ? (
+          <DarkCellFace cell={cell} />
+        ) : starts.length > 0 ? (
+          <span className="rounded bg-background/85 px-1 font-mono">{darkSpanStartWords(starts[0].span, entryLabel(starts[0].span.toEntryId))}</span>
+        ) : null}
+      </button>
+    </span>
+  )
+}
+
+/** The hatched segments of the moves crossing one row, a marker's included, each in its lane. */
+function TimelineDarkSegments({ marks, lanes }: { marks: readonly DarkSpanMark[] | undefined; lanes: number }) {
+  if (marks == null || marks.length === 0 || lanes === 0) return null
+  return (
+    <>
+      {marks.map((m) => (
+        <i
+          key={`${m.span.fromEntryId}-${m.span.toEntryId}`}
+          aria-hidden
+          data-dark-span={`${m.span.fromEntryId}-${m.span.toEntryId}`}
+          data-dark-start={m.start || undefined}
+          data-dark-end={m.end || undefined}
+          className={cn(
+            'pointer-events-none absolute z-[1]',
+            DARK_SPAN_CLASS,
+            m.start ? 'top-1 rounded-t-md' : '-top-px border-t-0',
+            m.end ? 'bottom-1 rounded-b-md' : '-bottom-px border-b-0',
+          )}
+          style={{
+            left: `calc(6px + ${m.span.lane} * (100% - 12px) / ${lanes})`,
+            width: `calc((100% - 12px) / ${lanes} - 2px)`,
+          }}
+        />
+      ))}
+    </>
+  )
+}
+
 function sceneryWords(state: SceneryState, transitionMs: number | null): string {
   const words = shortSceneryWords(undefined, state) || 'no state'
   const clock = clockWords(transitionMs)
@@ -1296,7 +1447,7 @@ function TimelineSceneryPick({
   )
 }
 
-function TimelineLegend({ cues, markers, columns }: { cues: number; markers: number; columns: number }) {
+function TimelineLegend({ cues, markers, columns, dark }: { cues: number; markers: number; columns: number; dark: boolean }) {
   return (
     <SheetPage.Footer>
       <span>
@@ -1322,6 +1473,12 @@ function TimelineLegend({ cues, markers, columns }: { cues: number; markers: num
       <span>
         <b className="text-amber-400">S</b> stomp · 60% amount · C mask · ⏱ timed · M master
       </span>
+      {dark && (
+        <span className="inline-flex items-center gap-1.5">
+          <LegendSwatch className={DARK_SPAN_CLASS} />
+          Moved in dark, from the cue it moves in to the cue it is for
+        </span>
+      )}
     </SheetPage.Footer>
   )
 }

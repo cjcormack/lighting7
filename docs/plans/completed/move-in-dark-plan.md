@@ -1,7 +1,7 @@
 # Move in dark: dark heads moved ahead of the cue that lights them
 
-> **Document status: READY — written 2026-10-31 from the page Chris and Claude agreed that day.**
-> Five sessions, each one PR, each stacked on the one before while that one is unmerged, each run by
+> **Document status: DONE — sessions 1–4 merged, session 5 the last, in review (2026-11-02).**
+> Written 2026-10-31 from the page Chris and Claude agreed that day. Five sessions, each one PR, each stacked on the one before while that one is unmerged, each run by
 > `/next-session` (§5). The page and the record are in
 > [`move-in-dark-design/INDEX.md`](move-in-dark-design/INDEX.md).
 >
@@ -143,8 +143,8 @@ is titled *Move in dark: session N — title*. Never merge a later session's PR 
 | 1 | Stack settings and the look-ahead engine | merged | `claude/brave-bardeen-l724t1` | [#321](https://github.com/cjcormack/lighting7/pull/321) | f161d5f |
 | 2 | Every edge: re-planning, catch-up, lit early, the key stack and the frame | merged | `claude/admiring-cannon-azpr8e` | [#322](https://github.com/cjcormack/lighting7/pull/322) | 1069003 |
 | 3 | The cue's setting, the static plan, MCP, and the row flag retired | merged | `claude/move-in-dark-s3` | [#324](https://github.com/cjcormack/lighting7/pull/324) | 3a67358 |
-| 4 | Screens: stack settings, the Cue tab and the cue list | in review | `claude/vigilant-noether-zvy1cy` | | |
-| 5 | Screens: the Stage view, the Timeline, and the docs closed | planned | | | |
+| 4 | Screens: stack settings, the Cue tab and the cue list | merged | `claude/vigilant-noether-zvy1cy` | [#326](https://github.com/cjcormack/lighting7/pull/326) | e8d8ade |
+| 5 | Screens: the Stage view, the Timeline, and the docs closed | in review | `claude/focused-wozniak-v52mvo` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -443,6 +443,28 @@ the next; whoever merges the last fills its own.
 - **Docs:** `frontend/docs/stage-vis-engineering.md` §"Moves in dark"; `frontend/CLAUDE.md` (the
   Timeline column, the overlay); `docs/plans/manual-validation.md` (§9's rig checks); move this plan
   to `docs/plans/completed/` with its design folder once every row is merged.
+- **Recorded in session 5:**
+  - *Which heads are drawn.* A head lit early is let go (D8) and draws its own beam, and a move with
+    no Position has nowhere to ring, so neither is marked; where two stacks move one head the lower
+    stack id's is drawn (the frame is keyed by stack). A head is matched to a patch by its key, and
+    only a mover draws one: a static lantern has no pan and tilt to move, and an element-keyed head
+    has no yoke of its own.
+  - *The badge.* The page drew `☾ Q12` set and `☾ Q12 · 1.4s` travelling; a head still waiting out
+    its delay reads `☾ Q12 · in 0.6s`, so the two countdowns are not confused.
+  - *Where the line and ring land.* Both casts are the beam's own `landBeam` on the axis, the target
+    turned as the beam director turns the head (`markTargetMatrix`), and the director draws the mark
+    in the frame it turns the head. With *Light* off there is nothing to cast against, and they land
+    on the deck. The ring is the pool's size at that throw, between 15 cm and 1.5 m.
+  - *The switch.* Announced as `movesInDark` and applied from a frame and `?movesInDark=`, but given
+    no Screens segment (the plan names the View menu only); *Copy link* carries it only while off,
+    on being a fresh tab's. Not drawn on the Positions plan.
+  - *The Timeline's column* is drawn only while the plan has a span or a read-out to show, and reads
+    the static plan only, not `moveInDark.state`. Spans that share a row take lanes side by side, a
+    span ending and another starting on one row included, and a move round a loop's end is drawn as
+    two segments. A row where moves land shows the Table's cell for that cue; one where a move starts,
+    `☾ 4 → Q12`. A tap selects the target's row and opens the pane at its Cue tab's Move in dark; the
+    request lapses once the pane leaves that row. Its spans cross the row rules through a read-out
+    that does not clip (`SheetColumn.bleed`).
 
 ## 6. Migration
 

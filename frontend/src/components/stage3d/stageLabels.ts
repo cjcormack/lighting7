@@ -45,11 +45,16 @@ export function toStageLabelMode(v: unknown): StageLabelMode {
   return 'positions'
 }
 
-/** `position` is a rigging or a region; `fixture` a lantern. */
-export type StageLabelKind = 'position' | 'fixture'
+/**
+ * `position` is a rigging or a region; `fixture` a lantern; `moveInDark` the badge on a head's move
+ * in the dark (`MoveInDarkMarker.tsx`), which its own switch shows rather than the Labels mode, placed
+ * after a hovered or selected label and before the rest.
+ */
+export type StageLabelKind = 'position' | 'fixture' | 'moveInDark'
 
 /** Rank in the declutter: the first placed wins the space. */
-const PRIORITY_EMPHASISED = 3
+const PRIORITY_EMPHASISED = 4
+const PRIORITY_MOVE_IN_DARK = 3
 const PRIORITY_POSITION = 2
 const PRIORITY_FIXTURE = 1
 
@@ -80,12 +85,14 @@ export function overlapsAny(r: ScreenRect, placed: ReadonlyArray<ScreenRect>, co
 
 /** Whether a label of this kind is a candidate at all under `mode`. */
 export function wantsLabel(mode: StageLabelMode, kind: StageLabelKind, emphasised: boolean): boolean {
+  if (kind === 'moveInDark') return true
   if (mode === 'none') return false
   if (kind === 'position') return true
   return mode === 'all' || emphasised
 }
 
 export function labelPriority(kind: StageLabelKind, emphasised: boolean): number {
+  if (kind === 'moveInDark') return PRIORITY_MOVE_IN_DARK
   if (emphasised) return PRIORITY_EMPHASISED
   return kind === 'position' ? PRIORITY_POSITION : PRIORITY_FIXTURE
 }
@@ -99,11 +106,14 @@ const SWATCH_WIDTH = 12
 const KIND_CLASS: Record<StageLabelKind, string> = {
   position: 'font-mono text-[10px] font-semibold tracking-wider',
   fixture: 'text-[11px] font-medium',
+  moveInDark: 'font-mono text-[10px] font-semibold tabular-nums',
 }
 /** The frame and ink at rest. */
 const RESTING_CLASS: Record<StageLabelKind, string> = {
   position: 'border-amber-500/40 bg-background/85 text-amber-600 dark:text-amber-400',
   fixture: 'border-border/60 bg-background/85 text-foreground',
+  // Move in dark's one look (`cues/moveInDarkMarks.tsx`), on the dark canvas whatever the theme.
+  moveInDark: 'border-dashed border-indigo-400/70 bg-[oklch(0.25_0.06_275/0.9)] text-indigo-200',
 }
 /**
  * Selected or hovered: the prototype's blue chip, on the dark canvas whatever the theme. The swatch
@@ -113,6 +123,7 @@ const EMPHASISED_CLASS: Record<StageLabelKind, string> = {
   position: 'border-primary bg-[oklch(0.3_0.09_260/0.9)] text-amber-400',
   fixture:
     'border-primary bg-[oklch(0.3_0.09_260/0.9)] text-white [&_[data-label-swatch]]:shadow-[0_0_0_1px_rgb(255_255_255/0.6)]',
+  moveInDark: 'border-dashed border-indigo-400/70 bg-[oklch(0.25_0.06_275/0.9)] text-indigo-200',
 }
 
 export interface StageLabelEntry {

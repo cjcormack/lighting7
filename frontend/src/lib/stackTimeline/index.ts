@@ -7,6 +7,7 @@ export { columns, applyColumnOrder, moveColumn, layerColumnId, fxColumnId, scene
 export { cells, cellAt, layerGlyphs, type TimelineCells } from './cells'
 export { runs, joins, runMarkAt, markerMarkAt, sameSettings, type TimelineRuns } from './runs'
 export { filter, kindCounts, type TimelineFilter } from './filter'
+export { darkColumn, darkSpanStartWords, NO_DARK_COLUMN, type DarkColumn, type DarkSpan, type DarkSpanMark } from './darkSpans'
 export {
   cellTargetOf,
   cueRangeWords,

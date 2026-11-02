@@ -59,6 +59,15 @@ describe('windowSetupUrl', () => {
     )
   })
 
+  it('carries a Stage row’s moves in dark only while off, on being a fresh tab’s (move-in-dark plan D11)', () => {
+    expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'plan', bodies: 'plain', movesInDark: 'off' }, 'http://desk')).toBe(
+      'http://desk/projects/1/stage?window=Hall&viewpoint=plan&bodies=plain&movesInDark=off',
+    )
+    expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'plan', movesInDark: 'on' }, 'http://desk')).toBe(
+      'http://desk/projects/1/stage?window=Hall&viewpoint=plan',
+    )
+  })
+
   it('carries a Stage row’s work lights beside its source, both values (stage-view menu plan D8)', () => {
     expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'plan', source: 'output', workLights: 'on' }, 'http://desk')).toBe(
       'http://desk/projects/1/stage?window=Hall&viewpoint=plan&source=output&workLights=on',

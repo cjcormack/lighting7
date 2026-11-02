@@ -2,7 +2,7 @@
 import { cueRow, markerRow } from '@/test/cueEntries'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CueStack } from '@/api/cueStacksApi'
+import type { CueStack, StackMoveInDarkPlan } from '@/api/cueStacksApi'
 import type { StackTimeline as StackTimelineData, TimelineEntry, TimelineLayer } from '@/api/stackTimelineApi'
 
 /**
@@ -12,8 +12,10 @@ import type { StackTimeline as StackTimelineData, TimelineEntry, TimelineLayer }
  */
 let TIMELINE: StackTimelineData | undefined
 const edit = vi.fn()
+let DARK_PLAN: StackMoveInDarkPlan | undefined
 vi.mock('@/store/cueStacks', () => ({
   useCueStackTimelineQuery: () => ({ data: TIMELINE }),
+  useCueStackMoveInDarkQuery: () => ({ data: DARK_PLAN }),
   useEditCueStackTimelineMutation: () => [edit, { isLoading: false }],
 }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
@@ -40,8 +42,8 @@ let FADE: number | null = null
 vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: FADE, fadeRemainMs: null }) }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 vi.mock('@/components/cues/editor/CueEditor', () => ({
-  CueEditor: (props: { cueId: number; tabRequest?: { tab: string } | null }) => (
-    <div data-cue-editor={props.cueId} data-tab={props.tabRequest?.tab ?? ''} />
+  CueEditor: (props: { cueId: number; tabRequest?: { tab: string; section?: string } | null }) => (
+    <div data-cue-editor={props.cueId} data-tab={props.tabRequest?.tab ?? ''} data-section={props.tabRequest?.section ?? ''} />
   ),
 }))
 /** What the bar hands the cue action set — the actions themselves are `CueActions.test.tsx`'s. */
@@ -105,6 +107,7 @@ function entry(entryId: number, over: Partial<TimelineEntry> = {}): TimelineEntr
 
 beforeEach(() => {
   edit.mockReset()
+  DARK_PLAN = undefined
   cueActions.last = undefined
   timelineFiltersStore.reset()
   sessionStorage.clear()
@@ -197,6 +200,78 @@ describe('StackTimeline', () => {
     // A range over two cues folds it.
     fireEvent.keyDown(window, { key: 'ArrowUp', shiftKey: true })
     expect(editor()).toBeNull()
+  })
+
+  it('draws no Dark column while the stack moves nothing in the dark', () => {
+    DARK_PLAN = { stackId: 10, rigLoaded: true, entries: [{ entryId: 101, cueId: 1, heads: [], live: [] }], summary: { heads: 0, cues: 0, live: 0, off: 0 } }
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    expect(document.querySelector('[data-timeline-dark]')).toBeNull()
+    expect([...document.querySelectorAll('[data-header-band]')].map((b) => b.textContent)).toEqual(['Palettes · 1', 'Scenery · 1'])
+  })
+
+  it('draws each move in the Dark column, from the cue it happens in to the cue it is for, across a marker', () => {
+    // Early: two heads move in Q1 for Q3, through Q2 and the marker. Late: one moves in Q2 for Q3.
+    DARK_PLAN = {
+      stackId: 10,
+      rigLoaded: true,
+      entries: [
+        { entryId: 101, cueId: 1, heads: [], live: [] },
+        { entryId: 102, cueId: 2, heads: [], live: [] },
+        {
+          entryId: 103,
+          cueId: 3,
+          heads: [
+            { target: 'spot-1', fromEntryId: 101, families: ['POSITION'] },
+            { target: 'spot-2', fromEntryId: 101, families: ['POSITION'] },
+            { target: 'spot-3', fromEntryId: 102, families: ['POSITION'] },
+          ],
+          live: [{ target: 'spot-4', reason: 'KEPT_LIVE' }],
+        },
+      ],
+      summary: { heads: 3, cues: 1, live: 1, off: 0 },
+    }
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    expect([...document.querySelectorAll('[data-header-band]')].map((b) => b.textContent)).toEqual(['Palettes · 1', 'Scenery · 1', 'Move in dark'])
+    const spans = (entryId: number) =>
+      [...document.querySelectorAll(`[data-row-id="entry:${entryId}"] [data-dark-span]`)].map(
+        (e) => `${e.getAttribute('data-dark-span')}${e.hasAttribute('data-dark-start') ? ' start' : ''}${e.hasAttribute('data-dark-end') ? ' end' : ''}`,
+      )
+    expect(spans(101)).toEqual(['101-103 start'])
+    expect(spans(102)).toEqual(['101-103', '102-103 start'])
+    expect(spans(150)).toEqual(['101-103', '102-103'])
+    expect(spans(103)).toEqual(['101-103 end', '102-103 end'])
+    // Where a move starts it says so; where moves land, the cue's own read-out.
+    expect(document.querySelector('[data-timeline-dark="101"]')?.textContent).toBe('☾ 2 → Q3')
+    expect(document.querySelector('[data-timeline-dark="103"]')?.textContent).toContain('3')
+    expect(document.querySelector('[data-timeline-dark="103"]')?.textContent).toContain('kept live')
+
+    // Read-only: a tap opens the cue the move is for, at its Move in dark.
+    fireEvent.click(document.querySelector('[data-timeline-dark="101"] button')!)
+    const editor = document.querySelector('[data-cue-editor]')
+    expect(editor?.getAttribute('data-cue-editor')).toBe('3')
+    expect(editor?.getAttribute('data-tab')).toBe('cue')
+    expect(editor?.getAttribute('data-section')).toBe('moveInDark')
+    expect(edit).not.toHaveBeenCalled()
+    // The request is for that row: once the pane leaves it, coming back opens no tab of its own.
+    fireEvent.click(document.querySelector('[data-row-id="entry:101"] [data-first-column]')!)
+    fireEvent.click(document.querySelector('[data-row-id="entry:103"] [data-first-column]')!)
+    expect(document.querySelector('[data-cue-editor]')?.getAttribute('data-cue-editor')).toBe('3')
+    expect(document.querySelector('[data-cue-editor]')?.getAttribute('data-tab')).toBe('')
+    // The spans cross the row rules: their read-out does not clip.
+    expect(document.querySelector('[data-timeline-dark="102"]')?.parentElement?.className).not.toContain('overflow-hidden')
+  })
+
+  it('names the place a move is for, where its cue sits twice in the stack', () => {
+    const twice: CueStack = { ...STACK, cues: [...STACK.cues, cueRow(3, { entryId: 109, cueNumber: '9', name: 'Market again' })] }
+    DARK_PLAN = {
+      stackId: 10,
+      rigLoaded: true,
+      entries: [{ entryId: 109, cueId: 3, heads: [{ target: 'spot-1', fromEntryId: 101, families: ['POSITION'] }], live: [] }],
+      summary: { heads: 1, cues: 1, live: 0, off: 0 },
+    }
+    render(<StackTimeline stack={twice} projectId={1} activeEntryId={null} />)
+    expect(document.querySelector('[data-timeline-dark="101"]')?.textContent).toBe('☾ 1 → Q9')
+    expect(document.querySelector('[data-timeline-dark="101"] button')?.getAttribute('title')).toContain('for Q9')
   })
 
   it('writes nothing for ⏎ and ⌫ over a row selection', () => {

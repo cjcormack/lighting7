@@ -32,6 +32,12 @@ import {
   setBodyColours,
 } from '../components/stage3d/scene/bodyColours'
 import {
+  MOVES_IN_DARK_KEY,
+  movesInDark,
+  resetMovesInDarkStore,
+  setMovesInDark,
+} from '../components/stage3d/scene/movesInDark'
+import {
   EYE_POSE_KEY,
   noteOrbitPose,
   readEyePose,
@@ -48,6 +54,7 @@ afterEach(() => {
   resetVisSourceStore()
   resetWorkLightsStore()
   resetBodyColoursStore()
+  resetMovesInDarkStore()
   resetLiveOrbitPose()
 })
 
@@ -88,7 +95,7 @@ describe('the Stage viewpoint (stage-view plan session 1)', () => {
   })
 
   it('announces the viewpoint, the source and the work lights, each under its own key', () => {
-    expect(stageViewOptions('eye', 'nextGo', 'on')).toEqual({ viewpoint: 'eye', source: 'nextGo', workLights: 'on', bodies: 'plain' })
+    expect(stageViewOptions('eye', 'nextGo', 'on')).toEqual({ viewpoint: 'eye', source: 'nextGo', workLights: 'on', bodies: 'plain', movesInDark: 'on' })
     expect(stageViewOptions('eye', 'nextGo', 'on', null, 'colour')).toMatchObject({ bodies: 'colour' })
   })
 
@@ -184,7 +191,7 @@ describe('a seat picked and not saved (stage-view plan session 3)', () => {
   it('rides a windows.viewOptions frame and ?viewpoint= like any viewpoint — no new key', () => {
     const ref = seatViewpointRef(STALLS, 'A1')
     expect(applyStageViewOptions({ viewpoint: ref })).toEqual({ viewpoint: ref })
-    expect(stageOptionsKeys(stageViewOptions(ref, 'output', 'off'))).toEqual(['bodies', 'source', 'viewpoint', 'workLights'])
+    expect(stageOptionsKeys(stageViewOptions(ref, 'output', 'off'))).toEqual(['bodies', 'movesInDark', 'source', 'viewpoint', 'workLights'])
   })
 })
 
@@ -232,6 +239,32 @@ describe('the Stage bodies per window (tables-colours plan D12)', () => {
   })
 })
 
+describe('the Stage moves in dark per window (move-in-dark plan D11)', () => {
+  it('are on until switched, and per tab: sessionStorage, never localStorage', () => {
+    expect(movesInDark()).toBe('on')
+    setMovesInDark('off')
+    expect(window.sessionStorage.getItem(MOVES_IN_DARK_KEY)).toBe('"off"')
+    expect(window.localStorage.getItem(MOVES_IN_DARK_KEY)).toBeNull()
+  })
+
+  it('ride viewOptions: announced, then applied by another window’s frame', () => {
+    const announced = stageViewOptions('plan', 'output', 'off', null, 'plain', 'off')
+    expect(announced.movesInDark).toBe('off')
+    expect(movesInDark()).toBe('on')
+    expect(applyStageViewOptions(announced)).toMatchObject({ movesInDark: 'off' })
+    expect(movesInDark()).toBe('off')
+  })
+
+  it('ignore a value outside on | off, and are taken from ?movesInDark= on arrival and stripped', () => {
+    expect(applyStageViewOptions({ movesInDark: 'yes' })).toEqual({})
+    expect(movesInDark()).toBe('on')
+    expect(consumeLaunchStageOptions(new URLSearchParams('movesInDark=off&cue=4'))?.toString()).toBe('cue=4')
+    expect(movesInDark()).toBe('off')
+    expect(consumeLaunchStageOptions(new URLSearchParams('movesInDark=yes'))?.toString()).toBe('')
+    expect(movesInDark()).toBe('off')
+  })
+})
+
 describe('the Stage work lights per window (stage-view menu plan D8)', () => {
   it('are off until switched, and per tab: sessionStorage, never localStorage', () => {
     expect(workLights()).toBe('off')
@@ -246,7 +279,7 @@ describe('the Stage work lights per window (stage-view menu plan D8)', () => {
     resetWorkLightsStore()
     window.sessionStorage.clear()
     expect(workLights()).toBe('off')
-    expect(applyStageViewOptions(announced)).toEqual({ viewpoint: 'plan', source: 'output', workLights: 'on', bodies: 'plain' })
+    expect(applyStageViewOptions(announced)).toEqual({ viewpoint: 'plan', source: 'output', workLights: 'on', bodies: 'plain', movesInDark: 'on' })
     expect(workLights()).toBe('on')
   })
 
@@ -335,10 +368,11 @@ describe('the cue in edit as a source (show-cue-editing plan §3.7)', () => {
       editEntry: '170',
       workLights: 'off',
       bodies: 'plain',
+      movesInDark: 'on',
     })
     expect(stageViewOptions('plan', 'edit', 'off', { kind: 'cue', cueId: 40 })).toMatchObject({ editCue: '40' })
-    expect(stageViewOptions('plan', 'nextGo', 'off', { kind: 'cue', cueId: 40 })).toEqual({ viewpoint: 'plan', source: 'nextGo', workLights: 'off', bodies: 'plain' })
+    expect(stageViewOptions('plan', 'nextGo', 'off', { kind: 'cue', cueId: 40 })).toEqual({ viewpoint: 'plan', source: 'nextGo', workLights: 'off', bodies: 'plain', movesInDark: 'on' })
     setVisSource('edit')
-    expect(stageViewOptions('plan', visSource(), 'off', null)).toEqual({ viewpoint: 'plan', source: 'output', workLights: 'off', bodies: 'plain' })
+    expect(stageViewOptions('plan', visSource(), 'off', null)).toEqual({ viewpoint: 'plan', source: 'output', workLights: 'off', bodies: 'plain', movesInDark: 'on' })
   })
 })
