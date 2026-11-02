@@ -5,72 +5,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
-import uk.me.cormack.lighting7.models.DaoVenueVersions
-import uk.me.cormack.lighting7.models.DaoShowColours
-import uk.me.cormack.lighting7.models.DaoShowGroupOrders
-import uk.me.cormack.lighting7.models.DaoShowHides
-import uk.me.cormack.lighting7.models.DaoShowOverrides
-import uk.me.cormack.lighting7.models.DaoShowParkReleases
-import uk.me.cormack.lighting7.models.DaoCueScenery
-import uk.me.cormack.lighting7.models.DaoCueEvents
-import uk.me.cormack.lighting7.models.DaoEffectTubeStates
-import uk.me.cormack.lighting7.models.DaoCueStackScenery
-import uk.me.cormack.lighting7.models.DaoLookScenery
-import uk.me.cormack.lighting7.models.DaoStageElements
-import uk.me.cormack.lighting7.models.DaoStageViewpoints
-import uk.me.cormack.lighting7.models.DaoBuskBanks
-import uk.me.cormack.lighting7.models.DaoBuskColumns
-import uk.me.cormack.lighting7.models.DaoBuskPads
-import uk.me.cormack.lighting7.models.DaoBuskPages
-import uk.me.cormack.lighting7.models.DaoBuskRigRows
-import uk.me.cormack.lighting7.models.DaoBuskRigTiles
-import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
-import uk.me.cormack.lighting7.models.DaoCueAdHocFx
-import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
-import uk.me.cormack.lighting7.models.DaoCueSlots
-import uk.me.cormack.lighting7.models.DaoCueStackEntries
-import uk.me.cormack.lighting7.models.DaoCueStacks
-import uk.me.cormack.lighting7.models.DaoCueTriggers
-import uk.me.cormack.lighting7.models.DaoCues
-import uk.me.cormack.lighting7.models.DaoLookFx
-import uk.me.cormack.lighting7.models.DaoLookRows
-import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.DaoPaletteFx
-import uk.me.cormack.lighting7.models.DaoPaletteRows
-import uk.me.cormack.lighting7.models.DaoPalettes
-import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
-import uk.me.cormack.lighting7.models.DaoFixtureGroups
-import uk.me.cormack.lighting7.models.DaoFixturePatches
-import uk.me.cormack.lighting7.models.DaoFixturePatchPlacements
-import uk.me.cormack.lighting7.models.DaoFxDefinitions
-import uk.me.cormack.lighting7.models.DaoInstalls
-import uk.me.cormack.lighting7.models.DaoMachineOverrides
-import uk.me.cormack.lighting7.models.DaoOAuthIdentities
-import uk.me.cormack.lighting7.models.DaoParkedChannels
-import uk.me.cormack.lighting7.models.DaoProjectScalerStates
-import uk.me.cormack.lighting7.models.DaoProjects
-import uk.me.cormack.lighting7.models.DaoPromptBookAnchors
-import uk.me.cormack.lighting7.models.DaoPromptBookAnnotations
-import uk.me.cormack.lighting7.models.DaoPromptBooks
-import uk.me.cormack.lighting7.models.DaoRiggings
-import uk.me.cormack.lighting7.models.DaoScripts
-import uk.me.cormack.lighting7.models.DaoSpeedMasters
-import uk.me.cormack.lighting7.models.DaoStageRegions
-import uk.me.cormack.lighting7.models.DaoSyncConfigs
-import uk.me.cormack.lighting7.models.DaoSyncLinkedRepos
-import uk.me.cormack.lighting7.models.DaoSyncLogEntries
-import uk.me.cormack.lighting7.models.DaoSyncSessionConflicts
-import uk.me.cormack.lighting7.models.DaoSyncSessions
-import uk.me.cormack.lighting7.models.DaoSyncStates
-import uk.me.cormack.lighting7.models.DaoPasswordResetTokens
-import uk.me.cormack.lighting7.models.DaoUniverseConfigs
-import uk.me.cormack.lighting7.models.DaoUserSessions
-import uk.me.cormack.lighting7.models.DaoMcpOAuthClients
-import uk.me.cormack.lighting7.models.DaoMcpOAuthGrants
-import uk.me.cormack.lighting7.models.DaoRemoteAccessSettingsTable
-import uk.me.cormack.lighting7.models.DaoTelemetrySettingsTable
-import uk.me.cormack.lighting7.models.DaoUsers
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedRichProject
@@ -89,9 +23,9 @@ import kotlin.test.assertTrue
  * symmetrically and passes. That gap is what let the clone path (and, in principle, the export
  * path) fall behind the schema. This test closes it from the other end:
  *
- *  1. every table in [ALL_TABLES] must have a [Disposition] recorded here — adding a table
- *     without answering "portable, machine-local, or transient?" fails the build;
- *  2. every table declared [Disposition.Portable] must actually produce output when the rich
+ *  1. every table in [ALL_TABLES] must have a [SyncDisposition] recorded in [SyncDispositions] —
+ *     adding a table without answering "portable, machine-local, or transient?" fails the build;
+ *  2. every table declared [SyncDisposition.Portable] must actually produce output when the rich
  *     fixture is exported, so declaring a table portable without wiring it into
  *     `ProjectExporter` fails too;
  *  3. the fixture itself must populate every portable table, which is what makes
@@ -103,137 +37,7 @@ import kotlin.test.assertTrue
  */
 class SyncCoverageTest {
 
-    /** What a table's rows are, as far as cloud sync and project cloning are concerned. */
-    private sealed interface Disposition {
-        /**
-         * Portable show content: exported to [exportDir] as canonical JSON, imported back, and
-         * carried by [ProjectCloner]. [embeddedField] names the JSON array this table's rows
-         * are nested into when it has no folder of its own (group members, preset assignments).
-         */
-        data class Portable(val exportDir: String, val embeddedField: String? = null) : Disposition
-
-        /** The project row itself — exported as `project.json`, not as a record folder. */
-        data object ProjectRoot : Disposition
-
-        /** Per-rig or per-install data, deliberately absent from the export. */
-        data class MachineLocal(val why: String) : Disposition
-
-        /** Transient or non-show data that no export, import or clone should carry. */
-        data class Excluded(val why: String) : Disposition
-    }
-
-    /**
-     * The recorded decision per table. Mirrors the decision tree in `CLAUDE.md`
-     * §"Database changes and cloud sync"; keep the two in step.
-     */
-    private val dispositions: Map<Table, Disposition> = mapOf(
-        DaoProjects to Disposition.ProjectRoot,
-
-        DaoScripts to Disposition.Portable("scripts"),
-        DaoFxDefinitions to Disposition.Portable("fxDefinitions"),
-        DaoLooks to Disposition.Portable("looks"),
-        DaoLookRows to Disposition.Portable("looks", "rows"),
-        DaoPalettes to Disposition.Portable("palettes"),
-        DaoPaletteRows to Disposition.Portable("palettes", "rows"),
-        DaoPaletteFx to Disposition.Portable("palettes", "fx"),
-        DaoLookFx to Disposition.Portable("looks", "fx"),
-        // Five `Excluded` dispositions stood here and just below — `DaoFxPresets`,
-        // `DaoFxPresetPropertyAssignments`, `DaoPalettes`, `DaoPaletteEntries` and
-        // `DaoCuePresetApplications`. They were excluded rather than portable at formatVersion 5,
-        // because exporting both representations would put two copies of one entity in the repo and
-        // materialise both on import. Session 4 deleted the tables, so they are out of `ALL_TABLES`
-        // and there is nothing left to have an opinion about. Their pre-v5 shape lived on in
-        // `testsupport/LegacySchema.kt` for the migration tests; both went with the migrations on
-        // 2026-08-24 (see state/InstallBootstrap.kt).
-        // Portable rather than excluded-live-state: look/cue effects reference a master by
-        // speedMasterUuid, and that reference only survives clone/import if the masters
-        // travel with the show. The exported bpm is a starting default, not a live knob.
-        DaoSpeedMasters to Disposition.Portable("speedMasters"),
-        DaoUniverseConfigs to Disposition.Portable("universeConfigs"),
-        DaoRiggings to Disposition.Portable("riggings"),
-        DaoStageRegions to Disposition.Portable("stageRegions"),
-        // v18: the scene document (stage-view plan session 2). Portable, both: "Row F" is the
-        // venue's, not this Mac's (D6).
-        DaoStageElements to Disposition.Portable("stageElements"),
-        DaoStageViewpoints to Disposition.Portable("stageViewpoints"),
-        // v20: scenery (stage-view plan session 8), embedded in the cue, stack or Look that owns it
-        // as a Look's rows are — an owner says one thing about each element.
-        DaoCueScenery to Disposition.Portable("cues", "scenery"),
-        DaoCueStackScenery to Disposition.Portable("cueStacks", "scenery"),
-        DaoLookScenery to Disposition.Portable("looks", "scenery"),
-        // v21: a cue's events (stage-view plan session 9), embedded in the cue as its scenery is.
-        DaoCueEvents to Disposition.Portable("cues", "events"),
-        DaoFixturePatches to Disposition.Portable("fixturePatches"),
-        // A paired dimmer's other lanterns, embedded in list order in their patch's document.
-        DaoFixturePatchPlacements to Disposition.Portable("fixturePatches", "extraPlacements"),
-        DaoFixtureGroups to Disposition.Portable("fixtureGroups"),
-        DaoFixtureGroupMembers to Disposition.Portable("fixtureGroups", "members"),
-        DaoCueStacks to Disposition.Portable("cueStacks"),
-        DaoCues to Disposition.Portable("cues"),
-        // Cue model plan session 3 (formatVersion 32): a stack's list is its own records, one file per
-        // entry — markers included — so a drag rewrites one file and two desks adding to one stack add
-        // two. Until then each cue's one entry rode inside its cue file.
-        DaoCueStackEntries to Disposition.Portable("cueStackEntries"),
-        DaoCueAttributeAssignments to Disposition.Portable("cueAttributeAssignments"),
-        DaoCueLayers to Disposition.Portable("cueLayers"),
-        DaoCueAdHocFx to Disposition.Portable("cueAdHocFx"),
-        DaoCueTriggers to Disposition.Portable("cueTriggers"),
-        DaoCueSlots to Disposition.Portable("cueSlots"),
-        DaoBuskPages to Disposition.Portable("buskPages"),
-        DaoBuskColumns to Disposition.Portable("buskPages", "columns"),
-        DaoBuskBanks to Disposition.Portable("buskPages", "banks"),
-        DaoBuskPads to Disposition.Portable("buskPages", "pads"),
-        // v12: one document per rig row, tiles inline — `buskRig/{rowUuid}.json`, a record folder
-        // like every other, because a top-level file is outside the record scan (busk-further plan
-        // §3.7, session 2 amendment).
-        DaoBuskRigRows to Disposition.Portable("buskRig"),
-        DaoBuskRigTiles to Disposition.Portable("buskRig", "tiles"),
-        DaoParkedChannels to Disposition.Portable("parkedChannels"),
-        DaoPromptBooks to Disposition.Portable("promptBooks"),
-        DaoPromptBookAnchors to Disposition.Portable("promptBookAnchors"),
-        DaoPromptBookAnnotations to Disposition.Portable("promptBookAnnotations"),
-        DaoControlSurfaceBindings to Disposition.Portable("controlSurfaceBindings"),
-
-        DaoMachineOverrides to Disposition.MachineLocal(
-            "per-rig field overrides (controller IPs); cloned same-machine, never exported"
-        ),
-        DaoInstalls to Disposition.MachineLocal("this install's identity"),
-        DaoOAuthIdentities to Disposition.MachineLocal("this install's git credentials"),
-        DaoSyncConfigs to Disposition.MachineLocal("per-project sync settings for this install"),
-        DaoSyncLinkedRepos to Disposition.MachineLocal("which remote this install is attached to"),
-        DaoSyncStates to Disposition.MachineLocal("last-synced record hashes for this install"),
-        DaoSyncSessions to Disposition.MachineLocal("in-flight conflict sessions"),
-        DaoSyncSessionConflicts to Disposition.MachineLocal("in-flight conflict rows"),
-        DaoSyncLogEntries to Disposition.MachineLocal("local sync activity log"),
-        DaoUsers to Disposition.MachineLocal("desk-local user accounts; never leave this machine"),
-        DaoUserSessions to Disposition.MachineLocal("live login sessions for this desk"),
-        DaoMcpOAuthClients to Disposition.MachineLocal("OAuth clients registered with this desk's MCP server"),
-        DaoMcpOAuthGrants to Disposition.MachineLocal("MCP OAuth grants: per-desk credentials, like sessions"),
-        DaoRemoteAccessSettingsTable to Disposition.MachineLocal("this desk's ngrok tunnel: its public domain and whether it is on"),
-        DaoTelemetrySettingsTable to Disposition.MachineLocal("this install's consent to send errors and logs to Sentry"),
-        DaoPasswordResetTokens to Disposition.MachineLocal("short-lived local password reset tokens"),
-        DaoEffectTubeStates to Disposition.MachineLocal("which confetti tubes on this rig are spent: the physical cannon, not the show"),
-        // Venue plan §3.2: this desk's index of its venue snapshots, rebuilt from the venue repo's
-        // tags (session 4, `VenueRepoSync`); the version itself travels as a tagged commit, never as this row.
-        DaoVenueVersions to Disposition.MachineLocal("this desk's index of venue versions; rebuilt from the venue repo's tags"),
-
-        DaoProjectScalerStates to Disposition.Excluded("machine-local blackout / grand-master level"),
-        // Venue plan §3.2, exported from formatVersion 24 (session 4). Only a show on a venue holds
-        // any, so the exporter check below reads them from `seedShowOnVenue`'s export.
-        DaoShowHides to Disposition.Portable("showHides"),
-        // Venue plan §3.2, exported from session 5 at formatVersion 24 (session 4 reserved the folder).
-        // A show on a venue's alone, read from `seedShowOnVenue`'s export like the hides.
-        DaoShowOverrides to Disposition.Portable("showOverrides"),
-        // Venue parks, formatVersion 27: a show's releases of its venue's parks, a show on a venue's
-        // alone, read from `seedShowOnVenue`'s export like the hides.
-        DaoShowParkReleases to Disposition.Portable("showParkReleases"),
-        // Fixture colours, formatVersion 36: a show's recolours of its venue's patches and groups, a
-        // show on a venue's alone, read from `seedShowOnVenue`'s export like the hides.
-        DaoShowColours to Disposition.Portable("showColours"),
-        // Group order, formatVersion 44: a show's orders of its venue's groups, a show on a venue's alone,
-        // read from `seedShowOnVenue`'s export like the hides.
-        DaoShowGroupOrders to Disposition.Portable("showGroupOrders"),
-    )
+    private val dispositions: Map<Table, SyncDisposition> = SyncDispositions.byTable
 
     private lateinit var state: State
     private lateinit var exportDir: Path
@@ -258,7 +62,7 @@ class SyncCoverageTest {
             emptyList(), undeclared,
             "New table(s) with no sync disposition. Work through the decision tree in " +
                 "CLAUDE.md §\"Database changes and cloud sync\", then record the answer in " +
-                "SyncCoverageTest.dispositions. If portable: wire it through ProjectExporter " +
+                "SyncDispositions.byTable. If portable: wire it through ProjectExporter " +
                 "and ProjectImporter, add rows to RichProjectFixture, and it is cloned for free.",
         )
     }
@@ -285,20 +89,20 @@ class SyncCoverageTest {
         val missing = mutableListOf<String>()
         val emptyEmbeds = mutableListOf<String>()
         for ((table, disposition) in dispositions) {
-            if (disposition !is Disposition.Portable) continue
+            if (disposition !is SyncDisposition.Portable) continue
             val files = listOf(exportDir, venueShowDir).flatMap { root ->
-                val dir = root.resolve(disposition.exportDir)
+                val dir = root.resolve(disposition.folder)
                 if (Files.isDirectory(dir)) Files.list(dir).use { it.toList() } else emptyList()
             }
             if (files.isEmpty()) {
-                missing += "${table.tableName} -> ${disposition.exportDir}/"
+                missing += "${table.tableName} -> ${disposition.folder}/"
                 continue
             }
             val field = disposition.embeddedField ?: continue
             // Embedded child tables have no folder of their own; assert the parent documents
             // actually carry the array, so a forgotten inline child is caught too.
             val carried = files.any { Files.readString(it).contains("\"$field\"") }
-            if (!carried) emptyEmbeds += "${table.tableName} -> ${disposition.exportDir}/*.json[$field]"
+            if (!carried) emptyEmbeds += "${table.tableName} -> ${disposition.folder}/*.json[$field]"
         }
 
         assertEquals(
@@ -316,8 +120,8 @@ class SyncCoverageTest {
     fun `machine-local and excluded tables have a documented reason`() {
         val undocumented = dispositions.entries.filter { (_, d) ->
             when (d) {
-                is Disposition.MachineLocal -> d.why.isBlank()
-                is Disposition.Excluded -> d.why.isBlank()
+                is SyncDisposition.MachineLocal -> d.why.isBlank()
+                is SyncDisposition.Excluded -> d.why.isBlank()
                 else -> false
             }
         }.map { it.key.tableName }
