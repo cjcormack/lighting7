@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "type": "welcome",
+  "id": "c-0002",
+  "replyTo": "d-0001",
+  "body": {
+    "orgName": "Cormack Lighting",
+    "heartbeatS": 25
+  }
+}

@@ -142,15 +142,16 @@ class RecordRestoreTest : RouteIntegrationTest() {
     private fun roundTripAll(project: Int, folders: Set<String>) {
         state.history.ensure(project)
         val all = images(project)
+        // Every record, not one: the fixtures' uuids are random, so a choice by uuid differs run to run.
         for (folder in folders.sorted()) {
-            assertTrue(all.keys.any { it.tableName == folder }, "the fixture holds a $folder record")
-            roundTrip(project, folder, all)
+            val keys = all.keys.filter { it.tableName == folder }.sortedBy { it.uuid.toString() }
+            assertTrue(keys.isNotEmpty(), "the fixture holds a $folder record")
+            for (key in keys) roundTrip(project, folder, key, all)
         }
     }
 
-    private fun roundTrip(project: Int, folder: String, all: Map<RecordKey, RecordImage>) {
+    private fun roundTrip(project: Int, folder: String, key: RecordKey, all: Map<RecordKey, RecordImage>) {
         val original = snapshot(project)
-        val key = all.keys.filter { it.tableName == folder }.minBy { it.uuid.toString() }
 
         if (folder != SyncDispositions.PROJECT_FOLDER) {
             val taken = withDependents(all, key)

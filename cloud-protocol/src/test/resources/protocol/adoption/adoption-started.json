@@ -1,0 +1,8 @@
+{
+  "adoptionId": "adp_7Kq2Vx9mT4",
+  "userCode": "WDJB-MJHT",
+  "verificationUri": "https://cloud.example/adopt",
+  "verificationUriComplete": "https://cloud.example/adopt?code=WDJB-MJHT",
+  "intervalS": 5,
+  "expiresInS": 900
+}

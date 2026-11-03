@@ -162,8 +162,6 @@ import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
-import uk.me.cormack.lighting7.routes.renumberAsArchived
-import uk.me.cormack.lighting7.routes.heldAutoNumbers
 import uk.me.cormack.lighting7.routes.cueEntryIds
 import uk.me.cormack.lighting7.models.entriesOf
 import uk.me.cormack.lighting7.models.DaoLooks
@@ -725,18 +723,6 @@ class ProjectImporter(private val state: State) {
         require(unknown.isEmpty()) { "No restore for folder(s) $unknown" }
 
         val leaving = targets.filterValues { it == null }.keys
-        // Each stack whose list the undo changes, with the auto numbers its standing entries carry in the
-        // export: once every entry is back, the stack is numbered as a reader of that export would.
-        val entryKeys = targets.keys.filter { it.tableName == CUE_STACK_ENTRIES }
-        val movingIds = entryKeys.mapNotNull { findEntry(project, it.uuid)?.id?.value }.toSet()
-        // The stacks the entries stand in now and the ones their images put them in — an entry the undo
-        // inserts again is in no stack yet.
-        val imageStacks = entryKeys.mapNotNull { key -> targets[key]?.jsonObjectOrNull()?.get("cueStackUuid") }
-            .mapNotNull { (it as? JsonPrimitive)?.content?.let { uuid -> runCatching { UUID.fromString(uuid) }.getOrNull() } }
-            .mapNotNull { uuid -> DaoCueStack.find { (DaoCueStacks.uuid eq uuid) and (DaoCueStacks.project eq project.id) }.firstOrNull() }
-        val held = (entryKeys.mapNotNull { findEntry(project, it.uuid)?.stack } + imageStacks)
-            .distinctBy { it.id.value }
-            .associate { stack -> stack.id.value to heldAutoNumbers(stack).filterKeys { it !in movingIds } }
         // A stack that loses an entry renumbers from its order before, as the write that added it did.
         val shrunk = leaving.filter { it.tableName == CUE_STACK_ENTRIES }
             .mapNotNull { findEntry(project, it.uuid)?.stack }
@@ -748,10 +734,7 @@ class ProjectImporter(private val state: State) {
         shrunk.forEach { (stack, before) -> renumberAutoEntries(stack, before) }
 
         val images = targets.mapNotNull { (key, image) -> image?.let { key to it } }.toMap()
-        if (images.isEmpty()) {
-            renumberRestoredStacks(project, held, emptyList())
-            return
-        }
+        if (images.isEmpty()) return
         freeSwappedUniques(project, images)
         val run = Run(ImageSource(images), upsert = true, rowIds = images.mapValues { it.value.rowId })
         val folders = images.keys.mapTo(HashSet()) { it.tableName }
@@ -826,18 +809,6 @@ class ProjectImporter(private val state: State) {
         }
         if (has(RecordFolders.CONTROL_SURFACE_BINDINGS)) importControlSurfaceBindings(run, project)
         images[RecordKey(SyncDispositions.PROJECT_FOLDER, project.uuid)]?.let { restoreProjectRow(project, it) }
-        renumberRestoredStacks(project, held, entries.values)
-    }
-
-    /**
-     * Number every stack an undo changed the list of — the ones [held] names, and the ones [restored]
-     * entries stand in — as a reader of its export would ([renumberAsArchived]), each standing entry's
-     * held auto number kept.
-     */
-    private fun renumberRestoredStacks(project: DaoProject, held: Map<Int, Map<Int, String>>, restored: Collection<DaoCueStackEntry>) {
-        val stacks = held.keys.mapNotNull { DaoCueStack.findById(it) } + restored.map { it.stack }
-        stacks.filter { it.project.id == project.id }.distinctBy { it.id.value }
-            .forEach { renumberAsArchived(it, held[it.id.value].orEmpty()) }
     }
 
     /**

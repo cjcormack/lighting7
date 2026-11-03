@@ -17,9 +17,9 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  * cold-white channels (no RGB).
  *
  * Reverse-engineered from the ChamSys library since no manual is bundled.
- * Authoritative channel map:
- * `Manuals/personalities/China_2CellLEDBlind_8ch.md` (transcribed from
- * MagicQ `EDIT HEAD` — the on-disk `.hed` files are obfuscated).
+ * Authoritative channel map: the ChamSys MagicQ personality
+ * `China_2CellLEDBlind_8ch.hed`, read from MagicQ's `EDIT HEAD` screens (the
+ * on-disk `.hed` files are obfuscated).
  *
  * ChamSys's manufacturer field is the literal string `China` and the model
  * is `2CellLEDBlind`. The `@FixtureType` annotation uses ChamSys's

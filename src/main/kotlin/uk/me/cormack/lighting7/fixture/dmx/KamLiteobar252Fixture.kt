@@ -12,9 +12,9 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  * Kam Liteobar 252 — three-cell LED bar (RGB only).
  *
  * Reverse-engineered from the ChamSys library since no manual is bundled.
- * Authoritative channel map:
- * `Manuals/personalities/Kam_Liteobar252_11ch.md` (transcribed from MagicQ
- * `EDIT HEAD` — the on-disk `.hed` files are obfuscated).
+ * Authoritative channel map: the ChamSys MagicQ personality
+ * `Kam_Liteobar252_11ch.hed`, read from MagicQ's `EDIT HEAD` screens (the on-disk
+ * `.hed` files are obfuscated).
  *
  * The fixture has no continuous master dimmer. Overall brightness comes
  * from the cell RGB values themselves; the macro channel must be in the

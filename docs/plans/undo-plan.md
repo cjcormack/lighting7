@@ -392,7 +392,7 @@ names written, and its row marked *in review* with its branch. A session's PR is
 | 1 | programmer history (backend + programmer UI) | merged | `claude/nice-hypatia-xf5tk7` | [#330](https://github.com/cjcormack/lighting7/pull/330) | `5ac9ce0` |
 | 2 | records in memory (backend, no behaviour change) | merged | `claude/admiring-gauss-1m7xs5` | [#331](https://github.com/cjcormack/lighting7/pull/331) | `36a577c` |
 | 3 | origin and journal, read-only (backend + sheet) | merged | `claude/gracious-wozniak-i6mim5` | [#333](https://github.com/cjcormack/lighting7/pull/333) | `0b1ac3f` |
-| 4 | putting records back: the cue side (backend) | in review | `claude/pensive-curie-096obw` | [#335](https://github.com/cjcormack/lighting7/pull/335) | `e10ee8c` |
+| 4 | putting records back: the cue side (backend) | merged | `claude/pensive-curie-096obw` | [#335](https://github.com/cjcormack/lighting7/pull/335) | `4f1542d` |
 | 5 | putting records back: the rest (backend) | in review | `claude/keen-ritchie-1y5b98` | | |
 | 6 | the controls (frontend + MCP + surfaces) | planned | | | |
 
@@ -598,7 +598,10 @@ the next; whoever merges the last fills its own.
     as a cue PATCH marks it.
   - A stack entry whose number the export carried as a held auto number comes back explicit, as an
     import makes it; the export is identical. The explicit numbers an upsert writes are freed first, from
-    an auto neighbour that took one and between entries that trade them.
+    an auto neighbour that took one and between entries that trade them. After the restore every stack
+    it touched is renumbered as its records say: an entry whose image carries a number keeps it, every
+    other auto entry is derived as an import derives it. The renumber by position the write itself ran
+    cannot be replayed backwards, and left a label no reader would derive.
   - The undo and redo routes resolve the project with `withProject`; a step still needs the current
     project, answered as before.
 
@@ -643,12 +646,10 @@ the next; whoever merges the last fills its own.
     touching a patch, group, rigging, element, region, viewpoint or hide on a show on a venue; a clash the
     restore made is refused as `HISTORY_UNDO_BLOCKED` *It would clash with the venue*. Session 4's route
     already refused an operator's show undo onto a venue (403), and its test stands for this session's.
-  - A fix to session 4's cue side, which the identity test over `stageRegions` found: a stack whose list
-    an undo changes, or that an entry it puts back stands in, is numbered at the end as a reader of its
-    export would (`renumberAsArchived`), its explicit numbers and the auto numbers its export carries held
-    and written back. Entries a delete had renumbered are in no entry, since the export leaves a derivable
-    number out, so numbering from the order before the undo left them on numbers the export then carried
-    as held.
+  - Session 4's renumber after the restore (`renumberAsWritten`, merged in `4f1542d`) now goes through
+    `renumberAsArchived`, which writes each held number back as well as keeping it, whatever an earlier
+    pass of the restore made of it. This session's identity test found the same bug over `stageRegions`
+    before that fix reached it, and now runs every record of every folder, as session 4's does.
   - The upsert first moves every unique key or name it rewrites off its old value (a patch's key, the
     names, a speed master's index, an FX definition's id), so undoing a swap (`rename_fixtures`,
     `edit_groups`) puts each back.

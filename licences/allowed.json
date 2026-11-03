@@ -1,0 +1,14 @@
+{
+  "allowed": {
+    "0BSD": "BSD Zero Clause License",
+    "Apache-2.0": "Apache License 2.0",
+    "BSD-2-Clause": "BSD 2-Clause \"Simplified\" License",
+    "BSD-3-Clause": "BSD 3-Clause \"New\" or \"Revised\" License (the Eclipse Distribution License 1.0 is this licence)",
+    "EPL-1.0": "Eclipse Public License 1.0, for a library used unmodified",
+    "EPL-2.0": "Eclipse Public License 2.0, for a library used unmodified",
+    "ISC": "ISC License",
+    "MIT": "MIT License",
+    "MPL-2.0": "Mozilla Public License 2.0, for a library used unmodified",
+    "blessing": "SQLite's public-domain dedication"
+  }
+}

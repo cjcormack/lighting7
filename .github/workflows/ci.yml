@@ -69,6 +69,7 @@ jobs:
           path: |
             build/reports/tests/
             launcher/build/reports/tests/
+            cloud-protocol/build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -121,6 +122,12 @@ jobs:
         with:
           path: frontend/node_modules/.cache/eslint/
           key: eslint-${{ hashFiles('frontend/package-lock.json', 'frontend/eslint.config.*', 'frontend/tsconfig*.json') }}-${{ github.sha }}
+
+      # The licence gate's npm half and the notices (docs/licensing.md); Gradle's `check` runs the
+      # same script for the JVM classpaths in the Backend job. After the cache save, so a licence
+      # failure on main does not cost the next PRs their ESLint cache.
+      - name: Licences
+        run: npm run licences
 
   frontend-test:
     name: Frontend tests (${{ matrix.shard }}/3)

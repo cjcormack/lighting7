@@ -13,7 +13,7 @@ Agent sessions use the words in [docs/glossary.md](docs/glossary.md). A `planned
   `io.ktor.plugin` declaration in `build.gradle.kts`; the artifacts are versionless
   and resolved from its BOM
 - **SQLite** (embedded, via `sqlite-jdbc`) with Exposed ORM and HikariCP
-- **ArtNet4j** for DMX protocol
+- **Art-Net** for DMX output, sent by the desk's own ArtDMX transport (`dmx/ArtNetTransport.kt`)
 - **Kotlin Scripting** for embedded lighting DSL
 
 ## Building and Running
@@ -72,7 +72,7 @@ contain "—". The script exports it; a bare `./gradlew test` needs it too.
 **The desk is usually running as `./gradlew run` in the operator's own terminal —
 the app *is* a Gradle daemon.** `gradle --stop` is registry-wide: it stops every
 daemon for that Gradle version, so "just clearing a wedged daemon" kills the live
-show. The app's non-daemon threads (Ktor, ArtNet, the sync engine) then keep the
+show. The app's non-daemon threads (Ktor, the sync engine) then keep the
 JVM alive after Gradle's services are torn down, so the registry keeps a stale
 **busy** entry — `./gradlew run` afterwards reports "1 busy Daemon could not be
 reused" and the operator has to kill the process by hand.
@@ -104,11 +104,12 @@ PR (`.github/workflows/ci.yml`, see §"Git workflow"). A full local run before p
 repeats CI, and the desktop app's Auto-fix wakes the session if CI fails.
 
 - **Backend:** `./gradlew compileTestKotlin`, then `./gradlew test --tests '<package>.*'` for
-  each package the change touches and each package that calls into it.
+  each package the change touches and each package that calls into it. A change to
+  `cloud-protocol/` is `./gradlew :cloud-protocol:check`: the root `test` does not reach it.
 - **Frontend:** `npm run check:quick` in `frontend/`: the full `tsc` and build, lint (cached, so
-  seconds when warm), and the Vitest files affected by changes since `origin/main`.
-  `.githooks/pre-commit` runs it when anything buildable under `frontend/` is staged (enable it
-  with `git config core.hooksPath .githooks`).
+  seconds when warm), the Vitest files affected by changes since `origin/main`, and the licence gate
+  (`npm run licences`). `.githooks/pre-commit` runs it when anything buildable under `frontend/`, or
+  the licence data, is staged (enable it with `git config core.hooksPath .githooks`).
 
 **Run the full suites locally** (`./gradlew test`, `npm run check`) when CI is a slow place to
 find out: a Gradle or build-config change, a sync `formatVersion` bump, a schema migration, or a
@@ -128,6 +129,12 @@ are all errors — the last two are in `gradle.properties`. Fix the cause; where
 be fixed, `@Suppress`/`@OptIn` it at the site with a comment, never globally. Kotlin compiles
 incrementally, so a warning in an untouched file only shows on a full recompile — CI's is always
 full.
+
+**A dependency needs a licence entry.** `./gradlew check` (its `licenceCheck`) fails on a Java module
+missing from `licences/jvm.json`; it and `npm run licences` both fail on a licence outside
+`licences/allowed.json` or a stale `THIRD-PARTY-NOTICES.md`. [docs/licensing.md](docs/licensing.md)
+says how to add one. The desk is MIT
+(`LICENSE`); nothing GPL may join its runtime classpath, which the gate enforces.
 
 `tasks.test` pins `-Dlighting7.dataDir` at `build/test-data`, because `State`
 resolves the script cache, prompt-book PDF store, sync working tree and export
@@ -198,7 +205,13 @@ src/main/kotlin/uk/me/cormack/lighting7/
 ├── routes/                 # REST API endpoints
 ├── plugins/                # Ktor plugins (HTTP, WebSockets, Routing)
 └── scripts/                # LightingScript DSL definition
+
+cloud-protocol/             # The desk–cloud wire contract, its own Gradle build (includeBuild)
 ```
+
+`cloud-protocol/` is MIT, builds alone from a sparse checkout with the root files (the cloud consumes
+it that way), and reads its Kotlin and serialization versions from the root `gradle.properties`; the
+root `check` runs its tests. See [docs/cloud-protocol.md](docs/cloud-protocol.md).
 
 ## Key Concepts
 
@@ -1074,6 +1087,8 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 For deeper technical details, see the docs in `docs/`:
 
 - [Glossary](docs/glossary.md) - One word per idea, its old names and MagicQ's word; `GlossaryVocabularyTest` and `glossary.test.ts` hold the label tables to its `done` rows
+- [Cloud Protocol](docs/cloud-protocol.md) - `cloud-protocol/`: the control channel's envelope and messages, the adoption API's bodies, close and error codes, the install key's signing, the golden fixtures both repos test against, and the versioning rule
+- [Licensing](docs/licensing.md) - The desk's MIT licence, the licence gate, what it allows, how to add a dependency, and the audit that found artnet4j blocking MIT
 - [API Conventions](docs/api-conventions.md) - Kebab-case paths, plural collections with the list GET on the collection, one spelling for vocabulary enumerations, `?force=true` as the guard-override, and why unbounded lists are deliberate at desk scale
 - [Testing](docs/testing-engineering.md) - What makes the suite ~1 min rather than ~14 (the four changes, each load-bearing), the warm/cold script-cache regimes, why `build/test-data` is pinned, the tests that assert real elapsed time, and the order-dependence detector
 - [DMX Subsystem](docs/dmx-engineering.md) - Low-level DMX control architecture, ArtNet implementation, fading, transactions

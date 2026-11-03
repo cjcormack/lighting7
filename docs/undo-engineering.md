@@ -199,13 +199,13 @@ record whose target is absent, with its embedded children; then it upserts the r
 importer's own per-kind code in `UPSERT` mode (sync-engineering.md §"Importer modes"), freeing the
 explicit numbers it writes first — and every unique key or name it rewrites (a patch's key; a group's,
 rigging's, element's, region's, viewpoint's, script's, Look's, palette's, busk page's or speed master's
-name; a master's index; a definition's FX id), so two records that traded can take each other's back —
-and numbers every stack whose list it changed, or an entry it puts back stands in, as a reader of the
-export would: explicit numbers and the auto numbers the export carries held, the rest derived again
-(`renumberAsArchived`, which writes the held numbers back too). The export leaves a derivable auto number out, so an entry a delete renumbered
-may be in no entry at all, and must still come back to the number its export implies. A stack the undo
-takes away is stopped on the live project, and stops being any project's playhead, once nothing can
-refuse the undo.
+name; a master's index; a definition's FX id), so two records that traded can take each other's back.
+Each stack it touched is then renumbered as its records say (`RecordRestorer.renumberAsWritten`,
+through `renumberAsArchived`): an entry whose image carries a number takes it, and every other auto
+entry is derived as an import derives it, which a renumber by position, run backwards, would not give.
+The export leaves a derivable auto number out, so an entry a delete renumbered may be in no entry at
+all, and must still come back to the number its export implies. A stack the undo takes away is stopped
+on the live project, and stops being any project's playhead, once nothing can refuse the undo.
 
 Deleting a record takes its embedded children with it (a patch's placements, a group's members) and
 nothing else: what its own delete route sweeps beside it — busk-rig tiles, group memberships, cue

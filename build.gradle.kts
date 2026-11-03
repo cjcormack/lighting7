@@ -76,19 +76,17 @@ repositories {
     mavenCentral()
 }
 
-// Two legacy API jars ship the same `javax.*` packages as their maintained `jakarta.*`
-// successors, which already resolve here — so the fat jar would contain two byte-different
-// copies of ~220 classes and the winner would be decided by classpath order:
+// A legacy API jar ships the same `javax.*` packages as its maintained `jakarta.*` successor,
+// which already resolves here — so the fat jar would contain two byte-different copies of its
+// classes and the winner would be decided by classpath order:
 //
 //   javax.validation:validation-api:1.1.0.Final  (via io.swagger:swagger-core, from
 //       io.github.smiley4:ktor-openapi)  is superseded by jakarta.validation-api:2.0.2
-//   javax.xml.bind:jaxb-api:2.3.0  (via ch.bildspur:artnet4j)  is superseded by
-//       jakarta.xml.bind:jakarta.xml.bind-api:2.3.3
 //
-// Both jakarta artifacts still use the `javax.*` namespace and are API-compatible supersets
-// (2.0.2 adds valueextraction, ClockProvider, @NotEmpty/@Email), so the consumers above keep
-// linking. Dropping the legacy pair is what makes shadowJar's `failOnDuplicateEntries`
-// achievable — see the fat-jar section below.
+// The jakarta artifact still uses the `javax.*` namespace and is an API-compatible superset
+// (it adds valueextraction, ClockProvider, @NotEmpty/@Email), so swagger-core keeps linking.
+// Dropping the legacy jar is what makes shadowJar's `failOnDuplicateEntries` achievable — see
+// the fat-jar section below.
 //
 // Ktor 3.6's Netty engine also depends on Netty's HTTP/3 codec, which drags in
 // `netty-codec-native-quic` — quiche binaries for five platforms, each jar carrying the same
@@ -98,7 +96,6 @@ repositories {
 // rather than shipped and then filtered through the `nativePayloads` table below.
 configurations.configureEach {
     exclude(group = "javax.validation", module = "validation-api")
-    exclude(group = "javax.xml.bind", module = "jaxb-api")
     exclude(group = "io.netty", module = "netty-codec-http3")
     exclude(group = "io.netty", module = "netty-codec-native-quic")
     exclude(group = "io.netty", module = "netty-codec-classes-quic")
@@ -141,7 +138,6 @@ dependencies {
     // launcher's UpdateMarker reader. They are two independently written parsers of the same
     // file format, and agreeing only by inspection is precisely how that breaks in the field.
     testImplementation(project(":launcher"))
-    implementation("ch.bildspur:artnet4j:0.6.2")
 
     // MIDI control-surface transport (Phase 0 of plans/completed/control-surface-plan.md).
     // ktmidi-jvm-desktop brings LibreMidiAccess (native libremidi via Panama FFM).
@@ -192,6 +188,9 @@ dependencies {
     // plan session 1). Cost 12 (~250 ms/verify) is a deliberate login throttle; tests pin
     // `auth.bcryptCost=4`. One transitive: at.favre.lib:bytes.
     implementation("at.favre.lib:bcrypt:0.10.2")
+
+    // The desk–cloud wire contract: the included build in cloud-protocol/ (docs/cloud-protocol.md).
+    implementation("uk.me.cormack.lighting7:cloud-protocol")
 }
 
 // ─── Frontend bundling ─────────────────────────────────────────────────
@@ -1067,4 +1066,80 @@ tasks.test {
             events("passed", "skipped", "failed")
         }
     }
+}
+
+// ─── Licence gate ──────────────────────────────────────────────────────
+// docs/licensing.md. Every module on the desk's and the launcher's runtime classpaths must be
+// listed in licences/jvm.json under a licence licences/allowed.json allows. scripts/licences.mjs
+// is the one check: this task hands it the resolved modules, and `npm run licences` in frontend/
+// runs it for the npm half and the notices.
+val launcherRuntimeModules = configurations.create("launcherRuntimeModules") {
+    description = "The launcher's runtime classpath, resolved here only to list its modules."
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+        attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+        attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE, objects.named(TargetJvmEnvironment.STANDARD_JVM))
+    }
+}
+
+dependencies {
+    launcherRuntimeModules(project(":launcher"))
+}
+
+// The modules whose artifacts ship, so a BOM (a platform, with no jar) is not one. The component
+// filter keeps the launcher's own jar out of the resolution, which would otherwise build it. A file
+// dependency has no coordinates, so it is listed by its file name and needs an entry of that name.
+fun Configuration.shippedModules(): Provider<List<String>> =
+    incoming.artifactView { componentFilter { it !is ProjectComponentIdentifier } }
+        .artifacts.resolvedArtifacts.map { artifacts ->
+            artifacts.map {
+                when (val id = it.id.componentIdentifier) {
+                    is ModuleComponentIdentifier -> "${id.group}:${id.module}"
+                    else -> "file:${it.file.name}"
+                }
+            }
+        }
+
+val runtimeModulesFile = layout.buildDirectory.file("licences/runtime-modules.txt")
+
+val writeRuntimeModules = tasks.register("writeRuntimeModules") {
+    description = "List the group:name of every module on the desk's and the launcher's runtime classpaths."
+    group = "verification"
+    val modules = configurations.runtimeClasspath.flatMap { it.shippedModules() }
+        .zip(launcherRuntimeModules.shippedModules()) { desk, launcher -> (desk + launcher).distinct().sorted() }
+    inputs.property("modules", modules)
+    // A local, so the action captures the provider rather than the script.
+    val out = runtimeModulesFile
+    outputs.file(out)
+    doLast {
+        out.get().asFile.writeText(modules.get().joinToString("\n", postfix = "\n"))
+    }
+}
+
+val licenceCheck = tasks.register<com.github.gradle.node.task.NodeTask>("licenceCheck") {
+    description = "Fail on a runtime dependency licence outside licences/allowed.json, or a stale THIRD-PARTY-NOTICES.md."
+    group = "verification"
+    dependsOn(writeRuntimeModules)
+    // npmInstall may rewrite the lock file this reads, so read it after.
+    mustRunAfter(tasks.named("npmInstall"))
+    script.set(layout.projectDirectory.file("scripts/licences.mjs"))
+    args.set(listOf("--check", "--jvm-modules", runtimeModulesFile.get().asFile.absolutePath))
+    workingDir.set(layout.projectDirectory)
+    inputs.file(runtimeModulesFile).withPropertyName("runtimeModules")
+    inputs.dir(layout.projectDirectory.dir("licences")).withPropertyName("licenceData")
+    inputs.file(layout.projectDirectory.file("frontend/package-lock.json")).withPropertyName("npmLock")
+    inputs.files(layout.projectDirectory.file("THIRD-PARTY-NOTICES.md")).withPropertyName("notices")
+    inputs.files(layout.projectDirectory.file("LICENSE")).withPropertyName("licence")
+    val stamp = layout.buildDirectory.file("licences/check.stamp")
+    outputs.file(stamp)
+    doLast { stamp.get().asFile.writeText("passed\n") }
+}
+
+tasks.named("check") {
+    dependsOn(licenceCheck)
+    dependsOn(gradle.includedBuild("cloud-protocol").task(":check"))
 }

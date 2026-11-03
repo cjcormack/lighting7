@@ -12,10 +12,9 @@ import uk.me.cormack.lighting7.fixture.trait.WithPosition
  * a 14-frame gel scroller, an internal media frame, and two module bays — the rear holding the
  * four-blade framing shutter module.
  *
- * The authority is ETC's *Source Four Revolution User Manual*, 7160M1200 Rev E
- * (`Manuals/S4_Revolution_User_Manual_RevE.pdf`; page numbers below are the PDF's). The ChamSys
- * capture in `Manuals/personalities/ETC_Source4Rev_BaseFrame.md` gave the channel order and the
- * scroller's bands, and the manual corrects it where they differ.
+ * The authority is ETC's *Source Four Revolution User Manual*, 7160M1200 Rev E (page numbers below
+ * are the PDF's). The ChamSys MagicQ personality `ETC_Source4Rev_Base Frame.hed` gave the channel
+ * order and the scroller's bands, and the manual corrects it where they differ.
  *
  * The ChamSys library lists five Revolution personalities: `Base` (14ch), `Base Iris` (15ch),
  * `15ch` (15ch), `Base Module` (23ch) and `Base Frame` (31ch). Only Base Frame — the base with the
