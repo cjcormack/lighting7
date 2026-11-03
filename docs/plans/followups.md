@@ -172,6 +172,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LICENCE-TEXTS`](#fu-licence-texts) | Ready | Dist | — |
 | [`FU-LICENCE-POM-DRIFT`](#fu-licence-pom-drift) | Ready | Dist | — |
 | [`FU-CLOUD-PROTOCOL-PUBLISH`](#fu-cloud-protocol-publish) | Trigger | Dist | a third party builds against the cloud protocol |
+| [`FU-CLOUD-DEFAULT-URL`](#fu-cloud-default-url) | Blocked | Cloud | the cloud's production domain is registered (OQ-1) |
 | [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
 | [`FU-HISTORY-EMBEDDED-CHILD-IDS`](#fu-history-embedded-child-ids) | Trigger | History | something names an embedded child (a busk pad, a rig tile, a scenery row) by its integer id across an undo |
 
@@ -1962,6 +1963,18 @@ it without checking out the desk.
 **Fix**: publish the module, versioned by desk release, to Maven Central (or GitHub Packages), with its
 golden fixtures as a test-fixtures artifact, and say in `docs/cloud-protocol.md` which version speaks
 which `PROTOCOL_VERSION`.
+
+### `FU-CLOUD-DEFAULT-URL`
+
+**`cloud.baseUrl` has no default** · Blocked · cloud-p0 session 4, 2026-11-02
+
+An empty `cloud.baseUrl` means no cloud is configured (cloud-p0 plan D13), so today every desk that is
+to be adopted needs the URL set in `local.conf` by hand, and the Cloud tab says so.
+
+**Blocked on**: the PRD's OQ-1, the cloud's production domain.
+
+**Fix**: make the production URL the default in `CloudConfig.from` and `example.local.conf`, keeping an
+explicit empty `baseUrl` as "no cloud", and update `docs/cloud-engineering.md` §"Configuration".
 
 ### `FU-DIST-ICONS`
 

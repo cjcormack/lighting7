@@ -96,6 +96,17 @@ data class TunnelStateOutMessage(
     val state: uk.me.cormack.lighting7.routes.TunnelStateDto,
 ) : MachineOutMessage()
 
+/**
+ * Lighting7 Cloud's state (`CloudService.state`, cloud-p0 plan D14): the snapshot on connect, then
+ * every change. Admin sockets only, like `tunnel.state`, without a pending adoption's code on the
+ * public listener; outbound only.
+ */
+@Serializable
+@SerialName("cloud.state")
+data class CloudStateOutMessage(
+    val state: uk.me.cormack.lighting7.cloud.CloudStateDto,
+) : MachineOutMessage()
+
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
 fun setupMachineSubscriptions(scope: SocketScope) {
@@ -127,6 +138,9 @@ fun setupMachineSubscriptions(scope: SocketScope) {
     if (user == null || user.role == uk.me.cormack.lighting7.models.UserRole.ADMIN) {
         scope.subscribe(scope.state.remoteAccess.state) { tunnel ->
             scope.send(TunnelStateOutMessage(tunnel.toDto()))
+        }
+        scope.subscribe(scope.state.cloud.state) { cloud ->
+            scope.send(CloudStateOutMessage(if (scope.remote) cloud.forRemote() else cloud))
         }
     }
 }

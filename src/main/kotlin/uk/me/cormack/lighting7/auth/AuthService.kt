@@ -19,6 +19,8 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
+import uk.me.cormack.lighting7.models.DaoCloudConnections
+import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoPasswordResetToken
 import uk.me.cormack.lighting7.models.DaoPasswordResetTokens
 import uk.me.cormack.lighting7.models.DaoUser
@@ -569,6 +571,10 @@ class AuthService(
             // declared but unenforced, so clear the reference by hand.
             DaoPasswordResetTokens.update({ DaoPasswordResetTokens.createdByUser eq userId }) {
                 it[createdByUser] = null
+            }
+            DaoCloudIdentityLinks.deleteWhere { DaoCloudIdentityLinks.user eq userId }
+            DaoCloudConnections.update({ DaoCloudConnections.adoptedBy eq userId }) {
+                it[adoptedBy] = null
             }
             dao.delete()
             UserMutation.Done(Unit)

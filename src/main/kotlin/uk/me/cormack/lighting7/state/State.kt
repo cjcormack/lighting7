@@ -141,6 +141,21 @@ class State(val config: ApplicationConfig) {
     val remoteAccess: uk.me.cormack.lighting7.mcp.tunnel.RemoteAccessService by remoteAccessDelegate
 
     /**
+     * Lighting7 Cloud: this desk's adoption and its `cloud.state` (cloud-p0 plan). Lazy, like
+     * [remoteAccess], and started only by `Application.module()`, so a test's `State` polls nothing.
+     */
+    private val cloudDelegate = lazy {
+        uk.me.cormack.lighting7.cloud.CloudService(
+            database = database,
+            config = uk.me.cormack.lighting7.cloud.CloudConfig.from(config),
+            credentialStore = { credentialStore },
+            userChanges = authService.userChanges,
+        )
+    }
+
+    val cloud: uk.me.cormack.lighting7.cloud.CloudService by cloudDelegate
+
+    /**
      * Kotlin scripting host configuration shared by every scripting host in the app. Installs
      * the on-disk compiled-script cache (see [buildScriptingHostConfiguration]) so scripts are
      * only compiled from source on the first boot after a rebuild.
@@ -1153,6 +1168,7 @@ class State(val config: ApplicationConfig) {
         // service purely to close it, on every test that builds a State and shuts it down.
         if (updateServiceDelegate.isInitialized()) runCatching { updateService.close() }
         if (remoteAccessDelegate.isInitialized()) runCatching { remoteAccess.close() }
+        if (cloudDelegate.isInitialized()) runCatching { cloud.close() }
 
         runCatching { projectManager.show.close() }
 

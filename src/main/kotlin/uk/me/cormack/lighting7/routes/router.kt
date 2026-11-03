@@ -90,6 +90,8 @@ fun Application.configureRouting(state: State) {
                         routeApiRestUsers(state)
                         routeApiRestCloudSync(state)
                         routeApiOAuthGitHub(state)
+                        // This desk's adoption by Lighting7 Cloud (cloud-p0 plan D14).
+                        routeApiRestInstallCloud(state)
                     }
                 }
 

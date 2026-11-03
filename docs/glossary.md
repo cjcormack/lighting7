@@ -179,6 +179,14 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | A part of a multi-head fixture; *head* means a fixture and its head number (D7) | Element | element keys `.head-N`, `.pixel-N`, `.cell-N` unchanged (D29); the stored busk rig's `cellMode` and `cellSplit`, the Fan's `over: CELLS`, the MIDI `SelectionCells` binding, `list_fixture_types`' `cellAttributes` and `subselect`'s cell counting keep *cell*, since renaming them would move stored or wire names. A table's or the programmer grid's cell is a plain word | Cell, head; the *Cells* chip | Element | screen, docs | done | `src:components/busking/RigBand.tsx` |
 | lighting7's own identifiers in UK spelling (D20) | Centre | `CENTRE_*`, `panCentre`, `tiltCentre` | `CENTER_*`, `panCenter`, `tiltCenter` | | wire, code, storage, archive | done | `src:components/fx/FxFields.tsx` |
 
+## Lighting7 Cloud
+
+| Idea | Word | In code | Was | MagicQ | Shows | Status | Key |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Make a desk an install of a cloud organisation, by a code an admin approves in the portal (PRD §17) | Adopt | `CloudAdoptionService`, `startAdoption`; REST `/install/cloud/adoption`; `cloud_connection.state` `ADOPTING` / `ADOPTED`. Taking it back is *unadopt* (`unadopt`, `DELETE /install/cloud`) | | | wire, code, docs | done | `doc:docs/cloud-engineering.md` |
+| The Ed25519 key a desk proves itself with, made at adoption and never leaving the desk (PRD §17) | Install key | `InstallKeys` (cloud-protocol), `InstallKeyStore`; the credential store's `cloud:install-key:<installs.uuid>` | | | code, docs | done | `doc:docs/cloud-engineering.md` |
+| Which cloud account a desk account is (PRD §17) | Link | `cloud_identity_links`, `CloudLinkVia`; the state's `linkedEmail` | | | wire, code, docs | done | `doc:docs/cloud-engineering.md` |
+
 ## Rules
 
 - **Palette references in colour FX (D30).** A colour parameter may name a generic colour palette,

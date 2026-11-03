@@ -7,6 +7,8 @@ import uk.me.cormack.lighting7.models.DaoBuskPads
 import uk.me.cormack.lighting7.models.DaoBuskPages
 import uk.me.cormack.lighting7.models.DaoBuskRigRows
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
+import uk.me.cormack.lighting7.models.DaoCloudConnections
+import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
 import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
@@ -162,6 +164,8 @@ object SyncDispositions {
             "per-rig field overrides (controller IPs); cloned same-machine, never exported"
         ),
         DaoInstalls to SyncDisposition.MachineLocal("this install's identity"),
+        DaoCloudConnections to SyncDisposition.MachineLocal("this install's adoption by Lighting7 Cloud"),
+        DaoCloudIdentityLinks to SyncDisposition.MachineLocal("which cloud account each desk account is"),
         DaoOAuthIdentities to SyncDisposition.MachineLocal("this install's git credentials"),
         DaoSyncConfigs to SyncDisposition.MachineLocal("per-project sync settings for this install"),
         DaoSyncLinkedRepos to SyncDisposition.MachineLocal("which remote this install is attached to"),

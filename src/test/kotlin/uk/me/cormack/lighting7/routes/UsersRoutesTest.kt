@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.auth.UserMutation
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.plugins.BootProgressStateOutMessage
 import uk.me.cormack.lighting7.plugins.MachineOutMessage
+import uk.me.cormack.lighting7.plugins.CloudStateOutMessage
 import uk.me.cormack.lighting7.plugins.TunnelStateOutMessage
 import uk.me.cormack.lighting7.plugins.OwnAccountChangedOutMessage
 import uk.me.cormack.lighting7.plugins.UserListChangedOutMessage
@@ -451,8 +452,8 @@ class UsersRoutesTest : RouteIntegrationTest() {
             val frames = collectUntilOfType<UserListChangedOutMessage>()
             assertEquals(
                 listOf(OwnAccountChangedOutMessage, UserListChangedOutMessage),
-                // `tunnel.state` is an admin socket's connect snapshot, and may land after the boot frame.
-                frames.filterIsInstance<MachineOutMessage>().filterNot { it is TunnelStateOutMessage },
+                // `tunnel.state` and `cloud.state` are an admin socket's connect snapshots, and may land after the boot frame.
+                frames.filterIsInstance<MachineOutMessage>().filterNot { it is TunnelStateOutMessage || it is CloudStateOutMessage },
             )
         }
     }
@@ -487,9 +488,37 @@ class UsersRoutesTest : RouteIntegrationTest() {
             val frames = collectUntilOfType<UserListChangedOutMessage>()
             assertEquals(
                 listOf(UserListChangedOutMessage),
-                // `tunnel.state` is an admin socket's connect snapshot, and may land after the boot frame.
-                frames.filterIsInstance<MachineOutMessage>().filterNot { it is TunnelStateOutMessage },
+                // `tunnel.state` and `cloud.state` are an admin socket's connect snapshots, and may land after the boot frame.
+                frames.filterIsInstance<MachineOutMessage>().filterNot { it is TunnelStateOutMessage || it is CloudStateOutMessage },
             )
+        }
+    }
+
+    /** `cloud.state` names the cloud org and the linked email, and every route behind it is admin only. */
+    @Test
+    fun `the cloud frame reaches an admin's socket and never an operator's`() = testApplication {
+        mountTestApp(state)
+        seedUser(state, "boss", role = UserRole.ADMIN)
+        seedUser(state, "op", role = UserRole.OPERATOR)
+        val bystander = seedUser(state, "other", role = UserRole.OPERATOR)
+        val client = createWsClient()
+        val admin = client.loginCookieHeader("boss")
+        val operator = client.loginCookieHeader("op")
+
+        client.webSocket("/api", request = { header(HttpHeaders.Cookie, admin) }) {
+            awaitOfType<CloudStateOutMessage>()
+        }
+
+        client.webSocket("/api", request = { header(HttpHeaders.Cookie, operator) }) {
+            awaitOfType<BootProgressStateOutMessage>()
+            val rename = client.put("/api/rest/users/${bystander.userId}") {
+                header(HttpHeaders.Cookie, admin)
+                contentType(ContentType.Application.Json)
+                setBody(UpdateUserRequest(displayName = "Renamed For The Cloud Test"))
+            }
+            assertEquals(HttpStatusCode.OK, rename.status, rename.bodyAsText())
+            val frames = collectUntilOfType<UserListChangedOutMessage>()
+            assertEquals(emptyList(), frames.filterIsInstance<CloudStateOutMessage>())
         }
     }
 
