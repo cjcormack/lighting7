@@ -58,7 +58,10 @@ data class CloudAdoptedDto(
 @Serializable
 data class CloudErrorDto(val code: String, val message: String)
 
-/** The control channel's status. Always [OFF] until the channel exists (cloud-p0 plan session 5). */
+/**
+ * The control channel's status: [OFF] while the desk is not adopted or the cloud is off on it,
+ * [RETRYING] between connections, with `retryAt` the next attempt.
+ */
 @Serializable
 enum class CloudConnectionStatus { OFF, CONNECTING, ONLINE, RETRYING }
 
@@ -84,6 +87,16 @@ object CloudErrorCodes {
     const val URL_CHANGED = "CLOUD_URL_CHANGED"
     const val URL_INVALID = "CLOUD_URL_INVALID"
     const val STATE_UNREADABLE = "CLOUD_STATE_UNREADABLE"
+
+    /** `lastError` codes of the control channel (D10): why the last connection ended. */
+    const val CONNECT_FAILED = "CLOUD_CONNECT_FAILED"
+    const val KEY_UNREADABLE = "CLOUD_KEY_UNREADABLE"
+    const val AUTH_FAILED = "CLOUD_AUTH_FAILED"
+    const val CLOCK_SKEW = "CLOUD_CLOCK_SKEW"
+    const val PROTOCOL_UNSUPPORTED = "CLOUD_PROTOCOL_UNSUPPORTED"
+    const val PROTOCOL_ERROR = "CLOUD_PROTOCOL_ERROR"
+    const val REPLACED = "CLOUD_REPLACED"
+    const val DISCONNECTED = "CLOUD_DISCONNECTED"
 }
 
 /** The `platform` the desk reports to the cloud: `windows-x64`, `macos-arm64`, `linux-x64`. */

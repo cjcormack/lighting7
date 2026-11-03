@@ -163,8 +163,8 @@ or more, now means session *N* + 1.
 | 1 | MIT and the licence gate | merged | `claude/cloud-p0-img1pv` | [#334](https://github.com/cjcormack/lighting7/pull/334) | 42ce8c3 |
 | 2 | Replace artnet4j | merged | `claude/amazing-einstein-f1ektw` | [#336](https://github.com/cjcormack/lighting7/pull/336) | b7c659d |
 | 3 | The protocol module | merged | `claude/friendly-clarke-kzokhd` | [#337](https://github.com/cjcormack/lighting7/pull/337) | d891cc4 |
-| 4 | Adoption on the desk | in review | `claude/cloud-p0-s4` | | |
-| 5 | The control channel | planned | | | |
+| 4 | Adoption on the desk | merged | `claude/cloud-p0-s4` | [#340](https://github.com/cjcormack/lighting7/pull/340) | 6cd2e70 |
+| 5 | The control channel | in review | `claude/admiring-mendel-4myfwt` | | |
 | 6 | Install settings → Cloud | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
@@ -399,6 +399,45 @@ already sent to admin sockets; session 5 documents it in `docs/websocket-enginee
 - **Docs:** `docs/cloud-engineering.md` §"The control channel"; `docs/websocket-engineering.md` gains
   `cloud.state`; root `CLAUDE.md` gains a short **Lighting7 Cloud** section under External
   Integrations and a `cloud.state` line under WebSocket Messages, with R6's review question.
+
+**Outcome (2026-11-03).** `cloud/CloudChannel.kt` holds the reconnect loop (`CloudChannel`, its wait
+injected so `CloudChannelBackoffTest` runs it on a virtual clock) and one connection over Ktor's
+WebSocket client (`ChannelConnection`); `CloudService` runs it exactly while the desk is adopted
+through the configured cloud and the cloud is enabled. `cloud-protocol` needed no change: every
+message the channel uses was session 3's. `FakeCloud` serves `/v1/desk` with the switches the tests
+need.
+
+- **D11 was wrong about the dispatcher.** `Dispatchers.IO.limitedParallelism(2)` shares its workers with
+  `Dispatchers.Default`, where the show runs, so the isolation test could not tell the connector's work
+  from the show's, and the claim that it holds none of the show's threads was the scheduler's to keep.
+  `CloudService` now runs on two threads of its own, `cloud-N`, which the test checks by name against
+  the threads an Art-Net controller and a `Dispatchers.Default` loop ran on. Ktor's socket I/O stays on
+  its engine's dispatcher.
+- **The safety test measured** (three runs locally): each 3 s fade ended 3018–3027 ms after the write
+  with 119–121 frames and a p99 frame gap of 25.4–26.8 ms, with or without the connector and through
+  each failure. *Stops reading* changes nothing a test can see in seconds: a heartbeat a second never
+  fills a socket's buffers, so the desk's send never blocks. The WebSocket ping is what notices it.
+- **Decided here:** the backoff is uniform between 1 s and `min(30 s, 1 s × 2^n)`, *n* the attempts since
+  a connection last stayed online for 30 s: one that held retries after 1 s, while a cloud that welcomes
+  and closes at once, or two desks trading one install's connection with `4009`, back off. An attempt
+  that fails in any way, a send on a session the cloud already closed included, is retried like a
+  close. A WebSocket ping every 25 s ends a connection whose cloud stops answering; a frame that finds
+  no room in the socket's buffers for three heartbeats does too, though at a heartbeat's size only
+  after hours. The upgrade runs in the channel's own coroutine (Ktor's block form), so a timeout
+  cancels it rather than leaving a late session open. The outbound queue holds 16. Ktor's frame limit is twice `MAX_FRAME_BYTES`, so the channel sees a frame between the two
+  and closes it `4000` as D9 asks, while one above is refused by Ktor (1009) without being read whole.
+  Each step of the handshake waits 15 s. `heartbeatS` is clamped to 1–300 s.
+- **`lastError` codes** for the channel: `CLOUD_CONNECT_FAILED`, `CLOUD_KEY_UNREADABLE` (the key read
+  per attempt until it reads, so a keychain locked at boot is retried), `CLOUD_AUTH_FAILED`, `CLOUD_CLOCK_SKEW`
+  (with the offset from the challenge's `serverTime`), `CLOUD_PROTOCOL_UNSUPPORTED`,
+  `CLOUD_PROTOCOL_ERROR`, `CLOUD_REPLACED`, `CLOUD_DISCONNECTED`. An adoption error outranks them.
+- **`hello`'s friendly name** is read when the channel starts, not per connection, since a reconnect is
+  on a timer and D11 allows no database read there.
+- `revoked()` takes the install id the channel was for, so a channel that outlived its adoption cannot
+  clear a newer one. Text the cloud chose is cut to 64 characters before the desk logs or repeats it,
+  and a close reason to RFC 6455's 123 bytes.
+- **The plan was wrong about `ktor-client-websockets`.** In Ktor 3 it is an empty jar; the client
+  WebSocket plugin is in `ktor-client-core`, already a runtime dependency. It stays test-only.
 
 ### Session 6 — Install settings → Cloud
 

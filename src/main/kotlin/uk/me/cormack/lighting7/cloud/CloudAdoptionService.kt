@@ -26,7 +26,6 @@ import uk.me.cormack.lighting7.models.CloudConnectionState
 import uk.me.cormack.lighting7.models.CloudLinkVia
 import uk.me.cormack.lighting7.models.DaoCloudConnections
 import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
-import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoUsers
 import uk.me.cormack.lighting7.update.BuildInfo
 import java.time.Instant
@@ -51,10 +50,11 @@ data class CloudConnectionRow(
     val adoptionExpiresAt: Instant?,
 )
 
-/** What the desk keeps in memory only, beside the row (D11: no write per poll). */
+/** What the desk keeps in memory only, beside the row (D11: no write per poll, heartbeat or reconnect). */
 internal class CloudMemory {
     @Volatile var notice: String? = null
     @Volatile var lastError: CloudErrorDto? = null
+    @Volatile var channel: ChannelStatus = ChannelStatus(CloudConnectionStatus.OFF)
 }
 
 /**
@@ -153,9 +153,7 @@ internal class CloudAdoptionService(
         val pair = keys.generate()
         try {
             val publicKey = InstallKeys.encodePublicKey(pair.public)
-            val (installUuid, friendlyName) = transaction(database) {
-                DaoInstall.all().first().let { it.uuid.toString() to it.friendlyName }
-            }
+            val (installUuid, friendlyName) = DeskIdentity.read(database)
             val request = AdoptionRequest(
                 publicKey = publicKey,
                 deskInstallUuid = installUuid,
@@ -248,10 +246,12 @@ internal class CloudAdoptionService(
 
     /**
      * The cloud removed this install (an `unadopted` message, or close 4004 at connect): forget it
-     * here and say so. The control channel's path in (cloud-p0 plan session 5).
+     * here and say so. With [installId], only if the desk is still adopted as that install, so a
+     * channel that outlived its adoption cannot clear a newer one.
      */
-    suspend fun revoked(): Unit = mutex.withLock {
+    suspend fun revoked(installId: String? = null): Unit = mutex.withLock {
         val row = row() ?: return@withLock
+        if (installId != null && (row.state != CloudConnectionState.ADOPTED || row.installId != installId)) return@withLock
         clearLocked(notice = "This desk was removed from ${row.orgName ?: "its organisation"} in the cloud.")
     }
 

@@ -1087,6 +1087,7 @@ Machine-scoped, so registered in the pre-warm-up band and unaffected by project 
 | `installChanged` | — | Every socket |
 | `updateStateChanged` | `phase`, `availability`, `latestVersion?`, `downloadedBytes`, `totalBytes?` | Every socket |
 | `tunnel.state` | `state`: `status`, `url?`, `code?`, `message?`, `retrying`, `downloadedBytes?`, `totalBytes?` | Admin sockets only (and bootstrap-open ones), snapshot on connect |
+| `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?` | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
 
 The account frames are payload-free **deliberately, not just by convention**: sockets are open to
 operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate
@@ -1105,6 +1106,14 @@ alone**: it names the desk's public address and ngrok's own errors, and every ro
 (`/install/tunnel`) is admin only. The role is the one resolved when the socket connected, so a
 demoted admin keeps receiving it until they reconnect; their REST calls are refused at once.
 `StateFlow`-backed, so the subscription is the connect snapshot (`WsConnectSnapshotTest` guards it).
+
+`cloud.state` is Lighting7 Cloud's state (`CloudService.state`, cloud-p0 plan D14), what
+`GET /install/cloud` answers, and follows `tunnel.state`'s rules: admins alone, `StateFlow`-backed,
+outbound only, every operation REST. On the public listener it leaves out a pending adoption's
+`userCode` and both verification URIs (`CloudStateDto.forRemote`), since whoever holds the code can
+approve the desk into an organisation of their own. It changes on an adoption's transitions, a poll's
+error and each change of the control channel's status (`CONNECTING`, `ONLINE`, `RETRYING` with
+`retryAt`, `OFF`), never per heartbeat. See `docs/cloud-engineering.md` §"The state".
 
 ### Cloud sync — `CloudSyncSocket.kt`
 
@@ -1436,7 +1445,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/LocateSocket.kt` | The located targets: `locate.state` |
 | `plugins/StackFxAmountSocket.kt` | Each stack's FX amount: `stackFxAmount.state` and `stackFxAmount.set` |
 | `plugins/MoveInDarkSocket.kt` | What the live show moves in the dark: `moveInDark.state` |
-| `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |
+| `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state, Lighting7 Cloud state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |
 | `plugins/ProjectSocket.kt` | Current project and switch events |
