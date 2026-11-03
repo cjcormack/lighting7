@@ -162,8 +162,8 @@ or more, now means session *N* + 1.
 |---|---|---|---|---|---|
 | 1 | MIT and the licence gate | merged | `claude/cloud-p0-img1pv` | [#334](https://github.com/cjcormack/lighting7/pull/334) | 42ce8c3 |
 | 2 | Replace artnet4j | merged | `claude/amazing-einstein-f1ektw` | [#336](https://github.com/cjcormack/lighting7/pull/336) | b7c659d |
-| 3 | The protocol module | in review | `claude/friendly-clarke-kzokhd` | | |
-| 4 | Adoption on the desk | planned | | | |
+| 3 | The protocol module | merged | `claude/friendly-clarke-kzokhd` | [#337](https://github.com/cjcormack/lighting7/pull/337) | d891cc4 |
+| 4 | Adoption on the desk | in review | `claude/cloud-p0-s4` | | |
 | 5 | The control channel | planned | | | |
 | 6 | Install settings → Cloud | planned | | | |
 
@@ -341,6 +341,41 @@ Ed25519 implementation, not against itself.
   the key, and §"Show safety" stating D11 as rules. `example.local.conf`'s `cloud` block. Glossary rows
   for *adopt*, *install key* and *link* (PRD §17). Follow-up row `FU-CLOUD-DEFAULT-URL`.
 
+**Outcome (2026-11-02).** `cloud/` holds `CloudConfig`, `InstallKeyStore`, `CloudApi` (the adoption
+API over CIO: 15 s timeouts, no redirects), `CloudAdoptionService` (every transition, under one mutex)
+and `CloudService` (the scope, the `cloud.state` `StateFlow`, started from `Application.module()`).
+`FakeCloud` is a Netty server on a loopback port rather than Ktor's test host, so the desk's real HTTP
+client runs against it; its control channel and *drop* switch are session 5's. The `cloud.state` frame is
+already sent to admin sockets; session 5 documents it in `docs/websocket-engineering.md`.
+
+- **The row holds more than D7 lists:** the verification URIs and the poll interval, so a restart can
+  show the code again and resume polling, and `adopted_by` is written when the adoption starts, since
+  that is the admin the link is for.
+- **Codes D14 did not name:** 409 `CLOUD_NO_ADOPTION` cancels nothing; starting an adoption is 409
+  `CLOUD_UNREACHABLE` when the cloud does not answer and 502 `CLOUD_REFUSED` when it refuses. An unadopt
+  the cloud refuses (anything but a 404, which counts as done), or that the desk cannot send
+  (`cloud.enabled = false`, a changed `baseUrl`, a missing key), is `CLOUD_UNREACHABLE` too, so the Cloud
+  tab offers *Forget on this desk only* for all of them. `lastError` codes: `CLOUD_POLL_FAILED`,
+  `CLOUD_URL_INVALID`, `CLOUD_URL_CHANGED`, `CLOUD_KEY_MISSING`, and `CLOUD_STATE_UNREADABLE` when the
+  row cannot be read at all, which still lets the desk boot.
+- **Additions to D14's shape:** `fingerprint` on `adoption` and `adopted`, the install key's, to compare
+  with the portal's. `adoptedBy` is the account's display name, null once it is deleted. `notice` also
+  says why an adoption ended unapproved (refused, expired).
+- **Deleting a user** deletes their link and clears `adopted_by` in `AuthService.deleteUser`'s
+  transaction, by hand: SQLite runs with foreign keys off, so D7's cascade is not enforced.
+- **D4 was wrong about the key's name.** The blob is `cloud:install-key:<installs.uuid>`: the OS
+  keychain is per user, so under one fixed name a second desk on the same machine (another data
+  directory) would find this one's key, delete it as an orphan and overwrite it at its own adoption.
+- **The poll, hardened:** at the expiry the desk polls once more (an approval made in the last interval,
+  or while it was down, still lands); `slow_down` is capped at 60 s; a key the credential store cannot
+  read is retried rather than taken as missing; an answer over 64 KB counts as none.
+- **D5 reaches the code too** (the owner's call): on the public listener `GET /install/cloud` and the
+  `cloud.state` frame leave out a pending adoption's `userCode` and verification URIs, which would let a
+  remote admin approve a locally started adoption into their own organisation. Session 6's tab says
+  the code shows only on the desk itself.
+- **Session 5's way in:** `CloudService.revoked()` forgets the adoption and sets the notice for a 4004
+  close or an `unadopted` message.
+
 ### Session 5 — The control channel
 
 - **`CloudChannel`** (D9, D10, D12): `ktor-client-websockets` moves from `testImplementation` to
@@ -378,7 +413,9 @@ Ed25519 implementation, not against itself.
     (Online / Connecting / Retrying in *n* s with the last error) and **Remove from cloud**, whose
     confirm offers *Forget on this desk only* when the answer is `CLOUD_UNREACHABLE`.
   - A `notice` after a revoke, dismissable.
-  - On the public listener the Adopt button is disabled with D5's reason.
+  - On the public listener the Adopt button is disabled with D5's reason, and a pending adoption shows
+    no code or link (the state leaves them out there, session 4): say it can only be approved from
+    the desk itself.
 - **Tests:** Vitest for each state and the confirm's two arms; `npm run check:quick` in `frontend/`.
 - **Docs:** `docs/cloud-engineering.md` §"The Cloud tab"; `docs/desk-accounts.md` gains the adoption
   link in one paragraph; the operator check `FU-MANUAL-CLOUD-P0` (§6) added to

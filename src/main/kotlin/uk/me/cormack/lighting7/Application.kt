@@ -98,7 +98,10 @@ fun Application.module() {
     // treated as remote — it is what the Remote access tunnel points at. Its routes answer "still
     // starting" until the show is ready, like the LAN port's, so it can come up before the show.
     val publicListener = startPublicListener(state)
+    // On its own scope, off the show's path: a pending adoption resumes polling.
+    state.cloud.start()
     monitor.subscribe(ApplicationStopping) {
+        runCatching { state.cloud.close() }
         // Tunnel first, so ngrok stops forwarding before the listener goes.
         runCatching { state.remoteAccess.close() }
         publicListener?.stop(1_000, 2_000)

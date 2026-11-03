@@ -61,4 +61,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoShowColours,
     // A show's order of a venue group's members (group-order plan D2); keyed by group uuid.
     DaoShowGroupOrders,
+    // This desk's adoption by Lighting7 Cloud and its cloud account links (cloud-p0 plan D7), after DaoUsers.
+    DaoCloudConnections, DaoCloudIdentityLinks,
 )
