@@ -1,7 +1,8 @@
 # Lighting7 Cloud on the desk
 
 Lighting7 Cloud is a hosted service that desks connect out to. This doc is the desk's side: what it
-holds, how it is adopted and unadopted, and the rules that keep the cloud off the show's path. The
+holds, how it is adopted and unadopted, the control channel it keeps open while adopted, and the
+rules that keep the cloud off the show's path. The
 wire contract is [cloud-protocol.md](cloud-protocol.md); the plan is
 [`plans/cloud-p0-plan.md`](plans/cloud-p0-plan.md), whose decisions (D1, D2, …) this doc cites. The
 code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`.
@@ -16,7 +17,7 @@ show, and nothing here may slow one down (§"Show safety").
 | The **install key**'s private half | `CredentialStore` blob `cloud:install-key:<installs.uuid>`, PKCS#8 base64 (`InstallKeyStore`) | made when adoption starts, deleted when the desk stops being adopted |
 | Its adoption | `cloud_connection`, one row (`models/cloudConnection.kt`) | while adopting or adopted |
 | Each desk account's cloud account | `cloud_identity_links`, one row per desk user (`models/cloudIdentityLinks.kt`) | written by adoption, deleted by unadopt or the user's deletion |
-| What is happening now: a poll's error, a notice | `CloudService`'s memory only | until the next transition or a restart |
+| What is happening now: a poll's error, a notice, the channel's status | `CloudService`'s memory only | until the next transition or a restart |
 
 Both tables are `SyncDisposition.MachineLocal` and never touch `ProjectExporter` or `ProjectImporter`
 (design record R7). The key never leaves the credential store: it is not exported, synced or logged, and
@@ -39,8 +40,8 @@ clears `cloud_connection.adopted_by` by hand.
   host (a cloud on the same machine), with no credentials, query or fragment (D12). A URL the desk
   refuses counts as not configured, and `cloud.state`'s `lastError` says why (`CLOUD_URL_INVALID`).
   There is no default until the production domain exists (`FU-CLOUD-DEFAULT-URL`).
-- **`enabled = false`** is the hard kill switch: no adoption (`CLOUD_DISABLED`), no poll, no call to the
-  cloud. The UI cannot override it.
+- **`enabled = false`** is the hard kill switch: no adoption (`CLOUD_DISABLED`), no poll, no control
+  channel, no call to the cloud. The UI cannot override it.
 
 The desk talks only to `baseUrl`'s host and follows no redirect (`CloudApi`). The row records the URL it
 was adopted through; if `cloud.baseUrl` later names another, `lastError` is `CLOUD_URL_CHANGED` and an
@@ -99,8 +100,63 @@ deleted at the same point.
 409 `CLOUD_NOT_ADOPTED` when the desk is not adopted (a pending adoption is cancelled, not unadopted).
 
 **Unadopted in the portal**, the cloud tells the desk with an `unadopted` message or close code 4004 at
-its next connect (cloud-p0 session 5). `CloudService.revoked()` forgets the adoption the same way and sets
-`notice` to "This desk was removed from *org* in the cloud."
+its next connect (§"The control channel"). `CloudService.revoked()` forgets the adoption the same way
+and sets `notice` to "This desk was removed from *org* in the cloud."
+
+## The control channel
+
+While the desk is adopted, `cloud.enabled` is true and `cloud.baseUrl` is the URL it was adopted
+through, `CloudService` keeps one WebSocket open to `/v1/desk` on that host
+(D9, `cloud/CloudChannel.kt`). It starts when `start()` runs or adoption is approved, and stops on
+unadopt, cancel or revoke. The wire side is [cloud-protocol.md](cloud-protocol.md); the desk's side:
+
+1. **Connect** to `wss://<host>/v1/desk` (`ws://` only for the loopback host `CloudConfig` allows, D12),
+   following no redirect: a redirect fails the attempt like any other refusal.
+2. **Handshake.** The cloud's first frame must be `challenge`; the desk answers `auth`, signing
+   `AuthPayload(installId, nonce, timestamp)` with the install key, and waits for `welcome`. The
+   upgrade and each step wait at most 15 s; a step that times out is closed `4000`, and the desk tries
+   again. The key is read from the credential store at the first attempt that needs it, and again at
+   each attempt until a read succeeds, so a keychain still locked at boot costs attempts, not the
+   channel.
+3. **Online.** The desk sends `hello` (protocol 1, its version, platform, `installs.uuid`, friendly
+   name, no capabilities in P0), then `health {uptimeS, deskVersion}` every `welcome.heartbeatS`
+   (clamped to 1–300 s). `hello` carries the friendly name as it was when the channel started.
+4. **Reading.** `unadopted` forgets the adoption (`revoked()`). `error` is logged. Any other type,
+   unknown ones, ones of another protocol version and ones only the desk sends, is ignored and logged
+   once per type, up to 100 types, so v1 can grow additively. Text the cloud chose (a type, an error,
+   a close reason) is cut to 64 characters before the desk logs or repeats it. A frame over 8 MiB, one that is not JSON text, or one that is not an
+   envelope closes the connection `4000`. Ktor's own limit sits at twice that, so a frame between the
+   two is seen and closed `4000`, and one above it is refused by Ktor (1009) without being read whole.
+5. **Closed.** `4004 INSTALL_REVOKED` forgets the adoption. Every other end, a close code, a dropped
+   connection or an attempt that failed in any way, is followed by a reconnect after a delay drawn
+   uniformly between 1 s and `min(30 s, 1 s × 2^n)`, *n* the attempts since a connection last stayed
+   online for 30 s, so a desk is back within 30 s of the cloud's return (NFR-PERF-3), and a cloud that
+   welcomes and then closes at once, or two desks trading one install's connection, back off as a down
+   cloud does.
+
+**Liveness.** Outbound frames go through a queue of 16 that drops the oldest, so a cloud that stops
+reading costs stale heartbeats, never a blocked sender. WebSocket pings every 25 s end a connection
+whose cloud stops answering, or vanished without closing. A frame that finds no room in the socket's
+buffers for three heartbeats ends it too, but at a heartbeat's size that takes hours of a cloud not
+reading; the pings are what notice first. Either way the desk reconnects.
+
+**Status** is memory only (D11): `connection` is `OFF` (not adopted, or the cloud off), `CONNECTING`,
+`ONLINE` or `RETRYING`, with `retryAt` the next attempt, `lastOnlineAt` the last `welcome`, and
+`lastError` why the last connection ended:
+
+| `lastError.code` | Why |
+|---|---|
+| `CLOUD_CONNECT_FAILED` | No connection: the cloud is down, the upgrade was refused or redirected, or nothing answered in 15 s |
+| `CLOUD_KEY_UNREADABLE` | The credential store holds the install key but could not read it; retried with the connection |
+| `CLOUD_AUTH_FAILED` | `4003`, its reason (`BAD_SIGNATURE`, `MALFORMED`, `TIMEOUT`) in the message |
+| `CLOUD_CLOCK_SKEW` | `4003 CLOCK_SKEW`: "check this machine's clock", with how far it is from the challenge's `serverTime` |
+| `CLOUD_PROTOCOL_UNSUPPORTED` | `4001`: the cloud no longer serves this desk's protocol, and names the version to update to |
+| `CLOUD_PROTOCOL_ERROR` | `4000`, sent by either side |
+| `CLOUD_REPLACED` | `4009`: another connection from this install took this one's place |
+| `CLOUD_DISCONNECTED` | Any other close, the connection dropped, or an attempt failed in a way the desk did not expect |
+
+An adoption error (the row's, or a poll's) outranks the channel's. Only a revoke changes what the
+desk holds; nothing about a connection is written to the database.
 
 ## The state
 
@@ -120,32 +176,48 @@ desk into an organisation of their own, which is what D5's refusal of a remote *
 admin still sees that an adoption is pending, and its expiry and fingerprint.
 
 `adoptedBy` is the adopting account's display name, null once it is deleted; `fingerprint` is the
-install key's, which the portal shows too. `connection` is `OFF` until the control channel arrives
-(session 5).
+install key's, which the portal shows too. `connection`, `retryAt`, `lastOnlineAt` and the channel's
+`lastError` are §"The control channel"'s; a frame goes out on each change of status, never per
+heartbeat.
 
 ## Show safety
 
 The cloud is never on the show's path (design record R6, D11). Every change here answers one question:
 does the show run exactly as before with the cloud down, hung or hostile? The rules:
 
-1. **Own scope.** Everything runs on `CloudService`'s scope, on `Dispatchers.IO.limitedParallelism(2)`,
-   so a cloud that hangs holds at most two IO threads and none of the show's.
+1. **Own threads.** Everything runs on `CloudService`'s scope, on two threads of its own named
+   `cloud-N`, so a cloud that hangs holds those and none of the show's. Not a slice of
+   `Dispatchers.IO`: its workers are `Dispatchers.Default`'s too, where the show runs, so a test could
+   not tell the connector's work from the show's (`CloudChannelTest`, "never runs on a thread the show
+   uses"). Ktor's socket I/O runs on its engine's own dispatcher.
 2. **Bounded waits and answers.** Every call to the cloud has a 15 s timeout, and the desk reads at
    most 64 KB of an answer, treating a longer one as none (`CloudApi`). A route that calls the cloud
    waits at most that long, and no route the show uses calls it.
 3. **No database write on a timer.** The database is written only on a transition: adopt, approve,
    cancel, unadopt, revoke. Never per poll, per heartbeat or per reconnect: the pool has one connection,
    so a timed write would queue behind, or in front of, show writes. Live status is memory only.
-4. **No lock the show takes.** The connector reads desk state only from `StateFlow`s and `BuildInfo`.
+   `CloudChannelTest` holds SQLite's `total_changes()` still across heartbeats and a reconnect.
+4. **Bounded queues.** The channel's outbound queue holds 16 frames and drops the oldest, so nothing
+   that sends to the cloud ever waits on it.
+5. **No lock the show takes.** The connector reads desk state only from `StateFlow`s and `BuildInfo`.
    The adoption reads the database only on a transition, an account change or a request (the install
    row, the adopting account's name and link), never on a timer: a poll's error is republished from
    memory.
-5. **No outbound but to `cloud.baseUrl`'s host**, and nothing at all with `cloud.enabled = false`.
+6. **No outbound but to `cloud.baseUrl`'s host**, and nothing at all with `cloud.enabled = false`.
+
+`CloudOutageOutputTimingTest` is the rules' proof (NFR-SAFE-1): a fade's Art-Net frames, timed with no
+connector, then with the cloud connected, stopping reading, dropping the connection and refusing every
+reconnect, each run held to the baseline's frame count, end, p99 and longest frame gap, each plus a margin.
 
 ## Tests
 
 `FakeCloud` (`src/test/kotlin/.../testsupport/FakeCloud.kt`) is a stand-in cloud on a loopback port,
-built on `cloud-protocol`, that verifies every signature it is sent. Its switches approve, deny, expire,
-slow down, refuse, stall and send an answer too large to read. Desk tests never use the real cloud (R5). `CloudAdoptionTest` drives
-`CloudService` through every adoption and unadopt path; `InstallCloudRoutesTest` the routes and their
-refusals on both listeners.
+built on `cloud-protocol`, that verifies every signature it is sent. Its adoption switches approve, deny,
+expire, slow down, refuse, stall and send an answer too large to read. Its control channel checks `auth`
+against the install's key and its own clock (`clockOffset` makes it skewed), keeps one connection per
+install, closes a removed install `4004`, and can stall a connection, stop reading one, drop it, refuse
+or redirect the upgrade, or force any `4003` reason. Desk tests never use the real cloud (R5).
+`CloudAdoptionTest` drives `CloudService` through every adoption and unadopt path;
+`InstallCloudRoutesTest` the routes and their refusals on both listeners; `CloudChannelTest` the
+channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and
+`CloudOutageOutputTimingTest` the show's output through a cloud outage.

@@ -782,6 +782,7 @@ session 5.
 - `grandMaster.state` / `grandMaster.set` - The live project's grand master, 0–100 %: `state {projectId, level}` is `StateFlow`-backed and follows the live show, so the subscription is the snapshot; `set {level}` is the Grand Master panel's fader, clamped, `CONTINUOUS` in `TraceSampling.WS_MESSAGES`. `surfaceScaler.state`'s `grandMasterEnabled` is the same level read as `> 0`. See `docs/websocket-engineering.md` §"Grand master"
 - `surfaceControls.state` / `surfaceControls.changed` - Per-device control state as the hardware was told it (`value`, `physical`, `touched`, `led`, `ring`), from `ControlStateTracker`: a whole-device `.state` on connect and after every full resync, conflated `.changed` deltas at most every 50 ms per device. The Surfaces view draws exactly this and never recomputes from DMX
 - `tunnel.state` - Remote access's live status (`off | installing | starting | online | error | no-binary`, with download progress, the URL, ngrok's `ERR_NGROK_…` code and whether it is retrying). Machine-scoped, **admin sockets only** (a zero-user desk's socket counts), snapshot on connect; the frame carries the state, so the client patches rather than refetches
+- `cloud.state` - Lighting7 Cloud's state (`CloudService.state`, cloud-p0 plan D14): adoption, the control channel's `connection` (`OFF | CONNECTING | ONLINE | RETRYING`, with `retryAt`, `lastOnlineAt`, `lastError`) and a revoke's `notice`. Machine-scoped, **admin sockets only**, `StateFlow`-backed, outbound only; on the public listener a pending adoption's code and links are left out. It changes per transition and per change of the channel's status, never per heartbeat. A change to what feeds it asks R6's question: does it still hold with the cloud down? See `docs/cloud-engineering.md` §"The control channel"
 - `cueRunStateChanged` - A cue stack's live cue, armed next, and fade timing — `activeEntryId`, `nextEntryId` and `standbyEntryId` beside the cue ids, since a stack's position is an **entry** (cue model plan P2). One frame per transition from `CueStackManager` (so REST, the MIDI surface and auto-advance all report), one per stack write that can move an active stack's next (`announceEntriesPlaced`, `announceEntryMoved`, `afterEntriesRemoved`, and a stack PUT, whose loop decides what follows the last entry), plus a snapshot on connect; clients animate the fade locally from `fadeElapsedMs`
 - `cueHolds.state` - What holds every live cue (cue model plan P3, `fx/CueHolds.kt`), outbound only and `StateFlow`-backed (`State.cueHoldsFrame`, so it survives a project switch): `{projectId, cues: [{cueId, priority, stackId?, holds: [{kind: STACK, stackId, entryId} | {kind: LOOSE, seq}], edited?}]}` (`edited: true` while a held cue is edited since GO, show-cue-editing plan D4), `stackId` the highest hold's stack (absent under a loose hold), the one whose FX amount weighs it. A cue is live while anything holds it and comes off with its last hold; its priority is its highest hold's, a loose hold (`/cues/{id}/apply`, `apply_cue`, a busk cue pad, a cue slot, MIDI `FireCue`, the hand) at `LOOSE_BAND + seq`, above every stack, newest on top. The busk pad's and cue slot's rings read it — solid for a loose hold, outline for live only in a stack. See `docs/cue-stacks-engineering.md` §"Holds"
 
@@ -1082,6 +1083,17 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
   tunnel, `/api/sentry`, is mounted there too, signed out included: its DSN check, 1 MB cap and
   telemetry gate are all that keep it from being an open relay. See
   [docs/mcp-engineering.md](docs/mcp-engineering.md)
+- **Lighting7 Cloud** (`cloud/`, the cloud-p0 plan): a hosted service the desk connects *out* to. An
+  admin on the desk's own listener **adopts** the desk into a cloud organisation (RFC 8628's flow,
+  polled by the backend, `cloud { baseUrl, enabled }` in `local.conf`); while adopted, `CloudChannel`
+  keeps one WebSocket open to `/v1/desk`, authenticated by the install key (Ed25519, in
+  `CredentialStore`), with a `health` heartbeat and a reconnect capped at 30 s. The wire contract is
+  `cloud-protocol/`. **The cloud is never on the show's path**: the connector's own work runs on two
+  `cloud-N` threads (Ktor's non-blocking socket I/O on its engine's dispatcher), sends through a bounded queue that drops the oldest, writes the database only on a
+  transition (adopt, unadopt, revoke) and takes no lock the show takes. Every change here answers one
+  question in review: *does the show run exactly as before with the cloud down, hung or hostile?*
+  `CloudOutageOutputTimingTest` holds a fade's output to that. See
+  [docs/cloud-engineering.md](docs/cloud-engineering.md) §"Show safety"
 
 ## Engineering Documentation
 

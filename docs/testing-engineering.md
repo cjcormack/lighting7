@@ -148,6 +148,8 @@ That job is also always cold — `build/test-data` does not survive between runs
 | `SpeedMasterBankTest` "deadline timer holds long-run rates exact" | a real 2500 ms window, rates within ±1.5% |
 | `ArtNetStreamingTest` "the configured interval governs packet cadence" | 20 frames take ≥1600 ms **and ≤8000 ms** |
 | `ArtNetParkSafetyTest`, `ActiveBankStateTest`, `CueEditSessionRegistryTest` | `withTimeout` waits of 1–5 s |
+| `CloudOutageOutputTimingTest` | a 3 s fade's Art-Net frames, connected and through three cloud failures, against one baseline fade with no connector: each run within 5 frames of the baseline's count, ending within 500 ms of its end, its p99 frame gap within 50 ms and its longest within 100 ms of the baseline's |
+| `CloudChannelTest`, `CloudAdoptionTest` | waits of up to 15 s for a connection or an adoption against `FakeCloud`, and two 1.5 s waits that assert nothing reconnects |
 
 Precedent: commit `51965fc` removed a tick-delivery assertion from `SpeedMasterBankTest` that
 held only on an idle machine — it failed 3 of 4 full runs and 0 of 5 runs of the class alone.

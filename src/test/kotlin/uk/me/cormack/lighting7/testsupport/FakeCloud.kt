@@ -3,18 +3,38 @@ package uk.me.cormack.lighting7.testsupport
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.install
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
+import io.ktor.server.request.path
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import io.ktor.server.websocket.DefaultWebSocketServerSession
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.webSocket
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.Frame
+import io.ktor.websocket.close
+import io.ktor.websocket.readText
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.KSerializer
+import uk.me.cormack.lighting7.cloud.protocol.AuthFailure
+import uk.me.cormack.lighting7.cloud.protocol.AuthPayload
+import uk.me.cormack.lighting7.cloud.protocol.CloseCode
+import uk.me.cormack.lighting7.cloud.protocol.CloudPaths
+import uk.me.cormack.lighting7.cloud.protocol.Envelope
+import uk.me.cormack.lighting7.cloud.protocol.Message
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionPollPayload
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionPollResult
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionRequest
@@ -32,17 +52,25 @@ import uk.me.cormack.lighting7.cloud.protocol.UnadoptPayload
 import uk.me.cormack.lighting7.cloud.protocol.UserCode
 import java.io.Closeable
 import java.security.PublicKey
+import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * A stand-in for Lighting7 Cloud, built on `cloud-protocol` and served on a loopback port, so desk
  * tests never need the real cloud (cloud design record R5). It implements the adoption API and
  * verifies every signature the desk sends, so a desk that signs the wrong bytes fails here first.
- * Its switches make the cloud approve, deny, expire, slow down, refuse or stall; session 5 adds the
- * control channel and dropping it.
+ * Its switches make the cloud approve, deny, expire, slow down, refuse or stall.
+ *
+ * It serves the control channel too (`/v1/desk`): the challenge, the signed `auth` checked against
+ * the install's key and the fake's clock, `welcome`, one connection per install (a newer one closes
+ * the older `4009`), and close `4004` for an install removed in the portal. Its channel switches
+ * stall a connection, stop reading one, drop it, refuse or redirect the upgrade, and force an
+ * `auth` refusal.
  */
 class FakeCloud : Closeable {
 
@@ -73,6 +101,45 @@ class FakeCloud : Closeable {
     @Volatile var intervalS: Int = 1
     @Volatile var expiresInS: Int = 600
 
+    /** The `heartbeatS` a `welcome` gives. */
+    @Volatile var heartbeatS: Int = 25
+
+    /** How far the fake's clock is from the real one, for the challenge's `serverTime` and the skew check. */
+    @Volatile var clockOffset: Duration = Duration.ZERO
+
+    /** Refuse every `auth` with this reason, whatever it carries. */
+    @Volatile var authFailure: AuthFailure? = null
+
+    /** Accept the upgrade, then send nothing and read nothing until [releaseChannel]. */
+    @Volatile var channelStall: Boolean = false
+
+    /** Stop reading every live connection until [releaseChannel]. */
+    @Volatile var stopReading: Boolean = false
+
+    /** Send the challenge, then close without waiting for `auth`. */
+    @Volatile var closeAfterChallenge: Boolean = false
+
+    /** Answer the upgrade 503. */
+    @Volatile var refuseChannel: Boolean = false
+
+    /** Answer the upgrade with a redirect to this base URL's channel. */
+    @Volatile var redirectChannelTo: String? = null
+    private var channelReleased = CompletableDeferred<Unit>()
+
+    /** Installs removed in the portal: their next `auth` is closed 4004. */
+    val revoked: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** Every request to the channel's path, refused and redirected ones included. */
+    val channelAttempts = AtomicInteger()
+
+    /** Every envelope a desk sent once authenticated, by install id. */
+    val received = CopyOnWriteArrayList<Pair<String, Envelope>>()
+
+    /** How each connection was closed, as the fake saw it. */
+    val closes = CopyOnWriteArrayList<CloseReason>()
+
+    private val sessions = ConcurrentHashMap<String, DefaultWebSocketServerSession>()
+
     val org = CloudOrg("org-1", "Test Org")
     val account = CloudAccount("acct-1", "admin@example.com", "Test Admin")
 
@@ -84,7 +151,21 @@ class FakeCloud : Closeable {
 
     private val server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> =
         embeddedServer(Netty, port = 0, host = "127.0.0.1") {
+            install(WebSockets) { maxFrameSize = 64L * 1024 * 1024 }
+            intercept(ApplicationCallPipeline.Plugins) {
+                if (context.request.path() != CloudPaths.DESK_CHANNEL) return@intercept
+                channelAttempts.incrementAndGet()
+                val redirect = redirectChannelTo
+                if (redirect != null) {
+                    context.respondRedirect(redirect + CloudPaths.DESK_CHANNEL, permanent = false)
+                    finish()
+                } else if (refuseChannel) {
+                    context.respond(HttpStatusCode.ServiceUnavailable)
+                    finish()
+                }
+            }
             routing {
+                webSocket(CloudPaths.DESK_CHANNEL) { channel(this) }
                 post("/v1/adoptions") {
                     if (gate(call)) return@post
                     val request = runCatching { CloudJson.decodeFromString(AdoptionRequest.serializer(), call.receiveText()) }.getOrNull()
@@ -143,6 +224,79 @@ class FakeCloud : Closeable {
         released = CompletableDeferred()
     }
 
+    /** End [channelStall] and [stopReading]. */
+    fun releaseChannel() {
+        channelStall = false
+        stopReading = false
+        channelReleased.complete(Unit)
+        channelReleased = CompletableDeferred()
+    }
+
+    /** The installs with a live, authenticated connection. */
+    val online: Set<String> get() = sessions.keys.toSet()
+
+    /** Send [message] down [installId]'s connection. */
+    fun send(installId: String, message: Message, v: Int = uk.me.cormack.lighting7.cloud.protocol.PROTOCOL_VERSION) =
+        sendText(installId, Envelope(id = UUID.randomUUID().toString(), body = message, v = v).encode())
+
+    fun sendText(installId: String, text: String) = runBlocking {
+        val session = sessions[installId] ?: error("$installId is not connected")
+        session.send(Frame.Text(text))
+    }
+
+    /** Remove the install in the portal: an `unadopted` message when [tell] and it is connected, and 4004 at its next connect. */
+    fun removeInPortal(installId: String, tell: Boolean) {
+        installs.remove(installId)
+        revoked += installId
+        if (tell) sessions[installId]?.let { runBlocking { it.send(Frame.Text(Envelope(UUID.randomUUID().toString(), Message.Unadopted).encode())) } }
+    }
+
+    /** End every connection without a close frame, as a network or a crashed cloud would. */
+    fun dropChannel() {
+        sessions.values.forEach { it.cancel() }
+    }
+
+    /** Close [installId]'s connection with [code]. */
+    fun closeChannel(installId: String, code: CloseCode, reason: String = code.name) = runBlocking {
+        sessions[installId]?.close(CloseReason(code.code, reason))
+    }
+
+    private fun now(): Instant = Instant.now().plus(clockOffset)
+
+    private suspend fun channel(session: DefaultWebSocketServerSession): Unit = with(session) {
+        if (channelStall) channelReleased.await()
+        val nonce = UUID.randomUUID().toString()
+        send(Frame.Text(Envelope(UUID.randomUUID().toString(), Message.Challenge(nonce, Timestamps.format(now()))).encode()))
+        if (closeAfterChallenge) return close(CloseReason(CloseReason.Codes.GOING_AWAY, "restarting"))
+        val auth = withTimeoutOrNull(5.seconds) { (incoming.receiveCatching().getOrNull() as? Frame.Text)?.readText() }
+            ?.let { runCatching { Envelope.decode(it).body }.getOrNull() }
+        suspend fun refuse(code: CloseCode, reason: String) {
+            close(CloseReason(code.code, reason))
+            closes += CloseReason(code.code, reason)
+        }
+        if (auth == null) return refuse(CloseCode.AUTH_FAILED, AuthFailure.TIMEOUT.name)
+        if (auth !is Message.Auth) return refuse(CloseCode.PROTOCOL_ERROR, "expected auth")
+        authFailure?.let { return refuse(CloseCode.AUTH_FAILED, it.name) }
+        if (auth.installId in revoked) return refuse(CloseCode.INSTALL_REVOKED, "")
+        val install = installs[auth.installId] ?: return refuse(CloseCode.AUTH_FAILED, AuthFailure.MALFORMED.name)
+        if (!Timestamps.withinSkew(auth.timestamp, now())) return refuse(CloseCode.AUTH_FAILED, AuthFailure.CLOCK_SKEW.name)
+        if (!InstallKeys.verify(install.key, AuthPayload(auth.installId, nonce, auth.timestamp), auth.signature)) {
+            return refuse(CloseCode.AUTH_FAILED, AuthFailure.BAD_SIGNATURE.name)
+        }
+        sessions.put(auth.installId, this)?.close(CloseReason(CloseCode.REPLACED.code, CloseCode.REPLACED.name))
+        send(Frame.Text(Envelope(UUID.randomUUID().toString(), Message.Welcome(org.name, heartbeatS)).encode()))
+        try {
+            while (true) {
+                if (stopReading) channelReleased.await()
+                val frame = incoming.receiveCatching().getOrNull() ?: break
+                if (frame is Frame.Text) received += auth.installId to Envelope.decode(frame.readText())
+            }
+        } finally {
+            sessions.remove(auth.installId, this)
+            withTimeoutOrNull(2.seconds) { runCatching { closeReason.await() }.getOrNull() }?.let { closes += it }
+        }
+    }
+
     /** True when the call was answered by a switch rather than the API. */
     private suspend fun gate(call: ApplicationCall): Boolean {
         if (stall) released.await()
@@ -175,6 +329,7 @@ class FakeCloud : Closeable {
 
     override fun close() {
         released.complete(Unit)
+        channelReleased.complete(Unit)
         server.stop(0, 500)
     }
 }
