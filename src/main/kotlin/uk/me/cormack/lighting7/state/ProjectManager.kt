@@ -217,14 +217,15 @@ class ProjectManager(
 
     /**
      * At project load, let the scene-image store forget what no element has referenced for a week
-     * (scrim plan §3.3) — an upload whose element was never saved, a cloth repainted long ago.
+     * (scrim plan §3.3) — an upload whose element was never saved, a cloth repainted long ago — and
+     * that no change in the project's history names, which an undo may put back.
      * Best-effort: a failure here is a few stale files, never a project that will not load.
      */
     private fun pruneSceneImages(project: DaoProject) {
         runCatching {
             val (uuid, referenced) = transaction(database) {
                 project.uuid.toString() to SceneImageRepoSync.referencedHashes(project.id.value)
-            }
+            }.let { (uuid, stored) -> uuid to (stored + stateProvider().history.sceneImageHashes(project.id.value)) }
             val pruned = stateProvider().sceneImages.prune(uuid, referenced)
             if (pruned > 0) logger.info("Pruned {} unreferenced scene image(s) from project {}", pruned, uuid)
         }.onFailure { logger.warn("Scene image prune failed for project {}: {}", project.id.value, it.message) }

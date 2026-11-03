@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.plugins.historySourceOf
 import uk.me.cormack.lighting7.plugins.showTakes
 import uk.me.cormack.lighting7.plugins.toMessage
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.RecordFolders
 import io.ktor.server.application.ApplicationCall
 import uk.me.cormack.lighting7.history.ProgrammerHistory
 import uk.me.cormack.lighting7.history.RecordRestorer
@@ -28,6 +29,8 @@ import uk.me.cormack.lighting7.history.WriteOrigin
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.UserRole
+import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
+import uk.me.cormack.lighting7.mcp.scriptsAllowed
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 /** Nothing to undo or redo. */
@@ -42,7 +45,7 @@ internal const val CODE_HISTORY_CONFLICT = "HISTORY_CONFLICT"
 /** The undo moves the stage while the show runs (D6): resend with `confirm`. */
 internal const val CODE_HISTORY_CONFIRM = "HISTORY_CONFIRM"
 
-/** The records cannot be put back as they were: a name taken since, a kind not yet restorable. */
+/** The records cannot be put back as they were: a name taken since, a clash with the venue, a record changed outside the history. */
 internal const val CODE_HISTORY_UNDO_BLOCKED = "HISTORY_UNDO_BLOCKED"
 
 /**
@@ -107,9 +110,9 @@ private suspend fun ApplicationCall.historyMove(state: State, project: DaoProjec
     val window = WriteOrigin.current()?.window
     val restorer = RecordRestorer(state)
     val outcome = if (undo) {
-        restorer.undo(projectId, request.entryId, caller, window, request.backToHere, request.confirm)
+        restorer.undo(projectId, request.entryId, caller, window, request.backToHere, request.confirm, scriptsAllowed(state))
     } else {
-        restorer.redo(projectId, request.entryId, caller, window, request.confirm)
+        restorer.redo(projectId, request.entryId, caller, window, request.confirm, scriptsAllowed(state))
     }
     when (outcome) {
         is RecordRestorer.Outcome.Empty -> if (outcome.already) {
@@ -138,6 +141,7 @@ private suspend fun ApplicationCall.historyMove(state: State, project: DaoProjec
             HttpStatusCode.Conflict,
             HistoryRefusalDto(error = "${outcome.record} cannot be put back: ${outcome.reason}", code = CODE_HISTORY_UNDO_BLOCKED, record = outcome.record, reason = outcome.reason),
         )
+        RecordRestorer.Outcome.ScriptsRefused -> throw RemoteScriptsDisabledException()
         is RecordRestorer.Outcome.Done -> respondMoved(
             HistoryMoveResponse(outcome.entries.map { HistoryStepRef(it.id, it.label) }, historyFrameFor(state, projectId, caller)),
             undo,
@@ -285,12 +289,7 @@ private fun uk.me.cormack.lighting7.history.ProgrammerHistory.StepInfo.toRow(cal
  * moves a live cue is asked when the undo runs ([RecordRestorer]'s confirm), not here.
  */
 private fun movesOf(changes: Collection<Change>): List<String> =
-    if (changes.any { it.key.tableName in OUTPUT_FOLDERS }) listOf(CHANGES_OUTPUT) else emptyList()
-
-private val OUTPUT_FOLDERS = setOf(
-    "fixturePatches", "fixtureGroups", "universeConfigs", "showHides", "showOverrides", "showColours",
-    "showGroupOrders", "parkedChannels", "showParkReleases",
-)
+    if (changes.any { it.key.tableName in RecordFolders.OUTPUT }) listOf(CHANGES_OUTPUT) else emptyList()
 
 private const val CHANGES_OUTPUT = "changes output"
 private const val KIND_SHOW = "SHOW"

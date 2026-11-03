@@ -174,6 +174,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-CLOUD-PROTOCOL-PUBLISH`](#fu-cloud-protocol-publish) | Trigger | Dist | a third party builds against the cloud protocol |
 | [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
 | [`FU-HISTORY-EMBEDDED-CHILD-IDS`](#fu-history-embedded-child-ids) | Trigger | History | something names an embedded child (a busk pad, a rig tile, a scenery row) by its integer id across an undo |
+| [`FU-HISTORY-MACHINE-LOCAL`](#fu-history-machine-local) | Trigger | History | a desk night asks for an undo of a machine-local setting (a universe's address) |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -3280,6 +3281,19 @@ the image, uuids kept and ids new. The busk view reads a pad's id from the page 
 `busk.layoutChanged`, and every binding names a pad or bank by uuid. If a client or a binding ever
 holds one across an undo, match that kind by uuid as the Look's rows are (`Run.children`), or export the
 child ids into the image (outside the canonical JSON, as the record's own `rowId` is).
+
+### `FU-HISTORY-MACHINE-LOCAL`
+
+**Undo for machine-local settings** · Trigger: a desk night asks for an undo of a machine-local setting
+(a universe's address) · undo plan session 5, 2026-11-02
+
+D4 keeps machine-local settings out of the show history: `machine_overrides` (a universe's address and
+refresh interval, an element's *Full detail*), `project_scaler_states`, tube state and sync config are
+written by no journaled folder, so no entry holds them. An undo that takes a universe away leaves its
+override rows, which a redo finds again, but a changed address is not undone. If a night asks for it,
+give machine-local writes an entry of their own: a second record cache over those tables, keyed by
+project and record uuid, journaled by the same interceptor and restored by `Overrides`' setters rather
+than the importer.
 
 ## Completed
 

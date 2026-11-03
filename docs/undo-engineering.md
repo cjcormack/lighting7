@@ -5,9 +5,8 @@ The desk keeps two histories behind one key (undo plan, `docs/plans/undo-plan.md
 `docs/lighting-composition-model.md` §"Programmer history"), and the **show history**, a journal of
 every stored record a request, frame, tool call or surface input changed. This document is the show
 history: who a change belongs to, the record cache it is measured against, how the journal captures a
-commit, what happens to a write that belongs to no one, and how an undo puts records back. The cue side
-is restorable (plan session 4); the patch, the stage, parks, scripts and the rest are session 5's, and
-an undo holding one is refused until then.
+commit, what happens to a write that belongs to no one, and how an undo puts records back. Every
+portable folder is restorable (plan sessions 4 and 5).
 
 Both are runtime state (D15): no table, no column, nothing synced. A restart starts empty.
 
@@ -151,7 +150,9 @@ programmer's steps follow their own rules (a reload keeps them, a switch drops t
 backToHere?, programmerOnly?, confirm?, fadeMs?}`. With no `entryId` the key takes, for the caller's
 source, the newer of the live programmer's top step and its own newest show entry (D1, D2); an id is a
 step's (`p-…`) or an entry's (`e-…`). A step goes back through the programmer's history, on the current
-project only. An entry goes back through `history/RecordRestorer.kt` on any project; on a venue an
+project only. An entry that puts back a script or an FX definition authors code, so on the public
+listener it is 403 `REMOTE_SCRIPTS_DISABLED` unless an admin allows remote scripts, as those routes are
+(`requireScriptAccess`). An entry goes back through `history/RecordRestorer.kt` on any project; on a venue an
 operator is refused 403 `VENUE_ADMIN_ONLY` here, since the write guard passes the history path as the
 programmer's. Both answers carry the caller's `history.state` frame for the project.
 
@@ -162,8 +163,9 @@ will write, after a first statement has taken the pool's one connection, so no c
   record it takes away, and nothing it puts back to link to a record gone since. A later entry, not
   undone, collides when it touches one of the records, when a record it wrote carries the uuid of one the
   undo takes away, or when it took away a record one the undo puts back carries the uuid of — and so does
-  any later entry that collides with a collider, until none does. Only the restorable folders' records
-  count as links: a binding's payload tolerates a record gone (sync v11). With collisions the answer is
+  any later entry that collides with a collider, until none does. Every restorable folder's records
+  count as links but a binding's, whose payload tolerates a record gone (sync v11); a prompt book's
+  anchors and notes name no book, since a project has one, so each links to it. With collisions the answer is
   409 `HISTORY_CONFLICT` naming them newest first (`later`); `backToHere` takes them too, and on the
   caller's own entry also every later entry of its source. Each record goes back to the oldest taken
   entry's `before`, and must stand as the newest left it, checked by hash; a record moved by something
@@ -178,10 +180,14 @@ With no `entryId`, undo takes whichever of the programmer's top step and the cal
 written last, and redo whichever was undone last (`HistoryEntry.undoneAt`, `StepInfo.undoneAt`); the
 route and `history.state` decide it with one function, `showTakes`.
 
-**Confirm (D6).** On the live project, while any cue is held, an undo that puts back a Look or palette a
-held cue's stored layer or a programmer layer uses answers 409 `HISTORY_CONFIRM` with `moves` (*Live cue
-“Q11” uses Look “Warm wash”*) until it is resent with `confirm`: those republish. A layer the undo itself
-puts back is not on stage, so it asks nothing; its cue is marked edited since GO.
+**Confirm (D6).** On the live project, while any cue is held, an undo that moves the stage answers 409
+`HISTORY_CONFIRM` with `moves` until it is resent with `confirm`: a change to the rig that rebuilds the
+fixtures, as its own route's write would (`KindEffects.rigReach`: a patch or group added or taken away,
+any but a patch's drawn fields, a universe, a group order, an Address or Media override, a patch or group
+hide — *The fixtures reload: Fixture “spot-3”*), a park or park release (*Parked channels change: …*), and a Look or palette a held
+cue's stored layer or a programmer layer uses, which republishes (*Live cue “Q11” uses Look “Warm
+wash”*). A layer the undo itself puts back is not on stage, so it asks nothing; its cue is marked edited
+since GO.
 
 **Writing.** The transaction runs under an `UNDO` or `REDO` origin carrying the entries' ids, which its
 commit marks undone or standing in the same step that moves the cache (`HistoryService.commit`), so a
@@ -191,18 +197,32 @@ stacks through `removeEntries`, as *Remove from stack* does, so a live one is de
 on from where it stood. `ProjectImporter.restore` then deletes, in reverse foreign-key order, each other
 record whose target is absent, with its embedded children; then it upserts the rest through the
 importer's own per-kind code in `UPSERT` mode (sync-engineering.md §"Importer modes"), freeing the
-explicit numbers it writes first. Each stack it touched is then renumbered as its records say: an
-entry whose image carries a number keeps it, and every other auto entry is derived as an import derives
-it, which a renumber by position, run backwards, would not give. A stack the undo takes away is stopped on the live project, and stops
-being any project's playhead, once nothing can refuse the undo.
+explicit numbers it writes first — and every unique key or name it rewrites (a patch's key; a group's,
+rigging's, element's, region's, viewpoint's, script's, Look's, palette's, busk page's or speed master's
+name; a master's index; a definition's FX id), so two records that traded can take each other's back.
+Each stack it touched is then renumbered as its records say (`RecordRestorer.renumberAsWritten`,
+through `renumberAsArchived`): an entry whose image carries a number takes it, and every other auto
+entry is derived as an import derives it, which a renumber by position, run backwards, would not give.
+The export leaves a derivable auto number out, so an entry a delete renumbered may be in no entry at
+all, and must still come back to the number its export implies. A stack the undo takes away is stopped
+on the live project, and stops being any project's playhead, once nothing can refuse the undo.
+
+Deleting a record takes its embedded children with it (a patch's placements, a group's members) and
+nothing else: what its own delete route sweeps beside it — busk-rig tiles, group memberships, cue
+events, anchors — are records of their own, which the undo takes away beside it or refuses as in use.
+Machine-local rows naming it (a universe's address, an element's *Full detail*) are left, so a redo
+finds them again. A universe's machine-local `address` column is never written by an upsert.
 
 Before the commit the restorer exports the folders it wrote and holds them to the cache with the
 targets laid over it: every record as its target says, with its row id, and no other record in those
 folders moved. A difference rolls the undo back as 409 `HISTORY_UNDO_BLOCKED` (*It could not be put back
 exactly*), and so does a constraint the database holds, a name someone has taken since among them
 (*Something else has taken its name or its place since*), and a record that names one gone since outside
-the history (*Something it names has gone since*), with `record` naming it. An entry holding a folder no
-restore yet covers is refused the same way before anything is written.
+the history (*Something it names has gone since*), with `record` naming it. On a show on a venue, an undo
+that touches a patch, group, rigging, element, region, viewpoint or hide is also held to the venue's
+namespace: a key, head number or name the show's own records share with the pinned version's after the
+restore that they did not before (`VenueRigChecks.clashesOf`) — one a venue record took back while the
+show's was gone, unhidden since — is the same refusal (*It would clash with the venue: …*).
 
 **What it sets off** (`history/KindEffects.kt`, §5 of the plan) runs after the commit, under an origin of
 the undo's kind, so the programmer takes no step for it and no entry is made. It goes through the routes'
@@ -213,10 +233,32 @@ released from the programmer's layers, and a Look's layering cues republished as
 `afterEntriesRemoved`; a held cue whose *Update stage* content (`stageContent`, read before and after in
 the transaction) moved is marked edited since GO, as a cue PATCH marks it; every stack an entry joined or
 left, and every stack put back, has its holds restamped and its run state published
-(`announceEntriesPlaced`). `RecordRestoreTest` holds the table to `RESTORABLE_FOLDERS`.
+(`announceEntriesPlaced`). A change to the rig reaches the live fixtures as its own route's write does
+(`KindEffects.rigReach`): one that rebuilds them reloads them (`DbFixtureLoader.loadFixtures`); a patch's
+drawn fields alone (`PUT_KEYS_WITHOUT_REBUILD`, its locate) and a Focus override refresh its metadata in
+place; a recolour, or a group's colour alone, announces the fixture list; a Position override and a hide
+of a rigging, element, region or viewpoint are drawn only. Any of them re-asserts the Locate of every unit a patch or override it moved stands for (`reassertLocates`), as a
+stored locate's write does, and sends `patchListChanged`, a hide also its record kind's list frame, and a
+patch, group, recolour or group order `busk.rigChanged`; it runs first, with the parks, so a Look,
+palette or cue republished after resolves its keys against the rig as it now stands, and every held cue
+the undo touched is republished with a rebuild (`republishCueIfLive`) — the order `rename_fixtures` announces
+its rewrite in. A rigging, region, element or viewpoint sends its list frame, the element's moving the
+scenery (`SceneryService` recomputes on it); a park or release reloads the parks (`ParkManager.reload`:
+each channel moved straight to its new park, one left with none handed down first as an unpark hands it
+down, the venue parks refused at load kept out, and a park made while it read kept; then
+`Show.dropRefusedParks`); a speed master reloads the bank, keeping the live tempo (D4); an FX definition
+is unregistered under the id it had and compiled and registered again (`registerUserFx`), and one that no
+longer compiles is left unregistered; a script, a prompt book or a note sends its frame; and a binding
+drops the binding cache. `RecordRestoreTest` holds the table, `ProjectExporter.FOLDERS`
+and the labeler to `RESTORABLE_FOLDERS`, and that to every portable folder.
 
-A Look's and a palette's rows and FX that still exist are matched by uuid in an upsert and keep their
-row ids — an included Look's FX is named by its row id; one the undo inserts again takes a new one. Every other embedded child — scenery, a cue's events, a busk
+The scene-image store's prune at project load (`ProjectManager.pruneSceneImages`) keeps every image a
+stage element's image in the project's journal paints with (`HistoryService.sceneImageHashes`), so an
+undo that puts a cloth back finds its paint.
+
+A Look's and a palette's rows and FX, a patch's placements and a group's members that still exist are
+matched by uuid in an upsert and keep their row ids — an included Look's FX is named by its row id; one
+the undo inserts again takes a new one. Every other embedded child — scenery, a cue's events, a busk
 page's columns, banks and pads, a rig row's tiles — comes back with its uuid and a new row id: an image
 does not carry them, and nothing that outlives a re-read names them (`FU-HISTORY-EMBEDDED-CHILD-IDS`). A stack entry whose number the export carried as a held auto number
 comes back explicit, as an import makes it.

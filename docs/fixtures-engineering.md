@@ -2002,7 +2002,8 @@ toolkit and puts a Java icon in the Dock, and one full decode at a time (an 8192
 **At project load** the store prunes any image no element has referenced for a week — an image's
 mtime is moved by every element write that names *or drops* it and by every load that finds it
 referenced — so an upload whose element was never saved does not pile up, and one taken off a cloth
-survives a week for an undo. A deleted project's store goes with it.
+survives a week for an undo. An image any change in the project's show history names is kept as
+referenced while that history lasts. A deleted project's store goes with it.
 
 **Model objects** (`models/sceneModel.kt`). An `OBJECT` whose `shape` is `MODEL` is built from
 `parts` — 1–200 of them, at most 4000 outline and profile points in all — each a `BOX {widthM, depthM,
@@ -2685,6 +2686,26 @@ the Stage editor's) draws a *Venue | This show* switch per facet, the drift note
 where drifted. A venue rigging, element, region, group or viewpoint is still only hidden
 (`FU-VENUE-ELEMENT-OVERRIDES`) — but for a group's colour, which a show recolours (§"Fixture
 colours").
+
+### Undoing a patch, hide or facet
+
+The show history (`docs/undo-engineering.md` §"Restore") puts the rig back like any other record: a
+patch with its placements, a group with its members, a universe, a hide, a facet override, a recolour,
+a group order, a park and a park release, each with its row id. On the live project each reaches the
+fixtures as its own route's write does: what rebuilds them (a patch's address, type or key, a group's
+members, a universe, an Address or Media override, a patch or group hide) reloads them, a drawn field or
+a Focus override refreshes the patch metadata, a recolour announces the fixture list, and a Position
+override or a hide of a rigging, element, region or viewpoint is drawn only; the parks reload. While a
+cue is held an undo that rebuilds or moves a park asks first (409 `HISTORY_CONFIRM`, *The fixtures
+reload: Fixture “spot-3”*), since the rig moves under the running show; a drawn-only one does not.
+
+A show on a venue's undo is held to the one namespace (§"Shows on a venue"): one that would leave a
+show record sharing a key, head number or name with a venue record it did not share before — a patch
+put back on a key whose venue fixture was unhidden since, or a hide taken away from under a key the
+show reused — is refused whole (409 `HISTORY_UNDO_BLOCKED`, *It would clash with the venue*). An
+operator's undo onto a venue is 403 `VENUE_ADMIN_ONLY`, as its stored writes are. A universe's address
+is machine-local and never undone (D4): a universe an undo takes away keeps its override row, so a redo
+finds its address again.
 
 ### Behind, the hold and Update
 
