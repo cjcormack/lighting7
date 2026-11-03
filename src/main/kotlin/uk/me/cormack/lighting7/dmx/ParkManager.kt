@@ -116,6 +116,10 @@ class ParkManager(
     private val suppressed = HashSet<ParkAddress>()
     private val lock = Any()
 
+    // Moved by every change to the layers in memory, under [lock]: [reload] reads the database outside
+    // the lock and applies what it read only if nothing moved in between.
+    private var version = 0L
+
     // Flow for notifying WebSocket clients of park state changes. A [MutableStateFlow] rather
     // than a replay-1 [kotlinx.coroutines.flow.MutableSharedFlow] so that "the park list is
     // empty" is a value a subscriber can observe, not the absence of one — that is what makes a
@@ -143,6 +147,46 @@ class ParkManager(
             (own.keys + venue.keys).forEach(::recompute)
         }
         emitState()
+    }
+
+    /**
+     * Load the parks again on a running show, after an undo moved the stored ones (undo plan §5): each
+     * channel moves straight to its new park, never through a frame without one; a channel left with
+     * no park is handed down first, as [unpark] hands one down; and the venue parks [forget] refused
+     * stay out, since an undo cannot move the venue layer. A park or unpark that lands while it reads is
+     * kept: the read is taken again.
+     */
+    suspend fun reload() {
+        while (true) {
+            val seen = synchronized(lock) { version }
+            val layers = transaction(database) { VenueParks.of(projectId) }
+            fun next(address: ParkAddress): UByte? = layers.own[address]
+                ?: layers.venue?.get(address)?.takeIf { address !in layers.releases && address !in suppressed }
+            val leaving = synchronized(lock) {
+                parkedChannels.flatMap { (universe, channels) ->
+                    channels.mapNotNull { (channel, value) ->
+                        val address = ParkAddress(universe, channel)
+                        if (next(address) != null) null else ParkedChannel(universe, channel, value, if (address in own) RigOwner.SHOW else RigOwner.VENUE)
+                    }
+                }
+            }
+            if (leaving.isNotEmpty()) unparkValueSink?.handOff(leaving)
+            val applied = synchronized(lock) {
+                if (version != seen) return@synchronized false
+                val before = parkedChannels.flatMap { (universe, channels) -> channels.keys.map { ParkAddress(universe, it) } }
+                own.clear(); own.putAll(layers.own)
+                venue = layers.venue.orEmpty()
+                onVenue = layers.onVenue
+                releases.clear(); releases.addAll(layers.releases)
+                suppressed.retainAll(venue.keys)
+                (before + own.keys + venue.keys).toSet().forEach(::recompute)
+                true
+            }
+            if (applied) {
+                emitState()
+                return
+            }
+        }
     }
 
     /**
@@ -290,6 +334,7 @@ class ParkManager(
             own.clear()
             if (onVenue) releases.addAll(toRelease)
             parkedChannels.clear()
+            version++
         }
 
         emitState()
@@ -359,6 +404,7 @@ class ParkManager(
 
     /** Recompute the effective park on [address] from the layers. Under [lock]. */
     private fun recompute(address: ParkAddress) {
+        version++
         val value = own[address] ?: venueUnder(address)
         if (value != null) {
             parkedChannels.getOrPut(address.universe) { ConcurrentHashMap() }[address.channel] = value

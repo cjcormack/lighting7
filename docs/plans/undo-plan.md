@@ -238,7 +238,9 @@ clash checks for a show on a venue first. Session 4 lists the rest.
 
 **Confirms (D6).** An undo that moves the stage while the show runs answers 409 `HISTORY_CONFIRM`
 `{moves: [...]}` until resent with `confirm: true`. *Moves* is: a Look or palette that a live cue or a
-programmer layer uses, a patch, group, universe, hide or facet change (fixtures reload), a park. *The
+programmer layer uses, a rig change that rebuilds the fixtures as its own route's write would (a patch or
+group added or taken away, a patch's address, type or key, a universe, a member order, an Address or
+Media override, a patch or group hide; a drawn-only change asks nothing — Session 5 "As built"), a park. *The
 show runs* is any live cue or loose hold. The locked rule is the client's, as the show-editing lock is
 (§4.5).
 
@@ -355,7 +357,7 @@ The MCP instructions gain one line: changes Claude makes can be listed and taken
 | `cues`, `cueAttributeAssignments`, `cueLayers`, `cueAdHocFx`, `cueTriggers` | `holds.markEdited` for a held cue; `cueListChanged`; `cueStackListChanged` | no (edited since GO) |
 | `cueStacks`, `cueStackEntries` | `cueStackListChanged`; the run state re-announced (`announceEntriesPlaced`) | no |
 | `cueSlots`, `buskPages`, `buskRig` | `cueSlotListChanged`; `busk.layoutChanged(pageIds)`; `busk.rigChanged` | no |
-| `fixturePatches`, `fixtureGroups`, `universeConfigs`, `showHides`, `showOverrides`, `showColours` | `DbFixtureLoader.loadFixtures`; `patchListChanged`; `fixturesChanged` | yes |
+| `fixturePatches`, `fixtureGroups`, `universeConfigs`, `showHides`, `showOverrides`, `showColours`, `showGroupOrders` | as each route's write: `DbFixtureLoader.loadFixtures` where it rebuilds, else the patch metadata refreshed or `fixturesChanged`; `patchListChanged` | where it rebuilds |
 | `riggings`, `stageRegions`, `stageElements`, `stageViewpoints` | their list frames; `SceneryService` recompute | no (drawn) |
 | `parkedChannels`, `showParkReleases` | `ParkManager` reloads the effective parks | yes |
 | `speedMasters` | `Show.reloadSpeedMasters`; `speedMasters.listChanged` | no |
@@ -390,8 +392,8 @@ names written, and its row marked *in review* with its branch. A session's PR is
 | 1 | programmer history (backend + programmer UI) | merged | `claude/nice-hypatia-xf5tk7` | [#330](https://github.com/cjcormack/lighting7/pull/330) | `5ac9ce0` |
 | 2 | records in memory (backend, no behaviour change) | merged | `claude/admiring-gauss-1m7xs5` | [#331](https://github.com/cjcormack/lighting7/pull/331) | `36a577c` |
 | 3 | origin and journal, read-only (backend + sheet) | merged | `claude/gracious-wozniak-i6mim5` | [#333](https://github.com/cjcormack/lighting7/pull/333) | `0b1ac3f` |
-| 4 | putting records back: the cue side (backend) | in review | `claude/pensive-curie-096obw` | | |
-| 5 | putting records back: the rest (backend) | planned | | | |
+| 4 | putting records back: the cue side (backend) | in review | `claude/pensive-curie-096obw` | [#335](https://github.com/cjcormack/lighting7/pull/335) | `e10ee8c` |
+| 5 | putting records back: the rest (backend) | in review | `claude/keen-ritchie-1y5b98` | | |
 | 6 | the controls (frontend + MCP + surfaces) | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -614,6 +616,58 @@ the next; whoever merges the last fills its own.
 - **Docs:** `fixtures-engineering.md` (an undo of a patch, hide or facet), `undo-engineering.md`.
 - **Locally:** the full `./gradlew test`: the coverage test reads every portable folder, and patch,
   venue and park restores reach the loader. Frontend untouched.
+- **As built**, where it differs from §3 or binds a later session:
+  - Every portable folder is restorable, `showGroupOrders` among them, so `RESTORABLE_FOLDERS` is every
+    portable folder and `project`, and the refusal of a kind *not available yet* is gone. The coverage test
+    is `RecordRestoreTest`'s: the portable folders, `RESTORABLE_FOLDERS`, `ProjectExporter.FOLDERS` and
+    `KindEffects.folders` are one set, and the labeler names each. Its identity test runs the rich fixture
+    for every folder but the five only a show on a venue holds, and `seedShowOnVenue` for those; a hide is
+    taken and given back, never edited.
+  - A script is one record from either source: `DirSource` reads `{uuid}.meta.json` and `{uuid}.kts`
+    together, the body as `body`, as `MapSink` holds one.
+  - A binding is the one restorable folder whose records are not links (its payload tolerates a record
+    gone). A prompt book's anchors and notes name no book, so each links to the project's book: an undo
+    that would take the book away from under a note collides with the note's entry.
+  - Deleting a record takes its embedded children (a patch's placements, a group's members) and nothing
+    else; what its route sweeps beside it is a record of its own, taken with it or refused as in use.
+    Machine-local rows naming it are left, so a redo finds a universe's address again, and an upsert never
+    writes a universe's `address` column. A patch's placements and a group's members are matched by uuid
+    and keep their ids.
+  - A rig undo reaches the fixtures as its own route's write does (`KindEffects.rigReach`, Chris
+    2026-11-02, against §3.5's and §5's first wording, which reloaded for any of them): a rebuild for what the loader
+    builds from, the patch metadata for a patch's drawn fields and a Focus override, the fixture list for
+    a recolour, nothing for a Position override or a hide of a rigging, element, region or viewpoint. The
+    confirm counts only what rebuilds (*The fixtures reload: Fixture “spot-3”*) and the parks (*Parked
+    channels change: …*) while a cue is held, beside session 4's Looks and palettes.
+  - The venue key check is `VenueRigChecks.clashesOf` read before and after the restore, for an undo
+    touching a patch, group, rigging, element, region, viewpoint or hide on a show on a venue; a clash the
+    restore made is refused as `HISTORY_UNDO_BLOCKED` *It would clash with the venue*. Session 4's route
+    already refused an operator's show undo onto a venue (403), and its test stands for this session's.
+  - A fix to session 4's cue side, which the identity test over `stageRegions` found: a stack whose list
+    an undo changes, or that an entry it puts back stands in, is numbered at the end as a reader of its
+    export would (`renumberAsArchived`), its explicit numbers and the auto numbers its export carries held
+    and written back. Entries a delete had renumbered are in no entry, since the export leaves a derivable
+    number out, so numbering from the order before the undo left them on numbers the export then carried
+    as held.
+  - The upsert first moves every unique key or name it rewrites off its old value (a patch's key, the
+    names, a speed master's index, an FX definition's id), so undoing a swap (`rename_fixtures`,
+    `edit_groups`) puts each back.
+  - An undo that puts back a script or an FX definition is held to the remote script gate (403
+    `REMOTE_SCRIPTS_DISABLED` on the public listener unless allowed). Session 6's `undo_changes` needs the
+    same check.
+  - The effects run the rig and the parks first, so a Look, palette or cue republished after resolves
+    against the reloaded rig; with the rig, every held cue the undo touched is republished
+    (`republishCueIfLive`), and every unit a patch or override it moved stands for has its Locate
+    re-asserted — what `rename_fixtures` and a stored locate's write do.
+  - A park undo reloads the parks through a new `ParkManager.reload`: each channel moves straight to its
+    new park, one left with none is handed down first as `unpark` hands one down, the venue parks refused
+    at load stay out, and a park made while it reads is kept; then `Show.dropRefusedParks`.
+    `loadFromDatabase` is unchanged, the start's alone. An FX definition undone on the live project is
+    unregistered under the id it had and registered again, and left unregistered if it no longer
+    compiles.
+  - A speed master undo keeps the live tempo (§5, D4): only the stored row and the bank's other fields
+    come back.
+  - `FU-HISTORY-MACHINE-LOCAL` is recorded.
 
 ### Session 6 — the controls (frontend + MCP + surfaces)
 

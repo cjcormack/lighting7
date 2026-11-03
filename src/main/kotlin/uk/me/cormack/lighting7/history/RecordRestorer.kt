@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.history
 
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.exposed.v1.core.eq
@@ -19,13 +20,14 @@ import uk.me.cormack.lighting7.sync.ImportError
 import uk.me.cormack.lighting7.sync.RecordFolders
 import uk.me.cormack.lighting7.sync.jsonObjectOrNull
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.venue.VenueRigChecks
 import uk.me.cormack.lighting7.routes.cuesReferencingLook
 import uk.me.cormack.lighting7.routes.cuesReferencingPalette
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.MapSink
 import uk.me.cormack.lighting7.sync.ProjectExporter
 import uk.me.cormack.lighting7.sync.ProjectImporter
-import uk.me.cormack.lighting7.sync.RESTORABLE_FOLDERS
 import uk.me.cormack.lighting7.sync.RecordImage
 import uk.me.cormack.lighting7.sync.RecordKey
 import java.util.UUID
@@ -49,24 +51,34 @@ internal class RecordRestorer(private val state: State) {
         data class Conflict(val entry: HistoryEntry, val later: List<HistoryEntry>) : Outcome
         data class Confirm(val moves: List<String>) : Outcome
         data class Blocked(val record: String, val reason: String) : Outcome
+
+        /** It puts back a script or an FX definition, which compiles code, for a caller remote scripts are off for. */
+        data object ScriptsRefused : Outcome
         data class Done(val entries: List<HistoryEntry>) : Outcome
     }
 
-    fun undo(projectId: Int, entryId: String?, caller: HistorySource, window: String?, backToHere: Boolean, confirm: Boolean): Outcome =
-        apply(projectId, caller, window, WriteOrigin.Kind.UNDO, confirm) { state.history.planUndo(projectId, entryId, caller.key, backToHere) }
+    /** [scriptsAllowed] is whether the caller may author a script (`ApplicationCall.scriptsAllowed`). */
+    suspend fun undo(
+        projectId: Int, entryId: String?, caller: HistorySource, window: String?, backToHere: Boolean, confirm: Boolean,
+        scriptsAllowed: Boolean = true,
+    ): Outcome =
+        apply(projectId, caller, window, WriteOrigin.Kind.UNDO, confirm, scriptsAllowed) { state.history.planUndo(projectId, entryId, caller.key, backToHere) }
 
-    fun redo(projectId: Int, entryId: String?, caller: HistorySource, window: String?, confirm: Boolean): Outcome =
-        apply(projectId, caller, window, WriteOrigin.Kind.REDO, confirm) { state.history.planRedo(projectId, entryId, caller.key) }
+    suspend fun redo(
+        projectId: Int, entryId: String?, caller: HistorySource, window: String?, confirm: Boolean, scriptsAllowed: Boolean = true,
+    ): Outcome =
+        apply(projectId, caller, window, WriteOrigin.Kind.REDO, confirm, scriptsAllowed) { state.history.planRedo(projectId, entryId, caller.key) }
 
     /** Thrown inside the transaction to roll it back with a [Outcome.Blocked]. */
     private class BlockedException(val blocked: Outcome.Blocked) : RuntimeException(blocked.reason)
 
-    private fun apply(
+    private suspend fun apply(
         projectId: Int,
         caller: HistorySource,
         window: String?,
         kind: WriteOrigin.Kind,
         confirm: Boolean,
+        scriptsAllowed: Boolean,
         plan: () -> HistoryService.Plan,
     ): Outcome {
         val current = state.projectManager.currentProjectOrNull?.id?.value == projectId
@@ -85,14 +97,10 @@ internal class RecordRestorer(private val state: State) {
                         is HistoryService.Plan.InUse -> return@transaction Outcome.Blocked(p.record, "${p.by} uses it")
                         is HistoryService.Plan.Ready -> p
                     }
-                    ready.targets.keys.firstOrNull { it.tableName !in RESTORABLE_FOLDERS }?.let { key ->
-                        return@transaction Outcome.Blocked(
-                            RecordLabeler.name(key, ready.targets[key] ?: state.history.recordOf(projectId, key)),
-                            "Undoing this kind of change is not available yet",
-                        )
-                    }
+                    // Putting a script or an FX definition back authors code, which the remote gate holds as its own routes do.
+                    if (!scriptsAllowed && ready.targets.keys.any { it.tableName in SCRIPT_FOLDERS }) return@transaction Outcome.ScriptsRefused
                     if (current && !confirm) {
-                        val moves = movesOf(ready.targets)
+                        val moves = movesOf(projectId, ready.targets)
                         if (moves.isNotEmpty()) return@transaction Outcome.Confirm(moves)
                     }
                     origin.entryIds = ready.entries.map { it.id }
@@ -105,8 +113,10 @@ internal class RecordRestorer(private val state: State) {
                         ready.targets.filter { it.key.tableName == RecordFolders.CUE_STACK_ENTRIES && it.value == null }.keys
                             .mapNotNull { key -> DaoCueStackEntry.find { DaoCueStackEntries.uuid eq key.uuid }.firstOrNull { it.stack.project.id == project.id } },
                     )
+                    val clashesBefore = venueClashes(project, ready.targets)
                     ProjectImporter(state).restore(project, ready.targets)
                     TransactionManager.current().flushCache()
+                    newClash(project, ready.targets, clashesBefore)?.let { throw BlockedException(it) }
                     verify(projectId, ready.targets)?.let { throw BlockedException(it) }
                     // Nothing below can refuse the undo, so a stack is stopped only once it surely goes.
                     stopLeavingStacks(project, ready.targets, current)
@@ -129,7 +139,7 @@ internal class RecordRestorer(private val state: State) {
             // Its commit marked them unless it wrote nothing: records already where the entries put them.
             state.history.mark(projectId, outcome.entries.map { it.id }, undone = kind == WriteOrigin.Kind.UNDO)
             // What the undo sets off is part of it: no programmer step, no entry of its own.
-            WriteOrigin.with(WriteOrigin(caller, window, kind = kind)) {
+            withContext(WriteOrigin(caller, window, kind = kind)) {
                 KindEffects.afterRestore(state, projectId, current, done.before, done.targets, done.removal, done.stageChanged)
             }
         }
@@ -169,15 +179,52 @@ internal class RecordRestorer(private val state: State) {
     }
 
     /**
-     * What putting [targets] back would move on stage while the show runs (D6): a Look or palette that a
-     * held cue's stored layer or a programmer layer uses, which republishes. A layer the undo itself puts
-     * back is not on stage: its cue is marked edited since GO instead. Nothing while no cue is held.
+     * The clashes with the venue in the rig of a show on one (`VenueRigChecks.clashesOf`), read when
+     * [targets] touch a record whose key or name the venue's share, or a hide; null when they cannot.
      */
-    private fun movesOf(targets: Map<RecordKey, RecordImage?>): List<String> {
+    private fun venueClashes(project: DaoProject, targets: Map<RecordKey, RecordImage?>): Set<VenueRigChecks.Clash>? {
+        if (targets.keys.none { it.tableName in IDENTITY_FOLDERS }) return null
+        val rig = RigScope.of(project)
+        val venue = rig.venue ?: return null
+        return VenueRigChecks.clashesOf(rig, venue.snapshotId, "v${venue.version}").toSet()
+    }
+
+    /**
+     * A key, head number or name the show's own records now share with its venue's that they did not
+     * before the restore — one a venue record took while the show's was gone, or a hide taken away from
+     * under one the show reused (keys and names are one namespace). Null when there is none.
+     */
+    private fun newClash(project: DaoProject, targets: Map<RecordKey, RecordImage?>, before: Set<VenueRigChecks.Clash>?): Outcome.Blocked? {
+        if (before == null) return null
+        val after = venueClashes(project, targets).orEmpty()
+        val clash = (after - before).firstOrNull() ?: return null
+        val record = targets.keys.firstOrNull { it.uuid.toString() == clash.mine.uuid }?.let { RecordLabeler.name(it, targets[it]) }
+            ?: "“${clash.mine.name}”"
+        return Outcome.Blocked(record, "It would clash with the venue: ${clash.detail}")
+    }
+
+    /**
+     * What putting [targets] back would move on stage while the show runs (D6): a change to the rig,
+     * which reloads the fixtures, or to the parks, which moves output; a Look or palette that a held
+     * cue's stored layer or a programmer layer uses, which republishes. A layer the undo itself puts back
+     * is not on stage: its cue is marked edited since GO instead. Nothing while no cue is held.
+     */
+    private fun movesOf(projectId: Int, targets: Map<RecordKey, RecordImage?>): List<String> {
         val live = state.show.cueStackManager.holds.heldCueIds()
         if (live.isEmpty()) return emptyList()
-        val sources = targets.keys.filter { it.tableName == RecordFolders.LOOKS || it.tableName == RecordFolders.PALETTES }
         val moves = ArrayList<String>()
+        fun named(folders: Set<String>): String? = targets.keys.filter { it.tableName in folders }
+            .map { RecordLabeler.name(it, targets[it] ?: state.history.recordOf(projectId, it)) }
+            .takeIf { it.isNotEmpty() }
+            ?.let { names -> if (names.size > 3) names.take(3).joinToString(", ") + " and ${names.size - 3} more" else names.joinToString(", ") }
+        val rebuilding = targets.keys.filter { it.tableName in RecordFolders.RIG }
+            .filter { KindEffects.rigReach(it, state.history.recordOf(projectId, it), targets[it]) == KindEffects.RigReach.REBUILD }
+        if (rebuilding.isNotEmpty()) {
+            val names = rebuilding.map { RecordLabeler.name(it, targets[it] ?: state.history.recordOf(projectId, it)) }
+            moves += "The fixtures reload: " + if (names.size > 3) names.take(3).joinToString(", ") + " and ${names.size - 3} more" else names.joinToString(", ")
+        }
+        named(RecordFolders.PARKS)?.let { moves += "Parked channels change: $it" }
+        val sources = targets.keys.filter { it.tableName == RecordFolders.LOOKS || it.tableName == RecordFolders.PALETTES }
         for (key in sources) {
             val name = RecordLabeler.name(key, targets[key] ?: state.history.recordOf(state.projectManager.currentProject.id.value, key))
             val cues = if (key.tableName == RecordFolders.LOOKS) cuesReferencingLook(state, key.uuid, live) else cuesReferencingPalette(state, key.uuid, live)
@@ -244,8 +291,21 @@ internal class RecordRestorer(private val state: State) {
         private val TABLE_HINTS = mapOf(
             "looks" to "looks.", "palettes" to "palettes.", "cueSlots" to "cue_slots.", "buskPages" to "busk_pages.",
             "cueStackEntries" to "cue_stack_entries.", "promptBookAnchors" to "prompt_book_anchors.", "project" to "projects.",
-            "cueStacks" to "cue_stacks.",
+            "cueStacks" to "cue_stacks.", "fixturePatches" to "fixture_patches.", "fixtureGroups" to "fixture_groups.",
+            "universeConfigs" to "universe_configs.", "riggings" to "riggings.", "stageRegions" to "stage_regions.",
+            "stageElements" to "stage_elements.", "stageViewpoints" to "stage_viewpoints.", "scripts" to "scripts.",
+            "fxDefinitions" to "fx_definitions.", "speedMasters" to "speed_masters.", "parkedChannels" to "parked_channels.",
+            "showParkReleases" to "show_park_releases.", "controlSurfaceBindings" to "control_surface_bindings.",
+            "promptBooks" to "prompt_books.", "promptBookAnnotations" to "prompt_book_annotations.", "showHides" to "show_hides.",
+            "showOverrides" to "show_overrides.", "showColours" to "show_colours.", "showGroupOrders" to "show_group_orders.",
         )
+
+        private val SCRIPT_FOLDERS = setOf(RecordFolders.SCRIPTS, RecordFolders.FX_DEFINITIONS)
+
+        /** The folders whose records hold a key or name the venue's share, and the hides that let a show reuse one. */
+        private val IDENTITY_FOLDERS = with(RecordFolders) {
+            setOf(FIXTURE_PATCHES, FIXTURE_GROUPS, RIGGINGS, STAGE_ELEMENTS, STAGE_REGIONS, STAGE_VIEWPOINTS, SHOW_HIDES)
+        }
     }
 }
 

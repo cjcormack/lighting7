@@ -376,6 +376,38 @@ internal fun heldAutoNumbers(stack: DaoCueStack): Map<Int, String> {
 }
 
 /**
+ * Relabel [stack]'s auto numbers as a reader of its archive would: every explicit number and each of
+ * [held] (auto numbers by entry id that the archive carries, [heldAutoNumbers]) fixed, every other
+ * auto entry derived from scratch. An undo's restore ends with this, so the stack exports as the
+ * history says it did — an auto number the export leaves out is one a reader derives, wherever the
+ * entries around it have since moved.
+ */
+internal fun renumberAsArchived(stack: DaoCueStack, held: Map<Int, String>) {
+    flushPendingEntryWrites()
+    val entries = cueEntriesInOrder(stack)
+    if (entries.isEmpty()) return
+    val labels = computeAutoCueNumbers(
+        entries.map { entry ->
+            val written = if (entry.hasExplicitNumber()) entry.cueNumber else held[entry.id.value]
+            AutoNumberInput(written, auto = written == null)
+        },
+    )
+    // A held entry takes its held number back too, whatever an earlier pass of the restore made of it.
+    val wanted = entries.mapIndexed { index, entry -> held[entry.id.value] ?: labels[index] }
+    val targets = entries.withIndex().filter { (_, entry) -> !entry.hasExplicitNumber() }
+    if (targets.none { (index, entry) -> entry.cueNumber != wanted[index] }) return
+    for ((index, entry) in targets) {
+        if (entry.cueNumber != wanted[index]) entry.cueNumber = null
+    }
+    flushPendingEntryWrites()
+    for ((index, entry) in targets) {
+        val label = wanted[index]
+        entry.cueNumber = label
+        entry.cueNumberAuto = label != null
+    }
+}
+
+/**
  * Release [number] from any *auto*-numbered cue entry in [stack] (other than [exceptEntryId]) so an
  * operator typing an explicit number can always claim it.
  *

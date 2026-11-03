@@ -261,17 +261,17 @@ class ShowUndoTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a change of a kind not yet restorable is refused, and the key takes the newer of a step and an entry`() = testApplication {
+    fun `a patch edit undoes, and the key takes the newer of a step and an entry`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
         val patch = transaction(state.database) {
             uk.me.cormack.lighting7.models.DaoFixturePatch.all().single().id.value
         }
+        val before = snapshot()
         client.ok("PUT", "/patches/$patch", """{"stageX":1.5}""")
-        val refused = client.undo()
-        assertEquals(HttpStatusCode.Conflict, refused.status, refused.bodyAsText())
-        assertEquals("HISTORY_UNDO_BLOCKED", refused.json()["code"]!!.jsonPrimitive.content)
+        assertEquals(HttpStatusCode.OK, client.undo().status)
+        assertEquals(before, snapshot(), "the patch is back where it was")
 
         client.ok("POST", "/looks", """{"name":"Warm wash","rows":[]}""")
         uk.me.cormack.lighting7.history.WriteOrigin.with(WriteOrigin(HistorySource.DESK)) {

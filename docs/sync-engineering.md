@@ -336,7 +336,7 @@ the cases session 4's `formatVersion` 38 closes.
 `sync/LegacyNames.kt` is the one place an old name lives (terminology plan P3, P5): the registry, the
 REST layer and the client know only today's. It maps by **field**, never by version, because an old
 name never returns with a new meaning in the same field — so it applies to every archive, and to a
-tree that mixes two. `ProjectImporter.readDir` reads each folder under its old names too and passes
+tree that mixes two. The importer's `DirSource` (`sync/RecordSource.kt`) reads each folder under its old names too and passes
 every record through `LegacyNames.record` before decoding it, a record in today's folder winning over
 its namesake in an old one; then every FX goes through `LegacyNames.rewriteFx`, then `consolidateFx`. `RecordHasher` keys a
 record in an old folder by today's name, so a merge across the rename pairs a record with itself.
@@ -1679,20 +1679,22 @@ modes (undo plan §3.5):
   and old words read through `LegacyNames`), every record a new row.
 - **Upsert**, an undo or redo (`ProjectImporter.restore`, `docs/undo-engineering.md` §"Restore"): an
   `ImageSource` over the record images the journal holds, already in today's words. A record found by
-  uuid within the project is updated in place — a Look's and a palette's rows and FX matched by uuid and
-  kept, its other embedded children deleted and inserted again from the image — and one not found is
+  uuid within the project is updated in place — a Look's and a palette's rows and FX, a patch's
+  placements and a group's members matched by uuid and kept, its other embedded children deleted and
+  inserted again from the image — and one not found is
   inserted with the row id its image kept (`DaoX.new(rowId)`; the tables are
   `AUTOINCREMENT`, so an id is never reused). The uuid → row maps start from the project's rows, the
   pinned venue's under them for a show on one, so a restored record links to whatever it names as it now
-  stands. A stack's entries are renumbered only in the stacks the upsert touched, from their order
-  before it, and the explicit numbers it writes are freed first. Each folder is read only when the undo
-  restores one of its records.
+  stands. A stack's entries are renumbered only in the stacks the upsert touched, and the explicit
+  numbers it writes are freed first. Each folder is read only when the undo restores one of its records.
 
-Only the cue side runs in both modes so far — `looks`, `palettes`, `cueStacks`, `cueStackEntries`,
-`cues` and their four child folders, `cueSlots`, `buskPages`, `buskRig`, `promptBookAnchors` and the
-project's own fields (`RESTORABLE_FOLDERS`); the rest read a `DirSource` alone. A new portable folder's
-import function should take the `Run` and place its rows through `Run.row`, which is what makes it
-restorable.
+Every portable folder runs in both modes (`RESTORABLE_FOLDERS`, undo plan session 5), and so does the
+project's own fields. A script's record is its meta with its body as `body` from either source:
+`DirSource` reads `{uuid}.meta.json` and `{uuid}.kts` together, as `MapSink` writes one. A new portable
+folder's import function must take the `Run`, place its rows through `Run.row` (and an embedded child
+through `Run.children`), and add its delete to `ProjectImporter.deleteRecord`, its folder to
+`RESTORE_ORDER` and its row to `KindEffects`: `RecordRestoreTest` fails until it has, and its identity
+test then covers it.
 
 ## Project cloning
 

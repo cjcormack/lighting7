@@ -12,9 +12,11 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.models.sceneImageHashesOf
 import uk.me.cormack.lighting7.sync.MapSink
 import uk.me.cormack.lighting7.sync.ProjectExporter
 import uk.me.cormack.lighting7.sync.RESTORABLE_FOLDERS
+import uk.me.cormack.lighting7.sync.RecordFolders
 import uk.me.cormack.lighting7.sync.RecordHasher
 import uk.me.cormack.lighting7.sync.RecordImage
 import uk.me.cormack.lighting7.sync.RecordKey
@@ -402,18 +404,17 @@ class HistoryService(
     /**
      * Whether [later] collides with an undo putting [targets] back: it touches one of their records, a
      * record it wrote links to one the undo takes away, or it took away a record one the undo puts back
-     * links to. A record links to another by carrying its uuid; only the [LINKING_FOLDERS] do, a binding's
-     * payload being tolerant of a record gone (sync v11).
+     * links to ([links]).
      */
     private fun collides(later: HistoryEntry, targets: Map<RecordKey, RecordImage?>): Boolean {
         if (later.changes.keys.any(targets::containsKey)) return true
-        val leaving = targets.filterValues { it == null }.keys.map { it.uuid.toString() }
-        val back = targets.filterKeys { it.tableName in LINKING_FOLDERS }.values.filterNotNull()
+        val leaving = targets.filterValues { it == null }.keys.map(::Linked)
+        val back = targets.mapNotNull { (key, image) -> image?.let { key to it } }
         return later.changes.values.any { change ->
             val after = change.after
             when {
-                after != null -> change.key.tableName in LINKING_FOLDERS && leaving.any(after.json::contains)
-                else -> back.any { it.json.contains(change.key.uuid.toString()) }
+                after != null -> leaving.any { links(change.key, after.json, it) }
+                else -> Linked(change.key).let { gone -> back.any { (key, image) -> links(key, image.json, gone) } }
             }
         }
     }
@@ -423,17 +424,17 @@ class HistoryService(
      * written outside the history, or before it began — or null when there is none.
      */
     private fun inUse(records: Map<RecordKey, RecordImage>, targets: Map<RecordKey, RecordImage?>): Plan.InUse? {
-        val leaving = targets.filterValues { it == null }.keys
+        val leaving = targets.filterValues { it == null }.keys.map(::Linked)
         if (leaving.isEmpty()) return null
         for ((key, image) in records) {
-            if (key in leaving || key.tableName !in LINKING_FOLDERS) continue
+            if (targets.containsKey(key) && targets[key] == null) continue
             val json = (if (key in targets) targets[key] else image)?.json ?: continue
-            val named = leaving.firstOrNull { json.contains(it.uuid.toString()) } ?: continue
+            val named = leaving.firstOrNull { links(key, json, it) }?.key ?: continue
             return Plan.InUse(RecordLabeler.name(named, records[named]), RecordLabeler.name(key, targets[key] ?: image))
         }
         for ((key, image) in targets) {
-            if (key in records || image == null || key.tableName !in LINKING_FOLDERS) continue
-            val named = leaving.firstOrNull { image.json.contains(it.uuid.toString()) } ?: continue
+            if (key in records || image == null) continue
+            val named = leaving.firstOrNull { links(key, image.json, it) }?.key ?: continue
             return Plan.InUse(RecordLabeler.name(named, records[named]), RecordLabeler.name(key, image))
         }
         return null
@@ -497,6 +498,18 @@ class HistoryService(
     /** One record's change named for the History sheet, its owner read from [projectId]'s cache. */
     fun describe(projectId: Int, change: Change): String = RecordLabeler.label(listOf(change)) { recordOf(projectId, it) }
 
+    /**
+     * Every scene image a stage element's image in [projectId]'s journal paints with, before or after
+     * a change: an undo may put one back, so the store keeps them ([uk.me.cormack.lighting7.state.SceneImageStore.prune]).
+     */
+    fun sceneImageHashes(projectId: Int): Set<String> = synchronized(lock) {
+        val entries = projects[projectId]?.entries ?: return emptySet()
+        entries.flatMap { it.changes.values }
+            .filter { it.key.tableName == RecordFolders.STAGE_ELEMENTS }
+            .flatMap { listOfNotNull(it.before, it.after) }
+            .flatMapTo(HashSet()) { image -> (image.jsonObjectOrNull()?.get("params") as? JsonObject)?.let(::sceneImageHashesOf).orEmpty() }
+    }
+
     /** The record cache's image of [key] in [projectId], for a label or a test. */
     fun recordOf(projectId: Int, key: RecordKey): RecordImage? = synchronized(lock) { projects[projectId]?.records?.get(key) }
 
@@ -535,8 +548,24 @@ class HistoryService(
 
         const val BACKGROUND_REASON = "Changed outside the history"
 
-        /** The folders whose records link to others by uuid, as foreign keys do: the restorable ones. */
-        private val LINKING_FOLDERS: Set<String> get() = RESTORABLE_FOLDERS
+        /**
+         * The folders whose records link to others by uuid, as foreign keys do: the restorable ones but a
+         * binding, whose payload is tolerant of a record gone (sync v11).
+         */
+        private val LINKING_FOLDERS: Set<String> by lazy { RESTORABLE_FOLDERS - RecordFolders.CONTROL_SURFACE_BINDINGS }
+
+        /** A record another may link to, its uuid as the text a link carries. */
+        private class Linked(val key: RecordKey) {
+            val uuid = key.uuid.toString()
+        }
+
+        /**
+         * Whether record [from], as [json], links to [to]: it carries [to]'s uuid, or it is an anchor or
+         * a note of the project's one prompt book, which names no book.
+         */
+        private fun links(from: RecordKey, json: String, to: Linked): Boolean =
+            from.tableName in LINKING_FOLDERS &&
+                (json.contains(to.uuid) || (to.key.tableName == RecordFolders.PROMPT_BOOKS && from.tableName in RecordFolders.PROMPT_BOOK_CHILDREN))
     }
 }
 
