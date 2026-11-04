@@ -342,6 +342,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectLooks(state)
         routeApiRestLookAbsorbFx(state)
         routeApiRestProjectPalettes(state)
+        routeApiRestPaletteHarden(state)
         routeApiRestPaletteRecord(state)
         routeApiRestProjectSpeedMasters(state)
         routeApiRestProjectCues(state)

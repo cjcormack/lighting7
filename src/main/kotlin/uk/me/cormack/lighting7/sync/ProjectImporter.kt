@@ -206,6 +206,7 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.dao.flushCache
+import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 
 // v12 added `buskRig/` — one document per rig row, tiles nested, naming groups and patches by uuid
 // (busk-further plan §3.7). MIN stays at 5: a missing folder reads as an empty rig.
@@ -366,6 +367,11 @@ import org.jetbrains.exposed.v1.dao.flushCache
 // would import a project whose cues had lost their composition entirely, which is worse than
 // refusing it. Bumping both is therefore deliberate, not an oversight.
 //
+// v47 let a cue row's or a Look row's value be a palette reference, `pal:{uuid}` (palette-references
+// plan D7). SUPPORTED moved because a v46 reader would refuse such a Look row and read such a cue row
+// as nothing; MIN stays at 5, since an older archive's rows are all literals. A reference to a
+// palette the archive does not hold is refused by name (`PALETTE_REFERENCE_INVALID`).
+//
 // **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
 // read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
 // alone leaves the gate wide open.
@@ -373,7 +379,7 @@ import org.jetbrains.exposed.v1.dao.flushCache
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 46
+internal const val SUPPORTED_FORMAT_VERSION = 47
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1099,7 +1105,34 @@ class ProjectImporter(private val state: State) {
         // before the commands existed.
         val strippedCommands = stripCommandRows(project)
         if (strippedCommands > 0) logger.warn("Import: stripped {} row(s) holding a fixture command", strippedCommands)
+        checkPaletteReferenceRows(project)
         return numberClashes
+    }
+
+    /**
+     * v47: every cue row and Look row whose value is a palette reference names a palette the project
+     * now holds, else the import is refused naming each row (palette-references plan D7) — a desk
+     * never stores a reference that cannot resolve.
+     */
+    private fun checkPaletteReferenceRows(project: DaoProject) {
+        TransactionManager.current().flushCache()
+        val held = DaoPalette.find { DaoPalettes.project eq project.id }.mapTo(HashSet()) { it.uuid }
+        val problems = ArrayList<String>()
+        for (cue in project.cues) {
+            for (row in cue.attributeAssignments) {
+                val uuid = row.paletteUuid ?: continue
+                if (uuid !in held) problems += "cue '${cue.name}' row ${row.uuid} (${row.targetKey} ${row.attribute}) names palette $uuid, which the archive does not hold"
+            }
+        }
+        for (look in DaoLook.find { DaoLooks.project eq project.id }) {
+            for (row in look.rows) {
+                val uuid = row.paletteUuid ?: continue
+                if (uuid !in held) problems += "Look '${look.name}' row ${row.uuid} (${row.targetKey} ${row.attribute}) names palette $uuid, which the archive does not hold"
+            }
+        }
+        if (problems.isNotEmpty()) {
+            throw ImportError(HttpStatusCode.BadRequest, problems.joinToString("; "), PaletteReferenceInvalidException.CODE)
+        }
     }
 
     /** v36: a stored colour, as the archive has it; one too long for the column is dropped, and said. */

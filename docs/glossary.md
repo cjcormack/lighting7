@@ -194,6 +194,10 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
   for every head. Colour Fade, Colour Wave, Colour Strobe and Colour Flicker keep these references.
   Colour Cycle takes literal colours only (D14), and every write boundary refuses a palette in its
   list; Palette Steps is the FX that lands each palette on each head for itself.
+- **Palette references as values (palette-references plan D1).** A cue's row, a Look row and a
+  programmer entry may hold `pal:{uuid}` naming a value palette of the same project. Unlike an FX
+  parameter's, it resolves **per head**, as a press resolves, and follows the palette's edits; *Copy
+  the values* (`harden`) turns one back into the literals it resolves to.
 - **Layer is always qualified (D9):** a cue layer or a programmer layer, never one of the five tiers.
 - **Element keys stay (D29).** `.head-N`, `.pixel-N`, `.cell-N` and the rest name the physical part;
   *Element* is what the screen calls it.

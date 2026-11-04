@@ -100,11 +100,21 @@ internal fun republishForLookDelete(state: State, lookUuid: UUID, layeringCueIds
  * template has to move every cue layering it *and* the programmer's own stack, by exactly the same
  * four-step order, or the flicker step 2 exists to prevent comes back on one of the two paths.
  *
- * Only two things differ — which cache to drop, and which FK column to search — so those are the
- * two parameters.
+ * A palette is also a **value** (palette-references plan D5), so its edit moves three more things
+ * in the same pass: the programmer's references to it, re-resolved in place; the live cues whose
+ * own rows reference it; and every Look whose rows do, invalidated and recooked wherever it is
+ * layered. `cuesRecomposed` names every cue any of these reaches.
  */
-internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): LookRepublishOutcome =
-    republishForSourceEdit(
+internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): LookRepublishOutcome {
+    val referencingLooks = transaction(state.database) {
+        val project = state.projectManager.currentProject
+        lookRowsReferencing(project.id, paletteUuid).map { it.look.uuid }.toSet()
+    }
+    fun referencing(restrictTo: Set<Int>?): Set<Int> =
+        cuesReferencingPalette(state, paletteUuid, restrictTo) +
+            cuesWithRowsReferencing(state, paletteUuid, restrictTo) +
+            referencingLooks.flatMap { cuesReferencingLook(state, it, restrictTo) }
+    return republishForSourceEdit(
         state,
         paletteUuid,
         kind = "palette",
@@ -114,10 +124,31 @@ internal fun republishForPaletteEdit(state: State, paletteUuid: UUID): LookRepub
         // any gap between the two lets the first re-resolve of a `pal:` parameter happen on the
         // 50 Hz tick loop and open a transaction there — the one thing `prewarmPaletteColours`
         // exists to keep off that thread.
-        invalidate = { state.show.paletteRegistry.refresh(paletteUuid) },
-        referencing = { activeCueIds -> cuesReferencingPalette(state, paletteUuid, activeCueIds) },
-        allReferencing = { cuesReferencingPalette(state, paletteUuid, restrictTo = null) },
+        invalidate = {
+            state.show.paletteRegistry.refresh(paletteUuid)
+            referencingLooks.forEach(state.show.lookRegistry::invalidate)
+        },
+        alsoRecook = referencingLooks,
+        programmerReferences = { reresolveProgrammerReferences(state, paletteUuid) },
+        referencing = { activeCueIds -> referencing(activeCueIds) },
+        allReferencing = { referencing(null) },
     )
+}
+
+/**
+ * Re-resolve the programmer's references to [paletteUuid] on their heads (D5), keeping each owner's
+ * slot and its place; answers the keys whose value moved.
+ */
+internal fun reresolveProgrammerReferences(state: State, paletteUuid: UUID): Set<CueAssignmentResolver.Key> {
+    val fixtures = state.show.fixtures
+    val references = state.show.paletteReferences
+    return state.show.programmerStore.reresolveReferences(paletteUuid) { fixtureKey, attribute, current ->
+        val head = runCatching { fixtures.untypedGroupableFixture(fixtureKey) }.getOrNull()
+            ?: return@reresolveReferences current
+        val resolved = references.resolve(head, attribute, paletteUuid)
+        current.copy(resolved = resolved.value ?: current.resolved, unresolved = resolved.unresolved)
+    }
+}
 
 private fun republishForSourceEdit(
     state: State,
@@ -128,6 +159,10 @@ private fun republishForSourceEdit(
     invalidate: () -> Unit,
     referencing: (Set<Int>) -> Set<Int>,
     allReferencing: () -> Set<Int>,
+    /** Other sources whose programmer layers recook with this one: the Looks referencing a palette. */
+    alsoRecook: Set<UUID> = emptySet(),
+    /** Re-resolve the programmer's references to the record, answering the keys that moved. */
+    programmerReferences: () -> Set<CueAssignmentResolver.Key> = { emptySet() },
 ): LookRepublishOutcome {
     val engine = state.show.fxEngine
 
@@ -138,7 +173,9 @@ private fun republishForSourceEdit(
     //    step 3, and that order is load-bearing: `publishCueLayerToControllers` composes the
     //    programmer *over* the cue layer, so stale layer slots would transmit the old value and be
     //    corrected a frame later — a visible flicker on the very fixtures being edited.
-    val layerKeys = state.show.programmerLayerStack.recookIfReferences(sourceUuid)
+    val layerKeys = (listOf(sourceUuid) + alsoRecook).flatMapTo(HashSet()) {
+        state.show.programmerLayerStack.recookIfReferences(it)
+    } + programmerReferences()
 
     // 3. Rebuild the live cues that depend on this record, then one republish per scan pass.
     //    The scan loops until the active set is stable: a cue fired concurrently with this edit
@@ -265,6 +302,16 @@ internal fun cuesReferencingPalette(
 ): Set<Int> = cuesLayering(state, restrictTo) {
     DaoPalette.find { DaoPalettes.uuid eq paletteUuid }.firstOrNull()
         ?.let { DaoCueLayers.palette eq it.id }
+}
+
+/** Which cues hold an own row referencing [paletteUuid] (D4's indexed column), [restrictTo] as above. */
+internal fun cuesWithRowsReferencing(state: State, paletteUuid: UUID, restrictTo: Set<Int>?): Set<Int> {
+    if (restrictTo != null && restrictTo.isEmpty()) return emptySet()
+    return transaction(state.database) {
+        cueRowsReferencing(state.projectManager.currentProject.id, paletteUuid)
+            .map { it.cue.id.value }
+            .filterTo(HashSet()) { restrictTo == null || it in restrictTo }
+    }
 }
 
 /**

@@ -166,7 +166,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 46, minReader = 43), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 47, minReader = 47), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -368,7 +368,7 @@ class ProjectRoundTripTest {
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
             Files.readString(exportDirA.resolve("formatVersion.json")),
         )
-        assertEquals(43, format.minReader, "a v42 reader would run the chase on the cycle")
+        assertTrue(format.minReader >= 43, "a v42 reader would run the chase on the cycle")
         assertTrue(SUPPORTED_FORMAT_VERSION >= 43)
 
         wipeDatabase()
@@ -595,8 +595,8 @@ class ProjectRoundTripTest {
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
             Files.readString(exportDirA.resolve("formatVersion.json")),
         )
-        assertEquals(46, format.formatVersion)
-        assertEquals(46, SUPPORTED_FORMAT_VERSION)
+        assertTrue(format.formatVersion >= 46)
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 46)
 
         val expected = uk.me.cormack.lighting7.models.CueMoveInDarkSettings(
             uk.me.cormack.lighting7.models.CueMoveInDarkMode.LATE, java.time.Duration.ofMillis(1500), java.time.Duration.ofMillis(800), listOf("hex-2"),
@@ -616,6 +616,58 @@ class ProjectRoundTripTest {
             }.single()
             assertEquals(expected, copied.moveInDarkSettings, "a clone keeps what is stored")
         }
+    }
+
+    /**
+     * A cue row and a Look row holding a palette reference (palette-references plan D7) import back
+     * as references, their indexed column filled from the value, and a clone points them at its own
+     * copy of the palette.
+     */
+    @Test
+    fun `palette references in cue and Look rows survive import and follow a clone`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+
+        fun referencesIn(project: Int): Pair<java.util.UUID, List<java.util.UUID?>> = transaction(state.database) {
+            val palette = uk.me.cormack.lighting7.models.DaoPalette.find {
+                (uk.me.cormack.lighting7.models.DaoPalettes.project eq project) and (uk.me.cormack.lighting7.models.DaoPalettes.name eq "amber-key")
+            }.single()
+            val rows = uk.me.cormack.lighting7.models.DaoCue.find { uk.me.cormack.lighting7.models.DaoCues.project eq project }
+                .flatMap { it.attributeAssignments }.filter { it.value.startsWith("pal:") }
+                .map { assertEquals("pal:${palette.uuid}", it.value); it.paletteUuid } +
+                uk.me.cormack.lighting7.models.DaoLook.find { uk.me.cormack.lighting7.models.DaoLooks.project eq project }
+                    .flatMap { it.rows }.filter { it.value.startsWith("pal:") }
+                    .map { assertEquals("pal:${palette.uuid}", it.value); it.paletteUuid }
+            palette.uuid to rows
+        }
+        val (original, rows) = referencesIn(imported.projectId)
+        assertEquals(listOf(original, original), rows, "a cue row and a Look row, each indexed by the palette it names")
+
+        val clone = uk.me.cormack.lighting7.sync.ProjectCloner(state).clone(imported.projectId, "Clone", null)
+        val (copied, cloneRows) = referencesIn(clone.projectId)
+        assertTrue(copied != original)
+        assertEquals(listOf(copied, copied), cloneRows, "the clone's rows name its own palette")
+    }
+
+    /** An archive whose row references a palette it does not hold is refused by name (D7). */
+    @Test
+    fun `a reference to a palette the archive lacks is refused`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val stranger = java.util.UUID.randomUUID()
+        Files.list(exportDirA.resolve("cueAttributeAssignments")).use { stream ->
+            stream.toList().forEach { file ->
+                val text = Files.readString(file)
+                if ("pal:" in text) Files.writeString(file, text.replace(Regex("pal:[0-9a-f-]{36}"), "pal:$stranger"))
+            }
+        }
+        wipeDatabase()
+        val error = kotlin.runCatching { ProjectImporter(state).import(exportDirA, nameOverride = null) }.exceptionOrNull()
+        assertTrue(error is ImportError, "refused, not imported: $error")
+        assertEquals(uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException.CODE, error.code)
+        assertTrue(stranger.toString() in error.message.orEmpty())
     }
 
     /** An archive written before v46 flags rows, not cues: a cue with a flagged row imports Early (D13). */

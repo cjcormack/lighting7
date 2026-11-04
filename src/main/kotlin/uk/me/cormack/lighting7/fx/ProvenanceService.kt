@@ -62,6 +62,11 @@ data class ProvenanceEntry(
      * head is moved for, so the fixture sheet's chip names it rather than a bare *Cue*.
      */
     val moveInDark: MoveInDarkService.Holding? = null,
+    /**
+     * The palette the winning value references, when it is a palette reference (palette-references
+     * plan D6): a programmer entry's, or a cue's own row's.
+     */
+    val reference: java.util.UUID? = null,
 )
 
 /** One bundled emitter's contribution to a reconciled colour — see [ProvenanceEntry.bundled]. */
@@ -450,6 +455,7 @@ class ProvenanceService internal constructor(
                         key.targetKey, key.attribute, ProvenanceSource.PROGRAMMER,
                         layerId = layer?.layerId,
                         layerSource = layer?.source,
+                        reference = (programmerStore.get(key.targetKey, key.attribute)?.value as? ProgrammerValue.Reference)?.paletteUuid,
                     )
                 }
                 effect != null -> ProvenanceEntry(
@@ -465,6 +471,7 @@ class ProvenanceService internal constructor(
                         cueStackId = winningCueId?.let { cueStackIdFor(it) },
                         layerId = layer?.layerId,
                         layerSource = layer?.source,
+                        reference = cueLayer.referenceWinners[key],
                         bundled = bundledProvenance(fixture, key, cueLayer),
                         moveInDark = winningCueId
                             ?.let { MoveInDarkService.stackOfContributor(it) }

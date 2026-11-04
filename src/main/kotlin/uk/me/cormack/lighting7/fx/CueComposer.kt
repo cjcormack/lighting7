@@ -185,6 +185,8 @@ internal object CueComposer {
         val bundleRole: CueAssignmentResolver.BundleRole? = null,
         /** See [CueAssignmentResolver.Assignment.sourceTarget]: the winning row's own target. */
         val sourceTarget: TargetRef? = null,
+        /** See [CueAssignmentResolver.Assignment.reference]: a local reference row's palette. */
+        val reference: java.util.UUID? = null,
     )
 
     private data class Key(val targetKey: String, val attribute: String)
@@ -385,6 +387,7 @@ internal object CueComposer {
                 fadeDurationMs = row.fadeDurationMs,
                 bundleRole = row.bundleRole,
                 sourceTarget = row.sourceTarget,
+                reference = row.reference,
             )
         }
 
@@ -405,6 +408,7 @@ internal object CueComposer {
                 fadeDurationMs = c.fadeDurationMs,
                 bundleRole = c.bundleRole,
                 sourceTarget = c.sourceTarget,
+                reference = c.reference,
             )
         }
         return FullCook(
@@ -553,7 +557,7 @@ internal object CueComposer {
                 // A Look carries its fade **per row**, so two rows of one Look can move at
                 // different speeds — the reason [SourceRow] holds the field rather than
                 // [LayerContent] doing.
-                SourceRow(it.target, it.attribute, it.value, it.elementKey, it.fadeDurationMs)
+                SourceRow(it.target, it.attribute, it.value, it.elementKey, it.fadeDurationMs, it.byHead)
             }
         }
 
@@ -589,6 +593,8 @@ internal object CueComposer {
          * which used to snap, because the field stopped here (sweep item B1).
          */
         val fadeDurationMs: Long?,
+        /** A Look group row's palette reference resolved per member — [LookRowEntry.byHead]. */
+        val byHead: Map<String, Pair<String, String>>? = null,
     )
 
     private fun resolveContent(
@@ -719,8 +725,10 @@ internal object CueComposer {
                     // `covers`, not key membership: a bound row spelled as a cell target lands under a
                     // layer on its parent exactly as an `elementKey` row does.
                     if (layerFixtures != null && !layerTargets.covers(e.fixture.targetKey)) continue
+                    val byHead = row.byHead
                     for (head in headsForRow(fixtures, e.fixture, row.attribute, intent)) {
-                        pending.add(Pending(head, row.attribute, row.value, e.groupKey, row.fadeDurationMs, intent, rowTarget))
+                        val (attribute, value) = if (byHead == null) row.attribute to row.value else byHead[head.targetKey] ?: continue
+                        pending.add(Pending(head, attribute, value, e.groupKey, row.fadeDurationMs, intent, rowTarget))
                     }
                 }
             }

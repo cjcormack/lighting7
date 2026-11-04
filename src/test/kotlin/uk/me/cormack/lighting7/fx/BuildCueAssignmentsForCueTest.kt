@@ -159,9 +159,9 @@ class BuildCueAssignmentsForCueTest {
     }
 
     @Test
-    fun `a template reference in a value is skipped rather than resolved`() {
-        // A cue row is a literal. `pal:` is legal in an effect *parameter* only, and letting one
-        // through here would read as white — see `CueAssignmentResolver.parseAssignmentValue`.
+    fun `a palette reference with no resolver is skipped rather than read as a literal`() {
+        // A reference resolves per head through `PaletteReferences` (`PaletteReferencesTest`); with
+        // none to ask, the row is dropped rather than read as white.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
             CueAttributeAssignmentDto(

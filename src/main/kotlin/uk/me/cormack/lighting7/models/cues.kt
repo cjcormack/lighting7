@@ -132,6 +132,12 @@ data class CueAttributeAssignmentDto(
      * code paths that don't resolve health stay serialisable unchanged.
      */
     val health: AssignmentHealth = AssignmentHealth.Ok,
+    /** The stored row's uuid, on read only; what `POST /cues/{id}/harden` names a row by. */
+    val uuid: String? = null,
+    /** The palette [value] references, when it is a `pal:{uuid}` (palette-references plan D6); on read only. */
+    val reference: PaletteReferenceDto? = null,
+    /** What the reference resolves to on each head it reaches, head key → literal, on the current project's reads. */
+    val resolvedByHead: Map<String, String>? = null,
 ) {
     val target: TargetRef get() = TargetRef.of(targetType, targetKey)
 }
@@ -394,6 +400,9 @@ object DaoCueAttributeAssignments : IntIdTable("cue_attribute_assignments") {
     val fadeDuration = duration("fade_duration").nullable()
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
+
+    /** The palette [value] references, as [DaoLookRows.paletteUuid] is for a Look row. */
+    val paletteUuid = javaUUID("palette_uuid").nullable().index()
 }
 
 class DaoCueAttributeAssignment(id: EntityID<Int>) : IntEntity(id) {
@@ -403,7 +412,17 @@ class DaoCueAttributeAssignment(id: EntityID<Int>) : IntEntity(id) {
     var targetType by DaoCueAttributeAssignments.targetType
     var targetKey by DaoCueAttributeAssignments.targetKey
     var attribute by DaoCueAttributeAssignments.attribute
-    var value by DaoCueAttributeAssignments.value
+    private var storedValue by DaoCueAttributeAssignments.value
+    var paletteUuid by DaoCueAttributeAssignments.paletteUuid
+        private set
+
+    /** The row's value; a write also sets [paletteUuid] from it. */
+    var value: String
+        get() = storedValue
+        set(value) {
+            storedValue = value
+            paletteUuid = uk.me.cormack.lighting7.fx.PaletteReferences.uuidOf(value)
+        }
     var fadeDuration by DaoCueAttributeAssignments.fadeDuration
     var sortOrder by DaoCueAttributeAssignments.sortOrder
     var uuid by DaoCueAttributeAssignments.uuid

@@ -362,6 +362,26 @@ internal val deleteLookTool = ToolDef(
     }
 )
 
+internal val hardenValuesTool = ToolDef(
+    name = "harden_values",
+    description = "Copy the values: turn a Look's or a cue's palette references ('pal:{uuid}' values) into the literals " +
+            "they resolve to on each head now, so those values stop following the palette's edits. Nothing on stage moves. " +
+            "A group row whose heads resolve apart becomes a row per head. Give exactly one of lookId and cueId; rowUuids " +
+            "names rows by uuid, absent every reference the Look or cue holds. Current project only.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("lookId", buildJsonObject { put("type", "integer") })
+            put("cueId", buildJsonObject { put("type", "integer") })
+            put("rowUuids", buildJsonObject {
+                put("type", "array")
+                put("items", buildJsonObject { put("type", "string") })
+                put("description", "The rows to harden, by uuid. Absent: every palette reference.")
+            })
+        })
+    }
+)
+
 internal val applyLookTool = ToolDef(
     name = "apply_look",
     description = "Apply an existing look in the programmer as a layer, or take it off again (a toggle: already on, every layer of it is removed). " +

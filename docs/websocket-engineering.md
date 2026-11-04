@@ -586,12 +586,15 @@ invalidation broadcast.
 
 `targetType` is `fixture` or `group`; `targetKey` is that target's key. `value` uses the same
 canonical grammar as a stored cue assignment: `"0".."255"` for sliders and settings, `"#rrggbb"`
-(plus optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position`. A programmer value is
-always a **literal** — a `pal:{uuid}` reference is legal only in an FX parameter.
+(plus optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position` — or a **palette
+reference**, `pal:{uuid}`, naming a value palette of the current project, which the desk resolves on
+each head the target reaches and holds as a reference (palette-references plan D1). An entry in
+`programmer.state` then carries `reference {paletteId, paletteUuid, name, unresolved?}` beside its
+resolved `value`.
 
 | Message | Fields | Reply |
 |---|---|---|
-| `programmer.set` | `targetType`, `targetKey`, `attribute`, `value`, `fadeMs?`, `sourceGroup?` | `programmer.entryChanged` \| `programmer.error` |
+| `programmer.set` | `targetType`, `targetKey`, `attribute`, `value`, `fadeMs?`, `sourceGroup?` | `programmer.entryChanged` (a `pal:` value: `programmer.state`, since it may land on other keys) \| `programmer.error` |
 | `programmer.setColour` | `targetType`, `targetKey`, `attribute = "rgbColour"`, `r`,`g`,`b`, `w?`,`a?`,`uv?`, `fadeMs?`, `sourceGroup?` | `programmer.entryChanged` \| `programmer.error` |
 | `programmer.setPosition` | `targetType`, `targetKey`, `pan`, `tilt`, `fadeMs?`, `sourceGroup?` | `programmer.entryChanged` \| `programmer.error` |
 | `programmer.clearEntry` | `targetType`, `targetKey`, `attribute`, `fadeMs?` | `programmer.entryCleared` \| `programmer.error` |

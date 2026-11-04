@@ -1,7 +1,7 @@
 # Palette references: a palette is a value
 
-> **Document status: READY — calls decided 2026-11-04 (§3).** No session started. Design record:
-> [`palette-references-design/`](palette-references-design/INDEX.md).
+> **Document status: IN PROGRESS — session 1 in review.** Calls decided 2026-11-04 (§3). Design
+> record: [`palette-references-design/`](palette-references-design/INDEX.md).
 
 ## 1. Context
 
@@ -220,7 +220,7 @@ checks"). Never merge a session's PR before the one before it.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | References as values on the desk | planned | | | |
+| 1 | References as values on the desk | in review | `claude/wizardly-ride-d2z3ns` | | |
 | 2 | Presses write references | planned | | | |
 | 3 | The marks and the new palette sheet | planned | | | |
 | 4 | Looks and cues: the sheets and Copy the values | planned | | | |
@@ -252,14 +252,52 @@ the next; whoever merges the last fills its own.
   `docs/sync-engineering.md` §"Version 47"; the glossary's *Palette references* rule widened from
   colour FX to values; the root `CLAUDE.md`'s palette paragraphs.
 
+**Where session 1 followed the code** (recorded with it):
+
+- **No `Reference` arm on `AttributeValue`.** Composition only ever sees literals, so every reader
+  resolves a reference on its head before parsing (`fx/PaletteReferences.kt`), and
+  `parseAssignmentValue` still answers null for one — which is D1's "never white". The programmer's
+  arm is `ProgrammerValue.Reference`, the sealed interface's second arm, carrying its resolved value.
+- **The column is `palette_uuid`, not `palette_id`.** It is set from the value alone by the row's
+  `value` setter, so no write — the importer's included — needs the palette to exist first, and it is
+  joined on the row's project, because a venue version keeps every record's uuid.
+- **No resolved-value cache** (§4's risk). A reference resolves at each build, the same per-head
+  arithmetic a palette layer's cook already runs; the desk remembers only what each (palette, head,
+  attribute) last resolved to, for D3, for the run. A desk started on a palette that already lacks a
+  head's row puts nothing there.
+- **A reference is keyed by the property it lands on**, so a colour reference on a MAC 250 resolves
+  to its `colourWheel`; a palette row is matched to the attribute by where it resolves on the head,
+  else by its own name.
+- **D16 moves to session 2 whole.** Record still writes what the programmer resolves to, and Include
+  of a Look loads literals; a reference recorded as a reference, and Include loading one back, land
+  with the presses that make them.
+- **`provenanceSignature` is the client's** (`frontend/src/api/programmerWsApi.ts`); this session adds
+  `reference` to it and to the programmer entry's signature. `ProvenanceEntry.reference` names a
+  programmer entry's or a cue's own row's palette; a Look layer's value keeps the Look's attribution,
+  as D19 draws it.
+- **The harden routes name rows by uuid**, which the row DTOs now carry (`uuid`) beside `reference`
+  and `resolvedByHead`; the delete answer's counts are `cueReferenceCount`, `lookReferenceCount` and
+  `programmerReferenceCount`.
+- **MCP's value grammar takes `pal:`** (`ai/LookValues.kt`), so `set_programmer`, `create_look`,
+  `update_look` and a cue's values write references — how S1's operator check writes its Look row. A
+  colour reference is laid on each colour-family attribute the palette names, as D10's press will.
+- **Hardening keeps what it cannot resolve.** *Copy the values* leaves a row whose head has no value
+  to keep — not patched now, or never resolved since the desk started — as the reference and counts
+  it as `kept`; only a forced palette delete drops it, since nothing could resolve it again.
+- **A Look's group reference stays a group row**, carrying each member's resolution
+  (`LookRowEntry.byHead`), so it keeps its place among the Look's group rows and its group origin.
+- **Update's cleared-key matching against a reference row** (a row stored on `rgbColour` that lands
+  on a `colourWheel`) is D16's, so session 2's; the stomp overlap and a row's health already read
+  where a reference lands.
+
 ### Session 2 — Presses write references
 
 - `ProgrammerStore`'s reference press (D10) and `ProgrammerLayerStack.toggle`'s hand-off for a value
   palette (D11); `appliedState` from the index (D12); solo siblings; the hand.
 - `fx/LayerPress.kt` over stored rows for the cue editor's press, and the Timeline's ops and read
   (D13).
-- `omitted` and `notCovered` (D14). `asReference` on `/palettes/from-programmer` (D15). Record into a
-  palette resolving a reference (D16).
+- `omitted` and `notCovered` (D14). `asReference` on `/palettes/from-programmer` (D15). D16 whole:
+  Record, Include and Update carrying a reference as one, and Record into a palette resolving it.
 - `state/PaletteLayerMigration.kt` (D17), step 10, its frozen fixture
   `src/test/resources/db/pre-palette-references.sql` (a database at 9, never regenerated), and the
   importer's conversion of a v46 archive.

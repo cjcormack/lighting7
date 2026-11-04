@@ -1,3 +1,4 @@
+import type { PaletteReference } from './paletteReference'
 import type { SpreadUnit } from '@/lib/spreadShape'
 import type { SceneryChange, TrackedScenery } from './sceneryApi'
 import type { CueType } from './cueStacksApi'
@@ -167,15 +168,18 @@ export type AssignmentHealth =
   | { type: 'missingAttribute'; targetKey: string; attribute: string }
 // Four arms, down from seven. Two described a row whose value was `ref:{uuid}` and whose Look was
 // gone or no longer covered the target, and a third before them named a wrong-type reference. All three retired with the `ref:` value grammar in
-// session 4: a row's value is always a literal, so a cue's only remaining dependency on a Look is a
-// layer — guarded by an indexed FK rather than by a health diagnosis.
+// session 4: a cue depends on a Look only through a layer, guarded by an indexed FK rather than by a
+// health diagnosis.
 
 // Layer 3 property assignment on a cue.
 export interface CueAttributeAssignment {
   targetType: 'fixture' | 'group'
   targetKey: string
   attribute: string
-  /** Canonical property-level form: "0".."255" for sliders/settings, extended-colour, "pan,tilt". */
+  /**
+   * Canonical property-level form: "0".."255" for sliders/settings, extended-colour, "pan,tilt" — or
+   * a `pal:{uuid}` palette reference the desk resolves per head (`reference`, `resolvedByHead`).
+   */
   value: string
   fadeDurationMs?: number | null
   sortOrder?: number
@@ -184,6 +188,12 @@ export interface CueAttributeAssignment {
    * (treated as `{ type: 'ok' }`). Populated by the server when the cue is read back.
    */
   health?: AssignmentHealth
+  /** The stored row's uuid, on read only. */
+  uuid?: string
+  /** The palette `value` references when it is `pal:{uuid}` (palette-references plan D6); on read only. */
+  reference?: PaletteReference
+  /** What the reference resolves to on each head it reaches, head key → literal; the live project's reads only. */
+  resolvedByHead?: Record<string, string>
 }
 
 // ─── Script trigger types ──────────────────────────────────────────

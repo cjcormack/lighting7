@@ -25,6 +25,14 @@ import uk.me.cormack.lighting7.models.LookLayerTargetedException
 import uk.me.cormack.lighting7.models.lookLayerTargetedMessage
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
+import uk.me.cormack.lighting7.fx.PaletteReferences
+import uk.me.cormack.lighting7.fx.PaletteSnapshot
+import uk.me.cormack.lighting7.ai.resolveProgrammerValues
+import uk.me.cormack.lighting7.routes.paletteInProject
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.put
 import uk.me.cormack.lighting7.fx.ProvenanceEntry
 import uk.me.cormack.lighting7.fx.LocateValueResolver
 import uk.me.cormack.lighting7.fx.AttributeChannelWriter
@@ -54,9 +62,9 @@ sealed class ProgrammerInMessage : InMessage()
  * Set a programmer value on a fixture or group property. [value] uses the same canonical
  * string form as cue assignments ([CueAssignmentResolver.parseAssignmentValue] /
  * [CueAssignmentResolver.AttributeValue.serialize]): `"0".."255"` for sliders and settings,
- * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position`. A programmer
- * value is always a **literal**: a `pal:{uuid}` template reference is legal only in an effect
- * parameter, and a dependency on a template is a layer (see [paletteColourSource]).
+ * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position` — or a
+ * `pal:{uuid}` palette reference, resolved per head and held as a reference
+ * ([ProgrammerHandler.setReference]).
  *
  * [sourceGroup] is for clients that fan a group-scoped gesture out to member fixtures rather
  * than sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a
@@ -255,6 +263,8 @@ data class ProgrammerEntryDto(
     val sourceGroup: String? = null,
     /** Every owner holding this property, most recent first. */
     val owners: List<String>,
+    /** The palette [value] is resolved from, when the top slot holds a reference (palette-references plan D6). */
+    val reference: uk.me.cormack.lighting7.models.PaletteReferenceDto? = null,
 )
 
 /** One channel-sideband entry in the state snapshot. */
@@ -689,6 +699,8 @@ data class ProvenanceEntryDto(
     val bundled: List<BundledProvenanceDto> = emptyList(),
     /** A `CUE` key a stack's Move in dark holds: the cue the head is moved for. Omitted otherwise. */
     val moveInDark: MoveInDarkProvenanceDto? = null,
+    /** The palette's uuid, when the winning value is a palette reference (palette-references plan D6). */
+    val reference: String? = null,
 )
 
 /** [ProvenanceEntryDto.moveInDark]: the stack, and the entry and cue it moves the head for (`Q12`). */
@@ -892,6 +904,7 @@ private fun buildProvenanceStateMessage(entries: List<ProvenanceEntry>, programm
                 moveInDark = it.moveInDark?.let { m ->
                     MoveInDarkProvenanceDto(m.stackId, m.targetEntryId, m.targetCueId, m.label)
                 },
+                reference = it.reference?.toString(),
             )
         },
     )
@@ -1061,11 +1074,58 @@ object ProgrammerHandler {
         sourceGroup: String? = null,
     ): OutMessage {
         triggerRefusal(state, target, attribute)?.let { return ProgrammerErrorOutMessage(it) }
+        if (PaletteReferences.isReference(value)) return setReference(state, target, attribute, value, fadeMs, sourceGroup)
         val typed = parseValue(state, target, attribute, value)
             ?: return ProgrammerErrorOutMessage(
                 "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' attribute '$attribute'"
             )
         return setTyped(state, target, attribute, typed, fadeMs, sourceGroup)
+    }
+
+    /**
+     * The current project's palette [uuid] names, or null when it names none here — the programmer's
+     * check for a `pal:` value, which the stored writers make at their own boundary.
+     */
+    fun currentProjectPalette(state: State, uuid: java.util.UUID): PaletteSnapshot? {
+        val project = state.projectManager.currentProject
+        val here = transaction(state.database) { paletteInProject(project.id, uuid) != null }
+        return if (here) state.show.paletteRegistry.snapshot(uuid) else null
+    }
+
+    /**
+     * A `pal:` value as a WEB reference on each head of [target] (palette-references plan D1, D2):
+     * resolved per head as `set_programmer` resolves it, a head the palette cannot reach skipped, and
+     * the whole write refused when it reaches none. Answers the programmer's whole state.
+     */
+    private fun setReference(
+        state: State,
+        target: TargetRef,
+        attribute: String,
+        value: String,
+        fadeMs: Long,
+        sourceGroup: String?,
+    ): OutMessage {
+        val items = buildJsonArray { addJsonObject { put("attribute", attribute); put("value", value) } }
+        val resolved = resolveProgrammerValues(state.show.fixtures, listOf(target), items) { currentProjectPalette(state, it) }
+        if (resolved.problems.isNotEmpty()) {
+            return ProgrammerErrorOutMessage(resolved.problems.joinToString("; "), PaletteReferenceInvalidException.CODE)
+        }
+        val group = when (target) {
+            is TargetRef.Group -> target.key
+            is TargetRef.Fixture -> validateSourceGroup(state, sourceGroup, target.key)
+        }
+        val writes = resolved.writes.map {
+            uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite(it.head, it.attribute, it.value, sourceGroup = group, reference = it.reference)
+        }
+        val landed = state.show.fxEngine.programmer.writeAttributes(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
+        if (landed.all { it.isEmpty() }) {
+            return ProgrammerErrorOutMessage(
+                "Attribute '$attribute' on ${target.discriminator} '${target.key}' resolves to no DMX channels"
+            )
+        }
+        // The whole state, not an entry echo: the write may land on other keys than the one asked for
+        // (a colour wheel, the palette's white), and each must arrive resolved, with its reference (D6).
+        return stateSnapshot(state)
     }
 
     /** Write a typed value as a WEB programmer entry and report the stored form. */
@@ -1389,6 +1449,15 @@ object ProgrammerHandler {
                 touched = top.touched,
                 sourceGroup = top.sourceGroup,
                 owners = entry.slots.map { it.owner.id },
+                reference = (top.value as? uk.me.cormack.lighting7.fx.ProgrammerValue.Reference)?.let { reference ->
+                    val palette = state.show.paletteRegistry.snapshot(reference.paletteUuid)
+                    uk.me.cormack.lighting7.models.PaletteReferenceDto(
+                        paletteId = palette?.paletteId ?: 0,
+                        paletteUuid = reference.paletteUuid.toString(),
+                        name = palette?.name ?: reference.paletteUuid.toString(),
+                        unresolved = reference.unresolved ?: if (palette == null) "names no palette" else null,
+                    )
+                },
             )
         }.sortedWith(compareBy({ it.targetKey }, { it.attribute }))
         val channels = store.channelEntries().map { entry ->
@@ -1441,9 +1510,8 @@ object ProgrammerHandler {
     /**
      * Parse a canonical value string for (target, property): `position` is the synthetic
      * pan/tilt pair; everything else resolves its category from the fixture's property
-     * catalogue (via the first member for groups). A programmer value is always a literal — a
-     * `pal:` template reference is refused by [CueAssignmentResolver.parseAssignmentValue] rather
-     * than read as white.
+     * catalogue (via the first member for groups). A literal only: [set] hands a `pal:` palette
+     * reference to [setReference] before this is reached.
      */
     private fun parseValue(
         state: State,

@@ -1729,7 +1729,7 @@ class SetupTools(
                             "leave them out, or switch_project first"
                         null
                     }
-                    else -> resolveLookValues(state.show.fixtures, raw).also { rowProblems += it.problems }
+                    else -> resolveLookValues(state.show.fixtures, raw, state.show.paletteRegistry::snapshot).also { rowProblems += it.problems }
                 }
             }
             val scenery = (row["scenery"] as? JsonArray)?.let {

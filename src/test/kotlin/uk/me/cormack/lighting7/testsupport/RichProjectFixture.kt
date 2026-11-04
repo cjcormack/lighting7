@@ -740,6 +740,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         attribute = "rgbColour"; value = "#ff9d4a;policy=extract"; sortOrder = 0
     }
 
+    // A Look row holding a **palette reference** (palette-references plan D1, formatVersion 47):
+    // the value is `pal:{uuid}`, so the clone's remap has to rewrite it inside a row's value.
+    DaoLookRow.new {
+        look = boundLook; targetType = "fixture"; targetKey = "hex-2"
+        attribute = "rgbColour"; value = "pal:${colourPalette.uuid}"; sortOrder = 3
+    }
+
     // An **effect** template: no rows, one target-less effect (fx-templates D1–D3). Seeded with a
     // non-default value on every optional field, because canonical JSON omits defaults — a field
     // left at its default is invisible to the round-trip and clone tests, so a copier that drops it
@@ -898,6 +905,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueAttributeAssignment.new {
         cue = cue1; targetType = "group"; targetKey = "front-wash"
         attribute = "position"; value = "120,64"; sortOrder = 1
+    }
+    // A group row referencing a palette (palette-references plan D1, formatVersion 47).
+    DaoCueAttributeAssignment.new {
+        cue = cue1; targetType = "group"; targetKey = "back-wash"
+        attribute = "rgbColour"; value = "pal:${colourPalette.uuid}"; sortOrder = 2
     }
     // There used to be a third row here holding `ref:{boundLook.uuid}`, seeded to prove
     // ExportUuidRemapper rewrote the reference on a clone. The `ref:` value grammar retired in

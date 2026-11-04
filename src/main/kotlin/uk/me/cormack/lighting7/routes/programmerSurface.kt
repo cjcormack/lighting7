@@ -139,7 +139,7 @@ internal fun performProgrammerRecord(
             // After the cue exists, so what it would track is read at its own place in the list.
             val withScenery = outcome.withScenery(writeHeldSceneryIntoCue(cue, held, mode))
             val entry = stack?.let { entryInStack(it.id.value, cue.id.value) }
-            Written(withScenery, cue.toCueDetails(true, state.show.fixtures), entry) to null
+            Written(withScenery, cue.toCueDetails(true, state.show.fixtures, references = state.show.paletteReferences), entry) to null
         } else {
             val cue = DaoCue.findById(cueId!!)
                 ?: return@transaction null to "Cue not found"
@@ -149,7 +149,7 @@ internal fun performProgrammerRecord(
             val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask, scope)
                 .withScenery(writeHeldSceneryIntoCue(cue, held, mode))
             val entry = includedEntryId?.let { DaoCueStackEntry.findById(it) }?.takeIf { it.cueId == cue.id.value }
-            Written(outcome, cue.toCueDetails(true, state.show.fixtures, contextEntryId = entry?.id?.value), entry) to null
+            Written(outcome, cue.toCueDetails(true, state.show.fixtures, contextEntryId = entry?.id?.value, references = state.show.paletteReferences), entry) to null
         }
     }
 

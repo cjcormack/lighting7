@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.mcp.RemoteCommandsDisabledException
 import uk.me.cormack.lighting7.mcp.RemoteEffectsDisabledException
 import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 import uk.me.cormack.lighting7.models.LookLayerTargetedException
 import uk.me.cormack.lighting7.routes.ErrorResponse
@@ -121,6 +122,11 @@ fun Application.configureErrorHandling() {
             logger.warn("Refused a command row on {}: {}", call.request.local.uri, cause.message)
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "A fixture command cannot be stored", CommandNotStorableException.CODE))
         }
+        // A palette reference naming something a value cannot reference (palette-references plan D1).
+        exception<PaletteReferenceInvalidException> { call, cause ->
+            logger.warn("Refused a palette reference on {}: {}", call.request.local.uri, cause.message)
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "Not a palette reference", PaletteReferenceInvalidException.CODE))
+        }
         // A stored write giving a Look's layer targets (absolute-looks plan P2): a Look lands whole.
         exception<LookLayerTargetedException> { call, cause ->
             logger.warn("Refused a targeted Look layer on {}: {}", call.request.local.uri, cause.message)
@@ -182,6 +188,7 @@ internal fun isClientErrorException(cause: Throwable): Boolean = when (cause) {
     is TriggerNotStorableException,
     is CommandNotStorableException,
     is LookLayerTargetedException,
+    is PaletteReferenceInvalidException,
     is PasswordPolicyException -> true
     else -> false
 }

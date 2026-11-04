@@ -20,6 +20,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.CommandIndex
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.PaletteReferences
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.groupHintsForTargets
@@ -77,13 +78,13 @@ internal class ProgrammerTools(private val state: State) {
         }
         if (refusals.isNotEmpty()) return errorResult(refusals.distinct().joinToString("; "))
 
-        val resolved = resolveProgrammerValues(fixtures, targets, values)
+        val resolved = resolveProgrammerValues(fixtures, targets, values) { uuid -> ProgrammerHandler.currentProjectPalette(state, uuid) }
         if (resolved.problems.isNotEmpty()) return errorResult(resolved.problems.joinToString("; "))
 
         // The group each head arrived through, so Record collapses it back to a group row.
         val groupHints = groupHintsForTargets(fixtures, targets)
         val writes = resolved.writes.map {
-            ProgrammerWriter.AttributeWrite(it.head, it.attribute, it.value, sourceGroup = groupHints[it.head.targetKey])
+            ProgrammerWriter.AttributeWrite(it.head, it.attribute, it.value, sourceGroup = groupHints[it.head.targetKey], reference = it.reference)
         }
         val landed = state.show.fxEngine.programmer.writeAttributes(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
 
@@ -107,6 +108,7 @@ internal class ProgrammerTools(private val state: State) {
                             put("targetKey", write.head.targetKey)
                             put("attribute", write.attribute)
                             put("value", write.value.serialize())
+                            write.reference?.let { put("reference", PaletteReferences.valueOf(it)) }
                             groupHints[write.head.targetKey]?.let { put("group", it) }
                         }
                     }

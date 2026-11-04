@@ -138,7 +138,7 @@ internal fun pressCueLayer(
                     action = if (applied) "applied" else "removed",
                     released = (decided.result as? LayerPress.Result.Applied)?.released ?: 0,
                     attributeMask = if (applied) decided.arriving.attributeMask else null,
-                    cue = cue.toCueDetails(isCurrentProject = true, state.show.fixtures),
+                    cue = cue.toCueDetails(isCurrentProject = true, state.show.fixtures, references = state.show.paletteReferences),
                 ),
                 stageChanged,
             )

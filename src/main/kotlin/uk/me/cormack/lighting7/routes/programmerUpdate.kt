@@ -174,7 +174,7 @@ internal fun sourceRowKeys(state: State, target: IncludedTarget): Set<Programmer
             val data = transaction(state.database) {
                 DaoCue.findById(target.targetId)?.let { buildCueApplyData(it, null) }
             } ?: return emptySet()
-            buildCueAssignmentsForCue(fixtures, data)
+            buildCueAssignmentsForCue(fixtures, data, state.show.paletteReferences)
                 .mapTo(HashSet()) { ProgrammerStore.IncludedKey(it.targetKey, canonicalAttributeName(it.attribute)) }
         }
         IncludedTarget.Kind.LOOK -> {

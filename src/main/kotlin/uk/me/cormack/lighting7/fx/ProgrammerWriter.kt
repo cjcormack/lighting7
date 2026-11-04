@@ -57,7 +57,13 @@ class ProgrammerWriter internal constructor(
         val value: CueAssignmentResolver.AttributeValue,
         /** Group name when this entry came from a group control, else null (§7.1). */
         val sourceGroup: String? = null,
-    )
+        /** The palette [value] is a reference to, held as one (palette-references plan D1), else null. */
+        val reference: java.util.UUID? = null,
+    ) {
+        /** What the store holds for this write. */
+        val programmerValue: ProgrammerValue
+            get() = reference?.let { ProgrammerValue.Reference(it, value) } ?: ProgrammerValue.Hard(value)
+    }
 
     /**
      * Lay a [value] onto the programmer for [attribute] of [fixture] as [owner] and
@@ -186,7 +192,7 @@ class ProgrammerWriter internal constructor(
                 owner,
                 write.fixture.targetKey,
                 write.attribute,
-                ProgrammerValue.Hard(write.value),
+                write.programmerValue,
                 touched,
                 write.sourceGroup,
             )
@@ -217,7 +223,7 @@ class ProgrammerWriter internal constructor(
                 )
             } else {
                 programmerStore.putValue(
-                    owner, write.fixture.targetKey, write.attribute, ProgrammerValue.Hard(write.value), touched, write.sourceGroup,
+                    owner, write.fixture.targetKey, write.attribute, write.programmerValue, touched, write.sourceGroup,
                 )
             }
         }

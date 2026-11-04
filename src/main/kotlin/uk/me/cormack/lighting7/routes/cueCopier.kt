@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.PALETTE_COLOUR_REF_PREFIX
+import uk.me.cormack.lighting7.fx.PaletteReferences
 import uk.me.cormack.lighting7.fx.parsePaletteColourRefUuid
 import uk.me.cormack.lighting7.models.*
 import java.util.UUID
@@ -115,12 +116,13 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
         }
         for (assignment in cue.attributeAssignments) {
             checkTarget(assignment.targetType, assignment.targetKey, by)
+            val copiedValue = rowValue(assignment.value, assignment.attribute, by) ?: continue
             DaoCueAttributeAssignment.new {
                 this.cue = copy
                 targetType = assignment.targetType
                 targetKey = assignment.targetKey
                 attribute = assignment.attribute
-                value = assignment.value
+                value = copiedValue
                 fadeDuration = assignment.fadeDuration
                 sortOrder = assignment.sortOrder
             }
@@ -219,12 +221,13 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
         report.looks += look.name
         for (row in look.rows.sortedBy { it.sortOrder }) {
             checkTarget(row.targetType, row.targetKey, by)
+            val copiedValue = rowValue(row.value, row.attribute, by) ?: continue
             DaoLookRow.new {
                 this.look = copy
                 targetType = row.targetType
                 targetKey = row.targetKey
                 attribute = row.attribute
-                value = row.value
+                value = copiedValue
                 fadeDuration = row.fadeDuration
                 elementKey = row.elementKey
                 sortOrder = row.sortOrder
@@ -352,6 +355,25 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 }
             }
         }
+    }
+
+    /**
+     * A cue or Look row's value, a palette reference mapped as [parameters] maps one
+     * (palette-references plan D8): the target's palette of that name, else a copy. A literal is kept.
+     */
+    fun rowValue(value: String, attribute: String, by: String): String? {
+        if (!crossProject || !PaletteReferences.isReference(value)) return value
+        val uuid = PaletteReferences.uuidOf(value) ?: return value
+        val named = sourcePalettesByUuid[uuid] ?: run {
+            report.unresolved("palette $uuid is not in $sourceName; its row is left out", by)
+            return null
+        }
+        val mapped = PaletteReferences.valueOf(palette(named).uuid)
+        paletteReferenceProblem(target.id, attribute, mapped)?.let { problem ->
+            report.unresolved("palette '${named.name}' in $targetName cannot be a $attribute value ($problem); its row is left out", by)
+            return null
+        }
+        return mapped
     }
 
     /** A layer's or effect's master, mapped by index; one the target lacks is left to master 1 and reported. */

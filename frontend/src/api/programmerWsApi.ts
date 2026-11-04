@@ -1,3 +1,4 @@
+import type { PaletteReference } from './paletteReference'
 import { startSpan } from '@sentry/react'
 import type { CueTarget, LayerSource } from './cuesApi'
 import type { InternalApiConnection } from './internalApi'
@@ -67,6 +68,11 @@ export interface ProgrammerEntry {
   sourceGroup?: string
   /** Every owner holding this property, most recent first. */
   owners: string[]
+  /**
+   * The palette `value` is resolved from, when the winning slot holds a palette reference
+   * (lighting7 palette-references plan D6). `value` is still the resolved literal.
+   */
+  reference?: PaletteReference
 }
 
 /**
@@ -122,6 +128,8 @@ export interface ProvenanceEntry {
    * otherwise, and from an older desk.
    */
   moveInDark?: MoveInDarkProvenance
+  /** The palette's uuid, when the winning value is a palette reference (palette-references plan D6). */
+  reference?: string
 }
 
 export interface MoveInDarkProvenance {
@@ -792,7 +800,16 @@ const EMPTY_KEY_STATE: ProgrammerKeyState = {}
 // reports no change, and the cell keeps painting the old colour indefinitely — a stale cell that
 // looks perfectly fine.
 const entrySignature = (e: ProgrammerEntry) =>
-  JSON.stringify([e.value, e.owner, e.touched, e.sourceGroup ?? null, e.owners])
+  JSON.stringify([
+    e.value,
+    e.owner,
+    e.touched,
+    e.sourceGroup ?? null,
+    e.owners,
+    e.reference?.paletteUuid ?? null,
+    e.reference?.name ?? null,
+    e.reference?.unresolved ?? null,
+  ])
 
 // The layer fields belong here: a key can move from "the cue" to "the cue's Warm Wash layer"
 // with `source` unchanged, and leaving them out would leave the cell showing the old answer.
@@ -811,6 +828,8 @@ const provenanceSignature = (p: ProvenanceEntry) =>
     // A key moves from the live cue to a move in the dark with `source` still `CUE`.
     p.moveInDark?.targetEntryId ?? null,
     p.moveInDark?.label ?? null,
+    // A palette edit can move a key's value without moving its source.
+    p.reference ?? null,
   ])
 
 /**
@@ -1037,10 +1056,8 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // thing driving it until the refetch lands. `sourceGroup` is dropped for the same reason:
     // a direct write did not come through a group control.
     const owners = ['web', ...(existing?.owners ?? []).filter((o) => o !== 'web')]
-    // There was a reference-recovery step here: the echo carries only the value, so a write of a
-    // `ref:` string landed locally as a reference-*less* entry until the refetch corrected it, and
-    // every cell Apply Palette touched dropped its badge for ~100 ms. Nothing writes a `ref:` any
-    // more, so the echo is the whole entry.
+    // The echo is a literal write's whole entry. A palette reference write is answered with the
+    // whole `programmer.state` instead, since it lands resolved on keys of its own.
     entries.put(key, {
       targetKey: message.targetKey,
       attribute: message.attribute,

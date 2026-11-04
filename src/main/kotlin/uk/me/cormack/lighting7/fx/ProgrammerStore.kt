@@ -91,14 +91,6 @@ value class ProgrammerOwner(val id: String) {
  * Carries a concrete [resolved] value, so every read path — including
  * [FxTarget.composeProgrammerOver], called from `LayerResolver.fallbackFor` on the 50 Hz
  * tick — reads `.resolved`.
- *
- * **Why this is still a sealed interface with one arm.** It had a second, [Ref], holding a
- * `ref:{uuid}` named-palette reference plus the literal it currently resolved to; the `ref:` value
- * grammar retired in session 4 of the looks-and-layers plan, and a layer with an `attributeMask` is
- * what replaces it. The shape is left alone because the arm's *reason* has not gone away — a value
- * that remembers where it came from is exactly what nested Looks (`FU-LOOK-NESTED`) would need —
- * and collapsing it to a bare typealias would make reintroducing one a change to every read site
- * rather than a new arm.
  */
 sealed interface ProgrammerValue {
     /** The concrete value the entry contributes to the cascade. */
@@ -106,6 +98,17 @@ sealed interface ProgrammerValue {
 
     /** A literal value. */
     data class Hard(override val resolved: CueAssignmentResolver.AttributeValue) : ProgrammerValue
+
+    /**
+     * A palette reference (palette-references plan D1), with what it resolves to on this key's head.
+     * A palette edit re-resolves it in place ([ProgrammerStore.reresolveReferences]); one that no
+     * longer resolves keeps its last value with [unresolved] saying why (D3).
+     */
+    data class Reference(
+        val paletteUuid: UUID,
+        override val resolved: CueAssignmentResolver.AttributeValue,
+        val unresolved: String? = null,
+    ) : ProgrammerValue
 }
 
 /**
@@ -1191,6 +1194,77 @@ class ProgrammerStore {
      */
     fun coversFixture(fixtureKey: String): Boolean =
         attributes[fixtureKey]?.isNotEmpty() == true
+
+    /** Every palette some slot references. */
+    fun referencedPalettes(): Set<UUID> = buildSet {
+        for (byAttribute in attributes.values) for (holder in byAttribute.values) for (slot in holder.all()) {
+            (slot.value as? ProgrammerValue.Reference)?.let { add(it.paletteUuid) }
+        }
+    }
+
+    /**
+     * Every key holding a slot that references [paletteUuid], whichever owner's (D4's in-memory
+     * index, read off the slots themselves).
+     */
+    fun referenceKeys(paletteUuid: UUID): Set<CueAssignmentResolver.Key> = buildSet {
+        for ((fixtureKey, byAttribute) in attributes) {
+            for ((attribute, holder) in byAttribute) {
+                if (holder.all().any { (it.value as? ProgrammerValue.Reference)?.paletteUuid == paletteUuid }) {
+                    add(CueAssignmentResolver.Key.fixture(fixtureKey, attribute))
+                }
+            }
+        }
+    }
+
+    /**
+     * Re-resolve every slot referencing [paletteUuid] through [resolve], in place: owner, touched
+     * flag and write seq kept, so a palette edit moves the value without being anyone's write
+     * (palette-references plan D5). Answers the keys whose value changed.
+     */
+    fun reresolveReferences(
+        paletteUuid: UUID,
+        resolve: (fixtureKey: String, attribute: String, current: ProgrammerValue.Reference) -> ProgrammerValue.Reference,
+    ): Set<CueAssignmentResolver.Key> {
+        val changed = HashSet<CueAssignmentResolver.Key>()
+        for (key in referenceKeys(paletteUuid)) {
+            var moved = false
+            attributes[key.targetKey]?.computeIfPresent(key.attribute) { _, holder ->
+                val slots = holder.all().map { slot ->
+                    val reference = slot.value as? ProgrammerValue.Reference
+                    if (reference == null || reference.paletteUuid != paletteUuid) return@map slot
+                    val next = resolve(key.targetKey, key.attribute, reference)
+                    if (next == reference) return@map slot
+                    moved = true
+                    Slot(slot.owner, next, slot.touched, slot.sourceGroup, slot.seq, slot.writtenAtMs)
+                }
+                if (!moved) holder else if (slots.size == 1) Single(slots[0]) else Stack(slots)
+            }
+            if (moved) changed += key
+        }
+        if (changed.isNotEmpty()) bumpEpoch()
+        return changed
+    }
+
+    /**
+     * Every slot referencing [paletteUuid] made literal at the value it resolves to now, in place,
+     * as a forced palette delete leaves them (palette-references plan D8). Answers the keys changed.
+     */
+    fun hardenReferences(paletteUuid: UUID): Set<CueAssignmentResolver.Key> {
+        val changed = HashSet<CueAssignmentResolver.Key>()
+        for (key in referenceKeys(paletteUuid)) {
+            attributes[key.targetKey]?.computeIfPresent(key.attribute) { _, holder ->
+                val slots = holder.all().map { slot ->
+                    val reference = slot.value as? ProgrammerValue.Reference
+                    if (reference?.paletteUuid != paletteUuid) slot
+                    else Slot(slot.owner, ProgrammerValue.Hard(reference.resolved), slot.touched, slot.sourceGroup, slot.seq, slot.writtenAtMs)
+                }
+                if (slots.size == 1) Single(slots[0]) else Stack(slots)
+            }
+            changed += key
+        }
+        if (changed.isNotEmpty()) bumpEpoch()
+        return changed
+    }
 
     /** O(1) hot-path gate: does the sideband hold any slot at all? */
     val hasSidebandEntries: Boolean get() = channels.isNotEmpty()

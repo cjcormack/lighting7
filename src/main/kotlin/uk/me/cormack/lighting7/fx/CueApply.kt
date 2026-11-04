@@ -265,8 +265,9 @@ internal fun buildStompOverlap(
     fixtures: Fixtures,
     cueData: CueApplyData,
     cooked: CookResult,
+    references: PaletteReferences? = null,
 ): Set<FxEngine.TargetAttribute> {
-    val fromAssignments = buildStompOverlapFromAssignments(fixtures, cueData)
+    val fromAssignments = buildStompOverlapFromAssignments(fixtures, cueData, references)
     if (cooked.assertedKeys.isEmpty()) return fromAssignments
     if (fromAssignments.isEmpty()) return cooked.assertedKeys
     return fromAssignments + cooked.assertedKeys
@@ -282,11 +283,19 @@ internal fun buildStompOverlap(
 internal fun buildStompOverlapFromAssignments(
     fixtures: Fixtures,
     cueData: CueApplyData,
+    /** A reference row overlaps the property it lands on per head too (a colour wheel, say). */
+    references: PaletteReferences? = null,
 ): Set<FxEngine.TargetAttribute> {
     if (cueData.attributeAssignments.isEmpty()) return emptySet()
     val out = HashSet<FxEngine.TargetAttribute>()
     for (assignment in cueData.attributeAssignments) {
         val canonical = canonicalAttributeName(assignment.attribute)
+        val paletteUuid = references?.let { PaletteReferences.uuidOf(assignment.value) }
+        fun landed(head: GroupableFixture) {
+            if (paletteUuid == null) return
+            references.resolve(head, canonical, paletteUuid).takeIf { it.value != null }
+                ?.let { out.add(FxEngine.TargetAttribute(head.targetKey, it.attribute)) }
+        }
         when (val target = assignment.target) {
             is TargetRef.Group -> {
                 out.add(FxEngine.TargetAttribute(target.key, canonical))
@@ -294,11 +303,15 @@ internal fun buildStompOverlapFromAssignments(
                     fixtures.untypedGroup(target.key).fixtures
                 } catch (_: IllegalStateException) { emptyList() }
                 for (member in members) {
-                    if (member is Fixture) out.add(FxEngine.TargetAttribute(member.key, canonical))
+                    if (member is Fixture) {
+                        out.add(FxEngine.TargetAttribute(member.key, canonical))
+                        landed(member)
+                    }
                 }
             }
             is TargetRef.Fixture -> {
                 out.add(FxEngine.TargetAttribute(target.key, canonical))
+                runCatching { fixtures.untypedGroupableFixture(target.key) }.getOrNull()?.let(::landed)
             }
         }
     }
@@ -372,16 +385,15 @@ internal fun bundleRoleOf(fixture: GroupableFixture, attribute: String): CueAssi
  * Assignments whose fixture, group, or property cannot be resolved are logged at warn and
  * skipped — missing data must not break cue apply.
  *
- * There used to be a per-member branch here: a row whose value was `ref:{uuid}` resolved **once per
- * target fixture**, taking each member's *own* property category rather than the reference fixture's,
- * because a reference is per-fixture by construction and a mixed-type group is exactly the case it
- * existed to serve. The `ref:` grammar retired in session 4, so every row is a literal and one parse
- * against the reference fixture serves the whole target — which is what the "literal rows keep the
- * single parse before the fanout" fast path always was.
+ * A literal row is parsed once against the reference fixture, which serves the whole target. A
+ * palette reference (`pal:{uuid}`) resolves **per head**, each on the property it lands on there, so
+ * a mixed group's members can land on different properties ([PaletteReferences]).
  */
 internal fun buildCueAssignmentsForCue(
     fixtures: Fixtures,
     cueData: CueApplyData,
+    /** How a `pal:` row resolves per head (palette-references plan D2); null skips reference rows. */
+    references: PaletteReferences? = null,
 ): List<CueAssignmentResolver.Assignment> {
     if (cueData.attributeAssignments.isEmpty()) return emptyList()
     val priority = cueDerivedPriority(cueData)
@@ -433,13 +445,14 @@ internal fun buildCueAssignmentsForCue(
             category: AttributeCategory,
             override: CompositionRule,
             value: CueAssignmentResolver.AttributeValue,
+            attribute: String = canonical,
         ) = CueAssignmentResolver.Assignment(
             cueId = cueData.cueId,
             priority = priority,
             fadeWeight = 1.0,
             targetKey = key,
             targetIsGroup = isGroup,
-            attribute = canonical,
+            attribute = attribute,
             category = category,
             compositionOverride = override,
             value = value,
@@ -449,15 +462,29 @@ internal fun buildCueAssignmentsForCue(
             fadeDurationMs = assignment.fadeDurationMs,
             // Per member, not off the reference fixture: whether a slider shares its channel with the
             // colour is a fact about each member's class, and a mixed group may disagree.
-            bundleRole = bundleRoleOf(fixture, canonical),
+            bundleRole = bundleRoleOf(fixture, attribute),
             // The stored row's own target, group or fixture, whichever member this copy landed on.
             sourceTarget = target,
         )
 
-        // Until session 4 a per-fixture branch sat here: a value of `ref:{uuid}` had to be resolved
-        // against the referenced Look *once per target fixture*, because a reference resolves per
-        // head. A row's value is always a literal now, so one parse against the reference fixture
-        // serves the whole target.
+        // A palette reference resolves per head, each on the property it lands on there.
+        if (PaletteReferences.isReference(assignment.value)) {
+            val paletteUuid = PaletteReferences.uuidOf(assignment.value)
+            if (paletteUuid == null || references == null) {
+                logger.warn("cue {}: reference '{}' for {}.{} cannot resolve — skipping", cueData.cueId, assignment.value, target.key, assignment.attribute)
+                continue
+            }
+            val heads = members.ifEmpty { listOf(referenceFixture) }
+            for (head in heads) {
+                val resolved = references.resolve(head, canonical, paletteUuid)
+                val value = resolved.value ?: continue
+                val (headCategory, headOverride) = fixtureCategoryFor(head, resolved.attribute) ?: continue
+                out.add(row(head.targetKey, head, isGroup = members.isNotEmpty(), headCategory, headOverride, value, resolved.attribute).copy(reference = paletteUuid))
+            }
+            continue
+        }
+
+        // A literal: one parse against the reference fixture serves the whole target.
         val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
             logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.attribute, target.key)
             continue
@@ -553,7 +580,7 @@ internal fun buildCombinedCueLayerCook(
         ?: state.show.cueStackManager.holds.priorityOf(cueId)
         ?: state.show.fxEngine.cueLayer.publishedPriorityOf(cueId)
     val data = live?.let { applyData.copy(livePriority = it) } ?: applyData
-    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, data)
+    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, data, state.show.paletteReferences)
     return CueComposer.cookAll(
         fixtures = state.show.fixtures,
         cueId = cueId,

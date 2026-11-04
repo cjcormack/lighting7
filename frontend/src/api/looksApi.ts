@@ -1,3 +1,4 @@
+import type { PaletteReference } from './paletteReference'
 import type { SpreadUnit } from '@/lib/spreadShape'
 import type { SceneryChange, SceneryState } from './sceneryApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
@@ -20,9 +21,10 @@ export const SELECTION_TARGET_TYPE = 'selection' as const
 /**
  * One stored Look row: "for this target, this property is this value".
  *
- * `value` is always a **literal** in the canonical cue-side grammar (hex for colour, `"pan,tilt"`
- * for position, `"0".."255"` for slider/setting). A `ref:` is rejected at the backend's write
- * boundary, which is what keeps Looks from nesting.
+ * `value` is a **literal** in the canonical cue-side grammar (hex for colour, `"pan,tilt"` for
+ * position, `"0".."255"` for slider/setting), or a `pal:{uuid}` palette reference the desk resolves
+ * per head (`reference`, `resolvedByHead`). A `ref:` is rejected at the backend's write boundary,
+ * which is what keeps Looks from nesting.
  *
  * **Always bound**: a Look row names a fixture or a group. `deferred` is refused at the write
  * boundary — see [DEFERRED_TARGET_TYPE].
@@ -38,6 +40,12 @@ export interface LookRow {
   sortOrder?: number
   /** Resolved server-side on read; ignored on write — the server never trusts client health. */
   health?: AssignmentHealth
+  /** The stored row's uuid, on read only. */
+  uuid?: string
+  /** The palette `value` references when it is `pal:{uuid}` (palette-references plan D6); on read only. */
+  reference?: PaletteReference
+  /** What the reference resolves to on each head it reaches, head key → literal; the live project's reads only. */
+  resolvedByHead?: Record<string, string>
 }
 
 /**

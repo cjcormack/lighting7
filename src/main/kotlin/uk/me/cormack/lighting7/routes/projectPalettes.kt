@@ -326,13 +326,29 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                 val running = state.show.programmerStore.layers.count {
                     it.source.isPalette && it.source.uuid == template.uuid
                 }
-                if ((usage.layerCount > 0 || fxRefs > 0 || running > 0) && !resource.force) {
-                    return@transaction PaletteDeleteOutcome.InUse(usage, fxRefs, running)
+                // A value referencing it is a use too (palette-references plan D8): stored in a cue's
+                // rows or a Look's, or held by the programmer.
+                val programmerRefs = state.show.programmerStore.referenceKeys(template.uuid).size
+                val referenceCount = usage.cueReferenceCount + usage.lookReferenceCount + programmerRefs
+                if ((usage.layerCount > 0 || fxRefs > 0 || running > 0 || referenceCount > 0) && !resource.force) {
+                    return@transaction PaletteDeleteOutcome.InUse(usage, fxRefs, running, programmerRefs)
                 }
                 // No DB-level ON DELETE CASCADE — SQLite does not enforce cascades without a
                 // per-connection pragma, so children go first, explicitly.
+                val hardenedCues = HashSet<Int>()
+                val hardenedLooks = HashSet<java.util.UUID>()
                 if (resource.force) {
                     DaoCueLayer.find { DaoCueLayers.palette eq template.id }.forEach { it.delete() }
+                    // Every reference hardened to the literal it last resolved to, per head, so
+                    // nothing it reached moves and nothing is left naming a palette that is gone.
+                    for (cue in cueRowsReferencing(project.id, template.uuid).map { it.cue }.distinctBy { it.id.value }) {
+                        hardenCueRows(state, cue, onlyPalette = template.uuid)
+                        hardenedCues += cue.id.value
+                    }
+                    for (look in lookRowsReferencing(project.id, template.uuid).map { it.look }.distinctBy { it.id.value }) {
+                        hardenLookRows(state, look, onlyPalette = template.uuid)
+                        hardenedLooks += look.uuid
+                    }
                 }
                 template.rows.forEach { it.delete() }
                 template.effects.forEach { it.delete() }
@@ -341,7 +357,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                 val pageIds = deleteBuskPadsReferencing(paletteId = template.id.value)
                 val uuid = template.uuid
                 template.delete()
-                PaletteDeleteOutcome.Deleted(uuid, pageIds)
+                PaletteDeleteOutcome.Deleted(uuid, pageIds, hardenedCues, hardenedLooks)
             }
             when (outcome) {
                 is PaletteDeleteOutcome.NotFound ->
@@ -351,7 +367,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                     PaletteInUseResponse(
                         error = "This palette is still in use by " +
                             describePaletteUse(
-                                outcome.usage, outcome.fxReferenceCount, outcome.runningCount,
+                                outcome.usage, outcome.fxReferenceCount, outcome.runningCount, outcome.programmerReferenceCount,
                             ),
                         code = CODE_PALETTE_IN_USE,
                         layerCount = outcome.usage.layerCount,
@@ -359,6 +375,9 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                         cueNames = outcome.usage.cueNames,
                         fxReferenceCount = outcome.fxReferenceCount,
                         runningCount = outcome.runningCount,
+                        cueReferenceCount = outcome.usage.cueReferenceCount,
+                        lookReferenceCount = outcome.usage.lookReferenceCount,
+                        programmerReferenceCount = outcome.programmerReferenceCount,
                     ),
                 )
                 is PaletteDeleteOutcome.Deleted -> {
@@ -370,7 +389,10 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                     state.show.programmerStore.layers
                         .filter { it.source.isPalette && it.source.uuid == outcome.uuid }
                         .forEach { state.show.programmerLayerStack.remove(it.layerId) }
+                    hardenProgrammerReferences(state, outcome.uuid)
                     state.show.fixtures.paletteListChanged()
+                    outcome.hardenedLooks.forEach { republishForLookEdit(state, it) }
+                    republishCuesAfterHarden(state, outcome.hardenedCues)
                     if (outcome.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(outcome.pageIds.toList())
                     call.respond(HttpStatusCode.NoContent)
                 }
@@ -791,6 +813,10 @@ internal data class PaletteInUseResponse(
     val cueNames: List<String>,
     /** Effect parameters holding a `pal:{uuid}` reference to this template. */
     val fxReferenceCount: Int = 0,
+    /** Cue rows, Look rows and programmer values whose value references it (palette-references plan D8). */
+    val cueReferenceCount: Int = 0,
+    val lookReferenceCount: Int = 0,
+    val programmerReferenceCount: Int = 0,
     /**
      * Programmer layers tracking this template *right now*.
      *
@@ -961,13 +987,20 @@ private sealed interface PaletteDeleteOutcome {
         val usage: PaletteUsage,
         val fxReferenceCount: Int,
         val runningCount: Int,
+        val programmerReferenceCount: Int = 0,
     ) : PaletteDeleteOutcome
 
     /**
      * Carries the uuid so the handler can release the programmer layers naming it, and the busk
      * pages that lost a pad so it can say so.
      */
-    data class Deleted(val uuid: java.util.UUID, val pageIds: Set<Int>) : PaletteDeleteOutcome
+    data class Deleted(
+        val uuid: java.util.UUID,
+        val pageIds: Set<Int>,
+        /** The cues and Looks whose references a forced delete hardened. */
+        val hardenedCues: Set<Int> = emptySet(),
+        val hardenedLooks: Set<java.util.UUID> = emptySet(),
+    ) : PaletteDeleteOutcome
 }
 
 /**
@@ -1427,6 +1460,10 @@ internal data class PaletteUsage(
      * does not block a delete (busk-layout plan D3) — the record's delete sweeps its pads.
      */
     val buskPageCount: Int = 0,
+    /** Cue rows whose value references this palette (palette-references plan D8). */
+    val cueReferenceCount: Int = 0,
+    /** Look rows whose value references this palette. */
+    val lookReferenceCount: Int = 0,
 ) {
     fun describe(): String = when {
         layerCount == 0 -> "nothing"
@@ -1466,14 +1503,19 @@ internal fun paletteFxReferenceCount(paletteUuid: java.util.UUID): Int {
     return adHoc + look + paletteFx
 }
 
-/** Phrase all three kinds of usage for the 409 body. */
+/** Phrase every kind of usage for the 409 body. */
 private fun describePaletteUse(
     usage: PaletteUsage,
     fxReferenceCount: Int,
     runningCount: Int,
+    programmerReferenceCount: Int = 0,
 ): String {
+    fun count(n: Int, one: String, many: String) = if (n == 1) "1 $one" else "$n $many"
     val parts = buildList {
         if (usage.layerCount > 0) add(usage.describe())
+        if (usage.cueReferenceCount > 0) add(count(usage.cueReferenceCount, "cue value", "cue values"))
+        if (usage.lookReferenceCount > 0) add(count(usage.lookReferenceCount, "Look value", "Look values"))
+        if (programmerReferenceCount > 0) add(count(programmerReferenceCount, "programmer value", "programmer values"))
         if (fxReferenceCount > 0) {
             add(if (fxReferenceCount == 1) "1 FX parameter" else "$fxReferenceCount FX parameters")
         }
@@ -1504,6 +1546,7 @@ internal fun paletteUsageFor(paletteIds: Collection<Int>): Map<Int, PaletteUsage
     // every row here has one.
     val byPalette = layers.groupBy { it.palette!!.id.value }
     val buskPages = buskPageCountsFor(BuskPadKind.PALETTE, ids)
+    val referenceCounts = paletteReferenceCountsFor(ids)
     return ids.associateWith { paletteId ->
         val mine = byPalette[paletteId].orEmpty()
         val cues = mine.map { it.cue }.distinctBy { it.id.value }
@@ -1512,6 +1555,8 @@ internal fun paletteUsageFor(paletteIds: Collection<Int>): Map<Int, PaletteUsage
             cueIds = cues.map { it.id.value },
             cueNames = cues.map { it.name },
             buskPageCount = buskPages[paletteId] ?: 0,
+            cueReferenceCount = referenceCounts[paletteId]?.first ?: 0,
+            lookReferenceCount = referenceCounts[paletteId]?.second ?: 0,
         )
     }
 }

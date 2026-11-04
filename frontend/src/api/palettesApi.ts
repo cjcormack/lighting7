@@ -283,6 +283,13 @@ export interface PaletteInUseError {
    * so this is a consequence to state rather than a reference to repoint.
    */
   runningCount?: number
+  /**
+   * Cue rows, Look rows and programmer values whose value references this palette
+   * (palette-references plan D8). A forced delete keeps each as the value it resolves to now.
+   */
+  cueReferenceCount?: number
+  lookReferenceCount?: number
+  programmerReferenceCount?: number
 }
 
 /**

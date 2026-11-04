@@ -1357,11 +1357,10 @@ answer wherever it is read.
 
 Two rules that fall out of that, both enforced rather than conventional:
 
-- **A reference is legal only in an FX parameter.** A value — a cue row, a Look row, a programmer
-  entry — is a literal, and a *value's* dependency mechanism is a layer.
-  `parseAssignmentValue` returns null for a `pal:`-shaped value and `validateLookRows` rejects one,
-  beside its `ref:` rejection.
-- **Only a generic colour palette can be named.** An FX's output is one colour applied to every
+- **In an FX parameter, a reference names one colour.** A reference may also be a *value*, which
+  resolves per head instead — §"A palette reference is a value" below; `parseAssignmentValue` still
+  returns null for one, because every reader resolves it before parsing.
+- **Only a generic colour palette can be named by an FX parameter.** An FX's output is one colour applied to every
   head it targets, so `PaletteResolver.resolveColourGeneric` resolves the intent without a fixture —
   as though the head were RGBW, which makes it identical to the same palette applied as a layer on
   any RGBW/RGBWA head. A per-fixture palette holds no single colour and is refused, and so is an
@@ -1388,6 +1387,61 @@ Two rules that fall out of that, both enforced rather than conventional:
   as `#B55300`). That is worse than the RGB-only reading, not equal to it. It is the accepted trade
   for matching the layer exactly on the common head; resolving `RGB_ONLY` there instead is a one-line
   change that inverts which class of head is exact.
+
+### A palette reference is a value
+
+A cue's own row, a Look row and a programmer entry may hold `pal:{uuid}` where they hold a literal
+(palette-references plan D1). It names a **value** palette of the same project; an FX palette, a
+palette of another project, an unknown uuid and a palette of another family than the row are refused
+by name at every write boundary (`PALETTE_REFERENCE_INVALID`, `routes/paletteReferenceRules.kt`).
+`ref:` stays refused: Looks still do not nest.
+
+**It resolves per head, as a press resolves** (`fx/PaletteReferences.kt`, D2): the palette's row for
+that head — a fixture row on it, a group row whose group holds it, or a row on its parent that
+`PaletteFanOut` lands on it — else its generic row, through `PaletteResolver.resolve` with the head's
+fitted media. A row is matched to the reference's attribute by where it resolves on the head, so a
+colour reference on a MAC 250 lands on its `colourWheel`, and the reference's value is keyed by that
+property. A colour row brings the palette's colour family with it, refused whole by
+`unmetColourRequirement` as a press is, and a palette with a hex and a white row gives an RGBW head a
+reference on each, which the bundled-emitter rule reconciles as it does any two rows. A group row
+resolves per member and composes as group-origin rows, so a member's own row beats it.
+
+Composition never sees one. A cue's rows resolve in `buildCueAssignmentsForCue`; a Look's in
+`LookRegistry.expand`, whose cached expansion holds the literals, so the cook, Include and *Apply as
+values* read literals; the programmer holds a `ProgrammerValue.Reference` carrying its resolved value,
+which every read path takes from `.resolved`.
+
+**A reference that no longer resolves keeps its last value, marked** (D3): the desk remembers what
+each (palette, head, attribute) last resolved to for the run, and answers that with the reason —
+*'DSR Focus' has no row for spot-3*. Nothing stores it, so a desk started with a palette that already
+lacks the head's row puts nothing there, as a palette layer did.
+
+**What references a palette is read from an indexed column, never the value text** (D4):
+`cue_attribute_assignments.palette_uuid` and `look_rows.palette_uuid`, set by the row's own value
+setter on every write the importer's included, never synced (the value carries the uuid), and joined
+on the row's project because a venue version keeps every uuid. The programmer is scanned in memory
+(`ProgrammerStore.referenceKeys`).
+
+**A palette edit moves every reference in one pass** (`republishForPaletteEdit`, D5): the programmer's
+references re-resolved in place (owner, touched flag and write seq kept), the live cues whose own rows
+reference it, and every Look whose rows do — invalidated, its programmer layers recooked and the cues
+layering it rebuilt — before the programmer's keys publish, firing `cuesRecomposed` with every cue it
+reached. A held cue moved this way is not marked edited since GO.
+
+**The desk answers the resolved value beside the reference** (D6). A programmer entry's frame carries
+`reference {paletteId, paletteUuid, name, unresolved?}` beside its resolved `value`; a cue row's and a
+Look row's DTO carry `reference`, `resolvedByHead` (on the live project's reads) and the row's `uuid`;
+`ProvenanceEntry.reference` names the palette a programmer entry or a cue's own row won with. A Look
+layer's value keeps the Look's attribution.
+
+**Delete, harden and copy** (D8, D9). A referenced palette refuses delete, `PaletteUsage` counting
+cue and Look reference rows and the delete guard the programmer's. `?force=true` **hardens** every
+reference to the literal it last resolved to, per head — a group row kept whole where its members
+agree, else split into member rows, a member the owner holds a row of its own for left alone — and
+then deletes, so nothing on stage moves (`routes/paletteHardening.kt`). *Copy the values*, `POST
+/looks/{id}/harden` and `POST /cues/{id}/harden` `{rowUuids?}` and MCP's `harden_values`, is the same
+rule on demand, one history entry. A cue or Look copied to another project maps each reference as the
+cue copier maps an FX parameter's: that project's palette of the name, else a copy.
 
 ## Tier 5 — Baseline / defaults
 
