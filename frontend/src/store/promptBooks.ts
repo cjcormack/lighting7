@@ -38,10 +38,11 @@ export const promptBooksApi = restApi.injectEndpoints({
 
     // Per-cue reading positions from the project's prompt book, for the Run view.
     // Tagged PromptBook so it rides the same invalidation as anchor edits (both the
-    // anchor mutations and the WS promptBookChanged echo refresh it).
+    // anchor mutations and the WS promptBookChanged echo refresh it), and CueStackList
+    // because a follower reads at the head of its sequence, which a follow or a reorder moves.
     projectCueLocations: build.query<CueLocationDto[], number>({
       query: (projectId) => `projects/${projectId}/cue-locations`,
-      providesTags: ['PromptBook'],
+      providesTags: (_result, _error, projectId) => ['PromptBook', { type: 'CueStackList', id: projectId }],
     }),
 
     // Create or replace the project's prompt book (idempotent PUT — the show has one).

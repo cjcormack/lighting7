@@ -4,6 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 
 vi.mock('@/components/SpeedMasters', () => ({ SpeedMastersChip: () => null }))
+vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: null, fadeRemainMs: null }) }))
 
 import { CueStackPanel } from './CueStackPanel'
 
@@ -14,6 +15,7 @@ const base: ComponentProps<typeof CueStackPanel> = {
   rows: [],
   anchorByEntry: new Map(),
   anchorHintByEntry: new Map(),
+  followByEntry: new Map(),
   entryRowByEntry: new Map(),
   statusOf: () => 'standby',
   warningsByEntry: new Map(),
@@ -61,5 +63,27 @@ describe('CueStackPanel · On GO', () => {
   it('heads the drawer too, under its own header', () => {
     render(<CueStackPanel {...base} inDrawer onClose={noop} onGo={{ cue: 'Q2', moves: 'Moon in' }} />)
     expect(screen.getByText('Moon in')).toBeInTheDocument()
+  })
+})
+
+describe('CueStackPanel · follow sequences', () => {
+  const cue = (entryId: number, label: string) => ({
+    type: 'cue' as const,
+    cue: { entryId, cueId: entryId, label, name: label, fadeMs: null, fadeCurve: 'LINEAR', stackId: 1, stackName: 'Act 1' },
+  })
+
+  it('hangs a follower off the rail, in order, and leaves its head on the rail edge', () => {
+    render(
+      <CueStackPanel
+        {...base}
+        rows={[cue(1, 'Q1'), cue(2, 'Q2')]}
+        followByEntry={new Map([[2, { headEntryId: 1, afterLabel: 'Q1', delayMs: 2000 }]])}
+      />,
+    )
+    const entries = [...document.querySelectorAll('[data-rail-entry]')].map((e) => e.getAttribute('data-rail-entry'))
+    expect(entries).toEqual(['1', '2'])
+    const tail = document.querySelector('[data-follow-tail]')!
+    expect(tail.querySelector('[data-rail-entry="2"]')).not.toBeNull()
+    expect(tail.querySelector('[data-rail-entry="1"]')).toBeNull()
   })
 })

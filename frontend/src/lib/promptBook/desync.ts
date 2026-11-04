@@ -8,10 +8,11 @@
 // Agreement means: advancing the stack moves you monotonically DOWN the script.
 // Ported from docs/prototypes/model.ts (the design-session spec) with numeric cue ids.
 //
-// A cue with no anchor is NOT a fault: a pre-show state, house lights, or an
-// auto-followed cue has no line to point at and never will. Unanchored cues are
-// simply skipped here (the rail signals them quietly and borrows a neighbour's
-// position for navigation — see geometry.nearestAnchoredCue).
+// A cue with no anchor is NOT a fault: a pre-show state or house lights has no line
+// to point at and never will. Unanchored cues are simply skipped here (the rail
+// signals them quietly and borrows a neighbour's position for navigation — see
+// geometry.nearestAnchoredCue). A follower never counts: its caller passes only the
+// anchors that are in force (see useBookAnchors).
 
 import type { Rect, Region, CueAnchorDto, AnnotationDto } from '../../api/promptBooksApi'
 

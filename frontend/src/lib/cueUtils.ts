@@ -1,6 +1,11 @@
 import type { Cue, CueAdHocFx, CueInput, CueLayer } from '@/api/cuesApi'
 import { formatMs } from './formatMs'
 
+/** How a cue's place reads across the desk: its number, else its name. */
+export function cueLabel(cue: { cueNumber?: string | null; name: string }): string {
+  return cue.cueNumber ? `Q${cue.cueNumber}` : cue.name
+}
+
 const CURVE_LABELS: Record<string, string> = {
   LINEAR: 'LIN',
   EASE_IN_OUT: 'SINE',

@@ -9,6 +9,7 @@ import type { ExpansionMode } from '@/components/runner/mobile/CueCardBody'
 import type { CueAnchorDto } from '../../api/promptBooksApi'
 import type { CueStackCueRow } from '../../api/cueStacksApi'
 import type { DesyncWarning, FlatCue } from '../../lib/promptBook/desync'
+import type { FollowLink } from '../../lib/promptBook/followers'
 import type { ShowRailRow } from '../../lib/promptBook/geometry'
 import type { CueRunStatus } from './AnchorOverlay'
 import { DesyncWarningsPanel } from './DesyncWarningsPanel'
@@ -24,8 +25,10 @@ interface CueStackPanelProps {
   rows: ShowRailRow[]
   /** Everything keyed by entry: a shared cue is a card per entry, each with its own anchor. */
   anchorByEntry: Map<number, CueAnchorDto>
-  /** Per-unanchored-entry hint naming the neighbour the book borrows, e.g. "follows Q12". */
+  /** Per-unanchored-entry hint naming the neighbour the book borrows, e.g. "after Q12". */
   anchorHintByEntry: Map<number, string>
+  /** Followers, drawn attached to the cue that starts their sequence. */
+  followByEntry: Map<number, FollowLink>
   /** Full stack entries by entry id — feeds each expanded card's palette/notes/auto. */
   entryRowByEntry: Map<number, CueStackCueRow>
   statusOf: (entryId: number) => CueRunStatus
@@ -86,6 +89,7 @@ interface CueStackPanelProps {
  * Right pane: the flattened show order as one list of Run-style cue cards. The live
  * (green) and next (blue) cues expand by default into full cards; every other cue is
  * a compact row that can be expanded on demand, with MARKER separators between them.
+ * A follower hangs off the cue before it on a connecting line, indented, in the same order.
  * Clicking a card/row navigates to that cue's anchor — it never fires a cue; a per-card
  * "Set next" arms the next GO. Transport (stack · BPM · TAP · BACK/GO) lives in the
  * shared Row 3 show bar above the view; only the narrow drawer variant keeps its own header.
@@ -94,6 +98,7 @@ export function CueStackPanel({
   rows,
   anchorByEntry,
   anchorHintByEntry,
+  followByEntry,
   entryRowByEntry,
   statusOf,
   warningsByEntry,
@@ -222,13 +227,15 @@ export function CueStackPanel({
           // Both facts below are the same underlying question — "is this row on the live
           // stack?" — computed once so they can't drift apart under a future edit.
           const isLiveStack = row.cue.stackId === activeStackId
-          return (
+          const follow = followByEntry.get(entryId) ?? null
+          const card = (
             <PromptBookCueCard
               key={entryId}
               cue={row.cue}
               status={status}
               anchor={anchorByEntry.get(entryId)}
               anchorHint={anchorHintByEntry.get(entryId) ?? null}
+              follow={follow}
               cueEntry={entryRowByEntry.get(entryId)}
               projectId={projectId}
               warnings={warningsByEntry.get(entryId) ?? NO_WARNINGS}
@@ -251,6 +258,14 @@ export function CueStackPanel({
               onRenoteCue={onRenoteCue}
               sceneryLines={sceneryLinesByCue?.get(row.cue.cueId)}
             />
+          )
+          // flow-root keeps each card's margins inside, so the line runs unbroken down the tail.
+          return follow == null ? (
+            card
+          ) : (
+            <div key={entryId} data-follow-tail className="ml-3 flow-root border-l-2 border-border pl-1.5">
+              {card}
+            </div>
           )
         })}
       </div>

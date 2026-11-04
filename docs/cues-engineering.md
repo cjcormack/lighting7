@@ -326,6 +326,16 @@ follow — or a **marker entry**, a labelled divider with no cue behind it. The 
   row. A typed number is explicit (409 if another cue entry of the stack has it explicitly, as on `add-cue` and `POST /cues`), a blank
   one hands the entry back to auto-numbering, and an unchanged one leaves the auto flag alone. The
   cue's `PUT` / `PATCH` no longer write these.
+- **A follower isn't anchored.** An entry whose cue before it, markers aside, has a follow with a
+  delay plays by itself, so the Prompt Book anchors its sequence at the head: the rail hangs followers
+  under the head, the head's margin chip counts them, and the chip stays lit until the last one is
+  through. Its scenery glyph lists the sequence's moves, followers' named by cue; their notes stay on
+  their rail cards. A follower firing leaves the book where it is. A head with no anchor shows *place
+  anchor*, even when a follower holds one: only the head can place the sequence. An anchor a follower already holds stays stored and is ignored, so turning the follow off
+  brings it back; nothing refuses the write, because a follow can be set after the next cue is
+  anchored. `cue-locations` reports a follower at its head's position. `followHeads`
+  (`models/cueStackEntries.kt`) and `lib/promptBook/followers.ts` hold the rule. A cue created from a
+  selection lands after the last follower of the sequence before it, never inside one.
 - **Remove from stack** is `DELETE /cue-stacks/{id}/entries/{entryId}`: the entry and its prompt-book
   anchor go, the stack renumbers, and the cue stays — loose if that was its last entry. Removing
   the **live** entry leaves the stage alone (D16): the stack keeps holding its cue, *detached* at the

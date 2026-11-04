@@ -6,10 +6,12 @@
 // relative to the page element's current box.
 
 import type { CSSProperties } from 'react'
+import { cueLabel } from '../cueUtils'
 import { clamp } from '../utils'
 import type { Rect, Region, CueAnchorDto } from '../../api/promptBooksApi'
 import type { CueStack } from '../../api/cueStacksApi'
 import { scriptPosition, type FlatCue } from './desync'
+import { followLinks } from './followers'
 
 /** Position a normalized rect inside a `position: relative` page wrapper. */
 export function rectToStyle(r: Rect): CSSProperties {
@@ -262,7 +264,7 @@ export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
       out.push({
         entryId: cue.entryId,
         cueId: cue.id,
-        label: cue.cueNumber ? `Q${cue.cueNumber}` : cue.name,
+        label: cueLabel(cue),
         name: cue.name,
         fadeMs: cue.fadeDurationMs,
         fadeCurve: cue.fadeCurve,
@@ -279,7 +281,8 @@ export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
  * of `region` — the ordering to POST to `reorderCueStackCues` when a cue is created
  * from a prompt-book selection. `stack.cues` is the CURRENT list (before the new cue
  * lands in cache); the new cue is spliced in immediately after the last anchored cue
- * whose reading position precedes-or-equals the selection.
+ * whose reading position precedes-or-equals the selection, or after the last of its followers,
+ * since a sequence plays as one. `anchorByEntry` holds no follower: its anchor is inactive.
  *
  * When there are no anchored cues to compare against, the new cue is appended — the
  * natural result of anchoring a stack top-to-bottom. When the stack has anchors but
@@ -310,6 +313,13 @@ export function orderedEntryIdsForInsert(
       insertIndex = i + 1
     }
   }
+  const follows = followLinks([stack])
+  for (let i = insertIndex; i < stack.cues.length; i++) {
+    const row = stack.cues[i]
+    if (row.cueType === 'MARKER') continue
+    if (!follows.has(row.entryId)) break
+    insertIndex = i + 1
+  }
   return [...ids.slice(0, insertIndex), newEntryId, ...ids.slice(insertIndex)]
 }
 
@@ -323,9 +333,9 @@ export interface AnchorFallback {
 }
 
 /**
- * Best-effort reading position for a cue with no anchor — a pre-show state or an
- * auto-followed cue reasonably has no line to point at, but the book should still
- * navigate somewhere sensible.
+ * Best-effort reading position for a cue with no anchor — a pre-show state or a
+ * follower has no line to point at, but the book should still navigate somewhere
+ * sensible.
  *
  * Searches BACKWARDS from the cue first: you read down the script, so the previous
  * cue's anchor is the closest known "you are here". Only when nothing precedes it
@@ -414,7 +424,7 @@ export function flattenShowRows(stacks: CueStack[] | undefined): ShowRailRow[] {
           cue: {
             entryId: cue.entryId,
             cueId: cue.id,
-            label: cue.cueNumber ? `Q${cue.cueNumber}` : cue.name,
+            label: cueLabel(cue),
             name: cue.name,
             fadeMs: cue.fadeDurationMs,
             fadeCurve: cue.fadeCurve,
