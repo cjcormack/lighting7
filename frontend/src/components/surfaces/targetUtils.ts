@@ -150,6 +150,12 @@ export function describeTarget(target: BindingTarget): string {
       return `Place in bank ${shortUuid(target.bankUuid)}`
     case "handDrop":
       return "Let go"
+    case "undo":
+      return "Undo"
+    case "redo":
+      return "Redo"
+    case "programmerUndo":
+      return "Programmer undo"
     case "buskPageNext":
       return "Busk · next page"
     case "buskPagePrev":

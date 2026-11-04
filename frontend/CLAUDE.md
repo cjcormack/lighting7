@@ -2632,7 +2632,8 @@ broadcast; `hand.pickUp {kind, id}` resolves the record **in the current project
 `hand.drop {uuid?}` lets go. There is no `hand.place` and **you must not add one** — every target
 already has a mutation with its own validation, so one frame that placed would reimplement four of
 them behind a single name. **A place is the placing window's own mutation followed by `hand.drop`**,
-and Undo is that window's inverse mutation, offered for ten seconds (`HAND_UNDO_MS`).
+and its Undo, offered for ten seconds (`HAND_UNDO_MS`), takes that mutation's own history entry back
+(§Undo) — the rig row's, whose write the rig's commit queue makes later, is still its inverse.
 
 **A drop after a place names what it is dropping; the chip's × and Escape do not.** A place is two
 independent round-trips — the window's mutation, then the drop — and another window may have picked
@@ -2768,13 +2769,11 @@ selected head) or write it **into** a focused Look, and the place's toast says w
 **beside** the error, on the one place with no Undo to recover through.
 
 **The four places, and the three Undos.** A **bank** is `useAddBuskPadMutation` — it answers the
-whole page, so the busk view's commit queue needs nothing — and its inverse goes back through the
-layout PUT, since there is no remove-pad route: `lastPadOfBank` finds the appended pad in the page
-the append returned. A **cue slot** is `useAssignCueSlotMutation`, on **empty tiles only** — a filled tile's press is
+whole page, so the busk view's commit queue needs nothing — and its Undo is the append's own history entry (`HandPlacement.history`, §Undo). A **cue slot** is `useAssignCueSlotMutation`, on **empty tiles only** — a filled tile's press is
 live, and a hand held over the panel must not quietly become a second meaning for it; replacing an
 occupied slot is *Clear slot* and then this. A **cue's stack** is `patchProjectCue`
-through `buildCueInput`, appended at the top (later wins within a cue), and its inverse patches back
-the layers array read *before* the place. The **programmer's layer stack** is the press
+through `buildCueInput`, appended at the top (later wins within a cue), its Undo the patch's entry as well. The rig row's
+place keeps its own inverse, since its write goes through the rig's commit queue after the place returns. The **programmer's layer stack** is the press
 (`usePress`, apply-model plan §5) — it toggles, replaces the palette's family and lands in a focused
 Look as a palette chip's tap does — and has **no Undo**, which is a decision: a press returns no layer id, the only way
 to find the new layer would be to diff a stack that is *shared*, and a wrong inverse removing another
@@ -4802,10 +4801,62 @@ row is its icon, so the pair costs the iconic row one 32px button (40px with its
 the revision Clear was pressed at, labelled `Clear`), so it undoes the Clear and whatever came after
 it, never whatever happens to be newest when it is clicked.
 
-**⌘Z and ⇧⌘Z** (Ctrl on Windows and Linux) take the steps while the programmer view is mounted
-(`useProgrammerUndoKeys`), skipped in a text field, a contenteditable or with a dialog open, and for a
-key another handler has `preventDefault()`ed. The cue editor's ⌘Z is its own and unchanged; session 6
-of the plan makes both global.
+⌘Z and ⇧⌘Z are global now, and take the newer of the programmer's top step and your newest show
+change (§Undo); the programmer view has no keys of its own.
+
+### Undo
+
+**One key, newest first, across the programmer and the show** (undo plan D1, D2, session 6;
+`components/history/`). ⌘Z and ⇧⌘Z (Ctrl on Windows and Linux; `undoKeys.ts`) are on `window`,
+registered once by `HistoryHost` in `Layout`, and stand aside in a text field, a contenteditable, an
+open dialog or alert dialog — **but not a sheet** (`[data-slot="sheet-content"]`), so the History sheet
+and an editor in a sheet take the key — and for a key another handler has `preventDefault()`ed. They
+take what `history.state`'s `undo` / `redo` name: the newer of the live programmer's top step and this
+window's source's newest show entry. The cue editor's own ⌘Z is gone.
+
+**Every door goes through `useHistoryMove`** (`HistoryMove.tsx`): the header's joined pair after
+`ProgrammerIndicator` (`HeaderUndoRedo`, its tooltip naming what it takes and its key, violet for a
+programmer step; folded into the user menu below `sm`, which is the phone's Undo · Redo · History…),
+⌘K's *History* group (*Undo · …*, *Redo · …*, *Show history*), the History sheet's head and rows, and
+the toasts. One move is one `POST …/history/undo|redo` (`historyMove`, silent in `errorToastMiddleware`)
+run through `runHistoryMove` (`undoFlow.ts`, pure): the **lock** first — a show entry on the live
+project while the show runs and the show-editing lock is on asks *Unlock and undo* — then the desk's
+409s, each asked once in `HistoryDialogs` (mounted once in `Layout`): `HISTORY_CONFLICT` lists the later
+changes and resends with `backToHere` (*Undo n changes*; a redo has no back-to-here and is refused),
+`HISTORY_CONFIRM` names what moves and resends with `confirm` (*Undo on stage*, amber). Anything else is
+one error toast in the desk's words. A move that lands toasts what came back (*Undone · Delete cue
+Q12*) with the way back (Redo, or Undo after a redo). A programmer step goes back through the deepest
+of the moved steps on the other stack; entries one at a time.
+
+**A toast's Undo names its change by request** (D11). The base query hands every answer's
+`X-History-Entry` to the trackers listening for that endpoint (`trackHistoryWrites([endpoints])`,
+`store/restApi.ts`) — named by endpoint, so a cue editor's flush or another sheet's write landing
+meanwhile is not taken back with the gesture; a gesture starts one, stops it when its write lands, and `entryUndoAction(projectId, requestIds)` is the toast's
+action — it reads the history page, finds the entries listing those request ids (`entriesForRequests`)
+and undoes them newest first through the mounted host (`undoHistoryRequests` in `historyActions.ts`,
+which needs no hooks, so a store module can call it), announced as one toast whose Redo brings them
+all back. It so undoes the right change whatever happened since; an entry
+another write folded into within 1.5 s (D8) comes back with it. The toasts carrying it: a library
+batch delete (`useBatchDelete`'s `history`: Looks, palettes, scripts, speed masters — one toast once the
+batch is done, both passes in it), the cue delete, Record, Record look and Update (`announceWrite`'s
+action), and the hand's bank, cue-slot and cue-layer places (`HandPlacement.history`). Clear's stays the programmer step's. The cue
+editor's *values saved* Undo and the prompt book's *Undo move* undo their own write's entry the same
+way, keeping their words. A show entry's move refetches the record caches (`SHOW_RECORD_TAGS`, which
+the cue editor's `Cue` reads need) and tells `onHistoryMoved` listeners: the cue editor's store drops
+its saved draft rows and its Undo there, since the undo may have put the cue back from under them.
+
+**The History sheet acts** (§4.2): its head carries Undo and Redo; a row's hover button is *Undo back
+to here* on your own show row and a programmer step (programmer-only, through it), *Undo {name}'s
+change* on anyone else's, *Redo* on an undone one (`rowActionLabel`). No door sends `backToHere` up
+front: an entry that collides with nothing is undone alone (D3), and one that does asks first — on
+your own entry *Undo back to here?*, saying it takes every later change of yours too, which is what
+the desk's back-to-here does there; on anyone else's *Undo n changes?*. An operator's
+show rows on a venue are read-only. An expanded record links to its page by the row id the desk now
+sends (`historyRecordHref`; a removed one links nowhere).
+
+`undoFlow.test.ts` holds each 409's flow and the lock, `undoKeys.test.ts` the key's skips,
+`historyEntryHeader.test.ts` the toast's entry from the header, `HistorySheet.test.tsx` the row actions
+and links, and `hand.test.ts` a place undone by entry.
 
 ### One selection, two shapes
 
@@ -6438,10 +6489,10 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   (`fetchLatestCue` in `store/cues.ts`): another client's cue PATCH fires `cueListChanged`, which
   invalidates only `CueList`, so a cached cue can hold a list someone has since rewritten. A flush
   sends only the entries no save has carried yet, and saves and Undos run one after another.
-- **Undo is one step**, the exact inverse of the last save that landed: the rows it changed put back
-  as they were, every other row as the desk holds it now — from the *Q1 · values saved* toast or ⌘Z
-  with the editor holding the keys (a text field keeps its own ⌘Z). Pending edits to those rows are
-  dropped with it; a refused save leaves the previous Undo standing. **One flush is one PATCH** for
+- **Undo is one step**: the last save that landed, taken back from the history by the save's own
+  entry (§Undo) — from the *Q1 · values saved* toast; ⌘Z is the global key, which takes your newest
+  show change, normally that save. Pending edits to the save's rows are dropped with it; a refused save
+  leaves the previous Undo standing. **One flush is one PATCH** for
   everything pending — the rows, and the Looks and FX tabs' lists — so one Undo puts back each list
   that save wrote (the toast names them: *Q1 · values and looks saved*); a list gesture still
   pending lands after the Undo, on what it put back. The header's `CueValuesSaveState`, beside

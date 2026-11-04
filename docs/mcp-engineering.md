@@ -144,7 +144,8 @@ except for scripts and the cannons:
   over remote access*). A script is arbitrary Kotlin in the desk's JVM. Refused
   (`REMOTE_SCRIPTS_DISABLED`, `requireScriptAccess`): creating, compiling and running a project
   script, changing a saved script's text or type (a rename is fine), the same for FX definitions,
-  and the whole `/script-editor` service. MCP never has a script tool, whatever this says.
+  an undo or redo that would put either back (the history routes and `undo_changes`), and the
+  whole `/script-editor` service. MCP never has a script tool, whatever this says.
 - **Arming and firing are refused remotely unless an admin allows them** (Remote access → *Allow
   arming and firing over remote access*; stage-view plan session 9, P2, D16). A confetti cannon spends
   something physical in a room a remote caller cannot see. Refused (`REMOTE_EFFECTS_DISABLED`,
@@ -620,7 +621,7 @@ The setup tools that read or store data take an optional **`projectId`** — `ge
 `patch_fixtures`, `delete_groups`, `unpatch_fixtures`, `rename_fixtures`, `edit_groups`, `set_stage`, `place_fixtures`,
 `override_venue_fixtures`, `set_scene`, `get_scene`,
 `upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `set_move_in_dark`, `delete_cue_stacks`, `delete_cues`,
-`copy_cues` (its target), and the
+`copy_cues` (its target), `list_history`, `undo_changes`, and the
 show-running `set_scenery` — so a project can be prepared while another runs, as the REST routes'
 `withProject` writes allow. `ai/ToolProject.kt`'s `State.toolProject` resolves it (absent is the
 current project; a venue version, or an id that names nothing, answers *Project not found*) and
@@ -658,6 +659,42 @@ element, here) too.
 [{fromCueId, cueId, entryId?}]`, `unresolved [{problem, in}]`, the Looks and palettes copied and
 linked — are the route's. Its target is the tool's `projectId`, current or not; the holds restamp and
 the busk pads' announcement are the live show's, so they follow only a copy into the current project.
+
+### Claude's own history
+
+Each tool call runs under one write origin of the grant's source, `mcp:{grantId}`, named *Claude ·
+{client}* (`McpProtocol.callTool`; undo plan D7), so a call that stores something is one show entry
+of Claude's, beside the operator's in the History sheet. Two setup tools (`ai/HistoryTools.kt`) read
+and take back Claude's own, on the current project or the one `projectId` names, and the
+`instructions` say so in one line:
+
+- **`list_history`** `{projectId?, limit?}` (1–100, default 20; read-only): `{projectId, changes:
+  [{id, label, at, undone, counts: {added, removed, changed}, records: [{folder, change, label}],
+  moreRecords?}], more}` — the grant's entries only, newest first, the first ten records of each.
+- **`undo_changes`** `{projectId?, entryId? | count?, confirm?}`: the entry `entryId` names, or the
+  grant's newest `count` (1–20, default 1) not yet undone, newest first, each through `moveHistory`
+  as the undo route runs it, stopping at the first refusal. Answers `{undone: [{id, label}]}`; a
+  refusal is an error carrying `code`, its words and code `HistoryMoveResult.refusal`'s — the one
+  mapping the route and the surfaces word too — and what was undone before it as
+  `undone`: `HISTORY_NOT_YOURS` for an entry of another source's (checked before anything runs),
+  `HISTORY_UNKNOWN`, `HISTORY_EMPTY` (none left, or already undone), `HISTORY_CONFLICT` with
+  `later` — there is no back-to-here, since it would take another source's changes, so the message
+  sends Claude to the operator — `HISTORY_UNDO_BLOCKED` with `record` and `reason`, and
+  `REMOTE_SCRIPTS_DISABLED`.
+
+Show entries only: Claude's programmer steps are steps of the one programmer, the operator's to
+undo. **Confirm:** an undo that would move the running show answers `HISTORY_CONFIRM` with `moves`,
+the route's sentences, and the description and message tell Claude to ask the operator and call
+again with `confirm: true` only once they agree. `confirm` covers the **first** undo of the call alone,
+the one whose moves the refusal named: with `count`, a later undo that would move the show stops the
+call with its own `HISTORY_CONFIRM` and `moves`, and `undone` says what went before it, so the operator
+is shown every move before it happens. A present `entryId` that is not a non-empty string, or a `count`
+or `confirm` of the wrong type (an explicit `null` included), is refused as a bad argument, never read
+as "the newest". MCP is always remote, so the undo is held to Remote
+access's *Allow scripts* as the route holds a remote call: one that would put a script or an FX
+definition back is refused. `undo_changes` is a stored write for the venue guard
+(`VENUE_STORED_WRITE_TOOLS`). The undo makes no entry of its own: the restorer's transaction and what
+it sets off run under its `UNDO` origin, which marks the entries rather than adding one.
 
 ### Tools on a live venue
 

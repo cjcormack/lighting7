@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CircleUser, History, LogOut, Maximize2, MessageSquareWarning, Minimize2, MonitorSmartphone, Power } from "lucide-react"
+import { CircleUser, History, LogOut, Maximize2, MessageSquareWarning, Minimize2, MonitorSmartphone, Power, Redo2, Undo2 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,6 +20,9 @@ import { useWindowName } from "@/lib/windowIdentity"
 import { useDeskWindows } from "@/store/windows"
 import { openScreensSheet } from "@/components/screens/screensSheetState"
 import { openHistorySheet } from "@/components/history/historySheetState"
+import { useHistoryMove } from "@/components/history/HistoryMove"
+import { historyActionLabel } from "@/components/history/HeaderUndoRedo"
+import { useHistoryState } from "@/store/history"
 import { useReportProblem } from "@/lib/reportProblem"
 import { useRigSafety } from "@/store/rigSafety"
 import { QuitDeskDialog } from "@/components/rigSafety/QuitDeskDialog"
@@ -48,6 +51,8 @@ export function UserMenu() {
   const { quitAllowed } = useRigSafety()
   const windowName = useWindowName()
   const windows = useDeskWindows()
+  const history = useHistoryState()
+  const move = useHistoryMove()
   const { active: fullscreen } = useFullscreenState()
   const reportProblem = useReportProblem()
 
@@ -141,6 +146,15 @@ export function UserMenu() {
               <DropdownMenuShortcut>⇧F</DropdownMenuShortcut>
             </DropdownMenuItem>
           )}
+          {/* The header's Undo and Redo, folded here on a phone (undo plan §4.1, §4.7). */}
+          <DropdownMenuItem className="sm:hidden" disabled={history.undo == null} onSelect={() => void move.undo()}>
+            <Undo2 className="size-4" />
+            <span className="min-w-0 truncate">{historyActionLabel("undo", history.undo)}</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="sm:hidden" disabled={history.redo == null} onSelect={() => void move.redo()}>
+            <Redo2 className="size-4" />
+            <span className="min-w-0 truncate">{historyActionLabel("redo", history.redo)}</span>
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={openHistorySheet}>
             <History className="size-4" />
             History…

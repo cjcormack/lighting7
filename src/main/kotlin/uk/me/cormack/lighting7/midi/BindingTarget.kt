@@ -28,6 +28,8 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *     See `docs/plans/completed/midi-surface-plan.md` §D3.
  *   - **The hand** ([PickUpPad], [HandPlaceInBank], [HandDrop]) — the desk's held record, moved
  *     between screens (multi-screen plan §3.5)
+ *   - **History** ([Undo], [Redo], [ProgrammerUndo]) — the undo key, as the surface's own source
+ *     (undo plan §4.8)
  *   - **Records** ([ApplyLook], [PressPalette], [PressPad]) — a named thing from the library on a
  *     button, uuid-addressed, **each with exactly one behaviour** (§D6): a Look always onto its own
  *     fixtures, a template always onto the selection, a pad always its own bank's plan.
@@ -358,6 +360,26 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("handDrop")
     data object HandDrop : BindingTarget()
+
+    /**
+     * The undo key for this surface (undo plan §3.5, D1, D2): the newer of the live programmer's top
+     * step and the surface's own newest show entry. A refusal — a conflict, a confirm, nothing to undo —
+     * does nothing and is logged; a surface cannot confirm, so an undo that would move a running show
+     * is not done.
+     */
+    @Serializable
+    @SerialName("undo")
+    data object Undo : BindingTarget()
+
+    /** The redo key for this surface: the one of the programmer's and the surface's own undone last. */
+    @Serializable
+    @SerialName("redo")
+    data object Redo : BindingTarget()
+
+    /** Undo the live programmer's top step, whoever took it (D2's programmer-only Undo). */
+    @Serializable
+    @SerialName("programmerUndo")
+    data object ProgrammerUndo : BindingTarget()
 
     /** Show the next busk page ([uk.me.cormack.lighting7.state.BuskPageState]); wraps at the end. */
     @Serializable

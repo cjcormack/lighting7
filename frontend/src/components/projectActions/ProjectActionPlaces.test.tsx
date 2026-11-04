@@ -34,6 +34,12 @@ const detailOf = (p: ProjectSummary): ProjectDetail => ({
   stageHeightM: null,
 })
 
+vi.mock('@/store/history', () => ({
+  useHistoryState: () => ({ projectId: null, revision: 0, showRevision: 0, undo: null, redo: null, programmer: { undo: [], redo: [] } }),
+}))
+vi.mock('@/components/history/HistoryMove', () => ({
+  useHistoryMove: () => ({ move: vi.fn(), undo: vi.fn(), redo: vi.fn(), undoRequests: vi.fn() }),
+}))
 vi.mock('@/store/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/projects')>()),
   useProjectListQuery: () => ({ data: projects, isLoading: false, error: undefined, refetch: vi.fn() }),

@@ -222,6 +222,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // never a toast on that screen. `StageRenderHost` logs it to the console instead.
   'uploadStageRender', // src/components/stageRender/StageRenderHost.tsx
   'failStageRender', // ...same
+  // HISTORY_CONFLICT and HISTORY_CONFIRM are steps in undoing, asked in a dialog, and every other
+  // refusal is one toast in the record's words.
+  'historyMove', // src/components/history/HistoryMove.tsx (asks in its dialogs, toasts the rest)
 ])
 
 /**

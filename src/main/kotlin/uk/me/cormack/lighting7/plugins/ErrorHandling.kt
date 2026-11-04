@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.auth.AuthenticationException
 import uk.me.cormack.lighting7.auth.AuthorizationException
 import uk.me.cormack.lighting7.auth.PasswordPolicyException
+import uk.me.cormack.lighting7.mcp.CODE_REMOTE_SCRIPTS_DISABLED
 import uk.me.cormack.lighting7.mcp.RemoteCommandsDisabledException
 import uk.me.cormack.lighting7.mcp.RemoteEffectsDisabledException
 import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
@@ -105,7 +106,7 @@ fun Application.configureErrorHandling() {
         // (`mcp/RemoteRequests.kt`). Expected, so WARN; the code lets the UI say why.
         exception<RemoteScriptsDisabledException> { call, cause ->
             logger.warn("Refused remote script request on {}", call.request.local.uri)
-            call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Scripts are turned off for remote access", "REMOTE_SCRIPTS_DISABLED"))
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Scripts are turned off for remote access", CODE_REMOTE_SCRIPTS_DISABLED))
         }
         // A stored row, an effect or a programmer value naming a one-shot trigger (stage-view plan
         // session 9, D15). Thrown from inside the row writers so a write's transaction rolls back

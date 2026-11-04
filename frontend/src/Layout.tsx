@@ -42,6 +42,8 @@ import { GrandMasterOverviewPanel } from "./components/GrandMasterOverviewPanel"
 import { EffectsAnnouncer } from "./components/effects/EffectsAnnouncer"
 import { ScreensSheet, type WindowViewControls } from "./components/screens/ScreensSheet"
 import { HistoryButton, HistorySheet } from "./components/history/HistorySheet"
+import { HeaderUndoRedo } from "./components/history/HeaderUndoRedo"
+import { HistoryDialogs, HistoryHost } from "./components/history/HistoryMove"
 import { VIEW_OPTION_VIEWPOINT } from "./lib/stageViewpoint"
 import { useWindowsBridge } from "./components/screens/useWindowsBridge"
 import { StageRenderHost } from "./components/stageRender/StageRenderHost"
@@ -249,7 +251,8 @@ export default function Layout() {
                 <ConnectionStatus />
                 {/* Every chip on this row is 28px (`h-7`, the ARMED chip's), the icon toggles 36. */}
                 <ProgrammerIndicator className="h-7" />
-                {/* Folded into the user menu on a phone, where this row has no width to spare. */}
+                {/* Undo, Redo and History fold into the user menu on a phone, where this row has no width to spare. */}
+                <HeaderUndoRedo className="hidden sm:inline-flex" />
                 <HistoryButton className="hidden sm:inline-flex" />
                 {/* A panel whose toggle is a chip (the grand master's) sits with the chips. */}
                 {panels.filter((panel) => panel.toggleChip).map((panel) => (
@@ -354,6 +357,9 @@ export default function Layout() {
 
         {/* The History sheet, mounted once: opened from the header's icon and the user menu. */}
         <HistorySheet />
+        {/* Undo's confirms, ⌘Z / ⇧⌘Z and the toasts' Undo, mounted once for every door. */}
+        <HistoryDialogs />
+        <HistoryHost />
 
         {/* `render_view`'s renders (stage-view plan session 4): any window, on any route, can be
             asked to draw a Stage viewpoint offscreen. Draws nothing of its own; the render itself

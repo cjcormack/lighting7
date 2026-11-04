@@ -137,6 +137,19 @@ export class CueRowDraft {
   }
 
   /**
+   * Forget every entry whose save has landed, keeping the unsaved and the in-flight: an undo has put
+   * the cue's records back from under them, so the server's rows are the answer now.
+   */
+  discardSaved(): void {
+    for (const [key, saved] of [...this.savedAt]) {
+      if (saved === Number.POSITIVE_INFINITY) continue
+      this.entries.delete(key)
+      this.savedAt.delete(key)
+      this.notify(key)
+    }
+  }
+
+  /**
    * Forget the entries the server now states: a set whose own row holds that value, a removal whose
    * own row is gone — each only once [cookAt], the cook's fetch time, is after the entry's save.
    */
@@ -261,30 +274,3 @@ function stripRow(row: CueAttributeAssignment): CueAttributeAssignment {
   return out
 }
 
-/** The stored rows under [keys], as the write takes them — what a save replaced, kept for its Undo. */
-export function rowsWithKeys(stored: readonly CueAttributeAssignment[], keys: readonly string[]): CueAttributeAssignment[] {
-  const wanted = new Set(keys)
-  return stored.filter((row) => wanted.has(cueRowKey(row.targetType, row.targetKey, row.attribute))).map(stripRow)
-}
-
-/**
- * The cue's list with the rows under [keys] put back to [rows] — Undo, as the exact inverse of the
- * save it undoes: every other row stays as the cue holds it **now**, so an edit to another row since
- * (here or from another client) survives. A restored row goes back to its own `sortOrder`, before
- * the first row ordered after it.
- */
-export function restoreCueRows(
-  stored: readonly CueAttributeAssignment[],
-  keys: readonly string[],
-  rows: readonly CueAttributeAssignment[],
-): CueAttributeAssignment[] {
-  const touched = new Set(keys)
-  const out = stored.filter((row) => !touched.has(cueRowKey(row.targetType, row.targetKey, row.attribute))).map(stripRow)
-  for (const row of rows) {
-    const order = row.sortOrder
-    const at = order == null ? -1 : out.findIndex((other) => other.sortOrder != null && other.sortOrder > order)
-    if (at < 0) out.push({ ...row })
-    else out.splice(at, 0, { ...row })
-  }
-  return out
-}

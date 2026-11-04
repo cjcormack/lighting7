@@ -32,7 +32,10 @@ private val RemoteRequestKey = AttributeKey<Boolean>("lighting7.remoteRequest")
 val ApplicationCall.isRemote: Boolean
     get() = attributes.getOrNull(RemoteRequestKey) == true
 
-/** Thrown by [requireScriptAccess]; `plugins/ErrorHandling.kt` answers it 403 `REMOTE_SCRIPTS_DISABLED`. */
+/** A script, or an undo that would put one back, refused over remote access. */
+const val CODE_REMOTE_SCRIPTS_DISABLED = "REMOTE_SCRIPTS_DISABLED"
+
+/** Thrown by [requireScriptAccess]; `plugins/ErrorHandling.kt` answers it 403 [CODE_REMOTE_SCRIPTS_DISABLED]. */
 class RemoteScriptsDisabledException :
     RuntimeException("Scripts are turned off for remote access. An admin can allow them in Install settings → Remote access.")
 

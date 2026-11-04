@@ -58,6 +58,7 @@ export function useScriptDelete({
     onDeleted,
     onKept,
     toastKey: 'scripts',
+    history: { projectId, endpoint: 'deleteProjectScript' },
   })
   const dialog = (
     <BatchDeleteDialog<ProjectScriptDetail, ScriptInUse>

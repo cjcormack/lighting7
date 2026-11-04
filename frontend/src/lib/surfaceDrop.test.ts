@@ -157,6 +157,14 @@ describe('targetControlKind', () => {
     expect(targetControlKind({ type: 'buskPageSet', pageUuid: 'g' })).toBe('button')
   })
 
+  it('puts undo, redo and programmer undo on a button — the mirror of BindingControlKind.kt', () => {
+    expect(targetControlKind({ type: 'undo' })).toBe('button')
+    expect(targetControlKind({ type: 'redo' })).toBe('button')
+    expect(targetControlKind({ type: 'programmerUndo' })).toBe('button')
+    const fader = { type: 'surface-control', controlId: 'fader-1', kinds: ['continuous'] } as const
+    expect(canLand({ type: 'surface-chip', target: { type: 'undo' }, label: 'Undo', swatch: null }, fader)).toBe(false)
+  })
+
   it('puts the busk-further plan’s five on a button — the mirror of BindingControlKind.kt (D14)', () => {
     // Two window commands and three sub-selection rewrites, each a press; `refuseWrongKind` would
     // refuse any of them on a fader, and this is the half that dims the drop before the 400.

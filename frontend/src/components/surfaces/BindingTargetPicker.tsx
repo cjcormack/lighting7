@@ -106,6 +106,9 @@ const BUTTON_KINDS: TargetKind[] = [
   "pickUpPad",
   "handPlaceInBank",
   "handDrop",
+  "undo",
+  "redo",
+  "programmerUndo",
   "buskPageSet",
   "buskPageNext",
   "buskPagePrev",
@@ -144,6 +147,9 @@ const KIND_LABELS: Record<TargetKind, string> = {
   pickUpPad: "Hand — pick up pad",
   handPlaceInBank: "Hand — place in bank",
   handDrop: "Hand — let go",
+  undo: "Undo",
+  redo: "Redo",
+  programmerUndo: "Programmer undo",
   buskPageSet: "Busk page — show",
   buskPageNext: "Busk page — next",
   buskPagePrev: "Busk page — previous",
@@ -153,6 +159,12 @@ const KIND_LABELS: Record<TargetKind, string> = {
   selectionPrev: "Selection — previous",
   selectionCells: "Selection — elements",
 }
+
+const HISTORY_KIND_HELP = {
+  undo: "Takes back the newer of the programmer’s last step and this surface’s own last change, as ⌘Z does in a window. One that would move the running show needs a confirm a surface cannot give, so it does nothing.",
+  redo: "Brings back whichever of the programmer’s step and this surface’s own change was undone last.",
+  programmerUndo: "Takes back the programmer’s last step, whoever took it.",
+} as const
 
 export function BindingTargetPicker({
   projectId,
@@ -828,6 +840,13 @@ function TargetBody({
       </div>
     )
   }
+  if (kind === "undo" || kind === "redo" || kind === "programmerUndo") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        {HISTORY_KIND_HELP[kind]}
+      </p>
+    )
+  }
   if (kind === "buskPageNext" || kind === "buskPagePrev") {
     return (
       <p className="text-xs text-muted-foreground">
@@ -1042,6 +1061,12 @@ function defaultForKind(
       return { type: "handPlaceInBank", bankUuid: "" }
     case "handDrop":
       return { type: "handDrop" }
+    case "undo":
+      return { type: "undo" }
+    case "redo":
+      return { type: "redo" }
+    case "programmerUndo":
+      return { type: "programmerUndo" }
     case "buskPageSet":
       return { type: "buskPageSet", pageUuid: "" }
     case "buskPageNext":

@@ -386,33 +386,6 @@ export function removePad(page: BuskPage, at: PadAddress): BuskPage {
   return normalisePage(next)
 }
 
-/**
- * Where the **last** pad of the bank with this server id sits, or null if there is no such bank.
- *
- * The one reader is the hand's Undo for a bank place (`BuskingView`): `POST /busk/banks/{id}/pads`
- * **appends**, and answers the whole page, so the pad to take back off is the last one of that
- * bank in the page the append just returned. There is no remove-pad route — the inverse goes back
- * through the layout PUT like every other edit to a page.
- *
- * By id rather than by address because the caller has a `bankId` and not a `BankAddress`: the
- * append addresses a bank by its server id, and the row/column it sits in is not part of that
- * conversation.
- */
-export function lastPadOfBank(page: BuskPage, bankId: number): PadAddress | null {
-  for (let row = 0; row < page.rows.length; row++) {
-    const columns = page.rows[row]!.columns
-    for (let column = 0; column < columns.length; column++) {
-      const banks = columns[column]!.banks
-      for (let bank = 0; bank < banks.length; bank++) {
-        const found = banks[bank]!
-        if (found.id !== bankId || found.pads.length === 0) continue
-        return { row, column, bank, pad: found.pads.length - 1 }
-      }
-    }
-  }
-  return null
-}
-
 export function removeBank(page: BuskPage, at: BankAddress): BuskPage {
   const next = clone(page)
   const column = next.rows[at.row]?.columns[at.column]

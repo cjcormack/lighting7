@@ -991,6 +991,8 @@ internal val setupToolDefs: List<ToolDef> = listOf(
     buildCueStackTool,
     setMoveInDarkTool,
     markUpPromptBookTool,
+    listHistoryTool,
+    undoChangesTool,
 )
 
 internal val readOnlySetupToolNames: Set<String> =
@@ -1002,4 +1004,5 @@ internal val readOnlySetupToolNames: Set<String> =
         getPromptBookTool.name,
         getSceneTool.name,
         renderViewTool.name,
+        listHistoryTool.name,
     )

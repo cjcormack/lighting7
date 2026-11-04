@@ -152,6 +152,7 @@ object BindingHealthEvaluator {
         is BindingTarget.HandPlaceInBank ->
             uuidHealth(target.bankUuid, context.validBankUuids) { AssignmentHealth.MissingBank(it) }
         BindingTarget.HandDrop -> AssignmentHealth.Ok
+        BindingTarget.Undo, BindingTarget.Redo, BindingTarget.ProgrammerUndo -> AssignmentHealth.Ok
         is BindingTarget.BuskPageSet ->
             uuidHealth(target.pageUuid, context.validPageUuids) { AssignmentHealth.MissingPage(it) }
         // Page-agnostic: they move along whatever pages there are, and a project with none simply

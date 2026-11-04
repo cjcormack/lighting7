@@ -45,7 +45,32 @@ const NOT_A_SESSION_LOSS: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Wraps the base query so that a 401 anywhere flips the app back to the login screen.
+ * The history's request id every REST write answers (undo plan §3.2): the entry holding the write
+ * lists it in `requestIds`, which is how a toast's Undo names the change it made.
+ */
+export const HISTORY_ENTRY_HEADER = 'X-History-Entry'
+
+const historyTrackers = new Set<{ endpoints: ReadonlySet<string>; seen: string[] }>()
+
+/**
+ * Collect the `X-History-Entry` of every answer to [endpoints] — the mutations a gesture sends — until
+ * `stop()`, in order: the requests it made, for its Undo. Named by endpoint so another write this
+ * window makes meanwhile, a cue editor's flush or a sheet's edit, is not taken back with it.
+ */
+export function trackHistoryWrites(endpoints: readonly string[]): { stop(): string[] } {
+  const tracker = { endpoints: new Set(endpoints), seen: [] as string[] }
+  historyTrackers.add(tracker)
+  return {
+    stop: () => {
+      historyTrackers.delete(tracker)
+      return tracker.seen
+    },
+  }
+}
+
+/**
+ * Wraps the base query so that a 401 anywhere flips the app back to the login screen, and hands each
+ * answer's `X-History-Entry` to the trackers listening for its endpoint.
  *
  * This is the entire logout mechanism: invalidating `Auth` refetches
  * `GET /auth/status`, which now answers `authenticated: false`, and `AuthGate` swaps
@@ -58,6 +83,8 @@ const NOT_A_SESSION_LOSS: ReadonlySet<string> = new Set([
 const baseQueryWithAuthCheck: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
   async (args, api, extraOptions) => {
     const result = await rawBaseQuery(args, api, extraOptions)
+    const requestId = result.meta?.response?.headers.get(HISTORY_ENTRY_HEADER)
+    if (requestId) for (const tracker of historyTrackers) if (tracker.endpoints.has(api.endpoint)) tracker.seen.push(requestId)
     if (result.error?.status === 401 && !NOT_A_SESSION_LOSS.has(api.endpoint)) {
       api.dispatch(restApi.util.invalidateTags(['Auth']))
     }

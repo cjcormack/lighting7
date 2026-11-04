@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { trackHistoryWrites } from '@/store/restApi'
+import { entryUndoAction } from '@/components/history/historyActions'
 import { useSelector } from 'react-redux'
 import { Loader2, XCircle } from 'lucide-react'
 import {
@@ -213,6 +215,15 @@ export function RecordSheet({
   // and backend sweep item D1 retired the sessions that produced it.
   const submit = async () => {
     if (done) return
+    const writes = trackHistoryWrites(['recordProgrammer', 'createProjectCueStack'])
+    try {
+      await recordAndAnnounce(writes)
+    } finally {
+      writes.stop()
+    }
+  }
+
+  const recordAndAnnounce = async (writes: ReturnType<typeof trackHistoryWrites>) => {
     resetCreateStack()
     let cueStackId = creating && !newStack && stackId !== NO_STACK ? Number(stackId) : undefined
     if (creating && newStack) {
@@ -243,7 +254,7 @@ export function RecordSheet({
     })
     if ('data' in response && response.data) {
       setDone(true)
-      announceWrite(recordNote(response.data))
+      announceWrite(recordNote(response.data), entryUndoAction(projectId, writes.stop()))
       onOpenChange(false)
     }
   }

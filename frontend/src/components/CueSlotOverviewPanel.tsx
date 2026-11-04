@@ -365,11 +365,10 @@ function CueSlotOverviewPanelBody() {
             // numeric spaces, so a template arriving here would name an unrelated Look.
             ...(held.kind === 'CUE' ? { cueId: held.id } : { lookId: held.id }),
           }).unwrap(),
-        // The slot was empty, so the inverse is simply to empty it again.
-        undo: (slot) => clearSlot({ projectId, slotId: slot.id }),
+        history: { projectId, endpoints: ['assignCueSlot'] },
       })
     },
-    [projectId, assignSlot, clearSlot, placeFromHand],
+    [projectId, assignSlot, placeFromHand],
   )
 
   const slotsForPage = useMemo(() => {

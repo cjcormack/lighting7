@@ -13,7 +13,6 @@ import type {
   CookedRow,
   Cue,
   CueAdHocFx,
-  CueLayer,
   CueLayerDetail,
   CueLayerPressResponse,
   CuePatchInput,
@@ -24,21 +23,29 @@ import {
   applyCueRowEntries,
   canonicalCueAttribute,
   cueRowKey,
-  restoreCueRows,
-  rowsWithKeys,
   type CueRowTargetType,
 } from './cueRowDraft'
 import { appendItem, replaceAt } from './cueListEdits'
 import { lastIndexOfDraft } from '@/components/fx/draftFx'
+import { trackHistoryWrites } from '@/store/restApi'
+import { onHistoryMoved, undoHistoryRequests } from '@/components/history/historyActions'
 
 /**
- * What one save changed, for its Undo: the rows' keys and the rows the cue held under them before
- * it, and the whole layer or effect list as it stood before, for each list the save wrote.
+ * What one save changed, for its Undo: the rows' keys and the lists it wrote, in the toast's words.
+ * The Undo itself is the save's entry in the history, named by its requests (undo plan D11).
  */
 interface UndoStep {
-  rows?: { keys: readonly string[]; rows: readonly CueAttributeAssignment[] }
-  layers?: readonly CueLayer[]
-  adHocFx?: readonly CueAdHocFx[]
+  rows?: { keys: readonly string[] }
+  layers?: true
+  adHocFx?: true
+}
+
+/** The writes a save or a layer press sends, which its Undo takes back. */
+const CUE_SAVE_ENDPOINTS = ['patchProjectCue', 'pressCueLayer']
+
+interface HeldUndo {
+  step: UndoStep
+  requestIds: string[]
 }
 
 /** One of the cue's two other child lists, as the Looks and FX tabs write them. */
@@ -213,8 +220,8 @@ export function CueRowStoreProvider({
   const writesRef = useRef(0)
   /** Every save and Undo, one after another: each builds on the cue the one before it left. */
   const chainRef = useRef<Promise<unknown>>(Promise.resolve())
-  /** What the last save changed — the rows' keys and the rows they replaced — for its Undo. */
-  const undoRef = useRef<UndoStep | null>(null)
+  /** What the last save changed, and the requests that wrote it, for its Undo. */
+  const undoRef = useRef<HeldUndo | null>(null)
   /** The layer and effect gestures no flush has carried yet, each list's composed into one edit. */
   const listEditsRef = useRef<ListEdits>({ layers: null, adHocFx: null })
   /** Those gestures' answers — what the flush that takes them settles, and counts back down. */
@@ -251,7 +258,7 @@ export function CueRowStoreProvider({
       const settle = () => setSaveState(writesRef.current === writesAtStart ? 'clean' : 'dirty')
       const settleSend = () =>
         setSaveState((state) => (state === 'error' ? state : writesRef.current === writesAtStart ? 'clean' : 'dirty'))
-      const run = async (): Promise<{ ok: boolean; undo?: U; answer?: R } | null> => {
+      const run = async (): Promise<{ ok: boolean; undo?: U; answer?: R; requestIds?: string[] } | null> => {
         const args = { ...argsRef.current, cueId: entry.cueId }
         let latest: Cue | undefined
         try {
@@ -270,14 +277,16 @@ export function CueRowStoreProvider({
         }
         if (built.send) setSaveState((state) => (state === 'error' ? state : 'saving'))
         else setSaveState('saving')
+        const writes = trackHistoryWrites(CUE_SAVE_ENDPOINTS)
         try {
           const answer = built.send
             ? await built.send()
             : ((await patchCue({ projectId: args.projectId, cueId: args.cueId, ...built.body }).unwrap()) as R)
           if (built.send) settleSend()
           else settle()
-          return { ok: true, undo: built.undo, answer }
+          return { ok: true, undo: built.undo, answer, requestIds: writes.stop() }
         } catch {
+          writes.stop()
           if (built.send) settleSend()
           else setSaveState('error')
           ignoreReportedError()
@@ -295,28 +304,34 @@ export function CueRowStoreProvider({
   const [listsInFlight, setListsInFlight] = useState(0)
   const [undoSeq, setUndoSeq] = useState(0)
 
+  // An undo or redo from anywhere in this window — ⌘Z, the header, the History sheet — may have put
+  // this cue back from under a save: its saved rows give way to the desk's, and its Undo is spent.
+  useEffect(
+    () =>
+      onHistoryMoved((movedProjectId) => {
+        if (movedProjectId !== argsRef.current.projectId) return
+        entry.draft.discardSaved()
+        undoRef.current = null
+        setCanUndo(false)
+      }),
+    [entry],
+  )
+
   const undo = useCallback(() => {
-    const step = undoRef.current
-    if (step == null || readOnlyRef.current) return
+    const held = undoRef.current
+    if (held == null || readOnlyRef.current) return
     // The flush timers stay: an edit to another row, or a gesture on a list, still lands — queued
     // behind this, built on what it puts back.
     undoRef.current = null
     setCanUndo(false)
     toast.dismiss(toastId)
     // Pending edits to the rows the save changed go with it; an edit to any other row still lands.
-    if (step.rows) draft.discard(step.rows.keys)
+    if (held.step.rows) draft.discard(held.step.rows.keys)
     setUndoSeq((n) => n + 1)
-    void enqueue((latest) => ({
-      body: {
-        ...(step.rows ? { attributeAssignments: restoreCueRows(latest.attributeAssignments, step.rows.keys, step.rows.rows) } : {}),
-        ...(step.layers ? { layers: [...step.layers] } : {}),
-        ...(step.adHocFx ? { adHocFx: [...step.adHocFx] } : {}),
-      },
-      undo: null,
-    })).then((result) => {
-      if (result?.ok) toast(`${labelRef.current} · ${wordsFor(step)} put back`, { id: toastId })
-    })
-  }, [draft, enqueue, toastId])
+    const message = `${labelRef.current} · ${wordsFor(held.step)} put back`
+    const run = () => undoHistoryRequests(argsRef.current.projectId, held.requestIds, message)
+    chainRef.current = chainRef.current.then(run, run)
+  }, [draft, toastId])
 
   const flush = useCallback(() => {
     clearTimers()
@@ -336,17 +351,17 @@ export function CueRowStoreProvider({
       const step: UndoStep = {}
       if (sent.size > 0) {
         body.attributeAssignments = applyCueRowEntries(latest.attributeAssignments, sent)
-        step.rows = { keys, rows: rowsWithKeys(latest.attributeAssignments, keys) }
+        step.rows = { keys }
       }
       const layers = layerEdit?.(latest.layers) ?? null
       if (layers != null) {
         body.layers = layers.map(cueLayerInput)
-        step.layers = latest.layers.map(cueLayerInput)
+        step.layers = true
       }
       const effects = fxEdit?.(latest.adHocFx) ?? null
       if (effects != null) {
         body.adHocFx = effects.map(cueFxInput)
-        step.adHocFx = latest.adHocFx.map(cueFxInput)
+        step.adHocFx = true
       }
       return Object.keys(body).length === 0 ? null : { body, undo: step }
     }).then((result) => {
@@ -360,7 +375,7 @@ export function CueRowStoreProvider({
       if (sent.size > 0) draft.markSaved(sent, Date.now())
       // Undo is set only by a save that landed, and names exactly what it changed.
       const step = result.undo!
-      undoRef.current = step
+      undoRef.current = { step, requestIds: result.requestIds ?? [] }
       setCanUndo(true)
       toast(`${labelRef.current} · ${wordsFor(step)} saved`, {
         id: toastId,
@@ -456,9 +471,9 @@ export function CueRowStoreProvider({
               targets: source.targets.map((t) => ({ type: t.type, key: t.key })),
               ...(source.families != null && source.families.length > 0 ? { families: [...source.families] } : {}),
             }
-      const result = await enqueue<UndoStep, CueLayerPressResponse>((latest) => ({
+      const result = await enqueue<UndoStep, CueLayerPressResponse>(() => ({
         send: () => pressCueLayer({ projectId: args.projectId, cueId: args.cueId, ...pressed }).unwrap(),
-        undo: { layers: latest.layers.map(cueLayerInput) },
+        undo: { layers: true },
       }))
       if (result == null || !result.ok || result.answer == null) return null
       const answer = result.answer
@@ -467,7 +482,7 @@ export function CueRowStoreProvider({
           draftCue.layers = answer.cue.layers
         }),
       )
-      undoRef.current = result.undo!
+      undoRef.current = { step: result.undo!, requestIds: result.requestIds ?? [] }
       setCanUndo(true)
       toast(`${labelRef.current} · looks saved`, { id: toastId, action: { label: 'Undo', onClick: () => undo() } })
       return answer

@@ -23,9 +23,10 @@ export interface WriteNote {
 /** A warning stays long enough to read with the sheet gone — the Sync toasts' precedent. */
 const WARNING_DURATION_MS = 10_000
 
-export function announceWrite(note: WriteNote) {
-  if (note.warn) toast.warning(note.title, { description: note.description, duration: WARNING_DURATION_MS })
-  else toast.success(note.title, { description: note.description })
+/** [action] is the toast's Undo, taking the write back from the history (undo plan §4.4). */
+export function announceWrite(note: WriteNote, action?: { label: string; onClick: () => void }) {
+  if (note.warn) toast.warning(note.title, { description: note.description, duration: WARNING_DURATION_MS, action })
+  else toast.success(note.title, { description: note.description, action })
 }
 
 function plural(n: number, noun: string): string {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EMPTY_HISTORY, type HistoryState, type HistoryStep } from '@/api/historyApi'
 
@@ -13,7 +13,7 @@ vi.mock('@/store/history', () => ({
 }))
 
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
-import { ProgrammerUndoRedo, undoKeyBlocked, undoKeyOf, useProgrammerUndoKeys } from './ProgrammerUndoRedo'
+import { ProgrammerUndoRedo } from './ProgrammerUndoRedo'
 
 const step = (id: string, label: string): HistoryStep => ({
   id,
@@ -78,42 +78,5 @@ describe('ProgrammerUndoRedo', () => {
     expect(screen.getByText('Go back to before')).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: /hex-1 dimmer/ }))
     expect(undoMutation).toHaveBeenCalledWith({ projectId: 1, entryId: 'p-1', fadeMs: 0 })
-  })
-})
-
-describe('the programmer undo keys', () => {
-  it('reads ⌘Z and ⇧⌘Z, Ctrl as ⌘, and nothing with ⌥', () => {
-    const key = (k: string, mods: Partial<KeyboardEvent> = {}) =>
-      undoKeyOf({ key: k, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods })
-    expect(key('z', { metaKey: true })).toBe('undo')
-    expect(key('Z', { metaKey: true, shiftKey: true })).toBe('redo')
-    expect(key('z', { ctrlKey: true })).toBe('undo')
-    expect(key('z', { metaKey: true, altKey: true })).toBeNull()
-    expect(key('z')).toBeNull()
-    expect(key('y', { metaKey: true })).toBeNull()
-  })
-
-  it('stands aside in a text field, a contenteditable and an open dialog', () => {
-    const input = document.body.appendChild(document.createElement('input'))
-    const editable = document.body.appendChild(document.createElement('div'))
-    editable.setAttribute('contenteditable', 'true')
-    const plain = document.body.appendChild(document.createElement('button'))
-    expect(undoKeyBlocked(input)).toBe(true)
-    expect(undoKeyBlocked(editable)).toBe(true)
-    expect(undoKeyBlocked(plain)).toBe(false)
-    document.body.appendChild(document.createElement('div')).setAttribute('role', 'dialog')
-    expect(undoKeyBlocked(plain)).toBe(true)
-  })
-
-  it('takes the step on ⌘Z and redoes on ⇧⌘Z while mounted', () => {
-    withSteps([step('p-2', 'Clear')], [step('p-3', 'Fan')])
-    const { unmount } = renderHook(() => useProgrammerUndoKeys(1))
-    fireEvent.keyDown(window, { key: 'z', metaKey: true })
-    expect(undoMutation).toHaveBeenCalledTimes(1)
-    fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true })
-    expect(redoMutation).toHaveBeenCalledTimes(1)
-    unmount()
-    fireEvent.keyDown(window, { key: 'z', metaKey: true })
-    expect(undoMutation).toHaveBeenCalledTimes(1)
   })
 })

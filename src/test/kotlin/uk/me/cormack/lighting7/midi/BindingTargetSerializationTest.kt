@@ -51,6 +51,16 @@ class BindingTargetSerializationTest {
     }
 
     @Test
+    fun `the history targets round trip by their type alone`() {
+        val targets = mapOf(BindingTarget.Undo to "undo", BindingTarget.Redo to "redo", BindingTarget.ProgrammerUndo to "programmerUndo")
+        for ((target, type) in targets) {
+            val encoded = BindingTargetJson.encodeToString<BindingTarget>(target)
+            assertEquals("""{"type":"$type"}""", encoded)
+            assertEquals(target, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        }
+    }
+
+    @Test
     fun `FireTrigger round trips by fixture key and trigger`() {
         val target: BindingTarget = BindingTarget.FireTrigger(fixtureKey = "cannon", trigger = "output1")
         val encoded = BindingTargetJson.encodeToString(target)

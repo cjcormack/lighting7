@@ -23,6 +23,8 @@ import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } fro
 import type { IncludedTarget } from '@/api/programmerWsApi'
 import { describeIncludedTarget, includedTargetKey } from '@/lib/includedTarget'
 import { announceWrite, updateNote } from './writeToasts'
+import { trackHistoryWrites } from '@/store/restApi'
+import { entryUndoAction } from '@/components/history/historyActions'
 
 export interface UpdateDialogProps {
   open: boolean
@@ -73,6 +75,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
     async (body: { targets?: number[]; preview?: boolean; mask?: ReturnType<typeof maskToWire> }) => {
       setConflict(null)
       const seq = ++requestSeqRef.current
+      const writes = trackHistoryWrites(['updateProgrammer'])
       try {
         const response = await update({ projectId, ...body }).unwrap()
         if (response.mode === 'CHECKLIST') {
@@ -90,7 +93,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
         } else if (response.applied || response.mode === 'A') {
           // Mode A closes even when nothing changed, and says so: left open, it reads as stuck.
           setDone(true)
-          announceWrite(updateNote(response))
+          announceWrite(updateNote(response), entryUndoAction(projectId, writes.stop()))
           onOpenChange(false)
         }
         return response
@@ -98,6 +101,8 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
         const data = (err as { data?: ProgrammerConflict })?.data
         if (data?.code === 'INCLUDE_TARGET_GONE') setConflict(data)
         return null
+      } finally {
+        writes.stop()
       }
     },
     [projectId, update, onOpenChange],

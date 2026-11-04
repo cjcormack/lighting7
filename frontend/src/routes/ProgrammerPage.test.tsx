@@ -93,7 +93,6 @@ vi.mock('@/components/programmer/ProgrammerSourceStrip', () => ({
 vi.mock('@/components/programmer/ProgrammerActionBar', () => ({
   ProgrammerActionBar: () => <div data-testid="action-bar" />,
 }))
-vi.mock('@/components/programmer/ProgrammerUndoRedo', () => ({ useProgrammerUndoKeys: () => {} }))
 vi.mock('@/components/programmer/ProgrammerSheets', () => ({
   ProgrammerSheetsProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useProgrammerSheets: () => ({

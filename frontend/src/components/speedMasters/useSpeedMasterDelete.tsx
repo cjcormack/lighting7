@@ -73,6 +73,7 @@ export function useSpeedMasterDelete({
     onDeleted,
     onKept,
     toastKey: 'speed-masters',
+    history: { projectId, endpoint: 'deleteSpeedMaster' },
   })
   const dialog = (
     <BatchDeleteDialog<SpeedMaster, SpeedMasterInUseResponse>

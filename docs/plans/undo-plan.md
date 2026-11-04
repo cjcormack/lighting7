@@ -393,8 +393,8 @@ names written, and its row marked *in review* with its branch. A session's PR is
 | 2 | records in memory (backend, no behaviour change) | merged | `claude/admiring-gauss-1m7xs5` | [#331](https://github.com/cjcormack/lighting7/pull/331) | `36a577c` |
 | 3 | origin and journal, read-only (backend + sheet) | merged | `claude/gracious-wozniak-i6mim5` | [#333](https://github.com/cjcormack/lighting7/pull/333) | `0b1ac3f` |
 | 4 | putting records back: the cue side (backend) | merged | `claude/pensive-curie-096obw` | [#335](https://github.com/cjcormack/lighting7/pull/335) | `4f1542d` |
-| 5 | putting records back: the rest (backend) | in review | `claude/keen-ritchie-1y5b98` | | |
-| 6 | the controls (frontend + MCP + surfaces) | planned | | | |
+| 5 | putting records back: the rest (backend) | merged | `claude/keen-ritchie-1y5b98` | [#339](https://github.com/cjcormack/lighting7/pull/339) | `eed6893` |
+| 6 | the controls (frontend + MCP + surfaces) | in review | `claude/nifty-hopper-9imfn2` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -681,6 +681,52 @@ the next; whoever merges the last fills its own.
   `mcp-engineering.md`, CLAUDE.md's endpoints and MCP paragraph.
 - **Locally:** the full `npm run check` (the header, keys and toasts reach most views), and the
   quick backend checks for `ai` and `midi`.
+- **As built**, where it differs from §3 and §4:
+  - Every door undoes through one function, `history/HistoryMove.kt`'s `moveHistory`, which the route
+    words as HTTP; the surfaces and MCP call it directly.
+  - A toast's Undo names its change by request, as §4.4 says, but the undo route takes entry ids: the
+    client finds the entries whose `requestIds` hold the gesture's `X-History-Entry`s on the history page
+    (the newest 200 rows) and undoes them newest first, announced as one toast. The base query hands
+    each answer's header to the trackers listening for its endpoint (`trackHistoryWrites([endpoints])`),
+    which a gesture starts and stops around its write, so another write the window makes meanwhile is
+    not taken back with it.
+  - The toasts with Undo are a library batch delete (Looks, palettes, scripts, speed masters), the cue
+    delete, Record, Record look and Update; Clear keeps its step. "Any bulk edit" is not done: there is no
+    one bulk writer to hang it on, so the sheets' batch edits are taken back with ⌘Z or the History sheet.
+  - An undo's toast names what came back by its entry's label (*Undone · Delete cue Q12*), not the
+    sentence §4.4 gives (*Q12 is back in Act 1 between Q11 and Q13*): the answer carries only labels.
+    It carries Redo, and a redo's toast carries Undo.
+  - The header's empty tooltip says *Nothing to undo*, not since which clear point: `history.state` does
+    not carry the last clear point.
+  - Below `sm` the pair folds into the user menu, which is also the phone runner's: the runner has no
+    menu of its own.
+  - ⌘Z stands aside for an open dialog or alert dialog but not a sheet, so the History sheet and an
+    editor in a sheet take the key. The programmer view's own keys went with the cue editor's.
+  - No door sends `backToHere` up front, the sheet's *Undo back to here* on your own row included: an
+    entry that collides with nothing is undone alone (D3). A conflict on your own entry asks *Undo back
+    to here?* and says it takes every later change of yours too, since that is what the desk's
+    back-to-here does on the caller's own entry (§3.5); on anyone else's it asks *Undo n changes?*.
+  - A show entry's move refetches the record caches on the client, since not every reader of a record
+    is refreshed by a socket frame (the cue editor's cue is not), and the cue editor drops its saved
+    draft rows and its Undo whenever one moves in its window.
+  - The lock asks only for a show entry on the live project while a stack runs and the shared lock is
+    on, and *Unlock and undo* lifts that lock.
+  - The hand's bank, cue-slot and cue-layer places undo their write's entry; the rig row's place keeps
+    its inverse, since its write goes through the rig's commit queue after the place returns. The cue
+    editor's Undo and the prompt book's *Undo move* undo their write's entry too, so saves D8 folded into
+    one entry come back together. `lastPadOfBank` and `restoreCueRows` went with the inverses.
+  - A record in an expanded row links to its folder's page, by the row id `HistoryRecordDto` now carries
+    where the page takes one (a stack, a script); a removed record links nowhere.
+  - `HISTORY_NOT_YOURS` is a tool error with that code, not a 409. `undo_changes` also takes `confirm`,
+    for a `HISTORY_CONFIRM` the operator has agreed to, and has no back-to-here; `list_history` takes a
+    `limit`. Both list and undo show entries only.
+  - A surface's undo runs at no fade (the desk holds no programmer fade), never confirms, and logs a
+    refusal; `SurfaceActions` is synchronous, so it is launched off the input. Its source has no role, so
+    a surface undo onto a venue is not refused as an operator's is: it only takes the surface's own
+    entries. Its presses run one at a time, in press order.
+  - `undo_changes`' `confirm` covers the first undo of a call alone: a later one that would move the
+    show stops it with its own `HISTORY_CONFIRM`. An `entryId` or `count` it cannot read is refused,
+    never read as the newest.
 
 ## 7. Explicitly out of scope
 

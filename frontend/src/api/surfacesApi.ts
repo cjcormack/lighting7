@@ -301,6 +301,24 @@ export interface HandDropTarget {
   type: "handDrop"
 }
 
+/**
+ * The undo key as the surface's own source: the newer of the programmer's top step and the
+ * surface's newest show change. A refusal does nothing; a surface cannot confirm.
+ */
+export interface UndoTarget {
+  type: "undo"
+}
+
+/** The redo key as the surface's own source. */
+export interface RedoTarget {
+  type: "redo"
+}
+
+/** Undo the programmer's top step, whoever took it. */
+export interface ProgrammerUndoTarget {
+  type: "programmerUndo"
+}
+
 /** Show the next busk page, wrapping. Page-agnostic, so it names none. */
 export interface BuskPageNextTarget {
   type: "buskPageNext"
@@ -400,6 +418,9 @@ export type BindingTarget =
   | PickUpPadTarget
   | HandPlaceInBankTarget
   | HandDropTarget
+  | UndoTarget
+  | RedoTarget
+  | ProgrammerUndoTarget
   | BuskPageNextTarget
   | BuskPagePrevTarget
   | BuskPageSetTarget

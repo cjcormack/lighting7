@@ -89,6 +89,7 @@ export function useLookDelete({
     onDeleted,
     onKept,
     toastKey: 'looks',
+    history: { projectId, endpoint: 'deleteLook' },
   })
   const dialog = (
     <BatchDeleteDialog<LookSummary, LookInUse>

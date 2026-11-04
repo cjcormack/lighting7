@@ -28,6 +28,8 @@ vi.mock('./components/venue/VenueBand', () => ({ VenueBand: () => <div data-test
 vi.mock('./components/venue/VenueBehindBanner', () => ({ VenueBehindBanner: () => <div data-testid="venue-behind" /> }))
 vi.mock('./components/rigSafety/RigSafetyBanner', () => ({ RigSafetyBanner: () => <div data-testid="rig-safety" /> }))
 vi.mock('./components/auth/UserMenu', () => ({ UserMenu: () => null }))
+vi.mock('./components/history/HeaderUndoRedo', () => ({ HeaderUndoRedo: () => null }))
+vi.mock('./components/history/HistoryMove', () => ({ HistoryDialogs: () => null, HistoryHost: () => null }))
 vi.mock('./components/FixtureOverviewPanel', () => ({ FixtureOverviewPanel: () => <div data-testid="panel-fixtures" /> }))
 vi.mock('./components/positions/PositionsPanel', () => ({ PositionsPanel: () => <div data-testid="panel-stage" /> }))
 vi.mock('./components/SpeedMasterOverviewPanel', () => ({ SpeedMasterOverviewPanel: () => <div data-testid="panel-speed" /> }))

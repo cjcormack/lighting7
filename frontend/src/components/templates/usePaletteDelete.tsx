@@ -96,6 +96,7 @@ export function usePaletteDelete({
     onDeleted,
     onKept,
     toastKey: 'templates',
+    history: { projectId, endpoint: 'deletePalette' },
   })
   const dialog = (
     <BatchDeleteDialog<PaletteSummary, PaletteInUse>

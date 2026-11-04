@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 // `parseProgrammerValue` reaches colourUtils, which reaches the api barrel.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
-import { CueRowDraft, applyCueRowEntries, cueRowKey, restoreCueRows, sameCueValue } from './cueRowDraft'
+import { CueRowDraft, applyCueRowEntries, cueRowKey, sameCueValue } from './cueRowDraft'
 import type { CueAttributeAssignment } from '@/api/cuesApi'
 
 const STORED: CueAttributeAssignment[] = [
@@ -70,21 +70,20 @@ describe('CueRowDraft.reconcile', () => {
   })
 })
 
-describe('restoreCueRows', () => {
-  it('puts the changed rows back in their order and keeps every other row as it stands', () => {
-    const now: CueAttributeAssignment[] = [
-      { targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '1', sortOrder: 0 },
-      { targetType: 'fixture', targetKey: 'b', attribute: 'dimmer', value: '99', sortOrder: 4 },
-      { targetType: 'fixture', targetKey: 'c', attribute: 'dimmer', value: '7', sortOrder: 9 },
-    ]
-    const key = cueRowKey('fixture', 'b', 'dimmer')
-    const added = cueRowKey('fixture', 'd', 'dimmer')
-    const base = [{ targetType: 'fixture' as const, targetKey: 'b', attribute: 'dimmer', value: '20', fadeDurationMs: 300, sortOrder: 4 }]
-    // b put back to 20 with its fade; d, which the save added, gone; a and c untouched.
-    expect(restoreCueRows([...now, { targetType: 'fixture', targetKey: 'd', attribute: 'dimmer', value: '5', sortOrder: 10 }], [key, added], base)).toEqual([
-      now[0],
-      base[0],
-      now[2],
-    ])
+describe('discardSaved', () => {
+  it('forgets the entries whose save landed, and keeps the unsaved and the in-flight', () => {
+    const draft = new CueRowDraft()
+    draft.set('fixture', 'a', 'dimmer', '1')
+    draft.set('fixture', 'b', 'dimmer', '2')
+    draft.set('fixture', 'c', 'dimmer', '3')
+    const saved = new Map([...draft.snapshot()].filter(([key]) => key === cueRowKey('fixture', 'a', 'dimmer')))
+    const sending = new Map([...draft.snapshot()].filter(([key]) => key === cueRowKey('fixture', 'b', 'dimmer')))
+    draft.markSending(saved)
+    draft.markSaved(saved, 5)
+    draft.markSending(sending)
+    draft.discardSaved()
+    expect(draft.get('fixture', 'a', 'dimmer')).toBeUndefined()
+    expect(draft.get('fixture', 'b', 'dimmer')).toEqual({ kind: 'set', value: '2' })
+    expect(draft.get('fixture', 'c', 'dimmer')).toEqual({ kind: 'set', value: '3' })
   })
 })

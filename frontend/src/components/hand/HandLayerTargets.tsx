@@ -3,7 +3,6 @@ import { useParams } from 'react-router'
 import type { Cue, CueLayer, CueTarget } from '@/api/cuesApi'
 import type { HeldRecord } from '@/api/handApi'
 import { buildCueInput } from '@/lib/cueUtils'
-import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { usePatchProjectCueMutation } from '@/store/cues'
 import { usePress, useWindowPress, useWindowPressPair, type PressSource } from '@/hooks/usePress'
 import { useHandPlace } from '@/store/hand'
@@ -184,10 +183,7 @@ function CueLayerStripBody({ projectId, cue, host }: { projectId: number; cue: C
               } satisfies CueLayer,
             ],
           }).unwrap(),
-        undo: () =>
-          patchCue({ projectId, cueId: cue.id, layers: before })
-            .unwrap()
-            .catch(ignoreReportedError),
+        history: { projectId, endpoints: ['patchProjectCue'] },
       })
     },
     [cue, projectId, patchCue, placeFromHand, targets, host, press],

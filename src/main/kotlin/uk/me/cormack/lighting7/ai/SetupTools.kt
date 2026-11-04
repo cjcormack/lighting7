@@ -118,11 +118,20 @@ class SetupTools(
     private val venueFixtures = VenueFixtureTools(state)
     private val patchEdits = PatchEditTools(state)
     private val moveInDark = MoveInDarkSetupTool(state)
+    private val history = HistoryTools(state)
 
     fun handles(name: String): Boolean = toolDefs.any { it.name == name }
 
-    /** Run [name]; [caller] is the signed-in user's display name, which signs what a tool publishes. */
-    suspend fun executeTool(name: String, input: JsonObject, caller: String? = null): ToolExecutionResult = try {
+    /**
+     * Run [name]; [caller] is the signed-in user's display name, which signs what a tool publishes, and
+     * [user] the caller itself, whose grant `list_history` and `undo_changes` answer for.
+     */
+    suspend fun executeTool(
+        name: String,
+        input: JsonObject,
+        caller: String? = null,
+        user: uk.me.cormack.lighting7.auth.AuthenticatedUser? = null,
+    ): ToolExecutionResult = try {
         val refusal = toolDefs.firstOrNull { it.name == name }?.let { undeclaredArgumentRefusal(it, input) }
         if (refusal != null) failure(refusal) else when (name) {
             listProjectsTool.name -> listProjects()
@@ -154,6 +163,8 @@ class SetupTools(
             buildCueStackTool.name -> buildCueStack(input, state.toolProject(input))
             setMoveInDarkTool.name -> moveInDark.setMoveInDark(input, state.toolProject(input))
             markUpPromptBookTool.name -> markUpPromptBook(input)
+            listHistoryTool.name -> history.listHistory(input, state.toolProject(input), user)
+            undoChangesTool.name -> history.undoChanges(input, state.toolProject(input), user)
             else -> failure("Unknown tool: $name")
         }
     } catch (e: kotlinx.coroutines.CancellationException) {

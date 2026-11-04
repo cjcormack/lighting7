@@ -468,7 +468,7 @@ a pointer event of its own.
 mutation with its own validation — `POST /busk/banks/{bankId}/pads`, `assignCueSlot`,
 the palette or Look press, `patchProjectCue` through `buildCueInput` — so one frame that placed would
 reimplement four of them behind one name, and the four would drift. **A place is the placing
-window's own mutation followed by `hand.drop`**, and Undo is that window's inverse mutation. The
+window's own mutation followed by `hand.drop`**, and Undo takes that mutation's history entry back (the rig row's place keeps an inverse). The
 desk's whole share of a place is letting go.
 
 `hand.pickUp` resolves `{kind, id}` **in the current project and nowhere else**, so a stale id from

@@ -5,7 +5,6 @@ import type { PaletteSummary } from '@/api/palettesApi'
 import {
   addBankColumn,
   allBanks,
-  lastPadOfBank,
   addRow,
   applyDrop,
   buskBankBodyId,
@@ -413,39 +412,6 @@ describe('the first-open generator', () => {
 })
 
 // ─── The hand's Undo for a bank place ───────────────────────────────────
-
-/**
- * `POST /busk/banks/{id}/pads` appends and answers the whole page, so the pad the hand's Undo has
- * to take back off is **the last one of that bank in the page the append returned**. There is no
- * remove-pad route; the inverse goes through the layout PUT like every other edit.
- */
-describe('lastPadOfBank', () => {
-  it('finds the appended pad’s address, whatever row and column the bank sits in', () => {
-    const page = samplePage()
-    const colourBankId = page.rows[0].columns[1].banks[0].id!
-    expect(lastPadOfBank(page, colourBankId)).toEqual({ row: 0, column: 1, bank: 0, pad: 0 })
-
-    const cuesBankId = page.rows[1].columns[0].banks[0].id!
-    expect(lastPadOfBank(page, cuesBankId)).toEqual({ row: 1, column: 0, bank: 0, pad: 0 })
-  })
-
-  it('names the LAST pad, which is where an append puts one', () => {
-    const page = samplePage()
-    const movementId = page.rows[0].columns[0].banks[0].id!
-    const at = lastPadOfBank(page, movementId)!
-    expect(at.pad).toBe(2)
-    expect(padNames(removePad(page, at), 0, 0, 0)).toEqual(['A', 'B'])
-  })
-
-  it('answers null for a bank id that is not on the page, and for an empty bank', () => {
-    expect(lastPadOfBank(samplePage(), 9999)).toBeNull()
-    const emptied = removePad(samplePage(), { row: 0, column: 1, bank: 0, pad: 0 })
-    // `normalisePage` keeps an empty bank, so it is still there to be asked about.
-    const colourBank = emptied.rows[0].columns[1].banks[0]
-    expect(colourBank.pads).toHaveLength(0)
-    expect(lastPadOfBank(emptied, colourBank.id!)).toBeNull()
-  })
-})
 
 describe('allBanks', () => {
   it('walks every bank on the page, in row then column then bank order', () => {
