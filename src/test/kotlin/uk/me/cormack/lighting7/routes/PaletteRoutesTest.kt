@@ -1298,6 +1298,103 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         assertEquals(setOf("pct:100", "pct:50.2"), body.palette.rows.map { it.value }.toSet())
     }
 
+    private fun writeZoneColours(colours: Map<String, java.awt.Color>) {
+        for ((key, colour) in colours) {
+            state.show.fxEngine.programmer.writeAttributes(
+                uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB,
+                listOf(
+                    uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite(
+                        state.show.fixtures.untypedGroupableFixture(key),
+                        "rgbColour",
+                        uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.Colour(
+                            uk.me.cormack.lighting7.fx.ExtendedColour(colour),
+                        ),
+                    ),
+                ),
+            )
+        }
+    }
+
+    private val shehdsZones = listOf("sh-1", "sh-2").flatMap { parent -> (1..3).map { "$parent.zone-$it" } }
+
+    @Test
+    fun `new from selection records a multi-head fixture's cells, where its colour lives`() = testApplication {
+        mountTestApp(state)
+        // A Shehds' colour is on its three zones only, so every colour the programmer holds for it
+        // is keyed by a zone — and the selection names the zones, as the programmer's columns send.
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "sh-1", 1)
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "sh-2", 30)
+        val client = jsonClient()
+        writeZoneColours(shehdsZones.associateWith { java.awt.Color(255, 157, 74) })
+
+        val resp = client.post("${base()}/from-programmer") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                PaletteFromProgrammerRequest(
+                    name = "warm glow",
+                    mask = listOf("COLOUR"),
+                    targets = shehdsZones.map { uk.me.cormack.lighting7.models.CueTargetDto("fixture", it) },
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        val body = resp.body<PaletteFromProgrammerResponse>()
+
+        assertTrue(body.isGeneric, "every zone agreed, so one value serves")
+        val row = body.palette.rows.single()
+        assertEquals(DEFERRED_TARGET_TYPE, row.targetType)
+        assertEquals("#FF9D4A;policy=rgbonly", row.value)
+        assertTrue(body.skipped.isEmpty(), body.skipped.toString())
+    }
+
+    @Test
+    fun `cells that disagree are recorded per cell, and the palette lands back on them`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "sh-1", 1)
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "sh-2", 30)
+        val client = jsonClient()
+        val colours = shehdsZones.withIndex().associate { (i, key) ->
+            key to if (i % 2 == 0) java.awt.Color(255, 0, 0) else java.awt.Color(0, 0, 255)
+        }
+        writeZoneColours(colours)
+
+        // The parents this time: a zone is in scope under its fixture.
+        val body = client.post("${base()}/from-programmer") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                PaletteFromProgrammerRequest(
+                    name = "alternate",
+                    mask = listOf("COLOUR"),
+                    targets = listOf("sh-1", "sh-2").map { uk.me.cormack.lighting7.models.CueTargetDto("fixture", it) },
+                )
+            )
+        }.body<PaletteFromProgrammerResponse>()
+
+        assertTrue(!body.isGeneric)
+        assertEquals(shehdsZones.toSet(), body.palette.rows.map { it.targetKey }.toSet())
+        assertTrue(body.palette.rows.all { it.targetType == "fixture" })
+
+        // The editor's panel answers for each cell, as the apply below lands on each.
+        val resolved = client.post("${base()}/resolve") {
+            contentType(ContentType.Application.Json)
+            setBody(PaletteResolveRequest(rows = body.palette.rows))
+        }.body<PaletteResolveResponse>().entries
+        assertEquals(shehdsZones.toSet(), resolved.map { it.fixtureKey }.toSet())
+
+        state.show.programmerStore.clearAll()
+        val applied = client.post("${base()}/${body.palette.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyPaletteRequest(targets = listOf("sh-1", "sh-2").map { PaletteTargetDto("fixture", it) }))
+        }
+        assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
+        val held = state.show.programmerStore.entries()
+            .filter { it.attribute == "rgbColour" }
+            .associate { entry ->
+                entry.fixtureKey to (entry.slots.first().value.resolved as uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.Colour).value.color
+            }
+        assertEquals(colours, held)
+    }
+
     @Test
     fun `new from selection needs exactly one family, and a selection`() = testApplication {
         mountTestApp(state)

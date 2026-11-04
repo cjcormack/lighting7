@@ -29,6 +29,7 @@ import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.FxSpecCoercion
@@ -1671,17 +1672,24 @@ private fun resolvePaletteAgainstPatch(
 
     // Every row paired with the heads it lands on, before anything is resolved — the apply's and the
     // cook's pairing, so the panel promises what the desk does. A per-fixture row answers only for
-    // the head it names; a generic row answers for all. A multi-head fixture whose property lives
+    // the head it names, a cell's row under its fixture ([selectedHeadFor]); a generic row answers
+    // for all. A multi-head fixture whose property lives
     // only on its cells (the Shehds' colour, on its three zones) answers once per cell
     // ([PaletteFanOut]), where the parent alone was "never a candidate" and quietly omitted.
     // Parsed **once**, not once per candidate: this backs the editor's live panel, so on a rig-wide
     // resolve the old shape re-parsed every row for every patched head on every debounced keystroke.
     val fittedMediaFor: (String) -> uk.me.cormack.lighting7.fixture.media.FittedMedia? = fixtures::fittedMediaFor
     val parsedRows = request.rows.mapNotNull { row -> parsePaletteIntent(row.value)?.let { row to it } }
+    val coverage = TargetCoverage { fixtures }
+    val candidateKeys = candidates.mapTo(HashSet()) { it.key }
     val landings: List<Pair<Pair<PaletteRowDto, PaletteIntent>, List<GroupableFixture>>> =
         parsedRows.map { (row, intent) ->
-            val forThisRow = when (val target = row.target) {
-                is TargetRef.Fixture -> candidates.filter { it.key == target.key }
+            val forThisRow: List<GroupableFixture> = when (val target = row.target) {
+                is TargetRef.Fixture -> listOfNotNull(
+                    coverage.selectedHeadFor(candidateKeys, target.key)?.let {
+                        runCatching { fixtures.untypedGroupableFixture(target.key) }.getOrNull()
+                    },
+                )
                 else -> candidates
             }
             (row to intent) to forThisRow.flatMap { PaletteFanOut.headsFor(it, row.attribute, fittedMediaFor) }

@@ -176,8 +176,9 @@ silently miss heads. Omitting the mask, or naming all four families, means "ever
 - **Elements** — an element-keyed entry (a head of a multi-head fixture) records as an **element-target
   row**: `targetType` fixture, `targetKey` the element key — the spelling an element has as a press
   target, and the one `buildCueAssignmentsForCue` resolves through `untypedGroupableFixture`. No
-  column is involved, so the sync layout is unchanged. Update writes elements back the same way; only
-  a palette, which names no targets, still skips them as `ELEMENT_TARGET`.
+  column is involved, so the sync layout is unchanged. Update writes elements back the same way, and
+  *New from selection* records a cell into a palette as a head like any other — in the generic row
+  when the heads agree, else a per-fixture row naming its element key.
 - **Group shape** — a `sourceGroup` hint only *nominates* a group row. It is emitted iff every
   member of the named group holds an entry for that attribute with an identical value. A stale or
   missing hint therefore degrades to per-fixture rows — verbose, never wrong.

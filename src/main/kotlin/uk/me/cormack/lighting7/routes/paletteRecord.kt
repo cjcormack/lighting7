@@ -49,6 +49,9 @@ import uk.me.cormack.lighting7.models.asDuration
  * rather than by a toggle in the sheet: the operator already expressed which they meant by putting
  * the heads where they are.
  *
+ * A cell of a multi-head fixture (a Shehds zone) is a head here: a per-fixture row names its element
+ * key, which the cook and the press resolve as they do a fixture's.
+ *
  * ## Converting a literal back to an intent is a heuristic, and it is stated once
  *
  * A recorded colour is per-head channel bytes; a template holds a hex plus a policy. The inverse is
