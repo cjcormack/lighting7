@@ -479,9 +479,7 @@ internal fun performProgrammerRecordLook(
         return RecordLookCoreResult.Failure("None of the requested targets resolve to a fixture")
     }
 
-    // `allowElements`: a Look has an element row, so a cell the operator edited is recorded as
-    // one rather than skipped — the only recording destination that may ask for this.
-    val (entries, skips) = collectProgrammerEntries(state, source, mask, targets = scope, allowElements = true)
+    val (entries, skips) = collectProgrammerEntries(state, source, mask, targets = scope)
     val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
     val inRemit = lookRowInRemit(state.show.fixtures, mask, scope)
     val elementParents = elementParentsOf(state.show.fixtures, collapsed)

@@ -104,9 +104,7 @@ internal fun changedSinceInclude(
     mask: Set<AttributeFamily>?,
 ): Pair<List<RecordEntry>, List<RecordSkip>> {
     val store = state.show.programmerStore
-    // `allowElements`: both destinations can hold a cell — a cue as a cell-target row, a Look as
-    // an element row — so a nudged head comes back through Update as the row it was included as.
-    val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
+    val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
     val recorded = store.recordedValues
     store.lastIncludedTarget?.let { refreshSourceKeys(state, it) }
     val changed = entries.filterTo(LinkedHashSet()) { entry ->
@@ -203,13 +201,13 @@ internal fun refreshSourceKeys(state: State, target: IncludedTarget) {
 internal fun heldOutsideSource(state: State): Int {
     val store = state.show.programmerStore
     if (store.lastIncludedTarget == null) return 0
-    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask = null, allowElements = true)
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask = null)
     return entries.count { !store.sourceHolds(it.key()) }
 }
 
 /** A Record made the include target agree with the programmer: its touched values become Update's baseline. */
 internal fun stampRecordedValues(state: State) {
-    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask = null, allowElements = true)
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask = null)
     state.show.programmerStore.recordedValues = entries.associate {
         ProgrammerStore.IncludedKey(it.fixtureKey, it.attribute) to (it.reconciledFrom ?: it.value)
     }
@@ -376,7 +374,7 @@ internal fun buildUpdateChecklist(
     mask: Set<AttributeFamily>?,
 ): ProgrammerUpdateChecklistDto {
     val engine = state.show.fxEngine
-    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
     if (entries.isEmpty()) {
         return ProgrammerUpdateChecklistDto(emptyList(), emptyList(), 0)
     }
@@ -495,7 +493,7 @@ internal fun entriesUnderlyingCue(
     mask: Set<AttributeFamily>?,
 ): List<RecordEntry> {
     val engine = state.show.fxEngine
-    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
     if (entries.isEmpty()) return emptyList()
     val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.attribute) }
     return engine.provenance.underlyingSources(byKey.keys, engine.cueLayer.cuesOnly())

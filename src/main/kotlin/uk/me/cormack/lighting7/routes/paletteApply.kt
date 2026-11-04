@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.fx.PaletteFanOut
 import uk.me.cormack.lighting7.fx.PaletteAttribute
 import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.PaletteSnapshot
+import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.familyOf
 import uk.me.cormack.lighting7.fx.groupHintsForTargets
 import uk.me.cormack.lighting7.fx.maskAllows
@@ -132,19 +133,24 @@ private fun applyValuePaletteToProgrammer(
 
     // Every row paired with the heads it lands on, before anything is resolved or written. A
     // per-fixture row applies only to the head it names, *and* only if that head is in the
-    // selection: applying a focus position to two of its eight heads must move those two and leave
-    // the rest alone. Each selected head then fans through [PaletteFanOut] — a multi-head fixture
-    // whose property lives only on its cells (the Shehds' colour, on its three zones) lands on
-    // those cells, where it used to be asked of the parent and refused as "no colour". Distinct by
-    // (row, head), so a selection naming a bar *and* one of its cells writes that cell once.
+    // selection — or under a selected head, as a cell's row is under its fixture: applying a focus
+    // position to two of its eight heads must move those two and leave the rest alone. Each selected
+    // head then fans through [PaletteFanOut] — a multi-head fixture whose property lives only on
+    // its cells (the Shehds' colour, on its three zones) lands on those cells, where it used to be
+    // asked of the parent and refused as "no colour". Distinct by (row, head), so a selection
+    // naming a bar *and* one of its cells writes that cell once.
     val landings = ArrayList<Landing>()
     val landed = HashSet<Pair<Int, String>>()
+    val coverage = TargetCoverage { state.show.fixtures }
     parsedRows.forEachIndexed { rowIndex, (row, intent) ->
-        val applyTo: List<String> = when (val target = row.target) {
-            is TargetRef.Fixture -> listOf(target.key).filter { it in fixtureKeys }
-            else -> fixtureKeys.toList()
+        // (row key, the selected head it lands under) — a cell's row takes its parent's group hint.
+        val applyTo: List<Pair<String, String>> = when (val target = row.target) {
+            is TargetRef.Fixture -> listOfNotNull(
+                coverage.selectedHeadFor(fixtureKeys, target.key)?.let { target.key to it },
+            )
+            else -> fixtureKeys.map { it to it }
         }
-        for (fixtureKey in applyTo) {
+        for ((fixtureKey, selectedKey) in applyTo) {
             val fixture: GroupableFixture? = runCatching {
                 state.show.fixtures.untypedGroupableFixture(fixtureKey)
             }.getOrNull()
@@ -154,7 +160,7 @@ private fun applyValuePaletteToProgrammer(
             }
             for (head in PaletteFanOut.headsFor(fixture, row.attribute, fittedMediaFor)) {
                 if (landed.add(rowIndex to head.targetKey)) {
-                    landings += Landing(row.attribute, intent, head, selectedKey = fixtureKey)
+                    landings += Landing(row.attribute, intent, head, selectedKey = selectedKey)
                 }
             }
         }
@@ -230,6 +236,16 @@ private fun applyValuePaletteToProgrammer(
         FanWriteDto(CueTargetDto(TargetRef.Fixture.TYPE, it.fixture.targetKey), it.attribute, it.value.serialize())
     }
     return ApplyPaletteResponse(writes.size, skips, values = values)
+}
+
+/**
+ * The selected head a per-fixture palette row naming [rowKey] lands under: [rowKey] itself when
+ * [selection] holds it, its parent when it is a cell whose fixture is selected, else null. Shared by
+ * *Apply as values* and the editor's resolve panel, so both pair rows with heads as the cook does.
+ */
+internal fun TargetCoverage.selectedHeadFor(selection: Set<String>, rowKey: String): String? {
+    if (rowKey in selection) return rowKey
+    return parentOf(CueTargetDto(TargetRef.Fixture.TYPE, rowKey))?.key?.takeIf { it in selection }
 }
 
 /**

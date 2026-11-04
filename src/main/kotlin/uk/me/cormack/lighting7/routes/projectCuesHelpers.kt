@@ -230,8 +230,7 @@ private fun programmerOverlayForSnapshot(state: State): ProgrammerOverlay {
     if (store.blind || (store.size == 0 && !store.hasSidebandEntries)) {
         return ProgrammerOverlay(emptyMap(), emptySet())
     }
-    // `allowElements`: a head the programmer holds is on stage, and a cue can hold it.
-    val (entries, _) = collectProgrammerEntries(state, RecordSource.ALL, mask = null, allowElements = true)
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.ALL, mask = null)
     val values = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.AttributeValue>(entries.size)
     val hints = LinkedHashSet<Pair<String, String>>()
     for (entry in entries) {

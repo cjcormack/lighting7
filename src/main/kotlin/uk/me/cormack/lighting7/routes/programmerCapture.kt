@@ -69,15 +69,6 @@ enum class RecordSource {
 
 /** Why a programmer entry didn't make it into the recording. Surfaced to the operator. */
 enum class RecordSkipReason {
-    /**
-     * The entry is keyed by an element (`bar-1.head-0`) and the destination cannot hold a cell:
-     * a **template** names no targets, so it has no row to put one in. A Look has an element row
-     * (`DaoLookRows.elementKey`) and a cue a cell-target row (`targetKey` the element key, which
-     * `buildCueAssignmentsForCue` resolves through `untypedGroupableFixture`), and both ask
-     * [collectProgrammerEntries] for elements, so this is never reported for either.
-     */
-    ELEMENT_TARGET,
-
     /** The fixture the entry names no longer exists in the patch. */
     MISSING_FIXTURE,
 
@@ -176,12 +167,6 @@ internal fun collectProgrammerEntries(
      * [uk.me.cormack.lighting7.fx.TargetCoverage.covers] — so a cell is in scope under its parent.
      */
     targets: Set<String>? = null,
-    /**
-     * Keep entries keyed by an element rather than skipping them as [RecordSkipReason.ELEMENT_TARGET].
-     * Only a destination that can hold a cell may ask for this — a Look (an element row) and a
-     * cue (a cell-target row) do; a template cannot, so its recording keeps the skip.
-     */
-    allowElements: Boolean = false,
 ): Pair<List<RecordEntry>, List<RecordSkip>> {
     val store = state.show.programmerStore
     val fixtures = state.show.fixtures
@@ -212,10 +197,6 @@ internal fun collectProgrammerEntries(
             fixtures.untypedGroupableFixture(fixtureKey)
         } catch (_: Exception) {
             skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MISSING_FIXTURE)
-            return
-        }
-        if (fixture !is Fixture && !allowElements) {
-            skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.ELEMENT_TARGET)
             return
         }
         val family = familyForAttribute(fixture, attribute)
@@ -471,9 +452,7 @@ internal fun collectProgrammerRecording(
         )
     }
 
-    // `allowElements`: a head's entry is recorded as a cell-target row (`targetKey` the element
-    // key) — the shape `collapseRecordingToAssignments` already emits for it.
-    val (entries, entrySkips) = collectProgrammerEntries(state, source, mask, scope, allowElements = true)
+    val (entries, entrySkips) = collectProgrammerEntries(state, source, mask, scope)
     val collapsed = collapseRecordingToAssignments(entries, fixtures)
 
     val bandFx = if (includeFx) {

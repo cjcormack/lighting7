@@ -28,7 +28,6 @@ export interface ProgrammerSkip {
   universe?: number
   channel?: number
   reason:
-    | 'ELEMENT_TARGET'
     | 'MISSING_FIXTURE'
     | 'MISSING_ATTRIBUTE'
     | 'NO_BACKING_ATTRIBUTE'

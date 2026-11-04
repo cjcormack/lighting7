@@ -254,7 +254,6 @@ function heldSentence(counts: Partial<Record<AttributeFamily, number>>): string 
 }
 
 const SKIP_REASONS: Record<ProgrammerSkip['reason'], string> = {
-  ELEMENT_TARGET: 'element-level entries (this destination addresses whole fixtures)',
   MISSING_FIXTURE: 'fixtures no longer in the patch',
   MISSING_ATTRIBUTE: 'attributes that no longer resolve',
   NO_BACKING_ATTRIBUTE: 'raw channels with no backing attribute',
