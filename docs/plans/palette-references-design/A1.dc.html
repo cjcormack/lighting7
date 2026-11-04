@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Step 1, four heads</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 840px; display: flex; flex-direction: column; background: #09090b; color: #fafafa; font-family: Inter, system-ui, sans-serif; font-size: 13px">
+  <div style="height: 80px; flex-shrink: 0; box-sizing: border-box; display: flex; gap: 14px; align-items: center; padding: 0 20px; border-bottom: 1px solid #27272a">
+    <span style="width: 32px; height: 32px; border-radius: 16px; background: #27272a; display: inline-flex; align-items: center; justify-content: center; font-weight: 700">1</span>
+    <span style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; font-weight: 600">Four heads, four positions</span><span style="color: #a1a1aa">Spot 1–4’s Position cells are selected, each holding its own value as yours. Record ▾ → A new palette. Unchanged from today.</span></span>
+  </div>
+  <dc-import name="Programmer" step="a1" hint-size="1280px,760px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

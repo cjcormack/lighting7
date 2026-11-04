@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Palette references walkthrough</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 920px; display: flex; flex-direction: column; background: #09090b; color: #fafafa; font-family: Inter, system-ui, sans-serif; font-size: 13px">
+  <div style="height: 160px; flex-shrink: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-bottom: 1px solid #27272a">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span style="font-size: 18px; font-weight: 700">Palette references</span>
+      <span style="color: #a1a1aa">A palette pressed on heads stays a reference, in the programmer and in a Look</span>
+      <span style="flex: 1"></span>
+      <button type="button" onClick="{{back}}" style="height: 32px; padding: 0 12px; border: 1px solid #34343a; border-radius: 6px; background: transparent; color: #fafafa; font: inherit; font-weight: 500; cursor: pointer">‹ Back</button>
+      <button type="button" onClick="{{next}}" style="height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: #4f8cff; color: #0b1020; font: inherit; font-weight: 600; cursor: pointer">Next ›</button>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap">
+      <sc-for list="{{steps}}" as="s" hint-placeholder-count="7">
+        <button type="button" onClick="{{s.pick}}" aria-pressed="{{s.active}}" style="{{s.pillStyle}}">{{s.n}} · {{s.short}}</button>
+      </sc-for>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: baseline">
+      <span style="font-weight: 600; white-space: nowrap">{{current.title}}</span>
+      <span style="color: #a1a1aa; line-height: 1.45">{{current.body}}</span>
+    </div>
+  </div>
+  <dc-import name="Programmer" step="{{current.id}}" hint-size="1280px,760px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":920}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { i: 0 }; }
+  renderVals() {
+    const STEPS = [
+      { id: 'a1', short: 'Select four', title: 'Four heads, four positions.', body: 'Spot 1–4’s Position cells are selected and each head holds its own value. Record ▾ → A new palette.' },
+      { id: 'a2', short: 'New palette', title: 'Name it, and use it on these heads.', body: 'The heads differ, so the palette is per fixture. New: “Use it on these heads”, on by default, turns the four values into references to the palette.' },
+      { id: 'a3', short: 'References', title: 'The cells are references to DSR Focus.', body: 'Nothing moved on stage. Each cell is still yours (the blue ring) and still in Local, with no layer on the Stack. The teal edge and the pill say its value is a reference to DSR Focus, not a literal.' },
+      { id: 'b1', short: 'Press on two', title: 'Later: press it with two heads selected.', body: 'After Clear the spots are elsewhere. Select Spot 2 and Spot 3’s Position and open Set: the DSR Focus chip says 2 of 4, and the hint says what is left out.' },
+      { id: 'b2', short: 'Two take it', title: 'Only the selected heads take it.', body: 'Spot 2 and Spot 3’s positions are references to their own rows in DSR Focus. Its rows for Spot 1 and Spot 4 are ignored, and Spot 1 and Spot 4 keep their literal values.' },
+      { id: 'c1', short: 'Record Look', title: 'Record a Look: references stay references.', body: 'Record takes your values as they are, so the two references go into the Look as references. The sheet says so; there is nothing to choose.' },
+      { id: 'c2', short: 'Look follows', title: 'The Look follows the palette.', body: 'Editing Act 1 Spots in the grid: Spot 2–3’s positions are references to DSR Focus, Spot 1 and Spot 4’s are literals. Retune DSR Focus and the Look moves. Copy the values makes them literals.' },
+    ];
+    const i = this.state.i;
+    const steps = STEPS.map((s, k) => ({
+      ...s,
+      n: k + 1,
+      active: k === i,
+      pick: () => this.setState({ i: k }),
+      pillStyle: 'height: 28px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; ' + (k === i ? 'border: 1px solid #4f8cff; background: rgba(79,140,255,0.18); color: #dbe7ff; font-weight: 600' : 'border: 1px solid #34343a; background: transparent; color: #a1a1aa'),
+    }));
+    return {
+      steps,
+      current: STEPS[i],
+      back: () => this.setState({ i: Math.max(0, i - 1) }),
+      next: () => this.setState({ i: Math.min(STEPS.length - 1, i + 1) }),
+    };
+  }
+}
+</script>
+</body>
+</html>
