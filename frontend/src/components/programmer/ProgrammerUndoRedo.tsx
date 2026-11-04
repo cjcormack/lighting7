@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Redo2, Undo2 } from 'lucide-react'
 import { dispatchSyntheticContextMenu, useLongPress } from '@/hooks/useLongPress'
 import { useProgrammerFade } from '@/lib/programmerFade'
@@ -80,7 +80,7 @@ export function ProgrammerUndoRedo({ projectId }: { projectId: number }) {
               if (!consumeLongPress()) undo()
             }}
             aria-label={top ? `Undo ${top.label}` : 'Undo'}
-            title={top ? `Undo · ${top.label} (⌘Z) — right-click for earlier steps` : 'Nothing to undo in the programmer'}
+            title={top ? `Undo · ${top.label} — right-click for earlier steps` : 'Nothing to undo in the programmer'}
             className="inline-flex items-center gap-1.5 px-2 text-xs font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
           >
             <Undo2 className="size-3.5" />
@@ -96,7 +96,7 @@ export function ProgrammerUndoRedo({ projectId }: { projectId: number }) {
             disabled={!next}
             onClick={() => redo()}
             aria-label={next ? `Redo ${next.label}` : 'Redo'}
-            title={next ? `Redo · ${next.label} (⇧⌘Z)` : 'Nothing to redo in the programmer'}
+            title={next ? `Redo · ${next.label}` : 'Nothing to redo in the programmer'}
             className="hidden items-center border-l px-2 transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50 @[800px]:inline-flex"
           >
             <Redo2 className="size-3.5" />
@@ -123,45 +123,4 @@ export function ProgrammerUndoRedo({ projectId }: { projectId: number }) {
       </ContextMenuContent>
     </ContextMenu>
   )
-}
-
-/** Whether [event] is ⌘Z or ⇧⌘Z (Ctrl on Windows and Linux): `'undo'`, `'redo'` or null. */
-export function undoKeyOf(event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>): 'undo' | 'redo' | null {
-  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== 'z') return null
-  return event.shiftKey ? 'redo' : 'undo'
-}
-
-/**
- * Whether ⌘Z belongs to something else where [target] is: a text field or a contenteditable, whose
- * own undo is the browser's, or an open dialog, which has its own keys (undo plan §4.6).
- */
-export function undoKeyBlocked(target: EventTarget | null, doc: Document = document): boolean {
-  if (target instanceof HTMLElement) {
-    if (target.isContentEditable) return true
-    if (target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return true
-  }
-  return doc.querySelector('[role="dialog"], [role="alertdialog"]') != null
-}
-
-/**
- * ⌘Z and ⇧⌘Z while the programmer view is open (undo plan session 1; §4.6 makes them global in
- * session 6). Bubble phase, so a handler that takes the key first and says so with
- * `preventDefault()` keeps it.
- */
-export function useProgrammerUndoKeys(projectId: number) {
-  const actions = useProgrammerUndo(projectId)
-  const latest = useRef(actions)
-  latest.current = actions
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat) return
-      const key = undoKeyOf(event)
-      if (key == null || undoKeyBlocked(event.target)) return
-      event.preventDefault()
-      if (key === 'undo') latest.current.undo()
-      else latest.current.redo()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
 }

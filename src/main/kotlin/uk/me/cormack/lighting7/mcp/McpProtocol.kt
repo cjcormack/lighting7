@@ -146,6 +146,7 @@ class McpProtocol(private val state: State) {
         appendLine("You are driving a live stage-lighting desk (lighting7). Changes reach the rig immediately.")
         appendLine("Call describe_rig before anything else: every other tool names fixtures, groups, looks, cues and speed masters by the keys and ids it lists.")
         appendLine("Prefer get_current_state to check what is running before changing it.")
+        appendLine("The changes you make can be listed and taken back with list_history and undo_changes, and the operator sees them in History.")
         appendLine()
         appendLine(SETUP_GUIDE)
         appendLine()
@@ -206,7 +207,7 @@ class McpProtocol(private val state: State) {
         state.ensureHistory()
         namedProjectOf(name, arguments)?.let { state.ensureHistory(it) }
         val outcome = withContext(origin) {
-            if (setupTools.handles(name)) setupTools.executeTool(name, arguments, caller = user.displayName)
+            if (setupTools.handles(name)) setupTools.executeTool(name, arguments, caller = user.displayName, user = user)
             else tools.executeTool(name, arguments)
         }
         return toolResult(outcome.result, isError = !outcome.success, images = outcome.images)
@@ -293,7 +294,7 @@ class McpProtocol(private val state: State) {
         private val PROJECT_SCOPED_TOOLS: Map<String, String> = listOf(
             "get_patch", "patch_fixtures", "delete_groups", "unpatch_fixtures", "rename_fixtures", "edit_groups", "set_stage", "set_scene", "get_scene", "upload_scene_image",
             "place_fixtures", "override_venue_fixtures", "get_prompt_book", "build_cue_stack", "delete_cue_stacks", "set_scenery",
-            "delete_cues", "copy_cues", "attach_to_venue", "set_move_in_dark",
+            "delete_cues", "copy_cues", "attach_to_venue", "set_move_in_dark", "list_history", "undo_changes",
         ).associateWith { "projectId" } + ("copy_to_project" to "toProjectId")
 
         /** The programmer's Record and Update, off in a venue (venue plan D11). */
@@ -309,7 +310,7 @@ class McpProtocol(private val state: State) {
             "patch_fixtures", "delete_groups", "unpatch_fixtures", "rename_fixtures", "edit_groups", "set_stage", "set_scene",
             "upload_scene_image",
             "place_fixtures", "override_venue_fixtures", "build_cue_stack", "mark_up_prompt_book", "copy_to_project",
-            "delete_cue_stacks", "delete_cues", "copy_cues", "attach_to_venue", "set_move_in_dark",
+            "delete_cue_stacks", "delete_cues", "copy_cues", "attach_to_venue", "set_move_in_dark", "undo_changes",
         )
 
         /**

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { toast } from 'sonner'
-import { restApi } from './restApi'
+import { restApi, trackHistoryWrites } from './restApi'
+import { entryUndoAction } from '../components/history/historyActions'
 import { lightingApi } from '../api/lightingApi'
 import type { HeldRecord } from '../api/handApi'
 import type { BuskPadKind } from '../api/buskApi'
@@ -153,6 +154,12 @@ export interface HandPlacement<R> {
    */
   undo?: (result: R) => unknown
   /**
+   * The project the place writes to and the endpoints [run] sends. Given in place of [undo], Undo
+   * takes back what [run] wrote from the history, by its requests' entries (undo plan D11) — the
+   * right change however much has happened since, which a call-site inverse cannot promise.
+   */
+  history?: { projectId: number; endpoints: readonly string[] }
+  /**
    * The toast, where a place can land more than one way — the programmer's is a press, which takes
    * the record off heads it already covers. Absent, *“X” placed in <where>*.
    */
@@ -179,14 +186,18 @@ export const HAND_UNDO_MS = 10_000
 export function useHandPlace(): <R>(held: HeldRecord, placement: HandPlacement<R>) => Promise<void> {
   return useCallback(async function place<R>(held: HeldRecord, placement: HandPlacement<R>) {
     let result: R | null
+    const writes = trackHistoryWrites(placement.history?.endpoints ?? [])
     try {
       result = await placement.run()
     } catch {
       // Reported by errorToastMiddleware; caught here only to keep the hand held, which is the
       // right state after a failed place — the operator still has the item and can try elsewhere.
       return
+    } finally {
+      writes.stop()
     }
     if (result == null) return
+    const requestIds = writes.stop()
 
     lightingApi.hand.drop(held.uuid)
 
@@ -197,7 +208,9 @@ export function useHandPlace(): <R>(held: HeldRecord, placement: HandPlacement<R
       // Plain field, not a conditional spread: sonner renders `action` only when it is set, so an
       // explicit `undefined` and an absent key are the same thing to it.
       action:
-        placement.undo == null
+        placement.history != null
+          ? entryUndoAction(placement.history.projectId, requestIds)
+          : placement.undo == null
           ? undefined
           : {
               label: 'Undo',

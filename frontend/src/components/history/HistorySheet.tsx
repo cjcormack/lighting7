@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight, History } from 'lucide-react'
+import { Link } from 'react-router'
+import { ChevronRight, History, Redo2, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -17,9 +18,13 @@ import { cn } from '@/lib/utils'
 import { useViewedProject } from '@/ProjectSwitcher'
 import { useHistoryPageQuery, useHistoryState, type HistoryRow } from '@/store/history'
 import { useDeskWindows } from '@/store/windows'
+import { useVenueMode } from '@/store/venues'
+import { useHistoryMove } from './HistoryMove'
+import { historyActionLabel } from './HeaderUndoRedo'
 import {
   HISTORY_FILTERS,
   filterHistoryRows,
+  historyRecordHref,
   historyTime,
   openHistorySheet,
   setHistorySheetOpen,
@@ -30,7 +35,7 @@ import {
 /**
  * The History sheet (undo plan §4.2, session 3): the viewed project's show entries and, on the live
  * project, the programmer's steps, newest first, with the moments the history was cleared drawn as
- * rules. An activity log for now — undoing from it is session 6's. Mounted once, in `Layout`.
+ * rules, each undoable from its row (§4.2). Mounted once, in `Layout`.
  */
 export function HistorySheet() {
   const open = useHistorySheetOpen()
@@ -41,6 +46,7 @@ export function HistorySheet() {
         <SheetHeader>
           <SheetTitle>History</SheetTitle>
           <SheetDescription>{project ? project.name : 'No project'}</SheetDescription>
+          {open && <SheetUndoRedo />}
         </SheetHeader>
         <SheetBody>{open && project && <HistorySheetBody projectId={project.id} />}</SheetBody>
         <SheetFooter className="flex-col items-stretch gap-2 sm:flex-col">
@@ -75,6 +81,15 @@ export function HistorySheetBody({ projectId }: { projectId: number }) {
   const windowNames = useMemo(() => new Map(windows.map((w) => [w.id, w.name])), [windows])
   const rows = useMemo(() => filterHistoryRows(data?.rows ?? [], filter), [data, filter])
   const nothing = rows.every((row) => row.kind === 'CLEAR')
+  const { move } = useHistoryMove()
+  // An operator's show changes on a venue are read-only (D12): the desk refuses the undo.
+  const { isVenue, canEdit } = useVenueMode(projectId)
+  const showReadOnly = isVenue && !canEdit
+  const act = (row: HistoryRow) => {
+    if (row.kind === 'CLEAR') return
+    const programmerOnly = row.kind === 'PROGRAMMER'
+    void move(row.undone ? 'redo' : 'undo', { projectId, entryId: row.id, programmerOnly, mine: row.mine })
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -101,7 +116,14 @@ export function HistorySheetBody({ projectId }: { projectId: number }) {
             row.kind === 'CLEAR' ? (
               <ClearRule key={row.id} row={row} />
             ) : (
-              <HistoryRowItem key={row.id} row={row} windowName={row.source?.window ? windowNames.get(row.source.window) : undefined} />
+              <HistoryRowItem
+                key={row.id}
+                row={row}
+                projectId={projectId}
+                windowName={row.source?.window ? windowNames.get(row.source.window) : undefined}
+                action={rowActionLabel(row, row.kind === 'SHOW' && showReadOnly)}
+                onAct={() => act(row)}
+              />
             ),
           )}
           {data?.more && <li className="py-2 text-xs text-muted-foreground">Older changes are not shown.</li>}
@@ -123,13 +145,48 @@ function ClearRule({ row }: { row: HistoryRow }) {
   )
 }
 
-function HistoryRowItem({ row, windowName }: { row: HistoryRow; windowName?: string }) {
+/**
+ * What a row's button says, or null for none (§4.2): *Undo back to here* on your own row or a
+ * programmer step (a step goes back with every step after it), *Undo {name}'s change* on anyone
+ * else's, *Redo* while an undone row can come back.
+ */
+export function rowActionLabel(row: HistoryRow, readOnly: boolean): string | null {
+  if (row.kind === 'CLEAR' || readOnly) return null
+  if (row.undone) return row.redoable ? 'Redo' : null
+  if (row.kind === 'PROGRAMMER' || row.mine) return 'Undo back to here'
+  return `Undo ${row.source?.name ?? 'this'}'s change`
+}
+
+function HistoryRowItem({
+  row,
+  projectId,
+  windowName,
+  action,
+  onAct,
+}: {
+  row: HistoryRow
+  projectId: number
+  windowName?: string
+  action: string | null
+  onAct: () => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const show = row.kind === 'SHOW'
   const source = row.source ? (windowName ? `${row.source.name} · ${windowName}` : row.source.name) : null
   const canExpand = row.records.length > 0
   return (
-    <li className={cn('border-b last:border-b-0', row.undone && 'opacity-50')} data-kind={row.kind}>
+    <li className={cn('group relative border-b last:border-b-0', row.undone && 'opacity-50')} data-kind={row.kind}>
+      {action && (
+        <Button
+          variant="secondary"
+          size="sm"
+          className="absolute right-6 top-1.5 z-10 h-7 px-2 text-xs opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+          onClick={onAct}
+        >
+          {row.undone ? <Redo2 className="size-3.5" /> : <Undo2 className="size-3.5" />}
+          {action}
+        </Button>
+      )}
       <button
         type="button"
         className="flex w-full items-start gap-2 py-2 text-left disabled:cursor-default"
@@ -165,12 +222,21 @@ function HistoryRowItem({ row, windowName }: { row: HistoryRow; windowName?: str
       </button>
       {expanded && (
         <ul className="mb-2 ml-[5.5rem] flex flex-col gap-0.5 text-xs text-muted-foreground">
-          {row.records.map((record) => (
-            <li key={`${record.folder}/${record.uuid}`}>
-              <span className="font-mono">{record.change === 'ADDED' ? '+' : record.change === 'REMOVED' ? '−' : '~'}</span>{' '}
-              {record.label}
-            </li>
-          ))}
+          {row.records.map((record) => {
+            const href = historyRecordHref(projectId, record)
+            return (
+              <li key={`${record.folder}/${record.uuid}`}>
+                <span className="font-mono">{record.change === 'ADDED' ? '+' : record.change === 'REMOVED' ? '−' : '~'}</span>{' '}
+                {href ? (
+                  <Link to={href} className="underline-offset-2 hover:text-foreground hover:underline">
+                    {record.label}
+                  </Link>
+                ) : (
+                  record.label
+                )}
+              </li>
+            )
+          })}
           {row.moreRecords > 0 && <li>and {row.moreRecords} more</li>}
         </ul>
       )}
@@ -185,6 +251,24 @@ function Counts({ counts }: { counts: NonNullable<HistoryRow['counts']> }) {
       {counts.removed > 0 && <span className="text-red-500">−{counts.removed} </span>}
       {counts.changed > 0 && <span>~{counts.changed}</span>}
     </span>
+  )
+}
+
+/** The sheet's own Undo and Redo: what ⌘Z and ⇧⌘Z take, named. */
+function SheetUndoRedo() {
+  const history = useHistoryState()
+  const { undo, redo } = useHistoryMove()
+  return (
+    <div className="flex gap-2 pt-1">
+      <Button variant="outline" size="sm" className="min-w-0" disabled={history.undo == null} onClick={() => void undo()}>
+        <Undo2 className="size-3.5" />
+        <span className="truncate">{historyActionLabel('undo', history.undo)}</span>
+      </Button>
+      <Button variant="outline" size="sm" className="min-w-0" disabled={history.redo == null} onClick={() => void redo()}>
+        <Redo2 className="size-3.5" />
+        <span className="truncate">{historyActionLabel('redo', history.redo)}</span>
+      </Button>
+    </div>
   )
 }
 

@@ -946,7 +946,7 @@ neighbour never receives a pointer event of its own.
 `POST /busk/banks/{bankId}/pads` appends a pad, `assignCueSlot` fills a slot, the palette or Look press
 (`/palettes/{id}/toggle`, `/looks/{id}/toggle`) adds a layer, `patchProjectCue` through `buildCueInput` adds a cue layer — so one frame that placed
 would reimplement four of them behind one name. A place is **the placing window's own mutation
-followed by `hand.drop`**, and Undo is that window's inverse mutation. The desk's whole share of a
+followed by `hand.drop`**, and Undo takes that mutation's history entry back (the rig row's place keeps an inverse). The desk's whole share of a
 place is letting go. A control surface has no mutation of its own to make, so its one place binding,
 `HandPlaceInBank(bankUuid)`, runs that same append rather than a second copy of it — and lets go
 only if it succeeded, so a refused place leaves the item in the hand where the operator can put it

@@ -46,7 +46,7 @@ import { useEditorForm } from '@/components/editor/EditorSurface'
 import { Button } from '@/components/ui/button'
 import { PanelBottomOpen } from 'lucide-react'
 import { toast } from 'sonner'
-import { lastPadOfBank, libraryStarterLayout, recordsOnPage, removePad, toLayoutRequest } from '@/lib/buskLayout'
+import { libraryStarterLayout, recordsOnPage } from '@/lib/buskLayout'
 import { recordsOnRig } from '@/lib/buskRig'
 import { buskAddBody } from '@/lib/buskAdd'
 import { followIsForced, relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
@@ -445,15 +445,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
               bankId,
               ...buskAddBody({ kind: held.kind, id: held.id, name: heldName(held) }),
             }).unwrap(),
-          undo: (page) => {
-            const at = lastPadOfBank(page, bankId)
-            if (at == null) return
-            void saveLayout({
-              projectId,
-              pageId: page.id,
-              ...toLayoutRequest(removePad(page, at)),
-            }).unwrap().catch(ignoreReportedError)
-          },
+          history: { projectId, endpoints: ['addBuskPad'] },
         })
       },
     }),
@@ -468,7 +460,6 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       navigate,
       activePage,
       addPad,
-      saveLayout,
       placeFromHand,
     ],
   )

@@ -4,7 +4,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const toastError = vi.fn()
 const toastInfo = vi.fn()
-vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => toastError(...a), info: (...a: unknown[]) => toastInfo(...a) } }))
+const toastSuccess = vi.hoisted(() => vi.fn())
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...a: unknown[]) => toastError(...a),
+    info: (...a: unknown[]) => toastInfo(...a),
+    success: (...a: unknown[]) => toastSuccess(...a),
+  },
+}))
+const writes = vi.hoisted(() => ({ next: 0 }))
+vi.mock('@/store/restApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/restApi')>()),
+  trackHistoryWrites: () => {
+    const seen = [`h-${++writes.next}`]
+    return { stop: () => seen }
+  },
+}))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 
 import { useBatchDelete, type DeleteOutcome } from './useBatchDelete'
@@ -29,7 +44,11 @@ const C: Item = { id: 3, name: 'Movement' }
 const D: Item = { id: 4, name: 'Strobe' }
 
 describe('useBatchDelete (library-sheets plan D13)', () => {
-  function harness(outcomes: Record<number, DeleteOutcome<string>>, forced: Record<number, DeleteOutcome<string>> = {}) {
+  function harness(
+    outcomes: Record<number, DeleteOutcome<string>>,
+    forced: Record<number, DeleteOutcome<string>> = {},
+    history?: { projectId: number; endpoint: string },
+  ) {
     const remove = vi.fn(async (item: Item, force: boolean) => (force ? (forced[item.id] ?? { kind: 'ok' as const }) : outcomes[item.id]))
     const onDeleted = vi.fn()
     const onKept = vi.fn()
@@ -42,10 +61,33 @@ describe('useBatchDelete (library-sheets plan D13)', () => {
         onDeleted,
         onKept,
         toastKey: 'test',
+        history,
       }),
     )
     return { remove, onDeleted, onKept, ...hook }
   }
+
+  it('says what the batch deleted once it is done, its Undo naming both passes’ requests (undo plan §4.4)', async () => {
+    toastSuccess.mockClear()
+    writes.next = 0
+    const { result } = harness({ 2: { kind: 'ok' }, 3: { kind: 'inUse', summary: 'x' } }, {}, { projectId: 4, endpoint: 'deleteSpeedMaster' })
+    await act(() => result.current.run([B, C]))
+    // Nothing is said while the dialog asks about the rest.
+    expect(toastSuccess).not.toHaveBeenCalled()
+    await act(() => result.current.force())
+    expect(toastSuccess).toHaveBeenCalledTimes(1)
+    const [message, options] = toastSuccess.mock.calls[0] as [string, { action?: { label: string } }]
+    expect(message).toBe('Deleted 2 masters')
+    expect(options.action?.label).toBe('Undo')
+  })
+
+  it('still says what the first pass deleted when the rest are kept', async () => {
+    toastSuccess.mockClear()
+    const { result } = harness({ 2: { kind: 'ok' }, 3: { kind: 'inUse', summary: 'x' } }, {}, { projectId: 4, endpoint: 'deleteSpeedMaster' })
+    await act(() => result.current.run([B, C]))
+    act(() => result.current.keep())
+    expect(toastSuccess).toHaveBeenCalledWith('Deleted Colour', expect.anything())
+  })
 
   it('skips by name before sending, sends the rest plain, and asks once about the in-use ones', async () => {
     const { remove, onDeleted, result } = harness({

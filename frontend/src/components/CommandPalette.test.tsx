@@ -11,6 +11,12 @@ import type { CommandPage, ProgrammerCommand } from '@/components/programmer/com
  * sub-pages list what their door built, a row pressed as a layer on ⏎ and as values on ⌥⏎.
  */
 
+vi.mock('@/store/history', () => ({
+  useHistoryState: () => ({ projectId: null, revision: 0, showRevision: 0, undo: null, redo: null, programmer: { undo: [], redo: [] } }),
+}))
+vi.mock('@/components/history/HistoryMove', () => ({
+  useHistoryMove: () => ({ move: vi.fn(), undo: vi.fn(), redo: vi.fn(), undoRequests: vi.fn() }),
+}))
 vi.mock('@/store/projects', () => ({ useProjectListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/auth', () => ({ useAuthStatusQuery: () => ({ data: undefined }) }))
 vi.mock('@/store/fixtures', () => ({ useVisibleFixtureListQuery: () => ({ data: [] }) }))

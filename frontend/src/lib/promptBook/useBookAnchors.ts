@@ -20,13 +20,13 @@ import { useRecordProgrammerMutation } from '../../store/programmerOps'
 import { formatError } from '../formatError'
 import type { AttributeFamily } from '../attributeFamily'
 import { announceWrite, recordNote } from '../../components/programmer/writeToasts'
+import { ignoreReportedError } from '../../store/errorToastMiddleware'
+import { trackHistoryWrites } from '../../store/restApi'
+import { undoHistoryRequests } from '../../components/history/historyActions'
 
-/** The one-deep undo slot a re-anchor fills: where the anchor was, and the label it wore. */
+/** A re-anchor's Undo: the requests that moved it, undone from the history (undo plan D11). */
 interface AnchorUndoSnapshot {
-  entryId: number
-  cueId: number
-  region: Region
-  label: string | null
+  requestIds: string[]
 }
 
 /**
@@ -142,57 +142,53 @@ export function useBookAnchors({
     [],
   )
 
+  /** Write an anchor; [undoable] keeps the write as the toolbar's *Undo move*, a re-anchor's. */
   const writeAnchor = useCallback(
-    (entryId: number, region: Region, label: string | null | undefined) => {
+    (entryId: number, region: Region, label: string | null | undefined, undoable = false) => {
       const cueId = anchorByEntry.get(entryId)?.cueId ?? cueIdByEntry.get(entryId)
       if (cueId == null) return
-      upsertAnchor({ projectId, entryId, cueId, region, label: label ?? undefined })
+      const writes = trackHistoryWrites(['upsertAnchor'])
+      void upsertAnchor({ projectId, entryId, cueId, region, label: label ?? undefined })
+        .unwrap()
+        .then(() => {
+          const requestIds = writes.stop()
+          if (undoable && requestIds.length > 0) setUndoSnapshot({ requestIds })
+        })
+        .catch(ignoreReportedError)
+        .finally(() => writes.stop())
     },
     [anchorByEntry, cueIdByEntry, upsertAnchor, projectId],
   )
 
   const moveAnchor = useCallback(
-    (entryId: number, region: Region, prevRegion: Region) => {
+    (entryId: number, region: Region) => {
       const anchor = anchorByEntry.get(entryId)
-      if (anchor) setUndoSnapshot({ entryId, cueId: anchor.cueId, region: prevRegion, label: anchor.label ?? null })
-      writeAnchor(entryId, region, anchor?.label)
+      writeAnchor(entryId, region, anchor?.label, anchor != null)
     },
     [anchorByEntry, writeAnchor],
   )
 
   const undo = useCallback(() => {
     if (!undoSnapshot) return
-    upsertAnchor({
-      projectId,
-      entryId: undoSnapshot.entryId,
-      cueId: undoSnapshot.cueId,
-      region: undoSnapshot.region,
-      label: undoSnapshot.label ?? undefined,
-    })
     setUndoSnapshot(null)
-  }, [undoSnapshot, upsertAnchor, projectId])
+    void undoHistoryRequests(projectId, undoSnapshot.requestIds)
+  }, [undoSnapshot, projectId])
 
   const placeAnchor = useCallback(
     (region: Region) => {
       if (placingEntryId == null) return
-      // Re-anchoring an existing entry → snapshot the old region so it can be undone.
-      const existing = anchorByEntry.get(placingEntryId)
-      if (existing) {
-        setUndoSnapshot({ entryId: placingEntryId, cueId: existing.cueId, region: existing.region, label: existing.label ?? null })
-      }
-      writeAnchor(placingEntryId, region, labelByEntry.get(placingEntryId))
+      // Re-anchoring an existing entry can be undone.
+      writeAnchor(placingEntryId, region, labelByEntry.get(placingEntryId), anchorByEntry.has(placingEntryId))
       setPlacingEntryId(null)
     },
     [placingEntryId, labelByEntry, anchorByEntry, writeAnchor],
   )
 
   // Anchor a chosen entry to a selected region (from the cue picker). Overwriting an
-  // existing anchor re-anchors it; snapshot the old region so it can be undone.
+  // existing anchor re-anchors it, which can be undone.
   const anchorCue = useCallback(
     (entryId: number, region: Region) => {
-      const existing = anchorByEntry.get(entryId)
-      if (existing) setUndoSnapshot({ entryId, cueId: existing.cueId, region: existing.region, label: existing.label ?? null })
-      writeAnchor(entryId, region, labelByEntry.get(entryId))
+      writeAnchor(entryId, region, labelByEntry.get(entryId), anchorByEntry.has(entryId))
       setAnchorPicker(null)
       setPlacingEntryId(null)
     },

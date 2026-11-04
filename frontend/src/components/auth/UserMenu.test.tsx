@@ -25,6 +25,12 @@ vi.mock('@/store/auth', () => ({
 }))
 
 const registry: { windows: DeskWindow[] } = { windows: [] }
+vi.mock('@/store/history', () => ({
+  useHistoryState: () => ({ projectId: null, revision: 0, showRevision: 0, undo: null, redo: null, programmer: { undo: [], redo: [] } }),
+}))
+vi.mock('@/components/history/HistoryMove', () => ({
+  useHistoryMove: () => ({ move: vi.fn(), undo: vi.fn(), redo: vi.fn(), undoRequests: vi.fn() }),
+}))
 vi.mock('@/store/windows', () => ({ useDeskWindows: () => registry.windows }))
 vi.mock('@/lib/windowIdentity', () => ({ useWindowName: () => 'Screen 1' }))
 

@@ -10,7 +10,15 @@ const tap = vi.fn()
 const toastError = vi.fn()
 const toastInfo = vi.fn()
 
-vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => toastError(...a), info: (...a: unknown[]) => toastInfo(...a) } }))
+const toastSuccess = vi.fn()
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...a: unknown[]) => toastError(...a),
+    info: (...a: unknown[]) => toastInfo(...a),
+    success: (...a: unknown[]) => toastSuccess(...a),
+  },
+}))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 vi.mock('@/components/BeatIndicator', () => ({ BeatIndicator: () => <span data-testid="beat" /> }))
 vi.mock('@tanstack/react-virtual', () => ({
@@ -292,5 +300,6 @@ describe('SpeedMasterSheet', () => {
     await waitFor(() => expect(deleteMaster).toHaveBeenCalledTimes(1))
     expect(deleteMaster).toHaveBeenCalledWith({ projectId: 1, masterId: 3, force: false })
     expect(toastInfo).toHaveBeenCalledWith(expect.stringMatching(/^M1 · Global skipped/), expect.anything())
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith(expect.stringMatching(/^Deleted /), expect.anything()))
   })
 })

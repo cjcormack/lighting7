@@ -127,6 +127,13 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
+    fun `the history targets address nothing and are always healthy`() {
+        for (target in listOf(BindingTarget.Undo, BindingTarget.Redo, BindingTarget.ProgrammerUndo)) {
+            assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(target, context()), "$target")
+        }
+    }
+
+    @Test
     fun `busk page next and prev are page-agnostic and always healthy`() {
         // A project with no pages has nowhere to step, which is not a dead binding — the same line
         // `ClearSelection` draws with an empty selection.

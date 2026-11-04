@@ -4,6 +4,19 @@ import uk.me.cormack.lighting7.fx.toggleLooseCue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import uk.me.cormack.lighting7.history.refusal
+import uk.me.cormack.lighting7.history.HistoryMove
+import uk.me.cormack.lighting7.history.HistoryMoveResult
+import uk.me.cormack.lighting7.history.HistorySource
+import uk.me.cormack.lighting7.history.RecordRestorer
+import uk.me.cormack.lighting7.history.WriteOrigin
+import uk.me.cormack.lighting7.history.moveHistory
+import kotlin.coroutines.EmptyCoroutineContext
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -176,6 +189,12 @@ interface SurfaceActions {
     /** Let go of whatever the hand holds; a no-op on an empty hand. */
     fun handDrop()
 
+    /**
+     * The undo or redo key as [source], the surface's own (undo plan §4.8), or the programmer's top
+     * step alone with [programmerOnly]. A refusal moves nothing and is logged.
+     */
+    fun historyMove(source: HistorySource, undo: Boolean, programmerOnly: Boolean = false)
+
     /** Move the desk's showing busk page by one, wrapping. */
     fun buskPageStep(delta: Int)
 
@@ -213,6 +232,10 @@ class DefaultSurfaceActions(
 
     companion object {
         private val logger = LoggerFactory.getLogger(DefaultSurfaceActions::class.java)
+
+        /** Every surface's undo and redo presses, one at a time in press order. */
+        private val historyDispatcher = Dispatchers.IO.limitedParallelism(1)
+        private val historyMutex = Mutex()
 
         /** The busk view's option keys and the one verb, as the client's `buskWindow.ts` reads them. */
         const val VIEW_OPTION_FOCUS = "focus"
@@ -629,6 +652,48 @@ class DefaultSurfaceActions(
     }
 
     override fun handDrop() = state.handState.drop()
+
+    override fun historyMove(source: HistorySource, undo: Boolean, programmerOnly: Boolean) {
+        launchHistoryMove(source, HistoryMove(undo, programmerOnly = programmerOnly))
+    }
+
+    /**
+     * Run one press off the input's thread, since putting records back reloads what they touch, and in
+     * press order: each decides what it takes only once the one before has finished.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    internal fun launchHistoryMove(source: HistorySource, move: HistoryMove): Job? {
+        val projectId = currentProjectId() ?: return null
+        return GlobalScope.launch(historyDispatcher + (WriteOrigin.current() ?: EmptyCoroutineContext)) {
+            historyMutex.withLock { surfaceHistoryMove(projectId, source, move) }
+        }
+    }
+
+    /**
+     * One surface undo or redo on [projectId], at no programmer fade, as a surface press has none. A
+     * surface cannot confirm, so an undo that would move a running show is refused like a conflict.
+     */
+    internal suspend fun surfaceHistoryMove(projectId: Int, source: HistorySource, move: HistoryMove): HistoryMoveResult {
+        val what = if (move.undo) "undo" else "redo"
+        val result = try {
+            moveHistory(state, projectId, source, move)
+        } catch (e: Exception) {
+            logger.warn("Surface {} failed for {}: {}", what, source.name, e.message)
+            return HistoryMoveResult.Empty
+        }
+        val refusal = result.refusal(move.undo, move.entryId)
+        if (refusal != null) {
+            logger.info("Surface {} by {} not done: {}", what, source.name, refusal.message)
+        } else {
+            val moved = when (result) {
+                is HistoryMoveResult.Steps -> result.steps.map { it.label }
+                is HistoryMoveResult.Show -> (result.outcome as? RecordRestorer.Outcome.Done)?.entries?.map { it.label }.orEmpty()
+                else -> emptyList()
+            }
+            logger.info("Surface {} by {}: {}", what, source.name, moved.joinToString())
+        }
+        return result
+    }
 
     override fun buskPageStep(delta: Int) = state.buskPageState.step(delta)
 

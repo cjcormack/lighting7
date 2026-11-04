@@ -168,6 +168,26 @@ const rig = vi.hoisted(() => ({ fixtures: [] as unknown[] }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({ fixtures: rig.fixtures, fixtureByKey: new Map((rig.fixtures as { key: string }[]).map((f) => [f.key, f])) }),
 }))
+// The store's Undo is the save's entry in the history (undo plan D11), named by the requests it made.
+const history = vi.hoisted(() => ({
+  undo: vi.fn(async (..._args: unknown[]) => true),
+  writes: 0,
+  moved: new Set<(projectId: number) => void>(),
+}))
+vi.mock('@/components/history/historyActions', () => ({
+  undoHistoryRequests: history.undo,
+  onHistoryMoved: (fn: (projectId: number) => void) => {
+    history.moved.add(fn)
+    return () => history.moved.delete(fn)
+  },
+}))
+vi.mock('@/store/restApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/restApi')>()),
+  trackHistoryWrites: () => {
+    const id = `h-${++history.writes}`
+    return { stop: () => [id] }
+  },
+}))
 vi.mock('sonner', async (importOriginal) => {
   const actual = await importOriginal<typeof import('sonner')>()
   const toast = Object.assign(() => {}, { ...actual.toast, dismiss: () => {}, error: () => {} })
@@ -684,7 +704,7 @@ it('a read-only cue stores no picked effect', async () => {
   expect(data.patches).toHaveLength(0)
 })
 
-it('one flush carries the rows and a list in one PATCH, and one Undo puts both back', async () => {
+it('one flush carries the rows and a list in one PATCH, and one Undo takes back its entry', async () => {
   data.cue = cueOf({ layers: [{ ...layer(WARM, 0), id: 1 }, { ...layer(COOL, 1), id: 2 }] })
   const probe: { store?: CueRowStoreValue | null } = {}
   function Probe() {
@@ -702,15 +722,10 @@ it('one flush carries the rows and a list in one PATCH, and one Undo puts both b
   })
   const body = await patched(1)
   expect(Object.keys(body).sort()).toEqual(['attributeAssignments', 'cueId', 'layers', 'projectId'])
-  // The desk now holds what that save wrote.
-  data.desk = cueOf({
-    layers: [{ ...layer(WARM, 0), id: 1, enabled: false }, { ...layer(COOL, 1), id: 2 }],
-    attributeAssignments: body.attributeAssignments as Cue['attributeAssignments'],
-  })
+  const request = `h-${history.writes}`
   act(() => probe.store!.undo())
-  const undone = await patched(2)
-  expect((undone.layers as CueLayer[]).map((l) => l.enabled)).toEqual([true, true])
-  expect((undone.attributeAssignments as Cue['attributeAssignments']).map((r) => r.value)).toEqual(['10'])
+  await waitFor(() => expect(history.undo).toHaveBeenCalledWith(1, [request], 'Q1 · values and looks put back'))
+  expect(data.patches).toHaveLength(1)
 })
 
 it('sends no programmer, channel or effect frame over a full pass of both tabs (P2)', async () => {

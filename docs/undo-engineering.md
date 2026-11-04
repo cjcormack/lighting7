@@ -180,6 +180,18 @@ With no `entryId`, undo takes whichever of the programmer's top step and the cal
 written last, and redo whichever was undone last (`HistoryEntry.undoneAt`, `StepInfo.undoneAt`); the
 route and `history.state` decide it with one function, `showTakes`.
 
+**Every door's undo is one function**, `history/HistoryMove.kt`'s `moveHistory(state, projectId,
+caller, HistoryMove, window?, operator, scriptsAllowed)`, answering a `HistoryMoveResult` — `Steps`,
+`Show(RecordRestorer.Outcome)`, `Empty`, `UnknownStep`, `NotLive` or `VenueAdminOnly`. Its
+`refusal(undo, entryId)` is the one mapping of a refusal to its message, code and extras (`later`,
+`moves`, `record`, `reason`), and each door carries it its own way. The routes answer it as HTTP; a
+surface's `undo`, `redo` and `programmerUndo` buttons (midi-control-surface-engineering.md) run it as
+`surface:{deviceKey}` at no fade, one press at a time in press order (one single-threaded dispatcher
+and a `Mutex` round the whole move, so each decides what it takes only after the last finished), and
+log a refusal, never confirming, so an undo that would move a running show is not done from one; Claude's
+`undo_changes` (mcp-engineering.md §"Claude's own history") runs it entry by entry for its own grant
+only, refusing another source's entry as `HISTORY_NOT_YOURS`.
+
 **Confirm (D6).** On the live project, while any cue is held, an undo that moves the stage answers 409
 `HISTORY_CONFIRM` with `moves` until it is resent with `confirm`: a change to the rig that rebuilds the
 fixtures, as its own route's write would (`KindEffects.rigReach`: a patch or group added or taken away,

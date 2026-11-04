@@ -37,6 +37,17 @@ function route(name: string) {
     },
   ]
 }
+// A place's Undo is its write's entry in the history (undo plan D11), named by the requests it made.
+const history = vi.hoisted(() => ({ undo: vi.fn(async (..._args: unknown[]) => true) }))
+vi.mock('@/components/history/historyActions', () => ({
+  entryUndoAction: (projectId: number, requestIds: readonly string[]) =>
+    requestIds.length === 0 ? undefined : { label: 'Undo', onClick: () => void history.undo(projectId, requestIds) },
+}))
+vi.mock('@/store/restApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/restApi')>()),
+  trackHistoryWrites: () => ({ stop: () => ['h-5'] }),
+}))
+
 vi.mock('@/store/palettes', () => ({
   useTogglePaletteMutation: route('togglePalette'),
   useApplyPaletteMutation: route('applyPalette'),
@@ -270,7 +281,7 @@ describe('a cue’s stack', () => {
     expect(sent.layers[1]).toMatchObject({ lookId: 8, sortOrder: 2, enabled: true })
   })
 
-  it('undoes by patching back the layers read BEFORE the place', async () => {
+  it("undoes the place's own entry from the history, sending no second patch", async () => {
     await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('PALETTE'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
@@ -280,10 +291,8 @@ describe('a cue’s stack', () => {
     await act(async () => {
       action.onClick()
     })
-    await waitFor(() => expect(patches).toHaveLength(2))
-    const undone = patches[1] as { layers: { lookId?: number | null }[] }
-    expect(undone.layers).toHaveLength(1)
-    expect(undone.layers[0]!.lookId).toBe(3)
+    expect(history.undo).toHaveBeenCalledWith(1, ['h-5'])
+    expect(patches).toHaveLength(1)
   })
 
   it('appends a palette onto an unlinked window’s own selection', async () => {

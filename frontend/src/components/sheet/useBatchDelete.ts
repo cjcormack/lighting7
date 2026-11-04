@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { formatError } from '@/lib/formatError'
+import { trackHistoryWrites } from '@/store/restApi'
+import { entryUndoAction } from '@/components/history/historyActions'
 import { nounPlural } from './sheetModel'
 
 /** What one plain (or forced) delete answered. */
@@ -51,6 +53,11 @@ export interface UseBatchDeleteOptions<Item, S> {
   onKept?: (items: Item[]) => void
   /** The toast id refusals are reported under — per sheet, so a batch's refusals replace. */
   toastKey: string
+  /**
+   * The project the records are in and the delete's endpoint. Given, what the batch deleted is said
+   * in one toast once it is done, whose Undo takes the deletes back from the history (undo plan §4.4).
+   */
+  history?: { projectId: number; endpoint: string }
 }
 
 /**
@@ -75,8 +82,23 @@ export function useBatchDelete<Item, S>({
   onDeleted,
   onKept,
   toastKey,
+  history,
 }: UseBatchDeleteOptions<Item, S>) {
   const [state, setState] = useState<BatchDeleteState<Item, S> | null>(null)
+  /** What the batch has deleted so far, and the requests that did it, until it is announced. */
+  const doneRef = useRef<{ deleted: Item[]; requestIds: string[] }>({ deleted: [], requestIds: [] })
+  const projectId = history?.projectId
+  const endpoint = history?.endpoint
+  const announce = useCallback(() => {
+    const { deleted, requestIds } = doneRef.current
+    doneRef.current = { deleted: [], requestIds: [] }
+    if (projectId == null || deleted.length === 0) return
+    toast.success(deleted.length === 1 ? `Deleted ${name(deleted[0])}` : `Deleted ${deleted.length} ${nounPlural(noun)}`, {
+      id: `batch-deleted:${toastKey}`,
+      action: entryUndoAction(projectId, requestIds),
+    })
+  }, [name, noun, projectId, toastKey])
+  const track = useCallback(() => trackHistoryWrites(endpoint ? [endpoint] : []), [endpoint])
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
 
@@ -119,6 +141,7 @@ export function useBatchDelete<Item, S>({
       const deleted: Item[] = []
       const inUse: InUseEntry<Item, S>[] = []
       const refused: { item: Item; reason: string }[] = []
+      const writes = track()
       try {
         for (const item of sending) {
           const outcome = await settle(remove(item, false))
@@ -130,11 +153,13 @@ export function useBatchDelete<Item, S>({
         busyRef.current = false
         setBusy(false)
       }
+      doneRef.current = { deleted, requestIds: writes.stop() }
       report(refused)
       if (deleted.length > 0) onDeleted?.(deleted)
       if (inUse.length > 0) setState({ total: sending.length, deleted: deleted.map(name), inUse })
+      else announce()
     },
-    [name, noun, onDeleted, remove, report, skip, toastKey],
+    [announce, name, noun, onDeleted, remove, report, skip, toastKey, track],
   )
 
   /**
@@ -152,6 +177,7 @@ export function useBatchDelete<Item, S>({
     const deleted: Item[] = []
     const again: InUseEntry<Item, S>[] = []
     const refused: { item: Item; reason: string }[] = []
+    const writes = track()
     try {
       for (const { item, summary } of state.inUse) {
         const outcome = await settle(remove(item, true, summary))
@@ -163,10 +189,13 @@ export function useBatchDelete<Item, S>({
       busyRef.current = false
       setBusy(false)
     }
+    const done = doneRef.current
+    doneRef.current = { deleted: [...done.deleted, ...deleted], requestIds: [...done.requestIds, ...writes.stop()] }
     setState(again.length > 0 ? { total: state.total, deleted: [...state.deleted, ...deleted.map(name)], inUse: again } : null)
     report(refused)
     if (deleted.length > 0) onDeleted?.(deleted)
-  }, [name, onDeleted, remove, report, state])
+    if (again.length === 0) announce()
+  }, [announce, name, onDeleted, remove, report, state, track])
 
   /** *Keep them*: close the dialog, and hand the in-use records back to the sheet. */
   const keep = useCallback(() => {
@@ -174,7 +203,8 @@ export function useBatchDelete<Item, S>({
     const kept = state.inUse.map((entry) => entry.item)
     setState(null)
     onKept?.(kept)
-  }, [onKept, state])
+    announce()
+  }, [announce, onKept, state])
 
   return { run, force, keep, state, busy }
 }

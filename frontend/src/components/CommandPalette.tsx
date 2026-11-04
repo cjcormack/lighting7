@@ -6,7 +6,7 @@ import {
   FolderOpen, PlusCircle, Search, TableProperties, Bookmark, Sparkles,
   Clapperboard, AudioWaveform, LayoutGrid, Layers, ArrowLeft, Lock,
   ListOrdered, SlidersHorizontal, CirclePlay, Activity, Settings, Copy, Download,
-  RefreshCw, Unlink2, Link2, PackageOpen, History, Upload, Trash2, Landmark,
+  RefreshCw, Unlink2, Link2, PackageOpen, History, Upload, Trash2, Landmark, Undo2, Redo2,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useProjectListQuery } from "@/store/projects"
@@ -45,6 +45,11 @@ import ProjectSwitchConfirmDialog from "@/ProjectSwitchConfirmDialog"
 import CreateProjectDialog from "@/CreateProjectDialog"
 import ImportProjectDialog from "@/ImportProjectDialog"
 import { SelectByColourItems } from "@/components/fixtureColours/SelectByColour"
+import { useHistoryState } from "@/store/history"
+import { useHistoryMove } from "@/components/history/HistoryMove"
+import { historyActionLabel } from "@/components/history/HeaderUndoRedo"
+import { undoShortcutLabel } from "@/components/history/undoKeys"
+import { openHistorySheet } from "@/components/history/historySheetState"
 
 export interface ToggleState {
   label: string
@@ -277,6 +282,9 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
     document.addEventListener("keydown", handler)
     return () => document.removeEventListener("keydown", handler)
   }, [handleOpenChange])
+
+  const history = useHistoryState()
+  const historyMove = useHistoryMove()
 
   const runAction = (fn: () => void) => {
     handleOpenChange(false)
@@ -554,6 +562,41 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   Set Channel Value...
                 </Command.Item>
               )}
+            </Command.Group>
+
+            {/* Undo, Redo and the History sheet (undo plan §4.6): what ⌘Z and ⇧⌘Z take, named. */}
+            <Command.Group heading="History" className={groupClassName}>
+              <Command.Item
+                value="Undo"
+                keywords={["undo", "take back", ...(history.undo ? [history.undo.label] : [])]}
+                disabled={history.undo == null}
+                onSelect={() => runAction(() => void historyMove.undo())}
+                className={itemClassName}
+              >
+                <Undo2 className="size-4 text-muted-foreground" />
+                <span className="flex-1 truncate">{historyActionLabel("undo", history.undo)}</span>
+                <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">{undoShortcutLabel("undo")}</kbd>
+              </Command.Item>
+              <Command.Item
+                value="Redo"
+                keywords={["redo", ...(history.redo ? [history.redo.label] : [])]}
+                disabled={history.redo == null}
+                onSelect={() => runAction(() => void historyMove.redo())}
+                className={itemClassName}
+              >
+                <Redo2 className="size-4 text-muted-foreground" />
+                <span className="flex-1 truncate">{historyActionLabel("redo", history.redo)}</span>
+                <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">{undoShortcutLabel("redo")}</kbd>
+              </Command.Item>
+              <Command.Item
+                value="Show history"
+                keywords={["history", "undo", "changes", "activity"]}
+                onSelect={() => runAction(openHistorySheet)}
+                className={itemClassName}
+              >
+                <History className="size-4 text-muted-foreground" />
+                Show history
+              </Command.Item>
             </Command.Group>
 
             {/* Screens: full screen, the Screens sheet, and one window moving another

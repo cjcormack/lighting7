@@ -538,6 +538,7 @@ class SurfaceFeedbackPublisherTest {
                 override fun pickUpPad(padUuid: String) {}
                 override fun handPlaceInBank(bankUuid: String) {}
                 override fun handDrop() {}
+                override fun historyMove(source: uk.me.cormack.lighting7.history.HistorySource, undo: Boolean, programmerOnly: Boolean) {}
                 override fun buskPageStep(delta: Int) {}
                 override fun buskPageSet(pageUuid: String) {}
                 override fun buskFocusSet(windowName: String, focus: String) {}

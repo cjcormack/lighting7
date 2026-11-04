@@ -222,3 +222,11 @@ describe('controlLabel', () => {
     expect(controlLabel(profile, 'btn-99')).toBe('btn-99')
   })
 })
+
+describe('describeTarget — the history keys', () => {
+  it('says Undo, Redo and Programmer undo', () => {
+    expect(describeTarget({ type: 'undo' })).toBe('Undo')
+    expect(describeTarget({ type: 'redo' })).toBe('Redo')
+    expect(describeTarget({ type: 'programmerUndo' })).toBe('Programmer undo')
+  })
+})

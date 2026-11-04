@@ -6,7 +6,6 @@ import { ShowHeader } from '@/components/ShowHeader'
 import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar'
-import { useProgrammerUndoKeys } from '@/components/programmer/ProgrammerUndoRedo'
 import { useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { createMarqueeStore, MarqueeStoreContext } from '@/components/fixtures-list/marqueeContext'
 import { createFxSelectionStore, FxSelectionStoreContext } from '@/components/fixtures-list/fxSelection'
@@ -93,8 +92,6 @@ export function ProgrammerPage() {
  */
 const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectIdNum: number }) {
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  // ⌘Z and ⇧⌘Z take the programmer's steps while this view is open (undo plan session 1).
-  useProgrammerUndoKeys(projectIdNum)
   // Only `showHeaderProps` is read: this page draws no `ShowBar` (see the note beside the header
   // below). The hook is still the right source for the header's Start/Stop — the same derivation
   // the other three views get, and hand-rolling it here is the drift `useShowBarProps` exists to

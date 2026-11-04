@@ -3,7 +3,6 @@ import { Filter, Grid3x3, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
-import { isEditableTarget } from '@/lib/domUtils'
 import { CueTargetPicker } from '@/components/cues/CueTargetPicker'
 import { FixturesTable } from '@/components/fixtures-list/FixturesTable'
 import { SpreadPopover, type SpreadColumn } from '@/components/fixtures-list/SpreadPopover'
@@ -319,23 +318,6 @@ function CueValuesGridBody({
   })
   const activeRegion = useActiveKeyRegion()
   const isRegion = activeRegion != null && activeRegion === region.current
-
-  // ⌘Z in the editor: the store's one-step Undo. A text field keeps its own.
-  const { undo, canUndo } = store
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return
-      const mine = region.current
-      if (mine == null) return
-      const target = e.target instanceof Element ? e.target : null
-      const inEditor = (target != null && mine.contains(target)) || activeRegion === mine
-      if (!inEditor || isEditableTarget(target) || !canUndo) return
-      e.preventDefault()
-      undo()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [region, activeRegion, canUndo, undo])
 
   // ── Rows' gestures ─────────────────────────────────────────────────────────────────────────────
   const onRowClick = useCallback((id: RowId, e: React.MouseEvent) => selectRow(id, listSelectionIntentFor(e)), [selectRow])

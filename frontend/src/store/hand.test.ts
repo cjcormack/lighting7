@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import { handWs } from '@/test/backendMock'
+import { handWs, installRelativeUrlRequest } from '@/test/backendMock'
 
 // lightingApi opens a real WebSocket at import time (jsdom has none). The mock's `hand` namespace
 // remembers the subscriber and every pick-up and drop, with the drop's argument.
@@ -16,7 +16,14 @@ vi.mock('sonner', () => ({
   }),
 }))
 
+const history = vi.hoisted(() => ({ undo: vi.fn(async (..._args: unknown[]) => true) }))
+vi.mock('@/components/history/historyActions', () => ({
+  entryUndoAction: (projectId: number, requestIds: readonly string[]) =>
+    requestIds.length === 0 ? undefined : { label: 'Undo', onClick: () => void history.undo(projectId, requestIds) },
+}))
+
 import type { HeldRecord } from '@/api/handApi'
+import { HISTORY_ENTRY_HEADER } from './restApi'
 import { HAND_UNDO_MS, handDrop, handPickUp, heldName, useHandPlace } from './hand'
 
 /**
@@ -124,6 +131,30 @@ describe('a place is the window’s own mutation, then a guarded drop', () => {
     action.onClick()
     // The *result* of the place, so an inverse can address what the mutation just made.
     expect(undo).toHaveBeenCalledWith({ padId: 31 })
+  })
+
+  it("takes a place back from the history by the requests it made, where it names its project (D11)", async () => {
+    const { store } = await import('./index')
+    const { historySlice } = await import('./history')
+    installRelativeUrlRequest()
+    vi.stubGlobal('fetch', async () =>
+      new Response(JSON.stringify({ undone: [] }), {
+        headers: { 'Content-Type': 'application/json', [HISTORY_ENTRY_HEADER]: 'h-41' },
+      }),
+    )
+    const { result } = renderHook(() => useHandPlace())
+    await act(async () => {
+      await result.current(held(), {
+        where: 'Colours',
+        history: { projectId: 3, endpoints: ['historyMove'] },
+        // Any REST write stands for the place's own mutation: what Undo names is its answer's header.
+        run: async () => store.dispatch(historySlice.endpoints.historyMove.initiate({ projectId: 3, direction: 'undo' })).unwrap(),
+      })
+    })
+    vi.unstubAllGlobals()
+    const action = toasts[0]![1].action as { onClick: () => void }
+    action.onClick()
+    expect(history.undo).toHaveBeenCalledWith(3, ['h-41'])
   })
 
   it('raises no Undo action where the window cannot address what it made', async () => {

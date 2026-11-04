@@ -18,20 +18,22 @@ import uk.me.cormack.lighting7.plugins.HistorySourceDto
 import uk.me.cormack.lighting7.plugins.HistoryStateOutMessage
 import java.time.Instant
 import uk.me.cormack.lighting7.plugins.historySourceOf
-import uk.me.cormack.lighting7.plugins.showTakes
 import uk.me.cormack.lighting7.plugins.toMessage
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.RecordFolders
 import io.ktor.server.application.ApplicationCall
 import uk.me.cormack.lighting7.history.ProgrammerHistory
+import uk.me.cormack.lighting7.history.HistoryMove
+import uk.me.cormack.lighting7.history.HistoryMoveResult
+import uk.me.cormack.lighting7.history.HistoryRefusal
+import uk.me.cormack.lighting7.history.refusal
 import uk.me.cormack.lighting7.history.RecordRestorer
+import uk.me.cormack.lighting7.history.moveHistory
 import uk.me.cormack.lighting7.history.WriteOrigin
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
 import uk.me.cormack.lighting7.mcp.scriptsAllowed
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 
 /** Nothing to undo or redo. */
 internal const val CODE_HISTORY_EMPTY = "HISTORY_EMPTY"
@@ -79,73 +81,37 @@ private suspend fun ApplicationCall.historyMove(state: State, project: DaoProjec
     val user = authenticatedUserOrNull
     val caller = historySourceOf(state, user)
     val projectId = project.id.value
-    val live = state.isCurrentProject(project)
-    val what = if (undo) "undo" else "redo"
-    val showEntry = when {
-        request.programmerOnly -> false
-        request.entryId != null -> !request.entryId.startsWith(STEP_PREFIX)
-        else -> {
-            val step = if (live) state.show.programmerHistory.frame().let { if (undo) it.undo else it.redo }.firstOrNull() else null
-            val entry = if (undo) state.history.topFor(projectId, caller.key) else state.history.redoFor(projectId, caller.key)
-            showTakes(step, entry, redo = !undo)
-        }
+    val move = HistoryMove(undo, request.entryId, request.programmerOnly, request.backToHere, request.confirm, request.fadeMs ?: 0)
+    val result = moveHistory(
+        state, projectId, caller, move,
+        window = WriteOrigin.current()?.window,
+        operator = user != null && user.role != UserRole.ADMIN,
+        scriptsAllowed = scriptsAllowed(state),
+    )
+    val steps = when (result) {
+        is HistoryMoveResult.Steps -> result.steps.map { HistoryStepRef(it.id, it.label) }
+        is HistoryMoveResult.Show -> (result.outcome as? RecordRestorer.Outcome.Done)?.entries?.map { HistoryStepRef(it.id, it.label) }
+        else -> null
     }
-    if (!showEntry) {
-        if (!live) {
-            // The key on a project with no show entry of the caller's has nothing to take; a step is asked for by name.
-            if (request.entryId == null && !request.programmerOnly) {
-                return respond(HttpStatusCode.Conflict, ErrorResponse("Nothing to $what", CODE_HISTORY_EMPTY))
-            }
-            return respond(HttpStatusCode.Conflict, ErrorResponse("Only the current project's programmer can be ${what}ne"))
-        }
-        val history = state.show.programmerHistory
-        val steps = if (undo) history.undo(request.entryId, request.fadeMs.coerceFade(), caller) else history.redo(request.entryId, request.fadeMs.coerceFade(), caller)
-        if (steps == null) return respondNothing(request.entryId, what)
-        return respondMoved(HistoryMoveResponse(steps.map { HistoryStepRef(it.id, it.label) }, historyFrameFor(state, projectId, caller)), undo)
-    }
-    val kind = transaction(state.database) { project.kind }
-    if (kind == ProjectKind.VENUE && user != null && user.role != UserRole.ADMIN) {
-        return respond(HttpStatusCode.Forbidden, ErrorResponse("Only an admin can change a venue", CODE_VENUE_ADMIN_ONLY))
-    }
-    val window = WriteOrigin.current()?.window
-    val restorer = RecordRestorer(state)
-    val outcome = if (undo) {
-        restorer.undo(projectId, request.entryId, caller, window, request.backToHere, request.confirm, scriptsAllowed(state))
-    } else {
-        restorer.redo(projectId, request.entryId, caller, window, request.confirm, scriptsAllowed(state))
-    }
-    when (outcome) {
-        is RecordRestorer.Outcome.Empty -> if (outcome.already) {
-            respond(HttpStatusCode.Conflict, ErrorResponse(if (undo) "That change is already undone" else "That change is not undone", CODE_HISTORY_EMPTY))
-        } else {
-            respond(HttpStatusCode.Conflict, ErrorResponse("Nothing to $what", CODE_HISTORY_EMPTY))
-        }
-        RecordRestorer.Outcome.Unknown -> respond(HttpStatusCode.NotFound, ErrorResponse("No change ${request.entryId} to $what", CODE_HISTORY_UNKNOWN))
-        is RecordRestorer.Outcome.Conflict -> respond(
+    if (steps != null) return respondMoved(HistoryMoveResponse(steps, historyFrameFor(state, projectId, caller)), undo)
+    val refusal = result.refusal(undo, request.entryId) ?: return
+    when (refusal.kind) {
+        HistoryRefusal.Kind.SCRIPTS_REFUSED -> throw RemoteScriptsDisabledException()
+        HistoryRefusal.Kind.CONFLICT, HistoryRefusal.Kind.CONFIRM, HistoryRefusal.Kind.BLOCKED -> respond(
             HttpStatusCode.Conflict,
             HistoryRefusalDto(
-                error = if (outcome.later.isEmpty()) {
-                    "“${outcome.entry.label}” has been changed since, outside the history"
-                } else {
-                    "“${outcome.entry.label}” has been changed since by ${outcome.later.size} later ${if (outcome.later.size == 1) "change" else "changes"}"
-                },
-                code = CODE_HISTORY_CONFLICT,
-                later = outcome.later.map { HistoryLaterDto(it.id, it.label, HistorySourceDto(it.source.kind.name, it.source.name, it.window)) },
+                error = refusal.message,
+                code = refusal.code!!,
+                later = refusal.later.takeIf { refusal.kind == HistoryRefusal.Kind.CONFLICT }
+                    ?.map { HistoryLaterDto(it.id, it.label, HistorySourceDto(it.source.kind.name, it.source.name, it.window)) },
+                moves = refusal.moves.takeIf { refusal.kind == HistoryRefusal.Kind.CONFIRM },
+                record = refusal.record,
+                reason = refusal.reason,
             ),
         )
-        is RecordRestorer.Outcome.Confirm -> respond(
-            HttpStatusCode.Conflict,
-            HistoryRefusalDto(error = "This $what moves the stage: ${outcome.moves.joinToString("; ")}", code = CODE_HISTORY_CONFIRM, moves = outcome.moves),
-        )
-        is RecordRestorer.Outcome.Blocked -> respond(
-            HttpStatusCode.Conflict,
-            HistoryRefusalDto(error = "${outcome.record} cannot be put back: ${outcome.reason}", code = CODE_HISTORY_UNDO_BLOCKED, record = outcome.record, reason = outcome.reason),
-        )
-        RecordRestorer.Outcome.ScriptsRefused -> throw RemoteScriptsDisabledException()
-        is RecordRestorer.Outcome.Done -> respondMoved(
-            HistoryMoveResponse(outcome.entries.map { HistoryStepRef(it.id, it.label) }, historyFrameFor(state, projectId, caller)),
-            undo,
-        )
+        HistoryRefusal.Kind.UNKNOWN -> respond(HttpStatusCode.NotFound, ErrorResponse(refusal.message, refusal.code))
+        HistoryRefusal.Kind.VENUE_ADMIN_ONLY -> respond(HttpStatusCode.Forbidden, ErrorResponse(refusal.message, refusal.code))
+        HistoryRefusal.Kind.EMPTY, HistoryRefusal.Kind.NOT_LIVE -> respond(HttpStatusCode.Conflict, ErrorResponse(refusal.message, refusal.code))
     }
 }
 
@@ -163,19 +129,6 @@ private fun historyFrameFor(state: State, projectId: Int, caller: HistorySource)
         ?: ProgrammerHistory.Frame(projectId, 0, emptyList(), emptyList())
     return frame.toMessage(state.history, caller.key, projectId)
 }
-
-private const val STEP_PREFIX = "p-"
-
-private fun Long?.coerceFade(): Long = (this ?: 0).coerceIn(0, MAX_HISTORY_FADE_MS)
-
-private const val MAX_HISTORY_FADE_MS = 60_000L
-
-private suspend fun io.ktor.server.application.ApplicationCall.respondNothing(entryId: String?, what: String) =
-    if (entryId == null) {
-        respond(HttpStatusCode.Conflict, ErrorResponse("Nothing to $what", CODE_HISTORY_EMPTY))
-    } else {
-        respond(HttpStatusCode.NotFound, ErrorResponse("No step $entryId to $what", CODE_HISTORY_UNKNOWN))
-    }
 
 @Resource("/{projectId}/history")
 internal data class HistoryResource(val projectId: String, val limit: Int? = null, val before: String? = null)
@@ -263,7 +216,7 @@ private fun showRow(history: HistoryService, projectId: Int, entry: HistoryEntry
     mine = entry.source.key == caller.key,
     counts = entry.counts().let { HistoryCountsDto(it.added, it.removed, it.changed) },
     records = entry.records.take(MAX_RECORDS_LISTED).map { change ->
-        HistoryRecordDto(change.key.tableName, change.key.uuid.toString(), change.kind.name, history.describe(projectId, change))
+        HistoryRecordDto(change.key.tableName, change.key.uuid.toString(), change.kind.name, history.describe(projectId, change), change.rowId)
     },
     moreRecords = (entry.records.size - MAX_RECORDS_LISTED).coerceAtLeast(0),
     requestIds = entry.requestIds.toList(),
@@ -302,9 +255,9 @@ private const val MAX_RECORDS_LISTED = 50
 @Serializable
 internal data class HistoryCountsDto(val added: Int, val removed: Int, val changed: Int)
 
-/** One record an entry changed: its folder and uuid, `ADDED | REMOVED | CHANGED`, and its name. */
+/** One record an entry changed: its folder and uuid, `ADDED | REMOVED | CHANGED`, its name and its row id, which the sheet links by. */
 @Serializable
-internal data class HistoryRecordDto(val folder: String, val uuid: String, val change: String, val label: String)
+internal data class HistoryRecordDto(val folder: String, val uuid: String, val change: String, val label: String, val rowId: Int)
 
 /** One row of the History sheet: a show entry, a programmer step, or a clear point (`CLEAR`, a rule). */
 @Serializable

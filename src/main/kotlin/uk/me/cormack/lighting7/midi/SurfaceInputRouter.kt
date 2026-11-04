@@ -208,7 +208,7 @@ class SurfaceInputRouter(
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
                 if (isDeadBinding(binding)) return
                 latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
-                    dispatchButtonPress(deviceTypeKey, binding)
+                    dispatchButtonPress(deviceTypeKey, displayKey, binding)
                 }
                 armSelectHold(displayKey, match.controlId, binding)
             }
@@ -297,6 +297,7 @@ class SurfaceInputRouter(
 
     private fun dispatchButtonPress(
         deviceTypeKey: String,
+        displayKey: String,
         binding: ControlSurfaceBindingService.ResolvedBinding,
     ) {
         when (val target = binding.target) {
@@ -338,6 +339,10 @@ class SurfaceInputRouter(
             is BindingTarget.PickUpPad -> actions.pickUpPad(target.padUuid)
             is BindingTarget.HandPlaceInBank -> actions.handPlaceInBank(target.bankUuid)
             BindingTarget.HandDrop -> actions.handDrop()
+            // The surface is a source of its own (undo plan D1): its key takes its own entries.
+            BindingTarget.Undo -> actions.historyMove(HistorySource.surface(displayKey), undo = true)
+            BindingTarget.Redo -> actions.historyMove(HistorySource.surface(displayKey), undo = false)
+            BindingTarget.ProgrammerUndo -> actions.historyMove(HistorySource.surface(displayKey), undo = true, programmerOnly = true)
             BindingTarget.BuskPageNext -> actions.buskPageStep(1)
             BindingTarget.BuskPagePrev -> actions.buskPageStep(-1)
             is BindingTarget.BuskPageSet -> actions.buskPageSet(target.pageUuid)

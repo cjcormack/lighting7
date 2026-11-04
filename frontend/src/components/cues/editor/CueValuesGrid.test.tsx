@@ -87,6 +87,26 @@ vi.mock('@/store/cues', async (importOriginal) => ({
     },
   ],
 }))
+// The store's Undo is the save's entry in the history (undo plan D11), named by the requests it made.
+const history = vi.hoisted(() => ({
+  undo: vi.fn(async (..._args: unknown[]) => true),
+  writes: 0,
+  moved: new Set<(projectId: number) => void>(),
+}))
+vi.mock('@/components/history/historyActions', () => ({
+  undoHistoryRequests: history.undo,
+  onHistoryMoved: (fn: (projectId: number) => void) => {
+    history.moved.add(fn)
+    return () => history.moved.delete(fn)
+  },
+}))
+vi.mock('@/store/restApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/restApi')>()),
+  trackHistoryWrites: () => {
+    const id = `h-${++history.writes}`
+    return { stop: () => [id] }
+  },
+}))
 const spread = vi.hoisted(() => ({ calls: [] as Record<string, unknown>[] }))
 vi.mock('@/store/programmerOps', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/programmerOps')>()),
@@ -377,7 +397,7 @@ describe('CueValuesGrid', () => {
     expect(editor(1).querySelector('[data-row-id="group:Bars"] [data-cell="colour"]')).toBeNull()
   })
 
-  it('Undo puts the list back as it was before the last save', async () => {
+  it("the save toast's Undo takes back that save's own entry from the history, and ⌘Z is no longer the editor's", async () => {
     const before: CueAttributeAssignment[] = [
       { targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', fadeDurationMs: 800, sortOrder: 1 },
     ]
@@ -390,7 +410,27 @@ describe('CueValuesGrid', () => {
     await waitFor(() => expect(toasts.last?.undo).toBeDefined())
     fireEvent.keyDown(window, { key: 'Escape' })
     fireEvent.keyDown(window, { key: 'z', metaKey: true })
-    expect(await saved(2)).toEqual(before)
+    expect(history.undo).not.toHaveBeenCalled()
+    const request = `h-${history.writes}`
+    act(() => toasts.last!.undo!())
+    await waitFor(() => expect(history.undo).toHaveBeenCalledWith(1, [request], 'Q1 · values put back'))
+    expect(data.patches).toHaveLength(1)
+  })
+
+  it('spends its Undo when an undo elsewhere in the window may have put the cue back', async () => {
+    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }]))
+    data.cooked.set(1, [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sourceTargetType: 'fixture', sourceTargetKey: 'orbit-sr' }])
+    render(<Editor cueId={1} />)
+    selectCell(1, 'fixture:orbit-sr', 'dimmer')
+    await typeLevel('80')
+    await saved(1)
+    await waitFor(() => expect(toasts.last?.undo).toBeDefined())
+    act(() => {
+      for (const fn of history.moved) fn(1)
+    })
+    history.undo.mockClear()
+    act(() => toasts.last!.undo!())
+    expect(history.undo).not.toHaveBeenCalled()
   })
 
   it('sends no programmer, channel or effect frame over a full editing pass (P2)', async () => {
@@ -438,13 +478,14 @@ describe('CueValuesGrid', () => {
         { targetType: 'fixture', targetKey: 'orbit-sl', attribute: 'position', value: '40,150', sortOrder: expect.any(Number) },
       ]),
     )
-    // ⌫ and Undo.
+    // ⌫ and Undo, which is the history's (a REST call, never a frame).
     data.cues.set(1, cue(1, assignments))
     fireEvent.keyDown(window, { key: 'Escape' })
     fireEvent.keyDown(window, { key: 'Backspace' })
     await saved(2)
-    fireEvent.keyDown(window, { key: 'z', metaKey: true })
-    await saved(3)
+    await waitFor(() => expect(toasts.last?.undo).toBeDefined())
+    act(() => toasts.last!.undo!())
+    await waitFor(() => expect(history.undo).toHaveBeenCalledTimes(1))
 
     const banned = socket.sent.filter((frame) => /^(programmer|channels|fx)\./.test(frame.type ?? '') || frame.type === 'updateChannel')
     expect(banned).toEqual([])
@@ -571,12 +612,6 @@ describe('CueValuesGrid', () => {
     await typeLevel('80')
     expect(await saved(1)).toEqual([{ ...mine, value: '204' }, theirs])
 
-    // Undo puts back only the row the save changed: their row, edited again since, stays.
-    const theirsAgain = { ...theirs, value: '60' }
-    data.desk.set(1, cue(1, [{ ...mine, value: '204' }, theirsAgain]))
-    await waitFor(() => expect(toasts.last?.undo).toBeDefined())
-    act(() => toasts.last!.undo!())
-    expect(await saved(2)).toEqual([mine, theirsAgain])
   })
 
   it('leaves the last Undo standing when a save fails, and sends the edit again', async () => {

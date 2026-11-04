@@ -36,6 +36,8 @@ import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } fro
 import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import { RecordSceneryRow } from './RecordSceneryRow'
 import { announceWrite, recordLookNote } from './writeToasts'
+import { trackHistoryWrites } from '@/store/restApi'
+import { entryUndoAction } from '@/components/history/historyActions'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 import { Badge } from '@/components/ui/badge'
 import { useActiveFxQuery } from '@/store/fixtureFx'
@@ -208,6 +210,7 @@ export function RecordLookSheet({
 
   const submit = async () => {
     if (done) return
+    const writes = trackHistoryWrites(['recordLook'])
     try {
       const response = await record({
         projectId,
@@ -223,10 +226,12 @@ export function RecordLookSheet({
         asLayer: creating && (makeLayer || asLayer) ? true : undefined,
       }).unwrap()
       setDone(true)
-      announceWrite(recordLookNote(response))
+      announceWrite(recordLookNote(response), entryUndoAction(projectId, writes.stop()))
       onOpenChange(false)
     } catch {
       // Rendered inline from the mutation's own `error` — `recordLook` is in SILENT_ENDPOINTS.
+    } finally {
+      writes.stop()
     }
   }
 

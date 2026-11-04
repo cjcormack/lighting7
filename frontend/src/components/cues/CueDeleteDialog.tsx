@@ -9,6 +9,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useCueDeletePreviewQuery, useDeleteCuesMutation } from '@/store/cues'
+import { trackHistoryWrites } from '@/store/restApi'
+import { entryUndoAction } from '@/components/history/historyActions'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import type { CueUses } from '@/api/cuesApi'
 
@@ -52,13 +54,17 @@ export function CueDeleteDialog({
   const confirm = () => {
     if (cues == null || cues.length === 0) return
     const ids = [...cueIds]
+    const writes = trackHistoryWrites(['deleteCues'])
     deleteCues({ projectId, cueIds: ids })
       .unwrap()
       .then(() => {
-        toast.success(cues.length === 1 ? `Deleted “${cues[0].name}”` : `Deleted ${plural(cues.length, 'cue')}`)
+        toast.success(cues.length === 1 ? `Deleted “${cues[0].name}”` : `Deleted ${plural(cues.length, 'cue')}`, {
+          action: entryUndoAction(projectId, writes.stop()),
+        })
         onDeleted?.(ids)
       })
       .catch(ignoreReportedError)
+      .finally(() => writes.stop())
     onClose()
   }
 

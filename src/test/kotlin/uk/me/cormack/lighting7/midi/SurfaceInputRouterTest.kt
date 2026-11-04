@@ -909,6 +909,43 @@ class SurfaceInputRouterTest {
         assertTrue(actions.calls.isEmpty())
     }
 
+    // ─── History (undo plan §4.8) ──────────────────────────────────────
+
+    @Test
+    fun `undo, redo and programmer undo act as the surface's own source`() {
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-1", BindingTarget.Undo),
+            binding(2, "btn-2", BindingTarget.Redo),
+            binding(3, "btn-3", BindingTarget.ProgrammerUndo),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u), displayKey = "x-touch-left")
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u), displayKey = "x-touch-left")
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u), displayKey = "x-touch-left")
+        assertEquals(
+            listOf<RecordedCall>(
+                RecordedCall.HistoryMove("surface:x-touch-left", undo = true, programmerOnly = false),
+                RecordedCall.HistoryMove("surface:x-touch-left", undo = false, programmerOnly = false),
+                RecordedCall.HistoryMove("surface:x-touch-left", undo = true, programmerOnly = true),
+            ),
+            actions.calls,
+        )
+    }
+
+    @Test
+    fun `the history targets are buttons a fader never dispatches`() {
+        val fader = ControlSurfaceRegistry.typeFor(deviceTypeKey)!!
+            .controls.filterIsInstance<FaderDescriptor>().first()
+        for (target in listOf(BindingTarget.Undo, BindingTarget.Redo, BindingTarget.ProgrammerUndo)) {
+            assertEquals(ControlKind.BUTTON, targetControlKind(target), "$target")
+            assertTrue(targetControlKind(target) !in dispatchableKinds(fader), "$target")
+        }
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(binding(1, "fader-1", BindingTarget.Undo)))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        assertTrue(actions.calls.isEmpty())
+    }
+
     /**
      * The three are `BUTTON`, so a fader can never dispatch one — and **the server is what says
      * so**. `refuseWrongKind` stops the row being written (`ControlSurfaceBindingBatchTest`); this
@@ -1007,6 +1044,9 @@ private class RecordingActions : SurfaceActions {
     override fun pickUpPad(padUuid: String) { calls += RecordedCall.PickUpPad(padUuid) }
     override fun handPlaceInBank(bankUuid: String) { calls += RecordedCall.HandPlaceInBank(bankUuid) }
     override fun handDrop() { calls += RecordedCall.HandDrop }
+    override fun historyMove(source: uk.me.cormack.lighting7.history.HistorySource, undo: Boolean, programmerOnly: Boolean) {
+        calls += RecordedCall.HistoryMove(source.key, undo, programmerOnly)
+    }
     override fun buskPageStep(delta: Int) { calls += RecordedCall.BuskPageStep(delta) }
     override fun buskPageSet(pageUuid: String) { calls += RecordedCall.BuskPageSet(pageUuid) }
 
@@ -1069,6 +1109,7 @@ private sealed class RecordedCall {
     data class PickUpPad(val padUuid: String) : RecordedCall()
     data class HandPlaceInBank(val bankUuid: String) : RecordedCall()
     data object HandDrop : RecordedCall()
+    data class HistoryMove(val sourceKey: String, val undo: Boolean, val programmerOnly: Boolean) : RecordedCall()
     data class BuskPageStep(val delta: Int) : RecordedCall()
     data class BuskPageSet(val pageUuid: String) : RecordedCall()
     data class WriteSpeedMasterBpm(

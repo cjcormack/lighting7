@@ -674,6 +674,9 @@ export function SurfaceLibrary({
         // The hand's own release. On the Desk row for the two page chips' reason: it names no
         // record and belongs to no page.
         actionChip("hand-drop", "Let go", { type: "handDrop" }),
+        actionChip("undo", "Undo", { type: "undo" }),
+        actionChip("redo", "Redo", { type: "redo" }),
+        actionChip("programmer-undo", "Programmer undo", { type: "programmerUndo" }),
         // The sub-selection (busk-further plan D12, D14): the rig band's two step buttons and the
         // Cells menu's three most-pressed filters, once, because they rewrite the one desk selection.
         actionChip("sel-next", SUBSELECT_MODE_LABELS.NEXT, { type: "selectionNext" }),
