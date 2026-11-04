@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Value source key</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 880px; height: 920px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px; padding: 28px; background: #0f0f12; color: #fafafa; font-family: Inter, system-ui, sans-serif; font-size: 13px; line-height: 1.45">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <span style="font-size: 20px; font-weight: 700">Where a value comes from</span>
+    <span style="color: #a1a1aa">A value is a literal or a reference to a palette. The blue ring says whose the value is; the teal edge and the pill say it is a reference, and to which palette. The same marks are used in Local, in Output, in a focused Look, in the cue editor and on the Look sheet.</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; border: 1px solid #27272a; border-radius: 8px; overflow: hidden">
+    <sc-for list="{{states}}" as="s" hint-placeholder-count="6">
+      <div style="display: flex; align-items: center; gap: 18px; padding: 12px 16px; border-bottom: 1px solid #1f1f23">
+        <div style="width: 300px; flex-shrink: 0">
+          <div title="{{s.hover}}" style="{{s.cellStyle}}">
+            <span style="{{s.textStyle}}">{{s.text}}</span>
+            <sc-if value="{{s.pill}}" hint-placeholder-val="{{ false }}">
+              <span style="{{s.pillStyle}}">
+                <sc-if value="{{s.layersGlyph}}" hint-placeholder-val="{{ false }}">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
+                </sc-if>
+                <sc-if value="{{s.paletteGlyph}}" hint-placeholder-val="{{ true }}">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 11.996 2z"/></svg>
+                </sc-if>
+                {{s.pillText}}
+              </span>
+            </sc-if>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-weight: 600">{{s.name}}</span>
+          <span style="color: #a1a1aa">{{s.body}}</span>
+          <span style="color: #71717a; font-size: 11px">Hover: {{s.hover}}</span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #a1a1aa">The rules the boards assume</span>
+    <div style="display: flex; flex-direction: column; gap: 6px; color: #d4d4d8">
+      <span>A palette press writes a reference into each selected head’s value, the palette’s own row for that head. A per-fixture palette’s rows for heads that are not selected are left out, and the press says so. ⌥click writes literals.</span>
+      <span>A reference is a value like any other: a later value replaces it, Release takes it away, Undo brings it back. There is no layer.</span>
+      <span>Creating a palette from the selection turns those heads’ values into references to it, on by default. Nothing moves on stage.</span>
+      <span>Record, Include and Update copy values as they are, so a reference stays a reference in a cue or a Look. Copy the values makes it a literal.</span>
+      <span>The pill always shows the palette’s name, never a short code.</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":880,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const mono = "font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px;";
+    const cell = 'height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 3px;';
+    const tealPill = 'height: 20px; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 999px; background: rgba(45,212,191,0.16); color: #5eead4; font-size: 10px; font-weight: 600; white-space: nowrap;';
+    const states = [
+      { name: 'Yours, a literal', body: 'A value you set. Record takes it as it is.', hover: 'Yours — Record takes this',
+        cellStyle: cell + ' box-shadow: inset 0 0 0 1px #4f8cff; background: rgba(79,140,255,0.12)', text: '-60,+30', pill: false },
+      { name: 'Yours, a palette reference', body: 'Your value, held as a reference to the palette’s row for this head. A palette edit moves it; Record takes it as a reference.', hover: 'Yours: DSR Focus, Spot 3’s row (+14,+22)',
+        cellStyle: cell + ' box-shadow: inset 3px 0 0 #2dd4bf, inset 0 0 0 1px #4f8cff; background: rgba(45,212,191,0.08)', text: '+14,+22', pill: true, paletteGlyph: true, pillText: 'DSR Focus', pillStyle: tealPill },
+      { name: 'A reference in a cue or a Look', body: 'The same edge and pill, inside the owner’s own colour: the cue’s blue in the cue editor, a Look’s in a focused Look.', hover: 'Q4’s value: DSR Focus, Spot 3’s row',
+        cellStyle: cell + ' box-shadow: inset 3px 0 0 #2dd4bf, inset 0 0 0 1px rgba(56,189,248,0.6); background: rgba(45,212,191,0.06)', text: '+14,+22', pill: true, paletteGlyph: true, pillText: 'DSR Focus', pillStyle: tealPill },
+      { name: 'Mixed, on a group row', body: 'Some of the group’s heads hold a reference to the palette and some do not. The pill counts the ones that do.', hover: 'DSR Focus on 2 of 4 · literals on 2',
+        cellStyle: cell + ' border: 1px dashed rgba(45,212,191,0.7); background: rgba(45,212,191,0.05)', text: 'Mixed', pill: true, paletteGlyph: true, pillText: 'DSR Focus · 2 of 4', pillStyle: tealPill },
+      { name: 'From a Look layer', body: 'A Look is still a layer. Output names it with the Layers glyph; its own references show their palette when the Look is focused.', hover: 'From layer Act 1 Spots',
+        cellStyle: cell + ' box-shadow: inset 3px 0 0 #a78bfa; background: rgba(167,139,250,0.06)', text: '-60,+30', pill: true, layersGlyph: true, paletteGlyph: false, pillText: 'Act 1 Spots', pillStyle: 'height: 20px; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 999px; background: rgba(148,163,184,0.16); color: #cbd5e1; font-size: 10px; font-weight: 600; white-space: nowrap;' },
+      { name: 'Not set', body: 'Nothing in this scope holds it.', hover: 'Not set',
+        cellStyle: cell, text: '—', pill: false, dash: true },
+    ].map((s) => ({ ...s, layersGlyph: !!s.layersGlyph, paletteGlyph: s.paletteGlyph !== false && s.pill, textStyle: mono + ' color: ' + (s.dash ? '#52525b' : '#fafafa') }));
+    return { states };
+  }
+}
+</script>
+</body>
+</html>

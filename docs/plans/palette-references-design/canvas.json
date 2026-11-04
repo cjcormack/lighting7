@@ -1,0 +1,27 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-11-04T15:10:00Z"},
+  "title": "Palette references in Looks",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1280, "h": 920, "title": "Walkthrough (click through the seven steps)", "is_interactive": true},
+    "Key.dc.html": {"x": 1360, "y": 0, "w": 880, "h": 920, "title": "Key: where a value comes from"},
+    "Programmer.dc.html": {"x": 2320, "y": 0, "w": 1280, "h": 760, "title": "Programmer (component, Tweaks picks the step)"},
+    "A1.dc.html": {"x": 0, "y": 1340, "w": 1280, "h": 840, "title": "1 · Four heads, four positions"},
+    "A2.dc.html": {"x": 1360, "y": 1340, "w": 1280, "h": 840, "title": "2 · New palette, heads pointed at it"},
+    "A3.dc.html": {"x": 2720, "y": 1340, "w": 1280, "h": 840, "title": "3 · The cells are references"},
+    "B1.dc.html": {"x": 0, "y": 2600, "w": 1280, "h": 840, "title": "4 · Press it with two heads selected"},
+    "B2.dc.html": {"x": 1360, "y": 2600, "w": 1280, "h": 840, "title": "5 · Only those two take it"},
+    "C1.dc.html": {"x": 0, "y": 3860, "w": 1280, "h": 840, "title": "6 · Record a Look, references kept"},
+    "C2.dc.html": {"x": 1360, "y": 3860, "w": 1280, "h": 840, "title": "7 · The Look follows the palette"}
+  },
+  "order": ["Main.dc.html", "Key.dc.html", "Programmer.dc.html", "A1.dc.html", "A2.dc.html", "A3.dc.html", "B1.dc.html", "B2.dc.html", "C1.dc.html", "C2.dc.html"],
+  "notes": {
+    "t0": {"x": 0, "y": -300, "text": "Palette references: walkthrough and key", "kind": "title1", "maxW": 3600},
+    "t1": {"x": 0, "y": 1040, "text": "Flow 1 · A new palette from four heads, and the heads point at it", "kind": "title1", "maxW": 4000},
+    "t2": {"x": 0, "y": 2300, "text": "Flow 2 · A per-fixture palette pressed on two of its heads", "kind": "title1", "maxW": 2640},
+    "t3": {"x": 0, "y": 3560, "text": "Flow 3 · Recorded into a Look, still a reference", "kind": "title1", "maxW": 2640}
+  },
+  "designSystems": []
+}
