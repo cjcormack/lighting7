@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { RefObject } from 'react'
 import type { CueStack } from '../../api/cueStacksApi'
 import type { PromptBookDetails, Region } from '../../api/promptBooksApi'
 import { regionsOverlap, type FlatCue } from './desync'
+import type { FollowLink } from './followers'
 import { nearestAnchoredCue, orderedEntryIdsForInsert } from './geometry'
 import type { ScriptViewerHandle } from '../../components/promptbook/ScriptViewer'
 import type { NewCueStackChoice } from '../../components/promptbook/CueAnchorPickerSheet'
@@ -17,6 +18,7 @@ import {
   useReorderCueStackCuesMutation,
 } from '../../store/cueStacks'
 import { useRecordProgrammerMutation } from '../../store/programmerOps'
+import { cueLabel } from '../cueUtils'
 import { formatError } from '../formatError'
 import type { AttributeFamily } from '../attributeFamily'
 import { announceWrite, recordNote } from '../../components/programmer/writeToasts'
@@ -43,6 +45,10 @@ interface AnchorUndoSnapshot {
  * rule ("an unanchored entry borrows its neighbour's position") has to be the same in the navigation
  * and in the hint text the rail prints, or the book scrolls somewhere the rail did not promise.
  *
+ * **A follower's anchor is inactive.** It stays stored, so turning the follow off brings it back, but
+ * nothing here reads it: `anchors` and `anchorByEntry` leave followers out, so a follower borrows its
+ * sequence's position like any unanchored cue, and can neither be placed nor picked.
+ *
  * Two things are deliberately *not* here:
  *
  *  - **The lock.** `handleCueClick`'s "unlocked also arms placing" rule is composed by the caller,
@@ -58,6 +64,7 @@ export function useBookAnchors({
   stacks,
   cueOrder,
   labelByEntry,
+  followByEntry,
   viewerRef,
 }: {
   projectId: number
@@ -65,6 +72,7 @@ export function useBookAnchors({
   stacks: CueStack[] | undefined
   cueOrder: FlatCue[]
   labelByEntry: Map<number, string>
+  followByEntry: Map<number, FollowLink>
   viewerRef: RefObject<ScriptViewerHandle | null>
 }) {
   const [upsertAnchor] = useUpsertAnchorMutation()
@@ -81,10 +89,11 @@ export function useBookAnchors({
   const [anchorPicker, setAnchorPicker] = useState<{ region: Region; record: boolean } | null>(null)
   const [undoSnapshot, setUndoSnapshot] = useState<AnchorUndoSnapshot | null>(null)
 
-  const anchorByEntry = useMemo(
-    () => new Map((book?.anchors ?? []).map((a) => [a.entryId, a])),
-    [book],
+  const anchors = useMemo(
+    () => (book?.anchors ?? []).filter((a) => !followByEntry.has(a.entryId)),
+    [book, followByEntry],
   )
+  const anchorByEntry = useMemo(() => new Map(anchors.map((a) => [a.entryId, a])), [anchors])
   // The cue an entry places — what a new anchor row names beside its entry.
   const cueIdByEntry = useMemo(() => new Map(cueOrder.map((c) => [c.entryId, c.cueId])), [cueOrder])
 
@@ -114,26 +123,32 @@ export function useBookAnchors({
     [viewerRef],
   )
 
-  // "follows Q12" / "before Q14" for each unanchored entry — names what the book scrolls
-  // to. Built from the same helper as the navigation, so the two can't disagree.
+  // "after Q12" / "before Q14" for each unanchored entry — names what the book scrolls to. Built
+  // from the same helper as the navigation, so the two can't disagree. A follower says what it
+  // follows instead.
   const anchorHintByEntry = useMemo(() => {
     const m = new Map<number, string>()
     for (const cue of cueOrder) {
-      if (anchorByEntry.has(cue.entryId)) continue
+      if (anchorByEntry.has(cue.entryId) || followByEntry.has(cue.entryId)) continue
       const fallback = nearestAnchoredCue(cue.entryId, cueOrder, anchorByEntry)
       if (fallback) {
-        m.set(cue.entryId, `${fallback.direction === 'before' ? 'follows' : 'before'} ${fallback.cue.label}`)
+        m.set(cue.entryId, `${fallback.direction === 'before' ? 'after' : 'before'} ${fallback.cue.label}`)
       }
     }
     return m
-  }, [cueOrder, anchorByEntry])
+  }, [cueOrder, anchorByEntry, followByEntry])
 
   // When the picker opens on a selection that lands on an existing anchor, surface that
   // entry (preselect + edit affordance) so "edit this cue" is one tap.
   const overlapEntryId = useMemo(() => {
     if (!anchorPicker) return null
-    return (book?.anchors ?? []).find((a) => regionsOverlap(a.region, anchorPicker.region))?.entryId ?? null
-  }, [anchorPicker, book])
+    return anchors.find((a) => regionsOverlap(a.region, anchorPicker.region))?.entryId ?? null
+  }, [anchorPicker, anchors])
+
+  // A follow set from anywhere else stands the placing down: a follower has no line to place.
+  useEffect(() => {
+    if (placingEntryId != null && followByEntry.has(placingEntryId)) setPlacingEntryId(null)
+  }, [placingEntryId, followByEntry])
 
   const clearPlacing = useCallback(() => setPlacingEntryId(null), [])
   /** Arm (or disarm) click-to-place for an entry. Toggling the armed entry cancels. */
@@ -287,7 +302,7 @@ export function useBookAnchors({
             entryId: newEntryId,
             cueId: newCue.id,
             region,
-            label: cueNumber ? `Q${cueNumber}` : name,
+            label: cueLabel({ cueNumber, name }),
           }).unwrap()
         }
         // Reading-order placement only matters when joining an existing stack that has cues;
@@ -324,6 +339,7 @@ export function useBookAnchors({
   )
 
   return {
+    anchors,
     anchorByEntry,
     anchorHintByEntry,
     scrollToEntry,

@@ -1,0 +1,53 @@
+{
+  "_comment": [
+    "Who follows whom: each case one stack's list in play order, and each follower's head.",
+    "Read by models/FollowHeadsTest.kt (followHeadsIn) and frontend/src/lib/promptBook/followers.test.ts (followLinks).",
+    "A row is a cue entry, or a marker with `marker: true`; an absent autoAdvance is false, an absent delayMs null."
+  ],
+  "cases": [
+    {
+      "name": "no follows, no followers",
+      "rows": [{ "id": 1 }, { "id": 2 }],
+      "heads": {}
+    },
+    {
+      "name": "a chain hangs from the cue that starts it",
+      "rows": [
+        { "id": 1 },
+        { "id": 2, "autoAdvance": true, "delayMs": 3000 },
+        { "id": 3, "autoAdvance": true, "delayMs": 8000 },
+        { "id": 4 },
+        { "id": 5 }
+      ],
+      "heads": { "3": 2, "4": 2 }
+    },
+    {
+      "name": "a follow with no delay is no follow",
+      "rows": [{ "id": 1, "autoAdvance": true }, { "id": 2 }],
+      "heads": {}
+    },
+    {
+      "name": "a delay of nothing is a follow",
+      "rows": [{ "id": 1, "autoAdvance": true, "delayMs": 0 }, { "id": 2 }],
+      "heads": { "2": 1 }
+    },
+    {
+      "name": "a marker does not break a sequence",
+      "rows": [{ "id": 1, "autoAdvance": true, "delayMs": 1000 }, { "id": 7, "marker": true }, { "id": 2 }],
+      "heads": { "2": 1 }
+    },
+    {
+      "name": "a delay left on a cue with its follow off is no follow",
+      "rows": [{ "id": 1, "autoAdvance": false, "delayMs": 1000 }, { "id": 2 }],
+      "heads": {}
+    },
+    {
+      "name": "the first cue never follows, even with every cue on a follow",
+      "rows": [
+        { "id": 1, "autoAdvance": true, "delayMs": 1000 },
+        { "id": 2, "autoAdvance": true, "delayMs": 1000 }
+      ],
+      "heads": { "2": 1 }
+    }
+  ]
+}

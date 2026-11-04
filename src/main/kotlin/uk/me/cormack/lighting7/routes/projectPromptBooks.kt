@@ -59,9 +59,10 @@ private suspend inline fun <reified T : Any> RoutingContext.respondRouteResult(r
 
 internal fun Route.routeApiRestProjectPromptBooks(state: State) {
     // GET /{projectId}/cue-locations - Per-cue reading positions from the project's
-    // prompt book, each reduced to {cueId, page, y}. Project-scoped and book-agnostic —
+    // prompt book, each reduced to {cueId, entryId, page, y}. Project-scoped and book-agnostic —
     // it resolves the project's single prompt book. Empty when the project has no book.
     // The human phrasing ("top of p. 9") is derived on the frontend from these coordinates.
+    // A follower has no position of its own: it reads at its sequence's head, whatever anchor it holds.
     get<ProjectCueLocationsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val locations = transaction(state.database) {
@@ -69,13 +70,23 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                     ?: return@transaction emptyList<CueLocationDto>()
                 val anchors = book.anchors.toList()
                 val cueByEntry = anchorCueIds(anchors)
-                anchors.mapNotNull { anchor ->
-                    val earliest = anchor.region.minWithOrNull(compareBy({ it.page }, { it.y }))
-                        ?: return@mapNotNull null
+                val earliestByEntry = anchors.mapNotNull { anchor ->
+                    anchor.region.minWithOrNull(compareBy({ it.page }, { it.y }))?.let { anchor.entryId to it }
+                }.toMap()
+                val lists = project.cueStacks.map { entriesOf(it) }
+                val heads = followHeads(lists)
+                val anchored = earliestByEntry.mapNotNull { (entryId, earliest) ->
                     // A location is a cue's: a marker's anchor has none to report.
-                    val cueId = cueByEntry[anchor.entryId] ?: return@mapNotNull null
-                    CueLocationDto(cueId = cueId, entryId = anchor.entryId, page = earliest.page, y = earliest.y)
+                    val cueId = cueByEntry[entryId] ?: return@mapNotNull null
+                    if (entryId in heads) return@mapNotNull null
+                    CueLocationDto(cueId = cueId, entryId = entryId, page = earliest.page, y = earliest.y)
                 }
+                val followers = lists.flatten().mapNotNull { entry ->
+                    val earliest = heads[entry.id.value]?.let { earliestByEntry[it] } ?: return@mapNotNull null
+                    val cueId = entry.cueId ?: return@mapNotNull null
+                    CueLocationDto(cueId = cueId, entryId = entry.id.value, page = earliest.page, y = earliest.y)
+                }
+                anchored + followers
             }
             call.respond(locations)
         }
@@ -513,14 +524,14 @@ data class PromptBookAnchorDto(
 )
 
 /**
- * A cue's reading position in the project's prompt book, reduced from its anchor
- * region to the earliest rect (topmost on the lowest page). Consumed by the Run view;
+ * A cue's reading position in the project's prompt book, reduced from its anchor (a
+ * follower's, its head's) to the earliest rect (topmost on the lowest page). Consumed by the Run view;
  * the frontend formats these coordinates into "top of p. 9"-style labels.
  */
 @Serializable
 data class CueLocationDto(
     val cueId: Int,
-    /** The entry the anchor marks: a shared cue has one location per anchored entry. */
+    /** The entry at this position: an anchored one, or a follower at its head's. A shared cue has one per place. */
     val entryId: Int,
     val page: Int,
     val y: Double,

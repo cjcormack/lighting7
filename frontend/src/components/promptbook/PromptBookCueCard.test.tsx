@@ -5,10 +5,11 @@ import type { ComponentProps, ReactNode } from 'react'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
 
 vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: null, fadeRemainMs: null }) }))
-// The open card's body is the runner's; here it only has to place the two slots the card fills.
+// The open card's body is the runner's; here it only has to place the slots the card fills.
 vi.mock('@/components/runner/mobile/CueCardBody', () => ({
-  CueCardBody: ({ afterIdentity, footer }: { afterIdentity?: ReactNode; footer?: ReactNode }) => (
+  CueCardBody: ({ location, afterIdentity, footer }: { location?: string; afterIdentity?: ReactNode; footer?: ReactNode }) => (
     <section>
+      <p>{location}</p>
       {afterIdentity}
       {footer}
     </section>
@@ -31,7 +32,7 @@ const entry: CueStackCueRow = {
 }
 const props = (over: Partial<ComponentProps<typeof PromptBookCueCard>> = {}): ComponentProps<typeof PromptBookCueCard> => ({
   cue: { entryId: 102, cueId: 2, label: 'Q2', name: 'Moon rise', fadeMs: 3000, fadeCurve: 'LINEAR', stackId: 1, stackName: 'Act 1' },
-  status: 'next', anchor: undefined, anchorHint: null, cueEntry: entry, projectId: 1, warnings: [], locked: false,
+  status: 'next', anchor: undefined, anchorHint: null, follow: null, cueEntry: entry, projectId: 1, warnings: [], locked: false,
   placing: false, expanded: true, mode: null, onModeChange: noop, fadeStackId: null, canSetNext: false, coverPages: 0,
   onCueClick: noop, onToggleExpanded: noop, onSetStandby: noop, onRemoveAnchor: noop, onEditCue: noop,
   onRenameCue: noop, onRenumberCue: noop, onRenoteCue: noop,
@@ -63,5 +64,27 @@ describe('PromptBookCueCard · scenery', () => {
     expect(screen.queryByTestId('scenery-editor')).toBeNull()
     rerender(<PromptBookCueCard {...props({ expanded: true })} />)
     expect(screen.queryByTestId('scenery-editor')).toBeNull()
+  })
+})
+
+describe('PromptBookCueCard · a follower', () => {
+  const follow = { headEntryId: 101, afterLabel: 'Q1', delayMs: 3000 }
+
+  it('shows its delay on the row and offers no anchor', () => {
+    render(<PromptBookCueCard {...props({ follow, expanded: false, status: 'standby' })} />)
+    expect(screen.getByTitle('Follows Q1')).toHaveTextContent('+3.0s')
+    expect(screen.queryByText('place anchor')).toBeNull()
+  })
+
+  it('names what it follows on the open card, not a missing anchor', () => {
+    render(<PromptBookCueCard {...props({ follow })} />)
+    expect(screen.getByText('Follows Q1 · +3.0s')).toBeInTheDocument()
+    expect(screen.queryByText(/No anchor/)).toBeNull()
+    expect(screen.queryByText('place anchor')).toBeNull()
+  })
+
+  it('still offers an ordinary unanchored cue its anchor', () => {
+    render(<PromptBookCueCard {...props({ expanded: false, status: 'standby' })} />)
+    expect(screen.getByText('place anchor')).toBeInTheDocument()
   })
 })

@@ -128,6 +128,34 @@ fun entriesOf(stack: DaoCueStack): List<DaoCueStackEntry> = entriesOfStack(stack
 fun entriesOfStack(stackId: EntityID<Int>): List<DaoCueStackEntry> =
     DaoCueStackEntry.find { DaoCueStackEntries.stack eq stackId }.toList().sortedWith(ENTRY_ORDER)
 
+/** One row of a stack's list as [followHeadsIn] reads it. */
+internal data class FollowRow(val entryId: Int, val isMarker: Boolean, val hasFollow: Boolean)
+
+/**
+ * Each follower in one stack's [rows] (in playback order) → the entry that starts its sequence. An
+ * entry follows when the cue entry before it has a follow with a delay, which is when the desk
+ * schedules one. The list is read top to bottom, so a looping stack's first cue is always a head.
+ * `src/test/resources/promptBook/followHeads.fixture.json` pins this to `lib/promptBook/followers.ts`.
+ */
+internal fun followHeadsIn(rows: List<FollowRow>): Map<Int, Int> {
+    val heads = mutableMapOf<Int, Int>()
+    var before: FollowRow? = null
+    for (row in rows) {
+        if (row.isMarker) continue
+        val previous = before
+        if (previous != null && previous.hasFollow) {
+            heads[row.entryId] = heads[previous.entryId] ?: previous.entryId
+        }
+        before = row
+    }
+    return heads
+}
+
+/** [followHeadsIn] over each stack's list: the Prompt Book anchors a sequence at its head. */
+fun followHeads(lists: List<List<DaoCueStackEntry>>): Map<Int, Int> = lists.flatMap { entries ->
+    followHeadsIn(entries.map { FollowRow(it.id.value, it.isMarker, it.autoAdvance && it.autoAdvanceDelay != null) }).toList()
+}.toMap()
+
 /**
  * The first entry in stack [stackId] that places cue [cueId], in the stack's order — the caller names
  * the stack (cue model plan P7). Only for a caller that names a cue in a stack it supplies: a Record

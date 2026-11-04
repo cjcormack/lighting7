@@ -15,6 +15,7 @@ import { Loader2 } from 'lucide-react'
 import { clamp, cn } from '@/lib/utils'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import type { AnnotationDto, AnnotationKind, CueAnchorDto, Rect, Region } from '../../api/promptBooksApi'
+import type { FollowTail } from '../../lib/promptBook/followers'
 import {
   clientPointToNormalized,
   cornersToRect,
@@ -163,6 +164,8 @@ interface ScriptViewerProps {
   /** Live labels from the cue stack, keyed by entry — the anchor's cached
    *  label can go stale when a cue number is edited, so this wins when present. */
   cueLabels: Map<number, string>
+  /** Each sequence's followers, keyed by its head — the `+2` on the head's margin chip. */
+  followTails?: Map<number, FollowTail>
   /** Cue notes keyed by cue id — rendered in the right gutter beside the cue's anchor. */
   cueNotes: Map<number, string>
   /** Set or clear an anchored cue's note from the gutter (unlocked only). */
@@ -197,10 +200,11 @@ interface ScriptViewerProps {
    */
   onPagesReady: () => void
   /**
-   * The scenery each cue moves on GO, one change per line, for cues that move any — the margin
-   * marker's `Blinds` glyph and its hover (scenery-programmer plan D14). Absent or missing a cue: no glyph.
+   * The scenery each anchored entry moves on GO, its followers' with it, one change per line — the
+   * margin marker's `Blinds` glyph and its hover (scenery-programmer plan D14). Absent or missing an
+   * entry: no glyph.
    */
-  sceneryByCue?: Map<number, string>
+  sceneryByEntry?: Map<number, string>
   /** Open an entry's card in the rail — the glyph's tap. Must be stable: this component is memoized. */
   onOpenCueCard?: (entryId: number) => void
 }
@@ -225,6 +229,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     annotations,
     statusOf,
     cueLabels,
+    followTails,
     cueNotes,
     onRenoteCue,
     warningEntryIds,
@@ -239,7 +244,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     onAnnotationClick,
     onDocumentError,
     onPagesReady,
-    sceneryByCue,
+    sceneryByEntry,
     onOpenCueCard,
   },
   ref,
@@ -886,11 +891,14 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                           status={statusByEntry.get(anchor.entryId)!}
                           hasWarning={warningEntryIds.has(anchor.entryId)}
                           locked={locked || tool !== 'move' || placingEntryId != null}
+                          inert={tool !== 'move' || placingEntryId != null}
                           dragging={dragOverride?.entryId === anchor.entryId}
                           laneX={laneX}
                           onPointerDown={(e) => onAnchorPointerDown(e, anchor, i)}
-                          scenery={sceneryByCue?.get(anchor.cueId)}
+                          scenery={sceneryByEntry?.get(anchor.entryId)}
                           onSceneryClick={onOpenCueCard ? () => onOpenCueCard(anchor.entryId) : undefined}
+                          followers={followTails?.get(anchor.entryId)}
+                          onFollowersClick={onOpenCueCard ? () => onOpenCueCard(anchor.entryId) : undefined}
                         />
                       ))}
                       {/* Notes — desktop: tail anchored to the text's right edge, bubble

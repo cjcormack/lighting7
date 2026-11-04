@@ -1530,7 +1530,9 @@ class SetupTools(
             val stacks = DaoCueStack.find { DaoCueStacks.project eq project.id }.toList()
             val stackNames = stacks.associate { it.id.value to it.name }
             // An anchor marks an entry (cue model plan D4): its cue, its number and its stack.
-            val entries = stacks.flatMap { entriesOf(it) }.associateBy { it.id.value }
+            val lists = stacks.map { entriesOf(it) }
+            val entries = lists.flatten().associateBy { it.id.value }
+            val heads = followHeads(lists)
             val anchors = book.anchors.toList()
             buildJsonObject {
                 book.scriptFileName?.let { put("fileName", it) }
@@ -1542,6 +1544,7 @@ class SetupTools(
                         addJsonObject {
                             put("entryId", a.entryId)
                             entry?.cueId?.let { put("cueId", it) }
+                            heads[a.entryId]?.let { put("sequenceHeadEntryId", it) }
                             entry?.let {
                                 it.cueNumber?.let { n -> put("cueNumber", n) }
                                 put("cueName", it.displayName)
@@ -1563,7 +1566,7 @@ class SetupTools(
                     }
                 }
                 val anchored = anchors.map { it.entryId }.toSet()
-                put("unanchoredCueCount", entries.values.count { !it.isMarker && it.id.value !in anchored })
+                put("unanchoredCueCount", entries.values.count { !it.isMarker && it.id.value !in anchored && it.id.value !in heads })
             }
         } ?: return success(noPromptBookMessage(), buildJsonObject {
             put("hasPromptBook", false)
@@ -1758,7 +1761,7 @@ class SetupTools(
 
         /** One row built: a cue entry ([id] its cue's) or a marker entry ([id] null — a marker is no cue). */
         data class BuiltCue(val id: Int?, val entryId: Int, val number: String?, val name: String, val skipped: List<LookValueSkip>, val shared: Boolean)
-        data class Built(val stackId: Int, val stackName: String, val cues: List<BuiltCue>, val anchors: Int)
+        data class Built(val stackId: Int, val stackName: String, val cues: List<BuiltCue>, val anchors: Int, val inactiveAnchors: Int)
         val built = transaction(state.database) {
             val stack = stackId?.let { DaoCueStack.findById(it)!! } ?: DaoCueStack.new {
                 name = stackName!!
@@ -1823,12 +1826,14 @@ class SetupTools(
                 }
                 anchors++
             }
+            val heads = followHeads(listOf(entriesOf(stack)))
             Built(
                 stack.id.value, stack.name,
                 created.map { (cue, entry, spec) ->
                     BuiltCue(cue?.id?.value, entry.id.value, entry.cueNumber, entry.displayName, spec.values?.skipped.orEmpty(), spec.shareCueId != null)
                 },
                 anchors,
+                created.count { (_, entry, spec) -> spec.place != null && entry.id.value in heads },
             )
         }
         // Appended, so no entry already there changed place: nothing to restamp.
@@ -1844,11 +1849,12 @@ class SetupTools(
         return success(
             "${if (stackId == null) "Created" else "Appended to"} stack '${built.stackName}' (id=${built.stackId}): " +
                 "${built.cues.size} cue(s)" + (if (sharedCount > 0) ", $sharedCount of them shared" else "") +
-                ", ${built.anchors} anchored in the prompt book",
+                ", ${built.anchors} anchored in the prompt book" + inactiveAnchorsNote(built.inactiveAnchors),
             buildJsonObject {
                 put("stackId", built.stackId)
                 put("stackName", built.stackName)
                 put("anchorsCreated", built.anchors)
+                put("inactiveAnchors", built.inactiveAnchors)
                 putJsonArray("cues") {
                     built.cues.forEach { cue ->
                         addJsonObject {
@@ -1989,7 +1995,7 @@ class SetupTools(
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
-        transaction(state.database) {
+        val inactiveAnchors = transaction(state.database) {
             val dao = DaoPromptBook.findById(book.id)!!
             coverPages?.let { dao.coverPages = it }
             for ((entryId, place) in anchors) {
@@ -2013,13 +2019,16 @@ class SetupTools(
                     region = listOf(place)
                 }
             }
+            val heads = followHeads(project.cueStacks.map { entriesOf(it) })
+            anchors.count { (entryId, _) -> entryId in heads }
         }
         state.show.fixtures.promptBookChanged()
         return success(
             "Prompt book updated: ${anchors.size} entr${if (anchors.size == 1) "y" else "ies"} anchored, ${notes.size} note(s) added" +
-                (coverPages?.let { ", $it cover page(s)" } ?: ""),
+                (coverPages?.let { ", $it cover page(s)" } ?: "") + inactiveAnchorsNote(inactiveAnchors),
             buildJsonObject {
                 put("anchored", anchors.size)
+                put("inactiveAnchors", inactiveAnchors)
                 put("notesAdded", notes.size)
                 coverPages?.let { put("coverPages", it) }
             },
@@ -2033,6 +2042,9 @@ class SetupTools(
     private fun anchorEntry(row: JsonObject, project: DaoProject, where: String, problem: (String) -> Unit): Int? {
         return findProjectEntry(project, row, where, problem)?.id?.value
     }
+
+    private fun inactiveAnchorsNote(count: Int): String =
+        if (count == 0) "" else " ($count inactive: those cues follow another, so the book anchors their sequence at its first cue)"
 
     /** The anchor's cached label, as the Prompt Book view writes it: `Q<number>`, else the name. */
     private fun anchorLabel(entry: DaoCueStackEntry): String =

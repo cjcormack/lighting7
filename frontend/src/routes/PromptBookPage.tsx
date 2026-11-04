@@ -38,6 +38,7 @@ import { useProjectPromptBookQuery } from '../store/promptBooks'
 import { scriptDocUrl, type NoteTone } from '../api/promptBooksApi'
 import { cn } from '@/lib/utils'
 import { computeWarnings, type DesyncWarning, type FlatCue } from '../lib/promptBook/desync'
+import { sequenceScenery, sequenceStatus } from '../lib/promptBook/followers'
 import { useCueIndex } from '../lib/promptBook/useCueIndex'
 import { useCueRunStatus } from '../lib/promptBook/useCueRunStatus'
 import { useRailExpansion } from '../lib/promptBook/useRailExpansion'
@@ -112,6 +113,8 @@ export function PromptBookViewerPage() {
     railRows,
     cueOrderIndex,
     labelByEntry,
+    followByEntry,
+    followTailByHead,
     firstEntryByCue,
     existingCueNames,
     entryRowByEntry,
@@ -120,6 +123,7 @@ export function PromptBookViewerPage() {
   } = useCueIndex(stacks, activeStackId)
 
   const {
+    anchors,
     anchorByEntry,
     anchorHintByEntry,
     scrollToEntry,
@@ -138,7 +142,7 @@ export function PromptBookViewerPage() {
     anchorCue,
     removeAnchor,
     createCueFromSelection,
-  } = useBookAnchors({ projectId: projectIdNum, book, stacks, cueOrder, labelByEntry, viewerRef })
+  } = useBookAnchors({ projectId: projectIdNum, book, stacks, cueOrder, labelByEntry, followByEntry, viewerRef })
 
   const doc = useScriptDocument(projectIdNum, book)
   const ann = useAnnotationEditor(projectIdNum)
@@ -210,6 +214,15 @@ export function PromptBookViewerPage() {
     cueOrderIndex,
   })
 
+  // A sequence has one anchor, which stays lit until its last follower is through.
+  const anchorStatusOf = useCallback(
+    (entryId: number) => {
+      const tail = followTailByHead.get(entryId)
+      return tail ? sequenceStatus([entryId, ...tail.entryIds].map(statusOf)) : statusOf(entryId)
+    },
+    [statusOf, followTailByHead],
+  )
+
   const { isExpanded, toggleExpanded } = useRailExpansion(activeEntryId, nextEntryId)
   const { modeOf, onCueModeChange } = useCardViewMode()
 
@@ -227,10 +240,17 @@ export function PromptBookViewerPage() {
     }
     return out
   }, [entryRowByEntry, elements])
-  const sceneryByCue = useMemo(
-    () => new Map([...sceneryLinesByCue].map(([cueId, lines]) => [cueId, lines.join('\n')])),
-    [sceneryLinesByCue],
-  )
+  // The script shows one glyph a sequence, on its anchor, so a head's carries its followers' moves.
+  const sceneryByEntry = useMemo(() => {
+    const linesOf = (entryId: number) => sceneryLinesByCue.get(entryRowByEntry.get(entryId)?.id ?? -1) ?? []
+    const out = new Map<number, string>()
+    for (const entryId of entryRowByEntry.keys()) {
+      if (followByEntry.has(entryId)) continue
+      const scenery = sequenceScenery(entryId, followTailByHead.get(entryId), linesOf, labelByEntry)
+      if (scenery != null) out.set(entryId, scenery)
+    }
+    return out
+  }, [sceneryLinesByCue, entryRowByEntry, followByEntry, followTailByHead, labelByEntry])
   // **On GO** — what the next GO moves: the Next GO preview's scenery against the live stage.
   const onGoScenery = useOnGoScenery(projectIdNum, isShowActive)
   const onGo = useMemo(
@@ -240,8 +260,8 @@ export function PromptBookViewerPage() {
 
   // ── Desync — advisory only; recomputed on every edit and on load. ──
   const warnings: DesyncWarning[] = useMemo(
-    () => (book ? computeWarnings(book.anchors, book.annotations, cueOrder) : []),
-    [book, cueOrder],
+    () => (book ? computeWarnings(anchors, book.annotations, cueOrder) : []),
+    [book, anchors, cueOrder],
   )
   const warningsByEntry = useMemo(() => {
     const map = new Map<number, DesyncWarning[]>()
@@ -288,15 +308,19 @@ export function PromptBookViewerPage() {
   }, [linkedEntryId, linkedCueId, scrollToEntry])
 
   // ── Runtime emphasis: scroll the live cue into view on advance. ──
-  // The same operation the toolbar's "jump to live" performs, so the two cannot drift.
+  // The same operation the toolbar's "jump to live" performs, so the two cannot drift. Keyed on the
+  // sequence, not the cue: a follower firing has no line to go to, and must not pull a reader back
+  // to its head.
   // `scrollToCue` holds one identity for the session, so an unrelated book refetch (edit, WS echo)
   // can't re-run this and yank the viewport while the operator reads ahead.
   // Not while a `?cue=` link is being honoured — the two would fight over the viewport, and the
   // one the operator asked for is the link.
+  const liveSequenceEntryId =
+    activeEntryId != null ? (followByEntry.get(activeEntryId)?.headEntryId ?? activeEntryId) : null
   const jumpToLiveUnlessLinked = useCallback(() => {
-    if (linkedCueId != null) return
-    jumpToLive()
-  }, [jumpToLive, linkedCueId])
+    if (linkedCueId != null || liveSequenceEntryId == null) return
+    scrollToEntry(liveSequenceEntryId)
+  }, [liveSequenceEntryId, linkedCueId, scrollToEntry])
   useEffect(jumpToLiveUnlessLinked, [jumpToLiveUnlessLinked])
 
   /**
@@ -382,14 +406,15 @@ export function PromptBookViewerPage() {
   )
 
   // Primary rail click: always move the book as close to the cue as we can — its own
-  // anchor, or a borrowed neighbour position. Unlocked, an unanchored cue ALSO arms
-  // click-to-place, so you land near where the anchor belongs and can select the line.
+  // anchor, or a borrowed neighbour position. Unlocked, an unanchored cue that isn't a
+  // follower ALSO arms click-to-place, so you land near where the anchor belongs and can
+  // select the line.
   const handleCueClick = useCallback(
     (cue: FlatCue) => {
       scrollToEntry(cue.entryId)
-      if (!anchorByEntry.has(cue.entryId) && !locked) togglePlacing(cue.entryId)
+      if (!anchorByEntry.has(cue.entryId) && !followByEntry.has(cue.entryId) && !locked) togglePlacing(cue.entryId)
     },
-    [scrollToEntry, anchorByEntry, locked, togglePlacing],
+    [scrollToEntry, anchorByEntry, followByEntry, locked, togglePlacing],
   )
 
   const handleWarningClick = useCallback(
@@ -492,6 +517,7 @@ export function PromptBookViewerPage() {
     rows: railRows,
     anchorByEntry,
     anchorHintByEntry,
+    followByEntry,
     entryRowByEntry,
     statusOf,
     warningsByEntry,
@@ -651,10 +677,11 @@ export function PromptBookViewerPage() {
               key={`${book.scriptHash}:${doc.retryNonce}`}
               ref={viewerRef}
               fileUrl={scriptDocUrl(projectIdNum, book.scriptHash)}
-              anchors={book.anchors}
+              anchors={anchors}
               annotations={book.annotations}
-              statusOf={statusOf}
+              statusOf={anchorStatusOf}
               cueLabels={labelByEntry}
+              followTails={followTailByHead}
               cueNotes={cueNotesByCue}
               onRenoteCue={handleRenoteCue}
               warningEntryIds={warningEntryIds}
@@ -669,7 +696,7 @@ export function PromptBookViewerPage() {
               onAnnotationClick={ann.open}
               onDocumentError={doc.onDocumentError}
               onPagesReady={handlePagesReady}
-              sceneryByCue={sceneryByCue}
+              sceneryByEntry={sceneryByEntry}
               onOpenCueCard={openCueCard}
             />
           )}
@@ -788,6 +815,7 @@ export function PromptBookViewerPage() {
         open={anchorPicker != null}
         cueOrder={cueOrder}
         anchorByEntry={anchorByEntry}
+        followByEntry={followByEntry}
         stacks={stacks ?? []}
         defaultStackId={defaultStackId}
         existingCueNames={existingCueNames}

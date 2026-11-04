@@ -392,6 +392,25 @@ describe('orderedEntryIdsForInsert', () => {
     expect(orderedEntryIdsForInsert(s, byCue, regionAt(0, 0.5), 99)).toEqual([101, 99, 102, 103])
   })
 
+  it('lands after the last follower of the sequence before it', () => {
+    const follows = (id: number) => cueRow(id, { autoAdvance: true, autoAdvanceDelayMs: 2000 })
+    const s = stack([follows(1), follows(2), cue(3), cue(4)])
+    const byCue = anchors([[1, 0, 0.2], [4, 0, 0.8]])
+    expect(orderedEntryIdsForInsert(s, byCue, regionAt(0, 0.5), 99)).toEqual([101, 102, 103, 99, 104])
+  })
+
+  it('reads a sequence across a marker', () => {
+    const s = stack([cueRow(1, { autoAdvance: true, autoAdvanceDelayMs: 0 }), markerRow(7, 'Interval'), cue(2), cue(3)])
+    const byCue = anchors([[1, 0, 0.2], [3, 0, 0.8]])
+    expect(orderedEntryIdsForInsert(s, byCue, regionAt(0, 0.5), 99)).toEqual([101, 7, 102, 99, 103])
+  })
+
+  it('still keeps an unanchored cue that does not follow in its slot', () => {
+    const s = stack([cueRow(1, { autoAdvance: true, autoAdvanceDelayMs: null }), cue(2), cue(3)])
+    const byCue = anchors([[1, 0, 0.2], [3, 0, 0.8]])
+    expect(orderedEntryIdsForInsert(s, byCue, regionAt(0, 0.5), 99)).toEqual([101, 99, 102, 103])
+  })
+
   it('keeps a marker in its slot, by its entry id', () => {
     const s = stack([cue(1), markerRow(7, 'Interval'), cue(2)])
     const byCue = anchors([[1, 0, 0.2], [2, 0, 0.8]])

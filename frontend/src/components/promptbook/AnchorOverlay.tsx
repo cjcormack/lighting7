@@ -2,6 +2,7 @@ import type { PointerEvent } from 'react'
 import { Blinds } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CueAnchorDto, Rect } from '../../api/promptBooksApi'
+import type { FollowTail } from '../../lib/promptBook/followers'
 import { MARKER_LANE_X, marginRailStyle, rectToStyle } from '../../lib/promptBook/geometry'
 
 /**
@@ -18,6 +19,8 @@ const statusStyles: Record<CueRunStatus, { band: string; wash: string; chip: str
   standby: { band: 'bg-amber-500', wash: 'bg-amber-400/15', chip: 'bg-amber-500 text-white', glyph: 'text-amber-600' },
   done: { band: 'bg-slate-400', wash: 'bg-slate-400/10', chip: 'bg-slate-500 text-white', glyph: 'text-slate-500' },
 }
+
+const followerCount = (count: number) => (count === 1 ? '1 cue follows' : `${count} cues follow`)
 
 /**
  * On-page highlighter wash over the cued line(s). Non-interactive — the drag
@@ -59,9 +62,14 @@ export function CueWash({
  *
  * **A cue that moves scenery carries a `Blinds` glyph** between its chip and its band
  * (scenery-programmer plan D14) — the DSM reads *LX 14 + fly* where the call is written. Hovering
- * it lists the changes ([scenery], one per line, the rail card's own lines); a tap opens the cue's
- * card in the rail ([onSceneryClick]). It takes its press whether the marker is locked or not, and
- * never starts the marker's drag.
+ * it lists the changes ([scenery], one per line, the rail card's own lines, its followers' named by
+ * cue); a tap opens the cue's card in the rail ([onSceneryClick]). It takes its press whether the
+ * marker is locked or not, and never starts the marker's drag; [inert], a drawing tool or a placing
+ * armed, lets a press through to the page.
+ *
+ * **A cue that starts a follow sequence counts its followers** on the chip, `Q12 +2`: they have no
+ * anchors of their own. Hovering lists them with their delays and a tap opens the cue's card, the
+ * same press rules as the glyph.
  */
 export function CueMarginMarker({
   anchor,
@@ -70,11 +78,14 @@ export function CueMarginMarker({
   status,
   hasWarning,
   locked,
+  inert,
   dragging,
   laneX = MARKER_LANE_X,
   onPointerDown,
   scenery,
   onSceneryClick,
+  followers,
+  onFollowersClick,
 }: {
   anchor: CueAnchorDto
   /** Live cue label from the cue stack; falls back to the anchor's cached label. */
@@ -83,6 +94,8 @@ export function CueMarginMarker({
   status: CueRunStatus
   hasWarning: boolean
   locked: boolean
+  /** The page is being drawn on, so the marker's own buttons stand aside as well. */
+  inert: boolean
   dragging: boolean
   /** Normalized x of the shared margin rail (just left of the page's text block). */
   laneX?: number
@@ -91,6 +104,10 @@ export function CueMarginMarker({
   scenery?: string
   /** Open the cue's card in the rail: the glyph's tap. */
   onSceneryClick?: () => void
+  /** The cues that follow this one — present only when it starts a sequence. */
+  followers?: FollowTail
+  /** Open the cue's card in the rail: the follower count's tap. */
+  onFollowersClick?: () => void
 }) {
   const s = statusStyles[status]
   const isLive = status === 'live'
@@ -119,6 +136,25 @@ export function CueMarginMarker({
       >
         {isLive && <span className="size-1 rounded-full bg-white/90" />}
         {label ?? `#${anchor.cueId}`}
+        {followers != null && (
+          <button
+            type="button"
+            data-follow-count={anchor.cueId}
+            title={`Follows on:\n${followers.summary}`}
+            aria-label={`${followerCount(followers.entryIds.length)} ${label ?? `cue ${anchor.cueId}`}: ${followers.summary.split('\n').join(', ')} — open its card`}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              onFollowersClick?.()
+            }}
+            className={cn(
+              inert ? 'pointer-events-none' : 'pointer-events-auto',
+              '-my-0.5 cursor-pointer rounded px-0.5 py-0.5 font-medium opacity-90 hover:bg-white/20',
+            )}
+          >
+            +{followers.entryIds.length}
+          </button>
+        )}
         {hasWarning && ' ▲'}
       </span>
       {scenery != null && (
@@ -135,7 +171,8 @@ export function CueMarginMarker({
             onSceneryClick?.()
           }}
           className={cn(
-            'pointer-events-auto mr-0.5 -my-0.5 inline-flex shrink-0 cursor-pointer items-center rounded p-0.5 hover:bg-black/10',
+            inert ? 'pointer-events-none' : 'pointer-events-auto',
+            'mr-0.5 -my-0.5 inline-flex shrink-0 cursor-pointer items-center rounded p-0.5 hover:bg-black/10',
             s.glyph,
           )}
         >

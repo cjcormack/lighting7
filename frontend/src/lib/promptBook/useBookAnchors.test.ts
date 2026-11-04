@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { CueStack } from '../../api/cueStacksApi'
 import type { PromptBookDetails, Region } from '../../api/promptBooksApi'
+import type { FlatCue } from './desync'
 
 const upsertAnchor = vi.fn()
 const createCue = vi.fn()
@@ -48,6 +49,7 @@ function setUp() {
       stacks: [stack],
       cueOrder: [],
       labelByEntry: new Map(),
+      followByEntry: new Map(),
       viewerRef: { current: null },
     }),
   )
@@ -130,5 +132,45 @@ describe('useBookAnchors · recording a cue from the selection', () => {
     expect(recordProgrammer).not.toHaveBeenCalled()
     expect(createCue).toHaveBeenCalledWith(expect.objectContaining({ name: 'Blackout', cueStackId: 7 }))
     expect(upsertAnchor).toHaveBeenCalledWith(expect.objectContaining({ entryId: 91, label: 'Blackout' }))
+  })
+})
+
+describe('useBookAnchors · followers', () => {
+  const flat = (entryId: number, label: string) => ({ entryId, cueId: entryId, label } as unknown as FlatCue)
+  const anchor = (entryId: number, y: number) => ({
+    cueId: entryId,
+    entryId,
+    label: null,
+    region: [{ page: 0, x: 0.1, y, w: 0.5, h: 0.03 }],
+  })
+  const followed = () => {
+    const { result } = renderHook(() =>
+      useBookAnchors({
+        projectId: 1,
+        book: { anchors: [anchor(1, 0.1), anchor(2, 0.5)], annotations: [] } as unknown as PromptBookDetails,
+        stacks: [stack],
+        cueOrder: [flat(1, 'Q1'), flat(2, 'Q2'), flat(3, 'Q3')],
+        labelByEntry: new Map(),
+        followByEntry: new Map([[2, { headEntryId: 1, afterLabel: 'Q1', delayMs: 1000 }]]),
+        viewerRef: { current: null },
+      }),
+    )
+    return result
+  }
+
+  it('leaves a follower\'s stored anchor out of everything it answers', () => {
+    const result = followed()
+    expect(result.current.anchors.map((a) => a.entryId)).toEqual([1])
+    expect([...result.current.anchorByEntry.keys()]).toEqual([1])
+  })
+
+  it('hints only at an ordinary unanchored cue, in words that do not read as a follow', () => {
+    expect([...followed().current.anchorHintByEntry]).toEqual([[3, 'after Q1']])
+  })
+
+  it('will not arm a follower for placing', () => {
+    const result = followed()
+    act(() => result.current.togglePlacing(2))
+    expect(result.current.placingEntryId).toBeNull()
   })
 })

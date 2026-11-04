@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -355,6 +356,54 @@ class PromptBookRoutesIntegrationTest {
         assertEquals(0.1, byCue.getValue(cue1).y)
         assertEquals(1, byCue.getValue(cue2).page, "earliest rect is on the lowest page")
         assertEquals(0.3, byCue.getValue(cue2).y, "and the topmost y on that page")
+    }
+
+    @Test
+    fun `cue-locations places a follower at its head and ignores its own anchor`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        client.put(bookUrl()) {
+            contentType(ContentType.Application.Json)
+            setBody(newBook())
+        }
+        val stackId = client.post("/api/rest/projects/$projectId/cue-stacks") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCueStack(name = "stack-a"))
+        }.body<CueStackDetails>().id
+        val cues = listOf("head", "follower", "next").map { name ->
+            client.post("/api/rest/projects/$projectId/cues") {
+                contentType(ContentType.Application.Json)
+                setBody(NewCue(name = name, cueStackId = stackId))
+            }.body<CueDetails>()
+        }
+        val (head, follower, next) = cues
+        val anchorAt = { y: Double -> UpsertAnchorRequest(region = listOf(rect(page = 0, y = y))) }
+        for ((cue, y) in listOf(head to 0.1, follower to 0.5, next to 0.9)) {
+            client.put("${bookUrl()}/anchors/${cue.entryId}") {
+                contentType(ContentType.Application.Json)
+                setBody(anchorAt(y))
+            }
+        }
+        client.patch("/api/rest/projects/$projectId/cue-stacks/$stackId/entries/${head.entryId}") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"autoAdvance":true,"autoAdvanceDelayMs":1500}""")
+        }
+
+        val byCue = client.get("/api/rest/projects/$projectId/cue-locations")
+            .body<List<CueLocationDto>>().associateBy { it.cueId }
+        assertEquals(setOf(head.id, follower.id, next.id), byCue.keys)
+        assertEquals(0.1, byCue.getValue(head.id).y)
+        assertEquals(0.1, byCue.getValue(follower.id).y, "a follower reads at its head")
+        assertEquals(follower.entryId, byCue.getValue(follower.id).entryId)
+        assertEquals(0.9, byCue.getValue(next.id).y)
+
+        client.patch("/api/rest/projects/$projectId/cue-stacks/$stackId/entries/${head.entryId}") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"autoAdvance":false}""")
+        }
+        val restored = client.get("/api/rest/projects/$projectId/cue-locations").body<List<CueLocationDto>>()
+        assertEquals(0.5, restored.single { it.cueId == follower.id }.y, "turning the follow off brings its anchor back")
     }
 
     @Test

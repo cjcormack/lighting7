@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { isCueRow, type CueStack, type CueStackCueRow } from '../../api/cueStacksApi'
 import type { FlatCue } from './desync'
+import { followLinks, followTails } from './followers'
 import { flattenCueOrder, flattenShowRows } from './geometry'
 
 /**
@@ -26,6 +27,9 @@ export function useCueIndex(stacks: CueStack[] | undefined, activeStackId: numbe
   // Live entry labels — the pill reads these so an edited cue number reflects at once
   // (the anchor's own cached label only refreshes when the anchor is re-saved).
   const labelByEntry = useMemo(() => new Map(cueOrder.map((c) => [c.entryId, c.label])), [cueOrder])
+  // Who follows whom: read from both sides, for the follower's rail row and the head's script chip.
+  const followByEntry = useMemo(() => followLinks(stacks), [stacks])
+  const followTailByHead = useMemo(() => followTails(followByEntry, labelByEntry), [followByEntry, labelByEntry])
   // A cue's first entry in show order — where a `?cue=` link lands.
   const firstEntryByCue = useMemo(() => {
     const m = new Map<number, number>()
@@ -67,6 +71,8 @@ export function useCueIndex(stacks: CueStack[] | undefined, activeStackId: numbe
     railRows,
     cueOrderIndex,
     labelByEntry,
+    followByEntry,
+    followTailByHead,
     firstEntryByCue,
     existingCueNames,
     entryRowByEntry,

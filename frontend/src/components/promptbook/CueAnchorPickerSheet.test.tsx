@@ -31,6 +31,7 @@ function renderSheet(props: Partial<ComponentProps<typeof CueAnchorPickerSheet>>
       open
       cueOrder={[cue]}
       anchorByEntry={new Map()}
+      followByEntry={new Map()}
       stacks={[stack]}
       defaultStackId={7}
       existingCueNames={new Set()}
@@ -85,5 +86,15 @@ describe('CueAnchorPickerSheet · recording the programmer', () => {
     expect(screen.getByText('The programmer is empty.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Create & anchor' }))
     expect(onCreateCue).toHaveBeenCalledWith(expect.objectContaining({ record: false }))
+  })
+})
+
+describe('CueAnchorPickerSheet · a follower', () => {
+  it('is listed by what it follows and cannot be picked', () => {
+    const onPick = vi.fn()
+    renderSheet({ onPick, followByEntry: new Map([[11, { headEntryId: 10, afterLabel: 'Q0', delayMs: 2000 }]]) })
+    expect(screen.getByText('follows Q0')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Preset/ }))
+    expect(onPick).not.toHaveBeenCalled()
   })
 })

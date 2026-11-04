@@ -980,6 +980,22 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         assertEquals(entryIds[0], read["anchors"]!!.jsonArray[0].jsonObject["entryId"]!!.jsonPrimitive.int)
         assertEquals(stackId, read["anchors"]!!.jsonArray[0].jsonObject["stackId"]!!.jsonPrimitive.int)
         assertEquals(0, read["unanchoredCueCount"]!!.jsonPrimitive.int)
+
+        // Q1 now followed by Q2: Q2's anchor is inactive, and names the head it hangs from.
+        transaction(state.database) {
+            DaoCueStackEntry.findById(entryIds[0])!!.apply {
+                autoAdvance = true
+                autoAdvanceDelay = java.time.Duration.ofSeconds(2)
+            }
+        }
+        val anchors = call("get_prompt_book", "{}").json()["anchors"]!!.jsonArray.map { it.jsonObject }
+        val headOf = { entryId: Int -> anchors.single { it["entryId"]!!.jsonPrimitive.int == entryId }["sequenceHeadEntryId"] }
+        assertNull(headOf(entryIds[0]))
+        assertEquals(entryIds[0], headOf(entryIds[1])!!.jsonPrimitive.int)
+
+        val reanchored = call("mark_up_prompt_book", """{"anchors":[{"entryId":${entryIds[1]},"at":{"pdfPage":3,"y":0.5}}]}""")
+        assertEquals(1, reanchored.json()["inactiveAnchors"]!!.jsonPrimitive.int)
+        assertTrue("1 inactive" in reanchored.description, reanchored.description)
     }
 
     @Test

@@ -45,7 +45,7 @@ export interface CueAnchorDto {
  */
 export interface CueLocationDto {
   cueId: number
-  /** The anchored entry; a shared cue has one location per anchor. */
+  /** The entry at this position: an anchored one, or a follower at its head's. A shared cue has one per place. */
   entryId: number
   page: number
   y: number

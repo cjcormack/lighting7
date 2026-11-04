@@ -375,8 +375,8 @@ describe('ScriptViewer render window', () => {
 
   it("draws a scenery glyph beside a cue that moves something, and its tap opens the cue's card — locked or not", async () => {
     const onOpenCueCard = vi.fn()
-    const sceneryByCue = new Map([[1, 'House tabs → closed · 4 s\nMoon → in']])
-    const { view } = await renderViewer({ sceneryByCue, onOpenCueCard })
+    const sceneryByEntry = new Map([[101, 'House tabs → closed · 4 s\nMoon → in']])
+    const { view } = await renderViewer({ sceneryByEntry, onOpenCueCard })
     const glyph = view.container.querySelector<HTMLElement>('[data-scenery-glyph="1"]')!
     expect(glyph).not.toBeNull()
     // Hovering it lists the changes, as the cue's card does.
@@ -391,7 +391,7 @@ describe('ScriptViewer render window', () => {
     const capture = vi.fn()
     Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { configurable: true, value: capture })
     const onOpenCueCard = vi.fn()
-    const { view } = await renderViewer({ locked: false, sceneryByCue: new Map([[1, 'Moon → in']]), onOpenCueCard })
+    const { view } = await renderViewer({ locked: false, sceneryByEntry: new Map([[101, 'Moon → in']]), onOpenCueCard })
     const glyph = view.container.querySelector<HTMLElement>('[data-scenery-glyph="1"]')!
     fireEvent.pointerDown(glyph, { pointerId: 1 })
     expect(capture).not.toHaveBeenCalled()
@@ -402,8 +402,32 @@ describe('ScriptViewer render window', () => {
     expect(capture).toHaveBeenCalled()
   })
 
+  it('counts a sequence on its head\'s chip, and a tap opens the head\'s card', async () => {
+    const onOpenCueCard = vi.fn()
+    const followTails = new Map([[101, { entryIds: [102], summary: 'Q2 · +3.0s' }]])
+    const { view } = await renderViewer({ followTails, onOpenCueCard })
+    const count = view.container.querySelector<HTMLElement>('[data-follow-count="1"]')!
+    expect(count).toHaveTextContent('+1')
+    expect(count.title).toBe('Follows on:\nQ2 · +3.0s')
+    expect(count).toHaveAccessibleName('1 cue follows Q1: Q2 · +3.0s — open its card')
+    expect(count.className).toContain('pointer-events-auto')
+    fireEvent.click(count)
+    expect(onOpenCueCard).toHaveBeenCalledWith(101)
+  })
+
+  it('lets a press through the marker\'s buttons to the page while a drawing tool is armed', async () => {
+    const { view } = await renderViewer({
+      tool: 'note',
+      followTails: new Map([[101, { entryIds: [102], summary: 'Q2 · +3.0s' }]]),
+      sceneryByEntry: new Map([[101, 'Moon → in']]),
+    })
+    for (const selector of ['[data-follow-count="1"]', '[data-scenery-glyph="1"]']) {
+      expect(view.container.querySelector(selector)!.className).toContain('pointer-events-none')
+    }
+  })
+
   it('draws no glyph for a cue that moves nothing', async () => {
-    const { view } = await renderViewer({ sceneryByCue: new Map(), onOpenCueCard: vi.fn() })
+    const { view } = await renderViewer({ sceneryByEntry: new Map(), onOpenCueCard: vi.fn() })
     expect(view.container.querySelector('[data-scenery-glyph]')).toBeNull()
     expect(view.getByText('Q1')).toBeVisible()
   })

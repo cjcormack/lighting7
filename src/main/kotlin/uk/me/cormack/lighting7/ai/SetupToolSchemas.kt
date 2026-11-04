@@ -727,7 +727,7 @@ internal val overrideVenueFixturesTool = ToolDef(
 
 internal val getPromptBookTool = ToolDef(
     name = "get_prompt_book",
-    description = "A project's prompt book: the script PDF's page count and cover pages, every entry anchored on it (its entryId, cue, stack and number — an anchor marks one place of a cue, so a cue in two stacks can be anchored twice) and every note. If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
+    description = "A project's prompt book: the script PDF's page count and cover pages, every entry anchored on it (its entryId, cue, stack and number — an anchor marks one place of a cue, so a cue in two stacks can be anchored twice) and every note. A cue that follows another has no anchor of its own: the book shows it attached to the cue that starts its sequence, so an anchor one holds is inactive until the follow is off and carries `sequenceHeadEntryId`, that cue's entry; `unanchoredCueCount` leaves followers out. If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
     inputSchema = objectSchema {
         prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
@@ -759,7 +759,7 @@ private val showCueSchema = objectSchema {
     put("moveInDark", cueMoveInDarkSchema)
     put("at", buildJsonObject {
         put("type", "object")
-        put("description", "Where the cue is called in the prompt book; anchors it there. Needs a prompt book (get_prompt_book).")
+        put("description", "Where the cue is called in the prompt book; anchors it there. Needs a prompt book (get_prompt_book). Leave it off a cue that follows another: the book anchors a follow sequence at its first cue, and ignores a follower's anchor.")
         put("properties", scriptPlaceSchema["properties"]!!)
         put("required", scriptPlaceSchema["required"]!!)
     })
@@ -807,6 +807,7 @@ private val anchorSchema = objectSchema(required = listOf("at")) {
 internal val markUpPromptBookTool = ToolDef(
     name = "mark_up_prompt_book",
     description = "Mark up the current project's prompt book: anchor cues' entries — each place a cue has in a stack, by entryId or by stackId and number — to the line they are called on (moving any existing anchor), add notes for the operator, and set how many cover pages precede the script's page 1. " +
+        "Anchor the cue that starts a follow sequence, not the cues that follow it: the book ignores a follower's anchor. " +
         "Notes are added, never replaced — check get_prompt_book first so a note is not written twice. Everything is validated before anything is written.",
     inputSchema = objectSchema {
         prop("coverPages", "integer", "PDF pages before the script's printed page 1 (title page, cast list…), so page labels match the script.")

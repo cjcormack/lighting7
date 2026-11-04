@@ -28,6 +28,7 @@ import { nextAvailableName } from '@/lib/cueUtils'
 import type { CueAnchorDto } from '../../api/promptBooksApi'
 import type { CueStack } from '../../api/cueStacksApi'
 import type { FlatCue } from '../../lib/promptBook/desync'
+import type { FollowLink } from '../../lib/promptBook/followers'
 import { groupCuesByStack } from '../../lib/promptBook/geometry'
 
 /** Where a newly-created cue should live: an existing stack, or a new one to create first. */
@@ -51,6 +52,7 @@ export function CueAnchorPickerSheet({
   open,
   cueOrder,
   anchorByEntry,
+  followByEntry,
   stacks,
   defaultStackId,
   existingCueNames,
@@ -66,6 +68,8 @@ export function CueAnchorPickerSheet({
   cueOrder: FlatCue[]
   /** Anchors by stack entry — a shared cue is listed once per entry, each anchored on its own. */
   anchorByEntry: Map<number, CueAnchorDto>
+  /** A follower is listed but can't be picked: its sequence is anchored at its head. */
+  followByEntry: Map<number, FollowLink>
   /** All project stacks; the create form's stack picker lists the runnable (STACK) ones. */
   stacks: CueStack[]
   /** Stack pre-selected in the create form (the live stack, the sole stack, or the first). */
@@ -315,8 +319,9 @@ export function CueAnchorPickerSheet({
                     >
                       <button
                         type="button"
+                        disabled={followByEntry.has(row.cue.entryId)}
                         onClick={() => onPick(row.cue.entryId)}
-                        className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left"
+                        className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left disabled:text-muted-foreground"
                       >
                         <TruncateStart
                           text={row.cue.label}
@@ -324,7 +329,11 @@ export function CueAnchorPickerSheet({
                           className="w-16 shrink-0 font-mono text-sm font-bold"
                         />
                         <span className="min-w-0 flex-1 truncate text-sm">{row.cue.name}</span>
-                        {anchorByEntry.has(row.cue.entryId) ? (
+                        {followByEntry.has(row.cue.entryId) ? (
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            follows {followByEntry.get(row.cue.entryId)?.afterLabel}
+                          </span>
+                        ) : anchorByEntry.has(row.cue.entryId) ? (
                           <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-amber-600">
                             <Anchor className="size-3" />
                             re-anchor

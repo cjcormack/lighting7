@@ -6,6 +6,7 @@ import { positionLabel } from '@/lib/promptBook/geometry'
 import { InlineEditField } from '@/components/InlineEditField'
 import { TruncateStart } from '@/components/TruncateStart'
 import { cueNumberCellWidth } from '@/lib/cueNumber'
+import { formatFollowDelay, type FollowLink } from '@/lib/promptBook/followers'
 import { CueCardBody, type CueCardKind, type ExpansionMode } from '@/components/runner/mobile/CueCardBody'
 import { useCueFade } from '@/hooks/useCueFade'
 import { CueSceneryEditor } from '@/components/scenery/CueSceneryEditor'
@@ -19,8 +20,10 @@ interface PromptBookCueCardProps {
   cue: FlatCue
   status: CueRunStatus
   anchor: CueAnchorDto | undefined
-  /** Unanchored cues only: the neighbour the book borrows, e.g. "follows Q12". */
+  /** Unanchored cues only: the neighbour the book borrows, e.g. "after Q12". */
   anchorHint: string | null
+  /** How this cue follows the one before, or null when it doesn't. Keeps its identity: this is memoized. */
+  follow: FollowLink | null
   /** The full stack entry (palette/notes/auto), for the expanded card. */
   cueEntry: CueStackCueRow | undefined
   projectId: number
@@ -82,10 +85,13 @@ const STATUS_KIND: Record<CueRunStatus, CueCardKind> = {
  * "Set next" arms it as the next GO, and the anchor place/remove + desync warning
  * affordances ride along. There is no "Change" button.
  *
- * Having no anchor is NOT an error — a pre-show state or an auto-followed cue reasonably
- * has no line to point at. While locked the row says nothing about it beyond slightly
- * dimmer text; the "place anchor" affordance only appears while the book is unlocked,
- * and the expanded card states it in words.
+ * Having no anchor is NOT an error — a pre-show state reasonably has no line to point
+ * at. While locked the row says nothing about it beyond slightly dimmer text; the
+ * "place anchor" affordance only appears while the book is unlocked, and the expanded
+ * card states it in words.
+ *
+ * A follower isn't anchored at all, so it has none of that: the row shows its delay and the
+ * expanded card names what it follows.
  *
  * Memoized: the rail can hold hundreds of these, and every one used to re-render on every
  * page render (a fade frame among them) for ten freshly-allocated per-row callbacks. The
@@ -97,6 +103,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
   status,
   anchor,
   anchorHint,
+  follow,
   cueEntry,
   projectId,
   warnings,
@@ -158,7 +165,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
   // dimmer text is the whole signal, so the state is spelled out for screen readers, which
   // can't see opacity. Unlocked it becomes an editing affordance, muted until the row is
   // hovered, so a mostly unanchored rail doesn't read as a wall of warnings.
-  const anchorAffordance = !anchored ? (
+  const anchorAffordance = follow != null ? null : !anchored ? (
     locked ? (
       <span className="sr-only">no anchor</span>
     ) : (
@@ -250,11 +257,13 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
           mode={mode}
           onModeChange={(m) => onModeChange(cue.entryId, status, m)}
           location={
-            anchored
-              ? positionLabel(anchor.region, coverPages)
-              : anchorHint
-                ? `No anchor · ${anchorHint}`
-                : 'No anchor'
+            follow != null
+              ? `Follows ${follow.afterLabel} · ${formatFollowDelay(follow.delayMs)}`
+              : anchored
+                ? positionLabel(anchor.region, coverPages)
+                : anchorHint
+                  ? `No anchor · ${anchorHint}`
+                  : 'No anchor'
           }
           headerLabel={cue.label}
           fadeProgress={fadeProgress}
@@ -348,7 +357,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
   const isDone = status === 'done'
   // The whole locked-mode signal for an unanchored cue: one notch quieter than an
   // anchored standby row. Live/next/done carry their own strong tier, so leave those be.
-  const dim = !anchored && !isLive && !isNext && !isDone
+  const dim = !anchored && follow == null && !isLive && !isNext && !isDone
   // Sized to the longest number in the rail (`--cue-num-chars`, published by CueStackPanel) so
   // "QS1-3.2.10" shows whole where the old fixed 4rem cell clipped it — but still one width for
   // every row, so each name starts at the same x. Overflow is clipped at the START
@@ -470,6 +479,15 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
       {setNextButton}
       {warningTriangle}
       {anchorAffordance}
+      {follow != null && (
+        <span
+          title={`Follows ${follow.afterLabel}`}
+          className={cn('shrink-0 font-mono text-[11px] tabular-nums', !isLive && !isNext && 'text-muted-foreground')}
+        >
+          <span className="sr-only">Follows {follow.afterLabel} after </span>
+          {formatFollowDelay(follow.delayMs)}
+        </span>
+      )}
       {chevron}
       {lines.length > 0 && (
         // A line of its own under the row, indented past the status slot so it reads under the cue.
