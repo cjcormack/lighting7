@@ -19,19 +19,23 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatError } from '@/lib/formatError'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
-import { useLookQuery, useSaveLookMutation } from '@/store/looks'
+import { useHardenLookMutation, useLookQuery, useSaveLookMutation } from '@/store/looks'
+import { useCurrentProjectQuery } from '@/store/projects'
 import { useFxLibraryQuery } from '@/store/fixtureFx'
 import { FxSummary } from '@/components/fx/FxSummary'
 import { fromLookFx } from '@/components/fx/fxSummaryTypes'
 import { useInclude } from '@/components/programmer/useInclude'
-import { LookValueChip } from './lookValueChips'
-import type { LookSummary } from '@/api/looksApi'
+import { LookReferenceChip, LookValueChip } from './lookValueChips'
+import { CopyTheValues, type ReferenceRow } from './CopyTheValues'
+import type { LookRow, LookSummary } from '@/api/looksApi'
+import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { useLookDelete } from './useLookDelete'
 import { SceneryEditor } from '@/components/scenery/SceneryEditor'
 import { useSetLookSceneryMutation } from '@/store/scenery'
 import type { SceneryChange } from '@/api/sceneryApi'
 
 const EMPTY_SCENERY: SceneryChange[] = []
+const EMPTY_PICK: ReadonlySet<string> = new Set()
 
 export interface LookDetailSheetProps {
   open: boolean
@@ -51,6 +55,10 @@ export interface LookDetailSheetProps {
  * fixture only means anything against that fixture, and a grid of hex codes divorced from the heads
  * they light is exactly the abstraction the programmer redesign exists to remove. Name and notes are
  * metadata and are editable here.
+ *
+ * The one value gesture here is *Copy the values* (palette-references plan D22): a row that follows a
+ * palette is drawn as its teal chip, a tap picks it, and the block under the contents makes the
+ * picked references — else all of them — literal on the desk.
  *
  * The same holds for its **effects**: they are listed here, read-only, so a Look that only runs
  * effects says what it runs, and they are changed the way values are — Include runs them in the
@@ -84,6 +92,10 @@ export function LookDetailSheet({
     projectId,
     onDeleted: () => onOpenChange(false),
   })
+  const [hardenLook] = useHardenLookMutation()
+  const { data: currentProject } = useCurrentProjectQuery()
+  const copyRefused =
+    currentProject != null && currentProject.id !== projectId ? 'Copy the values works on the current project only' : null
   const { include, isLoading: isIncluding } = useInclude(projectId)
   // For each effect's parameter labels and colour swatches; only while the sheet is open.
   const { data: library } = useFxLibraryQuery(undefined, { skip: !open })
@@ -110,20 +122,34 @@ export function LookDetailSheet({
   }, [look])
 
   const rowsByTarget = useMemo(() => {
-    const byTarget = new Map<
-      string,
-      { targetKey: string; values: { attribute: string; value: string }[] }
-    >()
+    const byTarget = new Map<string, { targetKey: string; values: LookRow[] }>()
     for (const row of detail?.rows ?? []) {
       // A cell's row under the cell's own key: a colour held per zone reads as one line per zone
       // rather than three unlabelled chips under the fixture.
       const key = row.elementKey ?? row.targetKey
       const bucket = byTarget.get(key) ?? { targetKey: key, values: [] }
-      bucket.values.push({ attribute: row.attribute, value: row.value })
+      bucket.values.push(row)
       byTarget.set(key, bucket)
     }
     return [...byTarget.values()]
   }, [detail])
+  const referenceRows = useMemo<ReferenceRow[]>(
+    () =>
+      (detail?.rows ?? []).flatMap((row) =>
+        row.reference != null && row.uuid != null ? [{ uuid: row.uuid, reference: row.reference }] : [],
+      ),
+    [detail],
+  )
+  // The references picked for *Copy the values*, by row uuid; a Look's own, so another starts empty.
+  const [picked, setPicked] = useState<{ lookId: number; uuids: ReadonlySet<string> }>({ lookId, uuids: new Set() })
+  const pickedUuids = picked.lookId === lookId ? picked.uuids : EMPTY_PICK
+  const togglePicked = (uuid: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev.lookId === lookId ? prev.uuids : EMPTY_PICK)
+      if (next.has(uuid)) next.delete(uuid)
+      else next.add(uuid)
+      return { lookId, uuids: next }
+    })
 
   if (!look) return null
 
@@ -255,17 +281,42 @@ export function LookDetailSheet({
                     <div className="flex flex-wrap items-center justify-end gap-1">
                       {/* Keyed by index as well as property: a multi-element fixture holds one row
                           per element for the same property, so the property alone is not unique. */}
-                      {bucket.values.map((v, index) => (
-                        <LookValueChip
-                          key={`${bucket.targetKey}-${v.attribute}-${index}`}
-                          value={v.value}
-                        />
-                      ))}
+                      {bucket.values.map((v, index) =>
+                        v.reference != null ? (
+                          <LookReferenceChip
+                            key={`${bucket.targetKey}-${v.attribute}-${index}`}
+                            reference={v.reference}
+                            resolved={v.resolvedByHead}
+                            selected={v.uuid != null && pickedUuids.has(v.uuid)}
+                            onToggle={v.uuid != null ? () => togglePicked(v.uuid!) : undefined}
+                          />
+                        ) : (
+                          <LookValueChip key={`${bucket.targetKey}-${v.attribute}-${index}`} value={v.value} />
+                        ),
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             )}
+            <CopyTheValues
+              rows={referenceRows}
+              selected={pickedUuids}
+              owner={look.name}
+              disabled={copyRefused}
+              onCopy={(rowUuids) =>
+                hardenLook({ projectId, lookId: look.id, ...(rowUuids ? { rowUuids } : {}) })
+                  .unwrap()
+                  .then((answer) => {
+                    setPicked({ lookId: look.id, uuids: EMPTY_PICK })
+                    return answer
+                  })
+                  .catch(() => {
+                    ignoreReportedError()
+                    return null
+                  })
+              }
+            />
           </div>
 
           {/* The Look's effects, as stored — read-only, like the values above. */}

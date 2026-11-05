@@ -302,7 +302,7 @@ describe('the Palettes band', () => {
       },
     ]
     slider(DIMMER)
-    expect(document.querySelector('[data-palette-band-into]')).toHaveTextContent('Into Warm wash')
+    expect(document.querySelector('[data-palette-band-into]')).toHaveTextContent('Into Warm wash · as references')
     expect(document.querySelector('[data-band-palette="1"]')).toHaveAttribute('aria-pressed', 'false')
   })
 

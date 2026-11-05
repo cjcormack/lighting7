@@ -325,7 +325,7 @@ describe('the references line (palette-references plan D16, board C1)', () => {
     const note = document.querySelector('[data-record-references]') as HTMLElement
     expect(within(note).getByText('DSR Focus')).toBeTruthy()
     expect(note).toHaveTextContent(
-      '2 of your values are references to DSR Focus and stay references: retune the palette and this cue moves with it.',
+      '2 of your values are references to DSR Focus and stay references: retune the palette and this cue moves with it. Copy the values on the cue editor makes them literals.',
     )
   })
 
@@ -365,9 +365,9 @@ describe('the references line (palette-references plan D16, board C1)', () => {
         { total: 3, palettes: [{ uuid: 'a', name: 'A', count: 2 }, { uuid: 'b', name: 'B', count: 1 }] },
         'look',
       ),
-    ).toBe('3 of your values are references to 2 palettes and stay references: retune one of them and this Look moves with it.')
+    ).toBe('3 of your values are references to 2 palettes and stay references: retune one of them and this Look moves with it. Copy the values on the Look sheet makes them literals.')
     expect(referencesSentence({ total: 1, palettes: [{ uuid: 'a', name: 'A', count: 1 }] }, 'cue')).toBe(
-      '1 of your values is a reference to A and stays a reference: retune the palette and this cue moves with it.',
+      '1 of your values is a reference to A and stays a reference: retune the palette and this cue moves with it. Copy the values on the cue editor makes it a literal.',
     )
   })
 })

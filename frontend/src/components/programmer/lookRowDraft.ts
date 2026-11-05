@@ -51,6 +51,23 @@ export class LookRowDraft {
     }
   }
 
+  /** The pending edits as they stand, by key — what a save sends, for [retire] once it has landed. */
+  snapshot(): ReadonlyMap<string, string> {
+    return new Map(this.values)
+  }
+
+  /**
+   * Forget the entries [sent] holds that no edit has moved since: a save that landed and a write
+   * that then changed those rows on the desk (a palette press), which [reconcile] could never match.
+   */
+  retire(sent: ReadonlyMap<string, string>): void {
+    for (const [key, value] of sent) {
+      if (this.values.get(key) !== value) continue
+      this.values.delete(key)
+      this.notify(key)
+    }
+  }
+
   clear(): void {
     const keys = [...this.values.keys()]
     this.values.clear()

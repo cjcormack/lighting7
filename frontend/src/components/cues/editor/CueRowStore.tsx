@@ -3,7 +3,8 @@ import { toast } from 'sonner'
 import { lookRowKey } from '@/components/programmer/lookRowKey'
 import { useDispatch } from 'react-redux'
 import type { store } from '@/store'
-import { cuesApi, fetchLatestCue, usePatchProjectCueMutation, usePressCueLayerMutation, useProjectCueCookedQuery, useProjectCueQuery } from '@/store/cues'
+import { cuesApi, fetchLatestCue, useHardenCueMutation, usePatchProjectCueMutation, usePressCueLayerMutation, useProjectCueCookedQuery, useProjectCueQuery } from '@/store/cues'
+import type { HardenResponse } from '@/api/looksApi'
 import { PressCueContext, type PressCue } from '@/components/press/pressCue'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { withoutInfrastructure } from '@/lib/infrastructure'
@@ -42,7 +43,7 @@ interface UndoStep {
 }
 
 /** The writes a save or a layer press sends, which its Undo takes back. */
-const CUE_SAVE_ENDPOINTS = ['patchProjectCue', 'pressCueLayer']
+const CUE_SAVE_ENDPOINTS = ['patchProjectCue', 'pressCueLayer', 'hardenCue']
 
 interface HeldUndo {
   step: UndoStep
@@ -147,6 +148,24 @@ export interface CueRowStoreValue {
   canUndo: boolean
   /** Save whatever is pending now. */
   flush: () => void
+  /** The cue's own rows that are palette references, by uuid — what *Copy the values* names. */
+  referenceRows: readonly CueReferenceRow[]
+  /**
+   * *Copy the values* (palette-references plan D9): what is pending lands first, then the desk makes
+   * the named references, else every one, literal — one write in the chain, and its Undo. Null when
+   * it was refused or did not land.
+   */
+  hardenRows: (rowUuids: string[] | undefined) => Promise<HardenResponse | null>
+}
+
+/** One own row of the cue's that follows a palette. */
+export interface CueReferenceRow {
+  uuid: string
+  reference: PaletteReference
+  targetType: CueRowTargetType
+  targetKey: string
+  /** The heads it lands on, as the desk resolved it. */
+  heads: readonly string[]
 }
 
 const CueRowStoreContext = createContext<CueRowStoreValue | null>(null)
@@ -194,6 +213,7 @@ export function CueRowStoreProvider({
   const { fixtures } = useFixtureLookup()
   const [patchCue] = usePatchProjectCueMutation()
   const [pressCueLayer] = usePressCueLayerMutation()
+  const [hardenCue] = useHardenCueMutation()
   const dispatch = useDispatch<typeof store.dispatch>()
   const [saveState, setSaveState] = useState<CueRowSaveState>('clean')
   const [canUndo, setCanUndo] = useState(false)
@@ -491,6 +511,25 @@ export function CueRowStoreProvider({
     [entry, enqueue, pressCueLayer, dispatch, toastId, undo],
   )
 
+  const hardenRows = useCallback<CueRowStoreValue['hardenRows']>(
+    async (rowUuids) => {
+      if (readOnlyRef.current) return null
+      flushRef.current()
+      const args = { ...argsRef.current, cueId: entry.cueId }
+      const result = await enqueue<UndoStep, HardenResponse>(() => ({
+        send: () => hardenCue({ projectId: args.projectId, cueId: args.cueId, ...(rowUuids ? { rowUuids } : {}) }).unwrap(),
+        undo: { rows: { keys: [] } },
+      }))
+      if (result == null || !result.ok || result.answer == null) return null
+      if (result.answer.hardened > 0) {
+        undoRef.current = { step: result.undo!, requestIds: result.requestIds ?? [] }
+        setCanUndo(true)
+      }
+      return result.answer
+    },
+    [entry, enqueue, hardenCue],
+  )
+
   /** *Apply as values* in the cue: each literal an own row, as a cell commit lands one. */
   const landValues = useCallback<PressCue['landValues']>(
     (values) => {
@@ -534,6 +573,23 @@ export function CueRowStoreProvider({
 
   const rows = cookedData?.rows ?? EMPTY_ROWS
   const assignments = cue?.attributeAssignments ?? EMPTY_ASSIGNMENTS
+  const referenceRows = useMemo<CueReferenceRow[]>(
+    () =>
+      assignments.flatMap((row) =>
+        row.reference != null && row.uuid != null
+          ? [
+              {
+                uuid: row.uuid,
+                reference: row.reference,
+                targetType: row.targetType,
+                targetKey: row.targetKey,
+                heads: Object.keys(row.resolvedByHead ?? {}),
+              },
+            ]
+          : [],
+      ),
+    [assignments],
+  )
   const cookedByKey = useMemo(() => {
     const out = new Map<string, CookedRow>()
     for (const row of rows) out.set(lookRowKey(row.targetKey, canonicalCueAttribute(row.attribute)), row)
@@ -720,6 +776,8 @@ export function CueRowStoreProvider({
       undo,
       canUndo,
       flush,
+      referenceRows,
+      hardenRows,
     }
     // `saveState` is not read here: it rides its own context so a keystroke does not re-render
     // every row. `rows`/`assignments` stand for the cook and the cue; the draft is a stable object
@@ -752,6 +810,8 @@ export function CueRowStoreProvider({
     undo,
     canUndo,
     flush,
+    referenceRows,
+    hardenRows,
   ])
 
   // Keyed on what the bands read, not on the cue: a value save refetches the cue, and every cell in

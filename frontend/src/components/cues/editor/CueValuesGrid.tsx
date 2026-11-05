@@ -42,6 +42,8 @@ import type { CueTarget } from '@/api/cuesApi'
 import { useCueRowStore, type CueRowStoreValue } from './CueRowStore'
 import { useCueValuesView, type CueValuesView } from './CueValuesView'
 import { CueEditorIsolation } from './editorIsolation'
+import { CopyTheValues } from '@/components/looks/CopyTheValues'
+import { cueReferencesIn } from './cueReferences'
 import { useFixtureColourIndex } from '@/hooks/useFixtureColourIndex'
 
 type CueCellRef = CellRef<ColumnKey>
@@ -429,6 +431,7 @@ function CueValuesGridBody({
           }
         />
       </div>
+      <CueCopyTheValues store={store} selection={view.selectionTargets} heads={view.selectionHeads} readOnlyReason={readOnlyReason} />
       {store.cookFailed ? (
         <p className="px-3 py-4 text-xs text-muted-foreground">
           The cue’s composed values could not be read. The desk composes the current project’s cues
@@ -476,6 +479,36 @@ function CueValuesGridBody({
 }
 
 function noop() {}
+
+/**
+ * The cue's line about its references and *Copy the values…* (palette-references plan D22), over
+ * the reference rows the Values selection reaches ([cueReferencesIn]) else all of them.
+ */
+function CueCopyTheValues({
+  store,
+  selection,
+  heads,
+  readOnlyReason,
+}: {
+  store: CueRowStoreValue
+  selection: readonly CueTarget[]
+  heads: readonly string[]
+  readOnlyReason: string | null
+}) {
+  const selected = useMemo(() => cueReferencesIn(store.referenceRows, selection, heads), [selection, heads, store.referenceRows])
+  if (store.referenceRows.length === 0) return null
+  return (
+    <div className="border-b px-3 py-1.5">
+      <CopyTheValues
+        rows={store.referenceRows}
+        selected={selected}
+        owner={store.cueLabel}
+        disabled={readOnlyReason}
+        onCopy={store.hardenRows}
+      />
+    </div>
+  )
+}
 
 /**
  * A drag's commits at ~30 Hz with a trailing call — the programmer container's throttle

@@ -282,7 +282,7 @@ function IntoLine({ into }: { into: Exclude<PressInto, { kind: 'programmer' }> }
       data-palette-band-into
       className="rounded border border-teal-600/30 bg-teal-500/10 px-2 py-1 text-[11px] text-teal-700 dark:text-teal-300"
     >
-      Into {into.lookName}
+      Into {into.lookName} · as references
     </div>
   ) : (
     <div

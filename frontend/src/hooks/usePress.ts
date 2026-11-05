@@ -135,9 +135,11 @@ export function usePressInCue(options: PressOptions = {}): PressCue | null {
  * request, named by the hold menu's *Take off these heads* so a caller can say which it offered;
  * **`asValues`** is *Apply as values*, literals and Local effects with no layer left behind.
  *
- * **With a Look layer focused, a press goes into the Look** (D7, plan §3.6): a value palette is
- * resolved on the desk with `write: false` and each head's literal lands in the layer's draft
- * through `LookRowStore`, which saves through the Look's own PUT; an effect palette's effect is
+ * **With a Look layer focused, a press goes into the Look** (D7, plan §3.6): a value palette's tap
+ * writes its references into the Look's rows, or takes them out, on the desk (`LookRowStore`'s
+ * `pressPalette`, lighting7 palette-references plan D23), and *Apply as values* is resolved with
+ * `write: false`, each head's literal landing in the layer's draft, which saves through the Look's
+ * own PUT; an effect palette's effect is
  * started on the selected heads and then absorbed into the Look (`absorb-fx`, *+
  * Effect*'s path) — and stopped again if the absorb is refused, so nothing is left on stage; a Look is
  * refused, since Looks don't nest. No `programmer.*` frame is sent. A door that writes Local whatever
@@ -235,6 +237,16 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
               throw refused
             }
             return 'into'
+          }
+          if (gesture !== 'asValues') {
+            const pressed = await look.pressPalette({
+              paletteId: template.id,
+              targets: targets.map((t) => ({ type: t.type, key: t.key })),
+              ...(families != null ? { families } : {}),
+            })
+            if (pressed == null) return null
+            if (pressed.action === 'applied') reportLeftOut(template.name, pressed)
+            return pressed.action === 'removed' ? 'off' : 'into'
           }
           const answer = await applyPalette({
             projectId,

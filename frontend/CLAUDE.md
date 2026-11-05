@@ -1264,7 +1264,13 @@ colour picker's swatches and a 3D material list are unrelated.
   cue's own rows give the Values grids a 3px teal edge over the owner's ring and a pill naming the
   palette (`fixtures-list/CellMarkPill.tsx`) — *DSR Focus · 2 of 4* and a dashed edge over part of a
   row, a dashed pill while unresolved — and a Look layer's value its own violet edge and `Layers`
-  pill; the fixture sheet's `SourceChip` names the palette in teal. A cue's reference arrives as a
+  pill; the fixture sheet's `SourceChip` names the palette in teal. The Look sheet draws a reference
+  row as `LookReferenceChip` (`looks/lookValueChips.tsx`: teal, the name and what it resolves to,
+  dashed while unresolved), and it and the cue editor's Values tab say *2 values follow DSR Focus*
+  over **Copy the values…** (`looks/CopyTheValues.tsx`: the picked chips, or the rows the Values
+  selection reaches — `cueReferencesIn` — else every reference, one question, then `POST
+  /looks/{id}/harden` or the cue store's `hardenRows` in its save chain). `LookSummary.referenceCount`
+  is what the Looks sheet's Contents and a busk pad's face count; `preview` holds literals only. A cue's reference arrives as a
   uuid alone (its provenance), named from the library (`usePaletteNameByUuid`). A per-fixture
   palette's chip counts its reach over the press (`lib/paletteOffer.ts`'s `paletteReach`, the desk's
   `paletteHeads` / `omittedHeads`) and its hold menu names the heads it leaves out.
@@ -3057,14 +3063,18 @@ then `absorb-fx` (§3.2 rule 6) — see §FX in the fixture sheet's paragraphs.
   `/looks/{id}/toggle`, `/looks/{id}/apply` and the cue's layer press go out with no targets and no
   mask, whatever the pair.
 - **The scope** (D7): with a Look layer focused (`LookRowStore`), a palette press goes **into the
-  Look** — a value palette through `/palettes/{id}/apply` with `write: false`, each head's literal
-  landing in the layer's draft through `setValue`, no `programmer.*` frame sent; an FX palette
+  Look** — a value palette's tap writes its references into the Look's rows, or takes them out, on
+  the desk (`LookRowStore.pressPalette` → `POST /looks/{id}/press`, lighting7 palette-references plan
+  D23; the draft lands first, no press if that save fails, and the answer's Look goes in the cache), and its *Apply as values* (⌥click)
+  through `/palettes/{id}/apply` with `write: false`, each head's literal landing in the layer's
+  draft through `setValue`; no `programmer.*` frame sent either way; an FX palette
   started on the selected heads and then absorbed (`absorb-fx`, *+ FX*'s path),
   and stopped again if the absorb is refused, since a press into a Look must leave the stage as it
   was; a Look refused, since Looks don't nest. `landValuesInLook` is the draft's one landing, shared
   with Fan's `write: false` arm. A door that writes Local whatever the grid is pointed at passes `scope: 'programmer'` (the
   fixture sheet, a cue slot, the busk view). In a focused Look the chips draw no ring and the menu
-  offers *Into <Look>* in place of the first two items. `write: false` stamps no recent. **In the cue
+  offers *Put on or take off in <Look>* and a value palette's *Apply as values* (an FX palette's *Into
+  <Look>* alone), as the cue editor's does. `write: false` stamps no recent. **In the cue
   editor a press writes the cue** (apply-model plan §3.6, session 8): `PressInto` gains `{kind:
   'cue', cueLabel}`, from `PressCue` (`components/press/pressCue.ts`), which `CueRowStoreProvider`
   provides and `usePress` reads before the programmer's scope — so every door under the editor (a
@@ -4305,7 +4315,7 @@ each was:
   the palettes with a row for its attribute** — a zoom cell is offered *Wide*, not *Soft edge*.
   A chip is `PalettePressButton` through `usePress` over the cell batch
   (`paletteTargetsOf(batch.targets)`) with the mask `[family]`, so the gestures and the ring are
-  the picker's; under a focused Look a teal *Into <Look>* line shows and the rings go. *All* mounts
+  the picker's; under a focused Look a teal *Into <Look> · as references* line shows and the rings go. *All* mounts
   `ApplyPicker` on the family on its first press and keeps it, with no *New from selection*
   (`offerNew={false}`): the picker lives inside the cell editor, and a sheet there would close with
   it, draft and all — the footer's *Save as palette…* is mounted outside. **The editor**, unchanged. **Below**,

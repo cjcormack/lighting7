@@ -124,8 +124,13 @@ export interface LookSummary {
   rowCount: number
   fxCount: number
   targetCount: number
-  /** Up to 8 distinct literals, most-frequent first, so a row can preview without a detail fetch. */
+  /**
+   * Up to 8 distinct literals, most-frequent first, so a row can preview without a detail fetch. A
+   * palette reference is not a literal: it is counted in [referenceCount].
+   */
   preview: string[]
+  /** How many rows are palette references (palette-references plan D22). Absent from an older desk. */
+  referenceCount?: number
   /** The effects it runs, by type, each once in the Look's order. Absent from an older desk. */
   fxTypes?: string[]
   /**
@@ -243,4 +248,39 @@ export interface ApplyLookResponse {
 export interface ToggleLookResponse {
   action: 'applied' | 'removed'
   fxCount: number
+}
+
+/**
+ * `POST looks/{id}/press` (lighting7 palette-references plan D23): a value palette tapped into a Look
+ * focused in the programmer, its reference rows written into the Look's own rows or taken out again
+ * by the cue press's rule.
+ */
+export interface LookPressRequest {
+  paletteId: number
+  targets: { type: 'fixture' | 'group'; key: string }[]
+  families?: string[]
+}
+
+export interface LookPressResponse {
+  action: 'applied' | 'removed'
+  /** The other palettes whose references the press took out. */
+  released?: number
+  look: LookDetails
+  /** A per-fixture palette's heads the press did not name, and the pressed heads it lands nothing on (D14). */
+  omitted?: string[]
+  notCovered?: string[]
+}
+
+/**
+ * *Copy the values* (palette-references plan D9): `POST looks/{id}/harden` and `cues/{id}/harden`.
+ * The rows by uuid, or absent for every reference the owner holds.
+ */
+export interface HardenRequest {
+  rowUuids?: string[]
+}
+
+/** Rows made literal, and rows left as references because a head they reach had nothing to keep. */
+export interface HardenResponse {
+  hardened: number
+  kept?: number
 }

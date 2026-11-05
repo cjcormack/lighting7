@@ -47,7 +47,7 @@ export function paletteSwatch(template: PaletteSummary): string | null {
 }
 
 /**
- * `2 effects · 3 values · 1 scenery`, or `empty`. A Look that only moves scenery is the busk
+ * `2 FX · 3 values (2 follow a palette) · 1 scenery`, or `empty`. A Look that only moves scenery is the busk
  * vehicle for it (scenery-programmer plan D9, D10) — the pad that flies the moon — so its scenery
  * counts as contents.
  */
@@ -57,7 +57,9 @@ export function describeLookContents(look: LookSummary): string {
     parts.push(`${look.fxCount} FX`)
   }
   if (look.rowCount > 0) {
-    parts.push(`${look.rowCount} ${look.rowCount === 1 ? 'value' : 'values'}`)
+    const references = look.referenceCount ?? 0
+    const following = references > 0 ? ` (${references} ${references === 1 ? 'follows' : 'follow'} a palette)` : ''
+    parts.push(`${look.rowCount} ${look.rowCount === 1 ? 'value' : 'values'}${following}`)
   }
   const scenery = look.scenery?.length ?? 0
   if (scenery > 0) parts.push(`${scenery} scenery`)

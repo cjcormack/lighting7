@@ -1,15 +1,18 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { AudioWaveform } from 'lucide-react'
+import { AudioWaveform, Palette } from 'lucide-react'
 import { computeCombinedCss } from '@/lib/colourMath'
 import { hexToRgb, parseExtendedColour } from '@/components/fx/colourUtils'
 import { parseProgrammerValue } from '@/lib/programmerValue'
 import { previewChipsThatFit } from './previewFit'
 import { dmxToCentre, formatCentre } from '@/lib/positionScale'
+import { cn } from '@/lib/utils'
+import type { PaletteReference } from '@/api/paletteReference'
 
 /**
- * Rendering one *stored Look literal*, which is the canonical assignment grammar and nothing else —
- * a Look row can never hold a `ref:` (the backend rejects that at the write boundary, because
- * nesting would make resolution recursive).
+ * Rendering one *stored Look literal*, the canonical assignment grammar — a Look row can never hold
+ * a `ref:` (the backend rejects that at the write boundary, because nesting would make resolution
+ * recursive). A row holding a palette reference, `pal:{uuid}`, is drawn by [LookReferenceChip] from
+ * what the desk resolved it to, never parsed here.
  *
  * Kept apart from the sheet's cell renderers deliberately. Those are editors bound to a fixture's
  * channel ranges; these are read-only chips that have no fixture in hand, so a position can only
@@ -82,6 +85,59 @@ export function LookValueChip({ value, className }: { value: string; className?:
       title={value}
     >
       {describeLookValue(value)}
+    </span>
+  )
+}
+
+/**
+ * One palette reference as a chip (palette-references plan D22): teal, the palette's name, and what
+ * it resolves to — *DSR Focus -14,+22* — or how many values where its heads resolve apart (a group
+ * row). Dashed while it no longer resolves (D3), the value then being the last one it did. With
+ * [onToggle] it is a toggle, the sheets' way of picking rows for *Copy the values*.
+ */
+export function LookReferenceChip({
+  reference,
+  resolved,
+  selected,
+  onToggle,
+}: {
+  reference: PaletteReference
+  /** The desk's literal per head; absent off the current project, where the name stands alone. */
+  resolved?: Record<string, string>
+  selected?: boolean
+  onToggle?: () => void
+}) {
+  const values = [...new Set(Object.values(resolved ?? {}))]
+  const shown = values.length === 1 ? describeLookValue(values[0]) : values.length > 1 ? `${values.length} values` : null
+  const title = [
+    `Follows ${reference.name}`,
+    values.length > 0 ? values.map(describeLookValue).join(', ') : null,
+    reference.unresolved ?? null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const className = cn(
+    'inline-flex h-5 shrink-0 items-center gap-1 rounded-full border bg-teal-400/15 px-2 text-[11px] font-semibold whitespace-nowrap text-teal-700 dark:text-teal-300',
+    reference.unresolved ? 'border-dashed border-teal-500/70' : 'border-transparent',
+    selected && 'ring-2 ring-teal-500',
+  )
+  const body = (
+    <>
+      <Palette aria-hidden className="size-[11px]" />
+      {reference.name}
+      {shown && <span className="font-mono font-normal">{shown}</span>}
+    </>
+  )
+  if (onToggle) {
+    return (
+      <button type="button" data-reference-chip className={className} title={title} aria-pressed={selected ?? false} onClick={onToggle}>
+        {body}
+      </button>
+    )
+  }
+  return (
+    <span data-reference-chip className={className} title={title}>
+      {body}
     </span>
   )
 }
