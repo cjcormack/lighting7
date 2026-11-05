@@ -12,6 +12,30 @@ const LOOKS = vi.hoisted(() => ({
     id: 4,
     rows: [{ targetType: 'fixture', targetKey: 'b', attribute: 'dimmer', value: '20' }],
   },
+  // Reference rows (palette-references plan D18): one fanned onto a Shehds's zones, one landing on a
+  // MAC 250's colour wheel — the desk's `resolvedByHead` keys and `resolvedAttributeByHead`.
+  5: {
+    id: 5,
+    rows: [
+      {
+        targetType: 'fixture',
+        targetKey: 'shehds',
+        attribute: 'rgbColour',
+        value: 'pal:red',
+        reference: { paletteId: 2, paletteUuid: 'red', name: 'Red' },
+        resolvedByHead: { 'shehds.zone-1': '#ff0000', 'shehds.zone-2': '#ff0000' },
+      },
+      {
+        targetType: 'fixture',
+        targetKey: 'mac',
+        attribute: 'rgbColour',
+        value: 'pal:red',
+        reference: { paletteId: 2, paletteUuid: 'red', name: 'Red' },
+        resolvedByHead: { mac: '24' },
+        resolvedAttributeByHead: { mac: 'colourWheel' },
+      },
+    ],
+  },
 }))
 /** Which layer the grid is pointed at — mutable, because moving the focus is a scenario. */
 const focused = vi.hoisted(() => ({ current: 7 }))
@@ -37,6 +61,12 @@ vi.mock('@/store/programmer', () => ({
         layerId: 9,
         source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Cold Wash' },
         targets: [{ type: 'fixture', key: 'b' }],
+        attributeMask: null,
+      },
+      {
+        layerId: 11,
+        source: { kind: 'LOOK', id: 5, uuid: 'u5', name: 'Follows Red' },
+        targets: [],
         attributeMask: null,
       },
       // A palette layer whose `source.id` **collides with LOOK 3** on purpose: the two live in
@@ -68,6 +98,7 @@ vi.mock('./ProgrammerScope', () => ({
 }))
 
 import { LookRowStoreProvider, useLookRowStore, useLookSaveState } from './LookRowStore'
+import { lookRowKey } from './lookRowKey'
 
 let captured: ReturnType<typeof useLookRowStore> = null
 let saveState = 'clean'
@@ -104,6 +135,18 @@ describe('LookRowStoreProvider', () => {
     draw()
     expect(captured?.lookId).toBe(3)
     expect(captured?.lookName).toBe('Warm Wash')
+  })
+
+  it('draws a reference row where the desk says it lands: a parent’s zones, a wheel’s property', () => {
+    focused.current = 11
+    draw()
+    const red = { paletteId: 2, paletteUuid: 'red', name: 'Red' }
+    expect(captured?.serverRows.get(lookRowKey('shehds.zone-1', 'rgbColour'))).toMatchObject({ kind: 'colour', r: 255 })
+    expect(captured?.serverReferences?.get(lookRowKey('shehds.zone-2', 'rgbColour'))).toEqual(red)
+    expect(captured?.serverRows.has(lookRowKey('shehds', 'rgbColour'))).toBe(false)
+    expect(captured?.serverRows.get(lookRowKey('mac', 'colourWheel'))).toEqual({ kind: 'level', value: 24 })
+    expect(captured?.serverReferences?.get(lookRowKey('mac', 'colourWheel'))).toEqual(red)
+    expect(captured?.serverRows.has(lookRowKey('mac', 'rgbColour'))).toBe(false)
   })
 
   it('coalesces a burst of commits into one save', () => {

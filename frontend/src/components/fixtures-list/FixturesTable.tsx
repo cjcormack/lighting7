@@ -38,7 +38,20 @@ import { cellHoldsBack } from '../../lib/heldBack'
 import { CellFxLens, CellFxLensHost } from './CellFxLens'
 import { useFxSelectionStore } from './fxSelection'
 import { lightingApi } from '../../api/lightingApi'
-import { applyStagedValue, cueSourceCellClass, cueSourceTitle, layerCellClass, ownershipCellClass, ownershipTitle } from './ownership'
+import {
+  applyStagedValue,
+  cellTitle,
+  cueSourceCellClass,
+  cueSourceTitle,
+  layerCellClass,
+  lookLayerCellClass,
+  ownershipCellClass,
+  ownershipTitle,
+  referenceCellClass,
+  referenceTitle,
+} from './ownership'
+import { LookLayerPill, ReferencePill } from './CellMarkPill'
+import { usePaletteNameByUuid } from '../fixtureSheet/fxLabels'
 import { cellSelectionClass } from '../sheet/cellSelection'
 import { useCellMarquee } from '../sheet/useCellMarquee'
 import { describeCellScope, type CellRef } from '../sheet/cellSelectionModel'
@@ -245,6 +258,9 @@ export function FixturesTable({
   onBackgroundClick,
   selectionDimmed = false,
 }: FixturesTableProps) {
+  // A reference whose frame names only a uuid (a cue's, in Output) is named from the library — read
+  // once here rather than subscribed per row.
+  const paletteName = usePaletteNameByUuid()
   const scrollRef = useRef<HTMLDivElement>(null)
   // One subscription for the whole grid; every row takes the answer as a prop.
   const deskConnected = useIsDeskConnected()
@@ -497,6 +513,7 @@ export function FixturesTable({
                 >
                   <RowView
                     row={row}
+                    paletteName={paletteName}
                     visibleColumns={visibleColumns}
                     gridTemplateColumns={gridTemplateColumns}
                     selected={row.kind !== 'divider' && isSelected(row.id)}
@@ -591,6 +608,8 @@ export function FixturesTable({
 
 interface RowViewProps {
   row: Row
+  /** A palette's name by uuid, for a reference's pill and hover (palette-references plan D18). */
+  paletteName: (uuid: string) => string | undefined
   visibleColumns: readonly ColumnKey[]
   gridTemplateColumns: string
   selected: boolean
@@ -701,6 +720,7 @@ const EMPTY_CELLS: RowCell[] = []
 
 const RowView = React.memo(function RowView({
   row,
+  paletteName,
   visibleColumns,
   gridTemplateColumns,
   selected,
@@ -969,6 +989,14 @@ const RowView = React.memo(function RowView({
         }
         const owned = ownership[col]
         const layer = owned?.layer
+        // A reference's mark (palette-references plan D18): the operator's own entry or a cue's row in
+        // Output and Local, a focused Look's stored row in layer scope; the cue editor's comes on its
+        // source. A Look layer's own pill (D19) stands only where no reference does.
+        const reference = owned?.reference ?? state?.reference
+        const cueReference = state?.source?.kind === 'reference' ? state.source.reference : undefined
+        const pillReference = reference ?? cueReference
+        const lookLayer = !pillReference && layer != null && !layer.mixed && layer.source?.kind === 'LOOK' ? layer : undefined
+        const headName = isGroup ? undefined : qualifiedName
         // **Held back** (fixture-fx-sheets plan D19): an effect runs under this cell's value and
         // the programmer's entry is what stops it painting — `lib/heldBack.ts`'s rule, the sheet's
         // amber dot's. Asked only where ownership is drawn: the row re-renders on its keys' moves,
@@ -1015,6 +1043,8 @@ const RowView = React.memo(function RowView({
               ownershipCellClass(owned),
               layerCellClass(scope?.kind === 'layer' ? state : undefined),
               cueSourceCellClass(state?.source),
+              referenceCellClass(reference),
+              lookLayerCellClass(lookLayer),
               cellSelectionClass(selectedCell, true, selectionDimmed),
               // Output is a read of the cook. Editing it would have to pick a destination, and
               // choosing one is what the scope switcher is for — so the cell reads and the
@@ -1033,7 +1063,14 @@ const RowView = React.memo(function RowView({
                 ? DESK_OFFLINE_LABEL
                 : heldBack
                   ? `${ownershipTitle(owned) ?? 'Programmer'} · holds an FX back — open the cell for its stack`
-                  : (cueSourceTitle(state?.source) ?? ownershipTitle(owned))
+                  : (cueSourceTitle(state?.source, headName) ??
+                    (state?.reference != null && scope?.kind === 'layer'
+                      ? referenceTitle('This Look', state.reference, state.reference.name, headName)
+                      : cellTitle(
+                          owned,
+                          owned?.reference?.paletteUuid != null ? paletteName(owned.reference.paletteUuid) : undefined,
+                          headName,
+                        )))
             }
           >
             {/* The winning Look layer, layered around the cell rather than inside it — the same
@@ -1041,9 +1078,9 @@ const RowView = React.memo(function RowView({
                 shape, and a marker drawn inside one of them would have to be drawn four times.
                 It used to share the cell with a `ref:` marker (a left rail plus a `Link2` in the
                 *opposite* corner, so the two icons stayed readable together); that retired with the
-                grammar in session 4, so this glyph now has the cell to itself. Title-only detail —
-                the hover text names the look, and a name would not fit here at this density. */}
-            {layer && (
+                grammar in session 4. Where one Look layer won the whole cell its pill names it
+                instead (D19); the glyph stays for a cell several layers share. */}
+            {layer && !lookLayer && !pillReference && (
               <Layers
                 className={`pointer-events-none absolute bottom-0.5 right-1 size-2.5 ${
                   layer.mixed ? 'text-muted-foreground/50' : 'text-muted-foreground'
@@ -1063,59 +1100,67 @@ const RowView = React.memo(function RowView({
                 {fxDivision}
               </span>
             )}
-            <AttributeCell
-              cell={cell}
-              label={columnLabel(col)}
-              // The staged overlay is applied to whatever the scope resolved, not only to the live
-              // read: in Output — where `state.value` is always set — short-circuiting past
-              // `applyStagedValue` dropped the optimistic feedback for a write still in flight, and
-              // that cell then sat on its old value until the wire caught up. In layer scope
-              // ownership is switched off, so `owned` is undefined there and this is a no-op.
-              value={applyStagedValue(
-                state?.value ?? live,
-                owned?.staged,
-                cell.resolutions,
-              )}
-              // Not `state == null`: a divider or a scope with no opinion is not the same as a
-              // scope that has one and says "nothing here".
-              placeholder={state !== undefined && state.value === undefined}
-              batch={batchFor(row, col)}
-              scopeLabel={scopeLabel}
-              projectId={projectId}
-              onSpread={onSpread}
-              // Belt and braces with the wrapper's `pointer-events-none` below: that stops the
-              // mouse, this stops the keyboard. The trigger is tabbable, so Tab-then-Enter would
-              // otherwise walk straight past the guard and open an editor whose commit is dropped.
-              // It also stops the trigger's own `onClick` — which on this grid is the selection —
-              // so a read-only cell cannot be selected by keyboard either.
-              //
-              // **Both reasons a cell takes no edit, not just the offline one.** `editable: false`
-              // is the *scope's* statement — Output is a read of the cook, and a focused template
-              // layer is a read of a template — and it reached only the pointer. A commit through
-              // the keyboard hole did not get dropped: `useCellWriters` has no scope arm for either
-              // (a template layer mints no `lookLayer` context), so it landed in Local, on a grid
-              // drawing itself as read-only.
-              disabled={cellsInert || state?.editable === false}
-              autoOpen={autoOpenCol === col}
-              autoClose={autoCloseCol === col}
-              anchorAtButton={autoOpenCol === col && autoOpenAtButton}
-              keyboardSeed={autoOpenCol === col ? autoOpenSeed : null}
-              selectionEmpty={selectionEmpty}
-              // A **single** click on a value cell selects it; a **double** click opens its
-              // editor — which is also opened by the selection bar's Set, by ⏎ and by typing. So
-              // the drag, the click and the keys all say *what* to edit and one gesture says
-              // *edit it*. Constant on this grid since every list it serves selects cells; the
-              // flag stays on the cells themselves for `CueValueGrid`, which has no selection and
-              // must keep click-to-open or lose every way in. See `CellClickBehaviour`.
-              clickSelects
-              editorAnchorRef={editorAnchorRef}
-              onBeginEdit={() => onBeginCellEdit(row, col)}
-              onCommit={(commit) => onCellCommit(row, col, commit)}
-              // The source chip on the editor's label line (D19) wherever ownership is drawn — Local
-              // scope on the programmer; Output's cells take no edit, and a focused Look layer's
-              // draft has no stack (§8).
-              sourceKeys={owned != null ? cell.keys : undefined}
-            />
+            {/* The cell and its pill side by side, always in this wrapper so a cell turning into a
+                reference (a palette pressed from its own editor) never remounts the editor. */}
+            <div className="flex h-full min-w-0 items-center gap-1">
+              <div className="h-full min-w-0 flex-1">
+                <AttributeCell
+                  cell={cell}
+                  label={columnLabel(col)}
+                  // The staged overlay is applied to whatever the scope resolved, not only to the live
+                  // read: in Output — where `state.value` is always set — short-circuiting past
+                  // `applyStagedValue` dropped the optimistic feedback for a write still in flight, and
+                  // that cell then sat on its old value until the wire caught up. In layer scope
+                  // ownership is switched off, so `owned` is undefined there and this is a no-op.
+                  value={applyStagedValue(
+                    state?.value ?? live,
+                    owned?.staged,
+                    cell.resolutions,
+                  )}
+                  // Not `state == null`: a divider or a scope with no opinion is not the same as a
+                  // scope that has one and says "nothing here".
+                  placeholder={state !== undefined && state.value === undefined}
+                  batch={batchFor(row, col)}
+                  scopeLabel={scopeLabel}
+                  projectId={projectId}
+                  onSpread={onSpread}
+                  // Belt and braces with the wrapper's `pointer-events-none` below: that stops the
+                  // mouse, this stops the keyboard. The trigger is tabbable, so Tab-then-Enter would
+                  // otherwise walk straight past the guard and open an editor whose commit is dropped.
+                  // It also stops the trigger's own `onClick` — which on this grid is the selection —
+                  // so a read-only cell cannot be selected by keyboard either.
+                  //
+                  // **Both reasons a cell takes no edit, not just the offline one.** `editable: false`
+                  // is the *scope's* statement — Output is a read of the cook, and a focused template
+                  // layer is a read of a template — and it reached only the pointer. A commit through
+                  // the keyboard hole did not get dropped: `useCellWriters` has no scope arm for either
+                  // (a template layer mints no `lookLayer` context), so it landed in Local, on a grid
+                  // drawing itself as read-only.
+                  disabled={cellsInert || state?.editable === false}
+                  autoOpen={autoOpenCol === col}
+                  autoClose={autoCloseCol === col}
+                  anchorAtButton={autoOpenCol === col && autoOpenAtButton}
+                  keyboardSeed={autoOpenCol === col ? autoOpenSeed : null}
+                  selectionEmpty={selectionEmpty}
+                  // A **single** click on a value cell selects it; a **double** click opens its
+                  // editor — which is also opened by the selection bar's Set, by ⏎ and by typing. So
+                  // the drag, the click and the keys all say *what* to edit and one gesture says
+                  // *edit it*. Constant on this grid since every list it serves selects cells; the
+                  // flag stays on the cells themselves for `CueValueGrid`, which has no selection and
+                  // must keep click-to-open or lose every way in. See `CellClickBehaviour`.
+                  clickSelects
+                  editorAnchorRef={editorAnchorRef}
+                  onBeginEdit={() => onBeginCellEdit(row, col)}
+                  onCommit={(commit) => onCellCommit(row, col, commit)}
+                  // The source chip on the editor's label line (D19) wherever ownership is drawn — Local
+                  // scope on the programmer; Output's cells take no edit, and a focused Look layer's
+                  // draft has no stack (§8).
+                  sourceKeys={owned != null ? cell.keys : undefined}
+                />
+              </div>
+              {pillReference != null && <ReferencePill reference={pillReference} nameOf={paletteName} />}
+              {lookLayer?.name != null && <LookLayerPill name={lookLayer.name} />}
+            </div>
             {scope?.kind === 'output' && <OwnerJumpOverlay owned={owned} />}
             {/* The FX lens (tables-colours plan D3): the effects painting this cell as a chip in
                 the marks gutter, and the FX table's selection as a ring. It takes over the corner's

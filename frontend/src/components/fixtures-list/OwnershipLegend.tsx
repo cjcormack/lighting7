@@ -3,7 +3,7 @@ import { AudioWaveform, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
 import { LENS_CHIP_FACE, lensChipTone } from './lensChip'
-import { OWNERSHIP_LABELS, layerCellClass, ownershipCellClass } from './ownership'
+import { OWNERSHIP_LABELS, layerCellClass, lookLayerCellClass, ownershipCellClass, referenceCellClass } from './ownership'
 import {
   LAYER_LEGEND_GLOSS,
   LAYER_LEGEND_ORDER,
@@ -12,6 +12,10 @@ import {
   LEGEND_SHORT,
   LENS_HELD_GLOSS,
   LENS_HELD_SHORT,
+  LOOK_LAYER_LEGEND_GLOSS,
+  LOOK_LAYER_LEGEND_SHORT,
+  REFERENCE_LEGEND_GLOSS,
+  REFERENCE_LEGEND_SHORT,
 } from './ownershipLegendModel'
 import type { LayerLegendKey } from './ownershipLegendModel'
 import type { CellState } from './scopedCellValue'
@@ -77,16 +81,21 @@ export function OwnershipLegend({
         </Fragment>
       ))}
       {/* Hidden below `@[520px]` rather than left to be clipped: the row is `overflow-hidden` and
-          every item is `shrink-0`, so the alternative is this badge sliced off mid-word with
-          nothing saying it was there. It is the item furthest from the counts and the one whose
-          glyph the cells themselves already carry, so it is the right one to drop first. */}
+          every item is `shrink-0`, so the alternative is these sliced off mid-word with nothing
+          saying they were there. They are the items furthest from the counts, and the cells carry
+          their pills, so they are the right ones to drop first. */}
       <span
         className="ml-auto hidden shrink-0 items-center gap-1.5 @[520px]:flex"
-        title="came from a Look layer"
+        title={REFERENCE_LEGEND_GLOSS}
       >
-        <Layers aria-hidden="true" className="size-3" />
-        <span className="@[1100px]:hidden">from a layer</span>
-        <span className="hidden @[1100px]:inline">came from a Look layer</span>
+        <ReferenceSwatch />
+        <span className="@[1100px]:hidden">{REFERENCE_LEGEND_SHORT}</span>
+        <span className="hidden @[1100px]:inline">{REFERENCE_LEGEND_GLOSS}</span>
+      </span>
+      <span className="hidden shrink-0 items-center gap-1.5 @[520px]:flex" title={LOOK_LAYER_LEGEND_GLOSS}>
+        <LookLayerSwatch />
+        <span className="@[1100px]:hidden">{LOOK_LAYER_LEGEND_SHORT}</span>
+        <span className="hidden @[1100px]:inline">{LOOK_LAYER_LEGEND_GLOSS}</span>
       </span>
     </LegendFooter>
   )
@@ -138,6 +147,27 @@ function LensChipSample({ held }: { held: boolean }) {
     <span aria-hidden className={cn(LENS_CHIP_FACE, 'shrink-0', lensChipTone(held))}>
       <AudioWaveform className="size-2" />½
     </span>
+  )
+}
+
+/** A reference of yours, as a cell draws it: your ring under the reference's teal edge (D18). */
+function ReferenceSwatch() {
+  return (
+    <LegendSwatch
+      className={cn(
+        ownershipCellClass(swatchOwnership('programmer')),
+        referenceCellClass({ count: 1, of: 1, severalPalettes: false }),
+      )}
+    />
+  )
+}
+
+/** A Look layer's value, as a cell draws it (D19). */
+function LookLayerSwatch() {
+  return (
+    <LegendSwatch className={lookLayerCellClass({ mixed: false })}>
+      <Layers aria-hidden="true" className="size-2.5" />
+    </LegendSwatch>
   )
 }
 
@@ -229,8 +259,12 @@ export function OwnershipKey() {
         </Fragment>
       ))}
       <li className="flex items-center gap-2">
-        <Layers aria-hidden="true" className="size-3 shrink-0" />
-        came from a Look layer
+        <ReferenceSwatch />
+        {REFERENCE_LEGEND_GLOSS}
+      </li>
+      <li className="flex items-center gap-2">
+        <LookLayerSwatch />
+        {LOOK_LAYER_LEGEND_GLOSS}
       </li>
     </KeyList>
   )

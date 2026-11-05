@@ -13,6 +13,7 @@ import { useCueRowStore, type CueCellSource, type CueRowStoreValue } from '../cu
 import { useRowValues } from './useRowValues'
 import type { AttributeFamily } from '../../lib/attributeFamily'
 import type { CellState, CueCellStateSource, RowCellStates, StagedPart } from './scopedCellValue'
+import { referenceAcross } from './cellReference'
 import type { RowCell } from './useRowValues'
 import type { LookRowStoreValue } from '../programmer/LookRowStore'
 import type { FocusedPaletteLayerValue } from '../programmer/FocusedPaletteLayer'
@@ -198,6 +199,19 @@ function useLayerRowValues(
         editable: tone === undefined,
       }
       if (tone) state.tone = tone
+      // A committed reference row no pending edit has replaced is drawn as one (D18).
+      const references = store.serverReferences
+      if (state.value && references != null && references.size > 0) {
+        const perHead = cell.keys.map(({ targetKey, attribute }) => ({
+          head: targetKey,
+          reference:
+            store.draft.get(targetKey, attribute) === undefined
+              ? references.get(lookRowKey(targetKey, attribute))
+              : undefined,
+        }))
+        const reference = referenceAcross(perHead, cell.targetKeys)
+        if (reference) state.reference = reference
+      }
       states[cell.col] = state
     }
     return states
@@ -317,39 +331,52 @@ function useCueRowValues(
     if (cells.length === 0 || !store) return EMPTY_STATES
     const states: RowCellStates = {}
     for (const cell of cells) {
-      const sources: CueCellSource[] = []
+      const sources: { head: string; source: CueCellSource }[] = []
       const lookup = (targetKey: string, attribute: string): StagedValue | undefined => {
         const hit = store.lookup(targetKey, attribute, group)
         if (!hit) return undefined
         const staged = parseProgrammerValue(hit.value)
-        if (staged) sources.push(hit.source)
+        if (staged) sources.push({ head: targetKey, source: hit.source })
         return staged ?? undefined
       }
       const parts = cell.resolutions.map((res, i) => stagedPartFor(res, cell.targetKeys[i], lookup))
       const value = cellValueFromParts(cell.resolutions, parts)
       const state: CellState = { value, editable: !store.readOnly }
-      if (value) state.source = cueSourceOf(sources)
+      if (value) state.source = cueSourceOf(sources, cell.targetKeys)
       states[cell.col] = state
     }
     return states
   }, [cells, store, group, draftVersion])
 }
 
-/** One cell's source from its parts': own, one Look, or mixed. */
-function cueSourceOf(sources: readonly CueCellSource[]): CueCellStateSource {
+/**
+ * One cell's source from its parts': own, own rows that are palette references (some or all of the
+ * cell's heads, D18, D20), one Look, or mixed.
+ */
+export function cueSourceOf(
+  perHead: readonly { head: string; source: CueCellSource }[],
+  cellHeads: readonly string[],
+): CueCellStateSource {
+  const sources = perHead.map((p) => p.source)
   const first = sources[0]
   if (first == null) return { kind: 'mixed' }
   if (sources.every((s) => s.kind === 'own')) {
     const overrides = sources.find((s) => s.kind === 'own' && s.overrides != null)
     const groupName = first.kind === 'own' && first.targetType === 'group' ? first.targetKey : undefined
-    return {
-      kind: 'own',
+    const own = {
       overrides: overrides?.kind === 'own' ? overrides.overrides : undefined,
       group: sources.every((s) => s.kind === 'own' && s.targetType === 'group' && s.targetKey === groupName) ? groupName : undefined,
     }
+    const reference = referenceAcross(
+      perHead.map(({ head, source }) => ({ head, reference: source.kind === 'own' ? source.reference : undefined })),
+      cellHeads,
+    )
+    if (reference) return { kind: 'reference', reference, ...own }
+    return { kind: 'own', ...own }
   }
   if (first.kind === 'layer' && sources.every((s) => s.kind === 'layer' && s.layerId === first.layerId)) {
     return { kind: 'layer', name: first.name }
   }
   return { kind: 'mixed' }
 }
+

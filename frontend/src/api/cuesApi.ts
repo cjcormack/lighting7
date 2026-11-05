@@ -194,6 +194,8 @@ export interface CueAttributeAssignment {
   reference?: PaletteReference
   /** What the reference resolves to on each head it reaches, head key → literal; the live project's reads only. */
   resolvedByHead?: Record<string, string>
+  /** The property a head's resolved literal lands under, where it is not the row's (a colour wheel). */
+  resolvedAttributeByHead?: Record<string, string>
 }
 
 // ─── Script trigger types ──────────────────────────────────────────
@@ -528,6 +530,8 @@ export interface CookedRow {
    */
   sourceTargetType?: 'fixture' | 'group' | null
   sourceTargetKey?: string | null
+  /** The palette's uuid, where this is one of the cue's own `pal:` rows resolved here (palette-references plan D18). */
+  reference?: string | null
 }
 
 export interface CueCookedResponse {

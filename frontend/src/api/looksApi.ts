@@ -46,6 +46,8 @@ export interface LookRow {
   reference?: PaletteReference
   /** What the reference resolves to on each head it reaches, head key → literal; the live project's reads only. */
   resolvedByHead?: Record<string, string>
+  /** The property a head's resolved literal lands under, where it is not the row's (a colour wheel). */
+  resolvedAttributeByHead?: Record<string, string>
 }
 
 /**

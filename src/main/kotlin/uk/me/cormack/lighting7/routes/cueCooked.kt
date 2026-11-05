@@ -68,6 +68,8 @@ data class CookedRowDto(
      */
     val sourceTargetType: String? = null,
     val sourceTargetKey: String? = null,
+    /** The palette's uuid, where this row is one of the cue's own `pal:` rows resolved here (palette-references plan D18). */
+    val reference: String? = null,
 )
 
 @Serializable
@@ -107,6 +109,7 @@ internal fun Route.routeApiRestCueCooked(state: State) {
                             layerSource = row.layerWinner?.source?.toDto(),
                             sourceTargetType = row.sourceTarget?.discriminator,
                             sourceTargetKey = row.sourceTarget?.key,
+                            reference = row.reference?.toString(),
                         )
                     },
                 ),

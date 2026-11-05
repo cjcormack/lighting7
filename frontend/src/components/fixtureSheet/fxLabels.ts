@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
+import { usePaletteListQuery } from '@/store/palettes'
 import { isCueRow } from '@/api/cueStacksApi'
 import { fxSpeedLabel } from '../fx/fxConstants'
 import { isOnSeconds } from '@/lib/fxTiming'
@@ -44,4 +45,15 @@ export function useCueLabel(): (cueId: number) => string | undefined {
     return map
   }, [stacks])
   return useCallback((cueId: number) => byId.get(cueId), [byId])
+}
+
+/**
+ * A palette's name by uuid, from the current project's library — for a reference whose frame names
+ * only the uuid (a cue's provenance, palette-references plan D6). Naming, never resolving.
+ */
+export function usePaletteNameByUuid(): (uuid: string) => string | undefined {
+  const { data: project } = useCurrentProjectQuery()
+  const { data: palettes } = usePaletteListQuery({ projectId: project?.id ?? 0 }, { skip: project == null })
+  const byUuid = useMemo(() => new Map((palettes ?? []).map((p) => [p.uuid, p.name])), [palettes])
+  return useCallback((uuid: string) => byUuid.get(uuid), [byUuid])
 }

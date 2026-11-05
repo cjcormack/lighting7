@@ -35,6 +35,7 @@ import type {
 import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } from './maskPicker'
 import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import { RecordSceneryRow } from './RecordSceneryRow'
+import { RecordReferencesNote } from './RecordReferencesNote'
 import { announceWrite, recordLookNote } from './writeToasts'
 import { trackHistoryWrites } from '@/store/restApi'
 import { entryUndoAction } from '@/components/history/historyActions'
@@ -387,6 +388,13 @@ export function RecordLookSheet({
           <MaskedAttributes value={mask} onChange={setMask} />
 
           <RecordableFx value={fxIds} onChange={setFxIds} layer={creating && (makeLayer || asLayer)} />
+
+          {mode !== 'REMOVE' && (
+            <RecordReferencesNote
+              destination="look"
+              scope={{ source, families: maskToWire(mask) ?? null, targetKeys: scoped ? selection.map((t) => t.key) : null }}
+            />
+          )}
 
           <RecordSceneryRow
             projectId={projectId}

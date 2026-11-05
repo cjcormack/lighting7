@@ -82,11 +82,11 @@ export function palettePressTitle(template: PaletteSummary, into: PressInto): st
   if (into.kind === 'cue') {
     return template.kind === 'fx'
       ? `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · hold or right-click for more`
-      : `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · ⌥click to set its values as ${into.cueLabel}’s own · hold or right-click for more`
+      : `Click to put “${template.name}” on in ${into.cueLabel} as references to it, or take it off · ⌥click to set its values as ${into.cueLabel}’s own · hold or right-click for more`
   }
   return template.kind === 'fx'
     ? `Click to run “${template.name}” as a layer that tracks it · ⌥click to run a copy · hold or right-click for more`
-    : `Click to put “${template.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`
+    : `Click to put “${template.name}” on as references that follow it · ⌥click to set its values as literals · hold or right-click for more`
 }
 
 /**
@@ -106,6 +106,7 @@ export function PalettePressButton({
   into,
   presence,
   hasTargets = true,
+  reachLabel,
   onGesture,
   children,
 }: {
@@ -116,6 +117,8 @@ export function PalettePressButton({
   presence: FxPresence
   /** False when the press carries no targets — the ring cannot then say which way it goes. */
   hasTargets?: boolean
+  /** A per-fixture palette's *Put on Spot 2 and Spot 3 — its Spot 1 and Spot 4 are left out* (D21), for an on press. */
+  reachLabel?: string | null
   onGesture: (template: PaletteSummary, gesture: PressGesture) => void
   /** The button itself, given the gesture handlers to spread. */
   children: (handlers: ReturnType<typeof usePressGestures>) => ReactElement
@@ -135,6 +138,7 @@ export function PalettePressButton({
           into={into}
           presence={presence}
           hasTargets={hasTargets}
+          reachLabel={reachLabel}
           onGesture={(g) => {
             setMenuOpen(false)
             gesture(g)
@@ -153,6 +157,7 @@ function PalettePressMenu({
   into,
   presence,
   hasTargets,
+  reachLabel,
   onGesture,
   onDone,
 }: {
@@ -161,6 +166,7 @@ function PalettePressMenu({
   into: PressInto
   presence: FxPresence
   hasTargets: boolean
+  reachLabel?: string | null
   onGesture: (gesture: PressGesture) => void
   onDone: () => void
 }) {
@@ -171,6 +177,7 @@ function PalettePressMenu({
       into={into}
       presence={presence}
       hasTargets={hasTargets}
+      reachLabel={reachLabel}
       ownHeads={!template.isGeneric}
       asValues={into.kind === 'programmer' || (into.kind === 'cue' && template.kind !== 'fx')}
       onGesture={onGesture}
@@ -242,11 +249,14 @@ function PressMenuItems({
   ownHeads,
   whole = false,
   asValues = into.kind === 'programmer',
+  reachLabel,
   onGesture,
   onPickUp,
   onEdit,
   editLabel,
 }: {
+  /** Names the heads an on press lands on and leaves out, in place of the bare *Put on*. */
+  reachLabel?: string | null
   name: string
   into: PressInto
   presence: FxPresence
@@ -263,7 +273,9 @@ function PressMenuItems({
   onEdit?: () => void
   editLabel?: string
 }) {
-  const verb = tapVerb(into, presence, hasTargets, ownHeads, whole)
+  const tap = tapVerb(into, presence, hasTargets, ownHeads, whole)
+  const verb =
+    reachLabel != null && into.kind === 'programmer' && tap.gesture === 'press' ? { ...tap, label: reachLabel } : tap
   return (
     <div role="menu" aria-label={name} className="flex flex-col">
       <MenuItem icon={verb.gesture === 'off' ? Undo2 : Layers} label={verb.label} onSelect={() => onGesture(verb.gesture)} />

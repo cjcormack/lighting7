@@ -1193,6 +1193,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     uuid = it.uuid.toString(),
                     reference = read?.reference,
                     resolvedByHead = read?.resolvedByHead,
+                    resolvedAttributeByHead = read?.resolvedAttributeByHead,
                 )
             },
         fx = fxInOrder()

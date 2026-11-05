@@ -28,6 +28,7 @@ import {
 import { appendItem, replaceAt } from './cueListEdits'
 import { lastIndexOfDraft } from '@/components/fx/draftFx'
 import { trackHistoryWrites } from '@/store/restApi'
+import type { PaletteReference } from '@/api/paletteReference'
 import { onHistoryMoved, undoHistoryRequests } from '@/components/history/historyActions'
 
 /**
@@ -69,7 +70,7 @@ interface ListEdits {
  * editor has seen one win the cell.
  */
 export type CueCellSource =
-  | { kind: 'own'; targetType: CueRowTargetType; targetKey: string; overrides?: string }
+  | { kind: 'own'; targetType: CueRowTargetType; targetKey: string; overrides?: string; reference?: PaletteReference }
   | { kind: 'layer'; layerId: number | null; name: string | null }
 
 /** One composed value: the canonical assignment string and what said it. */
@@ -573,22 +574,48 @@ export function CueRowStoreProvider({
     return draft.subscribeAll(read)
   }, [draft])
 
-  const storedGroupRows = useMemo(() => {
-    const out = new Map<string, string>()
+  // The cue's stored rows by target and canonical attribute — a group's own row is drawn from here — and
+  // each reference row's palette by uuid, which a composed own value's `reference` names.
+  const { storedRows, landedGroupRows, referenceByUuid } = useMemo(() => {
+    const rowsByKey = new Map<string, CueAttributeAssignment>()
+    // A group reference landing under another property on a head (a colour wheel), by group, head and that property.
+    const landed = new Map<string, CueAttributeAssignment>()
+    const byUuid = new Map<string, PaletteReference>()
     for (const row of assignments) {
-      if (row.targetType === 'group') out.set(cueRowKey('group', row.targetKey, row.attribute), row.value)
+      rowsByKey.set(cueRowKey(row.targetType, row.targetKey, canonicalCueAttribute(row.attribute)), row)
+      if (row.targetType === 'group') {
+        for (const [head, attribute] of Object.entries(row.resolvedAttributeByHead ?? {})) {
+          landed.set(landedKey(row.targetKey, head, attribute), row)
+        }
+      }
+      if (row.reference != null) byUuid.set(row.reference.paletteUuid, row.reference)
     }
-    return out
+    return { storedRows: rowsByKey, landedGroupRows: landed, referenceByUuid: byUuid }
   }, [assignments])
 
   const value = useMemo<CueRowStoreValue>(() => {
     // The heads and own targets below read the draft's set entries; `draftShape` is what changes
     // when those do, so the memo is rebuilt then and not on every keystroke.
     void draftShape
-    const own = (targetType: CueRowTargetType, targetKey: string, v: string, cellKey: string): CueCellValue => ({
+    const own = (
+      targetType: CueRowTargetType,
+      targetKey: string,
+      v: string,
+      cellKey: string,
+      reference?: PaletteReference,
+    ): CueCellValue => ({
       value: v,
-      source: { kind: 'own', targetType, targetKey, overrides: overriddenRef.current.get(cellKey) },
+      source: { kind: 'own', targetType, targetKey, overrides: overriddenRef.current.get(cellKey), ...(reference ? { reference } : {}) },
     })
+    /** A stored row's value on one head: a reference's resolution there (the desk's, never ours), else the literal. */
+    const storedValueOn = (row: CueAttributeAssignment, headKey: string): string | undefined =>
+      row.reference != null ? row.resolvedByHead?.[headKey] : row.value
+    /** A group's own row on one head and property: by its own property, else a reference landing there. */
+    const storedGroupRow = (group: string, headKey: string, attribute: string): CueAttributeAssignment | undefined =>
+      storedRows.get(cueRowKey('group', group, attribute)) ?? landedGroupRows.get(landedKey(group, headKey, attribute))
+    /** The palette a composed own value came from: the cook names its uuid (palette-references plan D18). */
+    const referenceOf = (cooked: CookedRow): PaletteReference | undefined =>
+      cooked.reference != null ? referenceByUuid.get(cooked.reference) : undefined
     const lookup = (headKey: string, rawAttribute: string, group?: string): CueCellValue | undefined => {
       const attribute = canonicalCueAttribute(rawAttribute)
       const cellKey = lookRowKey(headKey, attribute)
@@ -598,8 +625,9 @@ export function CueRowStoreProvider({
         const pending = draft.get('group', group, attribute)
         if (pending?.kind === 'removed') return undefined
         if (pending?.kind === 'set') return own('group', group, pending.value, cellKey)
-        const stored = storedGroupRows.get(cueRowKey('group', group, attribute))
-        return stored == null ? undefined : own('group', group, stored, cellKey)
+        const stored = storedGroupRow(group, headKey, attribute)
+        const storedValue = stored == null ? undefined : storedValueOn(stored, headKey)
+        return stored == null || storedValue == null ? undefined : own('group', group, storedValue, cellKey, stored.reference)
       }
       const pending = draft.get('fixture', headKey, attribute)
       if (pending?.kind === 'set') return own('fixture', headKey, pending.value, cellKey)
@@ -608,7 +636,7 @@ export function CueRowStoreProvider({
       const sourceKey = cooked?.sourceTargetKey ?? cooked?.targetKey
       const cookedOwn = cooked != null && cooked.layerId == null
       if (cookedOwn && sourceType === 'fixture' && pending?.kind !== 'removed') {
-        return own('fixture', sourceKey ?? headKey, cooked.value, cellKey)
+        return own('fixture', sourceKey ?? headKey, cooked.value, cellKey, referenceOf(cooked))
       }
       // A group's own row reaches its members unless a fixture row of their own beats it.
       for (const name of groupsByHead.get(headKey) ?? []) {
@@ -616,7 +644,9 @@ export function CueRowStoreProvider({
         if (groupPending?.kind === 'set') return own('group', name, groupPending.value, cellKey)
       }
       if (cookedOwn && sourceType === 'group' && sourceKey != null) {
-        if (draft.get('group', sourceKey, attribute)?.kind !== 'removed') return own('group', sourceKey, cooked.value, cellKey)
+        if (draft.get('group', sourceKey, attribute)?.kind !== 'removed') {
+          return own('group', sourceKey, cooked.value, cellKey, referenceOf(cooked))
+        }
         return undefined
       }
       if (cooked != null && cooked.layerId != null) {
@@ -629,9 +659,9 @@ export function CueRowStoreProvider({
       const pending = draft.get(targetType, targetKey, attribute)
       if (pending?.kind === 'set') return pending.value
       if (targetType === 'group') {
-        const stored = storedGroupRows.get(cueRowKey('group', targetKey, attribute))
-        if (stored != null) return stored
         const member = (fixtures ?? []).find((f) => f.groups.includes(targetKey))
+        const stored = storedRows.get(cueRowKey('group', targetKey, attribute))
+        if (stored != null) return member ? storedValueOn(stored, member.key) : stored.reference == null ? stored.value : undefined
         return member ? cookedByKey.get(lookRowKey(member.key, attribute))?.value : undefined
       }
       return cookedByKey.get(lookRowKey(targetKey, attribute))?.value
@@ -708,7 +738,9 @@ export function CueRowStoreProvider({
     rows,
     assignments,
     cookedByKey,
-    storedGroupRows,
+    storedRows,
+    landedGroupRows,
+    referenceByUuid,
     groupsByHead,
     fixtures,
     setValue,
@@ -763,3 +795,5 @@ function wordsFor(step: UndoStep): string {
 function cueLabelOf(cue: Cue): string {
   return cue.cueNumber ? `Q${cue.cueNumber}` : cue.name
 }
+
+const landedKey = (group: string, head: string, attribute: string) => `${group}\u0000${head}\u0000${attribute}`

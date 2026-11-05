@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AudioWaveform, Lock } from 'lucide-react'
+import { AudioWaveform, Lock, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PickSource, RowSource, RowSourceKind } from './rowSource'
 import { LayerStack } from './LayerStack'
@@ -16,7 +16,19 @@ export const SOURCE_EDGE_CLASS: Record<RowSourceKind, string> = {
   base: 'before:bg-transparent',
 }
 
+/** A palette reference's edge (palette-references plan D18), in place of its owner's. */
+export const REFERENCE_EDGE_CLASS = 'before:bg-teal-400'
+export const REFERENCE_MIXED_EDGE_CLASS =
+  'before:bg-[repeating-linear-gradient(to_bottom,var(--color-teal-400)_0_4px,transparent_4px_7px)]'
+
+/** A row's 3px edge: its source's colour, a reference's teal, dashed over a pick whose heads disagree. */
+export function sourceEdgeClass(source: RowSource, mixed = false): string {
+  if (source.reference) return mixed ? REFERENCE_MIXED_EDGE_CLASS : REFERENCE_EDGE_CLASS
+  return mixed ? MIXED_EDGE_CLASS[source.kind] : SOURCE_EDGE_CLASS[source.kind]
+}
+
 function chipClass(source: RowSource): string {
+  if (source.reference) return 'border-teal-400/60 bg-teal-400/15 text-teal-700 dark:text-teal-300'
   switch (source.kind) {
     case 'programmer':
       // Filled once touched; an outline while it is only what Include brought in (Layers board).
@@ -79,6 +91,10 @@ export function SourceChip({
   // *Programmer · 2 of 4* — how many of the picked heads the shown source holds (note 4).
   const count = 'mixed' in source && source.mixed ? `${source.count} of ${source.of}` : null
   const words = count ? `${source.label} · ${count}` : source.label
+  // Whose the reference is, as the grid's hover says it (D18): *Yours: DSR Focus*.
+  const named = source.reference
+    ? `${source.kind === 'programmer' ? 'Yours' : 'Cue'}: ${words}${source.reference.unresolved ? ` · ${source.reference.unresolved}` : ''}`
+    : words
   return (
     <span className="flex min-w-0 items-center gap-1">
       <LayerStack
@@ -96,13 +112,15 @@ export function SourceChip({
             data-source={source.kind}
             data-held-back={source.heldBack || undefined}
             data-mixed={count != null || undefined}
-            title={source.heldBack ? `${words} — something underneath is held back` : `${words} — show what is underneath`}
+            data-reference={source.reference != null || undefined}
+            title={source.heldBack ? `${named} — something underneath is held back` : `${named} — show what is underneath`}
             className={cn(
               'relative inline-flex h-[18px] min-w-0 max-w-full items-center gap-1 rounded-full border px-[7px] text-[10px] font-medium whitespace-nowrap',
               chipClass(source),
-              count != null && 'border-dashed',
+              (count != null || source.reference?.unresolved != null) && 'border-dashed',
             )}
           >
+            {source.reference && <Palette className="size-3 shrink-0" aria-hidden />}
             {source.kind === 'fx' && <AudioWaveform className="size-3 shrink-0" aria-hidden />}
             {source.kind === 'parked' && <Lock className="size-3 shrink-0" aria-hidden />}
             <span className="truncate">{words}</span>

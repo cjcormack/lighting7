@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RecordLookResponse } from '@/store/programmerOps'
+import { programmerWs } from '@/test/backendMock'
 
 /**
  * The Record look sheet's ending: a Record that lands closes the sheet and says what went in as a
@@ -14,10 +15,12 @@ const RESULT = {
 const recordLook = vi.fn((_: unknown) => ({ unwrap: () => Promise.resolve(RESULT) }))
 const readSelectionMask = vi.fn((): string[] | null => null)
 
+vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
-vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => ({ projectId: 6, elements: [] }) }))
+vi.mock('@/store/programmer', () => ({ useProgrammerRevision: () => 0, useProgrammerScenery: () => ({ projectId: 6, elements: [] }) }))
+vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }), useVisibleFixtureListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: [] }) }))
@@ -129,5 +132,28 @@ describe('Record look', () => {
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Night' } })
     expect(screen.getByRole('button', { name: 'Make layer' })).toBeDisabled()
     expect(screen.getByText(/Select the heads this look is about first/)).toBeTruthy()
+  })
+})
+
+describe('the references line (palette-references plan D16, board C1)', () => {
+  it('says the references stay references in a new Look, and says nothing under Remove', () => {
+    programmerWs.push({
+      entries: new Map([
+        [
+          'spot-2|position',
+          {
+            targetKey: 'spot-2', attribute: 'position', value: '140,150', owner: 'web', touched: true, owners: ['web'],
+            reference: { paletteId: 7, paletteUuid: 'dsr', name: 'DSR Focus' },
+          },
+        ],
+      ]),
+    })
+    render(<RecordLookSheet open onOpenChange={() => {}} projectId={6} targetLookId={12} />)
+    expect(document.querySelector('[data-record-references]')).toHaveTextContent(
+      '1 of your values is a reference to DSR Focus and stays a reference: retune the palette and this Look moves with it.',
+    )
+    fireEvent.click(screen.getByRole('radio', { name: 'Remove' }))
+    expect(document.querySelector('[data-record-references]')).toBeNull()
+    programmerWs.reset()
   })
 })

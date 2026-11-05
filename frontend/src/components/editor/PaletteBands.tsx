@@ -14,6 +14,7 @@ import { paletteFits, type FxFitContext, type PaletteFit } from '@/lib/paletteOf
 import { paletteAttributeFor } from '@/lib/paletteIntent'
 import { recentFirst } from '@/lib/paletteRecents'
 import { cn } from '@/lib/utils'
+import { usePaletteReach } from '@/components/press/usePaletteReach'
 import { isCueFx } from '@/components/fx/fxEditorModel'
 import { fxReaches, storedFxReaches } from '@/components/fx/fxSplit'
 import { useCueBandProject, usePressCue } from '@/components/press/pressCue'
@@ -115,10 +116,11 @@ export function PaletteBands({
  *
  * **A press lands on the cell batch under the cell's family** — `families` is the press's mask, the
  * cell's own family in a cell (§3.2 rule 5), the busk pair's in the busk Colour tab — through
- * `usePress`, with the chip's gestures: tap a tracking layer, ⌥click *Apply as values*, a hold or a
- * right-click the menu. Its chips wear the pad's ring; under a focused Look a teal line says where a
- * press goes instead (*Into Warm wash*) and the rings go, since a Look holds values. In the cue
- * editor the line says *Into Q1 · as a layer* and a chip is ringed (partly) where the cue layers it.
+ * `usePress`, with the chip's gestures: tap to put the palette on as references to it, ⌥click *Apply
+ * as values*, a hold or a right-click the menu. Its chips wear the pad's ring; under a focused Look a
+ * teal line says where a press goes instead (*Into Warm wash*) and the rings go, since a Look holds
+ * values. In the cue editor the line says *Into Q1 · as references* and a chip is ringed (partly)
+ * where the cue references it.
  *
  * **The offer is `paletteFits`'s**, the picker's too: the family, every emitter a palette names somewhere
  * in the heads — so a Shehds zone is offered the colour palettes its zone takes — and for a Beam cell
@@ -161,6 +163,7 @@ export function PaletteBand({
     [press],
   )
   const presenceOf = (template: PaletteSummary) => pressPresence(into, cue, applied, targets, 'PALETTE', template.id)
+  const reachOf = usePaletteReach(targets)
   const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters, attribute }), [family, emitters, attribute])
   const offered = useMemo(
     () => recentFirst((templates ?? []).filter((t) => t.kind === 'value' && paletteFits(t, fit))),
@@ -212,6 +215,7 @@ export function PaletteBand({
           {offered.map((template) => {
             const presence = presenceOf(template)
             const swatch = paletteSwatch(template)
+            const reach = reachOf(template)
             return (
               <PalettePressButton
                 key={template.id}
@@ -220,6 +224,7 @@ export function PaletteBand({
                 into={into}
                 presence={presence}
                 hasTargets={targets.length > 0}
+                reachLabel={reach.label}
                 onGesture={onGesture}
               >
                 {(handlers) => (
@@ -240,6 +245,11 @@ export function PaletteBand({
                     <span className={cn('max-w-[9rem] truncate', presence !== 'none' && 'text-primary')}>
                       {template.name}
                     </span>
+                    {reach.count != null && (
+                      <span data-palette-reach className="font-mono text-[10px] tabular-nums text-teal-600 dark:text-teal-300">
+                        {reach.count}
+                      </span>
+                    )}
                   </button>
                 )}
               </PalettePressButton>
@@ -279,7 +289,7 @@ function IntoLine({ into }: { into: Exclude<PressInto, { kind: 'programmer' }> }
       data-palette-band-into
       className="rounded border border-sky-600/30 bg-sky-500/10 px-2 py-1 text-[11px] text-sky-700 dark:text-sky-300"
     >
-      Into {into.cueLabel} · as a layer
+      Into {into.cueLabel} · as references
     </div>
   )
 }

@@ -138,6 +138,8 @@ data class CueAttributeAssignmentDto(
     val reference: PaletteReferenceDto? = null,
     /** What the reference resolves to on each head it reaches, head key → literal, on the current project's reads. */
     val resolvedByHead: Map<String, String>? = null,
+    /** The property a head's [resolvedByHead] literal lands under, where it is not this row's (a colour wheel). */
+    val resolvedAttributeByHead: Map<String, String>? = null,
 ) {
     val target: TargetRef get() = TargetRef.of(targetType, targetKey)
 }

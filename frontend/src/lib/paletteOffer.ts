@@ -3,6 +3,7 @@ import { FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/att
 import { isPaletteSteps, isSlotSteps, parseStepList } from '@/lib/stepFx'
 import { paletteAttributeFor } from '@/lib/paletteIntent'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
+import { listNames } from '@/components/sheet/sheetModel'
 
 /**
  * What the selected heads can take — the offer's half of palette compatibility (fx-templates D6).
@@ -109,4 +110,89 @@ export function outsideMaskReason(
 ): string | null {
   if (family == null || mask == null || mask.length === 0 || mask.includes(family)) return null
   return `${FAMILY_LABELS[family].singular} — the selection is ${formatFamilyList(mask, ' · ')}`
+}
+
+/** The fixtures a reach is counted over: each one's key, its groups and its cells' keys. */
+export interface ReachFixture {
+  key: string
+  groups: readonly string[]
+  elements?: readonly { key: string }[]
+}
+
+/**
+ * What a press over [targets] reaches, built once per press and rig and asked per palette: whether a
+ * palette row's head is pressed — named, its fixture named (a group naming the fixture included), or
+ * one of its cells named — the desk's `LayerPressRules` coverage.
+ */
+export interface PressReach {
+  /** False for a press naming nothing, which lands on a palette's own heads. */
+  named: boolean
+  reaches: (head: string) => boolean
+}
+
+export function pressReach(targets: readonly { type: string; key: string }[], fixtures: readonly ReachFixture[]): PressReach {
+  const pressed = new Set<string>()
+  for (const target of targets) {
+    if (target.type === 'group') {
+      for (const fixture of fixtures) if (fixture.groups.includes(target.key)) pressed.add(fixture.key)
+    } else {
+      pressed.add(target.key)
+    }
+  }
+  const parentOf = new Map<string, string>()
+  const cellsOf = new Map<string, string[]>()
+  for (const fixture of fixtures) {
+    const cells = (fixture.elements ?? []).map((element) => element.key)
+    cellsOf.set(fixture.key, cells)
+    for (const cell of cells) parentOf.set(cell, fixture.key)
+  }
+  return {
+    named: targets.length > 0,
+    reaches: (head) => {
+      if (pressed.has(head)) return true
+      const parent = parentOf.get(head)
+      if (parent != null && pressed.has(parent)) return true
+      return (cellsOf.get(head) ?? []).some((cell) => pressed.has(cell))
+    },
+  }
+}
+
+/**
+ * Which of a **per-fixture** palette's heads a press lands on, and which it leaves out
+ * (palette-references plan D21): the chip's *2 of 4* and the hold menu's first line, counted from the
+ * palette's rows — the desk's `paletteHeads` and `omittedHeads`. Null for a generic or an effect
+ * palette, and for a press naming nothing.
+ */
+export function paletteReach(
+  palette: Pick<PaletteSummary, 'kind' | 'isGeneric' | 'rows'>,
+  press: PressReach,
+): { reached: string[]; leftOut: string[] } | null {
+  if (palette.kind !== 'value' || palette.isGeneric || !press.named) return null
+  const rowHeads = [
+    ...new Set((palette.rows ?? []).filter((row) => row.targetType === 'fixture').map((row) => row.targetKey)),
+  ]
+  if (rowHeads.length === 0) return null
+  return { reached: rowHeads.filter(press.reaches), leftOut: rowHeads.filter((head) => !press.reaches(head)) }
+}
+
+/** The chip's count where a press leaves some of a palette's heads out: *2 of 4*. */
+export function reachCount(reach: { reached: readonly string[]; leftOut: readonly string[] } | null): string | null {
+  if (reach == null || reach.leftOut.length === 0) return null
+  return `${reach.reached.length} of ${reach.reached.length + reach.leftOut.length}`
+}
+
+/**
+ * The hold menu's first line for a press that leaves heads out (D21): *Put on Spot 2 and Spot 3 —
+ * its Spot 1 and Spot 4 are left out*, past four heads a count; *Put on nothing here — …* where it
+ * reaches none. Null where it leaves none out.
+ */
+export function reachVerb(
+  reach: { reached: readonly string[]; leftOut: readonly string[] } | null,
+  nameOf: (key: string) => string,
+): string | null {
+  if (reach == null || reach.leftOut.length === 0) return null
+  const left = listNames(reach.leftOut.map(nameOf), 'head')
+  const are = reach.leftOut.length === 1 ? 'is' : 'are'
+  if (reach.reached.length === 0) return `Put on nothing here — its ${left} ${are} not selected`
+  return `Put on ${listNames(reach.reached.map(nameOf), 'head')} — its ${left} ${are} left out`
 }

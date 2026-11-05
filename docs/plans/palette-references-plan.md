@@ -1,6 +1,6 @@
 # Palette references: a palette is a value
 
-> **Document status: IN PROGRESS — session 1 merged, session 2 in review.** Calls decided 2026-11-04 (§3). Design
+> **Document status: IN PROGRESS — sessions 1 and 2 merged, session 3 in review.** Calls decided 2026-11-04 (§3). Design
 > record: [`palette-references-design/`](palette-references-design/INDEX.md).
 
 ## 1. Context
@@ -221,8 +221,8 @@ checks"). Never merge a session's PR before the one before it.
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | References as values on the desk | merged | `claude/wizardly-ride-d2z3ns` | [#346](https://github.com/cjcormack/lighting7/pull/346) | `b0fcfe3` |
-| 2 | Presses write references | in review | `claude/palette-references-s2` | | |
-| 3 | The marks and the new palette sheet | planned | | | |
+| 2 | Presses write references | merged | `claude/palette-references-s2` | [#348](https://github.com/cjcormack/lighting7/pull/348) | `bfb81c0` |
+| 3 | The marks and the new palette sheet | in review | `claude/busy-wozniak-1kcdjg` | | |
 | 4 | Looks and cues: the sheets and Copy the values | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -394,12 +394,44 @@ the next; whoever merges the last fills its own.
   `paletteOffer.test.ts` for the count against `LayerPressRulesTest`'s cases; the sheet sending
   `asReference`.
 
+**Where session 3 followed the code** (recorded with it):
+
+- **Two grids drew a reference row as nothing.** A focused Look's `LookRowStore` and the cue
+  editor's `CueRowStore` parsed a stored row's `value`, which for a reference is `pal:{uuid}`, so the
+  cell read unset. Both now draw the desk's resolution where it lands, and carry the reference beside
+  it (`serverReferences`; `CueCellSource.reference`). `scopedCellValue.ts` gained `CellState.reference`
+  and a `reference` arm on the cue source for them; Local's value still needed nothing.
+- **Two additive read fields on the desk**, because the client cannot say where a reference lands
+  without resolving it: the row DTOs' `resolvedAttributeByHead` (the property a head's
+  `resolvedByHead` literal lands under, where it is not the row's — a MAC 250's colour wheel; a
+  parent fanned onto its cells is already keyed by the cells), and `CookedRowDto.reference` (the
+  palette's uuid on a composed own value, which the cook already knew). Neither is synced.
+- **The cue editor's Look-won cell is violet now**, as D19 made the programmer grid's, since teal is a
+  reference's there too.
+- **A cue's reference in Output names only a uuid** (`ProvenanceEntry.reference`), so the pill, the
+  hover and the fixture sheet's chip name it from the current project's library
+  (`usePaletteNameByUuid`), read once by the table and passed to its rows.
+- **The count is by head**, not by key (a pan/tilt pair is one head), over the cell's heads; a cell
+  whose heads reference different palettes reads *Palettes · 2 of 2* with the dashed edge.
+- **The pill sits beside the cell's editor**, in a wrapper drawn on every cell, so a cell turning
+  into a reference while its own editor is open (a palette pressed from the popup's band) does not
+  remount the editor.
+- **D19's mark is drawn only where one Look layer won the whole cell**; a cell several layers share,
+  and a kept palette layer's (D17), keep the corner glyph.
+- **No `ownership.test.ts` existed**; this session adds it, beside `useRowOwnership.test.ts`.
+- **The Record line leaves out *Copy the values*** (board C1's last clause) until session 4 puts it
+  on the Look sheet and the cue editor (D22), which adds the clause.
+- **The chips' hover said *as a layer that tracks it*** for a value palette, which session 2 made
+  untrue; it now says *as references that follow it*.
+
 ### Session 4 — Looks and cues: the sheets and Copy the values
 
 - `lookValueChips.tsx` and `LookDetailSheet.tsx`: reference chips, the sentence, *Copy the values…*
   (D22). The cue editor's rows the same. `LookSheet`'s Contents count.
 - `LookRowStore.tsx` and `usePress`'s focused-Look arm: a value palette's tap writes reference rows
-  into the draft, ⌥click literals (D23).
+  into the draft, ⌥click literals (D23). A `pal:` in the draft must then be drawn as a reference
+  too: session 3 draws only committed reference rows (`serverReferences`).
+- `RecordReferencesNote`'s sentence gains *Copy the values on the Look sheet makes them literals*.
 - Busk pad faces: `describeLookContents` counts references.
 - Tests: the chips; *Copy the values* over a selection and over all; a tap in a focused Look writing
   references and ⌥click writing literals; a second tap taking them off.

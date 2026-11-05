@@ -1259,7 +1259,15 @@ colour picker's swatches and a 3D material list are unrelated.
   programmer entry may be `pal:{uuid}`, which the desk resolves **per head** rather than to one
   colour, answering the resolved value beside the reference (`reference`, `resolvedByHead` on a
   row; `reference` on a programmer entry, typed as `api/paletteReference.ts`). This side never
-  resolves one. `validateLookRows` still refuses `ref:`.
+  resolves one. `validateLookRows` still refuses `ref:`. **A reference is drawn as one** (that plan's
+  D18–D21): `CellOwnership.reference` (`useRowOwnership`, counted by head) and a focused Look's or a
+  cue's own rows give the Values grids a 3px teal edge over the owner's ring and a pill naming the
+  palette (`fixtures-list/CellMarkPill.tsx`) — *DSR Focus · 2 of 4* and a dashed edge over part of a
+  row, a dashed pill while unresolved — and a Look layer's value its own violet edge and `Layers`
+  pill; the fixture sheet's `SourceChip` names the palette in teal. A cue's reference arrives as a
+  uuid alone (its provenance), named from the library (`usePaletteNameByUuid`). A per-fixture
+  palette's chip counts its reach over the press (`lib/paletteOffer.ts`'s `paletteReach`, the desk's
+  `paletteHeads` / `omittedHeads`) and its hold menu names the heads it leaves out.
 - **Only generic colour *value* palettes are offerable.** `family === 'COLOUR' && isGeneric`
   holds on both sides — a per-fixture palette holds no single colour, so there is nothing for a
   fixture-agnostic output to take. The third clause was `rows.length === 1` and is now
@@ -6518,7 +6526,8 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   cell's `CellState.source` from the cooked row's `layerId` / `layerSource` and its
   `sourceTargetType` / `sourceTargetKey` — the row's own target before group expansion, which the
   desk answers since this session. **An own cell has a blue edge** with a faint wash, **a Look-won
-  cell the Look's teal**, a row whose heads disagree a muted one (`cueSourceCellClass`); the hover
+  cell a violet one** (teal is a palette reference's, palette-references plan D19), a row whose heads
+  disagree a muted one (`cueSourceCellClass`); the hover
   names it (`cueSourceTitle`: *Own*, *Own · overrides Scrim · opaque*, *Own · Front's row*, *From
   Scrim · opaque*). *Overrides* is what this editor saw win the cell before the own value was typed
   — the cook keeps only the winner, so after the save nothing else says it, and an editor opened
