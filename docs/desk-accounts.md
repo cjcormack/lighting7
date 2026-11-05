@@ -389,6 +389,14 @@ are 404 on the public listener whatever the peer address — a tunnel's requests
 loopback, which the peer check would otherwise take as the LAN. See `docs/mcp-engineering.md`
 §"Remote hardening".
 
+## Lighting7 Cloud
+
+Adopting the desk into a Lighting7 Cloud organisation (Install settings → Cloud,
+`docs/cloud-engineering.md`) needs a desk account, and links the admin who started it to the cloud
+account that approved it: one `cloud_identity_links` row, the cloud account's id and email, deleted
+with the desk account. Nothing reads a link for authorisation yet (the cloud's P1 does), and the link
+gives the cloud no way in: adoption only starts from the desk's own listener, never over remote access.
+
 ## Cloud sync and support copies
 
 All three tables — and the two MCP OAuth tables — are `MachineLocal` in `SyncCoverageTest`: nothing here reaches a git

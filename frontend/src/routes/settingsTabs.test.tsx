@@ -41,6 +41,7 @@ vi.mock('./Diagnostics', () => ({ DiagnosticsContent: () => <div>diagnostics bod
 vi.mock('@/components/users/UsersTab', () => ({ UsersTab: () => <div>users body</div> }))
 vi.mock('@/components/updates/UpdatePanel', () => ({ UpdatePanel: () => <div>updates body</div> }))
 vi.mock('@/components/remoteAccess/RemoteAccessPanel', () => ({ RemoteAccessPanel: () => <div>remote body</div> }))
+vi.mock('@/components/cloud/CloudPanel', () => ({ CloudPanel: () => <div>cloud body</div> }))
 vi.mock('@/components/telemetry/TelemetryCard', () => ({ TelemetryCard: () => null }))
 vi.mock('@/components/stage/StageRegionsContent', () => ({ StageRegionsContent: () => <div>regions body</div> }))
 vi.mock('@/components/rigging/RiggingsContent', () => ({ RiggingsContent: () => <div>rigging body</div> }))
@@ -83,10 +84,10 @@ afterEach(cleanup)
 describe('Install Settings tabs', () => {
   it('offers an admin every tab', () => {
     renderInstall()
-    expect(tabs()).toEqual(['General', 'Users', 'Sync', 'Remote access', 'Updates', 'Diagnostics'])
+    expect(tabs()).toEqual(['General', 'Users', 'Sync', 'Remote access', 'Cloud', 'Updates', 'Diagnostics'])
   })
 
-  it('offers an operator no Sync, Users or Remote access, as the sidebar does', () => {
+  it('offers an operator no Sync, Users, Remote access or Cloud, as the sidebar does', () => {
     role = 'OPERATOR'
     renderInstall()
     expect(tabs()).toEqual(['General', 'Updates', 'Diagnostics'])
@@ -96,6 +97,16 @@ describe('Install Settings tabs', () => {
     role = 'OPERATOR'
     renderInstall('/install/sync')
     expect(screen.queryByText('sync hub')).toBeNull()
+    expect(screen.getByRole('tab', { name: 'General' }).getAttribute('data-state')).toBe('active')
+  })
+
+  it('opens the Cloud tab for an admin, and General for an operator', () => {
+    renderInstall('/install/cloud')
+    expect(screen.getByText('cloud body')).toBeTruthy()
+    cleanup()
+    role = 'OPERATOR'
+    renderInstall('/install/cloud')
+    expect(screen.queryByText('cloud body')).toBeNull()
     expect(screen.getByRole('tab', { name: 'General' }).getAttribute('data-state')).toBe('active')
   })
 })

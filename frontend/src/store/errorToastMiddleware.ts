@@ -142,6 +142,11 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Remote access renders a refused save (`REMOTE_ACCESS_INVALID` — a bad domain, no accounts yet)
   // beside the form, and a rejected enable is the switch staying off.
   'saveTunnelSettings', // src/components/remoteAccess/RemoteAccessPanel.tsx
+  // The Cloud tab renders every refusal beside the button that met it; `CLOUD_UNREACHABLE` on
+  // unadopt is the confirm offering *Forget on this desk only*, not a failure.
+  'startCloudAdoption', // src/components/cloud/CloudPanel.tsx
+  'cancelCloudAdoption', // ...same panel
+  'unadoptCloud', // ...same panel
 
 
   // Call site raises its own toast.error()

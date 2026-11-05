@@ -35,6 +35,7 @@ import {createUsersWsApi, UsersWsApi} from "./usersWsApi";
 import {createInstallWsApi, InstallWsApi} from "./installWsApi";
 import {createUpdateWsApi, UpdateWsApi} from "./updateWsApi";
 import {createRemoteAccessWsApi, RemoteAccessWsApi} from "./remoteAccessWsApi";
+import {CloudWsApi, createCloudWsApi} from "./cloudWsApi";
 import {createWindowsWsApi, WindowsWsApi} from "./windowsApi";
 import {createHandWsApi, HandWsApi} from "./handApi";
 import {createSceneryWsApi, SceneryWsApi} from "./sceneryApi";
@@ -59,6 +60,7 @@ interface LightingApi {
   install: InstallWsApi
   updates: UpdateWsApi
   remoteAccess: RemoteAccessWsApi
+  cloud: CloudWsApi
 
   fixtures: FixturesApi
   projects: ProjectApi
@@ -135,6 +137,7 @@ function createLightingApi(): LightingApi {
   const installWsApi = createInstallWsApi(connection)
   const updateWsApi = createUpdateWsApi(connection)
   const remoteAccessWsApi = createRemoteAccessWsApi(connection)
+  const cloudWsApi = createCloudWsApi(connection)
   const fixtureApi = createFixtureApi(connection)
   const projectApi = createProjectApi(connection)
   const fxApi = createFxApi(connection)
@@ -184,6 +187,7 @@ function createLightingApi(): LightingApi {
     install: installWsApi,
     updates: updateWsApi,
     remoteAccess: remoteAccessWsApi,
+    cloud: cloudWsApi,
 
     fixtures: fixtureApi,
     projects: projectApi,

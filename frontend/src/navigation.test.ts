@@ -156,7 +156,7 @@ describe("sections", () => {
 
   it("orders Project and Desk, with Projects first on the Desk", () => {
     expect(idsIn("project")).toEqual(["project-settings", "surfaces", "project-sync"])
-    expect(idsIn("desk")).toEqual(["projects", "install-settings", "users", "sync", "remote-access", "updates", "diagnostics"])
+    expect(idsIn("desk")).toEqual(["projects", "install-settings", "users", "sync", "remote-access", "cloud", "updates", "diagnostics"])
   })
 
   it("says Regions on the row Run's Stage would otherwise share a word with", () => {
@@ -223,7 +223,7 @@ describe("⌘K labels", () => {
 describe("admin-only navigation", () => {
   // Every entry whose destination's API is admin only on the backend: `adminOnly {}` in
   // lighting7's auth/AuthGate.kt, or `requireAdmin()` on every handler (Remote access's tunnel).
-  const adminOnlyIds = ["users", "sync", "project-sync", "remote-access"]
+  const adminOnlyIds = ["users", "sync", "project-sync", "remote-access", "cloud"]
 
   it("marks the entries whose APIs are admin-gated", () => {
     for (const id of adminOnlyIds) {
@@ -260,12 +260,13 @@ describe("install navigation", () => {
   const item = (id: string) => navItems.find((i) => i.id === id)!
 
   it("lists every install tab but General under Install Settings, in the tabs' order", () => {
-    // `routes/InstallSettings.tsx`'s TABS: general, users, sync, remote, updates, diagnostics.
+    // `routes/InstallSettings.tsx`'s TABS: general, users, sync, remote, cloud, updates, diagnostics.
     // General is the parent row itself.
     expect(navItems.filter((i) => i.parent === "install-settings").map((i) => i.path(1))).toEqual([
       "/install/users",
       "/install/sync",
       "/install/remote",
+      "/install/cloud",
       "/install/updates",
       "/install/diagnostics",
     ])

@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.models.CloudLinkVia
 import uk.me.cormack.lighting7.models.DaoCloudConnections
 import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoUsers
+import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.update.BuildInfo
 import java.time.Instant
 import kotlin.time.Duration
@@ -53,6 +54,7 @@ data class CloudConnectionRow(
 /** What the desk keeps in memory only, beside the row (D11: no write per poll, heartbeat or reconnect). */
 internal class CloudMemory {
     @Volatile var notice: String? = null
+    @Volatile var noticeAt: Instant? = null
     @Volatile var lastError: CloudErrorDto? = null
     @Volatile var channel: ChannelStatus = ChannelStatus(CloudConnectionStatus.OFF)
 }
@@ -190,6 +192,7 @@ internal class CloudAdoptionService(
                 }
             }
             memory.notice = null
+            memory.noticeAt = null
             memory.lastError = null
             launchPoll(started.adoptionId, interval, expiresAt)
         } catch (e: Throwable) {
@@ -381,6 +384,7 @@ internal class CloudAdoptionService(
         }
         runCatching { keys.delete() }.onFailure { logger.warn("Couldn't delete the install key", it) }
         memory.notice = notice
+        memory.noticeAt = notice?.let { nowUtc() }
         memory.lastError = null
         changed()
     }

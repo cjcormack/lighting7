@@ -183,7 +183,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 
 | Idea | Word | In code | Was | MagicQ | Shows | Status | Key |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Make a desk an install of a cloud organisation, by a code an admin approves in the portal (PRD §17) | Adopt | `CloudAdoptionService`, `startAdoption`; REST `/install/cloud/adoption`; `cloud_connection.state` `ADOPTING` / `ADOPTED`. Taking it back is *unadopt* (`unadopt`, `DELETE /install/cloud`) | | | wire, code, docs | done | `doc:docs/cloud-engineering.md` |
+| Make a desk an install of a cloud organisation, by a code an admin approves in the portal (PRD §17) | Adopt | `CloudAdoptionService`, `startAdoption`; REST `/install/cloud/adoption`; `cloud_connection.state` `ADOPTING` / `ADOPTED`. Taking it back is *unadopt* (`unadopt`, `DELETE /install/cloud`) | | | screen, wire, code, docs | done | `doc:docs/cloud-engineering.md` |
 | The Ed25519 key a desk proves itself with, made at adoption and never leaving the desk (PRD §17) | Install key | `InstallKeys` (cloud-protocol), `InstallKeyStore`; the credential store's `cloud:install-key:<installs.uuid>` | | | code, docs | done | `doc:docs/cloud-engineering.md` |
 | Which cloud account a desk account is (PRD §17) | Link | `cloud_identity_links`, `CloudLinkVia`; the state's `linkedEmail` | | | wire, code, docs | done | `doc:docs/cloud-engineering.md` |
 

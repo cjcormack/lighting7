@@ -168,17 +168,46 @@ project. Its shape:
 
 `{configured, enabled, adoption?: {userCode, verificationUri, verificationUriComplete, expiresAt,
 fingerprint}, adopted?: {installId, orgName, adoptedAt, adoptedBy, linkedEmail, fingerprint},
-connection, retryAt?, lastError?: {code, message}, lastOnlineAt?, notice?}`
+connection, retryAt?, lastError?: {code, message}, lastOnlineAt?, notice?, noticeAt?, remote}`
 
 On the public listener the pending adoption's `userCode` and both verification URIs are left out, from
 the REST answers and the frame alike (`CloudStateDto.forRemote`): whoever holds the code can approve the
 desk into an organisation of their own, which is what D5's refusal of a remote *Adopt* is for. A remote
-admin still sees that an adoption is pending, and its expiry and fingerprint.
+admin still sees that an adoption is pending, and its expiry and fingerprint. `remote` is true on that
+listener alone (the WS Json leaves a false one out), so the Cloud tab can disable *Adopt* rather than
+offer a button the desk refuses.
 
 `adoptedBy` is the adopting account's display name, null once it is deleted; `fingerprint` is the
 install key's, which the portal shows too. `connection`, `retryAt`, `lastOnlineAt` and the channel's
 `lastError` are §"The control channel"'s; a frame goes out on each change of status, never per
 heartbeat.
+
+## The Cloud tab
+
+Install settings → **Cloud** (`frontend/src/components/cloud/CloudPanel.tsx`, `store/cloud.ts`) is the
+admin's view of all of it: hidden from operators like *Remote access*, reading `GET /install/cloud` and
+patching its cache from `cloud.state`, so it is the desk's state on every window and a pending adoption
+survives a reload. Every route answers the whole state, which a mutation writes into the cache rather
+than refetching. Its states:
+
+- *No cloud configured* (`cloud.baseUrl` empty, or unusable, when `lastError` says why) or *Turned off
+  on this desk* (`cloud.enabled = false`), naming the key; a desk adopted before either still shows its adoption, so
+  it can be removed.
+- *Not adopted*: what adopting does, and **Adopt this desk**, disabled with D5's reason when `remote`.
+- *Adopting*: the user code, a QR of `verificationUriComplete`, the link, the time left, the key's
+  fingerprint and **Cancel**. Over remote access, where the code and links are left out, it says the
+  adoption can only be approved from the desk. In a Sentry replay the code is masked, and the QR and the
+  link, whose address carries the code, are blocked.
+- *Adopted*: the org, the install id (copyable), who adopted it and when, the linked cloud email, the
+  fingerprint, the connection (*Online*, *Connecting…*, *Retrying in n s* counted down from `retryAt`,
+  *Not connected*) with `lastError`'s message, and **Remove from cloud**. Its confirm unadopts; when the
+  answer is `CLOUD_UNREACHABLE` it shows the desk's reason (unreachable, refused, turned off, a changed
+  URL, a missing key) and offers **Forget on this desk only**, `?force=true`.
+- A `notice` above the rest, dismissed on that browser alone (localStorage) by its `noticeAt`, the
+  instant the desk set it, since the next expiry or revoke says the same words. The desk keeps both in
+  memory until the next adoption or a restart, and no route clears them.
+
+The three mutations are in `SILENT_ENDPOINTS`: the tab shows each refusal where it was met.
 
 ## Show safety
 

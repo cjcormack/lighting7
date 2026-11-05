@@ -158,8 +158,13 @@ class CloudAdoptionTest {
         fake.decision = FakeCloud.Decision.EXPIRE
         val after = service.await("expired") { it.adoption == null }
         assertEquals(CloudAdoptionService.EXPIRED_NOTICE, after.notice)
+        assertNotNull(after.noticeAt, "a notice is stamped, so a dismissal of one hides no later one")
         assertEquals(0, rows())
         assertFalse(store.containsBlob(keyName))
+
+        runBlocking { service.startAdoption(adminId) }
+        assertNull(service.state.value.notice)
+        assertNull(service.state.value.noticeAt)
     }
 
     @Test

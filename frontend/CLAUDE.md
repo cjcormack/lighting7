@@ -7271,6 +7271,27 @@ trigger is hidden from operators like Users, the query passes `skip: !isAdmin`, 
   (`REMOTE_ACCESS_INVALID`: a bad domain, no desk accounts) itself.
 - **No free-plan warning**, by decision (Chris, 2026-09-26): ngrok's quotas are not pre-empted.
 
+### Lighting7 Cloud
+
+The **Cloud** tab in `InstallSettings` (`components/cloud/CloudPanel.tsx`), backed by
+`store/cloud.ts` and `api/cloudWsApi.ts`: this desk's adoption by Lighting7 Cloud. Admin only, as
+Remote access is — hidden tab and nav row, `skip: !isAdmin`, `cloud.state` sent to admin sockets
+alone. Backend contract in `../docs/cloud-engineering.md` §"The Cloud tab".
+
+- **The state is the desk's.** `GET /install/cloud`, every Cloud route's answer and the `cloud.state`
+  frame are one document; the bridge replaces the cached state with each frame and each mutation
+  writes its answer (`upsertQueryData`), so nothing refetches and a pending adoption survives a reload.
+- **`remote` disables *Adopt*.** The desk refuses an adoption started over remote access and leaves a
+  pending one's code and links out there; the tab reads the state's `remote` rather than guessing from
+  the URL.
+- **Remove asks, and offers the forced arm only on `CLOUD_UNREACHABLE`.** *Forget on this desk only*
+  sends `?force=true`. The three mutations are in `SILENT_ENDPOINTS`; the tab renders each refusal.
+- **A `notice` is dismissed per browser** (`usePersistentState`), keyed on its `noticeAt`: the desk
+  repeats the same words for the next expiry or revoke, keeps both until the next adoption or a
+  restart, and has no route to clear them.
+- **The adoption link is `data-sentry-block`**, like the QR: its `href` carries the user code, and a
+  replay masks text, not attributes.
+
 ### Sentry
 
 `lib/sentry.ts` is the browser's Sentry and `main.tsx` its only importer (`sentryImports.test.ts`),

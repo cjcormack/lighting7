@@ -181,6 +181,7 @@ class CloudService(
             lastError = rowError ?: memory.lastError ?: channel.lastError,
             lastOnlineAt = channel.lastOnlineAt?.toIsoUtc(),
             notice = memory.notice,
+            noticeAt = memory.noticeAt?.toIsoUtc(),
         )
     }
 
@@ -287,6 +288,7 @@ class CloudService(
             lastError = error ?: memory.lastError ?: channel.lastError,
             lastOnlineAt = channel.lastOnlineAt?.toIsoUtc(),
             notice = memory.notice,
+            noticeAt = memory.noticeAt?.toIsoUtc(),
         )
     }
 
