@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.cloud
 
+import io.ktor.server.config.MapApplicationConfig
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -459,5 +460,16 @@ class CloudAdoptionTest {
         refused("https://cloud.example.com/?x=1")
         refused("cloud.example.com")
         assertEquals("https://cloud.example.com", (CloudConfig.checkBaseUrl("https://cloud.example.com/") as BaseUrlCheck.Ok).url)
+    }
+
+    @Test
+    fun `an absent base URL is the production cloud and an empty one is no cloud`() {
+        fun from(vararg pairs: Pair<String, String>) = CloudConfig.from(MapApplicationConfig(*pairs))
+        assertEquals(CloudConfig.DEFAULT_BASE_URL, from().baseUrl)
+        assertTrue(CloudConfig.checkBaseUrl(CloudConfig.DEFAULT_BASE_URL) is BaseUrlCheck.Ok)
+        assertNull(from("cloud.baseUrl" to "").baseUrl)
+        assertNull(from("cloud.baseUrl" to "  ").baseUrl)
+        assertFalse(from("cloud.baseUrl" to "").configured)
+        assertEquals("https://cloud.example.com", from("cloud.baseUrl" to "https://cloud.example.com/").baseUrl)
     }
 }

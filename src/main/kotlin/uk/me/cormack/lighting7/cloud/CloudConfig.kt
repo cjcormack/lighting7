@@ -2,14 +2,13 @@ package uk.me.cormack.lighting7.cloud
 
 import io.ktor.server.config.ApplicationConfig
 import uk.me.cormack.lighting7.state.optionalBoolean
-import uk.me.cormack.lighting7.state.optionalString
 import java.net.InetAddress
 import java.net.URI
 
 /**
  * The `cloud { }` block of `local.conf` (cloud-p0 plan D13). [enabled] false is the hard kill
- * switch the UI cannot override. An empty `baseUrl` means no cloud is configured; so does one the
- * desk refuses (D12), whose reason is [problem].
+ * switch the UI cannot override. An absent `baseUrl` is [DEFAULT_BASE_URL]; an empty one means no
+ * cloud is configured, and so does one the desk refuses (D12), whose reason is [problem].
  */
 data class CloudConfig(
     /** The cloud's base URL, no trailing slash, or null when none is configured or it was refused. */
@@ -21,9 +20,11 @@ data class CloudConfig(
     val configured: Boolean get() = baseUrl != null
 
     companion object {
+        const val DEFAULT_BASE_URL = "https://lighting7.net"
+
         fun from(config: ApplicationConfig): CloudConfig {
             val enabled = config.optionalBoolean("cloud.enabled", default = true)
-            val raw = config.optionalString("cloud.baseUrl")?.trim().orEmpty()
+            val raw = config.propertyOrNull("cloud.baseUrl")?.getString()?.trim() ?: DEFAULT_BASE_URL
             if (raw.isEmpty()) return CloudConfig(null, enabled)
             return when (val checked = checkBaseUrl(raw)) {
                 is BaseUrlCheck.Ok -> CloudConfig(checked.url, enabled)
