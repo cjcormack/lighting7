@@ -1,0 +1,43 @@
+{
+  "label": "ctl",
+  "messages": [
+    {
+      "from": "browser",
+      "message": {
+        "type": "hello",
+        "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.lxjYsIA293oYasOLCuBoGKDDxtIjwAbvEebGB2T_PHadyUhGBixngbwKgUvM0Fw0V-IZqJkU7vog-2xR6s3aDw"
+      }
+    },
+    {
+      "from": "sidecar",
+      "message": {
+        "type": "ready",
+        "user": "chris",
+        "role": "ADMIN",
+        "build": "1.4.0+3f2a9c1"
+      }
+    },
+    {
+      "from": "sidecar",
+      "message": {
+        "type": "ready",
+        "unlinked": true,
+        "build": "1.4.0+3f2a9c1"
+      }
+    },
+    {
+      "from": "sidecar",
+      "message": {
+        "type": "refused",
+        "code": "TOKEN_EXPIRED"
+      }
+    },
+    {
+      "from": "browser",
+      "message": {
+        "type": "token",
+        "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.lxjYsIA293oYasOLCuBoGKDDxtIjwAbvEebGB2T_PHadyUhGBixngbwKgUvM0Fw0V-IZqJkU7vog-2xR6s3aDw"
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "type": "link.accepted",
+  "id": "c-0011",
+  "body": {
+    "inviteId": "inv_4Rm7Kc",
+    "accountId": "acc_2Hs6Tv",
+    "email": "operator@example.com"
+  }
+}

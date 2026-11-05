@@ -1,0 +1,269 @@
+{
+  "source": "Computed with Python's cryptography from RFC 8032 §7.1's TEST 1 key (signing/test-key.json); wrong-key uses TEST 2.",
+  "kid": "test-1",
+  "jwk": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "kid": "test-1",
+    "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+  },
+  "audience": "inst_01JBX3Q5Z8",
+  "now": "2026-11-05T12:00:00.000Z",
+  "nowEpochS": 1793880000,
+  "valid": [
+    {
+      "name": "remote",
+      "why": "a remote session's token, checked at the remote door",
+      "scope": "remote",
+      "kid": "test-1",
+      "claims": {
+        "iss": "https://cloud.example",
+        "aud": "inst_01JBX3Q5Z8",
+        "sub": "acc_9Pz4Rt",
+        "org": "org_3Hc8Wn",
+        "scope": "remote",
+        "sid": "rs_5Tg2Lm8Qa1",
+        "iat": 1793879940,
+        "exp": 1793880240,
+        "jti": "jti_0001"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.lxjYsIA293oYasOLCuBoGKDDxtIjwAbvEebGB2T_PHadyUhGBixngbwKgUvM0Fw0V-IZqJkU7vog-2xR6s3aDw"
+    },
+    {
+      "name": "mcp",
+      "why": "an MCP grant's token, checked at the relay",
+      "scope": "mcp",
+      "kid": "test-1",
+      "claims": {
+        "iss": "https://cloud.example",
+        "aud": "inst_01JBX3Q5Z8",
+        "sub": "acc_9Pz4Rt",
+        "org": "org_3Hc8Wn",
+        "scope": "mcp",
+        "gid": "gr_8Hw3Zp",
+        "azp": "client_claude",
+        "iat": 1793879940,
+        "exp": 1793880240,
+        "jti": "jti_0002"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoibWNwIiwiZ2lkIjoiZ3JfOEh3M1pwIiwiYXpwIjoiY2xpZW50X2NsYXVkZSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMiJ9.NLunpOfDsIJjc9T3PUkem8BQw6WewPVA37Ff-N9HhS2l_bkTtWD171vaJz5UMgnX8qdbMJlKShCza9fxjkoeDA"
+    },
+    {
+      "name": "expired-within-skew",
+      "why": "expired 60 s ago: within the skew",
+      "scope": "remote",
+      "kid": "test-1",
+      "claims": {
+        "iss": "https://cloud.example",
+        "aud": "inst_01JBX3Q5Z8",
+        "sub": "acc_9Pz4Rt",
+        "org": "org_3Hc8Wn",
+        "scope": "remote",
+        "sid": "rs_5Tg2Lm8Qa1",
+        "iat": 1793879640,
+        "exp": 1793879940,
+        "jti": "jti_0001"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTY0MCwiZXhwIjoxNzkzODc5OTQwLCJqdGkiOiJqdGlfMDAwMSJ9.3Q11VaSz7uBbRybZwAWQ-IJPbRUQxjSJj0wuT3TKPJ2cYHtvvWYQqmZkhSGSmFLZD-fl_6RVphUkmk8br5bkDw"
+    },
+    {
+      "name": "issued-within-skew",
+      "why": "issued 60 s ahead of the desk's clock: within the skew",
+      "scope": "remote",
+      "kid": "test-1",
+      "claims": {
+        "iss": "https://cloud.example",
+        "aud": "inst_01JBX3Q5Z8",
+        "sub": "acc_9Pz4Rt",
+        "org": "org_3Hc8Wn",
+        "scope": "remote",
+        "sid": "rs_5Tg2Lm8Qa1",
+        "iat": 1793880060,
+        "exp": 1793880360,
+        "jti": "jti_0001"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg4MDA2MCwiZXhwIjoxNzkzODgwMzYwLCJqdGkiOiJqdGlfMDAwMSJ9.XyOeuBCYbvB-qFisDYP6sD7lAx-f1tk7pvXPnPowmFgA4W_V2zXRrCjlag-NFxrECxQ5yQb1MocJYyuUMJJJCQ"
+    },
+    {
+      "name": "ten-minute-lifetime",
+      "why": "exactly the longest lifetime",
+      "scope": "remote",
+      "kid": "test-1",
+      "claims": {
+        "iss": "https://cloud.example",
+        "aud": "inst_01JBX3Q5Z8",
+        "sub": "acc_9Pz4Rt",
+        "org": "org_3Hc8Wn",
+        "scope": "remote",
+        "sid": "rs_5Tg2Lm8Qa1",
+        "iat": 1793879940,
+        "exp": 1793880540,
+        "jti": "jti_0001"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwNTQwLCJqdGkiOiJqdGlfMDAwMSJ9.nrcDgglddYDPHMYd956BsJ54l3EkbEC3MsIaqgxUygGjDj-ZdHYASjAbw6CkWBbMfYTA82f5L7ICIppcR-ckDA"
+    }
+  ],
+  "refused": [
+    {
+      "name": "expired",
+      "why": "expired 61 s ago",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTYzOSwiZXhwIjoxNzkzODc5OTM5LCJqdGkiOiJqdGlfMDAwMSJ9.6fsPs7sWjkrocbEcBrVIYZgU1FeDMkwvI3dD9g5uTylU5pZfXU-eFGXQK7tATfQ5Tm9VKU5RGfIaf_SQFymNCg",
+      "refusal": "TOKEN_EXPIRED"
+    },
+    {
+      "name": "issued-in-the-future",
+      "why": "issued 61 s ahead of the desk's clock",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg4MDA2MSwiZXhwIjoxNzkzODgwMzYxLCJqdGkiOiJqdGlfMDAwMSJ9.r0y019-kVpOpuO5HQQ6Ra8jkjOI7X_igbEMACNOrjHmZih2ULD_VTJpxqH_FvS7YAmA1hnJBtfurNH6_hSvrAw",
+      "refusal": "TOKEN_NOT_YET_VALID"
+    },
+    {
+      "name": "too-long-lived",
+      "why": "a lifetime of 601 s",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwNTQxLCJqdGkiOiJqdGlfMDAwMSJ9.s44H1aihPrlLh867JLJoWrIe41EmENuHFSxBlYHO85Ce1Vpmfd073Yx6ST369H3nuu3rzGietcKuufICPkLXDQ",
+      "refusal": "TOKEN_TOO_LONG_LIVED"
+    },
+    {
+      "name": "wrong-audience",
+      "why": "for another install",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0X290aGVyIiwic3ViIjoiYWNjXzlQejRSdCIsIm9yZyI6Im9yZ18zSGM4V24iLCJzY29wZSI6InJlbW90ZSIsInNpZCI6InJzXzVUZzJMbThRYTEiLCJpYXQiOjE3OTM4Nzk5NDAsImV4cCI6MTc5Mzg4MDI0MCwianRpIjoianRpXzAwMDEifQ.uF6M60MgLVX_ag7b3g6GS6Wrwb6ymC0q3KWEz6qS9QKAAtilq3Ekeakh404Nket4HueabHMLnnqqDY2ejM4HBw",
+      "refusal": "TOKEN_WRONG_AUDIENCE"
+    },
+    {
+      "name": "remote-at-mcp",
+      "why": "a remote token at the MCP relay",
+      "scope": "mcp",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.lxjYsIA293oYasOLCuBoGKDDxtIjwAbvEebGB2T_PHadyUhGBixngbwKgUvM0Fw0V-IZqJkU7vog-2xR6s3aDw",
+      "refusal": "TOKEN_WRONG_SCOPE"
+    },
+    {
+      "name": "mcp-at-remote",
+      "why": "an MCP token at the remote door",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoibWNwIiwiZ2lkIjoiZ3JfOEh3M1pwIiwiYXpwIjoiY2xpZW50X2NsYXVkZSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMiJ9.NLunpOfDsIJjc9T3PUkem8BQw6WewPVA37Ff-N9HhS2l_bkTtWD171vaJz5UMgnX8qdbMJlKShCza9fxjkoeDA",
+      "refusal": "TOKEN_WRONG_SCOPE"
+    },
+    {
+      "name": "unknown-kid",
+      "why": "a kid the JWKS does not hold",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtOSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.a2QJvgER9SP_QHIbaqCS7TNzp8E7Q08kFItqdMfWDe7E9Ds0jgCPNYXdYQ0TgG1VttBrxvOqRGGM-6BEBMDFDg",
+      "refusal": "TOKEN_UNKNOWN_KEY"
+    },
+    {
+      "name": "wrong-key",
+      "why": "signed with RFC 8032's TEST 2 key under the test key's kid",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.cMosQ7j53fD758fxhIA-i3EejD5Gx0zYXH-gUhKRkKBbYzwgmfOmxShd7BPQ8aILWCwlskYTRNWk0dUv8m_8DQ",
+      "refusal": "TOKEN_BAD_SIGNATURE"
+    },
+    {
+      "name": "tampered-claims",
+      "why": "another account's id under the first token's signature",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfYWRtaW4xIiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.lxjYsIA293oYasOLCuBoGKDDxtIjwAbvEebGB2T_PHadyUhGBixngbwKgUvM0Fw0V-IZqJkU7vog-2xR6s3aDw",
+      "refusal": "TOKEN_BAD_SIGNATURE"
+    },
+    {
+      "name": "alg-none",
+      "why": "alg none",
+      "scope": "remote",
+      "token": "eyJhbGciOiJub25lIiwia2lkIjoidGVzdC0xIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.paynLQ_stbnV_QwLhOBP2tB_15FoiB4eMmPJOopjR1AMq3j7BvDty6eInkuFcXUHx7MXtp7M81yeV7U6TmM6DA",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "alg-hs256",
+      "why": "an algorithm other than EdDSA",
+      "scope": "remote",
+      "token": "eyJhbGciOiJIUzI1NiIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.Xhf894xCiKlywLlc3Q_b5srwi_w34ZWza1ArZsTs7FTYxOCas7H12sqfEUThh6Lj67MurM3W94tb4JLHCVIOAQ",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "crit-header",
+      "why": "a crit header, which nothing here understands",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsImNyaXQiOlsiZXhwIl19.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.RM-CtOWiyoCWAN4BPXZYfBuP1plNY4RikrSVIK_g2BbRYRv_UPduNUBRXbq5fVDZBgQHx9lmYyb5sjHnGlOLCQ",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "typ-missing",
+      "why": "no typ: only a token typed JWT is a desk access token",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.prdCZ3aVNTlOT0qOEgFGu0St-BS5evfQe3R_WITb0ama6HMBvaSUTWAa7B1wjGbfUsfemkHq3FsORImcgPjKDQ",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "typ-other",
+      "why": "another kind of JWT",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6ImF0K2p3dCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.QfPauyXmMLivFuqrCybnrRb1zxqJw7ynV1O4T6gh4pCms1o5yhQeB4ELas2o0K0S1EYw6AjLm8LPyz5sgE-6Dg",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "crit-null",
+      "why": "a crit header, even a null one",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCIsImNyaXQiOm51bGx9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9.U3uES87Z5bt-XgY2HoMPD_8HLHfW7qFnWbkv_R7jnyR3qRnta6nnnxK8y63tabfi2mKHnFMTHIecjkZctBqBBQ",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "two-parts",
+      "why": "no signature part",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "padded",
+      "why": "a padded part: one value has one spelling",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMSJ9==.lxjYsIA293oYasOLCuBoGKDDxtIjwAbvEebGB2T_PHadyUhGBixngbwKgUvM0Fw0V-IZqJkU7vog-2xR6s3aDw",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "not-json",
+      "why": "claims that are not JSON",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.bm90IGpzb24.40fl_Xj-EMfWM7UvbOJ-28LBlYwiGRC6tfO-6Y-5fXiHXYRNRABN2A77jTUZ0DLmtoMsAWWMJnwh04czqfvfAQ",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "remote-without-sid",
+      "why": "a remote token naming no sid",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODAyNDAsImp0aSI6Imp0aV8wMDAxIn0.wWgQGdEjNaNbF111tWEFg0tzW6MZBN8i0Bczqk54JmJpYnJPrE4qEFXHFX9eHVLFyRonIzHyOwVg7ER1rEjkCA",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "mcp-without-azp",
+      "why": "an MCP token naming no client",
+      "scope": "mcp",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoibWNwIiwiZ2lkIjoiZ3JfOEh3M1pwIiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODAyNDAsImp0aSI6Imp0aV8wMDAxIn0.XtL5_XhsMVA5b62bdrXa--4toB0SKwdq07tccJCuDRaq48jOP4bmaIUZyIKwSj9E2v8UaAWwiYNbulhZ6f8UAw",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "missing-exp",
+      "why": "no exp",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwianRpIjoianRpXzAwMDEifQ.wt8d1rv9dD1X7r_PvT2QLtN0OLc8t5_U9iwaf0idrdxLhro038sVw5ovK4K22vXW4lOcbo6bsC_pAsEH_dILBg",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "exp-before-iat",
+      "why": "an exp before its iat",
+      "scope": "remote",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoicmVtb3RlIiwic2lkIjoicnNfNVRnMkxtOFFhMSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODc5OTM5LCJqdGkiOiJqdGlfMDAwMSJ9.H2RMrECsbPpIkCN-ivn-L2s9wmoj31VdXzgmmaQO4rjDKqAqJuYvLul6AZ8-AEc4LKotTFqgCj_tFb9E1XOABw",
+      "refusal": "TOKEN_MALFORMED"
+    },
+    {
+      "name": "empty",
+      "why": "an empty token",
+      "scope": "remote",
+      "token": "",
+      "refusal": "TOKEN_MALFORMED"
+    }
+  ]
+}

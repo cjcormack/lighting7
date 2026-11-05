@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "type": "rtc.offer",
+  "id": "c-0008",
+  "body": {
+    "sid": "rs_5Tg2Lm8Qa1",
+    "accountId": "acc_9Pz4Rt",
+    "email": "owner@example.com",
+    "displayName": "Desk Owner",
+    "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=sctp-port:5000\r\n",
+    "iceServers": [
+      {
+        "urls": [
+          "stun:turn.cloud.example:3478"
+        ]
+      },
+      {
+        "urls": [
+          "turn:turn.cloud.example:3478?transport=udp",
+          "turns:turn.cloud.example:443?transport=tcp"
+        ],
+        "username": "1793923200:rs_5Tg2Lm8Qa1",
+        "credential": "dGVzdC1jcmVkZW50aWFs"
+      }
+    ]
+  }
+}

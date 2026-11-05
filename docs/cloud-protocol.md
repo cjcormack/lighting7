@@ -1,10 +1,12 @@
 # The cloud protocol
 
 `cloud-protocol/` is the wire contract between the desk and Lighting7 Cloud: the control channel's
-envelope and messages, the adoption API's bodies, the close and error codes, and the install key's
-signing. It is MIT like the rest of the desk, and it is the desk's: a protocol change is a desk PR first
-(cloud design record R3). The cloud builds it from a pinned desk commit (R4). P0 is the cloud-p0 plan
-(`docs/plans/completed/cloud-p0-plan.md`), decisions D3 to D10.
+envelope and messages, the adoption API's bodies, the close and error codes, the install key's signing,
+the desk access tokens, and the contracts a remote session's browser speaks to the desk's sidecar and to
+the desk's SPA. It is MIT like the rest of the desk, and it is the desk's: a protocol change is a desk
+PR first (cloud design record R3). The cloud builds it from a pinned desk commit (R4). P0 is the
+cloud-p0 plan (`docs/plans/completed/cloud-p0-plan.md`), decisions D3 to D10; P1's additions are the
+cloud-p1 plan's (`docs/plans/cloud-p1-plan.md`), D2 to D8.
 
 Package `uk.me.cormack.lighting7.cloud.protocol`, JVM only, `kotlinx.serialization` and no Ktor: each
 side brings its own HTTP client, server and WebSocket.
@@ -68,27 +70,108 @@ whatever its type, since this version's classes may not describe its body; the r
 3. Desk → `auth {installId, timestamp, signature}`, `signature` over `AuthPayload(installId, nonce,
    timestamp)`.
 4. The cloud checks the signature against the install's key and the timestamp against its clock
-   (`CLOCK_SKEW_TOLERANCE`, 5 minutes), then → `welcome {orgName, heartbeatS}`. A refusal closes 4003
-   with an `AuthFailure` name as the reason.
-5. Desk → `hello {protocol, deskVersion, platform, deskInstallUuid, friendlyName, capabilities}`. P0's
-   capabilities are empty; later phases add theirs here.
-6. Desk → `health {uptimeS, deskVersion}` every `heartbeatS` seconds (25 in P0).
+   (`CLOCK_SKEW_TOLERANCE`, 5 minutes), then → `welcome {orgName, heartbeatS, remoteOrigin?}`. A
+   refusal closes 4003 with an `AuthFailure` name as the reason. `remoteOrigin` is the origin the cloud
+   frames this install's SPA on (`https://<label>.desk.<domain>`), which the desk allows in its Origin
+   check; a cloud that serves no remote sessions leaves it out.
+5. Cloud → `jwks {keys}`, the keys desk access tokens are signed with (§"Desk access tokens"), and
+   again whenever they change.
+6. Desk → `hello {protocol, deskVersion, platform, deskInstallUuid, friendlyName, capabilities}`, and
+   `capabilities {list}` whenever the list changes (§"Capabilities").
+7. Desk → `health {uptimeS, deskVersion}` every `heartbeatS` seconds (25 in P0).
+
+`jwks` and `hello` cross: neither waits for the other.
 
 ## Messages
 
-Each has a fixture in `cloud-protocol/src/test/resources/protocol/messages/`.
+Each has a fixture in `cloud-protocol/src/test/resources/protocol/messages/`, named by its type
+(`rtc.offer.json`). A reply's *Answers* column names the request it answers (§"Replies").
 
-| Type | Direction | Body | Fixture |
+| Type | Direction | Body | Answers |
 |---|---|---|---|
-| `challenge` | cloud → desk | `nonce`, `serverTime` | `challenge.json` |
-| `auth` | desk → cloud | `installId`, `timestamp`, `signature` | `auth.json` |
-| `welcome` | cloud → desk | `orgName`, `heartbeatS` | `welcome.json` |
-| `hello` | desk → cloud | `protocol`, `deskVersion`, `platform`, `deskInstallUuid`, `friendlyName`, `capabilities` | `hello.json` |
-| `health` | desk → cloud | `uptimeS`, `deskVersion` | `health.json` |
-| `unadopted` | cloud → desk | none: the install was removed in the portal | `unadopted.json` |
-| `error` | either | `code` (`ErrorCode`, or a newer one), `message` | `error.json` |
+| `challenge` | cloud → desk | `nonce`, `serverTime` | |
+| `auth` | desk → cloud | `installId`, `timestamp`, `signature` | `challenge` |
+| `welcome` | cloud → desk | `orgName`, `heartbeatS`, `remoteOrigin?` | `auth` |
+| `hello` | desk → cloud | `protocol`, `deskVersion`, `platform`, `deskInstallUuid`, `friendlyName`, `capabilities` | |
+| `health` | desk → cloud | `uptimeS`, `deskVersion` | |
+| `unadopted` | cloud → desk | none: the install was removed in the portal | |
+| `error` | either | `code` (`ErrorCode`, or a newer one), `message` | any request it refuses |
+| `capabilities` | desk → cloud | `list`: the whole capability list, replacing `hello`'s | |
+| `jwks` | cloud → desk | `keys`: `[{kty, crv, kid, x}]` | |
+| `revoke` | cloud → desk | `at`, and normally one of `sid`, `accountId` or `all: true` | |
+| `rtc.offer` | cloud → desk | `sid`, `accountId`, `email`, `displayName`, `sdp`, `iceServers: [{urls, username?, credential?}]` | |
+| `rtc.answer` | desk → cloud | `sid`, `sdp` | `rtc.offer` |
+| `rtc.ice` | either | `sid`, `candidate?: {candidate, sdpMid?, sdpMLineIndex?, usernameFragment?}` | |
+| `rtc.close` | either | `sid`, `reason` (an `ErrorCode`) | `rtc.offer`, when refused |
+| `link.invite` | desk → cloud | `inviteId`, `email`, `userName`, `invitedByName`, `expiresAt` | |
+| `link.cancelled` | desk → cloud | `inviteId` | |
+| `link.refused` | cloud → desk | `inviteId`: an owner or admin declined it | |
+| `link.accepted` | cloud → desk | `inviteId`, `accountId`, `email` | |
+| `link.ack` | desk → cloud | `inviteId`, `outcome` (`LINKED` or `REFUSED`), `reason?` | `link.accepted` |
+| `link.created` | desk → cloud | `accountId`, `userName`: a link proved once | |
+| `link.removed` | desk → cloud | `accountId` | |
+| `mcp.call` | cloud → desk | `token`, `grant: {id, clientName}`, `request` (a JSON-RPC message) | |
+| `mcp.result` | desk → cloud | `response?` (absent for a notification) | `mcp.call` |
 
 `unknown.json` is a type this version does not know, and must survive a decode and re-encode.
+
+- **`revoke`** ends and refuses whatever it names: one remote session, every session and grant of one
+  account, or everything through the cloud. It normally names one; one naming several revokes each
+  (`Revoke.targets`), so a mistake revokes too much rather than nothing, and one naming none revokes
+  nothing. `at` is a `Timestamps` string on the cloud's clock. A token's `iat` is the floor of its mint
+  time in whole seconds, and a token for a revoked target is refused when its `iat` is at or before
+  `at`'s whole second (`Revoke.covers`), whatever the desk's clock says: so a token minted in the second
+  of the revocation is refused too, and the cloud mints nothing for a target it revoked until the next
+  second. An `at` that does not parse covers every token. `all` is written only when true.
+- **`rtc.offer`** brings the browser's SDP for a new remote session `sid`, the account asking for it,
+  and the ICE servers (STUN and TURN, in WebRTC's `RTCIceServer` shape) its peer should use. The cloud
+  relays the `rtc.*` messages without reading the SDP or candidates. `rtc.ice` without a candidate
+  says there are no more. `rtc.close` ends a session from either side, its `reason` one of the codes
+  below (`SESSION_ENDED` when none fits).
+- **`link.*`** carry an invite to its acceptance (`link.invite` → `link.accepted` or `link.refused`,
+  keyed by `inviteId`; `link.cancelled` withdraws it) and keep the cloud's mirror of a desk's links
+  (`link.created`, `link.removed`). `link.ack`'s `reason` is `LINK_EMAIL_MISMATCH`,
+  `LINK_INVITE_NOT_LIVE` or `LINK_TAKEN`.
+- **`mcp.call`** relays one MCP JSON-RPC message under a desk access token of scope `mcp`; its
+  `request` and `mcp.result`'s `response` are JSON objects. `grant.id` must be the token's signed `gid`
+  (the desk refuses a call where it is not, `MCP_GRANT_MISMATCH`); `grant.clientName` is the name the
+  desk shows for the grant. A call must fit one frame: the cloud refuses a body over
+  `MAX_RELAYED_REQUEST_BYTES` (7 MiB) with `REQUEST_TOO_LARGE` before it reaches the desk.
+
+## Replies
+
+A reply is a message whose envelope `replyTo` is the `id` of the request it answers. Besides the
+handshake (`challenge` → `auth` → `welcome`), three requests expect one:
+
+- **`rtc.offer`** is answered by `rtc.answer`, or by `rtc.close` when the desk refuses it
+  (`REMOTE_ACCESS_OFF`, `REMOTE_SESSION_DENIED`, `REMOTE_SESSION_LIMIT`, `SIDECAR_UNAVAILABLE`), within
+  `RTC_OFFER_REPLY_TIMEOUT` (75 s), which outlasts the minute a desk that approves each session gives an
+  admin to allow it.
+- **`link.accepted`** is answered by `link.ack`, linked or not.
+- **`mcp.call`** is answered by `mcp.result`, or by `error` when the desk refuses the call: its `code`
+  is `MCP_ACCESS_OFF`, `DESK_BUSY`, `CLOUD_ACCOUNT_NOT_LINKED`, `MCP_GRANT_MISMATCH`, `TOKEN_REVOKED` or
+  a token refusal.
+
+An unanswered request is the asker's to time out, and the asker drops a reply whose `replyTo` it no
+longer waits for. Every other message is sent and forgotten. `link.invite` is not a request in this
+sense: its answer, `link.accepted` or `link.refused`, may come days later and over another connection,
+so it names the invite rather than the message.
+
+## Capabilities
+
+`hello`'s `capabilities` and `capabilities`' `list` (`Capability`) say what the desk speaks and what
+stops it serving it, so the cloud can tell a user why before it asks:
+
+| Capability | Means | The cloud refuses with |
+|---|---|---|
+| `remote.v1` | The desk takes remote sessions | `DESK_REMOTE_UNSUPPORTED` when absent |
+| `mcp.v1` | The desk relays MCP calls | `DESK_MCP_UNSUPPORTED` when absent |
+| `remote.off` | Its *Remote sessions* switch is off | `REMOTE_ACCESS_OFF` |
+| `mcp.off` | Its *Claude (MCP)* switch is off | `MCP_ACCESS_OFF` |
+| `remote.no-sidecar` | No sidecar is running | `SIDECAR_UNAVAILABLE` |
+
+`remote.v1` and `mcp.v1` are announced whatever their switches say. A `capabilities` message replaces
+the whole list. A capability the cloud does not know is ignored.
 
 ## Close codes
 
@@ -103,9 +186,157 @@ state; after any other close the desk reconnects.
 | 4004 | `INSTALL_REVOKED` | free text |
 | 4009 | `REPLACED` | free text: a newer connection from the same install took its place |
 
-`ErrorCode` lists the codes an `error` message or an `ApiError` body carries: `PROTOCOL_ERROR`,
-`BAD_SIGNATURE`, `CLOCK_SKEW`, `MALFORMED`, `NOT_FOUND`. They are strings, so a newer code reads as
-unknown rather than failing to decode. `close-codes.json` pins all three lists and the constants.
+## Codes
+
+`ErrorCode` lists the codes the protocol carries: an `error` message's or `ApiError`'s `code`, an
+`rtc.close`'s `reason`, a `link.ack`'s `reason`, a `ctl` `refused`'s `code`, and the cloud's own
+refusals to the portal, the shell and MCP clients. They are strings, so a newer code reads as unknown
+rather than failing to decode. `close-codes.json` pins every list here and the constants.
+
+| Code | Means |
+|---|---|
+| `PROTOCOL_ERROR`, `BAD_SIGNATURE`, `CLOCK_SKEW`, `MALFORMED`, `NOT_FOUND` | P0's: a bad frame, and the install key's refusals |
+| `CLOUD_ACCOUNT_NOT_LINKED` | The account has no link to a local user on the desk |
+| `REMOTE_ACCESS_OFF`, `MCP_ACCESS_OFF` | The desk's switch for that door is off |
+| `REMOTE_SESSION_DENIED` | An admin at the desk denied the session, or none allowed it in time |
+| `REMOTE_SESSION_LIMIT` | The desk has as many sessions open, or offers this minute, as it takes |
+| `SESSION_ENDED` | A session ended for none of the other reasons |
+| `REMOTE_SESSION_UNKNOWN` | A remote token for a `sid` the desk never opened, or has ended |
+| `REMOTE_SESSION_MISMATCH` | A remote token whose `sub` or `org` is not its session's; the desk ends the session |
+| `TOKEN_REVOKED` | A token that verifies but whose target a `revoke` covers |
+| `MCP_GRANT_MISMATCH` | An `mcp.call` whose `grant.id` is not its token's `gid` |
+| `SIDECAR_UNAVAILABLE` | The desk's sidecar is not running |
+| `DESK_OFFLINE` | The cloud has no channel open to the desk |
+| `DESK_DISCONNECTED` | The channel closed with a request outstanding |
+| `DESK_TIMEOUT` | The desk did not answer in time |
+| `DESK_BUSY` | The desk runs as many relayed calls as it takes |
+| `DESK_REMOTE_UNSUPPORTED`, `DESK_MCP_UNSUPPORTED` | The desk does not announce `remote.v1` or `mcp.v1` |
+| `REQUEST_TOO_LARGE` | A body over `MAX_RELAYED_REQUEST_BYTES` |
+| `LINK_EMAIL_MISMATCH`, `LINK_INVITE_NOT_LIVE`, `LINK_TAKEN` | Why a `link.ack` refused |
+| `TOKEN_*` | Why a desk access token was refused (§"Desk access tokens") |
+
+## Desk access tokens
+
+How the cloud tells a desk who is calling (cloud-p1 D2), in `DeskTokens.kt`: a compact JWS (RFC 7515),
+`alg` `EdDSA` over Ed25519 (RFC 8037), signed by the cloud and checked by the desk with the JDK's
+Ed25519, so neither side carries a JWT library. Both use `DeskTokens`, so the cloud signs exactly the
+bytes the desk checks.
+
+- **Header**: `{"alg":"EdDSA","kid":…,"typ":"JWT"}`, `kid` naming the key in the JWKS. The keys a
+  `jwks` names sign desk access tokens and nothing else, so no other JWT the cloud issues can pass for
+  one (RFC 8725 §3.11).
+- **Claims** (`DeskAccessClaims`): `iss` (the cloud's origin), `aud` (the install id), `sub` (the cloud
+  account id), `org`, `scope` (`remote` or `mcp`), `sid` for a remote session, or `gid` and `azp` (the
+  MCP grant and its client) for an MCP call, `iat` and `exp` in seconds since the epoch, and `jti`.
+- **Bytes**: each part is base64url without padding of the compact JSON `CloudJson` writes, the fields
+  in the order above and absent ones left out; the signature is over the ASCII `header.claims`.
+  Ed25519 is deterministic, so a token's string is exact.
+
+`DeskTokens.verify(token, keys, audience, scope, now)` answers `TokenCheck.Valid` with the claims or
+`TokenCheck.Refused` with the first `TokenRefusal` found, checking the signature before trusting any
+claim:
+
+| Refusal | Code | When |
+|---|---|---|
+| `MALFORMED` | `TOKEN_MALFORMED` | Not three canonical base64url parts, over 4096 characters, a header or claims that do not decode, an `alg` other than `EdDSA`, a `typ` other than `JWT`, any `crit` header (a null one included), `exp` not after `iat`, a time outside 1970–9999, or claims of the wrong shape for their scope (a remote token without `sid` or with a grant; an MCP token without `gid` and `azp` or with a `sid`) |
+| `UNKNOWN_KEY` | `TOKEN_UNKNOWN_KEY` | `kid` is not in the desk's JWKS |
+| `BAD_SIGNATURE` | `TOKEN_BAD_SIGNATURE` | The signature does not verify under that key |
+| `WRONG_AUDIENCE` | `TOKEN_WRONG_AUDIENCE` | `aud` is not this install |
+| `WRONG_SCOPE` | `TOKEN_WRONG_SCOPE` | `scope` is not the door's: a remote token at the MCP relay, or the reverse |
+| `TOO_LONG_LIVED` | `TOKEN_TOO_LONG_LIVED` | `exp` is more than 10 minutes after `iat` (`DeskTokens.MAX_LIFETIME`) |
+| `NOT_YET_VALID` | `TOKEN_NOT_YET_VALID` | `iat` is more than 60 s ahead of the desk's clock (`DeskTokens.CLOCK_SKEW`) |
+| `EXPIRED` | `TOKEN_EXPIRED` | `exp` is more than 60 s behind the desk's clock |
+
+`DeskTokens.sign` refuses (`IllegalArgumentException`) claims `verify` would refuse whatever the time,
+so the cloud cannot mint a token no desk takes. `verify` does not judge `iss`, `sub`, `org` or `jti`:
+what they mean is the desk's, and so are its refusals for them: `REMOTE_SESSION_UNKNOWN`,
+`REMOTE_SESSION_MISMATCH` and `TOKEN_REVOKED`.
+
+**The JWKS.** `jwks {keys}` lists the keys tokens are signed with, each an RFC 8037 JWK
+(`Jwk {kty: "OKP", crv: "Ed25519", kid, x}`, `x` the raw key as `InstallKeys` writes one); a JWK with
+only `kid` and `x` reads as Ed25519. Every field is optional on the wire, so a JWKS that also holds a
+key of another type (RSA's `n` and `e`, no `x`) still decodes. `publicKeysOf` turns the list into the
+map `verify` takes, leaving out a key with no `kid`, one that is not Ed25519 and one that is not
+canonical, and keeping the first usable key of a `kid` named twice. There is
+no public JWKS URL: only desks verify, and they hear the keys over the channel.
+
+## The link framing
+
+A remote session is a WebRTC peer connection between the browser (the cloud's shell and its service
+worker) and the desk's sidecar, `lighting7-link` (cloud-p1 D7, D8). Each HTTP request and each
+WebSocket rides a data channel of its own, labelled by kind (`LinkFraming`): `ctl` (one per session,
+opened first, §"ctl"), `http` and `ws`, all ordered and reliable. On `http` and `ws` every data-channel
+message is binary, its first byte its kind:
+
+| Byte | Kind | Payload |
+|---|---|---|
+| `0x01` | `HEAD` | UTF-8 JSON, at most 65,535 bytes, so the frame is at most 64 KiB |
+| `0x02` | `DATA` | 1 to 16 KiB of body bytes, raw |
+| `0x03` | `END` | none: the body is complete |
+| `0x04` | `RESET` | UTF-8 JSON `{reason}`: the exchange is abandoned |
+| `0x10` | `TEXT_PART` | 1 to 16 KiB of a WebSocket text message, more to come |
+| `0x11` | `TEXT_END` | its last (or only) 0 to 16 KiB |
+| `0x12` | `BINARY_PART` | 1 to 16 KiB of a WebSocket binary message, more to come |
+| `0x13` | `BINARY_END` | its last (or only) 0 to 16 KiB |
+| `0x20` | `CLOSE` | UTF-8 JSON `{code, reason}`: the WebSocket closed |
+
+- **HTTP**: the browser sends `HEAD {method, path, headers, origin}` (`path` with its query; `headers`
+  as `[[name, value], …]`; `origin` the request's origin as the service worker sees it, which the
+  sidecar forwards as `Origin`), its body as `DATA`, then `END`; the sidecar answers `HEAD {status,
+  headers}`, `DATA`, `END`, and closes the channel. Either side may send `RESET` instead, after which
+  the channel closes.
+- **WebSocket**: the browser sends `HEAD {path, headers, origin}`; the sidecar answers `HEAD {status,
+  headers}`, `101` when the desk upgraded, otherwise the refusal's status, after which the channel
+  closes. Then each message is zero or more `_PART` fragments and one `_END` of its kind (a text
+  message is split at byte boundaries and decoded once whole); an empty message is one empty `_END`.
+  `CLOSE {code, reason}` from either side ends it, answered by the other's own `CLOSE` if it has not
+  sent one; the desk's codes (4401 among them) pass through unchanged.
+- **Backpressure**: a sender stops writing to a channel once its `bufferedAmount` passes 1 MiB and
+  resumes at its `bufferedAmountLowThreshold`, 256 KiB, so a 100 MB upload streams in bounded memory.
+- **What the sidecar adds**: it removes from a head's `headers`, without regard to case, every header
+  in `LinkFraming.STRIPPED_HEADERS`: those that authorise or identify a request (`Authorization`,
+  `Cookie`, `Host`, `Lighting7-Link`, `Origin`) and those its own connection to the desk owns
+  (hop-by-hop headers and the WebSocket handshake's). It then sets `Authorization` to the session's
+  latest token, `Lighting7-Link` to the desk's link secret and `Origin` to the head's `origin`, once
+  each; the browser's headers never authorise anything.
+
+`protocol/link/framing.json` gives the constants, the stripped headers and six exchanges frame by
+frame, each frame its kind, its JSON or text, and its bytes as hex (a long body as `fill {byte,
+count}`).
+
+## ctl
+
+The `ctl` channel carries `CtlMessage`s, JSON text with `type` naming each; a reader ignores a `type`
+it does not know (`CtlMessage.decodeOrNull` answers null for one). `protocol/link/ctl.json` has one of
+each.
+
+| Type | Direction | Body |
+|---|---|---|
+| `hello` | browser → sidecar, first | `token`: the session's desk access token |
+| `ready` | sidecar → browser | `user?`, `role?` for a linked session, `unlinked: true` for an unlinked one, and `build` |
+| `refused` | sidecar → browser | `code`: why the desk refused the token; the sidecar then ends the session |
+| `token` | browser → sidecar | `token`: a refreshed token for the same session |
+
+The sidecar decides nothing: it answers `hello` by asking the desk's `auth/status` with the token.
+
+## The remote frame
+
+The `postMessage` messages between the cloud's shell, the desk's SPA framed in it, and the shell's
+service worker (cloud-p1 D8, D9), each a JSON object whose `type` is one of `RemoteFrame.MESSAGE_TYPES`.
+`protocol/remote-frame/messages.json` lists each with its sender, receiver and channel (`over`: the
+window, the SPA's `MessagePort`, or the worker), and the ports it transfers.
+
+- **The SPA speaks first**, so nothing is posted before it listens: `hello {protocol: 1}` to the
+  parent, at the origin the page's `lighting7-remote-parent` meta names, answered by `port`,
+  transferring the `MessagePort` its socket rides. A message from any other origin is ignored.
+- **The socket**, on that port, one at a time: the SPA sends `open {path}` and the shell answers `open`
+  once the socket is open; `send {data}` and `message {data}` carry text messages; `close {code,
+  reason}` either way ends it, the shell's carrying the desk's code.
+- **The session**, on the same port: `session.end` (*Sign out*) and `auth.unlinked` (the account is not
+  linked here), SPA → shell.
+- **A restarted service worker** has lost its port: it posts `port.request` to the SPA, which posts
+  `port.request` on its own port; the shell answers `port` with a fresh one, which the SPA hands to the
+  worker as `port`.
 
 ## Adoption
 
@@ -154,15 +385,23 @@ next.
 | `UnadoptPayload` | `lighting7-cloud/unadopt/v1` | `installId`, `timestamp` |
 
 A later phase that signs something new (P2's git token, P3's backups) adds a payload with its own
-domain.
+domain. A desk access token is not a `SignedPayload`: it is a JWS, its bytes JOSE's (§"Desk access
+tokens").
 
 ## Golden fixtures
 
 `cloud-protocol/src/test/resources/protocol/` is the contract both repos test against (R3):
 
-- `messages/*.json`: one envelope per message type, and `unknown.json`.
+- `messages/*.json`: one envelope per message type, named by its type, and `unknown.json`.
 - `adoption/*.json`: every adoption body and `api-error.json`.
-- `close-codes.json`: the close codes, auth failures, error codes and the constants.
+- `close-codes.json`: the close codes, auth failures, error codes, token refusals, capabilities and the
+  constants.
+- `tokens/vectors.json`: the test key's JWK under `kid` `test-1`, a clock (`now`), and desk access
+  tokens: five that verify, each with its claims and scope, and one per way a token is refused, each
+  with the refusal it gets. Signed with the test key, bar `wrong-key`'s, which RFC 8032's TEST 2 key
+  signs.
+- `link/framing.json` and `link/ctl.json`: the sidecar's framing and `ctl` (§"The link framing").
+- `remote-frame/messages.json`: the remote-frame messages (§"The remote frame").
 - `signing/test-key.json`: RFC 8032 §7.1's TEST 1 key, its encodings and fingerprint, and the RFC's
   signature of the empty message. A published key, so never one any real install holds.
 - `signing/vectors.json`: each payload's fields, canonical bytes (hex) and signature under the test
@@ -170,15 +409,22 @@ domain.
 
 `GoldenFixturesTest` decodes each fixture to the value it names and re-encodes it to the same JSON, and
 fails on a message type with no fixture or a fixture nothing checks. `InstallKeysTest` checks every
-vector. The signing vectors were computed with Python's `cryptography` package, outside this code, so
-passing them says the desk signs what another Ed25519 implementation would.
+signing vector, `DeskTokensTest` every token vector (the valid ones sign to their tokens, the refused
+ones are refused for their reason), and `LinkContractsTest` the framing, `ctl` and remote-frame
+fixtures, which describe contracts the desk's JVM never speaks: each frame's bytes are its kind and
+payload, within the limits, in an order its label allows. The signing and token vectors were computed
+with Python's `cryptography` package, outside this code, so passing them says the desk signs and checks
+what another Ed25519 implementation would. The framing, `ctl` and remote-frame fixtures are read by the
+sidecar's Go tests, the SPA's Vitest and the cloud's tests too.
 
 ## Versioning
 
 Within `PROTOCOL_VERSION` every change is additive: a new message type (an old reader sees
-`Message.Unknown`), a new optional field (an old reader ignores it), a new capability in `hello`, a new
-error code. Anything else is a new version: removing or renaming a field or a type, making an optional
-field required, a new adoption status, a change to a payload's bytes (which takes a new domain string).
+`Message.Unknown`), a new optional field (an old reader ignores it), a new capability, a new error code,
+a new `ctl` or remote-frame message type, a new framing kind on a new label. Anything else is a new
+version: removing or renaming a field or a type, making an optional field required, a new adoption
+status, a new `link.ack` outcome or token scope (both enums, which an old reader cannot decode), a change
+to a payload's bytes (which takes a new domain string).
 The cloud serves a new version beside the old one for at least one desk minor version (NFR-COMPAT-1),
 and closes 4001 a desk it no longer serves.
 

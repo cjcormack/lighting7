@@ -8,6 +8,9 @@
     "platform": "windows-x64",
     "deskInstallUuid": "6f1d2c3e-8a4b-4c5d-9e6f-7a8b9c0d1e2f",
     "friendlyName": "Front-of-house desk",
-    "capabilities": []
+    "capabilities": [
+      "remote.v1",
+      "remote.no-sidecar"
+    ]
   }
 }

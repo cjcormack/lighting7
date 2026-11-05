@@ -17,6 +17,19 @@ const val PROTOCOL_VERSION: Int = 1
 /** The largest frame either side sends or accepts on the control channel, 8 MiB. */
 const val MAX_FRAME_BYTES: Int = 8 * 1024 * 1024
 
+/**
+ * The largest request body the cloud relays to a desk in one frame, 7 MiB, leaving room under
+ * [MAX_FRAME_BYTES] for the envelope and the token. A larger one is refused with
+ * [ErrorCode.REQUEST_TOO_LARGE] before it reaches the desk.
+ */
+const val MAX_RELAYED_REQUEST_BYTES: Int = 7 * 1024 * 1024
+
+/**
+ * How long the cloud waits for a desk's answer to an [Message.RtcOffer]: longer than the minute a desk
+ * that approves its sessions gives an admin to allow one.
+ */
+val RTC_OFFER_REPLY_TIMEOUT: Duration = Duration.ofSeconds(75)
+
 /** How far a signed timestamp may be from the receiver's clock before it is refused as [AuthFailure.CLOCK_SKEW]. */
 val CLOCK_SKEW_TOLERANCE: Duration = Duration.ofMinutes(5)
 

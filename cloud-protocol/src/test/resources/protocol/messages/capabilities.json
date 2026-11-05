@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "type": "capabilities",
+  "id": "d-0004",
+  "body": {
+    "list": [
+      "remote.v1",
+      "mcp.v1",
+      "mcp.off"
+    ]
+  }
+}

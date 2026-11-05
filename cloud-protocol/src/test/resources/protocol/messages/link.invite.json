@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "type": "link.invite",
+  "id": "d-0008",
+  "body": {
+    "inviteId": "inv_4Rm7Kc",
+    "email": "operator@example.com",
+    "userName": "sam",
+    "invitedByName": "chris",
+    "expiresAt": "2026-11-12T12:00:00.000Z"
+  }
+}

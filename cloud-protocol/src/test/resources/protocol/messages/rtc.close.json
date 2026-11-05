@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "type": "rtc.close",
+  "id": "d-0007",
+  "replyTo": "c-0009",
+  "body": {
+    "sid": "rs_5Tg2Lm8Qa2",
+    "reason": "REMOTE_ACCESS_OFF"
+  }
+}

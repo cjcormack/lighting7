@@ -1,0 +1,145 @@
+{
+  "protocol": 1,
+  "messages": [
+    {
+      "from": "spa",
+      "to": "shell",
+      "over": "window",
+      "message": {
+        "type": "hello",
+        "protocol": 1
+      },
+      "why": "The SPA speaks first, to the remote parent's origin."
+    },
+    {
+      "from": "shell",
+      "to": "spa",
+      "over": "window",
+      "transfer": [
+        "port"
+      ],
+      "message": {
+        "type": "port"
+      },
+      "why": "The port the SPA's socket rides."
+    },
+    {
+      "from": "spa",
+      "to": "shell",
+      "over": "port",
+      "message": {
+        "type": "open",
+        "path": "/api"
+      },
+      "why": "Open the socket."
+    },
+    {
+      "from": "shell",
+      "to": "spa",
+      "over": "port",
+      "message": {
+        "type": "open"
+      },
+      "why": "The socket is open."
+    },
+    {
+      "from": "spa",
+      "to": "shell",
+      "over": "port",
+      "message": {
+        "type": "send",
+        "data": "{\"type\":\"fxState\"}"
+      }
+    },
+    {
+      "from": "shell",
+      "to": "spa",
+      "over": "port",
+      "message": {
+        "type": "message",
+        "data": "{\"type\":\"universesState\",\"universes\":[]}"
+      }
+    },
+    {
+      "from": "spa",
+      "to": "shell",
+      "over": "port",
+      "message": {
+        "type": "close",
+        "code": 1000,
+        "reason": ""
+      },
+      "why": "The SPA closes its socket."
+    },
+    {
+      "from": "shell",
+      "to": "spa",
+      "over": "port",
+      "message": {
+        "type": "close",
+        "code": 4401,
+        "reason": "session ended"
+      },
+      "why": "The socket closed, with the desk's code."
+    },
+    {
+      "from": "spa",
+      "to": "shell",
+      "over": "port",
+      "message": {
+        "type": "session.end"
+      },
+      "why": "Sign out ends the session."
+    },
+    {
+      "from": "spa",
+      "to": "shell",
+      "over": "port",
+      "message": {
+        "type": "auth.unlinked"
+      },
+      "why": "The session's account is not linked on this desk."
+    },
+    {
+      "from": "worker",
+      "to": "spa",
+      "over": "worker",
+      "message": {
+        "type": "port.request"
+      },
+      "why": "A restarted service worker has lost its port."
+    },
+    {
+      "from": "spa",
+      "to": "shell",
+      "over": "port",
+      "message": {
+        "type": "port.request"
+      }
+    },
+    {
+      "from": "shell",
+      "to": "spa",
+      "over": "port",
+      "transfer": [
+        "port"
+      ],
+      "message": {
+        "type": "port"
+      },
+      "why": "A fresh port for the worker."
+    },
+    {
+      "from": "spa",
+      "to": "worker",
+      "over": "worker",
+      "transfer": [
+        "port"
+      ],
+      "message": {
+        "type": "port"
+      },
+      "why": "Handed on to the worker."
+    }
+  ]
+}

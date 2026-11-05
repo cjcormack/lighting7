@@ -50,11 +50,53 @@ class EnvelopeTest {
 
     @Test
     fun `an unknown type keeps its type and body`() {
-        val envelope = Envelope.decode("""{"v":1,"type":"mcp.call","id":"x","body":{"tool":"describe_rig"}}""")
+        val envelope = Envelope.decode("""{"v":1,"type":"future.call","id":"x","body":{"tool":"describe_rig"}}""")
         val body = envelope.body as Message.Unknown
-        assertEquals("mcp.call", envelope.type)
+        assertEquals("future.call", envelope.type)
         assertEquals("""{"tool":"describe_rig"}""", body.body.toString())
         assertEquals(envelope, Envelope.decode(envelope.encode()))
+    }
+
+    @Test
+    fun `a welcome from a cloud that names no remote origin still reads`() {
+        val frame = """{"v":1,"type":"welcome","id":"x","body":{"orgName":"O","heartbeatS":25}}"""
+        assertEquals(Message.Welcome("O", 25), Envelope.decode(frame).body)
+        assertEquals(frame, Envelope("x", Message.Welcome("O", 25)).encode())
+    }
+
+    @Test
+    fun `a revoke revokes every target it names`() {
+        val at = "2026-11-05T12:00:00.000Z"
+        assertEquals(setOf(RevokeTarget.Session("s")), Message.Revoke(at, sid = "s").targets)
+        assertEquals(setOf(RevokeTarget.Account("a")), Message.Revoke(at, accountId = "a").targets)
+        assertEquals(setOf(RevokeTarget.All), Message.Revoke(at, all = true).targets)
+        assertEquals(emptySet(), Message.Revoke(at).targets)
+        assertEquals(setOf(RevokeTarget.Session("s"), RevokeTarget.Account("a")), Message.Revoke(at, sid = "s", accountId = "a").targets)
+        assertEquals("""{"v":1,"type":"revoke","id":"x","body":{"at":"$at","all":true}}""", Envelope("x", Message.Revoke(at, all = true)).encode())
+        assertEquals("""{"v":1,"type":"revoke","id":"x","body":{"at":"$at","accountId":"a"}}""", Envelope("x", Message.Revoke(at, accountId = "a")).encode())
+    }
+
+    @Test
+    fun `a revoke covers every token issued in or before its second`() {
+        val revoke = Message.Revoke("2026-11-05T12:00:00.400Z", sid = "s")
+        val second = Instant.parse("2026-11-05T12:00:00Z").epochSecond
+        assertTrue(revoke.covers(second - 1))
+        assertTrue(revoke.covers(second), "a token minted later in the revocation's second")
+        assertFalse(revoke.covers(second + 1))
+        assertTrue(Message.Revoke("yesterday", sid = "s").covers(second + 3600), "an unreadable at covers everything")
+    }
+
+    @Test
+    fun `the end of a session's candidates and a notification's result carry no body field`() {
+        assertEquals("""{"v":1,"type":"rtc.ice","id":"x","body":{"sid":"s"}}""", Envelope("x", Message.RtcIce("s")).encode())
+        assertEquals(Message.RtcIce("s"), Envelope.decode("""{"v":1,"type":"rtc.ice","id":"x","body":{"sid":"s","candidate":null}}""").body)
+        assertEquals("""{"v":1,"type":"mcp.result","id":"x","replyTo":"c","body":{}}""", Envelope("x", Message.McpResult(), replyTo = "c").encode())
+    }
+
+    @Test
+    fun `a ready names an unlinked session only when it is one`() {
+        assertEquals("""{"type":"ready","user":"u","role":"ADMIN","build":"b"}""", CloudJson.encodeToString(CtlMessage.serializer(), CtlMessage.Ready("u", "ADMIN", build = "b")))
+        assertEquals("""{"type":"ready","unlinked":true,"build":"b"}""", CloudJson.encodeToString(CtlMessage.serializer(), CtlMessage.Ready(unlinked = true, build = "b")))
     }
 
     @Test
