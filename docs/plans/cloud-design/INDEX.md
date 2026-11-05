@@ -18,7 +18,7 @@ repos. So **each phase is two plans**, one per repo, written together:
 | Phase | Desk plan (this repo, public) | Cloud plan (`lighting7-cloud`, private) |
 |---|---|---|
 | P0 | `docs/plans/completed/cloud-p0-plan.md` (done) | `docs/plans/completed/p0-plan.md` (done) |
-| P1 | `docs/plans/cloud-p1-plan.md` | `docs/plans/p1-plan.md` |
+| P1 | `docs/plans/cloud-p1-plan.md` (active) | `docs/plans/p1-plan.md` (active) |
 | … | `cloud-pN-plan.md` | `pN-plan.md` |
 
 Each plan is run by `/next-session` in its own repo, which keeps its own copy of the skill. A session
@@ -28,11 +28,13 @@ owner can watch a real desk reach a real cloud.
 
 ## Asked and answered
 
-| Question | Answer (2026-11-02) |
+| Question | Answer |
 | --- | --- |
-| Where do the PRD and the plans live? | **Split by repo.** PRD and cloud plans in the private repo; desk plans here, self-contained and citing PRD IDs. One plan in this repo with a *Repo* column was declined: it would publish the cloud's design. |
-| REC-2, REC-3, REC-4 for P0? | **Confirmed**: AWS Lightsail in London under Terraform; Kotlin/Ktor/Exposed/Postgres with a React 19 + Vite + RTK Query portal; the cloud's own IdP and OAuth server in Ktor. |
-| The cloud's domain (OQ-1)? | **Decided before accounts.** Passkeys bind to the domain, so the cloud's accounts session waits for a registered product domain; infra may start on a placeholder. |
+| Where do the PRD and the plans live? (2026-11-02) | **Split by repo.** PRD and cloud plans in the private repo; desk plans here, self-contained and citing PRD IDs. One plan in this repo with a *Repo* column was declined: it would publish the cloud's design. |
+| REC-2, REC-3, REC-4 for P0? (2026-11-02) | **Confirmed**: AWS Lightsail in London under Terraform; Kotlin/Ktor/Exposed/Postgres with a React 19 + Vite + RTK Query portal; the cloud's own IdP and OAuth server in Ktor. |
+| The cloud's domain (OQ-1)? (2026-11-02) | **Decided before accounts.** Passkeys bind to the domain, so the cloud's accounts session waits for a registered product domain; infra may start on a placeholder. |
+| P1's open questions (asked 2026-11-05) | **OQ-3:** no remote-access trial before P5 (D-11). **OQ-4:** the MCP URL is per install in P1 (D-12). **OQ-5:** a cloud org role never implies a desk role; reaching a desk as a user always needs a link (D-13). **OQ-7:** "approve new remote sessions on the desk" is offered, off by default (D-14, FR-RA-12). **OQ-10** (an MIT shell) and **OQ-11** (a WebSocket relay of last resort) are decided at P1a's gate. |
+| Decisions taken while planning P1 (2026-11-05) | **D-15:** MCP through the cloud has its own desk switch, apart from remote sessions', since approval covers sessions only (FR-RA-13). **D-16:** a desk's invite is mailed only once an owner or admin of the org approves it in the portal, since the install key proves the desk, not the person. **D-17:** the switches that limit what comes through the cloud (remote sessions, MCP, approval, and the scripts, effects and commands switches) change only from the desk's own listener. |
 
 ## Rules every phase plan follows
 
@@ -77,5 +79,13 @@ Each lands in the PRD's next revision; until then, the plan named is the authori
   `render_view` results fit without a protocol change.
 - **No TURN in P0.** §10.3's lean start runs coturn on the app instance; P0 has no remote sessions, so
   coturn and its ports arrive with P1.
+- **The SPA runs at `/` of its own origin** (P1). §9.5 frames the desk's SPA under a path of the
+  cloud's origin; the cloud's P1 plan frames it at `/` of a per-install origin instead, so the SPA needs
+  no base path, and the desk learns that origin from `welcome` (`remoteOrigin`) for its Origin check
+  (cloud-p1 D4, D9).
+- **The sidecar's local API is its stdio** (P1). §9.2's "loopback-only local API" is JSON lines on the
+  sidecar's stdin and stdout, so there is no port to guard (cloud-p1 D7).
+- **The SPA announces remote mode** (P1). §9.5 has the parent announce it; in P1 the SPA's `hello` is
+  answered with the port its socket rides, so nothing is posted before the SPA listens (cloud-p1 D8, D9).
 - **Social sign-in moves out of P0.** FR-ACC-1's Google and Apple sign-in are SHOULD; P0 ships passkeys,
   email verification and recovery codes, and the cloud plan records social sign-in as a follow-up.
