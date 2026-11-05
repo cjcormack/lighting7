@@ -46,6 +46,7 @@ The plan's own rules:
 
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
+| `WindowsSocketTest` "viewOptions is rebroadcast as-is and an announced options map comes back on state", `TestTimedOutException` at `RouteIntegrationTest`'s 60 s rule | On #347's CI run 41968017539 (fbff1a4, 2026-11-05), 1 of 4408 tests, about 2.5 min into the Backend job's `:test`; 3 of 3 runs of the class alone on the same commit locally, 5–11 s each | Not traced. The change on that commit touches only `cloud.state`, which none of the test's `awaitOfType` waits read. Every wait in the test is an unbounded `receiveDeserialized` loop, so a frame that never comes shows up only as the 60 s rule. A candidate is the `StateFlow` conflation `awaitOfType`'s KDoc describes, which once timed this class's departure waits out on a slow runner, but no wait here looks for a value the socket already had | |
 
 ## 4. Fixed
 
