@@ -2,13 +2,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { DEFERRED_TARGET_TYPE } from '@/api/looksApi'
 import { parseProgrammerValue } from '@/lib/programmerValue'
 import { useFixtureListQuery } from '@/store/fixtures'
-import { useLookQuery, useSaveLookMutation } from '@/store/looks'
+import { useLookQuery, usePressLookMutation, useSaveLookMutation } from '@/store/looks'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { LookRowDraft } from './lookRowDraft'
 import { lookRowKey } from './lookRowKey'
 import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 import type { ReactNode } from 'react'
-import type { LookDetails, LookRow } from '@/api/looksApi'
+import type { LookDetails, LookPressRequest, LookPressResponse, LookRow } from '@/api/looksApi'
 import type { StagedValue } from '@/components/fixtures-list/useRowOwnership'
 import type { PaletteReference } from '@/api/paletteReference'
 
@@ -45,6 +45,12 @@ export interface LookRowStoreValue {
   draft: LookRowDraft
   /** Set one cell's value and schedule the save. Canonical assignment string. */
   setValue: (targetKey: string, attribute: string, value: string) => void
+  /**
+   * A value palette tapped into the Look (palette-references plan D23): the draft lands first, then
+   * the desk writes the palette's reference rows into the Look's rows, or takes them out — the cue
+   * press's rule. Null when the press or the draft's save was refused, which the error toast has said.
+   */
+  pressPalette: (press: Omit<LookPressRequest, 'paletteId'> & { paletteId: number }) => Promise<LookPressResponse | null>
   /** The layer's `attributeMask`, verbatim — callers parse it with `parseAttributeMask`. */
   attributeMask: string | null | undefined
   /**
@@ -126,6 +132,7 @@ export function LookRowStoreProvider({
   )
   const { data: fixtures } = useFixtureListQuery()
   const [saveLook] = useSaveLookMutation()
+  const [pressLook] = usePressLookMutation()
   const [saveState, setSaveState] = useState<LookSaveState>('clean')
 
   // One draft per focused Look, minted on the change rather than through a `useMemo` dependency
@@ -157,13 +164,14 @@ export function LookRowStoreProvider({
   /** Monotonic edit count — see the note in `flush`. */
   const writesRef = useRef(0)
 
-  const flush = useCallback(() => {
+  /** Save the draft now, answering whether it landed (true when there was nothing to save). */
+  const flush = useCallback((): Promise<boolean> => {
     if (timerRef.current != null) window.clearTimeout(timerRef.current)
     if (ceilingRef.current != null) window.clearTimeout(ceilingRef.current)
     timerRef.current = null
     ceilingRef.current = null
     const current = entry.look
-    if (!current || entry.draft.size === 0) return
+    if (!current || entry.draft.size === 0) return Promise.resolve(true)
     setSaveState('saving')
     // Not `draft.size` on the way out: the draft is retired against *server* rows, so it is still
     // full for the moment between the PUT resolving and the refetch landing, and reading it there
@@ -172,10 +180,16 @@ export function LookRowStoreProvider({
     const writesAtStart = writesRef.current
     // Built here rather than when the drag began: `PUT /looks/{id}` replaces the whole rows array,
     // so a stale base would resend another operator's rows as we last happened to see them.
-    void saveLook({ projectId, lookId: current.id, rows: entry.draft.applyTo(current.rows) })
+    return saveLook({ projectId, lookId: current.id, rows: entry.draft.applyTo(current.rows) })
       .unwrap()
-      .then(() => setSaveState(writesRef.current === writesAtStart ? 'clean' : 'dirty'))
-      .catch(() => setSaveState('error'))
+      .then(() => {
+        setSaveState(writesRef.current === writesAtStart ? 'clean' : 'dirty')
+        return true
+      })
+      .catch(() => {
+        setSaveState('error')
+        return false
+      })
   }, [entry, projectId, saveLook])
 
   const setValue = useCallback(
@@ -196,6 +210,28 @@ export function LookRowStoreProvider({
       }
     },
     [draft, flush],
+  )
+
+  const pressPalette = useCallback<LookRowStoreValue['pressPalette']>(
+    async (press) => {
+      const lookId = entry.lookId
+      if (lookId == null) return null
+      // The press reads the Look's stored rows, so a value set a moment ago must be among them; a
+      // save that failed stops the press, which would otherwise land under the draft's next save.
+      const sent = entry.draft.snapshot()
+      if (!(await flush())) return null
+      try {
+        const answer = await pressLook({ projectId, lookId, ...press }).unwrap()
+        // Saved, and the press may have written over them: the answer's rows, which `pressLook`
+        // puts in the cache, are what the grid draws now.
+        entry.look = answer.look
+        entry.draft.retire(sent)
+        return answer
+      } catch {
+        return null
+      }
+    },
+    [entry, flush, pressLook, projectId],
   )
 
   // Retire draft entries the server now states, and flush anything pending when the focus moves or
@@ -232,6 +268,7 @@ export function LookRowStoreProvider({
       ...buildServerRows(look?.rows, fixtures),
       draft,
       setValue,
+      pressPalette,
       attributeMask: layer.attributeMask,
       deferredRows: (look?.rows ?? []).filter((r) => r.targetType === DEFERRED_TARGET_TYPE),
       elementRows: (look?.rows ?? []).filter(
@@ -239,7 +276,7 @@ export function LookRowStoreProvider({
       ),
       loaded: isSuccess,
     }
-  }, [projectId, layer, lookId, look, fixtures, draft, setValue, isSuccess])
+  }, [projectId, layer, lookId, look, fixtures, draft, setValue, pressPalette, isSuccess])
 
   return (
     <LookRowStoreContext.Provider value={value}>

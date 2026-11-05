@@ -7,7 +7,11 @@ import type {
   ApplyLookResponse,
   CopyLookRequest,
   CopyLookResponse,
+  HardenRequest,
+  HardenResponse,
   LookDetails,
+  LookPressRequest,
+  LookPressResponse,
   LookInput,
   LookSummary,
   ToggleLookRequest,
@@ -186,6 +190,41 @@ export const looksApi = restApi.injectEndpoints({
     }),
 
     /**
+     * A value palette tapped into the Look focused in the programmer (palette-references plan D23).
+     * `LookRowStore` sends it once its draft has landed; the answer's Look goes into the cache.
+     */
+    pressLook: build.mutation<LookPressResponse, { projectId: number; lookId: number } & LookPressRequest>({
+      query: ({ projectId, lookId, ...body }) => ({
+        url: `projects/${projectId}/looks/${lookId}/press`,
+        method: 'POST',
+        body,
+      }),
+      // The answer's Look goes in at once, so a save straight after the press builds on its rows;
+      // the tag still re-reads it, in case a read already in flight lands over it.
+      async onQueryStarted({ projectId, lookId }, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          dispatch(looksApi.util.updateQueryData('look', { projectId, lookId }, () => data.look))
+        } catch {
+          // Refused: the error toast has said so, and the cache holds what the desk holds.
+        }
+      },
+      invalidatesTags: (result, _error, { lookId }) =>
+        result == null ? [] : ['LookList' as const, 'Cue' as const, { type: 'Look' as const, id: lookId }],
+    }),
+
+    /** *Copy the values* on a Look (D9): its references, or the rows named, made literal per head. */
+    hardenLook: build.mutation<HardenResponse, { projectId: number; lookId: number } & HardenRequest>({
+      query: ({ projectId, lookId, ...body }) => ({
+        url: `projects/${projectId}/looks/${lookId}/harden`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (result, _error, { lookId }) =>
+        result == null || result.hardened === 0 ? [] : [{ type: 'Look' as const, id: lookId }, 'LookList' as const, 'Cue' as const],
+    }),
+
+    /**
      * *Apply as values* for a Look — ⌥click and the hold menu's second item (apply-model plan
      * D8). Lands Local values and Local effects; like the toggle it names no targets to invalidate.
      */
@@ -209,4 +248,6 @@ export const {
   useAbsorbLookFxMutation,
   useToggleLookMutation,
   useApplyLookMutation,
+  usePressLookMutation,
+  useHardenLookMutation,
 } = looksApi

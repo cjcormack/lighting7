@@ -319,6 +319,9 @@ describe('describeLookContents', () => {
     expect(describeLookContents(LOOKS[3])).toBe('8 fixtures · 8 rows')
     expect(describeLookContents(look(5, { fxCount: 1, rowCount: 12, targetCount: 12 }))).toBe('12 fixtures · 12 rows · 1 FX')
     expect(describeLookContents(look(6, { targetCount: 0, fxCount: 0 }))).toBe('Empty')
+    // A row that follows a palette is counted (palette-references plan D22).
+    expect(describeLookContents(look(8, { rowCount: 4, targetCount: 4, referenceCount: 2 }))).toBe('4 fixtures · 4 rows · 2 follow a palette')
+    expect(describeLookContents(look(9, { rowCount: 1, targetCount: 1, referenceCount: 1 }))).toBe('1 fixture · 1 row · 1 follows a palette')
     // A Look that only moves scenery is a scenery Look (scenery-programmer plan D9, D10).
     expect(
       describeLookContents(look(7, { targetCount: 0, fxCount: 0, rowCount: 0, scenery: [{ elementUuid: 'moon', elementName: 'Moon', state: { trimM: 3 } }] })),

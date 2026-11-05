@@ -17,6 +17,7 @@ import type {
   CueLayerPressRequest,
   CueLayerPressResponse,
 } from '../api/cuesApi'
+import type { HardenRequest, HardenResponse } from '../api/looksApi'
 
 // Subscribe to WebSocket cue list changes - invalidate all cue caches
 lightingApi.cues.subscribe(function () {
@@ -274,6 +275,22 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
+    /** *Copy the values* on a cue (palette-references plan D9): its references, or the rows named, made literal per head. */
+    hardenCue: build.mutation<HardenResponse, { projectId: number; cueId: number } & HardenRequest>({
+      query: ({ projectId, cueId, ...body }) => ({
+        url: `projects/${projectId}/cues/${cueId}/harden`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (result, _error, { projectId, cueId }) =>
+        result == null || result.hardened === 0
+          ? []
+          : [
+              { type: 'Cue', id: cueId },
+              { type: 'CueStackList', id: projectId },
+            ],
+    }),
+
     // `snapshotCueFromLive` lived here until Session 3. Capturing the stage is now
     // `recordProgrammer({ source: 'STAGE_SNAPSHOT' })` in `programmerOps.ts` — the same
     // capture, plus the programmer overlay it used to miss, as one Record source among
@@ -298,6 +315,7 @@ export const {
   useStopCueMutation,
   useUpdateCueStageMutation,
   usePressCueLayerMutation,
+  useHardenCueMutation,
 } = cuesApi
 
 /**

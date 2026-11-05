@@ -582,7 +582,14 @@ internal data class LookDto(
     val rowCount: Int,
     val fxCount: Int,
     val targetCount: Int,
+    /** Up to [LOOK_PREVIEW_SIZE] distinct literals, most-frequent first; a palette reference is counted in [referenceCount] instead. */
     val preview: List<String>,
+    /**
+     * How many rows are palette references (palette-references plan D22), the Contents column's and a
+     * busk pad's count. `@EncodeDefault(ALWAYS)` for [scenery]'s reason.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val referenceCount: Int = 0,
     /**
      * The effects this Look runs, by type, in its own order and each once — the library's Preview
      * says *Colour Cycle* rather than only that there are effects. `@EncodeDefault(ALWAYS)` for
@@ -1150,12 +1157,13 @@ internal fun DaoLook.toSummaryDto(
         rowCount = rowList.size,
         fxCount = fxList.size,
         targetCount = rowList.map { it.targetKey }.distinct().size,
-        preview = rowList.groupingBy { it.value }
+        preview = rowList.filter { it.paletteUuid == null }.groupingBy { it.value }
             .eachCount()
             .entries
             .sortedByDescending { it.value }
             .take(LOOK_PREVIEW_SIZE)
             .map { it.key },
+        referenceCount = rowList.count { it.paletteUuid != null },
         fxTypes = fxList.sortedBy { it.sortOrder }.map { it.fxType }.distinct(),
         layerCount = resolvedUsage.layerCount,
         buskPageCount = resolvedUsage.buskPageCount,

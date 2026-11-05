@@ -58,8 +58,10 @@ export function tapVerb(
   hasTargets = true,
   ownHeads = true,
   whole = false,
+  /** An FX palette, which joins a focused Look rather than going on and off its rows. */
+  fx = false,
 ): { label: string; gesture: PressGesture } {
-  if (into.kind === 'look') return { label: `Into ${into.lookName}`, gesture: 'press' }
+  if (into.kind === 'look') return { label: whole || fx ? `Into ${into.lookName}` : `Put on or take off in ${into.lookName}`, gesture: 'press' }
   if (into.kind === 'cue') {
     return whole || hasTargets || ownHeads
       ? { label: `Put on or take off in ${into.cueLabel}`, gesture: 'press' }
@@ -78,7 +80,11 @@ export function tapVerb(
 
 /** The chip's and the pad's shared `title`: every gesture stated, since ⌥click is not guessed. */
 export function palettePressTitle(template: PaletteSummary, into: PressInto): string {
-  if (into.kind === 'look') return `Click to write “${template.name}” into ${into.lookName} · hold or right-click for more`
+  if (into.kind === 'look') {
+    return template.kind === 'fx'
+      ? `Click to add “${template.name}” to ${into.lookName} · hold or right-click for more`
+      : `Click to put “${template.name}” on in ${into.lookName} as references to it, or take it off · ⌥click to set its values as ${into.lookName}’s own · hold or right-click for more`
+  }
   if (into.kind === 'cue') {
     return template.kind === 'fx'
       ? `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · hold or right-click for more`
@@ -91,9 +97,9 @@ export function palettePressTitle(template: PaletteSummary, into: PressInto): st
 
 /**
  * A palette chip or pad with its hold menu: *Put on* or *Take off these heads* (the tap's verb),
- * *Apply as values*, *Pick up* and *Edit palette…* — *Into <Look>* alone in place of the first two
- * while a Look layer is focused, where every press writes the Look, and in the cue editor *Put on or
- * take off in Q1* and a value palette's *Apply as values*, the cue's own rows.
+ * *Apply as values*, *Pick up* and *Edit palette…* — while a Look layer is focused, where every press
+ * writes the Look, and in the cue editor, *Put on or take off in Night* (or *Q1*) and a value
+ * palette's *Apply as values*, the owner's own rows; an FX palette's *Into Night* alone.
  *
  * **A `Popover` anchored on the button, never a `ContextMenu`.** Radix's `ContextMenuTrigger` arms
  * a ~700ms touch timer of its own, which this button's hold would race; `PopoverAnchor` registers
@@ -179,7 +185,8 @@ function PalettePressMenu({
       hasTargets={hasTargets}
       reachLabel={reachLabel}
       ownHeads={!template.isGeneric}
-      asValues={into.kind === 'programmer' || (into.kind === 'cue' && template.kind !== 'fx')}
+      asValues={into.kind === 'programmer' || template.kind !== 'fx'}
+      fx={template.kind === 'fx'}
       onGesture={onGesture}
       onPickUp={() => {
         onDone()
@@ -249,6 +256,7 @@ function PressMenuItems({
   ownHeads,
   whole = false,
   asValues = into.kind === 'programmer',
+  fx = false,
   reachLabel,
   onGesture,
   onPickUp,
@@ -265,15 +273,17 @@ function PressMenuItems({
   ownHeads: boolean
   /** A Look: it lands whole, whatever is selected ([tapVerb]). */
   whole?: boolean
-  /** Offer *Apply as values* — the programmer's, and a value palette's in the cue. */
+  /** Offer *Apply as values* — the programmer's, and a value palette's in the cue or a focused Look. */
   asValues?: boolean
+  /** An FX palette ([tapVerb]). */
+  fx?: boolean
   onGesture: (gesture: PressGesture) => void
   onPickUp: () => void
   /** Absent, no edit item: a Look has no address to open it at yet. */
   onEdit?: () => void
   editLabel?: string
 }) {
-  const tap = tapVerb(into, presence, hasTargets, ownHeads, whole)
+  const tap = tapVerb(into, presence, hasTargets, ownHeads, whole, fx)
   const verb =
     reachLabel != null && into.kind === 'programmer' && tap.gesture === 'press' ? { ...tap, label: reachLabel } : tap
   return (

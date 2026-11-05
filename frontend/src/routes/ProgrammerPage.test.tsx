@@ -146,6 +146,7 @@ vi.mock('@/store/projects', () => ({
 vi.mock('@/store/looks', () => ({
   useLookQuery: () => ({ data: undefined, isSuccess: false }),
   useSaveLookMutation: () => [vi.fn()],
+  usePressLookMutation: () => [vi.fn()],
 }))
 // Same reason as `@/store/looks` above, for `FocusedPaletteLayerProvider`: `skip` stops the
 // *request*, not the hook, so the query still reaches for the store.

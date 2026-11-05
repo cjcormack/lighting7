@@ -341,6 +341,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         // against layers; the tables and routes go in the retirement pass.
         routeApiRestProjectLooks(state)
         routeApiRestLookAbsorbFx(state)
+        routeApiRestLookReferencePress(state)
         routeApiRestProjectPalettes(state)
         routeApiRestPaletteHarden(state)
         routeApiRestPaletteRecord(state)

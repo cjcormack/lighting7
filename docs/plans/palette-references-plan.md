@@ -1,6 +1,6 @@
 # Palette references: a palette is a value
 
-> **Document status: IN PROGRESS — sessions 1 and 2 merged, session 3 in review.** Calls decided 2026-11-04 (§3). Design
+> **Document status: IN PROGRESS — sessions 1–3 merged, session 4 in review.** Calls decided 2026-11-04 (§3). Design
 > record: [`palette-references-design/`](palette-references-design/INDEX.md).
 
 ## 1. Context
@@ -222,8 +222,8 @@ checks"). Never merge a session's PR before the one before it.
 |---|---|---|---|---|---|
 | 1 | References as values on the desk | merged | `claude/wizardly-ride-d2z3ns` | [#346](https://github.com/cjcormack/lighting7/pull/346) | `b0fcfe3` |
 | 2 | Presses write references | merged | `claude/palette-references-s2` | [#348](https://github.com/cjcormack/lighting7/pull/348) | `bfb81c0` |
-| 3 | The marks and the new palette sheet | in review | `claude/busy-wozniak-1kcdjg` | | |
-| 4 | Looks and cues: the sheets and Copy the values | planned | | | |
+| 3 | The marks and the new palette sheet | merged | `claude/busy-wozniak-1kcdjg` | [#350](https://github.com/cjcormack/lighting7/pull/350) | `8db20e2` |
+| 4 | Looks and cues: the sheets and Copy the values | in review | `claude/zealous-hamilton-34v524` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -435,6 +435,31 @@ the next; whoever merges the last fills its own.
 - Busk pad faces: `describeLookContents` counts references.
 - Tests: the chips; *Copy the values* over a selection and over all; a tap in a focused Look writing
   references and ⌥click writing literals; a second tap taking them off.
+
+**Where session 4 followed the code** (recorded with it):
+
+- **A tap in a focused Look is the desk's press, not the draft's.** D10 over a Look's rows — a group
+  row kept one row, the family's other references released only where they lie within the heads it
+  landed on, the off arm — is what `CueReferencePress` already does for a cue's rows, and the cue
+  editor already lands its draft and then presses on the desk. So `POST /looks/{id}/press`
+  (`routes/lookReferencePress.kt`) runs that press over the Look's own rows — a cell's row read by
+  the cell's key, so the press writes over it, and a new cell row stored under its parent as Record
+  stores one — and `LookRowStore.pressPalette` lands the pending draft first (no press if that save
+  fails), puts the answer's Look in the cache and forgets the draft entries it saved, which the
+  press may have written over. A `pal:` therefore never sits in the draft, and session 3's
+  committed-reference drawing covers it; the bullet saying a draft reference must be drawn is moot.
+- **A Look's summary counts its references, and its preview no longer shows them.** The preview was
+  "distinct literals" but took every row's value, so a reference row showed as `pal:{uuid}`.
+  `LookDto.preview` now leaves references out and `referenceCount` counts them, which the Looks
+  sheet's Contents (*· 2 follow a palette*) and a busk pad's face (*3 values (2 follow a palette)*)
+  read.
+- **The cue editor's "rows" are its Values tab.** It has no chip list (its grid has drawn references
+  since session 3), so the sentence and *Copy the values…* sit under the tab's selection bar, over the
+  reference rows the Values selection reaches (`cueReferencesIn`) else all, sent through
+  `CueRowStore.hardenRows` in its save chain, so the editor's Undo takes it back. On the Look sheet a
+  reference chip is a toggle that picks its row.
+- **The Record line names where to copy the values**: *the Look sheet* for a Look, *the cue editor*
+  for a cue.
 
 ## 6. Operator checks
 

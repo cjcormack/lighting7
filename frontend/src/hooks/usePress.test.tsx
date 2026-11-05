@@ -16,6 +16,7 @@ const calls = vi.hoisted(() => ({
   toggleLook: vi.fn(),
   absorb: vi.fn(),
   setValue: vi.fn(),
+  pressPalette: vi.fn(),
   programmerFrame: vi.fn(),
   removeFx: vi.fn(),
 }))
@@ -23,6 +24,7 @@ const answers = vi.hoisted(() => ({
   apply: { written: 1, skipped: [] } as Record<string, unknown>,
   look: { action: 'applied', fxCount: 0 } as Record<string, unknown>,
   absorbOk: true,
+  lookPress: { action: 'applied', look: { id: 9, rows: [] } } as Record<string, unknown> | null,
   toggle: { action: 'applied', fxCount: 0 } as Record<string, unknown>,
 }))
 function mutation(spy: (args: unknown) => void, answer: () => unknown) {
@@ -231,7 +233,12 @@ describe('usePress — a focused Look layer', () => {
       lookId: 9,
       lookName: 'Night',
       setValue: calls.setValue,
+      pressPalette: (press: unknown) => {
+        calls.pressPalette(press)
+        return Promise.resolve(answers.lookPress)
+      },
     }
+    answers.lookPress = { action: 'applied', look: { id: 9, rows: [] } }
     answers.apply = {
       written: 1,
       skipped: [],
@@ -239,12 +246,44 @@ describe('usePress — a focused Look layer', () => {
     }
   })
 
-  it('writes a palette’s literals into the Look’s draft and sends no programmer frame', async () => {
+  it('writes a value palette’s references into the Look on a tap, and sends no programmer frame (palette-references D23)', async () => {
     const { result } = renderHook(() => useWindowPress(1))
     expect(result.current.into).toEqual({ kind: 'look', lookName: 'Night' })
+    let landed: unknown
     await act(async () => {
-      await result.current.press({ kind: 'palette', palette: AMBER }, 'press')
+      landed = await result.current.press({ kind: 'palette', palette: AMBER }, 'press')
     })
+    expect(landed).toBe('into')
+    expect(calls.pressPalette).toHaveBeenCalledWith({ paletteId: 1, targets: HEX })
+    expect(calls.applyPalette).not.toHaveBeenCalled()
+    expect(calls.setValue).not.toHaveBeenCalled()
+    expect(calls.togglePalette).not.toHaveBeenCalled()
+    expect(calls.programmerFrame).not.toHaveBeenCalled()
+  })
+
+  it('takes the references off again on a second tap', async () => {
+    answers.lookPress = { action: 'removed', look: { id: 9, rows: [] } }
+    expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBe('off')
+    expect(calls.pressPalette).toHaveBeenCalledTimes(1)
+  })
+
+  it('carries the selection’s mask on the tap', async () => {
+    desk.pair = { targets: HEX, families: ['COLOUR'] }
+    await send({ kind: 'palette', palette: AMBER }, 'press')
+    expect(calls.pressPalette).toHaveBeenCalledWith({ paletteId: 1, targets: HEX, families: ['COLOUR'] })
+  })
+
+  it('answers nothing for a refused tap', async () => {
+    answers.lookPress = null
+    expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBeNull()
+  })
+
+  it('writes a palette’s literals into the Look’s draft on ⌥click, and sends no programmer frame', async () => {
+    const { result } = renderHook(() => useWindowPress(1))
+    await act(async () => {
+      await result.current.press({ kind: 'palette', palette: AMBER }, 'asValues')
+    })
+    expect(calls.pressPalette).not.toHaveBeenCalled()
     expect(calls.applyPalette).toHaveBeenCalledWith({
       projectId: 1,
       paletteId: 1,

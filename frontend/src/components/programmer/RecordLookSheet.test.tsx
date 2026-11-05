@@ -150,7 +150,7 @@ describe('the references line (palette-references plan D16, board C1)', () => {
     })
     render(<RecordLookSheet open onOpenChange={() => {}} projectId={6} targetLookId={12} />)
     expect(document.querySelector('[data-record-references]')).toHaveTextContent(
-      '1 of your values is a reference to DSR Focus and stays a reference: retune the palette and this Look moves with it.',
+      '1 of your values is a reference to DSR Focus and stays a reference: retune the palette and this Look moves with it. Copy the values on the Look sheet makes it a literal.',
     )
     fireEvent.click(screen.getByRole('radio', { name: 'Remove' }))
     expect(document.querySelector('[data-record-references]')).toBeNull()

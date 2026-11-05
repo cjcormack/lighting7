@@ -381,7 +381,7 @@ function cellsInert(): boolean {
 }
 
 /**
- * What a Look covers, in one line — `12 fixtures · 24 rows · 1 fx`. The row's subtitle before the
+ * What a Look covers, in one line — `12 fixtures · 24 rows · 4 follow a palette · 1 FX`. The row's subtitle before the
  * sheet (`LookListRow`'s `describeContents`), with the effect count folded in now that it has no
  * badge of its own.
  */
@@ -394,6 +394,8 @@ export function describeLookContents(look: LookSummary): string {
   const parts: string[] = []
   if (look.targetCount > 0) parts.push(`${look.targetCount} fixture${look.targetCount === 1 ? '' : 's'}`)
   if (look.rowCount > 0) parts.push(`${look.rowCount} row${look.rowCount === 1 ? '' : 's'}`)
+  const references = look.referenceCount ?? 0
+  if (references > 0) parts.push(`${references} follow${references === 1 ? 's' : ''} a palette`)
   if (look.fxCount > 0) parts.push(`${look.fxCount} FX`)
   return parts.join(' · ')
 }

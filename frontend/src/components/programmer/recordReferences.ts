@@ -64,7 +64,7 @@ export function useLocalReferences(scope: RecordScope): LocalReferences {
   }, [revision, source, familiesKey, targetsKey, categoryByAttribute])
 }
 
-/** *2 of your values are references to DSR Focus and stay references: …* */
+/** *2 of your values are references to DSR Focus and stay references: … Copy the values on the Look sheet makes them literals.* */
 export function referencesSentence(references: LocalReferences, destination: 'cue' | 'look'): string {
   const count = references.total
   const subject = `${count} of your values ${count === 1 ? 'is a reference' : 'are references'}`
@@ -72,5 +72,6 @@ export function referencesSentence(references: LocalReferences, destination: 'cu
     references.palettes.length === 1 ? references.palettes[0].name : `${references.palettes.length} palettes`
   const what = destination === 'look' ? 'this Look' : 'this cue'
   const retune = references.palettes.length === 1 ? 'the palette' : 'one of them'
-  return `${subject} to ${to} and ${count === 1 ? 'stays a reference' : 'stay references'}: retune ${retune} and ${what} moves with it.`
+  const copy = destination === 'look' ? 'the Look sheet' : 'the cue editor'
+  return `${subject} to ${to} and ${count === 1 ? 'stays a reference' : 'stay references'}: retune ${retune} and ${what} moves with it. Copy the values on ${copy} makes ${count === 1 ? 'it a literal' : 'them literals'}.`
 }

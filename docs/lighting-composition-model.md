@@ -735,7 +735,12 @@ reference slot moves (`ProgrammerStore.referencesRevision`). The answer names wh
 cue's own rows (`routes/cueReferencePress.kt`, D13) — one row per pressed target as spelled, a group
 staying one row, or per head for a per-fixture palette, written over every row on the same attribute
 whose heads it covers — and the Timeline's `layerOn` / `layerOff` / `replace` do the same, its read
-drawing them as one row per palette. **Everything below about layers is an FX palette's**, and a
+drawing them as one row per palette. **In a Look focused in the programmer** the same press writes the
+Look's own rows (`POST /looks/{id}/press`, `routes/lookReferencePress.kt`, D23): the cue press's rule
+over the Look's rows — a cell's row read by its cell's key, a new one stored under its parent as Record
+stores one, the rows it keeps in their order — the Look republished as a contents edit republishes
+it; the client lands its pending draft first and stops if that save fails. *Apply as values* there still lands literals in the
+draft, through `/palettes/{id}/apply` with `write: false`. **Everything below about layers is an FX palette's**, and a
 value palette's layer that a cue stored before references (§"Stored palette layers") keeps working by
 it; no door makes a new one.
 

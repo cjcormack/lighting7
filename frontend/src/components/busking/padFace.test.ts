@@ -16,6 +16,11 @@ describe('describeLookContents (pad face)', () => {
     expect(describeLookContents(look({}))).toBe('empty')
   })
 
+  it('says how many of its values follow a palette (palette-references plan D22)', () => {
+    expect(describeLookContents(look({ rowCount: 3, referenceCount: 2 }))).toBe('3 values (2 follow a palette)')
+    expect(describeLookContents(look({ rowCount: 1, referenceCount: 1 }))).toBe('1 value (1 follows a palette)')
+  })
+
   it('counts scenery, so a Look that only flies the moon is not an empty pad (scenery-programmer D10)', () => {
     const moon = { elementUuid: 'moon', elementName: 'Moon', state: { trimM: 3 } }
     expect(describeLookContents(look({ scenery: [moon] }))).toBe('1 scenery')

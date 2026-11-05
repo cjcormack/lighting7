@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-PALETTE-REFERENCES-S4`](#fu-manual-palette-references-s4) | a Look recorded from heads that follow a palette still follows it on the rig — retuned live with no GO, a tap in the focused Look writing references and a second taking them off — and *Copy the values* on the Look sheet and in the cue editor turns them to literals with nothing moving | Palette references S4, 2026-11-05 |
 | [`FU-MANUAL-CLOUD-P0`](#fu-manual-cloud-p0) | Lighting7 Cloud's P0 exit: each desk adopted from its Cloud tab shows Online in the portal, a running fade and FX see nothing of the cloud's app stopping and the desk is back within 30 s of its return, unadopt from either side lands on the other, and `cloud.enabled = false` connects nowhere — **adoption, Online and a portal removal seen 2026-11-05**; the outage, a desk unadopt and `enabled = false` still unseen | Cloud P0 S6, 2026-11-05 |
 | [`FU-MANUAL-ARTNET-TRANSPORT`](#fu-manual-artnet-transport) | a real Art-Net node lights from the desk's own ArtDMX transport as it did from artnet4j: broadcast and unicast universes, a node's status page showing the frames arriving, and a second program on the desk machine still hearing them | Cloud P0 S2, 2026-11-02 |
 | [`FU-MANUAL-MOVE-IN-DARK`](#fu-manual-move-in-dark) | movers moved in the dark on the rig: a head moves a second after it goes dark and is in place before the GO, a GO too soon and a GO TO land dark heads at once, a busk press lights a moved head and it returns, a cue *Off* and a head kept live move lit, an older show's flagged cues import on *Early*, and the stack sheet, the Cue tab, the *Dark* columns and the Stage view's rings agree with where the heads come up | Move in dark S1–S5, 2026-11-02 |
@@ -142,6 +143,37 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-PALETTE-REFERENCES-S4`
+
+**What it proves**: *a Look follows a palette* — palette-references plan D16, D22 and D23: a Look
+recorded from references keeps them, a palette tapped into a focused Look writes references there,
+and *Copy the values* makes them literals without moving the rig.
+
+**Why it is here**: the tests read rows and resolved values off a mock rig; only the rig shows that a
+retune of the palette moves a Look layered in a live cue with no GO, and that hardening lands on the
+bytes already on stage.
+
+**Test**, on the dev rig, four movers and a per-fixture position palette *DSR Focus* holding all four:
+
+1. **Record a Look.** Press *DSR Focus* on Spot 2 and Spot 3, set Spot 1 and Spot 4 by hand,
+   *Record ▾ → A new Look* named *Act 1 Spots*. The Record line says two values are references and
+   that *Copy the values on the Look sheet* makes them literals. Open the Look's sheet: Spot 2 and
+   Spot 3 are teal *DSR Focus* chips with their positions, and the line says *2 values follow DSR
+   Focus*. The Looks sheet's Contents reads *… · 2 follow a palette*, and a busk pad for the Look says
+   *(2 follow a palette)*.
+2. **It follows.** Layer *Act 1 Spots* in a live cue and retune *DSR Focus*'s Spot 2 row: Spot 2
+   moves with no GO; Spot 1 does not.
+3. **Into a focused Look.** Focus *Act 1 Spots* on the Stack tab, select Spot 1 and tap *DSR Focus*:
+   Spot 1's cell turns teal and the Look sheet shows a third chip. Tap it again: Spot 1's reference
+   comes out. ⌥click it: Spot 1 takes the palette's literal, not a reference.
+4. **Copy the values.** On the Look sheet tap Spot 3's chip, *Copy the values…*: the question says
+   *Copy 1 value?*; confirm. Spot 3's chip becomes its literal and nothing on stage moves; retune
+   *DSR Focus* again and Spot 3 stays put while Spot 2 moves. In a cue holding a reference, *Copy the
+   values…* in the Values tab with no selection copies every one, and the editor's Undo puts them
+   back.
 
 ---
 

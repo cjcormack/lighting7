@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
-import { buildRows, selectedRowTargets, type Row, type RowId } from '@/components/fixtures-list/rowModel'
+import { buildRows, paletteTargetsFor, selectedRowTargets, type Row, type RowId } from '@/components/fixtures-list/rowModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 import { useCellSelection, type CellSelection } from '@/components/sheet/useCellSelection'
 import { useLocalListSelection, type LocalListSelection } from '@/components/sheet/useLocalListSelection'
@@ -40,6 +40,8 @@ export interface CueValuesView {
    * cell by its element key — the rows a marquee covers, else the selected rows.
    */
   selectionTargets: readonly CueTarget[]
+  /** The heads the selection stands for: a group row's shown members, a fixture and its cells, a cell. */
+  selectionHeads: readonly string[]
 }
 
 const CueValuesViewContext = createContext<CueValuesView | null>(null)
@@ -49,6 +51,7 @@ export function useCueValuesView(): CueValuesView | null {
 }
 
 const NO_TARGETS: readonly CueTarget[] = []
+const NO_HEADS: readonly string[] = []
 
 export function CueValuesViewProvider({ children }: { children: ReactNode }) {
   const store = useCueRowStore()
@@ -152,11 +155,19 @@ function ViewProvider({ store, children }: { store: CueRowStoreValue; children: 
   }, [cellCount, clearCells, clearRows, rowSelection.count])
   const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows])
 
-  const selectionTargets = useMemo(() => {
-    const ids = cellCount > 0 ? new Set(cellSelection.cells.map((cell) => cell.rowId)) : rowSelection.selectedIds
-    if (ids.size === 0) return NO_TARGETS
-    return selectedRowTargets(rows, ids) as CueTarget[]
-  }, [cellCount, cellSelection.cells, rowSelection.selectedIds, rows])
+  const selectedIds = useMemo(
+    () => (cellCount > 0 ? new Set(cellSelection.cells.map((cell) => cell.rowId)) : rowSelection.selectedIds),
+    [cellCount, cellSelection.cells, rowSelection.selectedIds],
+  )
+  const selectionTargets = useMemo(
+    () => (selectedIds.size === 0 ? NO_TARGETS : (selectedRowTargets(rows, selectedIds) as CueTarget[])),
+    [selectedIds, rows],
+  )
+  const selectionHeads = useMemo(() => {
+    if (selectedIds.size === 0) return NO_HEADS
+    const cellsOf = new Map((allFixtures ?? []).map((f) => [f.key, (f.elements ?? []).map((e) => e.key)]))
+    return paletteTargetsFor(rows, selectedIds).flatMap((target) => [target.key, ...(cellsOf.get(target.key) ?? [])])
+  }, [selectedIds, rows, allFixtures])
 
   const addTarget = useCallback((target: CueTarget) => {
     if (target.type === 'group') setAddedGroups((prev) => new Set(prev).add(target.key))
@@ -183,8 +194,9 @@ function ViewProvider({ store, children }: { store: CueRowStoreValue; children: 
       clearByLadder,
       rowById,
       selectionTargets,
+      selectionHeads,
     }),
-    [rows, wholeRig, ownOnly, addTarget, toggleGroupExpanded, toggleFixtureExpanded, rowSelection, cellSelection, selectCells, selectRow, setRows, clearByLadder, rowById, selectionTargets],
+    [rows, wholeRig, ownOnly, addTarget, toggleGroupExpanded, toggleFixtureExpanded, rowSelection, cellSelection, selectCells, selectRow, setRows, clearByLadder, rowById, selectionTargets, selectionHeads],
   )
   return <CueValuesViewContext.Provider value={value}>{children}</CueValuesViewContext.Provider>
 }

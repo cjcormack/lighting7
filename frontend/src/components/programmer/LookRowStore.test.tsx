@@ -3,6 +3,7 @@ import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const saveLook = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve({}) })))
+const pressLook = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve({ action: 'applied', look: { id: 3, rows: [] } }) })))
 const LOOKS = vi.hoisted(() => ({
   3: {
     id: 3,
@@ -89,6 +90,7 @@ vi.mock('@/store/looks', () => ({
     return { data: LOOKS[lookId as keyof typeof LOOKS], isSuccess: true }
   },
   useSaveLookMutation: () => [saveLook],
+  usePressLookMutation: () => [pressLook],
 }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
 vi.mock('./ProgrammerScope', () => ({
@@ -179,6 +181,64 @@ describe('LookRowStoreProvider', () => {
       }
     })
     expect(saveLook).toHaveBeenCalled()
+  })
+
+  it('presses a palette into the Look only once the pending edit has saved (palette-references D23)', async () => {
+    let landSave: () => void = () => {}
+    saveLook.mockImplementationOnce(() => ({ unwrap: () => new Promise<object>((resolve) => (landSave = () => resolve({}))) }))
+    draw()
+    act(() => captured?.setValue('a', 'dimmer', '200'))
+    let answer: unknown
+    let pressing!: Promise<void>
+    act(() => {
+      pressing = captured!.pressPalette({ paletteId: 6, targets: [{ type: 'fixture', key: 'a' }] }).then((a) => {
+        answer = a
+      })
+    })
+    // The draft went out at once, and the press waits behind it: it reads the Look's stored rows.
+    expect(saveLook).toHaveBeenCalledTimes(1)
+    expect(pressLook).not.toHaveBeenCalled()
+    await act(async () => {
+      landSave()
+      await pressing
+    })
+    expect(pressLook).toHaveBeenCalledWith({ projectId: 1, lookId: 3, paletteId: 6, targets: [{ type: 'fixture', key: 'a' }] })
+    expect(answer).toMatchObject({ action: 'applied' })
+  })
+
+  it('does not press when the draft’s save fails, which would land the press under its next save', async () => {
+    saveLook.mockImplementationOnce(() => ({ unwrap: () => Promise.reject(new Error('refused')) }))
+    draw()
+    act(() => captured?.setValue('a', 'dimmer', '200'))
+    let answer: unknown = 'unset'
+    await act(async () => {
+      answer = await captured!.pressPalette({ paletteId: 6, targets: [{ type: 'fixture', key: 'a' }] })
+    })
+    expect(answer).toBeNull()
+    expect(pressLook).not.toHaveBeenCalled()
+  })
+
+  it('forgets the saved edit once the press lands, so no later save puts it back over the reference', async () => {
+    draw()
+    act(() => captured?.setValue('a', 'dimmer', '200'))
+    await act(async () => {
+      await captured!.pressPalette({ paletteId: 6, targets: [{ type: 'fixture', key: 'a' }] })
+    })
+    expect(captured?.draft.size).toBe(0)
+    saveLook.mockClear()
+    // The next flush (here, the teardown) has nothing to send.
+    cleanup()
+    expect(saveLook).not.toHaveBeenCalled()
+  })
+
+  it('answers null for a refused press', async () => {
+    pressLook.mockImplementationOnce(() => ({ unwrap: () => Promise.reject(new Error('refused')) }))
+    draw()
+    let answer: unknown = 'unset'
+    await act(async () => {
+      answer = await captured!.pressPalette({ paletteId: 6, targets: [] })
+    })
+    expect(answer).toBeNull()
   })
 
   it('reports dirty before the save and clean after it', async () => {
