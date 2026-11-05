@@ -5,7 +5,7 @@ import type { ChannelRef } from '../../store/fixtures'
 import { whiteLevelsFor } from '../../lib/whiteMix'
 import type { ProgrammerKeyState } from '../../api/programmerWsApi'
 import type { CellValue } from './useRowValues'
-import type { StagedValue } from './useRowOwnership'
+import type { CellReference, StagedValue } from './useRowOwnership'
 
 /**
  * Building cell values for a scope the wire cannot answer for.
@@ -55,13 +55,20 @@ export interface CellState {
    * from — one of the cue's own rows, the Look layer that won it, or several across the row.
    */
   source?: CueCellStateSource
+  /** A focused Look's cell whose stored row is a palette reference (palette-references plan D18). */
+  reference?: CellReference
 }
 
-/** See [CellState.source]. `overrides` names the Look an own value sits over, where one is known. */
+/**
+ * See [CellState.source]. `overrides` names the Look an own value sits over, where one is known, and
+ * `group` the group whose own row it is; a `reference` is own rows some or all of whose heads are
+ * palette references.
+ */
 export type CueCellStateSource =
   | { kind: 'own'; overrides?: string; group?: string }
   | { kind: 'layer'; name: string | null }
   | { kind: 'mixed' }
+  | { kind: 'reference'; reference: CellReference; overrides?: string; group?: string }
 
 export type RowCellStates = Partial<Record<ColumnKey, CellState>>
 

@@ -324,7 +324,7 @@ describe('CueValuesGrid', () => {
     render(<Editor cueId={1} />)
 
     expect(cell(1, 'fixture:orbit-sr', 'dimmer')).toHaveAttribute('title', 'From Scrim · opaque')
-    expect(cell(1, 'fixture:orbit-sr', 'dimmer').className).toContain('teal')
+    expect(cell(1, 'fixture:orbit-sr', 'dimmer').className).toContain('violet')
 
     selectCell(1, 'fixture:orbit-sr', 'dimmer')
     await typeLevel('80')
@@ -379,6 +379,27 @@ describe('CueValuesGrid', () => {
     await typeLevel('80')
     // One group row, rewritten — not a row per member.
     expect(await saved(1)).toEqual([{ targetType: 'group', targetKey: 'Front', attribute: 'dimmer', value: '204', sortOrder: 0 }])
+  })
+
+  it('draws a group’s reference row per member from the desk’s resolution, named as the group’s (palette-references plan D18)', () => {
+    const focus = { paletteId: 7, paletteUuid: 'dsr', name: 'DSR Focus' }
+    data.cues.set(1, cue(1, [{
+      targetType: 'group', targetKey: 'Front', attribute: 'dimmer', value: 'pal:dsr', sortOrder: 0,
+      reference: focus, resolvedByHead: { 'orbit-sr': '51', 'orbit-sl': '102' },
+    }]))
+    data.cooked.set(1, [
+      { targetType: 'group', targetKey: 'orbit-sr', attribute: 'dimmer', value: '51', sourceTargetType: 'group', sourceTargetKey: 'Front', reference: 'dsr' },
+      { targetType: 'group', targetKey: 'orbit-sl', attribute: 'dimmer', value: '102', sourceTargetType: 'group', sourceTargetKey: 'Front', reference: 'dsr' },
+    ])
+    render(<Editor cueId={1} />)
+    const group = cell(1, 'group:Front', 'dimmer')
+    expect(group).toHaveAttribute('title', 'Own: DSR Focus, Front’s row')
+    expect(group.querySelector('[data-reference-pill]')).toHaveTextContent('DSR Focus')
+    // Its members read the group's reference through the cook, which names the palette by uuid.
+    const member = cell(1, 'fixture:orbit-sl', 'dimmer')
+    expect(member).toHaveAttribute('title', 'Own: DSR Focus, Orbit SL’s row')
+    expect(member.className).toContain('var(--color-teal-400)')
+    expect(member).toHaveTextContent('40%')
   })
 
   it('draws a group row only the cells its own row can take — not a colour its members hold on their cells', () => {
@@ -520,7 +541,7 @@ describe('CueValuesGrid', () => {
     selectCell(1, 'fixture:orbit-sr', 'colour')
     fireEvent.keyDown(window, { key: 'Enter' })
     const chip = async (id: number) => (await waitFor(() => document.querySelector(`[data-band-palette="${id}"]`)!)) as HTMLElement
-    expect(document.querySelector('[data-palette-band-into]')?.textContent).toBe('Into Q1 · as a layer')
+    expect(document.querySelector('[data-palette-band-into]')?.textContent).toBe('Into Q1 · as references')
 
     data.answers.push({ action: 'applied', cue: layered(RED) })
     fireEvent.click(await chip(1))

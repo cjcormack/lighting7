@@ -53,7 +53,7 @@ const ALL_COLUMNS: readonly ColumnKey[] = COLUMN_DEFS.map((d) => d.key)
  * programmer's `FixturesTable` over the cue's `CueRowStore`, with the sheet kit's gestures.
  *
  * - **What it shows** is what GO lands — the cue's cook with the draft over it — each cell edged
- *   blue for one of the cue's own rows and teal for the Look that won it, the Look named on the
+ *   blue for one of the cue's own rows and violet for the Look that won it, the Look named on the
  *   hover. A typed value becomes an own row, which beats every layer; over a Look-won cell its hover
  *   says what it overrides. ⌫ takes the own row away and the layer shows again.
  * - **Which rows** (D14): every head an own row or a layer reaches, in rig order, a multi-head

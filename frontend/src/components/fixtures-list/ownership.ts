@@ -7,6 +7,7 @@ import type {
   CellLayer,
   CellOwnership,
   CellOwnershipSource,
+  CellReference,
   StagedValue,
 } from './useRowOwnership'
 
@@ -47,6 +48,74 @@ export function ownershipCellClass(ownership?: CellOwnership): string {
   }
 }
 
+/** True when every head of the cell references one palette. */
+export function isWholeReference(reference: CellReference): boolean {
+  return !reference.severalPalettes && reference.count === reference.of
+}
+
+/**
+ * A palette reference's mark (palette-references plan D18, D20), laid over the owner's: a 3px teal
+ * left edge and a faint teal wash where every head of the cell references one palette, a dashed teal
+ * border where only some do or they name different palettes. The owner's ring stays, so a reference
+ * of yours still reads as yours.
+ */
+export function referenceCellClass(reference: CellReference | undefined): string {
+  if (!reference) return ''
+  return isWholeReference(reference)
+    ? 'rounded-sm shadow-[inset_3px_0_0_var(--color-teal-400)] bg-teal-400/[0.08]'
+    : 'rounded-sm border border-dashed border-teal-400/70 bg-teal-400/5'
+}
+
+/**
+ * A Look layer's mark (D19): a 3px violet edge and wash where one Look layer won the whole cell, so
+ * a layer's value is never mistaken for a reference's teal. A cell several layers share keeps only
+ * its corner glyph.
+ */
+export function lookLayerCellClass(layer: CellLayer | undefined): string {
+  if (!layer || layer.mixed) return ''
+  return 'rounded-sm shadow-[inset_3px_0_0_var(--color-violet-400)] bg-violet-400/[0.06]'
+}
+
+/** The reference pill's words: the palette's name, and over part of a row how many heads (*DSR Focus · 2 of 4*). */
+export function referencePillText(reference: CellReference, name: string | undefined): string {
+  if (reference.severalPalettes) return `Palettes · ${reference.count} of ${reference.of}`
+  const label = name ?? 'Palette'
+  return reference.count === reference.of ? label : `${label} · ${reference.count} of ${reference.of}`
+}
+
+/**
+ * The hover naming a reference and whose it is (D18): *Yours: DSR Focus, Spot 3’s row*, over part of
+ * a row *Yours: DSR Focus on 2 of 4 heads*. An unresolved reference (D3) adds the desk's sentence.
+ */
+export function referenceTitle(
+  owner: string,
+  reference: CellReference,
+  name: string | undefined,
+  head?: string,
+  /** The group whose own row it is: one row, not each head's. */
+  group?: string,
+): string {
+  const label = name ?? 'a palette'
+  let words: string
+  if (reference.severalPalettes) {
+    words = `${owner}: references to more than one palette across this row`
+  } else if (reference.count < reference.of) {
+    words = `${owner}: ${label} on ${reference.count} of ${reference.of} heads`
+  } else if (reference.of === 1) {
+    words = `${owner}: ${label}, ${head != null ? `${head}’s` : 'this head’s'} row`
+  } else if (group != null) {
+    words = `${owner}: ${label}, ${group}’s row`
+  } else {
+    words = `${owner}: ${label}, each head’s own row`
+  }
+  return reference.unresolved ? `${words} · ${reference.unresolved} — keeps its last value` : words
+}
+
+/** Whose a cell's reference is, in the hover's words: *Yours*, or the source that won it. */
+export function referenceOwnerWord(ownership: CellOwnership): string {
+  return ownership.source === 'programmer' ? 'Yours' : OWNERSHIP_LABELS[ownership.source].split(' — ')[0]
+}
+
 /**
  * Cell styling for **layer scope**, where the ownership vocabulary above does not apply.
  *
@@ -77,8 +146,9 @@ export function layerCellClass(state: CellState | undefined): string {
 /**
  * Cell styling for the **cue editor's Values grid** (show-cue-editing plan D2, §4.1): a 3px left
  * edge saying where the composed value came from — blue for one of the cue's own rows (with the
- * faint wash an own value wears on the board), the Look's teal for a value a layer won, and a
- * muted edge where the row's heads disagree. A cell the cue composes nothing on gets nothing.
+ * faint wash an own value wears on the board), a Look's violet for a value a layer won (D19: teal is a
+ * palette reference's), and a muted edge where the row's heads disagree. A cell the cue composes
+ * nothing on gets nothing.
  */
 export function cueSourceCellClass(source: CueCellStateSource | undefined): string {
   if (!source) return ''
@@ -86,14 +156,22 @@ export function cueSourceCellClass(source: CueCellStateSource | undefined): stri
     case 'own':
       return 'rounded-sm shadow-[inset_3px_0_0_var(--color-blue-400)] bg-blue-500/10'
     case 'layer':
-      return 'rounded-sm shadow-[inset_3px_0_0_var(--color-teal-400)]'
+      return 'rounded-sm shadow-[inset_3px_0_0_var(--color-violet-400)]'
     case 'mixed':
       return 'rounded-sm shadow-[inset_3px_0_0_var(--color-muted-foreground)]'
+    case 'reference':
+      // The cue's own value, so the cue's blue stays as a ring and the edge is the reference's (D18).
+      return isWholeReference(source.reference)
+        ? 'rounded-sm ring-1 ring-inset ring-blue-400/60 shadow-[inset_3px_0_0_var(--color-teal-400)] bg-teal-400/[0.06]'
+        : 'rounded-sm border border-dashed border-teal-400/70 bg-teal-400/5'
   }
 }
 
-/** The hover naming a cue cell's source: *Own*, *Own · overrides Scrim*, *From Scrim*. */
-export function cueSourceTitle(source: CueCellStateSource | undefined): string | undefined {
+/**
+ * The hover naming a cue cell's source: *Own*, *Own · overrides Scrim*, *From Scrim*, a reference's
+ * *Own: DSR Focus, Spot 3’s row* ([head] the row's name).
+ */
+export function cueSourceTitle(source: CueCellStateSource | undefined, head?: string): string | undefined {
   if (!source) return undefined
   switch (source.kind) {
     case 'own': {
@@ -105,6 +183,10 @@ export function cueSourceTitle(source: CueCellStateSource | undefined): string |
       return source.name ? `From ${source.name}` : 'From a Look layer'
     case 'mixed':
       return 'Mixed across this row — own rows and Looks'
+    case 'reference': {
+      const words = referenceTitle('Own', source.reference, source.reference.name, head, source.group)
+      return source.overrides ? `${words} · overrides ${source.overrides}` : words
+    }
   }
 }
 
@@ -137,6 +219,21 @@ export function ownershipTitle(ownership?: CellOwnership): string | undefined {
   const layer = ownership.layer
   if (layer) parts.push(describeCellLayer(layer))
   return parts.join(' · ')
+}
+
+/**
+ * A cell's whole hover: a reference's sentence where the cell holds one (D18), else the owner's.
+ * [name] is the palette's name where the frame did not say it; [head] the row's, for *Spot 3’s row*.
+ */
+export function cellTitle(
+  ownership: CellOwnership | undefined,
+  name?: string,
+  head?: string,
+): string | undefined {
+  if (ownership?.reference) {
+    return referenceTitle(referenceOwnerWord(ownership), ownership.reference, ownership.reference.name ?? name, head)
+  }
+  return ownershipTitle(ownership)
 }
 
 /**

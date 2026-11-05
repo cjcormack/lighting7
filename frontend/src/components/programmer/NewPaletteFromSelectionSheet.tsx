@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Sheet,
   SheetBody,
@@ -56,20 +56,29 @@ export function NewPaletteFromSelectionSheet({
 
   const [name, setName] = useState('')
   const [family, setFamily] = useState<AttributeFamily | null>(null)
+  // *Use it on these heads* (palette-references plan D15, call C): on by default, every open.
+  const [asReference, setAsReference] = useState(true)
 
   const offered = useMemo(
     () => (families != null && families.length > 0 ? families : [...ATTRIBUTE_FAMILIES]),
     [families],
   )
 
+  // Reset as the sheet opens, and only then: a host that hands over a fresh `families` array while it
+  // is open must not undo what the operator chose here (an unticked *Use it on these heads* above all).
+  const offeredRef = useRef(offered)
+  useEffect(() => {
+    offeredRef.current = offered
+  }, [offered])
   useEffect(() => {
     if (!open) return
     setName('')
+    setAsReference(true)
     setBuskTarget(null)
     // Pre-chosen when the selection names exactly one — the common case.
-    setFamily(offered.length === 1 ? offered[0] : null)
+    setFamily(offeredRef.current.length === 1 ? offeredRef.current[0] : null)
     reset()
-  }, [open, offered, reset])
+  }, [open, reset])
 
   // Held, not written: the pad names a template id that does not exist until `record` answers.
   const [buskTarget, setBuskTarget] = useState<BuskAddTarget | null>(null)
@@ -85,20 +94,23 @@ export function NewPaletteFromSelectionSheet({
         name: name.trim(),
         mask: [family],
         targets: [...targets],
+        asReference,
       }).unwrap()
-      // The shape it came out as is worth saying: an operator who meant "one amber" and got a
-      // per-fixture template has selected heads that disagree, and will want to know now rather
-      // than when they apply it somewhere else.
       // The shape it came out as is worth saying: an operator who meant "one amber" and got a
       // per-fixture template has selected heads that disagree, and will want to know now rather
       // than when they apply it somewhere else.
       const shape = result.isGeneric
         ? 'one value for any head'
         : `per fixture, ${result.palette.rows?.length ?? 0} heads`
+      const referenced = result.referenced ?? 0
+      const linked =
+        referenced > 0
+          ? ` · ${referenced} value${referenced === 1 ? ' is a reference' : 's are references'} to it now; nothing moved on stage`
+          : ''
       await placeAfterCreate(
         buskTarget,
         { kind: 'PALETTE', id: result.palette.id, name: result.palette.name },
-        `“${result.palette.name}” — ${shape}`,
+        `“${result.palette.name}” — ${shape}${linked}`,
       )
       onOpenChange(false)
     } catch {
@@ -162,6 +174,23 @@ export function NewPaletteFromSelectionSheet({
             </div>
           )}
 
+          <label
+            className="flex items-start gap-2.5 rounded-lg border border-teal-400/45 bg-teal-400/[0.06] p-3"
+          >
+            <input
+              type="checkbox"
+              checked={asReference}
+              onChange={(e) => setAsReference(e.target.checked)}
+              className="mt-0.5 size-4 shrink-0 accent-teal-400"
+            />
+            <span className="space-y-1">
+              <span className="block text-sm font-medium">Use it on these heads</span>
+              <span className="block text-[11px] leading-snug text-muted-foreground">
+                {referenceSentence(targets, family, name.trim())}
+              </span>
+            </span>
+          </label>
+
           {targets.length === 0 && (
             <p className="text-[11px] text-destructive">
               Nothing selected — there is nothing to record.
@@ -182,4 +211,15 @@ export function NewPaletteFromSelectionSheet({
       </SheetContent>
     </Sheet>
   )
+}
+
+/** *The 4 selected heads’ position values become references to DSR Focus. …* — a group's members, *the selection’s*. */
+function referenceSentence(targets: readonly PaletteTarget[], family: AttributeFamily | null, name: string): string {
+  const whose = targets.some((t) => t.type === 'group')
+    ? 'The selection’s'
+    : targets.length === 1
+      ? 'The selected head’s'
+      : `The ${targets.length} selected heads’`
+  const values = family != null ? `${FAMILY_LABELS[family].singular.toLowerCase()} values` : 'values'
+  return `${whose} ${values} become references to ${name !== '' ? name : 'it'}. Nothing moves on stage, and whatever you record from them keeps the reference.`
 }

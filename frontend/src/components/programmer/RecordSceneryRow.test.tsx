@@ -37,7 +37,8 @@ const recordLook = vi.fn((_: unknown) => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
-vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => store.programmer }))
+vi.mock('@/store/programmer', () => ({ useProgrammerRevision: () => 0, useProgrammerScenery: () => store.programmer }))
+vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }), useVisibleFixtureListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: store.elements }) }))
 vi.mock('@/store/cueStacks', () => ({
   useProjectCueStackListQuery: () => ({ data: [{ id: 4, name: 'Main', type: 'STANDARD' }] }),

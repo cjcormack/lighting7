@@ -51,7 +51,7 @@ import {
   type PickRowGroup,
 } from './sheetPick'
 import { FixtureSheetContext, type FixtureSheetContextValue, type SheetHost, type SheetTarget } from './sheetContext'
-import { useCueLabel, useFxDetail } from './fxLabels'
+import { useCueLabel, useFxDetail, usePaletteNameByUuid } from './fxLabels'
 import { fixtureHeadKeys, heldLine, useHeldOnTarget, useRelease } from './useRelease'
 
 const EMPTY_FX: readonly ActiveFx[] = []
@@ -123,6 +123,7 @@ function useSheetContext(
   const { data: effects } = useActiveFxQuery()
   const cueLabel = useCueLabel()
   const fxDetail = useFxDetail()
+  const paletteName = usePaletteNameByUuid()
   const context = useMemo<FixtureSheetContextValue>(
     () => ({
       target,
@@ -133,11 +134,12 @@ function useSheetContext(
       reachOf,
       cueLabel,
       fxDetail,
+      paletteName,
       openRowId,
       setOpenRowId,
       aim,
     }),
-    [target, host, connected, blind, effects, reachOf, cueLabel, fxDetail, openRowId, aim],
+    [target, host, connected, blind, effects, reachOf, cueLabel, fxDetail, paletteName, openRowId, aim],
   )
   // The picker opens on the family of the row open on the sheet, and starts its effect on that
   // row's property where the effect can take it (Fx board, "Adding"). An open row is keyed by its

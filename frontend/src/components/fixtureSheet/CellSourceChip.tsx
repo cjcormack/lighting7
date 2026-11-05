@@ -5,7 +5,7 @@ import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useIsDeskConnected } from '@/store/status'
 import type { Fixture } from '@/store/fixtures'
-import { useCueLabel, useFxDetail } from './fxLabels'
+import { useCueLabel, useFxDetail, usePaletteNameByUuid } from './fxLabels'
 import { fxReaching, mergeRowSources, rowSourceOf } from './rowSource'
 import { SourceChip } from './SourceChip'
 
@@ -34,6 +34,7 @@ export function CellSourceChip({ keys, label }: { keys: readonly CellKey[]; labe
   const connected = useIsDeskConnected()
   const cueLabel = useCueLabel()
   const fxDetail = useFxDetail()
+  const paletteName = usePaletteNameByUuid()
   const [version, bump] = useReducer((n: number) => n + 1, 0)
 
   const signature = keys.map((k) => `${k.targetKey}\u0001${k.attribute}`).join('\u0000')
@@ -79,12 +80,13 @@ export function CellSourceChip({ keys, label }: { keys: readonly CellKey[]; labe
             blind,
             cueLabel,
             fxDetail,
+            paletteName,
           }),
         }
       }),
     )
     // `version` is the subscription's tick: the states are read from the client's store.
-  }, [version, heads, lookup, effects, blind, cueLabel, fxDetail])
+  }, [version, heads, lookup, effects, blind, cueLabel, fxDetail, paletteName])
 
   if (source == null) return null
   return (

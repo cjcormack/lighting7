@@ -21,7 +21,7 @@ import { SettingCell } from '../fixtures-list/cells/SettingCell'
 import { fromPct, toPct } from '../editor/cellPercent'
 import type { CellCommit } from '../fixtures-list/rowModel'
 import { SheetField } from './SheetField'
-import { SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
+import { SourceChip, sourceEdgeClass } from './SourceChip'
 import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, FINGER_ROW_HEAD_CLASS, ROW_HEAD_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
 import { useRowSource } from './useRowSource'
 import { clearSheetRow, writePickColour, writePickVirtualDimmer, writePickWhiteMix, writeSheetLevel, writeSheetPosition } from './sheetWrites'
@@ -104,7 +104,7 @@ function RowFrame({
       className={cn(
         'relative flex flex-col gap-1.5 py-[7px] pr-3 pl-4',
         "before:absolute before:top-[7px] before:bottom-[7px] before:left-0 before:w-[3px] before:rounded-r-sm before:content-['']",
-        SOURCE_EDGE_CLASS[source.kind],
+        sourceEdgeClass(source),
         openRowId === openKey(headKey, row) && 'bg-primary/[0.07]',
       )}
     >

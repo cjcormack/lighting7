@@ -88,8 +88,16 @@ internal fun lookRowsReferencing(project: EntityID<Int>, paletteUuid: UUID): Lis
     }.toList()
 }
 
-/** What a stored row's read carries for its reference (palette-references plan D6). */
-internal class StoredReferenceRead(val reference: PaletteReferenceDto, val resolvedByHead: Map<String, String>?)
+/**
+ * What a stored row's read carries for its reference (palette-references plan D6): each head's
+ * resolution, and, for a head where it lands under another property than the row's (a colour wheel),
+ * that property.
+ */
+internal class StoredReferenceRead(
+    val reference: PaletteReferenceDto,
+    val resolvedByHead: Map<String, String>?,
+    val resolvedAttributeByHead: Map<String, String>? = null,
+)
 
 /**
  * The reference [value] makes on a row of [project] — the palette named, and, when [references] is
@@ -116,12 +124,21 @@ internal fun storedReferenceRead(
         is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key).fixtures }.getOrNull()?.filterIsInstance<Fixture>().orEmpty()
     }
     val byHead = LinkedHashMap<String, String>()
+    val attributeByHead = LinkedHashMap<String, String>()
+    val canonical = canonicalAttributeName(attribute)
     var unresolved: String? = null
     for ((head, resolved) in heads.flatMap { references.resolveFanned(it, attribute, uuid) }) {
-        resolved.value?.let { byHead[head.targetKey] = it.serialize() }
+        resolved.value?.let {
+            byHead[head.targetKey] = it.serialize()
+            if (resolved.attribute != canonical) attributeByHead[head.targetKey] = resolved.attribute
+        }
         if (unresolved == null) unresolved = resolved.unresolved
     }
-    return StoredReferenceRead(PaletteReferenceDto(palette.id.value, uuid.toString(), palette.name, unresolved), byHead)
+    return StoredReferenceRead(
+        PaletteReferenceDto(palette.id.value, uuid.toString(), palette.name, unresolved),
+        byHead,
+        attributeByHead.ifEmpty { null },
+    )
 }
 
 /**

@@ -65,6 +65,8 @@ export interface FixtureSheetContextValue {
   reachOf: (headKey: string) => { keys: readonly string[]; groups: readonly string[] }
   cueLabel: (cueId: number) => string | undefined
   fxDetail: (effect: ActiveFx) => string
+  /** A palette's name by uuid, for a cue's reference (palette-references plan D18); absent names none. */
+  paletteName?: (uuid: string) => string | undefined
   /** The row whose full editor is open (Colour, Position). One at a time — call 5. */
   openRowId: string | null
   setOpenRowId: (id: string | null) => void

@@ -66,6 +66,8 @@ data class LookRowDto(
     val reference: PaletteReferenceDto? = null,
     /** As [CueAttributeAssignmentDto.resolvedByHead]. */
     val resolvedByHead: Map<String, String>? = null,
+    /** As [CueAttributeAssignmentDto.resolvedAttributeByHead]. */
+    val resolvedAttributeByHead: Map<String, String>? = null,
 ) {
     /**
      * The row's target. A Look row always names one — see [DEFERRED_TARGET_TYPE].

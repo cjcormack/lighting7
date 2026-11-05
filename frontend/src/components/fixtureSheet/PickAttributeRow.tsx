@@ -16,7 +16,7 @@ import type { CellCommit } from '../fixtures-list/rowModel'
 import { AxisControl, JOG_OPEN_SIZE, LevelControl, OpenToggle, openKey, PositionPad, READ_ONLY_JOG } from './AttributeRow'
 import { LiveJogPad, PadModeSwitch } from '../editor/StageJog'
 import { usePositionPadMode } from '@/lib/positionPadMode'
-import { MIXED_EDGE_CLASS, SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
+import { SourceChip, sourceEdgeClass } from './SourceChip'
 import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, FINGER_ROW_HEAD_CLASS, ROW_HEAD_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
 import { usePickSource } from './useRowSource'
 import { useChannelValues } from './useChannelValues'
@@ -141,7 +141,7 @@ function PickFrame({
       className={cn(
         'relative flex flex-col gap-1.5 py-[7px] pr-3 pl-4',
         "before:absolute before:top-[7px] before:bottom-[7px] before:left-0 before:w-[3px] before:rounded-r-sm before:content-['']",
-        source.mixed ? MIXED_EDGE_CLASS[source.kind] : SOURCE_EDGE_CLASS[source.kind],
+        sourceEdgeClass(source, source.mixed),
         openRowId === openKey(PICK_HEAD, row) && 'bg-primary/[0.07]',
       )}
     >

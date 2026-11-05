@@ -23,6 +23,11 @@ export interface RowSource {
   heldBack: boolean
   /** The programmer is blind and holds this row: the value is staged, not on stage. */
   staged: boolean
+  /**
+   * The winning value is a palette reference (palette-references plan D18): the palette's name, and
+   * the desk's sentence where it no longer resolves (D3). The chip names the palette and wears teal.
+   */
+  reference?: { name: string; unresolved?: string }
 }
 
 export interface RowSourceInput {
@@ -37,6 +42,8 @@ export interface RowSourceInput {
   cueLabel: (cueId: number) => string | undefined
   /** `½ · M2` — an effect's speed and master, as the sheet's tray and chips spell it. */
   fxDetail: (effect: ActiveFx) => string
+  /** A palette's name by uuid, for a cue's reference, whose provenance names only the uuid. */
+  paletteName?: (uuid: string) => string | undefined
 }
 
 const RANK: Record<RowSourceKind, number> = { parked: 4, programmer: 3, fx: 2, cue: 1, base: 0 }
@@ -64,7 +71,7 @@ function kindOf(source: string | undefined): RowSourceKind {
  * Over several keys (Position reads `position` and its two axes) the strongest wins, the way the
  * grid collapses a cell: a parked axis is the thing to know about first.
  */
-export function rowSourceOf({ headKey, states, effects, blind, cueLabel, fxDetail }: RowSourceInput): RowSource {
+export function rowSourceOf({ headKey, states, effects, blind, cueLabel, fxDetail, paletteName }: RowSourceInput): RowSource {
   let best: { kind: RowSourceKind; state: ProgrammerKeyState } | null = null
   let holds = false
   let touched = false
@@ -89,6 +96,7 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, fxDetai
   const provenance = best?.state.provenance
   let label: string
   let effect: ActiveFx | undefined
+  let reference: RowSource['reference']
   switch (kind) {
     case 'parked':
       label = 'Parked'
@@ -99,6 +107,10 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, fxDetai
       // A Look or template pressed in the programmer names itself; the operator's own hand is
       // *Programmer* (Layers board, the vocabulary).
       label = entry?.owner === 'layers' && layerName ? `${layerName} · pressed` : 'Programmer'
+      if (entry?.reference) {
+        reference = { name: entry.reference.name, unresolved: entry.reference.unresolved }
+        label = entry.reference.name
+      }
       break
     }
     case 'fx': {
@@ -114,13 +126,18 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, fxDetai
       const cue = provenance?.cueId != null ? cueLabel(provenance.cueId) : undefined
       const layer = provenance?.layerSource?.name
       label = [cue, layer].filter(Boolean).join(' · ') || 'Cue'
+      if (provenance?.reference) {
+        const name = paletteName?.(provenance.reference) ?? 'Palette'
+        reference = { name }
+        label = [cue, name].filter(Boolean).join(' · ')
+      }
       break
     }
     default:
       label = 'Base'
   }
 
-  return { kind, label, effect, holds, touched, heldBack, staged: blind && holds }
+  return { kind, label, effect, holds, touched, heldBack, staged: blind && holds, ...(reference ? { reference } : {}) }
 }
 
 /**

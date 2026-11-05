@@ -58,6 +58,7 @@ vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => s
 vi.mock('./fxLabels', () => ({
   useFxDetail: () => () => '¼ · M1',
   useCueLabel: () => (id: number) => `Q${id}`,
+  usePaletteNameByUuid: () => () => undefined,
 }))
 vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow: () => null, GroupBoundControlsRow: () => null }))
 vi.mock('../fixtures/LocateButton', () => ({
@@ -194,6 +195,18 @@ describe('FixtureSheet — rows', () => {
     expect(row('gobo').className).toContain('before:bg-sky-500')
     expect(chip('position').textContent).toBe('Parked')
     expect(row('position').className).toContain('before:bg-amber-500')
+  })
+
+  it('draws a palette reference as the palette’s chip with the glyph and a teal edge (palette-references plan D18)', () => {
+    const reference = { paletteId: 7, paletteUuid: 'dsr', name: 'DSR Focus' }
+    hold([entry('dimmer', { reference })], [prov('dimmer', { reference: 'dsr' })])
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    const chip = row('dimmer').querySelector('button[data-source]') as HTMLElement
+    expect(chip.textContent).toBe('DSR Focus')
+    expect(chip).toHaveAttribute('data-reference', 'true')
+    expect(chip.querySelector('svg.lucide-palette')).not.toBeNull()
+    expect(chip.getAttribute('title')).toBe('Yours: DSR Focus — show what is underneath')
+    expect(row('dimmer').className).toContain('before:bg-teal-400')
   })
 
   it('draws Base for a row nothing asserts', () => {

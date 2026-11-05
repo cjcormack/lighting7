@@ -349,6 +349,7 @@ private fun DaoCueAttributeAssignment.toDtoWithHealth(
         uuid = uuid.toString(),
         reference = read?.reference,
         resolvedByHead = read?.resolvedByHead,
+        resolvedAttributeByHead = read?.resolvedAttributeByHead,
     )
 }
 

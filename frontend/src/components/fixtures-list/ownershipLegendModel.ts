@@ -41,6 +41,12 @@ export const LEGEND_SHORT: Record<CellOwnershipSource, string> = {
   baseline: 'Nothing asserts it',
 }
 
+/** The two marks a value wears beside its owner's (palette-references plan D18, D19). */
+export const REFERENCE_LEGEND_GLOSS = 'A palette reference, named in the cell'
+export const REFERENCE_LEGEND_SHORT = 'Palette'
+export const LOOK_LAYER_LEGEND_GLOSS = 'From a Look layer'
+export const LOOK_LAYER_LEGEND_SHORT = 'Look layer'
+
 /** Draw order — loudest claim first, "nothing" last. */
 export const LEGEND_ORDER: readonly CellOwnershipSource[] = [
   'programmer',

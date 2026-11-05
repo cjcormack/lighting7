@@ -35,6 +35,7 @@ import type {
 } from '@/store/programmerOps'
 import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 import { RecordSceneryRow } from './RecordSceneryRow'
+import { RecordReferencesNote } from './RecordReferencesNote'
 import { announceWrite, recordNote } from './writeToasts'
 import { RecordCuePicker, usePickedCueName } from './RecordCuePicker'
 
@@ -408,6 +409,13 @@ export function RecordSheet({
             />
             Record FX too
           </label>
+
+          {mode !== 'REMOVE' && (
+            <RecordReferencesNote
+              destination="cue"
+              scope={{ source, families: maskToWire(mask) ?? null, targetKeys: scoped ? selectedKeys : null }}
+            />
+          )}
 
           <RecordSceneryRow
             projectId={projectId}

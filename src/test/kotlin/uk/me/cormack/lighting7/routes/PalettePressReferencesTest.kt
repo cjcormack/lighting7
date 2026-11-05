@@ -347,6 +347,24 @@ class PalettePressReferencesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a cue's colour reference on a wheel head names the property it lands on, and the cook names its palette`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedFixture(state, projectId, "martin-mac-250-mode-4", "mac-1", 1)
+        state.show.fixtures.patchListChanged()
+        val red = client.palette("Red", generic("rgbColour", "#ff0000;policy=rgbonly"))
+        val cueId = client.cue(null, "Q1")
+
+        val row = client.cuePress(cueId, red, CueTargetDto("fixture", "mac-1")).cue.attributeAssignments.single()
+        assertEquals(mapOf("mac-1" to "colourWheel"), row.resolvedAttributeByHead, "the literal is a wheel level, not a colour")
+        assertTrue(row.resolvedByHead.orEmpty().containsKey("mac-1"))
+
+        val cooked = client.get("$base/cues/$cueId/cooked").body<CueCookedResponse>().rows
+        val wheel = cooked.single { it.targetKey == "mac-1" && it.attribute == "colourWheel" }
+        assertEquals(red.uuid, wheel.reference, "the composed own value carries its palette")
+    }
+
+    @Test
     fun `a value palette's kept layer still comes off with its pad, in the programmer and in a cue`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

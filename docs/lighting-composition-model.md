@@ -1455,7 +1455,10 @@ reached. A held cue moved this way is not marked edited since GO.
 
 **The desk answers the resolved value beside the reference** (D6). A programmer entry's frame carries
 `reference {paletteId, paletteUuid, name, unresolved?}` beside its resolved `value`; a cue row's and a
-Look row's DTO carry `reference`, `resolvedByHead` (on the live project's reads) and the row's `uuid`;
+Look row's DTO carry `reference`, `resolvedByHead` (on the live project's reads, keyed by the head the
+value lands on — a parent's cells where the palette reaches only those), `resolvedAttributeByHead` (the
+property it lands under there, where that is not the row's: a colour wheel) and the row's `uuid`; a
+cue's cooked row (`/cues/{id}/cooked`) carries the palette's uuid as `reference` on a composed own value;
 `ProvenanceEntry.reference` names the palette a programmer entry or a cue's own row won with. A Look
 layer's value keeps the Look's attribution.
 

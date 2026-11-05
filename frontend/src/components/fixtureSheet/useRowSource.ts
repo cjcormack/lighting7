@@ -18,7 +18,7 @@ export function useRowSource(headKey: string, keys: readonly string[]): RowSourc
  * disagree. One subscription per (head, key), so a row over twelve pixels hears its twelve keys.
  */
 export function usePickSource(headKeys: readonly string[], keys: readonly string[]): PickSource {
-  const { effects, blind, cueLabel, fxDetail, reachOf } = useFixtureSheet()
+  const { effects, blind, cueLabel, fxDetail, reachOf, paletteName } = useFixtureSheet()
   const [version, bump] = useReducer((n: number) => n + 1, 0)
   const headsKey = headKeys.join('\u0000')
   const keysKey = keys.join('\u0000')
@@ -53,12 +53,13 @@ export function usePickSource(headKeys: readonly string[], keys: readonly string
             blind,
             cueLabel,
             fxDetail,
+            paletteName,
           }),
         })),
       )
     },
     // `version` is the subscription's tick: the states are read from the client's store, which
     // moves without React knowing, and every key's change bumps it.
-    [version, headsKey, keysKey, reaching, blind, cueLabel, fxDetail],
+    [version, headsKey, keysKey, reaching, blind, cueLabel, fxDetail, paletteName],
   )
 }

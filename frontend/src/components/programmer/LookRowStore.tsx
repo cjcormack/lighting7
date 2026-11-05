@@ -10,6 +10,7 @@ import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 import type { ReactNode } from 'react'
 import type { LookDetails, LookRow } from '@/api/looksApi'
 import type { StagedValue } from '@/components/fixtures-list/useRowOwnership'
+import type { PaletteReference } from '@/api/paletteReference'
 
 export { lookRowKey } from './lookRowKey'
 
@@ -35,6 +36,11 @@ export interface LookRowStoreValue {
   lookName?: string
   /** Committed row values by [lookRowKey], group rows already expanded to their members. */
   serverRows: ReadonlyMap<string, StagedValue>
+  /**
+   * The committed rows that are palette references, by the same key (palette-references plan D18):
+   * what the grid draws teal. Their values in [serverRows] are the desk's resolution on each head.
+   */
+  serverReferences?: ReadonlyMap<string, PaletteReference>
   /** Uncommitted edits, overlaid on `serverRows` by the read path. */
   draft: LookRowDraft
   /** Set one cell's value and schedule the save. Canonical assignment string. */
@@ -223,7 +229,7 @@ export function LookRowStoreProvider({
       layerId: layer.layerId,
       lookId,
       lookName: layer.source.name,
-      serverRows: buildServerRows(look?.rows, fixtures),
+      ...buildServerRows(look?.rows, fixtures),
       draft,
       setValue,
       attributeMask: layer.attributeMask,
@@ -252,23 +258,48 @@ export function LookRowStoreProvider({
 function buildServerRows(
   rows: readonly LookRow[] | undefined,
   fixtures: readonly { key: string; groups: string[] }[] | undefined,
-): ReadonlyMap<string, StagedValue> {
+): { serverRows: ReadonlyMap<string, StagedValue>; serverReferences: ReadonlyMap<string, PaletteReference> } {
   const out = new Map<string, StagedValue>()
+  const references = new Map<string, PaletteReference>()
+  const putLiteral = (row: LookRow, headKey: string) => {
+    const staged = parseProgrammerValue(row.value)
+    if (!staged) return
+    const key = lookRowKey(headKey, row.attribute)
+    out.set(key, staged)
+    references.delete(key)
+  }
+  // A reference row is drawn where the desk says it lands: each head of `resolvedByHead` — a
+  // parent's cells where the palette reaches only those — under the property it lands on there (a
+  // colour wheel). A head it does not resolve on is left unset rather than guessed.
+  const putReference = (row: LookRow, reference: PaletteReference) => {
+    if (row.targetType === 'fixture') {
+      const own = lookRowKey(row.targetKey, row.attribute)
+      out.delete(own)
+      references.delete(own)
+    }
+    for (const [headKey, literal] of Object.entries(row.resolvedByHead ?? {})) {
+      const staged = parseProgrammerValue(literal)
+      if (!staged) continue
+      const key = lookRowKey(headKey, row.resolvedAttributeByHead?.[headKey] ?? row.attribute)
+      out.set(key, staged)
+      references.set(key, reference)
+    }
+  }
   for (const pass of ['group', 'fixture'] as const) {
     for (const row of rows ?? []) {
       if (row.targetType !== pass || row.elementKey) continue
-      const staged = parseProgrammerValue(row.value)
-      if (!staged) continue
+      if (row.reference != null) {
+        putReference(row, row.reference)
+        continue
+      }
       if (pass === 'fixture') {
-        out.set(lookRowKey(row.targetKey, row.attribute), staged)
+        putLiteral(row, row.targetKey)
         continue
       }
       for (const fixture of fixtures ?? []) {
-        if (fixture.groups.includes(row.targetKey)) {
-          out.set(lookRowKey(fixture.key, row.attribute), staged)
-        }
+        if (fixture.groups.includes(row.targetKey)) putLiteral(row, fixture.key)
       }
     }
   }
-  return out
+  return { serverRows: out, serverReferences: references }
 }

@@ -181,3 +181,37 @@ describe('mergeRowSources — a row over a pick of heads (D13)', () => {
     expect(mergeRowSources([{ key: 'h1', source: programmer }, { key: 'h2', source: parked }])).toMatchObject({ kind: 'parked', count: 1 })
   })
 })
+
+describe('rowSourceOf — a palette reference (palette-references plan D18)', () => {
+  const DSR = { paletteId: 7, paletteUuid: 'dsr', name: 'DSR Focus' }
+
+  it('names the palette on your reference, and keeps it yours', () => {
+    expect(source({ entry: entry({ reference: DSR }), provenance: prov({ reference: 'dsr' }) })).toMatchObject({
+      kind: 'programmer',
+      label: 'DSR Focus',
+      reference: { name: 'DSR Focus' },
+      holds: true,
+    })
+  })
+
+  it('carries the desk’s sentence for one that no longer resolves', () => {
+    const stale = { ...DSR, unresolved: "'DSR Focus' has no row for spot-3" }
+    expect(source({ entry: entry({ reference: stale }), provenance: prov({}) }).reference).toEqual({
+      name: 'DSR Focus',
+      unresolved: "'DSR Focus' has no row for spot-3",
+    })
+  })
+
+  it('names a cue’s reference from the library by its uuid, beside the cue', () => {
+    const state = { provenance: prov({ source: 'CUE', cueId: 12, reference: 'dsr' }) }
+    expect(source(state, { paletteName: (uuid) => (uuid === 'dsr' ? 'DSR Focus' : undefined) })).toMatchObject({
+      kind: 'cue',
+      label: 'Q12 · DSR Focus',
+      reference: { name: 'DSR Focus' },
+    })
+  })
+
+  it('is no reference on a literal', () => {
+    expect(source({ entry: entry(), provenance: prov({}) }).reference).toBeUndefined()
+  })
+})

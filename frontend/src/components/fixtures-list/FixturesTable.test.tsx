@@ -161,6 +161,15 @@ vi.mock('../../store/status', () => ({
   useIsDeskConnected: () => deskConnected.current,
 }))
 
+// The palette library a reference's pill names a uuid from (palette-references plan D18).
+// Stable, as the real hook's is: a fresh function per render would defeat the rows' memo.
+const paletteNames = vi.hoisted(() => new Map<string, string>())
+const paletteNameOf = vi.hoisted(() => (uuid: string) => paletteNames.get(uuid))
+vi.mock('../fixtureSheet/fxLabels', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../fixtureSheet/fxLabels')>()),
+  usePaletteNameByUuid: () => paletteNameOf,
+}))
+
 import { FixturesTable } from './FixturesTable'
 import { FxSelectionStoreContext, createFxSelectionStore, type FxSelectionStore } from './fxSelection'
 import { chan, makeActiveFx, sliderProp } from '@/test/fixtureFactories'
@@ -1466,5 +1475,92 @@ describe('FixturesTable name mark (tables-colours plan D8)', () => {
     rerender(<Marked colours={new Map([['a', 'red' as const], ['b', 'lime' as const]])} />)
     expect(rowOf('SL Wash 2').className).toContain('fixture-tag-lime')
     expect(rowRenders.count).toBe(1)
+  })
+})
+
+describe('FixturesTable — a palette reference’s mark (palette-references plan D18–D20)', () => {
+  const pill = () => document.querySelector<HTMLElement>('[data-cell] [data-reference-pill]')
+  const whole = { paletteUuid: 'dsr', name: 'DSR Focus', count: 1, of: 1, severalPalettes: false }
+
+  it('draws your reference with the teal edge, the pill naming the palette, and whose it is on hover', () => {
+    scopeState.current = { kind: 'local' }
+    ownership.current = { dimmer: { source: 'programmer', touched: true, isUniform: true, owners: ['web'], reference: whole } }
+    render(<Harness />)
+    expect(pill()).toHaveTextContent('DSR Focus')
+    expect(pill()?.querySelector('svg.lucide-palette')).not.toBeNull()
+    expect(cellWrapper().className).toContain('var(--color-teal-400)')
+    // Still yours: the owner's ring stays under the edge.
+    expect(cellWrapper().className).toContain('ring-primary')
+    expect(cellWrapper()).toHaveAttribute('title', 'Yours: DSR Focus, SL Wash 1’s row')
+  })
+
+  it('counts the heads on a row that is partly references, with a dashed edge', () => {
+    scopeState.current = { kind: 'local' }
+    ownership.current = {
+      dimmer: { source: 'programmer', touched: true, isUniform: true, owners: ['web'], reference: { ...whole, count: 2, of: 4 } },
+    }
+    render(<Harness />)
+    expect(pill()).toHaveTextContent('DSR Focus · 2 of 4')
+    expect(cellWrapper().className).toContain('border-dashed')
+    expect(cellWrapper()).toHaveAttribute('title', 'Yours: DSR Focus on 2 of 4 heads')
+  })
+
+  it('dashes the pill of a reference that no longer resolves, and says why', () => {
+    scopeState.current = { kind: 'local' }
+    ownership.current = {
+      dimmer: {
+        source: 'programmer',
+        touched: true,
+        isUniform: true,
+        owners: ['web'],
+        reference: { ...whole, unresolved: "'DSR Focus' has no row for a" },
+      },
+    }
+    render(<Harness />)
+    expect(pill()).toHaveAttribute('data-unresolved', 'true')
+    expect(pill()?.className).toContain('border-dashed')
+    expect(cellWrapper().getAttribute('title')).toMatch(/has no row for a — keeps its last value$/)
+  })
+
+  it('names a cue’s reference in Output from the library, by its uuid', () => {
+    scopeState.current = { kind: 'output' }
+    paletteNames.set('dsr', 'DSR Focus')
+    ownership.current = { dimmer: { source: 'cue', touched: false, isUniform: true, owners: [], reference: { ...whole, name: undefined } } }
+    render(<Harness />)
+    expect(pill()).toHaveTextContent('DSR Focus')
+    expect(cellWrapper()).toHaveAttribute('title', 'Cue: DSR Focus, SL Wash 1’s row')
+    paletteNames.clear()
+  })
+
+  it('draws a focused Look’s reference row the same way', () => {
+    scopeState.current = { kind: 'layer', layerId: 7 }
+    lookStore.current = layerStore({
+      serverRows: new Map([[lookRowKey('a', 'dimmer'), { kind: 'level', value: 128 }]]),
+      serverReferences: new Map([[lookRowKey('a', 'dimmer'), { paletteId: 7, paletteUuid: 'dsr', name: 'DSR Focus' }]]),
+    })
+    render(<Harness />)
+    expect(pill()).toHaveTextContent('DSR Focus')
+    expect(cellWrapper().className).toContain('var(--color-teal-400)')
+    expect(cellWrapper()).toHaveAttribute('title', 'This Look: DSR Focus, SL Wash 1’s row')
+  })
+
+  it('gives a Look layer’s value its own pill, never the reference’s teal (D19)', () => {
+    scopeState.current = { kind: 'output' }
+    ownership.current = {
+      dimmer: {
+        source: 'cue',
+        touched: false,
+        isUniform: true,
+        owners: [],
+        layer: { layerId: 3, mixed: false, name: 'Act 1 Spots', source: { kind: 'LOOK', id: 9, uuid: 'l9', name: 'Act 1 Spots' } },
+      },
+    }
+    render(<Harness />)
+    const look = document.querySelector('[data-cell] [data-look-layer-pill]')
+    expect(look).toHaveTextContent('Act 1 Spots')
+    expect(look?.querySelector('svg.lucide-layers')).not.toBeNull()
+    expect(pill()).toBeNull()
+    expect(cellWrapper().className).toContain('var(--color-violet-400)')
+    expect(cellWrapper().className).not.toContain('teal')
   })
 })

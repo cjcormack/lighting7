@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PaletteSummary } from '@/api/palettesApi'
-import { outsideMaskReason, paletteFits, splitByMask } from './paletteOffer'
+import { outsideMaskReason, paletteFits, paletteReach, pressReach, reachCount, reachVerb, splitByMask } from './paletteOffer'
+import type { ReachFixture } from './paletteOffer'
 import { recentFirst } from './paletteRecents'
 
 /**
@@ -98,5 +99,66 @@ describe('recentFirst', () => {
     const c = palette({ id: 3, name: 'C', lastPressedAt: '2026-10-16T10:00:00.500Z' })
     const d = palette({ id: 4, name: 'D' })
     expect(recentFirst([a, b, c, d]).map((t) => t.name)).toEqual(['C', 'B', 'A', 'D'])
+  })
+})
+
+/**
+ * A per-fixture palette's reach over a press (palette-references plan D21), counted the desk's way —
+ * `LayerPressRules.paletteHeads` / `omittedHeads`, the cases `ProgrammerLayerPressTest` presses.
+ */
+describe('paletteReach', () => {
+  const rows = (...heads: string[]) =>
+    heads.map((targetKey) => ({ targetType: 'fixture' as const, targetKey, attribute: 'position', value: 'pos:0,0' }))
+  const spot = palette({ isGeneric: false, family: 'POSITION', rows: rows('hex-1', 'hex-2') })
+  const rig: ReachFixture[] = [
+    { key: 'hex-1', groups: ['front'] },
+    { key: 'hex-2', groups: ['front'] },
+    { key: 'hex-3', groups: [] },
+    { key: 'bar', groups: [], elements: [{ key: 'bar.1' }, { key: 'bar.2' }] },
+  ]
+  const fixture = (key: string) => ({ type: 'fixture', key })
+  const reach = (p: PaletteSummary, targets: { type: string; key: string }[], fixtures: ReachFixture[] = rig) =>
+    paletteReach(p, pressReach(targets, fixtures))
+
+  it('reaches the pressed heads its rows name, and leaves the rest out', () => {
+    // `a per-fixture palette replaces only on the heads its rows name`: Spot on hex-1 and hex-2,
+    // pressed on hex-1 and hex-3 — hex-2 omitted, hex-3 not one of its heads at all.
+    const r = reach(spot, [fixture('hex-1'), fixture('hex-3')])
+    expect(r).toEqual({ reached: ['hex-1'], leftOut: ['hex-2'] })
+    expect(reachCount(r)).toBe('1 of 2')
+  })
+
+  it('reaches every head a group press names', () => {
+    const r = reach(spot, [{ type: 'group', key: 'front' }])
+    expect(r).toEqual({ reached: ['hex-1', 'hex-2'], leftOut: [] })
+    expect(reachCount(r)).toBeNull()
+  })
+
+  it('reaches a cell row through its fixture, and a fixture row through one of its cells', () => {
+    const cells = palette({ isGeneric: false, family: 'POSITION', rows: rows('bar.1', 'bar.2') })
+    expect(reach(cells, [fixture('bar')])).toEqual({ reached: ['bar.1', 'bar.2'], leftOut: [] })
+    const whole = palette({ isGeneric: false, family: 'POSITION', rows: rows('bar', 'hex-1') })
+    expect(reach(whole, [fixture('bar.2')])).toEqual({ reached: ['bar'], leftOut: ['hex-1'] })
+  })
+
+  it('says nothing for a generic palette, an effect palette or a press naming nothing', () => {
+    expect(reach(palette({}), [fixture('hex-1')])).toBeNull()
+    expect(reach(palette({ kind: 'fx', isGeneric: true, rows: [] }), [fixture('hex-1')])).toBeNull()
+    // No targets: the desk lands it on its own heads, so nothing is left out.
+    expect(reach(spot, [])).toBeNull()
+  })
+
+  it('names the heads in the hold menu’s first line, and counts them past four', () => {
+    const four = palette({ isGeneric: false, family: 'POSITION', rows: rows('s1', 's2', 's3', 's4') })
+    const name = (k: string) => `Spot ${k.slice(1)}`
+    const r = reach(four, [fixture('s2'), fixture('s3')], [])
+    expect(reachCount(r)).toBe('2 of 4')
+    expect(reachVerb(r, name)).toBe('Put on Spot 2 and Spot 3 — its Spot 1 and Spot 4 are left out')
+    expect(reachVerb(reach(four, [fixture('x')], []), name)).toBe(
+      'Put on nothing here — its Spot 1, Spot 2, Spot 3 and Spot 4 are not selected',
+    )
+    expect(reachVerb(reach(four, ['s1', 's2', 's3', 's4'].map(fixture), []), name)).toBeNull()
+    const many = palette({ isGeneric: false, family: 'POSITION', rows: rows('s1', 's2', 's3', 's4', 's5', 's6', 's7') })
+    expect(reachVerb(reach(many, [fixture('s1')], []), name)).toBe('Put on Spot 1 — its 6 heads are left out')
   })
 })

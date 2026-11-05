@@ -21,6 +21,7 @@ import {
 import type { FxPresence } from '@/components/busking/buskingTypes'
 import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import { LookPressButton, PalettePressButton, palettePressTitle } from './PressGestures'
+import { usePaletteReach } from './usePaletteReach'
 import { usePress, usePressInCue, usePressLook, type PressGesture, type PressInto, type PressPair } from '@/hooks/usePress'
 import { usePressCue } from './pressCue'
 import { pressPresence } from './pressPresence'
@@ -251,6 +252,7 @@ export function ApplyPicker({
 
   const presenceOfPalette = (template: PaletteSummary): FxPresence =>
     pressPresence(into, cue, applied, pair.targets, 'PALETTE', template.id)
+  const reachOf = usePaletteReach(pair.targets)
   const presenceOfLook = (look: LookSummary): FxPresence =>
     pressPresence(into, cue, applied, pair.targets, 'LOOK', look.id)
 
@@ -349,6 +351,7 @@ export function ApplyPicker({
                       into={into}
                       presence={presenceOfPalette(item.palette)}
                       hasTargets={heads > 0}
+                      reach={reachOf(item.palette)}
                       reason={item.reason}
                       onGesture={onPalette}
                     />
@@ -568,6 +571,7 @@ function PalettePad({
   into,
   presence,
   hasTargets,
+  reach,
   reason,
   onGesture,
 }: {
@@ -576,6 +580,8 @@ function PalettePad({
   into: PressInto
   presence: FxPresence
   hasTargets: boolean
+  /** A per-fixture palette's *2 of 4* and its hold menu's line (D21). */
+  reach?: { count: string | null; label: string | null }
   reason?: string
   onGesture: (template: PaletteSummary, gesture: PressGesture) => void
 }) {
@@ -588,6 +594,7 @@ function PalettePad({
       into={into}
       presence={presence}
       hasTargets={hasTargets}
+      reachLabel={reach?.label}
       onGesture={onGesture}
     >
       {(handlers) => (
@@ -608,6 +615,11 @@ function PalettePad({
               />
             )}
             <PadName presence={presence}>{template.name}</PadName>
+            {reach?.count != null && (
+              <span data-palette-reach className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-teal-600 dark:text-teal-300">
+                {reach.count}
+              </span>
+            )}
           </span>
           <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
             {isFx ? <FxPadDetail palette={template} /> : describePalette(template)}

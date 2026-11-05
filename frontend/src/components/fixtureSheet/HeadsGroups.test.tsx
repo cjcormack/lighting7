@@ -93,6 +93,7 @@ vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => s
 vi.mock('./fxLabels', () => ({
   useFxDetail: () => () => '¼ · M1',
   useCueLabel: () => (id: number) => `Q${id}`,
+  usePaletteNameByUuid: () => () => undefined,
 }))
 vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow: () => null, GroupBoundControlsRow: () => null }))
 vi.mock('../fixtures/LocateButton', () => ({ LocateTargetsButton: () => <button type="button">Locate</button> }))

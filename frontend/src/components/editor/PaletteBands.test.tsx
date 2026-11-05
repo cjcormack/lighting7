@@ -374,6 +374,41 @@ function gobo(over: Partial<React.ComponentProps<typeof SettingCell>> = {}) {
 
 const fxChips = () => [...document.querySelectorAll('[data-band-effect-palette]')].map((chip) => chip.textContent)
 
+describe('a per-fixture palette’s reach (palette-references plan D21)', () => {
+  const FOCUS = template({
+    id: 11,
+    uuid: 'u11',
+    name: 'DSR Focus',
+    isGeneric: false,
+    rows: [
+      { targetType: 'fixture', targetKey: 'hex-1', attribute: 'dimmer', value: 'pct:80' },
+      { targetType: 'fixture', targetKey: 'hex-9', attribute: 'dimmer', value: 'pct:60' },
+    ],
+  })
+
+  it('counts on the chip the selected heads it has rows for, out of all it has rows for', () => {
+    templates = [FOCUS, FULL]
+    slider(DIMMER)
+    const chip = document.querySelector('[data-band-palette="11"]')!
+    expect(chip.querySelector('[data-palette-reach]')).toHaveTextContent('1 of 2')
+    // A generic palette lands on every pressed head, so it counts nothing.
+    expect(document.querySelector('[data-band-palette="1"] [data-palette-reach]')).toBeNull()
+  })
+
+  it('names the heads it lands on and leaves out on the hold menu’s first line', () => {
+    templates = [FOCUS]
+    slider(DIMMER)
+    fireEvent.contextMenu(document.querySelector('[data-band-palette="11"]')!)
+    expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Put on hex-1 — its hex-9 is left out')
+  })
+
+  it('counts nothing once the press reaches every head it has rows for', () => {
+    templates = [template({ ...FOCUS, rows: FOCUS.rows!.slice(0, 1) })]
+    slider(DIMMER)
+    expect(document.querySelector('[data-palette-reach]')).toBeNull()
+  })
+})
+
 describe('the Effects band', () => {
   it('sits below a dimmer cell’s editor, under its family', () => {
     slider(DIMMER)
@@ -494,7 +529,7 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
   it('draws the bands with the grid passing no project, says where a press goes, and no Save as palette…', () => {
     inCue()
     expect(chips()).toEqual(['Half', 'Full'])
-    expect(document.querySelector('[data-palette-band-into]')?.textContent).toBe('Into Q2 · as a layer')
+    expect(document.querySelector('[data-palette-band-into]')?.textContent).toBe('Into Q2 · as references')
     expect(screen.queryByRole('button', { name: 'Save as palette…' })).toBeNull()
   })
 

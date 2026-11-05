@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { selectionWs } from '@/test/backendMock'
+import { programmerWs, selectionWs } from '@/test/backendMock'
 import { resetDeskFollowStores } from '@/lib/deskFollow'
 
 /**
@@ -22,7 +22,8 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
-vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => ({ projectId: 6, elements: [] }) }))
+vi.mock('@/store/programmer', () => ({ useProgrammerRevision: () => 0, useProgrammerScenery: () => ({ projectId: 6, elements: [] }) }))
+vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }), useVisibleFixtureListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({
   useProjectCueStackListQuery: () => ({ data: store.stacks }),
@@ -36,6 +37,7 @@ vi.mock('@/store/programmerOps', () => ({
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import { RecordSheet } from './RecordSheet'
+import { referencesSentence, useLocalReferences } from './recordReferences'
 
 afterEach(() => {
   selectionWs.last = null
@@ -293,5 +295,79 @@ describe('the end of a Record', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(onOpenChange).not.toHaveBeenCalled()
     expect(toast.success).not.toHaveBeenCalled()
+  })
+})
+
+describe('the references line (palette-references plan D16, board C1)', () => {
+  const DSR = { paletteId: 7, paletteUuid: 'dsr', name: 'DSR Focus' }
+  const entry = (targetKey: string, over: Record<string, unknown> = {}) => ({
+    targetKey,
+    attribute: 'position',
+    value: '140,150',
+    owner: 'web',
+    touched: true,
+    owners: ['web'],
+    ...over,
+  })
+  afterEach(() => programmerWs.reset())
+
+  it('says how many of your values are references and that they stay references', () => {
+    programmerWs.push({
+      entries: new Map([
+        ['spot-2|position', entry('spot-2', { reference: DSR })],
+        ['spot-3|position', entry('spot-3', { reference: DSR })],
+        ['spot-1|position', entry('spot-1')],
+        // A layer's value is not yours, so it is not counted.
+        ['spot-4|position', entry('spot-4', { owner: 'layers', reference: DSR })],
+      ]),
+    })
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    const note = document.querySelector('[data-record-references]') as HTMLElement
+    expect(within(note).getByText('DSR Focus')).toBeTruthy()
+    expect(note).toHaveTextContent(
+      '2 of your values are references to DSR Focus and stay references: retune the palette and this cue moves with it.',
+    )
+  })
+
+  it('leaves out what the Record would not write: its mask, its scope and a whole-stage source', () => {
+    programmerWs.push({
+      entries: new Map([
+        ['spot-2|position', entry('spot-2', { reference: DSR })],
+        ['spot-3|position', entry('spot-3', { reference: DSR })],
+        ['spot-5|position', entry('spot-5', { reference: DSR, touched: false })],
+      ]),
+    })
+    const count = (scope: Parameters<typeof useLocalReferences>[0]) => renderHook(() => useLocalReferences(scope)).result.current.total
+    expect(count({ source: 'TOUCHED', families: null, targetKeys: null })).toBe(2)
+    expect(count({ source: 'ALL', families: null, targetKeys: null })).toBe(3)
+    expect(count({ source: 'TOUCHED', families: ['COLOUR'], targetKeys: null })).toBe(0)
+    expect(count({ source: 'TOUCHED', families: ['POSITION'], targetKeys: null })).toBe(2)
+    expect(count({ source: 'TOUCHED', families: null, targetKeys: ['spot-3'] })).toBe(1)
+    // A whole-stage Record captures the rig's literals.
+    expect(count({ source: 'STAGE_SNAPSHOT', families: null, targetKeys: null })).toBe(0)
+
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    expect(document.querySelector('[data-record-references]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'All attributes' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Position' }))
+    expect(document.querySelector('[data-record-references]')).toBeNull()
+  })
+
+  it('draws nothing while the programmer holds no reference', () => {
+    programmerWs.push({ entries: new Map([['spot-1|position', entry('spot-1')]]) })
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    expect(document.querySelector('[data-record-references]')).toBeNull()
+  })
+
+  it('names a Look, and counts palettes where there are several', () => {
+    expect(
+      referencesSentence(
+        { total: 3, palettes: [{ uuid: 'a', name: 'A', count: 2 }, { uuid: 'b', name: 'B', count: 1 }] },
+        'look',
+      ),
+    ).toBe('3 of your values are references to 2 palettes and stay references: retune one of them and this Look moves with it.')
+    expect(referencesSentence({ total: 1, palettes: [{ uuid: 'a', name: 'A', count: 1 }] }, 'cue')).toBe(
+      '1 of your values is a reference to A and stays a reference: retune the palette and this cue moves with it.',
+    )
   })
 })

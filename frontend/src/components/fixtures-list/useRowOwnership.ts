@@ -2,6 +2,7 @@ import type { LayerSource } from '@/api/cuesApi'
 import { lightingApi } from '../../api/lightingApi'
 import { parseProgrammerValue } from '../../lib/programmerValue'
 import { useProgrammerRowSnapshot } from './useProgrammerRowSnapshot'
+import { referenceAcross, type HeadReference } from './cellReference'
 import type { ProgrammerKeyState, ProvenanceSource } from '../../api/programmerWsApi'
 import type { CellAttributeKey, RowCell } from './useRowValues'
 import type { ColumnKey } from './columns'
@@ -40,6 +41,29 @@ export interface CellOwnership {
    * operator's own entry, and retired with that grammar in session 4.
    */
   layer?: CellLayer
+  /**
+   * Set when a covered key's winning value is a **palette reference** (palette-references plan D18,
+   * D20): the operator's own entry, or a cue's own row in Output.
+   */
+  reference?: CellReference
+}
+
+/**
+ * The palette references across one cell, counted by head: a group row where two of four heads
+ * reference *DSR Focus* reads `count: 2, of: 4`.
+ */
+export interface CellReference {
+  /** The palette every referencing head names; undefined over several palettes. */
+  paletteUuid?: string
+  /** Its name, where the frame says it (a programmer entry does; a cue's provenance carries the uuid alone). */
+  name?: string
+  /** Heads whose value is a reference, of the heads the cell covers. */
+  count: number
+  of: number
+  /** More than one palette across the cell. */
+  severalPalettes: boolean
+  /** The desk's sentence for a reference that no longer resolves (D3) — the value is its last. */
+  unresolved?: string
 }
 
 /**
@@ -126,6 +150,9 @@ export function aggregateCellOwnership(
   let layerEntry: { layerSource?: LayerSource } | undefined
   let layerCount = 0
   let layerMixed = false
+  // Each key's palette reference, by head — counted by `referenceAcross`.
+  const references: HeadReference[] = []
+
   // What the layer verdict is taken over: every covered key, plus every bundled emitter a colour's
   // W / A / UV came from — each is a contributor to what the cell shows, so a colour whose white
   // came from another layer is not wholly its RGB layer's.
@@ -150,6 +177,8 @@ export function aggregateCellOwnership(
       uniform = false
       if (SOURCE_RANK[keySource] > SOURCE_RANK[source]) source = keySource
     }
+
+    references.push({ head: key.targetKey, reference: referenceOf(state, keySource, blind) })
 
     const layer = state.provenance
     if (layer) {
@@ -191,6 +220,12 @@ export function aggregateCellOwnership(
           mixed: layerMixed || layerCount !== observations,
         }
 
+  const cellReference =
+    referenceAcross(
+      references,
+      keys.map((key) => key.targetKey),
+    ) ?? undefined
+
   return {
     source,
     touched,
@@ -199,7 +234,26 @@ export function aggregateCellOwnership(
     sourceGroup,
     staged,
     layer: cellLayer,
+    reference: cellReference,
   }
+}
+
+/**
+ * The reference a key's shown value is, if it is one: the operator's entry where the programmer wins
+ * — and always while Blind, where the cell shows the staged entry over whatever is underneath — else
+ * the winner's provenance, a cue's own row in Output. A layer's slot is never a reference.
+ */
+function referenceOf(
+  state: ProgrammerKeyState,
+  source: CellOwnershipSource,
+  blind: boolean,
+): HeadReference['reference'] {
+  if (blind && state.entry) return state.entry.reference
+  if (source === 'programmer' && state.entry?.reference) return state.entry.reference
+  if ((source === 'programmer' || source === 'cue') && state.provenance?.reference) {
+    return { paletteUuid: state.provenance.reference }
+  }
+  return undefined
 }
 
 /**
