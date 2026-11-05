@@ -363,15 +363,13 @@ class CueAssignmentResolverTest {
     }
 
     @Test
-    fun `parseAssignmentValue - a template reference is refused rather than read as white`() {
-        // The point of the refusal. `pal:` is legal in an *effect parameter* and nowhere else, and
-        // an assignment value is a literal. Without the guard `parseExtendedColour` would take this
-        // unrecognised string and answer white — the exact silent failure the retired positional
-        // grammar had when its list was empty.
+    fun `parseAssignmentValue - a palette reference is refused rather than read as white`() {
+        // A reference is resolved per head before parsing (`PaletteReferences`); without the guard
+        // `parseExtendedColour` would take this unrecognised string and answer white.
         val v = CueAssignmentResolver.parseAssignmentValue(
             AttributeCategory.COLOUR, "rgbColour", "pal:2f1c8a3e-0000-4000-8000-000000000001",
         )
-        assertNull(v, "a template reference in a value must be skipped with a warn, not resolved")
+        assertNull(v, "a palette reference is never parsed as a literal")
     }
 
     @Test

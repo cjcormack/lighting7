@@ -370,6 +370,23 @@ class RigBriefing(private val state: State) {
             sb.appendLine()
         }
 
+        // Every value palette with its uuid and family: a cue value, a Look value or a programmer
+        // value may reference any of them (palette-references plan D1), not only a generic colour.
+        val valuePalettes = transaction(state.database) {
+            DaoPalette.find { DaoPalettes.project eq project.id }.sortedBy { it.name }.mapNotNull { palette ->
+                if (palette.effect != null) return@mapNotNull null
+                val rows = palette.rows.sortedBy { it.sortOrder }
+                val family = uk.me.cormack.lighting7.fx.paletteFamily(rows.map { it.attribute }, null, null) ?: return@mapNotNull null
+                val shape = if (rows.all { it.isDeferred }) "generic" else "per fixture"
+                "${palette.name} — `pal:${palette.uuid}` (${family.name.lowercase()}, $shape)"
+            }
+        }
+        if (valuePalettes.isNotEmpty()) {
+            sb.appendLine("## Value Palettes")
+            valuePalettes.forEach { sb.appendLine("- $it") }
+            sb.appendLine()
+        }
+
         // Existing cues
         val cues = transaction(state.database) {
             val all = DaoCue.find { DaoCues.project eq project.id }.toList()
@@ -423,7 +440,7 @@ class RigBriefing(private val state: State) {
         sb.appendLine("- Orders: NORMAL (sequential chase), UNIFIED (all same), CENTRE_OUT, CENTRE_IN (from both ends to the centre), PING_PONG, REVERSE, RANDOM, POSITIONAL")
         sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or a palette reference 'pal:{uuid}'.")
         sb.appendLine("- **Palette references**: a colour parameter may name a colour palette by uuid — 'pal:2f1c…' — instead of stating a colour. Retuning that palette moves every running FX that references it, which is the point: it is how a show keeps one set of colours in one place. Only the **generic** colour palettes listed above can be referenced; a per-fixture palette holds no single colour, and an FX palette holds no colour at all. Colour Cycle's 'colours' takes literal colours only; to step through palettes, each landing on every head for itself, use PaletteSteps with 'palettes': 'pal:<warm>,pal:<cold>'. Make a palette with create_palette.")
-        sb.appendLine("- A palette reference is legal **only in an FX parameter**. Cue values, look rows and programmer values are always literals; a cue that should follow a palette gets a *layer* applying it (see create_cue / cue layers).")
+        sb.appendLine("- A **value** may be a palette reference too: a cue value, a look value or a programmer value of 'pal:{uuid}', naming one of the value palettes listed above, follows that palette's edits and lands on each head as the palette resolves there — a per-fixture palette gives each head its own row, a colour palette's hex and white land together. harden_values turns a look's or a cue's references back into the literals they resolve to (*Copy the values*).")
         sb.appendLine("- For group FX, use order=NORMAL for chases, UNIFIED for all-together")
         sb.appendLine("- **Timing**: `timing` says what `cycle` measures. `CYCLE`: the whole FX completes in one cycle. `HEAD`: each step takes one cycle, so the whole FX takes cycle × steps. Each FX type sets its own default: every built-in is `CYCLE`; a user FX that steps (a chase) may default to `HEAD`. Set `timing` on an FX to override it.")
         sb.appendLine("- DMX values range 0-255")

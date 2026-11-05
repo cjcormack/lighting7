@@ -22,7 +22,9 @@ export interface PaletteInUse {
  * - **effect parameters** naming it (`fxReferenceCount`) are *not* rewritten, so they point at
  *   nothing, and an unresolved colour runs as **white** — the one consequence worth repointing first;
  * - **programmer layers** applying it right now (`runningCount`) stop on the rig at once — the only
- *   usage that is not stored, and without it a template used only live would list no consequence.
+ *   usage that is not stored, and without it a template used only live would list no consequence;
+ * - **values** that reference it — cue rows, Look rows, the programmer's — are kept as the values they
+ *   resolve to now, so nothing on stage moves but they stop following it.
  */
 export function describePaletteInUse(summary: PaletteInUse): string {
   const parts: string[] = []
@@ -37,6 +39,8 @@ export function describePaletteInUse(summary: PaletteInUse): string {
     if (fx > 0) parts.push(`named by ${fx} FX parameter${fx === 1 ? '' : 's'}, which would run as white`)
     const running = body.runningCount ?? 0
     if (running > 0) parts.push(`${running} programmer layer${running === 1 ? '' : 's'} applying it now, stopped at once`)
+    const values = (body.cueReferenceCount ?? 0) + (body.lookReferenceCount ?? 0) + (body.programmerReferenceCount ?? 0)
+    if (values > 0) parts.push(`${values} value${values === 1 ? '' : 's'} following it, kept as ${values === 1 ? 'it is' : 'they are'} now`)
   }
   if (summary.buskPageCount > 0) {
     parts.push(`on ${summary.buskPageCount} busk page${summary.buskPageCount === 1 ? '' : 's'}`)

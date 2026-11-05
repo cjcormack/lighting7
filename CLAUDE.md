@@ -484,7 +484,18 @@ plan D2): `validateLookFx` refuses `deferred`, the importer drops one, and
 `state/DeferredLookEffectsMigration.kt` deleted this database's once. `CueComposer.fxForLayer`
 runs a Look's `FxEntry`s on their own targets and a palette's one `StoredFx` on each of the
 layer's. See
-`docs/lighting-composition-model.md` §"A palette holds a value *or* an FX". **A Look is pressed
+`docs/lighting-composition-model.md` §"A palette holds a value *or* an FX". **A palette reference is
+a value** (palette-references plan D1–D9): a cue's own row, a Look row and a programmer entry may hold
+`pal:{uuid}` naming a value palette of the same project (else 400 `PALETTE_REFERENCE_INVALID`),
+resolved per head as a press resolves (`fx/PaletteReferences.kt`) — a cue's rows in
+`buildCueAssignmentsForCue`, a Look's in `LookRegistry.expand`, the programmer's as a
+`ProgrammerValue.Reference` — keeping its last value, marked, where it no longer resolves. The
+indexed `palette_uuid` on both row tables, derived from the value, says what references a palette; a
+palette edit moves every reference (`republishForPaletteEdit`), a referenced palette refuses delete
+and `?force=true` hardens each reference to its literal first, and *Copy the values* is `POST
+/looks/{id}/harden` and `/cues/{id}/harden` and MCP's `harden_values`. Sync `formatVersion` 47,
+`minReader` 47. A press still adds a layer until that plan's session 2. See
+`docs/lighting-composition-model.md` §"A palette reference is a value". **A Look is pressed
 whole** (absolute-looks plan D1, P1): on puts one layer of it on top, naming no targets and no mask,
 off takes every layer of it off, whatever is selected; a Look layer's mask is a layer setting (D3). A
 palette press is per
@@ -677,6 +688,7 @@ storage, since terminology plan session 4: the `palettes` tables, the sync archi
 the stored `pressPalette` binding; and so do JSON field names such as `paletteId` and the code's identifiers, since
 session 5.
 - `GET/POST /api/rest/projects/{id}/palettes` + `GET/PUT/DELETE .../{tid}` - Palette CRUD. The list is ordered by name: a palette holds no position and no group, because a pad's place on a busk page is the only order there is. `PaletteDto` and `LookDto` both carry `buskPageCount`, the library row's "on *n* pages" hint — batched into `PaletteUsage` / `LookUsage`, kept out of their `describe()`, and never a delete guard (see `docs/lighting-composition-model.md` §"The busk layout")
+- `DELETE .../palettes/{tid}` is 409 `PALETTE_IN_USE` while a layer, an FX parameter or a **value** references it — `cueReferenceCount`, `lookReferenceCount`, `programmerReferenceCount` beside the layer counts; `?force=true` hardens every value reference to the literal it resolves to per head, then deletes. `POST .../looks/{lid}/harden` and `.../cues/{cid}/harden` `{rowUuids?}` (*Copy the values*, palette-references plan D9): the owner's references, or the rows named, made literal per head, a group row split where its members differ; answers `{hardened, kept}`, `kept` the rows left as references because a head they reach had nothing to keep; current project only. A cue row's and a Look row's DTO carry `uuid`, `reference {paletteId, paletteUuid, name, unresolved?}` and `resolvedByHead`
 - `POST .../palettes/{tid}/apply` (*Apply as values*, a chip's ⌥click → literals; `write: false` answers each head's literal as `values` and writes nothing, the focused-Look arm) and `.../toggle` (the press, a chip's tap → a tracking layer, per target on both arms: an off press clears the pressed targets from every layer of that palette). No solo siblings — those are a solo bank's — but an on press takes its heads off every other palette of its **family and kind** (value or FX) on every door, `released` counting them, and widens its own layer when that is the top of the stack (apply-model plan D2, D6, P3; `fx/LayerPress.kt`). See `docs/lighting-composition-model.md` §"A press is per target"
 - `POST .../looks/{lid}/apply` `{targets, families?, fadeMs?}` - *Apply as values* for a Look: its rows as `WEB` values and its FX as Local FX, as a press followed by Detach (`programmer.detachLayer`) would leave them, with no layer; the whole Look, `targets` and `families` ignored (absolute-looks plan P6). Not a toggle. §"Detach and Apply as values" there
 

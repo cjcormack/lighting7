@@ -261,7 +261,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 46`, `minReader = 43`. Rules for future
+Current writer emits `formatVersion = 47`, `minReader = 47`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -448,6 +448,20 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 47 — Palette references
+
+Palette-references plan session 1 (D1, D7; `docs/lighting-composition-model.md` §"A palette reference
+is a value"): a cue row's or a Look row's `value` may be a palette reference, `pal:{uuid}`, resolved
+per head on the reading desk. No field and no folder is new: the reference is the row's value, so a
+show with none exports byte-for-byte as at v46. `cue_attribute_assignments.palette_uuid` and
+`look_rows.palette_uuid`, the indexed columns that say which rows reference a palette, are derived
+from the value by the row's setter on import and never exported. A clone needs nothing: the remapper's
+blind uuid substitution rewrites the uuid inside the value. The importer refuses an archive whose row
+references a palette it does not hold (`PALETTE_REFERENCE_INVALID`, naming each row) once every
+record is in. `SUPPORTED_FORMAT_VERSION = 47`, `MIN_SUPPORTED_FORMAT_VERSION` stays 5, and **`minReader`
+moves to 47** with the writer: a v46 reader refuses a Look row holding `pal:` at its own write boundary
+and reads a cue row's as nothing, so its next push would lose the references or the rows.
 
 ### Version 46 — Move in dark on a cue
 

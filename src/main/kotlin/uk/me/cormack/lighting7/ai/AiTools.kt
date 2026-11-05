@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*
+import uk.me.cormack.lighting7.history.historyLabel
 import uk.me.cormack.lighting7.fx.PaletteAttribute
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
@@ -45,6 +46,7 @@ class AiTools(private val state: State) {
         createLookTool,
         updateLookTool,
         deleteLookTool,
+        hardenValuesTool,
         applyLookTool,
         setBpmTool,
         createSpeedMasterTool,
@@ -90,6 +92,7 @@ class AiTools(private val state: State) {
                 "create_look" -> executeCreateLook(input)
                 "update_look" -> executeUpdateLook(input)
                 "delete_look" -> executeDeleteLook(input)
+                "harden_values" -> executeHardenValues(input)
                 "apply_look" -> executeApplyLook(input)
                 "set_bpm" -> executeSetBpm(input)
                 "create_speed_master" -> executeCreateSpeedMaster(input)
@@ -157,7 +160,7 @@ class AiTools(private val state: State) {
 
         val apply = input["apply"]?.jsonPrimitive?.booleanOrNull ?: false
 
-        val values = resolveLookValues(state.show.fixtures, valuesArray)
+        val values = resolveLookValues(state.show.fixtures, valuesArray, state.show.paletteRegistry::snapshot)
         if (values.problems.isNotEmpty()) return errorResult(values.problems.joinToString("; "))
         validateLookRows(values.rows)?.let { return errorResult(it) }
 
@@ -227,7 +230,7 @@ class AiTools(private val state: State) {
             return errorResult("Give 'name', 'description', 'values', 'fx' or 'scenery' to change")
         }
 
-        val values = valuesArray?.let { resolveLookValues(state.show.fixtures, it) }
+        val values = valuesArray?.let { resolveLookValues(state.show.fixtures, it, state.show.paletteRegistry::snapshot) }
         if (values != null) {
             if (values.problems.isNotEmpty()) return errorResult(values.problems.joinToString("; "))
             validateLookRows(values.rows)?.let { return errorResult(it) }
@@ -323,6 +326,45 @@ class AiTools(private val state: State) {
             )
         }
     }
+
+    /** `POST /looks/{id}/harden` and `/cues/{id}/harden` as a tool (palette-references plan D9). */
+    private fun executeHardenValues(input: JsonObject): ToolExecutionResult {
+        val lookId = input["lookId"]?.jsonPrimitive?.intOrNull
+        val cueId = input["cueId"]?.jsonPrimitive?.intOrNull
+        if ((lookId == null) == (cueId == null)) return errorResult("Give exactly one of 'lookId' and 'cueId'")
+        val rowUuids = input["rowUuids"]?.jsonArray?.map { item ->
+            val raw = item.jsonPrimitive.contentOrNull.orEmpty()
+            runCatching { java.util.UUID.fromString(raw) }.getOrNull() ?: return errorResult("'$raw' is not a row uuid")
+        }?.toSet()
+        val project = state.projectManager.currentProject
+        historyLabel("Copy the values")
+        if (lookId != null) {
+            val outcome = transaction(state.database) {
+                val look = DaoLook.findById(lookId)?.takeIf { it.project.id == project.id } ?: return@transaction null
+                look.uuid to hardenLookRows(state, look, rowUuids)
+            } ?: return errorResult("Look not found: $lookId")
+            val (hardened, kept) = outcome.second
+            if (hardened > 0) republishForLookEdit(state, outcome.first)
+            return ToolExecutionResult(
+                success = true,
+                description = "Copied the values of $hardened reference row(s) in look $lookId" + keptNote(kept),
+                result = buildJsonObject { put("lookId", lookId); put("hardened", hardened); put("kept", kept) }.toString(),
+            )
+        }
+        val hardened = transaction(state.database) {
+            val cue = DaoCue.findById(cueId!!)?.takeIf { it.project.id == project.id } ?: return@transaction null
+            hardenCueRows(state, cue, rowUuids)
+        } ?: return errorResult("Cue not found: $cueId")
+        if (hardened.hardened > 0) republishCuesAfterHarden(state, setOf(cueId!!))
+        return ToolExecutionResult(
+            success = true,
+            description = "Copied the values of ${hardened.hardened} reference row(s) in cue $cueId" + keptNote(hardened.kept),
+            result = buildJsonObject { put("cueId", cueId); put("hardened", hardened.hardened); put("kept", hardened.kept) }.toString(),
+        )
+    }
+
+    private fun keptNote(kept: Int) =
+        if (kept == 0) "" else "; $kept left as references, since a head they reach has no value to keep (not patched, or never resolved since the desk started)"
 
     /** A Look's stored values and the heads they skipped, as create_look and update_look answer them. */
     private fun JsonObjectBuilder.putLookValues(values: ResolvedLookValues) {
@@ -1217,7 +1259,7 @@ class AiTools(private val state: State) {
             ?: emptyList()
         val values = input.present("values")?.let { raw ->
             val items = raw as? JsonArray ?: return errorResult("'values' must be an array")
-            resolveLookValues(state.show.fixtures, items).also { resolved ->
+            resolveLookValues(state.show.fixtures, items, state.show.paletteRegistry::snapshot).also { resolved ->
                 if (resolved.problems.isNotEmpty()) return errorResult(resolved.problems.joinToString("; "))
             }
         }

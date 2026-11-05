@@ -47,7 +47,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 val slots = entrySlotsOf(cues.map { it.id.value })
                 val uses = cueUsesOf(project, cues, slots)
                 cues.map { cue ->
-                    cue.toCueDetails(isCurrentProject, state.show.fixtures, slots[cue.id.value].orEmpty())
+                    cue.toCueDetails(isCurrentProject, state.show.fixtures, slots[cue.id.value].orEmpty(), references = state.show.paletteReferences)
                         .copy(usedBy = uses[cue.id.value]?.usedBy())
                 }
             }
@@ -136,7 +136,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     )
                     priorities = stackEntryPriorities(stack)
                 }
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures) to null
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, references = state.show.paletteReferences) to null
             }
             val (cueDetails, error) = result
             if (error != null || cueDetails == null) {
@@ -166,7 +166,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 val slots = entrySlotsOf(listOf(cue.id.value))[cue.id.value].orEmpty()
                 // The place fields describe the entry the caller names; it must be one of the cue's.
                 if (resource.entryId != null && slots.none { it.entry.id.value == resource.entryId }) return@transaction null
-                cue.toCueDetails(isCurrentProject, state.show.fixtures, slots, resource.entryId)
+                cue.toCueDetails(isCurrentProject, state.show.fixtures, slots, resource.entryId, references = state.show.paletteReferences)
             }
 
             if (cue != null) {
@@ -226,7 +226,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 )
                 stageChanged = stageBefore != null && cue.stageContent() != stageBefore
 
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, references = state.show.paletteReferences)
             }
 
             moveInDarkProblem?.let { return@withCurrentProject call.respondCueMoveInDarkInvalid(it) }
@@ -341,7 +341,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 writeCueChildren(cue, effects, assignments, triggers, layers, registry = state.show.fxRegistry)
                 stageChanged = stageBefore != null && cue.stageContent() != stageBefore
 
-                cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
+                cue.toCueDetails(isCurrentProject = true, state.show.fixtures, references = state.show.paletteReferences)
             }
 
             moveInDarkProblem?.let { return@withCurrentProject call.respondCueMoveInDarkInvalid(it) }

@@ -88,6 +88,7 @@ class Show(
     val lookRegistry = LookRegistry(
         fixtures = { fixtures },
         loader = { uuid -> loadLookSnapshot(state.database, uuid) },
+        references = { paletteReferences },
     ).also { registry ->
         fixtures.registerListener(object : FixturesChangeListener {
             // A group row in a Look expands to member fixtures, so any patch or group change
@@ -97,9 +98,11 @@ class Show(
 
             // Covers create and delete. A *contents* change goes through
             // `republishForLookEdit`, which invalidates the one Look directly.
-            // `paletteListChanged` is deliberately not handled here — a Look expansion holds no
-            // template data; `paletteRegistry` below has its own listener for that.
             override fun lookListChanged() = registry.invalidateAll()
+
+            // A Look row may reference a palette, and its expansion holds what that resolved to.
+            // A palette's contents edit invalidates the Looks referencing it (`republishForPaletteEdit`).
+            override fun paletteListChanged() = registry.invalidateAll()
         })
     }
 
@@ -119,6 +122,9 @@ class Show(
             override fun paletteListChanged() = registry.invalidateAll()
         })
     }
+
+    /** How a `pal:` value resolves on one head, and what each one last resolved to (palette-references plan D2, D3). */
+    val paletteReferences = PaletteReferences(fixtures = { fixtures }, palettes = paletteRegistry::snapshot)
 
     val cueAssignmentResolver = CueAssignmentResolver()
     val layerResolver = LayerResolver(cueAssignmentResolver, programmerStore)
@@ -496,6 +502,18 @@ class Show(
             // republished, so a head already in place stays there through the crossfade below.
             step("carry the moves in dark") { moveInDark.resume(carry.values) }
 
+            // A carried reference resolves against the reloaded palette and patch, which a pull or a
+            // venue Update may have changed.
+            step("re-resolve the programmer's references") {
+                for (paletteUuid in programmerStore.referencedPalettes()) {
+                    programmerStore.reresolveReferences(paletteUuid) { fixtureKey, attribute, current ->
+                        val head = runCatching { fixtures.untypedGroupableFixture(fixtureKey) }.getOrNull()
+                            ?: return@reresolveReferences current
+                        val resolved = paletteReferences.resolve(head, attribute, paletteUuid)
+                        current.copy(resolved = resolved.value ?: current.resolved, unresolved = resolved.unresolved)
+                    }
+                }
+            }
             step("re-cook the programmer's layers") { programmerLayerStack.reinstate() }
             step("republish the programmer") { fxEngine.programmer.republishAll() }
 

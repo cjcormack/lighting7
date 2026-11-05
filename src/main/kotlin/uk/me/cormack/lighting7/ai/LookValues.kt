@@ -13,9 +13,12 @@ import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue
 import uk.me.cormack.lighting7.fx.AttributeChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.PaletteIntent
 import uk.me.cormack.lighting7.fx.PaletteAttribute
+import uk.me.cormack.lighting7.fx.PaletteReferences
 import uk.me.cormack.lighting7.fx.PaletteResolver
+import uk.me.cormack.lighting7.fx.PaletteSnapshot
 import uk.me.cormack.lighting7.fx.WhitePolicy
 import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.parsePaletteIntent
@@ -57,23 +60,35 @@ internal const val LOOK_VALUE_GRAMMAR =
         "'pos:<pan>,<tilt>' for position (centre-relative DMX, -128 to 127 each, 0 the centre of travel; 'deg:' travel " +
         "degrees is still read), or pan and tilt each on its own with 'pct:' or 'dmx:', " +
         "'dmx:0-255' for a raw channel level (white, amber and uv, or any single channel), 'on' / 'off' for prism, " +
-        "or a setting's option name (a gobo, a colour-wheel slot, a macro) as list_fixture_types' attributes name it"
+        "or a setting's option name (a gobo, a colour-wheel slot, a macro) as list_fixture_types' attributes name it, " +
+        "or 'pal:{uuid}' for a value palette describe_rig lists, held as a reference that follows the palette's edits " +
+        "and lands on each head as the palette resolves there"
 
 private class Entry(val at: String, val ref: TargetRef, val attribute: String, val raw: String, val value: LookValue)
 
 private class ParsedValue(val attribute: String, val raw: String, val value: LookValue)
 
-internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLookValues {
+internal fun resolveLookValues(
+    fixtures: Fixtures,
+    items: JsonArray,
+    /** The project's value palettes by uuid, for a `pal:` value; none by default. */
+    palettes: (java.util.UUID) -> PaletteSnapshot? = { null },
+): ResolvedLookValues {
     val problems = ArrayList<String>()
-    val entries = items.mapIndexedNotNull { index, element -> parseEntry("values[$index]", element, problems) }
+    val parsed = items.mapIndexedNotNull { index, element -> parseEntry("values[$index]", element, problems) }
 
     val seen = HashMap<Pair<TargetRef, String>, String>()
-    for (entry in entries) {
+    for (entry in parsed) {
         seen.putIfAbsent(entry.ref to entry.attribute, entry.at)?.let { first ->
             problems += "${entry.at}: ${entry.ref.key} ${entry.attribute} is already set by $first"
         }
     }
     if (problems.isNotEmpty()) return ResolvedLookValues(emptyList(), emptyList(), problems)
+    val entries = parsed.flatMap { entry ->
+        colourFamilyAttributes(entry.attribute, entry.value, palettes)
+            .filter { it == entry.attribute || (entry.ref to it) !in seen }
+            .map { attribute -> if (attribute == entry.attribute) entry else Entry(entry.at, entry.ref, attribute, entry.raw, entry.value) }
+    }
 
     // A fixture's own value beats its group's in the cook; a group split per head must not
     // shadow it with a fixture row of its own.
@@ -94,9 +109,9 @@ internal fun resolveLookValues(fixtures: Fixtures, items: JsonArray): ResolvedLo
         val landed = LinkedHashMap<GroupableFixture, Pair<String, String>>()
         val missed = ArrayList<LookValueSkip>()
         for (head in heads) {
-            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.attribute, entry.raw, entry.value)) {
+            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.attribute, entry.raw, entry.value, palettes)) {
                 when (result) {
-                    is HeadValue.Landed -> landed[cell] = result.attribute to result.value.serialize()
+                    is HeadValue.Landed -> landed[cell] = result.attribute to (result.reference?.let(PaletteReferences::valueOf) ?: result.value.serialize())
                     is HeadValue.Missed -> missed += LookValueSkip(cell.targetKey, entry.attribute, result.reason)
                 }
             }
@@ -164,6 +179,21 @@ private fun parseValue(at: String, obj: JsonObject, problems: MutableList<String
     return ParsedValue(attribute, raw, value)
 }
 
+/**
+ * The attributes a value lands on: its own, and, for a palette reference on a colour-family
+ * attribute, every colour-family attribute the palette names (palette-references plan D2, D10) — a
+ * palette's hex and its white are one colour, so a reference to it on `rgbColour` is a reference on
+ * each, as a press of it would lay them.
+ */
+private fun colourFamilyAttributes(attribute: String, value: LookValue, palettes: (java.util.UUID) -> PaletteSnapshot?): List<String> {
+    val reference = value as? LookValue.Reference ?: return listOf(attribute)
+    if (PaletteAttribute.ofOrNull(attribute)?.family != AttributeFamily.COLOUR) return listOf(attribute)
+    val named = palettes(reference.paletteUuid)?.rows.orEmpty()
+        .map { canonicalAttributeName(it.attribute) }
+        .filter { PaletteAttribute.ofOrNull(it)?.family == AttributeFamily.COLOUR }
+    return (listOf(attribute) + named).distinct()
+}
+
 /** A cell is stored as Record stores one: the parent as the target, the cell as `elementKey`. */
 private fun row(ref: TargetRef, head: GroupableFixture?, attribute: String, literal: String, sortOrder: Int): LookRowDto =
     if (head is FixtureElement<*>) {
@@ -176,6 +206,8 @@ private sealed interface LookValue {
     /** [emitters] is a colour's own white, amber and UV, laid over the mix where the head has them. */
     data class Intent(val intent: PaletteIntent, val emitters: Emitters? = null) : LookValue
     data class Option(val name: String) : LookValue
+    /** A palette reference (palette-references plan D1), resolved per head as the palette resolves. */
+    data class Reference(val paletteUuid: java.util.UUID) : LookValue
 }
 
 /** The `;w` / `;a` / `;uv` levels a colour value named; null for one it did not. */
@@ -186,6 +218,7 @@ private data class Emitters(val white: UByte?, val amber: UByte?, val uv: UByte?
  * cannot land a hex on some other property. Anything that is not an intent is an option name.
  */
 private fun parseLookValue(attribute: String, raw: String): LookValue? {
+    if (PaletteReferences.isReference(raw)) return PaletteReferences.uuidOf(raw)?.let { LookValue.Reference(it) }
     val vocabulary = PaletteAttribute.ofOrNull(attribute)
     if (vocabulary == PaletteAttribute.COLOUR) return parseColourValue(raw)
     val intent = parsePaletteIntent(raw)
@@ -259,19 +292,33 @@ private fun resolveOnHeadOrCells(
     attribute: String,
     raw: String,
     value: LookValue,
+    palettes: (java.util.UUID) -> PaletteSnapshot?,
 ): List<Pair<GroupableFixture, HeadValue>> {
-    val own = resolveOnHead(fixtures, head, attribute, raw, value)
+    val own = resolveOnHead(fixtures, head, attribute, raw, value, palettes)
     if (own is HeadValue.Landed || head !is MultiElementFixture<*> || head.elements.isEmpty()) return listOf(head to own)
-    val cells = head.elements.map { cell -> cell to resolveOnHead(fixtures, cell, attribute, raw, value) }
+    val cells = head.elements.map { cell -> cell to resolveOnHead(fixtures, cell, attribute, raw, value, palettes) }
     return if (cells.any { it.second is HeadValue.Landed }) cells else listOf(head to own)
 }
 
 private sealed interface HeadValue {
-    data class Landed(val attribute: String, val value: AttributeValue) : HeadValue
+    /** [reference] is the palette [value] was resolved from, when the value is a reference. */
+    data class Landed(val attribute: String, val value: AttributeValue, val reference: java.util.UUID? = null) : HeadValue
     data class Missed(val reason: String) : HeadValue
 }
 
-private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, attribute: String, raw: String, value: LookValue): HeadValue {
+private fun resolveOnHead(
+    fixtures: Fixtures,
+    head: GroupableFixture,
+    attribute: String,
+    raw: String,
+    value: LookValue,
+    palettes: (java.util.UUID) -> PaletteSnapshot?,
+): HeadValue {
+    if (value is LookValue.Reference) {
+        val resolved = PaletteReferences.resolveOn(fixtures, head, attribute, palettes(value.paletteUuid))
+        val landed = resolved.value ?: return HeadValue.Missed(resolved.unresolved ?: "unresolved")
+        return HeadValue.Landed(resolved.attribute, landed, value.paletteUuid)
+    }
     val backing = AttributeChannelWriter.resolveAttribute(head, attribute)?.value
     val setting = backing as? DmxFixtureSetting<*>
     // An option literally named On or Off is that option, not the first or last slot.
@@ -279,6 +326,7 @@ private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, attribute:
     if (named != null) return HeadValue.Landed(attribute, AttributeValue.Setting(named.level))
 
     return when (value) {
+        is LookValue.Reference -> error("handled above")
         is LookValue.Option -> HeadValue.Missed(
             when {
                 backing == null -> "no $attribute"
@@ -319,9 +367,17 @@ internal class ProgrammerValueWrite(
     val requestedName: String,
     val attribute: String,
     val value: AttributeValue,
+    /** The palette [value] references, when it is a reference. */
+    val reference: java.util.UUID? = null,
 )
 
-internal fun resolveProgrammerValues(fixtures: Fixtures, targets: List<TargetRef>, items: JsonArray): ResolvedProgrammerValues {
+internal fun resolveProgrammerValues(
+    fixtures: Fixtures,
+    targets: List<TargetRef>,
+    items: JsonArray,
+    /** As [resolveLookValues]'s. */
+    palettes: (java.util.UUID) -> PaletteSnapshot? = { null },
+): ResolvedProgrammerValues {
     val problems = ArrayList<String>()
     if (targets.isEmpty()) problems += "targets must name at least one fixture or group"
     if (items.isEmpty()) problems += "values must hold at least one {attribute, value}"
@@ -339,18 +395,23 @@ internal fun resolveProgrammerValues(fixtures: Fixtures, targets: List<TargetRef
         for (head in found) heads.putIfAbsent(head.targetKey, head)
     }
 
-    val entries = items.mapIndexedNotNull { index, element ->
+    val parsedEntries = items.mapIndexedNotNull { index, element ->
         val at = "values[$index]"
         val obj = element as? JsonObject ?: run { problems += "$at must be an object"; return@mapIndexedNotNull null }
         parseValue(at, obj, problems)?.let { at to it }
     }
     val seen = HashMap<String, String>()
-    for ((at, parsed) in entries) {
+    for ((at, parsed) in parsedEntries) {
         seen.putIfAbsent(parsed.attribute, at)?.let { first ->
             problems += "$at: ${parsed.attribute} is already set by $first"
         }
     }
     if (problems.isNotEmpty()) return ResolvedProgrammerValues(emptyList(), emptyList(), problems)
+    val entries = parsedEntries.flatMap { (at, parsed) ->
+        colourFamilyAttributes(parsed.attribute, parsed.value, palettes)
+            .filter { it == parsed.attribute || it !in seen }
+            .map { attribute -> at to if (attribute == parsed.attribute) parsed else ParsedValue(attribute, parsed.raw, parsed.value) }
+    }
 
     val writes = ArrayList<ProgrammerValueWrite>()
     val skipped = ArrayList<LookValueSkip>()
@@ -358,10 +419,10 @@ internal fun resolveProgrammerValues(fixtures: Fixtures, targets: List<TargetRef
         val missed = ArrayList<LookValueSkip>()
         var landed = 0
         for (head in heads.values) {
-            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.attribute, entry.raw, entry.value)) {
+            for ((cell, result) in resolveOnHeadOrCells(fixtures, head, entry.attribute, entry.raw, entry.value, palettes)) {
                 when (result) {
                     is HeadValue.Landed -> {
-                        writes += ProgrammerValueWrite(cell, entry.attribute, result.attribute, result.value)
+                        writes += ProgrammerValueWrite(cell, entry.attribute, result.attribute, result.value, result.reference)
                         landed++
                     }
                     is HeadValue.Missed -> missed += LookValueSkip(cell.targetKey, entry.attribute, result.reason)

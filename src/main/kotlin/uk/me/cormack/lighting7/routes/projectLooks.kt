@@ -286,14 +286,17 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.notes = source.notes
                 }
                 // Fresh uuids on every child: a copy is a new entity, and reusing the source's
-                // uuid would make sync treat the two as one record.
+                // uuid would make sync treat the two as one record. A palette reference maps as the
+                // cue copier maps one (palette-references plan D8).
+                val copier = CueCopier(project, target)
                 for (row in source.rows.sortedBy { it.sortOrder }) {
+                    val copiedValue = copier.rowValue(row.value, row.attribute, "Look '${source.name}'") ?: continue
                     DaoLookRow.new {
                         look = copy
                         targetType = row.targetType
                         targetKey = row.targetKey
                         attribute = row.attribute
-                        value = row.value
+                        value = copiedValue
                         fadeDuration = row.fadeDuration
                         elementKey = row.elementKey
                         sortOrder = row.sortOrder
@@ -347,6 +350,9 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         targetProjectId = target.id.value,
                         targetProjectName = target.name,
                         message = "Copied '${source.name}' to '${target.name}' as '${copy.name}'",
+                        palettesCopied = copier.report.palettes.toList(),
+                        palettesLinked = copier.report.palettesLinked.toList(),
+                        unresolved = copier.report.unresolved.map { (problem, _) -> problem },
                     )
                 )
             }
@@ -358,6 +364,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 )
                 is CopyLookOutcome.Copied -> {
                     state.show.fixtures.lookListChanged()
+                    if (result.response.palettesCopied.isNotEmpty()) state.show.fixtures.paletteListChanged()
                     call.respond(result.response)
                 }
             }
@@ -655,6 +662,12 @@ internal data class CopyLookResponse(
     val targetProjectId: Int,
     val targetProjectName: String,
     val message: String,
+    /** Palettes its references needed that the target lacked, copied with it by name. */
+    val palettesCopied: List<String> = emptyList(),
+    /** Palettes its references were pointed at in the target, by name. */
+    val palettesLinked: List<String> = emptyList(),
+    /** What the copy could not carry, each a row left out. */
+    val unresolved: List<String> = emptyList(),
 )
 
 private sealed interface LookWriteOutcome {
@@ -818,22 +831,20 @@ internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
  *
  * Spelled out here rather than imported, because the module that used to own `ref:` —
  * `fx/PaletteRef.kt` — is gone, and the point of [validateLookRows]'s check is to survive exactly
- * that. `pal:` is listed for the same reason ahead of time: `fx/PaletteColourSource.kt` owns that
- * grammar today and this guard must not depend on it still existing tomorrow. `tmpl:` is the name it
- * had before, which a client may still send.
+ * that. `tmpl:` is the name a palette reference had before, which a client may still send. `pal:` is
+ * not here: a palette reference is a value (palette-references plan D1), checked against the
+ * project by [writeLookChildren].
  */
-private val LOOK_ROW_REFERENCE_PREFIXES = listOf("ref:", "tmpl:", "pal:")
+private val LOOK_ROW_REFERENCE_PREFIXES = listOf("ref:", "tmpl:")
 
 /**
  * Reject rows a Look must never hold. Returns the problem, or null when every row is acceptable.
  *
- * The reference rejection is what keeps **Looks from nesting**, so resolution can never recurse, and
- * it **must outlive the grammars it names**. Nothing authors a `ref:` any more — the parser, the
- * resolver and every producer retired in session 4 — and `pal:` is legal only in an *effect
- * parameter*, never in a value. But this is a *write boundary*, and the value it guards is free text
- * a client supplies. It is deliberately an inlined shape check rather than a call into a shared
- * parser, so that deleting the last reader of either grammar cannot quietly delete the guarantee
- * `FU-LOOK-NESTED` rests on. `LookRoutesTest` pins it.
+ * The `ref:` rejection is what keeps **Looks from nesting**, so resolution can never recurse, and
+ * it **must outlive the grammar it names**: nothing authors a `ref:` any more, but this is a write
+ * boundary and the value it guards is free text a client supplies. It is deliberately an inlined
+ * shape check rather than a call into a shared parser, so that deleting the last reader of the
+ * grammar cannot quietly delete the guarantee `FU-LOOK-NESTED` rests on. `LookRoutesTest` pins it.
  */
 internal fun validateLookRows(rows: List<LookRowDto>): String? {
     for (row in rows) {
@@ -852,7 +863,7 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
         if (row.attribute.isBlank()) return "Row attribute must not be blank"
         if (row.value.isBlank()) return "Row value must not be blank"
         if (LOOK_ROW_REFERENCE_PREFIXES.any { row.value.trimStart().startsWith(it, ignoreCase = true) }) {
-            return "A look row must hold a literal, not a reference — looks do not nest"
+            return "A look row must hold a literal or a palette reference (pal:{uuid}) — looks do not nest"
         }
     }
     return null
@@ -982,6 +993,7 @@ internal fun writeLookChildren(
         if (mayTrigger) TriggerIndex.of(look.project).check(refs)
         if (mayCommand) CommandIndex.of(look.project).check(refs)
     }
+    checkPaletteReferences(look.project.id, newRows.mapIndexed { i, r -> ReferenceSite("rows[$i]", r.attribute, r.value) })
     if (rows != null) {
         val pairing = pairByKey(if (created) emptyList() else look.rowsInOrder(), rows, { it.rowKey }, { it.rowKey })
         pairing.unmatched.forEach { it.delete() }
@@ -1165,6 +1177,11 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
         rows = rows
             .sortedWith(compareBy({ it.sortOrder }, { it.targetKey }, { it.attribute }))
             .map {
+                val read = storedReferenceRead(
+                    project.id, state.show.fixtures,
+                    state.show.paletteReferences.takeIf { _ -> state.isCurrentProject(project) },
+                    it.target, it.elementKey, it.attribute, it.value,
+                )
                 LookRowDto(
                     targetType = it.targetType,
                     targetKey = it.targetKey,
@@ -1173,6 +1190,9 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     fadeDurationMs = it.fadeDuration?.toMillis(),
                     elementKey = it.elementKey,
                     sortOrder = it.sortOrder,
+                    uuid = it.uuid.toString(),
+                    reference = read?.reference,
+                    resolvedByHead = read?.resolvedByHead,
                 )
             },
         fx = fxInOrder()

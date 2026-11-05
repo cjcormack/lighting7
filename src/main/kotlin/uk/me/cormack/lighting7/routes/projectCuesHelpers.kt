@@ -335,15 +335,20 @@ internal fun DaoCueLayer.toDto(): CueLayerDto? = CueLayerDto(
  */
 private fun DaoCueAttributeAssignment.toDtoWithHealth(
     fixtures: uk.me.cormack.lighting7.show.Fixtures,
+    /** The live project's reference resolver, for what a reference resolves to per head; null elsewhere. */
+    references: uk.me.cormack.lighting7.fx.PaletteReferences? = null,
 ): CueAttributeAssignmentDto {
     val base = toDto()
-    // Only the *target* is checkable now. Until session 4 a row's value could be a `ref:{uuid}`,
-    // and this also reported whether the referenced Look covered the target; with the grammar gone
-    // a row's value is always a literal, so there is no second reference to validate.
+    val read = storedReferenceRead(cue.project.id, fixtures, references, base.target, null, base.attribute, base.value)
+    // A reference that lands under another property than its own (a colour wheel) is healthy.
+    val lands = read?.resolvedByHead?.isNotEmpty() == true
     return base.copy(
-        health = PersistedFixtureReferenceValidator.validateTargetedReference(
+        health = if (lands) uk.me.cormack.lighting7.models.AssignmentHealth.Ok else PersistedFixtureReferenceValidator.validateTargetedReference(
             fixtures, base.target, base.attribute, allowElements = true,
         ),
+        uuid = uuid.toString(),
+        reference = read?.reference,
+        resolvedByHead = read?.resolvedByHead,
     )
 }
 
@@ -354,9 +359,8 @@ private fun DaoCueAttributeAssignment.toDtoWithHealth(
  * [fixtures] — dead references surface in the UI with markers (Phase 6) rather than
  * silently dropping at apply time.
  *
- * There was a `lookRegistry` parameter beside [fixtures], for the second check a row's *value* used
- * to need: a `ref:{uuid}` was validated against the Look it named. The `ref:` grammar retired in
- * session 4, so a row's value is always a literal and its target is the only thing left to check.
+ * A row's value is a literal or a `pal:` palette reference; a reference's palette, and on the current
+ * project what it resolves to per head, are read through [references].
  */
 internal fun DaoCue.toCueDetails(
     isCurrentProject: Boolean,
@@ -365,6 +369,8 @@ internal fun DaoCue.toCueDetails(
     slots: List<EntrySlot> = entrySlotsOf(listOf(id.value))[id.value].orEmpty(),
     /** The entry the place fields describe; null describes the cue's only entry, if it has one. */
     contextEntryId: Int? = null,
+    /** How a reference row resolves per head, read only on the current project. */
+    references: uk.me.cormack.lighting7.fx.PaletteReferences? = null,
 ): CueDetails {
     val triggerDetails = this.triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDetailDto(
@@ -378,7 +384,7 @@ internal fun DaoCue.toCueDetails(
         )
     }
     val assignmentDetails = this.attributeAssignments.sortedBy { it.sortOrder }
-        .map { it.toDtoWithHealth(fixtures) }
+        .map { it.toDtoWithHealth(fixtures, references?.takeIf { isCurrentProject }) }
     val slot = if (contextEntryId != null) slots.firstOrNull { it.entry.id.value == contextEntryId } else slots.singleOrNull()
     val entry = slot?.entry
     val stack = entry?.stack
@@ -741,6 +747,7 @@ internal fun writeCueChildren(
         if (mayTrigger) TriggerIndex.of(cue.project).check(refs)
         if (mayCommand) CommandIndex.of(cue.project).check(refs)
     }
+    checkPaletteReferences(cue.project.id, newRows.mapIndexed { i, r -> ReferenceSite("attributeAssignments[$i]", r.attribute, r.value) })
     // Resolved up front, so an unknown hook type is refused before any child is touched.
     val newHooks = triggers?.mapNotNull { trigger ->
         val type = normalisedTriggerType(trigger.triggerType)

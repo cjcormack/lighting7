@@ -562,7 +562,7 @@ class CueHolds internal constructor(
                 cueId = cueId,
                 priority = priority,
                 layers = data.layers,
-                localRows = buildCueAssignmentsForCue(state.show.fixtures, data),
+                localRows = buildCueAssignmentsForCue(state.show.fixtures, data, state.show.paletteReferences),
                 resolveLook = state.show.lookRegistry::snapshot,
                 resolvePalette = state.show.paletteRegistry::snapshot,
             )
@@ -663,7 +663,7 @@ class CueHolds internal constructor(
         } else {
             fxEngine.cueLayer.removeAssignments(cueId)
         }
-        if (data.stomp) fxEngine.stompForCue(cueId, buildStompOverlap(state.show.fixtures, data, cooked.values))
+        if (data.stomp) fxEngine.stompForCue(cueId, buildStompOverlap(state.show.fixtures, data, cooked.values, state.show.paletteReferences))
 
         // Its timed effects and its triggers, on every hold's first — a loose cue's included (§3.4).
         if (data.layers.any { it.enabled && it.isTimed } || timedAdHoc.isNotEmpty()) {
@@ -862,7 +862,8 @@ class CueHolds internal constructor(
         val dead = data.attributeAssignments.filter {
             PersistedFixtureReferenceValidator.validateTargetedReference(
                 state.show.fixtures, it.target, it.attribute, allowElements = true,
-            ) != uk.me.cormack.lighting7.models.AssignmentHealth.Ok
+            ) != uk.me.cormack.lighting7.models.AssignmentHealth.Ok &&
+                !state.show.paletteReferences.landsOn(state.show.fixtures, it.target, it.attribute, it.value)
         }
         if (dead.isEmpty()) return
         val signature = dead.joinToString(";") { "${it.targetType}:${it.targetKey}.${it.attribute}" }

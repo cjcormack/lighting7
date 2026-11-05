@@ -475,11 +475,14 @@ private class TimedFireCook(
     private val priority: () -> Int,
     private val cueData: CueApplyData,
 ) {
-    /** Scoped so an edit to some *other* template doesn't drop this cue's memo. */
-    private val paletteUuids: List<java.util.UUID> = cueData.layers
-        .filter { it.source.isPalette }
-        .map { it.source.uuid }
-        .distinct()
+    /**
+     * Scoped so an edit to some *other* template doesn't drop this cue's memo: the palettes its
+     * layers press and the ones its own rows reference.
+     */
+    private val paletteUuids: List<java.util.UUID> = (
+        cueData.layers.filter { it.source.isPalette }.map { it.source.uuid } +
+            cueData.attributeAssignments.mapNotNull { PaletteReferences.uuidOf(it.value) }
+        ).distinct()
 
     private data class Stamp(val structure: Long, val looks: Long, val palettes: Long, val priority: Int)
 
@@ -513,7 +516,7 @@ private class TimedFireCook(
         cooked?.let { if (firedKey == fired) return it }
 
         val rows = localRows
-            ?: buildCueAssignmentsForCue(state.show.fixtures, cueData.copy(livePriority = now.priority))
+            ?: buildCueAssignmentsForCue(state.show.fixtures, cueData.copy(livePriority = now.priority), state.show.paletteReferences)
                 .also { localRows = it }
         val result = CueComposer.cook(
             fixtures = state.show.fixtures,

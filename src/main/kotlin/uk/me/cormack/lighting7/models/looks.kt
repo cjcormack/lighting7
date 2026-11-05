@@ -37,8 +37,9 @@ const val DEFERRED_TARGET_TYPE: String = "deferred"
  * moved to [DaoPalettes], which is a better home for it (one family, an intent per row, resolved
  * per head).
  *
- * [value] is always a **literal** in the canonical
- * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.serialize] grammar. **Looks do
+ * [value] is a **literal** in the canonical
+ * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.serialize] grammar, or a
+ * **palette reference**, `pal:{uuid}`, resolved per head (palette-references plan D1). **Looks do
  * not nest**: a `ref:` value is rejected at the write boundary, so resolution can never recurse.
  *
  * `moveInDark` deliberately has no place here — it is a cue-*crossfade* concept, which is also
@@ -59,6 +60,12 @@ data class LookRowDto(
      * [CueAttributeAssignmentDto.health].
      */
     val health: AssignmentHealth = AssignmentHealth.Ok,
+    /** The stored row's uuid, on read only; what `POST /looks/{id}/harden` names a row by. */
+    val uuid: String? = null,
+    /** As [CueAttributeAssignmentDto.reference]. */
+    val reference: PaletteReferenceDto? = null,
+    /** As [CueAttributeAssignmentDto.resolvedByHead]. */
+    val resolvedByHead: Map<String, String>? = null,
 ) {
     /**
      * The row's target. A Look row always names one — see [DEFERRED_TARGET_TYPE].
@@ -201,6 +208,14 @@ object DaoLookRows : IntIdTable("look_rows") {
     val elementKey = varchar("element_key", 255).nullable()
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
+
+    /**
+     * The palette [value] references, when it is a `pal:{uuid}` (palette-references plan D4): what
+     * "what uses this palette" reads, never the value text. Machine-derived from [value] by
+     * [DaoLookRow.value]'s setter, so never synced; joined on the Look's project, since a uuid alone
+     * may name a palette in a venue's version too.
+     */
+    val paletteUuid = javaUUID("palette_uuid").nullable().index()
 }
 
 class DaoLookRow(id: EntityID<Int>) : IntEntity(id) {
@@ -210,7 +225,17 @@ class DaoLookRow(id: EntityID<Int>) : IntEntity(id) {
     var targetType by DaoLookRows.targetType
     var targetKey by DaoLookRows.targetKey
     var attribute by DaoLookRows.attribute
-    var value by DaoLookRows.value
+    private var storedValue by DaoLookRows.value
+    var paletteUuid by DaoLookRows.paletteUuid
+        private set
+
+    /** The row's value; a write also sets [paletteUuid] from it. */
+    var value: String
+        get() = storedValue
+        set(value) {
+            storedValue = value
+            paletteUuid = uk.me.cormack.lighting7.fx.PaletteReferences.uuidOf(value)
+        }
     var fadeDuration by DaoLookRows.fadeDuration
     var elementKey by DaoLookRows.elementKey
     var sortOrder by DaoLookRows.sortOrder

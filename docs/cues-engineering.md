@@ -682,11 +682,13 @@ import, the delete guard is an indexed query rather than a scan over opaque text
 dependency on a *named colour* inside an **FX parameter** is `pal:{uuid}`, which is the one
 consumer with no layer to hang off.
 
-Three things outlived those grammars, all deliberately. `validateLookRows` rejects both a `ref:`- and
-a `pal:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so
-it survives as an inlined shape check with its own local constant.
-`CueAssignmentResolver.parseAssignmentValue` returns **null** for a `pal:`-shaped value rather than
-letting `parseExtendedColour` answer white. The third was the migration that folded `ref:` rows from
+Three things outlived those grammars, all deliberately. `validateLookRows` rejects a `ref:`-shaped
+value at the Look write boundary — that rejection *is* the no-nesting guarantee, so it survives as
+an inlined shape check with its own local constant. A `pal:` value is allowed again, as a **palette
+reference** resolved per head (`docs/lighting-composition-model.md` §"A palette reference is a
+value"); a palette is not a Look, so nothing nests. `CueAssignmentResolver.parseAssignmentValue`
+returns **null** for a `pal:`-shaped value rather than letting `parseExtendedColour` answer white:
+every reader resolves a reference before it parses. The third was the migration that folded `ref:` rows from
 a v4 database into layers; it was removed on 2026-08-24 with the rest of them (see
 [InstallBootstrap.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt)), so a
 v4 database no longer has an upgrade path in the code — recover it from git history if one turns up.

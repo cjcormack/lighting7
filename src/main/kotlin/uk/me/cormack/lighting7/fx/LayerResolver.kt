@@ -76,6 +76,12 @@ class LayerResolver(
          * as "snap", and a zero entry would mean the same thing twice.
          */
         val fadeDurations: Map<CueAssignmentResolver.Key, Long>,
+        /**
+         * The palette the winning row references per composed key, for the keys a cue's own
+         * reference row won (palette-references plan D6) — the same winner as [winners]. Provenance
+         * only.
+         */
+        val referenceWinners: Map<CueAssignmentResolver.Key, java.util.UUID> = emptyMap(),
     ) {
         /**
          * [index] flattened to (targetKey, attribute) keys, derived on first read.
@@ -128,6 +134,7 @@ class LayerResolver(
             winners = winners.mapValues { (_, a) -> a.cueId },
             layerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap(),
             fadeDurations = cueAssignmentResolver.fadeDurationsFor(cooked, winners),
+            referenceWinners = referenceWinnersOf(winners),
         )
     }
 
@@ -155,7 +162,7 @@ class LayerResolver(
             return
         }
         val previous = cueLayer
-        publish(cooked, weights, previous.winners, previous.layerWinners, previous.fadeDurations)
+        publish(cooked, weights, previous.winners, previous.layerWinners, previous.fadeDurations, previous.referenceWinners)
     }
 
     /**
@@ -169,14 +176,22 @@ class LayerResolver(
         winners: Map<CueAssignmentResolver.Key, Int>,
         layerWinners: Map<CueAssignmentResolver.Key, CookWinner>,
         fadeDurations: Map<CueAssignmentResolver.Key, Long>,
+        referenceWinners: Map<CueAssignmentResolver.Key, java.util.UUID>,
     ) {
         cueLayer = CueLayerSnapshot(
             index = cueAssignmentResolver.compose(cooked, weights),
             winners = winners,
             layerWinners = layerWinners,
             fadeDurations = fadeDurations,
+            referenceWinners = referenceWinners,
         )
     }
+
+    private fun referenceWinnersOf(
+        winners: Map<CueAssignmentResolver.Key, CueAssignmentResolver.Assignment>,
+    ): Map<CueAssignmentResolver.Key, java.util.UUID> =
+        if (winners.values.none { it.reference != null }) emptyMap()
+        else winners.mapNotNull { (key, a) -> a.reference?.let { key to it } }.toMap()
 
     /**
      * What [assignments] compose to at [weights], as a snapshot that is never published: Layer 4
@@ -195,6 +210,7 @@ class LayerResolver(
             winners = winners.mapValues { (_, a) -> a.cueId },
             layerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap(),
             fadeDurations = cueAssignmentResolver.fadeDurationsFor(cooked, winners),
+            referenceWinners = referenceWinnersOf(winners),
         )
     }
 

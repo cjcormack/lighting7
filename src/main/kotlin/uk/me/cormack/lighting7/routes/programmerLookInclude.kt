@@ -213,7 +213,8 @@ internal fun includeExpandedIntoProgrammer(
                 .filterIsInstance<uk.me.cormack.lighting7.fixture.Fixture>()
         }.getOrNull() ?: continue
         for (member in members) {
-            groupHints[member.key to canonicalAttributeName(entry.attribute)] = group.key
+            val attribute = entry.forHead(member.key)?.first ?: continue
+            groupHints[member.key to canonicalAttributeName(attribute)] = group.key
         }
     }
 

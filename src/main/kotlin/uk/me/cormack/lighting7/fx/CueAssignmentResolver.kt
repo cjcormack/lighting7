@@ -93,6 +93,11 @@ class CueAssignmentResolver {
          * it back there (show-cue-editing plan §3.8) — [targetKey] names a member by then.
          */
         val sourceTarget: TargetRef? = null,
+        /**
+         * The palette this row's value is a reference to (palette-references plan D6), or null for a
+         * literal. Composition ignores it; provenance reads the winning row's.
+         */
+        val reference: java.util.UUID? = null,
     )
 
     /** See [Assignment.bundleRole]. */
@@ -164,11 +169,10 @@ class CueAssignmentResolver {
          * - `attribute == "position"` (case-insensitive): `"pan,tilt"` (each `0..255`) →
          *   [AttributeValue.Position]. This matches the `createFixtureTargetForCue` special case.
          * - [AttributeCategory.COLOUR]: hex / named / extended string consumed by
-         *   [parseExtendedColour] → [AttributeValue.Colour]. A **template reference**
-         *   (`pal:{uuid}`) is refused here and returns null: an assignment value is a literal,
-         *   and a dependency on a template is expressed by a *layer*. Letting it through would
-         *   hand [parseExtendedColour] an unparseable string, which answers white — the same
-         *   silent failure the retired positional-palette grammar had when its list was empty.
+         *   [parseExtendedColour] → [AttributeValue.Colour]. A **palette reference**
+         *   (`pal:{uuid}`) returns null: every reader resolves one per head before parsing
+         *   ([PaletteReferences]), and letting one through would hand [parseExtendedColour] an
+         *   unparseable string, which answers white.
          *   **Unless [settingBacked]**: a COLOUR property backed by a slot channel (a colour wheel,
          *   a gel scroller) stores and is written slot levels, so a plain `"0".."255"` is a
          *   [AttributeValue.Setting] there. A level is read first because the colour parse would

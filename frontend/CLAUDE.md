@@ -1255,10 +1255,11 @@ colour picker's swatches and a 3D material list are unrelated.
   the neutral is already out of RGB and its white byte is dropped, so `#FF9D4A` arrives as
   `#B55300` — dimmer *and* more saturated, which is worse than the RGB-only reading rather than
   equal to it. Accepted trade, documented at `resolveColourGeneric`, one line to invert.
-- **A reference is legal only in an FX parameter.** A cue row, a Look row and a programmer entry
-  are literals; the dependency mechanism for a *value* is a layer. `validateLookRows` refuses a
-  `pal:`-shaped value beside its `ref:` refusal, and `parseAssignmentValue` returns null for one
-  rather than letting `parseExtendedColour` answer white.
+- **A value may hold one too** (lighting7 palette-references plan D1): a cue row, a Look row and a
+  programmer entry may be `pal:{uuid}`, which the desk resolves **per head** rather than to one
+  colour, answering the resolved value beside the reference (`reference`, `resolvedByHead` on a
+  row; `reference` on a programmer entry, typed as `api/paletteReference.ts`). This side never
+  resolves one. `validateLookRows` still refuses `ref:`.
 - **Only generic colour *value* palettes are offerable.** `family === 'COLOUR' && isGeneric`
   holds on both sides — a per-fixture palette holds no single colour, so there is nothing for a
   fixture-agnostic output to take. The third clause was `rows.length === 1` and is now

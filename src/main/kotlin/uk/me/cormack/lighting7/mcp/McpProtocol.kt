@@ -305,7 +305,7 @@ class McpProtocol(private val state: State) {
          * (D3). The rest act on the rig as it stands (apply, GO, aim, tempo, the programmer) or only read.
          */
         private val VENUE_STORED_WRITE_TOOLS = setOf(
-            "create_look", "update_look", "delete_look", "create_speed_master", "park_channel", "unpark_channel", "create_cue",
+            "create_look", "update_look", "delete_look", "harden_values", "create_speed_master", "park_channel", "unpark_channel", "create_cue",
             "create_cue_stack", "add_cue_to_stack", "remove_cue_from_stack", "move_cue_to_stack", "create_palette", "set_cue_events", "set_scenery",
             "patch_fixtures", "delete_groups", "unpatch_fixtures", "rename_fixtures", "edit_groups", "set_stage", "set_scene",
             "upload_scene_image",

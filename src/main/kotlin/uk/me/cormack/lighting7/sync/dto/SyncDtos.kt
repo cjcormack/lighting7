@@ -34,6 +34,12 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v47: a cue row's or a Look row's `value` may be a palette reference, `pal:{uuid}`
+    // (palette-references plan D1, D7), resolved per head on the reading desk. No field and no folder
+    // is new: the reference is the row's value. `minReader` moves to **47** with the writer: a v46
+    // reader refuses a Look row holding `pal:` at its own write boundary and would read a cue row's as
+    // nothing. The importer refuses a reference to a palette the archive lacks
+    // (`PALETTE_REFERENCE_INVALID`). See `docs/sync-engineering.md` §"Version 47 — Palette references".
     // v46: a cue's own *Move in dark* setting travels on `CueJson` (`moveInDarkMode`,
     // `moveInDarkDelayMs`, `moveInDarkTimeMs`, `moveInDarkLive`; move-in-dark plan D3), and
     // `CueAttributeAssignmentJson.moveInDark`, the per-row flag it retires (D13), is no longer written:
@@ -361,9 +367,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 46,
+    val formatVersion: Int = 47,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 43,
+    val minReader: Int = 47,
 )
 
 /**

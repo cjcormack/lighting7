@@ -366,7 +366,16 @@ live cue layering the Look moves without a re-fire; a rename, notes or scenery f
 itself (`performLookDelete`): refused with `LOOK_IN_USE` and the cues that layer it unless `force`,
 which deletes those layers — rebuilding a live cue that held one, so the Look's values leave the
 stage without a re-fire (FX the cue spawned from it run until the cue stops) — and the Look's busk pads, cue slots, scenery, programmer layers and include
-target go with it.
+target go with it. `harden_values` `{lookId | cueId, rowUuids?}` is *Copy the values*
+(palette-references plan D9), `POST /looks/{id}/harden` or `/cues/{id}/harden` as a tool: the
+owner's palette references made literal per head, a row with a head that has nothing to keep left as
+the reference and counted as `kept`; it is an operator's stored write, so a venue's is an admin's.
+
+**Palette references as values.** The value grammar `create_look`, `update_look`, `set_programmer`
+and a cue's values share (`ai/LookValues.kt`) takes `pal:{uuid}`, a value palette `describe_rig`
+lists under *Value Palettes*: stored as the reference, resolved per head on the property it lands
+on there, and, for a colour reference, laid on each colour-family attribute the palette names, as a
+press lays them.
 
 A cue's **own values** — `create_cue`'s and each `build_cue_stack` cue's `values` — take
 `create_look`'s grammar and resolve the same way, stored as the cue's attribute assignments (an element by

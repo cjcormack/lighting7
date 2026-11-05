@@ -88,8 +88,8 @@ internal data class LookRecordOutcome(
  * - MERGE upserts the recorded rows and leaves everything else alone — the console re-record.
  * - REMOVE deletes the rows the recording names, values ignored.
  *
- * Recorded values are always literals — the programmer has held nothing else since the `ref:`
- * grammar retired. `validateLookRows` still rejects a `ref:`-shaped value at the write boundary as
+ * Recorded values are literals: a palette reference the programmer holds is recorded as what it
+ * resolves to (`RecordEntry.value`, its `.resolved`). `validateLookRows` still rejects a `ref:`-shaped value at the write boundary as
  * an inlined shape check, because that rejection *is* the non-recursion guarantee `FU-LOOK-NESTED`
  * depends on.
  *
