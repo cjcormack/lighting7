@@ -15,21 +15,23 @@ import { DiagnosticsContent } from "./Diagnostics"
 import { CloudSyncHubBody } from "./CloudSync"
 import { UpdatePanel } from "@/components/updates/UpdatePanel"
 import { RemoteAccessPanel } from "@/components/remoteAccess/RemoteAccessPanel"
+import { CloudPanel } from "@/components/cloud/CloudPanel"
 import { TelemetryCard } from "@/components/telemetry/TelemetryCard"
 import { useShownTabs } from "@/navigation"
 
-const TABS = ["general", "users", "sync", "remote", "updates", "diagnostics"] as const
+const TABS = ["general", "users", "sync", "remote", "cloud", "updates", "diagnostics"] as const
 type Tab = (typeof TABS)[number]
 
 /**
  * The nav row each tab opens: a tab is offered exactly where its row is (navigation plan P2), so
- * Users, Sync and Remote access go from an operator, whom every call behind them refuses.
+ * Users, Sync, Remote access and Cloud go from an operator, whom every call behind them refuses.
  */
 const TAB_NAV_IDS: Record<Tab, string> = {
   general: "install-settings",
   users: "users",
   sync: "sync",
   remote: "remote-access",
+  cloud: "cloud",
   updates: "updates",
   diagnostics: "diagnostics",
 }
@@ -67,6 +69,7 @@ export function InstallSettings() {
             {shown.has("users") && <TabsTrigger value="users">Users</TabsTrigger>}
             {shown.has("sync") && <TabsTrigger value="sync">Sync</TabsTrigger>}
             {shown.has("remote") && <TabsTrigger value="remote">Remote access</TabsTrigger>}
+            {shown.has("cloud") && <TabsTrigger value="cloud">Cloud</TabsTrigger>}
             {/* Shown to everyone: the version, and whether the desk is about to restart, are
                 things anyone standing at it should be able to read. The actions inside are
                 admin-only, disabled in the panel and enforced per-route by the backend. */}
@@ -86,6 +89,7 @@ export function InstallSettings() {
         {activeTab === "users" && <UsersTab />}
         {activeTab === "sync" && <CloudSyncHubBody />}
         {activeTab === "remote" && <RemoteAccessPanel />}
+        {activeTab === "cloud" && <CloudPanel />}
         {activeTab === "updates" && <UpdatePanel />}
         {activeTab === "diagnostics" && <DiagnosticsContent />}
       </div>

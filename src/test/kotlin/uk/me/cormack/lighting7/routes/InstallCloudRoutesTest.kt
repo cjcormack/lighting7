@@ -185,7 +185,7 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
         // Reaches the handler: refused only because nothing is adopted.
         val unadopt = http.delete("/api/rest/install/cloud") { header(HttpHeaders.Cookie, cookie) }
         assertEquals(CloudErrorCodes.NOT_ADOPTED, unadopt.code())
-        assertEquals(HttpStatusCode.OK, http.get("/api/rest/install/cloud") { header(HttpHeaders.Cookie, cookie) }.status)
+        assertTrue(http.cloud(cookie).remote, "the state tells the Cloud tab it is remote")
     }
 
     @Test
@@ -204,7 +204,9 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
         assertNull(remote.verificationUriComplete)
 
         client.webSocket("/api", request = { header(HttpHeaders.Cookie, cookie) }) {
-            val frame = awaitOfType<CloudStateOutMessage>().state.adoption
+            val state = awaitOfType<CloudStateOutMessage>().state
+            assertTrue(state.remote, "the frame tells the Cloud tab it is remote, as the REST answer does")
+            val frame = state.adoption
             assertNotNull(frame)
             assertNull(frame.userCode)
             assertNull(frame.verificationUriComplete)
@@ -219,7 +221,10 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
         val client = createWsClient()
         val cookie = client.loginCookieHeader("admin")
         client.webSocket("/api", request = { header(HttpHeaders.Cookie, cookie) }) {
-            assertEquals(fake.adoption.userCode, awaitOfType<CloudStateOutMessage>().state.adoption?.userCode)
+            val frame = awaitOfType<CloudStateOutMessage>().state
+            assertEquals(fake.adoption.userCode, frame.adoption?.userCode)
+            assertFalse(frame.remote)
         }
+        assertFalse(client.cloud(cookie).remote)
     }
 }

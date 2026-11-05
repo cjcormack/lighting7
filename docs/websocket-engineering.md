@@ -1090,7 +1090,7 @@ Machine-scoped, so registered in the pre-warm-up band and unaffected by project 
 | `installChanged` | — | Every socket |
 | `updateStateChanged` | `phase`, `availability`, `latestVersion?`, `downloadedBytes`, `totalBytes?` | Every socket |
 | `tunnel.state` | `state`: `status`, `url?`, `code?`, `message?`, `retrying`, `downloadedBytes?`, `totalBytes?` | Admin sockets only (and bootstrap-open ones), snapshot on connect |
-| `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?` | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
+| `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?`, `noticeAt?`, `remote?` | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
 
 The account frames are payload-free **deliberately, not just by convention**: sockets are open to
 operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate
@@ -1114,7 +1114,8 @@ demoted admin keeps receiving it until they reconnect; their REST calls are refu
 `GET /install/cloud` answers, and follows `tunnel.state`'s rules: admins alone, `StateFlow`-backed,
 outbound only, every operation REST. On the public listener it leaves out a pending adoption's
 `userCode` and both verification URIs (`CloudStateDto.forRemote`), since whoever holds the code can
-approve the desk into an organisation of their own. It changes on an adoption's transitions, a poll's
+approve the desk into an organisation of their own, and says `remote: true`, which is how the Cloud tab
+knows to disable *Adopt*. It changes on an adoption's transitions, a poll's
 error and each change of the control channel's status (`CONNECTING`, `ONLINE`, `RETRYING` with
 `retryAt`, `OFF`), never per heartbeat. See `docs/cloud-engineering.md` §"The state".
 

@@ -23,13 +23,19 @@ data class CloudStateDto(
     val lastOnlineAt: String? = null,
     /** Something the admin should know that ended an adoption: refused, expired, removed in the cloud. */
     val notice: String? = null,
+    /** When [notice] was set: what a dismissal is keyed on, since the same words can come again. */
+    val noticeAt: String? = null,
+    /** This answer is for a caller on the public listener, where *Adopt* is refused (D5). */
+    val remote: Boolean = false,
 ) {
     /**
      * What a caller on the public listener sees: the pending adoption's code and links left out,
      * since whoever holds them can approve this desk into an organisation of their own (D5).
      */
-    fun forRemote(): CloudStateDto =
-        copy(adoption = adoption?.copy(userCode = null, verificationUri = null, verificationUriComplete = null))
+    fun forRemote(): CloudStateDto = copy(
+        adoption = adoption?.copy(userCode = null, verificationUri = null, verificationUriComplete = null),
+        remote = true,
+    )
 }
 
 @Serializable

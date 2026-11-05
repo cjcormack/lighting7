@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P0`](#fu-manual-cloud-p0) | Lighting7 Cloud's P0 exit: each desk adopted from its Cloud tab shows Online in the portal, a running fade and FX see nothing of the cloud's app stopping and the desk is back within 30 s of its return, unadopt from either side lands on the other, and `cloud.enabled = false` connects nowhere | Cloud P0 S6, 2026-11-05 |
 | [`FU-MANUAL-ARTNET-TRANSPORT`](#fu-manual-artnet-transport) | a real Art-Net node lights from the desk's own ArtDMX transport as it did from artnet4j: broadcast and unicast universes, a node's status page showing the frames arriving, and a second program on the desk machine still hearing them | Cloud P0 S2, 2026-11-02 |
 | [`FU-MANUAL-MOVE-IN-DARK`](#fu-manual-move-in-dark) | movers moved in the dark on the rig: a head moves a second after it goes dark and is in place before the GO, a GO too soon and a GO TO land dark heads at once, a busk press lights a moved head and it returns, a cue *Off* and a head kept live move lit, an older show's flagged cues import on *Early*, and the stack sheet, the Cue tab, the *Dark* columns and the Stage view's rings agree with where the heads come up | Move in dark S1–S5, 2026-11-02 |
 | [`FU-MANUAL-RECORD-LOOK-AS-LAYER`](#fu-manual-record-look-as-layer) | *Record → A new Look* and *Make layer* leave the rig still: the new Look goes on top of the programmer's layers, what it took leaves *Your values*, a ticked chase keeps running without a jump, held scenery stays where it is, and a Record into a cue afterwards layers the Look | Record look as a layer, 2026-10-30 |
@@ -141,6 +142,31 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-CLOUD-P0`
+
+**What it proves**: the PRD's P0 exit (cloud-p0 plan §6): a desk is adopted into a cloud organisation,
+stays connected to it, can leave it from either side, and runs its show exactly as before while the
+cloud is down.
+
+**Why it is here**: every desk test runs against `FakeCloud` (R5). Only the owner can watch a real desk
+reach the deployed cloud.
+
+**Test**, once both P0 plans' sessions are merged and the cloud is deployed:
+
+1. **Adopt.** On each of the owner's desks, Install settings → Cloud → *Adopt this desk*, approve the
+   code in the portal (typed, and once by the QR). The tab shows *Adopted by* the org and *Online*; the
+   portal shows the desk Online, with its version and last seen.
+2. **Cloud down.** During a running cue with a fade and an FX, stop the cloud's app: nothing visible
+   changes on the rig, and the tab shows *Retrying in n s*. Start the app again: the desk is back
+   *Online* within 30 s of its return.
+3. **Unadopt.** From the desk, *Remove from cloud*: the portal shows it gone. Adopt it again, then
+   remove it from the portal: the desk's tab shows the notice within a heartbeat.
+4. **Off.** A desk set to `cloud.enabled = false` says *Turned off on this desk* and makes no connection,
+   checked in the portal and the desk log.
+5. **Tenancy.** The cloud plan's cross-tenant tests are green on its main.
 
 ---
 

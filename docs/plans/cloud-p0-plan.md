@@ -164,8 +164,8 @@ or more, now means session *N* + 1.
 | 2 | Replace artnet4j | merged | `claude/amazing-einstein-f1ektw` | [#336](https://github.com/cjcormack/lighting7/pull/336) | b7c659d |
 | 3 | The protocol module | merged | `claude/friendly-clarke-kzokhd` | [#337](https://github.com/cjcormack/lighting7/pull/337) | d891cc4 |
 | 4 | Adoption on the desk | merged | `claude/cloud-p0-s4` | [#340](https://github.com/cjcormack/lighting7/pull/340) | 6cd2e70 |
-| 5 | The control channel | in review | `claude/admiring-mendel-4myfwt` | | |
-| 6 | Install settings → Cloud | planned | | | |
+| 5 | The control channel | merged | `claude/admiring-mendel-4myfwt` | [#341](https://github.com/cjcormack/lighting7/pull/341) | c586166 |
+| 6 | Install settings → Cloud | in review | `claude/cloud-p0-s6` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
 *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts the
@@ -459,6 +459,22 @@ need.
 - **Docs:** `docs/cloud-engineering.md` §"The Cloud tab"; `docs/desk-accounts.md` gains the adoption
   link in one paragraph; the operator check `FU-MANUAL-CLOUD-P0` (§6) added to
   `docs/plans/manual-validation.md`.
+
+**Outcome (2026-11-05).** `components/cloud/CloudPanel.tsx` is the tab, `store/cloud.ts` its query,
+three mutations and the `cloud.state` bridge, and a *Cloud* row joins the install nav, admin only.
+
+- **The plan was wrong about the public listener.** Nothing told the browser which listener it was on,
+  so the tab could not disable *Adopt* there. `CloudStateDto` gained `remote`, set by `forRemote()`,
+  so the REST answers and the frame both carry it; `InstallCloudRoutesTest` checks it on each listener.
+  It is the desk's own REST, not the protocol, so `cloud-protocol` is unchanged.
+- **`settingsTabs` is a test, not a list:** the tabs are `routes/InstallSettings.tsx`'s `TABS`, each
+  shown where its nav row is (`TAB_NAV_IDS`), so the row is `navigation.ts`'s `cloud`.
+- **Decided here:** a notice is dismissed per browser, since no route clears it and the desk drops it
+  at the next adoption or a restart. The desk stamps each one (`noticeAt`) and the dismissal is keyed on
+  the stamp, since the next expiry or revoke from the same org says the same words. A desk adopted and then turned off or unconfigured still shows its
+  adoption under the *Turned off* or *No cloud* line, so *Remove from cloud* stays reachable (it answers
+  `CLOUD_UNREACHABLE`, and the confirm offers to forget it here). The adopting state shows the install
+  key's fingerprint beside the time left, for comparing with the portal.
 
 ## 6. Operator checks
 
