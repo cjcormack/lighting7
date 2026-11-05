@@ -5,6 +5,7 @@
   "replyTo": "d-0001",
   "body": {
     "orgName": "Cormack Lighting",
-    "heartbeatS": 25
+    "heartbeatS": 25,
+    "remoteOrigin": "https://inst-01jbx3q5z8.desk.cloud.example"
   }
 }

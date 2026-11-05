@@ -28,22 +28,22 @@ object InstallKeys {
     private val SPKI_PREFIX = byteArrayOf(0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00)
     private const val RAW_KEY_BYTES = 32
 
-    private val base64Url = Base64.getUrlEncoder().withoutPadding()
-
     fun generate(): KeyPair = KeyPairGenerator.getInstance(ALGORITHM).generateKeyPair()
 
     /** The public key on the wire: its 32 raw bytes (RFC 8032), base64url without padding. */
-    fun encodePublicKey(key: PublicKey): String {
+    fun encodePublicKey(key: PublicKey): String = Base64Url.encode(rawPublicKey(key))
+
+    private fun rawPublicKey(key: PublicKey): ByteArray {
         val spki = key.encoded
         require(key.isEd25519() && spki.size == SPKI_PREFIX.size + RAW_KEY_BYTES && spki.startsWith(SPKI_PREFIX)) {
             "Not an Ed25519 public key"
         }
-        return base64Url.encodeToString(spki.copyOfRange(SPKI_PREFIX.size, spki.size))
+        return spki.copyOfRange(SPKI_PREFIX.size, spki.size)
     }
 
     /** The key [encoded] names, or null when it is not an unpadded base64url Ed25519 public key. */
     fun decodePublicKey(encoded: String): PublicKey? = runCatching {
-        val raw = decodeBase64Url(encoded)
+        val raw = Base64Url.decode(encoded)
         require(raw.size == RAW_KEY_BYTES)
         KeyFactory.getInstance(ALGORITHM).generatePublic(X509EncodedKeySpec(SPKI_PREFIX + raw))
     }.getOrNull()
@@ -59,38 +59,31 @@ object InstallKeys {
 
     /** `SHA256:` and the base64 (unpadded) SHA-256 of the raw public key: what the desk and the portal show. */
     fun fingerprint(key: PublicKey): String {
-        val raw = Base64.getUrlDecoder().decode(encodePublicKey(key))
-        val digest = MessageDigest.getInstance("SHA-256").digest(raw)
+        val digest = MessageDigest.getInstance("SHA-256").digest(rawPublicKey(key))
         return "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(digest)
     }
 
     /** The signature of [payload], base64url without padding. Ed25519 is deterministic, so it is the same every time. */
-    fun sign(key: PrivateKey, payload: SignedPayload): String {
-        val signer = Signature.getInstance(ALGORITHM)
-        signer.initSign(key)
-        signer.update(payload.canonicalBytes())
-        return base64Url.encodeToString(signer.sign())
-    }
+    fun sign(key: PrivateKey, payload: SignedPayload): String = Base64Url.encode(signBytes(key, payload.canonicalBytes()))
 
     /** Whether [signature] is [key]'s over [payload]. False, never an exception, for a malformed signature. */
-    fun verify(key: PublicKey, payload: SignedPayload, signature: String): Boolean = runCatching {
-        val bytes = decodeBase64Url(signature)
+    fun verify(key: PublicKey, payload: SignedPayload, signature: String): Boolean =
+        runCatching { Base64Url.decode(signature) }.getOrNull()?.let { verifyBytes(key, payload.canonicalBytes(), it) } ?: false
+
+    internal fun signBytes(key: PrivateKey, bytes: ByteArray): ByteArray {
+        val signer = Signature.getInstance(ALGORITHM)
+        signer.initSign(key)
+        signer.update(bytes)
+        return signer.sign()
+    }
+
+    /** False, never an exception, for a key or signature the JDK refuses. */
+    internal fun verifyBytes(key: PublicKey, bytes: ByteArray, signature: ByteArray): Boolean = runCatching {
         val verifier = Signature.getInstance(ALGORITHM)
         verifier.initVerify(key)
-        verifier.update(payload.canonicalBytes())
-        verifier.verify(bytes)
+        verifier.update(bytes)
+        verifier.verify(signature)
     }.getOrDefault(false)
-
-    /**
-     * The bytes [text] encodes, refusing any spelling but the one [base64Url] writes. The JDK's
-     * decoder also takes padding and ignores stray low bits in the last character, so without this
-     * several strings would name one key or one signature.
-     */
-    private fun decodeBase64Url(text: String): ByteArray {
-        val bytes = Base64.getUrlDecoder().decode(text)
-        require(base64Url.encodeToString(bytes) == text) { "Not unpadded canonical base64url" }
-        return bytes
-    }
 
     private fun Key.isEd25519(): Boolean = (this as? EdECKey)?.params?.name == NamedParameterSpec.ED25519.name
 

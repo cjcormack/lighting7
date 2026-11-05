@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "type": "mcp.call",
+  "id": "c-0012",
+  "body": {
+    "token": "eyJhbGciOiJFZERTQSIsImtpZCI6InRlc3QtMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJhdWQiOiJpbnN0XzAxSkJYM1E1WjgiLCJzdWIiOiJhY2NfOVB6NFJ0Iiwib3JnIjoib3JnXzNIYzhXbiIsInNjb3BlIjoibWNwIiwiZ2lkIjoiZ3JfOEh3M1pwIiwiYXpwIjoiY2xpZW50X2NsYXVkZSIsImlhdCI6MTc5Mzg3OTk0MCwiZXhwIjoxNzkzODgwMjQwLCJqdGkiOiJqdGlfMDAwMiJ9.NLunpOfDsIJjc9T3PUkem8BQw6WewPVA37Ff-N9HhS2l_bkTtWD171vaJz5UMgnX8qdbMJlKShCza9fxjkoeDA",
+    "grant": {
+      "id": "gr_8Hw3Zp",
+      "clientName": "Claude"
+    },
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "tools/call",
+      "params": {
+        "name": "describe_rig",
+        "arguments": {}
+      }
+    }
+  }
+}

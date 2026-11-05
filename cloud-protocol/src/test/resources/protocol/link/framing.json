@@ -1,0 +1,334 @@
+{
+  "labels": {
+    "ctl": "ctl",
+    "http": "http",
+    "ws": "ws"
+  },
+  "kinds": {
+    "HEAD": 1,
+    "DATA": 2,
+    "END": 3,
+    "RESET": 4,
+    "TEXT_PART": 16,
+    "TEXT_END": 17,
+    "BINARY_PART": 18,
+    "BINARY_END": 19,
+    "CLOSE": 32
+  },
+  "maxChunkBytes": 16384,
+  "maxHeadBytes": 65535,
+  "bufferedHighBytes": 1048576,
+  "bufferedLowThresholdBytes": 262144,
+  "strippedHeaders": [
+    "authorization",
+    "cookie",
+    "host",
+    "lighting7-link",
+    "origin",
+    "connection",
+    "keep-alive",
+    "proxy-authorization",
+    "proxy-connection",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "sec-websocket-key",
+    "sec-websocket-version",
+    "sec-websocket-extensions"
+  ],
+  "exchanges": [
+    {
+      "name": "get",
+      "label": "http",
+      "why": "A GET: the browser's head and end, the desk's head, one chunk of body and end.",
+      "frames": [
+        {
+          "from": "browser",
+          "kind": "HEAD",
+          "json": {
+            "method": "GET",
+            "path": "/api/rest/auth/status",
+            "headers": [
+              [
+                "accept",
+                "application/json"
+              ]
+            ],
+            "origin": "https://inst-01jbx3q5z8.desk.cloud.example"
+          },
+          "hex": "017b226d6574686f64223a22474554222c2270617468223a222f6170692f726573742f617574682f737461747573222c2268656164657273223a5b5b22616363657074222c226170706c69636174696f6e2f6a736f6e225d5d2c226f726967696e223a2268747470733a2f2f696e73742d30316a62783371357a382e6465736b2e636c6f75642e6578616d706c65227d"
+        },
+        {
+          "from": "browser",
+          "kind": "END",
+          "hex": "03"
+        },
+        {
+          "from": "sidecar",
+          "kind": "HEAD",
+          "json": {
+            "status": 200,
+            "headers": [
+              [
+                "content-type",
+                "application/json"
+              ]
+            ]
+          },
+          "hex": "017b22737461747573223a3230302c2268656164657273223a5b5b22636f6e74656e742d74797065222c226170706c69636174696f6e2f6a736f6e225d5d7d"
+        },
+        {
+          "from": "sidecar",
+          "kind": "DATA",
+          "text": "{\"loggedIn\":true}",
+          "hex": "027b226c6f67676564496e223a747275657d"
+        },
+        {
+          "from": "sidecar",
+          "kind": "END",
+          "hex": "03"
+        }
+      ]
+    },
+    {
+      "name": "post-chunked",
+      "label": "http",
+      "why": "A body over one chunk: the first DATA carries 16384 bytes, the next the rest.",
+      "frames": [
+        {
+          "from": "browser",
+          "kind": "HEAD",
+          "json": {
+            "method": "POST",
+            "path": "/api/rest/projects/3/prompt-book/pdf?replace=true",
+            "headers": [
+              [
+                "content-type",
+                "application/pdf"
+              ],
+              [
+                "content-length",
+                "20000"
+              ]
+            ],
+            "origin": "https://inst-01jbx3q5z8.desk.cloud.example"
+          },
+          "hex": "017b226d6574686f64223a22504f5354222c2270617468223a222f6170692f726573742f70726f6a656374732f332f70726f6d70742d626f6f6b2f7064663f7265706c6163653d74727565222c2268656164657273223a5b5b22636f6e74656e742d74797065222c226170706c69636174696f6e2f706466225d2c5b22636f6e74656e742d6c656e677468222c223230303030225d5d2c226f726967696e223a2268747470733a2f2f696e73742d30316a62783371357a382e6465736b2e636c6f75642e6578616d706c65227d"
+        },
+        {
+          "from": "browser",
+          "kind": "DATA",
+          "fill": {
+            "byte": 37,
+            "count": 16384
+          }
+        },
+        {
+          "from": "browser",
+          "kind": "DATA",
+          "fill": {
+            "byte": 37,
+            "count": 3616
+          }
+        },
+        {
+          "from": "browser",
+          "kind": "END",
+          "hex": "03"
+        },
+        {
+          "from": "sidecar",
+          "kind": "HEAD",
+          "json": {
+            "status": 204,
+            "headers": []
+          },
+          "hex": "017b22737461747573223a3230342c2268656164657273223a5b5d7d"
+        },
+        {
+          "from": "sidecar",
+          "kind": "END",
+          "hex": "03"
+        }
+      ]
+    },
+    {
+      "name": "binary-body",
+      "label": "http",
+      "why": "Body bytes are raw: no encoding, no escaping.",
+      "frames": [
+        {
+          "from": "browser",
+          "kind": "HEAD",
+          "json": {
+            "method": "GET",
+            "path": "/api/rest/projects/3/scene-images/ab12",
+            "headers": [],
+            "origin": "https://inst-01jbx3q5z8.desk.cloud.example"
+          },
+          "hex": "017b226d6574686f64223a22474554222c2270617468223a222f6170692f726573742f70726f6a656374732f332f7363656e652d696d616765732f61623132222c2268656164657273223a5b5d2c226f726967696e223a2268747470733a2f2f696e73742d30316a62783371357a382e6465736b2e636c6f75642e6578616d706c65227d"
+        },
+        {
+          "from": "browser",
+          "kind": "END",
+          "hex": "03"
+        },
+        {
+          "from": "sidecar",
+          "kind": "HEAD",
+          "json": {
+            "status": 200,
+            "headers": [
+              [
+                "content-type",
+                "image/png"
+              ]
+            ]
+          },
+          "hex": "017b22737461747573223a3230302c2268656164657273223a5b5b22636f6e74656e742d74797065222c22696d6167652f706e67225d5d7d"
+        },
+        {
+          "from": "sidecar",
+          "kind": "DATA",
+          "hex": "0289504e470d0a1a0a00"
+        },
+        {
+          "from": "sidecar",
+          "kind": "END",
+          "hex": "03"
+        }
+      ]
+    },
+    {
+      "name": "reset",
+      "label": "http",
+      "why": "The browser abandons a request part way; the channel then closes.",
+      "frames": [
+        {
+          "from": "browser",
+          "kind": "HEAD",
+          "json": {
+            "method": "POST",
+            "path": "/api/rest/projects/3/scene-images",
+            "headers": [
+              [
+                "content-type",
+                "image/png"
+              ]
+            ],
+            "origin": "https://inst-01jbx3q5z8.desk.cloud.example"
+          },
+          "hex": "017b226d6574686f64223a22504f5354222c2270617468223a222f6170692f726573742f70726f6a656374732f332f7363656e652d696d61676573222c2268656164657273223a5b5b22636f6e74656e742d74797065222c22696d6167652f706e67225d5d2c226f726967696e223a2268747470733a2f2f696e73742d30316a62783371357a382e6465736b2e636c6f75642e6578616d706c65227d"
+        },
+        {
+          "from": "browser",
+          "kind": "DATA",
+          "hex": "0289504e47"
+        },
+        {
+          "from": "browser",
+          "kind": "RESET",
+          "json": {
+            "reason": "aborted"
+          },
+          "hex": "047b22726561736f6e223a2261626f72746564227d"
+        }
+      ]
+    },
+    {
+      "name": "websocket",
+      "label": "ws",
+      "why": "A WebSocket opened, a message each way (the browser's in two fragments), an empty message, and closed by the desk with 4401.",
+      "frames": [
+        {
+          "from": "browser",
+          "kind": "HEAD",
+          "json": {
+            "path": "/api",
+            "headers": [],
+            "origin": "https://inst-01jbx3q5z8.desk.cloud.example"
+          },
+          "hex": "017b2270617468223a222f617069222c2268656164657273223a5b5d2c226f726967696e223a2268747470733a2f2f696e73742d30316a62783371357a382e6465736b2e636c6f75642e6578616d706c65227d"
+        },
+        {
+          "from": "sidecar",
+          "kind": "HEAD",
+          "json": {
+            "status": 101,
+            "headers": []
+          },
+          "hex": "017b22737461747573223a3130312c2268656164657273223a5b5d7d"
+        },
+        {
+          "from": "sidecar",
+          "kind": "TEXT_END",
+          "text": "{\"type\":\"universesState\",\"universes\":[]}",
+          "hex": "117b2274797065223a22756e697665727365735374617465222c22756e69766572736573223a5b5d7d"
+        },
+        {
+          "from": "browser",
+          "kind": "TEXT_PART",
+          "text": "{\"type\":\"fxS",
+          "hex": "107b2274797065223a22667853"
+        },
+        {
+          "from": "browser",
+          "kind": "TEXT_END",
+          "text": "tate\"}",
+          "hex": "1174617465227d"
+        },
+        {
+          "from": "sidecar",
+          "kind": "TEXT_END",
+          "text": "",
+          "hex": "11"
+        },
+        {
+          "from": "sidecar",
+          "kind": "CLOSE",
+          "json": {
+            "code": 4401,
+            "reason": "session ended"
+          },
+          "hex": "207b22636f6465223a343430312c22726561736f6e223a2273657373696f6e20656e646564227d"
+        },
+        {
+          "from": "browser",
+          "kind": "CLOSE",
+          "json": {
+            "code": 4401,
+            "reason": ""
+          },
+          "hex": "207b22636f6465223a343430312c22726561736f6e223a22227d"
+        }
+      ]
+    },
+    {
+      "name": "websocket-refused",
+      "label": "ws",
+      "why": "An upgrade the desk refuses: a head with its status, then the channel closes.",
+      "frames": [
+        {
+          "from": "browser",
+          "kind": "HEAD",
+          "json": {
+            "path": "/api",
+            "headers": [],
+            "origin": "https://elsewhere.example"
+          },
+          "hex": "017b2270617468223a222f617069222c2268656164657273223a5b5d2c226f726967696e223a2268747470733a2f2f656c736577686572652e6578616d706c65227d"
+        },
+        {
+          "from": "sidecar",
+          "kind": "HEAD",
+          "json": {
+            "status": 403,
+            "headers": []
+          },
+          "hex": "017b22737461747573223a3430332c2268656164657273223a5b5d7d"
+        }
+      ]
+    }
+  ]
+}

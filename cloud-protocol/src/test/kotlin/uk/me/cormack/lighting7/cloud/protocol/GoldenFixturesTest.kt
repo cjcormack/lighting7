@@ -23,22 +23,98 @@ import kotlin.test.assertEquals
 class GoldenFixturesTest {
     private val ts = "2026-11-02T22:18:03.000Z"
     private val authSignature = "pywOheIKHXnb67KQokXxaAntdoy26DnwVTqh9u9oKqBF6KS4fPXeCeeVEAr9yxXfcWaSvMk4iN3D4HOjQBn1CQ"
+    private val remoteOrigin = "https://inst-01jbx3q5z8.desk.cloud.example"
+    private val sid = "rs_5Tg2Lm8Qa1"
+    private val testPublicKey = fixtureJson("signing/test-key.json").jsonObject.getValue("publicKey").jsonPrimitive.content
+    private val mcpToken = fixtureJson("tokens/vectors.json").jsonObject.getValue("valid").jsonArray
+        .map { it.jsonObject }
+        .single { it.getValue("name").jsonPrimitive.content == "mcp" }
+        .getValue("token").jsonPrimitive.content
+
+    private fun sdp(sessionId: String) =
+        "v=0\r\no=- $sessionId 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\n" +
+            "m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=sctp-port:5000\r\n"
 
     private val messages: Map<String, Envelope> = mapOf(
         "challenge" to Envelope("c-0001", Message.Challenge("oN6s1kZlqH0tq3fWb2pQe8Yd4VxCjR7uTgMa9LzK5wI", "2026-11-02T22:18:02.950Z")),
         "auth" to Envelope("d-0001", Message.Auth("inst_01JBX3Q5Z8", ts, authSignature), replyTo = "c-0001"),
-        "welcome" to Envelope("c-0002", Message.Welcome("Cormack Lighting", 25), replyTo = "d-0001"),
+        "welcome" to Envelope("c-0002", Message.Welcome("Cormack Lighting", 25, remoteOrigin), replyTo = "d-0001"),
         "hello" to Envelope(
             "d-0002",
-            Message.Hello(1, "1.4.0", "windows-x64", "6f1d2c3e-8a4b-4c5d-9e6f-7a8b9c0d1e2f", "Front-of-house desk", emptyList()),
+            Message.Hello(
+                1,
+                "1.4.0",
+                "windows-x64",
+                "6f1d2c3e-8a4b-4c5d-9e6f-7a8b9c0d1e2f",
+                "Front-of-house desk",
+                listOf(Capability.REMOTE_V1, Capability.REMOTE_NO_SIDECAR),
+            ),
         ),
         "health" to Envelope("d-0003", Message.Health(3600, "1.4.0")),
         "unadopted" to Envelope("c-0003", Message.Unadopted),
         "error" to Envelope("c-0004", Message.Error(ErrorCode.PROTOCOL_ERROR, "hello came before welcome"), replyTo = "d-0002"),
+        "capabilities" to Envelope("d-0004", Message.Capabilities(listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.MCP_OFF))),
+        "jwks" to Envelope("c-0006", Message.Jwks(listOf(Jwk(kid = "test-1", x = testPublicKey)))),
+        "revoke" to Envelope("c-0007", Message.Revoke("2026-11-05T12:00:00.000Z", sid = sid)),
+        "rtc.offer" to Envelope(
+            "c-0008",
+            Message.RtcOffer(
+                sid,
+                "acc_9Pz4Rt",
+                "owner@example.com",
+                "Desk Owner",
+                sdp("4611731400430051336"),
+                listOf(
+                    IceServer(listOf("stun:turn.cloud.example:3478")),
+                    IceServer(
+                        listOf("turn:turn.cloud.example:3478?transport=udp", "turns:turn.cloud.example:443?transport=tcp"),
+                        username = "1793923200:$sid",
+                        credential = "dGVzdC1jcmVkZW50aWFs",
+                    ),
+                ),
+            ),
+        ),
+        "rtc.answer" to Envelope("d-0005", Message.RtcAnswer(sid, sdp("8273418265320916235")), replyTo = "c-0008"),
+        "rtc.ice" to Envelope(
+            "d-0006",
+            Message.RtcIce(sid, IceCandidate("candidate:1966762134 1 udp 2122260223 192.168.1.20 51472 typ host", "0", 0, "f7Kq")),
+        ),
+        "rtc.close" to Envelope("d-0007", Message.RtcClose("rs_5Tg2Lm8Qa2", ErrorCode.REMOTE_ACCESS_OFF), replyTo = "c-0009"),
+        "link.invite" to Envelope(
+            "d-0008",
+            Message.LinkInvite("inv_4Rm7Kc", "operator@example.com", "sam", "chris", "2026-11-12T12:00:00.000Z"),
+        ),
+        "link.cancelled" to Envelope("d-0009", Message.LinkCancelled("inv_4Rm7Kc")),
+        "link.refused" to Envelope("c-0010", Message.LinkRefused("inv_4Rm7Kc")),
+        "link.accepted" to Envelope("c-0011", Message.LinkAccepted("inv_4Rm7Kc", "acc_2Hs6Tv", "operator@example.com")),
+        "link.ack" to Envelope(
+            "d-0010",
+            Message.LinkAck("inv_4Rm7Kc", LinkOutcome.REFUSED, ErrorCode.LINK_EMAIL_MISMATCH),
+            replyTo = "c-0011",
+        ),
+        "link.created" to Envelope("d-0011", Message.LinkCreated("acc_2Hs6Tv", "sam")),
+        "link.removed" to Envelope("d-0012", Message.LinkRemoved("acc_2Hs6Tv")),
+        "mcp.call" to Envelope(
+            "c-0012",
+            Message.McpCall(
+                mcpToken,
+                McpGrant("gr_8Hw3Zp", "Claude"),
+                Json.parseToJsonElement("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"describe_rig","arguments":{}}}""").jsonObject,
+            ),
+        ),
+        "mcp.result" to Envelope(
+            "d-0013",
+            Message.McpResult(
+                Json.parseToJsonElement(
+                    """{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"Front wash: 6 x Hex"}],"isError":false}}""",
+                ).jsonObject,
+            ),
+            replyTo = "c-0012",
+        ),
         "unknown" to Envelope(
             "c-0005",
             Message.Unknown(
-                "rtc.offer",
+                "future.thing",
                 Json.parseToJsonElement("""{"sdp":"v=0","nested":{"candidates":[1,2,3],"trickle":true}}""").jsonObject,
             ),
         ),
@@ -102,6 +178,14 @@ class GoldenFixturesTest {
         assertEquals(KNOWN_MESSAGE_TYPES + "unknown", messages.keys, "a fixture per message type, and one unknown")
         assertEquals(messages.keys, fixtureNames("messages"), "no message fixture goes unchecked")
         assertEquals(adoption.keys, fixtureNames("adoption"), "no adoption fixture goes unchecked")
+        assertEquals(setOf("vectors"), fixtureNames("tokens"), "DeskTokensTest checks tokens/")
+        assertEquals(setOf("framing", "ctl"), fixtureNames("link"), "LinkContractsTest checks link/")
+        assertEquals(setOf("messages"), fixtureNames("remote-frame"), "LinkContractsTest checks remote-frame/")
+        assertEquals(
+            setOf("messages", "adoption", "signing", "tokens", "link", "remote-frame", "close-codes"),
+            requireNotNull(File(resource("protocol")).listFiles()).map { it.nameWithoutExtension }.toSet(),
+            "every fixture directory is one a test reads",
+        )
     }
 
     @Test
@@ -114,6 +198,12 @@ class GoldenFixturesTest {
             put("maxFrameBytes", MAX_FRAME_BYTES)
             put("protocolVersion", PROTOCOL_VERSION)
             put("clockSkewToleranceS", CLOCK_SKEW_TOLERANCE.seconds)
+            put("tokenRefusals", buildJsonObject { TokenRefusal.entries.forEach { put(it.name, it.code) } })
+            put("capabilities", Json.parseToJsonElement(Capability.ALL.joinToString(",", "[", "]") { "\"$it\"" }))
+            put("maxRelayedRequestBytes", MAX_RELAYED_REQUEST_BYTES)
+            put("rtcOfferReplyTimeoutS", RTC_OFFER_REPLY_TIMEOUT.seconds)
+            put("deskTokenMaxLifetimeS", DeskTokens.MAX_LIFETIME.seconds)
+            put("deskTokenClockSkewS", DeskTokens.CLOCK_SKEW.seconds)
         }
         assertEquals(expected, written)
         val errorCodes = ErrorCode::class.java.declaredFields

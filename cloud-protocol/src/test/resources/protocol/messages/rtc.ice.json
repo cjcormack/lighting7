@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "type": "rtc.ice",
+  "id": "d-0006",
+  "body": {
+    "sid": "rs_5Tg2Lm8Qa1",
+    "candidate": {
+      "candidate": "candidate:1966762134 1 udp 2122260223 192.168.1.20 51472 typ host",
+      "sdpMid": "0",
+      "sdpMLineIndex": 0,
+      "usernameFragment": "f7Kq"
+    }
+  }
+}

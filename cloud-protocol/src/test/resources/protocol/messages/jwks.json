@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "type": "jwks",
+  "id": "c-0006",
+  "body": {
+    "keys": [
+      {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "kid": "test-1",
+        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+      }
+    ]
+  }
+}

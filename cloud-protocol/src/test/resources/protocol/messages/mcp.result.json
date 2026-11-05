@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "type": "mcp.result",
+  "id": "d-0013",
+  "replyTo": "c-0012",
+  "body": {
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Front wash: 6 x Hex"
+          }
+        ],
+        "isError": false
+      }
+    }
+  }
+}

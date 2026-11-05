@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, no session started.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05, session 1 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -161,7 +161,8 @@ P1 is done when `FU-MANUAL-CLOUD-P1` (§6), the PRD's exit criteria, passes.
     has lost its own port: it posts `port.request` to the SPA, which asks the shell for a fresh one
     (`port.request` on its own port, answered `port`) and hands that to the worker.
 
-  Fixtures under `cloud-protocol/src/test/resources/link/` and `…/remote-frame/`, read by the sidecar's
+  Fixtures under `cloud-protocol/src/test/resources/protocol/link/` and `…/protocol/remote-frame/`
+  (inside `protocol/`, the fixture root the cloud's build already reads), read by the sidecar's
   Go tests, the SPA's Vitest and the cloud's tests alike.
 - **D9 — The SPA's remote mode is decided before the socket exists, and only on the public listener**
   (FR-RA-5). `lightingApi` builds its connection when its module is first evaluated, and `main.tsx`
@@ -307,7 +308,7 @@ and a session is added here for it.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The protocol for P1 | planned | | | |
+| 1 | The protocol for P1 | in review | `claude/cloud-p1-z6z56z` | | |
 | 2 | Bearer tokens on the public listener | planned | | | |
 | 3 | The sidecar and the broker | planned | | | |
 | 4 | The SPA in remote mode | planned | | | |
@@ -347,6 +348,18 @@ next; whoever merges the last fills its own.
 - **Tests:** `./gradlew :cloud-protocol:check` and `./gradlew check shadowJar`; token vectors computed
   with another Ed25519 implementation (Python's `cryptography`, as P0's signing vectors were).
 - **Docs:** `docs/cloud-protocol.md` for all of the above.
+- **As built:** the fixtures sit under `protocol/` with the rest (`protocol/tokens/`, `protocol/link/`,
+  `protocol/remote-frame/`), each message's named by its type (`rtc.offer.json`). Beyond the codes
+  above it defines `SESSION_ENDED` (an `rtc.close` for no other reason) and `link.ack`'s reasons,
+  `LINK_EMAIL_MISMATCH`, `LINK_INVITE_NOT_LIVE` and `LINK_TAKEN`, so session 6 adds no protocol, and the
+  desk's own refusals sessions 2 and 8 need: `TOKEN_REVOKED`, `REMOTE_SESSION_UNKNOWN`,
+  `REMOTE_SESSION_MISMATCH` and `MCP_GRANT_MISMATCH` (an `mcp.call` whose `grant.id` is not its token's
+  `gid`). A JWKS entry is a full RFC 8037 JWK, `{kty, crv, kid, x}`, every field optional on the wire, so
+  a key of another type is skipped rather than failing the frame. A token must say `typ: JWT`. A
+  `revoke` naming several targets revokes each, and covers a token whose `iat` is at or before `at`'s
+  whole second (D5's comparison, made exact). A refused `mcp.call` is answered by `error` with
+  `replyTo`, its code the refusal's. The sidecar strips `LinkFraming.STRIPPED_HEADERS` from every head
+  before setting its own `Authorization`, `Lighting7-Link` and `Origin` (D4, D7).
 
 ### Session 2 — Bearer tokens on the public listener
 

@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "type": "link.ack",
+  "id": "d-0010",
+  "replyTo": "c-0011",
+  "body": {
+    "inviteId": "inv_4Rm7Kc",
+    "outcome": "REFUSED",
+    "reason": "LINK_EMAIL_MISMATCH"
+  }
+}
