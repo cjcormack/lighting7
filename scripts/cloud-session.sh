@@ -105,9 +105,13 @@ ensure_jdk24() {
 write_conf() {
   local repo_conf="$REPO_DIR/local.conf"
   # A local.conf in the working directory wins over the data dir's (Application.kt), so one
-  # left in the repo would silently drop pull-only.
+  # left in the repo would silently drop pull-only, and with no cloud.baseUrl point the desk at
+  # the production cloud.
   if [[ -f "$repo_conf" ]] && ! grep -Eq '^[^#]*(^|[[:space:].{])push[[:space:]]*[=:][[:space:]]*"?(false|off|no|0)"?[[:space:]]*($|[#,}]|//)' "$repo_conf"; then
     die "$repo_conf overrides $DATA_DIR/local.conf and does not set sync.push = false. Delete it, or add that key."
+  fi
+  if [[ -f "$repo_conf" ]] && ! grep -Eq '^[^#]*(^|[[:space:].{])baseUrl[[:space:]]*[=:]' "$repo_conf"; then
+    die "$repo_conf overrides $DATA_DIR/local.conf and does not set cloud.baseUrl, so this desk would use the production cloud. Delete it, or add cloud { baseUrl = \"\" }."
   fi
   mkdir -p "$DATA_DIR"
   cat > "$DATA_DIR/local.conf" <<'EOF'
@@ -115,6 +119,7 @@ write_conf() {
 database { path = "" }
 mdns { enabled = false }
 sentry { environment = "cloud" }
+cloud { baseUrl = "" }
 sync {
     # Pull-only: this install must never write to a show's repo. See
     # docs/sync-engineering.md §"Pull-only installs".

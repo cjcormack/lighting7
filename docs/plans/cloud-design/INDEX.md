@@ -6,8 +6,8 @@ copy is at <https://claude.ai/artifact/J6qFr7Wc5MNATSTAxZfiHt>, private to Chris
 so the PRD itself is not copied here: each desk plan restates the requirements it implements, by ID.
 
 This folder is the design record for **every** cloud phase plan in this repo
-(`docs/plans/cloud-p0-plan.md`, and `cloud-p1-plan.md` onwards as they are written). A phase plan links
-this file; anything that applies to more than one phase lives here, not in a plan.
+(`docs/plans/completed/cloud-p0-plan.md`, and `cloud-p1-plan.md` onwards as they are written). A
+phase plan links this file; anything that applies to more than one phase lives here, not in a plan.
 
 ## The programme
 
@@ -17,7 +17,7 @@ repos. So **each phase is two plans**, one per repo, written together:
 
 | Phase | Desk plan (this repo, public) | Cloud plan (`lighting7-cloud`, private) |
 |---|---|---|
-| P0 | `docs/plans/cloud-p0-plan.md` | `docs/plans/p0-plan.md` |
+| P0 | `docs/plans/completed/cloud-p0-plan.md` (done) | `docs/plans/completed/p0-plan.md` (done) |
 | P1 | `docs/plans/cloud-p1-plan.md` | `docs/plans/p1-plan.md` |
 | … | `cloud-pN-plan.md` | `pN-plan.md` |
 

@@ -1,8 +1,10 @@
 # Lighting7 Cloud P0: the desk's foundations
 
-> **Document status: READY — decisions confirmed 2026-11-02.** The desk half of the PRD's phase P0.
-> The cloud half is `docs/plans/p0-plan.md` in `cjcormack/lighting7-cloud`. Design record:
-> [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
+> **Document status: DONE — sessions 1–6 merged (2026-11-05).** Decisions confirmed 2026-11-02. The
+> desk half of the PRD's phase P0; the phase's exit, `FU-MANUAL-CLOUD-P0` (§6), is still to run, in
+> `docs/plans/manual-validation.md`. The cloud half is `docs/plans/completed/p0-plan.md` in
+> `cjcormack/lighting7-cloud`. Design record: [`../cloud-design/INDEX.md`](../cloud-design/INDEX.md),
+> whose rules R1–R7 apply to every session here.
 
 ## 1. Context
 
@@ -165,7 +167,7 @@ or more, now means session *N* + 1.
 | 3 | The protocol module | merged | `claude/friendly-clarke-kzokhd` | [#337](https://github.com/cjcormack/lighting7/pull/337) | d891cc4 |
 | 4 | Adoption on the desk | merged | `claude/cloud-p0-s4` | [#340](https://github.com/cjcormack/lighting7/pull/340) | 6cd2e70 |
 | 5 | The control channel | merged | `claude/admiring-mendel-4myfwt` | [#341](https://github.com/cjcormack/lighting7/pull/341) | c586166 |
-| 6 | Install settings → Cloud | in review | `claude/cloud-p0-s6` | | |
+| 6 | Install settings → Cloud | merged | `claude/cloud-p0-s6` | [#347](https://github.com/cjcormack/lighting7/pull/347) | 6ac9b55 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
 *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts the

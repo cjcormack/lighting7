@@ -23,6 +23,8 @@ fun testAppConfig(vararg extra: Pair<String, String>): MapApplicationConfig {
     // that is a property of the current tests rather than a guarantee, and the file backend is
     // equivalent for anything a test could assert.
     pairs.add("sync.credentialStore" to "file")
+    // No cloud, so nothing in the suite can reach the production one.
+    pairs.add("cloud.baseUrl" to "")
     pairs.addAll(extra)
     return MapApplicationConfig(*pairs.toTypedArray())
 }

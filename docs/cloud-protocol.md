@@ -4,7 +4,7 @@
 envelope and messages, the adoption API's bodies, the close and error codes, and the install key's
 signing. It is MIT like the rest of the desk, and it is the desk's: a protocol change is a desk PR first
 (cloud design record R3). The cloud builds it from a pinned desk commit (R4). P0 is the cloud-p0 plan
-(`docs/plans/cloud-p0-plan.md`), decisions D3 to D10.
+(`docs/plans/completed/cloud-p0-plan.md`), decisions D3 to D10.
 
 Package `uk.me.cormack.lighting7.cloud.protocol`, JVM only, `kotlinx.serialization` and no Ktor: each
 side brings its own HTTP client, server and WebSocket.

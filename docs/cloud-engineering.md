@@ -2,10 +2,10 @@
 
 Lighting7 Cloud is a hosted service that desks connect out to. This doc is the desk's side: what it
 holds, how it is adopted and unadopted, the control channel it keeps open while adopted, and the
-rules that keep the cloud off the show's path. The
-wire contract is [cloud-protocol.md](cloud-protocol.md); the plan is
-[`plans/cloud-p0-plan.md`](plans/cloud-p0-plan.md), whose decisions (D1, D2, …) this doc cites. The
-code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`.
+rules that keep the cloud off the show's path. The wire contract is
+[cloud-protocol.md](cloud-protocol.md); the plan is
+[`plans/completed/cloud-p0-plan.md`](plans/completed/cloud-p0-plan.md), whose decisions (D1, D2, …)
+this doc cites. The code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`.
 
 The desk works with no cloud, no account and through any outage. Nothing here is needed to run a
 show, and nothing here may slow one down (§"Show safety").
@@ -35,11 +35,14 @@ clears `cloud_connection.adopted_by` by hand.
 
 `local.conf`'s `cloud { baseUrl, enabled }` (D13), read once at startup by `CloudConfig`:
 
-- **`baseUrl`** is the cloud. Empty means no cloud is configured: adoption answers
-  `CLOUD_NOT_CONFIGURED` and the desk calls nothing. It must be `https`, or plain `http` to a loopback
-  host (a cloud on the same machine), with no credentials, query or fragment (D12). A URL the desk
-  refuses counts as not configured, and `cloud.state`'s `lastError` says why (`CLOUD_URL_INVALID`).
-  There is no default until the production domain exists (`FU-CLOUD-DEFAULT-URL`).
+- **`baseUrl`** is the cloud, `https://lighting7.net` when absent (`CloudConfig.DEFAULT_BASE_URL`), so
+  a packaged desk needs no `local.conf` to be adopted. Empty means no cloud is configured: adoption
+  answers `CLOUD_NOT_CONFIGURED` and the desk calls nothing; the test suite's config and
+  `scripts/cloud-session.sh`'s set it so. It must be `https`, or plain `http` to a loopback host (a
+  cloud on the same machine), with no credentials, query or fragment (D12). A URL the desk refuses
+  counts as not configured, and `cloud.state`'s `lastError` says why (`CLOUD_URL_INVALID`).
+  A `local.conf` copied from `example.local.conf` between 2026-11-03 and 2026-11-05, as a packaged
+  desk's first launch copies it, says `baseUrl = ""`: delete that line to take the default.
 - **`enabled = false`** is the hard kill switch: no adoption (`CLOUD_DISABLED`), no poll, no control
   channel, no call to the cloud. The UI cannot override it.
 

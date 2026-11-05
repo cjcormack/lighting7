@@ -15,7 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
-| [`FU-MANUAL-CLOUD-P0`](#fu-manual-cloud-p0) | Lighting7 Cloud's P0 exit: each desk adopted from its Cloud tab shows Online in the portal, a running fade and FX see nothing of the cloud's app stopping and the desk is back within 30 s of its return, unadopt from either side lands on the other, and `cloud.enabled = false` connects nowhere | Cloud P0 S6, 2026-11-05 |
+| [`FU-MANUAL-CLOUD-P0`](#fu-manual-cloud-p0) | Lighting7 Cloud's P0 exit: each desk adopted from its Cloud tab shows Online in the portal, a running fade and FX see nothing of the cloud's app stopping and the desk is back within 30 s of its return, unadopt from either side lands on the other, and `cloud.enabled = false` connects nowhere — **adoption, Online and a portal removal seen 2026-11-05**; the outage, a desk unadopt and `enabled = false` still unseen | Cloud P0 S6, 2026-11-05 |
 | [`FU-MANUAL-ARTNET-TRANSPORT`](#fu-manual-artnet-transport) | a real Art-Net node lights from the desk's own ArtDMX transport as it did from artnet4j: broadcast and unicast universes, a node's status page showing the frames arriving, and a second program on the desk machine still hearing them | Cloud P0 S2, 2026-11-02 |
 | [`FU-MANUAL-MOVE-IN-DARK`](#fu-manual-move-in-dark) | movers moved in the dark on the rig: a head moves a second after it goes dark and is in place before the GO, a GO too soon and a GO TO land dark heads at once, a busk press lights a moved head and it returns, a cue *Off* and a head kept live move lit, an older show's flagged cues import on *Early*, and the stack sheet, the Cue tab, the *Dark* columns and the Stage view's rings agree with where the heads come up | Move in dark S1–S5, 2026-11-02 |
 | [`FU-MANUAL-RECORD-LOOK-AS-LAYER`](#fu-manual-record-look-as-layer) | *Record → A new Look* and *Make layer* leave the rig still: the new Look goes on top of the programmer's layers, what it took leaves *Your values*, a ticked chase keeps running without a jump, held scenery stays where it is, and a Record into a cue afterwards layers the Look | Record look as a layer, 2026-10-30 |
@@ -146,6 +146,13 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 ---
 
 ## `FU-MANUAL-CLOUD-P0`
+
+> **Partly seen, 2026-11-05.** The cloud's own operator checks *Sign-up with passkeys* and *A desk
+> online* passed against `https://lighting7.net`: a desk adopted from its Cloud tab showed *Online* in
+> the portal, went *Offline* when quit, and, removed from the portal, said so on its tab (step 1 for
+> one desk, step 3's second half). Step 5 holds: the cloud's CI is green on main at `0b100bd`, cross-tenant
+> tests included. **Still unseen:** step 1 for each desk and by the QR, step 2 (the show through a
+> cloud outage), step 3's unadopt from the desk, and step 4.
 
 **What it proves**: the PRD's P0 exit (cloud-p0 plan §6): a desk is adopted into a cloud organisation,
 stays connected to it, can leave it from either side, and runs its show exactly as before while the

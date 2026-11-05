@@ -172,7 +172,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LICENCE-TEXTS`](#fu-licence-texts) | Ready | Dist | — |
 | [`FU-LICENCE-POM-DRIFT`](#fu-licence-pom-drift) | Ready | Dist | — |
 | [`FU-CLOUD-PROTOCOL-PUBLISH`](#fu-cloud-protocol-publish) | Trigger | Dist | a third party builds against the cloud protocol |
-| [`FU-CLOUD-DEFAULT-URL`](#fu-cloud-default-url) | Blocked | Cloud | the cloud's production domain is registered (OQ-1) |
+| [`FU-CLOUD-DS-PRIMITIVES-ENTRY`](#fu-cloud-ds-primitives-entry) | Trigger | FE | the cloud's portal needs a desk primitive its alias cannot reach, or the alias breaks on a `desk.ref` move |
 | [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
 | [`FU-HISTORY-EMBEDDED-CHILD-IDS`](#fu-history-embedded-child-ids) | Trigger | History | something names an embedded child (a busk pad, a rig tile, a scenery row) by its integer id across an undo |
 | [`FU-HISTORY-MACHINE-LOCAL`](#fu-history-machine-local) | Trigger | History | a desk night asks for an undo of a machine-local setting (a universe's address) |
@@ -1965,17 +1965,20 @@ it without checking out the desk.
 golden fixtures as a test-fixtures artifact, and say in `docs/cloud-protocol.md` which version speaks
 which `PROTOCOL_VERSION`.
 
-### `FU-CLOUD-DEFAULT-URL`
+### `FU-CLOUD-DS-PRIMITIVES-ENTRY`
 
-**`cloud.baseUrl` has no default** · Blocked · cloud-p0 session 4, 2026-11-02
+**A design-system build of the UI primitives alone** · Trigger · cloud P0 (the cloud's session 3), 2026-11-04
 
-An empty `cloud.baseUrl` means no cloud is configured (cloud-p0 plan D13), so today every desk that is
-to be adopted needs the URL set in `local.conf` by hand, and the Cloud tab says so.
+The cloud's portal uses the desk's design system at its pinned `desk.ref`: the stylesheet from `npm run
+build:ds`, but the UI primitives (`components/ui/*`, `AuthScreenLayout`) from `frontend/src` through a
+Vite alias, because the build's JS barrel also carries the desk's store-bound components and opening it
+connects the desk's WebSocket.
 
-**Blocked on**: the PRD's OQ-1, the cloud's production domain.
+**Trigger**: the portal needs a primitive the alias cannot reach on its own, or a desk change breaks
+the alias when the cloud moves its pin.
 
-**Fix**: make the production URL the default in `CloudConfig.from` and `example.local.conf`, keeping an
-explicit empty `baseUrl` as "no cloud", and update `docs/cloud-engineering.md` §"Configuration".
+**Fix**: a second `build:ds` entry exporting only the primitives and their CSS, with nothing that
+imports the store or the socket, so the portal can take the build whole.
 
 ### `FU-DIST-ICONS`
 
@@ -3312,6 +3315,12 @@ than the importer.
 
 One line each: slug, what shipped, commit. Full narratives live in the commit messages and in this
 file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
+
+### 2026-11
+
+- `FU-CLOUD-DEFAULT-URL` — an absent `cloud.baseUrl` is `https://lighting7.net`, so a packaged desk can
+  be adopted with no `local.conf`; an empty one is still no cloud, and the test suite and
+  `scripts/cloud-session.sh` set it so.
 
 ### 2026-10
 
