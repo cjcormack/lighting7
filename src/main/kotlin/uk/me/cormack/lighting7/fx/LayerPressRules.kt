@@ -72,6 +72,18 @@ internal class LayerPressRules(
     fun boundHeads(unTargeted: Collection<UUID>): Map<UUID, List<CueTargetDto>?> =
         unTargeted.associateWith(::perFixtureRowTargets)
 
+    /**
+     * The heads a per-fixture palette has rows for that a press naming [pressTargets] does not reach
+     * (palette-references plan D14); empty for a generic palette.
+     */
+    fun omittedHeads(uuid: UUID, pressTargets: List<CueTargetDto>): List<String> {
+        val rowHeads = coverage.expand(perFixtureRowTargets(uuid) ?: return emptyList())
+        val pressed = coverage.expand(pressTargets).toSet()
+        return rowHeads.filterNot { head -> coverage.covers(pressed, head) || coverage.cells(head).any { it in pressed } }
+            .map { it.key }
+            .distinct()
+    }
+
     /** A palette's family, and whether it holds an effect rather than values. */
     private fun paletteKind(uuid: UUID): Pair<AttributeFamily, Boolean>? =
         paletteRegistry().snapshot(uuid)?.let { snapshot -> snapshot.familyOf()?.let { it to (snapshot.effect != null) } }

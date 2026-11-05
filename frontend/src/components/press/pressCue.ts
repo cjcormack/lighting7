@@ -18,7 +18,7 @@ export interface PressCue {
   cueLabel: string
   /** Locked, or another project's cue. */
   readOnly: boolean
-  /** The records the cue layers, keyed `LOOK:id` / `PALETTE:id` — a chip's ring ([cuePresence]). */
+  /** The records the cue layers or its rows reference, keyed `LOOK:id` / `PALETTE:id` — a chip's ring ([cuePresence]). */
   layered: ReadonlySet<string>
   /** The cue's own effects, as the editor draws them. */
   effects: readonly CueAdHocFx[]
@@ -60,7 +60,7 @@ export function useCueBandProject(): number | undefined {
 }
 
 /**
- * A chip's ring in the cue arm: lit (partly) when the cue layers the record anywhere. A cue layer
+ * A chip's ring in the cue arm: lit (partly) when the cue layers the record, or its rows reference it, anywhere. A cue layer
  * covering every pressed head is not told apart — the desk owns that coverage rule, and the press's
  * answer says which arm it took.
  */

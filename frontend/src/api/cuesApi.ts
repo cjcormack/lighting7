@@ -405,10 +405,16 @@ export interface CueLayerPressRequest {
 /** What the press did to the stored cue, and the cue as stored after it. */
 export interface CueLayerPressResponse {
   action: 'applied' | 'removed'
-  /** The other palettes' layers the press narrowed or dropped on its heads. */
+  /** The other palettes the press took off its heads. */
   released?: number
   attributeMask?: string | null
   cue: Cue
+  /**
+   * A per-fixture palette's heads the press did not name, and the pressed heads it lands nothing on
+   * (lighting7 palette-references plan D14). Optional: an older desk sends neither.
+   */
+  omitted?: string[]
+  notCovered?: string[]
 }
 
 /**

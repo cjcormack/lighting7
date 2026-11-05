@@ -117,8 +117,7 @@ internal fun storedReferenceRead(
     }
     val byHead = LinkedHashMap<String, String>()
     var unresolved: String? = null
-    for (head in heads) {
-        val resolved = references.resolve(head, attribute, uuid)
+    for ((head, resolved) in heads.flatMap { references.resolveFanned(it, attribute, uuid) }) {
         resolved.value?.let { byHead[head.targetKey] = it.serialize() }
         if (unresolved == null) unresolved = resolved.unresolved
     }

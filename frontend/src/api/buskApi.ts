@@ -245,6 +245,12 @@ export interface BuskPressResponse {
    * besides — layer siblings narrowed or dropped, cue siblings stopped. Always 0 for an off press.
    */
   released: number
+  /**
+   * A per-fixture palette's heads the press did not name, and the pressed heads it lands nothing on
+   * (lighting7 palette-references plan D14). Optional: an older desk sends neither.
+   */
+  omitted?: string[]
+  notCovered?: string[]
 }
 
 // ─── Error codes the UI branches on ─────────────────────────────────────

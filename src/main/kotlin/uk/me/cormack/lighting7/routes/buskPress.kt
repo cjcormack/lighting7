@@ -76,7 +76,7 @@ internal fun Route.routeApiRestBuskPress(state: State) {
             )
             when (outcome) {
                 is BuskPressService.Outcome.Pressed -> call.respond(
-                    BuskPressResponse(outcome.kind, outcome.action, outcome.fxCount, outcome.released),
+                    BuskPressResponse(outcome.kind, outcome.action, outcome.fxCount, outcome.released, outcome.omitted, outcome.notCovered),
                 )
                 is BuskPressService.Outcome.Refused ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
@@ -125,4 +125,8 @@ internal data class BuskPressResponse(
      * D2). Always 0 for an off press.
      */
     val released: Int = 0,
+    /** A per-fixture palette's heads the press did not name (palette-references plan D14). */
+    val omitted: List<String> = emptyList(),
+    /** Pressed heads the palette lands nothing on (D14). */
+    val notCovered: List<String> = emptyList(),
 )

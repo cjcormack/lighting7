@@ -446,7 +446,7 @@ internal fun performProgrammerUpdate(
             cue.adHocFx.filter { it.uuid.toString() in retired }.forEach { it.delete() }
             val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
                 .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
-                .withRemoved(removeClearedFromCue(cue, cleared, state.show.fixtures))
+                .withRemoved(removeClearedFromCue(cue, cleared, state.show.fixtures, state.show.paletteReferences))
             if (modeLabel == "A") {
                 val stack = state.show.programmerStore.layers
                 writtenLayerIds = stack.mapTo(HashSet()) { it.layerId }

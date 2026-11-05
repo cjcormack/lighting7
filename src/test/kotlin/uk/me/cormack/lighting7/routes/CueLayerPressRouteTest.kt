@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.PaletteFxDto
 import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -37,8 +38,9 @@ import kotlin.test.assertTrue
 
 /**
  * `POST /cues/{id}/layers/press` (apply-model plan §3.6): the programmer's press over a **stored**
- * cue's layers — per target, the family's other palettes replaced, the top layer widened, a second
- * press taking it off, the mask tested on the on arm only — written to the cue and sent nowhere.
+ * cue — per target, the family's other palettes replaced, a second press taking it off, the mask
+ * tested on the on arm only — written to the cue and sent nowhere. A value palette writes reference
+ * rows (palette-references plan D13); an effect palette and a Look are layers, the top one widened.
  */
 class CueLayerPressRouteTest : RouteIntegrationTest() {
 
@@ -54,6 +56,24 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val resp = post("$base/palettes") {
             contentType(ContentType.Application.Json)
             setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", attribute, value))))
+        }
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+        return resp.body<PaletteDto>().id
+    }
+
+    /** A palette holding one colour effect, which a press still puts on as a layer. */
+    private suspend fun HttpClient.effectPalette(name: String): Int {
+        val resp = post("$base/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                PaletteInput(
+                    name = name,
+                    fx = PaletteFxDto(
+                        fxType = "ColourCycle", family = "colour", attribute = "rgbColour",
+                        cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
+                    ),
+                ),
+            )
         }
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
         return resp.body<PaletteDto>().id
@@ -120,33 +140,45 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
             "${layer.source?.name}: ${layer.targets.joinToString(",") { it.key }}"
         }
 
+    /** The cue's reference rows as `palette: key attribute`, sorted. */
+    private suspend fun HttpClient.references(cueId: Int): List<String> {
+        val names = get("$base/palettes").body<List<PaletteDto>>().associate { "pal:${it.uuid}" to it.name }
+        return get("$base/cues/$cueId").body<CueDetails>().attributeAssignments
+            .filter { it.value.startsWith("pal:") }
+            .map { "${names[it.value] ?: it.value}: ${it.targetKey} ${it.attribute}" }
+            .sorted()
+    }
+
     @Test
-    fun `a palette pressed into a cue adds a layer, and Blue replaces Red on the pressed heads`() = testApplication {
+    fun `a palette pressed into a cue writes reference rows, and its family's others give way on the pressed heads`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
         val red = client.palette("Red")
         val blue = client.palette("Blue", "#0000ff")
+        // UV is Colour too, on an attribute Red does not name.
+        val glow = client.palette("Glow", "dmx:200", attribute = "uv")
         val q = client.cue("Q")
 
         val on = client.press(q, paletteId = red, keys = arrayOf("hex-1", "hex-2"))
         assertEquals("applied", on.action)
         assertEquals("COLOUR", on.attributeMask)
-        assertEquals(listOf("Red: hex-1,hex-2"), on.cue.layers.map { "${it.source?.name}: ${it.targets.joinToString(",") { t -> t.key }}" })
-        val redId = on.cue.layers.single().id
+        assertEquals(listOf("Red: hex-1 rgbColour", "Red: hex-2 rgbColour"), client.references(q))
+        assertTrue(on.cue.layers.isEmpty(), "a value palette adds no layer")
+        val redOnHex2 = on.cue.attributeAssignments.single { it.targetKey == "hex-2" && it.attribute == "rgbColour" }.uuid
 
-        val replaced = client.press(q, paletteId = blue, keys = arrayOf("hex-1"))
-        assertEquals(1, replaced.released)
-        assertEquals(listOf("Red: hex-2", "Blue: hex-1"), client.layers(q))
-        assertEquals(redId, replaced.cue.layers.first().id, "a narrowed layer keeps its row")
+        assertEquals("applied", client.press(q, paletteId = blue, keys = arrayOf("hex-1")).action)
+        assertEquals(listOf("Blue: hex-1 rgbColour", "Red: hex-2 rgbColour"), client.references(q), "Blue's row is written over Red's")
+        val kept = client.get("$base/cues/$q").body<CueDetails>().attributeAssignments
+        assertEquals(redOnHex2, kept.single { it.targetKey == "hex-2" && it.attribute == "rgbColour" }.uuid, "a row the press did not reach keeps its row")
 
-        // Red pressed back on hex-1 takes Blue's only head, which leaves Red's layer the top: it widens.
-        client.press(q, paletteId = red, keys = arrayOf("hex-1"))
-        assertEquals(listOf("Red: hex-2,hex-1"), client.layers(q))
+        val replaced = client.press(q, paletteId = glow, keys = arrayOf("hex-2"))
+        assertEquals(1, replaced.released, "Red is off hex-2")
+        assertEquals(listOf("Blue: hex-1 rgbColour", "Glow: hex-2 uv"), client.references(q))
     }
 
     @Test
-    fun `a second press takes it off, and a press on the top layer widens it`() = testApplication {
+    fun `a second press takes it off, head by head`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -155,12 +187,32 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
 
         client.press(q, paletteId = red, keys = arrayOf("hex-1"))
         client.press(q, paletteId = red, keys = arrayOf("hex-2"))
-        assertEquals(listOf("Red: hex-1,hex-2"), client.layers(q), "the top layer widens")
+        assertEquals(listOf("Red: hex-1 rgbColour", "Red: hex-2 rgbColour"), client.references(q))
 
         val off = client.press(q, paletteId = red, keys = arrayOf("hex-1"))
         assertEquals("removed", off.action)
-        assertEquals(listOf("Red: hex-2"), client.layers(q))
+        assertEquals(listOf("Red: hex-2 rgbColour"), client.references(q))
         assertEquals("removed", client.press(q, paletteId = red, keys = arrayOf("hex-2")).action)
+        assertTrue(client.references(q).isEmpty())
+        assertEquals(listOf("hex-1 dimmer 128"), client.get("$base/cues/$q").body<CueDetails>().attributeAssignments.map { "${it.targetKey} ${it.attribute} ${it.value}" }, "the cue's own row is untouched")
+    }
+
+    @Test
+    fun `an effect palette pressed on the top layer widens it, and a second press takes it off`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val cycle = client.effectPalette("Cycle")
+        val q = client.cue("Q")
+
+        client.press(q, paletteId = cycle, keys = arrayOf("hex-1"))
+        client.press(q, paletteId = cycle, keys = arrayOf("hex-2"))
+        assertEquals(listOf("Cycle: hex-1,hex-2"), client.layers(q), "the top layer widens")
+
+        val off = client.press(q, paletteId = cycle, keys = arrayOf("hex-1"))
+        assertEquals("removed", off.action)
+        assertEquals(listOf("Cycle: hex-2"), client.layers(q))
+        assertEquals("removed", client.press(q, paletteId = cycle, keys = arrayOf("hex-2")).action)
         assertTrue(client.layers(q).isEmpty())
     }
 

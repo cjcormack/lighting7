@@ -601,7 +601,7 @@ resolved `value`.
 | `programmer.clearAll` | `fadeMs?` | `programmer.cleared` |
 | `programmer.setBlind` | `blind: Boolean`, `fadeMs?` | `programmer.blindState` |
 | `programmer.state` | — | `programmer.state` |
-| `programmer.addLayer` | exactly one of `lookId`/`paletteId`, `targets` (a palette's only: one given for a Look, which lands whole, is refused, `programmer.error` with `code: "LOOK_LAYER_TARGETED"`), `attributeMask?`, `blendMode?`, `amount?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
+| `programmer.addLayer` | exactly one of `lookId`/`paletteId`, `targets` (a palette's only: one given for a Look, which lands whole, is refused, `programmer.error` with `code: "LOOK_LAYER_TARGETED"`), `attributeMask?`, `blendMode?`, `amount?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `fadeMs?` — a value palette refused (`programmer.error`): it is pressed as references (palette-references plan D11) | `programmer.layerState` \| `programmer.error` |
 | `programmer.removeLayer` | `layerId: Int`, `fadeMs?` | `programmer.layerState` |
 | `programmer.detachLayer` | `layerId: Int` | `programmer.layerState` — the layer's values become Local `web` values and its FX Local FX, and it comes off with nothing on stage moving (`ProgrammerLayerStack.detach`; `lighting-composition-model.md` §"Detach and Apply as values") |
 | `programmer.moveLayer` | `layerId: Int`, `toIndex: Int` | `programmer.layerState` |
@@ -1144,7 +1144,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.entryCleared` | `targetType`, `targetKey`, `attribute` | Unicast reply |
 | `programmer.cleared` | `cleared: Int`, `fxCleared: Int` | Unicast reply |
 | `programmer.blindState` | `blind: Boolean` | Unicast reply |
-| `programmer.layerState` | `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]`, `changedSinceInclude: Int` (the layers Update would write into the included cue, `ProgrammerStore.layerChangesSinceInclude`; 0 unless a cue is included) | **Broadcast** — every tab, on `layersFlow`, which also says the stack again when the include target or the layer baseline moves |
+| `programmer.layerState` | `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]`, `changedSinceInclude: Int` (the layers Update would write into the included cue, `ProgrammerStore.layerChangesSinceInclude`; 0 unless a cue is included) | **Broadcast** — every tab, on `layersFlow`, which also says the stack again when the include target or the layer baseline moves, and on `ProgrammerStore.referencesRevision`, since a value palette's ring reads its references (palette-references plan D12) |
 | `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
 | `programmer.error` | `message: String`, `code?: String` (`LOOK_LAYER_TARGETED`; absent for the rest) | Unicast reply |
 | `programmer.sceneryState` | `projectId?`, `elements: [{elementUuid, state}]`, `changedSinceInclude?` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerScenery.flow`); also the reply to `setScenery` / `clearScenery` |

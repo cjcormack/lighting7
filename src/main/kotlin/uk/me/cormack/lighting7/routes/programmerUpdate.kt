@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
+import uk.me.cormack.lighting7.fx.PaletteReferences
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.IncludedTarget
@@ -111,22 +112,17 @@ internal fun changedSinceInclude(
         if (!store.sourceHolds(entry.key())) return@filterTo true
         // Since a Record, what was recorded is the baseline; a key it did not see is new.
         if (recorded != null) {
-            return@filterTo recorded[ProgrammerStore.IncludedKey(entry.fixtureKey, entry.attribute)] !=
-                (entry.reconciledFrom ?: entry.value)
+            return@filterTo recorded[ProgrammerStore.IncludedKey(entry.fixtureKey, entry.attribute)]?.let(entry::sameAs) != true
         }
         val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.attribute)
             // New since Include — the operator adding a fixture to the cue.
             ?: return@filterTo true
-        // A plain value comparison since the `ref:` grammar retired. It used to also compare
-        // reference *identity*, because a ref resolves to exactly the literal it was included as, so
-        // a value-only test would write an untouched ref back and harden it. Nothing can hold a
-        // reference now, and the surviving half of the mechanism — an INCLUDE slot outliving later
-        // writes, so an untouched positional `"P1"` row stays `"P1"` — is unaffected.
-        //
+        // The value and the palette reference both (palette-references plan D16): a press of a
+        // palette over a literal it resolves to is a change, and so is a literal over a reference.
         // Against the slot's own value, not the bundle-reconciled one: a cue whose colour row and
         // emitter row disagree would otherwise read as changed the moment it was included, and
         // Update would rewrite a row the operator never touched.
-        included.resolved != (entry.reconciledFrom ?: entry.value)
+        !entry.sameAs(included)
     }
     // An emitter an operator's newer colour overrode must go back too, carrying the colour's
     // component — playback lets the emitter's own row win, so leaving it would play back the old W.
@@ -157,7 +153,7 @@ internal fun foldUpdateIntoRecorded(
     val store = state.show.programmerStore
     val recorded = store.recordedValues ?: return
     store.recordedValues = recorded - cleared.toSet() +
-        written.associate { ProgrammerStore.IncludedKey(it.fixtureKey, it.attribute) to (it.reconciledFrom ?: it.value) }
+        written.associate { ProgrammerStore.IncludedKey(it.fixtureKey, it.attribute) to it.baseline() }
 }
 
 /** The programmer key [this] entry was collected from. */
@@ -209,7 +205,7 @@ internal fun heldOutsideSource(state: State): Int {
 internal fun stampRecordedValues(state: State) {
     val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask = null)
     state.show.programmerStore.recordedValues = entries.associate {
-        ProgrammerStore.IncludedKey(it.fixtureKey, it.attribute) to (it.reconciledFrom ?: it.value)
+        ProgrammerStore.IncludedKey(it.fixtureKey, it.attribute) to it.baseline()
     }
 }
 
@@ -243,7 +239,21 @@ internal class StoredValueRow<R>(
     /** The fixture, cell or group the row names. */
     val targetKey: String,
     val attribute: String,
+    /** The attribute the row lands on at a head, where that is not its own: a reference row's (palette-references plan D16). */
+    val landsAs: (headKey: String) -> String? = { null },
 )
+
+/**
+ * A stored row's [StoredValueRow.landsAs] for its [value]: where a reference lands on each head, read
+ * through [references]; nothing for a literal.
+ */
+internal fun referenceLanding(fixtures: Fixtures, references: PaletteReferences?, attribute: String, value: String): (String) -> String? {
+    val uuid = PaletteReferences.uuidOf(value) ?: return { null }
+    if (references == null) return { null }
+    return { headKey ->
+        runCatching { fixtures.untypedGroupableFixture(headKey) }.getOrNull()?.let { references.resolve(it, attribute, uuid).attribute }
+    }
+}
 
 /** What deleting cleared keys does to one cue's or Look's rows. */
 internal class ClearedRemoval<R>(
@@ -272,29 +282,32 @@ internal fun <R> planClearedRemoval(
     membersOf: (groupKey: String) -> List<String>?,
 ): ClearedRemoval<R> {
     val clearedKeys = cleared.mapTo(HashSet()) { it.fixtureKey to canonicalAttributeName(it.attribute) }
+    fun StoredValueRow<R>.attributeAt(head: String) = canonicalAttributeName(landsAs(head) ?: attribute)
     val direct = rows
         .filter { it.targetType == TargetRef.Fixture.TYPE }
-        .mapTo(HashSet()) { it.targetKey to canonicalAttributeName(it.attribute) }
+        .mapTo(HashSet()) { it.targetKey to it.attributeAt(it.targetKey) }
     val delete = ArrayList<R>()
     val split = ArrayList<Pair<R, String>>()
     val handled = HashSet<Pair<String, String>>()
     val splitKeys = HashSet<Pair<String, String>>()
 
     for (stored in rows) {
-        val attribute = canonicalAttributeName(stored.attribute)
         when (stored.targetType) {
-            TargetRef.Fixture.TYPE -> if ((stored.targetKey to attribute) in clearedKeys) {
-                delete += stored.row
-                handled += stored.targetKey to attribute
+            TargetRef.Fixture.TYPE -> {
+                val key = stored.targetKey to stored.attributeAt(stored.targetKey)
+                if (key in clearedKeys) {
+                    delete += stored.row
+                    handled += key
+                }
             }
             TargetRef.Group.TYPE -> {
                 val members = membersOf(stored.targetKey) ?: continue
-                val hit = members.filter { (it to attribute) in clearedKeys }
+                val keys = members.map { it to stored.attributeAt(it) }
+                val hit = keys.filter { it in clearedKeys }
                 if (hit.isEmpty()) continue
                 delete += stored.row
-                hit.forEach { handled += it to attribute }
-                for (member in members) {
-                    val key = member to attribute
+                handled += hit
+                for ((member, key) in members.zip(keys)) {
                     if (key in clearedKeys || key in direct || !splitKeys.add(key)) continue
                     split += stored.row to member
                 }
@@ -322,11 +335,14 @@ internal fun removeClearedFromCue(
     cue: DaoCue,
     cleared: Collection<ProgrammerStore.IncludedKey>,
     fixtures: Fixtures,
+    references: PaletteReferences? = null,
 ): ClearedOutcome {
     if (cleared.isEmpty()) return ClearedOutcome()
     val assignments = cue.attributeAssignmentsInOrder()
     val plan = planClearedRemoval(
-        assignments.map { StoredValueRow(it, it.targetType, it.targetKey, it.attribute) },
+        assignments.map {
+            StoredValueRow(it, it.targetType, it.targetKey, it.attribute, referenceLanding(fixtures, references, it.attribute, it.value))
+        },
         cleared,
         groupMembersIn(fixtures),
     )

@@ -513,7 +513,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                     PalettePressLog.record(state, project.id.value, source.id)
                 }
                 call.respond(
-                    TogglePaletteResponse(outcome.action, outcome.fxCount, derivedMask, outcome.released),
+                    TogglePaletteResponse(outcome.action, outcome.fxCount, derivedMask, outcome.released, outcome.omitted, outcome.notCovered),
                 )
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
@@ -925,10 +925,14 @@ internal data class TogglePaletteResponse(
      */
     val attributeMask: String? = null,
     /**
-     * How many other palettes' layers this press took the pressed heads off — the palettes of its
-     * family and kind it replaces (apply-model D2, D6). Always 0 on a `removed`.
+     * How many other palettes this press took the pressed heads off — the palettes of its family and
+     * kind it replaces (apply-model D2, D6). Always 0 on a `removed`.
      */
     val released: Int = 0,
+    /** A per-fixture palette's heads the press did not name (palette-references plan D14). */
+    val omitted: List<String> = emptyList(),
+    /** Pressed heads the palette lands nothing on (D14). */
+    val notCovered: List<String> = emptyList(),
 )
 
 /** The editor's live panel: a draft, and optionally which heads to answer for. */

@@ -239,6 +239,8 @@ export const palettesApi = restApi.injectEndpoints({
         palette: PaletteSummary
         isGeneric: boolean
         skipped: { fixtureKey: string; attribute: string; reason: string }[]
+        /** How many programmer values `asReference` made references to the new palette. */
+        referenced?: number
       },
       {
         projectId: number
@@ -247,6 +249,8 @@ export const palettesApi = restApi.injectEndpoints({
         mask: AttributeFamily[]
         targets: PaletteTarget[]
         source?: 'TOUCHED' | 'ALL' | 'STAGE_SNAPSHOT'
+        /** *Use it on these heads* (palette-references plan D15): the recorded values become references to it. */
+        asReference?: boolean
       }
     >({
       query: ({ projectId, ...body }) => ({

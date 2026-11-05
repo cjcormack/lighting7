@@ -1834,6 +1834,8 @@ class ProjectRoundTripTest {
             exportDirA.resolve("formatVersion.json"),
             Files.readString(exportDirB.resolve("formatVersion.json")),
         )
+        // And its plain palette layers, which a pre-v47 import stores as reference rows (D17).
+        uk.me.cormack.lighting7.testsupport.convertPaletteLayers(exportDirA)
         assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
     }
 

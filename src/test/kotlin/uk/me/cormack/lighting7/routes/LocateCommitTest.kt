@@ -14,6 +14,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.ProgrammerValue
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LayerSource
@@ -182,10 +183,13 @@ class LocateCommitTest : RouteIntegrationTest() {
         seedHex("hex-b", 20)
         state.show.fixtures.patchListChanged()
         val blue = client.createPalette("Blue", "#0000ff")
-        client.press(blue, "hex-b")
+        // A layer of the palette, as `programmer.addLayer` puts one on: a press would write references.
+        val (layer) = state.show.programmerLayerStack.add(
+            LayerSource.palette(blue, paletteUuid(client, blue), "Blue"),
+            targets = listOf(CueTargetDto("fixture", "hex-b")),
+        )
         assertTrue(toggle(client, "fixture", "hex-a").active)
 
-        val layer = state.show.programmerStore.layers.single()
         state.show.programmerLayerStack.patch(
             layer.layerId,
             targets = listOf(CueTargetDto("fixture", "hex-a"), CueTargetDto("fixture", "hex-b")),
@@ -198,7 +202,7 @@ class LocateCommitTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `widening a pressed palette onto another fixture leaves a located one it already held alone`() = testApplication {
+    fun `pressing a palette onto another fixture leaves a located one it already held alone`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-a", 1)
@@ -210,7 +214,7 @@ class LocateCommitTest : RouteIntegrationTest() {
 
         client.press(red, "hex-b")
 
-        assertEquals(1, state.show.programmerStore.layers.size, "the press widened the one layer")
+        assertEquals(paletteUuid(client, red), referencedPalette("hex-b", "rgbColour"), "the press references Red on hex-b")
         assertEquals(listOf(LocateTargetDto("fixture", "hex-a")), located(client))
         assertEquals(255u.toUByte(), programmerChannel(state, 0, 6), "hex-a keeps Locate's white")
         assertEquals(255u.toUByte(), programmerChannel(state, 0, 21), "hex-b is red")
@@ -261,6 +265,10 @@ class LocateCommitTest : RouteIntegrationTest() {
         .mapNotNull { state.show.programmerStore.get(it.fixtureKey, it.attribute)?.owner }
         .filter { it != ProgrammerOwner.LAYERS }
         .also { assertTrue(it.isNotEmpty(), "the programmer holds $key") }
+
+    /** The palette the winning slot on [key]/[attribute] references, or null. */
+    private fun referencedPalette(key: String, attribute: String): UUID? =
+        (state.show.programmerStore.get(key, attribute)?.value as? ProgrammerValue.Reference)?.paletteUuid
 
     private suspend fun located(client: HttpClient): List<LocateTargetDto> =
         client.get("/api/rest/locate").body<LocateStateResponse>().targets

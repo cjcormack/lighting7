@@ -770,7 +770,11 @@ live state are not repeated: the client has them from the stack list, `cueRunSta
 
 - **`layers`**, in layer order (`sortOrder`, then id): `{id, source: {kind, id, uuid, name,
   families}, targets, heads, sortOrder, rank, enabled, amount, blendMode, attributeMask, stomp, timed,
-  delayMs, intervalMs, randomWindowMs, speedMasterUuid, rateSpeedMasterUuid}`. `rank` is the layer's
+  delayMs, intervalMs, randomWindowMs, speedMasterUuid, rateSpeedMasterUuid, reference?}`. A value
+  palette the cue holds as reference rows (palette-references plan D13) reads as one more entry per
+  palette, `reference: true`, id `-paletteId`, ranked above the stored layers since a cue's rows beat
+  them, its targets the rows' (none for a per-fixture palette, which fills its own-heads cell) and no
+  settings of its own. `rank` is the layer's
   place among **every** stored layer of the cue, from 1 at the bottom, so a layer whose source is gone
   — left out of the list — still holds its place and the ranks above it do not shift. `families` is a
   Look's `derivedFamilyGroups` (its rows' attributes and its FX's families) or a palette's
@@ -842,7 +846,7 @@ and every cue an op names must have an entry in this stack. **Nothing is sent to
 | Op | Does |
 |---|---|
 | `layerOn {cueId, source: {kind, id}, target?, settingsFrom?}` | The cue editor's press (`decideCueLayerPress`, shared with `POST /cues/{id}/layers/press`, not copied) of a palette on one target — or none, its own heads — or of a Look, whole: an op naming a target for a Look is refused, `LOOK_LAYER_TARGETED`. It takes `settingsFrom`'s settings (D6): a layer of the same record in this stack as the batch found it, so one an earlier op took off still lends them. Else a fresh press's. A new layer goes on top; the top layer of the record is widened where it carries the same settings, keeping its own identity. A cell already on is left alone |
-| `layerOff {cueId, source, target?}` | The off press; a Look's takes every layer of it off. A cell already off is left alone |
+| `layerOff {cueId, source, target?}` | The off press; a Look's takes every layer of it off. A cell already off is left alone. A **value** palette's `layerOn` / `layerOff` write and remove its reference rows instead (`pressValuePaletteInCue`, as the cue editor's press does), `settingsFrom` naming nothing for it |
 | `layerSettings {cueId, layerId, fields}` | The Looks tab's fields: `enabled`, `amount` (0–1), `blendMode`, `attributeMask` (a comma list, or null), `stomp`, `delayMs`, `intervalMs`, `randomWindowMs`, `speedMasterUuid`, `rateSpeedMasterUuid` (a project's master, or null). An unknown field is a problem |
 | `replace {cueIds, from, to, keepSettings}` | In each cue holding `from` (a palette's layer naming its target, or none for its own heads; any layer of a Look, which names no target — one naming any is refused, `LOOK_LAYER_TARGETED`): where the cue lacks `to`, `from` comes off and `to` goes on with `from`'s settings **where `from` was** (`keepSettings`; a palette's mask is its family), else on top with a press's defaults; where the cue already has `to`, `from` comes off. Still the press, so a palette arriving takes its family's others off its heads |
 | `fxOn {cueId, fromFxUuid}` | Copies an ad-hoc FX row of one of this stack's cues into the cue, on top of its FX, with a uuid of its own (D6). The copy takes the source's run key; a source with none is given a fresh one and the copy shares it, so the two are one run (D7). A source an earlier op deleted is copied as the batch found it. Only the copy is checked and written, so a stale FX the cue already holds cannot refuse it. A cue already filling the column — an FX of the same `CueFxKey` — is left alone |
@@ -850,10 +854,10 @@ and every cue an op names must have an entry in this stack. **Nothing is sent to
 | `breakRun {cueId, fxUuid, entryId?}` | A fresh run key for the cell and the cells of its run below it: down the stack's cue entries from the place `entryId` names (else the cue's first), markers passed over, while the column's cell (the cue's first FX of that `CueFxKey`) still carries the old key. A cell in no run has nothing to break |
 | `joinRun {cueId, fxUuid, entryId?}` | The key of the cell directly above in the column — the cue entry above that place, markers passed over — for the cell and the rest of its run below; where that cell has no key it is given a fresh one, which is how an FX stored before run keys joins (C5). Refused when that cell is empty: a run joins neighbours only, so a key taken across a gap would join nothing |
 | `scenerySet {cueId, elementUuid, state, transitionMs?}` / `sceneryClear {cueId, elementUuid}` | One element's change, checked by `parseSceneryList` with the rest of the cue's list and written by `replaceCueScenery`; a clear hands the cue back to tracking |
-| `restore {cueId, layers, adHocFx, scenery}` | Undo (P5): the cue put back exactly as an answer's `before` holds it — `writeCueChildren(restore = true)` pairs layers and FX by uuid rather than key, so a row an edit deleted comes back with its uuid, and an FX with its run key; scenery by `replaceCueScenery`'s uuids. Stored orders are kept where they order the rows on their own, else renumbered by place |
+| `restore {cueId, layers, adHocFx, scenery, attributeAssignments?}` | Undo (P5): the cue put back exactly as an answer's `before` holds it — `writeCueChildren(restore = true)` pairs layers and FX by uuid rather than key, so a row an edit deleted comes back with its uuid, and an FX with its run key, as does one of the cue's own rows; scenery by `replaceCueScenery`'s uuids; absent rows are left as they are. Stored orders are kept where they order the rows on their own, else renumbered by place |
 
 The answer is `{changed, released: [{cueId, source, targets}], before: [{cueId, layers, adHocFx,
-scenery}], edited}`: the cues whose layers, FX or scenery changed (compared whole, uuids
+scenery, attributeAssignments}], edited}`: the cues whose layers, FX, scenery or own rows changed (compared whole, uuids
 included), each press's knock-on — another record's layers it narrowed or dropped, named on the
 pressed targets — each changed cue as the batch found it (what Undo sends back as `restore` ops), and
 the held cues whose `stageContent` changed, which are marked edited since GO (`CueHolds.markEdited`).

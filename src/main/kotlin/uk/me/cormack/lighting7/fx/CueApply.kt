@@ -475,8 +475,7 @@ internal fun buildCueAssignmentsForCue(
                 continue
             }
             val heads = members.ifEmpty { listOf(referenceFixture) }
-            for (head in heads) {
-                val resolved = references.resolve(head, canonical, paletteUuid)
+            for ((head, resolved) in heads.flatMap { references.resolveFanned(it, canonical, paletteUuid) }) {
                 val value = resolved.value ?: continue
                 val (headCategory, headOverride) = fixtureCategoryFor(head, resolved.attribute) ?: continue
                 out.add(row(head.targetKey, head, isGroup = members.isNotEmpty(), headCategory, headOverride, value, resolved.attribute).copy(reference = paletteUuid))

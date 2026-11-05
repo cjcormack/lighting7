@@ -284,7 +284,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `apply_palette puts on a layer that toggles, or literals with asValues`() {
+    fun `apply_palette puts references on that toggle, or literals with asValues`() {
         patchRig()
         ok("create_palette", """{"name":"Half","rows":[{"attribute":"dimmer","value":"pct:50"}]}""")
 
@@ -308,9 +308,12 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         val on = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}]}""")
         assertEquals("applied", on["action"]!!.jsonPrimitive.content)
         assertEquals(listOf(128, 128), listOf(level(1), level(2)))
-        val layers = ok("get_current_state", """{"include":["programmer"]}""")["programmer"]!!.jsonObject["layers"]!!.jsonArray
-        assertEquals("Half", layers.single().jsonObject["sourceName"]!!.jsonPrimitive.content)
-        assertEquals("PALETTE", layers.single().jsonObject["sourceKind"]!!.jsonPrimitive.content, "Claude reads palette, not the stored kind")
+        val layers = ok("get_current_state", """{"include":["programmer"]}""")["programmer"]!!.jsonObject["layers"]?.jsonArray.orEmpty()
+        assertTrue(layers.isEmpty(), "a value palette is pressed as references, not a layer")
+        val referenced = state.show.programmerStore.entries()
+            .filter { (it.slots.first().value as? uk.me.cormack.lighting7.fx.ProgrammerValue.Reference) != null }
+            .map { it.fixtureKey }.toSet()
+        assertEquals(setOf("foh-1", "foh-2"), referenced)
         val off = ok("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}]}""")
         assertEquals("removed", off["action"]!!.jsonPrimitive.content)
         assertEquals(listOf(0, 0), listOf(level(1), level(2)))

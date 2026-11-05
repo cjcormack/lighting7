@@ -131,6 +131,26 @@ it('selectedLayers names each layer once, and sharedValue says mixed where they 
   expect(sharedValue(layers.map((l) => l.layer.blendMode))).toBe('OVERRIDE')
 })
 
+it('selectedLayers leaves out a value palette’s reference rows, which have no settings of their own', () => {
+  const timeline: StackTimeline = { stackId: 1, entries: [entry(101, { layers: [layer(-7, { reference: true })] }), entry(102)] }
+  const order = timeline.entries.map((e) => ({ entryId: e.entryId, cueId: e.cueId! }))
+  const columnList = columns(timeline, NAMES)
+  const byId = new Map(columnList.map((c) => [c.id, c]))
+  expect(selectedLayers(order, cells(timeline, columnList), byId, [{ entryId: 101, columnId: PALETTE }])).toEqual([])
+  const stored: StackTimeline = { ...timeline, entries: [entry(101, { layers: [layer(11)] }), entry(102)] }
+  expect(selectedLayers(order, cells(stored, columnList), byId, [{ entryId: 101, columnId: PALETTE }])).toHaveLength(1)
+})
+
+it('onOp copies no settings from a value palette’s reference rows', () => {
+  const timeline: StackTimeline = { stackId: 1, entries: [entry(101, { layers: [layer(-7, { reference: true })] }), entry(102)] }
+  const order = timeline.entries.map((e) => ({ entryId: e.entryId, cueId: e.cueId! }))
+  const columnList = columns(timeline, NAMES)
+  const column = new Map(columnList.map((c) => [c.id, c])).get(PALETTE)!
+  expect(toggleOps(order, cells(timeline, columnList), column, 102)).toEqual([
+    { op: 'layerOn', cueId: 2, source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: null },
+  ])
+})
+
 it('cueRangeWords names a block as a range and anything else as a list', () => {
   const label = (id: number) => `Q${id}`
   expect(cueRangeWords(ORDER, [3], label)).toBe('Q3')

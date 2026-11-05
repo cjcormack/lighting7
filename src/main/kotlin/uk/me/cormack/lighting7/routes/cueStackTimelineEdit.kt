@@ -26,6 +26,8 @@ import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.LayerPress
 import uk.me.cormack.lighting7.fx.LayerPressRules
+import uk.me.cormack.lighting7.fx.PaletteReferences
+import uk.me.cormack.lighting7.fx.PaletteSnapshot
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.fx.toAttributeMask
@@ -40,6 +42,10 @@ import java.util.UUID
  * name must have an entry in this stack. **Nothing is sent to the stage**: a held cue whose
  * `stageContent` changed is marked edited since GO, which *Update stage* or its next GO lands.
  *
+ * - A **value** palette's `layerOn` / `layerOff` / `replace` write and remove the cue's reference
+ *   rows ([CueReferencePress], palette-references plan D13), as the cue editor's press does; the
+ *   read shows them as one row per palette, `reference: true`. What follows is an FX palette's and
+ *   a Look's.
  * - `layerOn` / `layerOff` are the cue editor's press ([decideCueLayerPress], shared, not copied):
  *   per target, the family's other palettes taken off the pressed heads (D5), the record's top
  *   layer widened where it carries the arriving layer's settings. `layerOn` takes the settings of
@@ -55,7 +61,7 @@ import java.util.UUID
  *   marks a held cue edited (P4) — but a held cue's running FX take the key they now have, since
  *   that is what its next GO hands a run on by.
  * - `scenerySet` / `sceneryClear` write one element's change, checked as every scenery list is.
- * - `restore` is Undo (P5): a cue's layers, effects and scenery put back exactly as an answer's
+ * - `restore` is Undo (P5): a cue's layers, effects, scenery and own rows put back exactly as an answer's
  *   `before` holds them, uuids and run keys included.
  *
  * The answer names the cues that changed, what each press released, each changed cue as the batch
@@ -144,7 +150,11 @@ internal fun editTimeline(state: State, project: DaoProject, stackId: Int, reque
     return transaction(state.database) {
         val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id }
             ?: return@transaction TimelineEditOutcome.NotFound
-        val batch = TimelineBatch(project, stack, rules, coverage, isHeld = holds::isHeld, registry = state.show.fxRegistry)
+        val batch = TimelineBatch(
+            project, stack, rules, coverage, isHeld = holds::isHeld, registry = state.show.fxRegistry,
+            references = CueReferencePress.of(state, rules, coverage),
+            valuePalette = { uuid -> state.show.paletteRegistry.snapshot(uuid)?.takeIf { it.effect == null } },
+        )
         request.ops.forEachIndexed { index, raw -> batch.run(index, raw) }
         val outcome = if (batch.problems.isNotEmpty()) TimelineEditOutcome.Invalid(batch.problems) else TimelineEditOutcome.Edited(batch.answer())
         if (outcome !is TimelineEditOutcome.Edited || request.dryRun) TransactionManager.current().rollback()
@@ -160,6 +170,8 @@ private class TimelineBatch(
     private val coverage: TargetCoverage,
     private val isHeld: (Int) -> Boolean,
     private val registry: FxRegistry,
+    private val references: CueReferencePress,
+    private val valuePalette: (UUID) -> PaletteSnapshot?,
 ) {
     val problems = mutableListOf<TimelineEditProblem>()
 
@@ -281,11 +293,14 @@ private class TimelineBatch(
         if (cues.any { it == null }) return
         for (cue in cues.filterNotNull()) {
             val layers = layersOf(cue)
-            val fromLayer = layers.lastOrNull { it.fills(from, fromTarget) } ?: continue
+            if (!fills(cue, layers, from, fromTarget)) continue
+            val fromLayer = layers.lastOrNull { it.fills(from, fromTarget) }
             when {
-                layers.any { it.fills(to, toTarget) } ->
+                fills(cue, layers, to, toTarget) ->
                     press(cue, from, listOfNotNull(fromTarget), on = false, settings = null, problem)
-                op.keepSettings -> replaceInPlace(cue, layers, fromLayer, from, fromTarget, to, toTarget, problem)
+                // A value palette is rows, not a layer, so there is no place and no settings to keep.
+                op.keepSettings && fromLayer != null && paletteOf(to) == null ->
+                    replaceInPlace(cue, layers, fromLayer, from, fromTarget, to, toTarget, problem)
                 else -> {
                     press(cue, from, listOfNotNull(fromTarget), on = false, settings = null, problem)
                     press(cue, to, listOfNotNull(toTarget), on = true, settings = null, problem)
@@ -478,6 +493,7 @@ private class TimelineBatch(
         writeCueChildren(
             cue,
             adHocFx = inListOrder(op.adHocFx, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) },
+            attributeAssignments = op.attributeAssignments,
             layers = inListOrder(op.layers, { it.sortOrder }) { layer, i -> layer.copy(sortOrder = i) },
             restore = true,
             registry = registry,
@@ -496,6 +512,7 @@ private class TimelineBatch(
      * the cue as it is.
      */
     private fun press(cue: DaoCue, record: PressedRecord.Found, targets: List<CueTargetDto>, on: Boolean, settings: CueLayerDto?, problem: (String) -> Unit) {
+        paletteOf(record)?.let { palette -> return pressRows(cue, record as PressedRecord.Palette, palette, targets, on, problem) }
         val layers = layersOf(cue)
         val decided = decide(record, targets, layers, settings, problem) ?: return
         val result = decided.result
@@ -503,6 +520,44 @@ private class TimelineBatch(
         if (result is LayerPress.Result.Applied) noteReleased(cue, layers, result.layers, record.source, decided.arriving.targets)
         write(cue, result.layers)
     }
+
+    /** A value palette's press as the cue's reference rows (palette-references plan D13), written on the arm the op asked for. */
+    private fun pressRows(
+        cue: DaoCue,
+        record: PressedRecord.Palette,
+        palette: PaletteSnapshot,
+        targets: List<CueTargetDto>,
+        on: Boolean,
+        problem: (String) -> Unit,
+    ) {
+        if (targets.isEmpty() && record.generic) return problem("This palette needs a selection to press onto")
+        val pressed = pressValuePaletteInCue(palette, targets, rowsOf(cue), layersOf(cue), references, rules, coverage)
+        val result = pressed.rows
+        if (result.applied != on) return
+        touch(cue)
+        writeCueChildren(cue, attributeAssignments = result.rows, layers = pressed.layers, registry = registry)
+        for (uuid in result.released) {
+            val other = paletteInProject(project.id, uuid) ?: continue
+            released += TimelineReleasedDto(cue.id.value, LayerSource.palette(other.id.value, other.uuid, other.name).toDto(), result.targets)
+        }
+    }
+
+    /** The value palette [record] is, or null for a Look, an FX palette or one not loaded. */
+    private fun paletteOf(record: PressedRecord.Found): PaletteSnapshot? =
+        if (record is PressedRecord.Palette) valuePalette(record.source.uuid) else null
+
+    /**
+     * Whether [cue] fills [record]'s cell of [target]: a layer of it ([fills]), or — for a value
+     * palette — a reference row to it on [target], or on any target for its own heads.
+     */
+    private fun fills(cue: DaoCue, layers: List<CueLayerDto>, record: PressedRecord.Found, target: CueTargetDto?): Boolean {
+        if (layers.any { it.fills(record, target) }) return true
+        val palette = paletteOf(record) ?: return false
+        val value = PaletteReferences.valueOf(palette.paletteUuid)
+        return rowsOf(cue).any { it.value == value && (target == null || (it.targetType == target.type && it.targetKey == target.key)) }
+    }
+
+    private fun rowsOf(cue: DaoCue): List<CueAttributeAssignmentDto> = cue.attributeAssignmentsInOrder().map { it.toDto() }
 
     private fun decide(
         record: PressedRecord.Found,
@@ -698,6 +753,7 @@ private fun snapshotOf(cue: DaoCue) = TimelineCueSnapshotDto(
     layers = cue.layersInOrder().mapNotNull { it.toDto() },
     adHocFx = cue.adHocFxInOrder().map { it.toDto() },
     scenery = cueSceneryOf(cue.id).map { it.toDto() },
+    attributeAssignments = cue.attributeAssignmentsInOrder().map { it.toDto().copy(uuid = it.uuid.toString()) },
 )
 
 /** A stored change back in a scenery list's item shape, its uuid beside it. */
@@ -772,6 +828,8 @@ internal data class RestoreOp(
     val layers: List<CueLayerDto>,
     val adHocFx: List<CueAdHocFxDto>,
     val scenery: List<JsonObject>,
+    /** The cue's own rows, which a value palette's press writes (palette-references plan D13); absent leaves them. */
+    val attributeAssignments: List<CueAttributeAssignmentDto>? = null,
 )
 
 @Serializable
@@ -805,4 +863,5 @@ internal data class TimelineCueSnapshotDto(
     val layers: List<CueLayerDto>,
     val adHocFx: List<CueAdHocFxDto>,
     val scenery: List<SceneryChangeDto>,
+    val attributeAssignments: List<CueAttributeAssignmentDto> = emptyList(),
 )

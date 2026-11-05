@@ -1438,6 +1438,10 @@ class State(val config: ApplicationConfig) {
         // column. `MoveInDarkRowFlagMigration.kt`.
         MoveInDarkRowFlagMigration.runIfNeeded(ds, database, dbPath)
 
+        // palette-references plan step 10: every plain cue palette layer as reference rows on its cue,
+        // backed up first when one converts. After step 9. `PaletteLayerMigration.kt`.
+        PaletteLayerMigration.runIfNeeded(ds, database, dbPath)
+
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database
     }

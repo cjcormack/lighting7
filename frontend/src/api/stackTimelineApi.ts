@@ -46,6 +46,12 @@ export interface TimelineLayer {
   randomWindowMs?: number | null
   speedMasterUuid: string | null
   rateSpeedMasterUuid: string | null
+  /**
+   * A value palette's reference rows in the cue, drawn as one row per palette (lighting7
+   * palette-references plan D13), not a stored layer: it has no settings to write. Absent from an
+   * older desk.
+   */
+  reference?: boolean
 }
 
 export interface TimelineFx {
@@ -109,6 +115,8 @@ export interface TimelineCueSnapshot {
   layers: Record<string, unknown>[]
   adHocFx: Record<string, unknown>[]
   scenery: Record<string, unknown>[]
+  /** The cue's own rows, which a value palette's press writes; absent from an older desk. */
+  attributeAssignments?: Record<string, unknown>[]
 }
 
 /**

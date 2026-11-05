@@ -814,6 +814,7 @@ internal fun writeCueChildren(
                     targetType = row.targetType
                     targetKey = row.targetKey
                     take(row)
+                    if (restore) row.uuid?.let { uuid = UUID.fromString(it) }
                 }
             }
         }

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.plugins
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.CommandIndex
 
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.EncodeDefault
@@ -850,6 +851,18 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
             )
         }
     }) { scope.send(it) }
+    // A value palette's press writes references, not layers (palette-references plan D12), so the
+    // rings the layer frame carries move without a layer moving: say the frame again.
+    scope.subscribeShow({ show ->
+        show.programmerStore.referencesRevision.drop(1).map {
+            val layers = show.programmerStore.layers
+            ProgrammerLayerStateOutMessage(
+                layers.map { it.toDto() },
+                show.programmerLayerStack.appliedState(layers).map { it.toDto() },
+                show.programmerStore.layerChangesSinceInclude(layers),
+            )
+        }
+    }) { scope.send(it) }
     scope.subscribeShow({ show ->
         val skippedProvenance = SkippedFrames("provenanceState")
         show.fxEngine.provenance.flow.map { update ->
@@ -1419,6 +1432,10 @@ object ProgrammerHandler {
             return ProgrammerErrorOutMessage(it)
         }
         if (source.kind == LayerSourceKind.LOOK && message.targets.isNotEmpty()) return lookLayerTargeted("programmer.addLayer")
+        // A value palette is pressed as references (palette-references plan D11), never a new layer.
+        if (source.isPalette && state.show.paletteRegistry.snapshot(source.uuid)?.effect == null) {
+            return ProgrammerErrorOutMessage("'${source.name}' is a value palette: press it to put references to it on the selection")
+        }
 
         state.show.programmerLayerStack.add(
             source = source,

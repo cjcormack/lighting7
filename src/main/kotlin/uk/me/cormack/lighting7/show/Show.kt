@@ -228,6 +228,7 @@ class Show(
         store = programmerStore,
         state = { state },
         onLanded = { keys -> landOnLocates(keys) },
+        references = { paletteReferences },
     )
 
     /** The show's speed-master clocks; slot 0 is master 1 (the global tempo). */

@@ -6,7 +6,17 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.KSerializer
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.state.PaletteLayerConversion
 import uk.me.cormack.lighting7.sync.LegacyNames
+import uk.me.cormack.lighting7.sync.dto.CueAttributeAssignmentJson
+import uk.me.cormack.lighting7.sync.dto.CueLayerJson
+import uk.me.cormack.lighting7.sync.dto.FixtureGroupJson
+import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
+import uk.me.cormack.lighting7.sync.dto.LookJson
+import uk.me.cormack.lighting7.sync.dto.PaletteJson
 import uk.me.cormack.lighting7.sync.RecordHasher
 import uk.me.cormack.lighting7.sync.canonicalDecode
 import uk.me.cormack.lighting7.sync.canonicalEncode
@@ -172,5 +182,76 @@ fun liftRowMoveInDark(archive: Path) {
         val cue = canonicalJson.parseToJsonElement(Files.readString(file)) as JsonObject
         if ((cue["uuid"] as? JsonPrimitive)?.content !in flagged) return@forEach
         Files.writeString(file, canonicalEncode(JsonElement.serializer(), JsonObject(cue + ("moveInDarkMode" to JsonPrimitive("EARLY")))))
+    }
+}
+
+/**
+ * [archive], an archive below v47 in today's field names, as the importer stores it
+ * (palette-references plan D17): each cue's plain palette layers become reference rows by
+ * [PaletteLayerConversion.decide], judged over the archive's own patches and groups, and their
+ * `cueLayers` records go.
+ */
+fun convertPaletteLayers(archive: Path) {
+    fun <T> records(folder: String, serializer: KSerializer<T>): List<Pair<Path, T>> {
+        val dir = archive.resolve(folder)
+        if (!Files.isDirectory(dir)) return emptyList()
+        return Files.list(dir).use { it.toList() }.filter { it.toString().endsWith(".json") }.sorted()
+            .map { it to canonicalDecode(serializer, Files.readString(it)) }
+    }
+    val patches = records("fixturePatches", FixturePatchJson.serializer()).map { it.second }
+    val keyOf = patches.associate { it.uuid to it.key }
+    val typeOf = patches.associate { it.key to it.fixtureTypeKey }
+    val groups = records("fixtureGroups", FixtureGroupJson.serializer()).associate { (_, group) ->
+        group.name to group.members.sortedBy { it.sortOrder }.mapNotNull { keyOf[it.fixturePatchUuid] }
+    }
+    val palettes = records("palettes", PaletteJson.serializer()).associate { (_, palette) ->
+        palette.uuid to PaletteLayerConversion.Palette(
+            UUID.fromString(palette.uuid), palette.name, palette.fx != null,
+            palette.rows.sortedBy { it.sortOrder }.map {
+                PaletteLayerConversion.PaletteRow(if (it.targetType == DEFERRED_TARGET_TYPE) null else it.targetKey, it.attribute)
+            },
+            palette.fadeDurationMs,
+        )
+    }
+    val looks = records("looks", LookJson.serializer()).associate { (_, look) ->
+        look.uuid to PaletteLayerConversion.Look(
+            look.name,
+            look.rows.mapNotNull { row -> TargetRef.ofOrNull(row.targetType, row.targetKey)?.let { PaletteLayerConversion.LookRow(it, row.elementKey, row.attribute) } },
+        )
+    }
+    val rows = records("cueAttributeAssignments", CueAttributeAssignmentJson.serializer()).map { it.second }
+    val rig = object : PaletteLayerConversion.Rig {
+        override fun members(group: String): List<String>? = groups[group]
+
+        override fun familyOf(head: String, attribute: String) = PaletteLayerConversion.typeFamily(typeOf[head], attribute)
+    }
+    for ((cue, layers) in records("cueLayers", CueLayerJson.serializer()).groupBy { it.second.cueUuid }) {
+        val own = rows.filter { it.cueUuid == cue }
+        val decision = PaletteLayerConversion.decide(
+            PaletteLayerConversion.Cue(
+                cue,
+                layers.mapIndexed { index, (_, layer) ->
+                    PaletteLayerConversion.Layer(
+                        id = index, uuid = UUID.fromString(layer.uuid), sortOrder = layer.sortOrder,
+                        look = layer.lookUuid?.let { looks[it] }, palette = layer.paletteUuid?.let { palettes[it] },
+                        enabled = layer.enabled, targets = layer.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) },
+                        mask = layer.attributeMask, blendMode = layer.blendMode, amount = layer.amount, stomp = layer.stomp,
+                        delayed = layer.delayMs != null, interval = layer.intervalMs != null, randomWindow = layer.randomWindowMs != null,
+                    )
+                },
+                own.mapNotNull { row -> TargetRef.ofOrNull(row.targetType, row.targetKey)?.let { PaletteLayerConversion.OwnRow(it, row.attribute) } },
+                nextSortOrder = (own.maxOfOrNull { it.sortOrder } ?: -1) + 1,
+            ),
+            rig,
+        )
+        for (row in decision.rows) {
+            val json = CueAttributeAssignmentJson(
+                uuid = row.uuid.toString(), cueUuid = cue, targetType = row.target.discriminator, targetKey = row.target.key,
+                attribute = row.attribute, value = row.value, sortOrder = row.sortOrder, fadeDurationMs = row.fadeMs,
+            )
+            val dir = Files.createDirectories(archive.resolve("cueAttributeAssignments"))
+            Files.writeString(dir.resolve("${row.uuid}.json"), canonicalEncode(CueAttributeAssignmentJson.serializer(), json))
+        }
+        for ((file, layer) in layers) if (UUID.fromString(layer.uuid) in decision.converted) Files.delete(file)
     }
 }

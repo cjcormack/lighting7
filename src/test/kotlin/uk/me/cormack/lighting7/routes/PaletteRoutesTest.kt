@@ -961,7 +961,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     // ─── Toggle ─────────────────────────────────────────────────────────
 
     @Test
-    fun `toggle adds a tracking layer and takes it off again`() = testApplication {
+    fun `toggle writes a reference and takes it off again`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
@@ -977,20 +977,20 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             setBody(TogglePaletteRequest(targets = targets, attributeMask = "COLOUR"))
         }.body<TogglePaletteResponse>()
         assertEquals("applied", on.action)
-        // A *value* template holds no effect, so its count is zero. Still not what drives the pads'
-        // active ring, and that is the point of asserting it: an effect template reports non-zero
-        // (see below), so a ring driven off this number would light for one kind of template and not
-        // the other. `paletteLayerPresence` reads the layer stack for exactly that reason.
+        // A *value* palette holds no effect, so its count is zero. Still not what drives the pads'
+        // active ring, and that is the point of asserting it: an effect palette reports non-zero
+        // (see below), so a ring driven off this number would light for one kind of palette and not
+        // the other. `paletteLayerPresence` reads the applied state for exactly that reason.
         assertEquals(0, on.fxCount)
-        assertEquals(1, state.show.programmerStore.layers.size)
-        assertTrue(state.show.programmerStore.layers.single().source.isPalette)
+        assertReferenced(template.uuid, listOf("hex-1"))
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "a value palette's press adds no layer")
 
         val off = client.post("${base()}/${template.id}/toggle") {
             contentType(ContentType.Application.Json)
             setBody(TogglePaletteRequest(targets = targets))
         }.body<TogglePaletteResponse>()
         assertEquals("removed", off.action)
-        assertTrue(state.show.programmerStore.layers.isEmpty())
+        assertNull(state.show.programmerStore.get("hex-1", "rgbColour"))
     }
 
     /**
@@ -1020,15 +1020,12 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         press("hex-1")
         val wider = press("hex-1", "hex-2")
         assertEquals("applied", wider.action)
-        assertEquals(1, state.show.programmerStore.layers.size, "extended, not stacked")
-        assertEquals(
-            listOf("hex-1", "hex-2"),
-            state.show.programmerStore.layers.single().targets.map { it.key }.sorted(),
-        )
+        assertReferenced(red.uuid, listOf("hex-1", "hex-2"))
 
         val off = press("hex-1", "hex-2")
         assertEquals("removed", off.action)
-        assertTrue(state.show.programmerStore.layers.isEmpty(), "off means off, on every pressed head")
+        assertNull(state.show.programmerStore.get("hex-1", "rgbColour"), "off means off, on every pressed head")
+        assertNull(state.show.programmerStore.get("hex-2", "rgbColour"))
     }
 
     /**
@@ -1041,13 +1038,14 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
 
-        suspend fun create(name: String, colour: String) = client.post(base()) {
+        suspend fun create(name: String, row: PaletteRowDto) = client.post(base()) {
             contentType(ContentType.Application.Json)
-            setBody(PaletteInput(name = name, rows = listOf(colourRow(colour))))
+            setBody(PaletteInput(name = name, rows = listOf(row)))
         }.body<PaletteDto>()
 
-        val amber = create("amber", "#FF9D4A")
-        val blue = create("blue", "#0000FF")
+        val amber = create("amber", colourRow("#FF9D4A"))
+        // UV is Colour too, on an attribute amber does not name.
+        val glow = create("glow", PaletteRowDto(DEFERRED_TARGET_TYPE, "", "uv", "dmx:200"))
 
         suspend fun press(id: Int): TogglePaletteResponse =
             client.post("${base()}/$id/toggle") {
@@ -1056,9 +1054,10 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             }.body()
 
         press(amber.id)
-        val blueOn = press(blue.id)
-        assertEquals(1, blueOn.released, "a palette replaces its family's other palettes on its heads (apply-model D2)")
-        assertEquals(listOf("blue"), state.show.programmerStore.layers.map { it.source.name })
+        val glowOn = press(glow.id)
+        assertEquals(1, glowOn.released, "a palette replaces its family's other palettes on its heads (apply-model D2)")
+        assertNull(state.show.programmerStore.get("hex-1", "rgbColour"), "amber is off hex-1")
+        assertReferenced(glow.uuid, listOf("hex-1"), attribute = "uv")
     }
 
     /**
@@ -1071,7 +1070,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
      * what makes a disagreement visible rather than silent.
      */
     @Test
-    fun `toggle masks the layer to the template's own family, whatever the caller claims`() = testApplication {
+    fun `toggle masks the press to the palette's own family, whatever the caller claims`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
@@ -1089,21 +1088,22 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             setBody(TogglePaletteRequest(targets = targets))
         }.body<TogglePaletteResponse>()
         assertEquals("COLOUR", silent.attributeMask)
-        assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask)
+        assertReferenced(template.uuid, listOf("hex-1"))
 
         client.post("${base()}/${template.id}/toggle") {
             contentType(ContentType.Application.Json)
             setBody(TogglePaletteRequest(targets = targets))
         }
 
-        // Says the wrong thing: the template wins, and the response says so.
+        // Says the wrong thing: the palette wins, and the response says so. Under the caller's
+        // POSITION mask its colour row would have landed nothing.
         val wrong = client.post("${base()}/${template.id}/toggle") {
             contentType(ContentType.Application.Json)
             setBody(TogglePaletteRequest(targets = targets, attributeMask = "POSITION"))
         }.body<TogglePaletteResponse>()
         assertEquals("applied", wrong.action)
         assertEquals("COLOUR", wrong.attributeMask)
-        assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask)
+        assertReferenced(template.uuid, listOf("hex-1"))
     }
 
     @Test
@@ -2147,6 +2147,16 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         return slot.owner to colour.value.color
     }
 
+    /** Each of [keys] holds, on top, a touched `WEB` reference to the palette [paletteUuid] names. */
+    private fun assertReferenced(paletteUuid: String, keys: List<String>, attribute: String = "rgbColour") {
+        for (key in keys) {
+            val slot = assertNotNull(state.show.programmerStore.get(key, attribute), "$key holds $attribute")
+            assertEquals(uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, slot.owner, "$key is the operator's")
+            val reference = assertIs<uk.me.cormack.lighting7.fx.ProgrammerValue.Reference>(slot.value, "$key holds a reference")
+            assertEquals(paletteUuid, reference.paletteUuid.toString(), "$key references the palette")
+        }
+    }
+
     private fun assertHeldBy(owner: uk.me.cormack.lighting7.fx.ProgrammerOwner, keys: List<String>) {
         for (key in keys) {
             val held = assertNotNull(heldColour(key), "$key holds the colour")
@@ -2242,7 +2252,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a colour template toggled on a blinder cooks onto both cells`() = testApplication {
+    fun `a colour template toggled on a blinder references both cells`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedFixture(state, projectId, "china-2-cell-led-blinder-8ch", "blinder-1", 60)
         val client = jsonClient()
@@ -2250,7 +2260,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         assertEquals("applied", client.toggle(template.id, PaletteTargetDto("fixture", "blinder-1")).action)
 
-        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS, listOf("blinder-1.cell-1", "blinder-1.cell-2"))
+        assertReferenced(template.uuid, listOf("blinder-1.cell-1", "blinder-1.cell-2"))
         assertNull(state.show.programmerStore.get("blinder-1", "rgbColour"))
     }
 
@@ -2328,7 +2338,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a colour template toggled on a Shehds cooks onto its zones`() = testApplication {
+    fun `a colour template toggled on a Shehds references its zones`() = testApplication {
         mountTestApp(state)
         seedShehds()
         val client = jsonClient()
@@ -2336,14 +2346,14 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         assertEquals("applied", client.toggle(template.id, PaletteTargetDto("fixture", "shehds-1")).action)
 
-        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS, zones("shehds-1"))
+        assertReferenced(template.uuid, zones("shehds-1"))
         assertNull(state.show.programmerStore.get("shehds-1", "rgbColour"))
         assertEquals("removed", client.toggle(template.id, PaletteTargetDto("fixture", "shehds-1")).action)
-        assertNull(heldColour("shehds-1.zone-1"), "the layer took its zones with it")
+        assertNull(heldColour("shehds-1.zone-1"), "the off press took every zone")
     }
 
     @Test
-    fun `a colour template toggled on one Shehds zone cooks onto that zone alone`() = testApplication {
+    fun `a colour template toggled on one Shehds zone references that zone alone`() = testApplication {
         mountTestApp(state)
         seedShehds()
         val client = jsonClient()
@@ -2351,12 +2361,12 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         client.toggle(template.id, PaletteTargetDto("fixture", "shehds-1.zone-3"))
 
-        assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS, listOf("shehds-1.zone-3"))
+        assertReferenced(template.uuid, listOf("shehds-1.zone-3"))
         assertNull(heldColour("shehds-1.zone-1"))
     }
 
     @Test
-    fun `a colour template toggled on a group of Shehds and a hex cooks onto every head that has colour`() =
+    fun `a colour template toggled on a group of Shehds and a hex references every head that has colour`() =
         testApplication {
             mountTestApp(state)
             seedShehds()
@@ -2365,7 +2375,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
             client.toggle(template.id, PaletteTargetDto("group", "mixed"))
 
-            assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS, zones("shehds-1") + "hex-1")
+            assertReferenced(template.uuid, zones("shehds-1") + "hex-1")
             assertNull(state.show.programmerStore.get("shehds-1", "rgbColour"))
         }
 

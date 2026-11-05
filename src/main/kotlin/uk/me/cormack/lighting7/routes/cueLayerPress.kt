@@ -10,13 +10,16 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.LayerPress
 import uk.me.cormack.lighting7.fx.LayerPressRules
+import uk.me.cormack.lighting7.fx.PaletteSnapshot
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.parseFamilies
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoPalette
@@ -27,7 +30,9 @@ import java.util.UUID
 
 /**
  * `POST /projects/{id}/cues/{cid}/layers/press` — a palette or a Look pressed into a **stored** cue
- * (apply-model plan §3.6, D7): the cue editor's bands and picker. It applies the programmer's press
+ * (apply-model plan §3.6, D7): the cue editor's bands and picker. A **value** palette writes or
+ * removes reference rows in the cue's own rows ([CueReferencePress], palette-references plan D13);
+ * what follows is an FX palette's press, and a Look's. It applies the programmer's press
  * to the cue's layer list — per target, the family's other palettes replaced on the pressed heads,
  * the record's newest layer widened when it is the top, a second press taking it off — and writes
  * the list, sending nothing to the stage. A live cue is marked edited since GO, as any layer write
@@ -117,6 +122,11 @@ internal fun pressCueLayer(
         is PressedRecord.Missing -> return CueLayerPressOutcome.NotFound(read.message)
         is PressedRecord.Found -> read
     }
+    if (record is PressedRecord.Palette) {
+        state.show.paletteRegistry.snapshot(record.source.uuid)?.takeIf { it.effect == null }?.let { palette ->
+            return pressCueReferences(state, cueId, record, palette, requested, families, rules, coverage)
+        }
+    }
 
     repeat(PRESS_ATTEMPTS) {
         val layers = transaction(state.database) { DaoCue.findById(cueId)?.layersInOrder()?.mapNotNull { it.toDto() } }
@@ -146,6 +156,102 @@ internal fun pressCueLayer(
         if (written != null) return written
     }
     return CueLayerPressOutcome.Moved("The cue's layers kept changing under the press — try again")
+}
+
+/**
+ * A value palette's press into the cue's own rows ([pressValuePaletteInCue], D13): the same refusals as a
+ * layer press, the rows and layers written in a transaction that re-reads them and decides again if
+ * another write moved them in between.
+ */
+private fun pressCueReferences(
+    state: State,
+    cueId: Int,
+    record: PressedRecord.Palette,
+    palette: PaletteSnapshot,
+    requested: List<CueTargetDto>,
+    families: Set<AttributeFamily>?,
+    rules: LayerPressRules,
+    coverage: TargetCoverage,
+): CueLayerPressOutcome {
+    if (requested.isEmpty() && record.generic) {
+        return CueLayerPressOutcome.Refused("This palette needs a selection to press onto", CODE_PALETTE_NEEDS_SELECTION)
+    }
+    val press = CueReferencePress.of(state, rules, coverage)
+    repeat(PRESS_ATTEMPTS) {
+        val read = transaction(state.database) {
+            DaoCue.findById(cueId)?.let { cue -> cue.attributeAssignmentsInOrder().map { it.toDto() } to cue.layersInOrder().mapNotNull { it.toDto() } }
+        } ?: return CueLayerPressOutcome.NotFound("Cue not found")
+        val (rows, layers) = read
+        val pressed = pressValuePaletteInCue(palette, requested, rows, layers, press, rules, coverage)
+        val result = pressed.rows
+        if (result.applied && families != null && !maskAllows(families, record.family)) {
+            return CueLayerPressOutcome.Refused(paletteOutsideMaskMessage(record.source.name, record.family, families), CODE_PALETTE_OUTSIDE_MASK)
+        }
+        val written: CueLayerPressOutcome? = transaction(state.database) {
+            val cue = DaoCue.findById(cueId) ?: return@transaction CueLayerPressOutcome.NotFound("Cue not found")
+            if (cue.attributeAssignmentsInOrder().map { it.toDto() } != rows || cue.layersInOrder().mapNotNull { it.toDto() } != layers) {
+                return@transaction null
+            }
+            val writesStage = state.show.cueStackManager.holds.isHeld(cueId)
+            val stageBefore = if (writesStage) cue.stageContent() else null
+            writeCueChildren(cue, attributeAssignments = result.rows, layers = pressed.layers, registry = state.show.fxRegistry)
+            val stageChanged = stageBefore != null && cue.stageContent() != stageBefore
+            CueLayerPressOutcome.Pressed(
+                CueLayerPressResponse(
+                    action = if (result.applied) "applied" else "removed",
+                    released = result.released.size + pressed.layersReleased,
+                    attributeMask = if (result.applied) record.family?.name else null,
+                    cue = cue.toCueDetails(isCurrentProject = true, state.show.fixtures, references = state.show.paletteReferences),
+                    omitted = result.omitted,
+                    notCovered = result.notCovered,
+                ),
+                stageChanged,
+            )
+        }
+        if (written != null) return written
+    }
+    return CueLayerPressOutcome.Moved("The cue's rows kept changing under the press — try again")
+}
+
+/** What a value palette's press makes of a stored cue: its rows, and its layers when the press moved one. */
+internal class CueValuePress(
+    val rows: CueReferencePress.Result,
+    /** The cue's layers after the press, renumbered; null when it moved none. */
+    val layers: List<CueLayerDto>?,
+    /** The other palettes' layers it narrowed or dropped. */
+    val layersReleased: Int,
+)
+
+/**
+ * A value palette pressed into a stored cue (D13): its reference rows by [CueReferencePress], and the
+ * layers a cue kept from before references (D17) read as the palette's too — its own layer covering the
+ * pressed heads makes the press the off arm, and the pressed heads come off it on either arm, and off
+ * its family's kept layers on the on arm, as the layer press takes them off.
+ */
+internal fun pressValuePaletteInCue(
+    palette: PaletteSnapshot,
+    requested: List<CueTargetDto>,
+    rows: List<CueAttributeAssignmentDto>,
+    layers: List<CueLayerDto>,
+    press: CueReferencePress,
+    rules: LayerPressRules,
+    coverage: TargetCoverage,
+): CueValuePress {
+    val uuid = palette.paletteUuid
+    val ops = CueLayerOps(rules, layers)
+    val pressTargets = rules.pressTargets(uuid, requested)
+    val layerOn = layers.any { ops.sourceUuid(it) == uuid } && LayerPress.wouldRelease(layers, uuid, pressTargets, ops, coverage)
+    val result = press.press(palette, requested, rows, alreadyOn = layerOn)
+    val pressed = (coverage.expand(pressTargets) + coverage.expand(result.targets)).toSet()
+    val others = if (result.applied) {
+        rules.familyReplacements(true, uuid, layers.mapNotNullTo(HashSet()) { it.sourceUuidOrNull()?.takeIf { _ -> it.paletteId != null } })
+    } else {
+        emptySet()
+    }
+    val (withoutOwn, own) = LayerPress.release(layers, setOf(uuid), pressed, ops, coverage)
+    val (next, released) = LayerPress.release(withoutOwn, others, pressed, ops, coverage)
+    val moved = own + released > 0
+    return CueValuePress(result, if (moved) next.mapIndexed { index, layer -> layer.copy(sortOrder = index) } else null, released)
 }
 
 private const val PRESS_ATTEMPTS = 3
@@ -263,7 +369,7 @@ internal fun CueLayerDto.withSettingsOf(from: CueLayerDto): CueLayerDto = copy(
  * A palette layer naming no targets lands on a per-fixture palette's heads, so a press on some of
  * them reads as covered and narrows it. A Look's layer is pressed whole ([whole]).
  */
-private class CueLayerOps(
+internal class CueLayerOps(
     rules: LayerPressRules,
     layers: List<CueLayerDto>,
 ) : LayerPress.Ops<CueLayerDto> {
@@ -311,12 +417,16 @@ internal data class CueLayerPressRequest(
 internal data class CueLayerPressResponse(
     /** `"applied"` or `"removed"`. */
     val action: String,
-    /** The other palettes' layers the press narrowed or dropped on its heads. */
+    /** The other palettes the press took off its heads. */
     val released: Int = 0,
     /** The arriving layer's mask — a palette's family; none for a Look. */
     val attributeMask: String? = null,
     /** The cue as stored after the press. */
     val cue: CueDetails,
+    /** A per-fixture palette's heads the press did not name (palette-references plan D14). */
+    val omitted: List<String> = emptyList(),
+    /** Pressed heads the palette lands nothing on (D14). */
+    val notCovered: List<String> = emptyList(),
 )
 
 @Resource("/{cueId}/layers/press")

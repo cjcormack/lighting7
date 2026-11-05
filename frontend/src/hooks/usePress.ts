@@ -204,6 +204,7 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
               : { lookId: source.look.id },
           )
           if (answer == null) return null
+          if (answer.action === 'applied' && source.kind === 'palette') reportLeftOut(source.palette.name, answer)
           return answer.action === 'removed' ? 'off' : 'on'
         }
         if (look != null) {
@@ -269,6 +270,7 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
             attributeMask: template.family ?? undefined,
             families,
           }).unwrap()
+          if (result.action === 'applied') reportLeftOut(template.name, result)
           return result.action === 'removed' ? 'off' : 'on'
         }
 
@@ -290,6 +292,31 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
   )
 
   return useMemo(() => ({ press, into }), [press, into])
+}
+
+/**
+ * What a palette press left out (lighting7 palette-references plan D14): the heads a per-fixture
+ * palette holds that were not pressed, and the pressed heads it lands nothing on. Said once, as a
+ * note rather than a warning — the press did what it says.
+ */
+export function reportLeftOut(name: string, answer: { omitted?: string[]; notCovered?: string[] }) {
+  const message = leftOutMessage(name, answer)
+  if (message != null) toast.info(message, { id: `press-left-out:${name}` })
+}
+
+/** [reportLeftOut]'s sentence, or null when nothing was left out. */
+export function leftOutMessage(name: string, answer: { omitted?: string[]; notCovered?: string[] }): string | null {
+  const parts: string[] = []
+  const omitted = answer.omitted ?? []
+  const notCovered = answer.notCovered ?? []
+  if (omitted.length > 0) parts.push(`its ${listOf(omitted)} ${omitted.length === 1 ? 'was' : 'were'} left out`)
+  if (notCovered.length > 0) parts.push(`it has nothing for ${listOf(notCovered)}`)
+  return parts.length === 0 ? null : `${name}: ${parts.join(' · ')}`
+}
+
+function listOf(keys: readonly string[]): string {
+  if (keys.length <= 3) return keys.join(', ')
+  return `${keys.slice(0, 2).join(', ')} and ${keys.length - 2} more`
 }
 
 /**

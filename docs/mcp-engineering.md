@@ -407,8 +407,10 @@ the code the desk's own gesture goes through, on the current project:
 - `set_blind` `{blind, fadeSeconds?}` — the WS `programmer.setBlind` branch, call for call:
   `programmer.setBlind`, `sceneryService.onBlindChanged`, `effectsService.onBlindChanged`.
 - `apply_palette` `{paletteId | paletteName, targets?, asValues?, mask?, fadeSeconds?}` — by default
-  the desk's press (apply-model plan D9): the toggle route's `programmerLayerStack.toggle`, with its
-  family replacement and widening, answering `released` when it took heads off another palette.
+  the desk's press (apply-model plan D9): the toggle route's `programmerLayerStack.toggle` — a value
+  palette's references (palette-references plan D10), an FX palette's layer — with its family
+  replacement, answering `released` when it took heads off another palette and `omitted` /
+  `notCovered` when it left heads out.
   `asValues: true` is `applyPaletteToProgrammer`, the values *Apply as values* writes. A generic palette with no targets is `PALETTE_NEEDS_SELECTION`;
   a per-fixture one with none lands on its own heads, as its pad press does. `mask` refuses a palette
   outside it (`PALETTE_OUTSIDE_MASK`), on the layer's on arm only (`pressWouldRelease`). Both press-log

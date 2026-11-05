@@ -112,6 +112,10 @@ data class ToggleOutcome(
     val action: String,
     val fxCount: Int,
     val released: Int = 0,
+    /** A per-fixture palette's heads the press did not name (palette-references plan D14). */
+    val omitted: List<String> = emptyList(),
+    /** Pressed heads a value palette lands nothing on (D14). */
+    val notCovered: List<String> = emptyList(),
 )
 
 /** What [ProgrammerLayerStack.detach] did: values written into Local, and effects that became Local. */
@@ -218,9 +222,20 @@ class ProgrammerLayerStack(
      * How an edit onto a located fixture ends its Locate (`show/LocateCommit.kt`). It must store only.
      */
     private val onLanded: (Set<CueAssignmentResolver.Key>) -> Set<CueAssignmentResolver.Key> = { emptySet() },
+    /** How a reference resolves, and what each last resolved to; the show's own, so D3's memory is one. */
+    references: (() -> PaletteReferences)? = null,
 ) {
     private val targetCoverage = TargetCoverage { fixtures() }
     private val pressRules = LayerPressRules(paletteRegistry, targetCoverage)
+    private val ownReferences by lazy { PaletteReferences(fixtures, { paletteRegistry().snapshot(it) }) }
+    private val referencePress = PaletteReferencePress(
+        fixtures = fixtures,
+        paletteRegistry = paletteRegistry,
+        references = references ?: { ownReferences },
+        store = store,
+        writer = { engine().programmer },
+        rules = pressRules,
+    )
 
     /**
      * Guards the classify-spawn-retract sequence in [syncFx].
@@ -373,6 +388,11 @@ class ProgrammerLayerStack(
         releaseSiblings: Set<UUID> = emptySet(),
         fadeMs: Long = 0,
     ): ToggleOutcome {
+        if (source.isPalette) {
+            referencePress.valuePalette(source.uuid)?.let { palette ->
+                return pressReferences(palette, targets, attributeMask, releaseSiblings, fadeMs.coerceAtLeast(0))
+            }
+        }
         val isLook = source.kind == LayerSourceKind.LOOK
         val pressTargets = if (isLook) emptyList() else pressRules.pressTargets(source.uuid, targets)
         val fade = fadeMs.coerceAtLeast(0)
@@ -398,14 +418,70 @@ class ProgrammerLayerStack(
         return when (result) {
             is LayerPress.Result.Removed -> ToggleOutcome("removed", recook(next, fade).fxRetracted)
             is LayerPress.Result.Applied -> {
+                // A value palette sibling is references: a Look press takes it off whole, an FX
+                // palette's press off the heads it was pressed on.
+                val onHeads = if (isLook) null else coverage(pressTargets).flatMapTo(HashSet()) { head ->
+                    listOf(head.key) + targetCoverage.cells(head).map { it.key }
+                }
+                val referencesReleased = referencePress.releaseAll(releaseSiblings, onHeads, fade).size
                 // The press's layer is this record's top one: the arrival, or the layer it widened —
                 // which lands only where its value moved, not on the heads it already held.
                 val pressed = next.lastOrNull { it.source.uuid == source.uuid }
                 val landing = pressed?.let { Landing(it.layerId, before.takeIf { _ -> it.layerId in heldBefore }) }
                 val outcome = recook(next, fade, arrival = true, landing = landing)
-                ToggleOutcome("applied", outcome.fxSpawned, result.released)
+                ToggleOutcome("applied", outcome.fxSpawned, result.released + referencesReleased)
             }
         }
+    }
+
+    /**
+     * A value palette's press (palette-references plan D10, D11): references written or released by
+     * [PaletteReferencePress]. The pressed heads also come off the palette's own layer, which a cue kept
+     * (D17), on either arm, and on the on arm off its family's kept layers and a solo bank's Look and
+     * palette siblings, as [LayerPress] takes them off.
+     */
+    private fun pressReferences(
+        palette: PaletteSnapshot,
+        targets: List<CueTargetDto>,
+        attributeMask: String?,
+        releaseSiblings: Set<UUID>,
+        fadeMs: Long,
+    ): ToggleOutcome {
+        val uuid = palette.paletteUuid
+        val mask = parseFamiliesLenient(attributeMask?.split(","))
+        val pressTargets = pressRules.pressTargets(uuid, targets)
+        // Resolved before the layer lock, as `toggle`'s are: a palette snapshot can open a transaction.
+        val family = pressRules.familyReplacements(true, uuid, paletteUuids(store.layers))
+        val outcome = referencePress.press(palette, targets, mask, releaseSiblings, fadeMs, alreadyOn = layerCovers(uuid, pressTargets))
+        val pressed = (coverage(pressTargets) + outcome.plan.pressedHeads.map { CueTargetDto(TargetRef.Fixture.TYPE, it) }).toSet()
+        val others = if (outcome.applied) family + releaseSiblings - uuid else emptySet()
+        val ops = layerOps(store.layers)
+        val (next, moved) = store.mutateLayers { current ->
+            val (withoutOwn, own) = LayerPress.release(current, setOf(uuid), pressed, ops, targetCoverage)
+            val (kept, released) = LayerPress.release(withoutOwn, others, pressed, ops, targetCoverage)
+            (if (own + released == 0) current else renumber(kept)) to (own + released to released)
+        }
+        val dropped = moved.second
+        if (moved.first > 0) recook(next, fadeMs)
+        val plan = outcome.plan
+        return ToggleOutcome(
+            action = if (outcome.applied) "applied" else "removed",
+            fxCount = 0,
+            released = outcome.released + dropped,
+            omitted = plan.omitted,
+            notCovered = plan.notCovered,
+        )
+    }
+
+    /**
+     * Whether a value palette's own layers already cover every head a press of it names — a layer a
+     * cue stored before references kept (D17), brought in by Include: it lights the pad, so its press
+     * is the off arm, as the ring says.
+     */
+    private fun layerCovers(uuid: UUID, pressTargets: List<CueTargetDto>): Boolean {
+        val layers = store.layers
+        return layers.any { it.source.uuid == uuid } &&
+            LayerPress.wouldRelease(layers, uuid, pressTargets, layerOps(layers), targetCoverage)
     }
 
     /**
@@ -414,6 +490,10 @@ class ProgrammerLayerStack(
      * stack as it stands, so it is the arm [toggle] takes.
      */
     fun wouldRelease(sourceUuid: UUID, targets: List<CueTargetDto>): Boolean {
+        referencePress.valuePalette(sourceUuid)?.let { palette ->
+            return layerCovers(sourceUuid, pressRules.pressTargets(sourceUuid, targets)) ||
+                referencePress.isOn(sourceUuid, referencePress.plan(palette, targets, null))
+        }
         val layers = store.layers
         return LayerPress.wouldRelease(layers, sourceUuid, pressRules.pressTargets(sourceUuid, targets), layerOps(layers), targetCoverage)
     }
@@ -502,6 +582,10 @@ class ProgrammerLayerStack(
             sources.putIfAbsent(layer.source.uuid, layer.source)
             heads.getOrPut(layer.source.uuid) { LinkedHashSet() } += coverage(named)
         }
+        for ((palette, covered) in referencePress.coveredHeads()) {
+            sources.putIfAbsent(palette.paletteUuid, LayerSource.palette(palette.paletteId, palette.paletteUuid, palette.name))
+            heads.getOrPut(palette.paletteUuid) { LinkedHashSet() } += covered
+        }
         if (sources.isEmpty()) return emptyList()
 
         // Group membership in the same terms `coverage` produces, so the two can be compared
@@ -557,6 +641,9 @@ class ProgrammerLayerStack(
      */
     val layersFlow get() = store.layersFlow
 
+    /** What else moves the rings: a value palette's references ([ProgrammerStore.referencesRevision]). */
+    val referencesRevision get() = store.referencesRevision
+
     /** Remove a layer by id. A no-op when it is already gone. */
     fun remove(layerId: Int, fadeMs: Long = 0): ProgrammerLayerOutcome {
         val (next, _) = store.mutateLayers { current ->
@@ -575,7 +662,10 @@ class ProgrammerLayerStack(
      * one recook and one `layerState` frame each — fine for a delete, wrong for a pad press over a
      * bank of lit pads, which is why this does it as one `mutateLayers` and one recook.
      *
-     * Returns how many layers came off. Nothing is recooked — and no `layerState` frame is emitted —
+     * A value palette among them is references, not a layer: every reference to it is released too,
+     * each counted once.
+     *
+     * Returns how many layers and value palettes came off. Nothing is recooked — and no `layerState` frame is emitted —
      * when nothing did: the transform hands `current` back by identity, which is what the store's
      * emit guard reads, rather than a renumbered copy of an unchanged list.
      */
@@ -586,7 +676,7 @@ class ProgrammerLayerStack(
             if (kept.size == current.size) current to 0 else renumber(kept) to (current.size - kept.size)
         }
         if (dropped > 0) recook(next)
-        return dropped
+        return dropped + referencePress.releaseAll(sourceUuids).size
     }
 
     /**

@@ -28,6 +28,8 @@ import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
+import java.util.UUID
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.models.asDuration
 
 /**
@@ -78,6 +80,11 @@ internal data class PaletteFromProgrammerRequest(
     val targets: List<CueTargetDto> = emptyList(),
     /** [RecordSource] name. Defaults to TOUCHED — what the operator actually set. */
     val source: String = "TOUCHED",
+    /**
+     * *Use it on these heads* (palette-references plan D15): once the palette is written, the values
+     * it was recorded from become references to it, in place, so nothing moves.
+     */
+    val asReference: Boolean = false,
 )
 
 @Serializable
@@ -87,6 +94,8 @@ internal data class PaletteFromProgrammerResponse(
     val isGeneric: Boolean,
     /** Properties that could not be expressed as an intent, with the reason. */
     val skipped: List<PaletteSkipDto> = emptyList(),
+    /** How many programmer values `asReference` made references to the new palette. */
+    val referenced: Int = 0,
 )
 
 internal fun Route.routeApiRestPaletteRecord(state: State) {
@@ -174,6 +183,9 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
         // arrive after this one, so these are merged in at the end and only where none exists.
         val derivedUv = LinkedHashMap<String, PaletteIntent>()
 
+        // The programmer keys a row came from, which `asReference` points at the palette.
+        val recordedKeys = LinkedHashSet<Pair<String, String>>()
+
         for (entry in entries) {
             val vocabulary = PaletteAttribute.ofOrNull(entry.attribute)
             if (vocabulary == null) {
@@ -205,6 +217,7 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
                 continue
             }
             byAttribute.getOrPut(vocabulary.attribute) { LinkedHashMap() }[entry.fixtureKey] = intent
+            recordedKeys += entry.fixtureKey to entry.attribute
 
             // The colour inverse folds white and amber back into the hex, but **no policy has ever
             // driven UV** — so a UV busked through the colour picker had nowhere to go and was
@@ -294,8 +307,20 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
             return@withCurrentProject
         }
         state.show.fixtures.paletteListChanged()
-        call.respond(PaletteFromProgrammerResponse(created, allGeneric, skipped))
+        val referenced = if (request.asReference) referenceRecordedValues(state, UUID.fromString(created.uuid), recordedKeys) else 0
+        call.respond(PaletteFromProgrammerResponse(created, allGeneric, skipped, referenced))
     }
+}
+
+/**
+ * Each programmer key in [recorded] (fixture, canonical attribute) made a reference to the palette
+ * just recorded from it (D15): the store's own key, which a colour may hold under another spelling.
+ */
+private fun referenceRecordedValues(state: State, paletteUuid: UUID, recorded: Set<Pair<String, String>>): Int {
+    val keys = state.show.programmerStore.entries()
+        .filter { (it.fixtureKey to canonicalAttributeName(it.attribute)) in recorded }
+        .map { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.attribute) }
+    return state.show.fxEngine.programmer.referenceInPlace(keys, paletteUuid)
 }
 
 /**

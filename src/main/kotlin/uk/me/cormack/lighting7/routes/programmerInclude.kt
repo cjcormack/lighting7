@@ -118,6 +118,8 @@ internal fun includeCueIntoProgrammer(
         writes += ProgrammerWriter.AttributeWrite(
             fixture, row.attribute, row.value,
             sourceGroup = groupHints[row.targetKey to canonicalAttributeName(row.attribute)],
+            // A reference row comes back as one (palette-references plan D16).
+            reference = row.reference,
         )
         fixtureKeys += row.targetKey
     }

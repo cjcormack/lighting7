@@ -463,6 +463,12 @@ record is in. `SUPPORTED_FORMAT_VERSION = 47`, `MIN_SUPPORTED_FORMAT_VERSION` st
 moves to 47** with the writer: a v46 reader refuses a Look row holding `pal:` at its own write boundary
 and reads a cue row's as nothing, so its next push would lose the references or the rows.
 
+**A v46 archive's plain palette layers arrive as rows** (session 2, D17): below v47 the importer runs
+database step 10's decision (`state/PaletteLayerConversion.kt`) over the imported project, so each
+plain cue palette layer lands as reference rows on its cue — row uuids named from the layer, target
+and attribute, so two desks pulling one archive write the same records — and every other palette
+layer stays a layer, logged with why.
+
 ### Version 46 — Move in dark on a cue
 
 Move-in-dark plan session 3 (D3, D13; `docs/cue-stacks-engineering.md` §"Move in dark"): a cue's own
