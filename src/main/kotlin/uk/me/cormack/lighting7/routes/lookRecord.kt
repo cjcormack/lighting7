@@ -88,8 +88,8 @@ internal data class LookRecordOutcome(
  * - MERGE upserts the recorded rows and leaves everything else alone — the console re-record.
  * - REMOVE deletes the rows the recording names, values ignored.
  *
- * Recorded values are literals: a palette reference the programmer holds is recorded as what it
- * resolves to (`RecordEntry.value`, its `.resolved`). `validateLookRows` still rejects a `ref:`-shaped value at the write boundary as
+ * A palette reference the programmer holds is recorded as the reference (palette-references plan
+ * D16, `RecordEntry.storedValue`). `validateLookRows` still rejects a `ref:`-shaped value at the write boundary as
  * an inlined shape check, because that rejection *is* the non-recursion guarantee `FU-LOOK-NESTED`
  * depends on.
  *
@@ -212,11 +212,17 @@ internal fun removeClearedFromLook(
     look: DaoLook,
     cleared: Collection<uk.me.cormack.lighting7.fx.ProgrammerStore.IncludedKey>,
     fixtures: Fixtures,
+    references: uk.me.cormack.lighting7.fx.PaletteReferences? = null,
 ): ClearedOutcome {
     if (cleared.isEmpty()) return ClearedOutcome()
     val rows = look.rowsInOrder()
     val plan = planClearedRemoval(
-        rows.map { StoredValueRow(it, it.targetType, it.elementKey ?: it.targetKey, it.attribute) },
+        rows.map {
+            StoredValueRow(
+                it, it.targetType, it.elementKey ?: it.targetKey, it.attribute,
+                referenceLanding(fixtures, references, it.attribute, it.value),
+            )
+        },
         cleared,
         groupMembersIn(fixtures),
     )
@@ -928,7 +934,7 @@ internal fun updateIncludedLook(
         // rather than leaving a live predicate a later edit could start reading.
         LookUpdateWrites(
             writeRecordingIntoLook(look, collapsed, RecordMode.MERGE, { false }, elementParents),
-            removeClearedFromLook(look, cleared, state.show.fixtures),
+            removeClearedFromLook(look, cleared, state.show.fixtures, state.show.paletteReferences),
             writeHeldSceneryIntoLook(look, held, RecordMode.MERGE),
             writeIncludedFxBack(look, includedFx),
         )

@@ -123,6 +123,28 @@ internal object LayerPress {
     }
 
     /**
+     * [layers] with every [siblings] layer taken off [pressed] — a Look's whole, a palette's narrowed
+     * as an on press narrows one — and how many it changed. A value palette's press, which adds no
+     * layer, releasing a solo bank's layer siblings (palette-references plan D11).
+     */
+    fun <L> release(
+        layers: List<L>,
+        siblings: Set<UUID>,
+        pressed: Set<CueTargetDto>,
+        ops: Ops<L>,
+        coverage: TargetCoverage,
+    ): Pair<List<L>, Int> {
+        var released = 0
+        val next = layers.mapNotNull { layer ->
+            if (ops.sourceUuid(layer) !in siblings) return@mapNotNull layer
+            val after = if (ops.whole(layer)) null else without(layer, pressed, ops, coverage)
+            if (after !== layer) released++
+            after
+        }
+        return next to released
+    }
+
+    /**
      * A Look's press (P1, P3): off when any layer of it is on, taking every one; else on top, with
      * every [siblings] layer taken off whole.
      */

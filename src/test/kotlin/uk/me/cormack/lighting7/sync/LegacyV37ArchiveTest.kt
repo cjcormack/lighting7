@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.assertExportsEqual
 import uk.me.cormack.lighting7.testsupport.consolidatedRecord
+import uk.me.cormack.lighting7.testsupport.convertPaletteLayers
 import uk.me.cormack.lighting7.testsupport.liftRowMoveInDark
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
@@ -119,6 +120,7 @@ class LegacyV37ArchiveTest {
         }
 
         liftRowMoveInDark(expected)
+        convertPaletteLayers(expected)
         assertExportsEqual(expected, exported, installsShapeOnly = true)
     }
 

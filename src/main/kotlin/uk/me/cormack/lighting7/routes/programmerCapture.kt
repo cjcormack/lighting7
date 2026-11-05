@@ -15,7 +15,9 @@ import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.PaletteReferences
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
+import uk.me.cormack.lighting7.fx.ProgrammerValue
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.canonicalAttributeName
@@ -117,7 +119,32 @@ data class RecordEntry(
      * a question about the slot, not about a value derived from another key.
      */
     val reconciledFrom: CueAssignmentResolver.AttributeValue? = null,
-)
+    /**
+     * The palette the slot references (palette-references plan D16): recorded into a cue or a Look as
+     * the reference, [value] being what it resolves to now. Null for a literal.
+     */
+    val reference: java.util.UUID? = null,
+) {
+    /**
+     * The value a row records: the reference, else the literal. An entry its bundle partner rewrote
+     * ([reconciledFrom]) records the literal on stage, which the reference would not play back.
+     */
+    fun storedValue(): String = reference?.takeIf { reconciledFrom == null }?.let(PaletteReferences::valueOf) ?: value.serialize()
+
+    /**
+     * Whether [other], a slot's value or a baseline, is this entry's own: a reference to the same
+     * palette — whatever each resolves to, since a palette edit moves both — else the same literal.
+     */
+    fun sameAs(other: ProgrammerValue): Boolean {
+        val otherReference = (other as? ProgrammerValue.Reference)?.paletteUuid
+        if (reference != null || otherReference != null) return otherReference == reference
+        return other.resolved == (reconciledFrom ?: value)
+    }
+
+    /** This entry as a baseline for [sameAs]. */
+    fun baseline(): ProgrammerValue =
+        reference?.let { ProgrammerValue.Reference(it, reconciledFrom ?: value) } ?: ProgrammerValue.Hard(reconciledFrom ?: value)
+}
 
 /** Everything one Record source produced, ready to be written into a cue. */
 data class ProgrammerRecording(
@@ -184,6 +211,7 @@ internal fun collectProgrammerEntries(
         value: CueAssignmentResolver.AttributeValue,
         sourceGroup: String?,
         seq: Long,
+        reference: java.util.UUID? = null,
     ) {
         val attribute = canonicalAttributeName(rawAttributeName)
         val mapKey = fixtureKey to attribute
@@ -208,14 +236,14 @@ internal fun collectProgrammerEntries(
             skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MASKED_OUT)
             return
         }
-        entries[mapKey] = RecordEntry(fixtureKey, attribute, value, sourceGroup, family)
+        entries[mapKey] = RecordEntry(fixtureKey, attribute, value, sourceGroup, family, reference = reference)
         seqs[mapKey] = seq
     }
 
     for (entry in store.entries()) {
         val top = entry.slots.firstOrNull() ?: continue
         if (source == RecordSource.TOUCHED && !top.touched) continue
-        accept(entry.fixtureKey, entry.attribute, top.value.resolved, top.sourceGroup, top.seq)
+        accept(entry.fixtureKey, entry.attribute, top.value.resolved, top.sourceGroup, top.seq, (top.value as? ProgrammerValue.Reference)?.paletteUuid)
     }
 
     // Sideband slots that a property covers can still be recorded — a raw pan/tilt drag from

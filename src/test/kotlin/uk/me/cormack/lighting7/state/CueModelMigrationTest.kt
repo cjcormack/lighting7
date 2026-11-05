@@ -152,6 +152,7 @@ class CueModelMigrationTest {
         val cuesBefore = cueUuids()
         val childrenBefore = childrenByCue(CHILD_TABLES)
         val padsBefore = rows("SELECT id, cue_id FROM busk_pads WHERE cue_id IS NOT NULL")
+        val layersBefore = rows("SELECT uuid FROM cue_layers").mapTo(HashSet()) { it["uuid"] as UUID }
         assertEquals(setOf(1, 2, 3, 4, 5, 6), cuesBefore.keys)
         assertTrue(childrenBefore.getValue(1).isNotEmpty(), "the fixture's cue 1 has children to keep")
         assertTrue(childrenBefore.getValue(6).isNotEmpty(), "and the hand-written marker has a row to lose")
@@ -161,7 +162,14 @@ class CueModelMigrationTest {
 
         val markers = setOf(3, 6)
         assertEquals(cuesBefore - markers, cueUuids(), "every standard cue keeps its id and uuid; the markers are gone")
-        assertEquals(childrenBefore - markers, childrenByCue(CHILD_TABLES_NOW), "every child row keeps its cue and its uuid")
+        // Step 10 then turns the plain palette layers into reference rows (`PaletteLayerMigrationTest`).
+        val layersNow = rows("SELECT uuid FROM cue_layers").mapTo(HashSet()) { it["uuid"] as UUID }
+        val references = rows("SELECT cue_id, uuid FROM cue_attribute_assignments WHERE value LIKE 'pal:%'")
+            .groupBy({ (it["cue_id"] as Number).toInt() }, { it["uuid"] as UUID })
+        val expected = (childrenBefore - markers).mapValues { (cue, uuids) ->
+            uuids.filterTo(HashSet()) { it !in layersBefore || it in layersNow } + references[cue].orEmpty()
+        }
+        assertEquals(expected, childrenByCue(CHILD_TABLES_NOW), "every child row keeps its cue and its uuid")
         assertEquals(
             padsBefore.filterNot { (it["cue_id"] as Number).toInt() in markers },
             rows("SELECT id, cue_id FROM busk_pads WHERE cue_id IS NOT NULL"),

@@ -73,7 +73,7 @@ internal fun collapseRecordingToAssignments(
         // collapsing them would emit one group row referencing one of the two, silently rebinding
         // half the members. With the `ref:` grammar gone a row carries no identity beyond its value.
         val uniform = members.all { member ->
-            byKey[member.key to attribute]?.value == first.value
+            byKey[member.key to attribute]?.storedValue() == first.storedValue()
         }
         if (!uniform) continue
 
@@ -82,7 +82,7 @@ internal fun collapseRecordingToAssignments(
                 targetType = TargetRef.Group.TYPE,
                 targetKey = groupKey,
                 attribute = attribute,
-                value = first.value.serialize(),
+                value = first.storedValue(),
                 sortOrder = emitted.size,
             )
         )
@@ -97,7 +97,7 @@ internal fun collapseRecordingToAssignments(
                 targetType = TargetRef.Fixture.TYPE,
                 targetKey = entry.fixtureKey,
                 attribute = entry.attribute,
-                value = entry.value.serialize(),
+                value = entry.storedValue(),
                 sortOrder = emitted.size,
             )
         )
@@ -106,9 +106,6 @@ internal fun collapseRecordingToAssignments(
     return CollapsedAssignments(emitted, groupRows, emptyList())
 }
 
-// A recorded row stores the serialized literal, full stop. There used to be a `recordedValue`
-// helper here choosing between that and `ref:{uuid}`, with a `preserveRefs` flag threaded from every
-// caller — true for cues (to keep "busk a palette, Record a cue" attached to the palette) and false
-// for palettes and Looks (whose rows must hold literals or resolution would recurse). The `ref:`
-// grammar retired in session 4 and a layer is what attaches a cue to a Look now, so every caller
-// wanted the same answer and the flag went with the helper.
+// A recorded row stores the serialized literal, or the palette reference the programmer holds
+// (palette-references plan D16): members referencing one palette collapse to one group row however
+// they resolve, since the group row resolves per member again.

@@ -714,6 +714,31 @@ press reads (P2). In `fx/LayerPress.kt` a Look's layer is *whole* (`Ops.whole`):
 of it is on", nothing is narrowed off it or widened onto it, and in a solo bank it comes and goes
 whole (§"The busk layout"). Everything below in this section is a **palette**'s.
 
+**A value palette's press writes references, not a layer** (palette-references plan D10–D14).
+`ProgrammerLayerStack.toggle` hands every value palette to `fx/PaletteReferencePress.kt`, so every
+door writes them: the toggle routes, a busk pad and its solo bank, MIDI `PressPalette`, the hand,
+`apply_palette` and a cue slot. An **on** press writes `pal:{uuid}` as a touched `WEB` value on each
+pressed head, for each attribute the palette lands on there, keyed by the property it lands on (§"A
+palette reference is a value") — a group's members under the group's name, a multi-head fixture that
+cannot take an attribute on each element that can, a per-fixture palette only on the heads it has rows
+for — at the press's fade, over whatever value the key held. It then releases, on the heads it landed
+on, the references to the other value palettes of its family on the attributes it does not name, so a
+colour palette with no white pressed over one with white leaves no white behind; and a solo bank's
+palette siblings' references on the pressed heads, on any attribute. A Look sibling still comes off
+whole, as a layer, and a Look or cue press takes a palette sibling's every reference off. An **off**
+press, when every key it lands on already shows a reference to it, releases those references and
+nothing else. A pad's ring reads the references (`appliedState`, D12): a head is covered when every
+key the palette lands on there shows one; the frame is the layer frame, said again whenever a
+reference slot moves (`ProgrammerStore.referencesRevision`). The answer names what the press left out
+(D14): `omitted`, the heads a per-fixture palette holds that the press did not name, and
+`notCovered`, the pressed heads it lands nothing on. In a **stored cue** the same press writes the
+cue's own rows (`routes/cueReferencePress.kt`, D13) — one row per pressed target as spelled, a group
+staying one row, or per head for a per-fixture palette, written over every row on the same attribute
+whose heads it covers — and the Timeline's `layerOn` / `layerOff` / `replace` do the same, its read
+drawing them as one row per palette. **Everything below about layers is an FX palette's**, and a
+value palette's layer that a cue stored before references (§"Stored palette layers") keeps working by
+it; no door makes a new one.
+
 **A palette press is per target, on both arms, and it is the exact inverse of the pad's ring.** The press
 means *these targets are now this record's, or they are now nobody's*: "already on" is the record
 covering **every** pressed target, counted over all of its layers, which is precisely what lights a
@@ -945,7 +970,7 @@ neighbour never receives a pointer event of its own.
 
 **There is no `hand.place`.** Every target already has a mutation with its own validation —
 `POST /busk/banks/{bankId}/pads` appends a pad, `assignCueSlot` fills a slot, the palette or Look press
-(`/palettes/{id}/toggle`, `/looks/{id}/toggle`) adds a layer, `patchProjectCue` through `buildCueInput` adds a cue layer — so one frame that placed
+(`/palettes/{id}/toggle`, `/looks/{id}/toggle`) writes references or adds a layer, `patchProjectCue` through `buildCueInput` adds a cue layer — so one frame that placed
 would reimplement four of them behind one name. A place is **the placing window's own mutation
 followed by `hand.drop`**, and Undo takes that mutation's history entry back (the rig row's place keeps an inverse). The desk's whole share of a
 place is letting go. A control surface has no mutation of its own to make, so its one place binding,
@@ -1443,6 +1468,29 @@ then deletes, so nothing on stage moves (`routes/paletteHardening.kt`). *Copy th
 rule on demand, one history entry. A cue or Look copied to another project maps each reference as the
 cue copier maps an FX parameter's: that project's palette of the name, else a copy.
 
+**Record, Include and Update carry a reference as one** (D16). Record writes a programmer reference
+into a cue or a Look as the reference (`RecordEntry.storedValue`), members referencing one palette
+collapsing to one group row however they resolve; Include of a cue or a Look loads a reference row back
+as a reference; Update's "changed since Include" compares the reference as well as the value, so a
+press over a literal it happens to equal is still a change, and a cleared key matches a stored
+reference row on the property the reference lands on there. A Record into a **palette** records the
+resolved value: a palette holds intents. *New palette from selection*'s `asReference` (D15) rewrites
+the values it recorded as references to the new palette in place — same owner, keys and bytes — so
+nothing moves.
+
+### Stored palette layers
+
+A value palette's layer stored in a cue before references (D17) became reference rows on the cue when
+it was **plain** — enabled, amount 1, Override, no stomp, untimed, unmasked or masked to its own
+family — and nothing would move by it: no contributing layer above it, a Look's or a palette's,
+asserts its family on a head it reaches, and no own row of the cue would lose to the rows it becomes.
+An own row on the same target and attribute only drops that row, as it already won, and an own
+fixture row under a converted group row still beats it; any other overlap keeps the layer, since rows
+rank fixture over group and then later over earlier (`PRAGMA user_version` 10,
+`state/PaletteLayerConversion.kt`, `PaletteLayerMigration.kt`; the importer converts a v46 archive the
+same way). The rows carry the palette's fade. Every other one stays a layer and keeps working by the
+layer rules of §"A press is per target"; nothing makes a new one.
+
 ## Tier 5 — Baseline / defaults
 
 Per-fixture baseline values: typically 0 (blackout) for intensity-like channels, 127 (centred) for pan/tilt where the fixture profile specifies. The "rest state" seen when no other tier contributes.
@@ -1526,8 +1574,9 @@ Two different things are called a fade here, and they operate at different scope
 
 The per-row fade survives the cook (`CueComposer`), which is what makes a **tracked** source behave
 like an **applied** one: ⌥clicking a palette chip writes literals into the programmer with the
-palette's fade, and tapping the same chip adds a layer — which used to snap, because the field
-stopped at `SourceRow`. It belongs to the row that **won** the key, alongside `CookWinner`: one
+palette's fade, and tapping the same chip writes references at it (a press with no programmer fade
+takes the palette's own) — and a cue row a press or the migration writes carries it, as the palette's
+layer once did, which used to snap, because the field stopped at `SourceRow`. It belongs to the row that **won** the key, alongside `CookWinner`: one
 winning row supplies the value, the attribution and the fade. A palette's fade sits on the palette
 rather than the row, so every row of one palette moves together.
 

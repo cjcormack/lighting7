@@ -62,8 +62,14 @@ internal fun hardenedRows(
     return when (target) {
         is TargetRef.Fixture -> {
             val head = runCatching { fixtures.untypedGroupableFixture(elementKey ?: target.key) }.getOrNull()
-            val landed = head?.let(::on) ?: return Hardening(emptyList(), complete = false)
-            Hardening(listOf(HardenedRow(target, elementKey, landed.first, landed.second)), complete = true)
+                ?: return Hardening(emptyList(), complete = false)
+            // A parent that takes nothing of the palette resolved it on its cells: one row per cell.
+            val landed = references.resolveFanned(head, attribute, paletteUuid).mapNotNull { (on, resolved) ->
+                val literal = resolved.value?.serialize() ?: return@mapNotNull null
+                HardenedRow(target, if (on === head) elementKey else on.targetKey, resolved.attribute, literal)
+            }
+            if (landed.isEmpty()) return Hardening(emptyList(), complete = false)
+            Hardening(landed, complete = true)
         }
         is TargetRef.Group -> {
             val members = runCatching { fixtures.untypedGroup(target.key).fixtures }.getOrNull()?.filterIsInstance<Fixture>()
@@ -112,14 +118,14 @@ internal fun hardenCueRows(
             row.delete()
         } else {
             row.targetType = first.target.discriminator
-            row.targetKey = first.target.key
+            row.targetKey = first.elementKey ?: first.target.key
             row.attribute = first.attribute
             row.value = first.value
             for (extra in replacements.drop(1)) {
                 DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = extra.target.discriminator
-                    targetKey = extra.target.key
+                    targetKey = extra.elementKey ?: extra.target.key
                     attribute = extra.attribute
                     value = extra.value
                     fadeDuration = fade

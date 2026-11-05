@@ -22,7 +22,7 @@ import {
   useBuskRigQuery,
 } from '@/store/busk'
 import { handPickUp, heldName, useHandPlace } from '@/store/hand'
-import { usePress } from '@/hooks/usePress'
+import { reportLeftOut, usePress } from '@/hooks/usePress'
 import {
   isBuskPageDecided,
   keepFollowingBuskPage,
@@ -407,6 +407,9 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
           families: families ?? undefined,
         })
           .unwrap()
+          .then((answer) => {
+            if (answer.action === 'applied' && pad.palette != null) reportLeftOut(pad.palette.name, answer)
+          })
           .catch(ignoreReportedError)
       },
       onApplyValues: (pad) => {

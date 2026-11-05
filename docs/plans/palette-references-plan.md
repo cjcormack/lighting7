@@ -1,6 +1,6 @@
 # Palette references: a palette is a value
 
-> **Document status: IN PROGRESS — session 1 in review.** Calls decided 2026-11-04 (§3). Design
+> **Document status: IN PROGRESS — session 1 merged, session 2 in review.** Calls decided 2026-11-04 (§3). Design
 > record: [`palette-references-design/`](palette-references-design/INDEX.md).
 
 ## 1. Context
@@ -220,8 +220,8 @@ checks"). Never merge a session's PR before the one before it.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | References as values on the desk | in review | `claude/wizardly-ride-d2z3ns` | | |
-| 2 | Presses write references | planned | | | |
+| 1 | References as values on the desk | merged | `claude/wizardly-ride-d2z3ns` | [#346](https://github.com/cjcormack/lighting7/pull/346) | `b0fcfe3` |
+| 2 | Presses write references | in review | `claude/palette-references-s2` | | |
 | 3 | The marks and the new palette sheet | planned | | | |
 | 4 | Looks and cues: the sheets and Copy the values | planned | | | |
 
@@ -309,6 +309,75 @@ the next; whoever merges the last fills its own.
   the importer conversion.
 - Docs: `docs/lighting-composition-model.md` §"A press is per target", the apply-model rules it
   restates, and `frontend/CLAUDE.md` §"Applying to a selection".
+
+**Where session 2 followed the code** (recorded with it):
+
+- **The press is its own class**, `fx/PaletteReferencePress.kt`, which `ProgrammerLayerStack.toggle`
+  hands a value palette to, rather than a method on `ProgrammerStore`: it needs the rig, the palette
+  registry and the writer, none of which the store holds. It writes through
+  `ProgrammerWriter.writeAttributes` and releases through `clearAttributes`, so a press is one
+  programmer step and one publish of each.
+- **The rings needed a signal of their own.** The layer frame is said on a layer change, and a
+  reference press changes no layer, so `ProgrammerStore.referencesRevision` (a conflated
+  `StateFlow`, moved only by a write or release that touches a reference) makes the socket say the
+  frame again, and the surface LEDs resync on it.
+- **Released counts palettes, not layers**: the distinct other palettes the press took references
+  off, plus any layer a solo sibling lost. A Look or a cue press in a solo bank takes a palette
+  sibling's every reference off (`release` gained it).
+- **`notCovered` is every pressed head the palette lands nothing on**, a generic palette's too (a
+  colour palette on a dimmer-only head), not only a per-fixture palette's unheld heads.
+- **A stored cue's press writes one row per pressed target as spelled** — a group stays one group
+  row, resolved per member — or per head for a per-fixture palette; it overwrites every row on the
+  same attribute whose heads it covers, and replaces a family palette's rows only where they lie
+  wholly within the heads it landed on (a group row it overlaps only in part is left).
+- **The Timeline reads a cue's references as one synthetic row per palette** (`reference: true`, id
+  `-paletteId`, ranked above the layers since rows beat layers, no targets for a per-fixture
+  palette so it fills its own-heads cell). *Settings…* leaves it out, and `before` / `restore` carry
+  the cue's rows, uuids kept, so Undo puts them back.
+- **Include of a Look** loads a reference row back as one through `ExpandedLook.referenceBy`; the
+  KDoc that said a Look's Include writes only literals went.
+- **Update's checklist still shows the resolved value** (`currentValue`), and Update's "changed since
+  Include" and Record's baseline compare the reference too, so `ProgrammerStore.recordedValues` now
+  holds `ProgrammerValue`s.
+- **A press with no programmer fade lands at the palette's own**, as its layer did (the client sends
+  none yet, `FU-FX-PRESS-FADE-CLIENT`), and every row a cue press or the migration writes carries the
+  palette's fade, which a palette layer gave every row it cooked.
+- **A reference on a multi-head fixture that cannot take it itself resolves on its cells**
+  (`PaletteReferences.resolveFanned`, `PaletteFanOut`'s rule for a parent), in a cue's rows, a Look's
+  fixture rows, the row read, *Copy the values* and `landsOn`, so a press on a Shehds and a migrated
+  layer on one land on its zones as the layer did.
+- **A kept layer still answers its pad** (D17). The programmer's press, the cue editor's and the
+  Timeline's read the palette's own layer: covering the pressed heads it makes the press the off arm,
+  and the pressed heads come off it on either arm, and off its family's kept layers on the on arm.
+- **Update compares two references by palette alone**, whatever each resolves to, so a palette edit
+  does not mark every key referencing it changed since Record; a reference over a literal it equals is
+  still a change. A colour or an emitter its bundle partner rewrote (`reconciledFrom`) records the
+  literal on stage.
+- ***Use it on these heads* over an Included value** puts a `WEB` reference over the `INCLUDE` slot at
+  the same bytes rather than rewriting it, so Update sees the change and writes the reference back,
+  as it does after a Record.
+- **`programmer.addLayer` refuses a value palette**, the one door that could still have made a new
+  value palette layer (call B).
+- **The Stack table, `LookStack`, `FocusedPaletteLayer` and *Detach* still show and handle value
+  palette layers.** A kept layer (D17) reaches the programmer through Include, and taking those
+  paths away would leave it on the stack with no way to see, edit or detach it. No press makes one,
+  so they are reached only by a kept layer.
+- **The cue editor's chip ring** (`PressCue.layered`) reads the cue's reference rows beside its
+  layers, so a palette pressed into a cue still lights there.
+- **D17's condition covers every layer above, not only Looks.** A plain palette layer under a palette
+  layer that stays would beat it as rows, and one under a palette layer that also converts would
+  double its rows, so a layer converts only where no contributing layer above it asserts its family
+  on a head it reaches (`state/PaletteLayerConversion.kt`, one pure `decide` the migration and the
+  importer share, over the stored rig: patches, groups and a venue show's pinned snapshot).
+- **D17's own-row exception is narrower than "the cue has an own row".** Rows rank fixture over group,
+  then later over earlier, so a converted fixture row under an own group row, or a converted group row
+  beside an own group row, would move the stage: those keep the layer. Only an own row on the same
+  target and attribute, or an own fixture row under a converted group row, is an exception.
+- **A converted row's uuid is derived from its layer** (`palette-layer:{layer}:{target}:{attribute}`),
+  so two desks converting one v46 archive write the same records. The importer converts after the
+  archive's rows are in, over the database, through the same adapter.
+- **`asReference`'s sheet toggle is session 3's** (D15's board A2); this session adds the request
+  field, its `referenced` count and the client type.
 
 ### Session 3 — The marks and the new palette sheet
 

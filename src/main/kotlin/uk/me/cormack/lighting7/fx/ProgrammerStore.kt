@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.dmx.unpackChannelNumber
 import uk.me.cormack.lighting7.dmx.unpackChannelUniverse
@@ -432,7 +433,7 @@ class ProgrammerStore {
      * an Include, and cleared with the target.
      */
     @Volatile
-    var recordedValues: Map<IncludedKey, CueAssignmentResolver.AttributeValue>? = null
+    var recordedValues: Map<IncludedKey, ProgrammerValue>? = null
 
     /** The keys one Include staged, and the source it staged them from. */
     data class IncludedKeys(val target: IncludedTarget, val keys: Set<IncludedKey>)
@@ -559,6 +560,19 @@ class ProgrammerStore {
 
     private val epochCounter = AtomicLong(0)
 
+    private val _referencesRevision = MutableStateFlow(0L)
+
+    /**
+     * Moves whenever a key's winning slot becomes or stops being a palette reference, or a referenced
+     * palette is edited — what a pad's ring reads (palette-references plan D12) — so the layer frame,
+     * which carries the rings, can be said again when no layer moved. Conflated: a burst is one change.
+     */
+    val referencesRevision: StateFlow<Long> = _referencesRevision.asStateFlow()
+
+    private fun referencesMoved() {
+        _referencesRevision.update { it + 1 }
+    }
+
     /**
      * Monotonic mutation counter. Incremented on every put/clear (property or sideband) and
      * used to stamp [Slot.seq] on writes. Because a put claims its seq *before* installing
@@ -623,11 +637,14 @@ class ProgrammerStore {
         val slot = Slot(owner, value, touched, sourceGroup, seq = bumpEpoch())
         val byAttribute = attributes.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
         var covered = false
+        var reference = value is ProgrammerValue.Reference
         byAttribute.compute(attribute) { _, holder ->
             covered = holder != null
+            if (holder?.top?.value is ProgrammerValue.Reference) reference = true
             withSlot(holder, slot)
         }
         if (!covered) bumpCoverage()
+        if (reference) referencesMoved()
     }
 
     /**
@@ -772,14 +789,19 @@ class ProgrammerStore {
         if (byAttribute[attribute]?.all()?.any { it.owner == owner } == true) mutating(owner)
         var changed = false
         var removedLast = false
+        var reference = false
         byAttribute.computeIfPresent(attribute) { _, holder ->
             val next = withoutOwner(holder, owner)
-            if (next !== holder) changed = true
+            if (next !== holder) {
+                changed = true
+                reference = holder.top.value is ProgrammerValue.Reference || next?.top?.value is ProgrammerValue.Reference
+            }
             if (next == null) removedLast = true
             next
         }
         if (changed) bumpEpoch()
         if (removedLast) bumpCoverage()
+        if (reference) referencesMoved()
     }
 
     /**
@@ -904,13 +926,17 @@ class ProgrammerStore {
         if (holds(owner)) mutating(owner)
         var swept = 0
         var coverageChanged = false
+        var referenceSwept = false
         // Emptied inner maps are left in place — see [clear] for the race a
         // check-then-remove would open against a concurrent [put] on the same fixture.
         for (byAttribute in attributes.values) {
             for (attribute in byAttribute.keys) {
                 byAttribute.computeIfPresent(attribute) { _, holder ->
                     val next = withoutOwner(holder, owner)
-                    if (next !== holder) swept++
+                    if (next !== holder) {
+                        swept++
+                        if (holder.top.value is ProgrammerValue.Reference || next?.top?.value is ProgrammerValue.Reference) referenceSwept = true
+                    }
                     if (next == null) coverageChanged = true
                     next
                 }
@@ -925,6 +951,7 @@ class ProgrammerStore {
         }
         if (swept > 0) bumpEpoch()
         if (coverageChanged) bumpCoverage()
+        if (referenceSwept) referencesMoved()
         return swept
     }
 
@@ -937,6 +964,7 @@ class ProgrammerStore {
      */
     fun clearAll() {
         if (holdsTrackedContent()) mutating()
+        val reference = referencedPalettes().isNotEmpty()
         attributes.clear()
         channels.clear()
         _lastIncludedTarget.value = null
@@ -949,6 +977,7 @@ class ProgrammerStore {
         recordedValues = null
         bumpEpoch()
         bumpCoverage()
+        if (reference) referencesMoved()
     }
 
     // ── History (undo plan §3.6) ───────────────────────────────────────────
@@ -1064,6 +1093,7 @@ class ProgrammerStore {
         includedKeys = snapshot.includedKeys
         bumpEpoch()
         bumpCoverage()
+        referencesMoved()
         // Its setter says the stack again, which every tab redraws the layer list from.
         includedLayerSnapshot = snapshot.includedLayerSnapshot
     }
@@ -1226,7 +1256,8 @@ class ProgrammerStore {
         resolve: (fixtureKey: String, attribute: String, current: ProgrammerValue.Reference) -> ProgrammerValue.Reference,
     ): Set<CueAssignmentResolver.Key> {
         val changed = HashSet<CueAssignmentResolver.Key>()
-        for (key in referenceKeys(paletteUuid)) {
+        val keys = referenceKeys(paletteUuid)
+        for (key in keys) {
             var moved = false
             attributes[key.targetKey]?.computeIfPresent(key.attribute) { _, holder ->
                 val slots = holder.all().map { slot ->
@@ -1242,7 +1273,40 @@ class ProgrammerStore {
             if (moved) changed += key
         }
         if (changed.isNotEmpty()) bumpEpoch()
+        // The palette moved under its references, which changes what it covers on each head, whatever the values did.
+        if (keys.isNotEmpty()) referencesMoved()
         return changed
+    }
+
+    /**
+     * The winning slot on [fixtureKey]/[attribute] made a reference to [paletteUuid] at the value it
+     * holds now, in place — owner, touched flag and write seq kept — so nothing on stage moves
+     * (palette-references plan D15); an Include slot keeps its place under a `WEB` reference at the
+     * same value. A layer's slot is left as it is. Answers whether it changed.
+     */
+    fun referenceInPlace(fixtureKey: String, attribute: String, paletteUuid: UUID): Boolean {
+        val top = attributes[fixtureKey]?.get(attribute)?.top ?: return false
+        if (top.owner == ProgrammerOwner.LAYERS || (top.value as? ProgrammerValue.Reference)?.paletteUuid == paletteUuid) return false
+        // An Include slot is Update's baseline, so the reference goes over it as the operator's own
+        // value, the bytes the same, and Update writes it back.
+        if (top.owner == ProgrammerOwner.INCLUDE) {
+            putValue(ProgrammerOwner.WEB, fixtureKey, attribute, ProgrammerValue.Reference(paletteUuid, top.value.resolved), touched = true, top.sourceGroup)
+            return true
+        }
+        mutating(top.owner)
+        var moved = false
+        attributes[fixtureKey]?.computeIfPresent(attribute) { _, holder ->
+            if (holder.top !== top) return@computeIfPresent holder
+            moved = true
+            val slots = holder.all()
+            val next = listOf(Slot(top.owner, ProgrammerValue.Reference(paletteUuid, top.value.resolved), top.touched, top.sourceGroup, top.seq, top.writtenAtMs)) + slots.drop(1)
+            if (next.size == 1) Single(next[0]) else Stack(next)
+        }
+        if (moved) {
+            bumpEpoch()
+            referencesMoved()
+        }
+        return moved
     }
 
     /**
@@ -1262,7 +1326,10 @@ class ProgrammerStore {
             }
             changed += key
         }
-        if (changed.isNotEmpty()) bumpEpoch()
+        if (changed.isNotEmpty()) {
+            bumpEpoch()
+            referencesMoved()
+        }
         return changed
     }
 

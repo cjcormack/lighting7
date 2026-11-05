@@ -180,9 +180,8 @@ private fun spawnIncludedLookFx(
  * The shared body: expand [sourceUuid] through [uk.me.cormack.lighting7.fx.LookRegistry], write the
  * literals into the programmer, and record [includedTarget] so Update knows what it is looking at.
  *
- * Writes **[ProgrammerValue.Hard]** slots, not refs: you are editing the source's own contents, and
- * a slot referencing the thing it is about to rewrite is meaningless. Contrast Include-a-cue,
- * which does write refs — there the reference is part of what the cue means.
+ * A row holding a palette reference comes back as the reference (palette-references plan D16); every
+ * other row as its literal.
  *
  * Group rows expand to members, and a member the source covers directly wins over the group row,
  * matching how it resolves at compose time.
@@ -249,6 +248,8 @@ internal fun includeExpandedIntoProgrammer(
             writes += uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite(
                 fixture, attribute, value,
                 sourceGroup = groupHints[fixtureKey to attribute],
+                // A reference row comes back as one (palette-references plan D16).
+                reference = expanded.referenceBy[fixtureKey]?.get(attribute),
             )
             fixtureKeys += fixtureKey
         }

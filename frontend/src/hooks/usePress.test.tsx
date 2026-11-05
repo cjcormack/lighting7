@@ -23,6 +23,7 @@ const answers = vi.hoisted(() => ({
   apply: { written: 1, skipped: [] } as Record<string, unknown>,
   look: { action: 'applied', fxCount: 0 } as Record<string, unknown>,
   absorbOk: true,
+  toggle: { action: 'applied', fxCount: 0 } as Record<string, unknown>,
 }))
 function mutation(spy: (args: unknown) => void, answer: () => unknown) {
   return () => [
@@ -34,7 +35,7 @@ function mutation(spy: (args: unknown) => void, answer: () => unknown) {
 }
 vi.mock('@/store/palettes', () => ({
   useApplyPaletteMutation: mutation(calls.applyPalette, () => answers.apply),
-  useTogglePaletteMutation: mutation(calls.togglePalette, () => ({ action: 'applied', fxCount: 0 })),
+  useTogglePaletteMutation: mutation(calls.togglePalette, () => answers.toggle),
 }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: mutation(calls.applyLook, () => ({ written: 2, fxIds: [] })),
@@ -55,7 +56,7 @@ vi.mock('@/api/lightingApi', () => ({
   lightingApi: new Proxy({}, { get: (_t, key) => { calls.programmerFrame(key); return undefined } }),
 }))
 
-const toast = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }))
+const toast = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() }))
 vi.mock('sonner', () => ({ toast }))
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 
@@ -80,7 +81,7 @@ vi.mock('@/store/selection', () => ({
   useSelectionPair: () => (desk.following ? desk.pair : desk.local),
 }))
 
-const { usePress, useWindowPaletteFit, useWindowPress } = await import('./usePress')
+const { leftOutMessage, usePress, useWindowPaletteFit, useWindowPress } = await import('./usePress')
 
 const AMBER = {
   id: 1,
@@ -98,6 +99,7 @@ beforeEach(() => {
   for (const spy of Object.values(toast)) spy.mockClear()
   answers.apply = { written: 1, skipped: [] }
   answers.absorbOk = true
+  answers.toggle = { action: 'applied', fxCount: 0 }
   scope.current = { kind: 'local' }
   lookStore.current = null
   cueArm.current = null
@@ -127,6 +129,19 @@ describe('usePress — the programmer', () => {
       families: undefined,
     })
     expect(calls.applyPalette).not.toHaveBeenCalled()
+  })
+
+  it('a press says once what it left out, and nothing when it left nothing out', async () => {
+    answers.toggle = { action: 'applied', fxCount: 0, omitted: ['spot-1', 'spot-4'], notCovered: ['hex-1'] }
+    await send({ kind: 'palette', palette: AMBER }, 'press')
+    expect(toast.info).toHaveBeenCalledWith('Amber: its spot-1, spot-4 were left out · it has nothing for hex-1', expect.anything())
+
+    toast.info.mockClear()
+    answers.toggle = { action: 'removed', fxCount: 0, omitted: ['spot-1'] }
+    await send({ kind: 'palette', palette: AMBER }, 'press')
+    answers.toggle = { action: 'applied', fxCount: 0 }
+    await send({ kind: 'palette', palette: AMBER }, 'press')
+    expect(toast.info).not.toHaveBeenCalled()
   })
 
   it('Apply as values is the palette’s apply route', async () => {
@@ -366,5 +381,13 @@ describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
     arm()
     const { result } = renderHook(() => usePress(1, { targets: HEX, families: null }, { scope: 'programmer' }))
     expect(result.current.into).toEqual({ kind: 'programmer' })
+  })
+})
+
+describe('leftOutMessage', () => {
+  it('names up to three heads, then counts the rest', () => {
+    expect(leftOutMessage('DSR Focus', { omitted: ['spot-1'] })).toBe('DSR Focus: its spot-1 was left out')
+    expect(leftOutMessage('DSR Focus', { notCovered: ['a', 'b', 'c', 'd', 'e'] })).toBe('DSR Focus: it has nothing for a, b and 3 more')
+    expect(leftOutMessage('DSR Focus', {})).toBeNull()
   })
 })

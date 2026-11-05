@@ -39,6 +39,8 @@ internal object BuskPressService {
             val action: String,
             val fxCount: Int,
             val released: Int,
+            val omitted: List<String> = emptyList(),
+            val notCovered: List<String> = emptyList(),
         ) : Outcome
 
         /** The pad, its record or its page is gone — or the pad is malformed, which reads the same. */
@@ -199,7 +201,7 @@ internal object BuskPressService {
                     if (record is PressRecord.Palette && outcome.action == "applied") {
                         PalettePressLog.record(state, plan.projectId, record.source.id)
                     }
-                    Outcome.Pressed(record.kind.name, outcome.action, outcome.fxCount, outcome.released + stopped)
+                    Outcome.Pressed(record.kind.name, outcome.action, outcome.fxCount, outcome.released + stopped, outcome.omitted, outcome.notCovered)
                 } catch (e: IllegalStateException) {
                     Outcome.TargetMissing(e.message ?: "Target not found")
                 }

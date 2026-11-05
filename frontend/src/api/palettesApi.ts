@@ -366,6 +366,12 @@ export interface TogglePaletteResponse {
    * a desk that predates the field sends nothing here.
    */
   released?: number
+  /**
+   * A per-fixture palette's heads the press did not name, and the pressed heads it lands nothing on
+   * (lighting7 palette-references plan D14). Optional: an older desk sends neither.
+   */
+  omitted?: string[]
+  notCovered?: string[]
 }
 
 /**

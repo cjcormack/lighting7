@@ -39,6 +39,8 @@ data class LookRowEntry(
      * other row. The row keeps its group target, so it composes as a group row in its place.
      */
     val byHead: Map<String, Pair<String, String>>? = null,
+    /** The palette a resolved reference row came from (palette-references plan D16), else null. */
+    val reference: UUID? = null,
 ) {
     /** What this row puts on [headKey]: its member's resolution, or its own attribute and value. */
     fun forHead(headKey: String): Pair<String, String>? = byHead?.get(headKey) ?: (attribute to value).takeIf { byHead == null }
@@ -131,6 +133,8 @@ data class LookSnapshot(
 class ExpandedLook(
     val snapshot: LookSnapshot,
     val byFixture: Map<String, Map<String, String>>,
+    /** Which of [byFixture]'s literals a palette reference resolved to, by the same keys: Include loads them back as references. */
+    val referenceBy: Map<String, Map<String, UUID>> = emptyMap(),
 ) {
     /**
      * [attribute] is canonicalised here rather than trusted from the caller. Both sides of the
@@ -277,9 +281,13 @@ class LookRegistry(
         internal fun expand(snapshot: LookSnapshot, fixtures: Fixtures, references: PaletteReferences? = null): ExpandedLook {
             val resolved = resolveReferenceRows(snapshot, fixtures, references)
             val byFixture = HashMap<String, MutableMap<String, String>>()
+            val referenceBy = HashMap<String, MutableMap<String, UUID>>()
 
-            fun put(fixtureKey: String, attribute: String, value: String) {
-                byFixture.getOrPut(fixtureKey) { HashMap() }[canonicalAttributeName(attribute)] = value
+            fun put(fixtureKey: String, attribute: String, value: String, reference: UUID?) {
+                val canonical = canonicalAttributeName(attribute)
+                byFixture.getOrPut(fixtureKey) { HashMap() }[canonical] = value
+                if (reference != null) referenceBy.getOrPut(fixtureKey) { HashMap() }[canonical] = reference
+                else referenceBy[fixtureKey]?.remove(canonical)
             }
 
             for (entry in resolved.rows) {
@@ -289,14 +297,16 @@ class LookRegistry(
                     ?.fixtures
                     ?.filterIsInstance<Fixture>()
                     ?: continue
-                for (member in members) entry.forHead(member.key)?.let { (attribute, value) -> put(member.key, attribute, value) }
+                for (member in members) {
+                    entry.forHead(member.key)?.let { (attribute, value) -> put(member.key, attribute, value, entry.reference) }
+                }
             }
             for (entry in resolved.rows) {
                 val key = entry.elementKey ?: (entry.target as? TargetRef.Fixture ?: continue).key
-                put(key, entry.attribute, entry.value)
+                put(key, entry.attribute, entry.value, entry.reference)
             }
 
-            return ExpandedLook(resolved, byFixture)
+            return ExpandedLook(resolved, byFixture, referenceBy)
         }
 
         /**
@@ -322,14 +332,18 @@ class LookRegistry(
                 when (val target = row.target) {
                     is TargetRef.Fixture -> {
                         val head = runCatching { fixtures.untypedGroupableFixture(row.elementKey ?: target.key) }.getOrNull() ?: continue
-                        val (attribute, literal) = resolvedOn(head) ?: continue
-                        out += row.copy(attribute = attribute, value = literal)
+                        // A parent that takes nothing of the palette lands it on its cells, each an element row.
+                        for ((landed, resolved) in references.resolveFanned(head, row.attribute, paletteUuid)) {
+                            val literal = resolved.value?.serialize() ?: continue
+                            val elementKey = if (landed === head) row.elementKey else landed.targetKey
+                            out += row.copy(attribute = resolved.attribute, value = literal, elementKey = elementKey, reference = paletteUuid)
+                        }
                     }
                     is TargetRef.Group -> {
                         val members = runCatching { fixtures.untypedGroup(target.key).fixtures }.getOrNull()
                             ?.filterIsInstance<Fixture>().orEmpty()
                         val byHead = members.mapNotNull { member -> resolvedOn(member)?.let { member.key to it } }.toMap()
-                        if (byHead.isNotEmpty()) out += row.copy(byHead = byHead)
+                        if (byHead.isNotEmpty()) out += row.copy(byHead = byHead, reference = paletteUuid)
                     }
                 }
             }

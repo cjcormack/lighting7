@@ -266,12 +266,15 @@ internal class ProgrammerTools(private val state: State) {
         if (outcome.action == "applied") PalettePressLog.record(state, projectId, found.source.id)
         return ToolExecutionResult(
             success = true,
-            description = "${outcome.action} palette '${found.source.name}' as a layer",
+            description = "${outcome.action} palette '${found.source.name}'" +
+                if (state.show.paletteRegistry.snapshot(found.source.uuid)?.effect != null) " as a layer" else " as references",
             result = buildJsonObject {
                 put("asValues", false)
                 put("action", outcome.action)
                 put("fxCount", outcome.fxCount)
                 if (outcome.released > 0) put("released", outcome.released)
+                if (outcome.omitted.isNotEmpty()) put("omitted", JsonArray(outcome.omitted.map(::JsonPrimitive)))
+                if (outcome.notCovered.isNotEmpty()) put("notCovered", JsonArray(outcome.notCovered.map(::JsonPrimitive)))
                 found.family?.let { put("attributeMask", it.name) }
             }.toString(),
         )

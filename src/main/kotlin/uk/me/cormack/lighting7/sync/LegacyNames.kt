@@ -393,6 +393,13 @@ object LegacyNames {
     const val SIBLINGS_FORMAT_VERSION = 42
 
     /**
+     * The `formatVersion` that made a palette reference a value (palette-references plan D7): an
+     * archive below it holds plain palette layers, which the importer turns into reference rows as
+     * database step 10 does (`state/PaletteLayerConversion.kt`, D17).
+     */
+    const val PALETTE_REFERENCES_FORMAT_VERSION = 47
+
+    /**
      * The built-in [fxId] names that old ids were rewritten onto — Wave or Path, as spelled — matched as
      * the registry matches one, or null. No FX definition may take one, or it would run them all.
      */

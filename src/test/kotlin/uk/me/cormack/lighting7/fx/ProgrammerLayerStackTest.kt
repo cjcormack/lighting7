@@ -22,7 +22,8 @@ import kotlin.test.assertTrue
  * Effects need a real `State` (the FX registry and target resolution both take one) and are covered
  * in `ProgrammerLayerStackFxTest`; everything here runs against map-backed [LookRegistry] and
  * [PaletteRegistry]s and no database, which is what keeps the composition rules cheap to assert.
- * A Look lands whole, so the per-target press rules are a palette's and are asserted on palettes.
+ * A Look lands whole, so the per-target press rules are a palette's and are asserted on palettes: a
+ * value palette's press writes references (palette-references plan D10), an effect palette's a layer.
  */
 class ProgrammerLayerStackTest {
 
@@ -115,6 +116,29 @@ class ProgrammerLayerStackTest {
 
     /** A dimmer palette, in another family from [uv]'s, so neither replaces the other on a press. */
     private fun Rig.dimmer(name: String, percent: Int) = palette(name, "dimmer", "pct:$percent")
+
+    /** A palette holding one effect, which a press still puts on as a layer (palette-references plan call A). */
+    private fun Rig.effectPalette(name: String, fxType: String, family: String, attribute: String): LayerSource {
+        val uuid = UUID.nameUUIDFromBytes("palette:$name".toByteArray())
+        palettes[uuid] = PaletteSnapshot(
+            paletteId = name.hashCode(), paletteUuid = uuid, name = name, fadeDurationMs = null,
+            rows = emptyList(),
+            effect = StoredFx(
+                fxType = fxType, family = family, attribute = attribute,
+                cycle = 4.0, blendMode = "OVERRIDE", order = "NORMAL", phaseOffset = 0.0,
+                elementMode = null, elementFilter = null, timing = null, parameters = emptyMap(),
+                speedMasterUuid = null, rateSpeedMasterUuid = null,
+            ),
+        )
+        return LayerSource.palette(name.hashCode(), uuid, name)
+    }
+
+    /** Each value palette a winning slot references, as `name: heads`, sorted by name. */
+    private fun Rig.references(): List<String> = store.entries()
+        .mapNotNull { entry -> (entry.slots.firstOrNull()?.value as? ProgrammerValue.Reference)?.let { it.paletteUuid to entry.fixtureKey } }
+        .groupBy({ it.first }, { it.second })
+        .map { (uuid, keys) -> "${palettes.getValue(uuid).name}: ${keys.distinct().sorted().joinToString(",")}" }
+        .sorted()
 
     /** The programmer's winning value for a key, as an Int, or null when it holds nothing. */
     private fun Rig.valueOf(fixtureKey: String, attribute: String = "dimmer"): Int? {
@@ -396,39 +420,39 @@ class ProgrammerLayerStackTest {
     @Test
     fun `toggle matches the same targets in a different order`() {
         // The same fixture set re-sent in a different order (e.g. re-derived from a Set on the
-        // client) must still toggle the existing layer off, not stack a second one on top.
+        // client) must still take the palette off, not write it again.
         val rig = newRig()
         val red = rig.uv("Red", 200)
 
         assertEquals("applied", rig.stack.toggle(red, on("hex-1", "hex-2")).action)
-        assertEquals(1, rig.store.layers.size)
+        assertEquals(listOf("Red: hex-1,hex-2"), rig.references())
 
         assertEquals("removed", rig.stack.toggle(red, on("hex-2", "hex-1")).action)
-        assertTrue(rig.store.layers.isEmpty())
+        assertEquals(emptyList(), rig.references())
+        assertNull(rig.valueOf("hex-1", "uv"))
     }
 
     @Test
-    fun `the same palette pressed on two targets widens, and comes off per target`() {
+    fun `the same palette pressed on two targets references both, and comes off per target`() {
         val rig = newRig()
         val red = rig.uv("Red", 200)
 
         rig.stack.toggle(red, on("hex-1"))
         rig.stack.toggle(red, on("hex-2"))
-        // The top layer widens rather than stacking a second (apply-model P3).
-        assertEquals(1, rig.store.layers.size)
+        assertEquals(listOf("Red: hex-1,hex-2"), rig.references())
+        assertTrue(rig.store.layers.isEmpty(), "a value palette's press adds no layer")
 
         rig.stack.toggle(red, on("hex-1"))
 
-        assertEquals(on("hex-2"), rig.store.layers.single().targets)
+        assertEquals(listOf("Red: hex-2"), rig.references())
         assertNull(rig.valueOf("hex-1", "uv"))
         assertEquals(200, rig.valueOf("hex-2", "uv"), "the other head is still on")
     }
 
     @Test
-    fun `a press extends its own layer to a wider selection`() {
-        // Red on hex-1, then hex-2 added to the selection and the pad pressed: the press extends the
-        // record rather than stacking a second layer over hex-1, or the next press could only take
-        // one of them off.
+    fun `a press extends its own references to a wider selection`() {
+        // Red on hex-1, then hex-2 added to the selection and the pad pressed: the press puts Red on
+        // hex-2 too rather than reading the half-lit selection as on and taking hex-1 off.
         val rig = newRig()
         val red = rig.uv("Red", 200)
 
@@ -436,8 +460,8 @@ class ProgrammerLayerStackTest {
         val press = rig.stack.toggle(red, on("hex-1", "hex-2"))
 
         assertEquals("applied", press.action, "the record covered only part of the selection")
-        assertEquals(0, press.released, "extending its own layer releases no other pad")
-        assertEquals(1, rig.store.layers.size, "one layer per record per head, not two")
+        assertEquals(0, press.released, "extending its own references releases no other pad")
+        assertEquals(listOf("Red: hex-1,hex-2"), rig.references())
         assertEquals(200, rig.valueOf("hex-1", "uv"))
         assertEquals(200, rig.valueOf("hex-2", "uv"))
     }
@@ -459,7 +483,7 @@ class ProgrammerLayerStackTest {
     }
 
     @Test
-    fun `an off press narrows a layer to the heads it did not name`() {
+    fun `an off press releases only the heads it names`() {
         val rig = newRig()
         val red = rig.uv("Red", 200)
 
@@ -467,7 +491,7 @@ class ProgrammerLayerStackTest {
         val off = rig.stack.toggle(red, on("hex-1"))
 
         assertEquals("removed", off.action, "the record covered every target the press named")
-        assertEquals(on("hex-2"), rig.store.layers.single().targets)
+        assertEquals(listOf("Red: hex-2"), rig.references())
         assertNull(rig.valueOf("hex-1", "uv"))
         assertEquals(200, rig.valueOf("hex-2", "uv"))
     }
@@ -480,10 +504,11 @@ class ProgrammerLayerStackTest {
         val red = rig.uv("Red", 200)
 
         rig.stack.toggle(red, listOf(CueTargetDto("group", "wash")))
+        assertEquals("wash", rig.store.get("hex-1", "uv")!!.sourceGroup, "each member written as the group's")
         val off = rig.stack.toggle(red, on("hex-1"))
 
         assertEquals("removed", off.action)
-        assertEquals(on("hex-2"), rig.store.layers.single().targets)
+        assertEquals(listOf("Red: hex-2"), rig.references())
         assertNull(rig.valueOf("hex-1", "uv"))
         assertEquals(200, rig.valueOf("hex-2", "uv"))
     }
@@ -501,33 +526,34 @@ class ProgrammerLayerStackTest {
     }
 
     @Test
-    fun `a record covered by two layers reads as on`() {
-        // Coverage is the union over the record's layers, so two half-selections add up to an off
-        // press rather than a third layer — which is what the pad's ring already showed.
+    fun `a record pressed on two selections reads as on over both`() {
+        // Coverage is the union over every press of the record, so two half-selections add up to an
+        // off press — which is what the pad's ring already showed.
         val rig = newRig()
         val red = rig.uv("Red", 200)
 
         rig.stack.toggle(red, on("hex-1"))
-        // A layer between the two presses, so the second adds a layer rather than widening the first.
         rig.add("Between", 10, "hex-1")
         rig.stack.toggle(red, on("hex-2"))
-        assertEquals(2, rig.store.layers.count { it.source == red }, "two presses on two selections are two layers")
+        assertEquals(listOf("Red: hex-1,hex-2"), rig.references())
 
         val off = rig.stack.toggle(red, on("hex-1", "hex-2"))
 
         assertEquals("removed", off.action)
-        assertTrue(rig.store.layers.none { it.source == red }, "both layers give up the pressed heads")
+        assertEquals(emptyList(), rig.references(), "both heads give it up")
+        assertEquals(listOf("Between"), rig.store.layers.map { it.source.name })
     }
 
     @Test
-    fun `a palette press naming no targets toggles its own untargeted layer off`() {
-        // A press with nothing selected and the layer it made are the same gesture: there is no
-        // coverage to compare, so the literal twin is the answer, or the pad could never go off.
+    fun `a generic palette pressed with no targets writes nothing`() {
+        // Its rows name no heads, so with nothing selected there is nowhere for a reference to go;
+        // the doors refuse such a press first (`PALETTE_NEEDS_SELECTION`).
         val rig = newRig()
         val red = rig.uv("Red", 200)
 
-        assertEquals("applied", rig.stack.toggle(red, emptyList()).action)
-        assertEquals("removed", rig.stack.toggle(red, emptyList()).action)
+        rig.stack.toggle(red, emptyList())
+
+        assertTrue(rig.store.entries().isEmpty())
         assertTrue(rig.store.layers.isEmpty())
     }
 
@@ -537,10 +563,11 @@ class ProgrammerLayerStackTest {
     // through its family: what is released here is released by the bank alone.
 
     @Test
-    fun `toggling with siblings releases a sibling on the same targets in one mutation`() {
+    fun `toggling an effect palette with siblings releases a sibling on the same targets in one mutation`() {
+        // Effect palettes, which are layers, so the press and its release are one stack.
         val rig = newRig()
-        val amber = rig.uv("Amber", 200)
-        val blue = rig.dimmer("Blue", 40)
+        val amber = rig.effectPalette("Amber", "ColourCycle", "colour", "rgbColour")
+        val blue = rig.effectPalette("Blue", "Wave", "intensity", "dimmer")
 
         rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(blue.uuid))
         assertEquals(1, rig.store.layers.size)
@@ -559,12 +586,25 @@ class ProgrammerLayerStackTest {
 
         assertEquals("applied", outcome.action)
         assertEquals(1, outcome.released, "Amber's layer on the same targets is released")
-        assertEquals(1, rig.store.layers.size, "release and add are one stack, not two")
-        assertEquals(blue.uuid, rig.store.layers.single().source.uuid)
-        assertNull(rig.valueOf("hex-1", "uv"), "Amber is off")
-        assertEquals(102, rig.valueOf("hex-1"), "Blue is on")
+        assertEquals(listOf(blue.uuid), rig.store.layers.map { it.source.uuid }, "release and add are one stack, not two")
         assertEquals(1, frames.size, "release and add must be one store mutation, so one layerState frame")
         assertEquals(listOf(blue.uuid), frames.single().map { it.source.uuid })
+    }
+
+    @Test
+    fun `toggling with siblings releases a sibling on the same targets`() {
+        val rig = newRig()
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
+
+        rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(blue.uuid))
+        val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
+
+        assertEquals("applied", outcome.action)
+        assertEquals(1, outcome.released, "Amber's reference on the same head is released")
+        assertEquals(listOf("Blue: hex-1"), rig.references())
+        assertNull(rig.valueOf("hex-1", "uv"), "Amber is off")
+        assertEquals(102, rig.valueOf("hex-1"), "Blue is on")
     }
 
     @Test
@@ -577,15 +617,15 @@ class ProgrammerLayerStackTest {
         val outcome = rig.stack.toggle(blue, on("hex-2"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(0, outcome.released)
-        assertEquals(2, rig.store.layers.size)
+        assertEquals(listOf("Amber: hex-1", "Blue: hex-2"), rig.references())
         assertEquals(200, rig.valueOf("hex-1", "uv"), "Amber on hex-1 is untouched")
         assertEquals(102, rig.valueOf("hex-2"))
     }
 
     @Test
     fun `a press over a sibling's whole target set takes the sibling off`() {
-        // Amber on hex-1, then Blue on hex-1 *and* hex-2: Amber's layer must go, or releasing Blue
-        // would pop it back.
+        // Amber on hex-1, then Blue on hex-1 *and* hex-2: Amber must go, or releasing Blue would
+        // leave it showing.
         val rig = newRig()
         val amber = rig.uv("Amber", 200)
         val blue = rig.dimmer("Blue", 40)
@@ -594,13 +634,13 @@ class ProgrammerLayerStackTest {
         val outcome = rig.stack.toggle(blue, on("hex-1", "hex-2"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(1, outcome.released, "Amber held nothing the press did not name")
-        assertEquals(listOf(blue.uuid), rig.store.layers.map { it.source.uuid })
+        assertEquals(listOf("Blue: hex-1,hex-2"), rig.references())
         assertEquals(102, rig.valueOf("hex-1"))
         assertEquals(102, rig.valueOf("hex-2"))
     }
 
     @Test
-    fun `a press narrows a sibling to the targets it did not name`() {
+    fun `a press releases a sibling only on the targets it names`() {
         val rig = newRig()
         val amber = rig.uv("Amber", 200)
         val blue = rig.dimmer("Blue", 40)
@@ -608,9 +648,8 @@ class ProgrammerLayerStackTest {
         rig.stack.toggle(amber, on("hex-1", "hex-2"), releaseSiblings = setOf(blue.uuid))
         val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
 
-        assertEquals(1, outcome.released, "a narrowed sibling counts as released from the pressed targets")
-        assertEquals(2, rig.store.layers.size)
-        assertEquals(on("hex-2"), rig.store.layers.single { it.source.uuid == amber.uuid }.targets)
+        assertEquals(1, outcome.released, "a sibling taken off the pressed heads counts as released")
+        assertEquals(listOf("Amber: hex-2", "Blue: hex-1"), rig.references())
         assertNull(rig.valueOf("hex-1", "uv"))
         assertEquals(200, rig.valueOf("hex-2", "uv"), "Amber keeps the head it never lost")
     }
@@ -627,7 +666,8 @@ class ProgrammerLayerStackTest {
         val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(0, outcome.released)
-        assertEquals(2, rig.store.layers.size)
+        assertEquals(listOf(amber.uuid), rig.store.layers.map { it.source.uuid })
+        assertEquals(listOf("Blue: hex-1"), rig.references())
     }
 
     @Test
@@ -638,14 +678,14 @@ class ProgrammerLayerStackTest {
 
         rig.stack.toggle(amber, on("hex-2"), releaseSiblings = setOf(blue.uuid))
         rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
-        assertEquals(2, rig.store.layers.size)
+        assertEquals(listOf("Amber: hex-2", "Blue: hex-1"), rig.references())
 
         // Press Blue again on hex-1: off. Amber on hex-2 is a sibling, but a remove never releases.
         val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals("removed", outcome.action)
         assertEquals(0, outcome.released)
-        assertEquals(1, rig.store.layers.size)
+        assertEquals(listOf("Amber: hex-2"), rig.references())
         assertEquals(200, rig.valueOf("hex-2", "uv"), "the sibling is still on")
     }
 
@@ -659,15 +699,13 @@ class ProgrammerLayerStackTest {
         val outcome = rig.stack.toggle(blue, listOf(CueTargetDto("group", "wash")), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(1, outcome.released)
-        assertEquals(listOf(blue.uuid), rig.store.layers.map { it.source.uuid })
+        assertEquals(listOf("Blue: hex-1,hex-2"), rig.references())
         assertEquals(102, rig.valueOf("hex-1"))
         assertEquals(102, rig.valueOf("hex-2"))
     }
 
     @Test
-    fun `a press on a member narrows a sibling held on the group`() {
-        // Amber keeps hex-2 as a fixture target, because "the wash minus hex-1" has no other way to
-        // be written.
+    fun `a press on a member releases a sibling held on the group from that member alone`() {
         val rig = newRig()
         val amber = rig.uv("Amber", 200)
         val blue = rig.dimmer("Blue", 40)
@@ -676,36 +714,35 @@ class ProgrammerLayerStackTest {
         val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(1, outcome.released)
-        assertEquals(on("hex-2"), rig.store.layers.single { it.source.uuid == amber.uuid }.targets)
+        assertEquals(listOf("Amber: hex-2", "Blue: hex-1"), rig.references())
+        assertEquals("wash", rig.store.get("hex-2", "uv")!!.sourceGroup, "the member it keeps is still the group's")
         assertNull(rig.valueOf("hex-1", "uv"))
         assertEquals(200, rig.valueOf("hex-2", "uv"))
     }
 
     @Test
-    fun `a layer on an unknown group is still its own pad`() {
-        // An unresolvable group stands for itself: the press that named it can still turn it off,
-        // and a press on a real fixture leaves it alone rather than treating it as covering
-        // everything or nothing.
+    fun `a press on an unknown group lands nothing and names it as not covered`() {
+        // An unresolvable group covers no fixture: the press writes nothing, says so, and a press on
+        // a real fixture finds nothing of it to release.
         val rig = newRig()
         val amber = rig.uv("Amber", 200)
         val blue = rig.dimmer("Blue", 40)
         val gone = listOf(CueTargetDto("group", "deleted-wash"))
 
-        rig.stack.toggle(amber, gone, releaseSiblings = setOf(blue.uuid))
-        val press = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
-        assertEquals(0, press.released, "a group nothing resolves covers no fixture")
+        val press = rig.stack.toggle(amber, gone, releaseSiblings = setOf(blue.uuid))
+        assertEquals(listOf("deleted-wash"), press.notCovered)
+        assertEquals(emptyList(), rig.references())
 
-        val off = rig.stack.toggle(amber, gone, releaseSiblings = setOf(blue.uuid))
-        assertEquals("removed", off.action, "and it is still the same pad by name")
+        assertEquals(0, rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid)).released)
     }
 
     @Test
-    fun `a target-less press releases a target-less sibling`() {
+    fun `a target-less effect palette press releases a target-less sibling`() {
         // Both pads say "my own rows, wherever they land", so they are exclusive in the only terms
         // they have: nothing can be subtracted from an empty target list, so the sibling goes.
         val rig = newRig()
-        val amber = rig.uv("Amber", 200)
-        val blue = rig.dimmer("Blue", 40)
+        val amber = rig.effectPalette("Amber", "ColourCycle", "colour", "rgbColour")
+        val blue = rig.effectPalette("Blue", "Wave", "intensity", "dimmer")
 
         rig.stack.toggle(amber, emptyList(), releaseSiblings = setOf(blue.uuid))
         val press = rig.stack.toggle(blue, emptyList(), releaseSiblings = setOf(amber.uuid))
@@ -715,7 +752,7 @@ class ProgrammerLayerStackTest {
     }
 
     @Test
-    fun `siblings never release a layer whose uuid is not named`() {
+    fun `siblings never release a palette whose uuid is not named`() {
         val rig = newRig()
         val amber = rig.uv("Amber", 200)
         val stranger = rig.dimmer("Stranger", 20)
@@ -724,7 +761,7 @@ class ProgrammerLayerStackTest {
         val outcome = rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(UUID.nameUUIDFromBytes("blue".toByteArray())))
 
         assertEquals(0, outcome.released)
-        assertEquals(2, rig.store.layers.size, "an unnamed layer on the same targets is left alone")
+        assertEquals(listOf("Amber: hex-1", "Stranger: hex-1"), rig.references(), "an unnamed palette on the same head is left alone")
     }
 
     @Test
@@ -757,7 +794,8 @@ class ProgrammerLayerStackTest {
         val press = rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(warm.uuid))
 
         assertEquals(1, press.released)
-        assertEquals(listOf(amber.uuid), rig.store.layers.map { it.source.uuid })
+        assertTrue(rig.store.layers.isEmpty())
+        assertEquals(listOf("Amber: hex-1"), rig.references())
         assertNull(rig.valueOf("hex-2"), "the Look is off its heads the press never named too")
     }
 

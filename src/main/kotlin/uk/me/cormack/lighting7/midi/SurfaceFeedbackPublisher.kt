@@ -6,6 +6,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -470,7 +471,7 @@ class SurfaceFeedbackPublisher(
         } catch (_: Exception) {
             null
         } ?: return
-        layersJob = stack.layersFlow
+        layersJob = merge(stack.layersFlow.map { }, stack.referencesRevision.map { })
             .onEach { resyncRecordLeds() }
             .launchIn(scope)
     }

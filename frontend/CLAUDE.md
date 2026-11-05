@@ -3011,9 +3011,13 @@ FX over the selection; the desk takes those heads off the family's other Local F
 asked **Replace · Stack** and the operator chose Stack — below), or, in a focused Look, `/fx/add`
 then `absorb-fx` (§3.2 rule 6) — see §FX in the fixture sheet's paragraphs.
 
-- **The gestures**, the same on every chip and pad (D1, D8): **tap** is the press — a layer that
-  *tracks* the record (`/palettes/{id}/toggle`, `/looks/{id}/toggle`), or off the pressed heads when
-  it already covers them all, the desk deciding which; **⌥click** is *Apply as values*
+- **The gestures**, the same on every chip and pad (D1, D8): **tap** is the press — for a value
+  palette, **references** to it on the pressed heads (lighting7 palette-references plan D10–D12:
+  `pal:{uuid}` as your values, which track the palette; no layer), for an FX palette or a Look a
+  layer that *tracks* the record (`/palettes/{id}/toggle`, `/looks/{id}/toggle`) — or off the
+  pressed heads when it already covers them all, the desk deciding which. The answer's `omitted`
+  and `notCovered` (D14) say what a press left out, toasted by `reportLeftOut` (`usePress`, the busk
+  pad's press) as one note: *DSR Focus: its spot-1, spot-4 were left out*; **⌥click** is *Apply as values*
   (`/palettes/{id}/apply`, `/looks/{id}/apply`): literals and Local FX with no layer, which
   retuning the record never moves; **hold or right-click** opens the menu — the tap's verb named
   (*Put on* / *Take off these heads*, from the chip's ring; *Put on or take off its own heads* with
@@ -3058,7 +3062,8 @@ then `absorb-fx` (§3.2 rule 6) — see §FX in the fixture sheet's paragraphs.
   provides and `usePress` reads before the programmer's scope — so every door under the editor (a
   cell's bands, the Looks tab's picker) is in the cue and none outside is, and a door passing
   `scope: 'programmer'` still writes Local. A palette or a Look is `POST /cues/{id}/layers/press`, the
-  desk's rule over the stored layers; *Apply as values* lands a value palette's literals as the cue's
+  desk's rule over the stored cue — a value palette's reference rows in the cue's own rows, an FX
+  palette's or a Look's layer; *Apply as values* lands a value palette's literals as the cue's
   own rows (a Look or an FX palette is refused, a tap being its layer); the FX arm is
   `FxPicker`'s draft arm. Nothing reaches the stage.
 - **The desk owns every rule** (plan P2): coverage, family replacement, widening and the mask test

@@ -114,7 +114,11 @@ import uk.me.cormack.lighting7.routes.releaseAutoNumber
 import uk.me.cormack.lighting7.routes.flushPendingEntryWrites
 import uk.me.cormack.lighting7.routes.deleteBuskRig
 import uk.me.cormack.lighting7.routes.deleteCueChildren
+import org.jetbrains.exposed.v1.dao.entityCache
+import uk.me.cormack.lighting7.state.PaletteLayerConversion
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.logConverted
+import uk.me.cormack.lighting7.state.logKept
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
@@ -1105,8 +1109,25 @@ class ProjectImporter(private val state: State) {
         // before the commands existed.
         val strippedCommands = stripCommandRows(project)
         if (strippedCommands > 0) logger.warn("Import: stripped {} row(s) holding a fixture command", strippedCommands)
+        if (formatVersion < LegacyNames.PALETTE_REFERENCES_FORMAT_VERSION) convertPaletteLayers(project)
         checkPaletteReferenceRows(project)
         return numberClashes
+    }
+
+    /**
+     * Below v47: the archive's plain cue palette layers become reference rows, by the decision
+     * database step 10 makes ([PaletteLayerConversion]); every other one stays a layer, logged.
+     */
+    private fun convertPaletteLayers(project: DaoProject) {
+        val transaction = TransactionManager.current()
+        transaction.flushCache()
+        val plans = with(PaletteLayerConversion) { transaction.plan(setOf(project.id.value)) }
+        logKept(plans, logger)
+        if (plans.none { it.decision.changes }) return
+        with(PaletteLayerConversion) { transaction.apply(plans) }
+        transaction.entityCache.data.remove(DaoCueLayers)
+        transaction.entityCache.clearReferrersCache()
+        logConverted(plans.filter { it.decision.changes }, logger)
     }
 
     /**

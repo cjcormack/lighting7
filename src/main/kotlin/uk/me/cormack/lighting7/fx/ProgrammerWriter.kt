@@ -231,6 +231,16 @@ class ProgrammerWriter internal constructor(
     }
 
     /**
+     * The winning values on [keys] rewritten in place as references to [paletteUuid], resolved bytes
+     * kept, so nothing is published (palette-references plan D15). Answers how many changed.
+     */
+    fun referenceInPlace(keys: Collection<CueAssignmentResolver.Key>, paletteUuid: java.util.UUID): Int {
+        val changed = keys.count { programmerStore.referenceInPlace(it.targetKey, it.attribute, paletteUuid) }
+        if (changed > 0) onProgrammerChanged()
+        return changed
+    }
+
+    /**
      * [writes]' indices with the `bundleWithColour` emitters last — see [writeAttributes]. A stable
      * partition, and only when the batch holds an emitter at all: the common batch (a locate, a
      * spread) holds none and keeps its own order at the cost of one scan.

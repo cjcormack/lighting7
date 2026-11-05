@@ -8,7 +8,9 @@ import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.ElementMode
 import uk.me.cormack.lighting7.fx.FxSpecCoercion
@@ -70,6 +72,10 @@ internal fun cueStackTimeline(
     val fxByCue = if (cueIds.isEmpty()) emptyMap() else {
         DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList cueRefs }.groupBy { it.readValues[DaoCueAdHocFx.cue].value }
     }
+    val referencesByCue = if (cueIds.isEmpty()) emptyMap() else {
+        DaoCueAttributeAssignment.find { (DaoCueAttributeAssignments.cue inList cueRefs) and DaoCueAttributeAssignments.paletteUuid.isNotNull() }
+            .groupBy { it.readValues[DaoCueAttributeAssignments.cue].value }
+    }
     val sceneryByCue = cueSceneryByCue(cueRefs)
     val tracked = trackedSceneryOfStack(stack)
     val reads = TimelineReads(fixtures, registry, speedMastersOf(project).firstOrNull()?.uuid)
@@ -91,9 +97,10 @@ internal fun cueStackTimeline(
                 layers = layerDtos.getOrPut(cueId) {
                     // Ranked over every stored layer, so one whose source is gone keeps its place
                     // and the layers above it their ranks.
-                    layersByCue[cueId].orEmpty()
-                        .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
-                        .mapIndexedNotNull { index, layer -> reads.layer(layer, rank = index + 1) }
+                    val stored = layersByCue[cueId].orEmpty()
+                    stored.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+                        .mapIndexedNotNull { index, layer -> reads.layer(layer, rank = index + 1) } +
+                        reads.references(project, referencesByCue[cueId].orEmpty(), firstRank = stored.size + 1)
                 },
                 fx = fxDtos.getOrPut(cueId) {
                     fxByCue[cueId].orEmpty()
@@ -122,6 +129,9 @@ private class TimelineReads(
     private val lookOwn = HashMap<Int, List<String>>()
     private val paletteFamilies = HashMap<Int, List<String>>()
     private val paletteRows = HashMap<Int, Set<CueTargetDto>?>()
+
+    /** Each palette a reference row names, read once, and whether it is per fixture. */
+    private val referenced = HashMap<java.util.UUID, Pair<DaoPalette, Boolean>?>()
 
     fun layer(layer: DaoCueLayer, rank: Int): TimelineLayerDto? {
         val source = layer.source ?: return null
@@ -157,6 +167,41 @@ private class TimelineReads(
             rateSpeedMasterUuid = layer.rateSpeedMasterUuid?.toString(),
         )
     }
+
+    /**
+     * A cue's reference rows (palette-references plan D13) as one row per palette, above every
+     * layer, since a cue's own rows beat its layers: its targets the rows', or none for a per-fixture
+     * palette on its own heads, so the cell is the one a press of it fills. Its id is the palette's,
+     * negated — no layer row has it — and it has no settings of its own.
+     */
+    fun references(project: DaoProject, rows: List<DaoCueAttributeAssignment>, firstRank: Int): List<TimelineLayerDto> =
+        rows.groupBy { it.paletteUuid!! }.entries.mapIndexedNotNull { index, (uuid, held) ->
+            val (template, perFixture) = referenced.getOrPut(uuid) {
+                paletteInProject(project.id, uuid)?.let { it to (perFixtureRowTargetsOf(it.effect != null, it.rows.map { row -> row.target }) != null) }
+            } ?: return@mapIndexedNotNull null
+            val family = paletteFamilies.getOrPut(template.id.value) { listOfNotNull(template.familyOf()?.name) }
+            val targets = held.map { CueTargetDto(it.targetType, it.targetKey) }.distinct()
+            TimelineLayerDto(
+                id = -template.id.value,
+                source = TimelineSourceDto(LayerSourceKind.PALETTE.name, template.id.value, uuid.toString(), template.name, family),
+                targets = if (perFixture) emptyList() else targets,
+                heads = headsOf(targets),
+                sortOrder = Int.MAX_VALUE,
+                rank = firstRank + index,
+                enabled = true,
+                amount = 1.0,
+                blendMode = "OVERRIDE",
+                attributeMask = family.firstOrNull(),
+                stomp = false,
+                timed = false,
+                delayMs = null,
+                intervalMs = null,
+                randomWindowMs = null,
+                speedMasterUuid = null,
+                rateSpeedMasterUuid = null,
+                reference = true,
+            )
+        }
 
     fun effect(row: DaoCueAdHocFxEntity): TimelineFxDto {
         val dto = row.toDto().canonicalTarget()
@@ -319,6 +364,8 @@ internal data class TimelineLayerDto(
     val randomWindowMs: Long?,
     val speedMasterUuid: String?,
     val rateSpeedMasterUuid: String?,
+    /** A value palette's reference rows in the cue (palette-references plan D13), not a stored layer: no settings to write. */
+    val reference: Boolean = false,
 )
 
 @Serializable

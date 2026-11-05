@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
+import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
@@ -62,6 +63,18 @@ class PaletteReferences(
     }
 
     /**
+     * [head] and what the reference resolves to there — or, where [head] is a multi-head fixture that
+     * takes nothing of the palette itself, each of its cells that does, as a palette's rows fan onto
+     * a parent's cells (`PaletteFanOut`). A head nothing reaches answers itself, unresolved.
+     */
+    fun resolveFanned(head: GroupableFixture, attribute: String, paletteUuid: UUID): List<Pair<GroupableFixture, Resolved>> {
+        val own = resolve(head, attribute, paletteUuid)
+        if (own.value != null || head !is MultiElementFixture<*>) return listOf(head to own)
+        val cells = head.elements.map { cell -> cell to resolve(cell, attribute, paletteUuid) }.filter { it.second.value != null }
+        return cells.ifEmpty { listOf(head to own) }
+    }
+
+    /**
      * Whether [value], a reference on [target]'s [attribute], resolves to something on any head the
      * target reaches — a row that lands on stage under another property than the one it is stored
      * under (a colour wheel) is not dead.
@@ -72,7 +85,7 @@ class PaletteReferences(
             is TargetRef.Fixture -> listOfNotNull(runCatching { fixtures.untypedGroupableFixture(target.key) }.getOrNull())
             is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key).fixtures }.getOrNull().orEmpty()
         }
-        return heads.any { resolve(it, attribute, paletteUuid).value != null }
+        return heads.any { head -> resolveFanned(head, attribute, paletteUuid).any { it.second.value != null } }
     }
 
     /** The palette [paletteUuid] names, for a caller that reports its name. */

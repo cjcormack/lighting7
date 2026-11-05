@@ -13,8 +13,10 @@ import kotlin.test.assertEquals
 
 /**
  * A press's family replacement and widening (apply-model plan D2, D6, P3), at the value level: a
- * map-backed registry for Looks and palettes and no database. An effect palette here is a snapshot
- * holding an effect; with no `State` it spawns nothing, which is all its replacement needs.
+ * map-backed registry for Looks and palettes and no database. A value palette's press writes
+ * references (palette-references plan D10), so widening is asserted on effect palettes, which are
+ * still layers. An effect palette here is a snapshot holding an effect; with no `State` it spawns
+ * nothing, which is all its replacement needs.
  */
 class ProgrammerLayerPressTest {
 
@@ -75,6 +77,7 @@ class ProgrammerLayerPressTest {
         return LayerSource.palette(name.hashCode(), uuid, name)
     }
 
+    /** A palette holding one colour effect: still a layer when pressed (palette-references plan call A). */
     private fun Rig.colourEffect(name: String): LayerSource {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
         palettes[uuid] = PaletteSnapshot(
@@ -86,6 +89,16 @@ class ProgrammerLayerPressTest {
                 elementMode = null, elementFilter = null, timing = null, parameters = emptyMap(),
                 speedMasterUuid = null, rateSpeedMasterUuid = null,
             ),
+        )
+        return LayerSource.palette(name.hashCode(), uuid, name)
+    }
+
+    /** A UV level: Colour family like [colour], on an attribute [colour] does not name. */
+    private fun Rig.uv(name: String, level: Int): LayerSource {
+        val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
+        palettes[uuid] = PaletteSnapshot(
+            paletteId = name.hashCode(), paletteUuid = uuid, name = name, fadeDurationMs = null,
+            rows = listOf(PaletteRowEntry(target = null, attribute = "uv", value = "dmx:$level")),
         )
         return LayerSource.palette(name.hashCode(), uuid, name)
     }
@@ -114,20 +127,39 @@ class ProgrammerLayerPressTest {
     /** Each layer as `name: heads`, bottom first. */
     private fun Rig.layers() = store.layers.map { layer -> "${layer.source.name}: ${layer.targets.joinToString(",") { it.key }}" }
 
+    /** Each value palette a winning slot references, as `name: heads`, sorted by name. */
+    private fun Rig.references(): List<String> = store.entries()
+        .mapNotNull { entry -> (entry.slots.firstOrNull()?.value as? ProgrammerValue.Reference)?.let { it.paletteUuid to entry.fixtureKey } }
+        .groupBy({ it.first }, { it.second })
+        .map { (uuid, keys) -> "${palettes.getValue(uuid).name}: ${keys.distinct().sorted().joinToString(",")}" }
+        .sorted()
+
     @Test
     fun `a palette pressed on another of its family's heads takes them off it, both ways`() {
         val rig = newRig()
         val red = rig.colour("Red", "#ff0000")
-        val blue = rig.colour("Blue", "#0000ff")
+        val glow = rig.uv("Glow", 200)
         rig.press(red, "hex-1", "hex-2")
 
-        val outcome = rig.press(blue, "hex-2")
+        val outcome = rig.press(glow, "hex-2")
 
         assertEquals(1, outcome.released, "Red gave up hex-2")
-        assertEquals(listOf("Red: hex-1", "Blue: hex-2"), rig.layers())
+        assertEquals(listOf("Glow: hex-2", "Red: hex-1"), rig.references())
 
         assertEquals(1, rig.press(red, "hex-2").released)
-        assertEquals(listOf("Red: hex-1,hex-2"), rig.layers(), "Blue is gone and Red is back on hex-2")
+        assertEquals(listOf("Red: hex-1,hex-2"), rig.references(), "Glow is gone and Red is back on hex-2")
+        assertEquals(emptyList(), rig.layers(), "a value palette's press adds no layer")
+    }
+
+    @Test
+    fun `a palette on the attribute another holds overwrites it there`() {
+        val rig = newRig()
+        val red = rig.colour("Red", "#ff0000")
+        rig.press(red, "hex-1", "hex-2")
+
+        assertEquals(1, rig.press(rig.colour("Blue", "#0000ff"), "hex-2").released, "Red gave up hex-2")
+
+        assertEquals(listOf("Blue: hex-2", "Red: hex-1"), rig.references())
     }
 
     @Test
@@ -138,7 +170,7 @@ class ProgrammerLayerPressTest {
         val outcome = rig.press(rig.level("Half", 50), "hex-1")
 
         assertEquals(0, outcome.released)
-        assertEquals(listOf("Red: hex-1", "Half: hex-1"), rig.layers())
+        assertEquals(listOf("Half: hex-1", "Red: hex-1"), rig.references())
     }
 
     @Test
@@ -148,8 +180,9 @@ class ProgrammerLayerPressTest {
         val cycle = rig.colourEffect("Cycle")
 
         assertEquals(0, rig.press(cycle, "hex-1").released, "Amber Breathe can run over Red (D6)")
-        assertEquals(1, rig.press(rig.colour("Blue", "#0000ff"), "hex-1").released, "only Red is Blue's to replace")
-        assertEquals(listOf("Cycle: hex-1", "Blue: hex-1"), rig.layers())
+        assertEquals(1, rig.press(rig.uv("Glow", 200), "hex-1").released, "only Red is Glow's to replace")
+        assertEquals(listOf("Cycle: hex-1"), rig.layers())
+        assertEquals(listOf("Glow: hex-1"), rig.references())
     }
 
     @Test
@@ -168,8 +201,9 @@ class ProgrammerLayerPressTest {
         rig.press(rig.colour("Red", "#ff0000"), "hex-1")
 
         assertEquals(0, rig.press(green, "hex-1").released)
-        assertEquals(1, rig.press(rig.colour("Blue", "#0000ff"), "hex-1").released, "Red only")
-        assertEquals(listOf("Green wash: ", "Blue: hex-1"), rig.layers(), "a Look's layer names no heads")
+        assertEquals(1, rig.press(rig.uv("Glow", 200), "hex-1").released, "Red only")
+        assertEquals(listOf("Green wash: "), rig.layers(), "a Look's layer names no heads")
+        assertEquals(listOf("Glow: hex-1"), rig.references())
     }
 
     @Test
@@ -182,7 +216,7 @@ class ProgrammerLayerPressTest {
         val outcome = rig.press(half, "hex-1", siblings = setOf(red.uuid))
 
         assertEquals(1, outcome.released)
-        assertEquals(listOf("Red: hex-2", "Half: hex-1"), rig.layers())
+        assertEquals(listOf("Half: hex-1", "Red: hex-2"), rig.references())
     }
 
     @Test
@@ -195,33 +229,34 @@ class ProgrammerLayerPressTest {
         val outcome = rig.press(half, "hex-1", siblings = setOf(green.uuid))
 
         assertEquals(1, outcome.released)
-        assertEquals(listOf("Half: hex-1"), rig.layers(), "a Look cannot be narrowed to the heads the press left")
+        assertEquals(emptyList(), rig.layers(), "a Look cannot be narrowed to the heads the press left")
+        assertEquals(listOf("Half: hex-1"), rig.references())
     }
 
     @Test
-    fun `a palette pressed on more heads widens its layer while it is the top`() {
+    fun `an effect palette pressed on more heads widens its layer while it is the top`() {
         val rig = newRig()
-        val red = rig.colour("Red", "#ff0000")
-        val firstId = rig.press(red, "hex-1").let { rig.store.layers.single().layerId }
+        val cycle = rig.colourEffect("Cycle")
+        val firstId = rig.press(cycle, "hex-1").let { rig.store.layers.single().layerId }
 
-        rig.press(red, "hex-2")
+        rig.press(cycle, "hex-2")
 
-        assertEquals(listOf("Red: hex-1,hex-2"), rig.layers())
+        assertEquals(listOf("Cycle: hex-1,hex-2"), rig.layers())
         assertEquals(firstId, rig.store.layers.single().layerId, "the same layer, widened")
-        assertEquals("removed", rig.press(red, "hex-1", "hex-2").action, "and one press takes it off")
+        assertEquals("removed", rig.press(cycle, "hex-1", "hex-2").action, "and one press takes it off")
         assertEquals(emptyList(), rig.layers())
     }
 
     @Test
-    fun `growing the selection and pressing again widens the same layer`() {
+    fun `growing the selection and pressing an effect palette again widens the same layer`() {
         val rig = newRig()
-        val red = rig.colour("Red", "#ff0000")
-        rig.press(red, "hex-1")
+        val cycle = rig.colourEffect("Cycle")
+        rig.press(cycle, "hex-1")
         val firstId = rig.store.layers.single().layerId
 
-        assertEquals("applied", rig.press(red, "hex-1", "hex-2").action)
+        assertEquals("applied", rig.press(cycle, "hex-1", "hex-2").action)
 
-        assertEquals(listOf("Red: hex-1,hex-2"), rig.layers())
+        assertEquals(listOf("Cycle: hex-1,hex-2"), rig.layers())
         assertEquals(firstId, rig.store.layers.single().layerId, "kept, so its effects on hex-1 keep their phase")
     }
 
@@ -229,63 +264,59 @@ class ProgrammerLayerPressTest {
     fun `a per-fixture palette replaces only on the heads its rows name`() {
         val rig = newRig()
         rig.press(rig.colour("Red", "#ff0000"), "hex-1", "hex-3")
-        val uuid = UUID.nameUUIDFromBytes("Spot".toByteArray())
-        rig.palettes[uuid] = PaletteSnapshot(
-            paletteId = 98, paletteUuid = uuid, name = "Spot", fadeDurationMs = null,
-            rows = listOf(
-                PaletteRowEntry(target = TargetRef.Fixture("hex-1"), attribute = "rgbColour", value = "#ffffff;policy=extract"),
-                PaletteRowEntry(target = TargetRef.Fixture("hex-2"), attribute = "rgbColour", value = "#ffffff;policy=extract"),
-            ),
-        )
+        val spot = rig.perFixture("Spot", "hex-1", "hex-2")
 
-        val outcome = rig.stack.toggle(LayerSource.palette(98, uuid, "Spot"), on("hex-1", "hex-3"), attributeMask = "COLOUR")
+        val outcome = rig.stack.toggle(spot, on("hex-1", "hex-3"), attributeMask = "COLOUR")
 
         assertEquals(1, outcome.released)
-        assertEquals(listOf("Red: hex-3", "Spot: hex-1,hex-3"), rig.layers(), "hex-3, which Spot does not reach, keeps Red")
+        assertEquals(listOf("Red: hex-3", "Spot: hex-1"), rig.references(), "hex-3, which Spot does not reach, keeps Red")
+        assertEquals(listOf("hex-2"), outcome.omitted)
+        assertEquals(listOf("hex-3"), outcome.notCovered)
     }
 
     @Test
-    fun `a layer pressed on between them stops the widening`() {
+    fun `an effect palette layer pressed on between them stops the widening`() {
         val rig = newRig()
-        val red = rig.colour("Red", "#ff0000")
-        rig.press(red, "hex-1")
-        rig.press(rig.colour("Blue", "#0000ff"), "hex-3")
+        val cycle = rig.colourEffect("Cycle")
+        rig.press(cycle, "hex-1")
+        rig.press(rig.colourEffect("Rainbow"), "hex-3")
 
-        rig.press(red, "hex-2")
+        rig.press(cycle, "hex-2")
 
-        assertEquals(listOf("Red: hex-1", "Blue: hex-3", "Red: hex-2"), rig.layers())
+        assertEquals(listOf("Cycle: hex-1", "Rainbow: hex-3", "Cycle: hex-2"), rig.layers())
     }
 
     @Test
     fun `a layer the press replaces outright no longer stands between`() {
-        // Blue on hex-2 alone is dropped by Red's press there, so Red's own layer is the top again.
+        // Rainbow on hex-2 alone is dropped by Cycle's press there, so Cycle's own layer is the top again.
         val rig = newRig()
-        val red = rig.colour("Red", "#ff0000")
-        rig.press(red, "hex-1")
-        rig.press(rig.colour("Blue", "#0000ff"), "hex-2")
+        val cycle = rig.colourEffect("Cycle")
+        rig.press(cycle, "hex-1")
+        rig.press(rig.colourEffect("Rainbow"), "hex-2")
 
-        rig.press(red, "hex-2")
+        rig.press(cycle, "hex-2")
 
-        assertEquals(listOf("Red: hex-1,hex-2"), rig.layers())
+        assertEquals(listOf("Cycle: hex-1,hex-2"), rig.layers())
     }
 
     @Test
     fun `a retuned layer is not widened`() {
         val rig = newRig()
-        val red = rig.colour("Red", "#ff0000")
-        rig.press(red, "hex-1")
+        val cycle = rig.colourEffect("Cycle")
+        rig.press(cycle, "hex-1")
         rig.stack.patch(rig.store.layers.single().layerId, amount = 0.5)
 
-        rig.press(red, "hex-2")
+        rig.press(cycle, "hex-2")
 
-        assertEquals(listOf("Red: hex-1", "Red: hex-2"), rig.layers())
+        assertEquals(listOf("Cycle: hex-1", "Cycle: hex-2"), rig.layers())
     }
 
+    /** A per-fixture palette: a UV level on each of [keys], so a press of it takes [colour]'s heads off. */
     private fun Rig.perFixture(name: String, vararg keys: String): LayerSource {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
         palettes[uuid] = PaletteSnapshot(
             paletteId = name.hashCode(), paletteUuid = uuid, name = name, fadeDurationMs = null,
-            rows = keys.map { PaletteRowEntry(target = TargetRef.Fixture(it), attribute = "rgbColour", value = "#ffffff;policy=extract") },
+            rows = keys.map { PaletteRowEntry(target = TargetRef.Fixture(it), attribute = "uv", value = "dmx:200") },
         )
         return LayerSource.palette(name.hashCode(), uuid, name)
     }
@@ -299,19 +330,21 @@ class ProgrammerLayerPressTest {
         val on = rig.stack.toggle(focus, emptyList(), attributeMask = "COLOUR")
 
         assertEquals(1, on.released)
-        assertEquals(listOf("Red: hex-3", "Focus: hex-1,hex-2"), rig.layers())
+        assertEquals(listOf("Focus: hex-1,hex-2", "Red: hex-3"), rig.references())
         assertEquals("removed", rig.stack.toggle(focus, emptyList(), attributeMask = "COLOUR").action, "and a second press takes it off")
+        assertEquals(listOf("Red: hex-3"), rig.references())
     }
 
     @Test
-    fun `a per-fixture palette's layer naming no targets is replaced on the heads its rows name`() {
+    fun `a solo press narrows a per-fixture palette's untargeted layer to the heads its rows name`() {
         // The shape Include leaves: the palette's layer with no targets of its own.
         val rig = newRig()
         val focus = rig.perFixture("Focus", "hex-1", "hex-2")
         rig.stack.add(focus, emptyList(), attributeMask = "COLOUR")
 
-        assertEquals(1, rig.press(rig.colour("Red", "#ff0000"), "hex-1").released)
+        assertEquals(1, rig.press(rig.colour("Red", "#ff0000"), "hex-1", siblings = setOf(focus.uuid)).released)
 
-        assertEquals(listOf("Focus: hex-2", "Red: hex-1"), rig.layers())
+        assertEquals(listOf("Focus: hex-2"), rig.layers())
+        assertEquals(listOf("Red: hex-1"), rig.references())
     }
 }

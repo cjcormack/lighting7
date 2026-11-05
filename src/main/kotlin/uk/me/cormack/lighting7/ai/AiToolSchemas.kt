@@ -1380,10 +1380,12 @@ internal val setBlindTool = ToolDef(
 internal val applyPaletteTool = ToolDef(
     name = "apply_palette",
     description = "Press a palette (by paletteId or paletteName) onto targets, as the desk's palette chips and pads do. " +
-            "By default it puts on a programmer layer that tracks the palette, and toggles: pressing again on targets it " +
-            "already covers takes it off them (get_current_state's `programmer.layers`). A palette pressed on heads " +
-            "that hold another palette of its family and kind (value or FX) takes them off that one; pressed on " +
-            "more heads straight after, its layer widens rather than stacking. asValues true instead writes the values " +
+            "By default it toggles: a value palette writes references to itself (pal:{uuid}) as each head's programmer " +
+            "values, which follow later edits to the palette; an FX palette puts on a programmer layer " +
+            "(get_current_state's `programmer.layers`). Pressing again on heads it already covers takes it off them. " +
+            "A palette pressed on heads that hold another palette of its family and kind takes them off that one. " +
+            "The answer's omitted / notCovered name the heads a per-fixture palette holds that were not pressed, and " +
+            "the pressed heads it lands nothing on. asValues true instead writes the values " +
             "it resolves to into the programmer — later edits to the palette do not move them — or, for an FX " +
             "palette, starts a copy of its FX per target. A generic palette takes its heads from targets and " +
             "refuses with none (PALETTE_NEEDS_SELECTION); a per-fixture one lands on its own heads when targets are " +
@@ -1399,7 +1401,7 @@ internal val applyPaletteTool = ToolDef(
             })
             put("asValues", buildJsonObject {
                 put("type", "boolean")
-                put("description", "Write the palette's values (or a copy of its FX) instead of a tracking layer. Default false.")
+                put("description", "Write the literal values the palette resolves to (or a copy of its FX) instead of references or a layer. Default false.")
             })
             put("mask", maskSchema)
             put("fadeSeconds", buildJsonObject {

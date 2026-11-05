@@ -724,7 +724,11 @@ export function CueRowStoreProvider({
 
   // Keyed on what the bands read, not on the cue: a value save refetches the cue, and every cell in
   // the grid reads this context.
-  const layeredKey = (cue?.layers ?? []).flatMap((layer) => (layer.source ? [`${layer.source.kind}:${layer.source.id}`] : [])).join('|')
+  // A value palette pressed into the cue is its reference rows, not a layer (lighting7 palette-references plan D13).
+  const layeredKey = [
+    ...(cue?.layers ?? []).flatMap((layer) => (layer.source ? [`${layer.source.kind}:${layer.source.id}`] : [])),
+    ...(cue?.attributeAssignments ?? []).flatMap((row) => (row.reference != null ? [`PALETTE:${row.reference.paletteId}`] : [])),
+  ].join('|')
   const effects = cue?.adHocFx ?? EMPTY_FX
   const pressCue = useMemo<PressCue>(
     () => ({

@@ -75,7 +75,9 @@ export function nearestFilled(
 export function onOp(column: TimelineColumn, cueId: number, from: TimelineFilled | null): TimelineEditOp | null {
   const source = sourceOf(column)
   if (source != null) {
-    return { op: 'layerOn', cueId, source, target: cellTargetOf(column), settingsFrom: from?.kind === 'layer' ? from.layer.id : null }
+    // A value palette's reference rows are no stored layer, so they lend no settings.
+    const settingsFrom = from?.kind === 'layer' && from.layer.reference !== true ? from.layer.id : null
+    return { op: 'layerOn', cueId, source, target: cellTargetOf(column), settingsFrom }
   }
   if (column.kind === 'fx') return from?.kind === 'fx' ? { op: 'fxOn', cueId, fromFxUuid: from.effect.uuid } : null
   if (column.kind === 'scenery' && column.elementUuid && from?.kind === 'scenery') {
@@ -291,7 +293,8 @@ export function selectedLayers(
     const cue = cueOf(order, entryId)
     if (column == null || cue == null || (column.kind !== 'look' && column.kind !== 'palette')) continue
     const filled = filledOf(cells, entryId, column)
-    if (filled?.kind !== 'layer' || seen.has(filled.layer.id)) continue
+    // A value palette's reference rows have no settings of their own (lighting7 palette-references plan D13).
+    if (filled?.kind !== 'layer' || filled.layer.reference === true || seen.has(filled.layer.id)) continue
     seen.add(filled.layer.id)
     out.push({ cueId: cue.cueId, layer: filled.layer })
   }
