@@ -37,7 +37,7 @@ const val CODE_REMOTE_SCRIPTS_DISABLED = "REMOTE_SCRIPTS_DISABLED"
 
 /** Thrown by [requireScriptAccess]; `plugins/ErrorHandling.kt` answers it 403 [CODE_REMOTE_SCRIPTS_DISABLED]. */
 class RemoteScriptsDisabledException :
-    RuntimeException("Scripts are turned off for remote access. An admin can allow them in Install settings → Remote access.")
+    RuntimeException("Scripts are turned off for remote access. An admin can allow them in Install settings → Cloud → Remote access.")
 
 /** Whether this caller may compile, run or save a script: always on the LAN, per the setting remotely. */
 fun ApplicationCall.scriptsAllowed(state: State): Boolean =
@@ -54,7 +54,7 @@ fun ApplicationCall.requireScriptAccess(state: State) {
 
 /** Thrown by [requireEffectsAccess]; `plugins/ErrorHandling.kt` answers it 403 `REMOTE_EFFECTS_DISABLED`. */
 class RemoteEffectsDisabledException :
-    RuntimeException("Arming and firing are turned off for remote access. An admin can allow them in Install settings → Remote access.")
+    RuntimeException("Arming and firing are turned off for remote access. An admin can allow them in Install settings → Cloud → Remote access.")
 
 /** Whether this caller may arm the desk, fire a one-shot trigger or reload one: always on the LAN, per the setting remotely. */
 fun ApplicationCall.effectsAllowed(state: State): Boolean =
@@ -72,7 +72,7 @@ fun ApplicationCall.requireEffectsAccess(state: State) {
 
 /** Thrown by [requireCommandsAccess]; `plugins/ErrorHandling.kt` answers it 403 `REMOTE_COMMANDS_DISABLED`. */
 class RemoteCommandsDisabledException :
-    RuntimeException("Fixture commands are turned off for remote access. An admin can allow them in Install settings → Remote access.")
+    RuntimeException("Fixture commands are turned off for remote access. An admin can allow them in Install settings → Cloud → Remote access.")
 
 /** Whether this caller may run a fixture command: always on the LAN, per the setting remotely. */
 fun ApplicationCall.commandsAllowed(state: State): Boolean =

@@ -472,4 +472,15 @@ class CloudAdoptionTest {
         assertFalse(from("cloud.baseUrl" to "").configured)
         assertEquals("https://cloud.example.com", from("cloud.baseUrl" to "https://cloud.example.com/").baseUrl)
     }
+
+    @Test
+    fun `the remote channelState cap is 20 a second unless local conf names another, and 0 turns it off`() {
+        fun hz(vararg pairs: Pair<String, String>) = CloudConfig.from(MapApplicationConfig(*pairs)).remoteChannelStateHz
+        assertEquals(20, hz())
+        assertEquals(30, hz("cloud.remote.channelStateHz" to "30"))
+        assertEquals(0, hz("cloud.remote.channelStateHz" to "0"))
+        assertEquals(20, hz("cloud.remote.channelStateHz" to "-1"))
+        assertEquals(20, hz("cloud.remote.channelStateHz" to "fast"))
+        assertEquals(15, hz("cloud.baseUrl" to "", "cloud.remote.channelStateHz" to "15"), "with no cloud configured too")
+    }
 }

@@ -58,6 +58,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         TunnelStateOutMessage::class,
         // Lighting7 Cloud (cloud-p0 plan D14), machine band, admin sockets only, like the tunnel's.
         CloudStateOutMessage::class,
+        // The remote sessions waiting for an admin (cloud-p1 plan D13), machine band, admin sockets on
+        // the desk's own listener: empty on a fresh desk, which is still what every window's toasts read.
+        RemoteSessionPendingOutMessage::class,
         // Scenery, in the show band: on a desk where nothing has gone yet its frame names no
         // element, and that empty frame is still what a Stage view starts from.
         SceneryStateOutMessage::class,

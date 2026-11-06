@@ -23,6 +23,7 @@ show, and nothing here may slow one down (§"Show safety").
 | What the cloud is to hear of links while the channel is down | memory only (`CloudLinks`), at most 256 messages | until the next connection, unadopt or a restart |
 | What is happening now: a poll's error, a notice, the channel's status | `CloudService`'s memory only | until the next transition or a restart |
 | What may come through the cloud: *Remote sessions*, *Claude (MCP)*, *Approve each session* | `cloud_connection`'s `remote_access`, `mcp_access`, `approve_sessions`, held in memory as `CloudService.switches` | off at adoption; changed only on the desk's own listener (P1 D6) |
+| Offers waiting for an admin at the desk, and the browser's candidates for each | memory only (`RemoteBroker`) | until allowed, denied, closed or 60 s old; nothing is written until allowed (P1 D13) |
 | The cloud's token keys and the origin it serves remote sessions from | memory only (`JwksCache`, `CloudService.remoteOrigin`) | the last `jwks` and `welcome` heard, through any reconnect, until a newer one or a restart (P1 D3) |
 | Open remote sessions, and those ended or revoked | memory only (`RemoteSessions`) | until each ends, then until any token issued for it has expired |
 | The sidecar's launch, its link secret and the offers still to be answered | memory only (`LinkSidecar`, `RemoteSessions`, `RemoteBroker`) | one launch; a new secret each time it starts |
@@ -55,6 +56,9 @@ off, so `AuthService.deleteUser` deletes the user's link and invites (`deleteClo
   desk's first launch copies it, says `baseUrl = ""`: delete that line to take the default.
 - **`enabled = false`** is the hard kill switch: no adoption (`CLOUD_DISABLED`), no poll, no control
   channel, no call to the cloud. The UI cannot override it.
+- **`remote.channelStateHz`** (default 20, 0 for none) caps `channelState` to each socket on the public
+  listener, where a remote session's frames cross the internet (P1 D14, §"The rate cap"). A value that is
+  not a whole number from 0 to 1000 is the default, with a warning.
 
 The desk talks only to `baseUrl`'s host and follows no redirect (`CloudApi`). The row records the URL it
 was adopted through; if `cloud.baseUrl` later names another, `lastError` is `CLOUD_URL_CHANGED` and an
@@ -269,11 +273,51 @@ the sidecar reported, the `RemoteSessionEnd`), never in between. A clean stop en
 year are pruned then.
 
 **The switches** (P1 D6) are `cloud_connection`'s `remote_access`, `mcp_access` and `approve_sessions`,
-off at adoption. `GET /install/cloud/remote` answers them (`RemoteSwitches`); `PUT` sets the first two
-and is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY`, whatever the role: a compromised
-cloud can mint a linked admin's token, so nothing it can sign may widen what comes through it. No message
-writes them. For the same reason `PUT /install/tunnel`, which holds the scripts, effects and commands
-switches, is refused there too. The Cloud tab's switches and approval are P1's session 7.
+off at adoption. `GET /install/cloud/remote` answers them beside the scripts, effects and commands
+switches every remote request answers to (`remote_access_settings`' `allow_*`, through the cloud or ngrok
+alike), as `RemoteAccessDto`; `PUT` sets any of the six, a cloud switch only once adopted (409
+`CLOUD_NOT_ADOPTED`), and is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY`, whatever the
+role: a compromised cloud can mint a linked admin's token, so nothing it can sign may widen what comes
+through it. No message writes them. For the same reason `PUT /install/tunnel`, which still takes the
+scripts, effects and commands switches until P1's session 9, is refused there too.
+
+**Approval** (P1 D13). With `approve_sessions` on, an offer past the caps, the switch and the sidecar
+waits in the broker rather than opening: nothing is written and nothing reaches the sidecar, the
+browser's candidates are kept (64 at most) to follow its `session.open`, and it counts as open against
+the cap of 8. `CloudService.pendingSessions` lists what waits, each with the account's email and display
+name, the display name of the desk user it links to (read once, at the offer) and when its wait ends,
+and `remoteSession.pending` carries the list to every admin socket on the desk's own listener.
+`POST /install/cloud/sessions/{sid}/allow` reads the account's link again first: if the desk user it links
+to is not the one shown, it answers 409 `CLOUD_SESSION_LINK_CHANGED` and the offer waits on, shown
+afresh, so an admin never allows one person and opens another. Otherwise it opens the offer as an
+unapproved one would have opened (the switch and the sidecar checked again) and hands the sidecar the
+kept candidates. Until that `session.open` has gone the offer stays listed as *opening*, answerable by
+no one: it still counts against the cap and still keeps the candidates that arrive, and a close or a
+revoke that lands meanwhile ends the session as soon as it is registered. `…/deny` refuses it
+`REMOTE_SESSION_DENIED`. Both are refused on the public listener, 403 `CLOUD_APPROVAL_LOCAL_ONLY`, and are
+404 `CLOUD_NO_SESSION` once it no longer waits. Unanswered for 60 s (the cloud waits 75 s for the reply)
+it is denied, timed by a coroutine on the cloud's scope. The cloud's `rtc.close` for it, a `revoke`
+naming it, its account or everything (refused `TOKEN_REVOKED`), *Remote sessions* turned off
+(`REMOTE_ACCESS_OFF`) and the control channel dropping all end the wait too; the last replies nothing,
+since an offer's reply names the connection it came on and the cloud has already failed it. A second
+offer for a sid that waits or is open is refused `SESSION_ENDED`. Turning approval off leaves what waits
+to be answered. A denied or timed-out offer leaves no audit row: it never was a session. MCP calls are
+not covered: they have their own switch.
+
+**The Cloud tab's list.** `GET /install/cloud/sessions` answers every open session, newest first, and the
+20 most recently ended from the audit, each with the desk user it was (by their name now), its path and
+why it ended (`RemoteSessionsDto`). `DELETE /install/cloud/sessions/{sid}` ends an open one
+`ENDED_BY_ADMIN`, from either listener, since it only reduces reach; 404 `CLOUD_NO_SESSION` for one not
+open. All of `/install/cloud` is admin-only.
+
+**The rate cap** (P1 D14, `plugins/RemoteFrameCap.kt`). Every frame a socket on the public listener is
+sent goes through `SocketScope.send`, where `channelState` and `provenanceState` are held to
+`cloud.remote.channelStateHz` a second and half that. `channelState` carries only the channels that
+changed, so the frames sent within an interval are merged, each (universe, channel) at its latest level,
+and a merged frame is a snapshot if any frame in it was; `provenanceState` is a whole snapshot, so only
+the latest is kept. The first frame after a quiet spell goes at once, and a coroutine on the socket's own
+session drains the rest, ending once an interval passes with nothing to send. A socket on the desk's own
+listener has no cap, and neither does one with the setting at 0.
 
 ## Links
 
@@ -506,8 +550,11 @@ project. Its shape:
 
 `{configured, enabled, adoption?: {userCode, verificationUri, verificationUriComplete, expiresAt,
 fingerprint}, adopted?: {installId, orgName, adoptedAt, adoptedBy, linkedEmail, fingerprint},
-connection, link?, retryAt?, lastError?: {code, message}, lastOnlineAt?, notice?, noticeAt?, remote}`,
-`link` the sidecar's `OFF | STARTING | RUNNING | RESTARTING` (§"The sidecar"), `OFF` when absent
+connection, link?, retryAt?, lastError?: {code, message}, lastOnlineAt?, notice?, noticeAt?, remote,
+remoteSwitches: {remoteAccess, mcpAccess, approveSessions}}`, `link` the sidecar's `OFF | STARTING |
+RUNNING | RESTARTING` (§"The sidecar"), `OFF` when absent. `remoteSwitches` is what may come through the
+cloud now, so a switch moved on one window, or an adoption that starts them all off, reaches every
+window's Cloud tab (P1 session 7)
 
 On the public listener the pending adoption's `userCode` and both verification URIs are left out, from
 the REST answers and the frame alike (`CloudStateDto.forRemote`): whoever holds the code can approve the
@@ -546,7 +593,23 @@ than refetching. Its states:
   instant the desk set it, since the next expiry or revoke says the same words. The desk keeps both in
   memory until the next adoption or a restart, and no route clears them.
 
-The three mutations are in `SILENT_ENDPOINTS`: the tab shows each refusal where it was met.
+Below the adoption, the **Remote access** section (`CloudRemoteAccess.tsx`, P1 D6, D13): once adopted,
+*Remote sessions* with the sidecar's status under it while it is on, *Approve each new session on this
+desk* and *Claude (MCP)*, each a switch saying what turning it on allows; on any desk, adopted or not,
+the scripts, effects and commands switches, which the Remote access tab held until now and which hold
+for the ngrok tunnel too; and once adopted the open sessions, each with *End* (asked once), and the
+recent ones with why they ended, re-read every 5 s while the tab is open, since no frame announces a
+session. The three cloud switches follow `cloud.state`'s `remoteSwitches` (`store/cloud.ts`'s bridge
+patches the cached settings), and a change of install re-reads the switches and the list. Over remote access (`remote`) every switch is drawn disabled with the reason; *End* still works.
+
+**Approval toasts** (`RemoteSessionApprovals.tsx`, mounted once by `Layout`): every window that is sent
+`remoteSession.pending` (an admin's, on the desk's own listener) toasts each waiting session — who, as
+which desk user, the seconds left — with *Allow* and *Deny*, and takes the toast down once the frame no
+longer lists it, whichever window answered. A socket that closes forgets the list until the next
+snapshot.
+
+The adoption's three mutations and the switches' are in `SILENT_ENDPOINTS`: the tab shows each refusal
+where it was met.
 
 ## Show safety
 
@@ -600,13 +663,16 @@ rotates its key and sends `revoke`. Desk tests never use the real cloud (R5).
 channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and
 `CloudOutageOutputTimingTest` the show's output through a cloud outage. `RemoteSessionsTest` drives
 bearer requests and sockets on the public listener through every refusal and every way a session ends;
-`ChannelOutboxTest` the two send queues on virtual time. `CloudLinksTest` carries invites through
+`ChannelOutboxTest` the two send queues on virtual time; `RemoteFrameCapTest` the rate cap on virtual
+time. `CloudLinksTest` carries invites through
 `FakeCloud`'s `acceptInvite` and `declineInvite` to every answer, proves links through a remote session,
 and unlinks from each side. `RemoteBrokerTest` drives offers from the fake
 through `FakeSidecar`, a stand-in sidecar run as a process of its own that speaks the stdio protocol and
 hangs, dies or floods its stdout or stderr on request; `LinkMessagesTest` reads the stdio fixture;
 `LinkProcessTest` the supervisor's backoff on a virtual clock and the orphan sweep; `LinkBinaryTest` which
-binary runs.
+binary runs. `RemoteBrokerTest` also carries an offer through approval (allowed, denied, timed out, closed
+by the cloud, the switch turned off, the cap), the frame to an admin on the desk's own listener, *Allow*
+refused on the public one, and the Cloud tab's list and *End*.
 
 The sidecar's own tests (`cd link && go test ./...`, CI's *Link* job) run a pion peer as the browser
 against it and a test server as the desk, through the framing and `ctl` fixtures, both 100 MB streams,

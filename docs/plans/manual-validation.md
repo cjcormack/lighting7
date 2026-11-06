@@ -2730,7 +2730,7 @@ universe beside it):
 6. **A project switch mid-hold** ends the hold at once: a dedicated channel drops to 0 and the panel
    says it was cut short.
 7. **Remote**: from the public listener (or a phone through the tunnel), a command answers
-   `REMOTE_COMMANDS_DISABLED`; Install settings → Remote access → *Allow fixture commands* lifts it,
+   `REMOTE_COMMANDS_DISABLED`; Install settings → Cloud → Remote access → *Allow fixture commands* lifts it,
    and MCP's `run_fixture_command` follows the same switch.
 
 Where a hold is wrong, change it and its comment and drop the `Estimate:` marker. Where a precondition

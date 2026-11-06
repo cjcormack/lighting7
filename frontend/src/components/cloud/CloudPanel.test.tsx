@@ -37,6 +37,14 @@ vi.mock('@/store/cloud', async () => {
     useStartCloudAdoptionMutation: mutationHook(() => mocks.start()),
     useCancelCloudAdoptionMutation: mutationHook(() => mocks.cancel()),
     useUnadoptCloudMutation: mutationHook((arg: { force?: boolean }) => mocks.unadopt(arg)),
+    // The Remote access section has tests of its own (CloudRemoteAccess.test.tsx).
+    useRemoteAccessSettingsQuery: () => ({
+      data: { remoteAccess: false, mcpAccess: false, approveSessions: false, allowScripts: false, allowEffects: false, allowCommands: false },
+      error: undefined,
+    }),
+    useSetRemoteAccessMutation: () => [() => ({ unwrap: () => Promise.resolve({}) }), { isLoading: false, error: undefined, reset: () => {} }],
+    useRemoteSessionsQuery: () => ({ data: undefined, error: undefined }),
+    useEndRemoteSessionMutation: () => [() => Promise.resolve({}), { isLoading: false }],
   }
 })
 

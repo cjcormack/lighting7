@@ -30,6 +30,8 @@ data class CloudStateDto(
     val noticeAt: String? = null,
     /** This answer is for a caller on the public listener, where *Adopt* is refused (D5). */
     val remote: Boolean = false,
+    /** What may come through the cloud now (cloud-p1 plan D6, D13): every window's Cloud tab follows it. */
+    val remoteSwitches: RemoteSwitches = RemoteSwitches(),
 ) {
     /**
      * What a caller on the public listener sees: the pending adoption's code and links left out,
@@ -106,6 +108,15 @@ object CloudErrorCodes {
 
     /** A setting that limits what comes through the cloud, changed from the public listener (cloud-p1 plan D6). */
     const val SETTINGS_LOCAL_ONLY = "CLOUD_SETTINGS_LOCAL_ONLY"
+
+    /** A remote session allowed or denied from the public listener (cloud-p1 plan D13). */
+    const val APPROVAL_LOCAL_ONLY = "CLOUD_APPROVAL_LOCAL_ONLY"
+
+    /** No remote session by that sid is waiting, or open. */
+    const val NO_SESSION = "CLOUD_NO_SESSION"
+
+    /** An *Allow* for a session whose account's link changed since it was shown (D13). */
+    const val SESSION_LINK_CHANGED = "CLOUD_SESSION_LINK_CHANGED"
 
     // Links and invites (cloud-p1 plan D12).
     const val OFFLINE = "CLOUD_OFFLINE"

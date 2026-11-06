@@ -54,7 +54,7 @@ whoever is standing at the desk running the show is who fires the confetti, and 
 admin could give would make the operator fetch one mid-show. What gates the cannons is not a role
 but **where the caller is**: on the public listener all three are refused (403
 `REMOTE_EFFECTS_DISABLED`, `requireEffectsAccess`) unless an admin has turned on *Allow arming and
-firing over remote access* in Install settings → Remote access — off by default, because a cannon
+firing over remote access* in Install settings → Cloud → Remote access — off by default, because a cannon
 spends something physical in a room a remote caller cannot see. They are REST rather than socket
 commands for the next paragraph's reason: the socket gains no operation. **The arm itself is the
 consent to a cue's events, wherever the GO comes from** (a decision made in session 9's review): a

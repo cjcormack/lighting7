@@ -19,6 +19,7 @@ import { formatError } from '@/lib/formatError'
 import { cn } from '@/lib/utils'
 import { errorCode } from '@/lib/venueSyncRefusal'
 import { useAuthStatusQuery } from '@/store/auth'
+import { CloudRemoteAccess } from './CloudRemoteAccess'
 import {
   useCancelCloudAdoptionMutation,
   useCloudStateQuery,
@@ -30,9 +31,9 @@ import {
 } from '@/store/cloud'
 
 /**
- * The Cloud tab: this desk's adoption by Lighting7 Cloud. Admin only and machine-local. Everything
- * it shows is the desk's own state, so a pending adoption survives a reload and is the same on
- * every window. Backend contract in lighting7's `docs/cloud-engineering.md`.
+ * The Cloud tab: this desk's adoption by Lighting7 Cloud, and what may reach it remotely. Admin only
+ * and machine-local. Everything it shows is the desk's own state, so a pending adoption survives a
+ * reload and is the same on every window. Backend contract in lighting7's `docs/cloud-engineering.md`.
  */
 export function CloudPanel() {
   const { data: authStatus } = useAuthStatusQuery()
@@ -90,6 +91,7 @@ function CloudBody({ state }: { state: CloudState }) {
       ) : (
         available && <NotAdopted remote={state.remote === true} />
       )}
+      <CloudRemoteAccess state={state} />
     </div>
   )
 }

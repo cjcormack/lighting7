@@ -1286,7 +1286,7 @@ internal const val RUN_FIXTURE_COMMAND = "run_fixture_command"
 
 /** What the tool answers when a caller may not run one. */
 internal const val FIXTURE_COMMANDS_REMOTE_REFUSAL =
-    "run_fixture_command is not available: fixture commands are turned off for remote access. An admin can allow them in Install settings → Remote access."
+    "run_fixture_command is not available: fixture commands are turned off for remote access. An admin can allow them in Install settings → Cloud → Remote access."
 
 // ─── The programmer: set, clear, Blind, template apply, Record into a Look ──
 

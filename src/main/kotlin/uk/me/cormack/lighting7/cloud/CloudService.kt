@@ -183,13 +183,42 @@ class CloudService(
         override fun send(message: LinkIn): Boolean = link?.sidecar?.send(message) ?: false
     }
 
+    /** How long a remote session waits for an admin at the desk (D13). Tests shorten it. */
+    @Volatile internal var approvalTimeout: java.time.Duration = RemoteBroker.APPROVAL_TIMEOUT
+
     private val broker = RemoteBroker(
         sessions = remoteSessions,
         remoteAccess = { switches.remoteAccess },
         sidecar = { sidecarPort },
         toCloud = { message, replyTo -> liveConnection?.send(message, replyTo) ?: false },
         clock = clock,
+        approveSessions = { switches.approveSessions },
+        linkedDeskUser = remoteSessions::linkedDeskUser,
+        after = { delay, block ->
+            val job = scope.launch {
+                kotlinx.coroutines.delay(delay.toMillis())
+                block()
+            }
+            ({ job.cancel() })
+        },
+        approvalTimeout = { approvalTimeout },
     )
+
+    /** The remote sessions waiting for an admin at the desk (D13): `remoteSession.pending`'s source. */
+    val pendingSessions: StateFlow<List<PendingRemoteSession>> get() = broker.waitingForApproval
+
+    /** Allow a remote session waiting for approval. Only the desk's own listener calls this. */
+    fun allowSession(sid: String, by: String): AllowResult = broker.allow(sid, by)
+
+    /** Deny a remote session waiting for approval: false when [sid] is not waiting. */
+    fun denySession(sid: String, by: String): Boolean = broker.deny(sid, by)
+
+    /** End an open remote session from the Cloud tab: false when [sid] is not open. */
+    fun endSession(sid: String, by: String): Boolean {
+        val ended = remoteSessions.end(sid, RemoteSessionEnd.ENDED_BY_ADMIN)
+        if (ended) logger.info("Remote session {} ended by {}", ChannelConnection.clip(sid), by)
+        return ended
+    }
 
     private val channelHandler = object : ChannelHandler {
         override fun capabilities(): List<String> = this@CloudService.capabilities()
@@ -202,7 +231,10 @@ class CloudService(
         }
 
         override fun offline(connection: ChannelConnection) {
-            if (liveConnection === connection) liveConnection = null
+            if (liveConnection === connection) {
+                liveConnection = null
+                broker.connectionLost()
+            }
         }
 
         override fun welcomed(welcome: Message.Welcome) {
@@ -211,7 +243,10 @@ class CloudService(
 
         override fun jwks(jwks: Message.Jwks) = this@CloudService.jwks.update(jwks)
 
-        override fun revoke(revoke: Message.Revoke) = remoteSessions.revoke(revoke)
+        override fun revoke(revoke: Message.Revoke) {
+            remoteSessions.revoke(revoke)
+            broker.revoked(revoke)
+        }
 
         override fun rtcOffer(id: String, offer: Message.RtcOffer) = broker.offer(id, offer)
 
@@ -387,6 +422,7 @@ class CloudService(
             previous != null && previous.installId != next.installId -> remoteSessions.endAll(RemoteSessionEnd.UNADOPTED)
             !next.remoteAccess -> remoteSessions.endAll(RemoteSessionEnd.REMOTE_ACCESS_OFF)
         }
+        if (!switches.remoteAccess) broker.remoteAccessOff()
         liveConnection?.refreshCapabilities()
     }
 
@@ -530,6 +566,7 @@ class CloudService(
             lastOnlineAt = channel.lastOnlineAt?.toIsoUtc(),
             notice = memory.notice,
             noticeAt = memory.noticeAt?.toIsoUtc(),
+            remoteSwitches = switches,
         )
     }
 

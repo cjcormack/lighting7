@@ -1,9 +1,21 @@
 package uk.me.cormack.lighting7.cloud
 
+import io.ktor.client.call.body
+import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.delete
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.After
@@ -14,14 +26,26 @@ import uk.me.cormack.lighting7.cloud.protocol.IceCandidate
 import uk.me.cormack.lighting7.cloud.protocol.IceServer
 import uk.me.cormack.lighting7.cloud.protocol.Message
 import uk.me.cormack.lighting7.link.LinkIn
+import uk.me.cormack.lighting7.mcp.publicModule
+import uk.me.cormack.lighting7.plugins.RemoteSessionPendingOutMessage
 import uk.me.cormack.lighting7.link.LinkSidecar
 import uk.me.cormack.lighting7.link.LinkStatus
+import uk.me.cormack.lighting7.models.CloudLinkVia
+import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoCloudRemoteSessions
+import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.process.PidFile
 import uk.me.cormack.lighting7.testsupport.FakeCloud
 import uk.me.cormack.lighting7.testsupport.FakeSidecar
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.awaitOfType
+import uk.me.cormack.lighting7.testsupport.createWsClient
+import uk.me.cormack.lighting7.testsupport.jsonClient
+import uk.me.cormack.lighting7.testsupport.loginCookieHeader
+import uk.me.cormack.lighting7.testsupport.mountTestApp
+import uk.me.cormack.lighting7.testsupport.TEST_PASSWORD
 import uk.me.cormack.lighting7.testsupport.seedUser
+import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -302,5 +326,248 @@ class RemoteBrokerTest : RouteIntegrationTest() {
         eventually("stopped") { state.cloud.link == null && !state.cloud.sidecarRunning }
         assertNull(sessions.find("sid-1"))
         assertFalse(record.readText().isEmpty())
+    }
+
+    private fun waitForApproval(sid: String): PendingRemoteSession {
+        var found: PendingRemoteSession? = null
+        eventually("$sid waits for an admin") { state.cloud.pendingSessions.value.firstOrNull { it.sid == sid }?.also { found = it } != null }
+        return found!!
+    }
+
+    private fun approving() {
+        adopt()
+        state.cloud.setSwitches(approveSessions = true)
+    }
+
+    @Test
+    fun `with approval on, an offer waits for an admin with nothing written, and opens when allowed`() {
+        approving()
+        val id = fake.offer(installId, "sid-1")
+        val waiting = waitForApproval("sid-1")
+        assertEquals("${fake.account.id}@example.com", waiting.email)
+        assertEquals("Someone", waiting.displayName)
+        assertEquals("Test admin", waiting.linkedUser, "the desk user the account links to")
+        fake.send(installId, Message.RtcIce("sid-1", IceCandidate("candidate:2 1 udp 1 192.0.2.7 9 typ host", "0", 0)))
+        fake.send(installId, Message.RtcIce("sid-1", null))
+        Thread.sleep(300)
+        assertNull(fake.replyTo(installId, id), "no answer while it waits")
+        assertEquals(0, auditRows())
+        assertNull(sessions.find("sid-1"))
+        assertTrue(stdin().none { "sid-1" in it }, "nothing reaches the sidecar")
+
+        assertEquals(AllowResult.Allowed, state.cloud.allowSession("sid-1", "admin"))
+        assertEquals(Message.RtcAnswer("sid-1", "answer for sid-1"), reply(id))
+        assertTrue(state.cloud.pendingSessions.value.isEmpty())
+        assertEquals(1, auditRows())
+        assertNotNull(sessions.find("sid-1"))
+        eventually("the kept candidates followed the open") { stdin().count { "session.ice" in it && "sid-1" in it } == 2 }
+        val lines = stdin()
+        assertTrue(lines.indexOfFirst { "session.open" in it } < lines.indexOfFirst { "192.0.2.7" in it }, lines.toString())
+        assertEquals(AllowResult.NotWaiting, state.cloud.allowSession("sid-1", "admin"), "an offer is answered once")
+    }
+
+    @Test
+    fun `a denied offer is refused and leaves nothing behind`() {
+        approving()
+        val id = fake.offer(installId, "sid-1")
+        waitForApproval("sid-1")
+        assertTrue(state.cloud.denySession("sid-1", "admin"))
+        assertEquals(Message.RtcClose("sid-1", ErrorCode.REMOTE_SESSION_DENIED), reply(id))
+        assertTrue(state.cloud.pendingSessions.value.isEmpty())
+        assertEquals(0, auditRows())
+        assertNull(sessions.find("sid-1"))
+        assertTrue(stdin().none { "sid-1" in it })
+        assertEquals(AllowResult.NotWaiting, state.cloud.allowSession("sid-1", "admin"))
+    }
+
+    @Test
+    fun `an offer nobody answers is denied when its wait runs out`() {
+        state.cloud.approvalTimeout = java.time.Duration.ofMillis(300)
+        approving()
+        val id = fake.offer(installId, "sid-1")
+        val waiting = waitForApproval("sid-1")
+        assertTrue(java.time.Instant.parse(waiting.expiresAt) > java.time.Instant.now().minusSeconds(1))
+        assertEquals(Message.RtcClose("sid-1", ErrorCode.REMOTE_SESSION_DENIED), reply(id))
+        assertTrue(state.cloud.pendingSessions.value.isEmpty())
+        assertEquals(0, auditRows())
+        assertEquals(AllowResult.NotWaiting, state.cloud.allowSession("sid-1", "admin"), "too late")
+    }
+
+    @Test
+    fun `an offer stops waiting when the cloud closes it, or when Remote sessions goes off`() {
+        approving()
+        fake.offer(installId, "sid-1")
+        waitForApproval("sid-1")
+        fake.send(installId, Message.RtcClose("sid-1", ErrorCode.SESSION_ENDED))
+        eventually("no longer waiting") { state.cloud.pendingSessions.value.isEmpty() }
+        assertEquals(AllowResult.NotWaiting, state.cloud.allowSession("sid-1", "admin"))
+
+        val id = fake.offer(installId, "sid-2")
+        waitForApproval("sid-2")
+        state.cloud.setSwitches(remoteAccess = false)
+        assertEquals(Message.RtcClose("sid-2", ErrorCode.REMOTE_ACCESS_OFF), reply(id))
+        assertTrue(state.cloud.pendingSessions.value.isEmpty())
+        assertEquals(0, auditRows())
+    }
+
+    @Test
+    fun `offers waiting for approval count against the cap on open sessions`() {
+        approving()
+        (1..8).forEach { fake.offer(installId, "sid-$it"); waitForApproval("sid-$it") }
+        assertEquals(Message.RtcClose("sid-9", ErrorCode.REMOTE_SESSION_LIMIT), reply(fake.offer(installId, "sid-9")))
+        assertEquals(8, state.cloud.pendingSessions.value.size)
+    }
+
+    @Test
+    fun `an offer stops waiting when the connection to the cloud drops`() {
+        approving()
+        fake.offer(installId, "sid-1")
+        waitForApproval("sid-1")
+        fake.dropChannel()
+        eventually("no longer waiting") { state.cloud.pendingSessions.value.isEmpty() }
+        assertEquals(AllowResult.NotWaiting, state.cloud.allowSession("sid-1", "admin"))
+        assertEquals(0, auditRows())
+    }
+
+    @Test
+    fun `a revoke ends the wait of what it names, refused as revoked`() {
+        approving()
+        val id = fake.offer(installId, "sid-1")
+        waitForApproval("sid-1")
+        fake.revoke(installId, accountId = fake.account.id)
+        assertEquals(Message.RtcClose("sid-1", ErrorCode.TOKEN_REVOKED), reply(id))
+        assertTrue(state.cloud.pendingSessions.value.isEmpty())
+        assertEquals(0, auditRows())
+    }
+
+    @Test
+    fun `with approval on, a second offer for an open session is refused, and the cloud's close still ends it`() {
+        adopt()
+        reply(fake.offer(installId, "sid-1"))
+        state.cloud.setSwitches(approveSessions = true)
+        assertEquals(Message.RtcClose("sid-1", ErrorCode.SESSION_ENDED), reply(fake.offer(installId, "sid-1")))
+        assertTrue(state.cloud.pendingSessions.value.isEmpty(), "nothing to ask about")
+        fake.send(installId, Message.RtcClose("sid-1", ErrorCode.SESSION_ENDED))
+        eventually("the open session ended") { sessions.find("sid-1") == null }
+    }
+
+    @Test
+    fun `an account linked while its offer waits is shown again rather than opened as someone else`() {
+        approving()
+        val operator = seedUser(state, "op", UserRole.OPERATOR)
+        val id = fake.offer(installId, "sid-1", accountId = "acct-unlinked")
+        assertNull(waitForApproval("sid-1").linkedUser)
+        transaction(state.database) {
+            DaoCloudIdentityLinks.insert {
+                it[user] = operator.userId
+                it[cloudAccountId] = "acct-unlinked"
+                it[email] = "acct-unlinked@example.com"
+                it[linkedAt] = java.time.Instant.now()
+                it[linkedVia] = CloudLinkVia.PROVED
+            }
+        }
+        assertEquals(AllowResult.LinkChanged("Test op"), state.cloud.allowSession("sid-1", "admin"))
+        assertEquals("Test op", state.cloud.pendingSessions.value.single().linkedUser, "shown afresh")
+        assertEquals(0, auditRows())
+        assertEquals(AllowResult.Allowed, state.cloud.allowSession("sid-1", "admin"))
+        assertTrue(reply(id) is Message.RtcAnswer)
+        assertEquals(operator.userId, sessions.find("sid-1")?.userId)
+    }
+
+    @Test
+    fun `a link moved to another user of the same name is caught, and a rename alone is not a change`() {
+        approving()
+        val first = runBlocking { state.authService.createUser("twin1", "Twin", UserRole.OPERATOR, TEST_PASSWORD) }
+        val second = runBlocking { state.authService.createUser("twin2", "Twin", UserRole.ADMIN, TEST_PASSWORD) }
+        fun linkTo(userId: Int) = transaction(state.database) {
+            DaoCloudIdentityLinks.deleteWhere { cloudAccountId eq "acct-twin" }
+            DaoCloudIdentityLinks.insert {
+                it[user] = userId
+                it[cloudAccountId] = "acct-twin"
+                it[email] = "acct-twin@example.com"
+                it[linkedAt] = java.time.Instant.now()
+                it[linkedVia] = CloudLinkVia.PROVED
+            }
+        }
+        linkTo(first.userId)
+        val id = fake.offer(installId, "sid-1", accountId = "acct-twin")
+        assertEquals("Twin", waitForApproval("sid-1").linkedUser)
+
+        linkTo(second.userId)
+        assertEquals(AllowResult.LinkChanged("Twin"), state.cloud.allowSession("sid-1", "admin"), "the same name, another user")
+
+        state.authService.updateUser(second.userId, "Twin, renamed", null, null)
+        assertEquals(AllowResult.Allowed, state.cloud.allowSession("sid-1", "admin"), "a rename is the same user")
+        assertTrue(reply(id) is Message.RtcAnswer)
+        assertEquals(second.userId, sessions.find("sid-1")?.userId)
+    }
+
+    @Test
+    fun `allow and deny are refused on the public listener`() = testApplication {
+        approving()
+        fake.offer(installId, "sid-1")
+        waitForApproval("sid-1")
+        environment { config = testAppConfig() }
+        application { publicModule(state) }
+        val http = jsonClient()
+        val cookie = http.loginCookieHeader("admin")
+        for (answer in listOf("allow", "deny")) {
+            val refused = http.post("/api/rest/install/cloud/sessions/sid-1/$answer") { header(HttpHeaders.Cookie, cookie) }
+            assertEquals(HttpStatusCode.Forbidden, refused.status, refused.bodyAsText())
+            assertTrue(CloudErrorCodes.APPROVAL_LOCAL_ONLY in refused.bodyAsText())
+        }
+        assertEquals(listOf("sid-1"), state.cloud.pendingSessions.value.map { it.sid }, "still waiting")
+    }
+
+    @Test
+    fun `an admin on the desk's own listener is shown the offer and allows it`() = testApplication {
+        approving()
+        mountTestApp(state)
+        val client = createWsClient()
+        val cookie = client.loginCookieHeader("admin")
+        val id = fake.offer(installId, "sid-1")
+        client.webSocket("/api", request = { header(HttpHeaders.Cookie, cookie) }) {
+            val frame = awaitOfType<RemoteSessionPendingOutMessage>(maxFrames = 400) { it.sessions.isNotEmpty() }
+            assertEquals(listOf("sid-1"), frame.sessions.map { it.sid })
+            assertEquals("Test admin", frame.sessions.single().linkedUser)
+            val missing = client.post("/api/rest/install/cloud/sessions/sid-x/allow") { header(HttpHeaders.Cookie, cookie) }
+            assertEquals(HttpStatusCode.NotFound, missing.status)
+            val allowed = client.post("/api/rest/install/cloud/sessions/sid-1/allow") { header(HttpHeaders.Cookie, cookie) }
+            assertEquals(HttpStatusCode.NoContent, allowed.status, allowed.bodyAsText())
+            awaitOfType<RemoteSessionPendingOutMessage>(maxFrames = 400) { it.sessions.isEmpty() }
+        }
+        assertTrue(reply(id) is Message.RtcAnswer)
+    }
+
+    @Test
+    fun `the Cloud tab lists open and ended sessions, and ends an open one`() = testApplication {
+        adopt()
+        reply(fake.offer(installId, "sid-1"))
+        reply(fake.offer(installId, "sid-2", sdp = "then-close"))
+        eventually("sid-2 closed") { sessions.find("sid-2") == null }
+        mountTestApp(state)
+        val http = jsonClient()
+        val cookie = http.loginCookieHeader("admin")
+
+        val listing = http.get("/api/rest/install/cloud/sessions") { header(HttpHeaders.Cookie, cookie) }.body<RemoteSessionsDto>()
+        val open = listing.open.single()
+        assertEquals("sid-1", open.sid)
+        assertEquals("Test admin", open.user)
+        assertEquals("Someone", open.displayName)
+        assertNull(open.endedAt)
+        val ended = listing.recent.single()
+        assertEquals("sid-2", ended.sid)
+        assertEquals(RemoteSessionEnd.LINK_CLOSED.name, ended.endReason)
+        assertNotNull(ended.endedAt)
+
+        val end = http.delete("/api/rest/install/cloud/sessions/sid-1") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.OK, end.status, end.bodyAsText())
+        val after = end.body<RemoteSessionsDto>()
+        assertTrue(after.open.isEmpty())
+        assertEquals(RemoteSessionEnd.ENDED_BY_ADMIN.name, after.recent.first { it.sid == "sid-1" }.endReason)
+        eventually("the cloud and the sidecar are told") {
+            fake.sent<Message.RtcClose>(installId).any { it.sid == "sid-1" } && stdin().any { "session.close" in it && "sid-1" in it }
+        }
+        assertEquals(HttpStatusCode.NotFound, http.delete("/api/rest/install/cloud/sessions/sid-1") { header(HttpHeaders.Cookie, cookie) }.status)
     }
 }
