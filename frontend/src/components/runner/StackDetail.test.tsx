@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cueRow, markerRow } from '@/test/cueEntries'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow } from '@/api/cueStacksApi'
 
@@ -59,6 +59,7 @@ vi.mock('./StackTimeline', () => ({ StackTimeline: () => <div data-testid="timel
 vi.mock('./CueSheet', () => ({ CueSheet: () => <div data-testid="table" /> }))
 
 import { StackDetail } from './StackDetail'
+import { cuePaneOpenStore } from './CueEditorPane'
 
 /** A cue row of the stack, or — with `cueType: 'MARKER'` — a marker entry, its entry id `id + 100`. */
 function cue(id: number, over?: Partial<CueStackCueRow>): CueStackCueRow
@@ -296,5 +297,35 @@ describe('the Timeline from 1100 px (C6)', () => {
     render(view({ view: 'list' }))
     expect(screen.getByTestId('table')).toBeTruthy()
     expect(screen.queryByLabelText('Timeline')).toBeNull()
+  })
+})
+
+describe('the Editor toggle (show-view-fixes plan D3)', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    cuePaneOpenStore.reset()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 1100, height: 600 } as DOMRect)
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('is drawn on the Table and the Timeline, pressed in a window that never chose, and not on Cards', () => {
+    const { unmount } = render(view({ view: 'list' }))
+    expect(screen.getByRole('button', { name: 'Editor' }).getAttribute('aria-pressed')).toBe('true')
+    unmount()
+    const timeline = render(view({ view: 'timeline' }))
+    expect(screen.getByRole('button', { name: 'Editor' })).toBeTruthy()
+    timeline.unmount()
+    render(view({ view: 'cards' }))
+    expect(screen.queryByRole('button', { name: 'Editor' })).toBeNull()
+  })
+
+  it('switches this window’s pane, locked or not, and keeps the choice in the window', () => {
+    render(view({ view: 'list', locked: true }))
+    const toggle = screen.getByRole('button', { name: 'Editor' })
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    expect(sessionStorage.getItem('cueSheet.paneOpen')).toBe('false')
+    fireEvent.click(toggle)
+    expect(cuePaneOpenStore.getSnapshot()).toBe(true)
   })
 })

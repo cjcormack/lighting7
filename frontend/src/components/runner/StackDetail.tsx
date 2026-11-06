@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { ArrowLeft, Pencil, SeparatorHorizontal, Zap } from 'lucide-react'
+import { ArrowLeft, PanelBottom, Pencil, SeparatorHorizontal, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DndContext,
@@ -32,6 +32,7 @@ import { ShowStackViewSwitcher, TIMELINE_MIN_WIDTH, effectiveStackView, type Car
 import { useContainerBand } from '@/hooks/useContainerBand'
 import { CueSheet } from './CueSheet'
 import { StackTimeline } from './StackTimeline'
+import { cuePaneOpenStore, useCuePaneOpen } from './CueEditorPane'
 import { OwnerEditor } from '@/components/stage/OwnerEditor'
 import { StackMovingChip } from '@/components/cues/StackMovingChip'
 
@@ -147,6 +148,7 @@ export function StackDetail({
     if (locked) setSettingsOpen(false)
   }, [locked])
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
+  const paneOpen = useCuePaneOpen()
 
   // Offer to fix the order when a cue-number group descends against itself. Dismissal is scoped
   // to the stack so drilling into another one asks again.
@@ -262,6 +264,23 @@ export function StackDetail({
         <StackMovingChip stackId={stack.id} detail className="hidden @[520px]:inline-flex" />
         <div className="flex-1" />
         <ShowStackViewSwitcher current={shownView} projectId={projectId} stackId={stack.id} timelineOffered={timelineOffered} />
+        {/* The bottom pane is this window's to show or not (show-view-fixes plan D3); a card is its
+            own editor, so Cards draws no toggle. */}
+        {!awaitingWidth && shownView !== 'cards' && (
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={paneOpen}
+            aria-label="Editor"
+            onClick={() => cuePaneOpenStore.set(!paneOpen)}
+            className={cn(paneOpen && 'border-primary bg-primary/10 text-primary hover:text-primary')}
+            title={paneOpen ? 'Hide the cue editor under the sheet' : 'Show the cue editor under the sheet'}
+            data-cue-pane-toggle
+          >
+            <PanelBottom className="size-3.5" />
+            <span className="ml-1.5 hidden @[600px]:inline">Editor</span>
+          </Button>
+        )}
 
         {/* **Recording is the only way in.** "Add Cue" made an empty cue and opened an editor
             on it, which is backwards: a cue is a captured state, so the thing that makes one is the

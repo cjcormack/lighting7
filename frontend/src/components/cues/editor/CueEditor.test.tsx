@@ -431,12 +431,11 @@ describe('CueEditor', () => {
       notes: null,
       cueType: 'STANDARD',
     }
-    const column = { current: document.createElement('div') }
     const sheet = { current: document.createElement('div') }
     render(
       <>
         <CueCardEditor cue={row} stackId={7} projectId={1} expanded onToggleExpanded={() => {}} />
-        <CueEditorPane projectId={1} cueId={1} entryId={101} locked={false} columnRef={column} sheetRef={sheet} />
+        <CueEditorPane projectId={1} content={{ kind: 'cue', rowId: 'entry:101', cueId: 1, entryId: 101 }} locked={false} sheetRef={sheet} />
       </>,
     )
     const editors = [...document.querySelectorAll('[data-cue-editor]')]

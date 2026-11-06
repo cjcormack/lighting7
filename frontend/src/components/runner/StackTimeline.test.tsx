@@ -64,6 +64,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 
 import { StackTimeline } from './StackTimeline'
 import { timelineFiltersStore } from '@/lib/stackTimeline/columnOrder'
+import { cuePaneHeightStore, cuePaneOpenStore } from './CueEditorPane'
 
 const STACK: CueStack = {
   id: 10,
@@ -111,6 +112,8 @@ beforeEach(() => {
   cueActions.last = undefined
   timelineFiltersStore.reset()
   sessionStorage.clear()
+  cuePaneOpenStore.reset()
+  cuePaneHeightStore.reset()
   DESK_SELECTION = []
   FADE = null
   TIMELINE = {
@@ -188,18 +191,24 @@ describe('StackTimeline', () => {
     expect((document.querySelector('[data-row-id="entry:103"]') as HTMLElement).className).toContain('rgb(59,130,246)')
   })
 
-  it('opens the pane on one selected cell’s cue at its column’s tab, and folds it over several cues', () => {
+  it('shows one selected cell’s cue at its column’s tab, and a blank state over several cues', () => {
     stubLayout()
     render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
     const editor = () => document.querySelector('[data-cue-editor]')
+    const pane = () => document.querySelector<HTMLElement>('[data-cue-pane]')
+    expect(pane()).toHaveAttribute('data-cue-pane-state', 'none')
     pressCell(cell(102, PALETTE).firstElementChild as HTMLElement, 400, 1)
     expect(editor()?.getAttribute('data-cue-editor')).toBe('2')
     expect(editor()?.getAttribute('data-tab')).toBe('looks')
+    const height = pane()!.style.height
     fireEvent.keyDown(window, { key: 'ArrowRight' })
     expect(editor()?.getAttribute('data-tab')).toBe('scenery')
-    // A range over two cues folds it.
+    // A range over two cues: the pane stays at its height and says why it is blank.
     fireEvent.keyDown(window, { key: 'ArrowUp', shiftKey: true })
     expect(editor()).toBeNull()
+    expect(pane()).toHaveAttribute('data-cue-pane-state', 'several')
+    expect(pane()).toHaveTextContent('2 cues selected')
+    expect(pane()!.style.height).toBe(height)
   })
 
   it('draws no Dark column while the stack moves nothing in the dark', () => {
@@ -371,5 +380,56 @@ describe('StackTimeline', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Choose the scenery shown' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Show all' }))
     expect(timelineFiltersStore.getSnapshot().hiddenScenery).toEqual(['elsewhere'])
+  })
+})
+
+describe('StackTimeline — the editor pane toggle', () => {
+  const pane = () => document.querySelector<HTMLElement>('[data-cue-pane]')
+
+  it('holds the pane’s cue while a marquee crosses cues, and follows the selection on release', () => {
+    stubLayout()
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    pressCell(cell(101, PALETTE).firstElementChild as HTMLElement, 400, 0)
+    expect(pane()).toHaveAttribute('data-cue-pane', '101')
+    const target = cell(101, PALETTE).firstElementChild as HTMLElement
+    fireEvent.pointerDown(target, { button: 0, clientX: 400, clientY: 10 })
+    fireEvent.pointerMove(target, { button: 0, buttons: 1, clientX: 410, clientY: 36 + 26 })
+    expect(pane()).toHaveAttribute('data-cue-pane', '101')
+    fireEvent.pointerUp(target, { button: 0, clientX: 410, clientY: 36 + 26 })
+    fireEvent.click(target)
+    expect(pane()).toHaveAttribute('data-cue-pane-state', 'several')
+  })
+
+  it('off, draws no pane over a selected cell', () => {
+    cuePaneOpenStore.set(false)
+    stubLayout()
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    pressCell(cell(102, PALETTE).firstElementChild as HTMLElement, 400, 1)
+    expect(pane()).toBeNull()
+  })
+
+  it('the URL’s cue turns it on', () => {
+    cuePaneOpenStore.set(false)
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} openedEntryId={103} />)
+    expect(cuePaneOpenStore.getSnapshot()).toBe(true)
+    expect(pane()).toHaveAttribute('data-cue-pane', '103')
+  })
+
+  it('a Dark tap turns it on and opens the cue at its Move in dark', () => {
+    cuePaneOpenStore.set(false)
+    DARK_PLAN = {
+      stackId: 10,
+      rigLoaded: true,
+      entries: [
+        { entryId: 101, cueId: 1, heads: [], live: [] },
+        { entryId: 103, cueId: 3, heads: [{ target: 'spot-1', fromEntryId: 101, families: ['POSITION'] }], live: [] },
+      ],
+      summary: { heads: 1, cues: 1, live: 0, off: 0 },
+    }
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    expect(pane()).toBeNull()
+    fireEvent.click(document.querySelector('[data-timeline-dark="101"] button')!)
+    expect(cuePaneOpenStore.getSnapshot()).toBe(true)
+    expect(pane()?.querySelector('[data-cue-editor]')?.getAttribute('data-section')).toBe('moveInDark')
   })
 })

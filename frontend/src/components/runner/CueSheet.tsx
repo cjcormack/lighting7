@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AudioWaveform, Blinds, Layers, Lock, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { UnlockShowDialog } from './UnlockShowDialog'
-import { CueEditorPane } from './CueEditorPane'
+import { CueEditorPane, cuePaneOpenStore, useCuePaneOpen } from './CueEditorPane'
+import { paneContentOf, useHeldPaneContent } from './cuePaneContent'
 import type { CueEditorTab } from '@/components/cues/editor/cueEditorTab'
 import { CueActions, type CueActionRow } from './CueActions'
 import { cn } from '@/lib/utils'
@@ -132,8 +133,9 @@ export interface CueSheetProps {
  * inline edit on the Cue column; Book is a read-out that opens the Prompt Book, and Layers · FX
  * select their row and open the bottom pane on that tab. Live row green, next row blue, as the cards.
  *
- * **The bottom pane** (`CueEditorPane`) holds the cue editor for the one selected cue row, and
- * folds for none, several or a marker.
+ * **The bottom pane** (`CueEditorPane`) is drawn while this window's *Editor* toggle is on: the cue
+ * editor for the one selected cue row, else a blank state at the same height, so a selection never
+ * moves the rows. A read-out that opens it turns the toggle on.
  *
  * **The lock is this sheet's read-only scope**, the way Output scope is the programmer's. Locked,
  * every value cell is inert — `pointer-events-none` on the wrapper, `disabled` on the trigger,
@@ -239,7 +241,6 @@ export function CueSheet({
    */
   const [tabRequest, setTabRequest] = useState<{ entryId: number; tab: CueEditorTab; section?: 'moveInDark'; seq: number } | null>(null)
   const openPaneRef = useRef<(row: CueSheetRow, tab: CueEditorTab, section?: 'moveInDark') => void>(() => {})
-  const columnRef = useRef<HTMLDivElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
 
   /** The stack's Move in dark plan by entry — the *Dark* column — and what it is moving now. */
@@ -640,14 +641,15 @@ export function CueSheet({
   })
   const { selectedRows, cellCount, setRows, scrollTo } = sheet
   openPaneRef.current = (row, tab, section) => {
+    cuePaneOpenStore.set(true)
     setRows([row.id])
     setTabRequest((prev) => ({ entryId: row.entry.entryId, tab, section, seq: (prev?.seq ?? 0) + 1 }))
   }
-  /** The one selected cue row the pane edits — none, several or a marker fold it (D5). */
-  const paneRow = selectedRows.length === 1 && isCueRow(selectedRows[0].entry) ? selectedRows[0] : null
-  const paneEntryId = paneRow?.entry.entryId ?? null
-  const paneRowId = paneRow?.id ?? null
-  // A read-out's tab is asked for once: when the pane moves off its row, or folds, it is spent.
+  const paneOpen = useCuePaneOpen()
+  const paneContent = useHeldPaneContent(paneContentOf(selectedRows), sheet.marqueeDragging)
+  const paneEntryId = paneOpen && paneContent.kind === 'cue' ? paneContent.entryId : null
+  const paneRowId = paneOpen && paneContent.kind === 'cue' ? paneContent.rowId : null
+  // A read-out's tab is asked for once: when the pane moves off its row, blanks or is switched off, it is spent.
   useEffect(() => {
     setTabRequest((request) => (request == null || request.entryId === paneEntryId ? request : null))
   }, [paneEntryId])
@@ -683,6 +685,8 @@ export function CueSheet({
     if (row == null) return
     const id = row.id
     consumedCueRef.current = openedEntryId
+    // *Edit cue* asks to edit that cue, as a read-out does: it turns the pane on.
+    cuePaneOpenStore.set(true)
     setRows([id])
     scrollTo(id)
   }, [openedEntryId, rows, scrollTo, setRows])
@@ -794,7 +798,7 @@ export function CueSheet({
   const markerCount = rows.length - standardCount
 
   return (
-    <div ref={columnRef} className="flex min-h-0 flex-1 flex-col" data-cue-sheet-column>
+    <div className="flex min-h-0 flex-1 flex-col" data-cue-sheet-column>
       {numberDialog}
       <div className="@container">
         <SelectionBar
@@ -951,16 +955,13 @@ export function CueSheet({
         }}
       />
       </div>
-      {/* The bottom pane: the cue editor for the one selected row (show-cue-editing plan D5, §4.3). */}
-      {paneRow != null && (
+      {paneOpen && (
         <CueEditorPane
           projectId={projectId}
-          cueId={cueOf(paneRow).id}
-          entryId={paneRow.entry.entryId}
+          content={paneContent}
           locked={locked}
           onRequestUnlock={onRequestUnlock}
-          tabRequest={tabRequest?.entryId === paneRow.entry.entryId ? tabRequest : null}
-          columnRef={columnRef}
+          tabRequest={paneEntryId != null && tabRequest?.entryId === paneEntryId ? tabRequest : null}
           sheetRef={sheetRef}
           onResized={keepPaneRowInView}
         />

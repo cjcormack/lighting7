@@ -1311,9 +1311,9 @@ stack landing where the cards say before the desk answers.
 1. **Cards.** On Act 1, open Q4's card: the action strip, then the editor — *Act 1 · Q4*, follow,
    the name, fade and curve, the save state — and the six tabs. Rename Q4 in the header; *Saved*
    shows, and the collapsed row reads the new name.
-2. **Table.** Switch to the table and select Q4's row: the pane opens under the sheet with the same
-   editor. Rename it again there; the sheet's Name cell follows. Select two rows: the pane folds and
-   the sheet takes the height back.
+2. **Table.** Switch to the table and select Q4's row: the pane under the sheet shows the same
+   editor. Rename it again there; the sheet's Name cell follows. Select two rows: the pane keeps its
+   height and reads *2 cues selected*; the stack header's *Editor* toggle hides it and shows it.
 3. **Grip.** Drag the pane's grip up and down: it sticks at half the column and at its smallest, and
    nowhere else. Reload the window: the pane opens at the height left. Press the grip twice: back to
    half.
