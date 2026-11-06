@@ -383,6 +383,30 @@ describe('StackTimeline', () => {
   })
 })
 
+describe('StackTimeline — the pip arms (show-view-fixes plan D13)', () => {
+  it.each([false, true])('locked %s: a grey pip arms its cue and selects nothing; the live and next pips are read-outs', (locked) => {
+    const onSetStandby = vi.fn()
+    render(
+      <StackTimeline
+        stack={STACK}
+        projectId={1}
+        activeEntryId={101}
+        standbyEntryId={102}
+        onSetStandby={onSetStandby}
+        locked={locked}
+        onRequestUnlock={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Arm Q3 as the next GO' }))
+    expect(onSetStandby).toHaveBeenCalledTimes(1)
+    expect(onSetStandby).toHaveBeenCalledWith(3, 103)
+    expect(document.querySelector('[data-row-id="entry:103"]')).not.toHaveAttribute('data-state', 'selected')
+    expect(screen.getByTitle('On stage').tagName).toBe('SPAN')
+    expect(screen.getByTitle('Next GO').tagName).toBe('SPAN')
+    expect(screen.queryByRole('button', { name: /Arm Q[12] as/ })).toBeNull()
+  })
+})
+
 describe('StackTimeline — the editor pane toggle', () => {
   const pane = () => document.querySelector<HTMLElement>('[data-cue-pane]')
 

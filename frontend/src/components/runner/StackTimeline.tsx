@@ -79,7 +79,7 @@ import {
 } from '@/lib/stackTimeline'
 import { timelineColumnOrderStore, timelineExtraColumnsStore, timelineFiltersStore } from '@/lib/stackTimeline/columnOrder'
 import type { CueEditorTab } from '@/components/cues/editor/cueEditorTab'
-import { CueStatePip } from '@/components/cues/CueRowParts'
+import { CueStatePip, cueArmLabel } from '@/components/cues/CueRowParts'
 import { EditedSinceGoChip } from '@/components/cues/EditedSinceGo'
 import { SheetTable } from '@/components/sheet/SheetTable'
 import { useSheet } from '@/components/sheet/useSheet'
@@ -981,6 +981,7 @@ export function StackTimeline({
                 standby={row.entry.entryId === standbyEntryId && row.entry.entryId !== activeEntryId}
                 fadeStackId={fadeStackId}
                 places={placesByCue?.get(cueOf(row).id)}
+                onArm={onSetStandby ? () => onSetStandby(cueOf(row).id, row.entry.entryId) : undefined}
               />
             ),
           }}
@@ -1071,6 +1072,7 @@ function TimelineCueLead({
   standby,
   fadeStackId,
   places,
+  onArm,
 }: {
   cue: CueStackCueRow
   projectId: number
@@ -1078,11 +1080,18 @@ function TimelineCueLead({
   standby: boolean
   fadeStackId?: number | null
   places?: readonly CuePlace[]
+  /** Arm this cue as the next GO — the pip's press. */
+  onArm?: () => void
 }) {
   const { fadeProgress } = useCueFade(fadeStackId, cue.id, cue.fadeDurationMs, cue.entryId)
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2" data-cue-row={cue.id} data-entry-row={cue.entryId}>
-      <CueStatePip isActive={active} isStandby={standby} />
+      <CueStatePip
+        isActive={active}
+        isStandby={standby}
+        onArm={onArm}
+        label={cueArmLabel(cue)}
+      />
       <span className={cn('w-11 shrink-0 truncate font-mono text-sm', cue.cueNumberAuto ? AUTO_CUE_NUMBER_CLASS : 'font-semibold')}>
         {cue.cueNumber ? `Q${cue.cueNumber}` : '—'}
       </span>

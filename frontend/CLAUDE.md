@@ -3713,13 +3713,20 @@ Three surface rules, each pinned by its test:
   `StackDetail`'s — a header, not one of the 40px chrome rows (the `ShowHeader` was 48 too until
   the busk-chrome plan's session B made it a 40px chrome row; this one and `StackDetail`'s stay).
 - **Cue sheet** (`CueSheet.test.tsx`): `/projects/:id/show/stacks/:stackId/table`, sticky key
-  `show.view`, the switcher on the `StackDetail` header. Name · Fade · Curve · Follow · Notes are
-  cells, and the cue number is a `TextCell` on the Cue column (`firstColumnCellProps`) **opened by a
-  double click** into the same popover as every value cell beside it (a single click there selects
-  the row — it was a single click that had to swallow the press, which made the Cue column the one
-  column where a click meant something different). **Locked, the number is plain text rather than a
-  disabled trigger**, because a click on it must bubble to the column to arm the cue and a browser
-  dispatches no click for a press inside a disabled button. **Scenery is a read-out that opens an
+  `show.view`, the switcher on the `StackDetail` header. **The first column is the row head** — the
+  kit's grip, the pip and the played mark, 64px — and a click there selects the row (locked, arms
+  it). **Cue # · Name · Fade · Curve · Follow · Notes are cells** (show-view-fixes plan D7–D12). Cue
+  # is a column of its own kind, `cueNumber`, right after the row head and not sticky, its value the
+  entry's typed number (`''` when auto), so it selects with a click, a marquee or the arrows and no
+  other column's commit reaches it. `runner/CueNumberCell.tsx` draws it: over **one** cell the number
+  field, the entry `PATCH` with `placement: 'ASK'` through `useCueNumberPlacement`; over **several**
+  the renumber form (`RenumberForm`, which the bar's *Renumber…* mounts too), *First* seeded with what
+  was typed at the grid, else the first cue's whole number, then one `POST …/renumber` of those
+  entries in stack order, whole numbers only. Clear returns each typed number to auto, one `PATCH` per
+  entry; there is no Spread on it. The cell picks its arm by `batchCount`, so it is a new node when a
+  marquee grows past one: jsdom, with no pointer capture, needs the cell asked for again after the
+  move (`dragNumbers`). **The pip arms** a cue that is neither live nor next, locked or not
+  (`CueStatePip`'s `onArm`, below). **Scenery is a read-out that opens an
   editor** (scenery-programmer plan D13): the cue's own changes (`Tabs → closed · 4 s`), the tracked
   hatch where it changes nothing but something is tracked into it, the em-dash where nothing is
   (the editor can set it), blank on a MARKER; a press opens `CueSceneryEditor` at the cell, and
@@ -3771,7 +3778,7 @@ Three surface rules, each pinned by its test:
 
   **The lock is the sheet's read-only scope** the way
   Output is the programmer's — locked, every value cell is inert in all four places, the marquee
-  still works, and a click on the Cue column arms
+  still works, and a click on the row head arms
   the cue as next; unlocked, cells edit under the amber wash. **A refused edit asks to unlock**
   rather than doing nothing: Set · Clear · Fan stay live and open a confirm, and so does ⏎ — through
   `useSheetKeyboard`'s `onRefused`, which reports the refused gesture **and the key** and lets the
@@ -3794,7 +3801,7 @@ Three surface rules, each pinned by its test:
   hints going below 1100 — Deselect's word folds below 760, and the set's own rungs were measured
   with a cell selection, the widest the bar gets.
 
-  **Unlocked, a grip in the Cue column reorders cues and separators** — `SheetTable`'s `rowDrag`,
+  **Unlocked, a grip in the row head reorders cues and separators** — `SheetTable`'s `rowDrag`,
   on the cards view's own `reorderCues`, so one gesture and one mutation serve both. The
   `DndContext` is mounted only where a surface asks for it and the rows are turned off through
   dnd-kit's `disabled` rather than by unmounting it (`StackDetail` learned that one); the grip
@@ -6791,10 +6798,19 @@ Six things about it are load-bearing:
   disabled with the reason where the lock is not the operator's (§"The cue action set"). The card
   draws it whether or not the show is locked, so a locked card is no longer a pure read surface.
 - **The lock is the cue sheet's read-only scope** (§Sheet kit): locked, the sheet's value cells
-  are inert and a click on the Cue column arms the cue as next, exactly as a card's body click
+  are inert and a click on the row head arms the cue as next, exactly as a card's body click
   does; `useTransportKeys` keeps its `enabled: locked` and now stands aside from a key another
   handler has already claimed, which is how a name typed into a cue cell beginning with `l` does
   not toggle the lock.
+- **Arming is not only a locked gesture: the pip arms** (show-view-fixes plan D13, D14).
+  `CueStatePip` (`components/cues/CueRowParts.tsx`) takes `onArm`; given, a pip that is neither live
+  nor next is a focusable button, *Arm Q13 as the next GO*, whose press stops at it, so it never
+  selects a row, starts a marquee or expands a card. Cards, the Table and the Timeline give it
+  wherever they have `onSetStandby`, locked or not; the live and next pips stay read-outs, *On stage*
+  and *Next GO*. The bar's *Arm as next* is drawn unlocked too. The locked body click and row-head
+  click still arm; unlocked they expand or select, so a click meant to look at a cue never changes
+  what GO fires. On a card the grip has its own 14px slot before the pip, drawn only unlocked, so the
+  pip is never hidden under it.
 - **Transport shortcuts act only while locked**, via `useTransportKeys`, on **both** lock surfaces;
   `L` stays bound in both states so there is always a keyboard way back to a safe desk. Unlocked, the
   row's cue number, name and fade are live text fields, and in an editing surface Space is a space.
@@ -6928,7 +6944,7 @@ bare scalar a GO would overwrite. Dismissed playhead cards self-clear as their i
 `resetKey` exists for the one id that survives a transition — a dismissed *next* card the GO makes
 live.
 
-**Cue numbers** are numbers — 0 to 9999.9999, at most four decimal places, sorted by value (`2.1` is `2.10`, `10` follows `9`) — and `sortOrder` is the authoritative playback order. `src/lib/cueNumber.ts` holds the model (`canonicalCueNumber`, `cueNumberProblem` for a field's `validate`) and drives the "Fix Order" banner; it mirrors `routes/cueNumbering.kt` in lighting7, which refuses anything else and performs the fix — **keep the two in step**. Every field that edits a cue's number — the cue sheet's Cue column, the cue editor's header, the card, the Prompt Book's rail and card, Record's *Cue #* — sends `placement: 'ASK'` through `useCueNumberPlacement` (`components/cues/CueNumberPlacement.tsx`), which asks *Move to its place* or *Keep it here* when the desk answers `CUE_NUMBER_OUT_OF_ORDER` (the Prompt Book's create-a-cue sheet places a new cue by page order, so it only checks the number), and the cue sheet's *Renumber…* (`runner/RenumberCuesButton.tsx`) numbers the selected cues from a whole number by a whole step.
+**Cue numbers** are numbers — 0 to 9999.9999, at most four decimal places, sorted by value (`2.1` is `2.10`, `10` follows `9`) — and `sortOrder` is the authoritative playback order. `src/lib/cueNumber.ts` holds the model (`canonicalCueNumber`, `cueNumberProblem` for a field's `validate`) and drives the "Fix Order" banner; it mirrors `routes/cueNumbering.kt` in lighting7, which refuses anything else and performs the fix — **keep the two in step**. Every field that edits a cue's number — the cue sheet's Cue # column, the cue editor's header, the card, the Prompt Book's rail and card, Record's *Cue #* — sends `placement: 'ASK'` through `useCueNumberPlacement` (`components/cues/CueNumberPlacement.tsx`), which asks *Move to its place* or *Keep it here* when the desk answers `CUE_NUMBER_OUT_OF_ORDER` (the Prompt Book's create-a-cue sheet places a new cue by page order, so it only checks the number), and the cue sheet's *Renumber…* (`runner/RenumberCuesButton.tsx`), or several of its Cue # cells set at once, numbers the selected cues from a whole number by a whole step through one `RenumberForm`.
 
 A cue without an explicit number gets one derived from its position (`cueNumberAuto: true`), kept by the backend while the cue stays where it is and derived again when a change to the list moves it. Auto numbers render dimmed via `AUTO_CUE_NUMBER_CLASS`; clearing the `Cue #` field returns a cue to auto. **An explicit renumber never relabels its auto neighbours** (venue-visit plan D11): in five auto cues, cue 2 set to `4.5` reads 1, 4.5, 3, 4, 5, `detectOutOfOrder` sees the descent and draws the banner, and *Fix Order* (`sort-by-cue-number`) moves the cue to where its number says rather than renumbering anything — the rule is lighting7's, `docs/cue-stacks-engineering.md` §"Auto Numbering".
 
@@ -7755,7 +7771,7 @@ path may quietly change where it lands.
   show, which is a *mode*, and one the Prompt Book already modelled. So the lock came
   across instead of the route (see §The show-editing lock). Both levels of the view
   survive in both modes: locked, `/show` is the runner with a state pip, fade chrome
-  and click-to-arm; unlocked, it is the same list plus drag, inline edit and the
+  and click-to-arm; unlocked (where the pip still arms), it is the same list plus drag, inline edit and the
   create/delete affordances. Two layouts under one switch would have been two views
   with extra steps.
 

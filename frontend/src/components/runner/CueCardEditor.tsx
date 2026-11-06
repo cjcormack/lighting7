@@ -19,6 +19,7 @@ import {
 } from '@/lib/cueUtils'
 import {
   CueStatePip,
+  cueArmLabel,
   CueTargetChip,
   useExpandedCue,
 } from '@/components/cues/CueRowParts'
@@ -147,9 +148,8 @@ export function CueCardEditor({
    *
    * The chevron always expands. The body **arms the cue for the next GO while locked** — locked is
    * the running state, where reaching for a cue means "go there next" — and expands while unlocked,
-   * where reaching for a cue means "let me look at it". Arming is deliberately not available
-   * unlocked: it changes what GO fires, which is the show, and not letting a stray click do that is
-   * the entire point of the lock.
+   * where reaching for a cue means "let me look at it". Unlocked, the pip is the one way to arm, so
+   * a click meant to look at a cue never changes what GO fires.
    */
   const handleBodyClick = () => {
     if (locked && onSetStandby && !isActive) {
@@ -187,30 +187,38 @@ export function CueCardEditor({
             // hidden at/below 1000px, so that range needs its own five-track template. A template
             // with more tracks than children slides every cell one column left — which is what a
             // stale track did to the cue name when the palette bar was removed from this row.
-            'grid-cols-[22px_auto_minmax(0,1fr)_auto_auto_18px]',
-            '@max-[1000px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_18px]',
-            '@max-[800px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_18px] @max-[800px]:gap-2',
+            // Unlocked, the grip leads in its own 14px track before the pip.
+            locked
+              ? [
+                  'grid-cols-[22px_auto_minmax(0,1fr)_auto_auto_18px]',
+                  '@max-[1000px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_18px]',
+                  '@max-[800px]:grid-cols-[22px_auto_minmax(0,1fr)_auto_18px] @max-[800px]:gap-2',
+                ]
+              : [
+                  'grid-cols-[14px_22px_auto_minmax(0,1fr)_auto_auto_18px]',
+                  '@max-[1000px]:grid-cols-[14px_22px_auto_minmax(0,1fr)_auto_18px]',
+                  '@max-[800px]:grid-cols-[14px_22px_auto_minmax(0,1fr)_auto_18px] @max-[800px]:gap-2',
+                ],
           )}
           onClick={handleBodyClick}
         >
-          {/* One cell, two jobs. The pip is a read-out and must be visible mid-show; the grip is
-              an action and only exists while unlocked. Stacking them costs no width, and hiding
-              the pip under the pointer is free — you are not reading it while you drag. */}
-          <div className="relative grid size-[22px] place-items-center">
-            <span className={cn('transition-opacity', !locked && 'group-hover/cue:opacity-0')}>
-              <CueStatePip isActive={isActive} isStandby={isStandby} />
-            </span>
-            {!locked && (
-              <div
-                className="absolute inset-0 grid place-items-center text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/cue:opacity-100 cursor-grab"
-                {...attributes}
-                {...listeners}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <GripVertical className="size-4" />
-              </div>
-            )}
-          </div>
+          {!locked && (
+            <div
+              className="grid h-full w-[14px] cursor-grab place-items-center text-muted-foreground/50 hover:text-foreground"
+              data-cue-card-grip
+              {...attributes}
+              {...listeners}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="size-4" />
+            </div>
+          )}
+          <CueStatePip
+            isActive={isActive}
+            isStandby={isStandby}
+            onArm={onSetStandby}
+            label={cueArmLabel(cue)}
+          />
 
           <div
             className="font-mono text-sm font-semibold flex items-center gap-1.5 min-w-0"

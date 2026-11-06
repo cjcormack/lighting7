@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useId, useState } from 'react'
 import { ListOrdered } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -46,6 +46,114 @@ export function renumberPreview(count: number, start: number, step: number): str
   return numbers.join(', ')
 }
 
+/** Where a renumber starts by default: the first cue's whole number, else 1. */
+export function renumberStartOf(cueNumber: string | null | undefined): string {
+  const first = cueNumber != null ? cueNumberValue(cueNumber) : null
+  return String(first != null ? Math.max(Math.floor(first), 0) : 1)
+}
+
+/**
+ * The renumber call and its toast, shared by the bar's *Renumber…* and the Cue # column's batch
+ * editor. Answers whether the desk took it.
+ */
+export function useRenumberCues(projectId: number, stackId: number) {
+  const [mutate, { isLoading }] = useRenumberCueStackEntriesMutation()
+  const renumber = useCallback(
+    (entryIds: readonly number[], start: number, step: number): Promise<boolean> =>
+      mutate({ projectId, stackId, entryIds: [...entryIds], start, step })
+        .unwrap()
+        .then(() => {
+          toast.success(`Renumbered ${entryIds.length} ${entryIds.length === 1 ? 'cue' : 'cues'} from Q${start}`)
+          return true
+        })
+        .catch(() => {
+          ignoreReportedError()
+          return false
+        }),
+    [mutate, projectId, stackId],
+  )
+  return { renumber, isLoading }
+}
+
+/**
+ * The start-and-step form: *First*, *Step*, the landing previewed, and *Renumber*. Its state is its
+ * own from mount, so a host remounts it to seed it afresh.
+ */
+export function RenumberForm({
+  count,
+  initialStart,
+  busy = false,
+  onSubmit,
+  onCancel,
+}: {
+  count: number
+  initialStart: string
+  busy?: boolean
+  onSubmit: (start: number, step: number) => void
+  /** Draws *Cancel* beside *Renumber*. */
+  onCancel?: () => void
+}) {
+  const [start, setStart] = useState(initialStart)
+  const [step, setStep] = useState('1')
+  const id = useId()
+  const problem = renumberProblem(count, start, step)
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (problem == null && !busy) onSubmit(Number(start.trim()), Number(step.trim()))
+      }}
+    >
+      <p className="text-sm font-medium">
+        Renumber {count} {count === 1 ? 'cue' : 'cues'}
+      </p>
+      <div className="flex gap-2">
+        <div className="flex-1 space-y-1">
+          <Label htmlFor={`${id}-start`} className="text-xs">
+            First
+          </Label>
+          <Input
+            id={`${id}-start`}
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+          />
+        </div>
+        <div className="w-20 space-y-1">
+          <Label htmlFor={`${id}-step`} className="text-xs">
+            Step
+          </Label>
+          <Input
+            id={`${id}-step`}
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={step}
+            onChange={(e) => setStep(e.target.value)}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground" data-renumber-preview>
+        {problem ?? renumberPreview(count, Number(start.trim()), Number(step.trim()))}
+      </p>
+      <div className="flex gap-2">
+        {onCancel && (
+          <Button type="button" variant="ghost" size="sm" className="flex-1" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+        <Button type="submit" size="sm" className="flex-1" disabled={problem != null || busy}>
+          Renumber
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 /**
  * *Renumber…* on the cue sheet's selection bar: the selected cues numbered in stack order from a
  * whole number, by a whole step (`POST cue-stacks/{id}/renumber`). Nothing moves; a number that then
@@ -63,39 +171,11 @@ export function RenumberCuesButton({
   disabledReason?: string | null
 }) {
   const [open, setOpen] = useState(false)
-  const [start, setStart] = useState('')
-  const [step, setStep] = useState('1')
-  const [renumber, { isLoading }] = useRenumberCueStackEntriesMutation()
-
+  const { renumber, isLoading } = useRenumberCues(projectId, stackId)
   const count = rows.length
-  const problem = renumberProblem(count, start, step)
-
-  const onOpenChange = (next: boolean) => {
-    if (next) {
-      // Starts from the first selected cue's whole number, so "renumber these from where they begin"
-      // is one click.
-      const first = rows[0]?.cueNumber != null ? cueNumberValue(rows[0].cueNumber) : null
-      setStart(String(first != null ? Math.max(Math.floor(first), 0) : 1))
-      setStep('1')
-    }
-    setOpen(next)
-  }
-
-  const submit = () => {
-    if (problem || isLoading) return
-    const first = Number(start.trim())
-    const by = Number(step.trim())
-    renumber({ projectId, stackId, entryIds: rows.map((r) => r.entryId), start: first, step: by })
-      .unwrap()
-      .then(() => {
-        toast.success(`Renumbered ${count} ${count === 1 ? 'cue' : 'cues'} from Q${first}`)
-        setOpen(false)
-      })
-      .catch(ignoreReportedError)
-  }
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -107,44 +187,29 @@ export function RenumberCuesButton({
           <span className={WORD_CLASS}>Renumber…</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72" align="end">
-        <form
-          className="space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault()
-            submit()
+      <PopoverContent
+        className="w-72"
+        align="end"
+        onOpenAutoFocus={(e) => {
+          const first = (e.currentTarget as HTMLElement | null)?.querySelector('input')
+          if (first == null) return
+          e.preventDefault()
+          first.focus()
+          first.select()
+        }}
+      >
+        <RenumberForm
+          count={count}
+          initialStart={renumberStartOf(rows[0]?.cueNumber)}
+          busy={isLoading}
+          onSubmit={(start, step) => {
+            void renumber(
+              rows.map((r) => r.entryId),
+              start,
+              step,
+            ).then((ok) => ok && setOpen(false))
           }}
-        >
-          <p className="text-sm font-medium">
-            Renumber {count} {count === 1 ? 'cue' : 'cues'}
-          </p>
-          <div className="flex gap-2">
-            <div className="flex-1 space-y-1">
-              <Label htmlFor="renumber-start" className="text-xs">
-                First
-              </Label>
-              <Input
-                id="renumber-start"
-                inputMode="numeric"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="w-20 space-y-1">
-              <Label htmlFor="renumber-step" className="text-xs">
-                Step
-              </Label>
-              <Input id="renumber-step" inputMode="numeric" value={step} onChange={(e) => setStep(e.target.value)} />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground" data-renumber-preview>
-            {problem ?? renumberPreview(count, Number(start.trim()), Number(step.trim()))}
-          </p>
-          <Button type="submit" size="sm" className="w-full" disabled={problem != null || isLoading}>
-            Renumber
-          </Button>
-        </form>
+        />
       </PopoverContent>
     </Popover>
   )

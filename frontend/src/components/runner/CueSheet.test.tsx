@@ -10,7 +10,7 @@ import type { MoveInDarkHead } from '@/api/moveInDarkApi'
  * sheet's read-only scope**: locked, every value cell is inert in the four places the programmer's
  * Output scope is — the wrapper's `pointer-events-none`, the trigger's `disabled`, the keyboard
  * through the permission, and the bar's Set · Clear · Spread with the reason — while the marquee
- * still works and a click on the Cue column arms the cue as next. Unlocked, a cell writes one
+ * still works and a click on the row head arms the cue as next. Unlocked, a cell writes one
  * PATCH per cue, and Spread on Fade spreads first→last.
  */
 const patchCue = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
@@ -115,12 +115,13 @@ function draw(over: Partial<React.ComponentProps<typeof CueSheet>> = {}) {
   return render(<CueSheet stack={STACK} projectId={1} activeEntryId={null} {...over} />)
 }
 
-/** The first column spans 0..100; Name 100..300, Fade 300..388 — rows are 36px from a 0-high header. */
+/** The row head spans 0..64, Cue # 64..140, Name 140..300, Fade 300..388 — rows are 36px from a 0-high header. */
 function stubFlatLayout() {
   const rect = (left: number, right: number) =>
     ({ left, top: 0, right, bottom: 0, width: right - left, height: 0, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
   const bands: Record<string, [number, number]> = {
-    name: [100, 300],
+    cueNumber: [64, 140],
+    name: [140, 300],
     fade: [300, 388],
     curve: [388, 506],
     follow: [506, 602],
@@ -132,7 +133,7 @@ function stubFlatLayout() {
     scenery: [1122, 1318],
   }
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-    if (this.hasAttribute('data-grid-name-header')) return rect(0, 100)
+    if (this.hasAttribute('data-grid-name-header')) return rect(0, 64)
     const col = this.getAttribute('data-column-header')
     if (col && bands[col]) return rect(...bands[col])
     return rect(0, 1100)
@@ -145,6 +146,22 @@ function row(cueId: number): HTMLElement {
 }
 function fadeCell(cueId: number): HTMLElement {
   return within(row(cueId)).getAllByRole('button').find((b) => b.closest('[data-cell="fade"]'))!
+}
+function numberCell(cueId: number): HTMLElement {
+  return row(cueId).querySelector('[data-cell="cueNumber"] button') as HTMLElement
+}
+
+/**
+ * A marquee down the Cue # column over the drawn rows `from`..`to`. The cell is asked for again after
+ * the move: over several cells it is the renumber editor's trigger, a new node, and jsdom has no
+ * pointer capture to carry the release to the rows wrapper as a browser does.
+ */
+function dragNumbers(from: number, to: number) {
+  const cueId = STACK.cues[from].entryId - 100
+  fireEvent.pointerDown(numberCell(cueId), { button: 0, clientX: 100, clientY: from * 36 + 10 })
+  fireEvent.pointerMove(numberCell(cueId), { button: 0, buttons: 1, clientX: 110, clientY: to * 36 + 26 })
+  fireEvent.pointerUp(numberCell(cueId), { button: 0, clientX: 110, clientY: to * 36 + 26 })
+  fireEvent.click(numberCell(cueId))
 }
 
 /** A marquee down the Fade column over the drawn rows `from`..`to`. */
@@ -176,6 +193,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   patchCue.mockClear()
   patchEntry.mockClear()
+  renumberEntries.mockClear()
 })
 
 describe('CueSheet', () => {
@@ -199,33 +217,12 @@ describe('CueSheet', () => {
     expect(book.closest('button')).toHaveAttribute('title', expect.stringContaining('bottom of p. 12'))
   })
 
-  it('locked: the cue number does not inflate the row — the display box is inline-block', () => {
-    // Locked, the number is a `<span>` wrapping `TruncateStart`'s blocks. Left inline, its line
-    // box measured 59px for a 20px number, and as the grid row's tallest min-content that became
-    // the *track*: every cell in the row was laid out below the row.
+  it('the cue number does not inflate the row — the display box is inline-block', () => {
+    // Left inline, `TruncateStart`'s blocks made the line box 59px tall for a 20px number, and as the
+    // grid row's tallest min-content that became the *track*: every cell in the row sat below it.
     draw({ locked: true })
-    const number = within(row(1)).getByTitle(/cue number/i)
+    const number = within(row(1)).getByTitle('Cue number')
     expect(number.className).toContain('inline-block')
-    // And it is text, not a disabled editor: a disabled button swallows the click the column
-    // needs to arm the cue.
-    expect(number.closest('button')).toBeNull()
-  })
-
-  it('unlocked: a double click on the cue number opens its editor — the same popover as every value cell — and a single click selects the row', () => {
-    draw()
-    const number = within(row(1)).getByTitle(/edit the cue number/i)
-    fireEvent.click(number)
-    expect(row(1)).toHaveAttribute('data-state', 'selected')
-    expect(screen.queryByLabelText('Cue number')).not.toBeInTheDocument()
-    fireEvent.doubleClick(number)
-    // Portalled, like every cell editor, so it is looked for on the screen and not in the row.
-    const field = screen.getByLabelText('Cue number') as HTMLInputElement
-    expect(field.value).toBe('1')
-    fireEvent.change(field, { target: { value: '12.5' } })
-    fireEvent.keyDown(field, { key: 'Enter' })
-    // The number is the entry's, written on the entry, asking first whether it lands out of order.
-    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryId: 101, cueId: 1, cueNumber: '12.5', placement: 'ASK' })
-    expect(patchCue).not.toHaveBeenCalled()
   })
 
   it('marks a cue another stack shares, on its name', () => {
@@ -248,15 +245,15 @@ describe('CueSheet', () => {
     // A snap cue has no curve to set and the read-outs are not cells at all; the em-dash belongs to
     // an empty cell you CAN set, which is what Follow and Notes still draw.
     draw({ stack: { ...STACK, cues: [cue(1, { fadeDurationMs: null }), cue(2)] } })
-    // Columns after the sticky Cue head: name, fade, curve, follow, book, layers, fx, notes.
+    // Columns after the sticky row head: cue #, name, fade, curve, follow, dark, book, layers, fx, …
     const cell = (i: number) => row(1).children[i] as HTMLElement
     // A snap cue's Curve has nothing to set, so it is not a cell at all — and it draws nothing.
     expect(row(1).querySelector('[data-cell="curve"]')).toBeNull()
-    expect(cell(3).textContent).toBe('')
+    expect(cell(4).textContent).toBe('')
     // Book, Layers and FX are read-outs with nothing to show, so they show nothing.
-    expect(cell(5).textContent).toBe('')
     expect(cell(6).textContent).toBe('')
     expect(cell(7).textContent).toBe('')
+    expect(cell(8).textContent).toBe('')
     // Follow and Notes keep their em-dash: they are empty cells, not absent ones.
     expect(row(1).querySelector('[data-cell="follow"]')?.textContent).toContain('—')
     expect(row(1).querySelector('[data-cell="notes"]')?.textContent).toContain('—')
@@ -483,20 +480,17 @@ describe('CueSheet', () => {
     expect(screen.queryByLabelText('Fade')).toBeNull()
   })
 
-  it('locked: a click on the Cue column arms the cue as next — on the number itself, not only the margins', () => {
+  it('locked: a click on the row head arms the cue as next', () => {
     const onSetStandby = vi.fn()
     draw({ locked: true, activeEntryId: 101, onSetStandby })
-    // The cue number is the largest thing in the column; locked, it is inert text and the click
-    // must bubble to the column.
-    // `TruncateStart` says the text twice (a measure and a display), so take the first.
-    fireEvent.click(within(row(2)).getAllByText('Q2')[0])
+    fireEvent.click(row(2).firstElementChild as HTMLElement)
     expect(onSetStandby).toHaveBeenCalledWith(2, 102)
     // The live cue cannot be armed against itself.
     fireEvent.click(row(1).firstElementChild as HTMLElement)
     expect(onSetStandby).toHaveBeenCalledTimes(1)
   })
 
-  it('unlocked: a click on the Cue column selects the row rather than arming', () => {
+  it('unlocked: a click on the row head selects the row rather than arming', () => {
     const onSetStandby = vi.fn()
     draw({ onSetStandby })
     fireEvent.click(row(2).firstElementChild as HTMLElement)
@@ -513,6 +507,181 @@ describe('CueSheet', () => {
     const space = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true })
     window.dispatchEvent(space)
     expect(space.defaultPrevented).toBe(false)
+  })
+})
+
+describe('CueSheet · Cue # (show-view-fixes plan D7–D12)', () => {
+  it('is a cell column after the row head, which keeps the grip and the pip', () => {
+    draw({ onReorder: vi.fn() })
+    expect(row(1).firstElementChild).toHaveAttribute('data-first-column')
+    expect(within(row(1).firstElementChild as HTMLElement).getByLabelText('Reorder row')).toBeInTheDocument()
+    expect(row(1).querySelector('[data-first-column] [data-entry-row="101"]')).not.toBeNull()
+    expect(row(1).children[1]).toHaveAttribute('data-cell', 'cueNumber')
+    expect(within(row(1).firstElementChild as HTMLElement).queryByText('Q1')).toBeNull()
+  })
+
+  it('one cell edits the number: a click selects the cell, a double click opens the field, Enter asks where it goes', () => {
+    draw()
+    fireEvent.click(numberCell(1))
+    expect(screen.getByText('1 cell')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Cue #')).not.toBeInTheDocument()
+    fireEvent.doubleClick(numberCell(1))
+    const field = screen.getByLabelText('Cue #') as HTMLInputElement
+    expect(field.value).toBe('1')
+    fireEvent.change(field, { target: { value: '12.5' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryId: 101, cueId: 1, cueNumber: '12.5', placement: 'ASK' })
+    expect(patchCue).not.toHaveBeenCalled()
+    expect(renumberEntries).not.toHaveBeenCalled()
+  })
+
+  it('an auto number opens empty: there is no typed number to edit', () => {
+    const stack = { ...STACK, cues: STACK.cues.map((c) => (c.id === 2 ? { ...c, cueNumberAuto: true } : c)) }
+    render(<CueSheet stack={stack} projectId={1} activeEntryId={null} />)
+    fireEvent.doubleClick(numberCell(2))
+    expect((screen.getByLabelText('Cue #') as HTMLInputElement).value).toBe('')
+  })
+
+  it('four cells and a typed 20 send one renumber of those cues in stack order', async () => {
+    draw()
+    // Rows 0..4 are Q1, Q2, the marker, Q4 and Q5; a rectangle skips the marker.
+    dragNumbers(0, 4)
+    expect(screen.getByText('4 cells')).toBeInTheDocument()
+    await act(async () => {
+      fireEvent.keyDown(window, { key: '2' })
+    })
+    expect(screen.getByText('Renumber 4 cues')).toBeInTheDocument()
+    const first = screen.getByLabelText('First') as HTMLInputElement
+    expect(first.value).toBe('2')
+    fireEvent.change(first, { target: { value: '20' } })
+    expect(screen.getByText('Q20, Q21, Q22, Q23')).toBeInTheDocument()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Renumber' }))
+    })
+    expect(renumberEntries).toHaveBeenCalledTimes(1)
+    expect(renumberEntries).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryIds: [101, 102, 104, 105], start: 20, step: 1 })
+    expect(patchEntry).not.toHaveBeenCalled()
+    expect(screen.queryByText('Renumber 4 cues')).toBeNull()
+  })
+
+  it('the renumber form is the kit’s: First focused and selected, a comma moves to Step, Enter renumbers', async () => {
+    draw()
+    dragNumbers(0, 1)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const first = (await screen.findByLabelText('First')) as HTMLInputElement
+    expect(document.activeElement).toBe(first)
+    expect([first.selectionStart, first.selectionEnd]).toEqual([0, first.value.length])
+    fireEvent.change(first, { target: { value: '30' } })
+    fireEvent.keyDown(first, { key: ',' })
+    const step = screen.getByLabelText('Step') as HTMLInputElement
+    expect(document.activeElement).toBe(step)
+    fireEvent.change(step, { target: { value: '10' } })
+    await act(async () => {
+      fireEvent.keyDown(step, { key: 'Enter' })
+    })
+    expect(renumberEntries).toHaveBeenCalledTimes(1)
+    expect(renumberEntries).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryIds: [101, 102], start: 30, step: 10 })
+  })
+
+  it('a letter typed at the grid does not seed First', async () => {
+    draw()
+    dragNumbers(0, 1)
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'q' })
+    })
+    expect((screen.getByLabelText('First') as HTMLInputElement).value).toBe('1')
+  })
+
+  it('Set over several starts from the first cue’s whole number', async () => {
+    const stack = { ...STACK, cues: STACK.cues.map((c) => (c.id === 1 ? { ...c, cueNumber: '7.5' } : c)) }
+    render(<CueSheet stack={stack} projectId={1} activeEntryId={null} />)
+    dragNumbers(0, 1)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    expect(((await screen.findByLabelText('First')) as HTMLInputElement).value).toBe('7')
+  })
+
+  it('refuses a decimal over several, with the form’s reason', async () => {
+    draw()
+    dragNumbers(0, 1)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    fireEvent.change(await screen.findByLabelText('First'), { target: { value: '2.5' } })
+    expect(screen.getByText('The first number is a whole number, 0 or more')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Renumber' })).toBeDisabled()
+    fireEvent.submit(screen.getByLabelText('First').closest('form')!)
+    expect(renumberEntries).not.toHaveBeenCalled()
+  })
+
+  it('Clear returns each typed number to auto, one PATCH per entry, and leaves an auto number alone', () => {
+    const stack = { ...STACK, cues: STACK.cues.map((c) => (c.id === 2 ? { ...c, cueNumberAuto: true } : c)) }
+    render(<CueSheet stack={stack} projectId={1} activeEntryId={null} />)
+    dragNumbers(0, 3)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear cells' }))
+    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryId: 101, cueId: 1, cueNumber: null })
+    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryId: 104, cueId: 4, cueNumber: null })
+    expect(patchEntry).toHaveBeenCalledTimes(2)
+  })
+
+  it('offers no Spread on the column', () => {
+    draw()
+    dragNumbers(0, 1)
+    expect(screen.getByRole('button', { name: 'Fan' })).toBeDisabled()
+  })
+
+  it('a Fade commit over a Cue # → Fade marquee never reaches the number', async () => {
+    draw()
+    fireEvent.pointerDown(numberCell(1), { button: 0, clientX: 100, clientY: 10 })
+    fireEvent.pointerMove(numberCell(1), { button: 0, buttons: 1, clientX: 340, clientY: 62 })
+    fireEvent.pointerUp(numberCell(1), { button: 0, clientX: 340, clientY: 62 })
+    fireEvent.click(numberCell(1))
+    // Cue #, Name and Fade for two cues.
+    expect(screen.getByText('6 cells')).toBeInTheDocument()
+    fireEvent.doubleClick(fadeCell(1))
+    const field = await screen.findByLabelText('Fade')
+    fireEvent.change(field, { target: { value: '3s' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(patchCue).toHaveBeenCalledWith({ projectId: 1, cueId: 1, fadeDurationMs: 3000 })
+    expect(patchCue).toHaveBeenCalledWith({ projectId: 1, cueId: 2, fadeDurationMs: 3000 })
+    expect(patchEntry).not.toHaveBeenCalled()
+    expect(renumberEntries).not.toHaveBeenCalled()
+  })
+
+  it('locked, a Cue # cell is inert like every value cell', () => {
+    draw({ locked: true, onSetStandby: () => {} })
+    expect(numberCell(1)).toBeDisabled()
+    expect(numberCell(1).closest('[data-cell]')!.className).toContain('pointer-events-none')
+  })
+})
+
+describe('CueSheet · the pip arms (show-view-fixes plan D13)', () => {
+  it.each([false, true])('locked %s: a grey pip arms its cue and selects nothing', (locked) => {
+    const onSetStandby = vi.fn()
+    draw({ locked, activeEntryId: 101, standbyEntryId: 102, onSetStandby })
+    const pip = screen.getByRole('button', { name: 'Arm Q4 as the next GO' })
+    expect(pip).toHaveAttribute('title', 'Arm Q4 as the next GO')
+    fireEvent.pointerDown(pip, { button: 0 })
+    fireEvent.click(pip)
+    expect(onSetStandby).toHaveBeenCalledTimes(1)
+    expect(onSetStandby).toHaveBeenCalledWith(4, 104)
+    expect(row(4)).not.toHaveAttribute('data-state', 'selected')
+    expect(screen.queryByText('1 cue')).toBeNull()
+  })
+
+  it('the live and next pips are read-outs, and no pip is a button without a transport', () => {
+    draw({ activeEntryId: 101, standbyEntryId: 102, onSetStandby: vi.fn() })
+    expect(within(row(1)).getByTitle('On stage').tagName).toBe('SPAN')
+    expect(within(row(2)).getByTitle('Next GO').tagName).toBe('SPAN')
+    expect(screen.queryByRole('button', { name: /Arm Q[12] as/ })).toBeNull()
+    cleanup()
+    draw()
+    expect(screen.queryByRole('button', { name: /as the next GO/ })).toBeNull()
+  })
+
+  it('unlocked, the bar offers Arm as next over one cue', () => {
+    const onSetStandby = vi.fn()
+    draw({ activeEntryId: 101, onSetStandby })
+    fireEvent.click(row(4).firstElementChild as HTMLElement)
+    fireEvent.click(screen.getByRole('button', { name: /Arm as next/ }))
+    expect(onSetStandby).toHaveBeenCalledWith(4, 104)
   })
 })
 

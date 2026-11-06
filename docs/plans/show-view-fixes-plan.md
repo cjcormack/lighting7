@@ -1,6 +1,6 @@
 # Show view editing fixes
 
-> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Sessions 1 and 2 merged; session 3 in review.
+> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Sessions 1 and 2 merged; sessions 3 and 4 in review.
 
 The design record is [`show-view-fixes-design/INDEX.md`](show-view-fixes-design/INDEX.md), and its
 one-page copy [`show-view-fixes.html`](show-view-fixes-design/show-view-fixes.html) holds the
@@ -172,8 +172,8 @@ touched packages' tests where they touch the backend, and `npm run check:quick` 
 |---|---|---|---|---|---|
 | 1 | Duplicate carries the follow | merged | `claude/festive-curie-bn6jsd` | [#359](https://github.com/cjcormack/lighting7/pull/359) | 4420de9 |
 | 2 | In production | merged | `claude/stoic-babbage-zbutzf` | [#360](https://github.com/cjcormack/lighting7/pull/360) | 9e51a1a |
-| 3 | The editor pane toggle | in review | `claude/gallant-faraday-nxc79c` | | |
-| 4 | The row head: Cue # cells and arming from the pip | planned | | | |
+| 3 | The editor pane toggle | in review | `claude/gallant-faraday-nxc79c` | [#362](https://github.com/cjcormack/lighting7/pull/362) | 68abe96 |
+| 4 | The row head: Cue # cells and arming from the pip | in review | `claude/lucid-bell-dkik4e` | | |
 | 5 | Dragging a selection | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -285,6 +285,14 @@ D7–D14.
 - Docs: frontend `CLAUDE.md` §Sheet kit's cue sheet entry (the Cue column paragraph) and
   §"The show-editing lock" (arming unlocked).
 - Local: `check:quick`.
+- As built: the cell is `runner/CueNumberCell.tsx`, a `TextCell` over one cell and the renumber form
+  over several, picked by `batchCount`; its write takes a typed string or `{renumber: {start, step}}`.
+  Beside `RenumberForm`, `RenumberCuesButton.tsx` exports `useRenumberCues` (the call and its toast,
+  shared by both doors) and `renumberStartOf`. Because a typed number's value is `''` for an auto
+  number, typing the number an auto cue already shows pins it. The pip is given `onArm` wherever the
+  view has `onSetStandby` and ignores it on the live and next pips itself; its press also stops
+  `pointerdown`, so it starts no marquee or card drag. The played mark stays the row head's
+  screen-reader *Played*: the sheet never drew a visible tick.
 
 ### Session 5 — Dragging a selection
 

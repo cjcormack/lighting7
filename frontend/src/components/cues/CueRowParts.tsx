@@ -34,37 +34,75 @@ export function CueTargetChip({ target }: { target: CueTarget }) {
   )
 }
 
+/** The pip's arming label — `Arm Q13 as the next GO`, or the name for a cue with no number. */
+export function cueArmLabel(cue: { cueNumber?: string | null; name: string }): string {
+  return `Arm ${cue.cueNumber ? `Q${cue.cueNumber}` : cue.name} as the next GO`
+}
+
 /**
  * Where this cue stands: outputting, armed for the next GO, or neither.
  *
  * Live wins over armed — a cue can be both when it is re-armed while still on stage, and what it is
  * *doing* matters more than what it is queued to do.
+ *
+ * Given [onArm], a pip that is neither is a button that arms its cue as the next GO, in every view
+ * and whether or not the show is locked. Its press stops at it, so it never also selects a row,
+ * starts a marquee or expands a card. The live and next pips stay read-outs.
  */
 export function CueStatePip({
   isActive,
   isStandby,
+  onArm,
+  label = 'Arm as the next GO',
 }: {
   isActive: boolean
   isStandby: boolean
+  onArm?: () => void
+  /** The button's name and tooltip — `Arm Q13 as the next GO`. */
+  label?: string
 }) {
   if (isActive) {
     return (
-      <span className="size-[22px] rounded-full grid place-items-center bg-green-950 border border-green-900 text-green-400 shadow-[0_0_8px_rgba(74,222,128,0.4)]">
+      <span
+        title="On stage"
+        className="size-[22px] shrink-0 rounded-full grid place-items-center bg-green-950 border border-green-900 text-green-400 shadow-[0_0_8px_rgba(74,222,128,0.4)]"
+      >
         <Play className="size-3 fill-current" strokeWidth={0} />
       </span>
     )
   }
   if (isStandby) {
     return (
-      <span className="size-[22px] rounded-full grid place-items-center bg-blue-950 border border-blue-900 text-blue-300">
+      <span
+        title="Next GO"
+        className="size-[22px] shrink-0 rounded-full grid place-items-center bg-blue-950 border border-blue-900 text-blue-300"
+      >
         <Circle className="size-1.5 fill-current" strokeWidth={0} />
       </span>
     )
   }
+  const dot = <span className="size-2 rounded-full bg-muted-foreground/30" />
+  if (onArm == null) {
+    return (
+      <span className="size-[22px] shrink-0 rounded-full grid place-items-center bg-muted border border-border">{dot}</span>
+    )
+  }
   return (
-    <span className="size-[22px] rounded-full grid place-items-center bg-muted border border-border">
-      <span className="size-2 rounded-full bg-muted-foreground/30" />
-    </span>
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      data-cue-pip-arm
+      onPointerDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation()
+        onArm()
+      }}
+      className="size-[22px] shrink-0 cursor-pointer rounded-full grid place-items-center bg-muted border border-border outline-offset-1 hover:outline-2 hover:outline-blue-500 focus-visible:outline-2 focus-visible:outline-blue-500"
+    >
+      {dot}
+    </button>
   )
 }
 
