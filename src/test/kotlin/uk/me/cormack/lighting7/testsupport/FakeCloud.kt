@@ -51,7 +51,12 @@ import uk.me.cormack.lighting7.cloud.protocol.Timestamps
 import uk.me.cormack.lighting7.cloud.protocol.UnadoptPayload
 import uk.me.cormack.lighting7.cloud.protocol.UserCode
 import java.io.Closeable
+import java.security.KeyPair
 import java.security.PublicKey
+import uk.me.cormack.lighting7.cloud.protocol.DeskAccessClaims
+import uk.me.cormack.lighting7.cloud.protocol.DeskTokens
+import uk.me.cormack.lighting7.cloud.protocol.Jwk
+import uk.me.cormack.lighting7.cloud.protocol.TokenScope
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -71,6 +76,9 @@ import kotlin.time.Duration.Companion.seconds
  * the older `4009`), and close `4004` for an install removed in the portal. Its channel switches
  * stall a connection, stop reading one, drop it, refuse or redirect the upgrade, and force an
  * `auth` refusal.
+ *
+ * For P1 it holds a token-signing key, sends its `jwks` after every `welcome`, mints desk access
+ * tokens with [mint], rotates its key ([rotateKeys]) and sends `revoke` ([revoke]).
  */
 class FakeCloud : Closeable {
 
@@ -103,6 +111,16 @@ class FakeCloud : Closeable {
 
     /** The `heartbeatS` a `welcome` gives. */
     @Volatile var heartbeatS: Int = 25
+
+    /** The `remoteOrigin` a `welcome` gives. */
+    @Volatile var remoteOrigin: String? = null
+
+    /** The key desk access tokens are signed with, and its `kid`. */
+    @Volatile var tokenKey: KeyPair = InstallKeys.generate()
+        private set
+    @Volatile var tokenKid: String = "key-1"
+        private set
+    private val kids = AtomicInteger(1)
 
     /** How far the fake's clock is from the real one, for the challenge's `serverTime` and the skew check. */
     @Volatile var clockOffset: Duration = Duration.ZERO
@@ -263,6 +281,51 @@ class FakeCloud : Closeable {
 
     private fun now(): Instant = Instant.now().plus(clockOffset)
 
+    private fun jwks() = Message.Jwks(listOf(Jwk.of(tokenKid, tokenKey.public)))
+
+    /**
+     * A desk access token for [installId], signed as the cloud signs one: a remote session's by
+     * default, [iat] the fake's clock, living [ttlS] seconds. [key] and [kid] sign it with something else.
+     */
+    fun mint(
+        installId: String,
+        sid: String? = "sid-1",
+        sub: String = account.id,
+        orgId: String = org.id,
+        scope: TokenScope = TokenScope.REMOTE,
+        iat: Long = now().epochSecond,
+        ttlS: Long = 300,
+        key: java.security.PrivateKey = tokenKey.private,
+        kid: String = tokenKid,
+    ): String = DeskTokens.sign(
+        key,
+        kid,
+        DeskAccessClaims(
+            iss = baseUrl,
+            aud = installId,
+            sub = sub,
+            org = orgId,
+            scope = scope,
+            sid = sid.takeIf { scope == TokenScope.REMOTE },
+            gid = "grant-1".takeIf { scope == TokenScope.MCP },
+            azp = "client-1".takeIf { scope == TokenScope.MCP },
+            iat = iat,
+            exp = iat + ttlS,
+            jti = UUID.randomUUID().toString(),
+        ),
+    )
+
+    /** A new signing key under a new `kid`, sent to every connected desk. Tokens signed with the old one no longer verify. */
+    fun rotateKeys() {
+        tokenKey = InstallKeys.generate()
+        tokenKid = "key-${kids.incrementAndGet()}"
+        sessions.keys.forEach { send(it, jwks()) }
+    }
+
+    /** Send `revoke` to [installId], stamped [at] (the fake's clock by default). */
+    fun revoke(installId: String, sid: String? = null, accountId: String? = null, all: Boolean = false, at: Instant = now()) =
+        send(installId, Message.Revoke(Timestamps.format(at), sid, accountId, all))
+
     private suspend fun channel(session: DefaultWebSocketServerSession): Unit = with(session) {
         if (channelStall) channelReleased.await()
         val nonce = UUID.randomUUID().toString()
@@ -284,7 +347,8 @@ class FakeCloud : Closeable {
             return refuse(CloseCode.AUTH_FAILED, AuthFailure.BAD_SIGNATURE.name)
         }
         sessions.put(auth.installId, this)?.close(CloseReason(CloseCode.REPLACED.code, CloseCode.REPLACED.name))
-        send(Frame.Text(Envelope(UUID.randomUUID().toString(), Message.Welcome(org.name, heartbeatS)).encode()))
+        send(Frame.Text(Envelope(UUID.randomUUID().toString(), Message.Welcome(org.name, heartbeatS, remoteOrigin)).encode()))
+        send(Frame.Text(Envelope(UUID.randomUUID().toString(), jwks()).encode()))
         try {
             while (true) {
                 if (stopReading) channelReleased.await()

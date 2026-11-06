@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.models.DaoBuskRigRows
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoCloudConnections
 import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
+import uk.me.cormack.lighting7.models.DaoCloudRemoteSessions
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
 import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
@@ -166,6 +167,7 @@ object SyncDispositions {
         DaoInstalls to SyncDisposition.MachineLocal("this install's identity"),
         DaoCloudConnections to SyncDisposition.MachineLocal("this install's adoption by Lighting7 Cloud"),
         DaoCloudIdentityLinks to SyncDisposition.MachineLocal("which cloud account each desk account is"),
+        DaoCloudRemoteSessions to SyncDisposition.MachineLocal("the audit of remote sessions through the cloud"),
         DaoOAuthIdentities to SyncDisposition.MachineLocal("this install's git credentials"),
         DaoSyncConfigs to SyncDisposition.MachineLocal("per-project sync settings for this install"),
         DaoSyncLinkedRepos to SyncDisposition.MachineLocal("which remote this install is attached to"),

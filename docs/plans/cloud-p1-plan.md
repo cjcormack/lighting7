@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, session 1 in review.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05, session 2 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -308,8 +308,8 @@ and a session is added here for it.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The protocol for P1 | in review | `claude/cloud-p1-z6z56z` | | |
-| 2 | Bearer tokens on the public listener | planned | | | |
+| 1 | The protocol for P1 | merged | `claude/cloud-p1-z6z56z` | [#353](https://github.com/cjcormack/lighting7/pull/353) | `f86d6bb` |
+| 2 | Bearer tokens on the public listener | in review | `claude/cloud-p1-s2` | | |
 | 3 | The sidecar and the broker | planned | | | |
 | 4 | The SPA in remote mode | planned | | | |
 | 5 | Bundling and supervising the sidecar | planned | | | |
@@ -395,6 +395,24 @@ next; whoever merges the last fills its own.
 - **Docs:** `docs/cloud-engineering.md` §"Desk access tokens" and §"Remote sessions";
   `docs/desk-accounts.md` §"Lighting7 Cloud" gains what a link now authorises; `FU-AUTH-AUDIT-LOG`'s
   row notes its remote slice.
+- **As built:** `rtc.offer` names no org, so a session's org is the adoption's `org_id`, recorded at
+  `RemoteSessions.open`. One resolver, `resolveCaller` (`auth/AuthGate.kt`), answers the gate, the
+  upgrade and `auth/status` once per call, and replaces `resolveSessionUser`. A bearer request
+  without `Lighting7-Link`, or with the desk not adopted through an enabled cloud, is 401
+  `unauthenticated`, as no cookie is; an unlinked session's socket closes 4401 with
+  `CLOUD_ACCOUNT_NOT_LINKED`, so the SPA re-reads `auth/status`. Besides the refresh, `DELETE
+  /cloud/session` and `POST /auth/logout` end the caller's own session; a refresh may not expire before
+  a token already used (the same token again is a retry, not a mismatch), and both are exempt from the
+  warm-up gate, as `/auth/` is. A sid the audit has ever held is refused, so a reused one cannot open
+  after a restart. The deny set keeps one `revoke` per account and one for everything (the latest
+  `at`), and past 4096 sids or accounts treats a further one as a revoke of everything. A clean stop
+  ends open sessions as `DESK_STOPPED`. `remoteOrigin` is allowed only on a bearer request, and kept
+  only when it is a bare origin `cloud.baseUrl` would accept (`https`, or `http` to a loopback host).
+  *Sign out everywhere else* spares the session that asked, through
+  `AuthService.addSessionRevocationListener`. `GET /install/cloud/remote` answers all three switches;
+  the `PUT` sets `remoteAccess` and `mcpAccess` only, approval being session 7's with its wait. Until
+  session 3 no sidecar runs, so `remote.no-sidecar` is announced from here, beside `remote.off` and
+  `mcp.off`. The reply queue holds 256 frames and 16 MiB.
 
 ### Session 3 — The sidecar and the broker
 

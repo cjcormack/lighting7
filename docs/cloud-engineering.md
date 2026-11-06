@@ -1,11 +1,11 @@
 # Lighting7 Cloud on the desk
 
 Lighting7 Cloud is a hosted service that desks connect out to. This doc is the desk's side: what it
-holds, how it is adopted and unadopted, the control channel it keeps open while adopted, and the
-rules that keep the cloud off the show's path. The wire contract is
-[cloud-protocol.md](cloud-protocol.md); the plan is
+holds, how it is adopted and unadopted, the control channel it keeps open while adopted, how a remote
+session through it is authorised, and the rules that keep the cloud off the show's path. The wire
+contract is [cloud-protocol.md](cloud-protocol.md); the plans are
 [`plans/completed/cloud-p0-plan.md`](plans/completed/cloud-p0-plan.md), whose decisions (D1, D2, …)
-this doc cites. The code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`.
+this doc cites bare, and [`plans/cloud-p1-plan.md`](plans/cloud-p1-plan.md), cited as P1's D-items. The code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`.
 
 The desk works with no cloud, no account and through any outage. Nothing here is needed to run a
 show, and nothing here may slow one down (§"Show safety").
@@ -18,8 +18,12 @@ show, and nothing here may slow one down (§"Show safety").
 | Its adoption | `cloud_connection`, one row (`models/cloudConnection.kt`) | while adopting or adopted |
 | Each desk account's cloud account | `cloud_identity_links`, one row per desk user (`models/cloudIdentityLinks.kt`) | written by adoption, deleted by unadopt or the user's deletion |
 | What is happening now: a poll's error, a notice, the channel's status | `CloudService`'s memory only | until the next transition or a restart |
+| What may come through the cloud: *Remote sessions*, *Claude (MCP)*, *Approve each session* | `cloud_connection`'s `remote_access`, `mcp_access`, `approve_sessions`, held in memory as `CloudService.switches` | off at adoption; changed only on the desk's own listener (P1 D6) |
+| The cloud's token keys and the origin it serves remote sessions from | memory only (`JwksCache`, `CloudService.remoteOrigin`) | the last `jwks` and `welcome` heard, through any reconnect, until a newer one or a restart (P1 D3) |
+| Open remote sessions, and those ended or revoked | memory only (`RemoteSessions`) | until each ends, then until any token issued for it has expired |
+| The audit of remote sessions | `cloud_remote_sessions` (`models/cloudRemoteSessions.kt`) | a row at a session's open and end, never between; a year |
 
-Both tables are `SyncDisposition.MachineLocal` and never touch `ProjectExporter` or `ProjectImporter`
+Every table is `SyncDisposition.MachineLocal` and never touches `ProjectExporter` or `ProjectImporter`
 (design record R7). The key never leaves the credential store: it is not exported, synced or logged, and
 a desk never holds two (D4). The blob's name carries the install's uuid because the OS keychain is per
 user, not per install: a second desk on the same machine, with its own data directory, never finds or
@@ -27,9 +31,10 @@ replaces this one's. `cloud_connection` keeps the key's public half and fingerpr
 cloud sends is stored as `text`, since the protocol bounds none of it.
 
 A **link** says which cloud account a desk account is. Adoption writes one, for the admin who started
-it (`linked_via` `ADOPTION`). Nothing reads links for authorisation in P0; P1 adds invites and proofs.
-SQLite runs with `PRAGMA foreign_keys` off, so `AuthService.deleteUser` deletes the user's link and
-clears `cloud_connection.adopted_by` by hand.
+it (`linked_via` `ADOPTION`). A remote session reads its account's link when it opens and acts as that
+user (§"Remote sessions"); P1's session 6 adds invites and proofs. SQLite runs with `PRAGMA foreign_keys`
+off, so `AuthService.deleteUser` deletes the user's link and clears `cloud_connection.adopted_by` and
+`cloud_remote_sessions.user_id` by hand.
 
 ## Configuration
 
@@ -122,9 +127,17 @@ unadopt, cancel or revoke. The wire side is [cloud-protocol.md](cloud-protocol.m
    each attempt until a read succeeds, so a keychain still locked at boot costs attempts, not the
    channel.
 3. **Online.** The desk sends `hello` (protocol 1, its version, platform, `installs.uuid`, friendly
-   name, no capabilities in P0), then `health {uptimeS, deskVersion}` every `welcome.heartbeatS`
-   (clamped to 1–300 s). `hello` carries the friendly name as it was when the channel started.
-4. **Reading.** `unadopted` forgets the adoption (`revoked()`). `error` is logged. Any other type,
+   name, its capabilities), then `health {uptimeS, deskVersion}` every `welcome.heartbeatS`
+   (clamped to 1–300 s). `hello` carries the friendly name as it was when the channel started. The
+   capabilities are the state entries of P1 D6: `remote.off` and `mcp.off` while their switch is off,
+   `remote.no-sidecar` while no sidecar runs (`CloudService.capabilities`); `remote.v1` and `mcp.v1`
+   join when the desk speaks them (P1 sessions 3 and 8). Whenever the list changes the desk sends
+   `capabilities`, the whole list, on the connection it was announced on, never ahead of its `hello`
+   (`ChannelConnection.refreshCapabilities`). `welcome`'s `remoteOrigin`, when it is a bare origin
+   `cloud.baseUrl` would accept (`https`, or `http` to a loopback host), is kept for the Origin check
+   (§"Remote sessions").
+4. **Reading.** `unadopted` forgets the adoption (`revoked()`). `jwks` replaces the token keys (P1 D3).
+   `revoke` ends and refuses what it names (§"Remote sessions"). `error` is logged. Any other type,
    unknown ones, ones of another protocol version and ones only the desk sends, is ignored and logged
    once per type, up to 100 types, so v1 can grow additively. Text the cloud chose (a type, an error,
    a close reason) is cut to 64 characters before the desk logs or repeats it. A frame over 8 MiB, one that is not JSON text, or one that is not an
@@ -137,10 +150,14 @@ unadopt, cancel or revoke. The wire side is [cloud-protocol.md](cloud-protocol.m
    welcomes and then closes at once, or two desks trading one install's connection, back off as a down
    cloud does.
 
-**Liveness.** Outbound frames go through a queue of 16 that drops the oldest, so a cloud that stops
-reading costs stale heartbeats, never a blocked sender. WebSocket pings every 25 s end a connection
-whose cloud stops answering, or vanished without closing. A frame that finds no room in the socket's
-buffers for three heartbeats ends it too, but at a heartbeat's size that takes hours of a cloud not
+**Liveness.** Outbound frames go through two queues (`ChannelOutbox`, P1 D16). Heartbeats take a queue
+of 16 that drops the oldest, so a cloud that stops reading costs stale heartbeats, never a blocked
+sender. Everything else (`hello`, `capabilities`, and the replies of later sessions) takes a queue in
+which nothing newer displaces anything older, bounded at 256 frames and 16 MiB; one that does not fit,
+or is over a frame, is refused and logged, and the cloud's request times out. That queue is written
+first. WebSocket pings every 25 s end a connection whose cloud stops answering, or vanished without
+closing. A frame that cannot be written within three heartbeats, or within its size at 128 KiB/s where
+that is longer (64 s for 8 MiB), ends it too, but at a heartbeat's size that takes hours of a cloud not
 reading; the pings are what notice first. Either way the desk reconnects.
 
 **Status** is memory only (D11): `connection` is `OFF` (not adopted, or the cloud off), `CONNECTING`,
@@ -160,6 +177,96 @@ reading; the pings are what notice first. Either way the desk reconnects.
 
 An adoption error (the row's, or a poll's) outranks the channel's. Only a revoke changes what the
 desk holds; nothing about a connection is written to the database.
+
+## Desk access tokens
+
+A request through the cloud says who is calling with a **desk access token**: a compact JWS the cloud
+signs with a key its `jwks` message names, checked by `DeskTokens.verify` (cloud-protocol.md §"Desk
+access tokens", P1 D2). The desk holds the last `jwks` it heard in memory (`JwksCache`, P1 D3), through
+any reconnect, until a newer one arrives; `publicKeysOf` turns it into the `kid` → key map `verify`
+reads. It is never written: a restart ends every remote session anyway, and every way in needs the cloud
+to begin. The keys go when the desk stops being adopted.
+
+The token's audience is the install id `cloud_connection` holds, its door (`remote` here, `mcp` at the
+relay of P1's session 8) the one it arrives at. What `verify` does not judge is the desk's: the session it
+names (`REMOTE_SESSION_UNKNOWN`), its account and org against that session's (`REMOTE_SESSION_MISMATCH`),
+and whether a `revoke` covers it (`TOKEN_REVOKED`), below.
+
+## Remote sessions
+
+A **remote session** is a cloud member using the desk's own SPA from anywhere, carried by the sidecar
+`lighting7-link` into the public listener (P1 D4, D5). `cloud/RemoteSessions.kt` is its registry; the
+broker (P1 session 3) opens each one when it accepts an `rtc.offer`, and everything else here is in place
+before it.
+
+**Opening.** `RemoteSessions.open(sid, accountId, email, displayName)` resolves the account's link to a
+local user (none: an *unlinked* session), records the adoption's org, writes the session's audit row and
+gives it until its first token's expiry, or 11 minutes. It refuses while the desk is not adopted, with
+*Remote sessions* off (`REMOTE_ACCESS_OFF`), and for a sid already open, ended, revoked or ever audited
+(`SESSION_ENDED`). The
+link and user are fixed for the session's life; the role is not.
+
+**Each request.** `resolveCaller` (`auth/AuthGate.kt`) is the one answer to "who is calling", used by the
+auth gate, the `/api` WebSocket upgrade and `GET /auth/status`, once per call. On the public listener a
+request with `Authorization: Bearer` is judged by `RemoteSessions.authenticate` and only that way, in
+order:
+
+1. It must carry `Lighting7-Link` equal to the secret the registry made for the running sidecar
+   (`newLinkSecret`, handed to the sidecar on stdin), compared in constant time; else 401
+   `unauthenticated`. So a valid token that reaches 8414 any other way, through ngrok or from a local
+   process, is refused. No sidecar, no secret, no bearer request.
+2. The desk must be adopted through an enabled cloud; *Remote sessions* off is 403 `REMOTE_ACCESS_OFF`.
+3. The token must verify (401 with its `TOKEN_*` code), be covered by no `revoke` (`TOKEN_REVOKED`), name
+   an open session (`REMOTE_SESSION_UNKNOWN`), and name that session's account and org: a token that
+   does not ends the session (`REMOTE_SESSION_MISMATCH`), so a session is never carried on as someone else.
+4. A linked session's caller is its local user as `AuthService` holds them now, with
+   `sessionTokenHash` `cloud-session:<sid>`, so a demotion counts on the next request and a disabled user
+   is refused as a disabled cookie user is. An unlinked one reaches `auth/status` (answered `{unlinked:
+   true, email}`), the SPA's static files, `POST /cloud/link/prove` (P1 session 6) and its own refresh and
+   end; everything else is 403 `CLOUD_ACCOUNT_NOT_LINKED`, naming the two ways to link. Its socket closes
+   4401 with that code.
+
+On the desk's own listener a bearer token is never read. All of `installRemoteHardening` applies to a
+bearer request, and the Origin check also allows `welcome`'s `remoteOrigin`, which the sidecar forwards
+as the request's origin; a cookie request is not given it. The scripts, effects and commands switches
+apply as to any remote request.
+
+**Refresh and end.** The sidecar hands over each refreshed token as the bearer of `POST
+/cloud/session/token`: the gate judges it as above, and it must not expire before a token the session
+has already used, or the session ends; the same token again, on a request that beat the refresh or on a
+retry, is accepted. The refresh and end are exempt from the warm-up gate, so a project switch cannot
+let a session lapse. Each accepted token moves the session's deadline to its `exp` plus the minute
+of skew `verify` allows; a session whose deadline passes unrefreshed ends `EXPIRED`, timed on one
+`cloud-sessions` thread that exists only while sessions are open. `DELETE /cloud/session` and *Sign out*
+(`POST /auth/logout`) end the caller's own session.
+
+**Ending.** A session ends on a `revoke` naming it, its account or everything; its token lapsing; a
+token naming another account or org; *Remote sessions* turned off; the desk unadopted; its link removed
+(`linkRemoved`, which unlink in P1 session 6 calls); and every credential revocation of its user
+(disable, delete, a password set or reset, *sign out everywhere*) through
+`AuthService.addSessionRevocationListener`, which spares the session that asked for "everywhere else".
+Its sockets close 4401 at once (they wait on `RemoteSession.ended`, which no burst can drop), its next
+request is refused, and `addEndListener` tells whoever drives the sidecar. An ended sid can never be
+opened or used again. A `revoke {accountId}` or `{all}` is also kept with its `at`, the cloud's own time,
+and refuses every token for it whose `iat` is at or before that second (`Revoke.covers`), whatever the
+desk's clock says, so a token minted a moment before the revoke cannot open a new session. One is kept
+per account and one for everything, the latest `at` winning, and a sid revoked before it opens is
+denied too. All are remembered until any token issued before them has expired (12 minutes). A cloud
+that names more than 4096 sids or accounts at once is answered as if it revoked everything, so the deny
+set stays bounded and errs towards refusing.
+
+**The audit.** `cloud_remote_sessions(sid, cloud_account_id, email, user_id, started_at, ended_at,
+path, end_reason)` gets a row when a session opens and its end when it closes (`ended_at`, the last path
+the sidecar reported, the `RemoteSessionEnd`), never in between. A clean stop ends every open session as
+`DESK_STOPPED`; a row a crash left open is closed at startup as `DESK_RESTARTED`, and rows older than a
+year are pruned then.
+
+**The switches** (P1 D6) are `cloud_connection`'s `remote_access`, `mcp_access` and `approve_sessions`,
+off at adoption. `GET /install/cloud/remote` answers them (`RemoteSwitches`); `PUT` sets the first two
+and is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY`, whatever the role: a compromised
+cloud can mint a linked admin's token, so nothing it can sign may widen what comes through it. No message
+writes them. For the same reason `PUT /install/tunnel`, which holds the scripts, effects and commands
+switches, is refused there too. The Cloud tab's switches and approval are P1's session 7.
 
 ## The state
 
@@ -226,11 +333,12 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
    most 64 KB of an answer, treating a longer one as none (`CloudApi`). A route that calls the cloud
    waits at most that long, and no route the show uses calls it.
 3. **No database write on a timer.** The database is written only on a transition: adopt, approve,
-   cancel, unadopt, revoke. Never per poll, per heartbeat or per reconnect: the pool has one connection,
+   cancel, unadopt, revoke, a switch, a remote session's open and end. Never per poll, per heartbeat or per reconnect: the pool has one connection,
    so a timed write would queue behind, or in front of, show writes. Live status is memory only.
    `CloudChannelTest` holds SQLite's `total_changes()` still across heartbeats and a reconnect.
-4. **Bounded queues.** The channel's outbound queue holds 16 frames and drops the oldest, so nothing
-   that sends to the cloud ever waits on it.
+4. **Bounded queues.** The channel's heartbeat queue holds 16 frames and drops the oldest; its other
+   queue refuses a frame it has no room for. Neither blocks, so nothing that sends to the cloud ever
+   waits on it.
 5. **No lock the show takes.** The connector reads desk state only from `StateFlow`s and `BuildInfo`.
    The adoption reads the database only on a transition, an account change or a request (the install
    row, the adopting account's name and link), never on a timer: a poll's error is republished from
@@ -248,8 +356,12 @@ built on `cloud-protocol`, that verifies every signature it is sent. Its adoptio
 expire, slow down, refuse, stall and send an answer too large to read. Its control channel checks `auth`
 against the install's key and its own clock (`clockOffset` makes it skewed), keeps one connection per
 install, closes a removed install `4004`, and can stall a connection, stop reading one, drop it, refuse
-or redirect the upgrade, or force any `4003` reason. Desk tests never use the real cloud (R5).
+or redirect the upgrade, or force any `4003` reason. For P1 it holds a token-signing key, sends its
+`jwks` after every `welcome` (and `remoteOrigin` in it when set), mints desk access tokens (`mint`),
+rotates its key and sends `revoke`. Desk tests never use the real cloud (R5).
 `CloudAdoptionTest` drives `CloudService` through every adoption and unadopt path;
 `InstallCloudRoutesTest` the routes and their refusals on both listeners; `CloudChannelTest` the
 channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and
-`CloudOutageOutputTimingTest` the show's output through a cloud outage.
+`CloudOutageOutputTimingTest` the show's output through a cloud outage. `RemoteSessionsTest` drives
+bearer requests and sockets on the public listener through every refusal and every way a session ends;
+`ChannelOutboxTest` the two send queues on virtual time.

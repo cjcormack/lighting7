@@ -9,6 +9,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.auth.requireAdmin
+import uk.me.cormack.lighting7.mcp.isRemote
 import uk.me.cormack.lighting7.mcp.tunnel.RemoteAccessException
 import uk.me.cormack.lighting7.mcp.tunnel.TunnelState
 import uk.me.cormack.lighting7.state.State
@@ -16,7 +17,7 @@ import uk.me.cormack.lighting7.state.State
 /**
  * Remote access (the ngrok tunnel): `GET` and `PUT /install/tunnel`, admin only. Machine-local —
  * it is about this computer's network, not the show — so it sits beside `/install` rather than
- * under a project. The authtoken is **write-only**: a `PUT` may set or clear it, and every answer
+ * under a project. A `PUT` is refused on the public listener (cloud-p1 plan D6). The authtoken is **write-only**: a `PUT` may set or clear it, and every answer
  * says only whether one is stored. Live status also streams as the admin-only `tunnel.state`
  * frame (`plugins/MachineSocket.kt`). See `docs/mcp-engineering.md` §"Remote access".
  */
@@ -26,8 +27,11 @@ internal fun Route.routeApiRestInstallTunnel(state: State) {
         call.respond(state.tunnelSettingsDto())
     }
 
+    // The scripts, effects and commands switches limit what a remote caller may do, so a remote
+    // caller may not change them (cloud-p1 plan D6), and with them ngrok's own settings.
     put<InstallTunnelResource> {
         call.requireAdmin()
+        if (call.isRemote) return@put refuseRemoteSettings()
         val request = call.receive<UpdateTunnelRequest>()
         try {
             state.remoteAccess.update(

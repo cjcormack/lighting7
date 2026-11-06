@@ -104,14 +104,21 @@ private val errorJson = Json { explicitNulls = false }
  * - **A state-changing request or WebSocket upgrade from a foreign `Origin`.** On the LAN the
  *   desk's CSRF answer is SameSite=Lax plus JSON-only bodies; a browser's WebSocket carries no
  *   such guarantee, so remotely the origin must be the desk's own public URL (or loopback on this
- *   port). A request with no `Origin` is not a browser and passes. `/mcp` and `/oauth/…` keep
- *   their own rules.
+ *   port, or for a request through the sidecar the cloud's origin for this install). A request with
+ *   no `Origin` is not a browser and passes. `/mcp` and `/oauth/…` keep their own rules.
  */
 internal fun Application.installRemoteHardening(state: State) {
     intercept(ApplicationCallPipeline.Setup) {
         call.attributes.put(RemoteRequestKey, true)
         val path = call.request.path()
-        val refusal = remoteRefusal(state, path, call.request.httpMethod, call.request.header(HttpHeaders.Origin), isWebSocketUpgrade(call))
+        val refusal = remoteRefusal(
+            state,
+            path,
+            call.request.httpMethod,
+            call.request.header(HttpHeaders.Origin),
+            isWebSocketUpgrade(call),
+            bearer = call.request.header(HttpHeaders.Authorization)?.startsWith("Bearer ", ignoreCase = true) == true,
+        )
         if (refusal != null) {
             val (status, body) = refusal
             if (status != HttpStatusCode.NotFound) log.warn("refusing remote {} {}: {}", call.request.httpMethod.value, path, body.error)
@@ -130,6 +137,7 @@ internal fun remoteRefusal(
     method: HttpMethod,
     origin: String?,
     webSocket: Boolean,
+    bearer: Boolean = false,
 ): Pair<HttpStatusCode, ErrorResponse>? {
     if (path == "/api.json" || path == "/openapi" || path.startsWith("/openapi/")) {
         return HttpStatusCode.NotFound to ErrorResponse("Not found")
@@ -147,7 +155,7 @@ internal fun remoteRefusal(
     }
     val ownRules = path == "/mcp" || path.startsWith("/oauth/") || path.startsWith("/.well-known/")
     val stateChanging = webSocket || method !in SAFE_METHODS
-    if (!ownRules && stateChanging && !remoteOriginAllowed(origin, state)) {
+    if (!ownRules && stateChanging && !remoteOriginAllowed(origin, state, bearer)) {
         return HttpStatusCode.Forbidden to ErrorResponse(
             "This request came from a page that isn't the desk.",
             "REMOTE_ORIGIN_REFUSED",
@@ -158,11 +166,16 @@ internal fun remoteRefusal(
 
 private val SAFE_METHODS = setOf(HttpMethod.Get, HttpMethod.Head, HttpMethod.Options)
 
-/** The desk's own public origin, or loopback on the public port. Missing = not a browser. */
-internal fun remoteOriginAllowed(origin: String?, state: State): Boolean {
+/**
+ * The desk's own public origin, or loopback on the public port, and for a [bearer] request through the
+ * sidecar the origin the cloud serves this install's remote sessions from (cloud-p1 plan D4), which
+ * the sidecar forwards as the request's. Missing = not a browser.
+ */
+internal fun remoteOriginAllowed(origin: String?, state: State, bearer: Boolean = false): Boolean {
     if (origin == null) return true
     val o = origin.trimEnd('/').lowercase()
     val port = state.mcpConfig.port
+    if (bearer && state.cloud.remoteOrigin?.let { it == o } == true) return true
     return o == originOf(state.remoteAccess.publicUrl())?.lowercase() ||
         o == "http://localhost:$port" ||
         o == "http://127.0.0.1:$port" ||

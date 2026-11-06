@@ -150,11 +150,15 @@ Keep-alive is Ktor's protocol-level ping; **there is no application-level `ping`
 client that sends one gets the undeserializable-frame path (logged and ignored), not a pong.
 
 **Auth**: the upgrade is accepted and then closed with code **4401** if the desk has accounts and
-the request carries no valid session cookie — a browser cannot read a 401 on an upgrade response,
-but it can read a close code. Bootstrap-open mode (zero accounts) admits everyone, mirroring the
-REST gate. The same 4401 is used for **live revocation**: `AuthService.revocations` is collected
-per connection, so disabling an operator or resetting their password closes their already-open
-socket instead of leaving it streaming. See [`desk-accounts.md`](desk-accounts.md).
+`resolveCaller` (`auth/AuthGate.kt`) finds no signed-in caller — a browser cannot read a 401 on an
+upgrade response, but it can read a close code. That is a valid session cookie, or, on the public
+listener, a remote session's bearer token through the cloud (`docs/cloud-engineering.md` §"Remote
+sessions"); the close's reason is the bearer's refusal code, `CLOUD_ACCOUNT_NOT_LINKED` for an
+unlinked session, else `unauthenticated`. Bootstrap-open mode (zero accounts) admits everyone,
+mirroring the REST gate. The same 4401 is used for **live revocation**: `AuthService.revocations` is
+collected per connection, so disabling an operator or resetting their password closes their
+already-open socket instead of leaving it streaming, and a remote session's socket waits on
+`RemoteSession.ended` and closes the moment that session ends. See [`desk-accounts.md`](desk-accounts.md).
 
 ## Architecture
 
@@ -167,10 +171,10 @@ handler itself only routes; every family owns its messages, its handler and its 
  ┌───────────────────────────────────────────────────┐        │
  │ plugins/Sockets.kt — webSocket("/api")            │        │
  │                                                   │        │
- │  1. resolveSessionUser → close 4401 if no session │        │
+ │  1. resolveCaller → close 4401 if no session      │        │
  │  2. SocketScope(session, state, user)             │        │
  │  ── pre-warm-up band (touches no state.show) ──   │        │
- │  3. authService.revocations  → close 4401         │        │
+ │  3. revocations, remote end  → close 4401         │        │
  │  4. setupMachineSubscriptions                     │        │
  │  5. bootProgress.flow → bootProgressState, until  │        │
  │     isShowReady (return on FAILED)                │        │

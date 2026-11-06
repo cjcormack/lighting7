@@ -45,4 +45,13 @@ object DaoCloudConnections : IntIdTable("cloud_connection") {
     val verificationUriComplete = text("verification_uri_complete").nullable()
     val pollIntervalS = integer("poll_interval_s").nullable()
     val adoptionExpiresAt = utcInstant("adoption_expires_at").nullable()
+
+    // What may come through the cloud (cloud-p1 plan D6): off at adoption, changed only by an admin on
+    // the desk's own listener, never by a message.
+    /** Remote sessions through the sidecar. */
+    val remoteAccess = bool("remote_access").default(false)
+    /** MCP calls relayed over the control channel. */
+    val mcpAccess = bool("mcp_access").default(false)
+    /** Each new remote session waits for an admin at the desk to allow it (D13). */
+    val approveSessions = bool("approve_sessions").default(false)
 }
