@@ -62,6 +62,7 @@ import {
   thisWindowRow,
   useDeskWindows,
 } from '@/store/windows'
+import { isRemoteMode } from '@/lib/remoteMode'
 import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
 
 /**
@@ -200,7 +201,8 @@ function ScreensSheetBody() {
           ))}
         </ul>
       )}
-      <NewWindowSection defaultName={nextName} />
+      {/* The LAN's: a link or a new window opened here would not be inside the cloud's shell. */}
+      {!isRemoteMode() && <NewWindowSection defaultName={nextName} />}
     </>
   )
 }
@@ -392,16 +394,18 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
         ),
       )}
       {viewHasOwnSelection(view.id) && <SelectionFollowOption row={row} viewId={view.id} />}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 px-2 text-xs"
-        onClick={() => void copy()}
-        title="A link that opens a window on another device with this one's view and its options"
-      >
-        {copied ? <Check className="size-3.5" /> : <Link className="size-3.5" />}
-        {copied ? 'Copied' : `Copy link for ${row.name}`}
-      </Button>
+      {!isRemoteMode() && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={() => void copy()}
+          title="A link that opens a window on another device with this one's view and its options"
+        >
+          {copied ? <Check className="size-3.5" /> : <Link className="size-3.5" />}
+          {copied ? 'Copied' : `Copy link for ${row.name}`}
+        </Button>
+      )}
     </div>
   )
 }

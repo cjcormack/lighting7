@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, session 3 in review.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05, session 4 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -310,8 +310,8 @@ and a session is added here for it.
 |---|---|---|---|---|---|
 | 1 | The protocol for P1 | merged | `claude/cloud-p1-z6z56z` | [#353](https://github.com/cjcormack/lighting7/pull/353) | `f86d6bb` |
 | 2 | Bearer tokens on the public listener | merged | `claude/cloud-p1-s2` | [#355](https://github.com/cjcormack/lighting7/pull/355) | `7deccac` |
-| 3 | The sidecar and the broker | in review | `claude/cloud-p1-s3` | | |
-| 4 | The SPA in remote mode | planned | | | |
+| 3 | The sidecar and the broker | merged | `claude/cloud-p1-s3` | [#356](https://github.com/cjcormack/lighting7/pull/356) | `45ab6d1` |
+| 4 | The SPA in remote mode | in review | `claude/cloud-p1-htmv50` | | |
 | 5 | Bundling and supervising the sidecar | planned | | | |
 | 6 | Linking cloud accounts | planned | | | |
 | 7 | Remote sessions on the Cloud tab | planned | | | |
@@ -478,6 +478,21 @@ next; whoever merges the last fills its own.
 - **Docs:** `frontend/CLAUDE.md` gains a line on remote mode; `docs/cloud-engineering.md` §"Remote
   mode".
 - **The gate's check:** `FU-MANUAL-CLOUD-P1A` (§6) added to `docs/plans/manual-validation.md`.
+- **As built:** the boot entry is `src/boot.ts`, its decision `src/remoteBoot.ts`, giving the shell
+  10 s to answer `hello`; the mode and the port live in `lib/remoteMode.ts`, which `lightingApi` reads.
+  The meta goes into `index.html` on every path the index answers, and only while `cloud.baseUrl` is
+  configured and `cloud.enabled` is on (`routes/spaPage.kt`); `frame-ancestors 'self'` is on every
+  bundle file on the desk's own listener, not on API answers. `docs/cloud-protocol.md` now says how a
+  socket on the port begins and ends, which the contract left open: `open` replaces any socket the shell
+  holds, the SPA's `close` is not answered, and a shell `close` before `open` means the socket did not
+  open; and the port outlives its sockets. A port the SPA takes as gone — its `close` event, which only
+  Chromium fires, or an `open` unanswered for 15 s — reads as a 1006 close, and the SPA replaces it with
+  another `hello`, whose port supersedes the old one. Signed out in remote mode the SPA says *Remote session ended* rather than offering a form, and
+  *Log out* keeps its label. Beside the new-window section and its localhost note, the Screens sheet's
+  per-row *Copy link*, a cue's *Copy link* and ⌘K's *Open … on another display* are hidden too: each
+  names this origin or opens a window outside the shell. The Vitest
+  files read the remote-frame fixture through `src/test/remoteFrameFakes.ts`, over fake ports, since
+  jsdom has no `MessagePort`.
 
 ### Session 5 — Bundling and supervising the sidecar
 

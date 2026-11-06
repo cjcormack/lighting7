@@ -97,6 +97,7 @@ vi.mock('@/components/ui/select', async () => {
   }
 })
 
+import { setRemoteLinkForTests, type RemoteLink } from '@/lib/remoteMode'
 import { ScreensSheet } from './ScreensSheet'
 import { setScreensSheetOpen } from './screensSheetState'
 
@@ -553,5 +554,21 @@ describe('ScreensSheet', () => {
     render(<ScreensSheet />)
     // jsdom's origin is http://localhost:3000.
     expect(screen.getByText(/names the desk to itself/)).toBeInTheDocument()
+  })
+
+  it('in remote mode draws no new window, no link and no localhost check, which are the LAN’s', () => {
+    ;(window as { getScreenDetails?: unknown }).getScreenDetails = vi.fn()
+    setRemoteLinkForTests({ post: () => true } as unknown as RemoteLink)
+    try {
+      render(<ScreensSheet />)
+      expect(within(screen.getByRole('list', { name: 'Windows' })).getAllByRole('listitem')).toHaveLength(3)
+      expect(screen.queryByLabelText('Name for a new window')).toBeNull()
+      expect(screen.queryByText('Open a window on…')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Copy link for another device' })).toBeNull()
+      expect(screen.queryByRole('button', { name: /^Copy link for / })).toBeNull()
+      expect(screen.queryByText(/names the desk to itself/)).toBeNull()
+    } finally {
+      setRemoteLinkForTests(null)
+    }
   })
 })

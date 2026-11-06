@@ -331,7 +331,12 @@ window, the SPA's `MessagePort`, or the worker), and the ports it transfers.
   transferring the `MessagePort` its socket rides. A message from any other origin is ignored.
 - **The socket**, on that port, one at a time: the SPA sends `open {path}` and the shell answers `open`
   once the socket is open; `send {data}` and `message {data}` carry text messages; `close {code,
-  reason}` either way ends it, the shell's carrying the desk's code.
+  reason}` either way ends it, the shell's carrying the desk's code. An `open` replaces any socket the
+  shell holds for the port, which it closes without a `close`; the SPA's `close` is not answered; and a
+  shell `close` while the SPA waits for `open` means that socket did not open. The port outlives its
+  sockets: the shell keeps it while the frame lives. A port the SPA takes as gone — its `close` event,
+  which only some browsers fire, or an `open` unanswered for 15 s — it replaces with another `hello`,
+  whose `port` supersedes the old one: the shell drops whatever it held on that.
 - **The session**, on the same port: `session.end` (*Sign out*) and `auth.unlinked` (the account is not
   linked here), SPA → shell.
 - **A restarted service worker** has lost its port: it posts `port.request` to the SPA, which posts

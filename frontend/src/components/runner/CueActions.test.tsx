@@ -63,6 +63,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: (m: string) => toas
 import { CueActions, ONE_CUE_REASON, type CueActionRow } from './CueActions'
 import { CueActionDialogsProvider } from './cueActionDialogs'
 import { resetShowIncludeForTests } from '@/lib/showInclude'
+import { setRemoteLinkForTests, type RemoteLink } from '@/lib/remoteMode'
 
 const ROWS: CueActionRow[] = [
   { cueId: 1, name: 'Opener', cueNumber: '1', entryId: 101, stackId: 7 },
@@ -320,6 +321,19 @@ describe('CueActions', () => {
       'Move to stack…',
       'Copy link',
     ])
+  })
+
+  it('draws no Copy link in remote mode, whose origin only the cloud’s shell can open', async () => {
+    setRemoteLinkForTests({} as RemoteLink)
+    try {
+      draw({ host: 'menu' })
+      openMenu(screen.getByRole('button', { name: 'Cue actions' }))
+      const items = (await screen.findAllByRole('menuitem')).map((el) => el.textContent)
+      expect(items).toContain('Move to stack…')
+      expect(items).not.toContain('Copy link')
+    } finally {
+      setRemoteLinkForTests(null)
+    }
   })
 
   describe('Update stage… (show-cue-editing plan §4.4)', () => {

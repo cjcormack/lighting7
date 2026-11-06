@@ -1,7 +1,9 @@
 import {ChannelsApi, createChannelsApi} from "./channelsApi";
 import {ChannelMappingApi, createChannelMappingApi} from "./channelMappingApi";
 import {createStatusApi, StatusApi} from "./statusApi";
-import {createInternalApiConnection} from "./internalApi";
+import {createInternalApiConnection, InternalApiConnection} from "./internalApi";
+import {createRemoteSocketConnection} from "./remoteSocket";
+import {remoteLink} from "../lib/remoteMode";
 import {webSocketUrlFor} from "./webSocketUrl";
 import {createUniversesApi, UniversesApi} from "./universesApi";
 
@@ -126,7 +128,11 @@ function createLightingApi(): LightingApi {
   const baseUrl = '/api/'
   const wsUrl = getWebSocketUrl()
 
-  const connection = createInternalApiConnection(baseUrl, wsUrl)
+  // Remote mode is decided before this module is evaluated (`remoteBoot.ts`).
+  const link = remoteLink()
+  const connection: InternalApiConnection = link != null
+    ? createRemoteSocketConnection(baseUrl, link)
+    : createInternalApiConnection(baseUrl, wsUrl)
 
   const universesApi = createUniversesApi(connection)
   const channelsApi = createChannelsApi(connection)
