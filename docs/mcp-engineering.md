@@ -675,8 +675,8 @@ the busk pads' announcement are the live show's, so they follow only a copy into
 
 ### Claude's own history
 
-Each tool call runs under one write origin of the grant's source, `mcp:{grantId}`, named *Claude ·
-{client}* (`McpProtocol.callTool`; undo plan D7), so a call that stores something is one show entry
+Each tool call runs under one write origin of the grant's source, `mcp:{grantId}` (a cloud grant's
+`mcp:cloud:{gid}`, §"Through the cloud"), named *Claude · {client}* (`McpProtocol.callTool`; undo plan D7), so a call that stores something is one show entry
 of Claude's, beside the operator's in the History sheet. Two setup tools (`ai/HistoryTools.kt`) read
 and take back Claude's own, on the current project or the one `projectId` names, and the
 `instructions` say so in one line:
@@ -884,6 +884,43 @@ detached canvas — is `frontend/docs/stage-vis-engineering.md` §"Rendering for
 
 Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`; the venue split (extract, a show on the venue, `copy_to_project`, `copy_cues`, a hide, `delete_cue_stacks`, `publish_venue`, `projectId` on a project that is not current, and the guards) in `McpVenueSplitToolsTest.kt`; a cue's places (`create_cue` into a stack, a cue shared and twice in one stack addressed by number and by entry, remove, move, `delete_cues`, a shared `build_cue_stack` row, `describe_rig`'s `in:`) in `McpLookCueEditingTest.kt`; `render_view` in `McpRenderViewTest.kt` (the vocabulary, the named errors, and the whole round trip over a real signed-in socket) and `state/StageRenderServiceTest.kt`.
 
+## Through the cloud
+
+Lighting7 Cloud serves one MCP URL per install and relays each JSON-RPC message to the desk over the
+control channel as `mcp.call {token, grant: {id, clientName}, request}` (cloud-p1 plan D15,
+`docs/cloud-protocol.md`). `cloud/McpRelay.kt` runs it through the same `McpProtocol` as `/mcp`
+(`State.mcpProtocol`, one instance for both), so every tool, refusal and switch above holds through the
+cloud unchanged. The desk's own `/mcp` stays beside it until P1's session 9.
+
+On the channel's thread a call is judged only by *Claude (MCP)* (`cloud_connection.mcp_access`, off at
+adoption and set only on the desk's own listener, P1 D6): off, it is refused `MCP_ACCESS_OFF`, and the
+desk announces `mcp.off` beside `mcp.v1`. Then the queue: four calls run at once and four wait, a ninth
+is refused `DESK_BUSY` (the cloud keeps eight in flight). The rest runs on `Dispatchers.IO`, never on a
+`cloud-N` thread:
+
+1. The token is checked by `DeskTokens.verify` at the `mcp` door, so a remote session's is
+   `TOKEN_WRONG_SCOPE`; its org must be the adoption's, its `gid` the call's `grant.id`
+   (`MCP_GRANT_MISMATCH`), and no `revoke` naming its account, or everything, may cover it
+   (`TOKEN_REVOKED`, the remote sessions' deny set, `RemoteSessions.tokenRevoked`).
+2. Its `sub` is mapped through `cloud_identity_links` to a desk user: none is `CLOUD_ACCOUNT_NOT_LINKED`,
+   whose message names the two ways to link (an admin's invite, or proving once from a remote session).
+   A disabled user's call is answered as a JSON-RPC error (`-32001`), not run. The user's role is read
+   from `AuthService` per call, as a cookie's is, so a demotion counts at the next call.
+3. The call runs as that user, with `sessionTokenHash = cloud-grant:{gid}` and the call's `clientName`
+   (cut to 64 characters) on `AuthenticatedUser`. `historySourceOf` reads it as `mcp-grant:` is read, as
+   the source `mcp:cloud:{gid}` named *Claude · {client}*, so each grant's history is its own and
+   `list_history` and `undo_changes` keep two grants apart.
+4. The answer is `mcp.result {response}` with `replyTo` the call's id, through the reply queue (P1 D16);
+   a notification's has no `response`. The call's slot is free before the answer is queued, so a cloud
+   that sends its next call on hearing one finds room. Each call is its own `mcp.relay` transaction,
+   which `McpProtocol`'s `mcp.server` span joins. A result whose frame would be over 8 MiB is answered in its place
+   as a JSON-RPC error (`-32603`) saying it was too large.
+
+A refusal is `error {code, message}` with `replyTo`. A call must fit one frame, so the cloud refuses a
+body over 7 MiB before it reaches the desk: `upload_scene_image` through the cloud takes an image of
+about 5 MB, which its description says (`FU-CLOUD-MCP-CHUNKING`). `render_view` still draws only on a
+signed-in window of the desk's own listener.
+
 ## Tests
 
 `src/test/kotlin/.../mcp/McpServerTest.kt` mounts `publicModule` and runs the whole
@@ -897,4 +934,5 @@ supervisor against a **fake `ngrok`** — a shell script printing the real agent
 through online, crash-and-restart, a bad token (not retried), a plain-text error and the orphan
 sweep (POSIX only); the installer against hand-built zip and tgz archives, including a checksum
 mismatch; and `RemoteAccessService` end to end with the fake agent. Nothing is tested against the
-real claude.ai or the real ngrok.
+real claude.ai or the real ngrok. The relay is `cloud/McpRelayTest.kt` and `McpRelayLimitsTest`, through
+`FakeCloud`'s `mcpCall` (`docs/cloud-engineering.md` §"Tests").

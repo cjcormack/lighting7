@@ -152,7 +152,8 @@ parallel workers' threads hold no scope, so the cache lookup is this attribute r
 | Sync run | `sync.run` | `RemoteSyncEngine.runSync` | `sync.export`, git `http.client`, `sync.diff`, `sync.apply` |
 | Venue operations | `venue.publish`, `venue.update`, `venue.extract`, `venue.detach`, `venue.attach` | `venue/` | `venue.diff`, `venue.snapshot`, `venue.behind`; `venue.dry_run` marks the review |
 | Script compile | `script.compile` | `Show.script`, on a miss in the show's own cache | `cache.get` on the compiled-jar cache, with `cache.hit` |
-| MCP tool call | `mcp.server` span, `tools/call <tool>` | `McpProtocol` | under the `/mcp` call's transaction |
+| MCP call through the cloud | `mcp.relay`, `mcp.call` | `cloud/McpRelay.kt` | the `mcp.server` span below |
+| MCP tool call | `mcp.server` span, `tools/call <tool>` | `McpProtocol` | under the `/mcp` call's transaction, or a relayed call's `mcp.relay` |
 
 An HTTP call is continued from the caller's `sentry-trace` / `baggage` and named by its **route
 template** (`GET /api/rest/auth/reset/{token}`), never the raw path. A call no API route took — a

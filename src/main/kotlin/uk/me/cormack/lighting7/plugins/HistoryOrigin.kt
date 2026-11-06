@@ -8,6 +8,7 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.withContext
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
+import uk.me.cormack.lighting7.cloud.McpRelay
 import uk.me.cormack.lighting7.history.HistorySource
 import uk.me.cormack.lighting7.history.WriteOrigin
 import uk.me.cormack.lighting7.state.State
@@ -20,7 +21,8 @@ import uk.me.cormack.lighting7.state.State
 
 /**
  * The source a signed-in caller writes as: their account, Claude's grant (named by its client through
- * [clientName], given the grant's id), or the desk with no accounts.
+ * [clientName], given the grant's id), a grant through the cloud (named by the client its call names),
+ * or the desk with no accounts.
  */
 internal fun historySourceOf(user: AuthenticatedUser?, clientName: (Int) -> String? = { null }): HistorySource = when {
     user == null -> HistorySource.DESK
@@ -28,6 +30,7 @@ internal fun historySourceOf(user: AuthenticatedUser?, clientName: (Int) -> Stri
         user.sessionTokenHash,
         user.sessionTokenHash.removePrefix(MCP_GRANT_PREFIX).toIntOrNull()?.let(clientName),
     )
+    user.sessionTokenHash.startsWith(McpRelay.CLOUD_GRANT_PREFIX) -> HistorySource.mcp(user.sessionTokenHash, user.clientName)
     else -> HistorySource.account(user.uuid, user.displayName)
 }
 

@@ -138,16 +138,17 @@ unadopt, cancel or revoke. The wire side is [cloud-protocol.md](cloud-protocol.m
 3. **Online.** The desk sends `hello` (protocol 1, its version, platform, `installs.uuid`, friendly
    name, its capabilities), then `health {uptimeS, deskVersion}` every `welcome.heartbeatS`
    (clamped to 1–300 s). `hello` carries the friendly name as it was when the channel started. The
-   capabilities are `remote.v1`, always, then the state entries of P1 D6: `remote.off` and `mcp.off`
-   while their switch is off, `remote.no-sidecar` while no sidecar runs (`CloudService.capabilities`);
-   `mcp.v1` joins when the desk relays MCP (P1 session 8). Whenever the list changes the desk sends
+   capabilities are `remote.v1` and `mcp.v1`, always, then the state entries of P1 D6: `remote.off` and
+   `mcp.off` while their switch is off, `remote.no-sidecar` while no sidecar runs
+   (`CloudService.capabilities`). Whenever the list changes the desk sends
    `capabilities`, the whole list, on the connection it was announced on, never ahead of its `hello`
    (`ChannelConnection.refreshCapabilities`). `welcome`'s `remoteOrigin`, when it is a bare origin
    `cloud.baseUrl` would accept (`https`, or `http` to a loopback host), is kept for the Origin check
    (§"Remote sessions").
 4. **Reading.** `unadopted` forgets the adoption (`revoked()`). `jwks` replaces the token keys (P1 D3).
    `revoke` ends and refuses what it names (§"Remote sessions"). The `rtc.*` messages go to the broker
-   (§"The sidecar"), and `link.accepted` and `link.refused` to `CloudLinks` (§"Links"). `error` is
+   (§"The sidecar"), `link.accepted` and `link.refused` to `CloudLinks` (§"Links"), and `mcp.call` to
+   `McpRelay` (`docs/mcp-engineering.md` §"Through the cloud"). `error` is
    logged. Any other type,
    unknown ones, ones of another protocol version and ones only the desk sends, is ignored and logged
    once per type, up to 100 types, so v1 can grow additively. Text the cloud chose (a type, an error,
@@ -199,7 +200,7 @@ reads. It is never written: a restart ends every remote session anyway, and ever
 to begin. The keys go when the desk stops being adopted.
 
 The token's audience is the install id `cloud_connection` holds, its door (`remote` here, `mcp` at the
-relay of P1's session 8) the one it arrives at. What `verify` does not judge is the desk's: the session it
+MCP relay, `docs/mcp-engineering.md` §"Through the cloud") the one it arrives at. What `verify` does not judge is the desk's: the session it
 names (`REMOTE_SESSION_UNKNOWN`), its account and org against that session's (`REMOTE_SESSION_MISMATCH`),
 and whether a `revoke` covers it (`TOKEN_REVOKED`), below.
 
@@ -640,13 +641,18 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
    sidecar's peer connections go wherever ICE finds the browser, which is what they are for.
 7. **The sidecar is a process apart.** Its pipes are read and written on threads of their own, through
    bounded queues, and one that hangs is restarted rather than waited on (§"The sidecar").
+8. **A relayed MCP call is the desk's own work, not the channel's.** The channel's thread only judges
+   the switch and the queue and hands the call on: the token, the link and the tool run on
+   `Dispatchers.IO`, four at once and four waiting, `DESK_BUSY` beyond, as `/mcp`'s run on the
+   listener's own threads (`docs/mcp-engineering.md` §"Through the cloud").
 
 `CloudOutageOutputTimingTest` is the rules' proof (NFR-SAFE-1): a fade's Art-Net frames, timed with no
 connector, then with the cloud connected, stopping reading, dropping the connection and refusing every
 reconnect, each run held to the baseline's frame count, end, p99 and longest frame gap, each plus a margin.
 `LinkSidecarSafetyTest` holds the sidecar to the same (NFR-SAFE-2): the real one running, killed mid-fade
 and stopped with SIGSTOP mid-fade until its stdin queue fills, then a stand-in flooding its stdout and one
-flooding its stderr. Both read `testsupport/FadeTiming.kt`.
+flooding its stderr. `McpRelayLimitsTest` holds the MCP relay to the same: a fade with 200 calls sent
+mid-fade, none run on a `cloud-N` thread. All three read `testsupport/FadeTiming.kt`.
 
 ## Tests
 
@@ -657,7 +663,8 @@ against the install's key and its own clock (`clockOffset` makes it skewed), kee
 install, closes a removed install `4004`, and can stall a connection, stop reading one, drop it, refuse
 or redirect the upgrade, or force any `4003` reason. For P1 it holds a token-signing key, sends its
 `jwks` after every `welcome` (and `remoteOrigin` in it when set), mints desk access tokens (`mint`),
-rotates its key and sends `revoke`. Desk tests never use the real cloud (R5).
+rotates its key, sends `revoke` and relays an MCP call (`mcpCall`). Desk tests never use the real
+cloud (R5).
 `CloudAdoptionTest` drives `CloudService` through every adoption and unadopt path;
 `InstallCloudRoutesTest` the routes and their refusals on both listeners; `CloudChannelTest` the
 channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and
@@ -672,7 +679,9 @@ hangs, dies or floods its stdout or stderr on request; `LinkMessagesTest` reads 
 `LinkProcessTest` the supervisor's backoff on a virtual clock and the orphan sweep; `LinkBinaryTest` which
 binary runs. `RemoteBrokerTest` also carries an offer through approval (allowed, denied, timed out, closed
 by the cloud, the switch turned off, the cap), the frame to an admin on the desk's own listener, *Allow*
-refused on the public one, and the Cloud tab's list and *End*.
+refused on the public one, and the Cloud tab's list and *End*. `McpRelayTest` relays calls through the
+fake to the desk's own `McpProtocol` and through every refusal; `McpRelayLimitsTest` the queue, a
+result over the frame limit and a flood of calls.
 
 The sidecar's own tests (`cd link && go test ./...`, CI's *Link* job) run a pion peer as the browser
 against it and a test server as the desk, through the framing and `ctl` fixtures, both 100 MB streams,

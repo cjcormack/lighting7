@@ -29,6 +29,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import uk.me.cormack.lighting7.cloud.protocol.AuthFailure
 import uk.me.cormack.lighting7.cloud.protocol.AuthPayload
 import uk.me.cormack.lighting7.cloud.protocol.CloseCode
@@ -57,6 +59,7 @@ import java.security.PublicKey
 import uk.me.cormack.lighting7.cloud.protocol.DeskAccessClaims
 import uk.me.cormack.lighting7.cloud.protocol.DeskTokens
 import uk.me.cormack.lighting7.cloud.protocol.Jwk
+import uk.me.cormack.lighting7.cloud.protocol.McpGrant
 import uk.me.cormack.lighting7.cloud.protocol.TokenScope
 import java.time.Duration
 import java.time.Instant
@@ -296,11 +299,13 @@ class FakeCloud : Closeable {
 
     /**
      * A desk access token for [installId], signed as the cloud signs one: a remote session's by
-     * default, [iat] the fake's clock, living [ttlS] seconds. [key] and [kid] sign it with something else.
+     * default, an MCP grant [gid]'s at [TokenScope.MCP], [iat] the fake's clock, living [ttlS] seconds.
+     * [key] and [kid] sign it with something else.
      */
     fun mint(
         installId: String,
         sid: String? = "sid-1",
+        gid: String = "grant-1",
         sub: String = account.id,
         orgId: String = org.id,
         scope: TokenScope = TokenScope.REMOTE,
@@ -318,7 +323,7 @@ class FakeCloud : Closeable {
             org = orgId,
             scope = scope,
             sid = sid.takeIf { scope == TokenScope.REMOTE },
-            gid = "grant-1".takeIf { scope == TokenScope.MCP },
+            gid = gid.takeIf { scope == TokenScope.MCP },
             azp = "client-1".takeIf { scope == TokenScope.MCP },
             iat = iat,
             exp = iat + ttlS,
@@ -344,6 +349,19 @@ class FakeCloud : Closeable {
 
     /** An owner or admin of the org declines [inviteId] in the portal. */
     fun declineInvite(installId: String, inviteId: String): String = send(installId, Message.LinkRefused(inviteId))
+
+    /**
+     * Relay one MCP JSON-RPC message, [request], to [installId] as Claude's grant [grantId] would: under
+     * [token] (an MCP token for [accountId]'s grant by default). Answers the call's id, which `mcp.result` names.
+     */
+    fun mcpCall(
+        installId: String,
+        request: String,
+        accountId: String = account.id,
+        grantId: String = "grant-1",
+        clientName: String = "Claude",
+        token: String = mint(installId, sub = accountId, gid = grantId, scope = TokenScope.MCP),
+    ): String = send(installId, Message.McpCall(token, McpGrant(grantId, clientName), Json.parseToJsonElement(request).jsonObject))
 
     /** Ask [installId] for remote session [sid] as [accountId], as the shell's offer would; answers the offer's id. */
     fun offer(installId: String, sid: String, accountId: String = account.id, sdp: String = "v=0 offer for $sid"): String =

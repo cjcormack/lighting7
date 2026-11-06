@@ -40,7 +40,8 @@ import uk.me.cormack.lighting7.update.BuildInfo
 
 /**
  * The MCP server itself: JSON-RPC 2.0 in, JSON-RPC 2.0 out, no transport. `McpServerModule`
- * carries it over streamable HTTP; tests call [handle] directly.
+ * carries it over streamable HTTP and `cloud/McpRelay` over the cloud's control channel; tests call
+ * [handle] directly.
  *
  * The tools are the show-running tools ([AiTools.toolDefs] — there is no script tool), the
  * show-setup tools ([SetupTools]), and `describe_rig`, which answers with the live rig in prose

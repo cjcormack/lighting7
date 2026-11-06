@@ -100,6 +100,9 @@ internal interface ChannelHandler {
 
     fun linkRefused(refused: Message.LinkRefused) {}
 
+    /** An `mcp.call`, [id] its envelope's: what `mcp.result`, or a refusal, replies to (D15). */
+    fun mcpCall(id: String, call: Message.McpCall) {}
+
     object None : ChannelHandler
 }
 
@@ -378,6 +381,7 @@ internal class ChannelConnection(
                     is Message.RtcClose -> handler.rtcClose(body)
                     is Message.LinkAccepted -> handler.linkAccepted(inbound.envelope.id, body)
                     is Message.LinkRefused -> handler.linkRefused(body)
+                    is Message.McpCall -> handler.mcpCall(inbound.envelope.id, body)
                     else -> ignore(inbound.envelope)
                 }
             }

@@ -89,7 +89,7 @@ fun Application.publicModule(state: State) {
  */
 fun Application.mcpModule(state: State) {
     val auth = state.mcpAuthService
-    val protocol = McpProtocol(state)
+    val protocol = state.mcpProtocol
     val publicUrl = { state.remoteAccess.publicUrl() }
 
     routing {
