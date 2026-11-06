@@ -491,6 +491,13 @@ class RemoteSessions(
         endAll(RemoteSessionEnd.REVOKED)
     }
 
+    /** Whether a `revoke` naming [claims]' account, or everything, covers it: the MCP relay's check (D15). */
+    fun tokenRevoked(claims: DeskAccessClaims): Boolean {
+        val now = clock()
+        pruneDenials(now)
+        return revoked(claims, now)
+    }
+
     private fun revoked(claims: DeskAccessClaims, now: Instant): Boolean =
         allRevoke.get()?.covers(claims.iat, now) == true || accountRevokes[claims.sub]?.covers(claims.iat, now) == true
 

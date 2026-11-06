@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, session 7 in review.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05, session 8 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -319,8 +319,8 @@ and a session is added here for it.
 | 4 | The SPA in remote mode | merged | `claude/cloud-p1-htmv50` | [#357](https://github.com/cjcormack/lighting7/pull/357) | `52c68fe` |
 | 5 | Bundling and supervising the sidecar | merged | `claude/awesome-lamport-bbwlen` | [#361](https://github.com/cjcormack/lighting7/pull/361) | `bbeac1e` |
 | 6 | Linking cloud accounts | merged | `claude/festive-wright-5j9oje` | [#364](https://github.com/cjcormack/lighting7/pull/364) | `0b40974` |
-| 7 | Remote sessions on the Cloud tab | in review | `claude/gifted-hopper-w8jn4c` | | |
-| 8 | The MCP relay | planned | | | |
+| 7 | Remote sessions on the Cloud tab | in review | `claude/gifted-hopper-w8jn4c` | [#366](https://github.com/cjcormack/lighting7/pull/366) | `a3984d1` |
+| 8 | The MCP relay | in review | `claude/cloud-p1-v6rzx8` | | |
 | 9 | Delete ngrok and the desk's OAuth server | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
@@ -632,6 +632,16 @@ next; whoever merges the last fills its own.
   the show's own, as today, but the channel's threads never run it). `./gradlew test --tests` for
   `cloud`, `mcp`, `ai`, `history`.
 - **Docs:** `docs/mcp-engineering.md` §"Through the cloud".
+- **As built:** the channel's thread judges only the switch and the queue; the token, the link and the
+  tool run on `Dispatchers.IO` (`cloud/McpRelay.kt`), and the desk keeps one `McpProtocol`
+  (`State.mcpProtocol`) for `/mcp` and the relay. Beyond D15's checks a token's `org` must be the
+  adoption's (`TOKEN_WRONG_AUDIENCE`), and a `revoke` naming its account or everything refuses it
+  through the remote sessions' deny set (`TOKEN_REVOKED`); a `revoke {sid}` has nothing to name here. A
+  disabled desk user's call is answered with a JSON-RPC error (`-32001`) rather than a new code. The
+  call's `clientName`, cut to 64 characters, rides on `AuthenticatedUser.clientName`, and the source is
+  `mcp:cloud:<gid>`, apart from a desk grant's `mcp:<id>`. `FU-CLOUD-MCP-CHUNKING` is in
+  `docs/plans/followups.md`. The flood test is `McpRelayLimitsTest`, beside the other wall-clock tests in
+  `docs/testing-engineering.md`.
 
 ### Session 9 — Delete ngrok and the desk's OAuth server
 

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -21,6 +22,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.auth.AuthService
+import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import uk.me.cormack.lighting7.cloud.protocol.Capability
 import uk.me.cormack.lighting7.cloud.protocol.MAX_FRAME_BYTES
 import uk.me.cormack.lighting7.cloud.protocol.Message
@@ -72,6 +74,8 @@ class CloudService(
     apiFactory: (baseUrl: String) -> CloudApi = { CloudApi(it) },
     private val deskIdentity: () -> DeskIdentity = { DeskIdentity.read(database) },
     authService: AuthService? = null,
+    /** Runs one relayed MCP message as a desk user (the desk's `McpProtocol`); none, and every call is refused as off. */
+    mcpHandler: (suspend (JsonObject, AuthenticatedUser) -> JsonObject?)? = null,
 ) {
     private val logger = LoggerFactory.getLogger(CloudService::class.java)
 
@@ -177,6 +181,17 @@ class CloudService(
         clock = clock,
     )
 
+    private val mcpRelay = McpRelay(
+        handle = mcpHandler ?: { _, _ -> null },
+        authService = authService,
+        sessions = remoteSessions,
+        trust = { trust },
+        keys = { jwks.keys },
+        mcpAccess = { mcpHandler != null && switches.mcpAccess },
+        reply = { message, replyTo -> liveConnection?.send(message, replyTo) ?: false },
+        clock = clock,
+    )
+
     private val sidecarPort = object : SidecarPort {
         override val running: Boolean get() = sidecarRunning
 
@@ -257,6 +272,8 @@ class CloudService(
         override fun linkAccepted(id: String, accepted: Message.LinkAccepted) = links.accepted(id, accepted)
 
         override fun linkRefused(refused: Message.LinkRefused) = links.refused(refused)
+
+        override fun mcpCall(id: String, call: Message.McpCall) = mcpRelay.call(id, call)
     }
 
     private val adoption = CloudAdoptionService(
@@ -426,9 +443,10 @@ class CloudService(
         liveConnection?.refreshCapabilities()
     }
 
-    /** What the desk announces (D6): that it takes remote sessions, and the state entries for each door's switch and the sidecar. */
+    /** What the desk announces (D6): that it takes remote sessions and relays MCP, and the state entries for each door's switch and the sidecar. */
     fun capabilities(): List<String> = buildList {
         add(Capability.REMOTE_V1)
+        add(Capability.MCP_V1)
         val now = switches
         if (!now.remoteAccess) add(Capability.REMOTE_OFF)
         if (!now.mcpAccess) add(Capability.MCP_OFF)
@@ -581,6 +599,7 @@ class CloudService(
     fun close() {
         // Sessions first, so a clean stop records them as DESK_STOPPED rather than as the sidecar's going.
         remoteSessions.close()
+        mcpRelay.close()
         synchronized(publishLock) { link?.also { link = null } }?.stop()
         scope.cancel()
         if (apiDelegate.isInitialized()) runCatching { apiDelegate.value.close() }

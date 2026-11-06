@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.history
 
+import uk.me.cormack.lighting7.cloud.McpRelay
 import uk.me.cormack.lighting7.mcp.McpAuthService
 import kotlinx.coroutines.ThreadContextElement
 import java.util.concurrent.atomic.AtomicLong
@@ -28,12 +29,14 @@ data class HistorySource(val kind: Kind, val id: String?, val name: String) {
         fun account(uuid: java.util.UUID, name: String) = HistorySource(Kind.ACCOUNT, uuid.toString(), name)
 
         /**
-         * A Claude grant, by its `mcp-grant:<id>` session hash, named by the client it was granted to (D7):
-         * *Claude · Cursor*. A client that calls itself Claude, or gives no name, is plain *Claude*.
+         * A Claude grant, by its `mcp-grant:<id>` session hash, or a cloud grant's `cloud-grant:<id>` as
+         * `cloud:<id>`, named by the client it was granted to (D7): *Claude · Cursor*. A client that calls
+         * itself Claude, or gives no name, is plain *Claude*.
          */
         fun mcp(sessionTokenHash: String, clientName: String? = null) = HistorySource(
             Kind.MCP,
-            sessionTokenHash.removePrefix("mcp-grant:"),
+            if (sessionTokenHash.startsWith(McpRelay.CLOUD_GRANT_PREFIX)) "cloud:" + sessionTokenHash.removePrefix(McpRelay.CLOUD_GRANT_PREFIX)
+            else sessionTokenHash.removePrefix("mcp-grant:"),
             clientName?.trim()?.takeUnless { it.isEmpty() || it.equals("Claude", ignoreCase = true) || it == McpAuthService.UNNAMED_CLIENT }
                 ?.let { "Claude · $it" } ?: "Claude",
         )

@@ -134,7 +134,7 @@ class CloudChannelTest {
         assertEquals(DeskPlatform.current, hello.platform)
         assertEquals(BuildInfo.current.version, hello.deskVersion)
         assertEquals(
-            listOf(Capability.REMOTE_V1, Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR),
+            listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR),
             hello.capabilities,
             "a desk with both switches off and no sidecar says so",
         )

@@ -150,6 +150,7 @@ That job is also always cold — `build/test-data` does not survive between runs
 | `ArtNetParkSafetyTest`, `ActiveBankStateTest`, `CueEditSessionRegistryTest` | `withTimeout` waits of 1–5 s |
 | `CloudOutageOutputTimingTest` | a 3 s fade's Art-Net frames, connected and through three cloud failures, against one baseline fade with no connector: each run within 5 frames of the baseline's count, ending within 500 ms of its end, its p99 frame gap within 50 ms and its longest within 100 ms of the baseline's |
 | `LinkSidecarSafetyTest` | the same fade and margins, with the real sidecar (`-Dlighting7.link`) running, killed mid-fade and stopped mid-fade until its stdin queue fills, then a stand-in flooding its stdout and its stderr; up to 30 s for each restart to serve |
+| `McpRelayLimitsTest` "a flood of calls leaves a fade as it is" | the same fade and margins, with 200 relayed MCP calls sent mid-fade |
 | `CloudChannelTest`, `CloudAdoptionTest` | waits of up to 15 s for a connection or an adoption against `FakeCloud`, and two 1.5 s waits that assert nothing reconnects |
 
 Precedent: commit `51965fc` removed a tick-delivery assertion from `SpeedMasterBankTest` that

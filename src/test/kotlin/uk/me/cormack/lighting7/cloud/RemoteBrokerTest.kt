@@ -207,7 +207,7 @@ class RemoteBrokerTest : RouteIntegrationTest() {
         Thread.sleep(500)
         assertNull(state.cloud.link)
         assertEquals(0, record.length())
-        assertEquals(listOf(Capability.REMOTE_V1, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR), lastCapabilities())
+        assertEquals(listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR), lastCapabilities())
         assertEquals(Message.RtcClose("sid-1", ErrorCode.SIDECAR_UNAVAILABLE), reply(fake.offer(installId, "sid-1")))
     }
 

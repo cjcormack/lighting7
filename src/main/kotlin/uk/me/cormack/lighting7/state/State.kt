@@ -151,10 +151,14 @@ class State(val config: ApplicationConfig) {
             credentialStore = { credentialStore },
             userChanges = authService.userChanges,
             authService = authService,
+            mcpHandler = { request, user -> mcpProtocol.handle(request, user) },
         )
     }
 
     val cloud: uk.me.cormack.lighting7.cloud.CloudService by cloudDelegate
+
+    /** The MCP server, which the public listener's `/mcp` and the cloud's relay both run. */
+    val mcpProtocol: uk.me.cormack.lighting7.mcp.McpProtocol by lazy { uk.me.cormack.lighting7.mcp.McpProtocol(this) }
 
     /**
      * Kotlin scripting host configuration shared by every scripting host in the app. Installs

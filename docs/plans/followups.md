@@ -174,6 +174,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-CLOUD-PROTOCOL-PUBLISH`](#fu-cloud-protocol-publish) | Trigger | Dist | a third party builds against the cloud protocol |
 | [`FU-CLOUD-DS-PRIMITIVES-ENTRY`](#fu-cloud-ds-primitives-entry) | Trigger | FE | the cloud's portal needs a desk primitive its alias cannot reach, or the alias breaks on a `desk.ref` move |
 | [`FU-CLOUD-LINK-SIGNING`](#fu-cloud-link-signing) | Blocked | Dist | the installers are code-signed |
+| [`FU-CLOUD-MCP-CHUNKING`](#fu-cloud-mcp-chunking) | Trigger | AI | Claude through the cloud needs an image over about 5 MB, or a result over 8 MiB |
 | [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
 | [`FU-HISTORY-EMBEDDED-CHILD-IDS`](#fu-history-embedded-child-ids) | Trigger | History | something names an embedded child (a busk pad, a rig tile, a scenery row) by its integer id across an undo |
 | [`FU-HISTORY-MACHINE-LOCAL`](#fu-history-machine-local) | Trigger | History | a desk night asks for an undo of a machine-local setting (a universe's address) |
@@ -1999,6 +2000,22 @@ the installer as a whole.
 **Fix**: sign `lighting7-link-*` with the same identity before `jpackage` stages them (`signtool` on
 Windows; `codesign` with the hardened runtime on the Mac, both architectures, then notarise the pkg),
 and have `stageJpackageInput`'s verifier fail an unsigned one on a release build.
+
+### `FU-CLOUD-MCP-CHUNKING`
+
+**Relay an MCP call larger than one frame** · Trigger · cloud-p1 session 8, 2026-11-06
+
+Lighting7 Cloud relays each MCP call and its result in one control-channel frame of at most 8 MiB
+(cloud-p1 plan D15). The cloud refuses a request body over 7 MiB (`REQUEST_TOO_LARGE`), so
+`upload_scene_image` through the cloud takes an image of about 5 MB rather than the 16 MB `/mcp` takes,
+and the desk answers a result over the frame limit with a JSON-RPC error (`cloud/McpRelay.kt`).
+
+**Trigger**: an operator's Claude, through the cloud, needs a larger image than that, or a tool answers
+more than 8 MiB.
+
+**Fix**: a chunked pair in `cloud-protocol` (a call's or a result's body in numbered parts under one id,
+reassembled within a byte cap and a timeout), announced as a capability so an older desk keeps the
+single-frame limit.
 
 ### `FU-DIST-ICONS`
 

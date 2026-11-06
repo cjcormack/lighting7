@@ -586,7 +586,7 @@ internal val uploadSceneImageTool = ToolDef(
     name = "upload_scene_image",
     description = "Store an image to paint on a cloth — a backcloth, a frontcloth, a gauze, a cut cloth, a flat — and answer its hash, width, height and whether it has transparent pixels. " +
         "Then name the hash in set_scene: a DRAPE's or a FLAT's params.paint {front, back}, or a MODEL part's texture.image. On a cloth the image stretches over the face, so size the element to the image's aspect; transparent pixels cut holes. " +
-        "PNG or JPEG only, at most 16 MB decoded and 8192 px a side (a larger one goes in through the element's sheet on the desk). Content-addressed: the same bytes always answer the same hash. Stored data only — it changes no DMX output and nothing on stage until an element names it. " +
+        "PNG or JPEG only, at most 16 MB decoded and 8192 px a side (a larger one goes in through the element's sheet on the desk); through Lighting7 Cloud, which relays a call of at most 7 MiB, about 5 MB decoded. Content-addressed: the same bytes always answer the same hash. Stored data only — it changes no DMX output and nothing on stage until an element names it. " +
         "Images are stored per project: the hash paints that project's elements only (a show on a venue also sees the venue's own images). copy_to_project carries an element's images with it.",
     inputSchema = objectSchema(required = listOf("mediaType", "base64")) {
         enumProp("mediaType", listOf("image/png", "image/jpeg"))

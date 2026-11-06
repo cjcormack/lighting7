@@ -48,6 +48,8 @@ data class AuthenticatedUser(
     val role: UserRole,
     /** SHA-256 hex of the caller's session token — lets handlers except "this session" from revocations. */
     val sessionTokenHash: String,
+    /** The MCP client a call through the cloud names its grant's client, which history shows; null otherwise. */
+    val clientName: String? = null,
 )
 
 /** A user row as cached in memory. [passwordHash] never leaves this class's callers' process. */
