@@ -86,7 +86,7 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
 import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
-import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
+import { dragGroupOf, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import { activeKeyRegion } from '@/components/sheet/keyRegion'
 import { keyTargetIsGuarded } from '@/components/sheet/cellEntry'
 import { editorIsOpen } from '@/components/editor/EditorSurface'
@@ -957,6 +957,7 @@ export function StackTimeline({
               ? {
                   enabled: !locked,
                   onReorder: (ids) => onReorder(ids.map((id) => Number(id.slice('entry:'.length))).filter(Number.isFinite)),
+                  group: (id) => dragGroupOf(selectedRows, id),
                 }
               : undefined
           }

@@ -314,3 +314,36 @@ export function firstEditableCell<Row extends SheetRow, C extends string>(
     return row != null && row.divider == null && column?.cell != null && column.value(row) !== undefined
   })
 }
+
+/**
+ * The order after a row drag: [group] — the rows travelling with [activeId], itself included —
+ * lifted out together in row order and put back before [overId] when the drag went up and after it
+ * when it went down, up and down being [activeId]'s own move. A single row lands where a plain
+ * splice would put it; a group with gaps closes up. Null where nothing moves: a drop on a row of
+ * the group, or an id the order does not hold.
+ */
+export function moveRows(
+  rowIds: readonly RowId[],
+  group: readonly RowId[],
+  activeId: RowId,
+  overId: RowId,
+): RowId[] | null {
+  const from = rowIds.indexOf(activeId)
+  const to = rowIds.indexOf(overId)
+  if (from < 0 || to < 0) return null
+  const moving = new Set(group.filter((id) => rowIds.includes(id)))
+  moving.add(activeId)
+  if (moving.has(overId)) return null
+  const block = rowIds.filter((id) => moving.has(id))
+  const rest = rowIds.filter((id) => !moving.has(id))
+  const at = rest.indexOf(overId) + (to > from ? 1 : 0)
+  return [...rest.slice(0, at), ...block, ...rest.slice(at)]
+}
+
+/**
+ * What a row drag carries (`rowDrag.group`) on a sheet whose selection travels: the selected rows
+ * when the dragged row is one of them, else the dragged row alone.
+ */
+export function dragGroupOf(selectedRows: readonly SheetRow[], activeId: RowId): RowId[] {
+  return selectedRows.some((row) => row.id === activeId) ? selectedRows.map((row) => row.id) : [activeId]
+}

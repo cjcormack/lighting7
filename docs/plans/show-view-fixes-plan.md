@@ -1,6 +1,6 @@
 # Show view editing fixes
 
-> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Sessions 1 and 2 merged; sessions 3 and 4 in review.
+> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Sessions 1–3 merged; sessions 4 and 5 in review.
 
 The design record is [`show-view-fixes-design/INDEX.md`](show-view-fixes-design/INDEX.md), and its
 one-page copy [`show-view-fixes.html`](show-view-fixes-design/show-view-fixes.html) holds the
@@ -172,9 +172,9 @@ touched packages' tests where they touch the backend, and `npm run check:quick` 
 |---|---|---|---|---|---|
 | 1 | Duplicate carries the follow | merged | `claude/festive-curie-bn6jsd` | [#359](https://github.com/cjcormack/lighting7/pull/359) | 4420de9 |
 | 2 | In production | merged | `claude/stoic-babbage-zbutzf` | [#360](https://github.com/cjcormack/lighting7/pull/360) | 9e51a1a |
-| 3 | The editor pane toggle | in review | `claude/gallant-faraday-nxc79c` | [#362](https://github.com/cjcormack/lighting7/pull/362) | 68abe96 |
-| 4 | The row head: Cue # cells and arming from the pip | in review | `claude/lucid-bell-dkik4e` | | |
-| 5 | Dragging a selection | planned | | | |
+| 3 | The editor pane toggle | merged | `claude/gallant-faraday-nxc79c` | [#362](https://github.com/cjcormack/lighting7/pull/362) | 68abe96 |
+| 4 | The row head: Cue # cells and arming from the pip | in review | `claude/lucid-bell-dkik4e` | [#363](https://github.com/cjcormack/lighting7/pull/363) | 99aa159 |
+| 5 | Dragging a selection | in review | `claude/busy-fermi-v71afs` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -308,6 +308,16 @@ D22–D24.
   alone. The existing `StackTable` drag tests unchanged.
 - Docs: frontend `CLAUDE.md` §Sheet kit (`rowDrag`) and the cue sheet entry.
 - Local: `check:quick`.
+- As built: `moveRows` takes the dragged row too, `moveRows(rowIds, group, activeId, overId)`, since
+  up and down are its move, which a group with gaps cannot say without it; it answers null where
+  nothing moves. The hosts' group is `sheetModel.ts`'s `dragGroupOf(selectedRows, id)`. The kit
+  never selects a separator (`isSelectableRow`), so in practice no separator joins a group;
+  `moveRows` carries one all the same. There was no drop line to keep: the landing line is new, drawn
+  only for a group, and a single-row drag draws and re-renders as before. The **+n** chip is centred
+  on the row head's right edge, clear of the pip. A cell selection's rows are the group on the Table
+  too, since they are the kit's `selectedRows` and the rows its bar counts. Both views' tests play
+  dnd-kit's events into the sheet's handlers, since a jsdom row has no geometry for a sensor to drag
+  across.
 
 ## 6. Operator checks
 

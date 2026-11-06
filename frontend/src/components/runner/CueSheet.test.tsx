@@ -62,6 +62,19 @@ vi.mock('@/components/cues/editor/CueEditor', () => ({
     </div>
   ),
 }))
+// The row drag's handlers, as the sheet hands them to dnd-kit — a jsdom row has no geometry for a
+// sensor to drag across, so a test plays the drag's events into the sheet's own handlers.
+const dnd: { last?: Record<string, (event: unknown) => void> } = {}
+vi.mock('@dnd-kit/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/core')>()
+  return {
+    ...actual,
+    DndContext: (props: React.ComponentProps<typeof actual.DndContext>) => {
+      dnd.last = props as unknown as Record<string, (event: unknown) => void>
+      return <actual.DndContext {...props} />
+    },
+  }
+})
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
@@ -649,6 +662,76 @@ describe('CueSheet · Cue # (show-view-fixes plan D7–D12)', () => {
     draw({ locked: true, onSetStandby: () => {} })
     expect(numberCell(1)).toBeDisabled()
     expect(numberCell(1).closest('[data-cell]')!.className).toContain('pointer-events-none')
+  })
+})
+
+describe('CueSheet · dragging a selection (show-view-fixes plan D22–D24)', () => {
+  /** Plays a row drag from the row of `from` onto the row of `over` (cue ids), through dnd-kit's events. */
+  function dragRow(from: number, over: number, end = true) {
+    const active = { id: `entry:${from + 100}` }
+    act(() => dnd.last!.onDragStart({ active }))
+    act(() => dnd.last!.onDragOver({ active, over: { id: `entry:${over + 100}` } }))
+    if (end) act(() => dnd.last!.onDragEnd({ active, over: { id: `entry:${over + 100}` } }))
+  }
+  const head = (cueId: number) => row(cueId).firstElementChild as HTMLElement
+
+  it('a selected row’s drag moves every selected row in one reorder, and the selection stays on them', () => {
+    const onReorder = vi.fn()
+    const { rerender } = draw({ onReorder })
+    fireEvent.click(head(1))
+    fireEvent.click(head(2), { metaKey: true })
+    fireEvent.click(head(4), { metaKey: true })
+    expect(screen.getByText('3 cues')).toBeInTheDocument()
+
+    dragRow(2, 5)
+    // Cue 1, 2 and 4 land together, in their order, after cue 5; the separator stays.
+    expect(onReorder).toHaveBeenCalledTimes(1)
+    expect(onReorder).toHaveBeenCalledWith([103, 105, 101, 102, 104])
+
+    const byEntry = new Map(STACK.cues.map((c) => [c.entryId, c]))
+    rerender(
+      <CueSheet
+        stack={{ ...STACK, cues: [103, 105, 101, 102, 104].map((id) => byEntry.get(id)!) }}
+        projectId={1}
+        activeEntryId={null}
+        onReorder={onReorder}
+      />,
+    )
+    expect(screen.getByText('3 cues')).toBeInTheDocument()
+    expect([1, 2, 4].map((id) => row(id).getAttribute('data-state'))).toEqual(['selected', 'selected', 'selected'])
+    expect(row(5)).not.toHaveAttribute('data-state')
+  })
+
+  it('an unselected row’s drag moves it alone', () => {
+    const onReorder = vi.fn()
+    draw({ onReorder })
+    fireEvent.click(head(1))
+    fireEvent.click(head(2), { metaKey: true })
+    dragRow(5, 1)
+    expect(onReorder).toHaveBeenCalledWith([105, 101, 102, 103, 104])
+  })
+
+  it('while dragging, the travelling rows dim, the dragged row carries +n and a line marks the landing', () => {
+    draw({ onReorder: vi.fn() })
+    fireEvent.click(head(1))
+    fireEvent.click(head(2), { metaKey: true })
+    fireEvent.click(head(4), { metaKey: true })
+    dragRow(2, 5, false)
+    const wrapper = (cueId: number) => row(cueId).parentElement!
+    expect([1, 2, 4, 5].map((id) => wrapper(id).hasAttribute('data-drag-dimmed'))).toEqual([true, false, true, false])
+    expect(within(row(2)).getByText('+2')).toBeInTheDocument()
+    // Moving down: the line is under the row dropped on.
+    expect(wrapper(5).querySelector('[data-drop-line]')).toHaveAttribute('data-drop-line', 'bottom')
+    expect(document.querySelectorAll('[data-drop-line]')).toHaveLength(1)
+
+    act(() => dnd.last!.onDragCancel({}))
+    expect(document.querySelectorAll('[data-drag-dimmed], [data-drop-line], [data-drag-carrying]')).toHaveLength(0)
+  })
+
+  it('a single row’s drag draws no chip and no line', () => {
+    draw({ onReorder: vi.fn() })
+    dragRow(2, 5, false)
+    expect(document.querySelectorAll('[data-drag-dimmed], [data-drop-line], [data-drag-carrying]')).toHaveLength(0)
   })
 })
 
