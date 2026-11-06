@@ -3164,7 +3164,15 @@ view's family tabs, its FX tab and ⌘K's own picker off the programmer still pr
 `editor`, the arm's `editOnStart`). A tap starts the FX and the panel turns into `FxEditor` on it,
 with *‹ Swap* back to the list — kept mounted under the editor, so it comes back on the family the FX
 was started from and, on the selection it was started over, its taps swap it, phase kept — *Open in FX editor* ⤢ and the editor's Done,
-which closes the picker; a selection that leaves under row C's open picker closes it. ⤢ is `useOpenInFxEditor` (`fxEditor/openInFxEditor.ts`, the
+which closes the picker; a selection that leaves under row C's open picker closes it. **Its closes
+can be traced** (programmer-fixes plan D25, `lib/fxPickerCloseTrace.ts`): with
+`localStorage['lighting7.debug.fxPickerClose'] = '1'` in a window, read at each close, every close of
+`ProgrammerAddFxSheet` logs one `console.warn` naming its door — `ApplyPicker`'s Radix dismissal
+(escape, outside press, focus outside, its sheet's ×) or Done, which it passes as `onOpenChange`'s
+second argument, ⤢, the offer turning disabled (its reason, whether the window follows the desk and
+the desk selection's `source`), the FX button pressed again and row C unmounting under it (the host's
+selected and visible rows, *Lit*, the filter). Off, nothing is logged; it goes once the plan's §6 check
+settles why the picker was seen closing. ⤢ is `useOpenInFxEditor` (`fxEditor/openInFxEditor.ts`, the
 fixture sheet's tray's move lifted out of `FxTray`): the FX picked, the FX tab on *Selection*, the FX
 table shown — `?table=fx`, replacing the address on the programmer. Nothing is reselected: the
 selection is already the editor's subject. It is never drawn under a focused Look, whose FX goes into
@@ -5232,6 +5240,16 @@ stack (`LayerStack`, which takes the cue names and the connection as props outsi
 it subscribes only while one is open, and only where ownership is drawn — Local; Output's cells
 take no edit (a click still jumps to the owner) and a focused Look layer's draft has no stack (§8's
 follow-up).
+
+**Row B's *Lit* shows only the fixtures emitting light** (`useLitFixtureKeys`, per browser as
+`fixturesList.onlyLit`): a fixture is lit when its master dimmer, if it has one, and at least one head
+dimmer, if it has any, are above 0, read from its **dimmer channels only**, so a dimmerless head is
+never lit. It holds still while something is open over the grid (programmer-fixes plan D21,
+`lib/litHold.ts`): a cell editor (`useEditorOpen`), row C's FX picker and a marquee drag each take a
+hold, and while any is held the set is the one it had when the first was taken, catching up when the
+last goes. So a dimmer FX or fade through 0 on a selected head does not take its row, row C and an
+open FX picker away mid-gesture. Outside a hold a selected row that goes dark leaves the list, and a
+typed filter still disarms row C whatever is held.
 
 **Row C is three clusters** (programmer-toolbar plan D3, `programmer/SelectionBar.tsx`), left to
 right, over the one selection:

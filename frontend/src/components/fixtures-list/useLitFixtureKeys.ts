@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
 import { channelKey } from '../../hooks/useAttributeValues'
 import { findDimmerAttribute } from '../../store/fixtures'
+import { isLitHeld, subscribeLitHold } from '../../lib/litHold'
 import type { Fixture } from '../../store/fixtures'
 
 const EMPTY_SET: ReadonlySet<string> = new Set()
@@ -31,6 +32,9 @@ function isLit({ master, heads }: FixtureDimmers, all: ReadonlyMap<string, numbe
  * One whole-map channel subscription for the entire rig (not per-fixture),
  * notifying React only when set *membership* changes, so fades don't churn
  * the row list. Mount this hook only while the filter is on.
+ *
+ * While a `lib/litHold.ts` hold is taken it answers the set it last answered, and catches up when
+ * the last hold goes: a row an open editor or picker works on stays though its dimmer goes to 0.
  */
 export function useLitFixtureKeys(fixtures: readonly Fixture[]): ReadonlySet<string> {
   const dimmers = useMemo(() => {
@@ -53,6 +57,9 @@ export function useLitFixtureKeys(fixtures: readonly Fixture[]): ReadonlySet<str
   }, [fixtures])
 
   const cachedRef = useRef<ReadonlySet<string>>(EMPTY_SET)
+  // The rig the cache was computed for. A hold keeps the cache only for that rig: one taken before
+  // the filter was on, or across a repatch, would otherwise freeze an answer never computed for it.
+  const cachedForRef = useRef<typeof dimmers | null>(null)
 
   const subscribe = useCallback((callback: () => void) => {
     // Passing an empty fixture list is the "filter off" idle state — skip the
@@ -66,12 +73,18 @@ export function useLitFixtureKeys(fixtures: readonly Fixture[]): ReadonlySet<str
         }
       }
     })
-    return () => subscription.unsubscribe()
+    const unsubscribeHold = subscribeLitHold(callback)
+    return () => {
+      subscription.unsubscribe()
+      unsubscribeHold()
+    }
   }, [dimmers])
 
   const getSnapshot = useCallback((): ReadonlySet<string> => {
-    const all = lightingApi.channels.getAll()
     const cached = cachedRef.current
+    if (isLitHeld() && cachedForRef.current === dimmers) return cached
+    cachedForRef.current = dimmers
+    const all = lightingApi.channels.getAll()
     // Membership is checked against the cached set as it is computed, and a Set is allocated
     // only once the two are known to differ. The unchanged case — every read during a fade that
     // moves levels without lighting or darkening anything — then costs no allocation at all,

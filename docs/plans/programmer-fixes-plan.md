@@ -347,7 +347,7 @@ suites locally: no Gradle change, schema, sync or cross-package refactor.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The FX picker: one release and a close trace | planned | | | |
+| 1 | The FX picker: one release and a close trace | in review | `claude/festive-faraday-m5qr2b` | | |
 | 2 | Element rows stay put | planned | | | |
 | 3 | Cells with gaps | planned | | | |
 | 4 | Recent values on the desk | planned | | | |
@@ -385,6 +385,19 @@ D21–D25.
   described (it has none: what counts as lit, and that it holds still while something is open),
   and the trace flag beside the picker's description.
 - Local: `check:quick`.
+
+**As built.** The trace module is `lib/fxPickerCloseTrace.ts`. `ApplyPicker` does not log: it passes
+what closed it (`ApplyPickerClose`) as `onOpenChange`'s second argument, and `ProgrammerAddFxSheet`
+logs, so the disabled door and Radix's are traced for all four of its users, not only row C. Radix's,
+Done and ⤢ are logged in their handlers, the disabled close in the sheet's effect, and row C
+unmounting in the button's cleanup, from a ref the container writes in a layout effect. The FX
+pickers release only after a drag that moved (`dragged`), so a press let go on the picker never turns
+a palette reference into its literal. A picker press is held a frame (20 ms) past the window's
+release, since react-colorful reports a move from an effect and the last one can follow the pointer-up;
+the release then comes once, on it, and a swatch closed mid-drag lands it as it unmounts. A close cause `ApplyPicker` notes lasts only for its event
+(`queueMicrotask`), so a dismissal the sheet's modal dialog prevents names no later close.
+`ApplyPicker.test.tsx` pins Escape and focus outside on the popover; neither Radix's outside press nor
+the modal sheet's focus outside reaches a jsdom document, so §6's check is where those are seen.
 
 ### Session 2 — Element rows stay put
 

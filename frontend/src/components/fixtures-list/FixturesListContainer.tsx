@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -83,6 +83,7 @@ import {
 import type { SelectionScope } from '../../store/selectionSlice'
 import { applyPlannedWrite, useCellWriters, type CellWriters } from './useCellWriters'
 import { useLitFixtureKeys } from './useLitFixtureKeys'
+import { useLitHold } from '../../lib/litHold'
 import { FixturesTable } from './FixturesTable'
 import { SelectionToolbar } from './SelectionToolbar'
 import { SelectionBar as ListSelectionBar } from '../programmer/SelectionBar'
@@ -550,6 +551,17 @@ export function FixturesListContainer({
     [rows, selectedRowIds],
   )
   usePublishRowTargets(selectionScope, locateTargets)
+  // What row C's FX picker logs if row C unmounts under it (`lib/fxPickerCloseTrace.ts`). Written
+  // after the commit, so the button's unmount cleanup reads the selection that unmounted it.
+  const rowCCloseTrace = useRef<Record<string, unknown>>({})
+  useLayoutEffect(() => {
+    rowCCloseTrace.current = {
+      selectedRows: selectedRowIds.size,
+      visibleSelectedRows: locateTargets.length,
+      onlyLit,
+      filtered: filter.trim() !== '',
+    }
+  })
   const releaseTargets = useMemo<ReleaseTarget[]>(
     () =>
       locateTargets.map((t) => ({
@@ -747,6 +759,7 @@ export function FixturesListContainer({
   // only consumer is a *toolbar* — a sibling above the rows, which `renderToolbar` builds — and
   // the table sets it twice a drag, so nothing renders at pointer rate for it.
   const [marqueeDragging, setMarqueeDragging] = useState(false)
+  useLitHold(marqueeDragging)
   /**
    * The cell whose editor the keyboard has asked for — a one-shot handed to `FixturesTable`, which
    * folds it into the same signal a released marquee uses. `seed` is the character that opened it,
@@ -1626,7 +1639,7 @@ export function FixturesListContainer({
           onSeedConsumed={consumeSpreadSeed}
           wordClass={ROW_C_VERB_WORD_CLASS}
         />
-        {routeProjectId != null && <ProgrammerAddFxButton projectId={routeProjectId} wordClass={ROW_C_VERB_WORD_CLASS} />}
+        {routeProjectId != null && <ProgrammerAddFxButton projectId={routeProjectId} wordClass={ROW_C_VERB_WORD_CLASS} closeTrace={rowCCloseTrace} />}
         <ReleaseTargetsButton
           targets={releaseTargets}
           wordClass={ROW_C_VERB_WORD_CLASS}

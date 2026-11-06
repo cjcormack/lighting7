@@ -427,6 +427,44 @@ describe('ApplyPicker — palettes', () => {
     door.remove()
   })
 
+  // For the add-FX picker's close trace (programmer-fixes plan D25).
+  it('says what closed it: Escape, a focus elsewhere, but not a press on its own door', async () => {
+    const door = document.createElement('button')
+    const elsewhere = document.createElement('input')
+    document.body.append(door, elsewhere)
+    const onOpenChange = vi.fn()
+    function Hosted() {
+      const [open, setOpen] = useState(true)
+      return picker({
+        open,
+        onOpenChange: (next, cause) => {
+          onOpenChange(next, cause)
+          setOpen(next)
+        },
+        anchorRef: { current: door },
+        pair: { targets: HEX_1, families: ['COLOUR'] },
+      })
+    }
+    // Radix arms its outside-press listener a tick after it opens.
+    const armed = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    const view = render(<Hosted />)
+    await armed()
+    fireEvent.pointerDown(door)
+    expect(onOpenChange).not.toHaveBeenCalled()
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false, 'escape'))
+    view.unmount()
+
+    onOpenChange.mockClear()
+    render(<Hosted />)
+    await armed()
+    // Radix's outside press does not reach it under jsdom; a focus moved elsewhere does.
+    act(() => elsewhere.focus())
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false, 'focus outside'))
+    door.remove()
+    elsewhere.remove()
+  })
+
   it('leaves the focus where the operator put it when a press elsewhere closes it', async () => {
     const door = document.createElement('button')
     const elsewhere = document.createElement('input')
@@ -799,7 +837,7 @@ describe('ApplyPicker — effects', () => {
     fireEvent.click(within(panel()).getByRole('button', { name: 'Open in FX editor' }))
     expect(onOpenInEditor).toHaveBeenCalledWith(77)
     fireEvent.click(within(panel()).getByRole('button', { name: 'editor done' }))
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(onOpenChange).toHaveBeenCalledWith(false, 'done')
   })
 
   it('keeps Edit and its way back to the list where the door did not ask for the editor, and no ⤢ in a Look', () => {

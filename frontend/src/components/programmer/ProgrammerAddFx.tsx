@@ -9,6 +9,9 @@ import { useLookRowStore, type LookRowStoreValue } from './LookRowStore'
 import { useProgrammerScope, type ProgrammerScope } from './ProgrammerScope'
 import { useOpenInFxEditor } from '@/components/fxEditor/openInFxEditor'
 import { countOf, useCommandDoor } from './commandDoors'
+import { lightingApi } from '@/api/lightingApi'
+import { isFollowingDesk } from '@/lib/deskFollow'
+import { traceFxPickerClose } from '@/lib/fxPickerCloseTrace'
 
 /** What `+ Effect` can do right now, and why not when it cannot. */
 export interface AddFxOffer {
@@ -96,7 +99,23 @@ export function ProgrammerAddFxSheet({
   anchorRef?: RefObject<HTMLElement | null>
   editor?: boolean
 }) {
-  if (!open || offer.disabled) return null
+  const shown = open && !offer.disabled
+  // The close trace's disabled door: the offer turned disabled under an open picker, which is the
+  // window's selection emptying — the desk's while following, moved by whoever `source` names.
+  const wasShown = useRef(shown)
+  useEffect(() => {
+    if (wasShown.current && open && offer.disabled) {
+      const desk = lightingApi.selection.getState()
+      traceFxPickerClose('offer disabled', {
+        reason: offer.reason,
+        followingDesk: isFollowingDesk(),
+        deskHeads: desk?.targets.length ?? 0,
+        deskMovedBy: desk?.source ?? null,
+      })
+    }
+    wasShown.current = shown
+  }, [shown, open, offer.disabled, offer.reason])
+  if (!shown) return null
   return <AddFxPicker projectId={projectId} pair={offer.pair} onClose={onClose} anchorRef={anchorRef} editor={editor} />
 }
 
@@ -121,7 +140,11 @@ function AddFxPicker({
     <ApplyPicker
       projectId={projectId}
       open
-      onOpenChange={(next) => !next && onClose()}
+      onOpenChange={(next, cause) => {
+        if (next) return
+        traceFxPickerClose(`picker: ${cause ?? 'dismissed'}`, { heads: pair.targets.length })
+        onClose()
+      }}
       anchorRef={anchorRef}
       library="fx"
       family={family}
@@ -132,6 +155,7 @@ function AddFxPicker({
       onOpenInEditor={
         editor
           ? (fxId) => {
+              traceFxPickerClose('picker: open in FX editor', { fxId })
               onClose()
               openInFxEditor(projectId, fxId)
             }

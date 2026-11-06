@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 // Extend the standard lightingApi mock with a real channel-value store the
 // tests can drive; everything else keeps the no-op subscription fallback.
-const { channelValues } = vi.hoisted(() => ({ channelValues: new Map<string, number>() }))
+const { channelValues, channelListeners } = vi.hoisted(() => ({
+  channelValues: new Map<string, number>(),
+  channelListeners: new Set<(updates: Map<string, number>) => void>(),
+}))
 vi.mock('@/api/lightingApi', async () => {
   const { lightingApiMock } = await import('@/test/backendMock')
   const base = lightingApiMock().lightingApi as Record<string, unknown>
@@ -13,15 +16,19 @@ vi.mock('@/api/lightingApi', async () => {
         prop === 'channels'
           ? {
               getAll: () => channelValues,
-              subscribe: () => ({ unsubscribe: () => {} }),
+              subscribe: (listener: (updates: Map<string, number>) => void) => {
+                channelListeners.add(listener)
+                return { unsubscribe: () => channelListeners.delete(listener) }
+              },
             }
           : target[prop],
     }),
   }
 })
 
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { useLitFixtureKeys } from './useLitFixtureKeys'
+import { takeLitHold } from '@/lib/litHold'
 import { chan, element, makeFixture, sliderProp } from '@/test/fixtureFactories'
 import type { Fixture } from '@/store/fixtures'
 
@@ -70,5 +77,64 @@ describe('useLitFixtureKeys', () => {
 
   it('never counts fixtures with no dimmer at any level', () => {
     expect(litKeys([dimmerless], {}).has('rgbOnly')).toBe(false)
+  })
+})
+
+describe('useLitFixtureKeys under a hold (programmer-fixes plan D21)', () => {
+  const spot = makeFixture('spot', [sliderProp('dimmer', 'dimmer', chan(1))])
+  const wash = makeFixture('wash', [sliderProp('dimmer', 'dimmer', chan(2))])
+  const setLevel = (key: string, value: number) =>
+    act(() => {
+      channelValues.set(key, value)
+      for (const listener of channelListeners) listener(new Map([[key, value]]))
+    })
+  const mount = () => {
+    channelValues.clear()
+    channelListeners.clear()
+    channelValues.set('0:1', 255)
+    channelValues.set('0:2', 0)
+    return renderHook(() => useLitFixtureKeys([spot, wash]))
+  }
+
+  it('keeps the set through a dimmer going to 0 and catches up on release', () => {
+    const { result, unmount } = mount()
+    expect([...result.current]).toEqual(['spot'])
+    const release = takeLitHold()
+    setLevel('0:1', 0)
+    setLevel('0:2', 200)
+    expect([...result.current]).toEqual(['spot'])
+    act(() => release())
+    expect([...result.current]).toEqual(['wash'])
+    unmount()
+  })
+
+  it.each([
+    ['first', 'second'],
+    ['second', 'first'],
+  ])('holds until the last of two holds goes, the %s released first', (first) => {
+    const { result, unmount } = mount()
+    const holds = { first: takeLitHold(), second: takeLitHold() }
+    const other = first === 'first' ? 'second' : 'first'
+    setLevel('0:1', 0)
+    act(() => holds[first as 'first' | 'second']())
+    expect([...result.current]).toEqual(['spot'])
+    act(() => holds[other as 'first' | 'second']())
+    expect([...result.current]).toEqual([])
+    unmount()
+  })
+
+  it('releases once however often the release is called', () => {
+    const { result, unmount } = mount()
+    const a = takeLitHold()
+    const b = takeLitHold()
+    setLevel('0:1', 0)
+    act(() => {
+      a()
+      a()
+    })
+    expect([...result.current]).toEqual(['spot'])
+    act(() => b())
+    expect([...result.current]).toEqual([])
+    unmount()
   })
 })

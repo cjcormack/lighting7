@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
+import { useEffect, useState } from 'react'
 import type { PressPair } from '@/hooks/usePress'
 
 /**
@@ -26,6 +27,12 @@ vi.mock('@/components/fx/selectionFxTarget', () => ({ useWindowFxPair: () => wir
 vi.mock('@/hooks/usePress', () => ({ useWindowPaletteFit: () => ({ families: null, emitters: null }) }))
 vi.mock('./ProgrammerScope', () => ({ useProgrammerScope: () => wire.scope }))
 vi.mock('./LookRowStore', () => ({ useLookRowStore: () => wire.store }))
+vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
+const follow = vi.hoisted(() => ({ on: false }))
+vi.mock('@/lib/deskFollow', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/deskFollow')>()),
+  isFollowingDesk: () => follow.on,
+}))
 const picker = vi.hoisted(() => vi.fn())
 vi.mock('@/components/press/ApplyPicker', () => ({
   ApplyPicker: (props: unknown) => {
@@ -38,10 +45,13 @@ const { ProgrammerAddFxDoor, ProgrammerAddFxSheet, useProgrammerAddFx } = await 
 const { ProgrammerAddFxButton } = await import('./ProgrammerAddFxButton')
 const { readProgrammerCommands, runProgrammerCommand } = await import('./commandDoors')
 const { getPickedFx, resetFxEditorViewStores, setFxTabView, useFxTabView } = await import('@/lib/fxEditorView')
+const { isLitHeld } = await import('@/lib/litHold')
+const { selectionWs } = await import('@/test/backendMock')
+const { FX_PICKER_CLOSE_FLAG } = await import('@/lib/fxPickerCloseTrace')
 
 type PickerProps = {
   open: boolean
-  onOpenChange: (open: boolean) => void
+  onOpenChange: (open: boolean, cause?: string) => void
   anchorRef?: { current: HTMLElement | null }
   askStack?: boolean
   editOnStart?: boolean
@@ -75,6 +85,10 @@ function onProgrammer(children: React.ReactNode) {
 afterEach(() => {
   cleanup()
   picker.mockClear()
+  follow.on = false
+  selectionWs.last = null
+  window.localStorage.removeItem(FX_PICKER_CLOSE_FLAG)
+  vi.restoreAllMocks()
   wire.scope = { kind: 'local' }
   wire.store = null
   resetFxEditorViewStores()
@@ -195,5 +209,121 @@ describe('the doors', () => {
     expect(offered()).toMatchObject({ hint: '4 heads · into Warm wash', canAct: true })
     view.unmount()
     expect(offered()).toBeUndefined()
+  })
+})
+
+describe('row C’s FX holds Lit while open (programmer-fixes plan D21)', () => {
+  it('takes the hold on open and gives it back on a close and an unmount', () => {
+    wire.pair = FOUR
+    const view = render(onProgrammer(<ProgrammerAddFxButton projectId={3} wordClass="" />))
+    expect(isLitHeld()).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Add FX on the selection' }))
+    expect(isLitHeld()).toBe(true)
+    act(() => lastPicker().onOpenChange(false, 'escape'))
+    expect(isLitHeld()).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Add FX on the selection' }))
+    view.unmount()
+    expect(isLitHeld()).toBe(false)
+  })
+})
+
+describe('the close trace (programmer-fixes plan D25)', () => {
+  const traced = (warn: { mock: { calls: unknown[][] } }) => warn.mock.calls.map(([line]) => line)
+  const open = () => fireEvent.click(screen.getByRole('button', { name: 'Add FX on the selection' }))
+
+  it('logs nothing without the flag', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    wire.pair = FOUR
+    const view = render(onProgrammer(<ProgrammerAddFxButton projectId={3} wordClass="" />))
+    open()
+    act(() => lastPicker().onOpenChange(false, 'outside press'))
+    open()
+    open()
+    open()
+    wire.pair = { targets: [], families: null }
+    view.rerender(onProgrammer(<ProgrammerAddFxButton projectId={3} wordClass="" />))
+    wire.pair = FOUR
+    view.rerender(onProgrammer(<ProgrammerAddFxButton projectId={3} wordClass="" />))
+    open()
+    view.unmount()
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('logs one warning per close naming the door, read at the close', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    wire.pair = FOUR
+    render(onProgrammer(<ProgrammerAddFxButton projectId={3} wordClass="" />))
+    // Set after load: nothing is read until a close.
+    window.localStorage.setItem(FX_PICKER_CLOSE_FLAG, '1')
+    for (const cause of ['escape', 'outside press', 'focus outside', 'done']) {
+      open()
+      act(() => lastPicker().onOpenChange(false, cause))
+    }
+    open()
+    open()
+    open()
+    act(() => lastPicker().onOpenInEditor!(42))
+    expect(traced(warn)).toEqual([
+      '[fx picker closed] picker: escape',
+      '[fx picker closed] picker: outside press',
+      '[fx picker closed] picker: focus outside',
+      '[fx picker closed] picker: done',
+      '[fx picker closed] FX button pressed',
+      '[fx picker closed] picker: open in FX editor',
+    ])
+  })
+
+  it('names the desk selection’s change and who moved it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    window.localStorage.setItem(FX_PICKER_CLOSE_FLAG, '1')
+    follow.on = true
+    wire.pair = FOUR
+    const view = render(onProgrammer(<ProgrammerAddFxButton projectId={3} wordClass="" />))
+    open()
+    selectionWs.last = { targets: [], families: null, source: { kind: 'window', id: 'w-7', name: 'Tablet' } }
+    wire.pair = { targets: [], families: null }
+    view.rerender(onProgrammer(<ProgrammerAddFxButton projectId={3} wordClass="" />))
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('[fx picker closed] offer disabled', {
+      reason: 'Select the heads the FX should drive first.',
+      followingDesk: true,
+      deskHeads: 0,
+      deskMovedBy: { kind: 'window', id: 'w-7', name: 'Tablet' },
+    })
+  })
+
+  // Following the desk, the offer empties a commit before row C does (the list follows the desk in an
+  // effect), so row C goes in the same flush as the disabled close: that is still one close.
+  it('logs one warning when row C goes with the disabled close, not two', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    window.localStorage.setItem(FX_PICKER_CLOSE_FLAG, '1')
+    follow.on = true
+    wire.pair = FOUR
+    function RowC() {
+      const empty = wire.pair!.targets.length === 0
+      const [shown, setShown] = useState(true)
+      useEffect(() => {
+        if (empty) setShown(false)
+      }, [empty])
+      return shown ? <ProgrammerAddFxButton projectId={3} wordClass="" closeTrace={{ current: { visibleSelectedRows: 0 } }} /> : null
+    }
+    const view = render(onProgrammer(<RowC />))
+    open()
+    wire.pair = { targets: [], families: null }
+    view.rerender(onProgrammer(<RowC />))
+    expect(screen.queryByRole('button', { name: 'Add FX on the selection' })).toBeNull()
+    expect(traced(warn)).toEqual(['[fx picker closed] offer disabled'])
+  })
+
+  it('names row C unmounting under an open picker, with what its host says', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    window.localStorage.setItem(FX_PICKER_CLOSE_FLAG, '1')
+    wire.pair = FOUR
+    const rowC = { current: { selectedRows: 1, visibleSelectedRows: 0, onlyLit: false, filtered: true } }
+    const view = render(onProgrammer(<ProgrammerAddFxButton projectId={3} wordClass="" closeTrace={rowC} />))
+    open()
+    view.unmount()
+    expect(warn).toHaveBeenCalledWith('[fx picker closed] row C actions unmounted', rowC.current)
+    expect(warn).toHaveBeenCalledTimes(1)
   })
 })

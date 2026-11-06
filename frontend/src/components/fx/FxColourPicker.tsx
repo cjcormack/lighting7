@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
 import {
@@ -14,7 +14,11 @@ import { ColourEditorBody } from './ColourEditorBody'
 
 interface FxColourPickerProps {
   value: string
-  onChange: (value: string) => void
+  /**
+   * [release] is false for a frame of a drag and true for its end and for every edit that is one
+   * already — a typed hex, a preset, a palette picked — so the host's live push lands the last move.
+   */
+  onChange: (value: string, release: boolean) => void
   label?: string
   description?: string
   /** Which extended channels to show (based on target fixture capabilities) */
@@ -33,6 +37,9 @@ export function FxColourPicker({
 
   const [isOpen, setIsOpen] = useState(false)
   const [localColour, setLocalColour] = useState<ExtendedColour>(() => parseExtendedColour(value))
+  // The colour a drag last drew, for its release to land; null when no drag has moved since. A press
+  // let go without a move sends nothing, so it never turns a reference into its literal.
+  const dragged = useRef<ExtendedColour | null>(null)
 
   // Sync from parent value when the popover opens.
   //
@@ -47,13 +54,25 @@ export function FxColourPicker({
     }
   }, [isOpen, value, swatchFor])
 
+  // An open starts with no drag. Not a close: the body lands a drag the close cut short as it unmounts,
+  // which an exit animation can put after this effect.
+  useEffect(() => {
+    if (isOpen) dragged.current = null
+  }, [isOpen])
+
   const emitChange = useCallback(
-    (colour: ExtendedColour) => {
+    (colour: ExtendedColour, release: boolean) => {
+      dragged.current = release ? null : colour
       setLocalColour(colour)
-      onChange(serializeExtendedColour(colour))
+      onChange(serializeExtendedColour(colour), release)
     },
     [onChange]
   )
+  const emitRelease = useCallback(() => {
+    const colour = dragged.current
+    dragged.current = null
+    if (colour != null) onChange(serializeExtendedColour(colour), true)
+  }, [onChange])
 
   const refSwatch = isRef ? swatchFor(value) : null
   const displayHex = refSwatch ?? resolveColourToHex(value)
@@ -86,8 +105,12 @@ export function FxColourPicker({
           <ColourEditorBody
             colour={localColour}
             onColourChange={emitChange}
+            onRelease={emitRelease}
             rawValue={value}
-            onPickPalette={onChange}
+            onPickPalette={(ref) => {
+              dragged.current = null
+              onChange(ref, true)
+            }}
             palettes={templates}
             extendedChannels={extendedChannels}
           />

@@ -83,6 +83,12 @@ export type ApplyLibrary = 'palettes' | 'looks' | 'fx'
  *    bottom sheet on an upright phone, a right-hand sheet where the viewport is short. A door with no
  *    anchor of its own (the Stack table's *+ Look or palette*) takes the right-hand sheet on a desk.
  */
+/**
+ * What closed the picker: Radix's dismissals by kind, the FX editor's Done, or `dismissed` for
+ * anything else Radix closed it for (the sheet's ×).
+ */
+export type ApplyPickerClose = 'escape' | 'outside press' | 'focus outside' | 'done' | 'dismissed'
+
 export function ApplyPicker({
   projectId,
   open,
@@ -102,7 +108,8 @@ export function ApplyPicker({
 }: {
   projectId: number
   open: boolean
-  onOpenChange: (open: boolean) => void
+  /** A close says what closed it, for the add-FX picker's close trace (`lib/fxPickerCloseTrace.ts`). */
+  onOpenChange: (open: boolean, cause?: ApplyPickerClose) => void
   /** The door the popover hangs under — a `virtualRef`, since the button belongs to its host's layout. */
   anchorRef?: RefObject<HTMLElement | null>
   library: ApplyLibrary
@@ -152,6 +159,25 @@ export function ApplyPicker({
   // The door the popover opened from, which Escape gives the focus back to.
   const opener = useRef<HTMLElement | null>(null)
   const closedOutside = useRef(false)
+  // Radix says why it dismisses in a handler, then calls `onOpenChange` in the same event unless a
+  // later handler (the sheet's modal dialog, a refusal of ours) prevents it. So a cause lasts only
+  // for its event: one that was prevented must not name the next close.
+  const closeCause = useRef<ApplyPickerClose | null>(null)
+  const changeOpen = (next: boolean) => {
+    if (next) {
+      onOpenChange(true)
+      return
+    }
+    const cause = closeCause.current ?? 'dismissed'
+    closeCause.current = null
+    onOpenChange(false, cause)
+  }
+  const noteCause = (cause: ApplyPickerClose) => () => {
+    closeCause.current = cause
+    queueMicrotask(() => {
+      if (closeCause.current === cause) closeCause.current = null
+    })
+  }
 
   // A fresh search each time it opens: the last one belonged to the last selection.
   useEffect(() => {
@@ -428,7 +454,7 @@ export function ApplyPicker({
         onBack={library === 'fx' ? undefined : () => setFxView(false)}
         editOnStart={editOnStart}
         onOpenInEditor={onOpenInEditor}
-        onClose={() => onOpenChange(false)}
+        onClose={() => onOpenChange(false, 'done')}
       />
     ) : (
       body
@@ -437,7 +463,7 @@ export function ApplyPicker({
   return (
     <>
       {asPopover ? (
-        <Popover open={open} onOpenChange={onOpenChange}>
+        <Popover open={open} onOpenChange={changeOpen}>
           <PopoverAnchor virtualRef={anchorRef} />
           <PopoverContent
             align="end"
@@ -458,6 +484,9 @@ export function ApplyPicker({
               if (anchorRef.current?.contains(event.target as Node)) event.preventDefault()
               else closedOutside.current = true
             }}
+            onEscapeKeyDown={noteCause('escape')}
+            onPointerDownOutside={noteCause('outside press')}
+            onFocusOutside={noteCause('focus outside')}
             // Radix's own auto-focus is a parent effect and would take the focus straight back off a
             // field focused in an effect. The FX arm has no search, so its family segment takes it.
             onOpenAutoFocus={(event) => {
@@ -479,10 +508,13 @@ export function ApplyPicker({
           </PopoverContent>
         </Popover>
       ) : (
-        <Sheet open={open} onOpenChange={onOpenChange}>
+        <Sheet open={open} onOpenChange={changeOpen}>
           <SheetContent
             side={form === 'bottom-sheet' ? 'bottom' : 'right'}
             aria-describedby={undefined}
+            onEscapeKeyDown={noteCause('escape')}
+            onPointerDownOutside={noteCause('outside press')}
+            onFocusOutside={noteCause('focus outside')}
             className="flex flex-col gap-0 p-0"
             style={
               form === 'bottom-sheet'

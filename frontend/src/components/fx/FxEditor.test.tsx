@@ -83,8 +83,43 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
     fixtureByKey: new Map((lookup.fixtures as { key: string }[]).map((f) => [f.key, f])),
   }),
 }))
-vi.mock('./FxColourPicker', () => ({ FxColourPicker: () => null }))
-vi.mock('./FxColourListPicker', () => ({ FxColourListPicker: () => null }))
+/** The colour pickers are drawn only where a test asks; elsewhere they draw nothing. */
+const colourPickers = vi.hoisted(() => ({ real: false }))
+vi.mock('./FxColourPicker', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./FxColourPicker')>()
+  return {
+    FxColourPicker: (props: Parameters<typeof actual.FxColourPicker>[0]) =>
+      colourPickers.real ? <actual.FxColourPicker {...props} /> : null,
+  }
+})
+vi.mock('./FxColourListPicker', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./FxColourListPicker')>()
+  return {
+    FxColourListPicker: (props: Parameters<typeof actual.FxColourListPicker>[0]) =>
+      colourPickers.real ? <actual.FxColourListPicker {...props} /> : null,
+  }
+})
+// One answer for every render, as the real hook's memoised lookups are: `FxColourPicker`'s open
+// effect depends on `swatchFor`, and a fresh one per render would re-run it for ever.
+const colourPalettes = vi.hoisted(() => ({
+  palettes: [],
+  isLoading: false,
+  paletteFor: () => null,
+  labelFor: () => null,
+  swatchFor: () => null,
+}))
+vi.mock('./FxColourPalettes', () => ({
+  isOfferableColourPalette: () => false,
+  isSpreadColourPalette: () => false,
+  useColourPalettes: () => colourPalettes,
+  FxColourPaletteRow: () => null,
+}))
+/** react-colorful reads the pointer against a box jsdom lays out at zero: `change` is a move. */
+vi.mock('react-colorful', () => ({
+  HexColorPicker: ({ color, onChange }: { color: string; onChange: (hex: string) => void }) => (
+    <input aria-label="Colour picker" value={color} onChange={(e) => onChange(e.target.value)} />
+  ),
+}))
 
 import { FxEditor } from './FxEditor'
 import { FxGraphLinkContext, createHoveredRowStore, type FxGraphLink, type LinkedEditor } from './fxGraphLink'
@@ -157,6 +192,7 @@ const aroundCircle = () =>
 const lastFrame = () => updateFx.mock.calls.at(-1)?.[1] as Record<string, unknown>
 
 beforeEach(() => {
+  colourPickers.real = false
   library.entries = [CIRCLE, PULSE, WAVE]
   lookup.fixtures = [SPOT]
   updateFx.mockClear()
@@ -815,5 +851,90 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     expect((lastFrame().parameters as Record<string, string>).max).toBe('135')
     act(() => held.editor!.set({ cycle: 8 }, true))
     expect(lastFrame()).toMatchObject({ cycle: 8, parameters: expect.objectContaining({ max: '135' }) })
+  })
+})
+
+describe('FxEditor’s colour pickers (programmer-fixes plan D23)', () => {
+  const COLOUR_CYCLE: FxLibraryEntry = {
+    name: 'ColourCycle',
+    family: 'colour',
+    outputType: 'COLOUR',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleAttributes: ['rgbColour'],
+    parameters: [{ name: 'colours', type: 'colourList', defaultValue: '#ff0000,#00ff00', description: '' }],
+  }
+  const COLOUR_STROBE: FxLibraryEntry = {
+    name: 'ColourStrobe',
+    family: 'colour',
+    outputType: 'COLOUR',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    compatibleAttributes: ['rgbColour'],
+    parameters: [{ name: 'colour', type: 'colour', defaultValue: '#ffffff', description: '' }],
+  }
+
+  /** Twelve moves of the picker 5 ms apart, the press held from the first. */
+  const dragPicker = (picker: HTMLElement, hexAt: (i: number) => string) => {
+    fireEvent.mouseDown(picker, { button: 0 })
+    for (let i = 1; i <= 12; i++) {
+      act(() => {
+        vi.advanceTimersByTime(5)
+        fireEvent.change(picker, { target: { value: hexAt(i) } })
+      })
+    }
+  }
+  const hex = (i: number) => `#${(0x10 + i).toString(16).padStart(2, '0')}0000`
+
+  it('floors a Colour Cycle swatch’s drag at 50 ms and lands its release on the window’s pointer-up', () => {
+    colourPickers.real = true
+    library.entries = [COLOUR_CYCLE]
+    vi.useFakeTimers()
+    vi.setSystemTime(1000)
+    const sentAt: number[] = []
+    updateFx.mockImplementation(() => {
+      sentAt.push(Date.now())
+      return true
+    })
+    const effect = makeActiveFx({ id: 31, fxType: 'ColourCycle', attribute: 'rgbColour', parameters: { colours: '#ff0000,#00ff00' } })
+    render(<FxEditor effect={effect} onDone={() => {}} onStop={() => {}} />)
+    fireEvent.click(screen.getByTitle('#ff0000'))
+    dragPicker(screen.getByLabelText('Colour picker'), hex)
+
+    const sentDuringDrag = updateFx.mock.calls.length
+    expect(sentDuringDrag).toBeGreaterThanOrEqual(1)
+    expect(sentDuringDrag).toBeLessThan(12)
+    for (let i = 1; i < sentAt.length; i++) expect(sentAt[i] - sentAt[i - 1]).toBeGreaterThanOrEqual(50)
+
+    fireEvent.mouseUp(document.body)
+    // The release waits a frame for a late last move, then lands at once rather than on the floor.
+    act(() => {
+      vi.advanceTimersByTime(20)
+    })
+    expect(updateFx).toHaveBeenCalledTimes(sentDuringDrag + 1)
+    expect((lastFrame().parameters as Record<string, string>).colours).toBe(`${hex(12)},#00ff00`)
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    expect(updateFx).toHaveBeenCalledTimes(sentDuringDrag + 1)
+  })
+
+  it('lands one colour’s drag on its release, not on the floor’s timer', () => {
+    colourPickers.real = true
+    library.entries = [COLOUR_STROBE]
+    vi.useFakeTimers()
+    vi.setSystemTime(1000)
+    const effect = makeActiveFx({ id: 32, fxType: 'ColourStrobe', attribute: 'rgbColour', parameters: { colour: '#ffffff' } })
+    render(<FxEditor effect={effect} onDone={() => {}} onStop={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /#ffffff/ }))
+    dragPicker(screen.getByLabelText('Colour picker'), hex)
+    const sentDuringDrag = updateFx.mock.calls.length
+
+    fireEvent.mouseUp(document.body)
+    act(() => {
+      vi.advanceTimersByTime(20)
+    })
+    expect(updateFx).toHaveBeenCalledTimes(sentDuringDrag + 1)
+    expect((lastFrame().parameters as Record<string, string>).colour).toBe(hex(12))
   })
 })

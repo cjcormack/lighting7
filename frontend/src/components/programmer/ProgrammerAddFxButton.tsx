@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { AudioWaveform } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useLitHold } from '@/lib/litHold'
+import { traceFxPickerClose } from '@/lib/fxPickerCloseTrace'
 import { ProgrammerAddFxSheet, useProgrammerAddFx } from './ProgrammerAddFx'
 
 /**
@@ -12,16 +14,45 @@ import { ProgrammerAddFxSheet, useProgrammerAddFx } from './ProgrammerAddFx'
  *
  * Where the scope sends it is `useProgrammerAddFx`'s: Local, into a focused Look (absorbed, never
  * asked Replace · Stack), or nowhere in Output, where the button is disabled with the reason.
+ *
+ * While open it holds *Lit* still (`lib/litHold.ts`), so a selected head going dark does not take
+ * row C, and the picker with it, away. [closeTrace] is what row C's host says about its selection,
+ * logged by the close trace (`lib/fxPickerCloseTrace.ts`) if row C unmounts under an open picker.
  */
-export function ProgrammerAddFxButton({ projectId, wordClass }: { projectId: number; wordClass: string }) {
+export function ProgrammerAddFxButton({
+  projectId,
+  wordClass,
+  closeTrace,
+}: {
+  projectId: number
+  wordClass: string
+  closeTrace?: RefObject<Record<string, unknown>>
+}) {
   const offer = useProgrammerAddFx()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLButtonElement>(null)
+  useLitHold(open)
   // A selection that leaves while the picker is open takes the picker with it, rather than leaving
   // it to come back unasked once there is a selection again.
   useEffect(() => {
     if (offer.disabled) setOpen(false)
   }, [offer.disabled])
+  const openRef = useRef(open)
+  openRef.current = open
+  // A disabled offer's close is the sheet's to trace; row C going with it in the next commit is not a
+  // second close.
+  const disabledRef = useRef(offer.disabled)
+  disabledRef.current = offer.disabled
+  const closeTraceRef = useRef(closeTrace)
+  closeTraceRef.current = closeTrace
+  useEffect(
+    () => () => {
+      if (openRef.current && !disabledRef.current) {
+        traceFxPickerClose('row C actions unmounted', closeTraceRef.current?.current ?? {})
+      }
+    },
+    [],
+  )
   return (
     <>
       {/* The reason on a wrapper: a disabled button takes no hover. */}
@@ -34,7 +65,10 @@ export function ProgrammerAddFxButton({ projectId, wordClass }: { projectId: num
           aria-label="Add FX on the selection"
           aria-expanded={open}
           data-row-c-fx
-          onClick={() => setOpen((wasOpen) => !wasOpen)}
+          onClick={() => {
+            if (open) traceFxPickerClose('FX button pressed')
+            setOpen(!open)
+          }}
         >
           <AudioWaveform className="size-3.5" />
           <span className={wordClass}>FX</span>

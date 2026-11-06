@@ -28,7 +28,12 @@ import { ColourEditorBody } from './ColourEditorBody'
 
 interface FxColourListPickerProps {
   value: string
-  onChange: (value: string) => void
+  /**
+   * [release] is false for a frame of a swatch's drag and true for its end and for every edit that
+   * is one already — an add, a removal, a reorder, a typed hex, a preset — so the host's live push
+   * lands the last move and floors the rest.
+   */
+  onChange: (value: string, release: boolean) => void
   label?: string
   description?: string
   extendedChannels?: Partial<ExtendedChannelFlags>
@@ -54,6 +59,9 @@ export function FxColourListPicker({
 }: FxColourListPickerProps) {
   const [items, setItems] = useState<ColourItem[]>(() => parseColourList(value))
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  // A reorder drag is live (dnd-kit's own, on the swatches).
+  const [sorting, setSorting] = useState(false)
+  const editing = editingIndex !== null || sorting
 
   // The last string this picker pushed up, used to tell "the parent echoed our
   // own edit back" from "the parent handed us a different list". It can't be
@@ -63,18 +71,28 @@ export function FxColourListPicker({
   // while owning the hex field's state — so the swatch being typed into would
   // remount mid-keystroke.
   const lastEmitted = useRef(value)
+  // The list a swatch's drag last drew, for its release to land; null when no drag has moved since.
+  const dragged = useRef<ColourItem[] | null>(null)
 
   // `items` is otherwise seeded only at mount, but this instance can outlive the
   // value it was seeded from: a parameter input keys on `param.name`, so a
   // host that swaps the value under a mounted picker — `FxEditor` after a
   // Revert, a template form switching effects — reuses this picker, and the
   // previous swatches would stay on screen and get written back on the next edit.
+  //
+  // Not while a swatch is open or a reorder is live, though: a late copy of an earlier value would
+  // re-mint the ids and close the swatch under the drag. The value is read again once it closes.
   useEffect(() => {
-    if (value === lastEmitted.current) return
+    if (editing || value === lastEmitted.current) return
     lastEmitted.current = value
     setItems(parseColourList(value))
-    setEditingIndex(null)
-  }, [value])
+  }, [value, editing])
+
+  // A swatch opening starts with no drag. Not its close: its body lands a drag the close cut short as
+  // it unmounts, which an exit animation can put after this.
+  useEffect(() => {
+    if (editingIndex !== null) dragged.current = null
+  }, [editingIndex])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -82,17 +100,23 @@ export function FxColourListPicker({
   )
 
   const emitChange = useCallback(
-    (newItems: ColourItem[]) => {
+    (newItems: ColourItem[], release: boolean) => {
+      dragged.current = release ? null : newItems
       setItems(newItems)
       const newValue = newItems.map((i) => serializeExtendedColour(i.colour)).join(',')
       lastEmitted.current = newValue
-      onChange(newValue)
+      onChange(newValue, release)
     },
     [onChange]
   )
+  const handleRelease = useCallback(() => {
+    const pending = dragged.current
+    if (pending != null) emitChange(pending, true)
+  }, [emitChange])
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      setSorting(false)
       const { active, over } = event
       if (!over || active.id === over.id) return
 
@@ -100,30 +124,30 @@ export function FxColourListPicker({
       const newIndex = items.findIndex((i) => i.id === over.id)
       if (oldIndex === -1 || newIndex === -1) return
 
-      emitChange(arrayMove(items, oldIndex, newIndex))
+      emitChange(arrayMove(items, oldIndex, newIndex), true)
     },
     [items, emitChange]
   )
 
   const handleColourChange = useCallback(
-    (index: number, colour: ExtendedColour) => {
+    (index: number, colour: ExtendedColour, release: boolean) => {
       const newItems = [...items]
       newItems[index] = { ...newItems[index], colour, raw: serializeExtendedColour(colour) }
-      emitChange(newItems)
+      emitChange(newItems, release)
     },
     [items, emitChange]
   )
 
   const handleAdd = useCallback(() => {
     const newItems = [...items, { id: makeId(), raw: '#ffffff', colour: { hex: '#ffffff', white: 0, amber: 0, uv: 0 } }]
-    emitChange(newItems)
+    emitChange(newItems, true)
     setEditingIndex(newItems.length - 1)
   }, [items, emitChange])
 
   const handleRemove = useCallback(
     (index: number) => {
       const newItems = items.filter((_, i) => i !== index)
-      emitChange(newItems)
+      emitChange(newItems, true)
       if (editingIndex === index) setEditingIndex(null)
       else if (editingIndex !== null && editingIndex > index) setEditingIndex(editingIndex - 1)
     },
@@ -142,7 +166,9 @@ export function FxColourListPicker({
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
+          onDragStart={() => setSorting(true)}
           onDragEnd={handleDragEnd}
+          onDragCancel={() => setSorting(false)}
         >
           <SortableContext
             items={items.map((i) => i.id)}
@@ -155,7 +181,8 @@ export function FxColourListPicker({
                 isEditing={editingIndex === index}
                 onEdit={() => setEditingIndex(editingIndex === index ? null : index)}
                 onRemove={() => handleRemove(index)}
-                onColourChange={(colour) => handleColourChange(index, colour)}
+                onColourChange={(colour, release) => handleColourChange(index, colour, release)}
+                onRelease={handleRelease}
                 extendedChannels={extendedChannels}
               />
             ))}
@@ -180,13 +207,15 @@ function SortableColourSwatch({
   onEdit,
   onRemove,
   onColourChange,
+  onRelease,
   extendedChannels,
 }: {
   item: ColourItem
   isEditing: boolean
   onEdit: () => void
   onRemove: () => void
-  onColourChange: (colour: ExtendedColour) => void
+  onColourChange: (colour: ExtendedColour, release: boolean) => void
+  onRelease: () => void
   extendedChannels?: Partial<ExtendedChannelFlags>
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -198,11 +227,6 @@ function SortableColourSwatch({
     zIndex: isDragging ? 10 : undefined,
     opacity: isDragging ? 0.5 : undefined,
   }
-
-  const handleColourEdit = useCallback(
-    (colour: ExtendedColour) => onColourChange(colour),
-    [onColourChange],
-  )
 
   return (
     <Popover
@@ -239,7 +263,8 @@ function SortableColourSwatch({
       <PopoverContent className="w-auto p-3" align="start" side="right">
         <ColourEditorBody
           colour={item.colour}
-          onColourChange={handleColourEdit}
+          onColourChange={onColourChange}
+          onRelease={onRelease}
           rawValue={item.raw}
           extendedChannels={extendedChannels}
         />
