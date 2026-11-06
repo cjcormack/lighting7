@@ -1,0 +1,417 @@
+<title>Show View Editing Fixes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column; each issue is a section with its problem, the change, a dark desk mock-up and its edges.
+     Colour carries meaning: green = live, blue = next, amber = the unlocked-while-running wash, violet = what this design adds. */
+  :root {
+    --bg:#f3f3f0; --panel:#ffffff; --fg:#1a1c1e; --muted:#5e6469; --line:#d8dad5; --soft:#e9eae5;
+    --add:#6a3fc0; --warn:#9a6200; --live:#1d8146; --next:#2a63c9; --no:#b8432b;
+    --sans:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#111315; --panel:#181b1e; --fg:#eceeec; --muted:#9ba1a3; --line:#2c3134; --soft:#1f2326;
+    --add:#bf9cf6; --warn:#f0bb52; --live:#5fd38a; --next:#80aaff; --no:#ff8f78; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#111315; --panel:#181b1e; --fg:#eceeec; --muted:#9ba1a3; --line:#2c3134; --soft:#1f2326;
+    --add:#bf9cf6; --warn:#f0bb52; --live:#5fd38a; --next:#80aaff; --no:#ff8f78; color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15.5px; line-height:1.55; }
+  .wrap { max-width:1060px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:48px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .eyebrow .status { color:var(--warn); }
+  h1 { margin:0; font-size:clamp(30px, 5vw, 46px); line-height:1.06; font-weight:700; letter-spacing:-0.02em; text-wrap:balance; max-width:22ch; }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:17px; }
+  body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top, 0px); z-index:10; background:var(--bg); }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-24px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--add); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:25px; line-height:1.2; font-weight:700; letter-spacing:-0.01em; text-wrap:balance; display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  h2 .n { font:500 13px var(--mono); color:var(--add); border:1px solid currentColor; border-radius:5px; padding:1px 7px; }
+  h3 { margin:6px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:72ch; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); font-size:0.82em; background:var(--soft); border-radius:4px; padding:1px 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:74ch; display:flex; flex-direction:column; gap:6px; }
+  kbd { font:500 11px var(--mono); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; background:var(--panel); }
+  .ask { color:var(--warn); font-weight:600; }
+
+  .two { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14.5px; display:flex; flex-direction:column; gap:6px; }
+  .box b { font-weight:600; }
+  .box .where { font:11px var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+  .box.now b { color:var(--no); } .box.then b { color:var(--add); }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 11px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.n { font:500 12px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.d { min-width:260px; }
+  td.k { font:500 11.5px var(--mono); white-space:nowrap; }
+  td.k.yes { color:var(--live); } td.k.no { color:var(--no); } td.k.new { color:var(--add); }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:74ch; }
+
+  /* ── mock-ups: the desk is dark, so the screens are dark in both page themes ── */
+  .screenbox { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  .screen { --s-bg:#0e0e11; --s-page:#121216; --s-card:#1b1b20; --s-row:#16161a; --s-bd:#2a2a31; --s-fg:#f4f4f5; --s-mfg:#a1a1aa;
+    --s-live:#4ade80; --s-next:#60a5fa; --s-amber:#f5c04a; --s-pri:#3b82f6; --s-add:#c4a1ff; --s-head:#1d4ed8;
+    background:var(--s-bg); color:var(--s-fg); font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:12.5px; line-height:1.35; min-width:900px; display:flex; flex-direction:column; position:relative; }
+  .screen .m { font-family:ui-monospace, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+  .screen .dim { color:var(--s-mfg); }
+  .screen .row { display:flex; align-items:center; gap:8px; }
+  .screen .sp { flex:1; }
+  .screen .btn { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px; border:1px solid var(--s-bd); border-radius:6px; background:var(--s-card); font-size:12px; white-space:nowrap; color:var(--s-fg); }
+  .screen .btn.on { background:#2a2350; border-color:#6d55c9; color:var(--s-add); }
+  .screen .btn.ghost { background:transparent; border-color:transparent; }
+  .screen .btn.pri { background:var(--s-pri); border-color:var(--s-pri); color:#fff; }
+  .screen .seg { display:inline-flex; border:1px solid var(--s-bd); border-radius:6px; overflow:hidden; }
+  .screen .seg span { padding:4px 9px; font-size:11.5px; color:var(--s-mfg); }
+  .screen .seg span.on { background:#27272a; color:var(--s-fg); }
+  .screen .lbl { font-size:9.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .chip { display:inline-flex; align-items:center; gap:4px; height:19px; padding:0 7px; border-radius:999px; border:1px solid var(--s-bd); font-size:10.5px; color:var(--s-mfg); white-space:nowrap; }
+  .screen .chip.add { color:var(--s-add); border-color:rgba(196,161,255,0.5); }
+  .screen .chip.amber { color:var(--s-amber); border-color:rgba(245,192,74,0.5); background:rgba(245,192,74,0.08); }
+  .screen .top { height:40px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--s-bd); background:var(--s-page); }
+  .screen .top.amber { background:rgba(245,192,74,0.13); border-bottom-color:rgba(245,192,74,0.5); }
+  .screen .bar { height:42px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--s-bd); background:var(--s-page); }
+  .screen .grid { display:grid; border-bottom:1px solid #222228; align-items:center; }
+  .screen .grid > div { padding:0 10px; height:34px; display:flex; align-items:center; border-right:1px solid #1f1f25; min-width:0; white-space:nowrap; overflow:hidden; }
+  .screen .grid.h > div { height:28px; font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--s-mfg); background:var(--s-row); }
+  .screen .grid.live { background:rgba(74,222,128,0.07); box-shadow:inset 3px 0 0 var(--s-live); }
+  .screen .grid.next { background:rgba(96,165,250,0.07); box-shadow:inset 3px 0 0 var(--s-next); }
+  .screen .grid.selrow { box-shadow:inset 3px 0 0 var(--s-pri); background:rgba(59,130,246,0.08); }
+  .screen .cellsel { outline:2px solid var(--s-pri); outline-offset:-2px; background:rgba(59,130,246,0.14); }
+  .screen .pip { width:20px; height:20px; border-radius:50%; display:grid; place-items:center; background:#27272a; border:1px solid var(--s-bd); flex:none; }
+  .screen .pip i { width:7px; height:7px; border-radius:50%; background:#52525b; display:block; }
+  .screen .pip.live { background:#052e16; border-color:#14532d; box-shadow:0 0 8px rgba(74,222,128,0.4); }
+  .screen .pip.live i { width:0; height:0; border-radius:0; background:none; border-left:7px solid var(--s-live); border-top:4.5px solid transparent; border-bottom:4.5px solid transparent; margin-left:2px; }
+  .screen .pip.next { background:#172554; border-color:#1e3a8a; } .screen .pip.next i { background:#93c5fd; width:5px; height:5px; }
+  .screen .pip.hover { outline:2px solid var(--s-next); outline-offset:1px; }
+  .screen .grip { color:#52525b; font-size:13px; letter-spacing:-2px; width:12px; flex:none; }
+  .screen .auto { color:var(--s-mfg); font-weight:400; }
+  .screen .pop { position:absolute; background:#1c1c22; border:1px solid #3a3a44; border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.55); padding:12px; display:flex; flex-direction:column; gap:9px; z-index:2; }
+  .screen .field { height:28px; border:1px solid #3f3f46; border-radius:6px; background:#0f0f12; display:flex; align-items:center; padding:0 8px; font-family:ui-monospace, Menlo, monospace; }
+  .screen .field.focus { border-color:var(--s-pri); box-shadow:0 0 0 2px rgba(59,130,246,0.35); }
+  .screen .tip { position:absolute; background:#fafafa; color:#18181b; border-radius:6px; padding:5px 9px; font-size:11.5px; box-shadow:0 8px 24px rgba(0,0,0,0.4); white-space:nowrap; z-index:2; }
+  .screen .pane { border-top:1px solid var(--s-bd); background:var(--s-bg); }
+  .screen .grip-row { height:14px; display:grid; place-items:center; border-top:1px solid var(--s-bd); background:#141418; }
+  .screen .grip-row i { width:36px; height:4px; border-radius:2px; background:#3f3f46; display:block; }
+  .screen .empty { height:150px; display:grid; place-items:center; text-align:center; color:var(--s-mfg); font-size:12.5px; }
+  .screen .empty b { color:var(--s-fg); font-weight:600; display:block; margin-bottom:4px; font-size:13px; }
+  .screen .tabs { display:flex; gap:2px; padding:0 12px; border-bottom:1px solid var(--s-bd); height:32px; align-items:flex-end; }
+  .screen .tabs span { padding:6px 10px; font-size:12px; color:var(--s-mfg); }
+  .screen .tabs span.on { color:var(--s-fg); box-shadow:inset 0 -2px 0 var(--s-pri); }
+  .screen .switch { width:30px; height:17px; border-radius:999px; background:#3f3f46; position:relative; flex:none; }
+  .screen .switch::after { content:""; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%; background:#e4e4e7; }
+  .screen .switch.on { background:var(--s-pri); } .screen .switch.on::after { left:15px; }
+  .screen .card { border:1px solid var(--s-bd); border-radius:8px; background:var(--s-card); padding:14px; display:flex; flex-direction:column; gap:12px; }
+  .screen .ring { position:absolute; border:2px dashed rgba(196,161,255,0.75); border-radius:8px; pointer-events:none; }
+  .screen .note { position:absolute; font-size:10.5px; color:var(--s-add); font-weight:600; letter-spacing:0.02em; white-space:nowrap; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow"><span>Design record</span><span>Show view · cue sheet · lock</span><span>2026-11-06</span><span>read from <code>d2f6b9b</code></span><span class="status">Draft · questions open</span></div>
+  <h1>Show view editing fixes</h1>
+  <p class="lede">Six changes to how a show is edited on the Show view, the Prompt Book and the Cues table: what Duplicate carries, a bottom editor that stays put, cue numbers as cells, arming from the pip, and a per-show switch that says whether the show needs a lock at all.</p>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <a href="#summary">Summary</a>
+  <a href="#duplicate">1 · Duplicate</a>
+  <a href="#pane">2–3 · Editor pane</a>
+  <a href="#numbers">4 · Cue numbers</a>
+  <a href="#pip">5 · Arm from the pip</a>
+  <a href="#production">6 · In production</a>
+  <a href="#questions">Questions</a>
+  <a href="#plan">Plan</a>
+</nav>
+
+<section id="summary">
+  <h2>Summary</h2>
+  <div class="tablebox"><table>
+    <thead><tr><th>#</th><th>The issue</th><th>The change</th><th>Touches</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td class="d">Duplicate drops the cue's follow.</td><td class="d">The request names the entry it was duplicated from, and the copy's entry takes that entry's follow and delay. Nothing else the cue owns is missing; the audit is below.</td><td class="n">route + 1 client call</td></tr>
+      <tr><td class="n">2</td><td class="d">Marquee-selecting near the bottom of the cue sheet makes the editor pane open and close under the pointer.</td><td class="d" rowspan="2">The pane is a <b>per-window toggle</b> in the stack header. On, it always keeps its height and shows the one selected cue, or a blank state for none, several or a marker. A marquee swaps its contents on release, not per frame.</td><td class="n" rowspan="2">CueSheet, StackTimeline, CueEditorPane, StackDetail</td></tr>
+      <tr><td class="n">3</td><td class="d">The pane appears and vanishes with the selection.</td></tr>
+      <tr><td class="n">4</td><td class="d">A cue number can only be edited by double-clicking one row's first column.</td><td class="d">The number becomes a <b>Cue&nbsp;#</b> cell column. One cell edits as today (with the out-of-order question); several cells open the renumber form, start and step, through <code>POST …/renumber</code>.</td><td class="n">CueSheet, RenumberCuesButton</td></tr>
+      <tr><td class="n">5</td><td class="d">Arming a cue as next needs the show locked.</td><td class="d">The <b>pip is a button</b> in Cards, Table and Timeline, locked or not: a click arms that cue as the next GO.</td><td class="n">CueRowParts, CueCardEditor, CueSheet, StackTimeline</td></tr>
+      <tr><td class="n">6</td><td class="d">A show being built or teched still locks and washes amber whenever a stack runs.</td><td class="d">A show setting, <b>In production</b>. Off, the lock never arms and the amber wash never draws, on every lock surface; on, everything is as today.</td><td class="n">projects column, sync, settings, <code>useEditLock</code></td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">Each section says what the code does now, with the file it was read from, then the change. The open questions are collected in <a href="#questions">Questions</a>, each with a recommendation.</p>
+</section>
+
+<!-- ───────────────────────── 1 ───────────────────────── -->
+<section id="duplicate">
+  <h2><span class="n">1</span>Duplicate carries the follow</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>Follow (<code>autoAdvance</code>, <code>autoAdvanceDelay</code>) belongs to the <em>stack entry</em>, not the cue, because a shared cue can follow in one stack and not another. <code>POST /cues/{id}/duplicate</code> takes only <code>{stackId}</code>, so it cannot know which place was duplicated, and <code>placeCueInStack</code> creates the copy's entry with follow off.</p>
+      <span class="where">routes/projectCues.kt:411 · DuplicateCueRequest(stackId) · projectCuesHelpers.kt:1023</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>The request gains <code>entryId</code>, the place the operator duplicated from. The desk checks that the entry places this cue in this project (400 otherwise) and passes its follow and delay to <code>placeCueInStack</code>, which already takes both. <code>CueActions</code> sends <code>row.entryId</code>; the Cues table sends it only when the cue has exactly one place, as it does for the stack today. Without it (a loose cue, an older client) the copy has no follow, as now.</p>
+      <span class="where">DuplicateCueRequest(stackId?, entryId?) · CueActions.duplicate</span>
+    </div>
+  </div>
+
+  <h3>What Duplicate carries, checked against the tables</h3>
+  <p>The copier (<code>CueCopier.copyCue</code>) copies every column of every table that hangs off a cue. Only the entry's fields were missing.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>Field</th><th>Owner</th><th>Copied</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Name, fade, curve, notes, stomp, speed masters, Move in dark</td><td class="n">cue</td><td class="k yes">yes</td><td>Already copied.</td></tr>
+      <tr><td>Values, layers, FX, script hooks, scenery, events</td><td class="n">cue's child rows</td><td class="k yes">yes</td><td>Already copied, each column checked. FX run keys are fresh; see Q2.</td></tr>
+      <tr><td>Follow and its delay</td><td class="n">entry</td><td class="k new">now yes</td><td>This change.</td></tr>
+      <tr><td>Cue number</td><td class="n">entry</td><td class="k no">no</td><td>Numbers are unique in a stack, so the copy takes an auto number, as now.</td></tr>
+      <tr><td>Prompt-book anchor</td><td class="n">entry</td><td class="k no">no</td><td>Two cues pinned to one point on the page would draw as one mark. The copy is anchored by hand.</td></tr>
+      <tr><td>Busk pads, cue slots, surface bindings</td><td class="n">name the cue</td><td class="k no">no</td><td>They point at the source; a copy on a pad is a second pad, made by the operator.</td></tr>
+      <tr><td>Where it lands in the stack</td><td class="n">entry</td><td class="k">end</td><td class="ask">Q1: at the end, or directly after its source?</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">Tests: a route test duplicating an entry with follow on and a 2 s delay finds both on the copy's entry, and one with another cue's <code>entryId</code> gets a 400; <code>CueActions.test.tsx</code> asserts the request carries the row's entry.</p>
+</section>
+
+<!-- ───────────────────────── 2–3 ───────────────────────── -->
+<section id="pane">
+  <h2><span class="n">2–3</span>The editor pane is switched on, not summoned</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>The pane is derived from the selection: <code>paneRow = selectedRows.length === 1 &amp;&amp; isCueRow(…)</code>. A marquee started on one row opens it, the second row closes it, the sheet gets taller, the rows move under the pointer and the marquee lands on a different row, which can make it one row again. Near the bottom of the list this repeats every few pixels. The Timeline has the same rule for one selected cell.</p>
+      <span class="where">CueSheet.tsx:647 · StackTimeline.tsx:673 · CueEditorPane.tsx</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>An <b>Editor</b> toggle in the stack header, drawn on the Table and the Timeline, kept per window in <code>sessionStorage cueSheet.paneOpen</code> beside the pane's height. On, the pane is always drawn at its height whatever is selected, so selecting never changes the layout. Off, it is never drawn. The selection only chooses what the pane shows.</p>
+      <span class="where">StackDetail header · cuePaneOpenStore (createSyncStore)</span>
+    </div>
+  </div>
+
+  <figure>
+    <div class="screenbox"><div class="screen" role="img" aria-label="Mock-up: the cue sheet with the Editor toggle on and three rows selected, the pane below showing a blank state.">
+      <div class="top">
+        <span class="btn">← Stacks</span><b>Act 1</b><span class="dim">24 cues</span><span class="sp"></span>
+        <span class="seg"><span>Cards</span><span class="on">Table</span><span>Timeline</span></span>
+        <span class="btn on">▭ Editor</span>
+        <span class="btn">Record into Act 1</span><span class="btn">Separator</span><span class="btn">Stack settings…</span>
+      </div>
+      <div class="bar"><b>3 cues</b><span class="sp"></span><span class="btn">Renumber…</span><span class="btn">Edit in programmer ▾</span><span class="btn">Duplicate</span><span class="btn">⋯</span><span class="btn ghost">✕ Deselect</span></div>
+      <div class="grid h" style="grid-template-columns:64px 76px 1fr 90px 90px 90px 1fr"><div>Cue</div><div>Cue #</div><div>Name</div><div>Fade</div><div>Curve</div><div>Follow</div><div>Notes</div></div>
+      <div class="grid live" style="grid-template-columns:64px 76px 1fr 90px 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip live"><i></i></span></div><div class="m"><b>Q9</b></div><div>Ball opens</div><div class="m">3s</div><div>Linear</div><div class="dim">—</div><div class="dim">—</div></div>
+      <div class="grid next" style="grid-template-columns:64px 76px 1fr 90px 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip next"><i></i></span></div><div class="m"><b>Q10</b></div><div>Waltz</div><div class="m">5s</div><div>Sine</div><div class="dim">—</div><div>slow build</div></div>
+      <div class="grid selrow" style="grid-template-columns:64px 76px 1fr 90px 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m"><b>Q11</b></div><div>Clock strikes</div><div class="m">0.5s</div><div>Linear</div><div class="m">2s</div><div class="dim">—</div></div>
+      <div class="grid selrow" style="grid-template-columns:64px 76px 1fr 90px 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q12</div><div>Flight</div><div class="m">2s</div><div>Linear</div><div class="dim">—</div><div class="dim">—</div></div>
+      <div class="grid selrow" style="grid-template-columns:64px 76px 1fr 90px 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q13</div><div>Midnight</div><div class="m">8s</div><div>Sine</div><div class="dim">—</div><div>LX + SM</div></div>
+      <div class="grip-row"><i></i></div>
+      <div class="pane"><div class="empty"><div><b>3 cues selected</b>The editor shows one cue at a time. The bar above acts on all three.</div></div></div>
+    </div></div>
+    <figcaption>The toggle on, three rows selected. The pane keeps its height and says why it is blank; selecting a fourth row by marquee moves nothing on screen. Names in the mock-ups are illustrative.</figcaption>
+  </figure>
+
+  <h3>The blank states</h3>
+  <div class="tablebox"><table>
+    <thead><tr><th>Selected</th><th>The pane shows</th></tr></thead>
+    <tbody>
+      <tr><td>One cue row (Table), or cells in one cue's row (Timeline)</td><td><code>CueEditor</code>, as now.</td></tr>
+      <tr><td>Nothing</td><td><b>No cue selected</b> · Select a cue to edit it here.</td></tr>
+      <tr><td>Several cues</td><td><b>3 cues selected</b> · The editor shows one cue at a time. The bar above acts on all three.</td></tr>
+      <tr><td>Only markers</td><td><b>A separator</b> · Rename it in its row.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Edges</h3>
+  <ul class="plain">
+    <li><b>During a marquee the pane keeps what it had</b> and follows the selection on release (<code>sheet.marqueeDragging</code>). Mounting and unmounting <code>CueEditor</code> per frame would fetch each cue the marquee crosses.</li>
+    <li><b>A read-out that opens the pane</b> (Layers, FX, the Move in dark chip) turns it on if it is off, then selects the row and asks for its tab, as now. A plain click never turns it on.</li>
+    <li><b>Keeping the edited row in view</b> (<code>keepPaneRowInView</code>) runs when the pane opens, resizes or its cue changes, as now; nothing scrolls when the selection changes to a blank state.</li>
+    <li><b>Cards</b> have no pane and draw no toggle; a card is its own editor.</li>
+    <li><b>Default for a window that never chose</b>: <span class="ask">Q3</span>.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── 4 ───────────────────────── -->
+<section id="numbers">
+  <h2><span class="n">4</span>Cue numbers are cells</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>The number lives in the sheet's sticky first column with the pip, as a <code>TextCell</code> opened by a double click on one row. The first column is the row selector, so a click there selects the row, a marquee from it selects rows, and the number can never be part of a cell selection. Several cues are renumbered only through the bar's <em>Renumber…</em> over a row selection.</p>
+      <span class="where">CueSheet.tsx:868–950 · RenumberCuesButton.tsx · SheetTable firstColumn</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>The first column becomes the <b>row head</b>: the drag grip, the pip and the played tick. The number moves to a <b>Cue&nbsp;#</b> column directly after it, a normal kit cell of its own kind (<code>cueNumber</code>), so it selects with a click, a marquee or the arrow keys like Fade or Notes, and nothing typed into another column reaches it.</p>
+      <span class="where">column kind cueNumber · value undefined on a marker</span>
+    </div>
+  </div>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:330px" role="img" aria-label="Mock-up: four Cue number cells selected, with the renumber editor open: first 20, step 1, landing Q20 to Q23.">
+      <div class="bar"><b>4 cues · 4 cells</b><span class="dim">Cue #</span><span class="sp"></span><span class="btn pri">Set</span><span class="btn">Clear</span><span class="btn">Renumber…</span><span class="btn ghost">✕ Deselect</span></div>
+      <div class="grid h" style="grid-template-columns:64px 76px 1fr 90px 90px 1fr"><div>Cue</div><div>Cue #</div><div>Name</div><div>Fade</div><div>Follow</div><div>Notes</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m"><b>Q14</b></div><div>Pumpkin</div><div class="m">3s</div><div class="dim">—</div><div class="dim">—</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m cellsel"><b>Q15</b></div><div>Coach</div><div class="m">4s</div><div class="dim">—</div><div class="dim">—</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m cellsel auto">Q16</div><div>Mice</div><div class="m">1s</div><div class="dim">—</div><div class="dim">—</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m cellsel"><b>Q16.5</b></div><div>Footmen</div><div class="m">2s</div><div class="m">0s</div><div class="dim">—</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m cellsel auto">Q17</div><div>Transform</div><div class="m">6s</div><div class="dim">—</div><div>big</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q18</div><div>Depart</div><div class="m">3s</div><div class="dim">—</div><div class="dim">—</div></div>
+      <div class="pop" style="left:150px; top:104px; width:270px">
+        <span class="lbl">Renumber 4 cues</span>
+        <div class="row" style="gap:10px"><div style="flex:1; display:flex; flex-direction:column; gap:4px"><span class="dim" style="font-size:11px">First</span><div class="field focus">20</div></div><div style="width:80px; display:flex; flex-direction:column; gap:4px"><span class="dim" style="font-size:11px">Step</span><div class="field">1</div></div></div>
+        <span class="dim m" style="font-size:11.5px">Q20, Q21, Q22, Q23</span>
+        <div class="row"><span class="sp"></span><span class="btn ghost">Cancel</span><span class="btn pri">Renumber</span></div>
+      </div>
+    </div></div>
+    <figcaption>Four number cells marqueed and <kbd>2</kbd><kbd>0</kbd> typed: the cell editor over several rows is the renumber form, seeded with what was typed, landing whole numbers in stack order. Over one cell it is the number field as today.</figcaption>
+  </figure>
+
+  <h3>How each gesture lands</h3>
+  <div class="tablebox"><table>
+    <thead><tr><th>Gesture</th><th>Over one cell</th><th>Over several</th></tr></thead>
+    <tbody>
+      <tr><td>Set, <kbd>⏎</kbd>, double click, typing</td><td>The number field. Commit is the entry <code>PATCH</code> with <code>placement: ASK</code>, so an out-of-order number asks <em>Move to its place</em> or <em>Keep it here</em> (<code>useCueNumberPlacement</code>), as now.</td><td>The renumber form: <em>First</em> (what was typed, else the first selected cue's whole number) and <em>Step</em> (1), the landing previewed, then <code>POST …/renumber {entryIds, start, step}</code> in stack order. A typed decimal is refused with the form's reason, a renumber writes whole numbers (<span class="ask">Q5</span>).</td></tr>
+      <tr><td>Clear, <kbd>⌫</kbd></td><td>Back to auto: <code>cueNumber: null</code>.</td><td>Each back to auto, one <code>PATCH</code> per entry like the sheet's other cells.</td></tr>
+      <tr><td>Spread</td><td colspan="2">Not offered on this column. The renumber form is its spread.</td></tr>
+      <tr><td>Locked</td><td colspan="2">Inert like every value cell; the marquee still selects. A refused gesture asks to unlock.</td></tr>
+    </tbody>
+  </table></div>
+  <ul class="plain">
+    <li><b>One form, two doors.</b> The start-and-step form is pulled out of <code>RenumberCuesButton</code> as <code>RenumberForm</code>; the bar's <em>Renumber…</em> over a row selection and the cell editor over several cells both mount it, with <code>renumberProblem</code> and <code>renumberPreview</code> unchanged.</li>
+    <li><b>The row head keeps the row gestures</b>: a click selects the row (and locked, arms it, as the Cue column does now), a drag from it is the row marquee, the grip reorders.</li>
+    <li><b>The number scrolls with the cells</b> rather than staying sticky. The sheet is wide enough on a desk that this only matters on a narrow window; the alternative is <span class="ask">Q4</span>.</li>
+    <li><b>The Timeline keeps its cue column</b>, whose cells are Looks and FX. Cards keep the inline field. Only the Table gets the cell.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── 5 ───────────────────────── -->
+<section id="pip">
+  <h2><span class="n">5</span>The pip arms the next GO</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>Arming is a locked gesture only: a locked click on a card's body or the sheet's Cue column calls <code>onSetStandby</code>, and the bar's <em>Arm as next</em> is drawn only while locked. Unlocked, those clicks expand the card or select the row, so a fix-it session mid-show has to re-lock to arm a cue. On a card the pip also sits under the drag grip, which replaces it on hover while unlocked.</p>
+      <span class="where">CueCardEditor.tsx:154, 199 · CueSheet.tsx:690, 751 · CueRowParts.tsx:43</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p><code>CueStatePip</code> takes an optional <code>onArm</code> and draws as a button when given: a click arms that cue as the next GO, in every view and in both lock states, and stops there, so it never also selects the row or expands the card. The bar's <em>Arm as next</em> is drawn unlocked too. Every other click keeps its meaning.</p>
+      <span class="where">CueStatePip({onArm}) · same onSetStandby the locked click uses</span>
+    </div>
+  </div>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:206px" role="img" aria-label="Mock-up: an unlocked running show; hovering a grey pip shows the tooltip Arm Q13 as the next GO.">
+      <div class="top amber"><b>Cinderella</b><span class="dim">· Show</span><span class="sp"></span><span class="chip amber">Unlocked · relocks in 4:52</span><span class="btn">Lock</span></div>
+      <div class="grid h" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div>Cue</div><div>Cue #</div><div>Name</div><div>Fade</div><div>Notes</div></div>
+      <div class="grid live" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip live"><i></i></span></div><div class="m"><b>Q11</b></div><div>Clock strikes</div><div class="m">0.5s</div><div class="dim">—</div></div>
+      <div class="grid next" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip next"><i></i></span></div><div class="m auto">Q12</div><div>Flight</div><div class="m">2s</div><div class="dim">—</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip hover"><i></i></span></div><div class="m auto">Q13</div><div>Midnight</div><div class="m">8s</div><div>LX + SM</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q14</div><div>Shoe</div><div class="m">3s</div><div class="dim">—</div></div>
+      <div class="tip" style="left:58px; top:176px">Arm Q13 as the next GO</div>
+    </div></div>
+    <figcaption>Unlocked mid-show. The pip of Q13 takes a hover ring and a tooltip; a click makes it the blue next, and GO fires it. The grip is beside the pip, never over it.</figcaption>
+  </figure>
+
+  <ul class="plain">
+    <li><b>When the pip is a button</b>: exactly when the locked click arms today, that is when the view is given <code>onSetStandby</code> and the row is not the live one. The live pip and the already-next pip stay read-outs, titled <em>On stage</em> and <em>Next GO</em>. The existing rule that arming is inert off the playhead's stack is unchanged.</li>
+    <li><b>Cards</b>: the grip moves out of the pip's cell into its own 14&nbsp;px slot before it, drawn only unlocked, so the pip is always visible and clickable. The card's grid templates gain that track.</li>
+    <li><b>Table and Timeline</b>: the kit's row grip is already its own element in the row head; the pip only needs the handler and <code>stopPropagation</code>.</li>
+    <li><b>Keyboard</b>: the pip is a focusable button with the same label as its tooltip, so it is reachable without a pointer. No new key.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── 6 ───────────────────────── -->
+<section id="production">
+  <h2><span class="n">6</span>A show says whether it is in production</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>The lock is <code>!canEdit || (isShowActive &amp;&amp; lockRequested)</code>, so it arms whenever any stack runs, including in a build or a tech where cues are fired constantly and edited between GOs. Each host then computes the amber wash itself as <code>!locked &amp;&amp; isShowActive</code>, and undo reads the lock slice and the run state on its own.</p>
+      <span class="where">useEditLock.ts · ShowPage.tsx:168 · PromptBookPage.tsx:180, 633, 648 · Cues.tsx:69 · busking/ShowTab.tsx:63 · history/HistoryMove.tsx:186</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>A show setting, <b>In production</b>. The lock guards a show that is running <em>and</em> in production; off, the show is always editable, the lock control, the auto-relock countdown and the amber wash never appear, and <kbd>L</kbd> does nothing. The rule moves into one place, <code>useEditLock</code>, which also returns <code>unlockedWarning</code>, so no host computes either again.</p>
+      <span class="where">guarded = canEdit &amp;&amp; isShowActive &amp;&amp; inProduction</span>
+    </div>
+  </div>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:250px" role="img" aria-label="Mock-up: Project settings, General tab, with an In production switch and its explanation.">
+      <div class="top"><b>Cinderella</b><span class="dim">· Settings</span></div>
+      <div class="tabs"><span class="on">General</span><span>Surfaces</span><span>Stage</span><span>Rigging</span><span>Sync</span></div>
+      <div style="padding:16px; display:flex; flex-direction:column; gap:12px; max-width:620px">
+        <div class="card">
+          <div class="row" style="gap:12px; align-items:flex-start">
+            <div style="flex:1; display:flex; flex-direction:column; gap:4px">
+              <b style="font-size:13px">In production</b>
+              <span class="dim">On: while a stack runs, Show, the Prompt Book and the Cues table lock against stray clicks, and an unlocked running show is washed amber. Off: they stay editable while the show runs.</span>
+            </div>
+            <span class="switch"></span>
+          </div>
+        </div>
+        <div class="card"><div class="row"><b style="font-size:13px; flex:1">Name</b><div class="field" style="width:240px; font-family:inherit">Cinderella</div></div></div>
+      </div>
+      <div class="ring" style="left:10px; top:84px; width:608px; height:86px"></div>
+      <div class="note" style="left:632px; top:112px">new · Settings › General</div>
+    </div></div>
+    <figcaption>The switch is the show's, in Settings › General beside its name, off for this show. Both roles may change it: the lock is a stray-click guard, not access control.</figcaption>
+  </figure>
+
+  <h3>Where it lives</h3>
+  <div class="tablebox"><table>
+    <thead><tr><th>Layer</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>Schema</td><td><code>projects.in_production</code>, boolean, default <code>true</code>, added by the reconciliation. No migration: every existing show reads as in production, which is today's behaviour.</td></tr>
+      <tr><td>REST</td><td><code>ProjectDto</code> and <code>ProjectDetailDto</code> carry <code>inProduction</code>; <code>UpdateProjectRequest</code> takes it; <code>POST /projects</code> takes it for a new show (<span class="ask">Q6</span>). On a venue it is refused, since a venue has no lock.</td></tr>
+      <tr><td>Sync</td><td>Portable, in <code>project.json</code> as <code>inProduction: Boolean = true</code>. Canonical JSON leaves the default out, so an archive from an older desk reads as in production and one written for a show still in production is byte-identical to today's. A new optional field: no <code>formatVersion</code> bump (<code>ignoreUnknownKeys</code>). <code>RichProjectFixture</code> sets it false so the round trip and clone tests see it.</td></tr>
+      <tr><td>History</td><td>The project's own fields are already restorable, so an undo of the switch works with no new kind.</td></tr>
+      <tr><td>Client</td><td><code>useEditLock</code> reads the current project's <code>inProduction</code> and owns <code>locked</code>, <code>lockRelevant</code> and the new <code>unlockedWarning</code>. Its five hosts drop their own <code>!locked &amp;&amp; isShowActive</code>; <code>useHistoryMove</code> asks the same rule instead of reading the slice directly.</td></tr>
+    </tbody>
+  </table></div>
+  <ul class="plain">
+    <li><b>Switching it on while a stack runs locks at once</b>, as starting the show does, so turning the guard on never leaves the desk unlocked by surprise. Switching it off while unlocked changes nothing visible but the wash.</li>
+    <li><b>The header says why there is no lock</b> while a show not in production runs: a quiet, uncoloured <em>Not in production</em> label in the lock control's place, linking to the setting. Without it a missing lock control reads as a bug, and an operator moving between shows cannot tell which one is guarded.</li>
+    <li><b>The phone runner keeps its layout.</b> It is always laid out as locked; only its ⋯ menu follows the lock, and that now follows the setting too.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── Questions ───────────────────────── -->
+<section id="questions">
+  <h2>Questions</h2>
+  <div class="tablebox"><table>
+    <thead><tr><th>#</th><th>Question</th><th>Recommendation</th><th>The other answers</th></tr></thead>
+    <tbody>
+      <tr><td class="n">Q1</td><td class="d">Where does a duplicated cue land?</td><td class="d"><b>Directly after the place it was duplicated from</b>, unnumbered, so it takes the next auto number there (Q5 → Q5.5 when Q6 is explicit). Duplicating to make the next cue is the common case, and a copy at the end has to be dragged back every time.</td><td class="d">Keep the end of the stack (show-cue-editing plan D12, nothing else in the stack moves).</td></tr>
+      <tr><td class="n">Q2</td><td class="d">If it lands after its source, do its FX join the source's runs?</td><td class="d"><b>Yes</b>: copy each FX's run key from the source when the copy is placed directly after it, so a Wave both cues hold carries across the GO without restarting, and the Timeline draws them as one run.</td><td class="d">Fresh keys, as the copier does now (each FX restarts on the copy's GO).</td></tr>
+      <tr><td class="n">Q3</td><td class="d">Is the editor pane on or off in a window that has never chosen?</td><td class="d"><b>On.</b> It is what people use now with one row selected, and on keeps the layout still.</td><td class="d">Off, opened from the toggle or a Layers / FX read-out.</td></tr>
+      <tr><td class="n">Q4</td><td class="d">Is the number its own column, or does it stay in the sticky first column?</td><td class="d"><b>Its own column</b> after a narrow row head. The kit needs no change and the number behaves like every other cell.</td><td class="d">Keep it sticky: the kit learns a first column that holds a cell, and the row gestures move to the pip and grip.</td></tr>
+      <tr><td class="n">Q5</td><td class="d">Can a renumber over several cells use decimal steps (5.1, 5.2, 5.3)?</td><td class="d"><b>Not in this change.</b> The renumber route writes whole numbers; decimals mean a desk change to <code>routes/cueNumbering.kt</code> and its tests, best done on its own.</td><td class="d">Allow a decimal start and step now, up to four places.</td></tr>
+      <tr><td class="n">Q6</td><td class="d">What is a new show's default?</td><td class="d"><b>Off for a new show, on for every existing one.</b> A new show is being built; the column's default keeps the show running now exactly as it is.</td><td class="d">On for every show, new ones included. Or machine-local rather than synced, if the desk at the venue should decide.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ───────────────────────── Plan ───────────────────────── -->
+<section id="plan">
+  <h2>Plan</h2>
+  <p>One branch, <code>claude/nifty-cerf-9cjk9l</code>, one PR, one commit per row so each can be read and reverted alone. Checks are the repo's: <code>compileTestKotlin</code> and the touched packages' tests for the backend, <code>npm run check:quick</code> for the frontend, the full suites in CI.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>Commit</th><th>What</th><th>Tests</th><th>Docs</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td class="d">Duplicate carries the entry's follow (and Q1, Q2 as answered).</td><td class="d">Route test for follow, delay and a foreign <code>entryId</code>; <code>CueActions.test.tsx</code> for the request.</td><td class="d"><code>docs/cues-engineering.md</code> on Duplicate; frontend <code>CLAUDE.md</code> §"Cues, Stacks &amp; Triggers".</td></tr>
+      <tr><td class="n">2</td><td class="d">The editor pane toggle and its blank states, Table and Timeline.</td><td class="d"><code>CueSheet.test.tsx</code>: toggle on, a marquee from one row to three leaves the pane's height alone; off, nothing drawn; a read-out turns it on. The Timeline's twin in <code>StackTimeline.test.tsx</code>.</td><td class="d">Frontend <code>CLAUDE.md</code> §Sheet kit's cue sheet entry.</td></tr>
+      <tr><td class="n">3</td><td class="d">The pip arms, in all three views, both lock states.</td><td class="d">A click on a grey pip calls <code>onSetStandby</code> unlocked and locked, never selects or expands; the live pip does nothing.</td><td class="d">§"The show-editing lock".</td></tr>
+      <tr><td class="n">4</td><td class="d">The Cue # column and <code>RenumberForm</code>.</td><td class="d">One cell sends the <code>ASK</code> PATCH; four cells and a typed <kbd>20</kbd> send one renumber in stack order; Clear returns each to auto; a Fade commit never reaches it.</td><td class="d">§Sheet kit, cue sheet entry.</td></tr>
+      <tr><td class="n">5</td><td class="d">In production: column, DTOs, <code>project.json</code>, settings switch, <code>useEditLock</code> and its hosts.</td><td class="d"><code>ProjectRoundTripTest</code> with the fixture off; <code>useEditLock.test.tsx</code> (running and not in production: unlocked, no warning; switching on while running locks); a project route test.</td><td class="d"><code>docs/sync-engineering.md</code> (the new field); §"The show-editing lock".</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</div>
