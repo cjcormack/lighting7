@@ -1,9 +1,9 @@
 name: CI
 
-# The PR gate: both halves of the repo, on every pull request into main and on every push to
-# main. This is where the full suites run — `./gradlew build` for the backend and
-# `npm run check` in frontend/; locally only the quick checks are expected (see "Pre-commit
-# checks" in CLAUDE.md).
+# The PR gate: the backend, the frontend and the sidecar, on every pull request into main and on
+# every push to main. This is where the full suites run — `./gradlew build` for the backend,
+# `npm run check` in frontend/ and `go test` in link/; locally only the quick checks are
+# expected (see "Pre-commit checks" in CLAUDE.md).
 #
 # No `paths:` filters, deliberately. A required status check whose workflow is skipped by a
 # path filter never reports, and GitHub then blocks the PR waiting for it forever. Running
@@ -72,6 +72,52 @@ jobs:
             cloud-protocol/build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore
+
+  # lighting7-link, the WebRTC sidecar (link/, docs/cloud-engineering.md §"The sidecar"): vet,
+  # format, its tests, a static build, and the licence gate over the modules that build links.
+  # Go is the version link/go.mod names, and GOTOOLCHAIN=local keeps it from fetching another.
+  link:
+    name: Link
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+    defaults:
+      run:
+        working-directory: link
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: link/go.mod
+          cache-dependency-path: link/go.sum
+
+      - name: Tidy
+        run: go mod tidy -diff
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Format
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: 0
+        run: go build -trimpath -o lighting7-link ./cmd/lighting7-link
+
+      # The modules the binary links, not go.sum's, which also lists test-only and unlinked ones.
+      - name: Licences
+        run: |
+          go version -m lighting7-link > go-modules.txt
+          node ../scripts/licences.mjs --check --go-binary-modules go-modules.txt
 
   # `npm run check`, split: build and lint in one job, Vitest in three shards, all in parallel.
   frontend-build-lint:

@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, session 2 in review.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05, session 3 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -309,8 +309,8 @@ and a session is added here for it.
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | The protocol for P1 | merged | `claude/cloud-p1-z6z56z` | [#353](https://github.com/cjcormack/lighting7/pull/353) | `f86d6bb` |
-| 2 | Bearer tokens on the public listener | in review | `claude/cloud-p1-s2` | | |
-| 3 | The sidecar and the broker | planned | | | |
+| 2 | Bearer tokens on the public listener | merged | `claude/cloud-p1-s2` | [#355](https://github.com/cjcormack/lighting7/pull/355) | `7deccac` |
+| 3 | The sidecar and the broker | in review | `claude/cloud-p1-s3` | | |
 | 4 | The SPA in remote mode | planned | | | |
 | 5 | Bundling and supervising the sidecar | planned | | | |
 | 6 | Linking cloud accounts | planned | | | |
@@ -424,8 +424,8 @@ next; whoever merges the last fills its own.
   registry and the sidecar, its account and org recorded (refused with `rtc.close`, as the offer's
   reply, when the switch is off or no sidecar runs), ICE both ways, `rtc.close` both ways, the audit
   row's `path` kept for its close. Replies use `replyTo`.
-- A development launch only: `cloud.link.binary` in `local.conf` names a binary built by hand (`go
-  build ./link/cmd/lighting7-link`), started and stopped with the channel, its pipes read as D11 says;
+- A development launch only: `cloud.link.binary` in `local.conf` names a binary built by hand (`cd
+  link && go build ./cmd/lighting7-link`), started and stopped with the channel, its pipes read as D11 says;
   session 5 bundles and supervises it. The desk announces `remote.v1`, and `remote.no-sidecar` while
   the binary is not running (D6).
 - CI: a *Link* job running `go vet`, `go test` and a build on Linux, with Go pinned as session 5's
@@ -440,6 +440,27 @@ next; whoever merges the last fills its own.
   `remote.no-sidecar` while the public listener is off or failed to bind; the licence gate over a built
   binary's modules.
 - **Docs:** `docs/cloud-engineering.md` §"The sidecar"; `docs/licensing.md` §"Go modules".
+- **As built:** the build is `cd link && go build ./cmd/lighting7-link`, not `go build
+  ./link/cmd/lighting7-link` as this section first said: `link/` is its own module and the root has no
+  `go.mod`. The sidecar's first stdout line is `started {build}`, once it has read its secret: the
+  desk counts it as running from then, not from the process starting. The stdio protocol is the desk's
+  own (both ends are here), so it is not in `cloud-protocol`; `link/testdata/stdio.json` is its fixture,
+  read by the Go tests and `LinkMessagesTest`. The desk's end is `link/LinkSidecar.kt` beside
+  `link/LinkMessages.kt`, which session 5's `LinkProcess` supervises; a stop sends the sidecar SIGTERM
+  from a thread of its own, since a write blocked on its full stdin holds the pipe's lock. The broker
+  also refuses an offer the sidecar could not read (`MALFORMED`: an SDP over 64 KiB, a sid over 128
+  characters, a `session.open` line over 128 KiB) and drops a cloud candidate over 4 KiB, and a session's end gains three
+  reasons, `CLOSED_BY_CLOUD`, `LINK_CLOSED` and `SIDECAR_STOPPED` (told to the cloud as
+  `SIDECAR_UNAVAILABLE`). Beside `STRIPPED_HEADERS` the sidecar drops a request's `content-length` (set
+  from the head's) and `accept-encoding`, since the service worker builds a `Response` from the bytes and
+  a `Response` never decodes a body, and an answer's hop-by-hop headers and `set-cookie`. It never sends
+  first on a channel, so a channel past its limit is reset in answer to its first frame, and its own
+  candidates follow its answer. Its module is
+  `github.com/cjcormack/lighting7/link`, on pion v4 and `coder/websocket` (ISC); Go is pinned by
+  `link/go.mod`'s `go 1.24.7`, which CI reads with `GOTOOLCHAIN=local`, so session 5's toolchain should
+  read the same line. The *Link* job is not yet a required check: the owner adds it to branch
+  protection. Measured on the session's container: a static linux/amd64 build is 16 MB, and each 100 MB
+  stream takes 2 to 5 s over loopback with the heap growing by 15 to 25 MiB.
 
 ### Session 4 — The SPA in remote mode
 

@@ -1,0 +1,32 @@
+{
+  "toolchain": {
+    "name": "The Go standard library and runtime",
+    "licence": "BSD-3-Clause",
+    "why": "Every Go binary links them; `go version -m` does not list them as a module."
+  },
+  "modules": {
+    "github.com/coder/websocket": "ISC",
+    "github.com/google/uuid": "BSD-3-Clause",
+    "github.com/pion/datachannel": "MIT",
+    "github.com/pion/dtls/v3": "MIT",
+    "github.com/pion/ice/v4": "MIT",
+    "github.com/pion/interceptor": "MIT",
+    "github.com/pion/logging": "MIT",
+    "github.com/pion/mdns/v2": "MIT",
+    "github.com/pion/randutil": "MIT",
+    "github.com/pion/rtcp": "MIT",
+    "github.com/pion/rtp": "MIT",
+    "github.com/pion/sctp": "MIT",
+    "github.com/pion/sdp/v3": "MIT",
+    "github.com/pion/srtp/v3": "MIT",
+    "github.com/pion/stun/v4": "MIT",
+    "github.com/pion/transport/v5": "MIT",
+    "github.com/pion/turn/v5": "MIT",
+    "github.com/pion/webrtc/v4": "MIT",
+    "github.com/wlynxg/anet": "BSD-3-Clause",
+    "golang.org/x/crypto": "BSD-3-Clause",
+    "golang.org/x/net": "BSD-3-Clause",
+    "golang.org/x/sys": "BSD-3-Clause",
+    "golang.org/x/time": "BSD-3-Clause"
+  }
+}

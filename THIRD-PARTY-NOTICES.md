@@ -187,6 +187,37 @@ In `lighting7.jar` (the desk) and `launcher.jar`.
 | `tools.jackson.module:jackson-module-kotlin` | Apache-2.0 |
 | `uk.co.xfactory-librarians:coremidi4j` | EPL-1.0 |
 
+## Go modules
+
+In `lighting7-link`, the desk's WebRTC sidecar, built from `link/`.
+
+| Module | Licence |
+|---|---|
+| `github.com/coder/websocket` | ISC |
+| `github.com/google/uuid` | BSD-3-Clause |
+| `github.com/pion/datachannel` | MIT |
+| `github.com/pion/dtls/v3` | MIT |
+| `github.com/pion/ice/v4` | MIT |
+| `github.com/pion/interceptor` | MIT |
+| `github.com/pion/logging` | MIT |
+| `github.com/pion/mdns/v2` | MIT |
+| `github.com/pion/randutil` | MIT |
+| `github.com/pion/rtcp` | MIT |
+| `github.com/pion/rtp` | MIT |
+| `github.com/pion/sctp` | MIT |
+| `github.com/pion/sdp/v3` | MIT |
+| `github.com/pion/srtp/v3` | MIT |
+| `github.com/pion/stun/v4` | MIT |
+| `github.com/pion/transport/v5` | MIT |
+| `github.com/pion/turn/v5` | MIT |
+| `github.com/pion/webrtc/v4` | MIT |
+| `github.com/wlynxg/anet` | BSD-3-Clause |
+| `golang.org/x/crypto` | BSD-3-Clause |
+| `golang.org/x/net` | BSD-3-Clause |
+| `golang.org/x/sys` | BSD-3-Clause |
+| `golang.org/x/time` | BSD-3-Clause |
+| The Go standard library and runtime | BSD-3-Clause |
+
 ## Browser libraries
 
 The frontend's production dependencies and everything they pull in, from

@@ -88,6 +88,13 @@ internal interface ChannelHandler {
 
     fun revoke(revoke: Message.Revoke) {}
 
+    /** An `rtc.offer`, [id] its envelope's: what the answer, or a refusal, replies to. */
+    fun rtcOffer(id: String, offer: Message.RtcOffer) {}
+
+    fun rtcIce(ice: Message.RtcIce) {}
+
+    fun rtcClose(close: Message.RtcClose) {}
+
     object None : ChannelHandler
 }
 
@@ -361,6 +368,9 @@ internal class ChannelConnection(
                     }
                     is Message.Jwks -> handler.jwks(body)
                     is Message.Revoke -> handler.revoke(body)
+                    is Message.RtcOffer -> handler.rtcOffer(inbound.envelope.id, body)
+                    is Message.RtcIce -> handler.rtcIce(body)
+                    is Message.RtcClose -> handler.rtcClose(body)
                     else -> ignore(inbound.envelope)
                 }
             }

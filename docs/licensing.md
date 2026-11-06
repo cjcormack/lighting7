@@ -16,17 +16,35 @@ Everything else the desk ships is under its own licence, listed in
   module `licences/jvm.json` does not list, or lists but no classpath has any more.
 - **`npm run licences`** in `frontend/`, part of `npm run check`, `check:quick` and CI's Frontend job.
   It runs the script's tests (`scripts/licences.test.mjs`), then the check without the module list.
+- **CI's Link job** builds the sidecar and hands the script `go version -m` over the binary
+  (`--go-binary-modules`), §"Go modules".
 
 Both fail on:
 
-- a licence `licences/allowed.json` does not allow, in `licences/jvm.json`, `licences/bundled.json`
-  or a production package of `frontend/package-lock.json`;
+- a licence `licences/allowed.json` does not allow, in `licences/jvm.json`, `licences/go.json`,
+  `licences/bundled.json` or a production package of `frontend/package-lock.json`;
 - an `allowed.json` entry in the GPL family (GPL, LGPL, AGPL), which is never allowed;
 - `LICENSE` existing while any entry is marked `pendingRemoval`;
 - `THIRD-PARTY-NOTICES.md` differing from what the data generates.
 
 A licence is an SPDX expression. `A OR B` passes when either side is allowed, `A AND B` when both
 are, and `A WITH exception` is judged as `A`.
+
+## Go modules
+
+The sidecar, `lighting7-link` (`link/`, `docs/cloud-engineering.md` §"The sidecar"), is a Go binary, so
+its dependencies are Go modules, listed in `licences/go.json` as `"<module path>": "<SPDX id>"`. The
+gate reads the modules **linked into the built binary**, the `dep` lines of `go version -m`, not
+`go.sum`, which also lists test-only modules and ones the build never links. With that list it fails on
+a linked module `go.json` does not name and on an entry the binary no longer links; without it (Gradle's
+`licenceCheck`, `npm run licences`) the entries are checked as written. `go.json`'s `toolchain` entry is
+the Go standard library and runtime, BSD-3-Clause, which every binary carries and `go version -m` does
+not list.
+
+To add one: `go get` it in `link/`, build (`CGO_ENABLED=0 go build -o lighting7-link ./cmd/lighting7-link`),
+read its licence from the `LICENSE` file in its module (`go env GOMODCACHE`), add the entry, then run
+`go version -m lighting7-link > modules.txt && node ../scripts/licences.mjs --check
+--go-binary-modules modules.txt` and `node scripts/licences.mjs --write`.
 
 ## What is allowed, and why
 
@@ -100,8 +118,8 @@ allowlist passes, and it keeps `LICENSE` out of the tree while it stands.
   the runtime and ship beside it, so it does not reach the desk's code. The notices name it.
 - **The ngrok agent** is downloaded by the desk when Remote access is first turned on, never bundled
   (`docs/mcp-engineering.md` §"Remote access").
-- **Build and test tooling** (Gradle plugins, `testImplementation`, the frontend's devDependencies)
-  does not ship. The one exception is the Sentry Vite plugin (MIT): in a release build, with
+- **Build and test tooling** (Gradle plugins, `testImplementation`, the frontend's devDependencies,
+  the sidecar's test-only Go modules) does not ship. The one exception is the Sentry Vite plugin (MIT): in a release build, with
   `SENTRY_AUTH_TOKEN` set, it injects a debug-id snippet into each chunk. A package whose code or CSS
   the bundle carries belongs in `dependencies`, which is why `tailwindcss-animate` is there.
 - **Licence texts.** The notices name each licence by SPDX id rather than reproduce its text or each

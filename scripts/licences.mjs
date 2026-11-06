@@ -3,13 +3,19 @@
 // from Gradle, the desk's and the launcher's runtime modules; fails on a licence outside
 // licences/allowed.json and on THIRD-PARTY-NOTICES.md drifting from the data.
 //
-//   node scripts/licences.mjs --check [--jvm-modules <file>]   validate; exit 1 on any problem
-//   node scripts/licences.mjs --write                          regenerate THIRD-PARTY-NOTICES.md
+//   node scripts/licences.mjs --check [--jvm-modules <file>] [--go-binary-modules <file>]
+//                                        validate; exit 1 on any problem
+//   node scripts/licences.mjs --write    regenerate THIRD-PARTY-NOTICES.md
 //
 // `--jvm-modules` is a file of `group:name` lines, one per runtime module (Gradle's
 // `licenceCheck` writes it). With it the gate also fails on a module licences/jvm.json does not
 // list, and on an entry no runtime classpath has any more. Without it (`npm run licences`) the
 // JVM entries are checked as written.
+//
+// `--go-binary-modules` is `go version -m` run over a built lighting7-link, which names the modules
+// linked into it (CI's Link job writes it). With it the gate fails on a linked module
+// licences/go.json does not list, and on an entry the binary does not link. Without it the Go
+// entries are checked as written.
 
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -21,6 +27,19 @@ const readJson = (p) => JSON.parse(readFileSync(at(p), 'utf8'))
 
 const NOTICES = 'THIRD-PARTY-NOTICES.md'
 const GPL_FAMILY = /^(A|L)?GPL-/
+
+/**
+ * The modules `go version -m` says a binary links: each `dep` line's module path, its `=>`
+ * replacement keeping the path it replaces.
+ */
+export function goModulesOf(versionOutput) {
+  const modules = new Set()
+  for (const line of versionOutput.split('\n')) {
+    const fields = line.trim().split(/\s+/)
+    if (fields[0] === 'dep' && fields[1]) modules.add(fields[1])
+  }
+  return modules
+}
 
 /** Tokenises and evaluates an SPDX licence expression: WITH binds tightest, then AND, then OR. */
 export function licenceAllowed(expression, allowed) {
@@ -75,6 +94,10 @@ function load() {
   const jvm = Object.entries(readJson('licences/jvm.json').modules).map(([module, v]) =>
     typeof v === 'string' ? { module, licence: v } : { module, ...v },
   )
+  const goFile = readJson('licences/go.json')
+  const go = Object.entries(goFile.modules).map(([module, v]) =>
+    typeof v === 'string' ? { module, licence: v } : { module, ...v },
+  )
   const npmData = readJson('licences/npm.json')
   const bundled = readJson('licences/bundled.json').bundled
   const lock = readJson('frontend/package-lock.json')
@@ -92,11 +115,11 @@ function load() {
       npm.set(name, { name, licence, override })
     }
   }
-  return { allowedFile, allowed, jvm, npmData, bundled, npm }
+  return { allowedFile, allowed, jvm, go, goToolchain: goFile.toolchain, npmData, bundled, npm }
 }
 
-function problems(data, jvmModulesFile) {
-  const { allowedFile, allowed, jvm, npmData, bundled, npm } = data
+function problems(data, jvmModulesFile, goBinaryModulesFile) {
+  const { allowedFile, allowed, jvm, go, goToolchain, npmData, bundled, npm } = data
   const out = []
   const check = (what, licence, pendingRemoval) => {
     if (!licence) return out.push(`${what}: no licence recorded`)
@@ -119,6 +142,8 @@ function problems(data, jvmModulesFile) {
     check(e.module, e.licence, e.pendingRemoval)
     if (e.pendingRemoval) pending.push(`${e.module} (${e.pendingRemoval})`)
   }
+  for (const e of go) check(`go ${e.module}`, e.licence, e.pendingRemoval)
+  check(`go toolchain`, goToolchain?.licence)
   for (const p of npm.values()) {
     if (p.conflict) out.push(`npm ${p.name}: two copies with different licences, ${p.conflict}`)
     check(`npm ${p.name}`, p.licence)
@@ -153,13 +178,25 @@ function problems(data, jvmModulesFile) {
     }
   }
 
+  if (goBinaryModulesFile) {
+    const linked = goModulesOf(readFileSync(goBinaryModulesFile, 'utf8'))
+    if (linked.size === 0) out.push(`${goBinaryModulesFile}: names no module; is it \`go version -m\` over lighting7-link?`)
+    const listed = new Set(go.map((e) => e.module))
+    for (const m of linked) {
+      if (!listed.has(m)) out.push(`go ${m}: linked into lighting7-link but not in licences/go.json; add it with the licence its LICENSE file names`)
+    }
+    for (const m of listed) {
+      if (!linked.has(m)) out.push(`licences/go.json: ${m} is not linked into lighting7-link any more`)
+    }
+  }
+
   const expected = notices(data)
   const actual = existsSync(at(NOTICES)) ? readFileSync(at(NOTICES), 'utf8').replace(/\r\n/g, '\n') : ''
   if (actual !== expected) out.push(`${NOTICES} is out of date: run \`node scripts/licences.mjs --write\``)
   return out
 }
 
-function notices({ allowedFile, jvm, npm, bundled }) {
+function notices({ allowedFile, jvm, go, goToolchain, npm, bundled }) {
   const cell = (s) => String(s).replace(/\|/g, '\\|')
   const byName = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
   const lines = [
@@ -182,6 +219,18 @@ function notices({ allowedFile, jvm, npm, bundled }) {
       .slice()
       .sort((a, b) => byName(a.module, b.module))
       .map((e) => `| \`${e.module}\` | ${cell(e.licence)}${e.pendingRemoval ? ' (being removed)' : ''} |`),
+    '',
+    '## Go modules',
+    '',
+    'In `lighting7-link`, the desk\'s WebRTC sidecar, built from `link/`.',
+    '',
+    '| Module | Licence |',
+    '|---|---|',
+    ...go
+      .slice()
+      .sort((a, b) => byName(a.module, b.module))
+      .map((e) => `| \`${e.module}\` | ${cell(e.licence)}${e.pendingRemoval ? ' (being removed)' : ''} |`),
+    `| ${cell(goToolchain.name)} | ${cell(goToolchain.licence)} |`,
     '',
     '## Browser libraries',
     '',
@@ -224,8 +273,10 @@ function main(argv) {
   const mode = argv.includes('--write') ? 'write' : argv.includes('--check') ? 'check' : null
   const modulesAt = argv.indexOf('--jvm-modules')
   const jvmModulesFile = modulesAt >= 0 ? argv[modulesAt + 1] : null
-  if (!mode || (modulesAt >= 0 && !jvmModulesFile)) {
-    console.error('usage: licences.mjs --check [--jvm-modules <file>] | --write')
+  const goAt = argv.indexOf('--go-binary-modules')
+  const goBinaryModulesFile = goAt >= 0 ? argv[goAt + 1] : null
+  if (!mode || (modulesAt >= 0 && !jvmModulesFile) || (goAt >= 0 && !goBinaryModulesFile)) {
+    console.error('usage: licences.mjs --check [--jvm-modules <file>] [--go-binary-modules <file>] | --write')
     return 2
   }
   const data = load()
@@ -234,12 +285,14 @@ function main(argv) {
     console.log(`Wrote ${NOTICES}`)
     return 0
   }
-  const found = problems(data, jvmModulesFile)
+  const found = problems(data, jvmModulesFile, goBinaryModulesFile)
   if (found.length) {
     console.error(`Licence gate failed (docs/licensing.md):\n${found.map((p) => `  - ${p}`).join('\n')}`)
     return 1
   }
-  console.log(`Licence gate passed: ${data.jvm.length} Java modules, ${data.npm.size} npm packages, ${data.bundled.length} bundled components.`)
+  console.log(
+    `Licence gate passed: ${data.jvm.length} Java modules, ${data.go.length} Go modules, ${data.npm.size} npm packages, ${data.bundled.length} bundled components.`,
+  )
   return 0
 }
 

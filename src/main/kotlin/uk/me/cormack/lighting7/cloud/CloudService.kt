@@ -24,6 +24,9 @@ import uk.me.cormack.lighting7.auth.AuthService
 import uk.me.cormack.lighting7.cloud.protocol.Capability
 import uk.me.cormack.lighting7.cloud.protocol.MAX_FRAME_BYTES
 import uk.me.cormack.lighting7.cloud.protocol.Message
+import uk.me.cormack.lighting7.link.LinkIn
+import uk.me.cormack.lighting7.link.LinkSidecar
+import uk.me.cormack.lighting7.update.BuildInfo
 import uk.me.cormack.lighting7.mcp.originOf
 import uk.me.cormack.lighting7.models.CloudConnectionState
 import uk.me.cormack.lighting7.models.DaoCloudConnections
@@ -131,17 +134,41 @@ class CloudService(
     @Volatile var remoteOrigin: String? = null
         private set
 
-    /** Whether a sidecar runs; session 3's broker sets it. Without one, `remote.no-sidecar` is announced. */
-    @Volatile var sidecarRunning: Boolean = false
-        set(value) {
-            field = value
-            liveConnection?.refreshCapabilities()
-        }
+    /**
+     * The command that launches the sidecar for a target and a build: `cloud.link.binary`'s, or none
+     * (session 3's development launch; session 5 bundles one). Tests replace it.
+     */
+    @Volatile internal var linkCommand: ((target: String, build: String) -> List<String>)? =
+        config.linkBinary?.let { binary -> { target, build -> listOf(binary, "-target", target, "-build", build) } }
+
+    /** The public listener's address, once it has bound: the sidecar's target. Without it no sidecar runs (D7). */
+    @Volatile private var linkTarget: String? = null
+
+    /** The sidecar while the channel runs; guarded by [publishLock]. */
+    @Volatile internal var link: LinkSidecar? = null
+        private set
+
+    /** Whether a sidecar serves. Without one, `remote.no-sidecar` is announced. */
+    val sidecarRunning: Boolean get() = link?.running == true
 
     @Volatile private var liveConnection: ChannelConnection? = null
 
     /** The remote sessions the broker opened, and the bearer check on the public listener (D4, D5). */
     val remoteSessions = RemoteSessions(database, authService, trust = { trust }, keys = { jwks.keys }, clock = clock)
+
+    private val sidecarPort = object : SidecarPort {
+        override val running: Boolean get() = sidecarRunning
+
+        override fun send(message: LinkIn): Boolean = link?.send(message) ?: false
+    }
+
+    private val broker = RemoteBroker(
+        sessions = remoteSessions,
+        remoteAccess = { switches.remoteAccess },
+        sidecar = { sidecarPort },
+        toCloud = { message, replyTo -> liveConnection?.send(message, replyTo) ?: false },
+        clock = clock,
+    )
 
     private val channelHandler = object : ChannelHandler {
         override fun capabilities(): List<String> = this@CloudService.capabilities()
@@ -163,6 +190,12 @@ class CloudService(
         override fun jwks(jwks: Message.Jwks) = this@CloudService.jwks.update(jwks)
 
         override fun revoke(revoke: Message.Revoke) = remoteSessions.revoke(revoke)
+
+        override fun rtcOffer(id: String, offer: Message.RtcOffer) = broker.offer(id, offer)
+
+        override fun rtcIce(ice: Message.RtcIce) = broker.cloudIce(ice)
+
+        override fun rtcClose(close: Message.RtcClose) = broker.cloudClose(close)
     }
 
     private val adoption = CloudAdoptionService(
@@ -226,6 +259,7 @@ class CloudService(
             val row = adoption.row()
             reconcileChannel(row)
             reconcileRemote(row)
+            reconcileLink()
             snapshot(row)
         }
             .onSuccess { _state.value = it }
@@ -318,12 +352,58 @@ class CloudService(
         liveConnection?.refreshCapabilities()
     }
 
-    /** What the desk announces (D6): the state entries for each door's switch and the sidecar. */
+    /** What the desk announces (D6): that it takes remote sessions, and the state entries for each door's switch and the sidecar. */
     fun capabilities(): List<String> = buildList {
+        add(Capability.REMOTE_V1)
         val now = switches
         if (!now.remoteAccess) add(Capability.REMOTE_OFF)
         if (!now.mcpAccess) add(Capability.MCP_OFF)
         if (!sidecarRunning) add(Capability.REMOTE_NO_SIDECAR)
+    }
+
+    /**
+     * The public listener bound at [host]:[port] (D7): the sidecar's target, so one may run. Called once,
+     * by `startPublicListener`; a listener that is off or failed to bind never calls it.
+     */
+    fun publicListenerBound(host: String, port: Int) {
+        val loopback = when (host) {
+            "0.0.0.0", "", "::", "[::]" -> "127.0.0.1"
+            else -> if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
+        }
+        linkTarget = "http://$loopback:$port"
+        refresh()
+    }
+
+    /**
+     * Run the sidecar exactly while the channel runs, the public listener has bound and a command is
+     * configured. Must hold [publishLock].
+     */
+    private fun reconcileLink() {
+        val command = linkCommand
+        val target = linkTarget
+        val wanted = channelJob?.isActive == true && command != null && target != null
+        val current = link
+        if (wanted && current == null) {
+            val build = BuildInfo.current.let { info -> info.version + (info.shortSha?.let { "+$it" } ?: "") }
+            link = LinkSidecar(
+                command = command(target, build),
+                scope = scope,
+                newSecret = remoteSessions::newLinkSecret,
+                onMessage = broker::fromSidecar,
+                onRunning = ::sidecarChanged,
+            ).also { it.start() }
+        } else if (!wanted && current != null) {
+            link = null
+            current.stop()
+        }
+    }
+
+    private fun sidecarChanged(running: Boolean) {
+        if (!running) {
+            remoteSessions.clearLinkSecret()
+            broker.sidecarStopped()
+        }
+        liveConnection?.refreshCapabilities()
     }
 
     /**
@@ -414,7 +494,9 @@ class CloudService(
     }
 
     fun close() {
+        // Sessions first, so a clean stop records them as DESK_STOPPED rather than as the sidecar's going.
         remoteSessions.close()
+        synchronized(publishLock) { link?.also { link = null } }?.stop()
         scope.cancel()
         if (apiDelegate.isInitialized()) runCatching { apiDelegate.value.close() }
         if (wsClientDelegate.isInitialized()) runCatching { wsClientDelegate.value.close() }
