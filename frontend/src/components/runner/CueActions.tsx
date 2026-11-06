@@ -48,6 +48,7 @@ import { useInclude } from '@/components/programmer/useInclude'
 import type { CueToDelete } from '@/components/cues/CueDeleteDialog'
 import { useCueActionDialogs } from './cueActionDialogs'
 import { TIMELINE_LAST_FOLD_CLASS } from './timelineFolds'
+import { isRemoteMode } from '@/lib/remoteMode'
 
 /** One row the actions act on: a cue, and the entry it was opened from (null for a loose cue). */
 export interface CueActionRow {
@@ -461,14 +462,17 @@ export function CueActions({
           ))}
         </DropdownMenuSubContent>
       </DropdownMenuSub>
-      <DropdownMenuItem
-        disabled={reasons.link != null}
-        title={reasons.link ?? undefined}
-        onSelect={guarded(copyLink)}
-      >
-        <Link className="size-3.5" />
-        Copy link
-      </DropdownMenuItem>
+      {/* A link names this origin, which only the cloud's shell can open in remote mode. */}
+      {!isRemoteMode() && (
+        <DropdownMenuItem
+          disabled={reasons.link != null}
+          title={reasons.link ?? undefined}
+          onSelect={guarded(copyLink)}
+        >
+          <Link className="size-3.5" />
+          Copy link
+        </DropdownMenuItem>
+      )}
     </>
   )
 

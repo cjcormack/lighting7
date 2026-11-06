@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-PALETTE-REFERENCES-S4`](#fu-manual-palette-references-s4) | a Look recorded from heads that follow a palette still follows it on the rig — retuned live with no GO, a tap in the focused Look writing references and a second taking them off — and *Copy the values* on the Look sheet and in the cue editor turns them to literals with nothing moving | Palette references S4, 2026-11-05 |
+| [`FU-MANUAL-CLOUD-P1A`](#fu-manual-cloud-p1a) | Lighting7 Cloud's P1a gate: the desk's SPA opened from the portal is usable through the shell on desktop Chrome, Firefox and Safari and iOS Safari, Direct and Relayed (TURN on 443 too), within NFR-PERF-1's times, a 100 MB upload, two token refreshes, *End* closing it within 5 s, ten minutes of fades relayed and a cached second visit under 2 s | Cloud P1 S4, 2026-11-06 |
 | [`FU-MANUAL-CLOUD-P0`](#fu-manual-cloud-p0) | Lighting7 Cloud's P0 exit: each desk adopted from its Cloud tab shows Online in the portal, a running fade and FX see nothing of the cloud's app stopping and the desk is back within 30 s of its return, unadopt from either side lands on the other, and `cloud.enabled = false` connects nowhere — **adoption, Online and a portal removal seen 2026-11-05**; the outage, a desk unadopt and `enabled = false` still unseen | Cloud P0 S6, 2026-11-05 |
 | [`FU-MANUAL-ARTNET-TRANSPORT`](#fu-manual-artnet-transport) | a real Art-Net node lights from the desk's own ArtDMX transport as it did from artnet4j: broadcast and unicast universes, a node's status page showing the frames arriving, and a second program on the desk machine still hearing them | Cloud P0 S2, 2026-11-02 |
 | [`FU-MANUAL-MOVE-IN-DARK`](#fu-manual-move-in-dark) | movers moved in the dark on the rig: a head moves a second after it goes dark and is in place before the GO, a GO too soon and a GO TO land dark heads at once, a busk press lights a moved head and it returns, a cue *Off* and a head kept live move lit, an older show's flagged cues import on *Early*, and the stack sheet, the Cue tab, the *Dark* columns and the Stage view's rings agree with where the heads come up | Move in dark S1–S5, 2026-11-02 |
@@ -174,6 +175,38 @@ bytes already on stage.
    *DSR Focus* again and Spot 3 stays put while Spot 2 moves. In a cue holding a reference, *Copy the
    values…* in the Values tab with no selection copies every one, and the editor's Undo puts them
    back.
+
+---
+
+## `FU-MANUAL-CLOUD-P1A`
+
+**What it proves**: the gate of the PRD's P1 (cloud-p1 plan §6, RISK-1): the desk's own SPA, served
+through a service worker and a WebSocket shim over WebRTC, is usable from the cloud's portal. Sessions 5
+to 9 of the desk's plan wait for it, and so does OQ-10.
+
+**Why it is here**: the desk's tests run against `FakeCloud` and fake ports (R5); only the owner can
+open a real desk through the deployed shell on real browsers and networks.
+
+**Test**, once the desk plan's sessions 1 to 4 and the cloud plan's sessions 1 and 2 are merged and
+deployed, with a desk running a hand-built sidecar (`cloud.link.binary`) and remote sessions turned on
+through `PUT /install/cloud/remote` on the desk's own listener:
+
+1. On desktop Chrome, Firefox and Safari and on iOS Safari, *Open* the desk from the portal: the SPA
+   loads and is usable through the shell, its socket and REST both (busk a look, the Stage view, a cue
+   GO), and the bar says *Direct*.
+2. Twenty opens on each browser, timed to an interactive desk with cached assets, with the p50 and p95
+   recorded against NFR-PERF-1 (under 3 s and 8 s); the round-trip time the bar shows on a direct path,
+   against a ping between the same two machines (under 30 ms more).
+3. A 100 MB prompt-book PDF uploads and opens.
+4. With the shell's *relay only*, then on a network that blocks UDP, the bar says *Relayed*, the second
+   time over TURN on 443, on every target browser.
+5. The session outlives two token refreshes (25 minutes), and *End* in the portal closes it within 5 s;
+   a reload after *End* does not get back in.
+6. Ten minutes of fades and FX relayed, with the relay's bytes recorded.
+7. A second visit loads in under 2 s from the asset cache (FR-RA-7).
+
+When it passes, record the date, what was measured and OQ-10's answer (and OQ-11's, if the spike
+settles it) here and in the plan's §6.
 
 ---
 

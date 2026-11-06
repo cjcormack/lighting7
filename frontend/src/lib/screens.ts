@@ -5,9 +5,14 @@
  * the same three things and the sheet imports the project switcher, which imports the registry.
  */
 
-/** Chrome only: `window.getScreenDetails`, secure context, `window-management` permission. */
+import { isRemoteMode } from './remoteMode'
+
+/**
+ * Chrome only: `window.getScreenDetails`, secure context, `window-management` permission. Never in
+ * remote mode, where a new window would open outside the cloud's shell.
+ */
 export function canChooseDisplay(): boolean {
-  return typeof window !== 'undefined' && 'getScreenDetails' in window
+  return typeof window !== 'undefined' && 'getScreenDetails' in window && !isRemoteMode()
 }
 
 /**

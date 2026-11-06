@@ -23,6 +23,10 @@ export interface AuthStatus {
   // Explicitly `null` (not absent) when signed out — the backend serialises the
   // field either way, so consumers must test the value, not `'user' in status`.
   user?: AuthUser | null
+  /** A remote session whose cloud account is linked to no user here (cloud-p1 plan D4). */
+  unlinked?: boolean
+  /** That account's email, for an `unlinked` session. */
+  email?: string | null
 }
 
 /** How a session was created. `PASSWORD` for rows predating the column. */

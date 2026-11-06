@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuthStatusQuery, useLogoutMutation } from "@/store/auth"
+import { endRemoteSession, isRemoteMode } from "@/lib/remoteMode"
 import { RoleBadge } from "@/components/users/RoleBadge"
 import { ProfileSheet } from "./ProfileSheet"
 import { ThemeMenuItem } from "@/ThemeToggle"
@@ -175,7 +176,7 @@ export function UserMenu() {
             </DropdownMenuItem>
           )}
           {user && (
-            <DropdownMenuItem onSelect={() => void logout()}>
+            <DropdownMenuItem onSelect={() => (isRemoteMode() ? endRemoteSession() : void logout())}>
               <LogOut className="size-4" />
               Log out
             </DropdownMenuItem>

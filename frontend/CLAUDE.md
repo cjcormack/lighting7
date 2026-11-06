@@ -117,6 +117,7 @@ src/
 │   └── legacyRedirects.tsx  # Redirects for paths that no longer name a view
 ├── App.tsx           # Router configuration
 ├── Layout.tsx        # Main layout with navigation drawer
+├── boot.ts           # The page's only script: decides remote mode, then loads main.tsx
 └── main.tsx          # Application entry point
 ```
 
@@ -7310,6 +7311,13 @@ alone. Backend contract in `../docs/cloud-engineering.md` §"The Cloud tab".
   restart, and has no route to clear them.
 - **The adoption link is `data-sentry-block`**, like the QR: its `href` carries the user code, and a
   replay masks text, not attributes.
+
+**Remote mode** (cloud-p1 plan D9): framed by the cloud's shell, with the desk's
+`lighting7-remote-parent` meta in `index.html`, the SPA's socket is `api/remoteSocket.ts` over the
+shell's `MessagePort`. `src/boot.ts` is the page's only script and decides it before `./main` loads,
+because `lightingApi` builds its connection at module evaluation; read `isRemoteMode()`
+(`lib/remoteMode.ts`) wherever a control is the LAN's. Backend contract in
+`../docs/cloud-engineering.md` §"Remote mode".
 
 ### Sentry
 

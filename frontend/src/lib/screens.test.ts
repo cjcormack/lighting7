@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setRemoteLinkForTests, type RemoteLink } from './remoteMode'
 import { canChooseDisplay, isLoopbackHost, listDisplays, newWindowUrl, nextScreenName, openWindowOn, windowSetupUrl } from './screens'
 
 /**
@@ -113,6 +114,10 @@ describe('the display list', () => {
     const other = { availLeft: 1440, availTop: 0, availWidth: 1920, availHeight: 1080, width: 1920, height: 1080 }
     ;(window as { getScreenDetails?: unknown }).getScreenDetails = async () => ({ screens: [current, other], currentScreen: current })
     expect(canChooseDisplay()).toBe(true)
+    // In remote mode a new window would open outside the cloud's shell.
+    setRemoteLinkForTests({} as RemoteLink)
+    expect(canChooseDisplay()).toBe(false)
+    setRemoteLinkForTests(null)
     expect(await listDisplays()).toEqual([
       { label: 'Display 1 · 1440×900', left: 0, top: 0, width: 1440, height: 900, isCurrent: true },
       { label: 'Display 2 · 1920×1080', left: 1440, top: 0, width: 1920, height: 1080, isCurrent: false },

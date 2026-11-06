@@ -11,6 +11,7 @@ import type { AuthStatus } from "@/store/auth"
 vi.mock("@/api/lightingApi", async () => (await import("@/test/backendMock")).lightingApiMock())
 
 import { AuthGate } from "./AuthGate"
+import { setRemoteLinkForTests, type RemoteLink } from "./lib/remoteMode"
 import { restApi } from "./store/restApi"
 import { store } from "./store"
 
@@ -104,6 +105,43 @@ describe("AuthGate", () => {
     await screen.findByText(/can't reach the desk/i)
     expect(screen.queryByRole("button", { name: /sign in/i })).not.toBeInTheDocument()
     expect(screen.queryByText(CHILD_TEXT)).not.toBeInTheDocument()
+  })
+
+  describe("in remote mode", () => {
+    const posted: unknown[] = []
+    beforeEach(() => {
+      posted.length = 0
+      setRemoteLinkForTests({ post: (m: unknown) => posted.push(m) > 0 } as unknown as RemoteLink)
+    })
+    afterEach(() => setRemoteLinkForTests(null))
+
+    it("renders the app for a linked session", async () => {
+      fetchMock = installRecordingFetch({ "auth/status": SIGNED_IN })
+      renderGate()
+      await screen.findByText(CHILD_TEXT)
+      expect(posted).toEqual([])
+    })
+
+    it("says an unlinked account is not linked, and tells the shell, with no sign-in form", async () => {
+      fetchMock = installRecordingFetch({
+        "auth/status": { setupRequired: false, authenticated: false, unlinked: true, email: "sam@example.com" },
+      })
+      renderGate()
+      await screen.findByText("Not linked to this desk")
+      expect(screen.getByText(/sam@example\.com/)).toBeInTheDocument()
+      expect(screen.queryByLabelText(/username/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(CHILD_TEXT)).not.toBeInTheDocument()
+      expect(posted.length).toBeGreaterThan(0)
+      expect(posted.every((m) => JSON.stringify(m) === JSON.stringify({ type: "auth.unlinked" }))).toBe(true)
+    })
+
+    it("shows the session as ended rather than a login form once it is signed out", async () => {
+      fetchMock = installRecordingFetch({ "auth/status": SIGNED_OUT })
+      renderGate()
+      await screen.findByText("Remote session ended")
+      expect(screen.queryByRole("button", { name: /sign in/i })).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/username/i)).not.toBeInTheDocument()
+    })
   })
 
   it("renders children immediately when bypassed, without asking who is signed in", async () => {

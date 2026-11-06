@@ -106,14 +106,15 @@ fun Application.configureRouting(state: State) {
         // Frontend bundle: prefer a configured on-disk dist/ for dev, otherwise serve the
         // copy baked into the JAR by Gradle's copyFrontend task.
         val configuredStaticPath = state.config.optionalString("frontend.staticPath")
+        val spaPage = spaPagePlugin(state)
         if (configuredStaticPath != null) {
             staticFiles("/", File(configuredStaticPath)) {
                 default("index.html")
-            }
+            }.install(spaPage)
         } else {
             staticResources("/", "static") {
                 default("index.html")
-            }
+            }.install(spaPage)
         }
     }
 }

@@ -71,29 +71,54 @@ export function parseWsFrame(ev: Event): unknown {
   }
 }
 
-export function createInternalApiConnection(baseUrl: string, wsUrl: string): InternalApiConnection {
+/**
+ * The subscribers of one connection: each event parsed once and handed to every bridge. Shared by
+ * the desk's WebSocket here and remote mode's `RemoteSocket`.
+ */
+export function createConnectionEvents(): {
+  notify(ev: Event): void
+  subscribe(fn: InternalEventHandler): Subscription
+} {
   let nextEventSubscriptionId = 1
   const eventSubscriptions = new Map<number, InternalEventHandler>()
+  return {
+    notify(ev: Event) {
+      const evType = ev.type as InternalEventType
+      if (!evType) return
+      const message = evType === InternalEventType.message ? parseWsFrame(ev) : null
+      eventSubscriptions.forEach((fn) => {
+        // One bridge that throws must not starve the ones registered after it of this
+        // frame — and the two most latency-sensitive (programmer, speed masters) are
+        // registered last. Report it; never swallow it silently.
+        try {
+          fn(evType, ev, message)
+        } catch (err) {
+          console.error(`WebSocket: a ${evType} subscriber threw`, err)
+        }
+      })
+    },
+    subscribe(fn: InternalEventHandler): Subscription {
+      const thisId = nextEventSubscriptionId
+      nextEventSubscriptionId++
+
+      eventSubscriptions.set(thisId, fn)
+
+      return {
+        unsubscribe: () => {
+          eventSubscriptions.delete(thisId)
+        },
+      }
+    },
+  }
+}
+
+export function createInternalApiConnection(baseUrl: string, wsUrl: string): InternalApiConnection {
+  const events = createConnectionEvents()
+  const notifyEvent = events.notify
   let reconnectDelay = 1000
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   // Why the next open is a reconnect; null until this page's first socket has opened.
   let reopenCause: ReconnectCause | null = null
-
-  const notifyEvent = (ev: Event) => {
-    const evType = ev.type as InternalEventType
-    if (!evType) return
-    const message = evType === InternalEventType.message ? parseWsFrame(ev) : null
-    eventSubscriptions.forEach((fn) => {
-      // One bridge that throws must not starve the ones registered after it of this
-      // frame — and the two most latency-sensitive (programmer, speed masters) are
-      // registered last. Report it; never swallow it silently.
-      try {
-        fn(evType, ev, message)
-      } catch (err) {
-        console.error(`WebSocket: a ${evType} subscriber threw`, err)
-      }
-    })
-  }
 
   function scheduleReconnect() {
     if (reconnectTimer) return
@@ -178,17 +203,6 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
       }
       ws = connect()
     },
-    subscribe(fn: InternalEventHandler): Subscription {
-      const thisId = nextEventSubscriptionId
-      nextEventSubscriptionId++
-
-      eventSubscriptions.set(thisId, fn)
-
-      return {
-        unsubscribe: () => {
-          eventSubscriptions.delete(thisId)
-        },
-      }
-    }
+    subscribe: events.subscribe,
   }
 }

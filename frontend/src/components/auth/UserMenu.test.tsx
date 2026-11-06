@@ -8,10 +8,11 @@ import type { DeskWindow } from '@/api/windowsApi'
 // open the menu with the keyboard, which Radix handles without a pointer. The factory is hoisted
 // above everything else in this file.
 let statusResult: { data?: { setupRequired: boolean; authenticated: boolean; user?: unknown } } = {}
+const logout = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 
 vi.mock('@/store/auth', () => ({
   useAuthStatusQuery: () => statusResult,
-  useLogoutMutation: () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }],
+  useLogoutMutation: () => [logout, { isLoading: false }],
   // ProfileSheet is mounted alongside the trigger, so its hooks have to exist too.
   useChangePasswordMutation: () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }],
   useUpdateProfileMutation: () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }],
@@ -53,6 +54,7 @@ vi.mock('@/components/rigSafety/QuitDeskDialog', () => ({
 
 import { UserMenu } from './UserMenu'
 import { setReportProblem } from '@/lib/reportProblem'
+import { setRemoteLinkForTests, type RemoteLink } from '@/lib/remoteMode'
 
 // jsdom has no `matchMedia`. The menu renders `ThemeMenuItem` on both branches, whose
 // `getInitialTheme` falls back to the OS preference when nothing is stored — so without this the
@@ -136,6 +138,28 @@ describe('UserMenu', () => {
     openMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: /Quit desk/ }))
     expect(screen.getByTestId('quit-dialog')).toBeTruthy()
+  })
+
+  it('logs out on the desk, and in remote mode ends the session through the shell instead', () => {
+    signedInAs('Chris Cormack')
+    render(<UserMenu />)
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }))
+    expect(logout).toHaveBeenCalledTimes(1)
+    cleanup()
+    logout.mockClear()
+
+    const posted: unknown[] = []
+    setRemoteLinkForTests({ post: (m: unknown) => posted.push(m) > 0 } as unknown as RemoteLink)
+    try {
+      render(<UserMenu />)
+      openMenu()
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }))
+      expect(posted).toEqual([{ type: 'session.end' }])
+      expect(logout).not.toHaveBeenCalled()
+    } finally {
+      setRemoteLinkForTests(null)
+    }
   })
 
   describe('the avatar initials', () => {

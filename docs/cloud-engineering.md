@@ -371,6 +371,43 @@ framing" and §"ctl"):
   channel: even that reset answers the channel's first frame. A session that has not connected within
   60 s is closed.
 
+## Remote mode
+
+The desk's SPA framed by the cloud's shell, its socket a `MessagePort` the shell bridges to the sidecar
+(P1 D8, D9). LAN behaviour is unchanged: a page that is not framed, or whose `index.html` lacks the
+meta below, loads exactly as before and never waits.
+
+- **The page.** `routes/spaPage.kt`, a route-scoped plugin on the bundle's static route, adds `<meta
+  name="lighting7-remote-parent" content="<origin of cloud.baseUrl>">` to `index.html` on the public
+  listener alone, on `/` and on every app path the index answers, and nothing with no cloud configured
+  or `cloud.enabled = false`. On the desk's own listener every bundle file carries
+  `Content-Security-Policy: frame-ancestors 'self'`, so no other page can frame the LAN desk; the
+  public listener sends none, since the shell's service worker serves its pages.
+- **The decision.** `frontend/src/boot.ts` is the page's only script. `remoteBoot.ts` enters remote mode
+  only when the page is framed *and* carries the meta: it posts `hello {protocol: 1}` to that origin and
+  waits up to 10 s for the shell's `port` (from that origin and the parent only), then imports `./main`.
+  `lightingApi` builds its connection as its module is evaluated, so the mode is fixed before anything
+  reads it (`lib/remoteMode.ts`). A shell that never answers leaves the page saying so, with the app
+  unloaded.
+- **The socket.** `api/remoteSocket.ts` is an `InternalApiConnection` over the port, emitting real
+  `Event`s, `MessageEvent`s and `CloseEvent`s through the same subscriber hub as the WebSocket
+  (`createConnectionEvents`), so every bridge, `statusApi`, `wsGesture` and the 4401 path are unchanged.
+  It keeps `internalApi`'s backoff, its breadcrumbs and its `ws.reconnect` count, and leaves a 4401
+  closed. A port taken as gone — its `close` event where the browser fires one (Chromium), or an
+  `open` unanswered for 15 s — reads as a 1006 close, and the reconnect asks the shell for a fresh port
+  with another `hello`, closing the old one. REST is untouched: it is
+  relative, and the service worker answers it.
+- **The worker's port.** A service worker the browser restarted posts `port.request`; the SPA asks the
+  shell for a fresh port on its own and hands the `port` it gets to that worker, oldest request first,
+  asking again on the next port for a request the last one never answered, and closing a port nobody
+  asked for.
+- **What changes in remote mode.** No sign-in or setup screen: an unlinked session shows *Not linked to
+  this desk* and posts `auth.unlinked` (session 6 brings the prove-once form), and a signed-out one
+  *Remote session ended*. *Log out* posts `session.end` and the shell ends the session. What names this
+  origin or opens a window outside the shell is the LAN's and is not drawn: the Screens sheet's
+  new-window section, its per-row *Copy link* and its localhost note, ⌘K's *Open … on another display*
+  (`canChooseDisplay` is false) and a cue's *Copy link*.
+
 ## The state
 
 `CloudService.state` is a `StateFlow<CloudStateDto>` (D14), rebuilt from the row and memory on every

@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FullScreenSpinner } from "./components/FullScreenSpinner"
 import { LoginScreen } from "./components/auth/LoginScreen"
 import { SetupScreen } from "./components/auth/SetupScreen"
+import { RemoteSessionEndedScreen, RemoteUnlinkedScreen } from "./components/auth/RemoteAuthScreens"
+import { isRemoteMode } from "./lib/remoteMode"
 import { useAuthStatusQuery } from "./store/auth"
 import { markSignInShown } from "./lib/sentryMetrics"
 
@@ -63,6 +65,12 @@ export function AuthGate({
   }
 
   if (!data) return null
+
+  if (isRemoteMode()) {
+    if (data.unlinked) return <RemoteUnlinkedScreen email={data.email} />
+    if (data.setupRequired || !data.authenticated) return <RemoteSessionEndedScreen />
+    return <>{children}</>
+  }
 
   if (data.setupRequired) return <SetupScreen />
   if (!data.authenticated) return <LoginScreen />
