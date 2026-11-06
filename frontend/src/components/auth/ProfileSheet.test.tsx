@@ -46,6 +46,13 @@ vi.mock('@/store/auth', () => ({
   useDeviceLoginStatusQuery: () => ({}),
 }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+const unlinkOwn = vi.fn()
+let ownLink: { data?: unknown } = { data: { link: null } }
+vi.mock('@/store/cloudLinks', () => ({
+  CLOUD_LINK_VIA_LABELS: { ADOPTION: 'linked when this desk was adopted', INVITE: 'linked by invite', PROVED: 'linked by signing in once' },
+  useOwnCloudLinkQuery: () => ownLink,
+  useUnlinkOwnCloudAccountMutation: () => [() => ({ unwrap: () => unlinkOwn() }), { isLoading: false }],
+}))
 
 import { ProfileSheet } from './ProfileSheet'
 
@@ -73,6 +80,7 @@ afterEach(() => {
   vi.clearAllMocks()
   sessionsResult = { data: [] }
   appsResult = { data: [] }
+  ownLink = { data: { link: null } }
 })
 
 function renderSheet(open = true) {
@@ -102,6 +110,25 @@ const fillPassword = (current = 'old-one', next = 'a-new-password', confirm = ne
 }
 
 describe('ProfileSheet', () => {
+  describe('the cloud link', () => {
+    it('shows nothing for an account with no link', () => {
+      renderSheet()
+      expect(screen.queryByText('Lighting7 Cloud')).not.toBeInTheDocument()
+    })
+
+    it('shows the linked account and unlinks it after a confirm', async () => {
+      unlinkOwn.mockResolvedValue(undefined)
+      ownLink = { data: { link: { email: 'boss@example.com', linkedAt: new Date(0).toISOString(), linkedVia: 'INVITE' } } }
+      renderSheet()
+      expect(screen.getByText('boss@example.com')).toBeInTheDocument()
+      expect(screen.getByText(/linked by invite/)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
+      expect(unlinkOwn).not.toHaveBeenCalled()
+      fireEvent.click(await screen.findByRole('button', { name: 'Unlink' }))
+      await vi.waitFor(() => expect(unlinkOwn).toHaveBeenCalledTimes(1))
+    })
+  })
+
   describe('the display name', () => {
     it('saves on its own, trimmed, without touching the password', async () => {
       renderSheet()

@@ -338,6 +338,13 @@ class FakeCloud : Closeable {
         send(installId, Message.Revoke(Timestamps.format(at), sid, accountId, all))
     }
 
+    /** [accountId], signed in as [email], accepts [inviteId] in the portal; answers the message's id, which `link.ack` names. */
+    fun acceptInvite(installId: String, inviteId: String, accountId: String, email: String): String =
+        send(installId, Message.LinkAccepted(inviteId, accountId, email))
+
+    /** An owner or admin of the org declines [inviteId] in the portal. */
+    fun declineInvite(installId: String, inviteId: String): String = send(installId, Message.LinkRefused(inviteId))
+
     /** Ask [installId] for remote session [sid] as [accountId], as the shell's offer would; answers the offer's id. */
     fun offer(installId: String, sid: String, accountId: String = account.id, sdp: String = "v=0 offer for $sid"): String =
         send(installId, Message.RtcOffer(sid, accountId, "$accountId@example.com", "Someone", sdp, listOf(IceServer(listOf("stun:stun.example:3478")))))

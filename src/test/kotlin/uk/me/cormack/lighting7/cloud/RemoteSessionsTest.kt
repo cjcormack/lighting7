@@ -208,8 +208,8 @@ class RemoteSessionsTest : RouteIntegrationTest() {
         val refused = http.projects(first)
         assertRefused(refused, HttpStatusCode.Forbidden, ErrorCode.CLOUD_ACCOUNT_NOT_LINKED)
         assertTrue(refused.bodyAsText().contains("invite"), refused.bodyAsText())
-        // The prove-once route is session 6's: open to the gate, so not 403.
-        assertEquals(HttpStatusCode.NotFound, http.post("/api/rest/cloud/link/prove") { bearer(first) }.status)
+        // The prove-once route is open to it: a body-less request is the route's 400, not the gate's 403.
+        assertEquals(HttpStatusCode.BadRequest, http.post("/api/rest/cloud/link/prove") { bearer(first) }.status)
 
         val deadlineBefore = sessions.find(SID)!!.deadline
         val second = token(sub = "acct-unlinked", iat = now, ttlS = 300)

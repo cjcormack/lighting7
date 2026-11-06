@@ -12,7 +12,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useAuthStatusQuery } from "@/store/auth"
+import { useCloudStateQuery } from "@/store/cloud"
 import { useUsersQuery, type DeskUser } from "@/store/users"
+import { CloudAccountCell } from "./CloudAccountSection"
 import { CreateUserSheet } from "./CreateUserSheet"
 import { RoleBadge } from "./RoleBadge"
 import { UserDetailSheet } from "./UserDetailSheet"
@@ -41,6 +43,9 @@ export function UsersTab() {
     skip: !isAdmin,
     refetchOnFocus: true,
   })
+  // The column is drawn once the desk is adopted, or while any user is still linked.
+  const { data: cloud } = useCloudStateQuery(undefined, { skip: !isAdmin })
+  const showCloud = cloud?.adopted != null || (users ?? []).some((u) => u.cloudLink != null)
   const [createOpen, setCreateOpen] = useState(false)
   const [selected, setSelected] = useState<DeskUser | null>(null)
 
@@ -98,6 +103,7 @@ export function UsersTab() {
                 <TableHead>Name</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Role</TableHead>
+                {showCloud && <TableHead>Cloud account</TableHead>}
                 <TableHead>Last signed in</TableHead>
               </TableRow>
             </TableHeader>
@@ -121,6 +127,11 @@ export function UsersTab() {
                   <TableCell>
                     <RoleBadge role={user.role} />
                   </TableCell>
+                  {showCloud && (
+                    <TableCell>
+                      <CloudAccountCell user={user} />
+                    </TableCell>
+                  )}
                   <TableCell className="text-sm text-muted-foreground">
                     {user.lastLoginAt
                       ? new Date(user.lastLoginAt).toLocaleString()

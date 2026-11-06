@@ -167,6 +167,16 @@ class CloudService(
     /** The remote sessions the broker opened, and the bearer check on the public listener (D4, D5). */
     val remoteSessions = RemoteSessions(database, authService, trust = { trust }, keys = { jwks.keys }, clock = clock)
 
+    /** Links between cloud accounts and desk users, and the invites that make them (D12). */
+    val links = CloudLinks(
+        database = database,
+        authService = authService,
+        sessions = remoteSessions,
+        adopted = { trust != null },
+        send = { message, replyTo -> liveConnection?.send(message, replyTo) ?: false },
+        clock = clock,
+    )
+
     private val sidecarPort = object : SidecarPort {
         override val running: Boolean get() = sidecarRunning
 
@@ -188,6 +198,7 @@ class CloudService(
             liveConnection = connection
             // A switch moved between the hello's list and this: say so now.
             connection.refreshCapabilities()
+            links.online()
         }
 
         override fun offline(connection: ChannelConnection) {
@@ -207,6 +218,10 @@ class CloudService(
         override fun rtcIce(ice: Message.RtcIce) = broker.cloudIce(ice)
 
         override fun rtcClose(close: Message.RtcClose) = broker.cloudClose(close)
+
+        override fun linkAccepted(id: String, accepted: Message.LinkAccepted) = links.accepted(id, accepted)
+
+        override fun linkRefused(refused: Message.LinkRefused) = links.refused(refused)
     }
 
     private val adoption = CloudAdoptionService(
@@ -220,6 +235,7 @@ class CloudService(
         pollDelay = { pollDelay },
         changed = ::refresh,
         memoryChanged = ::publishMemory,
+        usersChanged = { users -> users.forEach { authService?.announceUserChanged(it) } },
     )
 
     // Never fails construction: a desk whose cloud state cannot be read still boots, and says so.
@@ -366,6 +382,7 @@ class CloudService(
                 if (previous != null) jwks.clear()
                 remoteSessions.endAll(RemoteSessionEnd.UNADOPTED)
                 remoteOrigin = null
+                links.forgetPending()
             }
             previous != null && previous.installId != next.installId -> remoteSessions.endAll(RemoteSessionEnd.UNADOPTED)
             !next.remoteAccess -> remoteSessions.endAll(RemoteSessionEnd.REMOTE_ACCESS_OFF)

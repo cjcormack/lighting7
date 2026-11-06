@@ -107,6 +107,16 @@ object CloudErrorCodes {
     /** A setting that limits what comes through the cloud, changed from the public listener (cloud-p1 plan D6). */
     const val SETTINGS_LOCAL_ONLY = "CLOUD_SETTINGS_LOCAL_ONLY"
 
+    // Links and invites (cloud-p1 plan D12).
+    const val OFFLINE = "CLOUD_OFFLINE"
+    const val EMAIL_INVALID = "CLOUD_EMAIL_INVALID"
+    const val NO_USER = "CLOUD_NO_USER"
+    const val LINK_EXISTS = "CLOUD_LINK_EXISTS"
+    const val INVITE_PENDING = "CLOUD_INVITE_PENDING"
+    const val NO_LINK = "CLOUD_NO_LINK"
+    const val NO_INVITE = "CLOUD_NO_INVITE"
+    const val NOT_UNLINKED = "CLOUD_NOT_UNLINKED"
+
     /** `lastError` codes: never a REST refusal. */
     const val POLL_FAILED = "CLOUD_POLL_FAILED"
     const val KEY_MISSING = "CLOUD_KEY_MISSING"

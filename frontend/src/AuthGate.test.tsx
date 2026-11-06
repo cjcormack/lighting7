@@ -122,14 +122,15 @@ describe("AuthGate", () => {
       expect(posted).toEqual([])
     })
 
-    it("says an unlinked account is not linked, and tells the shell, with no sign-in form", async () => {
+    it("says an unlinked account is not linked, tells the shell, and offers to link it", async () => {
       fetchMock = installRecordingFetch({
         "auth/status": { setupRequired: false, authenticated: false, unlinked: true, email: "sam@example.com" },
       })
       renderGate()
       await screen.findByText("Not linked to this desk")
       expect(screen.getByText(/sam@example\.com/)).toBeInTheDocument()
-      expect(screen.queryByLabelText(/username/i)).not.toBeInTheDocument()
+      expect(screen.getByLabelText("Desk username")).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Link and sign in" })).toBeInTheDocument()
       expect(screen.queryByText(CHILD_TEXT)).not.toBeInTheDocument()
       expect(posted.length).toBeGreaterThan(0)
       expect(posted.every((m) => JSON.stringify(m) === JSON.stringify({ type: "auth.unlinked" }))).toBe(true)

@@ -609,7 +609,7 @@ private fun AuthenticatedUser.toDto() = AuthUserDto(
  * predates. Not `routes/users.kt`'s `UserRecord.toDto()`: that is the admin shape (`uuid`,
  * `disabled`, `lastLoginAt`), and this route answers any role.
  */
-private fun UserRecord.toAuthDto() = AuthUserDto(
+internal fun UserRecord.toAuthDto() = AuthUserDto(
     uuid = uuid.toString(),
     username = username,
     displayName = displayName,

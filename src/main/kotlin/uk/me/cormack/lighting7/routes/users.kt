@@ -17,6 +17,12 @@ import uk.me.cormack.lighting7.auth.UserMutation
 import uk.me.cormack.lighting7.auth.UserRecord
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
 import uk.me.cormack.lighting7.auth.buildResetUrls
+import uk.me.cormack.lighting7.cloud.CloudErrorCodes
+import uk.me.cormack.lighting7.cloud.CloudException
+import uk.me.cormack.lighting7.cloud.CloudInviteDto
+import uk.me.cormack.lighting7.cloud.CloudLinkDto
+import uk.me.cormack.lighting7.cloud.UserCloudLink
+import uk.me.cormack.lighting7.models.CloudUnlinkReason
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.models.toIsoUtc
@@ -53,7 +59,8 @@ private const val USER_NOT_FOUND = "User not found"
  */
 internal fun Route.routeApiRestUsers(state: State) {
     get<UsersResource> {
-        call.respond(state.authService.listUsers().map { it.toDto() })
+        val links = state.cloud.links.forUsers()
+        call.respond(state.authService.listUsers().map { it.toDto(links[it.userId]) })
     }
 
     post<UsersResource> {
@@ -71,7 +78,7 @@ internal fun Route.routeApiRestUsers(state: State) {
         // A duplicate username surfaces as the unique-index violation that
         // `plugins/ErrorHandling.kt` maps to 409 — the same race guard setup relies on.
         val created = state.authService.createUser(username, displayName, request.role, request.password)
-        call.respond(HttpStatusCode.Created, created.toDto())
+        call.respond(HttpStatusCode.Created, created.toDto(null))
     }
 
     get<UserResource> { resource ->
@@ -80,7 +87,7 @@ internal fun Route.routeApiRestUsers(state: State) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse(USER_NOT_FOUND))
             return@get
         }
-        call.respond(user.toDto())
+        call.respond(user.toDto(state.cloud.links.forUser(user.userId)))
     }
 
     put<UserResource> { resource ->
@@ -118,7 +125,7 @@ internal fun Route.routeApiRestUsers(state: State) {
         // The last-admin guard is the service's, not this handler's: it has to be atomic
         // with the write (see AuthService.updateUser), so asking first would be a race.
         when (val outcome = state.authService.updateUser(resource.userId, displayName, request.role, request.disabled)) {
-            is UserMutation.Done -> call.respond(outcome.value.toDto())
+            is UserMutation.Done -> call.respond(outcome.value.toDto(state.cloud.links.forUser(resource.userId)))
             UserMutation.NotFound -> call.respond(HttpStatusCode.NotFound, ErrorResponse(USER_NOT_FOUND))
             UserMutation.LastAdmin ->
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(LAST_ADMIN_MESSAGE, CODE_LAST_ADMIN))
@@ -139,6 +146,41 @@ internal fun Route.routeApiRestUsers(state: State) {
             UserMutation.LastAdmin ->
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(LAST_ADMIN_MESSAGE, CODE_LAST_ADMIN))
         }
+    }
+
+    /**
+     * Invite a Lighting7 Cloud account, by its email, to link to this user (cloud-p1 plan D12). The
+     * cloud mails nothing until an owner or admin of the org approves it in the portal. 201 with the
+     * invite; 409 `CLOUD_NOT_ADOPTED`, `CLOUD_OFFLINE`, `CLOUD_LINK_EXISTS`, `CLOUD_INVITE_PENDING`;
+     * 400 `CLOUD_EMAIL_INVALID`.
+     */
+    post<UserCloudInviteResource> { resource ->
+        val email = call.receive<CloudInviteRequest>().email
+        val by = call.authenticatedUserOrNull?.let { state.authService.findUser(it.userId) }
+        val invite = try {
+            state.cloud.links.invite(resource.parent.userId, email, by)
+        } catch (e: CloudException) {
+            return@post call.respond(e.status, ErrorResponse(e.message ?: e.code, e.code))
+        }
+        call.respond(HttpStatusCode.Created, invite)
+    }
+
+    /** Cancel this user's live invite, telling the cloud. 204, or 404 `CLOUD_NO_INVITE`. */
+    delete<UserCloudInviteResource> { resource ->
+        val by = call.authenticatedUserOrNull?.let { state.authService.findUser(it.userId) }
+        if (!state.cloud.links.cancelInvite(resource.parent.userId, by)) {
+            return@delete call.respond(HttpStatusCode.NotFound, ErrorResponse("No invite is waiting for this user.", CloudErrorCodes.NO_INVITE))
+        }
+        call.respond(HttpStatusCode.NoContent)
+    }
+
+    /** Unlink this user's cloud account: its remote sessions end. 204, or 404 `CLOUD_NO_LINK`. */
+    delete<UserCloudLinkResource> { resource ->
+        val by = call.authenticatedUserOrNull?.let { state.authService.findUser(it.userId) }
+        if (!state.cloud.links.unlink(resource.parent.userId, CloudUnlinkReason.BY_ADMIN, by)) {
+            return@delete call.respond(HttpStatusCode.NotFound, ErrorResponse("This user isn't linked to a cloud account.", CloudErrorCodes.NO_LINK))
+        }
+        call.respond(HttpStatusCode.NoContent)
     }
 
     /** Direct password set, for when the user is standing next to you. All their sessions die. */
@@ -283,6 +325,15 @@ data class UserPasswordResource(val parent: UserResource)
 @Resource("/reset-tokens")
 data class UserResetTokensResource(val parent: UserResource)
 
+@Resource("/cloud-invite")
+data class UserCloudInviteResource(val parent: UserResource)
+
+@Resource("/cloud-link")
+data class UserCloudLinkResource(val parent: UserResource)
+
+@Serializable
+data class CloudInviteRequest(val email: String)
+
 @Resource("/{tokenId}")
 data class UserResetTokenResource(val parent: UserResetTokensResource, val tokenId: Int)
 
@@ -298,6 +349,10 @@ data class UserDto(
     val createdAt: String,
     /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
     val lastLoginAt: String? = null,
+    /** The Lighting7 Cloud account this user is linked to (cloud-p1 plan D12). */
+    val cloudLink: CloudLinkDto? = null,
+    /** A live invite for a cloud account to link to this user. */
+    val cloudInvite: CloudInviteDto? = null,
 )
 
 @Serializable
@@ -341,7 +396,7 @@ data class ResetTokenStatusDto(
     val expiresAt: String,
 )
 
-private fun UserRecord.toDto() = UserDto(
+private fun UserRecord.toDto(cloud: UserCloudLink?) = UserDto(
     id = userId,
     uuid = uuid.toString(),
     username = username,
@@ -350,4 +405,6 @@ private fun UserRecord.toDto() = UserDto(
     disabled = disabled,
     createdAt = createdAt.toIsoUtc(),
     lastLoginAt = lastLoginAt?.toIsoUtc(),
+    cloudLink = cloud?.link,
+    cloudInvite = cloud?.invite,
 )

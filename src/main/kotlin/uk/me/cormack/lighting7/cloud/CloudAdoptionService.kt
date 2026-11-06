@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteAll
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -23,10 +24,15 @@ import uk.me.cormack.lighting7.cloud.protocol.AdoptionStarted
 import uk.me.cormack.lighting7.cloud.protocol.InstallKeys
 import uk.me.cormack.lighting7.cloud.protocol.UserCode
 import uk.me.cormack.lighting7.models.CloudConnectionState
+import uk.me.cormack.lighting7.models.CloudLinkEventKind
+import uk.me.cormack.lighting7.models.CloudLinkEventUser
 import uk.me.cormack.lighting7.models.CloudLinkVia
+import uk.me.cormack.lighting7.models.CloudUnlinkReason
 import uk.me.cormack.lighting7.models.DaoCloudConnections
 import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoUsers
+import uk.me.cormack.lighting7.models.clearCloudLinks
+import uk.me.cormack.lighting7.models.recordCloudLinkEvent
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.update.BuildInfo
 import java.time.Instant
@@ -81,6 +87,8 @@ internal class CloudAdoptionService(
     private val changed: () -> Unit,
     /** Only [memory] changed: republish without reading the database. */
     private val memoryChanged: () -> Unit,
+    /** These desk users' cloud links changed, so Users is told (cloud-p1 plan D12). */
+    private val usersChanged: (Collection<Int>) -> Unit = {},
 ) {
     private val logger = LoggerFactory.getLogger(CloudAdoptionService::class.java)
     private val mutex = Mutex()
@@ -347,7 +355,7 @@ internal class CloudAdoptionService(
             return@withLock
         }
         val now = clock()
-        transaction(database) {
+        val linked = transaction(database) {
             DaoCloudConnections.update {
                 it[state] = CloudConnectionState.ADOPTED
                 it[installId] = approved.installId
@@ -363,8 +371,22 @@ internal class CloudAdoptionService(
             }
             // Read here, in the write's transaction, so a user deleted meanwhile gets no link.
             val userId = DaoCloudConnections.selectAll().single()[DaoCloudConnections.adoptedBy]?.value
-            if (userId != null && DaoUsers.selectAll().where { DaoUsers.id eq userId }.any()) {
-                DaoCloudIdentityLinks.deleteWhere { user eq userId }
+            val username = userId?.let { id -> DaoUsers.selectAll().where { DaoUsers.id eq id }.firstOrNull()?.get(DaoUsers.username) }
+            if (userId != null && username != null) {
+                val who = CloudLinkEventUser(userId, username)
+                // Unadoption cleared every link, so neither side is linked yet; were one, it gives way to adoption's.
+                DaoCloudIdentityLinks.selectAll()
+                    .where { (DaoCloudIdentityLinks.user eq userId) or (DaoCloudIdentityLinks.cloudAccountId eq approved.account.id) }
+                    .forEach { old ->
+                        val oldUser = old[DaoCloudIdentityLinks.user].value
+                        val oldName = DaoUsers.selectAll().where { DaoUsers.id eq oldUser }.firstOrNull()?.get(DaoUsers.username)
+                        recordCloudLinkEvent(
+                            now, CloudLinkEventKind.UNLINKED, user = oldName?.let { CloudLinkEventUser(oldUser, it) },
+                            cloudAccountId = old[DaoCloudIdentityLinks.cloudAccountId], email = old[DaoCloudIdentityLinks.email],
+                            via = old[DaoCloudIdentityLinks.linkedVia], reason = CloudUnlinkReason.REPLACED.name,
+                        )
+                    }
+                DaoCloudIdentityLinks.deleteWhere { (user eq userId) or (cloudAccountId eq approved.account.id) }
                 DaoCloudIdentityLinks.insert {
                     it[user] = userId
                     it[cloudAccountId] = approved.account.id
@@ -372,13 +394,19 @@ internal class CloudAdoptionService(
                     it[linkedAt] = now
                     it[linkedVia] = CloudLinkVia.ADOPTION
                 }
+                recordCloudLinkEvent(
+                    now, CloudLinkEventKind.LINKED, user = who, cloudAccountId = approved.account.id,
+                    email = approved.account.email, via = CloudLinkVia.ADOPTION,
+                )
             }
+            userId?.takeIf { username != null }
         }
         logger.info("Adopted by {} in the cloud", approved.org.name)
         memory.lastError = null
         pollJob = null
         polling = null
         changed()
+        if (linked != null) usersChanged(listOf(linked))
     }
 
     /** Forget the adoption: row, links and key. Must hold [mutex]. */
@@ -386,15 +414,15 @@ internal class CloudAdoptionService(
         if (cancelPoll) pollJob?.cancel()
         pollJob = null
         polling = null
-        transaction(database) {
-            DaoCloudIdentityLinks.deleteAll()
-            DaoCloudConnections.deleteAll()
+        val unlinked = transaction(database) {
+            clearCloudLinks(clock(), CloudUnlinkReason.UNADOPTED).also { DaoCloudConnections.deleteAll() }
         }
         runCatching { keys.delete() }.onFailure { logger.warn("Couldn't delete the install key", it) }
         memory.notice = notice
         memory.noticeAt = notice?.let { nowUtc() }
         memory.lastError = null
         changed()
+        if (unlinked.isNotEmpty()) usersChanged(unlinked)
     }
 
     companion object {

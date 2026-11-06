@@ -17,7 +17,10 @@ show, and nothing here may slow one down (§"Show safety").
 |---|---|---|
 | The **install key**'s private half | `CredentialStore` blob `cloud:install-key:<installs.uuid>`, PKCS#8 base64 (`InstallKeyStore`) | made when adoption starts, deleted when the desk stops being adopted |
 | Its adoption | `cloud_connection`, one row (`models/cloudConnection.kt`) | while adopting or adopted |
-| Each desk account's cloud account | `cloud_identity_links`, one row per desk user (`models/cloudIdentityLinks.kt`) | written by adoption, deleted by unadopt or the user's deletion |
+| Each desk account's cloud account | `cloud_identity_links`, one row per desk user and per cloud account (`models/cloudIdentityLinks.kt`) | written by adoption, an accepted invite or a proof; deleted by an unlink, unadopt or the user's deletion (P1 D12) |
+| Invites to link a cloud account | `cloud_link_invites` (`models/cloudLinkInvites.kt`) | until accepted, declined, cancelled or seven days old |
+| The audit of links and invites | `cloud_link_events` (`models/cloudLinkEvents.kt`) | a row per change, in its transaction; a year |
+| What the cloud is to hear of links while the channel is down | memory only (`CloudLinks`), at most 256 messages | until the next connection, unadopt or a restart |
 | What is happening now: a poll's error, a notice, the channel's status | `CloudService`'s memory only | until the next transition or a restart |
 | What may come through the cloud: *Remote sessions*, *Claude (MCP)*, *Approve each session* | `cloud_connection`'s `remote_access`, `mcp_access`, `approve_sessions`, held in memory as `CloudService.switches` | off at adoption; changed only on the desk's own listener (P1 D6) |
 | The cloud's token keys and the origin it serves remote sessions from | memory only (`JwksCache`, `CloudService.remoteOrigin`) | the last `jwks` and `welcome` heard, through any reconnect, until a newer one or a restart (P1 D3) |
@@ -33,11 +36,10 @@ user, not per install: a second desk on the same machine, with its own data dire
 replaces this one's. `cloud_connection` keeps the key's public half and fingerprint for display. What the
 cloud sends is stored as `text`, since the protocol bounds none of it.
 
-A **link** says which cloud account a desk account is. Adoption writes one, for the admin who started
-it (`linked_via` `ADOPTION`). A remote session reads its account's link when it opens and acts as that
-user (§"Remote sessions"); P1's session 6 adds invites and proofs. SQLite runs with `PRAGMA foreign_keys`
-off, so `AuthService.deleteUser` deletes the user's link and clears `cloud_connection.adopted_by` and
-`cloud_remote_sessions.user_id` by hand.
+A **link** says which cloud account a desk account is (§"Links"). A remote session reads its account's
+link when it opens and acts as that user (§"Remote sessions"). SQLite runs with `PRAGMA foreign_keys`
+off, so `AuthService.deleteUser` deletes the user's link and invites (`deleteCloudLinksOf`) and clears
+`cloud_connection.adopted_by`, `cloud_remote_sessions.user_id` and the link audit's user columns by hand.
 
 ## Configuration
 
@@ -140,7 +142,9 @@ unadopt, cancel or revoke. The wire side is [cloud-protocol.md](cloud-protocol.m
    `cloud.baseUrl` would accept (`https`, or `http` to a loopback host), is kept for the Origin check
    (§"Remote sessions").
 4. **Reading.** `unadopted` forgets the adoption (`revoked()`). `jwks` replaces the token keys (P1 D3).
-   `revoke` ends and refuses what it names (§"Remote sessions"). `error` is logged. Any other type,
+   `revoke` ends and refuses what it names (§"Remote sessions"). The `rtc.*` messages go to the broker
+   (§"The sidecar"), and `link.accepted` and `link.refused` to `CloudLinks` (§"Links"). `error` is
+   logged. Any other type,
    unknown ones, ones of another protocol version and ones only the desk sends, is ignored and logged
    once per type, up to 100 types, so v1 can grow additively. Text the cloud chose (a type, an error,
    a close reason) is cut to 64 characters before the desk logs or repeats it. A frame over 8 MiB, one that is not JSON text, or one that is not an
@@ -206,7 +210,8 @@ local user (none: an *unlinked* session), records the adoption's org, writes the
 gives it until its first token's expiry, or 11 minutes. It refuses while the desk is not adopted, with
 *Remote sessions* off (`REMOTE_ACCESS_OFF`), and for a sid already open, ended, revoked or ever audited
 (`SESSION_ENDED`). The
-link and user are fixed for the session's life; the role is not.
+link and user are fixed for the session's life, except that an unlinked session takes the link its account
+gains while it is open (`linked`, §"Links"); the role is not fixed.
 
 **Each request.** `resolveCaller` (`auth/AuthGate.kt`) is the one answer to "who is calling", used by the
 auth gate, the `/api` WebSocket upgrade and `GET /auth/status`, once per call. On the public listener a
@@ -244,7 +249,7 @@ of skew `verify` allows; a session whose deadline passes unrefreshed ends `EXPIR
 
 **Ending.** A session ends on a `revoke` naming it, its account or everything; its token lapsing; a
 token naming another account or org; *Remote sessions* turned off; the desk unadopted; its link removed
-(`linkRemoved`, which unlink in P1 session 6 calls); and every credential revocation of its user
+(`linkRemoved`, which every unlink calls); and every credential revocation of its user
 (disable, delete, a password set or reset, *sign out everywhere*) through
 `AuthService.addSessionRevocationListener`, which spares the session that asked for "everywhere else".
 Its sockets close 4401 at once (they wait on `RemoteSession.ended`, which no burst can drop), its next
@@ -269,6 +274,58 @@ and is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY`, whatever
 cloud can mint a linked admin's token, so nothing it can sign may widen what comes through it. No message
 writes them. For the same reason `PUT /install/tunnel`, which holds the scripts, effects and commands
 switches, is refused there too. The Cloud tab's switches and approval are P1's session 7.
+
+## Links
+
+A link is one cloud account to one desk user and the reverse, held by unique indexes on both of
+`cloud_identity_links`' columns (P1 D12). No desk role follows from anything in the cloud: a linked
+session is its user, with that user's role. `cloud/CloudLinks.kt` owns every change but adoption's, and
+each writes a `cloud_link_events` row in its own transaction: `LINKED` (with `via`), `UNLINKED` (with
+its `CloudUnlinkReason`), `INVITED`, `INVITE_CANCELLED`, `INVITE_REFUSED`, `INVITE_EXPIRED` and
+`ACCEPTANCE_REFUSED` (with the `link.ack` reason), naming the user, the account, the email, the invite
+and the desk user who made the change, by name as well as id so a row outlives the user.
+
+**Three ways in.**
+
+- *Adoption* links the admin who started it to the cloud account that approved it (`ADOPTION`).
+- *Invite*: an admin names an email on a user's sheet, `POST /users/{id}/cloud-invite`. The desk keeps
+  the invite for seven days and sends `link.invite`; the install key proves which desk asks, not which
+  person, so the cloud holds it until an owner or admin of the org approves it in the portal and only
+  then mails it, answering `link.refused` if they decline. An invite needs the channel online (409
+  `CLOUD_OFFLINE` otherwise, nothing kept), and goes after any link message still waiting, so it never
+  overtakes the cancel of the invite before it. One live
+  invite per user and per email (`CLOUD_INVITE_PENDING`), none for a user already linked
+  (`CLOUD_LINK_EXISTS`). `link.accepted` writes the link (`INVITE`, its `invite_id` kept) only while the
+  invite is live and its email is the invite's, case aside, and only when neither the user nor the
+  account is linked already; it is answered `link.ack` with `replyTo` either way, refused as
+  `LINK_INVITE_NOT_LIVE`, `LINK_EMAIL_MISMATCH` (the invite kept) or `LINK_TAKEN`. An acceptance the
+  cloud sends again, having never heard the ack, finds the link by its invite and is answered linked.
+  The cloud delivers one a desk missed at its next `welcome`. `DELETE /users/{id}/cloud-invite` cancels
+  (`link.cancelled`); an expired invite is deleted when one is next written, when its acceptance arrives
+  and at startup.
+- *Prove once*: an unlinked remote session posts a desk username and password to `POST
+  /cloud/link/prove`. The password is checked by `AuthService.verifyCredentials`, as the sign-in form's is,
+  under the public listener's per-username lockout (429 `SIGN_IN_LOCKED`); a wrong one is 401 and ends
+  nothing. Then the account is linked to that user (`PROVED`), the user's live invite is cancelled, the
+  cloud hears `link.created`, and every unlinked session of the account becomes the user's
+  (`RemoteSessions.linked`), so the session that proved carries on signed in. 409 `CLOUD_LINK_EXISTS`
+  when the user is linked to another account.
+
+**One way out.** An admin's unlink (`DELETE /users/{id}/cloud-link`), the user's own from their profile
+(`DELETE /cloud/link`), and the user's deletion each end the account's remote sessions and tell the cloud
+`link.removed`; a deletion also cancels the user's invite. Unadopting deletes every link and invite,
+recorded as `UNADOPTED`, and tells nothing, since there is no cloud left to tell.
+
+**Races.** Each write re-reads, in its own transaction, that the desk is still adopted and the user
+still exists, so an unadopt or a deletion that committed after the caller's checks leaves no link or
+invite behind. A session opening while its account's link changes reads the link again once it is
+registered, so an unlink or a proof that landed in between is not missed.
+
+**While the channel is down** `link.cancelled`, `link.removed` and `link.created` wait in memory, in
+order, at most 256 (the oldest dropped past that), and go when the channel is next online; unadopting
+forgets them. `link.ack` is not kept: it is a reply, and an acceptance the desk never answered is the
+cloud's to send again. Like the rest of the connector, none of this writes on a timer or touches the
+show's threads; the `link.*` handlers run on the `cloud-N` threads and write only on a change.
 
 ## The sidecar
 
@@ -433,7 +490,7 @@ meta below, loads exactly as before and never waits.
   asking again on the next port for a request the last one never answered, and closing a port nobody
   asked for.
 - **What changes in remote mode.** No sign-in or setup screen: an unlinked session shows *Not linked to
-  this desk* and posts `auth.unlinked` (session 6 brings the prove-once form), and a signed-out one
+  this desk*, posts `auth.unlinked` and offers the prove-once form (§"Links"), and a signed-out one
   *Remote session ended*. *Log out* posts `session.end` and the shell ends the session. What names this
   origin or opens a window outside the shell is the LAN's and is not drawn: the Screens sheet's
   new-window section, its per-row *Copy link* and its localhost note, ⌘K's *Open … on another display*
@@ -505,7 +562,8 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
    most 64 KB of an answer, treating a longer one as none (`CloudApi`). A route that calls the cloud
    waits at most that long, and no route the show uses calls it.
 3. **No database write on a timer.** The database is written only on a transition: adopt, approve,
-   cancel, unadopt, revoke, a switch, a remote session's open and end. Never per poll, per heartbeat or per reconnect: the pool has one connection,
+   cancel, unadopt, revoke, a switch, a remote session's open and end, and a link or invite made,
+   accepted, refused or removed (§"Links"). Never per poll, per heartbeat or per reconnect: the pool has one connection,
    so a timed write would queue behind, or in front of, show writes. Live status is memory only.
    `CloudChannelTest` holds SQLite's `total_changes()` still across heartbeats and a reconnect.
 4. **Bounded queues.** The channel's heartbeat queue holds 16 frames and drops the oldest; its other
@@ -542,7 +600,9 @@ rotates its key and sends `revoke`. Desk tests never use the real cloud (R5).
 channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and
 `CloudOutageOutputTimingTest` the show's output through a cloud outage. `RemoteSessionsTest` drives
 bearer requests and sockets on the public listener through every refusal and every way a session ends;
-`ChannelOutboxTest` the two send queues on virtual time. `RemoteBrokerTest` drives offers from the fake
+`ChannelOutboxTest` the two send queues on virtual time. `CloudLinksTest` carries invites through
+`FakeCloud`'s `acceptInvite` and `declineInvite` to every answer, proves links through a remote session,
+and unlinks from each side. `RemoteBrokerTest` drives offers from the fake
 through `FakeSidecar`, a stand-in sidecar run as a process of its own that speaks the stdio protocol and
 hangs, dies or floods its stdout or stderr on request; `LinkMessagesTest` reads the stdio fixture;
 `LinkProcessTest` the supervisor's backoff on a virtual clock and the orphan sweep; `LinkBinaryTest` which

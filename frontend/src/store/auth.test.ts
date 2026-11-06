@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   authWs,
   failWith,
+  ownAccountWs,
   installRecordingFetch,
   installRelativeUrlRequest,
 } from "@/test/backendMock"
@@ -14,6 +15,7 @@ vi.mock("@/api/lightingApi", async () => (await import("@/test/backendMock")).li
 
 // Importing auth runs the module-level bridge and pulls in the real store + restApi.
 import { authApi, type AuthStatus } from "./auth"
+import { cloudLinksApi } from "./cloudLinks"
 import { restApi } from "./restApi"
 import { store } from "./index"
 
@@ -120,6 +122,22 @@ describe("auth WS bridge", () => {
       authWs.callback!()
 
       await vi.waitFor(() => expect(statusFetchCount()).toBeGreaterThan(before))
+    } finally {
+      sub.unsubscribe()
+    }
+  })
+})
+
+describe("own account changes", () => {
+  it("re-reads the account's own cloud link, which an accepted invite or an admin's unlink moves", async () => {
+    install({ "cloud/link": { link: null, invite: null } })
+    const sub = store.dispatch(cloudLinksApi.endpoints.ownCloudLink.initiate())
+    const linkFetches = () =>
+      fetchMock.mock.calls.filter(([input]) => (input instanceof Request ? input.url : String(input)).includes("cloud/link")).length
+    try {
+      await vi.waitFor(() => expect(linkFetches()).toBe(1))
+      ownAccountWs.callback!()
+      await vi.waitFor(() => expect(linkFetches()).toBe(2))
     } finally {
       sub.unsubscribe()
     }

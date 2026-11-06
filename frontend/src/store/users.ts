@@ -2,6 +2,7 @@ import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
 import type { UserRole } from './auth'
+import type { CloudInvite, CloudLink } from './cloudLinks'
 
 // Admin-only desk-account management. Distinct from ./auth: that module is "who am I and
 // how do I sign in", this one is "who else is allowed to" — a different tag family so
@@ -16,6 +17,10 @@ export interface DeskUser {
   disabled: boolean
   createdAt: string
   lastLoginAt?: string | null
+  /** The Lighting7 Cloud account linked to this user (cloud-p1 plan D12). */
+  cloudLink?: CloudLink | null
+  /** A live invite for a cloud account to link to this user. */
+  cloudInvite?: CloudInvite | null
 }
 
 export interface NewUserRequest {

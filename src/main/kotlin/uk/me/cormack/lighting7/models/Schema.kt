@@ -65,4 +65,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoCloudConnections, DaoCloudIdentityLinks,
     // The audit of remote sessions through the cloud (cloud-p1 plan D5), after DaoUsers.
     DaoCloudRemoteSessions,
+    // Invites to link a cloud account and the audit of links (cloud-p1 plan D12), after DaoUsers.
+    DaoCloudLinkInvites, DaoCloudLinkEvents,
 )
