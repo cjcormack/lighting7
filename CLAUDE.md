@@ -106,6 +106,8 @@ repeats CI, and the desktop app's Auto-fix wakes the session if CI fails.
 - **Backend:** `./gradlew compileTestKotlin`, then `./gradlew test --tests '<package>.*'` for
   each package the change touches and each package that calls into it. A change to
   `cloud-protocol/` is `./gradlew :cloud-protocol:check`: the root `test` does not reach it.
+- **Sidecar:** `go vet ./... && go test ./...` in `link/` (Go as `link/go.mod` names it), which CI's
+  *Link* job runs with a static build and the licence gate over the modules it links.
 - **Frontend:** `npm run check:quick` in `frontend/`: the full `tsc` and build, lint (cached, so
   seconds when warm), the Vitest files affected by changes since `origin/main`, and the licence gate
   (`npm run licences`). `.githooks/pre-commit` runs it when anything buildable under `frontend/`, or

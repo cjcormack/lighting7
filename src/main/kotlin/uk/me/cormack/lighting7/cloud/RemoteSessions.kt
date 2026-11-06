@@ -70,6 +70,15 @@ enum class RemoteSessionEnd {
     /** The desk is no longer adopted. */
     UNADOPTED,
 
+    /** The cloud closed it: the browser went, or the portal ended it. */
+    CLOSED_BY_CLOUD,
+
+    /** The sidecar closed it: its peer went, the desk refused its token, or one of its limits. */
+    LINK_CLOSED,
+
+    /** The sidecar carrying it stopped, crashed or was restarted. */
+    SIDECAR_STOPPED,
+
     /** Ended by its user, or by the desk for no other reason. */
     ENDED,
     ;
@@ -80,6 +89,7 @@ enum class RemoteSessionEnd {
             REMOTE_ACCESS_OFF -> ErrorCode.REMOTE_ACCESS_OFF
             MISMATCH -> ErrorCode.REMOTE_SESSION_MISMATCH
             REVOKED -> ErrorCode.TOKEN_REVOKED
+            SIDECAR_STOPPED -> ErrorCode.SIDECAR_UNAVAILABLE
             else -> ErrorCode.SESSION_ENDED
         }
 }

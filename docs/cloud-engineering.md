@@ -5,7 +5,8 @@ holds, how it is adopted and unadopted, the control channel it keeps open while 
 session through it is authorised, and the rules that keep the cloud off the show's path. The wire
 contract is [cloud-protocol.md](cloud-protocol.md); the plans are
 [`plans/completed/cloud-p0-plan.md`](plans/completed/cloud-p0-plan.md), whose decisions (D1, D2, …)
-this doc cites bare, and [`plans/cloud-p1-plan.md`](plans/cloud-p1-plan.md), cited as P1's D-items. The code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`.
+this doc cites bare, and [`plans/cloud-p1-plan.md`](plans/cloud-p1-plan.md), cited as P1's D-items. The code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`,
+`…/link/` for the desk's end of the sidecar, and `link/` (Go) for the sidecar itself.
 
 The desk works with no cloud, no account and through any outage. Nothing here is needed to run a
 show, and nothing here may slow one down (§"Show safety").
@@ -21,6 +22,7 @@ show, and nothing here may slow one down (§"Show safety").
 | What may come through the cloud: *Remote sessions*, *Claude (MCP)*, *Approve each session* | `cloud_connection`'s `remote_access`, `mcp_access`, `approve_sessions`, held in memory as `CloudService.switches` | off at adoption; changed only on the desk's own listener (P1 D6) |
 | The cloud's token keys and the origin it serves remote sessions from | memory only (`JwksCache`, `CloudService.remoteOrigin`) | the last `jwks` and `welcome` heard, through any reconnect, until a newer one or a restart (P1 D3) |
 | Open remote sessions, and those ended or revoked | memory only (`RemoteSessions`) | until each ends, then until any token issued for it has expired |
+| The sidecar's launch, its link secret and the offers still to be answered | memory only (`LinkSidecar`, `RemoteSessions`, `RemoteBroker`) | one launch; a new secret each time it starts |
 | The audit of remote sessions | `cloud_remote_sessions` (`models/cloudRemoteSessions.kt`) | a row at a session's open and end, never between; a year |
 
 Every table is `SyncDisposition.MachineLocal` and never touches `ProjectExporter` or `ProjectImporter`
@@ -129,9 +131,9 @@ unadopt, cancel or revoke. The wire side is [cloud-protocol.md](cloud-protocol.m
 3. **Online.** The desk sends `hello` (protocol 1, its version, platform, `installs.uuid`, friendly
    name, its capabilities), then `health {uptimeS, deskVersion}` every `welcome.heartbeatS`
    (clamped to 1–300 s). `hello` carries the friendly name as it was when the channel started. The
-   capabilities are the state entries of P1 D6: `remote.off` and `mcp.off` while their switch is off,
-   `remote.no-sidecar` while no sidecar runs (`CloudService.capabilities`); `remote.v1` and `mcp.v1`
-   join when the desk speaks them (P1 sessions 3 and 8). Whenever the list changes the desk sends
+   capabilities are `remote.v1`, always, then the state entries of P1 D6: `remote.off` and `mcp.off`
+   while their switch is off, `remote.no-sidecar` while no sidecar runs (`CloudService.capabilities`);
+   `mcp.v1` joins when the desk relays MCP (P1 session 8). Whenever the list changes the desk sends
    `capabilities`, the whole list, on the connection it was announced on, never ahead of its `hello`
    (`ChannelConnection.refreshCapabilities`). `welcome`'s `remoteOrigin`, when it is a bare origin
    `cloud.baseUrl` would accept (`https`, or `http` to a loopback host), is kept for the Origin check
@@ -196,8 +198,7 @@ and whether a `revoke` covers it (`TOKEN_REVOKED`), below.
 
 A **remote session** is a cloud member using the desk's own SPA from anywhere, carried by the sidecar
 `lighting7-link` into the public listener (P1 D4, D5). `cloud/RemoteSessions.kt` is its registry; the
-broker (P1 session 3) opens each one when it accepts an `rtc.offer`, and everything else here is in place
-before it.
+broker (§"The sidecar") opens each one when it accepts an `rtc.offer`.
 
 **Opening.** `RemoteSessions.open(sid, accountId, email, displayName)` resolves the account's link to a
 local user (none: an *unlinked* session), records the adoption's org, writes the session's audit row and
@@ -267,6 +268,108 @@ and is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY`, whatever
 cloud can mint a linked admin's token, so nothing it can sign may widen what comes through it. No message
 writes them. For the same reason `PUT /install/tunnel`, which holds the scripts, effects and commands
 switches, is refused there too. The Cloud tab's switches and approval are P1's session 7.
+
+## The sidecar
+
+`lighting7-link` is the desk's WebRTC end of a remote session (P1 D7, D8): a Go program on pion, in
+`link/` with its own `go.mod`, MIT like the desk. The JVM starts it, is its only client and talks to it
+over its stdio; each remote session is one peer connection, and each HTTP request or WebSocket the
+browser makes is one data channel, which the sidecar bridges to the public listener. It decides
+nothing: every request it forwards carries the session's token and the launch's secret, and the desk
+judges it as §"Remote sessions" says.
+
+**Building it.** Until P1's session 5 bundles it, it is built by hand and named in `local.conf`:
+
+```bash
+cd link && go build ./cmd/lighting7-link    # Go as link/go.mod names it
+```
+
+```hocon
+cloud { link.binary = "link/lighting7-link" }
+```
+
+The desk starts it while the control channel runs and the public listener has bound (`mcp.enabled` and
+a successful bind: `startPublicListener` calls `CloudService.publicListenerBound`), with that
+listener's address as `-target` and the desk's build as `-build`, and stops it with the channel. It is
+not restarted when it exits; session 5 supervises it. Without one running, `remote.no-sidecar` is
+announced and every offer is refused `SIDECAR_UNAVAILABLE`. From this session on the desk announces
+`remote.v1` whatever its state.
+
+**The stdio protocol.** The launch's link secret is the first line on stdin, then one JSON object per
+line each way (`link/LinkMessages.kt`, `link/internal/sidecar/stdio.go`). `link/testdata/stdio.json`
+has one of each, read by both ends' tests.
+
+| Type | Direction | Body |
+|---|---|---|
+| `session.open` | desk → sidecar | `sid`, `offer` (the browser's SDP), `iceServers` |
+| `session.ice` | either | `sid`, `candidate?` (none for the end of the candidates) |
+| `session.close` | desk → sidecar | `sid`, `reason` |
+| `started` | sidecar → desk, first | `build`: it has read its secret and serves |
+| `session.answer` | sidecar → desk | `sid`, `sdp` |
+| `session.state` | sidecar → desk | `sid`, `path`: `DIRECT`, or `RELAY` when either end of the selected candidate pair is a TURN relay |
+| `session.closed` | sidecar → desk | `sid`, `reason` (an `ErrorCode`): its peer went, the desk refused its token, a limit |
+
+It exits when stdin ends, closing every session. Its stdout carries nothing but this protocol: pion's
+logs and anything else that prints go to stderr.
+
+**The broker** (`cloud/RemoteBroker.kt`) sits between the channel and the sidecar. An `rtc.offer` is
+checked against D17's caps first, before any sidecar work or database write: at most 8 sessions open
+and 20 offers a minute past the caps, each refused `REMOTE_SESSION_LIMIT`. Then *Remote sessions* off is
+`REMOTE_ACCESS_OFF`, no sidecar serving `SIDECAR_UNAVAILABLE`, and an offer the sidecar could not read
+`MALFORMED`: an SDP over 64 KiB, a sid over 128 characters, or a `session.open` line over 128 KiB. Then
+`RemoteSessions.open` records the account and the adoption's org and writes the audit row, and the
+sidecar gets `session.open`; its `session.answer` goes to the cloud as `rtc.answer` replying to the
+offer. Every refusal is an `rtc.close` replying to the offer. Candidates go both ways (a cloud
+candidate over 4 KiB is dropped), and `session.state`'s path is kept on the session for its audit row.
+However a session ends, its end listener tells the cloud (`rtc.close`, the sidecar's reason when the
+sidecar closed it) and the sidecar (`session.close`), each unless it was the one that ended it, so the
+offer of a session that ends unanswered is still replied to. A sidecar that stops ends every session it
+carried, `SIDECAR_STOPPED`, told to the cloud as `SIDECAR_UNAVAILABLE`.
+
+**Its pipes** (`link/LinkSidecar.kt`, P1 D11) never block the JVM or hold the cloud's threads. stdout and
+stderr are read on threads of their own (`link-stdout-N`, `link-stderr-N`), in lines of at most
+256 KiB, a longer one skipped. stdout's lines go to the cloud's scope through a channel of 32, its reader
+waiting (and through the pipe, the sidecar) while the cloud's threads catch up, which yield every 64
+lines; a line that is no message is ignored. stderr goes to the log, at most 50 lines in 10 s, then a
+count of those not logged. stdin is written by `link-stdin-N` from a queue of 256 lines that never drops
+one: when it is full the sidecar has stopped reading, so it is killed and started again, with a new
+secret, which ends its sessions. A stop never waits: a thread of its own sends the sidecar SIGTERM (on
+Windows, a kill), on which it ends its sessions and exits, and kills it if it has not gone in 5 s. A
+launch ends once, whichever of a stop, a restart or its exit comes first, and a restart after a stop
+starts nothing.
+
+**Inside it** (`link/internal/sidecar/`), per the link framing (`docs/cloud-protocol.md` §"The link
+framing" and §"ctl"):
+
+- *`ctl`*: `hello {token}` is answered by asking `GET /api/rest/auth/status` with that bearer, `ready
+  {user, role, build}` for a linked session, `ready {unlinked, build}` for an unlinked one, else
+  `refused {code}` (the desk's `code`) and the session ends. Each `token {token}` is handed to the desk as
+  the bearer of `POST /api/rest/cloud/session/token`; a refusal ends the session. An `http` or `ws`
+  channel opened before a token is accepted waits up to 15 s for one, then is reset `NOT_READY`.
+- *HTTP*: the head's headers less `LinkFraming.STRIPPED_HEADERS`, and less `content-length` (set from
+  the head's) and `accept-encoding`, so the desk sends an identity body: the service worker builds a
+  `Response` from the bytes, which never decodes one. Then `Authorization`, `Lighting7-Link` and `Origin`
+  from the session. The body streams through a pipe, the response back in 16 KiB `DATA`; no redirect is
+  followed, no proxy used; hop-by-hop headers and `set-cookie` are dropped from the answer. A response
+  the desk cuts short is `RESET {reason: DESK_UNREACHABLE}`, never `END`. An upload the desk answers
+  without reading is answered all the same: the rest of its body is dropped until the answer has gone,
+  then the channel closes. A path must
+  be absolute and stay on the desk's host.
+- *WebSocket*: dialled with the same headers and the head's subprotocols; a refused upgrade answers its
+  status. Messages are forwarded as fragments both ways, the desk's codes (4401 among them) and the
+  browser's passing through each way's close handshake, and the browser's own `CLOSE` awaited for 5 s
+  after the desk's.
+- *ICE*: the sidecar's candidates follow its answer, held until it has gone; the browser's are queued
+  per session (64) and applied in order once its peer connection exists, so no session's setup holds
+  up another's lines.
+- *Backpressure*: a send waits while the channel buffers more than 1 MiB, until it falls to 256 KiB; each
+  channel queues at most 16 inbound messages before its reader blocks, which holds the browser back
+  through SCTP. A 100 MB body streams each way with the heap growing by about 20 MiB, and a browser that
+  stops reading holds the desk's response at a few MiB.
+- *Limits*: 16 sessions (the broker opens at most 8) and 128 `http` and `ws` channels per session, a
+  channel past it answered `RESET {reason: TOO_MANY_CHANNELS}`. The sidecar never sends first on a
+  channel: even that reset answers the channel's first frame. A session that has not connected within
+  60 s is closed.
 
 ## The state
 
@@ -343,7 +446,10 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
    The adoption reads the database only on a transition, an account change or a request (the install
    row, the adopting account's name and link), never on a timer: a poll's error is republished from
    memory.
-6. **No outbound but to `cloud.baseUrl`'s host**, and nothing at all with `cloud.enabled = false`.
+6. **No outbound but to `cloud.baseUrl`'s host**, and nothing at all with `cloud.enabled = false`. The
+   sidecar's peer connections go wherever ICE finds the browser, which is what they are for.
+7. **The sidecar is a process apart.** Its pipes are read and written on threads of their own, through
+   bounded queues, and one that hangs is restarted rather than waited on (§"The sidecar").
 
 `CloudOutageOutputTimingTest` is the rules' proof (NFR-SAFE-1): a fade's Art-Net frames, timed with no
 connector, then with the cloud connected, stopping reading, dropping the connection and refusing every
@@ -364,4 +470,10 @@ rotates its key and sends `revoke`. Desk tests never use the real cloud (R5).
 channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and
 `CloudOutageOutputTimingTest` the show's output through a cloud outage. `RemoteSessionsTest` drives
 bearer requests and sockets on the public listener through every refusal and every way a session ends;
-`ChannelOutboxTest` the two send queues on virtual time.
+`ChannelOutboxTest` the two send queues on virtual time. `RemoteBrokerTest` drives offers from the fake
+through `FakeSidecar`, a stand-in sidecar run as a process of its own that speaks the stdio protocol and
+hangs, dies or floods its stdout or stderr on request; `LinkMessagesTest` reads the stdio fixture.
+
+The sidecar's own tests (`cd link && go test ./...`, CI's *Link* job) run a pion peer as the browser
+against it and a test server as the desk, through the framing and `ctl` fixtures, both 100 MB streams,
+a peer that stops reading, the stripped headers and the limits.

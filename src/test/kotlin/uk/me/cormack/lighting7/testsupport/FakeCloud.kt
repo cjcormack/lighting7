@@ -44,6 +44,7 @@ import uk.me.cormack.lighting7.cloud.protocol.CloudAccount
 import uk.me.cormack.lighting7.cloud.protocol.CloudJson
 import uk.me.cormack.lighting7.cloud.protocol.CloudOrg
 import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
+import uk.me.cormack.lighting7.cloud.protocol.IceServer
 import uk.me.cormack.lighting7.cloud.protocol.InstallKeys
 import uk.me.cormack.lighting7.cloud.protocol.SignatureHeaders
 import uk.me.cormack.lighting7.cloud.protocol.SignedPayload
@@ -253,9 +254,19 @@ class FakeCloud : Closeable {
     /** The installs with a live, authenticated connection. */
     val online: Set<String> get() = sessions.keys.toSet()
 
-    /** Send [message] down [installId]'s connection. */
-    fun send(installId: String, message: Message, v: Int = uk.me.cormack.lighting7.cloud.protocol.PROTOCOL_VERSION) =
-        sendText(installId, Envelope(id = UUID.randomUUID().toString(), body = message, v = v).encode())
+    /** Send [message] down [installId]'s connection; answers its envelope's id, which a reply names. */
+    fun send(installId: String, message: Message, v: Int = uk.me.cormack.lighting7.cloud.protocol.PROTOCOL_VERSION): String {
+        val id = UUID.randomUUID().toString()
+        sendText(installId, Envelope(id = id, body = message, v = v).encode())
+        return id
+    }
+
+    /** What [installId] sent replying to [id], once it has. */
+    fun replyTo(installId: String, id: String): Envelope? = received.firstOrNull { it.first == installId && it.second.replyTo == id }?.second
+
+    /** The messages of type [T] [installId] has sent. */
+    inline fun <reified T : Message> sent(installId: String): List<T> =
+        received.filter { it.first == installId }.mapNotNull { it.second.body as? T }
 
     fun sendText(installId: String, text: String) = runBlocking {
         val session = sessions[installId] ?: error("$installId is not connected")
@@ -323,8 +334,13 @@ class FakeCloud : Closeable {
     }
 
     /** Send `revoke` to [installId], stamped [at] (the fake's clock by default). */
-    fun revoke(installId: String, sid: String? = null, accountId: String? = null, all: Boolean = false, at: Instant = now()) =
+    fun revoke(installId: String, sid: String? = null, accountId: String? = null, all: Boolean = false, at: Instant = now()) {
         send(installId, Message.Revoke(Timestamps.format(at), sid, accountId, all))
+    }
+
+    /** Ask [installId] for remote session [sid] as [accountId], as the shell's offer would; answers the offer's id. */
+    fun offer(installId: String, sid: String, accountId: String = account.id, sdp: String = "v=0 offer for $sid"): String =
+        send(installId, Message.RtcOffer(sid, accountId, "$accountId@example.com", "Someone", sdp, listOf(IceServer(listOf("stun:stun.example:3478")))))
 
     private suspend fun channel(session: DefaultWebSocketServerSession): Unit = with(session) {
         if (channelStall) channelReleased.await()

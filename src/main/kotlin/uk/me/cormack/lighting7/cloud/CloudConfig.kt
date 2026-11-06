@@ -16,6 +16,8 @@ data class CloudConfig(
     val enabled: Boolean,
     /** Why a non-empty `cloud.baseUrl` was refused. */
     val problem: String? = null,
+    /** `cloud.link.binary`: a sidecar built by hand, for development until the installers carry one. */
+    val linkBinary: String? = null,
 ) {
     val configured: Boolean get() = baseUrl != null
 
@@ -24,11 +26,12 @@ data class CloudConfig(
 
         fun from(config: ApplicationConfig): CloudConfig {
             val enabled = config.optionalBoolean("cloud.enabled", default = true)
+            val link = config.propertyOrNull("cloud.link.binary")?.getString()?.trim()?.takeIf { it.isNotEmpty() }
             val raw = config.propertyOrNull("cloud.baseUrl")?.getString()?.trim() ?: DEFAULT_BASE_URL
-            if (raw.isEmpty()) return CloudConfig(null, enabled)
+            if (raw.isEmpty()) return CloudConfig(null, enabled, linkBinary = link)
             return when (val checked = checkBaseUrl(raw)) {
-                is BaseUrlCheck.Ok -> CloudConfig(checked.url, enabled)
-                is BaseUrlCheck.Refused -> CloudConfig(null, enabled, checked.reason)
+                is BaseUrlCheck.Ok -> CloudConfig(checked.url, enabled, linkBinary = link)
+                is BaseUrlCheck.Refused -> CloudConfig(null, enabled, checked.reason, link)
             }
         }
 

@@ -1,0 +1,18 @@
+{
+  "why": "One of each line the desk and lighting7-link exchange over the sidecar's stdio, after the secret (docs/cloud-engineering.md §\"The sidecar\"). Read by the Go tests and the desk's LinkMessagesTest.",
+  "toSidecar": [
+    {"type": "session.open", "sid": "rs_5Tg2Lm8Qa1", "offer": "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n", "iceServers": [{"urls": ["stun:stun.cloud.example:3478"]}, {"urls": ["turn:turn.cloud.example:443?transport=tcp"], "username": "1793880240:rs_5Tg2Lm8Qa1", "credential": "c2VjcmV0"}]},
+    {"type": "session.ice", "sid": "rs_5Tg2Lm8Qa1", "candidate": {"candidate": "candidate:1 1 udp 2130706431 192.0.2.10 54321 typ host", "sdpMid": "0", "sdpMLineIndex": 0, "usernameFragment": "abcd"}},
+    {"type": "session.ice", "sid": "rs_5Tg2Lm8Qa1"},
+    {"type": "session.close", "sid": "rs_5Tg2Lm8Qa1", "reason": "TOKEN_REVOKED"}
+  ],
+  "fromSidecar": [
+    {"type": "started", "build": "1.4.0+3f2a9c1"},
+    {"type": "session.answer", "sid": "rs_5Tg2Lm8Qa1", "sdp": "v=0\r\no=- 3 4 IN IP4 0.0.0.0\r\n"},
+    {"type": "session.ice", "sid": "rs_5Tg2Lm8Qa1", "candidate": {"candidate": "candidate:2 1 udp 1694498815 198.51.100.7 61000 typ srflx raddr 0.0.0.0 rport 61000", "sdpMid": "0", "sdpMLineIndex": 0, "usernameFragment": "efgh"}},
+    {"type": "session.ice", "sid": "rs_5Tg2Lm8Qa1"},
+    {"type": "session.state", "sid": "rs_5Tg2Lm8Qa1", "path": "DIRECT"},
+    {"type": "session.state", "sid": "rs_5Tg2Lm8Qa1", "path": "RELAY"},
+    {"type": "session.closed", "sid": "rs_5Tg2Lm8Qa1", "reason": "SESSION_ENDED"}
+  ]
+}

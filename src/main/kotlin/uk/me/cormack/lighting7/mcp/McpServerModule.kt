@@ -10,6 +10,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import kotlinx.coroutines.runBlocking
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.receiveText
@@ -60,6 +61,8 @@ fun startPublicListener(state: State): EmbeddedServer<*, *>? {
     }.onSuccess {
         log.info("Public listener on {}:{} (public URL {})", config.host, config.port, state.remoteAccess.publicUrl())
         state.remoteAccess.onListenerStarted()
+        val port = if (config.port != 0) config.port else runBlocking { it.engine.resolvedConnectors().first().port }
+        state.cloud.publicListenerBound(config.host, port)
     }.onFailure {
         // A busy port must not take the desk down with it: remote access is an extra.
         log.error("Public listener failed to start on {}:{}: {}", config.host, config.port, it.message)

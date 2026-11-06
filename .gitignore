@@ -45,3 +45,7 @@ src/main/resources/static/
 
 # Heap dumps (Gradle daemon OOM writes these into the project root)
 *.hprof
+
+### lighting7-link, built by hand ###
+/link/lighting7-link
+/link/lighting7-link.exe
