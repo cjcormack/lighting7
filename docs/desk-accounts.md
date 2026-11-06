@@ -160,7 +160,8 @@ QR reset is redeemed (all sessions).
 ## Account edits reach other clients
 
 `revocations` has a sibling. **`AuthService.userChanges`** carries the userId of any account row
-that was written — created, renamed, re-roled, enabled, disabled, deleted, re-passworded — and
+that was written — created, renamed, re-roled, enabled, disabled, deleted, re-passworded — and of
+any whose Lighting7 Cloud link or invite changed (`announceUserChanged`, `cloud/CloudLinks.kt`) — and
 `plugins/MachineSocket.kt` collects it per connection and turns it into two frames:
 
 - **`userListChanged`** to every socket, which the frontend bridges to the `UserList` / `User`
@@ -396,11 +397,33 @@ Adopting the desk into a Lighting7 Cloud organisation (Install settings → Clou
 account that approved it: one `cloud_identity_links` row, the cloud account's id and email, deleted
 with the desk account. Adoption only starts from the desk's own listener, never over remote access.
 
+**Links come three ways and go one way** (cloud-p1 plan D12; `docs/cloud-engineering.md` §"Links"). One
+cloud account links to one desk user, and the reverse.
+
+- *Adoption* links the admin who adopted the desk.
+- *Invite*: an admin, on either listener, opens a user's sheet in Users and chooses *Invite a cloud
+  account…* with that person's cloud email. Nothing is mailed until an owner or admin of the desk's
+  organisation approves the invite in the portal; the person then accepts it signed in with that email,
+  and the desk links them. *Cancel invite* withdraws it; it lapses after seven days.
+- *Prove once*: someone whose cloud account is not linked, opening the desk from the portal, signs in
+  once with a desk username and password. The check is the sign-in form's, under the public listener's
+  lockout.
+
+*Unlink* on the user's sheet, the user's own *Unlink* on their Profile, and deleting the user each end
+that account's remote sessions at once. Unadopting removes every link.
+
+**What each audits.** Every link and invite change is a `cloud_link_events` row, kept a year: a link
+written (and how), a link removed (and why: an admin, the user, the user's deletion, unadoption), an
+invite sent, cancelled, declined in the portal or expired, and an acceptance the desk refused (another
+email, an invite no longer live, an account or user already linked). Each names the user and the cloud
+account, by name as well as id so the row outlives the user, and the desk user who made the change.
+
 **What a link authorises** (cloud-p1 plan D4, D5). A remote session through the cloud acts as the local
 user its cloud account is linked to, and only that way: no desk role ever follows from a role in the
 cloud. The link and the user are fixed when the session opens; the user's role, and whether they are
 disabled, are read on every request, so a demotion counts at once. A session whose account has no link
-is *unlinked*: it can see its own status and link itself, and nothing else (`CLOUD_ACCOUNT_NOT_LINKED`).
+is *unlinked*: it can see its own status and link itself by proving once, and nothing else
+(`CLOUD_ACCOUNT_NOT_LINKED`); once it proves, the same session carries on as the user.
 Everything that ends a cookie session ends a remote one too: disabling or deleting the user, a password
 set or reset, *sign out everywhere*. So does removing the link, unadopting, or *Remote sessions* turned
 off. The session's requests get the public listener's whole hardening, and every switch that limits what
@@ -411,7 +434,7 @@ as which user, when, and why it ended (`docs/cloud-engineering.md` §"Remote ses
 
 ## Cloud sync and support copies
 
-All three tables — and the two MCP OAuth tables — are `MachineLocal` in `SyncCoverageTest`: nothing here reaches a git
+All three tables — and the two MCP OAuth tables and the cloud's link, invite and audit tables — are `MachineLocal` in `SyncCoverageTest`: nothing here reaches a git
 remote, an export, or a clone. Session and reset tokens are stored hashed, so a SQLite
 file copied for diagnostics — or sitting next to a sync working tree — contains no
 redeemable credential. Device-login codes aren't in the database at all.

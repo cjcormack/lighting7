@@ -95,6 +95,11 @@ internal interface ChannelHandler {
 
     fun rtcClose(close: Message.RtcClose) {}
 
+    /** A `link.accepted`, [id] its envelope's: what `link.ack` replies to (D12). */
+    fun linkAccepted(id: String, accepted: Message.LinkAccepted) {}
+
+    fun linkRefused(refused: Message.LinkRefused) {}
+
     object None : ChannelHandler
 }
 
@@ -371,6 +376,8 @@ internal class ChannelConnection(
                     is Message.RtcOffer -> handler.rtcOffer(inbound.envelope.id, body)
                     is Message.RtcIce -> handler.rtcIce(body)
                     is Message.RtcClose -> handler.rtcClose(body)
+                    is Message.LinkAccepted -> handler.linkAccepted(inbound.envelope.id, body)
+                    is Message.LinkRefused -> handler.linkRefused(body)
                     else -> ignore(inbound.envelope)
                 }
             }

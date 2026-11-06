@@ -31,6 +31,18 @@ vi.mock('@/store/users', () => {
   }
 })
 
+// The Cloud account section's stores: a desk that isn't adopted, so it draws nothing here.
+vi.mock('@/store/cloud', () => ({ useCloudStateQuery: () => ({ data: undefined }) }))
+vi.mock('@/store/cloudLinks', () => {
+  const mutation = () => [() => ({ unwrap: () => Promise.resolve() }), { isLoading: false }]
+  return {
+    CLOUD_LINK_VIA_LABELS: { ADOPTION: '', INVITE: '', PROVED: '' },
+    useInviteCloudAccountMutation: mutation,
+    useCancelCloudInviteMutation: mutation,
+    useUnlinkCloudAccountMutation: mutation,
+  }
+})
+
 import { UserDetailSheet } from './UserDetailSheet'
 
 const user = {

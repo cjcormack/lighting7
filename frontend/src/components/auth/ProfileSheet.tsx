@@ -31,6 +31,7 @@ import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/userPolicy"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RoleBadge } from "@/components/users/RoleBadge"
 import { DeviceLoginSection } from "./DeviceLoginSection"
+import { OwnCloudLinkSection } from "./OwnCloudLinkSection"
 
 // The raw User-Agent is unreadable in a list. Pull out the browser and platform,
 // which is all anyone needs to recognise "that's my laptop" vs "that's the desk".
@@ -303,6 +304,8 @@ export function ProfileSheet({
                 {isSaving && <Loader2 className="size-4 animate-spin" />}
                 Save name
               </Button>
+
+              <OwnCloudLinkSection active={open} />
             </TabsContent>
 
             <TabsContent value="password" className="space-y-4">

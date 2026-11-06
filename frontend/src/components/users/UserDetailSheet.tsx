@@ -41,6 +41,7 @@ import {
   useUserQuery,
   type DeskUser,
 } from "@/store/users"
+import { CloudAccountSection } from "./CloudAccountSection"
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from "./RoleBadge"
 import { ResetQrSheet } from "./ResetQrSheet"
 import { ResetTokenHistory } from "./ResetTokenHistory"
@@ -325,6 +326,8 @@ export function UserDetailSheet({
                 </>
               )}
             </div>
+
+            <CloudAccountSection user={user} />
 
             <div className="space-y-2 border-t pt-4">
               <h3 className="text-sm font-medium">Access</h3>

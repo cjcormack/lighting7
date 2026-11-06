@@ -21,6 +21,12 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // refusal: *Copy to…* through `CopyToProjectSheet`, which names each record that failed in its
   // alert and keeps it for a retry; the sheets' Duplicate by a keyed toast; and `copyLook`'s third
   // caller, the Look detail sheet's Duplicate (`duplicateOne` in routes/Looks.tsx), by a toast too.
+  // Cloud account links (lighting7 cloud-p1 plan D12): the remote prove-once form and the user sheet's
+  // Cloud account section say every refusal in their own alert.
+  'proveCloudLink', // src/components/auth/RemoteAuthScreens.tsx
+  'inviteCloudAccount', // src/components/users/CloudAccountSection.tsx
+  'cancelCloudInvite', // src/components/users/CloudAccountSection.tsx
+  'unlinkCloudAccount', // src/components/users/CloudAccountSection.tsx
   'copyLook', // components/looks/LookSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx), routes/Looks.tsx duplicateOne
   'copyPalette', // components/templates/PaletteSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx)
   'copyScript', // src/CopyScriptDialog.tsx, and components/scripts/ScriptSheet.tsx (Copy to… through sheet/CopyToProjectSheet.tsx)

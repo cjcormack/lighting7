@@ -62,6 +62,8 @@ fun Application.configureRouting(state: State) {
                     routeApiRestAuth(state)
                     // A remote session's own refresh and end (cloud-p1 plan D5), open to an unlinked one.
                     routeApiRestCloudSession(state)
+                    // A desk account's own cloud link, and an unlinked session's prove-once (cloud-p1 plan D12).
+                    routeApiRestCloudLink(state)
                     routeApiRestStatus(state)
                     routeApiRestProjects(state)
                     routeApiRestLightsFixtures(state)
@@ -136,6 +138,8 @@ private fun isWarmupExempt(path: String): Boolean =
         // A remote session's refresh and end read nothing off the show, and must not lapse while it loads.
         path == "/api/rest/cloud/session" ||
         path == "/api/rest/cloud/session/token" ||
+        // Linking reads nothing off the show either, and an unlinked session has nothing else to do.
+        path == "/api/rest/cloud/link/prove" ||
         path.startsWith("/api/rest/oauth/") ||
         path.startsWith("/api/rest/cloud-sync/") ||
         // Nothing under /update touches the show — and a desk whose show *failed* to boot is

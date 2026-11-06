@@ -20,8 +20,9 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import uk.me.cormack.lighting7.models.DaoCloudConnections
-import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoCloudRemoteSessions
+import uk.me.cormack.lighting7.models.DeletedUserLinks
+import uk.me.cormack.lighting7.models.deleteCloudLinksOf
 import uk.me.cormack.lighting7.models.DaoPasswordResetToken
 import uk.me.cormack.lighting7.models.DaoPasswordResetTokens
 import uk.me.cormack.lighting7.models.DaoUser
@@ -336,11 +337,28 @@ class AuthService(
         credentialRevocationListeners.forEach { it(userId, exceptTokenHash) }
     }
 
+    private val userDeletedListeners = java.util.concurrent.CopyOnWriteArrayList<(DeletedUserLinks) -> Unit>()
+
+    /**
+     * Called after an account is deleted with the cloud link and invites its deletion removed
+     * (cloud-p1 plan D12), so the cloud can be told. Its sessions end through the revocation
+     * listeners as for any other deletion.
+     */
+    fun addUserDeletedListener(listener: (DeletedUserLinks) -> Unit) {
+        userDeletedListeners += listener
+    }
+
+    /** Tell every socket that [userId]'s account changed, for a change made outside this class (a cloud link). */
+    fun announceUserChanged(userId: Int) {
+        _userChanges.tryEmit(userId)
+    }
+
     private val _userChanges = MutableSharedFlow<Int>(replay = 0, extraBufferCapacity = 64)
 
     /**
      * userIds whose account row has just changed — created, renamed, re-roled, enabled,
-     * disabled, deleted, or re-passworded. `plugins/MachineSocket.kt` collects this per
+     * disabled, deleted, or re-passworded — or whose cloud link or invite has, which
+     * `cloud/CloudLinks.kt` reports through [announceUserChanged]. `plugins/MachineSocket.kt` collects this per
      * connection and turns it into a payload-free `userListChanged` for every socket plus an
      * `ownAccountChanged` for the subject's own sockets. Without it a user edit reaches only
      * the client that made it: a phone signed in by QR, a second desk or a tablet keeps the
@@ -568,6 +586,7 @@ class AuthService(
      * in-memory caches would happily keep honouring.
      */
     fun deleteUser(userId: Int): UserMutation<Unit> {
+        var deletedLinks: DeletedUserLinks? = null
         val outcome = transaction(database) {
             val dao = DaoUser.findById(userId) ?: return@transaction UserMutation.NotFound
             // Same in-transaction guard as updateUser, for the same reason: two admins
@@ -582,7 +601,7 @@ class AuthService(
             DaoPasswordResetTokens.update({ DaoPasswordResetTokens.createdByUser eq userId }) {
                 it[createdByUser] = null
             }
-            DaoCloudIdentityLinks.deleteWhere { DaoCloudIdentityLinks.user eq userId }
+            val removed = deleteCloudLinksOf(userId, dao.username, clock())
             DaoCloudConnections.update({ DaoCloudConnections.adoptedBy eq userId }) {
                 it[adoptedBy] = null
             }
@@ -590,6 +609,7 @@ class AuthService(
                 it[user] = null
             }
             dao.delete()
+            deletedLinks = removed
             UserMutation.Done(Unit)
         }
         if (outcome !is UserMutation.Done) return outcome
@@ -604,6 +624,7 @@ class AuthService(
             sessions.remove(it.tokenHash)
             _revocations.tryEmit(it.tokenHash)
         }
+        deletedLinks?.let { removed -> userDeletedListeners.forEach { it(removed) } }
         hasAnyUser = users.isNotEmpty()
         _userChanges.tryEmit(userId)
         return outcome

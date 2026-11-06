@@ -273,5 +273,7 @@ lightingApi.auth.subscribeUnauthenticated(() => {
 // bridge in ./users.ts: every connected client refetching `auth/status` on any admin edit is a
 // thundering herd for no gain.
 lightingApi.auth.subscribeOwnAccountChanged(() => {
-  store.dispatch(restApi.util.invalidateTags(['Auth']))
+  // `CloudLink` too: the desk announces a link made or removed elsewhere (an accepted invite, an
+  // admin's unlink) to the account's own sockets, and the Profile sheet draws it.
+  store.dispatch(restApi.util.invalidateTags(['Auth', 'CloudLink']))
 })

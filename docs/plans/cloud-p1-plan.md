@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, session 5 in review.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05, session 6 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -317,8 +317,8 @@ and a session is added here for it.
 | 2 | Bearer tokens on the public listener | merged | `claude/cloud-p1-s2` | [#355](https://github.com/cjcormack/lighting7/pull/355) | `7deccac` |
 | 3 | The sidecar and the broker | merged | `claude/cloud-p1-s3` | [#356](https://github.com/cjcormack/lighting7/pull/356) | `45ab6d1` |
 | 4 | The SPA in remote mode | merged | `claude/cloud-p1-htmv50` | [#357](https://github.com/cjcormack/lighting7/pull/357) | `52c68fe` |
-| 5 | Bundling and supervising the sidecar | in review | `claude/awesome-lamport-bbwlen` | | |
-| 6 | Linking cloud accounts | planned | | | |
+| 5 | Bundling and supervising the sidecar | merged | `claude/awesome-lamport-bbwlen` | [#361](https://github.com/cjcormack/lighting7/pull/361) | `bbeac1e` |
+| 6 | Linking cloud accounts | in review | `claude/festive-wright-5j9oje` | | |
 | 7 | Remote sessions on the Cloud tab | planned | | | |
 | 8 | The MCP relay | planned | | | |
 | 9 | Delete ngrok and the desk's OAuth server | planned | | | |
@@ -564,6 +564,27 @@ next; whoever merges the last fills its own.
   `./gradlew test --tests` for `cloud`, `auth`, `routes`, `sync`; `npm run check:quick`.
 - **Docs:** `docs/desk-accounts.md` §"Lighting7 Cloud" (links: the three ways, what each audits);
   `docs/cloud-engineering.md` §"Links".
+- **As built:** `cloud/CloudLinks.kt` owns every link change but adoption's, and `cloud_link_events` rows
+  carry the user's name beside its id, so a row says who after the user is deleted; both tables keep a
+  year, pruned at startup. The routes are `POST` / `DELETE /users/{id}/cloud-invite` and `DELETE
+  /users/{id}/cloud-link` for an admin, and `GET` / `DELETE /cloud/link` for the caller's own, beside
+  `POST /cloud/link/prove`, which is also exempt from the warm-up gate. An invite needs the channel online
+  (409 `CLOUD_OFFLINE`, nothing kept) and is one per user and per email, since the cloud keeps one live
+  invite per address; `link.invite`'s `userName` is the desk username. `cloud_identity_links` gains
+  `invite_id`, so an acceptance the cloud sends again after a lost `link.ack` is answered linked rather
+  than `LINK_INVITE_NOT_LIVE`. An email mismatch keeps the invite; `LINK_TAKEN` deletes it. A link the
+  account gains while one of its sessions is open, by proof or by invite, turns that unlinked session into
+  the user's (`RemoteSessions.linked`), and the audit row names the user it gained at its close.
+  `link.cancelled`, `link.removed` and `link.created` sent while the channel is down wait in memory (at
+  most 256) for the next connection. A wrong password on prove is 401, as the sign-in form's is, which the
+  SPA treats as no session loss; a disabled user is 403. Proving cancels the user's live invite. Unadopting
+  records each link and invite it deletes as `UNADOPTED`. The Users column is drawn once the desk is
+  adopted, or while any user is still linked. Every link and invite write re-reads the adoption and the
+  user in its own transaction, an invite waits behind any link message still queued, and
+  `RemoteSessions.open` reads the link again once the session is registered, so a link change racing a
+  session's opening is never missed. An invite for an email another user's link carries is sent and
+  refused only at its acceptance (`LINK_TAKEN`), since a link's email can be stale after an email change
+  in the cloud (decided 2026-11-06).
 
 ### Session 7 — Remote sessions on the Cloud tab
 

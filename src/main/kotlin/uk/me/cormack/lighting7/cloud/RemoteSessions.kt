@@ -25,6 +25,7 @@ import uk.me.cormack.lighting7.cloud.protocol.Timestamps
 import uk.me.cormack.lighting7.cloud.protocol.TokenScope
 import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoCloudRemoteSessions
+import uk.me.cormack.lighting7.models.DaoUsers
 import uk.me.cormack.lighting7.models.nowUtc
 import java.security.MessageDigest
 import java.security.PublicKey
@@ -101,11 +102,20 @@ class RemoteSession internal constructor(
     val orgId: String,
     val email: String,
     val displayName: String,
-    /** The local user the account is linked to, or null for an unlinked session (D12). */
-    val userId: Int?,
+    userId: Int?,
     val startedAt: Instant,
     internal val rowId: Int,
 ) {
+    /**
+     * The local user the account is linked to, or null for an unlinked session (D12). Fixed when the
+     * session opens, except that an unlinked one takes the link its account gains while it is open.
+     */
+    @Volatile var userId: Int? = userId
+        internal set
+
+    /** Opened unlinked: its audit row names no user until it closes, and then the one it gained, if any. */
+    internal val openedUnlinked: Boolean = userId == null
+
     /** The highest `exp` of any token accepted for it, 0 before the first. */
     @Volatile internal var latestExp: Long = 0
 
@@ -260,8 +270,7 @@ class RemoteSessions(
         val opened = runCatching {
             transaction(database) {
                 if (DaoCloudRemoteSessions.selectAll().where { DaoCloudRemoteSessions.sid eq sid }.any()) return@transaction null
-                val userId = DaoCloudIdentityLinks.selectAll().where { DaoCloudIdentityLinks.cloudAccountId eq accountId }
-                    .firstOrNull()?.get(DaoCloudIdentityLinks.user)?.value
+                val userId = linkedUser(accountId)
                 val rowId = DaoCloudRemoteSessions.insert {
                     it[DaoCloudRemoteSessions.sid] = sid
                     it[cloudAccountId] = accountId
@@ -281,8 +290,24 @@ class RemoteSessions(
             return OpenResult.Refused(ErrorCode.SESSION_ENDED)
         }
         scheduleExpiry(session)
+        // A link change that committed between the read above and the registration called [linked] or
+        // [linkRemoved] before this session was there to hear it, so read the link once more now.
+        val current = runCatching { linkedUser(accountId) }.getOrElse { userId }
+        if (current != userId) {
+            if (userId == null) {
+                linked(accountId, current!!)
+            } else {
+                end(sid, RemoteSessionEnd.LINK_REMOVED)
+                return OpenResult.Refused(ErrorCode.SESSION_ENDED)
+            }
+        }
         logger.info("Remote session {} opened for {}", sid, email)
         return OpenResult.Opened(session)
+    }
+
+    private fun linkedUser(accountId: String): Int? = transaction(database) {
+        DaoCloudIdentityLinks.selectAll().where { DaoCloudIdentityLinks.cloudAccountId eq accountId }
+            .firstOrNull()?.get(DaoCloudIdentityLinks.user)?.value
     }
 
     /**
@@ -364,6 +389,16 @@ class RemoteSessions(
                 }
                 RevokeTarget.All -> denyAll(denial)
             }
+        }
+    }
+
+    /**
+     * [accountId] is now linked to [userId] (D12): its unlinked sessions become that user's, so the
+     * session that proved the link carries on signed in. A session already linked keeps its user.
+     */
+    fun linked(accountId: String, userId: Int) {
+        sessions.values.filter { it.accountId == accountId }.forEach { session ->
+            synchronized(session) { if (session.userId == null) session.userId = userId }
         }
     }
 
@@ -454,6 +489,9 @@ class RemoteSessions(
             it[endedAt] = now
             it[path] = session.path
             it[endReason] = reason.name
+            // A session that gained its link while open names that user, unless they have been deleted since.
+            val gained = session.userId?.takeIf { id -> session.openedUnlinked && DaoUsers.selectAll().where { DaoUsers.id eq id }.any() }
+            if (gained != null) it[user] = gained
         }
     }
 
