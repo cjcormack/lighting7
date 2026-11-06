@@ -4,12 +4,16 @@ import { createSyncStore, sessionStorageArea } from '@/lib/syncStore'
 import { useHeightGrip } from '@/hooks/useHeightGrip'
 import { GRIP_CLASS, clampRigHeight, snapRigHeight, stepRigHeight } from '@/components/busking/RigHandle'
 import { CueEditor, type CueEditorTabRequest } from '@/components/cues/editor/CueEditor'
+import { paneBlankText, type CuePaneContent } from './cuePaneContent'
 
 /**
- * The cue sheet's **bottom pane** (show-cue-editing plan D5, §4.3): the cue editor for the one
- * selected row, under the sheet, with a grip for its height. The sheet mounts it only while exactly
- * one cue row is selected — no row, several, or a marker fold it and the sheet takes the height
- * back.
+ * The cue sheet's and the Timeline's **bottom pane** (show-cue-editing plan D5, §4.3): the cue
+ * editor for the one selected cue, under the sheet, with a grip for its height.
+ *
+ * **It is this window's toggle, not the selection's** (show-view-fixes plan D3–D5): while
+ * [cuePaneOpenStore] is on the host always draws it at its height, so selecting never moves the
+ * rows; off, never. The selection only chooses what it shows (`paneContentOf`) — the cue, or a
+ * blank state for nothing, several cues or only markers, drawn in the same sized box.
  *
  * **The height is this window's** (`sessionStorage cueSheet.paneHeight`), null until the window
  * drags it, drawn then at half the column. The grip is the busk `RigHandle`'s, its drag the same
@@ -20,8 +24,8 @@ import { CueEditor, type CueEditorTabRequest } from '@/components/cues/editor/Cu
  * the default. The height is clamped **on read**: one stored on a taller window comes back when the
  * window does.
  *
- * The grip and the pane are one **key region** (`data-key-region`): a key pressed in them is never
- * the sheet's.
+ * The grip and the editor are **key regions** (`data-key-region`): a key pressed in them is never
+ * the sheet's. A blank state is not one, so a press on it leaves the keys with the sheet.
  */
 
 /** The least the pane draws. */
@@ -30,6 +34,18 @@ export const PANE_MIN_PX = 160
 export const SHEET_KEEP_PX = 30 + 3 * 36
 /** The grip's own row. */
 const GRIP_PX = 16
+
+/** Whether this window draws the pane — on in a window that has never chosen. */
+export const cuePaneOpenStore = createSyncStore<boolean>({
+  key: 'cueSheet.paneOpen',
+  fallback: true,
+  parse: (parsed) => (typeof parsed === 'boolean' ? parsed : true),
+  storage: sessionStorageArea,
+})
+
+export function useCuePaneOpen(): boolean {
+  return useSyncExternalStore(cuePaneOpenStore.subscribe, cuePaneOpenStore.getSnapshot, cuePaneOpenStore.getServerSnapshot)
+}
 
 export const cuePaneHeightStore = createSyncStore<number | null>({
   key: 'cueSheet.paneHeight',
@@ -50,24 +66,19 @@ export function stepPaneHeight(current: number, half: number, max: number, direc
 
 export function CueEditorPane({
   projectId,
-  cueId,
-  entryId,
+  content,
   locked,
   onRequestUnlock,
   tabRequest,
-  columnRef,
   sheetRef,
   onResized,
 }: {
   projectId: number
-  cueId: number
-  entryId: number
+  content: CuePaneContent
   locked: boolean
   /** Lift the lock, where it is the operator's — the editor's refused edits ask to. */
   onRequestUnlock?: () => void
   tabRequest?: CueEditorTabRequest | null
-  /** The whole column — half of it is the default and a snap point. */
-  columnRef: RefObject<HTMLElement | null>
   /** The sheet's own box above the grip — the one other child that gives way to the pane. */
   sheetRef: RefObject<HTMLElement | null>
   /** The pane took a new height, or opened: the host keeps the edited row in view. */
@@ -80,9 +91,11 @@ export function CueEditorPane({
   const draggingRef = useRef(false)
 
   // Half the column, and the room the sheet and the pane share: the column less every other child
-  // in it (the selection bar, the footer), which nothing the pane holds can change.
+  // in it (the selection bar, the footer), which nothing the pane holds can change. The column is
+  // the region's parent, read from the DOM: the pane mounts with the sheet, and an ancestor's ref
+  // is not yet attached when a child's layout effect runs.
   useLayoutEffect(() => {
-    const column = columnRef.current
+    const column = regionRef.current?.parentElement
     if (column == null) return
     const measure = () => {
       const columnHeight = column.getBoundingClientRect().height
@@ -99,8 +112,11 @@ export function CueEditorPane({
     if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(measure)
     observer.observe(column)
+    // The sheet gives way when another child of the column grows (the selection bar arriving), which
+    // the column, `flex-1`, does not see.
+    if (sheetRef.current != null) observer.observe(sheetRef.current)
     return () => observer.disconnect()
-  }, [columnRef, sheetRef])
+  }, [sheetRef])
 
   const height = clampRigHeight(stored ?? bounds.half, PANE_MIN_PX, bounds.max)
   // Written onto the pane from an effect keyed on the value, never a `style` prop: the grip writes
@@ -125,8 +141,8 @@ export function CueEditorPane({
   })
 
   return (
-    <div ref={regionRef} className="flex min-h-0 shrink-0 flex-col" data-key-region>
-      <div className="flex h-4 shrink-0 items-center justify-center border-t bg-muted/20">
+    <div ref={regionRef} className="flex min-h-0 shrink-0 flex-col">
+      <div className="flex h-4 shrink-0 items-center justify-center border-t bg-muted/20" data-key-region>
         <div
           role="separator"
           aria-orientation="horizontal"
@@ -152,19 +168,39 @@ export function CueEditorPane({
           }}
         />
       </div>
-      <div ref={paneRef} className="flex min-h-0 shrink-0 flex-col border-t bg-background" data-cue-pane={entryId}>
-        <CueEditor
-          key={entryId}
-          projectId={projectId}
-          cueId={cueId}
-          entryId={entryId}
-          locked={locked}
-          onRequestUnlock={onRequestUnlock}
-          host="pane"
-          tabRequest={tabRequest}
-          className="min-h-0 flex-1"
-        />
+      <div
+        ref={paneRef}
+        className="flex min-h-0 shrink-0 flex-col border-t bg-background"
+        data-cue-pane={content.kind === 'cue' ? content.entryId : ''}
+        data-cue-pane-state={content.kind}
+        data-key-region={content.kind === 'cue' ? '' : undefined}
+      >
+        {content.kind === 'cue' ? (
+          <CueEditor
+            key={content.entryId}
+            projectId={projectId}
+            cueId={content.cueId}
+            entryId={content.entryId}
+            locked={locked}
+            onRequestUnlock={onRequestUnlock}
+            host="pane"
+            tabRequest={tabRequest}
+            className="min-h-0 flex-1"
+          />
+        ) : (
+          <PaneBlank content={content} />
+        )}
       </div>
+    </div>
+  )
+}
+
+function PaneBlank({ content }: { content: Exclude<CuePaneContent, { kind: 'cue' }> }) {
+  const { title, detail } = paneBlankText(content)
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center" data-cue-pane-blank>
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="text-xs text-muted-foreground">{detail}</p>
     </div>
   )
 }

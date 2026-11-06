@@ -3725,15 +3725,27 @@ Three surface rules, each pinned by its test:
   (the editor can set it), blank on a MARKER; a press opens `CueSceneryEditor` at the cell, and
   locked it asks to unlock like every refused edit (disabled with the reason where the lock is not
   the operator's), closing on a re-lock. Not a `cell` — one cue's list is not a value a marquee
-  spreads. **Layers · FX are read-outs that select their row and open the pane on that tab**
-  (below); **Book opens the Prompt Book** at that cue instead, through
+  spreads. **Layers · FX are read-outs that select their row and open the pane on that tab**,
+  turning it on if it is off (below); **Book opens the Prompt Book** at that cue instead, through
   `?cue=`, which is that page's arrival contract and the mirror of the one it mints for Show — it is
   the one read-out that names a place in another document. **No Hooks column**: `CueStackCueEntry`
   carries no trigger count, and adding one is a backend field.
 
-  **The bottom pane holds the cue editor for the one selected row** (show-cue-editing plan D5,
-  §4.3; `runner/CueEditorPane.tsx`): drawn only while exactly one cue row is selected — no row,
-  several, or a marker fold it, and the sheet (`flex-1`) takes the height back. It sits under the
+  **The bottom pane is a per-window toggle, and the selection only chooses what it shows**
+  (show-cue-editing plan D5; show-view-fixes plan D3–D6; `runner/CueEditorPane.tsx`): the
+  *Editor* button in `StackDetail`'s header (`aria-pressed`, drawn on the Table and the Timeline,
+  not on Cards, locked or not) keeps `sessionStorage cueSheet.paneOpen`, `cuePaneOpenStore`, on in a
+  window that never chose. On, the pane is always drawn at its height, so a selection never moves
+  the rows under a marquee. It shows `CueEditor` for the one selected cue row
+  (markers beside it aside), else a blank state in the same box — *No cue selected*, *3 cues
+  selected · … The bar above acts on all three*, or a separator's (unreachable while the kit never
+  selects a divider) — chosen by `runner/cuePaneContent.ts`'s `paneContentOf`. **During a marquee
+  it keeps what it had** (`useHeldPaneContent`, read from `sheet.marqueeDragging`) and follows the
+  selection on release, so `CueEditor` is never mounted per row crossed. A read-out that opens it —
+  Layers, FX, the Move in dark chip, the Timeline's Dark tap — turns it on first, and so does the
+  `?cue=` deep link (the Prompt Book's *Edit cue*); a plain click never does. Off, it is never drawn. The pane measures its column as its own parent element,
+  since it mounts with the sheet and an ancestor's ref is not attached when a child's layout effect
+  runs. It sits under the
   sheet with the busk `RigHandle`'s grip — one drag, `hooks/useHeightGrip.ts`, and one snap,
   `snapRigHeight` — but its snap points are its own: its **160px floor and half the column**,
   nothing else. The height
@@ -3743,9 +3755,9 @@ Three surface rules, each pinned by its test:
   the default. The ceiling is measured from the column (less its other children), never from the
   pane, whose content can be taller than the room. The height is written onto the pane
   imperatively per move and committed on release, so a drag re-renders the grip and not the sheet,
-  and the edited row is scrolled into view by the least move as the pane opens or resizes. **The
-  grip and the pane are a key region** (`data-key-region`, which `keyTargetIsGuarded` stands aside
-  for, as it does for a Select's list): Escape, Enter or ⌫ pressed in the editor is never the
+  and the edited row is scrolled into view by the least move as the pane opens, resizes or takes another cue — never for a blank state. **The
+  grip and the editor are key regions** (`data-key-region`, which `keyTargetIsGuarded` stands aside
+  for, as it does for a Select's list; a blank state is not one): Escape, Enter or ⌫ pressed in the editor is never the
   sheet's. The editor is `CueEditor` with `host="pane"` —
   the card's own (§"Cues, Stacks & Triggers") — keyed by the entry, so its header names the stack
   beside the number (*Act 1 · Q1*); locked it reads. A read-out's tab request is spent once the pane
@@ -6923,7 +6935,7 @@ A cue without an explicit number gets one derived from its position (`cueNumberA
 **A cue is edited in one editor, two hosts** (show-cue-editing plan D1, §4.1–4.3, session 4;
 `components/cues/editor/CueEditor.tsx`). The open card draws its collapsed row, the cue action set's
 strip, then `CueEditor`; the cue sheet's bottom pane draws the same `CueEditor` for its one selected
-row (§Sheet kit); and `stage/OwnerEditor` mounts it in a right-hand sheet for a cue opened from
+cue row while the window's *Editor* toggle is on (§Sheet kit); and `stage/OwnerEditor` mounts it in a right-hand sheet for a cue opened from
 outside the Show view — the fixture sheet FX tray's *on Q12* and the Stage view's *Moves with*.
 **Cue properties is gone** (D15): `CuePropertiesSheet` and `CuePropsPane` are deleted, and the card
 has no *Cue properties…*. Two cards can be open, each with its own editor.
@@ -7072,8 +7084,8 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   for FX and scenery) under the kit's header bands; a palette's cells and header carry its
   colour where it has one (`paletteRowsSwatch` over a generic palette's rows, the busk pad's rule). Markers are divider rows whose cells a run
   and a tracked line pass through. A cell selects through its `onBeginEdit`; editing is the next
-  bullet. One selected cell opens the pane on its cue at the column's tab (Looks for Look and palette
-  columns, FX, Scenery); a range over several cues folds it (C2). A layer cell's rank is the desk's
+  bullet. With the pane on, one selected cell shows its cue at the column's tab (Looks for Look and
+  palette columns, FX, Scenery); a range over several cues shows the blank state (C2). A layer cell's rank is the desk's
   `rank`, which counts a layer whose source is gone, so the ranks above it do not shift.
 - **Row B** is the filters, per window (`sessionStorage timeline.filters`): the kind chips with
   their counts under the other filters (`kindCounts`), the family segment (scenery always

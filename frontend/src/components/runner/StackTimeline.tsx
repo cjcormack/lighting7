@@ -91,7 +91,8 @@ import { activeKeyRegion } from '@/components/sheet/keyRegion'
 import { keyTargetIsGuarded } from '@/components/sheet/cellEntry'
 import { editorIsOpen } from '@/components/editor/EditorSurface'
 import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
-import { CueEditorPane } from './CueEditorPane'
+import { CueEditorPane, cuePaneOpenStore, useCuePaneOpen } from './CueEditorPane'
+import { paneContentOf, useHeldPaneContent } from './cuePaneContent'
 import { UnlockShowDialog } from './UnlockShowDialog'
 import { CueActions, type CueActionRow } from './CueActions'
 import { useSharedCueActionDialogs } from './cueActionDialogsContext'
@@ -182,8 +183,9 @@ export interface StackTimelineProps {
  * the stage, and its answer is one Undo (⌘Z, or the toast). Locked, the cells read and every write
  * asks to unlock.
  *
- * One selected cell opens `CueEditorPane` on its cue at its column's tab; a range over several cues
- * folds it (C2). The bar carries the cue action set over the selected cues, as the Table's does.
+ * While this window's *Editor* toggle is on, `CueEditorPane` is drawn under the grid: one selected
+ * cell shows its cue at its column's tab, and a range over several cues a blank state at the same
+ * height (C2). The bar carries the cue action set over the selected cues, as the Table's does.
  */
 export function StackTimeline({
   stack,
@@ -667,10 +669,10 @@ export function StackTimeline({
     },
   })
 
-  // ── The pane (C2): one selected cue opens it, at the selected cell's column's tab. ──
-  const columnRef = useRef<HTMLDivElement>(null)
+  // ── The pane (C2): one selected cue shows in it, at the selected cell's column's tab. ──
   const sheetRef = useRef<HTMLDivElement>(null)
-  const paneRow = selectedRows.length === 1 && isCueRow(selectedRows[0].entry) ? selectedRows[0] : null
+  const paneOpen = useCuePaneOpen()
+  const paneContent = useHeldPaneContent(paneContentOf(selectedRows), sheet.marqueeDragging)
   const singleCell = cellCount === 1 ? cellSelection.cells[0] : null
   const cellKind = singleCell == null ? null : (shown.find((c) => c.id === singleCell.col)?.kind ?? null)
   const [tabRequest, setTabRequest] = useState<{ key: string; tab: CueEditorTab; section?: 'moveInDark'; seq: number } | null>(null)
@@ -682,12 +684,13 @@ export function StackTimeline({
 
   openDarkRef.current = (entryId) => {
     const rowId = entryRowId(entryId)
+    cuePaneOpenStore.set(true)
     setRows([rowId])
     scrollTo(rowId)
     setTabRequest((prev) => ({ key: `${rowId}|${DARK_COLUMN}`, tab: 'cue', section: 'moveInDark', seq: (prev?.seq ?? 0) + 1 }))
   }
 
-  const paneRowId = paneRow?.id ?? null
+  const paneRowId = paneOpen && paneContent.kind === 'cue' ? paneContent.rowId : null
   // A Dark tap's tab request is for the row it opened; once the pane leaves that row it lapses.
   useEffect(() => {
     setTabRequest((request) =>
@@ -711,6 +714,7 @@ export function StackTimeline({
     const row = rows.find((r) => r.divider == null && r.entry.entryId === openedEntryId)
     if (row == null) return
     consumedRef.current = openedEntryId
+    cuePaneOpenStore.set(true)
     setRows([row.id])
     scrollTo(row.id)
   }, [openedEntryId, rows, scrollTo, setRows])
@@ -781,7 +785,7 @@ export function StackTimeline({
         )}`
 
   return (
-    <div ref={columnRef} className="flex min-h-0 flex-1 flex-col" data-stack-timeline>
+    <div className="flex min-h-0 flex-1 flex-col" data-stack-timeline>
       {/* Row B: the filters (§4.3), per window, and + Column. */}
       <div className={cn(CHROME_ROW_CLASS, 'overflow-x-auto')} data-timeline-filters>
         <span className="shrink-0 text-[11px] uppercase tracking-wider text-muted-foreground">Show</span>
@@ -982,19 +986,19 @@ export function StackTimeline({
           }}
         />
       </div>
-      {paneRow != null && (
+      {paneOpen && (
         <CueEditorPane
           projectId={projectId}
-          cueId={cueOf(paneRow).id}
-          entryId={paneRow.entry.entryId}
+          content={paneContent}
           locked={locked}
           onRequestUnlock={onRequestUnlock}
           tabRequest={
-            tabRequest != null && (singleCell?.rowId === paneRow.id || tabRequest.key === `${paneRow.id}|${DARK_COLUMN}`)
+            tabRequest != null &&
+            paneContent.kind === 'cue' &&
+            (singleCell?.rowId === paneContent.rowId || tabRequest.key === `${paneContent.rowId}|${DARK_COLUMN}`)
               ? tabRequest
               : null
           }
-          columnRef={columnRef}
           sheetRef={sheetRef}
           onResized={keepPaneRowInView}
         />

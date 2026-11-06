@@ -1,6 +1,6 @@
 # Show view editing fixes
 
-> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Sessions 1 and 2 in review.
+> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Sessions 1 and 2 merged; session 3 in review.
 
 The design record is [`show-view-fixes-design/INDEX.md`](show-view-fixes-design/INDEX.md), and its
 one-page copy [`show-view-fixes.html`](show-view-fixes-design/show-view-fixes.html) holds the
@@ -170,9 +170,9 @@ touched packages' tests where they touch the backend, and `npm run check:quick` 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Duplicate carries the follow | in review | `claude/festive-curie-bn6jsd` | [#359](https://github.com/cjcormack/lighting7/pull/359) | 4420de9 |
-| 2 | In production | in review | `claude/stoic-babbage-zbutzf` | | |
-| 3 | The editor pane toggle | planned | | | |
+| 1 | Duplicate carries the follow | merged | `claude/festive-curie-bn6jsd` | [#359](https://github.com/cjcormack/lighting7/pull/359) | 4420de9 |
+| 2 | In production | merged | `claude/stoic-babbage-zbutzf` | [#360](https://github.com/cjcormack/lighting7/pull/360) | 9e51a1a |
+| 3 | The editor pane toggle | in review | `claude/gallant-faraday-nxc79c` | | |
 | 4 | The row head: Cue # cells and arming from the pip | planned | | | |
 | 5 | Dragging a selection | planned | | | |
 
@@ -254,6 +254,16 @@ D3–D6.
 - Docs: frontend `CLAUDE.md` §Sheet kit's cue sheet entry (*The bottom pane…*) and the
   `CueEditorPane` docblock.
 - Local: `check:quick`.
+- As built: the content rule and the marquee hold are `runner/cuePaneContent.ts` (`paneContentOf`,
+  `useHeldPaneContent`, `paneBlankText`), apart from the pane so they test without a DOM. One cue
+  row with markers beside it shows that cue: the blank states count cues. The *only separators*
+  state is in the model but unreachable today, because the sheet kit never selects a divider
+  (`isSelectableRow`); session 5's selected separators would reach it. The pane no longer takes a
+  `columnRef`: mounted with the sheet, its layout effect ran before the column's ref was attached
+  and it never measured, so it reads its column as its own parent element. On the Timeline the
+  read-out that turns it on is the Dark tap; a cell click only selects. The `?cue=` deep link (the
+  Prompt Book's *Edit cue*) turns it on too, on both views (Chris, 2026-11-06). A blank state is not
+  a key region, so a press on it leaves the keys with the sheet; the grip and the editor still are.
 
 ### Session 4 — The row head: Cue # cells and arming from the pip
 
