@@ -1,6 +1,6 @@
 # Show view editing fixes
 
-> **Document status: READY — calls decided 2026-11-06 (§3).** No session started.
+> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Session 1 in review.
 
 The design record is [`show-view-fixes-design/INDEX.md`](show-view-fixes-design/INDEX.md), and its
 one-page copy [`show-view-fixes.html`](show-view-fixes-design/show-view-fixes.html) holds the
@@ -170,7 +170,7 @@ touched packages' tests where they touch the backend, and `npm run check:quick` 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Duplicate carries the follow | planned | | | |
+| 1 | Duplicate carries the follow | in review | `claude/festive-curie-bn6jsd` | | |
 | 2 | In production | planned | | | |
 | 3 | The editor pane toggle | planned | | | |
 | 4 | The row head: Cue # cells and arming from the pip | planned | | | |
@@ -189,7 +189,8 @@ D1, D2.
   entry not found` otherwise), its follow passed to `placeCueInStack(stack, copy, autoAdvance = …,
   autoAdvanceDelay = …)`. A request with `entryId` and no `stackId` makes a loose copy and ignores
   the entry.
-- `frontend/src/api/cuesApi.ts` and `store/cues.ts`: `entryId` on the duplicate call.
+- `store/cues.ts`: `entryId` on the duplicate call. (`api/cuesApi.ts` holds only the response
+  type; the request body is built in the store.)
   `components/runner/CueActions.tsx`'s `duplicate` sends `row.entryId`; the Cues table's
   `actionRowOf` already hands an entry only when the cue has one place.
 - Tests: `CueDuplicateAndMoveRoutesTest.kt` — an entry with follow on and a 2 s delay gives the

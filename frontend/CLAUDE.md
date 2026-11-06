@@ -6704,8 +6704,8 @@ provider (a test drawing the set alone) the set draws them itself.
   REST call, which the desk does not order, so sending both at once could put the cue on stage. No
   confirmation within 3 s loads nothing and says so. Blind holds the Include's FX too (D7).
 - **Load into programmer** Includes and stays; its title says live or blind. **Record…** opens the
-  Record sheet on the cue. **Duplicate** is the desk's route, each row in row order, the one copy
-  opened by its entry. **Remove from stack** deletes the entry. **Delete…** is `CueDeleteDialog`
+  Record sheet on the cue. **Duplicate** is the desk's route, each row in row order, naming the
+  row's entry so the copy keeps its follow, the one copy opened by its entry. **Remove from stack** deletes the entry. **Delete…** is `CueDeleteDialog`
   (`components/cues/`): one confirm for every row, each cue's entries, pads, slots, anchors and
   bindings from `cueDeletePreview`'s dry run, then `POST /cues/delete` with `force`; it says a
   surface binding stays and reports its cue missing (`FU-CUE-BINDING-SWEEP`). The Cues table's
@@ -6968,9 +6968,10 @@ tab and the Prompt Book rail all open their cards collapsed. Consequences worth 
   Show pill brings them back to the stack and the card (§"The Show position"), and so does *← Show*
   in the programmer's source box (§"The cue action set").
 - **Duplicate appends the copy to the end of the stack** and opens it by its entry (venue-visit plan
-  S3; show-cue-editing plan D12), on the desk's `POST /cues/{id}/duplicate {stackId}` since that
+  S3; show-cue-editing plan D12), on the desk's `POST /cues/{id}/duplicate {stackId, entryId}` since that
   plan's session 3: a full copy — rows, layers, FX, hooks, notes, scenery and events — unnumbered,
-  so it takes the next auto number with nothing else in the stack moving. The client-side
+  so it takes the next auto number with nothing else in the stack moving, and with the follow of
+  the entry it was duplicated from (show-view-fixes plan D1). The client-side
   `buildCueInput` copy it replaced carried neither scenery nor events.
 
 - **`CueValueGrid` reads `GET /{projectId}/cues/{cueId}/cooked`**, which wraps the same
@@ -7011,7 +7012,7 @@ is found — Record's *No stack* makes one.
 - **The bar is the cue action set** (`host="table"`, its own `FOLDS` rungs) after the kit's Set ·
   Clear over the name and notes cells, never verbs of the table's own. A row stands for the cue, so
   it hands the set its entry only when it has exactly one (`actionRowOf`): Duplicate appends a copy
-  to that stack or makes a loose one, *Remove from stack* and *Move to stack…* are off whenever a
+  to that stack with that entry's follow or makes a loose one, *Remove from stack* and *Move to stack…* are off whenever a
   selected cue sits in several places (it is changed in its stack), and the table stays put after Duplicate rather than opening the
   copy. *Delete…* is `CueDeleteDialog`.
 - **A row opens the cue at its first entry** on the Show view; a loose cue opens `CueEditor` in a

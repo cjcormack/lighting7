@@ -179,13 +179,17 @@ export const cuesApi = restApi.injectEndpoints({
 
     /**
      * *Duplicate*: a full copy of the cue — its rows, layers, effects, hooks, scenery and events —
-     * appended to the end of `stackId`'s list, or loose without one (show-cue-editing plan D12).
+     * appended to the end of `stackId`'s list with `entryId`'s follow, or loose without one
+     * (show-cue-editing plan D12, show-view-fixes plan D1). `entryId` is the place duplicated from.
      */
-    duplicateCue: build.mutation<DuplicateCueResponse, { projectId: number; cueId: number; stackId: number | null }>({
-      query: ({ projectId, cueId, stackId }) => ({
+    duplicateCue: build.mutation<
+      DuplicateCueResponse,
+      { projectId: number; cueId: number; stackId: number | null; entryId: number | null }
+    >({
+      query: ({ projectId, cueId, stackId, entryId }) => ({
         url: `projects/${projectId}/cues/${cueId}/duplicate`,
         method: 'POST',
-        body: stackId == null ? {} : { stackId },
+        body: stackId == null ? {} : { stackId, entryId },
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'CueList', id: projectId },
