@@ -12,7 +12,7 @@ import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 import { CopyFromShowSheet } from '../components/cues/CopyFromShowSheet'
 import { CueLibrarySheet } from '../components/cues/CueLibrarySheet'
 import { useCueActionDialogs } from '../components/runner/cueActionDialogs'
-import { ShowLockControl } from '../components/runner/ShowLockControl'
+import { NotInProductionLabel, ShowLockControl } from '../components/runner/ShowLockControl'
 import { LibraryRow, PartitionChips } from '../components/sheet/LibraryRow'
 import { SheetPage } from '../components/sheet/SheetPage'
 import { CueEditorSheet } from '../components/stage/OwnerEditor'
@@ -144,6 +144,11 @@ export function ProjectCues() {
               countdownSecondsLeft={editLock.countdownSecondsLeft}
               onStayUnlocked={editLock.stayUnlocked}
             />
+          </div>
+        )}
+        {editLock.notInProduction && (
+          <div className="ml-auto shrink-0">
+            <NotInProductionLabel projectId={projectIdNum} />
           </div>
         )}
       </SheetPage.Header>

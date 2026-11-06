@@ -264,6 +264,7 @@ class SetupTools(
                 }
                 venueUuid = pin?.first?.uuid
                 venueVersion = pin?.second
+                inProduction = false
             }
             ensureDefaultSpeedMasters(project)
             val seating = presetUuid?.let { SeatingPresets.copyOnCreate(project, pin!!.first, it).name }

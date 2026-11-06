@@ -11,6 +11,9 @@ import type { HistoryMoveArg, HistoryPage } from '@/store/history'
 const desk = vi.hoisted(() => ({
   sent: [] as HistoryMoveArg[],
   page: null as HistoryPage | null,
+  running: false,
+  lockRequested: false,
+  inProduction: true,
 }))
 const toasts = vi.hoisted(() => ({ last: null as null | { message: string; action?: { label: string; onClick: () => void } } }))
 
@@ -39,9 +42,14 @@ vi.mock('@/store/history', async (importOriginal) => ({
 }))
 vi.mock('react-redux', () => ({
   useDispatch: () => () => ({ unwrap: () => Promise.resolve(desk.page) }),
-  useSelector: () => false,
+  useSelector: () => desk.lockRequested,
 }))
-vi.mock('@/store/cueStacks', () => ({ useProjectProgramStateQuery: () => ({ data: undefined }) }))
+vi.mock('@/store/cueStacks', () => ({
+  useProjectProgramStateQuery: () => ({ data: desk.running ? { activeStackId: 10 } : undefined }),
+}))
+vi.mock('@/store/projects', () => ({
+  useCurrentProjectQuery: () => ({ data: { id: 1, inProduction: desk.inProduction } }),
+}))
 vi.mock('@/lib/programmerFade', () => ({ useProgrammerFade: () => '0' }))
 
 const { useHistoryMove } = await import('./HistoryMove')
@@ -49,6 +57,9 @@ const { parseHistoryPage } = await import('@/store/history')
 
 afterEach(() => {
   desk.sent = []
+  desk.running = false
+  desk.lockRequested = false
+  desk.inProduction = true
   toasts.last = null
 })
 
@@ -95,5 +106,28 @@ describe("a toast's Undo, and its way back", () => {
     })
     expect(desk.sent).toEqual([])
     expect(toasts.last?.message).toBe('That change is already undone')
+  })
+})
+
+describe('the show-editing lock', () => {
+  it('asks to unlock before undoing a show entry on a running show in production', async () => {
+    desk.running = true
+    desk.lockRequested = true
+    const { result } = renderHook(() => useHistoryMove())
+    await act(async () => {
+      void result.current.move('undo', { entryId: 'e-1' })
+    })
+    expect(desk.sent).toEqual([])
+  })
+
+  it('undoes at once on a running show that is not in production', async () => {
+    desk.running = true
+    desk.lockRequested = true
+    desk.inProduction = false
+    const { result } = renderHook(() => useHistoryMove())
+    await act(async () => {
+      await result.current.move('undo', { entryId: 'e-1' })
+    })
+    expect(moves()).toEqual(['undo e-1'])
   })
 })

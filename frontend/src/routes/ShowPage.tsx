@@ -15,7 +15,7 @@ import { OffPlayheadBanner } from '../components/runner/OffPlayheadBanner'
 import { RunMobile } from '../components/runner/mobile/RunMobile'
 import { useCueLocationLabels, useRunnerDisplay } from '../hooks/useRunnerDisplay'
 import { useMakeStackLive } from '../hooks/useMakeStackLive'
-import { ShowLockControl } from '../components/runner/ShowLockControl'
+import { NotInProductionLabel, ShowLockControl } from '../components/runner/ShowLockControl'
 import { ShowHeader } from '../components/ShowHeader'
 import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { ShowBar } from '../components/ShowBar'
@@ -158,14 +158,13 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   const [bodyRef, isNarrow] = useNarrowContainer(MOBILE_RUNNER_THRESHOLD)
   const locked = editLock.locked || isNarrow
   /**
-   * A *running* show that is unlocked — the state the chrome shouts about.
-   *
-   * Not the same as `!locked`: a stopped show is unlocked too, and there is nothing to be wrong
-   * about there. Threaded to every bar of chrome rather than applied once at the top, because the
-   * band is made of siblings — header, show bar, tab strip, navigation row — and tinting only some
-   * of them reads as stripes rather than as one state.
+   * A guarded show that is unlocked — the state the chrome shouts about; the lock's rule says when
+   * (`useEditLock`). The phone is always locked, so it never warns. Threaded to every bar of chrome
+   * rather than applied once at the top, because the band is made of siblings — header, show bar,
+   * tab strip, navigation row — and tinting only some of them reads as stripes rather than as one
+   * state.
    */
-  const unlockedWarning = !locked && isShowActive
+  const unlockedWarning = editLock.unlockedWarning && !isNarrow
 
   /**
    * What the phone runner is showing, and whether that is the playhead.
@@ -474,6 +473,8 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
               countdownSecondsLeft={editLock.countdownSecondsLeft}
               onStayUnlocked={editLock.stayUnlocked}
             />
+          ) : editLock.notInProduction && !isNarrow ? (
+            <NotInProductionLabel projectId={projectIdNum} />
           ) : undefined
         }
         {...showHeaderProps}

@@ -169,6 +169,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         stageHeightM = 6.0
         detachedFromVenueUuid = RICH_PROJECT_DETACHED_FROM.first
         detachedFromVersion = RICH_PROJECT_DETACHED_FROM.second
+        inProduction = false
     }
 
     // 2 universes, 4 patches, 2 groups. The address is machine-local (Phase 2 cloud sync)

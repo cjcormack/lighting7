@@ -29,6 +29,7 @@ const stacksState = {
 const programState = {
   data: undefined as { activeStackId: number | null; canEdit?: boolean } | undefined,
 }
+const currentProject = { inProduction: undefined as boolean | undefined }
 
 vi.mock('../store/cueStacks', () => ({
   useProjectCueStackListQuery: () => stacksState,
@@ -95,9 +96,10 @@ vi.mock('../components/runner/ShowLockControl', () => ({
       lock
     </button>
   ),
+  NotInProductionLabel: () => <span data-testid="not-in-production" />,
 }))
 vi.mock('../store/projects', () => ({
-  useCurrentProjectQuery: () => ({ data: { id: 1 }, isLoading: false }),
+  useCurrentProjectQuery: () => ({ data: { id: 1, inProduction: currentProject.inProduction }, isLoading: false }),
   useProjectQuery: () => ({ data: { id: 1, name: 'Hamlet' }, isLoading: false }),
 }))
 const goToStack = vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))
@@ -292,6 +294,7 @@ beforeEach(() => {
   programState.data = { activeStackId: null, canEdit: true }
   blindState.blind = false
   narrow.value = false
+  currentProject.inProduction = undefined
   store.dispatch(lockRequested())
 })
 
@@ -661,6 +664,24 @@ describe('ShowPage unlocked warning', () => {
     expect(barProps.unlockedWarning).toBe(false)
     expect(screen.getByTestId('tab-strip').getAttribute('data-warn')).toBe('false')
     expect(probe.unlockedWarning).toBe(false)
+  })
+
+  it('neither locks nor washes a running show that is not in production', () => {
+    programState.data = { activeStackId: 10, canEdit: true }
+    currentProject.inProduction = false
+    draw(['/projects/1/show/stacks/10'])
+    expect(screen.queryByTestId('lock')).toBeNull()
+    expect(screen.getByTestId('not-in-production')).toBeTruthy()
+    expect(screen.getByTestId('header').getAttribute('data-warn')).toBe('false')
+    expect(barProps.unlockedWarning).toBe(false)
+    expect(screen.getByTestId('tab-strip').getAttribute('data-warn')).toBe('false')
+    expect(probe.unlockedWarning).toBe(false)
+  })
+
+  it('says nothing about production while the show is stopped', () => {
+    currentProject.inProduction = false
+    draw(['/projects/1/show/stacks/10'])
+    expect(screen.queryByTestId('not-in-production')).toBeNull()
   })
 
   it('tints the whole chrome band together, not just the header', () => {

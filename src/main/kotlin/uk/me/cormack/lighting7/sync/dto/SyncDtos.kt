@@ -416,6 +416,11 @@ data class ProjectJson(
     val detachedFromVenueUuid: String? = null,
     val detachedFromVersion: Int? = null,
     /**
+     * Whether the show locks its editing views while a stack runs (show-view-fixes plan D16). No
+     * version of its own: true, every show before the setting, is the default and is omitted.
+     */
+    val inProduction: Boolean = true,
+    /**
      * Which FX library a v37 archive's FX were written against ([LegacyNames.FX_LIBRARY]); absent is
      * 1, every archive written before the terminology plan's session 3. It tells the importer an FX
      * that names no `pingPong` from before the parameter went, which ran with it on, from one written

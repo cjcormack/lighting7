@@ -1,6 +1,6 @@
 # Show view editing fixes
 
-> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Session 1 in review.
+> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Sessions 1 and 2 in review.
 
 The design record is [`show-view-fixes-design/INDEX.md`](show-view-fixes-design/INDEX.md), and its
 one-page copy [`show-view-fixes.html`](show-view-fixes-design/show-view-fixes.html) holds the
@@ -170,8 +170,8 @@ touched packages' tests where they touch the backend, and `npm run check:quick` 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Duplicate carries the follow | in review | `claude/festive-curie-bn6jsd` | | |
-| 2 | In production | planned | | | |
+| 1 | Duplicate carries the follow | in review | `claude/festive-curie-bn6jsd` | [#359](https://github.com/cjcormack/lighting7/pull/359) | 4420de9 |
+| 2 | In production | in review | `claude/stoic-babbage-zbutzf` | | |
 | 3 | The editor pane toggle | planned | | | |
 | 4 | The row head: Cue # cells and arming from the pip | planned | | | |
 | 5 | Dragging a selection | planned | | | |
@@ -226,6 +226,17 @@ D15–D21.
 - Docs: `docs/sync-engineering.md` (the field, no bump); frontend `CLAUDE.md`
   §"The show-editing lock" (the formula and the setting).
 - Local: the full `./gradlew test` and `npm run check`.
+- As built: the list DTO is `ProjectListDto` (there is no `ProjectDto`). A new show starts off on
+  every door that makes one, not only `POST /projects`: MCP's `create_project` and the `Default`
+  project a new desk boots on too. Naming it on anything but a show is 400 `IN_PRODUCTION_NOT_A_SHOW`
+  on create and update. The undo restore of `project.json` (`ProjectImporter.restoreProjectRow`)
+  puts it back with the name. The rule is `editLockRule` beside the hook, which `useHistoryMove`
+  calls, and an unknown `inProduction` (loading, an older desk) reads as on. The lock re-arms on
+  *running and in production* turning true (not `canEdit`, which the Prompt Book learns late), and
+  `updateProject` re-arms it when it turns the setting on, since the switch is on Settings, where no
+  lock host is mounted. On an auto-merge it merges three-way beside the pin (`mergeProjectPin`):
+  this desk's change wins where the remote did not change it (Chris, 2026-11-06), so a desk that
+  turned it on for a performance cannot lose the lock to another desk's older commit.
 
 ### Session 3 — The editor pane toggle
 

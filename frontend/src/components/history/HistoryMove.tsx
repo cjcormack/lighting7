@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useProgrammerFade } from '@/lib/programmerFade'
 import { selectLockRequested, unlockRequested } from '@/store/editLockSlice'
+import { editLockRule, useInProduction } from '@/hooks/useEditLock'
 import { useProjectProgramStateQuery } from '@/store/cueStacks'
 import {
   entriesForRequests,
@@ -184,9 +185,17 @@ export function useHistoryMove() {
   const history = useHistoryState()
   const fadeMs = Number(useProgrammerFade()) || 0
   const lockRequested = useSelector(selectLockRequested)
+  const inProduction = useInProduction()
   const { data: program } = useProjectProgramStateQuery(history.projectId ?? 0, { skip: history.projectId == null })
-  const latest = useRef({ history, fadeMs, lockRequested, running: program?.activeStackId != null })
-  latest.current = { history, fadeMs, lockRequested, running: program?.activeStackId != null }
+  // History's project is the live one, so it is editable: the lock is the rule's, guarded or not.
+  const lockedNow = editLockRule({
+    canEdit: true,
+    isShowActive: program?.activeStackId != null,
+    inProduction,
+    requested: lockRequested,
+  }).locked
+  const latest = useRef({ history, fadeMs, lockedNow })
+  latest.current = { history, fadeMs, lockedNow }
 
   return useMemo(() => {
     const move = async (direction: 'undo' | 'redo', options: HistoryMoveOptions = {}): Promise<HistoryMoveAnswer | null> => {
@@ -215,7 +224,7 @@ export function useHistoryMove() {
           },
           ask: askHistoryQuestion,
           mine: options.mine ?? true,
-          locked: showEntry && projectId === now.history.projectId && now.running && now.lockRequested,
+          locked: showEntry && projectId === now.history.projectId && now.lockedNow,
           unlock: () => dispatch(unlockRequested()),
           done: (request, answered) => {
             if (answered.moved.some((m) => isShowEntryId(m.id))) notifyHistoryMoved(request.projectId)

@@ -37,6 +37,7 @@ vi.mock('@/store/promptBooks', () => ({
   useProjectCueLocationsQuery: () => ({ data: [{ cueId: 12, page: 9, y: 0.1 }] }), // page 9 zero-based reads "p. 10"
   useProjectPromptBookQuery: () => ({ data: { coverPages: 0 } }),
 }))
+vi.mock('@/store/projects', () => ({ useCurrentProjectQuery: () => ({ data: { id: 1 } }) }))
 vi.mock('react-redux', () => {
   const dispatch = vi.fn()
   return {

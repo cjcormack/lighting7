@@ -64,6 +64,13 @@ object DaoProjects: IntIdTable("projects") {
      */
     val detachedFromVenueUuid = javaUUID("detached_from_venue_uuid").nullable()
     val detachedFromVersion = integer("detached_from_version").nullable()
+    /**
+     * Whether the show is **in production** (show-view-fixes plan D15): while it is and a stack runs,
+     * the show-editing views lock against stray clicks. Every show from before the setting reads as
+     * in production; a new show starts off. Meaningless on a venue, which has no lock. Portable:
+     * `project.json`'s `inProduction`, omitted when true.
+     */
+    val inProduction = bool("in_production").default(true)
 }
 
 /** Whether this is a show **on a venue** (venue plan §3.1): one with a pin. */
@@ -100,6 +107,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var venueRepo by DaoProjects.venueRepo
     var detachedFromVenueUuid by DaoProjects.detachedFromVenueUuid
     var detachedFromVersion by DaoProjects.detachedFromVersion
+    var inProduction by DaoProjects.inProduction
 
     val scripts by DaoScript referrersOn DaoScripts.project
     val looks by DaoLook referrersOn DaoLooks.project

@@ -52,7 +52,7 @@ import { ShowHeader } from '../components/ShowHeader'
 import { ImmersiveEscape } from '@/components/ImmersiveEscape'
 import { ShowBar } from '../components/ShowBar'
 import { PromptBookToolbar } from '../components/promptbook/PromptBookToolbar'
-import { ShowLockControl } from '../components/runner/ShowLockControl'
+import { NotInProductionLabel, ShowLockControl } from '../components/runner/ShowLockControl'
 import { ToolPalette, type PromptBookTool } from '../components/promptbook/ToolPalette'
 import { CueStackPanel } from '../components/promptbook/CueStackPanel'
 import { ScriptUploadCard } from '../components/promptbook/ScriptUploadCard'
@@ -175,9 +175,7 @@ export function PromptBookViewerPage() {
       clearPlacing()
     },
   })
-  const { locked, toggleLock, noteEdit, noteGo } = relock
-  /** See the note in `ShowPage`: the whole chrome band tints, or it reads as stripes. */
-  const unlockedWarning = !locked && isShowActive
+  const { locked, toggleLock, noteEdit, noteGo, unlockedWarning } = relock
 
   /**
    * One transport and one show bar, from the same hook every other live view uses.
@@ -593,7 +591,7 @@ export function PromptBookViewerPage() {
         // Same slot, same control, same position as Show — the lock is shared between the two
         // views, so having it in two different places was the inconsistency.
         actions={
-          isShowActive || !canEdit ? (
+          relock.lockRelevant || !canEdit ? (
             <ShowLockControl
               locked={locked}
               onToggle={toggleLock}
@@ -601,6 +599,8 @@ export function PromptBookViewerPage() {
               onStayUnlocked={relock.stayUnlocked}
               disabled={!canEdit}
             />
+          ) : relock.notInProduction ? (
+            <NotInProductionLabel projectId={projectIdNum} />
           ) : undefined
         }
       />
@@ -628,9 +628,9 @@ export function PromptBookViewerPage() {
       {!locked && (
         <ToolPalette
           tool={tool}
-          // Amber is the "you unlocked a running show" signal — with the show stopped the
-          // bar is just the normal way to annotate, so it wears the normal chrome.
-          warn={isShowActive}
+          // Amber is the "you unlocked a running show" signal — with the show stopped, or not in
+          // production, the bar is just the normal way to annotate, so it wears the normal chrome.
+          warn={unlockedWarning}
           placingLabel={placingEntryId != null ? (labelByEntry.get(placingEntryId) ?? null) : null}
           onSelectTool={(t) => {
             setTool(t)
@@ -642,10 +642,10 @@ export function PromptBookViewerPage() {
       <div
         ref={bodyRef}
         className={cn(
-          // Unlocking a RUNNING show must be visually unmistakable: the whole script pane
-          // gets an inset amber ring. Editing a stopped show is unremarkable — no ring.
+          // Unlocking a guarded show must be visually unmistakable: the whole script pane gets an
+          // inset amber ring. Editing a stopped show, or one not in production, is unremarkable.
           'relative flex min-h-0 flex-1 overflow-hidden',
-          !locked && isShowActive && 'shadow-[inset_0_0_0_2px_rgba(245,158,11,0.55)]',
+          unlockedWarning && 'shadow-[inset_0_0_0_2px_rgba(245,158,11,0.55)]',
         )}
       >
         <div className="relative flex min-w-0 flex-1 flex-col">

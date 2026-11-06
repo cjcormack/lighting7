@@ -47,6 +47,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
@@ -156,6 +157,13 @@ class ProjectCloneTest {
             assertEquals(expected, runs(sourceId))
             assertEquals(expected, runs(result.projectId), "the clone's Pulse is one run under the source's key")
         }
+    }
+
+    @Test
+    fun `clone keeps a show not in production`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-production", description = null)
+        transaction(state.database) { assertFalse(DaoProject[result.projectId].inProduction) }
     }
 
     /**

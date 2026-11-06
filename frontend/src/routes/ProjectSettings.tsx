@@ -11,7 +11,7 @@ import { Loader2 } from "lucide-react"
 import { useProjectQuery, useUpdateProjectMutation } from "@/store/projects"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { formatError } from "@/lib/formatError"
-import { parseNullableNumber } from "@/lib/utils"
+import { cn, parseNullableNumber } from "@/lib/utils"
 import { SurfacesContent } from "./Surfaces"
 import { StageRegionsContent } from "@/components/stage/StageRegionsContent"
 import { RiggingsContent } from "@/components/rigging/RiggingsContent"
@@ -202,7 +202,55 @@ function GeneralTab({ projectId }: { projectId: number }) {
           </Button>
         </div>
       </Card>
+      {(project.kind ?? "SHOW") === "SHOW" && <InProductionCard projectId={projectId} inProduction={project.inProduction ?? true} />}
     </div>
+  )
+}
+
+/**
+ * *In production* (show-view-fixes plan D21): whether a running show locks its editing views. Saved
+ * on the switch, apart from the name's Save, since it is one gesture with nothing to type. Turning it
+ * on re-arms the lock (`updateProject`'s, D19).
+ */
+function InProductionCard({ projectId, inProduction }: { projectId: number; inProduction: boolean }) {
+  const [updateProject, { isLoading: saving }] = useUpdateProjectMutation()
+  const onToggle = async () => {
+    try {
+      await updateProject({ id: projectId, inProduction: !inProduction }).unwrap()
+    } catch (err) {
+      toast.error(`Failed to save project: ${formatError(err)}`)
+    }
+  }
+  return (
+    <Card className="mt-4 p-4 space-y-2">
+      <div className="flex items-center justify-between gap-4">
+        <Label htmlFor="project-in-production">In production</Label>
+        <button
+          id="project-in-production"
+          type="button"
+          role="switch"
+          aria-checked={inProduction}
+          disabled={saving}
+          onClick={() => void onToggle()}
+          className={cn(
+            "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+            inProduction ? "bg-primary" : "bg-input",
+          )}
+        >
+          <span
+            className={cn(
+              "pointer-events-none block h-5 w-5 rounded-full bg-background shadow transition-transform",
+              inProduction ? "translate-x-5" : "translate-x-0",
+            )}
+          />
+        </button>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        On: while a stack runs, Show, the Prompt Book and the Cues table lock against stray clicks, and
+        an unlocked running show is washed amber. Off: they stay editable while the show runs.
+      </p>
+    </Card>
   )
 }
 

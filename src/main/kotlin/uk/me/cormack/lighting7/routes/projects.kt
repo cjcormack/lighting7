@@ -167,6 +167,10 @@ internal fun Route.routeApiRestProjects(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Only a show sits on a venue", VenueVersions.CODE_NOT_A_VENUE))
                 return@routingPost
             }
+            if (request.inProduction != null && request.kind != ProjectKind.SHOW) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(IN_PRODUCTION_NOT_A_SHOW_MESSAGE, CODE_IN_PRODUCTION_NOT_A_SHOW))
+                return@routingPost
+            }
             if (request.seatingPresetUuid != null && request.venueId == null) {
                 call.respond(
                     HttpStatusCode.BadRequest,
@@ -207,6 +211,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     kind = request.kind
                     venueUuid = pin?.first?.uuid
                     venueVersion = pin?.second
+                    if (request.kind == ProjectKind.SHOW) inProduction = request.inProduction ?: false
                 }
                 ensureDefaultSpeedMasters(newProject)
                 // The stalls (venue plan D6, session 7): a copy of the preset the operator chose, the show's own.
@@ -234,6 +239,9 @@ internal fun Route.routeApiRestProjects(state: State) {
             val project = transaction(state.database) {
                 val project = DaoProject.findById(resource.id)
                     ?: return@transaction null
+                if (request.inProduction != null && project.kind != ProjectKind.SHOW) {
+                    throw VenueException.badRequest(CODE_IN_PRODUCTION_NOT_A_SHOW, IN_PRODUCTION_NOT_A_SHOW_MESSAGE)
+                }
                 // A show on a venue reads its stage size from the venue (venue plan §3.2).
                 if (project.isVenueBound &&
                     listOf(request.stageWidthM, request.stageDepthM, request.stageHeightM).any { it != null }
@@ -246,6 +254,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                 request.stageWidthM?.let { project.stageWidthM = it }
                 request.stageDepthM?.let { project.stageDepthM = it }
                 request.stageHeightM?.let { project.stageHeightM = it }
+                request.inProduction?.let { project.inProduction = it }
 
                 project.toDetailDto(state)
             }
@@ -471,6 +480,8 @@ data class ProjectListDto(
     val safeBlackout: Boolean = false,
     /** Where a standalone show was detached from (venue-attach plan D1); absent for any other project. */
     val detachedFrom: DetachedFromDto? = null,
+    /** Whether a running show locks its editing views (show-view-fixes plan D15). */
+    val inProduction: Boolean = true,
 )
 
 /**
@@ -531,6 +542,8 @@ data class ProjectDetailDto(
     val venue: ProjectVenueDto? = null,
     /** Where a standalone show was detached from (venue-attach plan D1); absent for any other project. */
     val detachedFrom: DetachedFromDto? = null,
+    /** Whether a running show locks its editing views (show-view-fixes plan D15). */
+    val inProduction: Boolean = true,
 )
 
 @Serializable
@@ -552,6 +565,8 @@ data class CreateProjectRequest(
      * show as its own stalls. Null seats nothing; 400 `SEATING_PRESET_UNKNOWN` for one the version lacks.
      */
     val seatingPresetUuid: String? = null,
+    /** A new show starts not in production (show-view-fixes plan call 6); refused on a venue. */
+    val inProduction: Boolean? = null,
 )
 
 @Serializable
@@ -561,6 +576,8 @@ data class UpdateProjectRequest(
     val stageWidthM: Double? = null,
     val stageDepthM: Double? = null,
     val stageHeightM: Double? = null,
+    /** Refused on a venue, which has no lock. Either role may change it (show-view-fixes plan D17). */
+    val inProduction: Boolean? = null,
 )
 
 @Serializable
@@ -598,6 +615,7 @@ private fun DaoProject.toListDto(state: State) = ProjectListDto(
     parks = VenueParks.of(id).effective.size,
     safeBlackout = state.safeBlackoutHeld(id.value),
     detachedFrom = detachedFromDto(),
+    inProduction = inProduction,
 )
 
 /** A venue's card, or null for anything else. Counts read the installed version (the draft before v1). Inside a transaction. */
@@ -637,6 +655,7 @@ internal fun DaoProject.toDetailDto(state: State): ProjectDetailDto {
         kind = kind,
         venue = venueDto(state),
         detachedFrom = detachedFromDto(),
+        inProduction = inProduction,
     )
 }
 
@@ -678,6 +697,10 @@ internal fun showsOnVenue(venue: DaoProject): List<DaoProject> =
 
 /** A venue a show pins cannot be deleted: the show's rig links into its versions (venue plan P3). */
 internal const val CODE_VENUE_IN_USE = "VENUE_IN_USE"
+
+/** *In production* on anything but a show (show-view-fixes plan D15): a venue has no lock. */
+internal const val CODE_IN_PRODUCTION_NOT_A_SHOW = "IN_PRODUCTION_NOT_A_SHOW"
+private const val IN_PRODUCTION_NOT_A_SHOW_MESSAGE = "Only a show is in production: a venue has no lock"
 
 /**
  * Delete [project] and every row it owns, children before parents (no FK here cascades). Inside a

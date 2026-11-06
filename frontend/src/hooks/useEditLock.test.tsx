@@ -7,8 +7,11 @@ import type { ReactNode } from 'react'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import { store } from '../store'
-import { lockRequested } from '../store/editLockSlice'
+import { lockRequested, unlockRequested } from '../store/editLockSlice'
+import { projectsApi } from '../store/projects'
+import type { ProjectDetail } from '../api/projectApi'
 import { useEditLock } from './useEditLock'
+import { installRecordingFetch, installRelativeUrlRequest } from '../test/backendMock'
 
 /**
  * The lock is a show-safety mechanism, so its edges are pinned rather than assumed: what it does
@@ -29,9 +32,20 @@ function draw(args: Args) {
   return renderHook((p: Args) => useEditLock(p), { wrapper, initialProps: args })
 }
 
-beforeEach(() => {
+async function setInProduction(inProduction: boolean) {
+  const project: ProjectDetail = {
+    id: 1, name: 'Hamlet', description: null, isCurrent: true, scriptCount: 0, lookCount: 0, cueCount: 0,
+    cueStackCount: 0, stageWidthM: null, stageDepthM: null, stageHeightM: null, inProduction,
+  }
+  await act(async () => {
+    await store.dispatch(projectsApi.util.upsertQueryData('currentProject', undefined, project))
+  })
+}
+
+beforeEach(async () => {
   // A running show always opens locked; reset the shared slice between cases.
   store.dispatch(lockRequested())
+  await setInProduction(true)
 })
 
 afterEach(() => vi.clearAllMocks())
@@ -109,5 +123,81 @@ describe('useEditLock', () => {
 
     const second = draw({ canEdit: true, isShowActive: true })
     expect(second.result.current.locked).toBe(false)
+  })
+
+  describe('a show not in production', () => {
+    it('is unlocked while it runs, with no lock chrome and no warning', async () => {
+      await setInProduction(false)
+      const { result } = draw({ canEdit: true, isShowActive: true })
+      expect(result.current.locked).toBe(false)
+      expect(result.current.lockRelevant).toBe(false)
+      expect(result.current.unlockedWarning).toBe(false)
+      expect(result.current.notInProduction).toBe(true)
+
+      act(() => result.current.toggleLock())
+      expect(result.current.locked).toBe(false)
+    })
+
+    it('still refuses an edit the backend would refuse', async () => {
+      await setInProduction(false)
+      const { result } = draw({ canEdit: false, isShowActive: true })
+      expect(result.current.locked).toBe(true)
+      expect(result.current.notInProduction).toBe(false)
+    })
+
+    it('locks at once when put into production while it runs', async () => {
+      await setInProduction(false)
+      const { result } = draw({ canEdit: true, isShowActive: true })
+      // Unlocked by the slice too, as after a fix-it session: the transition must re-arm it.
+      act(() => {
+        store.dispatch(unlockRequested())
+      })
+      expect(result.current.locked).toBe(false)
+
+      await setInProduction(true)
+      expect(result.current.locked).toBe(true)
+      expect(result.current.lockRelevant).toBe(true)
+      expect(result.current.notInProduction).toBe(false)
+    })
+  })
+
+  it('warns while a guarded show is unlocked, and only then', () => {
+    const { result, rerender } = draw({ canEdit: true, isShowActive: true })
+    expect(result.current.unlockedWarning).toBe(false)
+    act(() => result.current.toggleLock())
+    expect(result.current.unlockedWarning).toBe(true)
+
+    rerender({ canEdit: true, isShowActive: false })
+    expect(result.current.unlockedWarning).toBe(false)
+  })
+
+  it('does not re-lock an unlocked session when a host’s canEdit arrives after mount', () => {
+    // The Prompt Book's canEdit comes off its book, which can land after the run state: moving to it
+    // mid fix-it session must not lock again.
+    store.dispatch(unlockRequested())
+    const { result, rerender } = draw({ canEdit: false, isShowActive: true })
+    rerender({ canEdit: true, isShowActive: true })
+    expect(result.current.locked).toBe(false)
+  })
+
+  it('re-arms the lock when a running show is put into production from anywhere', async () => {
+    // The switch is on Settings, where no lock host is mounted to see the transition.
+    installRelativeUrlRequest()
+    installRecordingFetch({ 'projects/1': { id: 1, name: 'Hamlet', inProduction: true } })
+    try {
+      store.dispatch(unlockRequested())
+      await act(async () => {
+        await store.dispatch(projectsApi.endpoints.updateProject.initiate({ id: 1, inProduction: true }))
+      })
+      expect(store.getState().editLock.lockRequested).toBe(true)
+
+      store.dispatch(unlockRequested())
+      await act(async () => {
+        await store.dispatch(projectsApi.endpoints.updateProject.initiate({ id: 1, inProduction: false }))
+      })
+      expect(store.getState().editLock.lockRequested).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

@@ -116,7 +116,7 @@ vi.mock('../components/ShowBar', () => ({ ShowBar: () => null }))
 vi.mock('../components/programmer/RecordSheet', () => ({ RecordSheet: () => null }))
 vi.mock('../components/runner/StackTabStrip', () => ({ StackTabStrip: () => null }))
 vi.mock('../components/runner/ShowOverview', () => ({ ShowOverview: () => <div data-testid="stack-list" /> }))
-vi.mock('../components/runner/ShowLockControl', () => ({ ShowLockControl: () => null }))
+vi.mock('../components/runner/ShowLockControl', () => ({ ShowLockControl: () => null, NotInProductionLabel: () => null }))
 // The card's read surface, the hand's strip and the fade — store-touching, and not what is pressed.
 vi.mock('@/components/cues/editor/CueEditor', () => ({ CueEditor: () => <div data-testid="detail" /> }))
 vi.mock('@/components/stage/OwnerEditor', () => ({ OwnerEditor: () => null }))
