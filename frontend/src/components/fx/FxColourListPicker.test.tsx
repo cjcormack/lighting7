@@ -3,12 +3,72 @@ import { useState } from 'react'
 import { Provider } from 'react-redux'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { installRecordingFetch, installRelativeUrlRequest } from '@/test/backendMock'
 
 // lightingApi opens a real WebSocket at import time and jsdom has none; the
 // store slices this component pulls in subscribe at module load.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
+
+/**
+ * react-colorful and Radix's slider read the pointer against a box jsdom lays out at zero, so each is
+ * a stand-in with its callbacks: the picker's `change` is a move, the slider's `pointerUp` its commit.
+ */
+vi.mock('react-colorful', () => ({
+  HexColorPicker: ({ color, onChange }: { color: string; onChange: (hex: string) => void }) => (
+    <input aria-label="Colour picker" value={color} onChange={(e) => onChange(e.target.value)} />
+  ),
+}))
+/** dnd-kit's sensors measure the swatches, so a test drives the context's own callbacks instead. */
+const dnd = vi.hoisted(() => ({
+  props: null as null | {
+    onDragStart?: (event: unknown) => void
+    onDragEnd?: (event: unknown) => void
+    onDragCancel?: (event: unknown) => void
+  },
+  items: [] as string[],
+}))
+vi.mock('@dnd-kit/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/core')>()
+  return {
+    ...actual,
+    DndContext: (props: NonNullable<typeof dnd.props> & { children: React.ReactNode }) => {
+      dnd.props = props
+      return <actual.DndContext>{props.children}</actual.DndContext>
+    },
+  }
+})
+vi.mock('@dnd-kit/sortable', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/sortable')>()
+  return {
+    ...actual,
+    SortableContext: (props: { items: string[]; children: React.ReactNode }) => {
+      dnd.items = props.items
+      return <actual.SortableContext {...props} />
+    },
+  }
+})
+vi.mock('@/components/ui/slider', () => ({
+  Slider: ({
+    value,
+    onValueChange,
+    onValueCommit,
+  }: {
+    value: number[]
+    onValueChange?: (v: number[]) => void
+    onValueCommit?: (v: number[]) => void
+  }) => (
+    <input
+      type="range"
+      aria-label="Emitter"
+      min={0}
+      max={255}
+      value={value[0]}
+      onChange={(e) => onValueChange?.([Number(e.target.value)])}
+      onPointerUp={(e) => onValueCommit?.([Number((e.target as HTMLInputElement).value)])}
+    />
+  ),
+}))
 
 import { FxColourListPicker } from './FxColourListPicker'
 import { store } from '@/store'
@@ -42,10 +102,12 @@ function ControlledPicker({
   initial,
   external,
   onEmit,
+  extendedChannels,
 }: {
   initial: string
   external?: string
-  onEmit?: (v: string) => void
+  onEmit?: (v: string, release: boolean) => void
+  extendedChannels?: { white?: boolean }
 }) {
   const [value, setValue] = useState(initial)
   return (
@@ -55,9 +117,10 @@ function ControlledPicker({
       )}
       <FxColourListPicker
         value={value}
-        onChange={(v) => {
+        extendedChannels={extendedChannels}
+        onChange={(v, release) => {
           setValue(v)
-          onEmit?.(v)
+          onEmit?.(v, release)
         }}
       />
     </>
@@ -95,7 +158,7 @@ describe('FxColourListPicker', () => {
     expect(swatchLabels(container)).toEqual(['rgb(0, 255, 0)'])
 
     addColour()
-    expect(onEmit).toHaveBeenCalledWith('#00ff00,#ffffff')
+    expect(onEmit).toHaveBeenCalledWith('#00ff00,#ffffff', true)
     expect(screen.queryByText('Palettes')).toBeNull()
   })
 
@@ -114,20 +177,20 @@ describe('FxColourListPicker', () => {
 
     addColour()
 
-    expect(onEmit).toHaveBeenCalledWith('#ff0000,#0000ff,#ffffff')
+    expect(onEmit).toHaveBeenCalledWith('#ff0000,#0000ff,#ffffff', true)
     expect(swatchLabels(container)).toHaveLength(3)
     // Same DOM node — the existing items kept their ids rather than being
     // re-parsed into new ones behind the edit.
     expect(container.querySelector('button[style*="background-color"]')).toBe(firstSwatchBefore)
 
     addColour()
-    expect(onEmit).toHaveBeenLastCalledWith('#ff0000,#0000ff,#ffffff,#ffffff')
+    expect(onEmit).toHaveBeenLastCalledWith('#ff0000,#0000ff,#ffffff,#ffffff', true)
     expect(container.querySelector('button[style*="background-color"]')).toBe(firstSwatchBefore)
   })
 
-  // editingIndex is positional, so leaving it set would reopen the editor on
-  // whichever swatch now happens to sit at that index in the new list.
-  it('closes an open swatch editor when handed a different list', () => {
+  // D24: a value arriving while a swatch is open — a late copy of an earlier frame, or any other —
+  // leaves the swatch open on its own colours, and is read once it closes.
+  it('keeps an open swatch through a different value, and takes the value once it closes', () => {
     const { container } = render(
       withStore(<ControlledPicker initial="#ff0000,#00ff00" external="#111111,#222222" />),
     )
@@ -136,7 +199,20 @@ describe('FxColourListPicker', () => {
     expect(screen.queryByRole('dialog')).not.toBeNull()
 
     handOver()
+    expect(screen.queryByRole('dialog')).not.toBeNull()
+    expect(swatchLabels(container).slice(0, 2)).toEqual(['rgb(255, 0, 0)', 'rgb(0, 255, 0)'])
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
+    expect(swatchLabels(container)).toEqual(['rgb(17, 17, 17)', 'rgb(34, 34, 34)'])
+  })
+
+  it('resets to a different list handed over while no swatch is open', () => {
+    const { container } = render(
+      withStore(<ControlledPicker initial="#ff0000,#00ff00" external="#111111,#222222" />),
+    )
+    handOver()
+    expect(swatchLabels(container)).toEqual(['rgb(17, 17, 17)', 'rgb(34, 34, 34)'])
   })
 
   it('keeps emitting from live state across repeated edits', () => {
@@ -146,7 +222,194 @@ describe('FxColourListPicker', () => {
     addColour()
     addColour()
 
-    expect(onEmit).toHaveBeenLastCalledWith('#ff0000,#ffffff,#ffffff')
+    expect(onEmit).toHaveBeenLastCalledWith('#ff0000,#ffffff,#ffffff', true)
     expect(swatchLabels(container)).toHaveLength(3)
+  })
+})
+
+describe('FxColourListPicker releases (programmer-fixes plan D23)', () => {
+  beforeEach(() => {
+    installRelativeUrlRequest()
+    installRecordingFetch()
+  })
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  const openFirstSwatch = (container: HTMLElement) =>
+    fireEvent.click(container.querySelector('button[style*="background-color"]')!)
+  const releases = (onEmit: ReturnType<typeof vi.fn>) => onEmit.mock.calls.filter(([, release]) => release)
+  /** The frame a release is held past the window's pointer-up, for a late last move to land. */
+  const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 30)))
+
+  it('sends a drag as moves, and releases on the window’s pointer-up — inside the popover or out', async () => {
+    for (const target of ['picker', 'outside'] as const) {
+      const onEmit = vi.fn()
+      const { container, unmount } = render(withStore(<ControlledPicker initial="#ff0000,#00ff00" onEmit={onEmit} />))
+      openFirstSwatch(container)
+      const picker = screen.getByLabelText('Colour picker')
+      fireEvent.mouseDown(picker, { button: 0 })
+      fireEvent.change(picker, { target: { value: '#ee0000' } })
+      fireEvent.change(picker, { target: { value: '#dd0000' } })
+      expect(onEmit.mock.calls.map(([, release]) => release)).toEqual([false, false])
+
+      fireEvent.mouseUp(target === 'picker' ? picker : document.body)
+      expect(releases(onEmit)).toEqual([])
+      await settle()
+      expect(releases(onEmit)).toEqual([['#dd0000,#00ff00', true]])
+      // The swatch stays open on the colour it was dragged to.
+      expect(screen.queryByRole('dialog')).not.toBeNull()
+      unmount()
+    }
+  })
+
+  it('sends nothing for a press let go without a move', async () => {
+    const onEmit = vi.fn()
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} />))
+    openFirstSwatch(container)
+    const picker = screen.getByLabelText('Colour picker')
+    fireEvent.mouseDown(picker, { button: 0 })
+    fireEvent.mouseUp(picker)
+    await settle()
+    expect(onEmit).not.toHaveBeenCalled()
+  })
+
+  // react-colorful reports a move from an effect, so the last one can follow the window's release.
+  it('takes a last move reported after the pointer-up into the drag, and releases once, on it', async () => {
+    const onEmit = vi.fn()
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} />))
+    openFirstSwatch(container)
+    const picker = screen.getByLabelText('Colour picker')
+    fireEvent.mouseDown(picker, { button: 0 })
+    fireEvent.change(picker, { target: { value: '#ee0000' } })
+    fireEvent.mouseUp(document.body)
+    fireEvent.change(picker, { target: { value: '#dd0000' } })
+    await settle()
+    expect(onEmit.mock.calls).toEqual([
+      ['#ee0000', false],
+      ['#dd0000', false],
+      ['#dd0000', true],
+    ])
+  })
+
+  it('releases a drag the swatch’s close cuts short', () => {
+    const onEmit = vi.fn()
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} />))
+    openFirstSwatch(container)
+    const picker = screen.getByLabelText('Colour picker')
+    fireEvent.mouseDown(picker, { button: 0 })
+    fireEvent.change(picker, { target: { value: '#ee0000' } })
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(releases(onEmit)).toEqual([['#ee0000', true]])
+  })
+
+  it('lands a release still settling when the next press starts', async () => {
+    const onEmit = vi.fn()
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} />))
+    openFirstSwatch(container)
+    const picker = screen.getByLabelText('Colour picker')
+    fireEvent.mouseDown(picker, { button: 0 })
+    fireEvent.change(picker, { target: { value: '#ee0000' } })
+    fireEvent.mouseUp(picker)
+    fireEvent.mouseDown(picker, { button: 0 })
+    expect(releases(onEmit)).toEqual([['#ee0000', true]])
+    fireEvent.change(picker, { target: { value: '#cc0000' } })
+    expect(onEmit).toHaveBeenLastCalledWith('#cc0000', false)
+    fireEvent.mouseUp(picker)
+    await settle()
+    expect(releases(onEmit)).toEqual([
+      ['#ee0000', true],
+      ['#cc0000', true],
+    ])
+  })
+
+  it('never lands a stale drag: an emitter drag with no commit, then a press with no move, sends nothing more', async () => {
+    const onEmit = vi.fn()
+    const { container } = render(
+      withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} extendedChannels={{ white: true }} />),
+    )
+    openFirstSwatch(container)
+    const white = screen.getByLabelText('Emitter')
+    fireEvent.change(white, { target: { value: '120' } })
+    fireEvent.change(white, { target: { value: '0' } })
+    const sent = onEmit.mock.calls.length
+    const picker = screen.getByLabelText('Colour picker')
+    fireEvent.mouseDown(picker, { button: 0 })
+    fireEvent.mouseUp(picker)
+    await settle()
+    expect(onEmit).toHaveBeenCalledTimes(sent)
+  })
+
+  it('releases an emitter slider’s drag once, on its commit', () => {
+    const onEmit = vi.fn()
+    const { container } = render(
+      withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} extendedChannels={{ white: true }} />),
+    )
+    openFirstSwatch(container)
+    const white = screen.getByLabelText('Emitter')
+    fireEvent.change(white, { target: { value: '40' } })
+    fireEvent.change(white, { target: { value: '80' } })
+    fireEvent.pointerUp(white)
+    expect(onEmit.mock.calls.map(([, release]) => release)).toEqual([false, false, true])
+    expect(releases(onEmit)).toHaveLength(1)
+  })
+
+  it('releases a typed hex, an add and a removal each', () => {
+    const onEmit = vi.fn()
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000,#00ff00" onEmit={onEmit} />))
+    addColour()
+    expect(onEmit).toHaveBeenLastCalledWith('#ff0000,#00ff00,#ffffff', true)
+
+    fireEvent.click(screen.getAllByTitle('Remove')[2])
+    expect(onEmit).toHaveBeenLastCalledWith('#ff0000,#00ff00', true)
+
+    openFirstSwatch(container)
+    fireEvent.change(screen.getByRole('dialog').querySelector('input[type="text"]')!, { target: { value: '#123456' } })
+    expect(onEmit).toHaveBeenLastCalledWith('#123456,#00ff00', true)
+    expect(onEmit.mock.calls.every(([, release]) => release)).toBe(true)
+  })
+
+  it('releases a preset', () => {
+    const onEmit = vi.fn()
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} />))
+    openFirstSwatch(container)
+    const presets = screen.getByRole('dialog').querySelectorAll('button[title]')
+    fireEvent.click(presets[1])
+    expect(onEmit).toHaveBeenCalledTimes(1)
+    expect(onEmit.mock.calls[0][1]).toBe(true)
+  })
+})
+
+describe('FxColourListPicker reorders (programmer-fixes plan D23, D24)', () => {
+  beforeEach(() => {
+    installRelativeUrlRequest()
+    installRecordingFetch()
+  })
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  it('releases a reorder', () => {
+    const onEmit = vi.fn()
+    render(withStore(<ControlledPicker initial="#ff0000,#00ff00" onEmit={onEmit} />))
+    const [first, second] = dnd.items
+    act(() => dnd.props!.onDragStart!({ active: { id: first } }))
+    act(() => dnd.props!.onDragEnd!({ active: { id: first }, over: { id: second } }))
+    expect(onEmit).toHaveBeenLastCalledWith('#00ff00,#ff0000', true)
+  })
+
+  it('keeps its swatches through a different value while a reorder is live, and takes it at the drop', () => {
+    const { container } = render(
+      withStore(<ControlledPicker initial="#ff0000,#00ff00" external="#111111,#222222" />),
+    )
+    const [first] = dnd.items
+    act(() => dnd.props!.onDragStart!({ active: { id: first } }))
+    handOver()
+    expect(swatchLabels(container)).toEqual(['rgb(255, 0, 0)', 'rgb(0, 255, 0)'])
+    act(() => dnd.props!.onDragEnd!({ active: { id: first }, over: null }))
+    expect(swatchLabels(container)).toEqual(['rgb(17, 17, 17)', 'rgb(34, 34, 34)'])
   })
 })

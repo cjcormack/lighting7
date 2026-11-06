@@ -4,6 +4,8 @@ interface ExtendedChannelSliderProps {
   label: string
   value: number
   onChange: (v: number) => void
+  /** The end of a drag, or a key's step: Radix's `onValueCommit`. */
+  onValueCommit?: (v: number) => void
   /** Swatch colour for the channel (W, A, or UV) */
   color: string
 }
@@ -12,6 +14,7 @@ export function ExtendedChannelSlider({
   label,
   value,
   onChange,
+  onValueCommit,
   color,
 }: ExtendedChannelSliderProps) {
   return (
@@ -32,6 +35,7 @@ export function ExtendedChannelSlider({
         max={255}
         step={1}
         onValueChange={([v]) => onChange(v)}
+        onValueCommit={onValueCommit && (([v]) => onValueCommit(v))}
       />
     </div>
   )

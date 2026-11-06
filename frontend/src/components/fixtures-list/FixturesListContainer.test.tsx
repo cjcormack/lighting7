@@ -92,6 +92,15 @@ vi.mock('@/store/fixtureFx', async (importOriginal) => ({
 }))
 /** Every `programmer.clearTarget` *Release n* sent — the frame the desk's W2 answers. */
 const releaseFrames = vi.hoisted(() => ({ calls: [] as unknown[][] }))
+/** The channel store *Lit* reads, which a test drives; empty and silent by default. */
+const channels = vi.hoisted(() => ({
+  values: new Map<string, number>(),
+  listeners: new Set<(updates: Map<string, number>) => void>(),
+  set(key: string, value: number) {
+    this.values.set(key, value)
+    for (const listener of this.listeners) listener(new Map([[key, value]]))
+  },
+}))
 vi.mock('@/api/lightingApi', async () => {
   const { lightingApiMock } = await import('@/test/backendMock')
   const base = lightingApiMock().lightingApi as Record<string, unknown>
@@ -104,10 +113,29 @@ vi.mock('@/api/lightingApi', async () => {
           }
         : target[prop],
   })
-  return { lightingApi: new Proxy(base, { get: (target, prop: string) => (prop === 'programmer' ? programmer : target[prop]) }) }
+  const channelApi = {
+    getAll: () => channels.values,
+    subscribe: (listener: (updates: Map<string, number>) => void) => {
+      channels.listeners.add(listener)
+      return { unsubscribe: () => channels.listeners.delete(listener) }
+    },
+  }
+  return {
+    lightingApi: new Proxy(base, {
+      get: (target, prop: string) => (prop === 'programmer' ? programmer : prop === 'channels' ? channelApi : target[prop]),
+    }),
+  }
 })
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() } }))
-vi.mock('./useLitFixtureKeys', () => ({ useLitFixtureKeys: () => new Set<string>() }))
+/** Whether *Lit* is the real hook over `channels`; a test sets it before it renders, never after. */
+const lit = vi.hoisted(() => ({ real: false }))
+vi.mock('./useLitFixtureKeys', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./useLitFixtureKeys')>()
+  return {
+    useLitFixtureKeys: (fixtures: Parameters<typeof actual.useLitFixtureKeys>[0]) =>
+      lit.real ? actual.useLitFixtureKeys(fixtures) : new Set<string>(),
+  }
+})
 vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => new Map() }))
 vi.mock('./useDeskSelectionBridge', () => ({ useDeskSelectionBridge: () => {} }))
 // The plain lists' row C reads the press mask through the store; there is no Provider here, and
@@ -153,10 +181,24 @@ vi.mock('./SpreadPopover', async (importOriginal) => ({
     <span data-testid="row-spread" data-seed={seed == null ? '' : JSON.stringify(seed)} />
   ),
 }))
-// Row C's FX reads the window's pair and opens the picker; `ProgrammerAddFx.test.tsx` has it.
-vi.mock('../programmer/ProgrammerAddFxButton', () => ({
-  ProgrammerAddFxButton: ({ projectId }: { projectId: number }) => <span data-testid="row-fx" data-project={projectId} />,
-}))
+// Row C's FX reads the window's pair and opens the picker; `ProgrammerAddFx.test.tsx` has it. The
+// stand-in opens and closes as the real one does, holding *Lit* while open (D21).
+vi.mock('../programmer/ProgrammerAddFxButton', async () => {
+  const { useState } = await import('react')
+  const { useLitHold } = await import('../../lib/litHold')
+  return {
+    ProgrammerAddFxButton: function ProgrammerAddFxButton({ projectId }: { projectId: number }) {
+      const [open, setOpen] = useState(false)
+      useLitHold(open)
+      return (
+        <span data-testid="row-fx" data-project={projectId}>
+          <button data-testid="row-fx-toggle" onClick={() => setOpen(!open)} />
+          {open && <span data-testid="fx-picker" />}
+        </span>
+      )
+    },
+  }
+})
 // Row C's rig verbs and the heads chip's writes are store-connected, with suites of their own.
 const rigRelease = vi.hoisted(() => vi.fn())
 vi.mock('./RigVerbs', () => ({
@@ -272,6 +314,10 @@ beforeEach(() => {
   table.revealCell = null
   include.request = { nonce: 0, fixtureKeys: [], groupKeys: [] }
   resetProgrammerTableStore()
+  lit.real = false
+  channels.values.clear()
+  channels.listeners.clear()
+  window.localStorage.removeItem('fixturesList.onlyLit')
 })
 afterEach(cleanup)
 
@@ -961,5 +1007,52 @@ describe('FixturesListContainer — what a palette press lands on (venue-visit p
     expect(parts().paletteTargets).toEqual([{ type: 'fixture', key: 'c.pixel-0' }])
     // The cell's own colour: keyed by fixture alone, the map dropped the cell and offered nothing.
     expect(marquee.get()?.press.targetFamilies).toEqual(['COLOUR'])
+  })
+})
+
+describe('Lit under an open FX picker (programmer-fixes plan D21)', () => {
+  /** Row B's filter and Lit beside row C, as the programmer draws them. */
+  const toolbar = (parts: { filter: ReactNode; lit: ReactNode; actions: ReactNode; selection: ReactNode }) => (
+    <>
+      {parts.filter}
+      {parts.lit}
+      {parts.actions}
+      {parts.selection}
+    </>
+  )
+  // The grid is not drawn at all over no rows, so its last props say nothing once the list empties.
+  const rowKeys = () =>
+    screen.queryByTestId('cell') == null ? [] : table.rows.flatMap((row) => ('fixture' in row ? [row.fixture.key] : []))
+  const renderLit = () => {
+    lit.real = true
+    window.localStorage.setItem('fixturesList.onlyLit', 'true')
+    channels.values.set('0:1', 255)
+    rowSelection.ids = new Set(['fixture:a'])
+    render(
+      <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={toolbar} />,
+    )
+  }
+
+  it('keeps the selected row, row C and the picker while its dimmer goes to 0, and drops the row once it closes', () => {
+    renderLit()
+    expect(rowKeys()).toEqual(['a'])
+    fireEvent.click(screen.getByTestId('row-fx-toggle'))
+    expect(screen.getByTestId('fx-picker')).toBeInTheDocument()
+
+    act(() => channels.set('0:1', 0))
+    expect(rowKeys()).toEqual(['a'])
+    expect(screen.getByTestId('fx-picker')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('row-fx-toggle'))
+    expect(rowKeys()).toEqual([])
+    expect(screen.queryByTestId('row-fx')).toBeNull()
+  })
+
+  it('still takes row C away when a typed filter hides every selected row', () => {
+    renderLit()
+    fireEvent.click(screen.getByTestId('row-fx-toggle'))
+    fireEvent.change(screen.getByPlaceholderText('Filter fixtures…'), { target: { value: 'Wash 2' } })
+    expect(rowKeys()).not.toContain('a')
+    expect(screen.queryByTestId('row-fx')).toBeNull()
   })
 })

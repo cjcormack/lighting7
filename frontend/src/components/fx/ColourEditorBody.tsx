@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { ExtendedChannelSlider } from '../fixtures/ExtendedChannelSlider'
 import {
@@ -10,6 +10,9 @@ import {
 } from './colourUtils'
 import { FxColourPaletteRow } from './FxColourPalettes'
 import type { PaletteSummary } from '@/api/palettesApi'
+
+/** How long a picker press is held past the window's release: a frame, for the last move to land. */
+const RELEASE_SETTLE_MS = 20
 
 interface ColourEditorBodyProps {
   /**
@@ -23,8 +26,17 @@ interface ColourEditorBodyProps {
   /**
    * An edit. The caller decides what it does to a reference; both of today's callers replace it
    * with the literal, which is the honest reading of "I want this colour, not that template".
+   *
+   * [release] is false for a frame of a running drag — the picker's or an emitter slider's — and
+   * true for a gesture's end and for every edit that is one already: a typed hex, a preset, an
+   * arrow key on the picker, an emitter slider's commit.
    */
-  onColourChange: (colour: ExtendedColour) => void
+  onColourChange: (colour: ExtendedColour, release: boolean) => void
+  /**
+   * A press on the picker was let go — anywhere: the window's release, so a drag that ends outside
+   * the popover still ends. The host lands the colour it last had.
+   */
+  onRelease?: () => void
   /** The raw stored value, read only for which template chip is highlighted. */
   rawValue: string
   /**
@@ -53,6 +65,7 @@ export function ColourEditorBody({
   onPickPalette,
   palettes: templates,
   extendedChannels,
+  onRelease,
 }: ColourEditorBodyProps) {
   const [hexInput, setHexInput] = useState(colour.hex)
 
@@ -69,13 +82,67 @@ export function ColourEditorBody({
     setHexInput(colour.hex)
   }
 
+  // A press on the picker arms window listeners for its release, as `ColourEditor`'s `holdPicker`
+  // does: react-colorful reports moves only, and a drag let go outside the popover reaches nothing
+  // inside it. A move while no press is held is a key's step, and is a release of its own.
+  //
+  // react-colorful reports a move from an effect, so a drag's last move can arrive after the window
+  // has seen the release. The press is held for [RELEASE_SETTLE_MS] past it, so that move is still
+  // a frame, and the release comes once, after it — and only if the picker moved during the press.
+  const holdingRef = useRef(false)
+  const movedRef = useRef(false)
+  // Ends the press, releasing it if the picker moved; null while no press is held.
+  const landRef = useRef<(() => void) | null>(null)
+  // Lands a release still settling at once; null unless one is.
+  const settleNowRef = useRef<(() => void) | null>(null)
+  const onReleaseRef = useRef(onRelease)
+  onReleaseRef.current = onRelease
+  const holdPicker = (event: { button: number }) => {
+    // A secondary button's release can be swallowed by a context menu, which would hold for good.
+    if (event.button !== 0) return
+    settleNowRef.current?.()
+    if (landRef.current != null) return
+    holdingRef.current = true
+    movedRef.current = false
+    const events = ['pointerup', 'pointercancel', 'mouseup', 'touchend', 'touchcancel', 'blur'] as const
+    let settle: ReturnType<typeof setTimeout> | null = null
+    const unhold = () => {
+      holdingRef.current = false
+      for (const name of events) window.removeEventListener(name, release)
+      if (settle != null) clearTimeout(settle)
+      settle = null
+      settleNowRef.current = null
+      landRef.current = null
+    }
+    const land = () => {
+      const moved = movedRef.current
+      unhold()
+      if (moved) onReleaseRef.current?.()
+    }
+    const release = () => {
+      for (const name of events) window.removeEventListener(name, release)
+      if (settle != null) return
+      settle = setTimeout(land, RELEASE_SETTLE_MS)
+      settleNowRef.current = land
+    }
+    for (const name of events) window.addEventListener(name, release)
+    landRef.current = land
+  }
+  // Unmounted mid-drag (the popover closed under it): the drag ends here, released if it moved.
+  useEffect(() => () => landRef.current?.(), [])
+
   const setHex = useCallback(
-    (hex: string) => {
+    (hex: string, release: boolean) => {
       setHexInput(hex)
-      onColourChange({ ...colour, hex })
+      onColourChange({ ...colour, hex }, release)
     },
     [colour, onColourChange],
   )
+
+  const pickerMoved = (hex: string) => {
+    if (holdingRef.current) movedRef.current = true
+    setHex(hex.toLowerCase(), !holdingRef.current)
+  }
 
   // Typed hex is committed only once it parses, so the intermediate states of typing `#ff0000`
   // don't each get pushed up as a colour.
@@ -84,15 +151,15 @@ export function ColourEditorBody({
       setHexInput(hex)
       const normalized = hex.startsWith('#') ? hex : `#${hex}`
       if (isValidHexColour(normalized)) {
-        onColourChange({ ...colour, hex: normalized.toLowerCase() })
+        onColourChange({ ...colour, hex: normalized.toLowerCase() }, true)
       }
     },
     [colour, onColourChange],
   )
 
   const handleExtendedChange = useCallback(
-    (channel: 'white' | 'amber' | 'uv', val: number) => {
-      onColourChange({ ...colour, [channel]: val })
+    (channel: 'white' | 'amber' | 'uv', val: number, release: boolean) => {
+      onColourChange({ ...colour, [channel]: val }, release)
     },
     [colour, onColourChange],
   )
@@ -101,7 +168,13 @@ export function ColourEditorBody({
 
   return (
     <div className="space-y-3">
-      <HexColorPicker color={colour.hex} onChange={(hex) => setHex(hex.toLowerCase())} />
+      <div
+        onPointerDownCapture={holdPicker}
+        onMouseDownCapture={holdPicker}
+        onTouchStartCapture={() => holdPicker({ button: 0 })}
+      >
+        <HexColorPicker color={colour.hex} onChange={pickerMoved} />
+      </div>
 
       <input
         type="text"
@@ -120,7 +193,7 @@ export function ColourEditorBody({
             title={preset.name}
             className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
             style={{ backgroundColor: preset.hex }}
-            onClick={() => setHex(preset.hex)}
+            onClick={() => setHex(preset.hex, true)}
           />
         ))}
       </div>
@@ -144,7 +217,8 @@ export function ColourEditorBody({
             <ExtendedChannelSlider
               label="White"
               value={colour.white}
-              onChange={(v) => handleExtendedChange('white', v)}
+              onChange={(v) => handleExtendedChange('white', v, false)}
+              onValueCommit={(v) => handleExtendedChange('white', v, true)}
               color="#fffbe6"
             />
           )}
@@ -152,7 +226,8 @@ export function ColourEditorBody({
             <ExtendedChannelSlider
               label="Amber"
               value={colour.amber}
-              onChange={(v) => handleExtendedChange('amber', v)}
+              onChange={(v) => handleExtendedChange('amber', v, false)}
+              onValueCommit={(v) => handleExtendedChange('amber', v, true)}
               color="#ffbf00"
             />
           )}
@@ -160,7 +235,8 @@ export function ColourEditorBody({
             <ExtendedChannelSlider
               label="UV"
               value={colour.uv}
-              onChange={(v) => handleExtendedChange('uv', v)}
+              onChange={(v) => handleExtendedChange('uv', v, false)}
+              onValueCommit={(v) => handleExtendedChange('uv', v, true)}
               color="#7f00ff"
             />
           )}

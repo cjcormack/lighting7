@@ -1769,7 +1769,7 @@ function ParamControl({
     return (
       <FxColourPicker
         value={value}
-        onChange={(v) => onChange(v, false)}
+        onChange={onChange}
         label={label}
         description={param.description}
         extendedChannels={extendedChannels}
@@ -1809,7 +1809,7 @@ function ParamControl({
     return (
       <FxColourListPicker
         value={value}
-        onChange={(v) => onChange(v, true)}
+        onChange={onChange}
         label={label}
         description={param.description}
         extendedChannels={extendedChannels}

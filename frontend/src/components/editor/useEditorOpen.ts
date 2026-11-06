@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLitHold } from '@/lib/litHold'
 
 /**
  * A cell editor's open state, plus the one way it opens without a click.
@@ -26,6 +27,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  *
  * It also owns the closing rule that is nobody's click: **an editor belongs to a selection, so it
  * goes when the selection does** — see [selectionEmpty].
+ *
+ * An open editor holds the programmer's *Lit* filter still (`lib/litHold.ts`), so the row it edits
+ * is not taken away under it by its own dimmer going to 0.
  */
 export function useEditorOpen({
   autoOpen,
@@ -100,6 +104,7 @@ export function useEditorOpen({
   const [isOpen, setIsOpen] = useState(false)
   const [keyboardOpen, setKeyboardOpen] = useState<string | null>(null)
   const [atButton, setAtButton] = useState(false)
+  useLitHold(isOpen)
 
   const onOpenRef = useRef(onOpen)
   onOpenRef.current = onOpen
