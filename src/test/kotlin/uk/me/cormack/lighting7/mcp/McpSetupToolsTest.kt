@@ -837,8 +837,8 @@ class McpSetupToolsTest : RouteIntegrationTest() {
             assertNull(entries[0].cueNumber)
             assertEquals("Warm preset on the house curtain", entries[1].cue!!.notes)
             assertEquals(Duration.ofSeconds(5), entries[2].cue!!.fadeDuration)
-            // The unnumbered cue is numbered from its neighbours, as the desk does.
-            assertEquals("2.1", entries[3].cueNumber)
+            // The unnumbered cue is numbered from its neighbours: no whole number is free between 2 and 3, so the midpoint.
+            assertEquals("2.5", entries[3].cueNumber)
             assertTrue(entries[3].autoAdvance)
             assertEquals(Duration.ofMillis(1500), entries[3].autoAdvanceDelay)
             assertEquals("SINE_IN_OUT", entries[4].cue!!.fadeCurve)

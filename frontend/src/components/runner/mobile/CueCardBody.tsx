@@ -9,6 +9,7 @@ import { TruncateStart } from '@/components/TruncateStart'
 import { formatFadeText } from '@/lib/cueUtils'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
+import { readTypedCueNumber } from '@/components/cues/CueNumberPlacement'
 
 /**
  * What an expanded card shows. Details only since venue-visit plan S3: the Stage body was a 2D
@@ -109,7 +110,11 @@ export function CueCardBody({
       <InlineEditField
         value={cue.cueNumber ?? ''}
         formatDisplay={(v) => heroQ(v ? `Q${v}` : '—')}
-        onCommit={(next) => onCueNumberCommit(next.trim() || null)}
+        onCommit={(next) => {
+          const number = readTypedCueNumber(next)
+          if (number === undefined) return false
+          onCueNumberCommit(number)
+        }}
         ariaLabel="cue number"
         placeholder="Q#"
         className={cn(

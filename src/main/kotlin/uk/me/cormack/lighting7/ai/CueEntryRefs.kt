@@ -9,6 +9,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
+import uk.me.cormack.lighting7.routes.canonicalCueNumber
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
@@ -36,7 +37,7 @@ internal data class EntryRef(val entryId: Int?, val number: String?) {
             }
             val number = obj[numberField]?.let(::cueNumberText)
             if (obj[numberField] != null && obj[numberField] !is JsonNull && number == null) {
-                problem("$where: $numberField must be the cue number as the stack shows it, e.g. \"14\" or \"14A\"")
+                problem("$where: $numberField must be the cue number as the stack shows it, e.g. \"14\" or \"14.5\"")
                 return null
             }
             if (entryId != null && number != null) {
@@ -110,8 +111,8 @@ internal fun findStackEntry(
     }
     val number = ref.number ?: run { problem("$where: name the entry by entryId or by number"); return null }
     val cues = entries.filter { !it.isMarker }
-    return cues.firstOrNull { it.cueNumber == number }
-        ?: cues.singleOrNull { it.cueNumber.equals(number, ignoreCase = true) }
+    val wanted = canonicalCueNumber(number) ?: number
+    return cues.firstOrNull { it.cueNumber == wanted }
         ?: run { problem("$where: stack ${stack.id.value} ('${stack.name}') has no cue numbered '$number'"); null }
 }
 
@@ -123,7 +124,7 @@ internal fun JsonObjectBuilder.putEntryRefProps(what: String, idField: String = 
     })
     put(numberField, buildJsonObject {
         put("type", "string")
-        put("description", "$what, by its cue number in the stack, as the Show view shows it ('14', '14A'). Give this or $idField.")
+        put("description", "$what, by its cue number in the stack, as the Show view shows it ('14', '14.5'). Give this or $idField.")
     })
 }
 

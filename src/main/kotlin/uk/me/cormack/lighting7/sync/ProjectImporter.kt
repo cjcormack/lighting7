@@ -111,6 +111,7 @@ import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.routes.deleteBuskPage
 import uk.me.cormack.lighting7.routes.deleteBuskPageContents
 import uk.me.cormack.lighting7.routes.releaseAutoNumber
+import uk.me.cormack.lighting7.routes.canonicalCueNumber
 import uk.me.cormack.lighting7.routes.flushPendingEntryWrites
 import uk.me.cormack.lighting7.routes.deleteBuskRig
 import uk.me.cormack.lighting7.routes.deleteCueChildren
@@ -383,7 +384,7 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 47
+internal const val SUPPORTED_FORMAT_VERSION = 48
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -473,7 +474,7 @@ class ProjectImporter(private val state: State) {
         val name: String,
         /**
          * Explicit cue numbers the archive held twice in one stack — after a merge, two desks that
-         * each typed `14A` — each resolved by keeping the number on the entry with the lower uuid and
+         * each typed `14.5` — each resolved by keeping the number on the entry with the lower uuid and
          * making the other auto (cue model plan §3.9). Empty for an archive any one desk wrote.
          */
         val numberClashes: List<CueNumberClash> = emptyList(),
@@ -1931,7 +1932,7 @@ class ProjectImporter(private val state: State) {
             legacyPlaces += PendingEntry(
                 uuid = uuid, stack = stack, cue = dao, marker = false, label = null,
                 ordinal = place.sortOrder.toDouble(),
-                cueNumber = place.cueNumber?.takeIf { !place.cueNumberAuto && it.isNotEmpty() },
+                cueNumber = place.cueNumber?.takeIf { !place.cueNumberAuto && it.isNotEmpty() }?.let { importedCueNumber(it, uuid) },
                 autoAdvance = place.autoAdvance, autoAdvanceDelayMs = place.autoAdvanceDelayMs,
             )
         }
@@ -1971,7 +1972,7 @@ class ProjectImporter(private val state: State) {
      *    pull: one file per entry means a merge can pair a peer's new entry with a stack or cue this
      *    side deleted, and a place in a list is nothing without either. The next snapshot writes the
      *    drop as a deletion, so the deleting side wins everywhere.
-     *  * **Two explicit numbers alike in one stack** — two desks that each typed `14A`, merged — keep
+     *  * **Two explicit numbers alike in one stack** — two desks that each typed `14.5`, merged — keep
      *    the number on the entry with the lower uuid and make the other auto; the clash is answered so
      *    the sync result can name it. Resolved before a row is written, so `uq_entry_number_per_stack`
      *    never sees the pair and a pull never aborts on it.
@@ -2006,7 +2007,7 @@ class ProjectImporter(private val state: State) {
                 uuid = uuid, stack = stack, cue = cue, marker = marker,
                 label = if (marker) e.label.orEmpty().take(255) else null,
                 ordinal = e.ordinal,
-                cueNumber = if (marker) null else e.cueNumber?.takeIf { it.isNotEmpty() },
+                cueNumber = if (marker) null else e.cueNumber?.takeIf { it.isNotEmpty() }?.let { importedCueNumber(it, uuid) },
                 autoAdvance = !marker && e.autoAdvance,
                 autoAdvanceDelayMs = if (marker) null else e.autoAdvanceDelayMs,
             )
@@ -2065,6 +2066,15 @@ class ProjectImporter(private val state: State) {
         clashes.forEach { logger.warn("Import: {}", it.describe()) }
         return entries to clashes
     }
+
+    /**
+     * An archive's cue [number] as this desk stores it: its canonical spelling (`2.10` is `2.1`), or
+     * null — the entry auto-numbered — for one that is not a number, which an older desk could write.
+     */
+    private fun importedCueNumber(number: String, entryUuid: UUID): String? =
+        canonicalCueNumber(number) ?: null.also {
+            logger.warn("Import: entry {}'s cue number '{}' is not a number; it is numbered from its place", entryUuid, number)
+        }
 
     /**
      * Keep each stack's explicit numbers unique (cue model plan §3.9): of the cue entries holding one

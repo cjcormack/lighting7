@@ -741,7 +741,7 @@ internal val cueEventItemSchema = buildJsonObject {
 
 /** A new entry's `number`, for create_cue and add_cue_to_stack. */
 internal const val NEW_ENTRY_NUMBER_NOTE =
-    "The new entry's cue number in the stack ('14', '14A'), unique there. Omit to let the stack number it from its neighbours. Needs stackId."
+    "The new entry's cue number in the stack, a number with at most 4 decimal places ('14', '14.5'), unique there. Omit to let the stack number it from its neighbours. Needs stackId."
 
 /** Where create_cue and add_cue_to_stack put a new entry. */
 private val afterEntrySchema = buildJsonObject {
@@ -989,7 +989,7 @@ internal val recordCueTool = ToolDef(
                 put("description", "Record the running FX as well as the static values. Default true.")
             })
             put("name", buildJsonObject { put("type", "string"); put("description", "New cue's name (CREATE). Defaults to the next 'Cue N'.") })
-            put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number in cueStackId (CREATE). Omit to let the stack number it.") })
+            put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number in cueStackId (CREATE): a number with at most 4 decimal places ('14', '14.5'). Omit to let the stack number it.") })
             put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in cueStackId (CREATE). Omit to append.") })
             // No `cueType`: a marker is a stack entry, not a cue, and records nothing (cue model
             // plan D12); an old caller naming one is refused as an undeclared argument.

@@ -13,6 +13,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -219,7 +220,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         withCurrentProject(state, resource.parent.parent.projectId) { project ->
             val request = call.receive<AddCueToStackRequest>()
             val manager = state.show.cueStackManager
-            var numberTaken = false
+            var refusal: EntryNumberRefusal? = null
             val result = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.parent.stackId)
                     ?.takeIf { it.project.id == project.id }
@@ -227,41 +228,15 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 if (stack.type == CueStackType.SEPARATOR.name) return@transaction Triple("Cannot add cues to a separator", null, null)
                 val cue = DaoCue.findById(request.cueId) ?: return@transaction Triple("Cue not found", null, null)
                 if (cue.project.id != project.id) return@transaction Triple("Cue does not belong to project", null, null)
-                val number = request.cueNumber?.takeIf { it.isNotEmpty() }
-                number?.let { explicitNumberClash(stack, it) }?.let { numberTaken = true; return@transaction Triple(it, null, null) }
-
-                // Every entry already in the stack, markers included — the insert below has to
-                // place it among separators too, or they drift away from the cues they label.
-                val existing = entriesOf(stack)
-
-                val insertAt = if (request.insertByNumber) {
-                    val parsed = number?.let { parseCueNumber(it) }
-                        ?: return@transaction Triple(
-                            "insertByNumber requires a cueNumber with a numeric component",
-                            null,
-                            null,
-                        )
-
-                    // Position the cue within its own prefix group; other groups sort
-                    // independently, so their numbers say nothing about where this one belongs.
-                    val group = existing.withIndex().mapNotNull { (index, other) ->
-                        val otherParsed = other.cueNumber?.takeIf { !other.isMarker }?.let { parseCueNumber(it) }
-                        if (otherParsed != null && otherParsed.prefix.equals(parsed.prefix, ignoreCase = true)) {
-                            index to otherParsed
-                        } else {
-                            null
-                        }
-                    }
-                    val insertAfter = group.lastOrNull { (_, other) -> compareWithinGroup(other, parsed) < 0 }
-                    when {
-                        insertAfter != null -> insertAfter.first + 1
-                        group.isNotEmpty() -> group.first().first
-                        // Nothing in this group yet — append.
-                        else -> existing.size
-                    }
-                } else {
-                    // `sortOrder` is a position in the stack's list, as it always read in practice.
-                    request.sortOrder?.coerceIn(0, existing.size) ?: existing.size
+                // `sortOrder` is a position in the stack's list, as it always read in practice.
+                val placement = request.placement
+                    ?: if (request.insertByNumber) CueNumberPlacement.BY_NUMBER else CueNumberPlacement.HERE
+                if (placement == CueNumberPlacement.BY_NUMBER && request.cueNumber.isNullOrBlank()) {
+                    return@transaction Triple("Placing a cue by its number needs a cueNumber", null, null)
+                }
+                val (number, insertAt) = when (val plan = planNewEntryNumber(stack, request.cueNumber, request.sortOrder, placement)) {
+                    is NewEntryNumberPlan.Refused -> { refusal = plan.refusal; return@transaction Triple(plan.refusal.message, null, null) }
+                    is NewEntryNumberPlan.Place -> plan.number to plan.position
                 }
 
                 placeCueInStack(stack, cue, cueNumber = number, position = insertAt)
@@ -273,9 +248,10 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             }
 
             val (error, details, priorities) = result
-            if (error != null) {
-                // A number another entry holds explicitly is a conflict, as on the entry PATCH and POST /cues.
-                call.respond(if (numberTaken) HttpStatusCode.Conflict else HttpStatusCode.BadRequest, ErrorResponse(error))
+            if (refusal != null) {
+                call.respondNumberRefusal(refusal)
+            } else if (error != null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
             } else {
                 announceEntriesPlaced(state, resource.parent.stackId, priorities ?: emptyMap())
                 call.respond(details!!)
@@ -307,27 +283,38 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
     patch<CueStackEntryResource> { resource ->
         withCurrentProject(state, resource.parent.parent.parent.projectId) { project ->
             val body = call.receive<JsonObject>()
-            var numberTaken = false
+            val stackId = resource.parent.parent.stackId
+            var refusal: EntryNumberRefusal? = null
+            // The new priorities when the number moved the entry, read in the write's own transaction.
+            var movedPriorities: Map<Int, Int>? = null
             val result = transaction(state.database) {
-                val entry = stackEntry(project, resource.parent.parent.stackId, resource.entryId)
+                val entry = stackEntry(project, stackId, resource.entryId)
                     ?.takeIf { !it.isMarker }
                     ?: return@transaction null to "Entry not found"
+                // Every field is read before any is written: a refusal is a normal return, which commits.
+                val autoAdvance = if ("autoAdvance" in body) {
+                    (body["autoAdvance"] as? JsonPrimitive)?.booleanOrNull
+                        ?: return@transaction null to "autoAdvance must be true or false"
+                } else {
+                    null
+                }
+                val placement = body["placement"]?.takeIf { it !is JsonNull }?.let { raw ->
+                    raw.nullableString()?.let { name -> CueNumberPlacement.entries.firstOrNull { it.name == name } }
+                        ?: return@transaction null to "placement must be ASK, HERE or BY_NUMBER"
+                } ?: CueNumberPlacement.HERE
                 // A typed number is explicit and wins any auto number a sibling was given; clearing
                 // it hands the entry back to the auto scheme, which fills it in again from position.
                 // An unchanged number leaves the auto flag alone, so a save that round-trips the
                 // current number cannot freeze an auto number as explicit.
-                if ("cueNumber" in body) {
-                    val incoming = body["cueNumber"].nullableString()?.takeIf { it.isNotEmpty() }
-                    if (incoming != entry.cueNumber) {
-                        incoming?.let { explicitNumberClash(entry.stack, it, entry.id.value) }
-                            ?.let { numberTaken = true; return@transaction null to it }
-                        setEntryNumber(entry, incoming)
-                    }
+                val numberPlan = if ("cueNumber" in body) planEntryNumberEdit(entry, body["cueNumber"].nullableString(), placement) else null
+                if (numberPlan is EntryNumberEditPlan.Refused) {
+                    refusal = numberPlan.refusal
+                    return@transaction null to numberPlan.refusal.message
                 }
-                if ("autoAdvance" in body) {
-                    entry.autoAdvance = (body["autoAdvance"] as? JsonPrimitive)?.booleanOrNull
-                        ?: return@transaction null to "autoAdvance must be true or false"
+                if (numberPlan is EntryNumberEditPlan.Write && setEntryNumber(entry, numberPlan.number, numberPlan.byNumber)) {
+                    movedPriorities = stackEntryPriorities(entry.stack)
                 }
+                autoAdvance?.let { entry.autoAdvance = it }
                 if ("autoAdvanceDelayMs" in body) entry.autoAdvanceDelay = body["autoAdvanceDelayMs"].nullableLong().asDuration()
                 entry.toCueStackCueEntry(cueSceneryByCue(listOfNotNull(entry.cue?.id))) to null
             }
@@ -335,15 +322,19 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val (row, error) = result
             when {
                 row != null -> {
-                    state.show.fixtures.cueStackListChanged()
-                    state.show.fixtures.cueListChanged()
-                    // A renumber moves the auto numbers after it too, which other cues' pads show.
-                    if (renumbered != null) announceCuePadsChanged(state, cueIdsOfStack(state, resource.parent.parent.stackId))
+                    val priorities = movedPriorities
+                    if (priorities != null) {
+                        announceEntriesPlaced(state, stackId, priorities)
+                    } else {
+                        state.show.fixtures.cueStackListChanged()
+                        state.show.fixtures.cueListChanged()
+                        // A renumber moves the auto numbers after it too, which other cues' pads show.
+                        if (renumbered != null) announceCuePadsChanged(state, cueIdsOfStack(state, stackId))
+                    }
                     call.respond(row)
                 }
+                refusal != null -> call.respondNumberRefusal(refusal)
                 error == "Entry not found" -> call.respond(HttpStatusCode.NotFound, ErrorResponse(error))
-                // A number another entry holds explicitly, as the unique index would refuse it.
-                numberTaken -> call.respond(HttpStatusCode.Conflict, ErrorResponse(error ?: "Cue number taken"))
                 else -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(error ?: "Failed to update entry"))
             }
         }
@@ -579,7 +570,35 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
-    // POST /{projectId}/cue-stacks/{stackId}/sort-by-cue-number - Group-aware natural sort
+    // POST /{projectId}/cue-stacks/{stackId}/renumber - Number the named cue entries start, start +
+    // step, … in their stack order, as explicit whole numbers; nothing moves.
+    post<CueStackRenumberResource> { resource ->
+        withCurrentProject(state, resource.parent.parent.projectId) { project ->
+            val request = call.receive<RenumberEntriesRequest>()
+            val stackId = resource.parent.stackId
+            var refusal: EntryNumberRefusal? = null
+            val details = transaction(state.database) {
+                val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id }
+                    ?: return@transaction null
+                refusal = renumberProblem(stack, request.entryIds, request.start, request.step)
+                if (refusal != null) return@transaction null
+                renumberEntries(stack, request.entryIds, request.start, request.step)
+                stack.toCueStackDetails(isCurrentProject = true, state.show.cueStackManager)
+            }
+            when {
+                refusal != null -> call.respondNumberRefusal(refusal!!)
+                details == null -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
+                else -> {
+                    state.show.fixtures.cueStackListChanged()
+                    state.show.fixtures.cueListChanged()
+                    announceCuePadsChanged(state, cueIdsOfStack(state, stackId))
+                    call.respond(details)
+                }
+            }
+        }
+    }
+
+    // POST /{projectId}/cue-stacks/{stackId}/sort-by-cue-number - Sort the numbered cues by number
     post<CueStackSortByNumberResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId) { project ->
             val manager = state.show.cueStackManager
@@ -591,19 +610,16 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val all = entriesOf(stack)
                 val cueEntries = all.filter { !it.isMarker }
 
-                // Each prefix group is sorted within the slots it already occupies, so groups
-                // keep their relative placement. Markers and numbers with nothing to order by
-                // ("A", blanks) never move — that's the replacement for the old rule that a cue
-                // number had to *start* with a digit to participate, which excluded every
-                // prefixed number like "S1-3".
-                val sorted = groupAwareCueOrder(cueEntries) { it.cueNumber }.iterator()
+                // The numbered cues are sorted within the places they already occupy; markers and
+                // blanks never move.
+                val sorted = numericCueOrder(cueEntries) { it.cueNumber }.iterator()
                 writeEntryOrder(all.map { if (it.isMarker) it else sorted.next() })
 
                 // Counted before renumbering: that call is what fills blanks in, so reading these
                 // afterwards would report zero unnumbered cues no matter what came in.
                 val unparseable = cueEntries.count {
                     val number = it.cueNumber
-                    !number.isNullOrEmpty() && parseCueNumber(number) == null
+                    !number.isNullOrEmpty() && cueNumberValue(number) == null
                 }
                 val unnumbered = cueEntries.count { it.cueNumber.isNullOrEmpty() }
 
@@ -694,6 +710,9 @@ data class CueStackPreviewResource(
 
 @Resource("/sort-by-cue-number")
 data class CueStackSortByNumberResource(val parent: ProjectCueStackResource)
+
+@Resource("/renumber")
+data class CueStackRenumberResource(val parent: ProjectCueStackResource)
 
 // ─── DTOs ──────────────────────────────────────────────────────────────
 
@@ -818,14 +837,20 @@ data class AddCueToStackRequest(
     val cueId: Int,
     /** Where the new entry goes: a position in the list; absent appends. */
     val sortOrder: Int? = null,
-    /** Place the entry by [cueNumber] among its prefix group instead of at [sortOrder]. */
+    /** Place the entry at its [cueNumber]'s place instead of at [sortOrder]: `placement` `BY_NUMBER`. */
     val insertByNumber: Boolean = false,
     /** The new entry's explicit number; absent numbers it from where it lands. */
     val cueNumber: String? = null,
+    /** Where a [cueNumber] reading out of order at [sortOrder] puts the entry; absent is `HERE` (or [insertByNumber]'s). */
+    val placement: CueNumberPlacement? = null,
 )
 
 @Serializable
 data class MoveEntryRequest(val toStackId: Int)
+
+/** `POST …/renumber`: the cue entries to number, in any order (they are numbered in stack order). */
+@Serializable
+data class RenumberEntriesRequest(val entryIds: List<Int>, val start: Long, val step: Long = 1)
 
 /** Where the entry now is: the same entry, in [stackId]. */
 @Serializable
@@ -889,12 +914,6 @@ data class SortByNumberResponse(
     val pinnedCount: Int,
     val nullNumberCount: Int,
 )
-
-// The old flat `naturalSortKey` / `naturalCompare` / `CueNumberComparator` trio lived here.
-// They compared cue numbers as one undifferentiated token stream, which is what forced the
-// "must start with a digit" participation rule — a prefixed number like "S1-3" would otherwise
-// sort against "T2-1" as if the prefixes were meaningful ordering data. `cueNumbering.kt` now
-// models prefix / decimal run / suffix separately and compares only within a group.
 
 // ─── Entity helpers ────────────────────────────────────────────────────
 

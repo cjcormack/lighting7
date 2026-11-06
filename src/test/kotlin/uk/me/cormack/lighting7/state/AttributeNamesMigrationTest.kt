@@ -99,7 +99,7 @@ class AttributeNamesMigrationTest {
         setUserVersion(TERMINOLOGY_RENAMED_USER_VERSION)
 
         val reopened = startDesk()
-        assertEquals(PALETTE_LAYER_USER_VERSION, userVersion(), "steps 7 to 10 follow")
+        assertEquals(CUE_NUMBER_USER_VERSION, userVersion(), "steps 7 to 11 follow")
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         transaction(reopened.database) {
             val bindings = DaoControlSurfaceBinding.all().associate { it.controlId to (it.targetType to it.targetPayload) }
@@ -159,14 +159,14 @@ class AttributeNamesMigrationTest {
         stopDesk()
         setUserVersion(TERMINOLOGY_RENAMED_USER_VERSION)
         startDesk()
-        assertEquals(PALETTE_LAYER_USER_VERSION, userVersion(), "steps 7 to 10 follow")
+        assertEquals(CUE_NUMBER_USER_VERSION, userVersion(), "steps 7 to 11 follow")
         assertEquals(emptyList(), backups())
     }
 
     @Test
     fun `a fresh database is born past step 6`() {
         startDesk()
-        assertEquals(PALETTE_LAYER_USER_VERSION, userVersion(), "steps 7 to 10 follow")
+        assertEquals(CUE_NUMBER_USER_VERSION, userVersion(), "steps 7 to 11 follow")
         assertEquals(emptyList(), backups())
     }
 }

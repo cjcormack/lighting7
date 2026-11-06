@@ -244,6 +244,18 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
  */
 export function ignoreReportedError(): void {}
 
+/**
+ * Refusal codes the caller always handles itself. A desk answers one only to a request that asked
+ * for it — `CUE_NUMBER_OUT_OF_ORDER` only to a write sent with `placement: 'ASK'`, whose caller then
+ * asks the operator (`components/cues/CueNumberPlacement.tsx`) — so no other caller can be left silent.
+ */
+export const SILENT_CODES: ReadonlySet<string> = new Set(['CUE_NUMBER_OUT_OF_ORDER'])
+
+function refusalCode(payload: unknown): string | undefined {
+  const data = (payload as { data?: { code?: unknown } } | undefined)?.data
+  return typeof data?.code === 'string' ? data.code : undefined
+}
+
 /** Shape of the `meta` RTK Query attaches to a rejected endpoint action. */
 interface RejectedMeta {
   arg?: { type?: string; endpointName?: string }
@@ -272,7 +284,8 @@ export const errorToastMiddleware: Middleware = () => (next) => (action) => {
     const isReportableMutation =
       meta?.arg?.type === 'mutation' && !meta.condition && endpointName !== undefined
 
-    if (isReportableMutation && !SILENT_ENDPOINTS.has(endpointName)) {
+    const code = refusalCode(action.payload)
+    if (isReportableMutation && !SILENT_ENDPOINTS.has(endpointName) && !(code && SILENT_CODES.has(code))) {
       // A stable per-endpoint id makes sonner *replace* rather than stack, so a burst of failing
       // keystroke-driven saves (patchCue fires per edit) collapses into one toast, not ten.
       toast.error(formatError(action.payload), { id: `mutation-error:${endpointName}` })

@@ -76,6 +76,8 @@ internal data class ProgrammerRecordRequest(
     val name: String? = null,
     val cueNumber: String? = null,
     val sortOrder: Int? = null,
+    /** Where a CREATE's [cueNumber] reading out of order at [sortOrder] puts the cue; absent is `HERE`. */
+    val placement: CueNumberPlacement? = null,
     val cueType: String = "STANDARD",
     /**
      * Inert since sweep item D1 retired `cueEdit.*` — there is no longer a session to record
@@ -169,8 +171,10 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                 sortOrder = request.sortOrder,
                 targets = request.targets,
                 scenery = request.scenery,
+                placement = request.placement ?: CueNumberPlacement.HERE,
             )
         ) {
+            is RecordCoreResult.NumberRefused -> call.respondNumberRefusal(result.refusal)
             is RecordCoreResult.Failure -> call.respond(
                 if (result.notFound) HttpStatusCode.NotFound else HttpStatusCode.BadRequest,
                 ErrorResponse(result.message),

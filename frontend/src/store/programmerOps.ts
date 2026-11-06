@@ -1,3 +1,4 @@
+import type { CueNumberPlacement } from '../api/cueStacksApi'
 import { restApi } from './restApi'
 import type { AttributeFamily } from '../lib/attributeFamily'
 import type { Cue, CueTarget } from '../api/cuesApi'
@@ -69,6 +70,8 @@ export interface RecordRequest {
   includeFx?: boolean
   name?: string
   cueNumber?: string
+  /** Where a CREATE's `cueNumber` reading out of order puts the cue; absent is `HERE`. */
+  placement?: CueNumberPlacement
   /**
    * Restrict the record to these fixtures — "put just these heads into this cue". Groups are
    * expanded server-side.

@@ -19,7 +19,9 @@ import { cueSceneryLines } from '@/lib/scenery'
 import { useStageElementListQuery } from '@/store/stageElements'
 import { CueSceneryEditor } from '@/components/scenery/CueSceneryEditor'
 import { TRACKED_HATCH_CLASS } from '@/components/scenery/trackedHatch'
-import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
+import { AUTO_CUE_NUMBER_CLASS, canonicalCueNumber, cueNumberColumnChars, cueNumberProblem } from '@/lib/cueNumber'
+import { useCueNumberPlacement } from '@/components/cues/CueNumberPlacement'
+import { RenumberCuesButton } from './RenumberCuesButton'
 import { TruncateStart } from '@/components/TruncateStart'
 import { CueStatePip } from '@/components/cues/CueRowParts'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
@@ -225,6 +227,8 @@ export function CueSheet({
     },
     [patchEntryMutation, projectId, stack.id],
   )
+
+  const { writeNumber, dialog: numberDialog } = useCueNumberPlacement()
 
   const [unlockAsked, setUnlockAsked] = useState(false)
 
@@ -711,6 +715,16 @@ export function CueSheet({
         })),
     [selectedRows, stack.id],
   )
+  // Wide enough for the widest number beside the grip and the pip, so a decimal is never clipped
+  // down to its tail ("….5" cannot be told from Q3.5).
+  const cueColumnWidth = useMemo(
+    () => cueSheetCueColumnWidth(cueNumberColumnChars(stack.cues.filter(isCueRow).map((c) => c.cueNumber))),
+    [stack.cues],
+  )
+  const renumberRows = useMemo(
+    () => actionRows.flatMap((r) => (r.entryId != null ? [{ entryId: r.entryId, cueNumber: r.cueNumber }] : [])),
+    [actionRows],
+  )
   const verbs =
     selectedRows.length > 0 ? (
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -746,6 +760,14 @@ export function CueSheet({
             <span className={WORD_CLASS}>Arm as next</span>
           </Button>
         )}
+        {renumberRows.length > 0 && (
+          <RenumberCuesButton
+            projectId={projectId}
+            stackId={stack.id}
+            rows={renumberRows}
+            disabledReason={locked ? LOCKED_REASON : null}
+          />
+        )}
         {/* The cue action set, after Set · Clear · Spread and before Deselect (show-cue-editing
             plan §4.3); a one-cue action is disabled over several rows, with the reason. */}
         {actionRows.length > 0 && (
@@ -773,6 +795,7 @@ export function CueSheet({
 
   return (
     <div ref={columnRef} className="flex min-h-0 flex-1 flex-col" data-cue-sheet-column>
+      {numberDialog}
       <div className="@container">
         <SelectionBar
           rowLabel={selectedRows.length > 0 ? `${selectedRows.length} ${rowNoun}` : null}
@@ -843,7 +866,7 @@ export function CueSheet({
         }
         firstColumn={{
           label: 'Cue',
-          width: '100px',
+          width: cueColumnWidth,
           render: (row) => {
             const active = row.entry.entryId === activeEntryId
             const standby = row.entry.entryId === standbyEntryId && !active
@@ -887,13 +910,26 @@ export function CueSheet({
                         value: cueOf(row).cueNumber ?? '',
                         label: 'Cue number',
                         onCommit: (next) => {
-                          const trimmed = next || null
-                          if (trimmed !== (cueOf(row).cueNumber ?? null)) patchEntry(cueOf(row), { cueNumber: trimmed })
+                          const blank = next.trim() === ''
+                          const number = blank ? null : canonicalCueNumber(next)
+                          // `validate` refuses a number that is not one; never let it clear the entry.
+                          if ((!blank && number == null) || number === (cueOf(row).cueNumber ?? null)) return
+                          writeNumber((placement) =>
+                            patchEntryMutation({
+                              projectId,
+                              stackId: stack.id,
+                              entryId: row.entry.entryId,
+                              cueId: cueOf(row).id,
+                              cueNumber: number,
+                              placement,
+                            }).unwrap(),
+                          )
                         },
                       })}
                       mono
                       allowEmpty
-                      placeholder="14A"
+                      placeholder="14.5"
+                      validate={cueNumberProblem}
                       face={
                         <span
                           className="inline-block max-w-full px-0.5"
@@ -980,4 +1016,13 @@ function CountBadge({ n, className }: { n: number; className?: string }) {
 function trackFloor(width: string): number {
   const m = /^(?:minmax\()?\s*(\d+)px/.exec(width)
   return m ? Number(m[1]) : 96
+}
+
+/**
+ * The cue sheet's Cue column for a widest number of `chars` characters (the `Q` included): the grip,
+ * the pip, the gaps and the padding (80px) beside the mono number (8.5px a character at text-sm), never narrower
+ * than the 100px the column always had.
+ */
+export function cueSheetCueColumnWidth(chars: number): string {
+  return `${Math.max(100, Math.ceil(80 + chars * 8.5))}px`
 }

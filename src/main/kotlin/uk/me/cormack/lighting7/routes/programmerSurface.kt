@@ -49,6 +49,9 @@ internal sealed interface RecordCoreResult {
 
     /** [notFound] separates "you asked for a cue that isn't there" (404) from a bad request (400). */
     data class Failure(val message: String, val notFound: Boolean = false) : RecordCoreResult
+
+    /** The new cue's number was refused, or reads out of order under [CueNumberPlacement.ASK]. */
+    data class NumberRefused(val refusal: EntryNumberRefusal) : RecordCoreResult
 }
 
 /**
@@ -89,6 +92,8 @@ internal fun performProgrammerRecord(
      * [source] and [targets] say, since scenery is addressed by element and never by the selection.
      */
     scenery: Boolean = true,
+    /** Where a new cue's [cueNumber] reading out of order at [sortOrder] puts it. */
+    placement: CueNumberPlacement = CueNumberPlacement.HERE,
 ): RecordCoreResult {
     recordShapeProblem(mode, cueStackId, cueId)?.let { return RecordCoreResult.Failure(it) }
     // A marker is a labelled entry, not a cue (cue model plan D12): nothing can be recorded into
@@ -113,6 +118,7 @@ internal fun performProgrammerRecord(
     var priorities = emptyMap<Int, Int>()
     // A write into a cue keeps the entry it was included from, when it was (the indicator's number).
     val includedEntryId = state.show.programmerStore.lastIncludedTarget?.takeIf { it.cueId == cueId }?.entryId
+    var refusal: EntryNumberRefusal? = null
     val (written, error) = transaction(state.database) {
         if (mode == RecordMode.CREATE) {
             // No stack makes a loose cue (cue model plan §3.5).
@@ -126,11 +132,18 @@ internal fun performProgrammerRecord(
                 }
                 stack
             }
+            // Before anything is written: a refusal is a normal return, which commits.
+            val placed = stack?.let {
+                when (val plan = planNewEntryNumber(it, cueNumber, sortOrder, placement)) {
+                    is NewEntryNumberPlan.Refused -> { refusal = plan.refusal; return@transaction null to plan.refusal.message }
+                    is NewEntryNumberPlan.Place -> plan
+                }
+            }
             val outcome = createCueFromRecording(
                 project, stack, recording,
                 name = name?.takeIf { it.isNotBlank() } ?: defaultRecordedCueName(project, stack),
-                cueNumber = cueNumber?.takeIf { it.isNotBlank() },
-                sortOrder = sortOrder,
+                cueNumber = placed?.number,
+                sortOrder = placed?.position ?: sortOrder,
                 cueType = cueType,
                 registry = state.show.fxRegistry,
             )
@@ -153,6 +166,7 @@ internal fun performProgrammerRecord(
         }
     }
 
+    refusal?.let { return RecordCoreResult.NumberRefused(it) }
     if (written == null) return RecordCoreResult.Failure(error ?: "Cue not found", notFound = true)
 
     val republished = republishCueIfLive(state, written.outcome.cueId)

@@ -221,7 +221,7 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         val a = stack("A", 0)
         val b = stack("B", 1)
         val (one, two, three) = listOf(cue("One"), cue("Two"), cue("Three"))
-        client.addCue(a, one); client.addCue(a, two, number = "7A"); client.addCue(a, three)
+        client.addCue(a, one); client.addCue(a, two, number = "7.5"); client.addCue(a, three)
         client.addCue(b, cue("Other"))
         val moving = client.stackRows(a)[1].entryId
         client.patch("$base/cue-stacks/$a/entries/$moving") {
@@ -245,7 +245,7 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         val bRows = client.stackRows(b)
         val moved = bRows.last()
         assertEquals(moving, moved.entryId, "the same entry")
-        assertEquals("7A", moved.cueNumber)
+        assertEquals("7.5", moved.cueNumber)
         assertTrue(moved.autoAdvance)
         assertEquals(1_500L, moved.autoAdvanceDelayMs)
         transaction(state.database) {

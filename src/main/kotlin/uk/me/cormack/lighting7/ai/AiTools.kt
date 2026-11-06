@@ -1943,10 +1943,10 @@ class AiTools(private val state: State) {
         val number = input.present("number")?.let { raw ->
             cueNumberText(raw) ?: run { problem("number must be the cue number as the stack shows it, e.g. \"14\""); return null }
         }
-        if (number != null) {
-            if (number.length > MAX_CUE_NUMBER_LENGTH) { problem("number must be at most $MAX_CUE_NUMBER_LENGTH characters"); return null }
-            explicitNumberClash(stack, number)?.let { problem(it); return null }
+        val canonical = number?.let { typed ->
+            parseTypedCueNumber(typed).getOrElse { problem("number: ${it.message}"); return null }
         }
+        canonical?.let { explicitNumberClash(stack, it) }?.let { problem(it); return null }
         val position = input.present("after")?.let { raw ->
             val after = raw as? JsonObject ?: run { problem("after must name an entry: {\"entryId\": …} or {\"number\": …}"); return null }
             val ref = EntryRef.of(after, "after", problem) ?: return null
@@ -1954,7 +1954,7 @@ class AiTools(private val state: State) {
             val entry = findStackEntry(stack, ref, "after", problem, markers = true) ?: return null
             entriesOf(stack).indexOfFirst { it.id == entry.id } + 1
         }
-        return Placement(stack, number, position)
+        return Placement(stack, canonical, position)
     }
 
     /** The entry of current-project stack [stackId] that [input] names, or null after [problem]. Inside a transaction. */
@@ -2009,6 +2009,7 @@ class AiTools(private val state: State) {
 
         return when (result) {
             is RecordCoreResult.Failure -> errorResult(result.message)
+            is RecordCoreResult.NumberRefused -> errorResult(result.refusal.message)
             is RecordCoreResult.Ok -> ToolExecutionResult(
                 success = true,
                 description = (if (result.outcome.created) "Recorded new cue" else "Recorded into cue") +

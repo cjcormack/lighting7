@@ -1,83 +1,63 @@
 /**
  * Cue-number model — the front-end half of the shared scheme.
  *
- * A cue number is a free-form display label; `sortOrder` is the authoritative playback order.
- * What this adds is *structure*: a number reads as a group prefix, a dotted decimal run, and an
- * optional letter suffix. Numbers are only ever compared against others in the same group, so a
- * stack holding `Pre-show 1`, `Pre-show 2`, `T2-1`, `S-1`, `S-2` is in order even though the
- * groups themselves aren't alphabetical.
+ * A cue number is a number from 0 to 9999.9999 with at most four decimal places, sorted by value:
+ * `2.1` and `2.10` are one number, `2.15` sits between `2.1` and `2.2`, and `10` comes after `9`. The
+ * desk stores one spelling of each ([canonicalCueNumber]); `sortOrder` is the authoritative playback
+ * order.
  *
- * This mirrors `routes/cueNumbering.kt` in the lighting7 backend — keep the two in step. This
- * copy decides whether to *offer* the "Fix Order" banner; the Kotlin copy performs the fix and
- * derives auto numbers.
+ * This mirrors `routes/cueNumbering.kt` in the backend — keep the two in step. This copy checks what
+ * the operator types and decides whether to *offer* the "Fix Order" banner; the desk refuses a
+ * number that is not one, asks before a number lands out of order, and derives auto numbers.
  */
 
-/** A cue number split into its ordering components. */
-export interface ParsedCueNumber {
-  /** Everything before the trailing decimal run — the group key ("S1-", "Pre-show "). */
-  prefix: string
-  /** The dotted decimal run, most significant first ("3.1" → [3, 1]). */
-  segments: number[]
-  /** Trailing letters, if any ("14A" → "A"). */
-  suffix: string
-}
+/** Most decimal places a cue number may have. */
+export const CUE_NUMBER_DECIMALS = 4
+
+/** What a refused cue number is told — the desk's `CUE_NUMBER_RULE`. */
+export const CUE_NUMBER_RULE = 'A cue number is a number from 0 to 9999.9999, with at most 4 decimal places'
+
+/** Digits with an optional fraction; a leading `Q` (as the desk displays a number) is allowed. */
+const CUE_NUMBER_RE = /^[Qq]?(\d*)(?:\.(\d*))?$/
 
 /**
- * The prefix is lazy but still has to match the whole string, so it settles on the *last* decimal
- * run: "S1-3.1" → ("S1-", [3,1], ""), "T2-1" → ("T2-", [1], ""), "14A" → ("", [14], "A").
+ * `raw` in the one spelling the desk stores — no leading zeros, no trailing fraction zeros — or null
+ * when it is not a cue number. `2.10` is `2.1`, `007` is `7`, `.5` is `0.5`.
  */
-const CUE_NUMBER_RE = /^(.*?)(\d+(?:\.\d+)*)([A-Za-z]*)$/
-
-/** Parse `cueNumber`, or null when it holds no decimal run to order by (e.g. "A", "Preshow"). */
-export function parseCueNumber(cueNumber: string): ParsedCueNumber | null {
-  const match = CUE_NUMBER_RE.exec(cueNumber)
+export function canonicalCueNumber(raw: string): string | null {
+  const match = CUE_NUMBER_RE.exec(raw.trim())
   if (!match) return null
-  const [, prefix, digits, suffix] = match
-  const segments = digits.split('.').map(Number)
-  if (segments.some((n) => !Number.isSafeInteger(n))) return null
-  return { prefix, segments, suffix }
+  const [, whole, fraction = ''] = match
+  if (whole === '' && fraction === '') return null
+  const integer = whole.replace(/^0+(?=\d)/, '') || '0'
+  const decimals = fraction.replace(/0+$/, '')
+  if (decimals.length > CUE_NUMBER_DECIMALS || integer.length > 4) return null
+  return decimals ? `${integer}.${decimals}` : integer
+}
+
+/** `raw`'s value, or null when it is not a cue number. Exact to four places, which is all a number holds. */
+export function cueNumberValue(raw: string): number | null {
+  const canonical = canonicalCueNumber(raw)
+  return canonical == null ? null : Number(canonical)
 }
 
 /**
- * The group a cue number sorts within. Unparseable numbers get a private key so they form
- * singleton groups and therefore never move.
+ * The refusal for a typed number, or null when it is blank or a number — what a cue-number field
+ * passes as its `validate`.
  */
-export function cueNumberGroupKey(cueNumber: string): string {
-  const parsed = parseCueNumber(cueNumber)
-  // NUL can't occur in a parsed prefix, so the sentinel can never collide with a real group
-  // — a leading space could, since a prefix may end in one ("Pre-show "). Written as
-  // an escape: a raw NUL in source makes git treat the whole file as binary.
-  return parsed ? parsed.prefix.toLowerCase() : `\u0000unparsed:${cueNumber.toLowerCase()}`
+export function cueNumberProblem(draft: string): string | null {
+  return draft.trim() === '' || canonicalCueNumber(draft) != null ? null : CUE_NUMBER_RULE
 }
 
-/**
- * Order two numbers from the same group: decimal run element-wise (so `3` < `3.1` < `3.2` < `4`),
- * shorter run first on a shared stem, then the letter suffix ("14" < "14A" < "14B").
- */
-export function compareWithinGroup(a: ParsedCueNumber, b: ParsedCueNumber): number {
-  const shared = Math.min(a.segments.length, b.segments.length)
-  for (let i = 0; i < shared; i++) {
-    if (a.segments[i] !== b.segments[i]) return a.segments[i] - b.segments[i]
-  }
-  if (a.segments.length !== b.segments.length) return a.segments.length - b.segments.length
-  return a.suffix.toLowerCase().localeCompare(b.suffix.toLowerCase())
-}
-
-/**
- * True when some group's members do not ascend in the order given. Interleaved groups are fine —
- * only a group descending against itself counts, so `["Pre-show 1", "T2-1", "S-1", "S-2"]` passes
- * while `["S-2", "S-1"]` does not. Blank and unparseable numbers are ignored.
- */
+/** True when some numbered cue reads lower than one before it. Blank and non-numbers are ignored. */
 export function detectCueNumbersOutOfOrder(cueNumbers: (string | null | undefined)[]): boolean {
-  const lastByGroup = new Map<string, ParsedCueNumber>()
+  let last: number | null = null
   for (const raw of cueNumbers) {
     if (!raw) continue
-    const parsed = parseCueNumber(raw)
-    if (!parsed) continue
-    const key = parsed.prefix.toLowerCase()
-    const previous = lastByGroup.get(key)
-    if (previous && compareWithinGroup(parsed, previous) < 0) return true
-    lastByGroup.set(key, parsed)
+    const value = cueNumberValue(raw)
+    if (value == null) continue
+    if (last != null && value < last) return true
+    last = value
   }
   return false
 }
@@ -94,7 +74,7 @@ export const AUTO_CUE_NUMBER_CLASS = 'text-muted-foreground/70 font-normal'
  * Widest rendered cue number in a list, in characters — the `Q` prefix included.
  *
  * Cue lists size their number column from this rather than a fixed pixel budget, so a stack of
- * `Q1`–`Q40` stays narrow while one holding `QS1-3.2.10` gets the room to show it whole. Every
+ * `Q1`–`Q40` stays narrow while one holding `Q1234.5678` gets the room to show it whole. Every
  * row is its own grid, so the count has to be computed once by the list and handed down; a
  * `max-content` track would size each row independently and stagger the column.
  *

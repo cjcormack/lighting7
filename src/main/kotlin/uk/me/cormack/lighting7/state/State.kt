@@ -1442,6 +1442,10 @@ class State(val config: ApplicationConfig) {
         // backed up first when one converts. After step 9. `PaletteLayerMigration.kt`.
         PaletteLayerMigration.runIfNeeded(ds, database, dbPath)
 
+        // step 11: every cue number a number, in its canonical spelling, backed up first when one
+        // changes. After step 10. `CueNumberMigration.kt`.
+        CueNumberMigration.runIfNeeded(ds, database, dbPath)
+
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database
     }

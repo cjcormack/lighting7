@@ -261,7 +261,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 47`, `minReader = 47`. Rules for future
+Current writer emits `formatVersion = 48`, `minReader = 48`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -448,6 +448,19 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 48 — Numeric cue numbers
+
+A cue entry's `cueNumber` is a **number**: 0 to 9999.9999, at most four decimal places, in its
+canonical spelling (`docs/cue-stacks-engineering.md` §"Cue Number Model"). No field and no folder is
+new, so a show whose numbers were already canonical exports byte-for-byte as at v47 but for
+`formatVersion.json`. What changed is the value domain and the auto-numbering rule a reader derives the
+left-out numbers by: whole numbers, a decimal only where none is free (between explicit 3 and 4 a v48
+reader derives `3.5`, a v47 one `3.1`). The importer reads every archive's numbers through
+`canonicalCueNumber`, clearing one that is not a number with a warning, as database step 11 does.
+`SUPPORTED_FORMAT_VERSION = 48`, `MIN_SUPPORTED_FORMAT_VERSION` stays 5, and **`minReader` moves to 48**
+with the writer: a v47 desk would show a v48 archive's auto numbers differently and keep writing
+free-form numbers this desk clears, so it refuses the repo instead of trading numbers with it.
 
 ### Version 47 — Palette references
 
@@ -776,10 +789,10 @@ it had before the bump, and renaming it would resurrect the uuid its removed sib
 retired. Without it, the first sync of two desks after the bump would merge both desks' entries for
 every cue, and every cue would sit twice in its stack.
 
-**After a merge two explicit numbers can clash** in one stack (two desks each typed `14A`). The
+**After a merge two explicit numbers can clash** in one stack (two desks each typed `14.5`). The
 importer resolves every stack before a row is written: the entry with the lower uuid keeps the number
 and the other is made auto, so `uq_entry_number_per_stack` never sees the pair and a pull never aborts
-on it. Numbers compare exactly, as the index does. Each clash is answered in
+on it. Numbers compare in their canonical spelling, as the index does (the importer reads an archive's numbers through `canonicalCueNumber`, clearing one that is not a number). Each clash is answered in
 `ProjectImporter.Result.numberClashes`, returned by the engine's import (`importTree`) to the path that
 ran it, which puts it on the `SyncRunResult` it answers (a push-rejected retry that imports again
 answers its own), carried by `SyncRunResult.numberClashes` and said in the run's

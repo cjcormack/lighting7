@@ -26,6 +26,7 @@ import { AUTO_CUE_NUMBER_CLASS, cueNumberCellWidth } from '@/lib/cueNumber'
 import { TruncateStart } from '@/components/TruncateStart'
 import { CueEditor } from '@/components/cues/editor/CueEditor'
 import { useCueFade } from '@/hooks/useCueFade'
+import { readTypedCueNumber, useCueNumberPlacement } from '@/components/cues/CueNumberPlacement'
 
 interface CueCardEditorProps {
   /** A cue entry — a marker is drawn by `ShowMarkerRow`, never as a card. */
@@ -115,10 +116,14 @@ export function CueCardEditor({
     if (trimmed !== cue.name) patchCue({ projectId, cueId: cue.id, name: trimmed })
   }
 
+  const { writeNumber, dialog: numberDialog } = useCueNumberPlacement()
   const commitCueNumber = (next: string) => {
-    const trimmed = next.trim() || null
-    if (trimmed !== (cue.cueNumber ?? null)) {
-      patchEntry({ projectId, stackId, entryId: cue.entryId, cueId: cue.id, cueNumber: trimmed })
+    const number = readTypedCueNumber(next)
+    if (number === undefined) return false
+    if (number !== (cue.cueNumber ?? null)) {
+      writeNumber((placement) =>
+        patchEntry({ projectId, stackId, entryId: cue.entryId, cueId: cue.id, cueNumber: number, placement }).unwrap(),
+      )
     }
   }
 
@@ -159,6 +164,7 @@ export function CueCardEditor({
     // the drag's activator, not on the card: on the card they made the whole of it one disabled
     // button, the action strip included, which works locked.
     <div ref={setNodeRef} style={sortableStyle} data-cue-row={cue.id} data-entry-row={cue.entryId}>
+      {numberDialog}
       <div
         className={cn(
           // `@container`: the header's columns below query THIS box. They used to be viewport
@@ -216,13 +222,13 @@ export function CueCardEditor({
             )}
             <InlineEditField
               value={cue.cueNumber ?? ''}
-              // Clipped at the START: the tail is what tells "QS1-3.1" from "QS1-3.2", so it is
-              // the end worth keeping.
+              // Clipped at the START: the tail is what tells "Q12.25" from "Q12.5", so it is the
+              // end worth keeping.
               formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : '—'} />}
               onCommit={commitCueNumber}
               ariaLabel="cue number"
               disabled={locked}
-              placeholder="14A"
+              placeholder="14.5"
               title={
                 cue.cueNumberAuto
                   ? 'Auto-numbered from position — click to set an explicit cue number'

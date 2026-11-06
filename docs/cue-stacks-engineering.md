@@ -40,7 +40,7 @@ cue_stack_entries (cue model plan session 1 — `models/cueStackEntries.kt`)
 ├── kind (varchar 20 — CUE or MARKER)
 ├── label (varchar 255, nullable — a marker's text)
 ├── ordinal (double, default 0.0 — the list's order; ties by uuid, `ENTRY_ORDER`)
-├── cue_number (varchar 20, nullable — free-form display label)
+├── cue_number (varchar 20, nullable — a number, 0–9999.9999, in its canonical spelling)
 ├── cue_number_auto (boolean, default false — cue_number was derived from position)
 ├── auto_advance (boolean, default false — the follow)
 ├── auto_advance_delay (Duration, nullable — nanoseconds on disk)
@@ -106,31 +106,67 @@ the number on the lower uuid and make the other auto, and the sync result names 
 ### Cue Number Model
 
 See [`cueNumbering.kt`](../src/main/kotlin/uk/me/cormack/lighting7/routes/cueNumbering.kt); the
-frontend mirrors it in `src/lib/cueNumber.ts` (lighting-react).
+frontend mirrors it in `frontend/src/lib/cueNumber.ts`.
 
-A number is parsed as **prefix + decimal run + letter suffix** — `S1-3.1` → `("S1-", [3,1], "")`,
-`Pre-show 2` → `("Pre-show ", [2], "")`, `14A` → `("", [14], "A")`. The prefix is the **group key**,
-and numbers are only ever compared against others in the same group. So
-`["Pre-show 1", "Pre-show 2", "T2-1", "S-1", "S-2"]` is in order despite the groups not being
-alphabetical, while `[…, "S-2", "S-1"]` is not.
+A cue number is a **number**: 0 to 9999.9999, at most four decimal places, sorted by value — as on
+Eos, grandMA3 and MagicQ. `2.1` and `2.10` are one number, `2.15` sits between `2.1` and `2.2`, and
+`10` comes after `9`. It is stored in one canonical spelling (`canonicalCueNumber`: `2.10` is `2.1`,
+`007` is `7`, `.5` is `0.5`, a leading `Q` dropped), which is what lets `uq_entry_number_per_stack`
+refuse two spellings of one number. Every write boundary — the entry `PATCH`, `add-cue`, `POST /cues`,
+Record, `renumber` and the MCP tools — reads a typed number through `parseTypedCueNumber`, refusing
+anything else 400 `CUE_NUMBER_INVALID` with `CUE_NUMBER_RULE`; one another entry holds explicitly is
+409 `CUE_NUMBER_TAKEN`. A blank one is the auto scheme's.
+
+Prefixes, letter suffixes and dotted runs (`S1-3`, `14A`, `1.2.3`) were allowed until database step
+11 (`state/CueNumberMigration.kt`), which cleared every number that was not one and wrote the rest in
+their canonical spelling, each such entry then numbered from its place. An archive an older desk
+wrote can still carry one: the importer clears it the same way (`importedCueNumber`), warning.
+
+### Placement: a number that reads out of order
+
+A number **reads out of order** where it sits when the nearest numbered cue before it is not below it,
+or the nearest after it is not above it (`outOfOrderAt`; an auto number equal to it does not count,
+since the write takes it over). Every door that writes a number to a cue in a stack — the entry
+`PATCH`, `add-cue`, `POST /cues` and Record — takes a `placement` (`CueNumberPlacement`,
+`routes/cueNumberPlacement.kt`):
+
+- **`HERE`** (the default) writes it where the cue is, or where it was asked to go — out of order or
+  not. The desk's number edit has always done this, and the MCP tools still do.
+- **`BY_NUMBER`** writes it and moves the cue to its number's place: just after the last cue numbered
+  below it, else just before the first numbered cue (`positionForNumber`). The cues it passes take
+  numbers from where they land, as *Fix Order*'s do. `add-cue`'s older `insertByNumber: true` is this.
+- **`ASK`** writes nothing when the number would read out of order, answering 409
+  `CUE_NUMBER_OUT_OF_ORDER` `{error, code, number, previous?, next?}` (the neighbours it reads out of
+  order against); in order, it is `HERE`. The client then asks the operator — *Move to its place* or
+  *Keep it here* (`frontend/src/components/cues/CueNumberPlacement.tsx`) — and sends again. Every
+  number field in the UI sends `ASK` first: the cue sheet's Cue column, the cue editor's header, the
+  card, the Prompt Book's rail and card, and Record's *Cue #* (the Prompt Book's create-a-cue sheet places
+  by page order and only checks the number). The error toast leaves that code to its caller (`SILENT_CODES`).
+
+### Renumber
+
+`POST /{stackId}/renumber {entryIds, start, step?}` numbers the named cue entries, **in their stack
+order**, `start`, `start + step`, … as explicit **whole** numbers (`step` defaults to 1). Nothing
+moves; a number that then reads out of order waits for *Fix Order*. The numbers are written in two
+passes, so the named entries may trade numbers, and an auto number in the way gives way as a typed
+one's does; one an unnamed entry holds explicitly is 409 `CUE_NUMBER_TAKEN`, naming each. 400
+`CUE_NUMBER_INVALID` for no entries, a marker or another stack's entry, a start below 0, a step below
+1, or a last number past 9999. The cue sheet's selection bar draws it as *Renumber…*
+(`RenumberCuesButton`), starting from the first selected cue's whole number.
 
 | Class | Rule | Examples | Behaviour |
 |-------|------|----------|-----------|
-| **Numbered** | parses to a decimal run | "1", "1.5", "14A", "S1-3.1" | Sorted within its prefix group |
-| **Unparseable** | no decimal run at all | "intro", "A" | Singleton group — never moved |
+| **Numbered** | a number | "1", "1.5", "14.25" | Sorted by value |
 | **Unnumbered** | `cue_number` is null | — | Given an auto number (below) |
-
-This replaced an earlier "first character must be a digit" participation rule, which pinned every
-prefixed number — a stack numbered `S1-1`, `S1-2`, … had *nothing* eligible to sort.
 
 ### Auto Numbering
 
 A cue entry with no explicit number is given one derived from its position, flagged with
 `cue_number_auto`. `renumberAutoEntries(stack, before)` recomputes them and is called from every handler
 that changes a stack's membership, order or numbers: cue create / delete / copy, `reorder`,
-`add-cue`, Remove from stack (each stack an entry left), `sort-by-cue-number`, the marker routes,
-Record's new cue, the AI's `build_cue_stack` (once, after it has placed every cue), and the entry
-`PATCH` when it changes a number. Marker entries take no number and are not an auto
+`add-cue`, Remove from stack (each stack an entry left), `sort-by-cue-number`, `renumber`, the marker
+routes, Record's new cue, the AI's `build_cue_stack` (once, after it has placed every cue), and the
+entry `PATCH` when it changes a number. Marker entries take no number and are not an auto
 cue's neighbours.
 
 **An auto number stays put while its cue does** (venue-visit plan D11). Each handler takes
@@ -142,58 +178,44 @@ cues, cue 2 set to `4.5` reads 1, 4.5, 3, 4, 5, the frontend's out-of-order chec
 and offers *Fix Order*, and *Fix Order* moves that cue rather than renumbering anything — the cues it
 passed take numbers from where they land (1, 2, 3, 4.5, 5). Cue 3 set to `10` reads 1, 2, 10, 4, 5
 and sorts to 1, 2, 3, 4, 10; cue 3 set to `1` takes cue 1's number, so cue 1 — released by
-`releaseAutoNumber` — takes the highest free integer below its neighbour and the stack reads
+`releaseAutoNumber` — takes the highest free whole number below its neighbour and the stack reads
 0, 2, 1, 4, 5, sorting to 0, 1, 2, 4, 5. `CueNumberingTest` pins the three on the rule and
 `CueNumberingRouteTest` through the routes; `EntryNumberingTest` runs them again with a marker in
 the list (cue-model plan D14).
 
 The cues that do need a label are labelled in maximal runs, each from the nearest preceding *fixed*
-number — an explicit one, or an auto one being kept:
+number — an explicit one, or an auto one being kept — with **whole numbers**:
 
-- **Increment** its trailing decimal — `S1-3` → `S1-4`, `S1-5`.
-- **Decimal-insert** beneath it instead — `S1-3.1`, `S1-3.2` — when incrementing would land on a
-  number used elsewhere in the stack or run past the next fixed cue in the same group.
+- The whole numbers after it that are free in the stack and below the next fixed number: `3` →
+  `4`, `5`.
+- Only the cues there are not enough of those for take **decimals**, between the last whole number
+  and the next fixed one, evenly spaced in the fewest places that fit (exact first, so a midpoint is a
+  midpoint): one cue between `3` and `4` is `3.5`, one between `3` and `3.5` is `3.25`, two between
+  `3` and `4` are `3.3` and `3.7`, three between `1` and `4` are `2`, `3` and `3.5`. This is the point
+  cue Eos and MagicQ give an insert between consecutive numbers.
 
-**An explicit number that reads out of order against the auto numbers beside it in its group** —
-the nearest one before it is not below it, or the nearest one after it is not above it — **neither
-anchors nor bounds a run**: the run passes through it, counting its place. It is a renumber waiting
-for *Fix Order*, and anchoring on it would relabel the cues around it the next time anything in the
-stack changed, which is D11's relabelling one gesture later. Two explicit numbers out of order
-against each other still anchor, as they always did.
+**An explicit number that reads out of order against the auto numbers beside it** — the nearest one
+before it is not below it, or the nearest one after it is not above it — **neither anchors nor bounds
+a run**: the run passes through it, counting its place. It is a renumber waiting for *Fix Order*, and
+anchoring on it would relabel the cues around it the next time anything in the stack changed, which
+is D11's relabelling one gesture later. Two explicit numbers out of order against each other still
+anchor, as they always did.
 
-A run with nothing fixed before it borrows the following cue's prefix and counts *up to* it: two
-cues before `S1-3` are `S1-1` and `S1-2`, and a lone cue before `S1-1` is `S1-0` — zero itself is
-free, so there is no need to decimal-insert. A block a number in it is taken from is tried lower
-down before giving up (a lone cue before `2` whose `1` is taken is `0`). Only when there isn't room
-for the whole run below the boundary (two cues before `S1-1`, say) does it fall back to `S1-0.1`,
-`S1-0.2`. With nothing either side the run is starting the series, so a fresh stack numbers `1`,
-`2`, `3`.
+A run with nothing fixed before it takes the highest free whole numbers below the following cue:
+two cues before `3` are `1` and `2`, and a lone cue before `1` is `0`. With nothing either side the
+run is starting the series, so a fresh stack numbers `1`, `2`, `3`. A cue with no room even in four
+places (between `3` and `3.0001`) stays blank.
 
-**Nothing renumbers a stored stack on upgrade.** Every number the derive-from-scratch rule wrote is
-one the keep rule leaves alone — a stack's kept labels are its own — and `copy_to_project` stores
-`cue_number` and `cue_number_auto` as they are. **An import derives them from scratch**: the archive
-carries only explicit numbers (sync v32, P5), so the importer — a pull, a clone, an import — numbers
-every stack's auto entries from position alone once its entries are in, and every desk reading one
-archive numbers it alike. That can relabel an auto number the desk had kept by the keep rule (an
-explicit renumber's neighbours), which is the price of a drag being one changed file. On the desk
-itself, a stack's auto numbers move only when an operator next changes that stack's list, and then
-only for the cues that change moves.
+**An import derives auto numbers from scratch**: the archive carries only explicit numbers (sync v32,
+P5) and the auto numbers a reader could not derive (`heldAutoNumbers`), so the importer — a pull, a
+clone, an import — numbers every stack's auto entries from position once its entries are in, and every
+desk reading one archive numbers it alike. `copy_to_project` stores `cue_number` and `cue_number_auto`
+as they are.
 
 Typing an explicit number releases that value from any auto sibling holding it (`releaseAutoNumber`)
 so the edit can't be rejected by `uq_entry_number_per_stack`; clearing the field hands the cue back to
 the auto scheme. `renumberAutoEntries` writes in two passes with a flush between, since two auto
 numbers swapping places would otherwise be a transient duplicate.
-
-Labels that won't fit `varchar(20)` are skipped — the cue stays blank rather than carrying a
-truncated number.
-
-**Backfill (removed).** The renumber only runs off a mutation, so cues that predated the
-feature would have stayed blank until something touched their stack. A `backfillAutoCueNumbers()`
-walked every stack once at startup to fix that. It went with the rest of the migrations on
-2026-08-24, once the only database in existence had no blank auto numbers left — see
-[InstallBootstrap.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt).
-Nothing backfills now, so a cue that somehow acquires a blank auto number keeps it until its stack
-is next mutated.
 
 ### Key Design Decisions
 
@@ -205,7 +227,7 @@ is next mutated.
   without rewriting the list (`writeEntryOrder`), and two desks inserting into one gap play their
   entries in the same order (sync v32, one archive file per entry)
 - **Per-cue fade settings** allow different transition timing for each cue in a stack; `fade_duration = null` means snap-cut
-- **`cue_number` is a display label only** — the entries' order remains the authoritative playback order
+- **`cue_number` does not play the stack** — the entries' order remains the authoritative playback order; a number is what the operator reads and types, and *Fix Order* or a `BY_NUMBER` placement is how it moves a cue
 - **Markers are entries, not cues** — `advance`, `go-to` and standby only target cue entries
 - **Per-cue auto-advance** allows some cues to auto-advance while others wait for manual progression
 - **EasingCurve enum** (LINEAR, SINE_IN_OUT, CUBIC_IN_OUT, etc.) stored as string for extensibility
@@ -744,8 +766,9 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | PUT | `/{stackId}` | Update stack settings |
 | DELETE | `/{stackId}` | Delete stack, its entries and its set; its cues stay. `?deleteLooseCues=true` deletes those it left in no stack. Answers `{ looseCueIds, deletedCueIds }` |
 | POST | `/{stackId}/reorder` | Reorder the list: body `{ entryIds: [3, 1, 5] }`, markers included; an entry left out keeps its relative order after the named ones |
-| POST | `/{stackId}/add-cue` | Add a cue to this stack as a new entry — shared, never moved: body `{ cueId, sortOrder?, insertByNumber?, cueNumber? }` |
-| PATCH | `/{stackId}/entries/{entryId}` | An entry's number and follow: `{ cueNumber?, autoAdvance?, autoAdvanceDelayMs? }`, the fields present only. Answers the row |
+| POST | `/{stackId}/add-cue` | Add a cue to this stack as a new entry — shared, never moved: body `{ cueId, sortOrder?, insertByNumber?, cueNumber?, placement? }` |
+| PATCH | `/{stackId}/entries/{entryId}` | An entry's number and follow: `{ cueNumber?, placement?, autoAdvance?, autoAdvanceDelayMs? }`, the fields present only (§"Placement"). Answers the row |
+| POST | `/{stackId}/renumber` | Number cue entries in stack order from a whole number: `{ entryIds, start, step? }` (§"Renumber"). Answers the stack |
 | DELETE | `/{stackId}/entries/{entryId}` | Remove from stack: the entry and its anchor go, the cue stays. The live entry's removal moves nothing until the next GO (`cues-engineering.md` §"Cue Stack Membership") |
 | POST | `/{stackId}/activate` | Activate stack: optional `{ entryId }`; absent starts at the armed standby, else the first cue entry. HTTP 400 for a marker or another stack's entry |
 | POST | `/{stackId}/deactivate` | Deactivate stack |
@@ -757,7 +780,7 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | GET | `/{stackId}/preview?entryId=` | Compose an entry's cue without firing it (absent → the effective next). See below |
 | GET | `/{stackId}/timeline` | The stack's Timeline read: every entry with its cue's stored layers, ad-hoc FX, scenery and tracked scenery. See below |
 | POST | `/{stackId}/timeline/edit` | One Timeline gesture: `{ ops, dryRun? }`, a batch over the stack's stored cues in one transaction, nothing sent to the stage. See §"Timeline" |
-| POST | `/{stackId}/sort-by-cue-number` | Group-aware sort of cue_number |
+| POST | `/{stackId}/sort-by-cue-number` | *Fix Order*: sort the numbered cues by number |
 
 ### `timeline`
 
@@ -804,23 +827,23 @@ families its FX's alone.
 
 ### `add-cue` with `insertByNumber`
 
-When `insertByNumber: true`, the new entry is inserted at its `cueNumber`'s sorted position
-**within its own prefix group** — other groups say nothing about where it belongs. Returns 400
-without a `cueNumber`, or one with no decimal run to position it by. Entries at or after the
-insertion point shift down, markers included. An **explicit** `cueNumber` another cue entry of the
-stack already holds explicitly is refused (409, as on the entry `PATCH` and `POST /cues`) rather than tripping the unique index; an auto one
-is released and derived again. Without `cueNumber` the entry is auto-numbered where it lands.
+`insertByNumber: true` is `placement: BY_NUMBER` (§"Placement"): the new entry goes at its
+`cueNumber`'s place among the stack's numbered cues, markers included in the shift. 400 without a
+`cueNumber`; with no numbered cue in the stack it goes at `sortOrder`, else at the end. An explicit
+`cueNumber` another cue entry of the stack already holds explicitly is refused 409
+`CUE_NUMBER_TAKEN` (as on the entry `PATCH` and `POST /cues`) rather than tripping the unique index;
+an auto one is released and derived again. Without `cueNumber` the entry is auto-numbered where it
+lands.
 
 ### `sort-by-cue-number`
 
-Sorts each prefix group's cue entries among themselves and writes them back into the slots of the
-list that group already occupied, so groups keep their relative placement. Markers and unparseable
-numbers never move. Afterwards the cues the sort moved take auto numbers from where they landed and
-the rest keep theirs (§"Auto Numbering", D11), so *Fix Order* moves a renumbered cue rather than
-relabelling its neighbours.
+Sorts the numbered cue entries by number among the places numbered cue entries already occupy
+(`numericCueOrder`), so markers and unnumbered cues never move. Afterwards the cues the sort moved
+take auto numbers from where they landed and the rest keep theirs (§"Auto Numbering", D11), so *Fix
+Order* moves a renumbered cue rather than relabelling its neighbours.
 
-Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }` — `pinnedCount` is the number of
-unparseable numbers left in place. No longer returns 400 when nothing was eligible; a stack that
+Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }` — `pinnedCount` counts numbers that
+are not numbers, left in place (none since step 11). No longer returns 400 when nothing was eligible; a stack that
 needs no sorting simply comes back unchanged.
 
 Both this and `reorder` also call `holds.restampEntries`, since a stack hold's priority is derived

@@ -1,10 +1,6 @@
 import { TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-// The ordering model this banner used to carry inline now lives in `@/lib/cueNumber` — import
-// `detectOutOfOrder` from there. The old local version only considered cue numbers starting with a
-// digit, so a prefixed stack ("S1-4" before "S1-3.1") never triggered it.
-
 interface OutOfOrderBannerProps {
   onFixOrder: () => void
   onDismiss: () => void

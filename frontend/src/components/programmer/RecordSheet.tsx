@@ -28,6 +28,9 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatError } from '@/lib/formatError'
 import { useCreateProjectCueStackMutation, useProjectCueStackListQuery } from '@/store/cueStacks'
 import { useRecordProgrammerMutation } from '@/store/programmerOps'
+import { cueNumberProblem } from '@/lib/cueNumber'
+import { outOfOrderOf, useCueNumberPlacement } from '@/components/cues/CueNumberPlacement'
+import type { CueNumberPlacement } from '@/api/cueStacksApi'
 import { selectTargetKeys } from '@/store/selectionSlice'
 import type {
   RecordMode,
@@ -199,10 +202,14 @@ export function RecordSheet({
   const newStack = stackId === NEW_STACK
   // The stack's error only while *New stack…* is still the choice: picking an existing stack after a
   // failed create must not leave it standing over the Record that follows (submit resets it too).
-  const error = (creating && newStack ? createStackError : undefined) ?? recordError
+  // An out-of-order number is asked about in the placement dialog, not shown as a failure.
+  const error = (creating && newStack ? createStackError : undefined) ?? (outOfOrderOf(recordError) ? undefined : recordError)
+  // Only while the field is shown: a loose cue takes no number, so a leftover one is ignored.
+  const numberProblem = creating && stackId !== NO_STACK ? cueNumberProblem(cueNumber) : null
   const canSubmit =
     (creating ? (newStack ? newStackName.trim() !== '' : stackId !== '') : cueId != null) &&
-    !maskIsEmpty(mask)
+    !maskIsEmpty(mask) &&
+    numberProblem == null
   const pickedCueName = usePickedCueName(projectId, creating ? null : cueId)
   // The list's name once it has loaded, the preset's until then — and the preset's only for its
   // own cue, never for one picked since.
@@ -211,20 +218,29 @@ export function RecordSheet({
   // while this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
   const scoped = selectedOnly && selectedKeys.length > 0
 
-  // No `unwrap()`: a failure is reported by the hook's own `error`, rendered below. There is
-  // nothing left to catch here — Record's one recoverable refusal was `409 CUE_EDIT_SESSION_OPEN`,
-  // and backend sweep item D1 retired the sessions that produced it.
-  const submit = async () => {
+  // No `unwrap()`: a failure is reported by the hook's own `error`, rendered below — all but the
+  // out-of-order answer to a numbered new cue, which `recordAndAnnounce` throws for the placement
+  // dialog to ask about.
+  const { writeNumber, dialog: numberDialog } = useCueNumberPlacement()
+
+  // A numbered new cue is sent asking first: a number that reads out of order at the end of the
+  // stack opens the placement dialog, which sends again moved to its place or kept at the end.
+  const submit = () => {
     if (done) return
+    if (creating && stackId !== NO_STACK && cueNumber.trim() !== '') writeNumber((placement) => submitWith(placement))
+    else void submitWith(undefined)
+  }
+
+  const submitWith = async (placement: CueNumberPlacement | undefined) => {
     const writes = trackHistoryWrites(['recordProgrammer', 'createProjectCueStack'])
     try {
-      await recordAndAnnounce(writes)
+      await recordAndAnnounce(writes, placement)
     } finally {
       writes.stop()
     }
   }
 
-  const recordAndAnnounce = async (writes: ReturnType<typeof trackHistoryWrites>) => {
+  const recordAndAnnounce = async (writes: ReturnType<typeof trackHistoryWrites>, placement: CueNumberPlacement | undefined) => {
     resetCreateStack()
     let cueStackId = creating && !newStack && stackId !== NO_STACK ? Number(stackId) : undefined
     if (creating && newStack) {
@@ -252,7 +268,9 @@ export function RecordSheet({
       name: creating && name.trim() !== '' ? name.trim() : undefined,
       // A number is an entry's, so a cue in no stack has none to take.
       cueNumber: creating && cueStackId != null && cueNumber.trim() !== '' ? cueNumber.trim() : undefined,
+      placement,
     })
+    if ('error' in response && outOfOrderOf(response.error)) throw response.error
     if ('data' in response && response.data) {
       setDone(true)
       announceWrite(recordNote(response.data), entryUndoAction(projectId, writes.stop()))
@@ -262,6 +280,7 @@ export function RecordSheet({
 
   return (
     <Sheet open={open} onOpenChange={(next) => !isLoading && onOpenChange(next)}>
+      {numberDialog}
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Record</SheetTitle>
@@ -349,7 +368,10 @@ export function RecordSheet({
                     value={cueNumber}
                     onChange={(e) => setCueNumber(e.target.value)}
                     placeholder="Auto"
+                    inputMode="decimal"
+                    aria-invalid={numberProblem != null}
                   />
+                  {numberProblem && <p className="text-xs text-destructive">{numberProblem}</p>}
                 </div>
               )}
             </>
@@ -436,7 +458,7 @@ export function RecordSheet({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={!canSubmit || isLoading || done}>
+          <Button onClick={submit} disabled={!canSubmit || isLoading || done}>
             {isLoading && <Loader2 className="size-4 animate-spin" />}
             {isLoading ? 'Recording…' : 'Record'}
           </Button>
