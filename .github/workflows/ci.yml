@@ -74,7 +74,7 @@ jobs:
           if-no-files-found: ignore
 
   # lighting7-link, the WebRTC sidecar (link/, docs/cloud-engineering.md §"The sidecar"): vet,
-  # format, its tests, a static build, and the licence gate over the modules that build links.
+  # format, its tests, a static build for each target, and the licence gate over each.
   # Go is the version link/go.mod names, and GOTOOLCHAIN=local keeps it from fetching another.
   link:
     name: Link
@@ -108,15 +108,20 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Build
+      # Every sidecar an installer carries, built as `buildLink` builds them (build.gradle.kts), and
+      # the licence gate over the modules they link, not go.sum's, which also lists test-only and
+      # unlinked ones. One check over all four binaries' modules: a module only one OS links must be
+      # listed, and an entry is stale only when no binary links it.
+      - name: Build and check licences
         env:
           CGO_ENABLED: 0
-        run: go build -trimpath -o lighting7-link ./cmd/lighting7-link
-
-      # The modules the binary links, not go.sum's, which also lists test-only and unlinked ones.
-      - name: Licences
         run: |
-          go version -m lighting7-link > go-modules.txt
+          : > go-modules.txt
+          for target in linux/amd64 darwin/arm64 darwin/amd64 windows/amd64; do
+            out="lighting7-link-${target%/*}-${target#*/}"
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build -trimpath -ldflags="-s -w" -o "$out" ./cmd/lighting7-link
+            go version -m "$out" >> go-modules.txt
+          done
           node ../scripts/licences.mjs --check --go-binary-modules go-modules.txt
 
   # `npm run check`, split: build and lint in one job, Vitest in three shards, all in parallel.

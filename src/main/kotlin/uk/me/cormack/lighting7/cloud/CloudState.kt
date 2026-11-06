@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.cloud
 
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.link.LinkStatus
 
 /**
  * What `GET /install/cloud` answers and the `cloud.state` frame carries (cloud-p0 plan D14). Built
@@ -18,6 +19,8 @@ data class CloudStateDto(
     /** Present once adopted. */
     val adopted: CloudAdoptedDto? = null,
     val connection: CloudConnectionStatus = CloudConnectionStatus.OFF,
+    /** The sidecar that carries remote sessions (cloud-p1 plan D11). */
+    val link: LinkStatus = LinkStatus.OFF,
     val retryAt: String? = null,
     val lastError: CloudErrorDto? = null,
     val lastOnlineAt: String? = null,

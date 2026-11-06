@@ -15,12 +15,16 @@ import uk.me.cormack.lighting7.cloud.protocol.IceServer
 import uk.me.cormack.lighting7.cloud.protocol.Message
 import uk.me.cormack.lighting7.link.LinkIn
 import uk.me.cormack.lighting7.link.LinkSidecar
+import uk.me.cormack.lighting7.link.LinkStatus
 import uk.me.cormack.lighting7.models.DaoCloudRemoteSessions
+import uk.me.cormack.lighting7.process.PidFile
 import uk.me.cormack.lighting7.testsupport.FakeCloud
 import uk.me.cormack.lighting7.testsupport.FakeSidecar
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.seedUser
 import java.io.File
+import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -64,8 +68,9 @@ class RemoteBrokerTest : RouteIntegrationTest() {
         eventually("adopted") { state.cloud.state.value.adopted != null }
         installId = state.cloud.state.value.adopted!!.installId
         eventually("online") { state.cloud.state.value.connection == CloudConnectionStatus.ONLINE }
+        eventually("the hello") { fake.sent<Message.Hello>(installId).isNotEmpty() }
         if (remoteAccess) state.cloud.setSwitches(remoteAccess = true)
-        if (mode != null && bound) eventually("the sidecar serves", 30.seconds) { state.cloud.sidecarRunning }
+        if (mode != null && bound && remoteAccess) eventually("the sidecar serves", 30.seconds) { state.cloud.sidecarRunning }
     }
 
     private fun eventually(what: String, within: Duration = 15.seconds, check: () -> Boolean) = runBlocking {
@@ -149,7 +154,8 @@ class RemoteBrokerTest : RouteIntegrationTest() {
         assertTrue(Capability.REMOTE_OFF in lastCapabilities())
         assertEquals(Message.RtcClose("sid-1", ErrorCode.REMOTE_ACCESS_OFF), reply(fake.offer(installId, "sid-1")))
         assertEquals(0, auditRows())
-        assertTrue(stdin().none { "session.open" in it })
+        assertNull(state.cloud.link, "no sidecar runs while Remote sessions is off")
+        assertEquals(0, record.length())
     }
 
     @Test
@@ -212,6 +218,26 @@ class RemoteBrokerTest : RouteIntegrationTest() {
         eventually("remote.no-sidecar") { Capability.REMOTE_NO_SIDECAR in lastCapabilities() }
         val row = transaction(state.database) { DaoCloudRemoteSessions.selectAll().single() }
         assertEquals(RemoteSessionEnd.SIDECAR_STOPPED.name, row[DaoCloudRemoteSessions.endReason])
+
+        eventually("restarted", 30.seconds) { state.cloud.sidecarRunning }
+        assertEquals(2, assertNotNull(state.cloud.link).sidecar.launches.get())
+        eventually("remote.no-sidecar cleared") { Capability.REMOTE_NO_SIDECAR !in lastCapabilities() }
+        eventually("cloud.state says it runs") { state.cloud.state.value.link == LinkStatus.RUNNING }
+    }
+
+    @Test
+    fun `turning Remote sessions off stops the sidecar, and on starts it again`() {
+        adopt()
+        eventually("cloud.state says it runs") { state.cloud.state.value.link == LinkStatus.RUNNING }
+        state.cloud.setSwitches(remoteAccess = false)
+        eventually("stopped") { state.cloud.link == null && !state.cloud.sidecarRunning }
+        assertEquals(LinkStatus.OFF, state.cloud.state.value.link)
+        eventually("remote.no-sidecar") { Capability.REMOTE_NO_SIDECAR in lastCapabilities() }
+
+        state.cloud.setSwitches(remoteAccess = true)
+        eventually("serving again", 30.seconds) { state.cloud.sidecarRunning }
+        eventually("cloud.state says it runs") { state.cloud.state.value.link == LinkStatus.RUNNING }
+        assertEquals(2, stdin().count { !it.startsWith("{") }, "a second launch, with its own secret")
     }
 
     @Test
@@ -219,7 +245,7 @@ class RemoteBrokerTest : RouteIntegrationTest() {
         adopt(mode = "hang")
         val id = fake.offer(installId, "sid-1")
         eventually("opened") { sessions.find("sid-1") != null }
-        val link = assertNotNull(state.cloud.link)
+        val link = assertNotNull(state.cloud.link).sidecar
         assertEquals(1, link.launches.get())
         val candidate = IceCandidate("candidate:" + "z".repeat(1000))
         var refused = 0
@@ -248,6 +274,24 @@ class RemoteBrokerTest : RouteIntegrationTest() {
         repeat(3) { assertTrue(reply(fake.offer(installId, "sid-$it")) is Message.RtcAnswer) }
         eventually("heartbeats go on") { fake.sent<Message.Health>(installId).size >= healthBefore + 2 }
         assertTrue(state.cloud.sidecarRunning)
+    }
+
+    @Test
+    fun `a sidecar a killed desk left running is stopped at the next start`() {
+        val pidFile = PidFile(File.createTempFile("link", ".pid").toPath(), "a test sidecar")
+        val command = FakeSidecar.command("hang", File.createTempFile("orphan", ".log"))
+        val orphan = ProcessBuilder(command).start()
+        try {
+            pidFile.write(orphan, Path.of(command.first()))
+            state.cloud.linkPidFile = { pidFile }
+            adopt()
+            assertTrue(orphan.waitFor(5, TimeUnit.SECONDS), "the orphan was stopped")
+            eventually("this run's own recorded") {
+                runCatching { pidFile.path.toFile().readLines().first().toLong() }.getOrNull() == state.cloud.link?.pid
+            }
+        } finally {
+            orphan.destroyForcibly()
+        }
     }
 
     @Test

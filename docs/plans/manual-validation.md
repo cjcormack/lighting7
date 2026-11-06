@@ -15,8 +15,9 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P1-S5`](#fu-manual-cloud-p1-s5) | an installed MSI and Mac pkg carry the sidecar for their machine and the desk runs it: `link` reads `RUNNING` with *Remote sessions* on, the installers' sizes against the build before | Cloud P1 S5, 2026-11-06 |
 | [`FU-MANUAL-PALETTE-REFERENCES-S4`](#fu-manual-palette-references-s4) | a Look recorded from heads that follow a palette still follows it on the rig — retuned live with no GO, a tap in the focused Look writing references and a second taking them off — and *Copy the values* on the Look sheet and in the cue editor turns them to literals with nothing moving | Palette references S4, 2026-11-05 |
-| [`FU-MANUAL-CLOUD-P1A`](#fu-manual-cloud-p1a) | Lighting7 Cloud's P1a gate: the desk's SPA opened from the portal is usable through the shell on desktop Chrome, Firefox and Safari and iOS Safari, Direct and Relayed (TURN on 443 too), within NFR-PERF-1's times, a 100 MB upload, two token refreshes, *End* closing it within 5 s, ten minutes of fades relayed and a cached second visit under 2 s | Cloud P1 S4, 2026-11-06 |
+| [`FU-MANUAL-CLOUD-P1A`](#fu-manual-cloud-p1a) | Lighting7 Cloud's P1a gate: the desk's SPA opened from the portal is usable through the shell on desktop Chrome, Firefox and Safari and iOS Safari, Direct and Relayed (TURN on 443 too), within NFR-PERF-1's times, a 100 MB upload, two token refreshes, *End* closing it within 5 s, ten minutes of fades relayed and a cached second visit under 2 s — **passed 2026-11-06 but for the performance checks**, steps 2 and 7, which are deferred | Cloud P1 S4, 2026-11-06 |
 | [`FU-MANUAL-CLOUD-P0`](#fu-manual-cloud-p0) | Lighting7 Cloud's P0 exit: each desk adopted from its Cloud tab shows Online in the portal, a running fade and FX see nothing of the cloud's app stopping and the desk is back within 30 s of its return, unadopt from either side lands on the other, and `cloud.enabled = false` connects nowhere — **adoption, Online and a portal removal seen 2026-11-05**; the outage, a desk unadopt and `enabled = false` still unseen | Cloud P0 S6, 2026-11-05 |
 | [`FU-MANUAL-ARTNET-TRANSPORT`](#fu-manual-artnet-transport) | a real Art-Net node lights from the desk's own ArtDMX transport as it did from artnet4j: broadcast and unicast universes, a node's status page showing the frames arriving, and a second program on the desk machine still hearing them | Cloud P0 S2, 2026-11-02 |
 | [`FU-MANUAL-MOVE-IN-DARK`](#fu-manual-move-in-dark) | movers moved in the dark on the rig: a head moves a second after it goes dark and is in place before the GO, a GO too soon and a GO TO land dark heads at once, a busk press lights a moved head and it returns, a cue *Off* and a head kept live move lit, an older show's flagged cues import on *Early*, and the stack sheet, the Cue tab, the *Dark* columns and the Stage view's rings agree with where the heads come up | Move in dark S1–S5, 2026-11-02 |
@@ -178,7 +179,33 @@ bytes already on stage.
 
 ---
 
+## `FU-MANUAL-CLOUD-P1-S5`
+
+**What it proves**: the installers carry `lighting7-link` and the installed desk runs it (cloud-p1 plan
+session 5, D10). The session ran from Linux, so `packageMac` and `packageWindows` were not run, and an
+installed app's file modes and layout are the installer's.
+
+**Test**, on a Mac (Apple silicon, and an Intel one if there is one) and on Windows:
+
+1. Build and install the installer (`./gradlew packageMac`; the *Windows build* workflow for the MSI)
+   and note its size against the last one built before this session; the workflow prints the MSI's and
+   the sidecar's.
+2. Adopt the desk and turn *Remote sessions* on. `GET /api/rest/install/cloud` answers `"link":
+   "RUNNING"`, and the desk's log names the sidecar it started, the one for this machine
+   (`lighting7-link-darwin-arm64`, `-darwin-amd64` or `-windows-amd64.exe`).
+3. End the sidecar's process from Activity Monitor or Task Manager: `link` reads `RESTARTING`, then
+   `RUNNING` again within a few seconds.
+4. Quit the desk from its menu: no `lighting7-link` process is left running.
+
+Record the date and the two installers' growth here and in the plan's §4.
+
+---
+
 ## `FU-MANUAL-CLOUD-P1A`
+
+> **Passed 2026-11-06 but for the performance checks.** The owner reports the gate passed, and OQ-10
+> answered: the shell stays in `cjcormack/lighting7-cloud`. **Still unrun:** step 2 (NFR-PERF-1's open
+> times and the round-trip against a ping) and step 7 (a cached second visit under 2 s), deferred.
 
 **What it proves**: the gate of the PRD's P1 (cloud-p1 plan §6, RISK-1): the desk's own SPA, served
 through a service worker and a WebSocket shim over WebRTC, is usable from the cloud's portal. Sessions 5

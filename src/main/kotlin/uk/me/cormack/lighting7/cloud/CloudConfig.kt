@@ -16,7 +16,7 @@ data class CloudConfig(
     val enabled: Boolean,
     /** Why a non-empty `cloud.baseUrl` was refused. */
     val problem: String? = null,
-    /** `cloud.link.binary`: a sidecar built by hand, for development until the installers carry one. */
+    /** `cloud.link.binary`: a sidecar to run in place of the installed one ([uk.me.cormack.lighting7.link.LinkBinary]). */
     val linkBinary: String? = null,
 ) {
     val configured: Boolean get() = baseUrl != null

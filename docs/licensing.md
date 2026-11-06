@@ -37,7 +37,10 @@ its dependencies are Go modules, listed in `licences/go.json` as `"<module path>
 gate reads the modules **linked into the built binary**, the `dep` lines of `go version -m`, not
 `go.sum`, which also lists test-only modules and ones the build never links. With that list it fails on
 a linked module `go.json` does not name and on an entry the binary no longer links; without it (Gradle's
-`licenceCheck`, `npm run licences`) the entries are checked as written. `go.json`'s `toolchain` entry is
+`licenceCheck`, `npm run licences`) the entries are checked as written. CI's *Link* job runs it once
+over the modules of every binary an installer carries (`linux/amd64`, `darwin/arm64`, `darwin/amd64`,
+`windows/amd64`) together, since the modules a binary links can differ by OS: a module one OS links must
+be listed, and an entry is stale only when none links it (today all four link the same 23). `go.json`'s `toolchain` entry is
 the Go standard library and runtime, BSD-3-Clause, which every binary carries and `go version -m` does
 not list.
 

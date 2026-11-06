@@ -33,6 +33,8 @@ export interface CloudState {
   adoption?: CloudAdoption | null
   adopted?: CloudAdopted | null
   connection?: CloudConnection
+  /** The sidecar that carries remote sessions: absent from a desk before it supervised one. */
+  link?: 'OFF' | 'STARTING' | 'RUNNING' | 'RESTARTING'
   retryAt?: string | null
   lastError?: { code: string; message: string } | null
   lastOnlineAt?: string | null

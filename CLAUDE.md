@@ -43,6 +43,12 @@ a stale Ant exclude matches nothing *silently* in both directions. `packageMac` 
 `packageWindows` refuse a mismatched override. Tests and `run` are unaffected — they use
 `runtimeClasspath`, not the fat jar.
 
+The installers carry **`lighting7-link`**, the remote-session sidecar, beside the jar in
+`jpackage-input`, built per OS *and* architecture by `buildLink` with a Go toolchain Gradle downloads
+and checks by SHA-256 (the Mac's arm64 and amd64 both, the others amd64). `stageJpackageInput`
+verifies the jar's natives and the sidecars are for one OS. `run` and the tests build the host's
+and pass it as `-Dlighting7.link`. See `docs/cloud-engineering.md` §"The sidecar".
+
 Also note `copyFrontend` is a `Sync`: it owns `src/main/resources/static/` and deletes
 anything it didn't put there, so don't hand-place files in it.
 

@@ -1,5 +1,8 @@
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 val kotlin_version = providers.gradleProperty("kotlin_version").get()
 val logback_version = providers.gradleProperty("logback_version").get()
@@ -630,6 +633,271 @@ tasks.shadowJar {
     }
 }
 
+// ─── lighting7-link, the sidecar ───────────────────────────────────────
+// The desk's WebRTC end of a remote session (docs/cloud-engineering.md §"The sidecar"), Go in
+// `link/`. It ships beside the jars in `jpackage-input`, never inside the fat jar: an executable
+// cannot run from inside one. A Go binary is per OS *and* architecture, so each `nativePayloadOs`
+// carries the builds its installer needs, and the desk starts the one for its machine.
+//
+// Go is downloaded rather than taken from the PATH, as Node is: the toolchain zip
+// `golang.org/toolchain@v0.0.1-go<version>.<os>-<arch>` that `GOTOOLCHAIN` itself fetches, from the
+// Go module proxy, checked against the SHA-256 below. Its version is `link/go.mod`'s `go` line,
+// which CI's *Link* job reads too; a bump there needs these five checksums with it.
+val goVersion = "1.24.7"
+val goToolchainSha256 = mapOf(
+    "linux-amd64" to "4c2a63c008dbb90112f22ff9e47eb6fb487b17da1c70ecc7b9fad77577b8031e",
+    "linux-arm64" to "67d836d2f0e17ce538757ba43439fa8f77eb00fe9798e0b0920d94925184e7a6",
+    "darwin-arm64" to "b529787fe1ee7c4a1e5b9635e97ff0840d1206b7cccc958ec1f8296fac604f63",
+    "darwin-amd64" to "c25f2a9069b5471d4daaccfe9a1eb5646c9340ef0d216ebe13ae125d56269170",
+    "windows-amd64" to "615b342308b2ce49b2c1198070c39edbb897c02c943d573c2a88ae02ddfae337",
+)
+val linkDir = layout.projectDirectory.dir("link")
+
+val goModLine = linkDir.file("go.mod").asFile.readLines().map { it.trim() }.firstOrNull { it.startsWith("go ") }
+require(goModLine == "go $goVersion") {
+    "link/go.mod says '$goModLine' but the build pins Go $goVersion. Move both together, with " +
+        "goToolchainSha256's checksums for the new version."
+}
+
+data class GoTarget(val goos: String, val goarch: String) {
+    val key get() = "$goos-$goarch"
+    val linkFileName get() = "lighting7-link-$key" + if (goos == "windows") ".exe" else ""
+    val taskName get() = "buildLink" + key.split('-').joinToString("") { it.replaceFirstChar(Char::uppercase) }
+}
+
+val hostGoTarget = GoTarget(
+    goos = when (runtimeOsLabel) { "mac" -> "darwin"; else -> runtimeOsLabel },
+    goarch = when (val arch = System.getProperty("os.arch").lowercase()) {
+        "amd64", "x86_64", "x64" -> "amd64"
+        "aarch64", "arm64" -> "arm64"
+        else -> arch
+    },
+)
+
+// The sidecars each installer carries.
+val linkTargetsByOs = mapOf(
+    "windows" to listOf(GoTarget("windows", "amd64")),
+    "mac" to listOf(GoTarget("darwin", "arm64"), GoTarget("darwin", "amd64")),
+    "linux" to listOf(GoTarget("linux", "amd64")),
+)
+val shippedLinkTargets: List<GoTarget> =
+    if (nativePayloadOs == "all") linkTargetsByOs.values.flatten() else linkTargetsByOs.getValue(nativePayloadOs)
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            ivy {
+                name = "Go toolchains"
+                url = uri("https://proxy.golang.org/golang.org/toolchain/@v")
+                patternLayout { artifact("[revision].[ext]") }
+                metadataSources { artifact() }
+            }
+        }
+        filter { includeModule("golang.org", "toolchain") }
+    }
+}
+
+val goToolchain: Configuration = configurations.create("goToolchain") {
+    description = "The pinned Go toolchain for this host, as the Go module proxy serves it."
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    goToolchain("golang.org:toolchain:v0.0.1-go$goVersion.${hostGoTarget.key}@zip")
+}
+
+val goRootDir = layout.projectDirectory.dir(".gradle/go/go$goVersion-${hostGoTarget.key}")
+val goExecutable = goRootDir.file(if (hostGoTarget.goos == "windows") "bin/go.exe" else "bin/go").asFile
+
+val installGo = tasks.register<Sync>("installGo") {
+    description = "Unpack the pinned Go toolchain into .gradle/go/, checked against its SHA-256."
+    group = "build setup"
+    val expected = goToolchainSha256[hostGoTarget.key]
+    val zip = goToolchain
+    inputs.property("sha256", expected.orEmpty())
+    doFirst {
+        requireNotNull(expected) {
+            "No Go toolchain is pinned for ${hostGoTarget.key}. Add its checksum to goToolchainSha256."
+        }
+        val file = zip.singleFile
+        val actual = MessageDigest.getInstance("SHA-256")
+            .digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+        require(actual == expected) {
+            "${file.name} has SHA-256 $actual, not the pinned $expected. Refusing to run it."
+        }
+    }
+    from(zip.elements.map { files -> files.map { zipTree(it) } })
+    // The zip's one top-level directory is golang.org/toolchain@v0.0.1-go<version>.<os>-<arch>/.
+    eachFile { relativePath = RelativePath(true, *relativePath.segments.drop(2).toTypedArray()) }
+    includeEmptyDirs = false
+    into(goRootDir)
+}
+
+val linkSources = fileTree(linkDir) {
+    include("**/*.go", "go.mod", "go.sum")
+    exclude("**/*_test.go")
+}
+
+fun registerBuildLink(target: GoTarget) = tasks.register<Exec>(target.taskName) {
+    description = "Build lighting7-link for ${target.key} into build/link/."
+    group = "build"
+    dependsOn(installGo)
+    val out = layout.buildDirectory.file("link/${target.linkFileName}")
+    inputs.files(linkSources).withPropertyName("sources").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.property("goVersion", goVersion)
+    inputs.property("target", target.key)
+    outputs.file(out)
+    outputs.cacheIf { true }
+    workingDir = linkDir.asFile
+    environment("GOOS", target.goos)
+    environment("GOARCH", target.goarch)
+    // pion is pure Go, so the sidecar is static and cross-compiles from any host.
+    environment("CGO_ENABLED", "0")
+    environment("GOTOOLCHAIN", "local")
+    environment("GOFLAGS", "-mod=readonly")
+    // Nothing of the host's Go may reach the build or its cache entry: not another toolchain's tree,
+    // not `go env -w` settings, not a go.work above the module, not a CPU level beyond the baseline.
+    environment("GOROOT", goRootDir.asFile.absolutePath)
+    environment("GOENV", "off")
+    environment("GOWORK", "off")
+    environment("GOAMD64", "v1")
+    environment("GOARM64", "v8.0")
+    environment("GOEXPERIMENT", "")
+    // `-s -w` drops the symbol table and DWARF, a third of the binary; a panic's stack trace and
+    // `go version -m`, which the licence gate reads, are kept.
+    commandLine(goExecutable.absolutePath, "build", "-trimpath", "-ldflags=-s -w", "-o", out.get().asFile.absolutePath, "./cmd/lighting7-link")
+}
+
+val buildLinkTasks: Map<GoTarget, TaskProvider<Exec>> =
+    (linkTargetsByOs.values.flatten() + hostGoTarget).distinct().associateWith { registerBuildLink(it) }
+
+val buildLink = tasks.register("buildLink") {
+    description = "Build the sidecars the installer for nativePayloadOs=$nativePayloadOs carries."
+    group = "build"
+    dependsOn(shippedLinkTargets.map { buildLinkTasks.getValue(it) })
+}
+
+val hostLinkBinary = buildLinkTasks.getValue(hostGoTarget).map { it.outputs.files.singleFile }
+
+/** `-Dlighting7.link`: the host's sidecar, for `run` and the tests, which have no installer beside them. */
+class LinkBinaryArgument(
+    @get:InputFile @get:PathSensitive(PathSensitivity.NONE) val binary: Provider<File>,
+) : CommandLineArgumentProvider {
+    override fun asArguments() = listOf("-Dlighting7.link=${binary.get().absolutePath}")
+}
+
+tasks.named<JavaExec>("run") {
+    dependsOn(buildLinkTasks.getValue(hostGoTarget))
+    jvmArgumentProviders += LinkBinaryArgument(hostLinkBinary)
+}
+
+/**
+ * What is wrong with an installer's input [dir] for [os]: the jar's native payloads and the
+ * sidecars beside it must be for the same OS, each sidecar its target's executable format and
+ * architecture, and none missing or extra. The fat jar's own verifier says which payloads it keeps;
+ * this one says the staged directory agrees with it.
+ */
+fun jpackageInputProblems(dir: File, os: String): List<String> {
+    val problems = mutableListOf<String>()
+    val jar = dir.resolve("lighting7.jar")
+    if (!jar.isFile) return listOf("MISSING  lighting7.jar")
+    val jarOses = ZipFile(jar).use { zip ->
+        val names = zip.entries().asSequence().map { it.name }.toList()
+        nativePayloads.mapNotNull { (_, prefix, owner) -> owner?.takeIf { names.any { n -> n.startsWith(prefix) } } }.toSet()
+    }
+    val expectedOses = if (os == "all") linkTargetsByOs.keys else setOf(os)
+    if (jarOses != expectedOses) {
+        problems += "lighting7.jar carries natives for ${jarOses.sorted().ifEmpty { listOf("no OS") }}, not $expectedOses"
+    }
+    val wanted = expectedOses.flatMap { linkTargetsByOs.getValue(it) }.associateBy { it.linkFileName }
+    val present = dir.listFiles { f -> f.name.startsWith("lighting7-link") }.orEmpty().associateBy { it.name }
+    (wanted.keys - present.keys).sorted().forEach { problems += "MISSING  $it — expected for nativePayloadOs=$os" }
+    (present.keys - wanted.keys).sorted().forEach { problems += "UNEXPECTED  $it — not a sidecar nativePayloadOs=$os carries" }
+    wanted.filterKeys { it in present }.forEach { (name, target) ->
+        val file = present.getValue(name)
+        val actual = executableFormatOf(file)
+        if (actual != target.key) problems += "WRONG  $name is ${actual ?: "no executable we know"}, not ${target.key}"
+        if (target.goos != "windows" && !hostOs.isWindows && !file.canExecute()) problems += "NOT EXECUTABLE  $name"
+    }
+    return problems
+}
+
+/** `<goos>-<goarch>` as [file]'s header says, for the executable formats the sidecars are built in. */
+fun executableFormatOf(file: File): String? {
+    val head = file.inputStream().use { it.readNBytes(4096) }
+    fun u16(at: Int) = if (at + 2 > head.size) -1 else (head[at].toInt() and 0xff) or ((head[at + 1].toInt() and 0xff) shl 8)
+    fun u32(at: Int) = if (at + 4 > head.size) -1L else (u16(at).toLong() or (u16(at + 2).toLong() shl 16))
+    return when {
+        head.size > 20 && head[0] == 0x7f.toByte() && head[1] == 'E'.code.toByte() && head[2] == 'L'.code.toByte() && head[3] == 'F'.code.toByte() ->
+            when (u16(18)) { 0x3e -> "linux-amd64"; 0xb7 -> "linux-arm64"; else -> null }
+        u32(0) == 0xfeedfacfL -> when (u32(4)) { 0x01000007L -> "darwin-amd64"; 0x0100000cL -> "darwin-arm64"; else -> null }
+        head.size > 0x40 && head[0] == 'M'.code.toByte() && head[1] == 'Z'.code.toByte() -> {
+            val pe = u32(0x3c).toInt()
+            if (u32(pe) != 0x00004550L) null else when (u16(pe + 4)) { 0x8664 -> "windows-amd64"; 0xaa64 -> "windows-arm64"; else -> null }
+        }
+        else -> null
+    }
+}
+
+/**
+ * The input verifier's own test: fixture directories with fake jars and executable headers, each
+ * case answering what it should. A build-script function has no test source set, and a check that
+ * never fails is the one this has to rule out.
+ */
+val verifyJpackageInputSelfTest = tasks.register("verifyJpackageInputSelfTest") {
+    description = "Check that the jpackage-input verifier fails a wrong, missing or extra sidecar."
+    group = "verification"
+    val stamp = layout.buildDirectory.file("link/verifier-self-test.stamp")
+    val work = layout.buildDirectory.dir("tmp/verifyJpackageInputSelfTest")
+    outputs.file(stamp)
+    doLast {
+        val root = work.get().asFile.apply { deleteRecursively(); mkdirs() }
+        fun fakeJar(dir: File, vararg entries: String) {
+            ZipOutputStream(dir.resolve("lighting7.jar").outputStream()).use { zip ->
+                entries.forEach { zip.putNextEntry(ZipEntry(it)); zip.closeEntry() }
+            }
+        }
+        fun header(format: String): ByteArray = ByteArray(256).also { b ->
+            fun put16(at: Int, v: Int) { b[at] = v.toByte(); b[at + 1] = (v shr 8).toByte() }
+            fun put32(at: Int, v: Long) { put16(at, (v and 0xffff).toInt()); put16(at + 2, (v shr 16).toInt()) }
+            when (format) {
+                "linux-amd64" -> { b[0] = 0x7f; b[1] = 'E'.code.toByte(); b[2] = 'L'.code.toByte(); b[3] = 'F'.code.toByte(); put16(18, 0x3e) }
+                "darwin-arm64" -> { put32(0, 0xfeedfacfL); put32(4, 0x0100000cL) }
+                "darwin-amd64" -> { put32(0, 0xfeedfacfL); put32(4, 0x01000007L) }
+                "windows-amd64" -> { b[0] = 'M'.code.toByte(); b[1] = 'Z'.code.toByte(); put32(0x3c, 0x80); put32(0x80, 0x4550); put16(0x84, 0x8664) }
+            }
+        }
+        fun case(name: String, os: String, jarEntry: String, sidecars: Map<String, String>): List<String> {
+            val dir = root.resolve(name).apply { mkdirs() }
+            fakeJar(dir, jarEntry)
+            sidecars.forEach { (file, format) -> dir.resolve(file).apply { writeBytes(header(format)); setExecutable(true) } }
+            return jpackageInputProblems(dir, os)
+        }
+        val windowsJar = "org/sqlite/native/Windows/x86_64/sqlitejdbc.dll"
+        val linuxJar = "org/sqlite/native/Linux/x86_64/libsqlitejdbc.so"
+        val macJar = "org/sqlite/native/Mac/aarch64/libsqlitejdbc.dylib"
+        val expectations = listOf(
+            Triple("windows", case("windows-ok", "windows", windowsJar, mapOf("lighting7-link-windows-amd64.exe" to "windows-amd64")), null),
+            Triple("mac", case("mac-ok", "mac", macJar, mapOf("lighting7-link-darwin-arm64" to "darwin-arm64", "lighting7-link-darwin-amd64" to "darwin-amd64")), null),
+            Triple("a Linux sidecar named as Windows's", case("wrong-format", "windows", windowsJar, mapOf("lighting7-link-windows-amd64.exe" to "linux-amd64")), "WRONG"),
+            Triple("a Linux jar with Windows's sidecar", case("wrong-jar", "windows", linuxJar, mapOf("lighting7-link-windows-amd64.exe" to "windows-amd64")), "natives for"),
+            Triple("no sidecar", case("missing", "windows", windowsJar, emptyMap()), "MISSING"),
+            Triple("one Mac architecture", case("one-arch", "mac", macJar, mapOf("lighting7-link-darwin-arm64" to "darwin-arm64")), "MISSING"),
+            Triple("another OS's sidecar beside it", case("extra", "linux", linuxJar, mapOf("lighting7-link-linux-amd64" to "linux-amd64", "lighting7-link-windows-amd64.exe" to "windows-amd64")), "UNEXPECTED"),
+        )
+        val failures = expectations.mapNotNull { (what, problems, expected) ->
+            when {
+                expected == null && problems.isNotEmpty() -> "$what: expected to pass, got $problems"
+                expected != null && problems.none { expected in it } -> "$what: expected a '$expected' problem, got $problems"
+                else -> null
+            }
+        }
+        require(failures.isEmpty()) { "The jpackage-input verifier is wrong:\n" + failures.joinToString("\n") { "  - $it" } }
+        stamp.get().asFile.writeText("passed\n")
+    }
+}
+
 // ─── Phase 3: jlink trimmed runtime + jpackage installers ──────────────
 // Module list: we lean on the `java.se` aggregate plus a handful of jdk.* extras
 // JNDI / TLS need rather than auto-discovering with jdeps.
@@ -801,11 +1069,23 @@ val stageJpackageInput = tasks.register<Sync>("stageJpackageInput") {
     description = "Stage launcher.jar + lighting7.jar into build/jpackage-input/."
     group = "distribution"
 
-    dependsOn(tasks.shadowJar, ":launcher:shadowJar")
+    dependsOn(tasks.shadowJar, ":launcher:shadowJar", buildLink)
 
     from(tasks.shadowJar) { include("lighting7.jar") }
     from(project(":launcher").layout.buildDirectory.file("libs/launcher.jar"))
+    shippedLinkTargets.forEach { from(buildLinkTasks.getValue(it)) }
     into(jpackageInputDir)
+
+    // The jar's natives and the sidecars beside it must be for one OS, as the jar's own verifier
+    // insists of its payloads: a Windows MSI carrying a Linux sidecar builds and installs green.
+    doLast {
+        val problems = jpackageInputProblems(jpackageInputDir.get().asFile, nativePayloadOs)
+        require(problems.isEmpty()) {
+            "jpackage-input verification failed (nativePayloadOs=$nativePayloadOs):\n" +
+                problems.joinToString("\n") { "  - $it" }
+        }
+        logger.lifecycle("jpackage-input verified: ${shippedLinkTargets.joinToString { it.linkFileName }} beside lighting7.jar.")
+    }
 }
 
 tasks.named<Delete>("clean") {
@@ -1029,6 +1309,10 @@ tasks.test {
     // which is worth ~55 s on the first run after any rebuild; `clean` discards it.
     systemProperty("lighting7.dataDir", layout.buildDirectory.dir("test-data").get().asFile.absolutePath)
 
+    // The host's sidecar, which the safety test runs and kills (`LinkSidecarSafetyTest`).
+    dependsOn(buildLinkTasks.getValue(hostGoTarget))
+    jvmArgumentProviders += LinkBinaryArgument(hostLinkBinary)
+
     // The same JDK 24+ opt-ins as `./gradlew run` (see `application` above): sqlite-jdbc loads its
     // native library in every test that opens a DB, and the embedded Kotlin compiler the script
     // tests drive calls `sun.misc.Unsafe::invokeCleaner`. Without them each test JVM opens with
@@ -1141,5 +1425,6 @@ val licenceCheck = tasks.register<com.github.gradle.node.task.NodeTask>("licence
 
 tasks.named("check") {
     dependsOn(licenceCheck)
+    dependsOn(verifyJpackageInputSelfTest)
     dependsOn(gradle.includedBuild("cloud-protocol").task(":check"))
 }

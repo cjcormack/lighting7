@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, session 4 in review.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05, session 5 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -286,7 +286,12 @@ P1 is done when `FU-MANUAL-CLOUD-P1` (§6), the PRD's exit criteria, passes.
 
 - **RISK-1, browser delivery.** P1a's test; D1's fallback.
 - **RISK-3, the second binary.** A Go toolchain in the build and a per-OS sidecar in the installers.
-  Session 5 measures the installers' growth and records it here; the PRD expects 10–15 MB.
+  Session 5 measures the installers' growth and records it here; the PRD expects 10–15 MB. *Measured
+  2026-11-06, from Linux, with no Mac or Windows host to run `packageMac` or `packageWindows`:* each
+  sidecar (`-s -w`) is 10.0–10.6 MB uncompressed and 3.9–4.2 MB at gzip -9, so the MSI should grow by
+  about 4 MB compressed (10.5 MB installed) and the Mac pkg, carrying both architectures, by about 8 MB
+  (20.6 MB installed). `windows-build.yml` now prints the MSI's size and the sidecar's on every run;
+  `FU-MANUAL-CLOUD-P1-S5` records the real installers'.
 - **A timing test that flakes.** Session 5's sidecar-crash test measures wall clock, as
   `CloudOutageOutputTimingTest` does; it compares against its own baseline with generous bounds and
   joins `docs/testing-engineering.md`'s table.
@@ -311,8 +316,8 @@ and a session is added here for it.
 | 1 | The protocol for P1 | merged | `claude/cloud-p1-z6z56z` | [#353](https://github.com/cjcormack/lighting7/pull/353) | `f86d6bb` |
 | 2 | Bearer tokens on the public listener | merged | `claude/cloud-p1-s2` | [#355](https://github.com/cjcormack/lighting7/pull/355) | `7deccac` |
 | 3 | The sidecar and the broker | merged | `claude/cloud-p1-s3` | [#356](https://github.com/cjcormack/lighting7/pull/356) | `45ab6d1` |
-| 4 | The SPA in remote mode | in review | `claude/cloud-p1-htmv50` | | |
-| 5 | Bundling and supervising the sidecar | planned | | | |
+| 4 | The SPA in remote mode | merged | `claude/cloud-p1-htmv50` | [#357](https://github.com/cjcormack/lighting7/pull/357) | `52c68fe` |
+| 5 | Bundling and supervising the sidecar | in review | `claude/awesome-lamport-bbwlen` | | |
 | 6 | Linking cloud accounts | planned | | | |
 | 7 | Remote sessions on the Cloud tab | planned | | | |
 | 8 | The MCP relay | planned | | | |
@@ -514,6 +519,29 @@ next; whoever merges the last fills its own.
   the installers' growth recorded in §4.
 - **Docs:** `docs/cloud-engineering.md` §"The sidecar" (bundling, supervision); root `CLAUDE.md`'s note
   on `lighting7.jar` gains the sidecar beside it; `docs/testing-engineering.md`'s wall-clock table.
+- **As built:** Go comes from the Go module proxy, as `GOTOOLCHAIN` fetches it (the zip
+  `golang.org/toolchain@v0.0.1-go1.24.7.<os>-<arch>`, resolved by Gradle through an exclusive ivy
+  repository and checked against `goToolchainSha256`), pinned for five hosts: the four the installers
+  are built on or for and linux/arm64, for `run` and the tests; the build refuses to configure when
+  `link/go.mod`'s `go` line is not the pinned version. The binaries are built `-ldflags=-s -w`, a third
+  smaller, `go version -m` still reading their modules. The verifier reads the staged jar's natives to
+  say which OS it is for and each sidecar's header for its OS and architecture; it is a build-script
+  function, so its test is `verifyJpackageInputSelfTest` in `check`, over fixture headers.
+  `cloud.link.binary` stays, as an override of the installed sidecar, beside `-Dlighting7.link`
+  (`link/LinkBinary.kt`). `LinkSidecar` no longer restarts a hung sidecar itself: it reports each
+  launch's end and `LinkProcess` starts the next after the backoff, so a hung one is replaced after 1 s
+  rather than at once. The sidecar also needs *Remote sessions* on, which the section's D11 line says
+  and session 3's launch did not check. The PID file records the process's start time beside its PID and
+  binary, and the sweep leaves a process started at another time alone; it runs once, in
+  `CloudService.start` before anything launches, not at each supervisor's first launch, where it would
+  catch the previous supervisor's own sidecar still stopping, under the cloud's locks; a launch's exit
+  deletes the file only while it still names that launch; ngrok's sweep gets the same, and
+  reads its older two-line files as before. The safety test, `LinkSidecarSafetyTest`, kills and hangs the
+  real sidecar (hung by SIGSTOP, so on POSIX only, its stdin then filled until the desk takes it as hung)
+  and floods through `FakeSidecar`; it and `CloudOutageOutputTimingTest` share `testsupport/FadeTiming.kt`.
+  The *Link* job builds and gates all four targets; the Backend job now downloads Go to build the host's
+  sidecar for the tests. `cloud.state` carries `link`, and the frontend's type with it; no UI shows it
+  before session 7. Not run here: `packageMac` and `packageWindows`, for want of either host.
 
 ### Session 6 — Linking cloud accounts
 
@@ -615,7 +643,9 @@ remote sessions turned on through session 2's admin route (the Cloud tab's switc
 7. A second visit loads in under 2 s from the asset cache (FR-RA-7).
 
 When it passes, the owner records here: the date, what was measured, and OQ-10's answer (and OQ-11's,
-if the spike settles it). *Not yet run.*
+if the spike settles it). **Passed 2026-11-06**, the owner reports, with the performance checks (steps 2
+and 7) deferred: they stay open under `FU-MANUAL-CLOUD-P1A`. **OQ-10:** the shell stays in
+`cjcormack/lighting7-cloud`, so no session is added here for it. OQ-11 is not settled by the spike.
 
 **UC-3 through the cloud**, the operator item session 9 needs: once the cloud plan's session 4 is
 deployed, a Claude connector added with the desk's cloud URL drives this desk. The owner records the

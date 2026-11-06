@@ -24,8 +24,13 @@ import uk.me.cormack.lighting7.auth.AuthService
 import uk.me.cormack.lighting7.cloud.protocol.Capability
 import uk.me.cormack.lighting7.cloud.protocol.MAX_FRAME_BYTES
 import uk.me.cormack.lighting7.cloud.protocol.Message
+import uk.me.cormack.lighting7.link.LinkBinary
 import uk.me.cormack.lighting7.link.LinkIn
+import uk.me.cormack.lighting7.link.LinkProcess
 import uk.me.cormack.lighting7.link.LinkSidecar
+import uk.me.cormack.lighting7.link.LinkStatus
+import uk.me.cormack.lighting7.process.PidFile
+import uk.me.cormack.lighting7.state.appDataDir
 import uk.me.cormack.lighting7.update.BuildInfo
 import uk.me.cormack.lighting7.mcp.originOf
 import uk.me.cormack.lighting7.models.CloudConnectionState
@@ -36,6 +41,7 @@ import uk.me.cormack.lighting7.models.DaoUsers
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.sync.auth.CredentialStore
+import java.nio.file.Path
 import java.security.PrivateKey
 import java.time.Instant
 import java.util.concurrent.LinkedBlockingQueue
@@ -78,6 +84,7 @@ class CloudService(
     private val scope = CoroutineScope(SupervisorJob() + executor.asCoroutineDispatcher() + CoroutineName("cloud"))
     private val memory = CloudMemory()
     private val started = AtomicBoolean(false)
+    private val startLock = Any()
 
     /** Held from reading a snapshot to publishing it, so an older one never lands after a newer one. */
     private val publishLock = Any()
@@ -135,21 +142,25 @@ class CloudService(
         private set
 
     /**
-     * The command that launches the sidecar for a target and a build: `cloud.link.binary`'s, or none
-     * (session 3's development launch; session 5 bundles one). Tests replace it.
+     * The command that launches the sidecar for a target and a build: the installed one, or the one
+     * `cloud.link.binary` or `-Dlighting7.link` names ([LinkBinary]); none when there is none. Tests
+     * replace it.
      */
     @Volatile internal var linkCommand: ((target: String, build: String) -> List<String>)? =
-        config.linkBinary?.let { binary -> { target, build -> listOf(binary, "-target", target, "-build", build) } }
+        LinkBinary.resolve(config.linkBinary)?.let { binary -> { target, build -> listOf(binary.toString(), "-target", target, "-build", build) } }
+
+    /** Where the sidecar's PID is kept, so the next start stops one a killed desk left running. */
+    @Volatile internal var linkPidFile: () -> PidFile? = { PidFile(appDataDir().resolve("link/lighting7-link.pid"), "a lighting7-link sidecar") }
 
     /** The public listener's address, once it has bound: the sidecar's target. Without it no sidecar runs (D7). */
     @Volatile private var linkTarget: String? = null
 
-    /** The sidecar while the channel runs; guarded by [publishLock]. */
-    @Volatile internal var link: LinkSidecar? = null
+    /** The sidecar, supervised, while it is wanted; guarded by [publishLock]. */
+    @Volatile internal var link: LinkProcess<LinkSidecar>? = null
         private set
 
     /** Whether a sidecar serves. Without one, `remote.no-sidecar` is announced. */
-    val sidecarRunning: Boolean get() = link?.running == true
+    val sidecarRunning: Boolean get() = link?.sidecar?.running == true
 
     @Volatile private var liveConnection: ChannelConnection? = null
 
@@ -159,7 +170,7 @@ class CloudService(
     private val sidecarPort = object : SidecarPort {
         override val running: Boolean get() = sidecarRunning
 
-        override fun send(message: LinkIn): Boolean = link?.send(message) ?: false
+        override fun send(message: LinkIn): Boolean = link?.sidecar?.send(message) ?: false
     }
 
     private val broker = RemoteBroker(
@@ -228,9 +239,18 @@ class CloudService(
         config.problem?.let { logger.warn("Cloud not configured: {}", it) }
     }
 
-    /** Resume a pending adoption and follow account changes. Idempotent. */
+    /**
+     * Resume a pending adoption and follow account changes, once a sidecar a killed desk left running
+     * has been stopped. Idempotent.
+     */
     fun start() {
-        if (!started.compareAndSet(false, true)) return
+        synchronized(startLock) {
+            if (started.get()) return
+            // Before `started`, so no sidecar of this run's own can have launched; under no lock any other
+            // path takes, since it may wait 3 s.
+            linkCommand?.invoke("", "")?.firstOrNull()?.let { binary -> linkPidFile()?.sweepOrphan(Path.of(binary)) }
+            started.set(true)
+        }
         scope.launch {
             runCatching { adoption.resume() }.onFailure { logger.warn("Couldn't resume the cloud adoption", it) }
             refresh()
@@ -270,6 +290,7 @@ class CloudService(
     private fun publishMemory(): Unit = synchronized(publishLock) {
         val channel = memory.channel
         _state.value = _state.value.copy(
+            link = linkStatus(),
             connection = channel.connection,
             retryAt = channel.retryAt?.toIsoUtc(),
             lastError = rowError ?: memory.lastError ?: channel.lastError,
@@ -375,28 +396,37 @@ class CloudService(
     }
 
     /**
-     * Run the sidecar exactly while the channel runs, the public listener has bound and a command is
-     * configured. Must hold [publishLock].
+     * Run the sidecar exactly while the channel runs, *Remote sessions* is on, the public listener has
+     * bound and there is a sidecar to run (D11). Must hold [publishLock].
      */
     private fun reconcileLink() {
         val command = linkCommand
         val target = linkTarget
-        val wanted = channelJob?.isActive == true && command != null && target != null
+        val wanted = channelJob?.isActive == true && switches.remoteAccess && command != null && target != null
         val current = link
         if (wanted && current == null) {
             val build = BuildInfo.current.let { info -> info.version + (info.shortSha?.let { "+$it" } ?: "") }
-            link = LinkSidecar(
-                command = command(target, build),
-                scope = scope,
-                newSecret = remoteSessions::newLinkSecret,
-                onMessage = broker::fromSidecar,
-                onRunning = ::sidecarChanged,
-            ).also { it.start() }
+            link = LinkProcess(scope = scope, onStatus = ::publishMemory, pidFile = linkPidFile()) { supervisor ->
+                LinkSidecar(
+                    command = command(target, build),
+                    scope = scope,
+                    newSecret = remoteSessions::newLinkSecret,
+                    onMessage = broker::fromSidecar,
+                    onRunning = { running ->
+                        supervisor.serving(running)
+                        sidecarChanged(running)
+                    },
+                    onEnded = supervisor::ended,
+                    launcher = supervisor::launch,
+                )
+            }.also { it.start() }
         } else if (!wanted && current != null) {
             link = null
             current.stop()
         }
     }
+
+    private fun linkStatus(): LinkStatus = link?.status ?: LinkStatus.OFF
 
     private fun sidecarChanged(running: Boolean) {
         if (!running) {
@@ -476,6 +506,7 @@ class CloudService(
             enabled = config.enabled,
             adoption = adopting,
             adopted = adopted,
+            link = linkStatus(),
             connection = channel.connection,
             retryAt = channel.retryAt?.toIsoUtc(),
             lastError = error ?: memory.lastError ?: channel.lastError,

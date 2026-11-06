@@ -109,6 +109,10 @@ jobs:
           echo "BUILD_COMMIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           echo "BUILD_COMMIT_TIMESTAMP=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
 
+      # The MSI carries lighting7-link, the remote-session sidecar, beside the jars: packageWindows
+      # stages it through buildLink, which builds it with the Go toolchain Gradle downloads and
+      # checks by SHA-256, and stageJpackageInput's verifier fails a missing or wrong one.
+      #
       # GitHub OAuth credentials for the install-wide "Connect GitHub" flow.
       # Stored as repository secrets so they're never in git. Build-time
       # injection (see `generateBundledOAuthCredentials` in build.gradle.kts)
@@ -158,6 +162,9 @@ jobs:
           # verifiable by hand.
           [System.IO.File]::WriteAllText((Join-Path $PWD "dist/$name.sha256"), "$hash  $name`n")
           Write-Host "$name  sha256=$hash"
+          # What the installer weighs, and the sidecar's share of it (cloud-p1 plan §4, RISK-3).
+          $sidecar = Get-Item build/jpackage-input/lighting7-link-windows-amd64.exe
+          Write-Host ("MSI {0:N1} MB; lighting7-link {1:N1} MB uncompressed" -f ((Get-Item $dest).Length / 1MB), ($sidecar.Length / 1MB))
 
       - name: Upload installer as workflow artifact
         uses: actions/upload-artifact@v7
@@ -185,8 +192,9 @@ jobs:
           body: |
             Windows installer (x64).
 
-            **This MSI is not code-signed.** Windows SmartScreen will show "Windows protected
-            your PC" — choose **More info → Run anyway**.
+            **This MSI is not code-signed**, nor is the remote-session sidecar it carries
+            (`lighting7-link`). Windows SmartScreen will show "Windows protected your PC" —
+            choose **More info → Run anyway**.
 
             Verify the download before running it:
 
