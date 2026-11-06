@@ -30,6 +30,7 @@ import type { CueStack } from '../../api/cueStacksApi'
 import type { FlatCue } from '../../lib/promptBook/desync'
 import type { FollowLink } from '../../lib/promptBook/followers'
 import { groupCuesByStack } from '../../lib/promptBook/geometry'
+import { cueNumberProblem } from '@/lib/cueNumber'
 
 /** Where a newly-created cue should live: an existing stack, or a new one to create first. */
 export type NewCueStackChoice = { kind: 'existing'; id: number } | { kind: 'new'; name: string }
@@ -146,8 +147,10 @@ export function CueAnchorPickerSheet({
 
   const creatingStack = stackChoice === NEW_STACK
   const recording = record && recordUnavailable == null
+  const numberProblem = cueNumberProblem(cueNumber)
   const canCreate =
     name.trim() !== '' &&
+    numberProblem == null &&
     (creatingStack ? newStackName.trim() !== '' : true) &&
     !(recording && maskIsEmpty(mask))
   const handleCreate = async () => {
@@ -225,9 +228,12 @@ export function CueAnchorPickerSheet({
                   id="new-cue-num"
                   value={cueNumber}
                   onChange={(e) => setCueNumber(e.target.value)}
-                  placeholder="14A"
+                  placeholder="14.5"
+                  inputMode="decimal"
+                  aria-invalid={numberProblem != null}
                   className="h-9"
                 />
+                {numberProblem && <p className="text-xs text-destructive">{numberProblem}</p>}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="new-cue-notes">Notes (optional)</Label>

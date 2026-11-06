@@ -744,7 +744,7 @@ private val scriptPlaceSchema = objectSchema(required = listOf("pdfPage", "y")) 
 
 private val showCueSchema = objectSchema {
     prop("cueId", "integer", "Share an existing cue of this project instead of defining one: it plays here too, and editing it changes it in every place. Such a row takes only number, followSeconds and at, which are this place's own.")
-    prop("number", "string", "Cue number as the book calls it: '1', '12.5', '14A', 'S1-3'. Unique in the stack. Omit to have the desk number it from its neighbours.")
+    prop("number", "string", "Cue number as the book calls it, a number with at most 4 decimal places: '1', '12.5', '14.25'. Unique in the stack; a book's '14A' is 14.1. Omit to have the desk number it from its neighbours.")
     prop("name", "string", "Short name — the stand-by line or the look: 'House to half', 'Dawn'. Required unless cueId is given.")
     prop("notes", "string", "The designer's note for the cue: what it looks like, what it's called on, anything the operator needs. This is where lighting notes go when there is no look to layer yet.")
     prop("fadeSeconds", "number", "Crossfade time in seconds. Omit for a snap.")

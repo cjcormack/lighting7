@@ -112,7 +112,7 @@ export function TruncateStart({
   return (
     <span ref={ref} title={title} style={style} className={cn('block overflow-hidden', className)}>
       {/* The clipping is a visual accommodation, so assistive tech gets the whole string:
-          announcing "…3.2.10" would make QS1-3.2.10 and QS2-3.2.10 indistinguishable. */}
+          announcing "…2.25" would make Q12.25 and Q22.25 indistinguishable. */}
       <span className="sr-only">{text}</span>
       {/* Intrinsic sizer — see the note above. `sr-only` can't do this job: it is positioned
           absolutely and so contributes no width at all. Zero-height and hidden, it costs a line

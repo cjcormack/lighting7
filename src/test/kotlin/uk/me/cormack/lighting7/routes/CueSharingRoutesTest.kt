@@ -126,9 +126,9 @@ class CueSharingRoutesTest : RouteIntegrationTest() {
 
         val row = client.patch("$base/cue-stacks/$a/entries/$aEntry") {
             contentType(ContentType.Application.Json)
-            setBody("""{"cueNumber":"7A","autoAdvance":true,"autoAdvanceDelayMs":2500}""")
+            setBody("""{"cueNumber":"7.5","autoAdvance":true,"autoAdvanceDelayMs":2500}""")
         }.body<CueStackCueEntry>()
-        assertEquals("7A", row.cueNumber)
+        assertEquals("7.5", row.cueNumber)
         assertFalse(row.cueNumberAuto)
         assertTrue(row.autoAdvance)
         assertEquals(2500L, row.autoAdvanceDelayMs)
@@ -141,7 +141,7 @@ class CueSharingRoutesTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody("""{"cueNumber":"99","autoAdvance":false}""")
         }
-        assertEquals("7A", client.stackRows(a).single().cueNumber)
+        assertEquals("7.5", client.stackRows(a).single().cueNumber)
         assertTrue(client.stackRows(a).single().autoAdvance)
 
         // A follow is true or false, never null.

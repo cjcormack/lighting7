@@ -92,15 +92,17 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             }
             // An insert shifts the positions after it, and a live cue's priority is its position.
             var priorities = emptyMap<Int, Int>()
-            var numberTaken = false
+            var refusal: EntryNumberRefusal? = null
+            var placed = NewEntryNumberPlan.Place(null, newCue.sortOrder)
             val result = transaction(state.database) {
                 val stack = cueStackId?.let { id ->
                     val stack = DaoCueStack.findById(id) ?: return@transaction null to "Cue stack not found"
                     if (stack.project.id != project.id) return@transaction null to "Cue stack does not belong to project"
                     if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
                     // Before anything is written: a refusal is a normal return, which commits.
-                    newCue.cueNumber?.takeIf { it.isNotEmpty() }?.let { number ->
-                        explicitNumberClash(stack, number)?.let { numberTaken = true; return@transaction null to it }
+                    when (val plan = planNewEntryNumber(stack, newCue.cueNumber, newCue.sortOrder, newCue.placement ?: CueNumberPlacement.HERE)) {
+                        is NewEntryNumberPlan.Refused -> { refusal = plan.refusal; return@transaction null to plan.refusal.message }
+                        is NewEntryNumberPlan.Place -> placed = plan
                     }
                     stack
                 }
@@ -129,8 +131,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if (stack != null) {
                     placeCueInStack(
                         stack, cue,
-                        cueNumber = newCue.cueNumber,
-                        position = newCue.sortOrder,
+                        cueNumber = placed.number,
+                        position = placed.position,
                         autoAdvance = newCue.autoAdvance,
                         autoAdvanceDelay = newCue.autoAdvanceDelayMs.asDuration(),
                     )
@@ -139,11 +141,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures, references = state.show.paletteReferences) to null
             }
             val (cueDetails, error) = result
+            refusal?.let {
+                call.respondNumberRefusal(it)
+                return@withCurrentProject
+            }
             if (error != null || cueDetails == null) {
-                call.respond(
-                    if (numberTaken) HttpStatusCode.Conflict else HttpStatusCode.BadRequest,
-                    ErrorResponse(error ?: "Failed to create cue"),
-                )
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(error ?: "Failed to create cue"))
                 return@withCurrentProject
             }
             if (cueStackId != null) {
@@ -644,6 +647,8 @@ data class NewCue(
     val fadeDurationMs: Long? = null,
     val fadeCurve: String = "LINEAR",
     val cueNumber: String? = null,
+    /** Where a [cueNumber] reading out of order at [sortOrder] puts the cue's entry; absent is `HERE`. */
+    val placement: CueNumberPlacement? = null,
     val notes: String? = null,
     val cueType: String = "STANDARD",
     val stomp: Boolean = false,

@@ -17,10 +17,12 @@ const patchCue = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => false }))
 vi.mock('@/store/cues', () => ({ usePatchProjectCueMutation: () => [patchCue] }))
 const patchEntry = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
+const renumberEntries = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 // The stack's Move in dark plan and what it is moving now — the *Dark* column's two sources.
 const dark: { plan: StackMoveInDarkPlan | undefined; heads: MoveInDarkHead[] } = { plan: undefined, heads: [] }
 vi.mock('@/store/cueStacks', () => ({
   usePatchCueStackEntryMutation: () => [patchEntry],
+  useRenumberCueStackEntriesMutation: () => [renumberEntries, { isLoading: false }],
   useCueStackMoveInDarkQuery: () => ({ data: dark.plan }),
 }))
 vi.mock('@/store/moveInDark', () => ({ useMoveInDarkHeads: () => dark.heads }))
@@ -217,10 +219,10 @@ describe('CueSheet', () => {
     // Portalled, like every cell editor, so it is looked for on the screen and not in the row.
     const field = screen.getByLabelText('Cue number') as HTMLInputElement
     expect(field.value).toBe('1')
-    fireEvent.change(field, { target: { value: '12A' } })
+    fireEvent.change(field, { target: { value: '12.5' } })
     fireEvent.keyDown(field, { key: 'Enter' })
-    // The number is the entry's, written on the entry.
-    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryId: 101, cueId: 1, cueNumber: '12A' })
+    // The number is the entry's, written on the entry, asking first whether it lands out of order.
+    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 10, entryId: 101, cueId: 1, cueNumber: '12.5', placement: 'ASK' })
     expect(patchCue).not.toHaveBeenCalled()
   })
 

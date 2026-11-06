@@ -15,6 +15,7 @@ import type { CueAnchorDto } from '@/api/promptBooksApi'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
 import type { DesyncWarning, FlatCue } from '@/lib/promptBook/desync'
 import type { CueRunStatus } from './AnchorOverlay'
+import { readTypedCueNumber } from '@/components/cues/CueNumberPlacement'
 
 interface PromptBookCueCardProps {
   cue: FlatCue
@@ -359,9 +360,9 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
   // anchored standby row. Live/next/done carry their own strong tier, so leave those be.
   const dim = !anchored && follow == null && !isLive && !isNext && !isDone
   // Sized to the longest number in the rail (`--cue-num-chars`, published by CueStackPanel) so
-  // "QS1-3.2.10" shows whole where the old fixed 4rem cell clipped it — but still one width for
-  // every row, so each name starts at the same x. Overflow is clipped at the START
-  // (`TruncateStart`): the tail of a cue number is what tells "S1-3.1" from "S1-3.2".
+  // "Q1234.5678" shows whole where a fixed 4rem cell clipped it — but still one width for every
+  // row, so each name starts at the same x. Overflow is clipped at the START (`TruncateStart`):
+  // the tail of a cue number is what tells "Q12.25" from "Q12.5".
   const labelClass = cn(
     'shrink-0 text-[13px] font-bold',
     isLive
@@ -439,7 +440,11 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
               // rather than `cue.label`: both come from the stack list, so clearing a number
               // shows the name at once instead of the stale "Q…" until `cueOrder` refetches.
               formatDisplay={(v) => <TruncateStart text={v ? `Q${v}` : cueEntry.name} />}
-              onCommit={(next) => onRenumberCue(cue.entryId, next.trim() || null)}
+              onCommit={(next) => {
+                const number = readTypedCueNumber(next)
+                if (number === undefined) return false
+                onRenumberCue(cue.entryId, number)
+              }}
               ariaLabel="cue number"
               placeholder="Q#"
               // Whatever the cell ends up showing, in full — it is the same cell that folds

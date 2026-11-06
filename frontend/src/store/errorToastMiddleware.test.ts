@@ -40,6 +40,13 @@ describe('errorToastMiddleware', () => {
     toastError.mockClear()
   })
 
+  it('leaves a refusal the caller asked for to the caller', () => {
+    run(rejection({ endpointName: 'patchCueStackEntry', payload: { status: 409, data: { error: 'Q4.5 reads out of order here', code: 'CUE_NUMBER_OUT_OF_ORDER', number: '4.5' } } }))
+    expect(toastError).not.toHaveBeenCalled()
+    run(rejection({ endpointName: 'patchCueStackEntry', payload: { status: 409, data: { error: 'Cue number 4 is already used', code: 'CUE_NUMBER_TAKEN' } } }))
+    expect(toastError).toHaveBeenCalledTimes(1)
+  })
+
   it('toasts the server message when a mutation fails', () => {
     run(rejection({ endpointName: 'createProjectCue' }))
     expect(toastError).toHaveBeenCalledOnce()

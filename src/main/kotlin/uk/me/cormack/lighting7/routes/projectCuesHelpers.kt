@@ -1061,22 +1061,6 @@ internal fun explicitNumberClash(stack: DaoCueStack, number: String, exceptEntry
     }
 
 /**
- * Set [entry]'s number as an operator edit: typed, it becomes explicit, released first from any
- * auto-numbered sibling that holds it; blank hands the entry back to the auto scheme, which fills
- * it in again from position. A number edit moves nothing, so every other auto entry keeps its
- * number (D11). `""` is normalised to null so the unique index and the "is it numbered?" checks
- * agree on what blank means. Must run inside a transaction.
- */
-internal fun setEntryNumber(entry: DaoCueStackEntry, incoming: String?) {
-    val next = incoming?.takeIf { it.isNotEmpty() }
-    val stack = entry.stack
-    releaseAutoNumber(stack, next, entry.id.value)
-    entry.cueNumber = next
-    entry.cueNumberAuto = false
-    renumberAutoEntries(stack, cueEntryIds(stack))
-}
-
-/**
  * Why a write read as a raw [JsonObject] names a field it does not take, or null. A partial write
  * reads only the keys it knows, so without this an old field name (terminology plan P5) would be a
  * silent 200 that changed nothing.

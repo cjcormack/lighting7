@@ -174,8 +174,8 @@ describe('CueEditor', () => {
 
   it('writes the number and the follow to the entry, by its id, and nothing to the cue', () => {
     draw()
-    edit('entry cue number', '14A')
-    expect(patchEntry).toHaveBeenLastCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1, cueNumber: '14A' })
+    edit('entry cue number', '14.5')
+    expect(patchEntry).toHaveBeenLastCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1, cueNumber: '14.5', placement: 'ASK' })
     edit('entry follow', '3s')
     expect(patchEntry).toHaveBeenLastCalledWith({
       projectId: 1,

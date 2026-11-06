@@ -62,6 +62,7 @@ import { useOnGoScenery } from '../hooks/useNextGoPreview'
 import { useStageElementListQuery } from '../store/stageElements'
 import { cueSceneryLines, describeOnGo } from '../lib/scenery'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
+import { useCueNumberPlacement } from '@/components/cues/CueNumberPlacement'
 
 export function PromptBookRedirect() {
   return <CurrentProjectRedirect to="prompt-book" />
@@ -392,13 +393,18 @@ export function PromptBookViewerPage() {
     (cueId: number, name: string) => patchCue({ projectId: projectIdNum, cueId, name }),
     [patchCue, projectIdNum],
   )
-  // The number is the entry's, written on the entry.
+  // The number is the entry's, written on the entry — canonical, from the field, and asking first
+  // whether it lands out of order.
+  const { writeNumber, dialog: numberDialog } = useCueNumberPlacement()
   const handleRenumberCue = useCallback(
     (entryId: number, cueNumber: string | null) => {
       const flat = cueOrder[cueOrderIndex.get(entryId) ?? -1]
-      if (flat) patchEntry({ projectId: projectIdNum, stackId: flat.stackId, entryId, cueId: flat.cueId, cueNumber })
+      if (!flat) return
+      writeNumber((placement) =>
+        patchEntry({ projectId: projectIdNum, stackId: flat.stackId, entryId, cueId: flat.cueId, cueNumber, placement }).unwrap(),
+      )
     },
-    [patchEntry, projectIdNum, cueOrder, cueOrderIndex],
+    [patchEntry, projectIdNum, cueOrder, cueOrderIndex, writeNumber],
   )
   const handleRenoteCue = useCallback(
     (cueId: number, notes: string | null) => patchCue({ projectId: projectIdNum, cueId, notes }),
@@ -574,6 +580,7 @@ export function PromptBookViewerPage() {
       onKeyDownCapture={noteEdit}
       onInputCapture={noteEdit}
     >
+      {numberDialog}
       <ShowHeader
         view="prompt-book"
         projectId={projectIdNum}

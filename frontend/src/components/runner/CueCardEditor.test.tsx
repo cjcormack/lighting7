@@ -207,9 +207,9 @@ describe('CueCardEditor', () => {
     draw()
     fireEvent.click(screen.getByRole('button', { name: /^cue number:/ }))
     const input = screen.getByRole('textbox', { name: 'cue number' })
-    fireEvent.change(input, { target: { value: '14A' } })
+    fireEvent.change(input, { target: { value: '14.50' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1, cueNumber: '14A' })
+    expect(patchEntry).toHaveBeenCalledWith({ projectId: 1, stackId: 7, entryId: 101, cueId: 1, cueNumber: '14.5', placement: 'ASK' })
     expect(patchCue).not.toHaveBeenCalled()
   })
 

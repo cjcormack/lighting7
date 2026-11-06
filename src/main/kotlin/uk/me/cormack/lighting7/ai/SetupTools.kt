@@ -54,7 +54,8 @@ import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
 import uk.me.cormack.lighting7.routes.WhiteMixAttributeDescriptor
 import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
+import uk.me.cormack.lighting7.routes.CUE_NUMBER_RULE
+import uk.me.cormack.lighting7.routes.canonicalCueNumber
 import uk.me.cormack.lighting7.routes.listedProjects
 import uk.me.cormack.lighting7.routes.PlacementInput
 import uk.me.cormack.lighting7.routes.applyExtraPlacements
@@ -1695,9 +1696,9 @@ class SetupTools(
             val marker = row.boolean("marker") == true
             if (name.isEmpty()) rowProblems += "name must not be blank (or cueId, to share an existing cue)"
             if (name.length > 255) rowProblems += "name must be at most 255 characters"
-            val number = row.string("number")?.trim()?.takeIf { it.isNotEmpty() }
-            if (marker && number != null) rowProblems += "a marker cannot carry a number"
-            if (number != null && !marker) checkRowNumber(number, index, context.takenNumbers, seenNumbers, rowProblems)
+            val typed = row.string("number")?.trim()?.takeIf { it.isNotEmpty() }
+            if (marker && typed != null) rowProblems += "a marker cannot carry a number"
+            val number = typed?.takeIf { !marker }?.let { checkRowNumber(it, index, context.takenNumbers, seenNumbers, rowProblems) }
             val fade = seconds(row, "fadeSeconds", rowProblems)
             val follow = seconds(row, "followSeconds", rowProblems)
             val curve = row.string("fadeCurve")?.trim()?.uppercase() ?: EasingCurve.LINEAR.name
@@ -1900,7 +1901,7 @@ class SetupTools(
                 "followSeconds and at — edit the cue itself to change it"
         }
         val number = row.string("number")?.trim()?.takeIf { it.isNotEmpty() }
-        if (number != null) checkRowNumber(number, index, takenNumbers, seenNumbers, rowProblems)
+            ?.let { checkRowNumber(it, index, takenNumbers, seenNumbers, rowProblems) }
         val follow = seconds(row, "followSeconds", rowProblems)
         val place = rowPlace(row, target, pageCount, rowProblems)
         if (rowProblems.isNotEmpty()) {
@@ -1922,12 +1923,19 @@ class SetupTools(
         else -> false
     }
 
-    /** A build_cue_stack row's cue [number], checked against the stack's and the call's other rows. */
-    private fun checkRowNumber(number: String, index: Int, takenNumbers: Set<String>, seenNumbers: MutableMap<String, Int>, problems: MutableList<String>) {
-        if (number.length > MAX_CUE_NUMBER_LENGTH) problems += "number must be at most $MAX_CUE_NUMBER_LENGTH characters"
+    /**
+     * A build_cue_stack row's cue [typed] number, checked against the stack's and the call's other rows:
+     * its canonical spelling, or null after a problem.
+     */
+    private fun checkRowNumber(typed: String, index: Int, takenNumbers: Set<String>, seenNumbers: MutableMap<String, Int>, problems: MutableList<String>): String? {
+        val number = canonicalCueNumber(typed) ?: run {
+            problems += "number: $CUE_NUMBER_RULE — '$typed' is not one"
+            return null
+        }
         seenNumbers[number]?.let { problems += "number '$number' is also used by cues[$it]" }
         seenNumbers.putIfAbsent(number, index)
         if (number in takenNumbers) problems += "the stack already has a cue numbered '$number'"
+        return number
     }
 
     /** A build_cue_stack row's `at`, or null — refused, as the Prompt Book routes refuse it, outside the current project. */

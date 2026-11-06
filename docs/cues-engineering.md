@@ -300,7 +300,7 @@ follow — or a **marker entry**, a labelled divider with no cue behind it. The 
 - **A cue may have any number of entries** (plan D1, D7): one in several stacks (**shared**), twice
   in one, or none (**loose**). Editing a cue changes it everywhere it plays; its number and follow
   are each entry's own (D2), so a shared cue can be Q14 in one stack and Q3 in another.
-  `POST /cue-stacks/{id}/add-cue` `{cueId, sortOrder?, insertByNumber?, cueNumber?}` **adds** an entry,
+  `POST /cue-stacks/{id}/add-cue` `{cueId, sortOrder?, insertByNumber?, cueNumber?, placement?}` **adds** an entry,
   sharing the cue rather than moving it.
 - ***Move to stack…*** is `POST /cue-stacks/{id}/entries/{entryId}/move` `{toStackId}`
   (show-cue-editing plan session 3): the **same entry row** re-pointed to the end of the other
@@ -322,8 +322,8 @@ follow — or a **marker entry**, a labelled divider with no cue behind it. The 
   entry any more. `entryInStack` — a cue's first entry in a stack the caller names — is left for
   Record CREATE's answer and Update's preview labels.
 - **An entry's number and follow** are written on the entry: `PATCH /cue-stacks/{id}/entries/{entryId}`
-  `{cueNumber?, autoAdvance?, autoAdvanceDelayMs?}`, the fields present only, answering the entry's
-  row. A typed number is explicit (409 if another cue entry of the stack has it explicitly, as on `add-cue` and `POST /cues`), a blank
+  `{cueNumber?, placement?, autoAdvance?, autoAdvanceDelayMs?}`, the fields present only, answering the entry's
+  row. A typed number is a number (`cue-stacks-engineering.md` §"Cue Number Model", §"Placement") and explicit (409 if another cue entry of the stack has it explicitly, as on `add-cue` and `POST /cues`), a blank
   one hands the entry back to auto-numbering, and an unchanged one leaves the auto flag alone. The
   cue's `PUT` / `PATCH` no longer write these.
 - **A follower isn't anchored.** An entry whose cue before it, markers aside, has a follow with a

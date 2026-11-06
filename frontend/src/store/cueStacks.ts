@@ -23,6 +23,7 @@ import type {
   ProgramActivateResponse,
   SortByCueNumberResponse,
   CueEntryPatch,
+  RenumberEntriesRequest,
   DeleteCueStackResponse,
   StackMoveInDarkPlan,
 } from '../api/cueStacksApi'
@@ -600,6 +601,22 @@ export const cueStacksApi = restApi.injectEndpoints({
       ],
     }),
 
+    /** Number the named entries `start`, `start + step`, … in stack order, as explicit whole numbers. */
+    renumberCueStackEntries: build.mutation<CueStack, { projectId: number; stackId: number } & RenumberEntriesRequest>({
+      query: ({ projectId, stackId, ...body }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/renumber`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+        { type: 'CueList', id: projectId },
+        'CueList',
+        'Cue',
+      ],
+    }),
+
     // ─── Program transport (project playhead over the ordered stacks) ─────────
 
     activateProgram: build.mutation<ProgramActivateResponse, { projectId: number }>({
@@ -763,6 +780,7 @@ export const {
   useEditCueStackTimelineMutation,
   usePreviewLooseCueQuery,
   useSortCueStackByCueNumberMutation,
+  useRenumberCueStackEntriesMutation,
   useActivateProgramMutation,
   useDeactivateProgramMutation,
   useAdvanceProgramMutation,

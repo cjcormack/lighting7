@@ -206,14 +206,14 @@ class CueStackEntrySyncTest {
         val b = export(projectId)
         assertEquals(setOf("cueStackEntries/${entries[5]}.json"), changedFiles(a, b))
 
-        // Type an explicit number on the third entry (1, 1.1, 1.2, 1.3, 4, 5 after the drag). Its file
-        // changes, and so does the fourth's: D11 holds its 1.3, which a reader anchoring on the new
-        // 1.25 would derive as 1.26, so the archive now writes it (P5, as amended 2026-10-16).
+        // Type an explicit number on the third entry (1, 2, 3, 3.5, 4, 5 after the drag). Its file
+        // changes, and so does the fourth's: D11 holds its 3.5, which a reader anchoring on the new
+        // 2.5 would derive as 3, so the archive now writes it (P5, as amended 2026-10-16).
         transaction(state.database) {
             val stack = DaoCueStack.find { DaoCueStacks.project eq projectId }.single()
             val before = cueEntryIds(stack)
             val third = entriesOf(stack)[2]
-            third.cueNumber = "1.25"
+            third.cueNumber = "2.5"
             third.cueNumberAuto = false
             renumberAutoEntries(stack, before)
         }
@@ -222,7 +222,7 @@ class CueStackEntrySyncTest {
             entriesOf(DaoCueStack.find { DaoCueStacks.project eq projectId }.single()).let { it[2].uuid to it[3].uuid }
         }
         assertEquals(setOf("cueStackEntries/$third.json", "cueStackEntries/$fourth.json"), changedFiles(b, c))
-        assertEquals("1.3", canonicalDecode(CueStackEntryJson.serializer(), c.getValue("cueStackEntries/$fourth.json")).cueNumber)
+        assertEquals("3.5", canonicalDecode(CueStackEntryJson.serializer(), c.getValue("cueStackEntries/$fourth.json")).cueNumber)
     }
 
     /**

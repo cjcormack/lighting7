@@ -167,4 +167,184 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
         renumber(client, ids[1], "")
         assertEquals(listOf("1", "2", "3", "4", "5"), numbers(client, stackId))
     }
+
+    // ─── Numbers are numbers ────────────────────────────────────────────
+
+    private suspend fun patchNumber(client: HttpClient, stackId: Int, entryId: Int, body: String) =
+        client.patch("/api/rest/projects/$projectId/cue-stacks/$stackId/entries/$entryId") {
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+
+    @Test
+    fun `a number that is not one is refused, and one number has one spelling`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+        val entry = cues(client, stackId)[4].entryId
+
+        for (bad in listOf("14A", "S1-3", "1.2.3", "1.23456", "10000")) {
+            val resp = patchNumber(client, stackId, entry, """{"cueNumber":"$bad"}""")
+            assertEquals(HttpStatusCode.BadRequest, resp.status, bad)
+            assertEquals(CUE_NUMBER_INVALID, resp.body<ErrorResponse>().code, bad)
+        }
+        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, entry, """{"cueNumber":"5.10"}""").status)
+        assertEquals("5.1", numbers(client, stackId)[4])
+
+        // Another spelling of a number another entry holds explicitly is that number.
+        val other = cues(client, stackId)[3].entryId
+        val taken = patchNumber(client, stackId, other, """{"cueNumber":"5.100"}""")
+        assertEquals(HttpStatusCode.Conflict, taken.status)
+        assertEquals(CUE_NUMBER_TAKEN, taken.body<ErrorResponse>().code)
+    }
+
+    @Test
+    fun `ASK refuses an out-of-order number and names its neighbours, writing nothing`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+        val second = cues(client, stackId)[1].entryId
+
+        val resp = patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":"ASK"}""")
+        assertEquals(HttpStatusCode.Conflict, resp.status)
+        val body = resp.body<CueNumberOutOfOrderResponse>()
+        assertEquals(CUE_NUMBER_OUT_OF_ORDER, body.code)
+        assertEquals("4.5", body.number)
+        assertEquals(null, body.previous)
+        assertEquals("3", body.next)
+        assertEquals(listOf("1", "2", "3", "4", "5"), numbers(client, stackId), "nothing written")
+
+        // In order, ASK writes as HERE does.
+        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, second, """{"cueNumber":"1.5","placement":"ASK"}""").status)
+        assertEquals(listOf("1", "1.5", "3", "4", "5"), numbers(client, stackId))
+    }
+
+    @Test
+    fun `BY_NUMBER moves the cue to its number's place`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+        val second = cues(client, stackId)[1].entryId
+
+        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":"BY_NUMBER"}""").status)
+        assertEquals(listOf("Q1", "Q3", "Q4", "Q2", "Q5"), names(client, stackId))
+        // The cues it passed take numbers from where they land, as Fix Order's do.
+        assertEquals(listOf("1", "2", "3", "4.5", "5"), numbers(client, stackId))
+        assertFalse(outOfOrder(numbers(client, stackId)))
+    }
+
+    @Test
+    fun `HERE keeps an out-of-order number where it is`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+        val second = cues(client, stackId)[1].entryId
+
+        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":"HERE"}""").status)
+        assertEquals(listOf("1", "4.5", "3", "4", "5"), numbers(client, stackId))
+    }
+
+    @Test
+    fun `a new cue numbered out of order asks, or goes to its place`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+
+        val asked = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Q2.5", cueStackId = stackId, cueNumber = "2.5", placement = CueNumberPlacement.ASK))
+        }
+        assertEquals(HttpStatusCode.Conflict, asked.status)
+        assertEquals("5", asked.body<CueNumberOutOfOrderResponse>().previous)
+        assertEquals(5, cues(client, stackId).size, "no cue made")
+
+        val placed = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Q2.5", cueStackId = stackId, cueNumber = "2.5", placement = CueNumberPlacement.BY_NUMBER))
+        }
+        assertEquals(HttpStatusCode.Created, placed.status, placed.bodyAsText())
+        assertEquals(listOf("Q1", "Q2", "Q2.5", "Q3", "Q4", "Q5"), names(client, stackId))
+        assertEquals(listOf("1", "2", "2.5", "3", "4", "5"), numbers(client, stackId))
+    }
+
+    @Test
+    fun `renumber numbers the selected cues in stack order from a whole number`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+        val rows = cues(client, stackId)
+
+        val resp = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/renumber") {
+            contentType(ContentType.Application.Json)
+            // Named out of order: they are numbered in the stack's.
+            setBody(RenumberEntriesRequest(entryIds = listOf(rows[3].entryId, rows[1].entryId, rows[2].entryId), start = 10, step = 10))
+        }
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        val after = cues(client, stackId)
+        assertEquals(listOf("1", "10", "20", "30", "5"), after.map { it.cueNumber })
+        assertEquals(listOf(true, false, false, false, true), after.map { it.cueNumberAuto })
+        assertEquals(rows.map { it.entryId }, after.map { it.entryId }, "nothing moves")
+    }
+
+    @Test
+    fun `renumber refuses a number an unselected cue holds explicitly, and a bad start or step`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+        val rows = cues(client, stackId)
+        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, rows[4].entryId, """{"cueNumber":"8"}""").status)
+
+        suspend fun post(body: RenumberEntriesRequest) = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/renumber") {
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        val taken = post(RenumberEntriesRequest(entryIds = listOf(rows[0].entryId, rows[1].entryId), start = 7))
+        assertEquals(HttpStatusCode.Conflict, taken.status)
+        assertTrue(taken.body<ErrorResponse>().error.contains("Q8"))
+        assertEquals(HttpStatusCode.BadRequest, post(RenumberEntriesRequest(entryIds = listOf(rows[0].entryId), start = 1, step = 0)).status)
+        assertEquals(HttpStatusCode.BadRequest, post(RenumberEntriesRequest(entryIds = listOf(rows[0].entryId, rows[1].entryId), start = 9999)).status)
+        assertEquals(HttpStatusCode.BadRequest, post(RenumberEntriesRequest(entryIds = emptyList(), start = 1)).status)
+
+        // An auto number in the way gives way, as a typed number's does.
+        val ok = post(RenumberEntriesRequest(entryIds = listOf(rows[0].entryId), start = 2))
+        assertEquals(HttpStatusCode.OK, ok.status, ok.bodyAsText())
+        assertEquals("2", numbers(client, stackId)[0])
+    }
+
+    @Test
+    fun `ASK on a cue inserted mid-stack ignores the auto numbers it shifts`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+
+        val resp = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Q2.5", cueStackId = stackId, sortOrder = 2, cueNumber = "2.5", placement = CueNumberPlacement.ASK))
+        }
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+        assertEquals(listOf("1", "2", "2.5", "3", "4", "5"), numbers(client, stackId))
+
+        // A number the shifted cues would still read out of order against is asked about.
+        val asked = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Q10", cueStackId = stackId, sortOrder = 1, cueNumber = "10", placement = CueNumberPlacement.ASK))
+        }
+        assertEquals(HttpStatusCode.Conflict, asked.status, asked.bodyAsText())
+    }
+
+    @Test
+    fun `a refused field in an entry PATCH writes nothing, and a null placement is HERE`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (stackId, _) = fiveAutoCues(client)
+        val second = cues(client, stackId)[1].entryId
+
+        val refused = patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":"BY_NUMBER","autoAdvance":"yes"}""")
+        assertEquals(HttpStatusCode.BadRequest, refused.status)
+        assertEquals(listOf("Q1", "Q2", "Q3", "Q4", "Q5"), names(client, stackId), "nothing moved")
+        assertEquals(listOf("1", "2", "3", "4", "5"), numbers(client, stackId))
+
+        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":null}""").status)
+        assertEquals(listOf("1", "4.5", "3", "4", "5"), numbers(client, stackId))
+    }
 }

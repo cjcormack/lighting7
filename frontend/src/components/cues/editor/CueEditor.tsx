@@ -25,6 +25,7 @@ import type { Cue, CuePatchInput } from '@/api/cuesApi'
 import { cueEditorTabStore, type CueEditorTab } from './cueEditorTab'
 import { CueTab } from './CueTab'
 import { CueRowStoreProvider, useCueRowSaveState } from './CueRowStore'
+import { readTypedCueNumber, useCueNumberPlacement } from '@/components/cues/CueNumberPlacement'
 import { CueValuesGrid } from './CueValuesGrid'
 import { CueValuesViewProvider } from './CueValuesView'
 import { CueLooksTab } from './CueLooksTab'
@@ -270,9 +271,12 @@ function CueEditorHeader({
       .catch(ignoreReportedError)
   }
 
+  const { writeNumber, dialog: numberDialog } = useCueNumberPlacement()
   const commitNumber = (next: string) => {
-    const trimmed = next.trim() || null
-    if (trimmed !== (cue.cueNumber ?? null)) writeEntry({ cueNumber: trimmed })
+    const number = readTypedCueNumber(next)
+    if (number === undefined) return false
+    if (number === (cue.cueNumber ?? null) || stackId == null || entryId == null) return
+    writeNumber((placement) => patchEntry({ projectId, stackId, entryId, cueId: cue.id, cueNumber: number, placement }).unwrap())
   }
   const commitFollow = (next: string) => {
     const parsed = parseFollowDelay(next)
@@ -297,6 +301,7 @@ function CueEditorHeader({
 
   return (
     <div className={cn(CHROME_ROW_CLASS, 'gap-2 overflow-hidden bg-muted/20 text-xs')} data-cue-editor-header>
+      {numberDialog}
       {/* ── The entry's ── */}
       {loose ? (
         <span className="shrink-0 text-muted-foreground" data-cue-editor-entry="loose" title="It is in no stack, so it has no place to number or follow from">
@@ -316,7 +321,7 @@ function CueEditorHeader({
           ariaLabel="entry cue number"
           commitOnUnmount
           disabled={entryReason != null}
-          placeholder="14A"
+          placeholder="14.5"
           title={entryReason ?? (cue.cueNumberAuto ? 'Auto-numbered from position — click to set this entry’s number' : 'This entry’s number')}
           className={cn('max-w-[6rem] px-0.5 font-mono text-sm font-semibold', cue.cueNumberAuto && AUTO_CUE_NUMBER_CLASS)}
         />

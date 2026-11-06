@@ -482,7 +482,8 @@ internal fun buildUpdateChecklist(
                 cueStackName = group.firstNotNullOfOrNull { it.second },
                 isActive = stackId != null && state.show.cueStackManager.getActiveCueId(stackId) != null,
                 cues = group.map { it.third }.sortedWith(
-                    compareBy({ it.cueNumber ?: "" }, { it.cueId }),
+                    compareBy(nullsLast()) { it: ProgrammerChecklistCueDto -> it.cueNumber?.let(::cueNumberValue) }
+                        .thenBy { it.cueId },
                 ),
             )
         }

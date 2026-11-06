@@ -192,8 +192,33 @@ export interface MarkerEntryRequest {
  */
 export interface CueEntryPatch {
   cueNumber?: string | null
+  /** Where a `cueNumber` reading out of order puts the entry; absent is `HERE`. */
+  placement?: CueNumberPlacement
   autoAdvance?: boolean
   autoAdvanceDelayMs?: number | null
+}
+
+/**
+ * Where a cue goes when its number reads out of order where it sits: `ASK` writes nothing and answers
+ * 409 `CUE_NUMBER_OUT_OF_ORDER` ({@link CueNumberOutOfOrder}), `HERE` keeps its place, `BY_NUMBER`
+ * moves it to its number's place.
+ */
+export type CueNumberPlacement = 'ASK' | 'HERE' | 'BY_NUMBER'
+
+/** The body of a 409 `CUE_NUMBER_OUT_OF_ORDER`: the number, and the neighbours it reads out of order against. */
+export interface CueNumberOutOfOrder {
+  error: string
+  code: 'CUE_NUMBER_OUT_OF_ORDER'
+  number: string
+  previous?: string | null
+  next?: string | null
+}
+
+/** `POST cue-stacks/{sid}/renumber`: the entries, numbered `start`, `start + step`, … in stack order. */
+export interface RenumberEntriesRequest {
+  entryIds: number[]
+  start: number
+  step?: number
 }
 
 /** `DELETE cue-stacks/{sid}`: the cues it left in no stack, or — with `deleteLooseCues` — deleted. */

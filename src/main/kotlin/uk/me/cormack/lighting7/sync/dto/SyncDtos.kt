@@ -34,6 +34,12 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v48: a cue entry's `cueNumber` is a number — 0 to 9999.9999, at most four decimal places, in its
+    // canonical spelling — and an auto number a reader derives is a whole number, a decimal only where
+    // none is free (`routes/cueNumbering.kt`). No field is new. The writer and `minReader` move to
+    // **48**: a v47 reader derives the auto numbers an archive leaves out by the old rule (3.1 where this
+    // desk shows 3.5) and keeps writing free-form numbers (`14A`), which this importer clears; a v47 desk
+    // refuses the repo instead. See `docs/sync-engineering.md` §"Version 48 — Numeric cue numbers".
     // v47: a cue row's or a Look row's `value` may be a palette reference, `pal:{uuid}`
     // (palette-references plan D1, D7), resolved per head on the reading desk. No field and no folder
     // is new: the reference is the row's value. `minReader` moves to **47** with the writer: a v46
@@ -367,9 +373,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 47,
+    val formatVersion: Int = 48,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 47,
+    val minReader: Int = 48,
 )
 
 /**
