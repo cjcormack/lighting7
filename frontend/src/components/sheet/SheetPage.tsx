@@ -15,7 +15,7 @@ import {
  * ```
  * <SheetPage>
  *   <SheetPage.Header>breadcrumbs · the view switcher</SheetPage.Header>
- *   <SheetPage.Row>filter · spacer · Lit · Columns</SheetPage.Row>
+ *   <SheetPage.Row>filter · spacer · Lit · Expand all · Columns</SheetPage.Row>
  *   <SelectionBar … />                      row C, the kit's
  *   <SheetTable … /> or <FixturesTable … />  the sheet, the only scroller
  *   <SheetPage.Footer>the count · the legend</SheetPage.Footer>

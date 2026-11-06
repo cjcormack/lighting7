@@ -149,6 +149,7 @@ function ProgrammerGridBody({
         renderToolbar={({
           filter,
           lit,
+          expand,
           columns,
           selection,
           actions,
@@ -462,6 +463,10 @@ function ProgrammerGridBody({
                         rendering a 156px bordered rectangle with nothing in it. */}
                     <span className={labelUnlessCompact(!!leading, '@[800px]:inline')}>Groups</span>
                   </Button>
+                  {/* Expand all / Collapse all (programmer-fixes D12), its glyph alone. From 640px of
+                      row only, and never on the folded row: every number above is measured without
+                      it, and at 600 the field it would take 38px from is 157 against its 132 floor. */}
+                  {!leading && <span className="hidden @[640px]:contents [&_.control-label]:hidden">{expand}</span>}
                   <span className={leading ? 'contents' : WORDLESS_BELOW_760}>{columns}</span>
                   {/* The key, exactly where the 22px footer that normally carries it is not drawn
                       (see `renderFooter`) — narrow, or short. A grid whose tints are *navigational*

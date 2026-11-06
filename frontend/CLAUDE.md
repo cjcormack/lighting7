@@ -3879,7 +3879,8 @@ transparent until the unlocked wash colours it.
 Three things the shell changed that read as bugs if you do not know they are decisions. **The two
 plain lists have row C and a footer now** — reserved (`Nothing selected`) when nothing is, the
 count in the footer — so `SelectionToolbar` draws no count of its own, and `FixturesListContainer`
-has one arm: no `fill`, no `space-y-3` wrapper, and its default toolbar is the shell's row plus
+has one arm: no `fill`, no `space-y-3` wrapper, and its default toolbar is the shell's row (filter ·
+spacer · Lit · Expand all · Columns) plus
 the programmer's own `SelectionBar` with no `projectId`, which is what draws it as the kit's bar
 rather than the programmer's three clusters — one component, so the two bars cannot count a marquee
 two ways. The bar's own
@@ -5053,6 +5054,20 @@ over its members, a multi-head fixture over its elements — with ← on a membe
 to its parent first, the ARIA tree convention (`treeKeyAction` in `rowModel.ts` is the rule); ↑/↓
 step by the kit's `arrowStepTarget`, which every sheet on the kit steps by too (§Sheet kit).
 
+**What a list has open is per window, per list, per project** (programmer-fixes plan D9,
+`lib/listExpansion.ts`): one `sessionStorage` entry per project and selection scope, group names and
+fixture keys, so a row opened on the programmer is open on the way back to it, a show's same-named
+group never opens another show's, and a name the loaded rig lacks is dropped on the next write.
+Include, the heads chip's landings and a deep link add to it. **Expand all · Collapse all**
+(`ExpandAllButton`, the toolbar's `expand` part) opens every group and multi-head fixture the filter
+shows — a closed group's members included — and reads *Collapse all* once none is closed; a collapse
+leaves open a fixture whose element rows hold a selected row or cell, and a group whose member rows
+or their elements do, so it never empties the selection (`fixtures-list/expandAll.ts`). **⌥-click on
+a chevron** does the same over that row's level alone. The cue editor's Values view has the button
+and the ⌥-click over its own state, which is not stored. On the programmer's row B the button is its
+glyph alone, from 640px of row and never on the folded short-height row: that row's widths are
+measured without it.
+
 **The grid's rows are `select-none`, and a fixture name is no longer selectable text.** Three
 declarations ride together on the rows wrapper — `select-none`, `touch-manipulation` and
 `[-webkit-touch-callout:none]` — each for a browser default a marquee was losing to
@@ -5449,7 +5464,12 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   kept, else Include's request (`store/includeSelection.ts`), which opens the group or fixture a head
   sits in and clears the filter — a group sent as its row and its members, since a flat list has no
   group row, and an element as its row under its fixture's. The Values grid never unmounts, so the list
-  is always there to hear it. The picked FX is drawn only while it is on the selection: the id
+  is always there to hear it. **A request lands once** (programmer-fixes plan D10): the grid that lands
+  it spends it a task later (an unmount cancels the spend, so StrictMode's remount lands it again),
+  and a grid mounting after finds nothing to land; one published while no grid is mounted is landed by
+  the next grid of the project the publishing window's address named, within five seconds, and never
+  otherwise, so the way back to the programmer never re-selects, reopens or clears the filter and
+  *Lit*. The picked FX is drawn only while it is on the selection: the id
   outlives a selection and a desk restart.
 - **The list is the desk's apply order, read, never computed** (`fxEditorList.ts`' `fxLanes`):
   Intensity · Colour · Position · Beam, a lane for each family an FX is in or the selection can

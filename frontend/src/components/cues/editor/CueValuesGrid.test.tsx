@@ -318,6 +318,40 @@ afterEach(() => {
 })
 
 describe('CueValuesGrid', () => {
+  it('opens and closes every group and multi-head fixture shown with Expand all (programmer-fixes plan D13)', () => {
+    rig.fixtures = [makePixelBar('bar-1', 2, [sliderProp('dimmer', 'dimmer', chan(90))], { name: 'Bar 1', groups: ['Bars'] })]
+    rig.groups = [{ name: 'Bars', memberCount: 1, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', memberKeys: ['bar-1'] }]
+    data.cues.set(1, cue(1, [{ targetType: 'group', targetKey: 'Bars', attribute: 'dimmer', value: '115', sortOrder: 0 }]))
+    data.cooked.set(1, [
+      { targetType: 'group', targetKey: 'bar-1', attribute: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Bars' },
+    ])
+    render(<Editor cueId={1} />)
+    const rowCount = (id: string) => editor(1).querySelectorAll(`[data-row-id="${id}"]`).length
+    fireEvent.click(within(editor(1)).getByRole('button', { name: 'Expand all' }))
+    expect(rowCount('member:Bars:bar-1')).toBe(1)
+    expect(rowCount('element:fixture:bar-1:bar-1.pixel-0')).toBe(1)
+    expect(rowCount('element:member:Bars:bar-1:bar-1.pixel-0')).toBe(1)
+    fireEvent.click(within(editor(1)).getByRole('button', { name: 'Collapse all' }))
+    expect(rowCount('member:Bars:bar-1')).toBe(0)
+    expect(rowCount('element:fixture:bar-1:bar-1.pixel-0')).toBe(0)
+  })
+
+  it('keeps a fixture the operator opened open once the cue comes to hold one of its cells', () => {
+    rig.fixtures = [makePixelBar('bar-1', 2, [sliderProp('dimmer', 'dimmer', chan(90))], { name: 'Bar 1' })]
+    data.cues.set(1, cue(1, [{ targetType: 'fixture', targetKey: 'bar-1', attribute: 'dimmer', value: '115', sortOrder: 0 }]))
+    const { rerender } = render(<Editor cueId={1} />)
+    const rowCount = (id: string) => editor(1).querySelectorAll(`[data-row-id="${id}"]`).length
+    fireEvent.click(within(editor(1)).getByRole('button', { name: 'Expand all' }))
+    expect(rowCount('element:fixture:bar-1:bar-1.pixel-0')).toBe(1)
+    data.cues.set(1, cue(1, [
+      { targetType: 'fixture', targetKey: 'bar-1', attribute: 'dimmer', value: '115', sortOrder: 0 },
+      { targetType: 'fixture', targetKey: 'bar-1.pixel-0', attribute: 'rgbColour', value: '#ff0000', sortOrder: 1 },
+    ]))
+    data.cueAt = 2
+    rerender(<Provider store={store}><Editor cueId={1} /></Provider>)
+    expect(rowCount('element:fixture:bar-1:bar-1.pixel-0')).toBe(1)
+  })
+
   it('a typed value over a Look-won cell becomes own and wins; ⌫ shows the layer again', async () => {
     data.cues.set(1, cue(1, []))
     data.cooked.set(1, [layerRow('orbit-sr', 'dimmer', '255'), layerRow('orbit-sl', 'dimmer', '255')])

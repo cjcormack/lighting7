@@ -172,7 +172,7 @@ vi.mock('../fixtureSheet/fxLabels', async (importOriginal) => ({
 
 import { FixturesTable } from './FixturesTable'
 import { FxSelectionStoreContext, createFxSelectionStore, type FxSelectionStore } from './fxSelection'
-import { chan, makeActiveFx, sliderProp } from '@/test/fixtureFactories'
+import { chan, makeActiveFx, makePixelBar, sliderProp } from '@/test/fixtureFactories'
 import { EditorContextProvider } from '../programmer/EditorContext'
 import { useCellSelection } from '../sheet/useCellSelection'
 import type { Row } from './rowModel'
@@ -1562,5 +1562,39 @@ describe('FixturesTable — a palette reference’s mark (palette-references pla
     expect(pill()).toBeNull()
     expect(cellWrapper().className).toContain('var(--color-violet-400)')
     expect(cellWrapper().className).not.toContain('teal')
+  })
+})
+
+describe('FixturesTable chevron (programmer-fixes plan D12)', () => {
+  const noop = () => {}
+  const bar = makePixelBar('bar', 2, [], { name: 'Bar' })
+  const rows: Row[] = [{ kind: 'fixture', id: 'fixture:bar', fixture: bar, isExpanded: false }]
+  const rowIds = new Set(rows.map((r) => r.id))
+
+  function Chevron({ onToggleExpand }: { onToggleExpand: (row: Row, options?: { level?: boolean }) => void }) {
+    const cellSelection = useCellSelection<ColumnKey>(rowIds)
+    return (
+      <FixturesTable
+        rows={rows}
+        visibleColumns={['dimmer']}
+        isSelected={() => false}
+        onRowClick={noop}
+        onToggleExpand={onToggleExpand}
+        onBeginCellEdit={noop}
+        onCellCommit={noop}
+        batchFor={() => ({ count: 1, skipped: 0, resolutions: [] })}
+        scopeLabel="Local"
+        onShowInfo={noop}
+        cellSelection={cellSelection}
+      />
+    )
+  }
+
+  it('says an ⌥-click is for the row’s level, and a plain click is not', () => {
+    const onToggleExpand = vi.fn()
+    render(<Chevron onToggleExpand={onToggleExpand} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Bar' }), { altKey: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Bar' }))
+    expect(onToggleExpand.mock.calls.map(([, options]) => options)).toEqual([{ level: true }, { level: false }])
   })
 })

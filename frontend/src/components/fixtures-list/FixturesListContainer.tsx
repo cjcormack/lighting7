@@ -73,7 +73,15 @@ import {
   rowIdsForTargets,
 } from './rowModel'
 import { buildRowCells } from './useRowValues'
-import { useIncludeSelectionRequest } from '../../store/includeSelection'
+import {
+  currentIncludeSelection,
+  includeSelectionLandable,
+  spendIncludeSelection,
+  useIncludeSelectionRequest,
+} from '../../store/includeSelection'
+import { useListExpansion, type KnownRig } from '../../lib/listExpansion'
+import { anyClosed, applyExpandAll, heldOpen, shownExpandable, type ExpandLevel } from './expandAll'
+import { ExpandAllButton } from './ExpandAllButton'
 import {
   listSelectionIntentFor,
   useListSelection,
@@ -114,6 +122,7 @@ import { useDeskSelectionBridge } from './useDeskSelectionBridge'
 import { useDeskFollow } from '@/lib/deskFollow'
 import { setProgrammerTable } from '@/lib/programmerTables'
 import { usePressFamilies } from '@/store/selection'
+import { useCurrentProjectQuery } from '@/store/projects'
 import type {
   CellBatch,
   CellCommit,
@@ -190,7 +199,7 @@ export interface FixturesListContainerProps {
    */
   filterPlaceholder?: string
   /**
-   * Replace the built-in chrome — one 40px toolbar row (filter · spacer · Lit · Columns) and the
+   * Replace the built-in chrome — one 40px toolbar row (filter · spacer · Lit · Expand all · Columns) and the
    * selection bar under it — receiving the controls this container owns as ready-made nodes so a
    * caller can re-arrange them without re-implementing their state.
    *
@@ -202,6 +211,8 @@ export interface FixturesListContainerProps {
   renderToolbar?: (parts: {
     filter: React.ReactNode
     lit: React.ReactNode
+    /** Expand all / Collapse all over the rows the filter shows (D12). */
+    expand: React.ReactNode
     columns: React.ReactNode
     /**
      * Null when nothing *visible* is selected; the caller should render nothing rather than a
@@ -324,8 +335,23 @@ export function FixturesListContainer({
   const ownColumns = useColumnVisibility()
   const columnVisibility = controlledColumnVisibility ?? ownColumns[0]
   const setColumnVisibility = onColumnVisibilityChange ?? ownColumns[1]
-  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set<string>())
-  const [expandedFixtures, setExpandedFixtures] = useState<ReadonlySet<string>>(new Set<string>())
+  // Per window, per list, per project (D9): what was open is open again on the way back. The rig
+  // lists are the desk's current project's, so they judge a stored name stale only while that is
+  // the route's: across a switch the route can still name the project being left.
+  const { data: currentProject } = useCurrentProjectQuery()
+  const rigIsRoutes = currentProject?.id === projectId
+  const knownRig = useMemo<KnownRig | null>(
+    () =>
+      !rigIsRoutes || maybeFixtures == null || maybeGroups == null
+        ? null
+        : { groups: new Set(maybeGroups.map((g) => g.name)), fixtures: new Set(maybeFixtures.map((f) => f.key)) },
+    [rigIsRoutes, maybeFixtures, maybeGroups],
+  )
+  const { expandedGroups, expandedFixtures, setExpandedGroups, setExpandedFixtures } = useListExpansion(
+    projectId,
+    selectionScope,
+    knownRig,
+  )
   const [scrollToRowId, setScrollToRowId] = useState<RowId | null>(null)
   const [infoFixtureKey, setInfoFixtureKey] = useState<string | null>(null)
   const [infoGroupName, setInfoGroupName] = useState<string | null>(null)
@@ -640,16 +666,47 @@ export function FixturesListContainer({
     else setInfoFixtureKey(row.fixture.key)
   }, [])
 
-  const handleToggleExpand = useCallback((row: GroupRow | FixtureRow) => {
-    const toggled = (prev: ReadonlySet<string>, key: string): ReadonlySet<string> => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    }
-    if (row.kind === 'group') setExpandedGroups((prev) => toggled(prev, row.name))
-    else setExpandedFixtures((prev) => toggled(prev, row.fixture.key))
-  }, [])
+  // Expand all / Collapse all (D12) over what the filter shows, a collapse keeping open whatever
+  // holds the selection. Read through a ref so the chevron's handler stays stable across rows.
+  const expandAllInputs = useRef({ rows, selectedRowIds, expandedGroups, expandedFixtures })
+  expandAllInputs.current = { rows, selectedRowIds, expandedGroups, expandedFixtures }
+  const expandAll = useCallback(
+    (level: ExpandLevel, open: boolean) => {
+      const { rows: shownRows, selectedRowIds: selected, expandedGroups: groupsOpen, expandedFixtures: fixturesOpen } =
+        expandAllInputs.current
+      const next = applyExpandAll(
+        { groups: groupsOpen, fixtures: fixturesOpen },
+        shownExpandable(shownRows),
+        heldOpen(shownRows, selected),
+        level,
+        open,
+      )
+      if (next.groups !== groupsOpen) setExpandedGroups(() => next.groups)
+      if (next.fixtures !== fixturesOpen) setExpandedFixtures(() => next.fixtures)
+    },
+    [setExpandedGroups, setExpandedFixtures],
+  )
+  const shownTree = useMemo(() => shownExpandable(rows), [rows])
+  const expandClosed = anyClosed(shownTree, (name) => expandedGroups.has(name), (key) => expandedFixtures.has(key))
+
+  const handleToggleExpand = useCallback(
+    (row: GroupRow | FixtureRow, options?: { level?: boolean }) => {
+      // ⌥-click: the same over the row's level, in the direction this row would go.
+      if (options?.level) {
+        expandAll(row.kind === 'group' ? 'groups' : 'fixtures', !row.isExpanded)
+        return
+      }
+      const toggled = (prev: ReadonlySet<string>, key: string): ReadonlySet<string> => {
+        const next = new Set(prev)
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
+        return next
+      }
+      if (row.kind === 'group') setExpandedGroups((prev) => toggled(prev, row.name))
+      else setExpandedFixtures((prev) => toggled(prev, row.fixture.key))
+    },
+    [expandAll, setExpandedGroups, setExpandedFixtures],
+  )
 
   // **A click on a cell selects that one cell, and does nothing else.** Not its row (the
   // spreadsheet feel from when rows had checkboxes, which put a row wash under a click that was
@@ -1042,7 +1099,7 @@ export function FixturesListContainer({
       if (openGroups.size > 0) setExpandedGroups((prev) => opened(prev, openGroups))
       setLanding(targets)
     },
-    [fixtures, groups, grouped],
+    [fixtures, groups, grouped, setExpandedFixtures, setExpandedGroups],
   )
   useEffect(() => {
     if (landing == null) return
@@ -1237,7 +1294,7 @@ export function FixturesListContainer({
       selectRow(rowId, 'replace')
       setScrollToRowId(rowId)
     },
-    [selectRow, setOnlyLit],
+    [selectRow, setOnlyLit, setExpandedGroups],
   )
 
   // "Select Heads on Include": pick up the fixtures the last Include pulled in. Keyed on the
@@ -1245,22 +1302,24 @@ export function FixturesListContainer({
   // operator may have changed the selection in between.
   const includeSelection = useIncludeSelectionRequest()
   const includeNonce = respondToIncludeSelection ? includeSelection.nonce : 0
-  // Each nonce is applied at most once. The effect also depends on `fixtures`/`groups`/
-  // `grouped` — it has to, to map keys onto row ids — and any of those can change long after
-  // the Include: a background fixture-list refetch, or the operator hitting the Groups toggle.
-  // Without this guard that would silently re-apply the old Include's selection over whatever
-  // they had since selected, and reset their filter and scroll position with it.
-  const appliedIncludeNonceRef = useRef(0)
-  // An unmount clears the selection (`useListSelection`), so the request is forgotten with it: a
-  // remount that keeps this ref — StrictMode's — then applies it again, as a fresh mount would.
+  // What was already waiting when this grid mounted: a request older than that lands only within
+  // the store's window, so a request is never replayed long after, or by the grid it was for once
+  // the operator came back to it (D10). State, so StrictMode's remount keeps the first mount's.
+  const [includeMount] = useState(() => ({ mountedAt: Date.now(), nonceAtMount: currentIncludeSelection().nonce }))
+  // The spend runs a task after the land, and an unmount cancels it: StrictMode's immediate
+  // remount must land the request again, since the unmount cleared the selection. The effect below
+  // re-runs on `fixtures` and the rest, so it also asks whether the nonce is already on its way out.
+  const pendingSpendRef = useRef<{ nonce: number; timer: ReturnType<typeof setTimeout> } | null>(null)
   useEffect(
     () => () => {
-      appliedIncludeNonceRef.current = 0
+      if (pendingSpendRef.current != null) clearTimeout(pendingSpendRef.current.timer)
+      pendingSpendRef.current = null
     },
     [],
   )
   useEffect(() => {
-    if (includeNonce === 0 || appliedIncludeNonceRef.current === includeNonce) return
+    if (includeNonce === 0 || pendingSpendRef.current?.nonce === includeNonce) return
+    if (!includeSelectionLandable(includeSelection, projectId, includeMount)) return
     const { fixtureKeys, groupKeys } = includeSelection
     // Prefer the group row when the sheet is in rollup mode and the whole group came in —
     // that is the shape the operator was working in, and it keeps the row count readable.
@@ -1298,18 +1357,23 @@ export function FixturesListContainer({
     // Nothing resolved — the fixtures may still be loading, so leave the nonce unapplied and
     // let the next run (when they arrive) do it.
     if (wanted.length === 0) return
-    appliedIncludeNonceRef.current = includeNonce
+    const nonce = includeNonce
+    if (pendingSpendRef.current != null) clearTimeout(pendingSpendRef.current.timer)
+    pendingSpendRef.current = {
+      nonce,
+      timer: setTimeout(() => {
+        spendIncludeSelection(nonce)
+        if (pendingSpendRef.current?.nonce === nonce) pendingSpendRef.current = null
+      }, 0),
+    }
     // A filter would hide most of what we just selected, and the operator did not ask for it.
     setFilter('')
     setOnlyLit(false)
     setRows(wanted)
     setScrollToRowId(wanted[0])
-    // `includeSelection` is read fresh rather than depended on: its identity changes with every
-    // publish, and the arrays inside it are the same data the nonce already tracks.
-    // `setRows` and `setOnlyLit` are referentially stable (the former is a useCallback over the
-    // slice's own stable setter and the cell clear, both fixed for the mount).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeNonce, fixtures, groups, grouped])
+    // A re-run lands nothing twice: the nonce is spent, or on its way out. RigGate's follow can
+    // move `projectId` and the expansion setters under a mounted grid, so they are deps too.
+  }, [includeNonce, fixtures, groups, grouped, includeSelection, projectId, includeMount, setRows, setOnlyLit, setExpandedGroups, setExpandedFixtures])
 
   // View-level shortcuts: Escape clears, ⌘/Ctrl+A selects all visible rows,
   // ↑/↓ move the selection (Shift extends the range from the anchor), and →/← open and close the
@@ -1561,6 +1625,15 @@ export function FixturesListContainer({
     </Button>
   )
 
+  const expandControl = (
+    <ExpandAllButton
+      closed={expandClosed}
+      disabled={shownTree.groups.length === 0 && shownTree.fixtures.length === 0}
+      onPress={(open) => expandAll('all', open)}
+      labelClassName={labelUnlessCompact(compactControls, 'sm:inline')}
+    />
+  )
+
   const columnsControl = (
     <ColumnsMenu
       visibility={columnVisibility}
@@ -1698,6 +1771,7 @@ export function FixturesListContainer({
         renderToolbar({
           filter: filterControl,
           lit: litControl,
+          expand: expandControl,
           columns: columnsControl,
           selection: selectionControl,
           actions: isProgrammer ? programmerActions : null,
@@ -1719,6 +1793,7 @@ export function FixturesListContainer({
             <div className="flex min-w-0 max-w-[340px] flex-[999_1_0%] items-center">{filterControl}</div>
             <span className="flex-1" />
             {litControl}
+            {expandControl}
             {columnsControl}
           </SheetPage.Row>
           {/* Row C, reserved when nothing is selected — the programmer's bar as the kit's (no

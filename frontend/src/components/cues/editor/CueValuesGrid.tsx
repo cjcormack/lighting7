@@ -39,6 +39,7 @@ import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 import type { CueTarget } from '@/api/cuesApi'
+import { ExpandAllButton } from '@/components/fixtures-list/ExpandAllButton'
 import { useCueRowStore, type CueRowStoreValue } from './CueRowStore'
 import { useCueValuesView, type CueValuesView } from './CueValuesView'
 import { CueEditorIsolation } from './editorIsolation'
@@ -121,6 +122,9 @@ function CueValuesGridBody({
     addTarget,
     toggleGroupExpanded,
     toggleFixtureExpanded,
+    expandAll,
+    expandClosed,
+    expandDisabled,
     rowSelection,
     cellSelection,
     selectCells,
@@ -324,11 +328,12 @@ function CueValuesGridBody({
   // ── Rows' gestures ─────────────────────────────────────────────────────────────────────────────
   const onRowClick = useCallback((id: RowId, e: React.MouseEvent) => selectRow(id, listSelectionIntentFor(e)), [selectRow])
   const onToggleExpand = useCallback(
-    (row: GroupRow | FixtureRow) => {
-      if (row.kind === 'group') toggleGroupExpanded(row.name)
+    (row: GroupRow | FixtureRow, options?: { level?: boolean }) => {
+      if (options?.level) expandAll(row.kind === 'group' ? 'groups' : 'fixtures', !row.isExpanded)
+      else if (row.kind === 'group') toggleGroupExpanded(row.name)
       else toggleFixtureExpanded(row.fixture.key)
     },
-    [toggleGroupExpanded, toggleFixtureExpanded],
+    [toggleGroupExpanded, toggleFixtureExpanded, expandAll],
   )
   const onBeginCellEdit = useCallback(
     (row: Row, col: ColumnKey) => {
@@ -387,6 +392,12 @@ function CueValuesGridBody({
         <Grid3x3 className="size-3.5" />
         <span className="hidden @[700px]:inline">Whole rig</span>
       </Button>
+      <ExpandAllButton
+        closed={expandClosed}
+        disabled={expandDisabled}
+        onPress={(open) => expandAll('all', open)}
+        labelClassName="hidden @[700px]:inline"
+      />
     </>
   )
 

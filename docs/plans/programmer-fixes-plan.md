@@ -347,8 +347,8 @@ suites locally: no Gradle change, schema, sync or cross-package refactor.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The FX picker: one release and a close trace | in review | `claude/festive-faraday-m5qr2b` | | |
-| 2 | Element rows stay put | planned | | | |
+| 1 | The FX picker: one release and a close trace | in review | `claude/festive-faraday-m5qr2b` | [#369](https://github.com/cjcormack/lighting7/pull/369) | 8584e2e |
+| 2 | Element rows stay put | in review | `claude/determined-goodall-rw10tw` | | |
 | 3 | Cells with gaps | planned | | | |
 | 4 | Recent values on the desk | planned | | | |
 | 5 | Recents in every value editor | planned | | | |
@@ -426,6 +426,19 @@ D9–D13.
   head sits in…*, *The Values grid never unmounts*), the → / ← paragraph, and the container's
   toolbar.
 - Local: `check:quick`.
+
+**As built.** The store stamps the project the publishing window's **address** names
+(`projectIdOfPath`), not the desk's current project: a grid is matched by its route's project, and
+both callers publish from a project route; a request stamped with none lands on any project's grid,
+within the window. A grid notes the request already waiting when it mounts, and only that one is held
+to the five seconds; one published while it is mounted lands whenever its rows resolve. On row B the
+button is its glyph alone, drawn from 640px of row and never on the folded short-height row: the row's
+widths are measured without it, and at 600 the field it would take 38px from has 157px against its
+132 floor. In the Values view the operator's open or shut is kept per fixture over the cue's own rule
+(it opens where the cue holds an element), rather than as a toggle of that rule, so a cell written
+after an Expand all never folds its fixture; its fixtures open under a group as on their own rows,
+where before a member under a group could not be opened at all. The pruning of stale names waits
+while the loaded rig is another project's than the route's, as it is across a switch.
 
 ### Session 3 — Cells with gaps
 
