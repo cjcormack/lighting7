@@ -142,13 +142,13 @@ except for scripts and the cannons:
 - **Not reachable remotely at all (404):** the QR password-reset and device-login flows (both lean
   on "the phone is on the desk's LAN"), `requireLanPeer`, and the API docs (`/api.json`,
   `/openapi`).
-- **Scripts are refused remotely unless an admin allows them** (Remote access → *Allow scripts
-  over remote access*). A script is arbitrary Kotlin in the desk's JVM. Refused
+- **Scripts are refused remotely unless an admin allows them** (Cloud → Remote access → *Allow
+  scripts over remote access*). A script is arbitrary Kotlin in the desk's JVM. Refused
   (`REMOTE_SCRIPTS_DISABLED`, `requireScriptAccess`): creating, compiling and running a project
   script, changing a saved script's text or type (a rename is fine), the same for FX definitions,
   an undo or redo that would put either back (the history routes and `undo_changes`), and the
   whole `/script-editor` service. MCP never has a script tool, whatever this says.
-- **Arming and firing are refused remotely unless an admin allows them** (Remote access → *Allow
+- **Arming and firing are refused remotely unless an admin allows them** (Cloud → Remote access → *Allow
   arming and firing over remote access*; stage-view plan session 9, P2, D16). A confetti cannon spends
   something physical in a room a remote caller cannot see. Refused (`REMOTE_EFFECTS_DISABLED`,
   `requireEffectsAccess`, the `requireScriptAccess` twin): `POST …/effects/arm`, `…/patches/{id}/fire`
@@ -159,7 +159,7 @@ except for scripts and the cannons:
   **The local arm is the consent, by decision** (session 9 review): a GO from a remote session or an
   MCP tool (`go_cue_stack`, `apply_cue`) into a cue with events fires them while the desk is armed,
   as a GO at the desk would. What a remote caller cannot do is arm, fire a tube outright or reload.
-- **Fixture commands are refused remotely unless an admin allows them** (Remote access → *Allow
+- **Fixture commands are refused remotely unless an admin allows them** (Cloud → Remote access → *Allow
   fixture commands over remote access*; fixture optics plan session 7, D13). A reset swings a head
   through its travel and a lamp off leaves a discharge head dark for minutes, in a room a remote caller
   cannot see. Refused (`REMOTE_COMMANDS_DISABLED`, `requireCommandsAccess`, the `requireEffectsAccess`

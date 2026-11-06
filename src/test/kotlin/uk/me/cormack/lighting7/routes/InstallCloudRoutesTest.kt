@@ -10,6 +10,10 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
@@ -168,6 +172,9 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Forbidden, http.get("/api/rest/install/cloud") { header(HttpHeaders.Cookie, cookie) }.status)
         assertEquals(HttpStatusCode.Forbidden, http.post("/api/rest/install/cloud/adoption") { header(HttpHeaders.Cookie, cookie) }.status)
         assertEquals(HttpStatusCode.Forbidden, http.delete("/api/rest/install/cloud") { header(HttpHeaders.Cookie, cookie) }.status)
+        assertEquals(HttpStatusCode.Forbidden, http.get("/api/rest/install/cloud/sessions") { header(HttpHeaders.Cookie, cookie) }.status)
+        assertEquals(HttpStatusCode.Forbidden, http.post("/api/rest/install/cloud/sessions/x/allow") { header(HttpHeaders.Cookie, cookie) }.status)
+        assertEquals(HttpStatusCode.Forbidden, http.delete("/api/rest/install/cloud/sessions/x") { header(HttpHeaders.Cookie, cookie) }.status)
         assertTrue(fake.adoptions.isEmpty())
     }
 
@@ -226,5 +233,48 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
             assertFalse(frame.remote)
         }
         assertFalse(client.cloud(cookie).remote)
+    }
+
+    @Test
+    fun `the scripts, effects and commands switches are set from the Cloud tab, adopted or not`() = testApplication {
+        seedUser(state, "admin")
+        mountTestApp(state)
+        val http = jsonClient()
+        val cookie = http.loginCookieHeader("admin")
+        suspend fun put(body: String) = http.put("/api/rest/install/cloud/remote") {
+            header(HttpHeaders.Cookie, cookie); contentType(ContentType.Application.Json); setBody(body)
+        }
+
+        val set = put("""{"allowScripts":true,"allowCommands":true}""")
+        assertEquals(HttpStatusCode.OK, set.status, set.bodyAsText())
+        assertEquals(RemoteAccessDto(false, false, false, allowScripts = true, allowEffects = false, allowCommands = true), set.body())
+        assertTrue(state.remoteAccess.allowRemoteScripts)
+        assertTrue(state.remoteAccess.allowRemoteCommands)
+        assertFalse(state.remoteAccess.allowRemoteEffects)
+
+        val approve = put("""{"approveSessions":true,"allowEffects":true}""")
+        assertEquals(HttpStatusCode.Conflict, approve.status)
+        assertEquals(CloudErrorCodes.NOT_ADOPTED, approve.code())
+        assertFalse(state.remoteAccess.allowRemoteEffects, "a refused request changes nothing")
+        assertEquals(set.body<RemoteAccessDto>(), http.get("/api/rest/install/cloud/remote") { header(HttpHeaders.Cookie, cookie) }.body())
+    }
+
+    @Test
+    fun `the switches are refused on the public listener, and the session routes are there`() = testApplication {
+        seedUser(state, "admin")
+        mountPublic()
+        val http = jsonClient()
+        val cookie = http.loginCookieHeader("admin")
+        val put = http.put("/api/rest/install/cloud/remote") {
+            header(HttpHeaders.Cookie, cookie); contentType(ContentType.Application.Json); setBody("""{"allowScripts":true}""")
+        }
+        assertEquals(HttpStatusCode.Forbidden, put.status)
+        assertEquals(CloudErrorCodes.SETTINGS_LOCAL_ONLY, put.code())
+        assertFalse(state.remoteAccess.allowRemoteScripts)
+
+        val listing = http.get("/api/rest/install/cloud/sessions") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.OK, listing.status, listing.bodyAsText())
+        val end = http.delete("/api/rest/install/cloud/sessions/nothing") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(CloudErrorCodes.NO_SESSION, end.code(), "End is open to either listener: it only reduces reach")
     }
 }

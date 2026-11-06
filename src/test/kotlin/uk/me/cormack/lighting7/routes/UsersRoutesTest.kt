@@ -20,11 +20,13 @@ import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.plugins.BootProgressStateOutMessage
 import uk.me.cormack.lighting7.plugins.MachineOutMessage
 import uk.me.cormack.lighting7.plugins.CloudStateOutMessage
+import uk.me.cormack.lighting7.plugins.RemoteSessionPendingOutMessage
 import uk.me.cormack.lighting7.plugins.TunnelStateOutMessage
 import uk.me.cormack.lighting7.plugins.OwnAccountChangedOutMessage
 import uk.me.cormack.lighting7.plugins.UserListChangedOutMessage
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.TEST_PASSWORD
+import uk.me.cormack.lighting7.testsupport.awaitEachOf
 import uk.me.cormack.lighting7.testsupport.awaitOfType
 import uk.me.cormack.lighting7.testsupport.collectUntilOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
@@ -452,8 +454,10 @@ class UsersRoutesTest : RouteIntegrationTest() {
             val frames = collectUntilOfType<UserListChangedOutMessage>()
             assertEquals(
                 listOf(OwnAccountChangedOutMessage, UserListChangedOutMessage),
-                // `tunnel.state` and `cloud.state` are an admin socket's connect snapshots, and may land after the boot frame.
-                frames.filterIsInstance<MachineOutMessage>().filterNot { it is TunnelStateOutMessage || it is CloudStateOutMessage },
+                // `tunnel.state`, `cloud.state` and `remoteSession.pending` are an admin socket's connect snapshots,
+                // and may land after the boot frame.
+                frames.filterIsInstance<MachineOutMessage>()
+                    .filterNot { it is TunnelStateOutMessage || it is CloudStateOutMessage || it is RemoteSessionPendingOutMessage },
             )
         }
     }
@@ -488,8 +492,10 @@ class UsersRoutesTest : RouteIntegrationTest() {
             val frames = collectUntilOfType<UserListChangedOutMessage>()
             assertEquals(
                 listOf(UserListChangedOutMessage),
-                // `tunnel.state` and `cloud.state` are an admin socket's connect snapshots, and may land after the boot frame.
-                frames.filterIsInstance<MachineOutMessage>().filterNot { it is TunnelStateOutMessage || it is CloudStateOutMessage },
+                // `tunnel.state`, `cloud.state` and `remoteSession.pending` are an admin socket's connect snapshots,
+                // and may land after the boot frame.
+                frames.filterIsInstance<MachineOutMessage>()
+                    .filterNot { it is TunnelStateOutMessage || it is CloudStateOutMessage || it is RemoteSessionPendingOutMessage },
             )
         }
     }
@@ -506,7 +512,7 @@ class UsersRoutesTest : RouteIntegrationTest() {
         val operator = client.loginCookieHeader("op")
 
         client.webSocket("/api", request = { header(HttpHeaders.Cookie, admin) }) {
-            awaitOfType<CloudStateOutMessage>()
+            awaitEachOf(CloudStateOutMessage::class, RemoteSessionPendingOutMessage::class)
         }
 
         client.webSocket("/api", request = { header(HttpHeaders.Cookie, operator) }) {
@@ -519,6 +525,7 @@ class UsersRoutesTest : RouteIntegrationTest() {
             assertEquals(HttpStatusCode.OK, rename.status, rename.bodyAsText())
             val frames = collectUntilOfType<UserListChangedOutMessage>()
             assertEquals(emptyList(), frames.filterIsInstance<CloudStateOutMessage>())
+            assertEquals(emptyList(), frames.filterIsInstance<RemoteSessionPendingOutMessage>())
         }
     }
 

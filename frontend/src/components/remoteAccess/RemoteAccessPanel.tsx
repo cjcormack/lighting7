@@ -217,70 +217,10 @@ function RemoteAccessForm({ settings }: { settings: TunnelSettings }) {
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium">Scripts</h3>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5"
-            checked={settings.allowScripts}
-            disabled={saving}
-            onChange={(e) => void run({ allowScripts: e.target.checked })}
-          />
-          <span>
-            Allow scripts over remote access
-            <span className="block text-xs text-muted-foreground">
-              A script runs as the desk, with this computer’s files and network. Off, anyone signed in
-              from outside can edit and busk but cannot save, compile or run a script.
-            </span>
-          </span>
-        </label>
-      </section>
-
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium">Cannons</h3>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5"
-            checked={settings.allowEffects === true}
-            disabled={saving}
-            onChange={(e) => void run({ allowEffects: e.target.checked })}
-          />
-          <span>
-            Allow arming and firing over remote access
-            <span className="block text-xs text-muted-foreground">
-              A confetti cannon spends something physical in a room a remote caller cannot see. Off,
-              anyone signed in from outside can author a cue&apos;s events but cannot arm the desk, fire
-              a tube or reload one; at the desk itself every signed-in role can. The arm is the
-              operator&apos;s consent: while the desk is armed, a GO from anywhere — a remote session
-              or Claude included — fires its cue&apos;s events.
-            </span>
-          </span>
-        </label>
-      </section>
-
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium">Fixture commands</h3>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5"
-            checked={settings.allowCommands === true}
-            disabled={saving}
-            onChange={(e) => void run({ allowCommands: e.target.checked })}
-          />
-          <span>
-            Allow fixture commands over remote access
-            <span className="block text-xs text-muted-foreground">
-              A reset swings a head through its travel and a lamp off leaves a discharge head dark for
-              minutes, in a room a remote caller cannot see. Off, anyone signed in from outside — and
-              Claude over MCP, which is always remote — cannot run a reset or a lamp command; at the desk
-              itself every signed-in role can, behind the fixture panel&apos;s confirm.
-            </span>
-          </span>
-        </label>
-      </section>
+      <p className="text-xs text-muted-foreground">
+        What a remote caller may do — scripts, arming and firing, fixture commands — is set in the Cloud
+        tab, and holds for the tunnel and the cloud alike.
+      </p>
 
       {saveError != null && (
         <Alert variant="destructive">
@@ -359,8 +299,8 @@ function EnableDialog({
           <li>Sign-ins from outside lock for fifteen minutes after ten failures.</li>
           <li>
             {allowScripts
-              ? 'Scripts are allowed from outside. Turn that off below unless you need it.'
-              : 'Scripts stay blocked from outside unless you allow them below.'}
+              ? 'Scripts are allowed from outside. Turn that off in the Cloud tab unless you need it.'
+              : 'Scripts stay blocked from outside unless you allow them in the Cloud tab.'}
           </li>
         </ul>
         <DialogFooter>

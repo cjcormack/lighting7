@@ -669,7 +669,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (86)
+## Server → Client (87)
 
 ### Boot — `BootSocket.kt`
 
@@ -1094,7 +1094,8 @@ Machine-scoped, so registered in the pre-warm-up band and unaffected by project 
 | `installChanged` | — | Every socket |
 | `updateStateChanged` | `phase`, `availability`, `latestVersion?`, `downloadedBytes`, `totalBytes?` | Every socket |
 | `tunnel.state` | `state`: `status`, `url?`, `code?`, `message?`, `retrying`, `downloadedBytes?`, `totalBytes?` | Admin sockets only (and bootstrap-open ones), snapshot on connect |
-| `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `link?` (the sidecar's status, `OFF` when absent), `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?`, `noticeAt?`, `remote?` | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
+| `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `link?` (the sidecar's status, `OFF` when absent), `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?`, `noticeAt?`, `remote?`, `remoteSwitches` (`remoteAccess`, `mcpAccess`, `approveSessions`) | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
+| `remoteSession.pending` | `sessions`: `[{sid, email, displayName, linkedUser?, expiresAt}]`, oldest first, empty once none waits | Admin sockets (and bootstrap-open ones) **on the desk's own listener** only, snapshot on connect |
 
 The account frames are payload-free **deliberately, not just by convention**: sockets are open to
 operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate
@@ -1122,6 +1123,12 @@ approve the desk into an organisation of their own, and says `remote: true`, whi
 knows to disable *Adopt*. It changes on an adoption's transitions, a poll's
 error and each change of the control channel's status (`CONNECTING`, `ONLINE`, `RETRYING` with
 `retryAt`, `OFF`), never per heartbeat. See `docs/cloud-engineering.md` §"The state".
+
+`remoteSession.pending` is the remote sessions waiting for an admin at the desk (cloud-p1 plan D13):
+`StateFlow`-backed (`CloudService.pendingSessions`), so the subscription is the snapshot, and a whole
+list each time, which every admin window toasts and takes down once its session leaves the list. Only
+the desk's own listener is sent it, since only there may one be allowed; *Allow* and *Deny* are REST.
+Outbound only. See `docs/cloud-engineering.md` §"Remote sessions".
 
 ### Cloud sync — `CloudSyncSocket.kt`
 
@@ -1384,6 +1391,14 @@ override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {
 The connect snapshot is the whole buffer with parked values overlaid, so clients see what fixtures
 are actually emitting rather than the underlying buffered value.
 
+**A remote socket is capped** (cloud-p1 plan D14, `plugins/RemoteFrameCap.kt`). On the public listener,
+where a remote session's frames cross the internet, `SocketScope.send` holds `channelState` to
+`cloud.remote.channelStateHz` frames a second (default 20, 0 for no cap), merging the frames sent within
+an interval — each (universe, channel) at its latest level, `snapshot` kept if any frame merged had it —
+and `provenanceState`, a whole snapshot each time, to its latest frame at half that rate. The first frame
+after a quiet spell goes at once. A socket on the desk's own listener is never capped. Every sender of
+those two frames goes through `send`, so none of them needs to know.
+
 **Subnet limitation**: only subnet 0 is on the wire. Universe numbers are sent as-is (0–15 within
 subnet 0); frames for other subnets are dropped at the listener.
 
@@ -1440,6 +1455,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 |---|---|
 | `plugins/Sockets.kt` | Plugin config, `/api` endpoint, auth + warm-up gates, frame dispatch, teardown |
 | `plugins/SocketScope.kt` | Per-connection context: `send`, `subscribe`, `subscribeShow`, `sendSnapshot`, `cancelAll` |
+| `plugins/RemoteFrameCap.kt` | The rate cap on a public-listener socket's `channelState` and `provenanceState` |
 | `plugins/SocketMessages.kt` | The `InMessage` / `OutMessage` sealed roots |
 | `plugins/SentryTracing.kt` | `traceMessage`: a gesture frame as a Sentry transaction (and the HTTP plugin) |
 | `plugins/BootSocket.kt` | `bootProgressState` |

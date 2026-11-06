@@ -518,7 +518,7 @@ scenery editor's shape — a whole-list save per gesture, its draft held over a 
 throws **confetti** on every fire (`stage3d/StageConfetti.tsx` over the pure `confetti.ts`): one
 instanced mesh pooled per canvas, unlit, invalidating each frame only while a flake flies — see
 `docs/stage-vis-engineering.md` §"Confetti". The MIDI `fireTrigger` target is mirrored in
-`lib/surfaceDrop.ts` and the binding picker; the remote-access tab carries *Allow arming and firing*.
+`lib/surfaceDrop.ts` and the binding picker; the Cloud tab's Remote access section carries *Allow arming and firing*.
 
 **Fixture commands — resets and lamp control** (fixture-optics session 7; lighting7
 `docs/fixtures-engineering.md` §"@FixtureCommand") take the trigger's shape: a
@@ -531,7 +531,7 @@ and what it sets for the hold (`alongside`). Confirmed, it is one REST call
 (`useRunFixtureCommandMutation`, `store/commands.ts`) that **answers when the hold ends**, and the
 button counts the hold down from the descriptor's `holdMs` meanwhile — only in this window, since there
 is no socket frame. Refusals (`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`,
-`REMOTE_COMMANDS_DISABLED`) toast by the desk's words; a cut-short hold warns. The remote-access tab
+`REMOTE_COMMANDS_DISABLED`) toast by the desk's words; a cut-short hold warns. The Cloud tab's Remote access section
 carries *Allow fixture commands over remote access* (`allowCommands`), which MCP is held to as well.
 
 **Painted cloths hang flat, and carry their pictures** (scrim plan session 2;
@@ -7342,6 +7342,11 @@ trigger is hidden from operators like Users, the query passes `skip: !isAdmin`, 
   (`upsertQueryData`). `saveTunnelSettings` is in `SILENT_ENDPOINTS` — the panel renders a refusal
   (`REMOTE_ACCESS_INVALID`: a bad domain, no desk accounts) itself.
 - **No free-plan warning**, by decision (Chris, 2026-09-26): ngrok's quotas are not pre-empted.
+- **The scripts, effects and commands switches are the Cloud tab's now** (lighting7 cloud-p1 plan
+  session 7, D6): they hold for the tunnel and the cloud alike, so they sit in the Cloud tab's *Remote
+  access* section, which writes them through `PUT /install/cloud/remote`, and this tab keeps only
+  ngrok's own fields until the tunnel is deleted (session 9). The enable dialog still reads
+  `allowScripts` from its settings, which the Cloud tab's save invalidates.
 
 ### Lighting7 Cloud
 
@@ -7363,6 +7368,22 @@ alone. Backend contract in `../docs/cloud-engineering.md` §"The Cloud tab".
   restart, and has no route to clear them.
 - **The adoption link is `data-sentry-block`**, like the QR: its `href` carries the user code, and a
   replay masks text, not attributes.
+- **Remote access** (`CloudRemoteAccess.tsx`, lighting7 cloud-p1 plan D6, D13): *Remote sessions*,
+  *Approve each new session on this desk* and *Claude (MCP)* once adopted, the sidecar's status from
+  `cloud.state`'s `link`, the scripts, effects and commands switches on any desk, and the open and
+  recent sessions with *End*. Its own two queries (`remoteAccessSettings`, `remoteSessions`, the
+  latter polled every 5 s while mounted: no frame announces a session); `setRemoteAccess` answers the
+  switches and is silent, rendered inline. **`cloud.state`'s `remoteSwitches` patches the cached three
+  cloud switches**, so another window's change and a new adoption (which starts them off) show at
+  once; a change of install id invalidates both queries. **`remote` disables every switch with the reason** —
+  the desk refuses them there (`CLOUD_SETTINGS_LOCAL_ONLY`) — and leaves *End*, which only reduces reach.
+- **Approval is a toast on every admin window** (`RemoteSessionApprovals.tsx`, mounted once by
+  `Layout`): `remoteSession.pending` is kept by `api/cloudWsApi.ts` (its latest list, read through
+  `useSyncExternalStore`, cleared when the socket closes), each waiting session a `toast.custom` keyed
+  by its sid with *Allow* and *Deny* and the seconds left, dismissed once the list drops it — answered
+  anywhere, timed out or closed. The desk sends the frame only to admin sockets on its own listener.
+  An *Allow* the desk refuses because the account's link moved (`CLOUD_SESSION_LINK_CHANGED`) is toasted
+  by the error middleware, and the toast redraws with the new desk user from the next frame.
 
 **Remote mode** (cloud-p1 plan D9): framed by the cloud's shell, with the desk's
 `lighting7-remote-parent` meta in `index.html`, the SPA's socket is `api/remoteSocket.ts` over the

@@ -97,6 +97,7 @@ fun Application.configureSockets(state: State) {
                 wsUser,
                 remote = call.isRemote,
                 loopbackPeer = peer?.isLoopbackAddress == true,
+                remoteChannelStateHz = state.cloud.config.remoteChannelStateHz,
             )
 
             // Live revocation (plan 3.5): the check above only runs at upgrade time, so

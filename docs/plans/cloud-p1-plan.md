@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, session 6 in review.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05, session 7 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -318,8 +318,8 @@ and a session is added here for it.
 | 3 | The sidecar and the broker | merged | `claude/cloud-p1-s3` | [#356](https://github.com/cjcormack/lighting7/pull/356) | `45ab6d1` |
 | 4 | The SPA in remote mode | merged | `claude/cloud-p1-htmv50` | [#357](https://github.com/cjcormack/lighting7/pull/357) | `52c68fe` |
 | 5 | Bundling and supervising the sidecar | merged | `claude/awesome-lamport-bbwlen` | [#361](https://github.com/cjcormack/lighting7/pull/361) | `bbeac1e` |
-| 6 | Linking cloud accounts | in review | `claude/festive-wright-5j9oje` | | |
-| 7 | Remote sessions on the Cloud tab | planned | | | |
+| 6 | Linking cloud accounts | merged | `claude/festive-wright-5j9oje` | [#364](https://github.com/cjcormack/lighting7/pull/364) | `0b40974` |
+| 7 | Remote sessions on the Cloud tab | in review | `claude/gifted-hopper-w8jn4c` | | |
 | 8 | The MCP relay | planned | | | |
 | 9 | Delete ngrok and the desk's OAuth server | planned | | | |
 
@@ -605,6 +605,14 @@ next; whoever merges the last fills its own.
   `cloud`, `plugins`, `routes`; `npm run check:quick`.
 - **Docs:** `docs/cloud-engineering.md` §"The Cloud tab"; `docs/websocket-engineering.md` gains
   `remoteSession.pending` and the cap; `frontend/CLAUDE.md`'s note on the Remote access tab's switches.
+- **As built:** the six switches share `PUT /install/cloud/remote`, the scripts, effects and commands
+  three needing no adoption, since they hold for ngrok too; an offer waiting for approval writes nothing,
+  counts against D17's cap of 8 and keeps the browser's candidates for its open, and a denied or
+  timed-out one leaves no audit row; *Allow* reads the link again and, when the desk user it links to
+  has changed since it was shown, answers 409 and shows it afresh; a dropped control channel or a
+  `revoke` ends the wait; `cloud.state` carries the three cloud switches so every window follows them; turning approval off leaves what waits to be answered; *End*
+  (`ENDED_BY_ADMIN`) is allowed from either listener, as unadopt is, since it only reduces reach; and
+  the session list is re-read every 5 s while the tab is open rather than announced by a frame.
 
 ### Session 8 — The MCP relay
 

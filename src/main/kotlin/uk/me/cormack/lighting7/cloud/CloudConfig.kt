@@ -1,7 +1,9 @@
 package uk.me.cormack.lighting7.cloud
 
 import io.ktor.server.config.ApplicationConfig
+import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.state.optionalBoolean
+import uk.me.cormack.lighting7.state.optionalString
 import java.net.InetAddress
 import java.net.URI
 
@@ -18,21 +20,36 @@ data class CloudConfig(
     val problem: String? = null,
     /** `cloud.link.binary`: a sidecar to run in place of the installed one ([uk.me.cormack.lighting7.link.LinkBinary]). */
     val linkBinary: String? = null,
+    /** `cloud.remote.channelStateHz`: the most `channelState` frames a second to a socket on the public listener, 0 for no cap (P1 D14). */
+    val remoteChannelStateHz: Int = DEFAULT_CHANNEL_STATE_HZ,
 ) {
     val configured: Boolean get() = baseUrl != null
 
     companion object {
         const val DEFAULT_BASE_URL = "https://lighting7.net"
+        const val DEFAULT_CHANNEL_STATE_HZ = 20
+        const val MAX_CHANNEL_STATE_HZ = 1000
 
         fun from(config: ApplicationConfig): CloudConfig {
             val enabled = config.optionalBoolean("cloud.enabled", default = true)
             val link = config.propertyOrNull("cloud.link.binary")?.getString()?.trim()?.takeIf { it.isNotEmpty() }
+            val hz = channelStateHz(config.optionalString("cloud.remote.channelStateHz"))
             val raw = config.propertyOrNull("cloud.baseUrl")?.getString()?.trim() ?: DEFAULT_BASE_URL
-            if (raw.isEmpty()) return CloudConfig(null, enabled, linkBinary = link)
+            if (raw.isEmpty()) return CloudConfig(null, enabled, linkBinary = link, remoteChannelStateHz = hz)
             return when (val checked = checkBaseUrl(raw)) {
-                is BaseUrlCheck.Ok -> CloudConfig(checked.url, enabled, linkBinary = link)
-                is BaseUrlCheck.Refused -> CloudConfig(null, enabled, checked.reason, link)
+                is BaseUrlCheck.Ok -> CloudConfig(checked.url, enabled, linkBinary = link, remoteChannelStateHz = hz)
+                is BaseUrlCheck.Refused -> CloudConfig(null, enabled, checked.reason, link, hz)
             }
+        }
+
+        /** A whole number from 0 to [MAX_CHANNEL_STATE_HZ]; anything else is the default, with a warning. */
+        internal fun channelStateHz(raw: String?): Int {
+            if (raw == null) return DEFAULT_CHANNEL_STATE_HZ
+            val hz = raw.trim().toIntOrNull()
+            if (hz != null && hz in 0..MAX_CHANNEL_STATE_HZ) return hz
+            LoggerFactory.getLogger(CloudConfig::class.java)
+                .warn("cloud.remote.channelStateHz must be a whole number from 0 to {}, not '{}': using {}", MAX_CHANNEL_STATE_HZ, raw, DEFAULT_CHANNEL_STATE_HZ)
+            return DEFAULT_CHANNEL_STATE_HZ
         }
 
         /**

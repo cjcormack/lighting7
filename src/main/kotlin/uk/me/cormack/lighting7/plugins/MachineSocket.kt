@@ -107,6 +107,17 @@ data class CloudStateOutMessage(
     val state: uk.me.cormack.lighting7.cloud.CloudStateDto,
 ) : MachineOutMessage()
 
+/**
+ * The remote sessions waiting for an admin at the desk (cloud-p1 plan D13), oldest first; empty when
+ * none waits. `StateFlow`-backed, so the subscription is the snapshot. Admin sockets on the desk's own
+ * listener only, since only there may one be allowed; outbound only, the answer being REST.
+ */
+@Serializable
+@SerialName("remoteSession.pending")
+data class RemoteSessionPendingOutMessage(
+    val sessions: List<uk.me.cormack.lighting7.cloud.PendingRemoteSession>,
+) : MachineOutMessage()
+
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
 fun setupMachineSubscriptions(scope: SocketScope) {
@@ -141,6 +152,11 @@ fun setupMachineSubscriptions(scope: SocketScope) {
         }
         scope.subscribe(scope.state.cloud.state) { cloud ->
             scope.send(CloudStateOutMessage(if (scope.remote) cloud.forRemote() else cloud))
+        }
+        if (!scope.remote) {
+            scope.subscribe(scope.state.cloud.pendingSessions) { pending ->
+                scope.send(RemoteSessionPendingOutMessage(pending))
+            }
         }
     }
 }

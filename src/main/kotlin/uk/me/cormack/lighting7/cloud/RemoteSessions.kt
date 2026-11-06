@@ -1,9 +1,14 @@
 package uk.me.cormack.lighting7.cloud
 
 import io.ktor.http.HttpStatusCode
+import kotlinx.serialization.Serializable
 import kotlinx.coroutines.CompletableDeferred
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.innerJoin
+import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -27,6 +32,7 @@ import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoCloudRemoteSessions
 import uk.me.cormack.lighting7.models.DaoUsers
 import uk.me.cormack.lighting7.models.nowUtc
+import uk.me.cormack.lighting7.models.toIsoUtc
 import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.SecureRandom
@@ -79,6 +85,9 @@ enum class RemoteSessionEnd {
 
     /** The sidecar carrying it stopped, crashed or was restarted. */
     SIDECAR_STOPPED,
+
+    /** An admin ended it from the Cloud tab. */
+    ENDED_BY_ADMIN,
 
     /** Ended by its user, or by the desk for no other reason. */
     ENDED,
@@ -305,6 +314,50 @@ class RemoteSessions(
         return OpenResult.Opened(session)
     }
 
+    /** The desk user [accountId] links to, if any (D13: who an admin allowing it is shown). */
+    fun linkedDeskUser(accountId: String): LinkedDeskUser? = transaction(database) {
+        (DaoCloudIdentityLinks innerJoin DaoUsers).selectAll().where { DaoCloudIdentityLinks.cloudAccountId eq accountId }
+            .firstOrNull()?.let { LinkedDeskUser(it[DaoUsers.id].value, it[DaoUsers.displayName]) }
+    }
+
+    /**
+     * What the Cloud tab lists: every open session, newest first, and the [limit] most recently
+     * ended from the audit, each with the desk user it was (by name, as the user is now).
+     */
+    fun listing(limit: Int = RECENT_LIMIT): RemoteSessionsDto {
+        val now = open.sortedByDescending { it.startedAt }
+        val names = now.mapNotNull { it.userId }.associateWith { authService?.findUser(it)?.displayName }
+        val recent = transaction(database) {
+            (DaoCloudRemoteSessions leftJoin DaoUsers).selectAll().where { DaoCloudRemoteSessions.endedAt.isNotNull() }
+                .orderBy(DaoCloudRemoteSessions.endedAt to SortOrder.DESC, DaoCloudRemoteSessions.id to SortOrder.DESC)
+                .limit(limit)
+                .map {
+                    RemoteSessionDto(
+                        sid = it[DaoCloudRemoteSessions.sid],
+                        email = it[DaoCloudRemoteSessions.email],
+                        user = it.getOrNull(DaoUsers.displayName),
+                        startedAt = it[DaoCloudRemoteSessions.startedAt].toIsoUtc(),
+                        endedAt = it[DaoCloudRemoteSessions.endedAt]?.toIsoUtc(),
+                        path = it[DaoCloudRemoteSessions.path],
+                        endReason = it[DaoCloudRemoteSessions.endReason],
+                    )
+                }
+        }
+        return RemoteSessionsDto(
+            open = now.map {
+                RemoteSessionDto(
+                    sid = it.sid,
+                    email = it.email,
+                    displayName = it.displayName,
+                    user = it.userId?.let(names::get),
+                    startedAt = it.startedAt.toIsoUtc(),
+                    path = it.path,
+                )
+            },
+            recent = recent,
+        )
+    }
+
     private fun linkedUser(accountId: String): Int? = transaction(database) {
         DaoCloudIdentityLinks.selectAll().where { DaoCloudIdentityLinks.cloudAccountId eq accountId }
             .firstOrNull()?.get(DaoCloudIdentityLinks.user)?.value
@@ -528,5 +581,31 @@ class RemoteSessions(
 
         /** How long an audit row is kept. */
         val RETENTION: Duration = Duration.ofDays(365)
+
+        /** How many ended sessions the Cloud tab lists. */
+        const val RECENT_LIMIT: Int = 20
     }
 }
+
+/** A desk user a cloud account links to: [userId] says who, [displayName] is what is shown. */
+data class LinkedDeskUser(val userId: Int, val displayName: String)
+
+/** The Cloud tab's sessions: `GET /install/cloud/sessions`. */
+@Serializable
+data class RemoteSessionsDto(val open: List<RemoteSessionDto>, val recent: List<RemoteSessionDto>)
+
+/** One remote session, open or from the audit. [displayName] is known only while it is open. */
+@Serializable
+data class RemoteSessionDto(
+    val sid: String,
+    val email: String,
+    val displayName: String? = null,
+    /** The desk user it was, by their name now; null for an unlinked session or a user since deleted. */
+    val user: String? = null,
+    val startedAt: String,
+    val endedAt: String? = null,
+    /** `DIRECT` or `RELAY`, the last the sidecar reported. */
+    val path: String? = null,
+    /** A [RemoteSessionEnd] name, once ended. */
+    val endReason: String? = null,
+)

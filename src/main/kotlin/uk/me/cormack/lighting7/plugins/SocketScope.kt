@@ -41,6 +41,8 @@ class SocketScope(
     val remote: Boolean = false,
     /** The socket's peer is this machine — a desk screen rather than a device on the LAN. */
     val loopbackPeer: Boolean = false,
+    /** `cloud.remote.channelStateHz`, the cap on a [remote] socket's `channelState` (cloud-p1 plan D14). */
+    remoteChannelStateHz: Int = 0,
 ) {
     /** The caller's session-token hash — what a live-revocation stream (Session 3) matches on. */
     val sessionTokenHash: String? get() = user?.sessionTokenHash
@@ -91,7 +93,21 @@ class SocketScope(
     @Volatile
     var windowName: String? = null
 
+    private val frameCap = RemoteFrameCap.forSocket(remote, remoteChannelStateHz, session, ::sendNow)
+
     suspend fun send(message: OutMessage) {
+        val cap = frameCap
+        if (cap != null) {
+            when (message) {
+                is ChannelStateOutMessage -> return cap.channelState(message)
+                is ProvenanceStateOutMessage -> return cap.provenance(message)
+                else -> Unit
+            }
+        }
+        sendNow(message)
+    }
+
+    private suspend fun sendNow(message: OutMessage) {
         try {
             session.sendSerialized<OutMessage>(message)
         } catch (e: kotlinx.coroutines.CancellationException) {
