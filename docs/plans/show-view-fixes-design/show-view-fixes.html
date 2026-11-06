@@ -123,9 +123,9 @@
 
 <div class="wrap">
 <header>
-  <div class="eyebrow"><span>Design record</span><span>Show view · cue sheet · lock</span><span>2026-11-06</span><span>read from <code>d2f6b9b</code></span><span class="status">Draft · questions open</span></div>
+  <div class="eyebrow"><span>Design record</span><span>Show view · cue sheet · lock</span><span>2026-11-06</span><span>read from <code>d2f6b9b</code></span><span class="status">Agreed 2026-11-06</span></div>
   <h1>Show view editing fixes</h1>
-  <p class="lede">Six changes to how a show is edited on the Show view, the Prompt Book and the Cues table: what Duplicate carries, a bottom editor that stays put, cue numbers as cells, arming from the pip, and a per-show switch that says whether the show needs a lock at all.</p>
+  <p class="lede">Seven changes to how a show is edited on the Show view, the Prompt Book and the Cues table: what Duplicate carries, a bottom editor that stays put, cue numbers as cells, arming from the pip, a per-show switch that says whether the show needs a lock at all, and dragging a selection of cues as one.</p>
 </header>
 
 <nav class="toc" aria-label="Sections">
@@ -135,7 +135,8 @@
   <a href="#numbers">4 · Cue numbers</a>
   <a href="#pip">5 · Arm from the pip</a>
   <a href="#production">6 · In production</a>
-  <a href="#questions">Questions</a>
+  <a href="#drag">7 · Drag the selection</a>
+  <a href="#questions">Decisions</a>
   <a href="#plan">Plan</a>
 </nav>
 
@@ -150,9 +151,10 @@
       <tr><td class="n">4</td><td class="d">A cue number can only be edited by double-clicking one row's first column.</td><td class="d">The number becomes a <b>Cue&nbsp;#</b> cell column. One cell edits as today (with the out-of-order question); several cells open the renumber form, start and step, through <code>POST …/renumber</code>.</td><td class="n">CueSheet, RenumberCuesButton</td></tr>
       <tr><td class="n">5</td><td class="d">Arming a cue as next needs the show locked.</td><td class="d">The <b>pip is a button</b> in Cards, Table and Timeline, locked or not: a click arms that cue as the next GO.</td><td class="n">CueRowParts, CueCardEditor, CueSheet, StackTimeline</td></tr>
       <tr><td class="n">6</td><td class="d">A show being built or teched still locks and washes amber whenever a stack runs.</td><td class="d">A show setting, <b>In production</b>. Off, the lock never arms and the amber wash never draws, on every lock surface; on, everything is as today.</td><td class="n">projects column, sync, settings, <code>useEditLock</code></td></tr>
+      <tr><td class="n">7</td><td class="d">Dragging one of several selected cues moves only that cue.</td><td class="d">A drag from a selected row's grip <b>moves every selected row</b>, separators included, landing together in their order at the drop. A drag from an unselected row moves just it, as now.</td><td class="n">SheetTable <code>rowDrag</code>, CueSheet, StackTimeline</td></tr>
     </tbody>
   </table></div>
-  <p class="muted">Each section says what the code does now, with the file it was read from, then the change. The open questions are collected in <a href="#questions">Questions</a>, each with a recommendation.</p>
+  <p class="muted">Each section says what the code does now, with the file it was read from, then the change. The questions and Chris's answers are in <a href="#questions">Decisions</a>.</p>
 </section>
 
 <!-- ───────────────────────── 1 ───────────────────────── -->
@@ -175,12 +177,12 @@
     <thead><tr><th>Field</th><th>Owner</th><th>Copied</th><th>Why</th></tr></thead>
     <tbody>
       <tr><td>Name, fade, curve, notes, stomp, speed masters, Move in dark</td><td class="n">cue</td><td class="k yes">yes</td><td>Already copied.</td></tr>
-      <tr><td>Values, layers, FX, script hooks, scenery, events</td><td class="n">cue's child rows</td><td class="k yes">yes</td><td>Already copied, each column checked. FX run keys are fresh; see Q2.</td></tr>
+      <tr><td>Values, layers, FX, script hooks, scenery, events</td><td class="n">cue's child rows</td><td class="k yes">yes</td><td>Already copied, each column checked. FX run keys stay fresh (Q2).</td></tr>
       <tr><td>Follow and its delay</td><td class="n">entry</td><td class="k new">now yes</td><td>This change.</td></tr>
       <tr><td>Cue number</td><td class="n">entry</td><td class="k no">no</td><td>Numbers are unique in a stack, so the copy takes an auto number, as now.</td></tr>
       <tr><td>Prompt-book anchor</td><td class="n">entry</td><td class="k no">no</td><td>Two cues pinned to one point on the page would draw as one mark. The copy is anchored by hand.</td></tr>
       <tr><td>Busk pads, cue slots, surface bindings</td><td class="n">name the cue</td><td class="k no">no</td><td>They point at the source; a copy on a pad is a second pad, made by the operator.</td></tr>
-      <tr><td>Where it lands in the stack</td><td class="n">entry</td><td class="k">end</td><td class="ask">Q1: at the end, or directly after its source?</td></tr>
+      <tr><td>Where it lands in the stack</td><td class="n">entry</td><td class="k">end</td><td>At the end, unnumbered, as now (Q1).</td></tr>
     </tbody>
   </table></div>
   <p class="muted">Tests: a route test duplicating an entry with follow on and a 2 s delay finds both on the copy's entry, and one with another cue's <code>entryId</code> gets a 400; <code>CueActions.test.tsx</code> asserts the request carries the row's entry.</p>
@@ -238,7 +240,7 @@
     <li><b>A read-out that opens the pane</b> (Layers, FX, the Move in dark chip) turns it on if it is off, then selects the row and asks for its tab, as now. A plain click never turns it on.</li>
     <li><b>Keeping the edited row in view</b> (<code>keepPaneRowInView</code>) runs when the pane opens, resizes or its cue changes, as now; nothing scrolls when the selection changes to a blank state.</li>
     <li><b>Cards</b> have no pane and draw no toggle; a card is its own editor.</li>
-    <li><b>Default for a window that never chose</b>: <span class="ask">Q3</span>.</li>
+    <li><b>A window that never chose starts with it on</b> (Q3).</li>
   </ul>
 </section>
 
@@ -280,7 +282,7 @@
   <div class="tablebox"><table>
     <thead><tr><th>Gesture</th><th>Over one cell</th><th>Over several</th></tr></thead>
     <tbody>
-      <tr><td>Set, <kbd>⏎</kbd>, double click, typing</td><td>The number field. Commit is the entry <code>PATCH</code> with <code>placement: ASK</code>, so an out-of-order number asks <em>Move to its place</em> or <em>Keep it here</em> (<code>useCueNumberPlacement</code>), as now.</td><td>The renumber form: <em>First</em> (what was typed, else the first selected cue's whole number) and <em>Step</em> (1), the landing previewed, then <code>POST …/renumber {entryIds, start, step}</code> in stack order. A typed decimal is refused with the form's reason, a renumber writes whole numbers (<span class="ask">Q5</span>).</td></tr>
+      <tr><td>Set, <kbd>⏎</kbd>, double click, typing</td><td>The number field. Commit is the entry <code>PATCH</code> with <code>placement: ASK</code>, so an out-of-order number asks <em>Move to its place</em> or <em>Keep it here</em> (<code>useCueNumberPlacement</code>), as now.</td><td>The renumber form: <em>First</em> (what was typed, else the first selected cue's whole number) and <em>Step</em> (1), the landing previewed, then <code>POST …/renumber {entryIds, start, step}</code> in stack order. A typed decimal is refused with the form's reason, a renumber writes whole numbers (Q5).</td></tr>
       <tr><td>Clear, <kbd>⌫</kbd></td><td>Back to auto: <code>cueNumber: null</code>.</td><td>Each back to auto, one <code>PATCH</code> per entry like the sheet's other cells.</td></tr>
       <tr><td>Spread</td><td colspan="2">Not offered on this column. The renumber form is its spread.</td></tr>
       <tr><td>Locked</td><td colspan="2">Inert like every value cell; the marquee still selects. A refused gesture asks to unlock.</td></tr>
@@ -289,7 +291,7 @@
   <ul class="plain">
     <li><b>One form, two doors.</b> The start-and-step form is pulled out of <code>RenumberCuesButton</code> as <code>RenumberForm</code>; the bar's <em>Renumber…</em> over a row selection and the cell editor over several cells both mount it, with <code>renumberProblem</code> and <code>renumberPreview</code> unchanged.</li>
     <li><b>The row head keeps the row gestures</b>: a click selects the row (and locked, arms it, as the Cue column does now), a drag from it is the row marquee, the grip reorders.</li>
-    <li><b>The number scrolls with the cells</b> rather than staying sticky. The sheet is wide enough on a desk that this only matters on a narrow window; the alternative is <span class="ask">Q4</span>.</li>
+    <li><b>The number scrolls with the cells</b> rather than staying sticky. The sheet is wide enough on a desk that this only matters on a narrow window; keeping it sticky was considered and declined (Q4).</li>
     <li><b>The Timeline keeps its cue column</b>, whose cells are Looks and FX. Cards keep the inline field. Only the Table gets the cell.</li>
   </ul>
 </section>
@@ -370,7 +372,7 @@
     <thead><tr><th>Layer</th><th>Change</th></tr></thead>
     <tbody>
       <tr><td>Schema</td><td><code>projects.in_production</code>, boolean, default <code>true</code>, added by the reconciliation. No migration: every existing show reads as in production, which is today's behaviour.</td></tr>
-      <tr><td>REST</td><td><code>ProjectDto</code> and <code>ProjectDetailDto</code> carry <code>inProduction</code>; <code>UpdateProjectRequest</code> takes it; <code>POST /projects</code> takes it for a new show (<span class="ask">Q6</span>). On a venue it is refused, since a venue has no lock.</td></tr>
+      <tr><td>REST</td><td><code>ProjectDto</code> and <code>ProjectDetailDto</code> carry <code>inProduction</code>; <code>UpdateProjectRequest</code> takes it; <code>POST /projects</code> takes it, and a new show starts with it off (Q6). On a venue it is refused, since a venue has no lock.</td></tr>
       <tr><td>Sync</td><td>Portable, in <code>project.json</code> as <code>inProduction: Boolean = true</code>. Canonical JSON leaves the default out, so an archive from an older desk reads as in production and one written for a show still in production is byte-identical to today's. A new optional field: no <code>formatVersion</code> bump (<code>ignoreUnknownKeys</code>). <code>RichProjectFixture</code> sets it false so the round trip and clone tests see it.</td></tr>
       <tr><td>History</td><td>The project's own fields are already restorable, so an undo of the switch works with no new kind.</td></tr>
       <tr><td>Client</td><td><code>useEditLock</code> reads the current project's <code>inProduction</code> and owns <code>locked</code>, <code>lockRelevant</code> and the new <code>unlockedWarning</code>. Its five hosts drop their own <code>!locked &amp;&amp; isShowActive</code>; <code>useHistoryMove</code> asks the same rule instead of reading the slice directly.</td></tr>
@@ -383,18 +385,62 @@
   </ul>
 </section>
 
+<!-- ───────────────────────── 7 ───────────────────────── -->
+<section id="drag">
+  <h2><span class="n">7</span>Dragging a selection moves all of it</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>The sheet kit's row drag moves one row: <code>handleDragEnd</code> splices the active row out and back in at the row it was dropped on, and hands the whole new order to <code>onReorder</code>, which the cue sheet and the Timeline send as one <code>reorder</code> of every entry. The selection plays no part, so with Q11–Q13 selected a drag of Q11 leaves Q12 and Q13 behind.</p>
+      <span class="where">SheetTable.tsx:291 handleDragEnd · CueSheet.tsx:846 · StackTimeline.tsx:951</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p><code>rowDrag</code> gains an optional <code>group(activeId)</code>: the rows that travel with the one being dragged, in row order. The cue sheet and the Timeline answer with the selected rows when the dragged row is one of them, else the row alone. The kit's new order is a pure function, <code>moveRows(rowIds, group, overId)</code>, unit-tested on its own. Still one request: the desk's <code>reorder</code> already takes the whole list.</p>
+      <span class="where">rowDrag.group · sheetModel moveRows · opt-in per sheet</span>
+    </div>
+  </div>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:262px" role="img" aria-label="Mock-up: three selected rows being dragged; the grabbed row is lifted with a plus two chip, the other two are dimmed, and a line shows they will land after Q16.">
+      <div class="bar"><b>3 cues</b><span class="sp"></span><span class="btn">Renumber…</span><span class="btn">Duplicate</span><span class="btn ghost">✕ Deselect</span></div>
+      <div class="grid h" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div>Cue</div><div>Cue #</div><div>Name</div><div>Fade</div><div>Notes</div></div>
+      <div class="grid selrow" style="grid-template-columns:64px 76px 1fr 90px 1fr; opacity:0.35"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m"><b>Q11</b></div><div>Clock strikes</div><div class="m">0.5s</div><div class="dim">—</div></div>
+      <div class="grid selrow" style="grid-template-columns:64px 76px 1fr 90px 1fr; opacity:0.35"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q12</div><div>Flight</div><div class="m">2s</div><div class="dim">—</div></div>
+      <div class="grid selrow" style="grid-template-columns:64px 76px 1fr 90px 1fr; opacity:0.35"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q13</div><div>Midnight</div><div class="m">8s</div><div>LX + SM</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q14</div><div>Shoe</div><div class="m">3s</div><div class="dim">—</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q15</div><div>Search</div><div class="m">4s</div><div class="dim">—</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 1fr; box-shadow:inset 0 -2px 0 var(--s-pri)"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q16</div><div>Slipper</div><div class="m">3s</div><div class="dim">—</div></div>
+      <div class="grid" style="grid-template-columns:64px 76px 1fr 90px 1fr"><div><span class="grip">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q17</div><div>Wedding</div><div class="m">10s</div><div class="dim">—</div></div>
+      <div class="grid selrow" style="position:absolute; left:40px; right:200px; top:206px; grid-template-columns:64px 76px 1fr 90px 1fr; background:#1b2232; border-radius:6px; box-shadow:0 10px 28px rgba(0,0,0,0.6), inset 3px 0 0 var(--s-pri)"><div><span class="grip" style="color:#a1a1aa">⋮⋮</span>&nbsp;<span class="pip"><i></i></span></div><div class="m auto">Q12</div><div class="row">Flight <span class="chip add">+2</span></div><div class="m">2s</div><div class="dim">—</div></div>
+      <div class="note" style="right:16px; top:204px">Q11 · Q12 · Q13 land here</div>
+    </div></div>
+    <figcaption>Q11–Q13 selected and Q12 grabbed. The rows travelling with it dim in place, the grabbed row carries <b>+2</b> for them, and the line under Q16 shows where all three land, in their order: Q14, Q15, Q16, then Q11, Q12, Q13.</figcaption>
+  </figure>
+
+  <h3>Rules</h3>
+  <ul class="plain">
+    <li><b>Which rows travel</b>: the selected rows, if the grabbed row is one of them. On the Table that is the row selection; on the Timeline, the rows the selected cells are in, the kit's <code>selectedRows</code>. Grabbing an unselected row moves it alone and leaves the selection as it is.</li>
+    <li><b>Where they land</b>: together, in the order they had, before the row dropped on when moving up and after it when moving down, which is where a single row lands now. A selection with gaps closes up. A drop on a row of the block changes nothing.</li>
+    <li><b>Separators travel too</b>: a selected separator is a row of the stack like any cue, as the single drag already treats it.</li>
+    <li><b>After the drop</b> the selection stays on the moved rows (their ids are entry ids, which a reorder keeps), so the pane and the bar stay on them. Auto numbers are re-derived by the desk and the out-of-order banner appears if explicit numbers now descend, as after any drag.</li>
+    <li><b>Refused where a single drag is</b>: locked, or with the Move in dark filter showing only some cues.</li>
+    <li><b>The landing gap is one row high</b>, because dnd-kit's list strategy moves the other rows for the dragged one only. The drop line and the <b>+n</b> chip say what the gap cannot. A full gap for the block needs a custom sorting strategy; not in this change.</li>
+    <li><b>Cards</b> have no multi-selection, so their drag is unchanged. The programmer's Stack table and the applied tables share the kit's drag but do not pass <code>group</code>, so theirs is unchanged too.</li>
+  </ul>
+</section>
+
 <!-- ───────────────────────── Questions ───────────────────────── -->
 <section id="questions">
-  <h2>Questions</h2>
+  <h2>Decisions</h2>
+  <p>Asked and answered by Chris on 2026-11-06, in two rounds.</p>
   <div class="tablebox"><table>
-    <thead><tr><th>#</th><th>Question</th><th>Recommendation</th><th>The other answers</th></tr></thead>
+    <thead><tr><th>#</th><th>Question</th><th>Answer</th><th>Declined</th></tr></thead>
     <tbody>
-      <tr><td class="n">Q1</td><td class="d">Where does a duplicated cue land?</td><td class="d"><b>Directly after the place it was duplicated from</b>, unnumbered, so it takes the next auto number there (Q5 → Q5.5 when Q6 is explicit). Duplicating to make the next cue is the common case, and a copy at the end has to be dragged back every time.</td><td class="d">Keep the end of the stack (show-cue-editing plan D12, nothing else in the stack moves).</td></tr>
-      <tr><td class="n">Q2</td><td class="d">If it lands after its source, do its FX join the source's runs?</td><td class="d"><b>Yes</b>: copy each FX's run key from the source when the copy is placed directly after it, so a Wave both cues hold carries across the GO without restarting, and the Timeline draws them as one run.</td><td class="d">Fresh keys, as the copier does now (each FX restarts on the copy's GO).</td></tr>
-      <tr><td class="n">Q3</td><td class="d">Is the editor pane on or off in a window that has never chosen?</td><td class="d"><b>On.</b> It is what people use now with one row selected, and on keeps the layout still.</td><td class="d">Off, opened from the toggle or a Layers / FX read-out.</td></tr>
-      <tr><td class="n">Q4</td><td class="d">Is the number its own column, or does it stay in the sticky first column?</td><td class="d"><b>Its own column</b> after a narrow row head. The kit needs no change and the number behaves like every other cell.</td><td class="d">Keep it sticky: the kit learns a first column that holds a cell, and the row gestures move to the pip and grip.</td></tr>
-      <tr><td class="n">Q5</td><td class="d">Can a renumber over several cells use decimal steps (5.1, 5.2, 5.3)?</td><td class="d"><b>Not in this change.</b> The renumber route writes whole numbers; decimals mean a desk change to <code>routes/cueNumbering.kt</code> and its tests, best done on its own.</td><td class="d">Allow a decimal start and step now, up to four places.</td></tr>
-      <tr><td class="n">Q6</td><td class="d">What is a new show's default?</td><td class="d"><b>Off for a new show, on for every existing one.</b> A new show is being built; the column's default keeps the show running now exactly as it is.</td><td class="d">On for every show, new ones included. Or machine-local rather than synced, if the desk at the venue should decide.</td></tr>
+      <tr><td class="n">Q1</td><td class="d">Where does a duplicated cue land?</td><td class="d"><b>At the end of the stack</b>, unnumbered, as now (show-cue-editing plan D12). Only the follow is new.</td><td class="d">Directly after its source.</td></tr>
+      <tr><td class="n">Q2</td><td class="d">Do the copy's FX join the source's runs?</td><td class="d"><b>No: fresh run keys</b>, as the copier does now. A run joins neighbours only, and a copy at the end has none in common with its source.</td><td class="d">Shared keys, with the copy after its source; shared keys at the end, joining only if moved next to it.</td></tr>
+      <tr><td class="n">Q3</td><td class="d">Is the editor pane on or off in a window that has never chosen?</td><td class="d"><b>On.</b></td><td class="d">Off.</td></tr>
+      <tr><td class="n">Q4</td><td class="d">Is the number its own column, or does it stay in the sticky first column?</td><td class="d"><b>Its own column</b>, after a narrow row head.</td><td class="d">Sticky, with a kit change for a first column holding a cell.</td></tr>
+      <tr><td class="n">Q5</td><td class="d">Can a renumber over several cells use decimals?</td><td class="d"><b>Whole numbers only</b> in this change.</td><td class="d">A decimal start and step now.</td></tr>
+      <tr><td class="n">Q6</td><td class="d">What do shows default to, and is it synced?</td><td class="d"><b>Synced with the show; existing shows on, a new show off.</b></td><td class="d">On for every show; machine-local.</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -406,11 +452,12 @@
   <div class="tablebox"><table>
     <thead><tr><th>Commit</th><th>What</th><th>Tests</th><th>Docs</th></tr></thead>
     <tbody>
-      <tr><td class="n">1</td><td class="d">Duplicate carries the entry's follow (and Q1, Q2 as answered).</td><td class="d">Route test for follow, delay and a foreign <code>entryId</code>; <code>CueActions.test.tsx</code> for the request.</td><td class="d"><code>docs/cues-engineering.md</code> on Duplicate; frontend <code>CLAUDE.md</code> §"Cues, Stacks &amp; Triggers".</td></tr>
+      <tr><td class="n">1</td><td class="d">Duplicate carries the entry's follow.</td><td class="d">Route test for follow, delay and a foreign <code>entryId</code>; <code>CueActions.test.tsx</code> for the request.</td><td class="d"><code>docs/cues-engineering.md</code> on Duplicate; frontend <code>CLAUDE.md</code> §"Cues, Stacks &amp; Triggers".</td></tr>
       <tr><td class="n">2</td><td class="d">The editor pane toggle and its blank states, Table and Timeline.</td><td class="d"><code>CueSheet.test.tsx</code>: toggle on, a marquee from one row to three leaves the pane's height alone; off, nothing drawn; a read-out turns it on. The Timeline's twin in <code>StackTimeline.test.tsx</code>.</td><td class="d">Frontend <code>CLAUDE.md</code> §Sheet kit's cue sheet entry.</td></tr>
       <tr><td class="n">3</td><td class="d">The pip arms, in all three views, both lock states.</td><td class="d">A click on a grey pip calls <code>onSetStandby</code> unlocked and locked, never selects or expands; the live pip does nothing.</td><td class="d">§"The show-editing lock".</td></tr>
       <tr><td class="n">4</td><td class="d">The Cue # column and <code>RenumberForm</code>.</td><td class="d">One cell sends the <code>ASK</code> PATCH; four cells and a typed <kbd>20</kbd> send one renumber in stack order; Clear returns each to auto; a Fade commit never reaches it.</td><td class="d">§Sheet kit, cue sheet entry.</td></tr>
       <tr><td class="n">5</td><td class="d">In production: column, DTOs, <code>project.json</code>, settings switch, <code>useEditLock</code> and its hosts.</td><td class="d"><code>ProjectRoundTripTest</code> with the fixture off; <code>useEditLock.test.tsx</code> (running and not in production: unlocked, no warning; switching on while running locks); a project route test.</td><td class="d"><code>docs/sync-engineering.md</code> (the new field); §"The show-editing lock".</td></tr>
+      <tr><td class="n">6</td><td class="d">Dragging a selection: <code>rowDrag.group</code>, <code>moveRows</code>, the dimmed rows and the <b>+n</b> chip, opted into by the cue sheet and the Timeline.</td><td class="d"><code>moveRows</code> unit tests (up, down, gaps, a drop inside the block, separators); <code>CueSheet.test.tsx</code>: three selected rows dragged send one reorder with all three moved; an unselected row's drag moves it alone.</td><td class="d">§Sheet kit's row drag; the cue sheet entry.</td></tr>
     </tbody>
   </table></div>
 </section>
